@@ -64,8 +64,31 @@ async def _seed_default(kernel: Kernel) -> None:
     await kernel.register_adapter(_DEFAULT_TENANT, build_tickets())
 
 
+async def _register_memory(kernel: Kernel, tenant_id: str, memory_cfg) -> None:
+    """Register the memory subsystem when the manifest opts in (Round Five).
+
+    The engine is adopted, not built: ``local`` is the dev/offline reference,
+    ``cognee`` is the production seam. memory.* verbs run the chokepoint via the
+    MemoryAdapter, which is the kernel-side isolation boundary (SEC-40)."""
+    if not memory_cfg or not memory_cfg.get("enabled"):
+        return
+    from nankle.memory import LocalMemoryEngine
+    from nankle.memory.adapter import build_memory_adapter
+
+    if memory_cfg.get("engine") == "cognee":
+        from nankle.memory.cognee import CogneeEngine
+
+        engine = CogneeEngine(memory_cfg)
+    else:
+        engine = LocalMemoryEngine()
+    adapter = build_memory_adapter(engine, kernel.store, audit=kernel.audit, config=memory_cfg)
+    await kernel.register_adapter(tenant_id, adapter)
+    log.info("memory subsystem enabled (engine=%s)", memory_cfg.get("engine", "local"))
+
+
 async def _seed_from_manifest(kernel: Kernel, manifest) -> None:
     await apply_manifest(kernel, manifest)
+    await _register_memory(kernel, manifest.tenant_id, manifest.section("memory"))
     skills_dir = _find(_SKILLS_DIR_CANDIDATES)
     if skills_dir:
         from nankle.skills import load_skills_dir

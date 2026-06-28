@@ -231,8 +231,26 @@ personal_agents:
   default_runtime: pi-worker
   default_skills: ["writing/*", "analysis/*"]
 
-# --- memory & knowledge (Epic MEM, optional) - sensitive-safe by default -----
+# --- memory & knowledge (Epic MEM, Round Five) - kernel-governed, opt-in -----
+# The engine is ADOPTED, not built: `local` is the dev/offline reference, `cognee`
+# is the production engine (validate per MEM-ENG-04 before enabling). The kernel,
+# not the engine, is the isolation boundary at ingestion AND retrieval (SEC-40).
 memory:
-  enabled: false
-  embedding_endpoint: local-sensitive
-  default_owner_scope: "user"
+  enabled: true                        # opt-in per installation
+  engine: local                        # local (dev reference) | cognee (production)
+  store: postgres                      # reuse the existing Postgres instance
+  embedding_endpoint: local-sensitive  # sensitive-safe default (SEC-43)
+  extraction_endpoint: local-sensitive # entity/relationship extraction model
+  local_endpoints: [local-sensitive]   # endpoints treated as on-box for residency
+  default_owner_scope: user            # user | department | org
+  cross_scope_edges: forbidden         # forbidden | governed
+  ingest:
+    on_session_end: true               # cognify a conversation when it closes
+    incremental: true                  # process only new/changed content
+    schedule: null                     # optional tz-aware cron for document corpora
+    screen_content: true               # anti-poisoning screen (SEC-42)
+  retrieval:
+    default_mode: graph_completion     # similarity | graph_completion (multi-hop)
+    max_hops: 4
+    max_results: 20
+  retention_days: 365

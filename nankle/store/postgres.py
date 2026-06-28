@@ -29,6 +29,9 @@ from nankle.models import (
     EvalCase,
     EvalRun,
     MemoryItem,
+    MemoryErasure,
+    MemoryFact,
+    MemoryIngestion,
     MessageRole,
     NotificationPref,
     PersonalAccessToken,
@@ -654,6 +657,90 @@ class PostgresStore:
             )
         return [_memory(r) for r in rows]
 
+    # --- Round Five: structured memory governance ---
+    async def add_memory_fact(self, f: MemoryFact):
+        await self._pool.execute(
+            """INSERT INTO memory_facts (id, tenant_id, owner_scope, engine_ref, kind,
+                                         source_kind, source_ref, data_class, content, redacted)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+               ON CONFLICT (tenant_id, id) DO UPDATE SET
+                 owner_scope=EXCLUDED.owner_scope, engine_ref=EXCLUDED.engine_ref,
+                 kind=EXCLUDED.kind, source_kind=EXCLUDED.source_kind,
+                 source_ref=EXCLUDED.source_ref, data_class=EXCLUDED.data_class,
+                 content=EXCLUDED.content, redacted=EXCLUDED.redacted""",
+            f.id, f.tenant_id, f.owner_scope, f.engine_ref, f.kind, f.source_kind,
+            f.source_ref, f.data_class, f.content, f.redacted,
+        )
+
+    async def get_memory_fact(self, tenant_id, fact_id):
+        row = await self._pool.fetchrow(
+            "SELECT * FROM memory_facts WHERE tenant_id=$1 AND id=$2", tenant_id, fact_id
+        )
+        return _mem_fact(row)
+
+    async def list_memory_facts(self, tenant_id, owner_scopes, kind=None, limit=50):
+        if kind is None:
+            rows = await self._pool.fetch(
+                """SELECT * FROM memory_facts WHERE tenant_id=$1
+                   AND owner_scope = ANY($2::text[]) ORDER BY created_at DESC LIMIT $3""",
+                tenant_id, list(owner_scopes), limit,
+            )
+        else:
+            rows = await self._pool.fetch(
+                """SELECT * FROM memory_facts WHERE tenant_id=$1
+                   AND owner_scope = ANY($2::text[]) AND kind=$3
+                   ORDER BY created_at DESC LIMIT $4""",
+                tenant_id, list(owner_scopes), kind, limit,
+            )
+        return [_mem_fact(r) for r in rows]
+
+    async def delete_memory_fact(self, tenant_id, fact_id):
+        await self._pool.execute(
+            "DELETE FROM memory_facts WHERE tenant_id=$1 AND id=$2", tenant_id, fact_id
+        )
+
+    async def add_memory_ingestion(self, i: MemoryIngestion):
+        await self._pool.execute(
+            """INSERT INTO memory_ingestions (id, tenant_id, source_kind, source_ref,
+                                              owner_scope, status, hatchet_run_id,
+                                              facts_added, screened, detail, created_at)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+               ON CONFLICT (tenant_id, id) DO UPDATE SET
+                 status=EXCLUDED.status, hatchet_run_id=EXCLUDED.hatchet_run_id,
+                 facts_added=EXCLUDED.facts_added, screened=EXCLUDED.screened,
+                 detail=EXCLUDED.detail""",
+            i.id, i.tenant_id, i.source_kind, i.source_ref, i.owner_scope, i.status,
+            i.hatchet_run_id, i.facts_added, i.screened, i.detail, i.created_at,
+        )
+
+    async def update_memory_ingestion(self, i: MemoryIngestion):
+        await self.add_memory_ingestion(i)
+
+    async def list_memory_ingestions(self, tenant_id, limit=50):
+        rows = await self._pool.fetch(
+            "SELECT * FROM memory_ingestions WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT $2",
+            tenant_id, limit,
+        )
+        return [_mem_ingestion(r) for r in rows]
+
+    async def add_memory_erasure(self, e: MemoryErasure):
+        await self._pool.execute(
+            """INSERT INTO memory_erasures (id, tenant_id, requested_by, target, scope,
+                                            engine_confirmed, transcript_handled,
+                                            facts_removed, created_at, completed_at)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+               ON CONFLICT (tenant_id, id) DO NOTHING""",
+            e.id, e.tenant_id, e.requested_by, e.target, e.scope, e.engine_confirmed,
+            e.transcript_handled, e.facts_removed, e.created_at, e.completed_at,
+        )
+
+    async def list_memory_erasures(self, tenant_id, limit=50):
+        rows = await self._pool.fetch(
+            "SELECT * FROM memory_erasures WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT $2",
+            tenant_id, limit,
+        )
+        return [_mem_erasure(r) for r in rows]
+
     # --- Round Four: users + provisioning (USR) ---
     async def upsert_user(self, u: User):
         await self._pool.execute(
@@ -1004,6 +1091,39 @@ def _personal(r):
     return PersonalAgent(
         id=r["id"], tenant_id=r["tenant_id"], user_id=r["user_id"], runtime=r["runtime"],
         skills=list(r["skills"] or []), enabled=r["enabled"],
+    )
+
+
+def _mem_fact(r):
+    if r is None:
+        return None
+    return MemoryFact(
+        id=r["id"], tenant_id=r["tenant_id"], owner_scope=r["owner_scope"],
+        engine_ref=r["engine_ref"], kind=r["kind"], source_kind=r["source_kind"],
+        source_ref=r["source_ref"], data_class=r["data_class"], content=r["content"] or "",
+        created_at=r["created_at"], redacted=r["redacted"],
+    )
+
+
+def _mem_ingestion(r):
+    if r is None:
+        return None
+    return MemoryIngestion(
+        id=r["id"], tenant_id=r["tenant_id"], source_kind=r["source_kind"],
+        source_ref=r["source_ref"], owner_scope=r["owner_scope"], status=r["status"],
+        hatchet_run_id=r["hatchet_run_id"], facts_added=r["facts_added"],
+        screened=r["screened"], detail=r["detail"] or {}, created_at=r["created_at"],
+    )
+
+
+def _mem_erasure(r):
+    if r is None:
+        return None
+    return MemoryErasure(
+        id=r["id"], tenant_id=r["tenant_id"], requested_by=r["requested_by"],
+        target=r["target"], scope=r["scope"], engine_confirmed=r["engine_confirmed"],
+        transcript_handled=r["transcript_handled"], facts_removed=r["facts_removed"],
+        created_at=r["created_at"], completed_at=r["completed_at"],
     )
 
 

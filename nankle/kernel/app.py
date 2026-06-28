@@ -429,6 +429,11 @@ def create_app(
 
     register_access_routes(app, principal_dep=principal, get_kernel=_get_kernel)
 
+    # Round Five: kernel-governed memory verbs + scoped reads.
+    from .memory_routes import register_memory_routes
+
+    register_memory_routes(app, principal_dep=principal, get_kernel=_get_kernel)
+
     # keep an unused import referenced for the HITL enums in scope
     _ = (HITLType, Urgency)
     return app

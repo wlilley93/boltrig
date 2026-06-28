@@ -27,6 +27,9 @@ from nankle.models import (
     HITLRequest,
     HITLResponse,
     HITLStatus,
+    MemoryErasure,
+    MemoryFact,
+    MemoryIngestion,
     ModelEndpoint,
     Noun,
     Skill,
@@ -71,6 +74,10 @@ class InMemoryStore:
         self._notif: dict[tuple[str, str], NotificationPref] = {}
         self._personal: dict[tuple[str, str], PersonalAgent] = {}
         self._memory: list[MemoryItem] = []
+        # Round Five: structured memory governance (facts/ingestions/erasures).
+        self._mem_facts: dict[tuple[str, str], MemoryFact] = {}
+        self._mem_ingest: dict[tuple[str, str], MemoryIngestion] = {}
+        self._mem_erase: list[MemoryErasure] = []
         # Round Four: users, tokens, invitations, settings, sessions.
         self._users: dict[tuple[str, str], User] = {}
         self._pats: dict[tuple[str, str], PersonalAccessToken] = {}
@@ -335,6 +342,41 @@ class InMemoryStore:
             and (kind is None or m.kind == kind)
         ]
         return out[-limit:]
+
+    # --- Round Five: structured memory governance ---
+    async def add_memory_fact(self, fact):
+        self._mem_facts[(fact.tenant_id, fact.id)] = fact
+
+    async def get_memory_fact(self, tenant_id, fact_id):
+        return self._mem_facts.get((tenant_id, fact_id))
+
+    async def list_memory_facts(self, tenant_id, owner_scopes, kind=None, limit=50):
+        scopes = set(owner_scopes)
+        out = [
+            f for (t, _), f in self._mem_facts.items()
+            if t == tenant_id and f.owner_scope in scopes
+            and (kind is None or f.kind == kind)
+        ]
+        return out[-limit:]
+
+    async def delete_memory_fact(self, tenant_id, fact_id):
+        self._mem_facts.pop((tenant_id, fact_id), None)
+
+    async def add_memory_ingestion(self, ing):
+        self._mem_ingest[(ing.tenant_id, ing.id)] = ing
+
+    async def update_memory_ingestion(self, ing):
+        self._mem_ingest[(ing.tenant_id, ing.id)] = ing
+
+    async def list_memory_ingestions(self, tenant_id, limit=50):
+        out = [i for (t, _), i in self._mem_ingest.items() if t == tenant_id]
+        return out[-limit:]
+
+    async def add_memory_erasure(self, er):
+        self._mem_erase.append(er)
+
+    async def list_memory_erasures(self, tenant_id, limit=50):
+        return [e for e in self._mem_erase if e.tenant_id == tenant_id][-limit:]
 
     # --- Round Four: users + provisioning (USR) ---
     async def upsert_user(self, user):

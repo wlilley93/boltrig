@@ -60,6 +60,7 @@ from .access import (
 from .grants import EMPTY_GRANTS, GrantSet, TenantPermissions
 from .hitl import HITLRequest, HITLResponse, HITLStatus, HITLType, Urgency
 from .identity import RoleMapping, User
+from .memory import MemoryErasure, MemoryFact, MemoryIngestion
 from .libraries import (
     AdapterHealth,
     AdapterRecord,
@@ -97,6 +98,9 @@ __all__ = [
     "EvalCase",
     "EvalRun",
     "MemoryItem",
+    "MemoryFact",
+    "MemoryIngestion",
+    "MemoryErasure",
     "NotificationPref",
     "PersonalAgent",
     "NankleError",

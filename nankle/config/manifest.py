@@ -191,6 +191,14 @@ class FleetManifest:
     hitl: HitlConfig = field(default_factory=HitlConfig)
     network: NetworkConfig = field(default_factory=NetworkConfig)
     privacy: PrivacyConfig = field(default_factory=PrivacyConfig)
+    # Sections surfaced as raw config rather than typed dataclasses (Round Three+:
+    # evaluation/notifications/personal_agents, and Round Five: memory).
+    extra: dict[str, Any] = field(default_factory=dict)
+
+    def section(self, name: str) -> dict[str, Any]:
+        """A raw manifest section by name (empty dict if absent)."""
+        value = self.extra.get(name)
+        return dict(value) if isinstance(value, dict) else {}
 
     @property
     def role_mappings(self) -> tuple[RoleMapping, ...]:
@@ -431,6 +439,8 @@ def load_manifest(path: str, *, env: Mapping[str, str] | None = None) -> FleetMa
         hitl=_parse_hitl(doc.get("hitl") or {}),
         network=_parse_network(doc.get("network") or {}),
         privacy=_parse_privacy(doc.get("privacy") or {}),
+        extra={k: doc[k] for k in ("evaluation", "notifications", "personal_agents",
+                                   "memory", "runtimes", "mcp", "chat") if k in doc},
     )
 
 

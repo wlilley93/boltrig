@@ -487,3 +487,56 @@ CREATE TABLE IF NOT EXISTS user_sessions (
     PRIMARY KEY (tenant_id, id)
 );
 CREATE INDEX IF NOT EXISTS sessions_user_idx ON user_sessions (tenant_id, user_id);
+
+-- ===========================================================================
+-- Round Five: structured memory governance + provenance control plane (Epic MEM).
+-- The swappable Memory Engine owns the graph/vector store; Nankle governs scope,
+-- provenance, ingestion runs and the erasure ledger. owner_scope is the RBAC
+-- boundary the kernel enforces at ingestion AND retrieval (SEC-40). Opt-in.
+-- ===========================================================================
+
+CREATE TABLE IF NOT EXISTS memory_facts (
+    id            TEXT NOT NULL,            -- Nankle id, mapped to the engine node id
+    tenant_id     TEXT NOT NULL,
+    owner_scope   TEXT NOT NULL,            -- user:<id> | department:<name> | org
+    engine_ref    TEXT NOT NULL,            -- the engine's node/record identifier
+    kind          TEXT NOT NULL,            -- entity | relationship | summary | document_chunk
+    source_kind   TEXT NOT NULL,            -- conversation | document | verb_result | feedback
+    source_ref    TEXT,
+    data_class    TEXT NOT NULL DEFAULT 'standard',
+    content       TEXT NOT NULL DEFAULT '',
+    redacted      BOOLEAN NOT NULL DEFAULT false,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, id)
+);
+CREATE INDEX IF NOT EXISTS memory_facts_scope_idx ON memory_facts (tenant_id, owner_scope, kind);
+CREATE INDEX IF NOT EXISTS memory_facts_source_idx ON memory_facts (tenant_id, source_kind, source_ref);
+
+CREATE TABLE IF NOT EXISTS memory_ingestions (
+    id             TEXT NOT NULL,
+    tenant_id      TEXT NOT NULL,
+    source_kind    TEXT NOT NULL,
+    source_ref     TEXT NOT NULL,
+    owner_scope    TEXT NOT NULL,
+    status         TEXT NOT NULL DEFAULT 'pending',  -- pending|screening|cognifying|done|failed|rejected
+    hatchet_run_id TEXT,
+    facts_added    INT NOT NULL DEFAULT 0,
+    screened       BOOLEAN NOT NULL DEFAULT false,
+    detail         JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, id)
+);
+
+CREATE TABLE IF NOT EXISTS memory_erasures (
+    id                 TEXT NOT NULL,
+    tenant_id          TEXT NOT NULL,
+    requested_by       TEXT NOT NULL,
+    target             TEXT NOT NULL,        -- a fact id, source_ref, subject, or scope
+    scope              TEXT NOT NULL,
+    engine_confirmed   BOOLEAN NOT NULL DEFAULT false,
+    transcript_handled BOOLEAN NOT NULL DEFAULT false,
+    facts_removed      INT NOT NULL DEFAULT 0,
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    completed_at       TIMESTAMPTZ,
+    PRIMARY KEY (tenant_id, id)
+);
