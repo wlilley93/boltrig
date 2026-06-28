@@ -23,13 +23,14 @@ against this build. Each item is marked:
 - [x] **done** Credentials resolved only inside the kernel; never returned or audited (SEC-05, K-20). `kernel/credentials.py`; `tests/security/test_credential_isolation.py`.
 - [x] **done** Append-only, hash-chained, tamper-evident audit (SEC-16, K-19). `kernel/audit.py`; `tests/kernel/test_audit_chain.py`.
 - [x] **done** PII redaction + secret scanning (SEC-13). `kernel/pii.py`; `tests/security/test_budget_and_pii.py`.
-- [~] **seam** Live OIDC / SAML token verification (SEC-01/02). `OidcVerifier` is implemented (`identity/auth.py`); it needs an issuer + JWKS. The dev resolver trusts headers for local dev only.
+- [x] **done** Real OIDC/SAML token verification (SEC-01/02). `OidcVerifier` verifies RS256 JWTs against the issuer JWKS; bootstrap selects it when `OIDC_*` is set, the header resolver only with `NANKLE_DEV_AUTH=1`, else fail-closed. `identity/auth.py`; `tests/security/test_auth.py`. The only external leg is a live IdP.
 
 ## Fleet + execution
 
 - [x] **done** Spawn pipeline: skill inheritance, cheapest-capable runtime, depth limit, budget-before-run, audited (US-FLT-03/04, FR-EXE-03). `fleet/spawn.py`.
 - [x] **done** Graceful degradation: a runtime/backend failure degrades, never crashes (P9). `dispatch.py` (`_degrade_or_fail`), `fleet/spawn.py`; `tests/kernel/test_ratelimit_degraded.py::test_degraded_mode_when_backend_down`.
-- [~] **seam** Durable, resumable execution over Hatchet (P6, US-FLT-06). The seam + `[durable]` extra + compose services are in place; needs a running Hatchet engine.
+- [x] **done** Durable HITL pause (NFR-REL-01): a blocking pause survives a restart and resumes on approval over Postgres; `trigger` enqueues through the durable backbone. `tests/store/test_postgres_store.py`, `tests/integration/test_workflow_trigger.py`.
+- [~] **seam** Full live-Hatchet run-resume of long/recursive runs (P6, US-FLT-06) needs a running Hatchet engine; the local executor is the offline fallback.
 - [x] **done** Source-agnostic work normalisation to one WorkItem (P10). `work/normalise.py`, `work/store.py`.
 
 ## Cost + HITL + observability
@@ -49,13 +50,14 @@ against this build. Each item is marked:
 ## Deployment + packaging
 
 - [x] **done** One self-hostable stack; identical images, config via env + manifest (S11.1, P7, NFR-PORT-01). `docker-compose.yml`, `deploy/*.Dockerfile`, `.env.example`, `manifest.example.yaml`.
-- [x] **done** Corporate proxy + CA bundle support at build/runtime (US-DEP-04). `deploy/kernel.Dockerfile`, `deploy/fleet.Dockerfile`.
-- [~] **seam** On-box inference for sensitive data (SEC-12). The `local-model` compose profile + manifest `sensitive_endpoint` are wired; needs a model (and a GPU for vLLM, or swap to Ollama).
-- [~] **seam** Postgres-backed store + migrations. `store/schema.sql` is the source of truth (applied on first boot); the alembic migration set behind `make migrate` is the remaining packaging step. Tests + smoke run on the in-memory store.
+- [x] **done** Corporate proxy + CA bundle support at build/runtime (US-DEP-04). `deploy/kernel.Dockerfile`, `deploy/fleet.Dockerfile`, `deploy/compose.secure.yml`.
+- [x] **done** Sensitive->local model routing guard (SEC-12, US-PRIV-01): sensitive data is refused on any non-local endpoint and the misroute is audited. `fleet/model_router.py`; `tests/security/test_sensitive_routing.py`. On-box inference itself (the `local-model` profile) still needs a model - the only external leg.
+- [x] **done** Postgres-backed durable store (PostgresStore, asyncpg), selected on `DATABASE_URL`. The security suite, tenant isolation, and durability-across-restart run against it (`tests/store/test_postgres_store.py`; CI postgres service). `store/postgres.py`, `store/schema.sql`. Alembic is the remaining additive-migration step; schema.sql is applied idempotently today.
+- [x] **done** Encryption in transit + at rest config (SEC-10/11) and backup/restore (DoD#7). `deploy/compose.secure.yml` (TLS terminator, encrypted volume, proxy/CA), `docs/DEPLOYMENT.md`, `docs/backup-restore.md`, `make secure-up`/`backup`/`restore`.
 
 ## Quality gate
 
-- [x] **done** Test suite green (34 tests). `make test`.
+- [x] **done** Test suite green (74 tests + opt-in Postgres/live-adapter tests). `make test`; set `NANKLE_TEST_DATABASE_URL` to add the Postgres-backed suite.
 - [x] **done** Offline, in-process smoke of the kernel guarantees. `make smoke` (4/4 steps pass).
-- [x] **done** Binding-invariant gate at debt 0 (16 declared, 16 bound). `make invariants`; `docs/invariants.md`, `tests/invariants.yaml`, `scripts/check_invariants.py`.
+- [x] **done** Binding-invariant gate at debt 0 (27 declared, 27 bound). `make invariants`; `docs/invariants.md`, `tests/invariants.yaml`, `scripts/check_invariants.py`.
 - [~] **seam** UI end-to-end against a live kernel. The React console (Router, Kanban, Approvals) is built and proxies `/v1`; full e2e needs the running stack.

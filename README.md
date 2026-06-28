@@ -8,9 +8,12 @@ permanent agent fleet that spawns ephemeral workers to get work done. Nankle is
 a clean-room reference implementation of the "Hermes Fleet" SRS (the kernel
 doctrine: one dispatch chokepoint, stable nouns and verbs, everything-as-data).
 
-The kernel core is implemented and tested (34 passing tests; a machine-checked
-binding-invariant gate). Adapters, the fleet, the UI, and the deploy stack are
-real but some external legs are seams (see "Implemented vs scaffolded" below).
+The kernel core is implemented and tested (74 passing tests + opt-in Postgres and
+live-adapter suites; a machine-checked binding-invariant gate at debt 0).
+Persistence (Postgres), real OIDC auth, sensitive->local model routing, and
+durable HITL pauses are implemented and tested; the remaining external legs (a
+live Hatchet engine, a live IdP, third-party adapter credentials, an on-box
+model) are seams (see "Implemented vs scaffolded" below).
 
 ## The three defining characteristics
 
@@ -141,29 +144,36 @@ through bindings, and dispatches them through the same chokepoint. No file under
   hard-stops, rate limiting, and graceful degradation. These are pinned by the
   binding-invariant catalogue (`docs/invariants.md`, `tests/invariants.yaml`)
   and the gate at `scripts/check_invariants.py`.
-- The in-memory store (the reference Store implementation), the registry, the
-  fleet spawner (skill inheritance, cheapest-runtime selection, depth + budget),
-  the manifest loader/applier, and the kernel HTTP surface.
+- Both Store implementations (in-memory + **Postgres**, `nankle/store/postgres.py`),
+  the registry, the fleet spawner (skill inheritance, cheapest-runtime selection,
+  depth + budget), the manifest loader/applier, and the kernel HTTP surface.
+- **Real OIDC token verification** (`nankle/identity/auth.py`, RS256 against the
+  issuer JWKS), with bootstrap selecting it when `OIDC_*` is set and failing
+  closed otherwise; the header resolver only with `NANKLE_DEV_AUTH=1`.
+- **Sensitive->local model routing guard** (`fleet/model_router.py`): sensitive
+  data is blocked from non-local endpoints and the misroute is audited (SEC-12).
+- **Durable HITL pause** (NFR-REL-01): a blocking pause survives a restart and
+  resumes on approval over Postgres.
 
 **Real, but with external seams** (the code is here; the live leg needs its
 service or credentials to exercise):
 
-- **Durable execution (Hatchet).** The fleet is built for durable resume; the
-  `hatchet-engine` / `hatchet-dashboard` services and the `[durable]` extra wire
-  it. Without Hatchet the fleet still runs and degrades (P9).
-- **Live OIDC / SAML.** `nankle/identity/auth.py` ships a real `OidcVerifier`;
-  it needs an issuer + JWKS to verify real tokens. The dev resolver trusts
-  `x-nankle-*` headers and is for local dev only (SEC-01/02).
+- **Full live-Hatchet run-resume.** The durable HITL pause is done and tested; the
+  full long/recursive run-resume needs a running Hatchet engine (the
+  `hatchet-engine` service + `[durable]` extra). Without it the fleet still runs
+  and degrades (P9); the local executor is the offline fallback.
+- **Live IdP.** OIDC verification is implemented and tested against minted tokens;
+  pointing it at a real Azure AD / Okta / Google issuer is the remaining leg.
 - **Live MS Graph / Jira / CRM adapters.** The builtin adapters are real HTTP/SQL
-  clients but need credentials and reachable backends. The `memory-tickets`
-  adapter is fully self-contained (used by the tests and `make smoke`).
+  clients but need credentials and reachable backends (opt-in `make smoke` with
+  `NANKLE_LIVE_SMOKE=1`). The `memory-tickets` adapter is fully self-contained.
 - **On-box model (local inference).** The `local-model` compose profile runs a
   local OpenAI-compatible endpoint for sensitive data; it needs a model + (for
-  vLLM) a GPU, or swap in Ollama for CPU.
-- **Postgres-backed store + migrations.** `nankle/store/schema.sql` is the
-  source of truth and is applied on first boot; an alembic migration set
-  (`make migrate`) is the remaining packaging step. Tests + smoke run on the
-  in-memory store.
+  vLLM) a GPU, or swap in Ollama for CPU. (The routing guard that *requires* it
+  for sensitive data is done.)
+- **Alembic migrations.** `schema.sql` is the source of truth and applied
+  idempotently; an ordered alembic set (`make migrate`) is the remaining additive
+  step.
 
 ## Layout
 
