@@ -76,10 +76,11 @@ invariants:
       - tests/security/test_grant_enforcement.py::test_ungranted_verb_is_denied
       - tests/security/test_grant_enforcement.py::test_grant_for_other_verb_does_not_authorise
   SEC-08:
-    description: Tenant isolation - no cross-tenant discovery or dispatch (fail-closed).
+    description: Tenant isolation - no cross-tenant discovery or dispatch (fail-closed), both stores.
     tests:
       - tests/security/test_tenant_isolation.py::test_other_tenant_cannot_see_this_tenants_verbs
       - tests/security/test_tenant_isolation.py::test_other_tenant_dispatch_fails_closed
+      - tests/store/test_postgres_store.py::test_cross_tenant_fails_closed
   SEC-13:
     description: PII is detected and redacted before it leaves the boundary.
     tests:

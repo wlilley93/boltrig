@@ -246,7 +246,7 @@ CREATE TABLE IF NOT EXISTS budgets (
     token_limit       BIGINT,
     cost_limit_micros BIGINT,
     hard_stop         BOOLEAN NOT NULL DEFAULT true,
-    window            TEXT NOT NULL DEFAULT 'run',      -- run | daily | monthly
+    "window"          TEXT NOT NULL DEFAULT 'run',      -- run | daily | monthly (quoted: reserved word)
     spent_tokens      BIGINT NOT NULL DEFAULT 0,
     spent_micros      BIGINT NOT NULL DEFAULT 0,
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -255,13 +255,27 @@ CREATE TABLE IF NOT EXISTS budgets (
 );
 
 -- Secret references only - never plaintext secrets at rest (SEC-04, FR-SEC-02).
+-- ``data`` holds the full reference dict the resolver consumes (store, ref, kind,
+-- ...); the typed columns mirror it for queryability. No secret material here.
 CREATE TABLE IF NOT EXISTS credential_refs (
     id          TEXT NOT NULL,                          -- "jira-oauth"
     tenant_id   TEXT NOT NULL,
     store       TEXT NOT NULL,                          -- vault | kms | docker-secret | env
     ref         TEXT NOT NULL,                          -- path/name in the external store
+    data        JSONB,                                  -- the full reference dict (no secrets)
     expires_at  TIMESTAMPTZ,                            -- for rotation alerts (US-COST-04)
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (tenant_id, id)
+);
+
+-- The tenant permission ceiling (the role-derived GrantSet seeded from the
+-- manifest). Caps every caller's grants (SEC-07, the K-2 intersection). Stored as
+-- allow/deny verb-pattern arrays, never secret material.
+CREATE TABLE IF NOT EXISTS tenant_permissions (
+    tenant_id   TEXT PRIMARY KEY,
+    allow       JSONB NOT NULL DEFAULT '[]'::jsonb,
+    deny        JSONB NOT NULL DEFAULT '[]'::jsonb,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );

@@ -9,6 +9,8 @@ the request body.
 
 from __future__ import annotations
 
+import inspect
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable
 
@@ -97,29 +99,68 @@ class RespondBody(BaseModel):
 
 # Spawner seam: the fleet attaches an async (principal, body) -> dict callable.
 Spawner = Callable[[Principal, SpawnBody], Awaitable[dict]]
+KernelFactory = Callable[[], Awaitable[Kernel]]
+SpawnerFactory = Callable[[Kernel], Spawner]
+
+
+def _get_kernel(request: Request) -> Kernel:
+    """Resolve the live kernel from app state (set synchronously for a prebuilt
+    kernel, or built on the serving loop by the lifespan for the factory path)."""
+    return request.app.state.kernel
 
 
 def create_app(
-    kernel: Kernel,
+    kernel: Kernel | None = None,
     *,
     principal_resolver: PrincipalResolver | None = None,
     spawner: Spawner | None = None,
+    kernel_factory: KernelFactory | None = None,
+    spawner_factory: SpawnerFactory | None = None,
 ) -> FastAPI:
-    app = FastAPI(title="Nankle Kernel", version="0.1.0")
+    """Build the ASGI app. Pass a prebuilt ``kernel`` (tests/in-process), or a
+    ``kernel_factory`` that the lifespan runs on the SERVING loop so loop-bound
+    resources (the asyncpg pool) attach to the loop that handles requests."""
     resolver = principal_resolver or _dev_principal
-    app.state.kernel = kernel
-    app.state.spawner = spawner
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        if not hasattr(app.state, "kernel"):
+            if kernel_factory is None:
+                raise RuntimeError("create_app needs a kernel or a kernel_factory")
+            built = await kernel_factory()
+            app.state.kernel = built
+            app.state.spawner = spawner_factory(built) if spawner_factory else spawner
+        try:
+            yield
+        finally:
+            store = getattr(getattr(app.state, "kernel", None), "store", None)
+            close = getattr(store, "close", None)
+            if close is not None:  # PostgresStore: drain the pool on shutdown
+                result = close()
+                if inspect.isawaitable(result):
+                    await result
+
+    app = FastAPI(title="Nankle Kernel", version="0.1.0", lifespan=lifespan)
+    # Prebuilt kernel is set synchronously so it works even without lifespan
+    # (Starlette TestClient used without a context manager).
+    if kernel is not None:
+        app.state.kernel = kernel
+        app.state.spawner = spawner
 
     async def principal(request: Request) -> Principal:
         return await resolver(request)
 
     @app.get("/healthz")
-    async def healthz() -> dict:
-        health = await kernel.loader.refresh_health()
+    async def healthz(k: Kernel = Depends(_get_kernel)) -> dict:
+        health = await k.loader.refresh_health()
         return {"status": "ok", "adapters": {f"{t}/{a}": h for (t, a), h in health.items()}}
 
     @app.post("/v1/invoke")
-    async def invoke(body: InvokeBody, p: Principal = Depends(principal)) -> JSONResponse:
+    async def invoke(
+        body: InvokeBody,
+        k: Kernel = Depends(_get_kernel),
+        p: Principal = Depends(principal),
+    ) -> JSONResponse:
         ctx = p.context(
             run_id=body.context.get("run_id"),
             parent_run_id=body.context.get("parent_run_id"),
@@ -127,7 +168,7 @@ def create_app(
             skills=body.context.get("skills_loaded", ()),
         )
         try:
-            output = await kernel.invoke(
+            output = await k.invoke(
                 body.noun, body.verb, body.params, ctx,
                 idempotency_key=body.idempotency_key, approval_id=body.approval_id,
             )
@@ -147,22 +188,29 @@ def create_app(
 
     @app.get("/v1/capabilities")
     async def capabilities(
-        noun: str | None = None, p: Principal = Depends(principal)
+        noun: str | None = None,
+        k: Kernel = Depends(_get_kernel),
+        p: Principal = Depends(principal),
     ) -> dict:
-        return await kernel.discover(p.tenant_id, p.context(), noun)
+        return await k.discover(p.tenant_id, p.context(), noun)
 
     @app.post("/v1/spawn")
-    async def spawn(body: SpawnBody, p: Principal = Depends(principal)) -> JSONResponse:
-        if app.state.spawner is None:
+    async def spawn(
+        body: SpawnBody, request: Request, p: Principal = Depends(principal)
+    ) -> JSONResponse:
+        spawner_fn = getattr(request.app.state, "spawner", None)
+        if spawner_fn is None:
             return JSONResponse({"error": "spawner_unavailable"}, status_code=503)
         try:
-            return JSONResponse(await app.state.spawner(p, body))
+            return JSONResponse(await spawner_fn(p, body))
         except NankleError as e:
             return JSONResponse({"error": e.reason}, status_code=e.status_code)
 
     @app.get("/v1/hitl")
-    async def list_hitl(p: Principal = Depends(principal)) -> dict:
-        pending = await kernel.hitl.list_pending(p.tenant_id)
+    async def list_hitl(
+        k: Kernel = Depends(_get_kernel), p: Principal = Depends(principal)
+    ) -> dict:
+        pending = await k.hitl.list_pending(p.tenant_id)
         return {
             "requests": [
                 {
@@ -176,19 +224,26 @@ def create_app(
 
     @app.post("/v1/hitl/{request_id}/respond")
     async def respond(
-        request_id: str, body: RespondBody, p: Principal = Depends(principal)
+        request_id: str,
+        body: RespondBody,
+        k: Kernel = Depends(_get_kernel),
+        p: Principal = Depends(principal),
     ) -> dict:
-        resp = await kernel.hitl.answer(
+        resp = await k.hitl.answer(
             p.tenant_id, request_id, body.decision, p.subject, body.notes
         )
         return {"status": "answered", "response_id": resp.id}
 
     @app.get("/v1/work")
-    async def work(status: str | None = None, p: Principal = Depends(principal)) -> dict:
+    async def work(
+        status: str | None = None,
+        k: Kernel = Depends(_get_kernel),
+        p: Principal = Depends(principal),
+    ) -> dict:
         from nankle.models import WorkStatus
 
         st = WorkStatus(status) if status else None
-        items = await kernel.store.list_work_items(p.tenant_id, st)
+        items = await k.store.list_work_items(p.tenant_id, st)
         return {
             "items": [
                 {
@@ -202,10 +257,12 @@ def create_app(
         }
 
     @app.get("/v1/audit/tree/{run_id}")
-    async def audit_tree(run_id: str, p: Principal = Depends(principal)) -> dict:
+    async def audit_tree(
+        run_id: str, k: Kernel = Depends(_get_kernel), p: Principal = Depends(principal)
+    ) -> dict:
         from nankle.observability.tree import build_tree
 
-        return await build_tree(kernel.store, p.tenant_id, run_id)
+        return await build_tree(k.store, p.tenant_id, run_id)
 
     # keep an unused import referenced for the HITL enums in scope
     _ = (HITLType, Urgency)

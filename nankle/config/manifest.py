@@ -435,15 +435,20 @@ def load_manifest(path: str, *, env: Mapping[str, str] | None = None) -> FleetMa
 
 
 # --- applying the manifest to the store -------------------------------------
-def _seed_call(store: Any, method: str, *args: Any) -> None:
-    """Call a store seeding helper, with a clear error if it is unsupported."""
+async def _seed_call(store: Any, method: str, *args: Any) -> None:
+    """Call a store seeding helper, awaiting it if it is async (PostgresStore) and
+    calling it directly if it is sync (InMemoryStore). Clear error if unsupported."""
+    import inspect
+
     fn = getattr(store, method, None)
     if fn is None:
         raise RuntimeError(
             f"store {type(store).__name__} lacks seed helper {method!r}; "
-            "apply_manifest requires a seedable store (e.g. InMemoryStore)"
+            "apply_manifest requires a seedable store (e.g. InMemoryStore, PostgresStore)"
         )
-    fn(*args)
+    result = fn(*args)
+    if inspect.isawaitable(result):
+        await result
 
 
 def _capability_from_tier(tier: HierarchyTier, tenant_id: str) -> AgentCapability:
@@ -517,7 +522,7 @@ async def apply_manifest(
 
     # 3. budgets from tier budget blocks (FR cost-control)
     if manifest.hierarchy.tier1 is not None and manifest.hierarchy.tier1.budget:
-        _seed_call(
+        await _seed_call(
             store,
             "set_budget",
             _budget_from_tier(
@@ -527,7 +532,7 @@ async def apply_manifest(
     for tier in manifest.hierarchy.tier2:
         if tier.budget:
             scope_id = tier.department or tier.name
-            _seed_call(
+            await _seed_call(
                 store,
                 "set_budget",
                 _budget_from_tier(
@@ -536,7 +541,7 @@ async def apply_manifest(
             )
 
     # 4. tenant permissions (the verb ceiling, US-IAM-04)
-    _seed_call(
+    await _seed_call(
         store,
         "set_tenant_permissions",
         TenantPermissions(tenant, manifest.tenant_grants()),
@@ -546,7 +551,7 @@ async def apply_manifest(
     for adapter in manifest.adapters:
         if adapter.credential is not None:
             cred = adapter.credential
-            _seed_call(store, "set_credential_ref", tenant, cred.id, cred.as_ref())
+            await _seed_call(store, "set_credential_ref", tenant, cred.id, cred.as_ref())
             kernel.credentials.bind_adapter_credential(tenant, adapter.id, cred.id)
 
     # 6. builtin adapters: import the module, build(), register (P1)

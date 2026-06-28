@@ -13,6 +13,21 @@ on:
 jobs:
   test-and-gate:
     runs-on: ubuntu-latest
+    # A real Postgres so the security suite + tenant isolation run against the
+    # durable PostgresStore, not just in-memory (P0-1 done-when).
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: nankle
+          POSTGRES_DB: nankle
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      NANKLE_TEST_DATABASE_URL: postgresql://postgres:nankle@localhost:5432/nankle
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -25,7 +40,7 @@ jobs:
           pip install pytest pytest-asyncio aiosqlite
       - name: Invariant binding gate (K-29/K-30, debt 0)
         run: python scripts/check_invariants.py
-      - name: Test suite
+      - name: Test suite (in-memory + Postgres-backed)
         run: python -m pytest -q
 
   ui-build:

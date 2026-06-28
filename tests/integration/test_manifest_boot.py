@@ -11,7 +11,9 @@ from nankle.api.bootstrap import build_app
 @pytest.fixture(scope="module")
 def client():
     os.environ["NANKLE_MANIFEST"] = "manifest.example.yaml"
-    return TestClient(build_app())
+    # enter the context so the lifespan builds the kernel on the serving loop
+    with TestClient(build_app()) as c:
+        yield c
 
 
 def _admin(grants="*"):

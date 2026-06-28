@@ -36,15 +36,16 @@ def _find(paths) -> str | None:
     return None
 
 
-def build_store() -> Store:
-    """The store factory. Returns the in-memory store today; a Postgres store
-    plugs in here without touching any caller (the seam in NFR-MNT/§6)."""
+async def build_store() -> Store:
+    """The store factory (the §6 seam). Returns a durable PostgresStore when
+    DATABASE_URL is set, else the in-memory store (so offline tests still run).
+    Swapping the store changes nothing else in the system (P1, NFR-MNT)."""
     settings = load_settings()
     if settings.database_url:
-        log.warning(
-            "DATABASE_URL is set but the Postgres store is a seam; using in-memory "
-            "store. Plug the SQL store into build_store() to persist."
-        )
+        from nankle.store import PostgresStore
+
+        log.info("DATABASE_URL set; using durable PostgresStore")
+        return await PostgresStore.connect(settings.database_url)
     return InMemoryStore()
 
 
@@ -53,9 +54,13 @@ async def _seed_default(kernel: Kernel) -> None:
     from nankle.adapters.builtin.memory_tickets import build as build_tickets
     from nankle.models import GrantSet, TenantPermissions
 
-    kernel.store.set_tenant_permissions(  # type: ignore[attr-defined]
+    import inspect
+
+    res = kernel.store.set_tenant_permissions(  # type: ignore[attr-defined]
         TenantPermissions(_DEFAULT_TENANT, GrantSet.of(["*"]))
     )
+    if inspect.isawaitable(res):  # PostgresStore seed helper is async
+        await res
     await kernel.register_adapter(_DEFAULT_TENANT, build_tickets())
 
 
@@ -72,27 +77,34 @@ async def _seed_from_manifest(kernel: Kernel, manifest) -> None:
             log.warning("skill load failed: %s", exc)
 
 
-def build_kernel() -> Kernel:
-    """Construct and fully wire a Kernel (adapters, capabilities, agent invoker)."""
-    store = build_store()
+async def build_kernel_async() -> Kernel:
+    """Construct and fully wire a Kernel (store, adapters, capabilities, invoker)."""
+    store = await build_store()
     manifest_path = _find(_MANIFEST_CANDIDATES)
     if manifest_path:
         manifest = load_manifest(manifest_path)
         kernel = Kernel(store, blocking_verbs=manifest.blocking_verbs())
-        asyncio.run(_seed_from_manifest(kernel, manifest))
+        await _seed_from_manifest(kernel, manifest)
         log.info("booted from manifest %s (tenant %s)", manifest_path, manifest.tenant_id)
     else:
         kernel = Kernel(store)
-        asyncio.run(_seed_default(kernel))
+        await _seed_default(kernel)
         log.info("no manifest found; booted minimal demo tenant '%s'", _DEFAULT_TENANT)
 
     kernel.set_agent_invoker(make_agent_invoker(kernel))  # US-KER-02
     return kernel
 
 
+def build_kernel() -> Kernel:
+    """Synchronous entrypoint for uvicorn/worker import-time construction."""
+    return asyncio.run(build_kernel_async())
+
+
 def build_app():
-    """Build the FastAPI app for uvicorn (target: nankle.api.asgi:app)."""
+    """Build the FastAPI app for uvicorn (target: nankle.api.asgi:app).
+
+    The kernel is built by the app lifespan on the serving loop (not here), so
+    loop-bound resources like the asyncpg pool attach to uvicorn's loop."""
     from nankle.kernel.app import create_app
 
-    kernel = build_kernel()
-    return create_app(kernel, spawner=make_app_spawner(kernel))
+    return create_app(kernel_factory=build_kernel_async, spawner_factory=make_app_spawner)
