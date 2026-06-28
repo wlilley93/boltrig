@@ -1,5 +1,8 @@
 # Nankle
 
+[![GitHub repo](https://img.shields.io/badge/GitHub-wlilley93%2FNankle-181717?logo=github)](https://github.com/wlilley93/Nankle)
+[![CI](https://github.com/wlilley93/Nankle/actions/workflows/ci.yml/badge.svg)](https://github.com/wlilley93/Nankle/actions/workflows/ci.yml)
+
 A self-hostable agent-orchestration platform: a thin, secure kernel and a
 permanent agent fleet that spawns ephemeral workers to get work done. Nankle is
 a clean-room reference implementation of the "Hermes Fleet" SRS (the kernel
