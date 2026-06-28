@@ -842,3 +842,116 @@ export interface CreateInvitationResponse {
   email?: string;
   reason?: string;
 }
+
+// ===========================================================================
+// Round Five: memory & knowledge (nankle/kernel/memory_routes.py). recall /
+// remember / forget / ingest run the memory.* verbs through the chokepoint, so
+// when memory is disabled the verb routes return {status:"error",
+// reason:"binding_not_found"} (the UI surfaces that as "memory not enabled").
+// Reads (facts / ingestions) are scope-filtered server-side. Returned facts
+// carry provenance so the surface can show WHY a fact is known.
+// ===========================================================================
+
+export type MemoryDataClass = "standard" | "sensitive" | string;
+export type RecallMode = "similarity" | "graph_completion";
+
+export interface MemoryProvenance {
+  source_kind?: string | null;
+  source_ref?: string | null;
+  // present on browse (GET /facts)
+  created_at?: string | null;
+  // present on graph_completion recall: how the fact was reached
+  hops?: number;
+  path?: string[];
+}
+
+export interface MemoryFactView {
+  id: string;
+  owner_scope: string;
+  kind: string;
+  content: unknown;
+  data_class: MemoryDataClass;
+  provenance: MemoryProvenance;
+}
+
+export interface MemoryFactsResponse {
+  facts: MemoryFactView[];
+  scopes: string[];
+}
+
+export interface MemoryRecallRequest {
+  query: string;
+  mode?: RecallMode;
+  limit?: number;
+}
+
+// success: {facts, count}; denial / memory-off: {status, reason}.
+export interface MemoryRecallResponse {
+  facts?: MemoryFactView[];
+  count?: number;
+  status?: string;
+  reason?: string;
+}
+
+export interface MemoryRememberRequest {
+  content: string;
+  owner_scope?: string;
+  kind?: string;
+  source_kind?: string;
+  source_ref?: string;
+  data_class?: MemoryDataClass;
+  relates_to?: string[];
+}
+
+export interface MemoryRememberResponse {
+  status: string;
+  fact_ids?: string[];
+  owner_scope?: string;
+  reason?: string;
+}
+
+export interface MemoryForgetRequest {
+  target?: string;
+  source_ref?: string;
+}
+
+export interface MemoryForgetResponse {
+  status: string;
+  erasure_id?: string;
+  removed?: string[];
+  facts_removed?: number;
+  engine_confirmed?: boolean;
+  transcript_handled?: boolean;
+  reason?: string;
+}
+
+export interface MemoryIngestRequest {
+  source_kind: string;
+  source_ref: string;
+  owner_scope?: string;
+  items?: string[];
+}
+
+export interface MemoryIngestResponse {
+  status: string;
+  id?: string;
+  ingestion_status?: string;
+  facts_added?: number;
+  screened?: number;
+  reason?: string;
+}
+
+export interface MemoryIngestionRow {
+  id: string;
+  source_kind: string;
+  source_ref: string;
+  owner_scope: string;
+  status: string;
+  facts_added: number;
+  screened: number;
+  created_at?: string | null;
+}
+
+export interface MemoryIngestionsResponse {
+  ingestions: MemoryIngestionRow[];
+}

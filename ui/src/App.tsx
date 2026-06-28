@@ -11,6 +11,7 @@ import { EvalPanel } from "./panels/EvalPanel";
 import { InsightPanel } from "./panels/InsightPanel";
 import { KanbanPanel } from "./panels/KanbanPanel";
 import { MePanel } from "./panels/MePanel";
+import { MemoryPanel } from "./panels/MemoryPanel";
 import { RouterPanel } from "./panels/RouterPanel";
 import { SettingsPanel } from "./panels/SettingsPanel";
 import { StudioPanel } from "./panels/StudioPanel";
@@ -24,6 +25,7 @@ type Tab =
   | "admin"
   | "insight"
   | "eval"
+  | "memory"
   | "me"
   | "settings";
 
@@ -65,6 +67,11 @@ const TABS: ReadonlyArray<TabDef> = [
   },
   { id: "insight", label: "Insight", hint: "Cost, audit and runs (scoped)" },
   { id: "eval", label: "Eval", hint: "No-escalation evaluation harness" },
+  {
+    id: "memory",
+    label: "Memory",
+    hint: "Recall, browse, remember and ingest (scoped)",
+  },
   { id: "me", label: "Me", hint: "Personal agent, prefs and memory" },
   {
     id: "settings",
@@ -193,6 +200,7 @@ export function App() {
         {active === "admin" && <AdminPanel />}
         {active === "insight" && <InsightPanel />}
         {active === "eval" && <EvalPanel />}
+        {active === "memory" && <MemoryPanel />}
         {active === "me" && <MePanel />}
         {active === "settings" && <SettingsPanel />}
       </main>

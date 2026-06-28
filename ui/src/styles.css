@@ -1014,6 +1014,68 @@ textarea.code--tall {
 }
 
 /* ==========================================================================
+   Round Five: Memory panel. Reuses the card / badge / table vocabulary; the
+   fact card lays content over its metadata and provenance, and the grid reflows
+   to a single column on narrow screens (handled by the responsive block below).
+   ========================================================================== */
+
+.mem-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--gap);
+  align-items: start;
+}
+
+.mem-fact {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.mem-fact__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mem-fact__id {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 50%;
+}
+
+.mem-fact__text {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.mem-fact__prov,
+.mem-fact__path {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.mem-fact__foot {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* ==========================================================================
    Chat panel: layout, message bubbles and the structured-turn cards. Built to
    reflow from a two-column desktop view to a single column on phones, with the
    message list and composer always usable (US-MOB-02).
@@ -1426,6 +1488,9 @@ summary:focus-visible,
     grid-template-columns: 1fr;
   }
   .form__grid {
+    grid-template-columns: 1fr;
+  }
+  .mem-facts {
     grid-template-columns: 1fr;
   }
 
