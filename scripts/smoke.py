@@ -1,0 +1,175 @@
+#!/usr/bin/env python3
+"""Offline, in-process smoke test of the Nankle kernel guarantees.
+
+No docker, no database, no network: it builds an InMemoryStore + Kernel, loads
+the builtin ``memory-tickets`` adapter, and exercises the dispatch chokepoint
+end to end through the public kernel API. It demonstrates the four behaviours
+that define the kernel:
+
+  1. a granted create + read succeeds            (happy path, P2)
+  2. an ungranted call is denied                 (grant enforcement, SEC-07)
+  3. a gated verb pauses for approval, then       (HITL gate, SEC-14)
+     resumes once approved
+  4. a call degrades when the backend is down     (graceful degradation, P9)
+
+Each step prints a PASS/FAIL line; the process exits non-zero if any step fails.
+
+Usage:  python scripts/smoke.py      (or: make smoke)
+"""
+
+from __future__ import annotations
+
+import asyncio
+import sys
+from pathlib import Path
+
+# Run straight from a checkout (no editable install needed): put the repo root
+# on the path before importing the package, so `make smoke` works out of the box.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from nankle.adapters.builtin.memory_tickets import build as build_tickets  # noqa: E402
+from nankle.kernel import Kernel  # noqa: E402
+from nankle.models import (  # noqa: E402
+    DegradedMode,
+    GrantMissing,
+    GrantSet,
+    InvocationContext,
+    PendingHuman,
+    TenantPermissions,
+)
+from nankle.store import InMemoryStore  # noqa: E402
+
+TENANT = "acme"
+_results: list[tuple[str, bool, str]] = []
+
+
+def _ctx(grants: list[str], *, run_id: str = "smoke-run") -> InvocationContext:
+    return InvocationContext(
+        tenant_id=TENANT,
+        grants=GrantSet.of(grants),
+        actor="smoke-agent",
+        actor_tier="ephemeral",
+        run_id=run_id,
+        depth=0,
+    )
+
+
+async def _build_kernel(blocking_verbs: set[str] | None = None):
+    """A kernel on the in-memory store with the tenant ceiling and adapter set."""
+    store = InMemoryStore()
+    # Tenant ceiling permits the whole ticket noun (role-derived in production).
+    store.set_tenant_permissions(TenantPermissions(TENANT, GrantSet.of(["ticket.*"])))
+    kernel = Kernel(store, blocking_verbs=blocking_verbs or set())
+    adapter = build_tickets()
+    await kernel.register_adapter(TENANT, adapter)
+    return kernel, adapter
+
+
+def _record(name: str, ok: bool, detail: str = "") -> None:
+    _results.append((name, ok, detail))
+    tag = "PASS" if ok else "FAIL"
+    suffix = f"  ({detail})" if detail else ""
+    print(f"[{tag}] {name}{suffix}")
+
+
+async def step_granted_create_and_read() -> None:
+    name = "granted create + read succeeds"
+    try:
+        kernel, _ = await _build_kernel()
+        created = await kernel.invoke(
+            "ticket", "ticket.create", {"title": "Fix login"}, _ctx(["ticket.create"])
+        )
+        assert created.get("status") == "open" and created.get("id"), created
+        read = await kernel.invoke(
+            "ticket", "ticket.read", {"id": created["id"]}, _ctx(["ticket.read"])
+        )
+        assert read["id"] == created["id"], read
+        _record(name, True, f"ticket {created['id']} created and read back")
+    except Exception as exc:  # noqa: BLE001 - smoke reports, never raises
+        _record(name, False, f"{type(exc).__name__}: {exc}")
+
+
+async def step_ungranted_is_denied() -> None:
+    name = "ungranted call is denied"
+    try:
+        kernel, _ = await _build_kernel()
+        try:
+            await kernel.invoke(
+                "ticket", "ticket.create", {"title": "x"}, _ctx([])  # no grants
+            )
+        except GrantMissing:
+            _record(name, True, "GrantMissing raised as expected")
+            return
+        _record(name, False, "expected GrantMissing, but the call was allowed")
+    except Exception as exc:  # noqa: BLE001
+        _record(name, False, f"{type(exc).__name__}: {exc}")
+
+
+async def step_gated_pause_then_resume() -> None:
+    name = "gated verb pauses, then resumes after approval"
+    try:
+        kernel, _ = await _build_kernel(blocking_verbs={"ticket.create"})
+        # First attempt must pause for a human decision.
+        try:
+            await kernel.invoke(
+                "ticket", "ticket.create", {"title": "x"}, _ctx(["ticket.create"])
+            )
+        except PendingHuman as pending:
+            req_id = pending.hitl_request_id
+        else:
+            _record(name, False, "expected PendingHuman, but the call ran immediately")
+            return
+        # The pending request is on the queue.
+        outstanding = await kernel.hitl.list_pending(TENANT)
+        assert any(r.id == req_id for r in outstanding), "request not listed as pending"
+        # Approve it, then resume by replaying with the approval id.
+        await kernel.hitl.answer(TENANT, req_id, "approve", "lead@acme")
+        out = await kernel.invoke(
+            "ticket", "ticket.create", {"title": "x"}, _ctx(["ticket.create"]),
+            approval_id=req_id,
+        )
+        assert out.get("status") == "open", out
+        _record(name, True, f"paused on {req_id[:8]}, approved, then created")
+    except Exception as exc:  # noqa: BLE001
+        _record(name, False, f"{type(exc).__name__}: {exc}")
+
+
+async def step_degraded_when_backend_down() -> None:
+    name = "call degrades when the backend is down"
+    try:
+        kernel, adapter = await _build_kernel()
+        adapter._fail = True  # flip the builtin adapter to simulate an outage
+        try:
+            await kernel.invoke(
+                "ticket", "ticket.create", {"title": "x"}, _ctx(["ticket.create"])
+            )
+        except DegradedMode as degraded:
+            reason = degraded.output.get("_degraded", {}).get("reason")
+            assert reason == "backend_unavailable", degraded.output
+            assert degraded.deferred is True
+            _record(name, True, f"degraded result deferred (reason={reason})")
+            return
+        _record(name, False, "expected DegradedMode, but the call returned a normal result")
+    except Exception as exc:  # noqa: BLE001
+        _record(name, False, f"{type(exc).__name__}: {exc}")
+
+
+async def main() -> int:
+    print("Nankle offline smoke test (in-process, no docker)\n")
+    await step_granted_create_and_read()
+    await step_ungranted_is_denied()
+    await step_gated_pause_then_resume()
+    await step_degraded_when_backend_down()
+
+    passed = sum(1 for _, ok, _ in _results if ok)
+    total = len(_results)
+    print(f"\n{passed}/{total} steps passed")
+    if passed == total:
+        print("RESULT: PASS")
+        return 0
+    print("RESULT: FAIL")
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(asyncio.run(main()))

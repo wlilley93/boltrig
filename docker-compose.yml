@@ -1,0 +1,187 @@
+# Nankle - one self-hostable stack (SRS S11.1).
+#
+# The same first-party images run in every environment; only .env and the fleet
+# manifest change between them (P7, NFR-PORT-01). Bring it up with:
+#
+#   cp .env.example .env                 # then edit secrets
+#   cp manifest.example.yaml manifest.yaml
+#   docker compose up -d                 # add: --profile local for on-box inference
+#
+# Services:
+#   postgres          durable state (SRS S6 / nankle/store/schema.sql)
+#   redis             rate-limit + ephemeral counters (FR-KER-05)
+#   kernel            the dispatch chokepoint HTTP surface (P2)
+#   fleet-worker      the fleet runtime + durable workers (Epics F/G)
+#   hatchet-engine    optional durable execution engine (US-FLT-06, seam)
+#   hatchet-dashboard optional Hatchet web console (seam)
+#   ui                the React console: Router, Kanban, Approvals (Epic L)
+#   local-model       optional on-box inference for sensitive data (profile: local)
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-nankle}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nankle}
+      POSTGRES_DB: ${POSTGRES_DB:-nankle}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # First-boot schema load (idempotent; CREATE TABLE IF NOT EXISTS).
+      # Production schema changes go through `make migrate` (alembic).
+      - ./nankle/store/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U $${POSTGRES_USER:-nankle} -d $${POSTGRES_DB:-nankle}
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  kernel:
+    build:
+      context: .
+      dockerfile: deploy/kernel.Dockerfile
+      args:
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-}
+    image: nankle/kernel:0.1.0
+    restart: unless-stopped
+    command: ["uvicorn", "nankle.api.asgi:app", "--host", "0.0.0.0", "--port", "8000"]
+    env_file: .env
+    ports:
+      - "${KERNEL_PORT:-8000}:8000"
+    volumes:
+      - ./manifest.yaml:/app/manifest.yaml:ro
+      - ./libraries:/app/libraries:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')" || exit 1
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  fleet-worker:
+    build:
+      context: .
+      dockerfile: deploy/fleet.Dockerfile
+      args:
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-}
+    image: nankle/fleet:0.1.0
+    restart: unless-stopped
+    command: ["python", "-m", "nankle.api.worker"]
+    env_file: .env
+    volumes:
+      - ./manifest.yaml:/app/manifest.yaml:ro
+      - ./libraries:/app/libraries:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - python -c "import nankle" || exit 1
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  hatchet-engine:
+    # Optional durable execution (US-FLT-06). The kernel and fleet run WITHOUT
+    # it (P9 degrade); enable it to get durable resume of paused/long runs.
+    # hatchet-lite bundles the engine, API and gRPC. Pin a digest for air-gap.
+    image: ghcr.io/hatchet-dev/hatchet/hatchet-lite:latest
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${HATCHET_DATABASE_URL:-postgresql://nankle:nankle@postgres:5432/hatchet?sslmode=disable}
+      SERVER_GRPC_BROADCAST_ADDRESS: hatchet-engine:7077
+      SERVER_GRPC_BIND_ADDRESS: 0.0.0.0
+    ports:
+      - "${HATCHET_GRPC_PORT:-7077}:7077"
+      - "${HATCHET_API_PORT:-8888}:8888"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  hatchet-dashboard:
+    # Optional Hatchet web console (seam). Proxies to the engine API.
+    image: ghcr.io/hatchet-dev/hatchet/hatchet-dashboard:latest
+    restart: unless-stopped
+    environment:
+      SERVER_URL: http://hatchet-engine:8888
+    ports:
+      - "${HATCHET_DASHBOARD_PORT:-8889}:80"
+    depends_on:
+      - hatchet-engine
+
+  ui:
+    build:
+      context: ./ui
+      dockerfile: Dockerfile
+    image: nankle/ui:0.1.0
+    restart: unless-stopped
+    ports:
+      - "${UI_PORT:-8080}:80"
+    depends_on:
+      - kernel
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget -qO- http://localhost/ >/dev/null 2>&1 || exit 1
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  local-model:
+    # Optional on-box inference for air-gapped / sensitive-classified data
+    # (SEC-12, the manifest sensitive_endpoint). OpenAI-compatible on :8000.
+    # Enable with: docker compose --profile local up -d
+    profiles: ["local"]
+    image: vllm/vllm-openai:latest
+    restart: unless-stopped
+    command:
+      - "--model"
+      - "${LOCAL_MODEL:-Qwen/Qwen2.5-7B-Instruct}"
+      - "--port"
+      - "8000"
+    ports:
+      - "${LOCAL_MODEL_PORT:-8001}:8000"
+    volumes:
+      # Mount a local model cache so air-gapped boxes never reach the internet.
+      - ${LOCAL_MODEL_CACHE:-./.models}:/root/.cache/huggingface
+    ipc: host
+    # GPU is optional. On a CPU-only box, swap this image for an Ollama service.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: ["gpu"]
+
+volumes:
+  pgdata:

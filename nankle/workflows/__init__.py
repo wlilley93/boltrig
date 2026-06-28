@@ -1,0 +1,18 @@
+"""The workflow library: precreated, generated and learned process definitions.
+
+Workflows are data (P1). This package selects and synthesises
+:class:`nankle.models.WorkflowDefinition` records; durable execution is Hatchet
+(reached through the ``trigger`` seam).
+"""
+
+from __future__ import annotations
+
+from .generator import generate_workflow, learn_from_success, schedule_spec
+from .library import WorkflowLibrary
+
+__all__ = [
+    "WorkflowLibrary",
+    "generate_workflow",
+    "learn_from_success",
+    "schedule_spec",
+]

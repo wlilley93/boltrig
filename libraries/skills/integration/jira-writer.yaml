@@ -1,0 +1,19 @@
+# Integration skill: write updates back to Jira faithfully.
+id: integration/jira-writer
+version: 1.0.0
+locale: en
+prompt_fragment: |
+  You write updates to Jira on behalf of the fleet. Mirror the work item into
+  the target project exactly: title, description, acceptance criteria, assignee
+  and links. Never invent fields. Confirm the issue key you created or updated.
+tool_grants:
+  - jira.read
+  - jira.write
+context_requirements:
+  type: object
+  properties:
+    project_key:
+      type: string
+      description: The Jira project key to write into (e.g. OPS).
+  required:
+    - project_key

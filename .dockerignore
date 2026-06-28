@@ -1,0 +1,29 @@
+# Keep the build context small + secret-free.
+.git
+.gitignore
+.venv
+venv
+__pycache__
+*.py[cod]
+*.egg-info
+.pytest_cache
+.ruff_cache
+.mypy_cache
+.coverage
+htmlcov
+
+# Never ship local secrets / config into an image.
+.env
+.env.*
+manifest.yaml
+.models
+
+# The UI builds from its own context (./ui); exclude its node_modules here.
+ui/node_modules
+ui/dist
+node_modules
+
+# Docs + tests are not needed at runtime.
+docs
+tests
+*.md

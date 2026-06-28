@@ -1,0 +1,19 @@
+# Skill library data (S7.4). Adding or editing a skill is data, never code (P1).
+# Base analysis skill: the shared decomposition prompt every analysis skill builds on.
+id: analysis/base-decomposition
+version: 1.0.0
+locale: en
+prompt_fragment: |
+  You are a decomposition specialist. Break the task into the smallest
+  independently-verifiable subtasks. For each subtask, state its goal, the
+  inputs it needs, and a crisp acceptance check. Prefer convergent steps with
+  known outputs and flag any step that may expand so it can be bounded.
+tool_grants: []
+context_requirements:
+  type: object
+  properties:
+    objective:
+      type: string
+      description: The outcome the decomposition is working towards.
+  required:
+    - objective

@@ -1,0 +1,22 @@
+# Extends analysis/base-decomposition (S7.4 example, US-SKL-02).
+# Inheritance at resolve time: prompts concatenate parent-first, tool_grants
+# union, context_requirements merge. The base never mutates.
+id: analysis/ticket-decomposition
+version: 1.0.0
+extends: analysis/base-decomposition
+locale: en
+prompt_fragment: |
+  Apply decomposition to a tracker ticket. Read the ticket and its links, then
+  produce child tickets each sized to a single owner and a single acceptance
+  check. Preserve a link from every child back to the parent ticket.
+tool_grants:
+  - jira.read
+  - jira.write
+context_requirements:
+  type: object
+  properties:
+    ticket_id:
+      type: string
+      description: The id/key of the ticket to decompose.
+  required:
+    - ticket_id

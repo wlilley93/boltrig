@@ -1,0 +1,179 @@
+# Nankle fleet manifest (SRS S11.2). Copy to manifest.yaml and edit.
+#
+#   cp manifest.example.yaml manifest.yaml
+#
+# This file is the ONE place an organisation is configured: who they are, how
+# they authenticate, which models and integrations they use, the agent org
+# chart, the spawn rules, the HITL policy, and the network / privacy posture.
+# Adding an org, a model, a capability, or an integration is a manifest edit
+# (plus an adapter/skill/workflow in libraries/) - never a core code change
+# (P1/P7). ${ENV} references are interpolated from the process environment
+# (nankle/config/manifest.py).
+
+organisation: Acme Corp
+tenant_id: acme
+locale_default: en
+timezone_default: Europe/London
+
+# --- identity: OIDC + IdP-group -> role/scope mappings (US-IAM-01/02) --------
+identity:
+  provider: oidc
+  issuer: ${OIDC_ISSUER}
+  audience: ${OIDC_AUDIENCE}
+  jwks_uri: ${OIDC_JWKS_URI}
+  role_mappings:
+    # Org admins get the tenant-wide verb ceiling ("*").
+    - idp_group: acme-admins
+      role: org-admin
+      scope:
+        all: true
+    # Engineering dept heads: ticket + jira authority, scoped to their dept.
+    - idp_group: acme-engineering
+      role: department-head
+      scope:
+        departments: ["engineering"]
+        nouns: ["ticket", "jira"]
+    # Members can read and write tickets only.
+    - idp_group: acme-staff
+      role: agent
+      scope:
+        verbs: ["ticket.read", "ticket.create"]
+
+# --- models: inference back ends + routing (P4, SEC-12) ---------------------
+models:
+  endpoints:
+    - id: standard
+      kind: anthropic
+      model: claude-sonnet-4-6
+      data_class: standard
+    - id: local-sensitive
+      kind: vllm
+      base_url: http://local-model:8000/v1
+      model: ${LOCAL_MODEL:-Qwen/Qwen2.5-7B-Instruct}
+      data_class: sensitive
+  default: standard
+  # Sensitive-classified data is routed to the on-box endpoint (never egresses).
+  sensitive_endpoint: local-sensitive
+
+# --- hierarchy: the durable agent org chart (one tier1 over many tier2) ------
+hierarchy:
+  tier1:
+    name: chief-of-staff
+    runtime: hermes
+    model_endpoint: standard
+    max_depth: 4
+    supported_skills: ["*"]
+    cost_tier: standard
+    budget:
+      cost_limit_micros: 50000000
+      hard_stop: true
+      window: daily
+  tier2:
+    - name: head-of-engineering
+      department: engineering
+      runtime: hermes
+      model_endpoint: standard
+      max_depth: 3
+      supported_skills: ["analysis/*", "integration/*"]
+      cost_tier: standard
+      budget:
+        cost_limit_micros: 20000000
+        hard_stop: true
+        window: daily
+    - name: head-of-marketing
+      department: marketing
+      runtime: hermes
+      model_endpoint: standard
+      max_depth: 3
+      supported_skills: ["writing/*", "analysis/*"]
+      cost_tier: standard
+
+# --- ephemeral runtimes: short-lived child agents the fleet spawns -----------
+ephemeral_runtimes:
+  - name: worker-cheap
+    runtime: hermes
+    model_endpoint: standard
+    supported_skills: ["*"]
+    max_depth: 2
+    cost_tier: cheap
+  - name: worker-sensitive
+    runtime: hermes
+    model_endpoint: local-sensitive
+    supported_skills: ["*"]
+    max_depth: 2
+    cost_tier: standard
+
+# --- spawn rules: match a task to a runtime + skill set (S6) -----------------
+spawn_rules:
+  - name: decompose-tickets
+    match:
+      intent_tags: ["planning", "decomposition"]
+    capability: worker-cheap
+    skills: ["analysis/ticket-decomposition"]
+    max_depth: 2
+  - name: write-back-to-jira
+    match:
+      intent_tags: ["integration", "jira"]
+    capability: worker-cheap
+    skills: ["integration/jira-writer"]
+  - name: long-form-writing
+    match:
+      intent_tags: ["content", "writing"]
+    capability: worker-cheap
+    skills: ["writing/long-form"]
+
+# --- adapters: the integrations this tenant uses + their credential refs -----
+# ids are the builtin adapters (nankle/adapters/builtin/*); credential refs map
+# to the JSON env vars in .env. memory-tickets needs no credential.
+adapters:
+  - id: ms-graph
+    runtime: http
+    credential:
+      id: GRAPH_APP
+      store: env
+      kind: oauth
+  - id: jira
+    runtime: http
+    credential:
+      id: JIRA_OAUTH
+      store: env
+      kind: api_key
+  - id: crm-sql
+    runtime: sql
+    credential:
+      id: CRM_SQL
+      store: env
+      kind: basic
+  - id: memory-tickets
+    runtime: script
+
+# --- HITL: routing + the verbs that ALWAYS require human approval (P5) -------
+hitl:
+  primary_channel: teams
+  notify_via: ["teams"]
+  approval_timeout_seconds: 3600
+  escalation_chain: ["head-of-engineering", "chief-of-staff"]
+  # These verbs are gated at the kernel regardless of consequence (SEC-14).
+  blocking_verbs:
+    - jira.delete
+    - crm.write
+    - ms-graph.sendMail
+
+# --- network: egress posture for adapter calls (US-DEP-04, SEC) -------------
+network:
+  air_gapped: ${AIR_GAPPED:-false}
+  https_proxy: ${HTTPS_PROXY:-}
+  ca_bundle: ${CA_BUNDLE:-}
+  allowed_domains:
+    - graph.microsoft.com
+    - your-org.atlassian.net
+  blocked_domains: []
+
+# --- privacy: data-handling posture (US-PRIV-02, SEC-13) --------------------
+privacy:
+  pii_redaction: true
+  data_residency: eu
+  retention_days: 365
+  redact_fields:
+    - email
+    - phone

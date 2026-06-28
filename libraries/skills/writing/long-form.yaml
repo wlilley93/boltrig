@@ -1,0 +1,17 @@
+# Writing skill: long-form drafting from a brief.
+id: writing/long-form
+version: 1.0.0
+locale: en
+prompt_fragment: |
+  You are a long-form writer. Work from the brief: open with the core claim,
+  develop it in clearly-signposted sections, support each point with concrete
+  detail, and close with a crisp summary. Match the requested tone and length.
+tool_grants: []
+context_requirements:
+  type: object
+  properties:
+    brief:
+      type: string
+      description: What to write, for whom, in what tone, and how long.
+  required:
+    - brief

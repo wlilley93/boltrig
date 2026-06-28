@@ -1,0 +1,40 @@
+# --- secrets / local config (NEVER commit) ---
+.env
+.env.*
+!.env.example
+manifest.yaml
+deploy/ca-bundle.crt
+.models/
+
+# --- python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+build/
+dist/
+.eggs/
+.venv/
+venv/
+.python-version
+
+# --- test / tooling caches ---
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# --- node / ui ---
+node_modules/
+ui/dist/
+ui/node_modules/
+*.tsbuildinfo
+
+# --- editors / os ---
+.idea/
+.vscode/
+*.swp
+.DS_Store

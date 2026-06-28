@@ -1,0 +1,103 @@
+# Nankle binding-invariant catalogue (the K-29/K-30 ratchet input).
+#
+# Each entry is a binding invariant: a one-line meaning plus the pytest node ids
+# that bind it (path::test_name). scripts/check_invariants.py cross-checks this
+# file against the @pytest.mark.invariant(...) markers in tests/: every declared
+# invariant MUST have at least one real test (no unbound claims), and every
+# marker in the tests MUST be declared here (no undeclared invariants). Binding
+# debt may only ever decrease. See docs/invariants.md for the human-readable map.
+#
+# Structure (parsed by a tiny stdlib reader; keep this exact shape):
+#   invariants:
+#     <ID>:
+#       description: <one line>
+#       tests:
+#         - <path::test_name>
+
+invariants:
+  P9:
+    description: Backend unavailability degrades gracefully, never crashes (graceful degradation).
+    tests:
+      - tests/kernel/test_ratelimit_degraded.py::test_degraded_mode_when_backend_down
+  US-FLT-04:
+    description: Spawn selects the cheapest capable runtime for a child agent.
+    tests:
+      - tests/integration/test_fleet_spawn.py::test_cheapest_capable_runtime_chosen
+  US-ADP-01:
+    description: An adapter is generated from an OpenAPI spec, deriving its verbs.
+    tests:
+      - tests/integration/test_generated_adapter.py::test_generator_derives_verbs_from_openapi
+  SEC-22:
+    description: A generated adapter is inert until a human review gate activates it.
+    tests:
+      - tests/integration/test_generated_adapter.py::test_generated_adapter_inert_until_reviewed
+  FR-EXE-03:
+    description: Recursion depth is bounded - a spawn past the capability max depth is refused.
+    tests:
+      - tests/integration/test_fleet_spawn.py::test_depth_limit_enforced
+  K-2:
+    description: The tenant permission ceiling caps caller grants (intersection, not union).
+    tests:
+      - tests/security/test_grant_enforcement.py::test_tenant_ceiling_caps_caller_grants
+  K-5:
+    description: Deny dominates allow in a GrantSet (a deny beats a covering allow).
+    tests:
+      - tests/unit/test_grants_model.py::test_deny_dominates_allow
+  K-9:
+    description: Grant wildcards match on the noun namespace, never a bare prefix collision.
+    tests:
+      - tests/unit/test_grants_model.py::test_wildcard_does_not_match_prefix_collision
+  K-13:
+    description: Fail-closed - empty grants deny everything and an unknown verb has no binding.
+    tests:
+      - tests/kernel/test_dispatch.py::test_unknown_verb_fails_closed
+      - tests/unit/test_grants_model.py::test_empty_grants_deny_everything
+  K-19:
+    description: The audit chain is tamper-evident - a re-derive detects any reorder, drop, or edit.
+    tests:
+      - tests/kernel/test_audit_chain.py::test_chain_verifies_and_detects_tampering
+  K-20:
+    description: Bounded observability - the audit writer scrubs secrets / identity in detail.
+    tests:
+      - tests/security/test_credential_isolation.py::test_audit_scrubs_secret_in_detail
+  SEC-05:
+    description: Resolved credential material never enters the audit log.
+    tests:
+      - tests/security/test_credential_isolation.py::test_secret_material_never_enters_audit
+  SEC-07:
+    description: A verb is denied unless the caller holds the matching grant.
+    tests:
+      - tests/security/test_grant_enforcement.py::test_ungranted_verb_is_denied
+      - tests/security/test_grant_enforcement.py::test_grant_for_other_verb_does_not_authorise
+  SEC-08:
+    description: Tenant isolation - no cross-tenant discovery or dispatch (fail-closed).
+    tests:
+      - tests/security/test_tenant_isolation.py::test_other_tenant_cannot_see_this_tenants_verbs
+      - tests/security/test_tenant_isolation.py::test_other_tenant_dispatch_fails_closed
+  SEC-13:
+    description: PII is detected and redacted before it leaves the boundary.
+    tests:
+      - tests/security/test_budget_and_pii.py::test_pii_redaction
+  SEC-14:
+    description: High-consequence / blocking verbs pause for human approval and cannot be bypassed.
+    tests:
+      - tests/security/test_hitl_gate.py::test_blocking_verb_pauses_for_approval
+      - tests/security/test_hitl_gate.py::test_resumes_after_approval
+  SEC-16:
+    description: Every action (allowed or denied) is audited, hash-chained, append-only.
+    tests:
+      - tests/kernel/test_audit_chain.py::test_every_action_is_audited
+      - tests/kernel/test_audit_chain.py::test_denied_actions_are_also_audited
+  SEC-21:
+    description: Verb params are schema-validated before any dispatch side effect.
+    tests:
+      - tests/kernel/test_dispatch.py::test_invalid_params_rejected_before_dispatch
+  FR-KER-05:
+    description: Per-verb / per-tenant rate limits are enforced at the kernel.
+    tests:
+      - tests/kernel/test_ratelimit_degraded.py::test_rate_limit_enforced
+  FR-COST-02:
+    description: A hard-stop budget halts before exceeding; a soft budget records overage only.
+    tests:
+      - tests/security/test_budget_and_pii.py::test_budget_hard_stop_halts_before_exceeding
+      - tests/security/test_budget_and_pii.py::test_soft_budget_does_not_halt

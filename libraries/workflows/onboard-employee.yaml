@@ -1,0 +1,37 @@
+# Precreated workflow library data (US-WFL-01). intent_tags drive matching.
+# Maps directly onto nankle.models.WorkflowDefinition; definition is a
+# Hatchet-style spec (steps with parents form the DAG).
+id: onboard-employee
+version: 1.0.0
+source: precreated
+intent_tags:
+  - onboarding
+  - hr
+  - new-hire
+origin_task: null
+definition:
+  name: onboard-employee
+  version: 1.0.0
+  on:
+    event: employee.created
+  steps:
+    - id: create-accounts
+      name: provision-accounts
+      parents: []
+      action: provision.accounts
+    - id: assign-equipment
+      name: assign-equipment
+      parents:
+        - create-accounts
+      action: it.assign-equipment
+    - id: schedule-orientation
+      name: schedule-orientation
+      parents:
+        - create-accounts
+      action: hr.schedule-orientation
+    - id: notify-manager
+      name: notify-manager
+      parents:
+        - assign-equipment
+        - schedule-orientation
+      action: notify.manager
