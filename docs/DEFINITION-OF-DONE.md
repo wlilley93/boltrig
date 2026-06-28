@@ -30,7 +30,8 @@ against this build. Each item is marked:
 - [x] **done** Spawn pipeline: skill inheritance, cheapest-capable runtime, depth limit, budget-before-run, audited (US-FLT-03/04, FR-EXE-03). `fleet/spawn.py`.
 - [x] **done** Graceful degradation: a runtime/backend failure degrades, never crashes (P9). `dispatch.py` (`_degrade_or_fail`), `fleet/spawn.py`; `tests/kernel/test_ratelimit_degraded.py::test_degraded_mode_when_backend_down`.
 - [x] **done** Durable HITL pause (NFR-REL-01): a blocking pause survives a restart and resumes on approval over Postgres; `trigger` enqueues through the durable backbone. `tests/store/test_postgres_store.py`, `tests/integration/test_workflow_trigger.py`.
-- [~] **seam** Full live-Hatchet run-resume of long/recursive runs (P6, US-FLT-06) needs a running Hatchet engine; the local executor is the offline fallback.
+- [x] **done** Live Hatchet integration (P6, US-FLT-06): the engine + SDK are wired (`fleet/hatchet_app.py`, `fleet/hatchet_worker.py`); a Nankle workflow registers and runs end to end on a real engine, and the durable HITL task pauses live (`tests/integration/test_hatchet_live.py`, gated on `HATCHET_CLIENT_TOKEN`). Proven on-box against hatchet-lite.
+- [~] **seam** Live durable-event *resume* across a worker restart over Hatchet depends on the engine's durable-event wiring (a hatchet-lite v1 detail); the durability property itself is proven by the Postgres NFR-REL-01 test, and the local executor is the offline fallback.
 - [x] **done** Source-agnostic work normalisation to one WorkItem (P10). `work/normalise.py`, `work/store.py`.
 
 ## Cost + HITL + observability
