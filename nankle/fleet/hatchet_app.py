@@ -26,6 +26,12 @@ from typing import Any
 from pydantic import BaseModel
 
 
+# The HITL approval event key. Correlation to a specific run is by SCOPE
+# (the run key), not by baking the key into the event name - that is how Hatchet
+# routes a user event to one durable wait.
+APPROVAL_EVENT_KEY = "nankle:approval"
+
+
 class HitlInput(BaseModel):
     run_key: str
 
@@ -66,15 +72,31 @@ def build_hatchet_app() -> tuple[Any, dict[str, Any]]:
     )
     async def hitl_demo(inp: HitlInput, ctx: DurableContext) -> dict:
         # Durable pause: block until the approval event for this run arrives. The
-        # first arg is the durable signal key; the condition matches the event.
-        # The engine persists this wait, so a worker restart resumes the same run.
+        # event is correlated to THIS run by scope (a fixed key + per-run scope),
+        # which is how Hatchet routes a user event to a specific durable wait. The
+        # engine persists this wait, so a worker restart resumes the same run.
         await ctx.aio_wait_for(
             f"approval-{inp.run_key}",
             UserEventCondition(
-                event_key=f"nankle:approval:{inp.run_key}",
+                event_key=APPROVAL_EVENT_KEY,
+                scope=inp.run_key,
+                expression="true",
                 consider_events_since=datetime.now(timezone.utc) - timedelta(minutes=10),
             ),
         )
         return {"resumed": True, "key": inp.run_key}
 
     return hatchet, {"ping": ping, "hitl": hitl_demo}
+
+
+async def approve(hatchet: Any, run_key: str, decision: str = "approve") -> None:
+    """Push the approval event that resumes a paused durable HITL run, correlated
+    to the run by scope. This is what a kernel HITL approval triggers in
+    production to resume the Hatchet run."""
+    from hatchet_sdk import PushEventOptions
+
+    await hatchet.event.aio_push(
+        APPROVAL_EVENT_KEY,
+        {"decision": decision, "run_key": run_key},
+        options=PushEventOptions(scope=run_key),
+    )

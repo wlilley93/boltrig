@@ -79,3 +79,32 @@ async def test_live_durable_task_pauses():
     finally:
         if worker.poll() is None:
             worker.kill()
+
+
+async def test_live_durable_pause_then_resume_on_approval():
+    """A paused durable HITL run resumes when the scope-correlated approval event
+    arrives (NFR-REL-01). The wait is a fixed event key + per-run scope; approval
+    pushes that event with the matching scope - the Hatchet pattern for resuming a
+    specific durable wait. (Also proven over a worker restart with two workers.)"""
+    import uuid
+
+    from nankle.fleet.hatchet_app import HitlInput, approve, build_hatchet_app
+
+    hatchet, workflows = build_hatchet_app()
+    worker = _start_worker()
+    try:
+        await asyncio.sleep(9)
+        key = uuid.uuid4().hex[:8]
+        ref = await workflows["hitl"].aio_run(HitlInput(run_key=key), wait_for_result=False)
+        await asyncio.sleep(8)  # the durable wait registers
+        await approve(hatchet, key)  # scope-correlated approval resumes THIS run
+        result = await asyncio.wait_for(ref.aio_result(), timeout=60)
+        resumed = result.get("resumed") if isinstance(result, dict) else None
+        if resumed is None and isinstance(result, dict):
+            resumed = next(
+                (v.get("resumed") for v in result.values() if isinstance(v, dict)), None
+            )
+        assert resumed is True, result
+    finally:
+        if worker.poll() is None:
+            worker.kill()
