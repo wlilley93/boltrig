@@ -33,10 +33,11 @@ def test_invoke_ok_200():
 @pytest.mark.kernel
 def test_invoke_denied_403():
     c = _client()
+    # a non-admin caller with no grants and no scope (role-derived grants are empty)
     r = c.post(
         "/v1/invoke",
         json={"noun": "ticket", "verb": "ticket.create", "params": {"title": "x"}},
-        headers=_headers(""),  # no grants
+        headers={"x-nankle-tenant": "acme", "x-nankle-subject": "u1", "x-nankle-role": "agent"},
     )
     assert r.status_code == 403
     assert r.json()["status"] == "denied"

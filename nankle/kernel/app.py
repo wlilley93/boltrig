@@ -64,15 +64,28 @@ PrincipalResolver = Callable[[Request], Awaitable[Principal]]
 async def _dev_principal(request: Request) -> Principal:
     """Development resolver. Trusts headers; replace with OIDC/SAML in prod
     (see ``nankle.identity.auth``). SEC-01 requires real auth in production."""
+    from nankle.identity.rbac import grants_for_scope
+
     h = request.headers
-    grants = [g for g in h.get("x-nankle-grants", "").split(",") if g]
     role = h.get("x-nankle-role", "org-admin")
     departments = [d for d in h.get("x-nankle-departments", "").split(",") if d]
-    scope = {"all": True} if role == "org-admin" else {"departments": departments}
+    grants_hdr = [g for g in h.get("x-nankle-grants", "").split(",") if g]
+    verbs = [v for v in h.get("x-nankle-verbs", "").split(",") if v]
+    scope: dict[str, Any] = {"all": True} if role == "org-admin" else {
+        "departments": departments, "verbs": verbs,
+    }
+    # Grants priority: an explicit grants header (simulate an ephemeral) wins;
+    # otherwise derive from role/scope so dev discovery is not empty (US-KER-05).
+    if grants_hdr:
+        grants = GrantSet.of(grants_hdr)
+    elif role == "org-admin":
+        grants = GrantSet.of(["*"])
+    else:
+        grants = grants_for_scope(scope)
     return Principal(
         tenant_id=h.get("x-nankle-tenant", "default"),
         subject=h.get("x-nankle-subject", "dev"),
-        grants=GrantSet.of(grants),
+        grants=grants,
         role=role,
         actor_tier=h.get("x-nankle-tier", "human"),
         on_behalf_of=h.get("x-nankle-obo"),

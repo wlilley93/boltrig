@@ -30,6 +30,10 @@ invariants:
     tests:
       - tests/security/test_department_isolation.py::test_engineer_sees_only_their_department
       - tests/security/test_department_isolation.py::test_engineer_cannot_see_other_department
+  US-KER-05:
+    description: Discovery is caller-scoped - capabilities omit verbs outside the caller's grants.
+    tests:
+      - tests/security/test_discovery_scope.py::test_scoped_caller_sees_only_scoped_verbs
   US-FLT-04:
     description: Spawn selects the cheapest capable runtime for a child agent.
     tests:

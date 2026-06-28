@@ -82,7 +82,15 @@ class KernelRegistry:
     ) -> dict[str, Any]:
         """Return the noun/verb map the caller is permitted to see (role-scoped)."""
         verbs = await self._store.list_verbs(tenant_id, noun_id)
-        visible = [v for v in verbs if perms.grants.permits(v.id)]
+        # A verb is visible iff the tenant ceiling permits it AND the caller's own
+        # (role-scoped) grants permit it - the US-IAM-02 / US-KER-05 intersection.
+        # With no caller context, fall back to the ceiling (internal callers).
+        caller = context.grants if context is not None else None
+        visible = [
+            v
+            for v in verbs
+            if perms.grants.permits(v.id) and (caller is None or caller.permits(v.id))
+        ]
         out: list[dict[str, Any]] = []
         for v in visible:
             binding = await self._store.get_binding(tenant_id, v.id)
