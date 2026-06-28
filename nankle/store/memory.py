@@ -22,6 +22,7 @@ from nankle.models import (
     EvalRun,
     MemoryItem,
     NotificationPref,
+    PersonalAccessToken,
     PersonalAgent,
     HITLRequest,
     HITLResponse,
@@ -30,6 +31,10 @@ from nankle.models import (
     Noun,
     Skill,
     TenantPermissions,
+    User,
+    UserInvitation,
+    UserSession,
+    UserSetting,
     Verb,
     VerbBinding,
     WorkflowDefinition,
@@ -66,6 +71,12 @@ class InMemoryStore:
         self._notif: dict[tuple[str, str], NotificationPref] = {}
         self._personal: dict[tuple[str, str], PersonalAgent] = {}
         self._memory: list[MemoryItem] = []
+        # Round Four: users, tokens, invitations, settings, sessions.
+        self._users: dict[tuple[str, str], User] = {}
+        self._pats: dict[tuple[str, str], PersonalAccessToken] = {}
+        self._invites: dict[tuple[str, str], UserInvitation] = {}
+        self._settings: dict[tuple[str, str, str], UserSetting] = {}
+        self._sessions: dict[tuple[str, str], UserSession] = {}
 
     # --- registry ---
     async def get_noun(self, tenant_id, noun_id):
@@ -324,3 +335,83 @@ class InMemoryStore:
             and (kind is None or m.kind == kind)
         ]
         return out[-limit:]
+
+    # --- Round Four: users + provisioning (USR) ---
+    async def upsert_user(self, user):
+        self._users[(user.tenant_id, user.id)] = user
+
+    async def get_user(self, tenant_id, user_id):
+        return self._users.get((tenant_id, user_id))
+
+    async def list_users(self, tenant_id):
+        return [u for (t, _), u in self._users.items() if t == tenant_id]
+
+    # --- personal access tokens (PAT, SEC-34) ---
+    async def add_pat(self, pat):
+        self._pats[(pat.tenant_id, pat.id)] = pat
+
+    async def get_pat(self, tenant_id, pat_id):
+        return self._pats.get((tenant_id, pat_id))
+
+    async def get_pat_by_hash(self, token_hash):
+        # The secret carries identity; lookup is by hash across tenants (the hash
+        # is globally unique). Returns at most one token.
+        for pat in self._pats.values():
+            if pat.token_hash == token_hash:
+                return pat
+        return None
+
+    async def list_pats(self, tenant_id, user_id):
+        return [
+            p for (t, _), p in self._pats.items()
+            if t == tenant_id and p.user_id == user_id
+        ]
+
+    async def update_pat(self, pat):
+        self._pats[(pat.tenant_id, pat.id)] = pat
+
+    # --- invitations (US-USR-02) ---
+    async def add_invitation(self, inv):
+        self._invites[(inv.tenant_id, inv.id)] = inv
+
+    async def get_invitation(self, tenant_id, inv_id):
+        return self._invites.get((tenant_id, inv_id))
+
+    async def list_invitations(self, tenant_id):
+        return [i for (t, _), i in self._invites.items() if t == tenant_id]
+
+    async def find_pending_invitation(self, tenant_id, email):
+        target = email.strip().lower()
+        for (t, _), inv in self._invites.items():
+            if t == tenant_id and inv.status == "pending" and inv.email.strip().lower() == target:
+                return inv
+        return None
+
+    async def update_invitation(self, inv):
+        self._invites[(inv.tenant_id, inv.id)] = inv
+
+    # --- per-user settings (SET-*) ---
+    async def upsert_user_setting(self, setting):
+        self._settings[(setting.tenant_id, setting.user_id, setting.key)] = setting
+
+    async def list_user_settings(self, tenant_id, user_id):
+        return [
+            s for (t, u, _), s in self._settings.items()
+            if t == tenant_id and u == user_id
+        ]
+
+    # --- sessions (SET-70) ---
+    async def add_session(self, session):
+        self._sessions[(session.tenant_id, session.id)] = session
+
+    async def list_sessions(self, tenant_id, user_id):
+        return [
+            s for (t, _), s in self._sessions.items()
+            if t == tenant_id and s.user_id == user_id
+        ]
+
+    async def get_session(self, tenant_id, session_id):
+        return self._sessions.get((tenant_id, session_id))
+
+    async def update_session(self, session):
+        self._sessions[(session.tenant_id, session.id)] = session

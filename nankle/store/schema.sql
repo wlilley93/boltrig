@@ -405,3 +405,85 @@ CREATE TABLE IF NOT EXISTS conversation_messages (
     PRIMARY KEY (tenant_id, id)
 );
 CREATE INDEX IF NOT EXISTS conv_messages_idx ON conversation_messages (conversation_id, created_at);
+
+-- ===========================================================================
+-- Round Four: users + provisioning (USR), personal access tokens (PAT),
+-- per-user settings (SET), sessions. Tenant-isolated; RLS-ready like the rest.
+-- ===========================================================================
+
+-- Provisioned users (US-USR-01/03). The authority for a user's CURRENT role/
+-- scope/status: a PAT re-checks against this and a deactivated user's access (and
+-- tokens) stop working at once (SEC-34).
+CREATE TABLE IF NOT EXISTS users (
+    id            TEXT NOT NULL,          -- subject from the IdP
+    tenant_id     TEXT NOT NULL,
+    email         TEXT,
+    display_name  TEXT,
+    groups        TEXT[] NOT NULL DEFAULT '{}',
+    role          TEXT NOT NULL DEFAULT 'none',
+    scope         JSONB NOT NULL DEFAULT '{}'::jsonb,
+    status        TEXT NOT NULL DEFAULT 'active',   -- active | deactivated
+    source        TEXT NOT NULL DEFAULT 'idp',      -- idp | invitation
+    source_group  TEXT,                             -- the IdP group that conferred the role
+    last_seen_at  TIMESTAMPTZ,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, id)
+);
+CREATE INDEX IF NOT EXISTS users_email_idx ON users (tenant_id, email);
+
+-- Personal access tokens (SET-40 / PAT-*). Stored as a hash only; the secret is
+-- shown once at creation. scope is a subset of the user's grants (SEC-34).
+CREATE TABLE IF NOT EXISTS personal_access_tokens (
+    id            TEXT NOT NULL,
+    tenant_id     TEXT NOT NULL,
+    user_id       TEXT NOT NULL,
+    name          TEXT NOT NULL,
+    token_hash    TEXT NOT NULL,
+    scope         TEXT[] NOT NULL DEFAULT '{}',
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expires_at    TIMESTAMPTZ,                       -- required + bounded in practice
+    last_used_at  TIMESTAMPTZ,
+    revoked       BOOLEAN NOT NULL DEFAULT false,
+    PRIMARY KEY (tenant_id, id)
+);
+CREATE INDEX IF NOT EXISTS pat_user_idx ON personal_access_tokens (tenant_id, user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS pat_hash_idx ON personal_access_tokens (token_hash);
+
+-- Admin invitations (US-USR-02). Pre-stages a role/scope for an SSO identity;
+-- creates no password and grants no access until the invitee authenticates (SEC-35).
+CREATE TABLE IF NOT EXISTS user_invitations (
+    id             TEXT NOT NULL,
+    tenant_id      TEXT NOT NULL,
+    email          TEXT NOT NULL,
+    intended_role  TEXT NOT NULL,
+    intended_scope JSONB NOT NULL DEFAULT '{}'::jsonb,
+    invited_by     TEXT NOT NULL,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expires_at     TIMESTAMPTZ,
+    status         TEXT NOT NULL DEFAULT 'pending',  -- pending | accepted | revoked | expired
+    PRIMARY KEY (tenant_id, id)
+);
+CREATE INDEX IF NOT EXISTS invitations_email_idx ON user_invitations (tenant_id, email);
+
+-- Per-user settings/preferences (SET-*).
+CREATE TABLE IF NOT EXISTS user_settings (
+    tenant_id   TEXT NOT NULL,
+    user_id     TEXT NOT NULL,
+    key         TEXT NOT NULL,
+    value       JSONB NOT NULL,
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, user_id, key)
+);
+
+-- Sessions (SET-70).
+CREATE TABLE IF NOT EXISTS user_sessions (
+    id            TEXT NOT NULL,
+    tenant_id     TEXT NOT NULL,
+    user_id       TEXT NOT NULL,
+    client        TEXT,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_seen_at  TIMESTAMPTZ,
+    revoked       BOOLEAN NOT NULL DEFAULT false,
+    PRIMARY KEY (tenant_id, id)
+);
+CREATE INDEX IF NOT EXISTS sessions_user_idx ON user_sessions (tenant_id, user_id);

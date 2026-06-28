@@ -247,3 +247,29 @@ invariants:
     tests:
       - tests/security/test_budget_and_pii.py::test_budget_hard_stop_halts_before_exceeding
       - tests/security/test_budget_and_pii.py::test_soft_budget_does_not_halt
+
+  # --- Round Four: settings, account & access management (SEC-34..39) ---
+  SEC-34:
+    description: A personal access token never escalates (scope ∩ current grants, re-checked) and a deactivated/de-provisioned user's tokens stop working.
+    tests:
+      - tests/security/test_round_four.py::test_pat_never_escalates_and_dies_with_user
+  SEC-35:
+    description: Invitations do not bypass the IdP - they pre-stage a role/scope, grant no access until SSO login, and are consumed once.
+    tests:
+      - tests/security/test_round_four.py::test_invitations_do_not_bypass_idp
+  SEC-36:
+    description: Settings writes enforce RBAC server-side and are audited with the actor.
+    tests:
+      - tests/security/test_round_four.py::test_settings_changes_are_authz_checked_and_audited
+  SEC-37:
+    description: Headless REST/MCP runs the same chokepoint scoped to the user - no weak path.
+    tests:
+      - tests/security/test_round_four.py::test_headless_parity_no_weak_path
+  SEC-38:
+    description: No unauthenticated access to tokens or connection details (mobile/web follow the same auth rules).
+    tests:
+      - tests/security/test_round_four.py::test_no_unauthenticated_access_to_tokens
+  SEC-39:
+    description: An authored verb with a destructive/outbound name defaults to high-consequence so the HITL gate engages.
+    tests:
+      - tests/security/test_round_four.py::test_authored_verbs_safe_by_default

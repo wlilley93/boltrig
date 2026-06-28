@@ -43,6 +43,25 @@ def _require_author(p) -> None:
         raise GrantMissing("authoring/admin not permitted for this role")
 
 
+# Verb-name tokens that imply a mutating / destructive / outbound effect. A verb
+# authored with such a name and no explicit consequence defaults to high, so the
+# HITL gate engages by default (US-RTR-02/04, SEC-39: safe-by-default authoring).
+_DESTRUCTIVE_TOKENS: frozenset[str] = frozenset({
+    "delete", "remove", "destroy", "drop", "purge", "wipe", "erase",
+    "send", "email", "post", "pay", "transfer", "charge", "refund",
+    "deactivate", "revoke", "cancel", "terminate", "approve", "publish",
+})
+
+
+def safe_consequence(verb_id: str, explicit) -> str:
+    """The consequence to store for an authored verb. An explicit low/high is
+    honoured; otherwise a destructive/outbound verb name defaults to high (SEC-39)."""
+    if explicit in ("low", "high"):
+        return explicit
+    tail = verb_id.rsplit(".", 1)[-1].lower()
+    return "high" if any(tok in tail for tok in _DESTRUCTIVE_TOKENS) else "low"
+
+
 async def _audit(kernel, p, action: str, detail: dict, status: str = "ok") -> None:
     await kernel.audit.write(
         AuditEvent(
@@ -132,15 +151,16 @@ def register_platform_routes(app, *, principal_dep, get_kernel) -> None:
     async def upsert_verb(body: dict, k=K, p=P) -> JSONResponse:
         try:
             _require_author(p)
+            conseq = safe_consequence(body["id"], body.get("consequence"))
             verb = Verb(
                 id=body["id"], tenant_id=p.tenant_id, noun_id=body["noun_id"],
                 input_schema=body.get("input_schema", {}), output_schema=body.get("output_schema", {}),
                 description=body.get("description", ""),
-                consequence=Consequence(body.get("consequence", "low")),
+                consequence=Consequence(conseq),
             )
             await k.store.upsert_verb(verb)
-            await _audit(k, p, "verb.upsert", {"id": verb.id})
-            return JSONResponse({"status": "ok", "id": verb.id})
+            await _audit(k, p, "verb.upsert", {"id": verb.id, "consequence": conseq})
+            return JSONResponse({"status": "ok", "id": verb.id, "consequence": conseq})
         except NankleError as e:
             return JSONResponse({"status": "denied", "reason": e.reason}, status_code=e.status_code)
 

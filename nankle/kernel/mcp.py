@@ -67,6 +67,10 @@ class McpFace:
     def revoke(self, token: str) -> None:
         self._tokens.pop(token, None)
 
+    def is_run_token(self, token: str | None) -> bool:
+        """Whether ``token`` is a live run-scoped token (vs a user bearer/PAT)."""
+        return bool(token) and token in self._tokens
+
     def _context(self, rt: RunToken) -> InvocationContext:
         return InvocationContext(
             tenant_id=rt.tenant_id, grants=rt.grants, actor=rt.actor,
@@ -75,10 +79,24 @@ class McpFace:
 
     # --- JSON-RPC dispatch ---
     async def handle(self, token: str | None, request: dict) -> dict:
-        rid = request.get("id")
         rt = self._tokens.get(token or "")
         if rt is None:
-            return _err(rid, -32001, "invalid or expired run token")
+            return _err(request.get("id"), -32001, "invalid or expired run token")
+        return await self._dispatch(rt, request)
+
+    async def handle_user(self, principal, request: dict) -> dict:
+        """User-authenticated MCP (US-HEAD-02, SEC-37): a transient connection
+        scoped to the user's effective grants (PAT scope ∩ owner grants, or the
+        user's role-derived grants). Every call runs the same chokepoint as the
+        site - no reduced-security headless path - and is audited as the user."""
+        rt = RunToken(
+            token="", tenant_id=principal.tenant_id, grants=principal.grants,
+            run_id=None, actor=principal.subject, skills=(),
+        )
+        return await self._dispatch(rt, request)
+
+    async def _dispatch(self, rt: "RunToken", request: dict) -> dict:
+        rid = request.get("id")
         method = request.get("method")
         params = request.get("params") or {}
         if method == "initialize":

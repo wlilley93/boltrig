@@ -15,7 +15,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -193,6 +193,20 @@ def create_app(
         app.state.platform = _platform_for(kernel)
 
     async def principal(request: Request) -> Principal:
+        from nankle.identity.tokens import looks_like_pat, resolve_pat_principal
+
+        # Headless parity (US-HEAD-02, SEC-37): a personal access token bearer is
+        # resolved to its owner's effective grants (PAT scope ∩ owner's current
+        # grants) and flows through the same chokepoint as the site. Anything else
+        # falls through to the configured resolver (OIDC in prod, headers in dev).
+        auth = request.headers.get("authorization", "")
+        scheme, _, value = auth.partition(" ")
+        token = value.strip() if scheme.lower() == "bearer" else None
+        if token and looks_like_pat(token):
+            p = await resolve_pat_principal(_get_kernel(request).store, token)
+            if p is None:
+                raise HTTPException(status_code=401, detail="invalid or expired access token")
+            return p
         return await resolver(request)
 
     @app.get("/healthz")
@@ -235,13 +249,22 @@ def create_app(
     async def mcp(
         body: dict, request: Request, k: Kernel = Depends(_get_kernel)
     ) -> JSONResponse:
-        # run-scoped MCP connection: the token (not the body) authorises + scopes it
-        token = request.headers.get("x-nankle-mcp-token")
-        if token is None:
+        # Two ways in, both run the same chokepoint:
+        #  - a run-scoped token (the fleet/sidecar path, Round Two): scopes to a run.
+        #  - a user bearer / PAT (US-HEAD-02): scopes to the user's effective grants.
+        run_token = request.headers.get("x-nankle-mcp-token")
+        if run_token is None:
             auth = request.headers.get("authorization", "")
             scheme, _, value = auth.partition(" ")
-            token = value.strip() if scheme.lower() == "bearer" else None
-        return JSONResponse(await k.mcp.handle(token, body))
+            bearer = value.strip() if scheme.lower() == "bearer" else None
+            if k.mcp.is_run_token(bearer):  # a run token presented as a bearer
+                run_token = bearer
+        if run_token is not None:
+            return JSONResponse(await k.mcp.handle(run_token, body))
+        # user-authenticated MCP: resolve the caller (PAT or configured resolver)
+        # and advertise/scope tools to their effective grants (no weak path, SEC-37).
+        p = await principal(request)
+        return JSONResponse(await k.mcp.handle_user(p, body))
 
     @app.post("/v1/chat")
     async def chat(
@@ -400,6 +423,11 @@ def create_app(
     from .platform_routes import register_platform_routes
 
     register_platform_routes(app, principal_dep=principal, get_kernel=_get_kernel)
+
+    # Round Four: settings, personal access tokens, sessions, users, invitations.
+    from .access_routes import register_access_routes
+
+    register_access_routes(app, principal_dep=principal, get_kernel=_get_kernel)
 
     # keep an unused import referenced for the HITL enums in scope
     _ = (HITLType, Urgency)

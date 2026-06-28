@@ -154,6 +154,7 @@ def build_principal_resolver(
     verifier: Verifier,
     mappings: list[RoleMapping],
     tenant_id: str,
+    store: Any | None = None,
 ) -> PrincipalResolver:
     """Build a production ``PrincipalResolver`` from a verifier (US-IAM-01/02).
 
@@ -161,6 +162,12 @@ def build_principal_resolver(
     role + scope from the token's groups (US-IAM-02), and builds a ``Principal``
     whose grants are the scope's GrantSet ceiling. Tenant and subject come from
     the verified token / pinned tenant, never from the request body (SEC-02).
+
+    When a ``store`` is supplied, the resolver provisions the user just-in-time
+    (US-USR-01): an unmapped, un-invited identity is denied (fail-closed), an
+    invited identity is provisioned with its intended role/scope (US-USR-02), and
+    the user's *current* (possibly admin-adjusted or deactivated) role/scope/status
+    is authoritative - so deactivation revokes access at once (US-USR-03).
     """
 
     async def resolver(request: Request) -> Principal:
@@ -176,7 +183,32 @@ def build_principal_resolver(
         if not subject:
             raise HTTPException(status_code=401, detail="token has no subject claim")
 
-        role, scope = resolve_role(_claim_groups(claims), mappings)
+        groups = _claim_groups(claims)
+        if store is not None:
+            from .provisioning import current_grants_for_user, provision_user
+
+            user = await provision_user(
+                store,
+                tenant_id=tenant_id,
+                subject=str(subject),
+                email=claims.get("email"),
+                groups=groups,
+                mappings=mappings,
+            )
+            if user is None or user.status != "active":
+                # Unmapped + un-invited, or deactivated -> denied (US-USR-01/03).
+                raise HTTPException(status_code=403, detail="no access for this identity")
+            return Principal(
+                tenant_id=tenant_id,
+                subject=user.id,
+                grants=current_grants_for_user(user),
+                role=user.role,
+                actor_tier="human",
+                on_behalf_of=_on_behalf_of(claims),
+                scope=user.scope,
+            )
+
+        role, scope = resolve_role(groups, mappings)
         return Principal(
             tenant_id=tenant_id,
             subject=str(subject),

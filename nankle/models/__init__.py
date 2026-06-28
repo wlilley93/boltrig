@@ -51,6 +51,12 @@ from .errors import (
     SensitiveDataMisrouted,
     TenantIsolation,
 )
+from .access import (
+    PersonalAccessToken,
+    UserInvitation,
+    UserSession,
+    UserSetting,
+)
 from .grants import EMPTY_GRANTS, GrantSet, TenantPermissions
 from .hitl import HITLRequest, HITLResponse, HITLStatus, HITLType, Urgency
 from .identity import RoleMapping, User
@@ -116,6 +122,10 @@ __all__ = [
     "Urgency",
     "RoleMapping",
     "User",
+    "PersonalAccessToken",
+    "UserInvitation",
+    "UserSession",
+    "UserSetting",
     "AdapterHealth",
     "AdapterRecord",
     "AgentCapability",

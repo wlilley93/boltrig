@@ -31,7 +31,12 @@ from nankle.models import (
     MemoryItem,
     MessageRole,
     NotificationPref,
+    PersonalAccessToken,
     PersonalAgent,
+    User,
+    UserInvitation,
+    UserSession,
+    UserSetting,
     EMPTY_GRANTS,
     GrantSet,
     HITLRequest,
@@ -649,6 +654,161 @@ class PostgresStore:
             )
         return [_memory(r) for r in rows]
 
+    # --- Round Four: users + provisioning (USR) ---
+    async def upsert_user(self, u: User):
+        await self._pool.execute(
+            """INSERT INTO users (id, tenant_id, email, display_name, groups, role, scope,
+                                  status, source, source_group, last_seen_at, created_at)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+               ON CONFLICT (tenant_id, id) DO UPDATE SET
+                 email=EXCLUDED.email, display_name=EXCLUDED.display_name,
+                 groups=EXCLUDED.groups, role=EXCLUDED.role, scope=EXCLUDED.scope,
+                 status=EXCLUDED.status, source=EXCLUDED.source,
+                 source_group=EXCLUDED.source_group, last_seen_at=EXCLUDED.last_seen_at""",
+            u.id, u.tenant_id, u.email, u.display_name, u.groups, u.role, u.scope,
+            u.status, u.source, u.source_group, u.last_seen_at, u.created_at,
+        )
+
+    async def get_user(self, tenant_id, user_id):
+        row = await self._pool.fetchrow(
+            "SELECT * FROM users WHERE tenant_id=$1 AND id=$2", tenant_id, user_id
+        )
+        return _user(row)
+
+    async def list_users(self, tenant_id):
+        rows = await self._pool.fetch(
+            "SELECT * FROM users WHERE tenant_id=$1 ORDER BY created_at DESC", tenant_id
+        )
+        return [_user(r) for r in rows]
+
+    # --- personal access tokens (PAT, SEC-34) ---
+    async def add_pat(self, p: PersonalAccessToken):
+        await self._pool.execute(
+            """INSERT INTO personal_access_tokens
+               (id, tenant_id, user_id, name, token_hash, scope, created_at,
+                expires_at, last_used_at, revoked)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+               ON CONFLICT (tenant_id, id) DO NOTHING""",
+            p.id, p.tenant_id, p.user_id, p.name, p.token_hash, p.scope, p.created_at,
+            p.expires_at, p.last_used_at, p.revoked,
+        )
+
+    async def get_pat(self, tenant_id, pat_id):
+        row = await self._pool.fetchrow(
+            "SELECT * FROM personal_access_tokens WHERE tenant_id=$1 AND id=$2",
+            tenant_id, pat_id,
+        )
+        return _pat(row)
+
+    async def get_pat_by_hash(self, token_hash):
+        row = await self._pool.fetchrow(
+            "SELECT * FROM personal_access_tokens WHERE token_hash=$1", token_hash
+        )
+        return _pat(row)
+
+    async def list_pats(self, tenant_id, user_id):
+        rows = await self._pool.fetch(
+            """SELECT * FROM personal_access_tokens WHERE tenant_id=$1 AND user_id=$2
+               ORDER BY created_at DESC""",
+            tenant_id, user_id,
+        )
+        return [_pat(r) for r in rows]
+
+    async def update_pat(self, p: PersonalAccessToken):
+        await self._pool.execute(
+            """UPDATE personal_access_tokens SET last_used_at=$3, revoked=$4
+               WHERE tenant_id=$1 AND id=$2""",
+            p.tenant_id, p.id, p.last_used_at, p.revoked,
+        )
+
+    # --- invitations (US-USR-02) ---
+    async def add_invitation(self, inv: UserInvitation):
+        await self._pool.execute(
+            """INSERT INTO user_invitations
+               (id, tenant_id, email, intended_role, intended_scope, invited_by,
+                created_at, expires_at, status)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+               ON CONFLICT (tenant_id, id) DO NOTHING""",
+            inv.id, inv.tenant_id, inv.email, inv.intended_role, inv.intended_scope,
+            inv.invited_by, inv.created_at, inv.expires_at, inv.status,
+        )
+
+    async def get_invitation(self, tenant_id, inv_id):
+        row = await self._pool.fetchrow(
+            "SELECT * FROM user_invitations WHERE tenant_id=$1 AND id=$2", tenant_id, inv_id
+        )
+        return _invitation(row)
+
+    async def list_invitations(self, tenant_id):
+        rows = await self._pool.fetch(
+            "SELECT * FROM user_invitations WHERE tenant_id=$1 ORDER BY created_at DESC",
+            tenant_id,
+        )
+        return [_invitation(r) for r in rows]
+
+    async def find_pending_invitation(self, tenant_id, email):
+        row = await self._pool.fetchrow(
+            """SELECT * FROM user_invitations
+               WHERE tenant_id=$1 AND status='pending' AND lower(email)=lower($2)
+               ORDER BY created_at DESC LIMIT 1""",
+            tenant_id, email,
+        )
+        return _invitation(row)
+
+    async def update_invitation(self, inv: UserInvitation):
+        await self._pool.execute(
+            "UPDATE user_invitations SET status=$3 WHERE tenant_id=$1 AND id=$2",
+            inv.tenant_id, inv.id, inv.status,
+        )
+
+    # --- per-user settings (SET-*) ---
+    async def upsert_user_setting(self, s: UserSetting):
+        await self._pool.execute(
+            """INSERT INTO user_settings (tenant_id, user_id, key, value, updated_at)
+               VALUES ($1,$2,$3,$4,$5)
+               ON CONFLICT (tenant_id, user_id, key) DO UPDATE SET
+                 value=EXCLUDED.value, updated_at=EXCLUDED.updated_at""",
+            s.tenant_id, s.user_id, s.key, s.value, s.updated_at,
+        )
+
+    async def list_user_settings(self, tenant_id, user_id):
+        rows = await self._pool.fetch(
+            "SELECT * FROM user_settings WHERE tenant_id=$1 AND user_id=$2",
+            tenant_id, user_id,
+        )
+        return [_setting(r) for r in rows]
+
+    # --- sessions (SET-70) ---
+    async def add_session(self, s: UserSession):
+        await self._pool.execute(
+            """INSERT INTO user_sessions (id, tenant_id, user_id, client, created_at,
+                                          last_seen_at, revoked)
+               VALUES ($1,$2,$3,$4,$5,$6,$7)
+               ON CONFLICT (tenant_id, id) DO NOTHING""",
+            s.id, s.tenant_id, s.user_id, s.client, s.created_at, s.last_seen_at, s.revoked,
+        )
+
+    async def list_sessions(self, tenant_id, user_id):
+        rows = await self._pool.fetch(
+            """SELECT * FROM user_sessions WHERE tenant_id=$1 AND user_id=$2
+               ORDER BY created_at DESC""",
+            tenant_id, user_id,
+        )
+        return [_session(r) for r in rows]
+
+    async def get_session(self, tenant_id, session_id):
+        row = await self._pool.fetchrow(
+            "SELECT * FROM user_sessions WHERE tenant_id=$1 AND id=$2", tenant_id, session_id
+        )
+        return _session(row)
+
+    async def update_session(self, s: UserSession):
+        await self._pool.execute(
+            """UPDATE user_sessions SET client=$3, last_seen_at=$4, revoked=$5
+               WHERE tenant_id=$1 AND id=$2""",
+            s.tenant_id, s.id, s.client, s.last_seen_at, s.revoked,
+        )
+
 
 # --- row -> dataclass mappers (None-safe) ---------------------------------
 def _noun(r):
@@ -844,6 +1004,57 @@ def _personal(r):
     return PersonalAgent(
         id=r["id"], tenant_id=r["tenant_id"], user_id=r["user_id"], runtime=r["runtime"],
         skills=list(r["skills"] or []), enabled=r["enabled"],
+    )
+
+
+def _user(r):
+    if r is None:
+        return None
+    return User(
+        id=r["id"], tenant_id=r["tenant_id"], email=r["email"],
+        display_name=r["display_name"], groups=list(r["groups"] or []), role=r["role"],
+        scope=r["scope"] or {}, status=r["status"], source=r["source"],
+        source_group=r["source_group"], last_seen_at=r["last_seen_at"],
+        created_at=r["created_at"],
+    )
+
+
+def _pat(r):
+    if r is None:
+        return None
+    return PersonalAccessToken(
+        id=r["id"], tenant_id=r["tenant_id"], user_id=r["user_id"], name=r["name"],
+        token_hash=r["token_hash"], scope=list(r["scope"] or []), created_at=r["created_at"],
+        expires_at=r["expires_at"], last_used_at=r["last_used_at"], revoked=r["revoked"],
+    )
+
+
+def _invitation(r):
+    if r is None:
+        return None
+    return UserInvitation(
+        id=r["id"], tenant_id=r["tenant_id"], email=r["email"],
+        intended_role=r["intended_role"], intended_scope=r["intended_scope"] or {},
+        invited_by=r["invited_by"], created_at=r["created_at"], expires_at=r["expires_at"],
+        status=r["status"],
+    )
+
+
+def _setting(r):
+    if r is None:
+        return None
+    return UserSetting(
+        tenant_id=r["tenant_id"], user_id=r["user_id"], key=r["key"], value=r["value"],
+        updated_at=r["updated_at"],
+    )
+
+
+def _session(r):
+    if r is None:
+        return None
+    return UserSession(
+        id=r["id"], tenant_id=r["tenant_id"], user_id=r["user_id"], client=r["client"],
+        created_at=r["created_at"], last_seen_at=r["last_seen_at"], revoked=r["revoked"],
     )
 
 
