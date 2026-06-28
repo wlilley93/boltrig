@@ -38,6 +38,7 @@ from nankle.models import (
     utcnow,
 )
 
+from .model_router import select_model_endpoint
 from .result import AgentResult
 from .runtime import _MICROS_PER_TOKEN, build_runtime
 
@@ -178,8 +179,10 @@ def _estimate(task: str, prompt: str, skills: list[str], cost_tier: str) -> tupl
 class Spawner:
     """Composes and runs ephemeral agents on top of the kernel (S7.5)."""
 
-    def __init__(self, kernel: Kernel) -> None:
+    def __init__(self, kernel: Kernel, *, sensitive_endpoint_id: str | None = None) -> None:
         self._kernel = kernel
+        # the tenant's local endpoint for sensitive data (manifest sensitive_endpoint)
+        self._sensitive_endpoint_id = sensitive_endpoint_id
 
     async def spawn(
         self,
@@ -275,10 +278,12 @@ class Spawner:
             actor=capability.name,
             actor_tier="ephemeral",
             skills_loaded=tuple(skills),
+            extra=dict(context.extra),  # propagate data_class etc to the child
         )
 
-        # 7. Run the selected runtime (degrades, never crashes, offline).
-        runtime = await self._runtime_for(tenant_id, capability)
+        # 7. Run the selected runtime (degrades, never crashes, offline). The
+        #    data classification on the context gates sensitive->local routing.
+        runtime = await self._runtime_for(tenant_id, capability, context)
         prompt = self._compose_prompt(merged_prompt, task)
         result: AgentResult = await runtime.run(
             prompt, child_ctx, tools=list(merged.tool_grants)
@@ -322,13 +327,23 @@ class Spawner:
             capable, key=lambda c: (_COST_ORDER.get(c.cost_tier, 99), c.name)
         )
 
-    async def _runtime_for(self, tenant_id: str, capability: AgentCapability):
-        """Resolve the model endpoint (async) and build the runtime (sync)."""
-        endpoint: ModelEndpoint | None = None
-        if capability.model_endpoint:
-            endpoint = await self._kernel.store.get_model_endpoint(
-                tenant_id, capability.model_endpoint
-            )
+    async def _runtime_for(
+        self, tenant_id: str, capability: AgentCapability, context: InvocationContext | None = None
+    ):
+        """Resolve the model endpoint (with the sensitive->local guard) and build
+        the runtime. Sensitive-classified data (``context.extra['data_class'] ==
+        'sensitive'``) may only resolve to a local endpoint, else the guard raises
+        ``SensitiveDataMisrouted`` and audits it (SEC-12, US-PRIV-01)."""
+        sensitive = bool(context is not None and context.extra.get("data_class") == "sensitive")
+        endpoint = await select_model_endpoint(
+            self._kernel.store,
+            tenant_id,
+            capability.model_endpoint,
+            sensitive=sensitive,
+            sensitive_endpoint_id=self._sensitive_endpoint_id,
+            audit=self._kernel.audit,
+            actor=capability.name,
+        )
 
         def lookup(endpoint_id: str) -> ModelEndpoint | None:
             if endpoint is not None and endpoint.id == endpoint_id:
@@ -469,7 +484,7 @@ def make_agent_invoker(kernel: Kernel) -> AgentInvoker:
             if cap is None:
                 runtime = ScriptRuntime()
             else:
-                runtime = await spawner._runtime_for(context.tenant_id, cap)
+                runtime = await spawner._runtime_for(context.tenant_id, cap, context)
             result = await runtime.run(
                 prompt, context, tools=list(context.grants.allow)
             )

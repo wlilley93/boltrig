@@ -56,6 +56,12 @@ invariants:
     description: A blocking HITL pause is durable - survives a restart and resumes on approval.
     tests:
       - tests/store/test_postgres_store.py::test_blocking_pause_survives_restart_and_resumes
+  SEC-12:
+    description: Sensitive data routes only to local endpoints - a misroute is blocked and audited.
+    tests:
+      - tests/security/test_sensitive_routing.py::test_sensitive_data_blocked_from_hosted_and_audited
+      - tests/security/test_sensitive_routing.py::test_sensitive_data_routes_to_local_endpoint
+      - tests/security/test_sensitive_routing.py::test_spawn_blocks_sensitive_on_hosted_capability
   FR-EXE-03:
     description: Recursion depth is bounded - a spawn past the capability max depth is refused.
     tests:
