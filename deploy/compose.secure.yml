@@ -1,0 +1,56 @@
+# Secure deployment overlay (SEC-10/SEC-11, P3-1). Layer it over the base stack:
+#
+#   docker compose -f docker-compose.yml -f deploy/compose.secure.yml up -d
+#
+# It adds TLS termination (Caddy) in front of the UI and kernel, stops publishing
+# the kernel/UI ports directly (only Caddy is reachable), mounts a custom CA
+# bundle into the app containers, and shows the encrypted-at-rest volume wiring.
+# All of this is config + env, no image rebuild (P7).
+
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "443:443"
+      - "80:80"
+    environment:
+      NANKLE_DOMAIN: ${NANKLE_DOMAIN:-localhost}
+    volumes:
+      - ./deploy/Caddyfile.example:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - kernel
+      - ui
+
+  kernel:
+    # reachable only through Caddy now (no direct host port). Internal
+    # service-to-service traffic stays on the compose network.
+    ports: []
+    volumes:
+      - ./manifest.yaml:/app/manifest.yaml:ro
+      - ./libraries:/app/libraries:ro
+      # custom/internal CA so outbound adapter calls trust enterprise endpoints
+      - ${CA_BUNDLE_FILE:-./deploy/ca-bundle.crt}:/certs/ca.pem:ro
+
+  fleet-worker:
+    volumes:
+      - ./manifest.yaml:/app/manifest.yaml:ro
+      - ./libraries:/app/libraries:ro
+      - ${CA_BUNDLE_FILE:-./deploy/ca-bundle.crt}:/certs/ca.pem:ro
+
+  ui:
+    ports: []
+
+  postgres:
+    # Encrypted-at-rest (SEC-11): point the data dir at an encrypted device/path
+    # (LUKS volume, or a cloud encrypted disk). Set PGDATA_HOST to that mount.
+    # Connections use TLS by putting sslmode=require in DATABASE_URL.
+    volumes:
+      - ${PGDATA_HOST:-pgdata}:/var/lib/postgresql/data
+      - ./nankle/store/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,25 @@
+# Caddy TLS terminator for Nankle (deploy/compose.secure.yml).
+#
+# Caddy terminates TLS and reverse-proxies to the kernel API and the UI over the
+# internal compose network. For a public domain Caddy auto-provisions a
+# certificate; for `localhost` it uses its built-in internal CA (self-signed). To
+# use an internal-CA / corporate certificate instead, replace the auto-TLS with:
+#     tls /certs/site.crt /certs/site.key
+# and mount those files into the caddy service.
+
+{$NANKLE_DOMAIN:localhost} {
+	encode gzip
+
+	# kernel API + health (the dispatch chokepoint)
+	handle /v1/* {
+		reverse_proxy kernel:8000
+	}
+	handle /healthz {
+		reverse_proxy kernel:8000
+	}
+
+	# everything else is the React console
+	handle {
+		reverse_proxy ui:80
+	}
+}
