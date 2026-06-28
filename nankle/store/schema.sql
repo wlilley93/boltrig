@@ -294,6 +294,90 @@ CREATE TABLE IF NOT EXISTS conversations (
 );
 CREATE INDEX IF NOT EXISTS conversations_user_idx ON conversations (tenant_id, user_id);
 
+-- Round Three: versioned configuration & library edits (C1/C2/C3). Every in-app
+-- authoring/admin change is recorded here so it round-trips to manifest/YAML and
+-- is reversible (rollback). No secret values; payloads are config/library data.
+CREATE TABLE IF NOT EXISTS config_revisions (
+    id          BIGSERIAL PRIMARY KEY,
+    tenant_id   TEXT NOT NULL,
+    kind        TEXT NOT NULL,    -- manifest_section|skill|workflow|noun|verb|binding|adapter
+    ref         TEXT NOT NULL,
+    version     TEXT NOT NULL,
+    payload     JSONB NOT NULL,
+    actor       TEXT NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    rolled_back BOOLEAN NOT NULL DEFAULT false
+);
+CREATE INDEX IF NOT EXISTS config_revisions_idx ON config_revisions (tenant_id, kind, ref, created_at);
+
+-- Round Three: evaluation harness (Epic EVAL)
+CREATE TABLE IF NOT EXISTS eval_cases (
+    id          TEXT NOT NULL,
+    tenant_id   TEXT NOT NULL,
+    target_kind TEXT NOT NULL,    -- skill | workflow | conversation
+    target_ref  TEXT NOT NULL,
+    input       JSONB NOT NULL,
+    assertions  JSONB NOT NULL,
+    labels      JSONB,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, id)
+);
+CREATE TABLE IF NOT EXISTS eval_runs (
+    id          TEXT NOT NULL,
+    tenant_id   TEXT NOT NULL,
+    case_id     TEXT NOT NULL,
+    passed      BOOLEAN,
+    score       DOUBLE PRECISION,
+    run_id      TEXT,
+    detail      JSONB,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, id)
+);
+CREATE INDEX IF NOT EXISTS eval_runs_case_idx ON eval_runs (tenant_id, case_id, created_at);
+
+-- Round Three: notification preferences (Epic NOT)
+CREATE TABLE IF NOT EXISTS notification_prefs (
+    id          TEXT NOT NULL,
+    tenant_id   TEXT NOT NULL,
+    scope_kind  TEXT NOT NULL,    -- user | team
+    scope_ref   TEXT NOT NULL,
+    event_type  TEXT NOT NULL,
+    channel     TEXT NOT NULL,
+    target      TEXT,
+    enabled     BOOLEAN NOT NULL DEFAULT true,
+    PRIMARY KEY (tenant_id, id)
+);
+
+-- Round Three: personal agents (Epic PA). Acts ONLY under the owner's delegated
+-- permissions (SEC-30); holds no service-principal authority.
+CREATE TABLE IF NOT EXISTS personal_agents (
+    id          TEXT NOT NULL,
+    tenant_id   TEXT NOT NULL,
+    user_id     TEXT NOT NULL,
+    runtime     TEXT NOT NULL,
+    skills      JSONB NOT NULL,
+    enabled     BOOLEAN NOT NULL DEFAULT true,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, id)
+);
+CREATE INDEX IF NOT EXISTS personal_agents_user_idx ON personal_agents (tenant_id, user_id);
+
+-- Round Three (optional): memory & knowledge (Epic MEM). owner_scope is the RBAC
+-- boundary; sensitive memory follows sensitive-routing (SEC-31).
+CREATE TABLE IF NOT EXISTS memory_items (
+    id          TEXT NOT NULL,
+    tenant_id   TEXT NOT NULL,
+    owner_scope TEXT NOT NULL,    -- user:<id> | department:<name> | org
+    kind        TEXT NOT NULL,    -- fact | summary | document_chunk
+    content     TEXT NOT NULL,
+    embedding   JSONB,
+    source_ref  TEXT,
+    data_class  TEXT NOT NULL DEFAULT 'standard',
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, id)
+);
+CREATE INDEX IF NOT EXISTS memory_scope_idx ON memory_items (tenant_id, owner_scope, kind);
+
 -- Round Two (optional): external MCP servers Nankle consumes as adapters
 -- (US-MCP-03). Inert (pending_review) until activated through the review gate.
 CREATE TABLE IF NOT EXISTS mcp_servers (

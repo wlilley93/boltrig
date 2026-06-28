@@ -22,10 +22,16 @@ from nankle.models import (
     AuditEvent,
     Budget,
     Consequence,
+    ConfigRevision,
     Conversation,
     ConversationMessage,
     ConversationStatus,
+    EvalCase,
+    EvalRun,
+    MemoryItem,
     MessageRole,
+    NotificationPref,
+    PersonalAgent,
     EMPTY_GRANTS,
     GrantSet,
     HITLRequest,
@@ -516,6 +522,133 @@ class PostgresStore:
         )
         return [_message(r) for r in rows]
 
+    # --- Round Three: config revisions ---
+    async def add_config_revision(self, rev: ConfigRevision) -> ConfigRevision:
+        row = await self._pool.fetchrow(
+            """INSERT INTO config_revisions (tenant_id, kind, ref, version, payload, actor, rolled_back)
+               VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, created_at""",
+            rev.tenant_id, rev.kind, rev.ref, rev.version, rev.payload, rev.actor, rev.rolled_back,
+        )
+        rev.id = row["id"]
+        rev.created_at = row["created_at"]
+        return rev
+
+    async def list_config_revisions(self, tenant_id, kind, ref):
+        rows = await self._pool.fetch(
+            """SELECT * FROM config_revisions WHERE tenant_id=$1 AND kind=$2 AND ref=$3
+               ORDER BY created_at DESC""",
+            tenant_id, kind, ref,
+        )
+        return [_revision(r) for r in rows]
+
+    async def get_config_revision(self, tenant_id, rev_id):
+        row = await self._pool.fetchrow(
+            "SELECT * FROM config_revisions WHERE tenant_id=$1 AND id=$2", tenant_id, rev_id
+        )
+        return _revision(row)
+
+    # --- eval ---
+    async def upsert_eval_case(self, c: EvalCase):
+        await self._pool.execute(
+            """INSERT INTO eval_cases (id, tenant_id, target_kind, target_ref, input, assertions, labels)
+               VALUES ($1,$2,$3,$4,$5,$6,$7)
+               ON CONFLICT (tenant_id, id) DO UPDATE SET
+                 target_kind=EXCLUDED.target_kind, target_ref=EXCLUDED.target_ref,
+                 input=EXCLUDED.input, assertions=EXCLUDED.assertions, labels=EXCLUDED.labels""",
+            c.id, c.tenant_id, c.target_kind, c.target_ref, c.input, c.assertions, c.labels,
+        )
+
+    async def get_eval_case(self, tenant_id, case_id):
+        row = await self._pool.fetchrow(
+            "SELECT * FROM eval_cases WHERE tenant_id=$1 AND id=$2", tenant_id, case_id
+        )
+        return _eval_case(row)
+
+    async def list_eval_cases(self, tenant_id):
+        rows = await self._pool.fetch("SELECT * FROM eval_cases WHERE tenant_id=$1", tenant_id)
+        return [_eval_case(r) for r in rows]
+
+    async def add_eval_run(self, r: EvalRun):
+        await self._pool.execute(
+            """INSERT INTO eval_runs (id, tenant_id, case_id, passed, score, run_id, detail)
+               VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (tenant_id, id) DO NOTHING""",
+            r.id, r.tenant_id, r.case_id, r.passed, r.score, r.run_id, r.detail,
+        )
+
+    async def list_eval_runs(self, tenant_id, case_id=None):
+        if case_id is None:
+            rows = await self._pool.fetch(
+                "SELECT * FROM eval_runs WHERE tenant_id=$1 ORDER BY created_at DESC", tenant_id
+            )
+        else:
+            rows = await self._pool.fetch(
+                "SELECT * FROM eval_runs WHERE tenant_id=$1 AND case_id=$2 ORDER BY created_at DESC",
+                tenant_id, case_id,
+            )
+        return [_eval_run(r) for r in rows]
+
+    # --- notifications ---
+    async def upsert_notification_pref(self, p: NotificationPref):
+        await self._pool.execute(
+            """INSERT INTO notification_prefs (id, tenant_id, scope_kind, scope_ref, event_type, channel, target, enabled)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+               ON CONFLICT (tenant_id, id) DO UPDATE SET
+                 scope_kind=EXCLUDED.scope_kind, scope_ref=EXCLUDED.scope_ref,
+                 event_type=EXCLUDED.event_type, channel=EXCLUDED.channel,
+                 target=EXCLUDED.target, enabled=EXCLUDED.enabled""",
+            p.id, p.tenant_id, p.scope_kind, p.scope_ref, p.event_type, p.channel,
+            p.target, p.enabled,
+        )
+
+    async def list_notification_prefs(self, tenant_id):
+        rows = await self._pool.fetch(
+            "SELECT * FROM notification_prefs WHERE tenant_id=$1", tenant_id
+        )
+        return [_notif(r) for r in rows]
+
+    # --- personal agents ---
+    async def upsert_personal_agent(self, a: PersonalAgent):
+        await self._pool.execute(
+            """INSERT INTO personal_agents (id, tenant_id, user_id, runtime, skills, enabled)
+               VALUES ($1,$2,$3,$4,$5,$6)
+               ON CONFLICT (tenant_id, id) DO UPDATE SET
+                 user_id=EXCLUDED.user_id, runtime=EXCLUDED.runtime,
+                 skills=EXCLUDED.skills, enabled=EXCLUDED.enabled""",
+            a.id, a.tenant_id, a.user_id, a.runtime, a.skills, a.enabled,
+        )
+
+    async def get_personal_agent(self, tenant_id, user_id):
+        row = await self._pool.fetchrow(
+            """SELECT * FROM personal_agents WHERE tenant_id=$1 AND user_id=$2
+               ORDER BY created_at DESC LIMIT 1""",
+            tenant_id, user_id,
+        )
+        return _personal(row)
+
+    # --- memory ---
+    async def add_memory_item(self, m: MemoryItem):
+        await self._pool.execute(
+            """INSERT INTO memory_items (id, tenant_id, owner_scope, kind, content, embedding, source_ref, data_class)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (tenant_id, id) DO NOTHING""",
+            m.id, m.tenant_id, m.owner_scope, m.kind, m.content, m.embedding, m.source_ref,
+            m.data_class,
+        )
+
+    async def query_memory(self, tenant_id, owner_scopes, kind=None, limit=20):
+        if kind is None:
+            rows = await self._pool.fetch(
+                """SELECT * FROM memory_items WHERE tenant_id=$1 AND owner_scope = ANY($2::text[])
+                   ORDER BY created_at DESC LIMIT $3""",
+                tenant_id, list(owner_scopes), limit,
+            )
+        else:
+            rows = await self._pool.fetch(
+                """SELECT * FROM memory_items WHERE tenant_id=$1 AND owner_scope = ANY($2::text[])
+                   AND kind=$3 ORDER BY created_at DESC LIMIT $4""",
+                tenant_id, list(owner_scopes), kind, limit,
+            )
+        return [_memory(r) for r in rows]
+
 
 # --- row -> dataclass mappers (None-safe) ---------------------------------
 def _noun(r):
@@ -662,6 +795,65 @@ def _message(r):
         role=MessageRole(r["role"]), content=r["content"], run_id=r["run_id"],
         hitl_request_id=r["hitl_request_id"], events=list(r["events"] or []),
         created_at=r["created_at"],
+    )
+
+
+def _revision(r):
+    if r is None:
+        return None
+    return ConfigRevision(
+        id=r["id"], tenant_id=r["tenant_id"], kind=r["kind"], ref=r["ref"],
+        version=r["version"], payload=r["payload"], actor=r["actor"],
+        created_at=r["created_at"], rolled_back=r["rolled_back"],
+    )
+
+
+def _eval_case(r):
+    if r is None:
+        return None
+    return EvalCase(
+        id=r["id"], tenant_id=r["tenant_id"], target_kind=r["target_kind"],
+        target_ref=r["target_ref"], input=r["input"], assertions=r["assertions"],
+        labels=list(r["labels"] or []),
+    )
+
+
+def _eval_run(r):
+    if r is None:
+        return None
+    return EvalRun(
+        id=r["id"], tenant_id=r["tenant_id"], case_id=r["case_id"], passed=r["passed"],
+        score=r["score"], run_id=r["run_id"], detail=r["detail"] or {},
+        created_at=r["created_at"],
+    )
+
+
+def _notif(r):
+    if r is None:
+        return None
+    return NotificationPref(
+        id=r["id"], tenant_id=r["tenant_id"], scope_kind=r["scope_kind"],
+        scope_ref=r["scope_ref"], event_type=r["event_type"], channel=r["channel"],
+        target=r["target"], enabled=r["enabled"],
+    )
+
+
+def _personal(r):
+    if r is None:
+        return None
+    return PersonalAgent(
+        id=r["id"], tenant_id=r["tenant_id"], user_id=r["user_id"], runtime=r["runtime"],
+        skills=list(r["skills"] or []), enabled=r["enabled"],
+    )
+
+
+def _memory(r):
+    if r is None:
+        return None
+    return MemoryItem(
+        id=r["id"], tenant_id=r["tenant_id"], owner_scope=r["owner_scope"], kind=r["kind"],
+        content=r["content"], embedding=r["embedding"], source_ref=r["source_ref"],
+        data_class=r["data_class"], created_at=r["created_at"],
     )
 
 

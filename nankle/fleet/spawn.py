@@ -201,6 +201,7 @@ class Spawner:
         context: InvocationContext,
         *,
         partial_on_budget: bool = True,
+        grant_ceiling: GrantSet | None = None,
     ) -> dict[str, Any]:
         """Spawn one ephemeral agent for ``task`` with ``skills`` (US-FLT-03/04).
 
@@ -208,6 +209,11 @@ class Spawner:
         for in-fleet spawns) a budget hard-stop returns a partial result instead
         of raising (FR-COST-02). The app-facing adapter sets it ``False`` so the
         HTTP caller gets a ``429 budget_exceeded`` (kernel error taxonomy).
+
+        ``grant_ceiling`` caps the child's grants to those the initiator also
+        holds - used by Skill Studio test-spawns, eval runs, and personal agents
+        so a test/eval/personal turn can never call a verb the initiator lacks
+        (no escalation, SEC-29/SEC-30).
         """
         kernel = self._kernel
         prefer = prefer or {}
@@ -274,8 +280,12 @@ class Spawner:
                 "new_work_items": [],
             }
 
-        # 6. Build the child context (depth+1, skill grants, skills loaded).
+        # 6. Build the child context (depth+1, skill grants, skills loaded). When a
+        #    grant ceiling is given (test-spawn / eval / personal agent), the child
+        #    gets only grants the initiator also holds - no escalation (SEC-29/30).
         child_grants = GrantSet.of(allow=list(merged.tool_grants))
+        if grant_ceiling is not None:
+            child_grants = child_grants.intersect(grant_ceiling)
         child_ctx = InvocationContext(
             tenant_id=tenant_id,
             run_id=run_id,
@@ -313,6 +323,9 @@ class Spawner:
             "tokens_used": result.tokens_used,
             "cost_micros": result.cost_micros,
             "new_work_items": list(result.new_work_items),
+            # the child's effective grants after the ceiling intersection: a
+            # test-spawn/eval/personal turn can never exceed the initiator (SEC-29).
+            "effective_grants": list(child_grants.allow),
         }
 
     # --- internals ------------------------------------------------------------

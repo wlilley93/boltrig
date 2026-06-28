@@ -159,9 +159,32 @@ def build_app():
             turn_executor=build_turn_executor(kernel, build_spawner(kernel)),
         )
 
+    def platform_factory(kernel):
+        # Round Three studios/admin/eval ride existing services (C2)
+        from nankle.config.admin import AdminConfig
+        from nankle.fleet import register_workers
+        from nankle.fleet.eval import EvalRunner
+        from nankle.workflows import WorkflowLibrary
+
+        manifest_path = _find(_MANIFEST_CANDIDATES)
+        tenant = _DEFAULT_TENANT
+        if manifest_path:
+            try:
+                tenant = load_manifest(manifest_path).tenant_id
+            except Exception:
+                pass
+        spawner = build_spawner(kernel)
+        return {
+            "admin": AdminConfig(kernel.store, tenant_id=tenant, path=manifest_path),
+            "eval": EvalRunner(kernel, spawner),
+            "spawner": spawner,
+            "workflows": WorkflowLibrary(kernel.store, executor=register_workers(kernel)),
+        }
+
     return create_app(
         kernel_factory=build_kernel_async,
         spawner_factory=make_app_spawner,
         principal_resolver=select_principal_resolver(),
         chat_factory=chat_factory,
+        platform_factory=platform_factory,
     )

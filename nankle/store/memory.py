@@ -14,9 +14,15 @@ from nankle.models import (
     AgentCapability,
     AuditEvent,
     Budget,
+    ConfigRevision,
     Conversation,
     ConversationMessage,
     EMPTY_GRANTS,
+    EvalCase,
+    EvalRun,
+    MemoryItem,
+    NotificationPref,
+    PersonalAgent,
     HITLRequest,
     HITLResponse,
     HITLStatus,
@@ -53,6 +59,13 @@ class InMemoryStore:
         self._creds: dict[tuple[str, str], dict] = {}
         self._convs: dict[tuple[str, str], Conversation] = {}
         self._messages: dict[str, list[ConversationMessage]] = {}
+        self._revisions: list[ConfigRevision] = []
+        self._rev_seq = 0
+        self._eval_cases: dict[tuple[str, str], EvalCase] = {}
+        self._eval_runs: list[EvalRun] = []
+        self._notif: dict[tuple[str, str], NotificationPref] = {}
+        self._personal: dict[tuple[str, str], PersonalAgent] = {}
+        self._memory: list[MemoryItem] = []
 
     # --- registry ---
     async def get_noun(self, tenant_id, noun_id):
@@ -249,3 +262,65 @@ class InMemoryStore:
 
     async def list_messages(self, tenant_id, conv_id):
         return [m for m in self._messages.get(conv_id, []) if m.tenant_id == tenant_id]
+
+    # --- Round Three: config revisions ---
+    async def add_config_revision(self, rev):
+        self._rev_seq += 1
+        rev.id = self._rev_seq
+        self._revisions.append(rev)
+        return rev
+
+    async def list_config_revisions(self, tenant_id, kind, ref):
+        return [
+            r for r in self._revisions
+            if r.tenant_id == tenant_id and r.kind == kind and r.ref == ref
+        ]
+
+    async def get_config_revision(self, tenant_id, rev_id):
+        return next(
+            (r for r in self._revisions if r.tenant_id == tenant_id and r.id == rev_id), None
+        )
+
+    # --- eval ---
+    async def upsert_eval_case(self, case):
+        self._eval_cases[(case.tenant_id, case.id)] = case
+
+    async def get_eval_case(self, tenant_id, case_id):
+        return self._eval_cases.get((tenant_id, case_id))
+
+    async def list_eval_cases(self, tenant_id):
+        return [c for (t, _), c in self._eval_cases.items() if t == tenant_id]
+
+    async def add_eval_run(self, run):
+        self._eval_runs.append(run)
+
+    async def list_eval_runs(self, tenant_id, case_id=None):
+        out = [r for r in self._eval_runs if r.tenant_id == tenant_id]
+        return [r for r in out if case_id is None or r.case_id == case_id]
+
+    # --- notifications ---
+    async def upsert_notification_pref(self, pref):
+        self._notif[(pref.tenant_id, pref.id)] = pref
+
+    async def list_notification_prefs(self, tenant_id):
+        return [p for (t, _), p in self._notif.items() if t == tenant_id]
+
+    # --- personal agents ---
+    async def upsert_personal_agent(self, agent):
+        self._personal[(agent.tenant_id, agent.user_id)] = agent
+
+    async def get_personal_agent(self, tenant_id, user_id):
+        return self._personal.get((tenant_id, user_id))
+
+    # --- memory (scope-filtered, SEC-31) ---
+    async def add_memory_item(self, item):
+        self._memory.append(item)
+
+    async def query_memory(self, tenant_id, owner_scopes, kind=None, limit=20):
+        scopes = set(owner_scopes)
+        out = [
+            m for m in self._memory
+            if m.tenant_id == tenant_id and m.owner_scope in scopes
+            and (kind is None or m.kind == kind)
+        ]
+        return out[-limit:]

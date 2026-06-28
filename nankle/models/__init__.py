@@ -28,6 +28,14 @@ from .conversation import (
     ConversationStatus,
     MessageRole,
 )
+from .platform import (
+    ConfigRevision,
+    EvalCase,
+    EvalRun,
+    MemoryItem,
+    NotificationPref,
+    PersonalAgent,
+)
 from .errors import (
     BindingNotFound,
     BudgetExceeded,
@@ -79,6 +87,12 @@ __all__ = [
     "ConversationMessage",
     "ConversationStatus",
     "MessageRole",
+    "ConfigRevision",
+    "EvalCase",
+    "EvalRun",
+    "MemoryItem",
+    "NotificationPref",
+    "PersonalAgent",
     "NankleError",
     "SchemaValidationError",
     "BindingNotFound",

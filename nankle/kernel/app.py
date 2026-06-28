@@ -142,6 +142,8 @@ def create_app(
     spawner_factory: SpawnerFactory | None = None,
     chat_service: Any = None,
     chat_factory: Callable[[Kernel], Any] | None = None,
+    platform: dict[str, Any] | None = None,
+    platform_factory: Callable[[Kernel], dict[str, Any]] | None = None,
 ) -> FastAPI:
     """Build the ASGI app. Pass a prebuilt ``kernel`` (tests/in-process), or a
     ``kernel_factory`` that the lifespan runs on the SERVING loop so loop-bound
@@ -156,6 +158,11 @@ def create_app(
             return chat_service
         return chat_factory(k) if chat_factory is not None else None
 
+    def _platform_for(k: Kernel) -> dict[str, Any]:
+        if platform is not None:
+            return platform
+        return platform_factory(k) if platform_factory is not None else {}
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         if not hasattr(app.state, "kernel"):
@@ -165,6 +172,7 @@ def create_app(
             app.state.kernel = built
             app.state.spawner = spawner_factory(built) if spawner_factory else spawner
             app.state.chat = _chat_for(built)
+            app.state.platform = _platform_for(built)
         try:
             yield
         finally:
@@ -182,6 +190,7 @@ def create_app(
         app.state.kernel = kernel
         app.state.spawner = spawner
         app.state.chat = _chat_for(kernel)
+        app.state.platform = _platform_for(kernel)
 
     async def principal(request: Request) -> Principal:
         return await resolver(request)
@@ -386,6 +395,11 @@ def create_app(
         from nankle.observability.tree import build_tree
 
         return await build_tree(k.store, p.tenant_id, run_id)
+
+    # Round Three: authoring studios, admin console, observability, eval, etc.
+    from .platform_routes import register_platform_routes
+
+    register_platform_routes(app, principal_dep=principal, get_kernel=_get_kernel)
 
     # keep an unused import referenced for the HITL enums in scope
     _ = (HITLType, Urgency)

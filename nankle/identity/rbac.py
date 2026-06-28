@@ -121,6 +121,27 @@ def grants_for_scope(scope: dict[str, Any] | None) -> GrantSet:
     return GrantSet.of(allow=allow, deny=deny)
 
 
+# Roles permitted to author (studios) and administer (admin console) (C3, SEC-32).
+AUTHOR_ROLES: frozenset[str] = frozenset(
+    {"org-admin", "department-head", "manager", "lead", "integrator"}
+)
+
+
+def can_author(role: str) -> bool:
+    """Whether a role may use the authoring studios / admin console (SEC-32)."""
+    return role in AUTHOR_ROLES
+
+
+def memory_owner_scopes(user_id: str, role: str, scope: dict[str, Any] | None) -> list[str]:
+    """The memory owner-scopes a caller may read (SEC-31): their own user, the org
+    scope, and any department in their visibility scope. Excludes other users'
+    and other departments' memory, so cross-scope reads are denied."""
+    scopes = [f"user:{user_id}", "org"]
+    for dept in departments_for(role, scope) or []:
+        scopes.append(f"department:{dept}")
+    return scopes
+
+
 def departments_for(role: str, scope: dict[str, Any] | None) -> list[str] | None:
     """The caller's row-level department scope for work listing (US-IAM-02).
 

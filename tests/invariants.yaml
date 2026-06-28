@@ -38,6 +38,46 @@ invariants:
     description: Spawn selects the cheapest capable runtime for a child agent.
     tests:
       - tests/integration/test_fleet_spawn.py::test_cheapest_capable_runtime_chosen
+  SEC-29:
+    description: Test-spawns/eval run under the initiator's grants - no escalation.
+    tests:
+      - tests/security/test_round_three.py::test_test_spawn_cannot_escalate
+  SEC-30:
+    description: A personal agent acts only with the owner's delegated authority (on-behalf-of, capped).
+    tests:
+      - tests/security/test_round_three.py::test_personal_agent_is_delegated_only
+  SEC-31:
+    description: Memory is scope-isolated - cross-user/cross-department reads are denied.
+    tests:
+      - tests/security/test_round_three.py::test_memory_scope_isolation
+  SEC-32:
+    description: Authoring/admin is RBAC-gated and audited with the actor.
+    tests:
+      - tests/security/test_round_three.py::test_authoring_requires_role_and_is_audited
+  SEC-33:
+    description: Cost/audit/runs insight is scope-filtered - a dept cannot read another's.
+    tests:
+      - tests/security/test_round_three.py::test_audit_and_runs_are_scope_filtered
+  FR-OBS-02:
+    description: The audit browser is scope-filtered (and search/run links preserved).
+    tests:
+      - tests/security/test_round_three.py::test_audit_and_runs_are_scope_filtered
+  FR-EVAL-02:
+    description: An eval runs through the chokepoint under a defined scope, no escalation.
+    tests:
+      - tests/security/test_round_three.py::test_eval_runs_without_escalation
+  FR-ADM-02:
+    description: Admin config round-trips to a manifest and supports rollback (C1, NFR-REL-01).
+    tests:
+      - tests/integration/test_round_three_studios.py::test_admin_config_round_trips
+  FR-WFS-04:
+    description: A registered workflow becomes a live durable run with the durable executor.
+    tests:
+      - tests/integration/test_round_three_studios.py::test_workflow_live_durable_registration
+  FR-ADS-02:
+    description: Adapter Studio binds a generated adapter's verbs only after a named review (gate).
+    tests:
+      - tests/integration/test_round_three_studios.py::test_adapter_studio_review_gate
   US-WFL-02:
     description: Workflow synthesis uses a reasoning runtime when present, else a deterministic fallback.
     tests:

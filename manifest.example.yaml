@@ -210,3 +210,29 @@ chat:
   transport: sse                             # sse | websocket
   retention_days: 365
   panel: true                                # show the Chat panel in the UI
+
+# === Round Three additions (S10) - the manifest stays the source of truth (C1)
+# --- evaluation harness (Epic EVAL) -----------------------------------------
+evaluation:
+  enabled: true
+  suites:
+    - { id: onboarding-skills, target_kind: skill, target_ref: "ops/*" }
+
+# --- notification routing (Epic NOT) ----------------------------------------
+notifications:
+  defaults:
+    approval:     { channel: teams }
+    escalation:   { channel: teams }
+    budget_alert: { channel: email }
+
+# --- personal agents (Epic PA) - delegated-only -----------------------------
+personal_agents:
+  enabled: true
+  default_runtime: pi-worker
+  default_skills: ["writing/*", "analysis/*"]
+
+# --- memory & knowledge (Epic MEM, optional) - sensitive-safe by default -----
+memory:
+  enabled: false
+  embedding_endpoint: local-sensitive
+  default_owner_scope: "user"
