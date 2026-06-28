@@ -105,6 +105,23 @@ invariants:
     description: Resolved credential material never enters the audit log.
     tests:
       - tests/security/test_credential_isolation.py::test_secret_material_never_enters_audit
+  FR-MCP-01:
+    description: The kernel MCP face lists granted verbs (with schemas) as tools.
+    tests:
+      - tests/security/test_mcp_face.py::test_tools_list_is_granted_only_with_schemas
+  FR-MCP-02:
+    description: An MCP run-scoped token exposes only that run's tools.
+    tests:
+      - tests/security/test_mcp_face.py::test_out_of_scope_verb_not_listed_and_denied
+  SEC-23:
+    description: A Pi/MCP run is exposed only its granted verbs; out-of-scope calls are denied.
+    tests:
+      - tests/security/test_mcp_face.py::test_out_of_scope_verb_not_listed_and_denied
+  SEC-26:
+    description: Chokepoint parity - every MCP-originated call runs the full dispatch order + audit.
+    tests:
+      - tests/security/test_mcp_face.py::test_tools_call_runs_chokepoint_and_audits
+      - tests/security/test_mcp_face.py::test_mcp_hitl_gate_parity
   SEC-07:
     description: A verb is denied unless the caller holds the matching grant.
     tests:

@@ -50,7 +50,11 @@ class Kernel:
 
         from nankle.adapters.loader import AdapterLoader
 
+        from .mcp import McpFace
+
         self.loader = AdapterLoader()
+        # MCP server face: granted verbs as MCP tools, every call via the chokepoint.
+        self.mcp = McpFace(self)
         self.dispatcher = Dispatcher(
             store,
             grants=self.grants,

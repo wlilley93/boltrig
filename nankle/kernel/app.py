@@ -204,6 +204,18 @@ def create_app(
                 status_code=e.status_code,
             )
 
+    @app.post("/v1/mcp")
+    async def mcp(
+        body: dict, request: Request, k: Kernel = Depends(_get_kernel)
+    ) -> JSONResponse:
+        # run-scoped MCP connection: the token (not the body) authorises + scopes it
+        token = request.headers.get("x-nankle-mcp-token")
+        if token is None:
+            auth = request.headers.get("authorization", "")
+            scheme, _, value = auth.partition(" ")
+            token = value.strip() if scheme.lower() == "bearer" else None
+        return JSONResponse(await k.mcp.handle(token, body))
+
     @app.get("/v1/capabilities")
     async def capabilities(
         noun: str | None = None,
