@@ -20,6 +20,8 @@ Usage:  python scripts/smoke.py      (or: make smoke)
 from __future__ import annotations
 
 import asyncio
+import json
+import os
 import sys
 from pathlib import Path
 
@@ -154,6 +156,54 @@ async def step_degraded_when_backend_down() -> None:
         _record(name, False, f"{type(exc).__name__}: {exc}")
 
 
+# --- live adapter smoke (opt-in: real reads through the builtin adapters) ------
+# Each entry: (adapter_id, builder import path, read verb, params, credential env).
+# The credential env holds the reference *material* as JSON (an OAuth/token dict,
+# or a SQL DSN dict); the kernel never inlines secrets, it resolves references.
+_LIVE_TARGETS = [
+    ("jira", "nankle.adapters.builtin.jira", "ticket.search",
+     {"jql": "order by created DESC", "max_results": 1}, "JIRA_OAUTH", "oauth"),
+    ("ms-graph", "nankle.adapters.builtin.ms_graph", "directory.get_user",
+     {"id": "me"}, "GRAPH_APP", "oauth"),
+    ("crm-sql", "nankle.adapters.builtin.crm_sql", "contact.search",
+     {"query": ""}, "CRM_DB_RO", "basic"),
+]
+
+
+async def live_adapter_smoke() -> list[tuple[str, bool, str]]:
+    """One real read per adapter when its credential env is present (P2-1).
+
+    Returns per-adapter (name, ok, detail). Adapters with no credential env are
+    reported as skipped (ok=True) so the live run is green where it cannot test.
+    Only invoked when NANKLE_LIVE_SMOKE=1.
+    """
+    import importlib
+
+    from nankle.adapters.base import Credential
+
+    out: list[tuple[str, bool, str]] = []
+    for adapter_id, module_path, verb, params, cred_env, kind in _LIVE_TARGETS:
+        name = f"live read: {adapter_id} {verb}"
+        raw = os.environ.get(cred_env)
+        if not raw:
+            print(f"[SKIP] {name}  (set {cred_env} to test)")
+            out.append((name, True, "skipped (no credential)"))
+            continue
+        try:
+            adapter = importlib.import_module(module_path).build()
+            material = json.loads(raw) if raw.strip().startswith("{") else {"value": raw}
+            cred = Credential(id=adapter_id, kind=kind, material=material)
+            result = await adapter.execute(verb, params, cred, _ctx([f"{verb.split('.')[0]}.read"]))
+            ok = result.ok
+            detail = "ok" if ok else f"{result.error.error_class.value}: {result.error.message}"
+            print(f"[{'PASS' if ok else 'FAIL'}] {name}  ({detail})")
+            out.append((name, ok, detail))
+        except Exception as exc:  # noqa: BLE001
+            print(f"[FAIL] {name}  ({type(exc).__name__}: {exc})")
+            out.append((name, False, f"{type(exc).__name__}: {exc}"))
+    return out
+
+
 async def main() -> int:
     print("Nankle offline smoke test (in-process, no docker)\n")
     await step_granted_create_and_read()
@@ -161,8 +211,16 @@ async def main() -> int:
     await step_gated_pause_then_resume()
     await step_degraded_when_backend_down()
 
-    passed = sum(1 for _, ok, _ in _results if ok)
-    total = len(_results)
+    live: list[tuple[str, bool, str]] = []
+    if os.environ.get("NANKLE_LIVE_SMOKE") in {"1", "true", "yes"}:
+        print("\nLive adapter smoke (real reads where credentials are present):")
+        live = await live_adapter_smoke()
+    else:
+        print("\nLive adapter smoke: skipped (set NANKLE_LIVE_SMOKE=1 + per-adapter creds)")
+
+    all_results = _results + live
+    passed = sum(1 for _, ok, _ in all_results if ok)
+    total = len(all_results)
     print(f"\n{passed}/{total} steps passed")
     if passed == total:
         print("RESULT: PASS")
