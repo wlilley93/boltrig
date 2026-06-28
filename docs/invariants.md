@@ -12,7 +12,7 @@ The gate (the K-29 / K-30 ratchet) fails the build if:
   (an undeclared invariant), or
 - the catalogue claims a test node id that no marker actually backs (drift).
 
-Binding debt may only ever decrease. Today: **58 declared, debt 0** (76 bound
+Binding debt may only ever decrease. Today: **64 declared, debt 0** (82 bound
 test node ids), per `python scripts/check_invariants.py`. `tests/invariants.yaml`
 is the authoritative, machine-checked list; the table below is the curated
 human-readable view and highlights the core kernel set plus each round's new
@@ -74,6 +74,17 @@ and `FR*` ids are Nankle-local (drawn from the SRS) and never restate a `K-*`.
 | **SEC-37** | Headless REST / MCP runs the same chokepoint scoped to the user - no weak path. | `tests/security/test_round_four.py::test_headless_parity_no_weak_path` |
 | **SEC-38** | No unauthenticated access to tokens or connection details (mobile / web follow the same auth rules). | `tests/security/test_round_four.py::test_no_unauthenticated_access_to_tokens` |
 | **SEC-39** | An authored verb with a destructive / outbound name defaults to high-consequence so the HITL gate engages. | `tests/security/test_round_four.py::test_authored_verbs_safe_by_default` |
+
+### Round Five (kernel-governed structured memory)
+
+| Invariant | Meaning | Bound test(s) |
+| --- | --- | --- |
+| **SEC-40** | The kernel is the memory isolation boundary at ingestion AND retrieval - a hostile cross-scope edge (incl multi-hop) cannot leak an out-of-scope fact. | `tests/security/test_round_five.py::test_kernel_is_the_isolation_boundary` |
+| **SEC-41** | Recalled memory is data, never authority - it cannot grant a caller a verb they lack. | `tests/security/test_round_five.py::test_memory_cannot_escalate` |
+| **SEC-42** | Content is screened for injection/malware before it becomes memory; poison is rejected, never persisted. | `tests/security/test_round_five.py::test_ingestion_screens_poison` |
+| **SEC-43** | Sensitive memory must use a local endpoint; a misroute is blocked and audited. | `tests/security/test_round_five.py::test_sensitive_memory_stays_local` |
+| **SEC-44** | Erasure is complete (node + derived edges/facts), engine-confirmed, ledgered and audited. | `tests/security/test_round_five.py::test_complete_audited_erasure` |
+| **SEC-45** | Recall is least-privilege and audited - query and count recorded, fact contents never. | `tests/security/test_round_five.py::test_recall_is_audited_without_leaking_contents` |
 
 ## How a new invariant is added
 

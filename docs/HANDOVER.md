@@ -270,6 +270,40 @@ New bound invariants (debt still 0): SEC-34..39. Full DoD:
 
 ---
 
+## 7.3 Round Five (memory & knowledge)
+
+Kernel-governed structured memory, opt-in (`memory.enabled`). The engine is
+adopted, not built; the kernel - not the engine - is the isolation boundary; every
+memory op runs the unchanged chokepoint (NFR-MEM-05: dispatch/grants/registry
+untouched). Severable: `nankle/memory/*` imports only models + adapters.base.
+
+- **Engine interface** (`memory/engine.py`): `MemoryEngine` Protocol +
+  EngineFact/RecallHit. **Reference** (`memory/local.py`): keyword similarity +
+  explicit edges with scope-bounded multi-hop traversal and complete erasure.
+  **Production seam** (`memory/cognee.py`): lazy-import `CogneeEngine` (raises until
+  wired + validated per MEM-ENG-04).
+- **MemoryAdapter** (`memory/adapter.py`): memory.remember/recall/improve/forget as
+  a normal adapter (so grant + audit + chokepoint), and the kernel-side boundary -
+  owner-scope at ingestion + retrieval (SEC-40), recalled-content-is-data (SEC-41),
+  injection/malware screening (SEC-42), sensitive->local residency block (SEC-43),
+  complete ledgered+audited erasure (SEC-44), least-privilege audited recall
+  (SEC-45). Registered in bootstrap when the manifest opts in.
+- **Cognify pipeline** (`memory/cognify.py`): durable-or-local ingestion of
+  transcripts/documents -> screen -> remember via the chokepoint, with provenance;
+  records `memory_ingestions`.
+- **Routes** (`kernel/memory_routes.py`): `/v1/memory/recall|remember|forget|ingest`
+  + GET `facts`/`ingestions` (scope from the Principal via context.extra).
+- **Data** (`models/memory.py`: MemoryFact/MemoryIngestion/MemoryErasure; `store/*`;
+  `schema.sql`; Alembic `0003`). **Manifest**: the expanded `memory` section.
+- **UI** (`ui/src/panels/MemoryPanel.tsx`): Recall (with provenance) / Browse /
+  Remember / Ingest.
+
+Round Three flat memory (`memory_items` + `/v1/memory/query`, SEC-31) is kept as
+the seed. New bound invariants (debt still 0): SEC-40..45. Full DoD:
+`docs/DEFINITION-OF-DONE-round-five.md`.
+
+---
+
 ## 8. Quality / governance gate
 
 `scripts/check_invariants.py` is the K-29/K-30 ratchet: every `@pytest.mark.
