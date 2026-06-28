@@ -625,3 +625,220 @@ export interface MemoryQueryResponse {
   items: MemoryItem[];
   scopes: string[];
 }
+
+// ===========================================================================
+// Round Four: settings, account & access management (nankle/kernel/
+// access_routes.py). Per-user routes act on the caller's own scope; admin
+// routes require org-admin (a 403 returns {status:"denied", reason} which the
+// UI renders as a notice). User/invitation scope is a free-form dict
+// (departments / nouns / verbs visible), typed as a Record here.
+// ===========================================================================
+
+export interface UserProfile {
+  id: string;
+  email?: string | null;
+  display_name?: string | null;
+  role?: string;
+  scope?: Record<string, unknown>;
+  status?: string;
+  source?: string;
+  source_group?: string | null;
+  last_seen_at?: string | null;
+}
+
+export interface MeSettingsResponse {
+  profile: UserProfile;
+  settings: Record<string, unknown>;
+}
+
+// PUT accepts either {key, value} or {settings: {k: v}}.
+export interface PutSettingsRequest {
+  key?: string;
+  value?: unknown;
+  settings?: Record<string, unknown>;
+}
+
+export interface PutSettingsResponse {
+  status: string;
+  keys?: string[];
+  reason?: string;
+}
+
+export interface ActivityRow {
+  seq: number;
+  ts: string | null;
+  verb: string;
+  status: string;
+  run_id?: string | null;
+}
+
+export interface MeActivityResponse {
+  results: ActivityRow[];
+}
+
+export interface ExportConversation {
+  id: string;
+  title: string;
+  status: string;
+}
+
+export interface ExportWorkItem {
+  id: string;
+  intent: string;
+  status: string;
+}
+
+export interface MeExportResponse {
+  user: string;
+  conversations: ExportConversation[];
+  work_items: ExportWorkItem[];
+  settings: Record<string, unknown>;
+}
+
+// {status, id} on success; {status:"error"|"denied", reason} on 404/403.
+export interface DeleteAck {
+  status: string;
+  id?: string;
+  reason?: string;
+}
+
+// A personal access token as listed: never the secret or the hash (PAT-02).
+export interface PatView {
+  id: string;
+  name: string;
+  scope: string[];
+  created_at?: string | null;
+  last_used_at?: string | null;
+  expires_at?: string | null;
+  revoked: boolean;
+}
+
+export interface TokensResponse {
+  tokens: PatView[];
+}
+
+export interface MintTokenRequest {
+  name: string;
+  scope?: string[];
+  ttl_days?: number;
+}
+
+// On success the body spreads a PatView plus the one-time `secret`; on rejection
+// it is {status:"error", reason}.
+export interface MintTokenResponse extends Partial<PatView> {
+  status: string;
+  secret?: string;
+  reason?: string;
+}
+
+export interface ConnectionsResponse {
+  rest_base: string;
+  mcp_endpoint: string;
+  auth: string;
+  snippets: { claude_code: string; curl: string };
+  note: string;
+}
+
+export interface SessionView {
+  id: string;
+  client?: string | null;
+  revoked: boolean;
+  created_at?: string | null;
+  last_seen_at?: string | null;
+}
+
+export interface SessionsResponse {
+  sessions: SessionView[];
+}
+
+export interface MeNotificationItem {
+  id: string;
+  event_type: string;
+  channel: string;
+  target?: string | null;
+  enabled: boolean;
+}
+
+export interface MeNotificationsResponse {
+  prefs: MeNotificationItem[];
+}
+
+export interface PutMeNotificationRequest {
+  id?: string;
+  event_type: string;
+  channel: string;
+  target?: string | null;
+  enabled?: boolean;
+}
+
+export interface PersonalAgentView {
+  id: string;
+  runtime: string;
+  skills: string[];
+  enabled: boolean;
+}
+
+export interface MeAgentResponse {
+  agent: PersonalAgentView | null;
+}
+
+export interface DirectoryUser {
+  id: string;
+  email?: string | null;
+  display_name?: string | null;
+  role: string;
+  scope: Record<string, unknown>;
+  status: string;
+  source?: string;
+  source_group?: string | null;
+  last_seen_at?: string | null;
+}
+
+// users present on success; {status:"denied", reason} when the server refuses.
+export interface AdminUsersResponse {
+  users?: DirectoryUser[];
+  status?: string;
+  reason?: string;
+}
+
+export interface PatchUserRequest {
+  role?: string;
+  scope?: Record<string, unknown>;
+  status?: "active" | "deactivated";
+}
+
+export interface PatchUserResponse {
+  status: string;
+  user?: DirectoryUser;
+  reason?: string;
+}
+
+export interface AdminInvitation {
+  id: string;
+  email: string;
+  intended_role: string;
+  intended_scope: Record<string, unknown>;
+  status: string;
+  invited_by: string;
+  expires_at?: string | null;
+}
+
+export interface AdminInvitationsResponse {
+  invitations?: AdminInvitation[];
+  status?: string;
+  reason?: string;
+}
+
+export interface CreateInvitationRequest {
+  email: string;
+  role?: string;
+  scope?: Record<string, unknown>;
+  ttl_days?: number;
+}
+
+export interface CreateInvitationResponse {
+  status: string;
+  id?: string;
+  email?: string;
+  reason?: string;
+}

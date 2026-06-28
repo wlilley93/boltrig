@@ -18,6 +18,76 @@
   --low: #60a5fa;
   --radius: 8px;
   --gap: 12px;
+  --font-scale: 1;
+}
+
+/* === Appearance: theme / density / contrast (driven by data-* on <html>, set
+   by ui/src/appearance.ts). The :root defaults above are the dark theme. ===== */
+
+/* Light palette: explicit light, or system-light when theme = system. */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f5f6f8;
+  --bg-1: #ffffff;
+  --bg-2: #eceef3;
+  --border: #d4d8e0;
+  --text: #1b1f27;
+  --muted: #5b6472;
+  --accent: #2563eb;
+  --accent-2: #2563eb;
+  --ok: #059669;
+  --warn: #b45309;
+  --down: #dc2626;
+  --unknown: #6b7280;
+  --high: #b45309;
+  --low: #2563eb;
+}
+
+@media (prefers-color-scheme: light) {
+  :root[data-theme="system"] {
+    color-scheme: light;
+    --bg: #f5f6f8;
+    --bg-1: #ffffff;
+    --bg-2: #eceef3;
+    --border: #d4d8e0;
+    --text: #1b1f27;
+    --muted: #5b6472;
+    --accent: #2563eb;
+    --accent-2: #2563eb;
+    --ok: #059669;
+    --warn: #b45309;
+    --down: #dc2626;
+    --unknown: #6b7280;
+    --high: #b45309;
+    --low: #2563eb;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+/* Compact density tightens the shared gap the layouts are built on. */
+:root[data-density="compact"] {
+  --gap: 8px;
+}
+
+/* High contrast: strengthen borders and secondary text for WCAG AA+. */
+:root[data-contrast="high"] {
+  --border: #8b93a3;
+  --muted: #d7dce4;
+}
+
+:root[data-theme="light"][data-contrast="high"] {
+  --border: #3a4150;
+  --muted: #2a313c;
+}
+
+@media (prefers-color-scheme: light) {
+  :root[data-theme="system"][data-contrast="high"] {
+    --border: #3a4150;
+    --muted: #2a313c;
+  }
 }
 
 * {
@@ -34,8 +104,11 @@ body,
 body {
   background: var(--bg);
   color: var(--text);
-  font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto,
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto,
     Helvetica, Arial, sans-serif;
+  /* --font-scale is set on <html> from the user's appearance setting. */
+  font-size: calc(14px * var(--font-scale, 1));
+  line-height: 1.45;
 }
 
 code {
@@ -153,13 +226,16 @@ textarea:focus {
   border-color: var(--accent);
 }
 
-/* tabs */
+/* tabs - scroll horizontally on narrow viewports instead of wrapping/breaking */
 .tabs {
   display: flex;
   gap: 4px;
   padding: 8px 16px 0;
   background: var(--bg-1);
   border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
 }
 
 .tab {
@@ -171,6 +247,8 @@ textarea:focus {
   padding: 8px 16px;
   cursor: pointer;
   font: inherit;
+  white-space: nowrap;
+  flex: 0 0 auto;
 }
 
 .tab:hover {
@@ -871,13 +949,519 @@ textarea.code--tall {
   border-color: var(--down);
 }
 
-/* desktop-console nicety: let the sub-grids collapse to one column on narrow
-   viewports (full mobile/responsive is a later round) */
+/* ==========================================================================
+   Round Four: Settings extras (copy rows, the one-time token secret box)
+   ========================================================================== */
+
+.copy-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.copy-row__label {
+  flex: 0 0 auto;
+}
+
+.copy-row__value {
+  flex: 1 1 200px;
+  min-width: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.secret-box {
+  margin-top: 6px;
+}
+
+.secret-box__value {
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+/* user directory row: the identity/controls line plus a collapsible scope editor */
+.dir-row {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.dir-row:last-child {
+  border-bottom: none;
+}
+
+.dir-row__top {
+  border-bottom: none;
+  padding: 0;
+}
+
+.dir-row__scope {
+  margin-top: 6px;
+}
+
+.dir-row__scope summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 12px;
+}
+
+.dir-row__scope .field {
+  margin-top: 6px;
+}
+
+/* ==========================================================================
+   Chat panel: layout, message bubbles and the structured-turn cards. Built to
+   reflow from a two-column desktop view to a single column on phones, with the
+   message list and composer always usable (US-MOB-02).
+   ========================================================================== */
+
+.chat__layout {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: var(--gap);
+  align-items: stretch;
+  min-width: 0;
+}
+
+.chat__rail {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px;
+  overflow-y: auto;
+  max-height: 70vh;
+  min-width: 0;
+}
+
+.conv-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.conv-item {
+  width: 100%;
+  text-align: left;
+  background: var(--bg-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font: inherit;
+}
+
+.conv-item:hover {
+  border-color: var(--accent);
+}
+
+.conv-item--active {
+  border-color: var(--accent);
+  background: var(--bg-1);
+}
+
+.conv-item__title {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conv-item__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.chat__main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-1);
+  overflow: hidden;
+}
+
+.chat__messages {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  padding: 12px;
+  overflow-y: auto;
+  max-height: 60vh;
+  min-height: 240px;
+}
+
+.chat__empty {
+  text-align: center;
+  padding: 24px 0;
+}
+
+.chat-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 100%;
+}
+
+.chat-msg--user {
+  align-items: flex-end;
+}
+
+.chat-msg--assistant {
+  align-items: flex-start;
+}
+
+.chat-msg__role {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.chat-msg__bubble {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 80%;
+  min-width: 0;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.chat-msg--user .chat-msg__bubble {
+  background: var(--accent-2);
+  color: #fff;
+  border-color: var(--accent-2);
+}
+
+.chat-msg__text {
+  white-space: pre-wrap;
+}
+
+.chat-msg__typing {
+  font-style: italic;
+}
+
+/* dimmed reasoning */
+.thinking {
+  border-left: 2px solid var(--border);
+  padding-left: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.thinking__label {
+  display: block;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  font-size: 10px;
+}
+
+.thinking__body {
+  white-space: pre-wrap;
+}
+
+/* tool cards */
+.tool-card {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.tool-card__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  cursor: pointer;
+  flex-wrap: wrap;
+}
+
+.tool-card__body {
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tool-card__io pre {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px;
+  margin: 4px 0 0;
+  overflow-x: auto;
+  max-height: 200px;
+  font-size: 12px;
+}
+
+.badge--verb {
+  color: var(--text);
+}
+.badge--tool-running {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.badge--tool-ok {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+.badge--tool-error {
+  color: var(--down);
+  border-color: var(--down);
+}
+
+/* sub-agent cards */
+.subagent-card {
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  padding: 8px;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.subagent-card__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.subagent-card__task {
+  font-weight: 600;
+}
+
+.subagent-card__skills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.chip {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+  color: var(--muted);
+}
+
+/* inline HITL inside the chat */
+.chat-hitl {
+  border: 1px solid var(--warn);
+  border-radius: var(--radius);
+  padding: 10px;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chat-hitl__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.chat-hitl__question {
+  margin: 0;
+  font-weight: 600;
+}
+
+.chat-hitl__respond {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chat-hitl__row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.chat-hitl__text {
+  flex: 1 1 200px;
+}
+
+.chat-hitl__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chat-hitl__notes {
+  width: 100%;
+  resize: vertical;
+}
+
+.chat__reconnect {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.chat__composer {
+  display: flex;
+  gap: 8px;
+  padding: 10px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-1);
+  align-items: flex-end;
+}
+
+.chat__input {
+  flex: 1;
+  resize: vertical;
+  min-height: 44px;
+}
+
+/* ==========================================================================
+   Accessibility (WCAG 2.1 AA): visible keyboard focus, comfortable tap targets
+   on touch devices, and reduced-motion support (both the OS preference and the
+   user's own appearance setting, applied as .reduce-motion on <html>).
+   ========================================================================== */
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+summary:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Touch: every interactive control is at least a 44px tap target (US-MOB-03). */
+@media (pointer: coarse) {
+  .btn,
+  .tab,
+  .subtab,
+  .conv-item,
+  .run-handle,
+  input,
+  select,
+  textarea {
+    min-height: 44px;
+  }
+}
+
+/* Honour the OS-level reduced-motion preference. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Honour the user's own reduced-motion setting regardless of the OS. */
+:root.reduce-motion *,
+:root.reduce-motion *::before,
+:root.reduce-motion *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* ==========================================================================
+   Responsive layout (US-MOB-01..04). Reflow multi-column layouts to a single
+   column, keep primary content from scrolling horizontally, and make the chat
+   usable on a phone. The kanban board and data tables keep their own internal
+   horizontal scroll so the page itself never does.
+   ========================================================================== */
+
+@media (max-width: 900px) {
+  .chat__layout {
+    grid-template-columns: 1fr;
+  }
+  .chat__rail {
+    max-height: 30vh;
+  }
+}
+
 @media (max-width: 720px) {
+  .app__main {
+    padding: 12px;
+  }
+  .app__header {
+    padding: 10px 12px;
+  }
+  .identity-bar {
+    padding: 10px 12px;
+  }
+  .tabs {
+    padding: 8px 12px 0;
+  }
+
   .cols {
     grid-template-columns: 1fr;
   }
   .form__grid {
     grid-template-columns: 1fr;
+  }
+
+  /* let justified rows wrap their trailing controls below the label */
+  .row-line {
+    flex-wrap: wrap;
+  }
+
+  .panel__head {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  /* identity-bar fields fill the row rather than overflow */
+  .identity-bar .field,
+  .identity-bar .field--wide {
+    flex: 1 1 140px;
+  }
+  .identity-bar .field input,
+  .identity-bar .field--wide input {
+    width: 100%;
+  }
+
+  .chat-msg__bubble {
+    max-width: 92%;
+  }
+  .chat__messages {
+    max-height: 55vh;
+  }
+}
+
+@media (max-width: 480px) {
+  .form__actions {
+    align-items: stretch;
+  }
+  .chat-msg__bubble {
+    max-width: 100%;
   }
 }

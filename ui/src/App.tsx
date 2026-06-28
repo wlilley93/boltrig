@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { api } from "./api/client";
+import { applyAppearance, loadAppearance } from "./appearance";
 import { resetIdentity, updateIdentity, useIdentity } from "./identity";
 import { useFetch } from "./useFetch";
 import { AdminPanel } from "./panels/AdminPanel";
@@ -11,6 +12,7 @@ import { InsightPanel } from "./panels/InsightPanel";
 import { KanbanPanel } from "./panels/KanbanPanel";
 import { MePanel } from "./panels/MePanel";
 import { RouterPanel } from "./panels/RouterPanel";
+import { SettingsPanel } from "./panels/SettingsPanel";
 import { StudioPanel } from "./panels/StudioPanel";
 
 type Tab =
@@ -22,7 +24,8 @@ type Tab =
   | "admin"
   | "insight"
   | "eval"
-  | "me";
+  | "me"
+  | "settings";
 
 // Roles permitted to author (studios) / administer (admin console). The server
 // is the real gate (403); these only decide whether the tab is offered up front.
@@ -63,6 +66,11 @@ const TABS: ReadonlyArray<TabDef> = [
   { id: "insight", label: "Insight", hint: "Cost, audit and runs (scoped)" },
   { id: "eval", label: "Eval", hint: "No-escalation evaluation harness" },
   { id: "me", label: "Me", hint: "Personal agent, prefs and memory" },
+  {
+    id: "settings",
+    label: "Settings",
+    hint: "Account, tokens, connections, directory",
+  },
 ];
 
 function IdentityBar() {
@@ -137,6 +145,14 @@ export function App() {
   const identity = useIdentity();
   const [tab, setTab] = useState<Tab>("router");
 
+  // Apply the persisted appearance (theme / density / contrast / font scale /
+  // reduced motion) to the document root on first load, before any panel paints,
+  // so the saved choice takes effect with no flash. The Settings panel keeps it
+  // in sync with the server thereafter.
+  useEffect(() => {
+    applyAppearance(loadAppearance());
+  }, []);
+
   // Tabs gated by role are hidden when the role does not qualify. If the active
   // tab becomes hidden (role changed), fall back to Router for the render.
   const visibleTabs = TABS.filter((t) => !t.gate || t.gate(identity.role));
@@ -178,6 +194,7 @@ export function App() {
         {active === "insight" && <InsightPanel />}
         {active === "eval" && <EvalPanel />}
         {active === "me" && <MePanel />}
+        {active === "settings" && <SettingsPanel />}
       </main>
     </div>
   );

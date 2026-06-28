@@ -9,6 +9,8 @@ import type {
   ActivateAdapterResponse,
   AdapterInventoryResponse,
   AdapterSourceResponse,
+  AdminInvitationsResponse,
+  AdminUsersResponse,
   AuditExportResponse,
   AuditSearchResponse,
   AuditTreeResponse,
@@ -22,11 +24,15 @@ import type {
   ConfigSectionResponse,
   ConfigurePersonalAgentRequest,
   ConfigurePersonalAgentResponse,
+  ConnectionsResponse,
   ConversationResponse,
   ConversationsResponse,
   CostResponse,
   CreateEvalCaseRequest,
+  CreateInvitationRequest,
+  CreateInvitationResponse,
   CredentialsResponse,
+  DeleteAck,
   EvalRunResult,
   EvalRunsResponse,
   GenerateAdapterRequest,
@@ -36,24 +42,38 @@ import type {
   InvokePersonalAgentRequest,
   InvokeRequest,
   InvokeResult,
+  MeActivityResponse,
+  MeAgentResponse,
+  MeExportResponse,
+  MeNotificationsResponse,
+  MeSettingsResponse,
   MemoryQueryRequest,
   MemoryQueryResponse,
+  MintTokenRequest,
+  MintTokenResponse,
   NotificationPrefsResponse,
+  PatchUserRequest,
+  PatchUserResponse,
   PutConfigRequest,
   PutConfigResponse,
+  PutMeNotificationRequest,
   PutNotificationPrefRequest,
+  PutSettingsRequest,
+  PutSettingsResponse,
   RegisterMcpRequest,
   RespondResult,
   RunEvalRequest,
   RunsResponse,
   ScheduleWorkflowRequest,
   ScheduleWorkflowResponse,
+  SessionsResponse,
   SetBindingRequest,
   SkillsResponse,
   SpawnRequest,
   SpawnResult,
   StatusAck,
   TestSpawnRequest,
+  TokensResponse,
   TriggerWorkflowRequest,
   UpsertNounRequest,
   UpsertSkillRequest,
@@ -464,6 +484,124 @@ export const api = {
       method: "POST",
       body,
     });
+  },
+
+  // === Round Four: settings, account & access management ===
+  // Writes carry tolerateStatus so a 400 (bad input), 403 (admin-only) or 404
+  // (not found) renders as a message instead of throwing.
+
+  meSettings(): Promise<MeSettingsResponse> {
+    return request<MeSettingsResponse>("/v1/me/settings");
+  },
+
+  putMeSettings(body: PutSettingsRequest): Promise<PutSettingsResponse> {
+    return request<PutSettingsResponse>("/v1/me/settings", {
+      method: "PUT",
+      body,
+      tolerateStatus: true,
+    });
+  },
+
+  meActivity(): Promise<MeActivityResponse> {
+    return request<MeActivityResponse>("/v1/me/activity");
+  },
+
+  meExport(): Promise<MeExportResponse> {
+    return request<MeExportResponse>("/v1/me/export");
+  },
+
+  deleteMyConversation(id: string): Promise<DeleteAck> {
+    return request<DeleteAck>(
+      `/v1/me/conversations/${encodeURIComponent(id)}`,
+      { method: "DELETE", tolerateStatus: true },
+    );
+  },
+
+  meTokens(): Promise<TokensResponse> {
+    return request<TokensResponse>("/v1/me/tokens");
+  },
+
+  // The minted secret is in the response ONCE and is never returned again.
+  mintToken(body: MintTokenRequest): Promise<MintTokenResponse> {
+    return request<MintTokenResponse>("/v1/me/tokens", {
+      method: "POST",
+      body,
+      tolerateStatus: true,
+    });
+  },
+
+  revokeToken(id: string): Promise<DeleteAck> {
+    return request<DeleteAck>(`/v1/me/tokens/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      tolerateStatus: true,
+    });
+  },
+
+  meConnections(): Promise<ConnectionsResponse> {
+    return request<ConnectionsResponse>("/v1/me/connections");
+  },
+
+  meSessions(): Promise<SessionsResponse> {
+    return request<SessionsResponse>("/v1/me/sessions");
+  },
+
+  revokeSession(id: string): Promise<DeleteAck> {
+    return request<DeleteAck>(`/v1/me/sessions/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      tolerateStatus: true,
+    });
+  },
+
+  meNotifications(): Promise<MeNotificationsResponse> {
+    return request<MeNotificationsResponse>("/v1/me/notifications");
+  },
+
+  putMeNotification(body: PutMeNotificationRequest): Promise<StatusAck> {
+    return request<StatusAck>("/v1/me/notifications", {
+      method: "PUT",
+      body,
+      tolerateStatus: true,
+    });
+  },
+
+  meAgent(): Promise<MeAgentResponse> {
+    return request<MeAgentResponse>("/v1/me/agent", { tolerateStatus: true });
+  },
+
+  adminUsers(): Promise<AdminUsersResponse> {
+    return request<AdminUsersResponse>("/v1/admin/users", {
+      tolerateStatus: true,
+    });
+  },
+
+  patchUser(id: string, body: PatchUserRequest): Promise<PatchUserResponse> {
+    return request<PatchUserResponse>(
+      `/v1/admin/users/${encodeURIComponent(id)}`,
+      { method: "PATCH", body, tolerateStatus: true },
+    );
+  },
+
+  adminInvitations(): Promise<AdminInvitationsResponse> {
+    return request<AdminInvitationsResponse>("/v1/admin/invitations", {
+      tolerateStatus: true,
+    });
+  },
+
+  createInvitation(
+    body: CreateInvitationRequest,
+  ): Promise<CreateInvitationResponse> {
+    return request<CreateInvitationResponse>("/v1/admin/invitations", {
+      method: "POST",
+      body,
+      tolerateStatus: true,
+    });
+  },
+
+  revokeInvitation(id: string): Promise<DeleteAck> {
+    return request<DeleteAck>(
+      `/v1/admin/invitations/${encodeURIComponent(id)}`,
+      { method: "DELETE", tolerateStatus: true },
+    );
   },
 };
 
