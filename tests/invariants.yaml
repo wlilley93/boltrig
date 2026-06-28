@@ -62,6 +62,11 @@ invariants:
       - tests/security/test_sensitive_routing.py::test_sensitive_data_blocked_from_hosted_and_audited
       - tests/security/test_sensitive_routing.py::test_sensitive_data_routes_to_local_endpoint
       - tests/security/test_sensitive_routing.py::test_spawn_blocks_sensitive_on_hosted_capability
+  SEC-15:
+    description: Idempotent replay - a repeated idempotency key never re-executes a side-effecting verb.
+    tests:
+      - tests/kernel/test_idempotency.py::test_repeated_key_replays_without_reexecuting
+      - tests/kernel/test_idempotency.py::test_distinct_key_executes_again
   FR-EXE-03:
     description: Recursion depth is bounded - a spawn past the capability max depth is refused.
     tests:
