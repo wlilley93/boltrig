@@ -127,12 +127,15 @@ class InMemoryStore:
     async def update_work_item(self, item):
         self._work[(item.tenant_id, item.id)] = item
 
-    async def list_work_items(self, tenant_id, status=None, parent_id=None):
+    async def list_work_items(self, tenant_id, status=None, parent_id=None, departments=None):
         out = [w for (t, _), w in self._work.items() if t == tenant_id]
         if status is not None:
             out = [w for w in out if w.status == status]
         if parent_id is not None:
             out = [w for w in out if w.parent_id == parent_id]
+        if departments is not None:  # row-level department scope (US-IAM-02)
+            allowed = set(departments)
+            out = [w for w in out if w.owner_member in allowed]
         return out
 
     # --- hitl ---

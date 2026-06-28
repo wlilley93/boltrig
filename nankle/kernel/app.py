@@ -41,6 +41,7 @@ class Principal:
     role: str = "agent"
     actor_tier: str = "ephemeral"
     on_behalf_of: str | None = None
+    scope: dict[str, Any] = field(default_factory=dict)  # visibility scope (US-IAM-02)
 
     def context(self, *, run_id=None, parent_run_id=None, depth=0, skills=(), extra=None):
         return InvocationContext(
@@ -65,13 +66,17 @@ async def _dev_principal(request: Request) -> Principal:
     (see ``nankle.identity.auth``). SEC-01 requires real auth in production."""
     h = request.headers
     grants = [g for g in h.get("x-nankle-grants", "").split(",") if g]
+    role = h.get("x-nankle-role", "org-admin")
+    departments = [d for d in h.get("x-nankle-departments", "").split(",") if d]
+    scope = {"all": True} if role == "org-admin" else {"departments": departments}
     return Principal(
         tenant_id=h.get("x-nankle-tenant", "default"),
         subject=h.get("x-nankle-subject", "dev"),
         grants=GrantSet.of(grants),
-        role=h.get("x-nankle-role", "org-admin"),
+        role=role,
         actor_tier=h.get("x-nankle-tier", "human"),
         on_behalf_of=h.get("x-nankle-obo"),
+        scope=scope,
     )
 
 
@@ -240,10 +245,13 @@ def create_app(
         k: Kernel = Depends(_get_kernel),
         p: Principal = Depends(principal),
     ) -> dict:
+        from nankle.identity.rbac import departments_for
         from nankle.models import WorkStatus
 
         st = WorkStatus(status) if status else None
-        items = await k.store.list_work_items(p.tenant_id, st)
+        # row-level department isolation enforced at the store (US-IAM-02)
+        departments = departments_for(p.role, p.scope)
+        items = await k.list_work(p.tenant_id, departments=departments, status=st)
         return {
             "items": [
                 {

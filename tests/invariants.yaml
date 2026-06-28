@@ -25,6 +25,11 @@ invariants:
     description: Backend unavailability degrades gracefully, never crashes (graceful degradation).
     tests:
       - tests/kernel/test_ratelimit_degraded.py::test_degraded_mode_when_backend_down
+  US-IAM-02:
+    description: Row-level department isolation - an engineer cannot list another department's queue.
+    tests:
+      - tests/security/test_department_isolation.py::test_engineer_sees_only_their_department
+      - tests/security/test_department_isolation.py::test_engineer_cannot_see_other_department
   US-FLT-04:
     description: Spawn selects the cheapest capable runtime for a child agent.
     tests:

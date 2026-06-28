@@ -118,3 +118,19 @@ class Kernel:
             if binding and binding["target_type"] == "adapter":
                 v["health"] = self.loader.health_of(tenant_id, binding["target_ref"])
         return result
+
+    async def list_work(
+        self,
+        tenant_id: str,
+        *,
+        departments: list[str] | None = None,
+        status: Any = None,
+    ) -> list[Any]:
+        """List work items, row-scoped by department at the store (US-IAM-02).
+
+        ``departments=None`` is unrestricted (org-admin); a list restricts to work
+        owned by those departments. Scoping is enforced in the store, never in the
+        HTTP handler, so no caller can widen it."""
+        return await self.store.list_work_items(
+            tenant_id, status, departments=departments
+        )

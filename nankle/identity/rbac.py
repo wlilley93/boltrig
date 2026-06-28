@@ -119,3 +119,15 @@ def grants_for_scope(scope: dict[str, Any] | None) -> GrantSet:
 
     deny = [d for d in (scope.get("deny", []) or [])]
     return GrantSet.of(allow=allow, deny=deny)
+
+
+def departments_for(role: str, scope: dict[str, Any] | None) -> list[str] | None:
+    """The caller's row-level department scope for work listing (US-IAM-02).
+
+    Returns ``None`` for unrestricted access (org-admin, or ``{all: true}``) and
+    otherwise the list of departments the caller may see (possibly empty, which
+    is fail-closed: an engineer with no department sees nothing).
+    """
+    if role == "org-admin" or _scope_is_all(scope):
+        return None
+    return list((scope or {}).get("departments", []) or [])

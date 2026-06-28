@@ -61,7 +61,11 @@ class Store(Protocol):
     async def get_work_item(self, tenant_id: str, item_id: str) -> WorkItem | None: ...
     async def update_work_item(self, item: WorkItem) -> None: ...
     async def list_work_items(
-        self, tenant_id: str, status: WorkStatus | None = None, parent_id: str | None = None
+        self,
+        tenant_id: str,
+        status: WorkStatus | None = None,
+        parent_id: str | None = None,
+        departments: list[str] | None = None,
     ) -> list[WorkItem]: ...
 
     # --- hitl ---
