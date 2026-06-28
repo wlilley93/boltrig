@@ -5,20 +5,65 @@
 
 import { getIdentity } from "../identity";
 import type {
+  ActivateAdapterRequest,
+  ActivateAdapterResponse,
+  AdapterInventoryResponse,
+  AdapterSourceResponse,
+  AuditExportResponse,
+  AuditSearchResponse,
   AuditTreeResponse,
   CapabilitiesResponse,
   ChatEvent,
   ChatRequest,
+  ConfigExportResponse,
+  ConfigHistoryResponse,
+  ConfigRollbackRequest,
+  ConfigRollbackResponse,
+  ConfigSectionResponse,
+  ConfigurePersonalAgentRequest,
+  ConfigurePersonalAgentResponse,
   ConversationResponse,
   ConversationsResponse,
+  CostResponse,
+  CreateEvalCaseRequest,
+  CredentialsResponse,
+  EvalRunResult,
+  EvalRunsResponse,
+  GenerateAdapterRequest,
+  GenerateAdapterResponse,
   HealthResponse,
   HITLListResponse,
+  InvokePersonalAgentRequest,
   InvokeRequest,
   InvokeResult,
+  MemoryQueryRequest,
+  MemoryQueryResponse,
+  NotificationPrefsResponse,
+  PutConfigRequest,
+  PutConfigResponse,
+  PutNotificationPrefRequest,
+  RegisterMcpRequest,
   RespondResult,
+  RunEvalRequest,
+  RunsResponse,
+  ScheduleWorkflowRequest,
+  ScheduleWorkflowResponse,
+  SetBindingRequest,
+  SkillsResponse,
   SpawnRequest,
+  SpawnResult,
+  StatusAck,
+  TestSpawnRequest,
+  TriggerWorkflowRequest,
+  UpsertNounRequest,
+  UpsertSkillRequest,
+  UpsertVerbRequest,
+  UpsertWorkflowRequest,
   WorkResponse,
   WorkStatus,
+  WorkflowRunDescriptor,
+  WorkflowRunsResponse,
+  WorkflowsResponse,
 } from "./types";
 
 // Optional base prefix (e.g. when the UI is mounted under a sub-path).
@@ -43,6 +88,7 @@ function identityHeaders(): Record<string, string> {
     "x-nankle-subject": id.subject,
     "x-nankle-grants": id.grants,
     "x-nankle-role": id.role,
+    "x-nankle-departments": id.departments ?? "",
   };
 }
 
@@ -150,6 +196,274 @@ export const api = {
     return request<ConversationResponse>(
       `/v1/conversations/${encodeURIComponent(id)}`,
     );
+  },
+
+  // === Round Three: authoring studios ===
+  // Writes carry tolerateStatus so a 403 (role lacks authoring) renders as a
+  // denial message instead of throwing.
+
+  skills(): Promise<SkillsResponse> {
+    return request<SkillsResponse>("/v1/skills");
+  },
+
+  upsertSkill(body: UpsertSkillRequest): Promise<StatusAck> {
+    return request<StatusAck>("/v1/skills", {
+      method: "POST",
+      body,
+      tolerateStatus: true,
+    });
+  },
+
+  // Spawns the skill under the AUTHOR's grants (ceiling); the returned
+  // effective_grants prove the child never escalates (SEC-29).
+  testSpawn(skillId: string, body: TestSpawnRequest): Promise<SpawnResult> {
+    return request<SpawnResult>(
+      `/v1/skills/${encodeURIComponent(skillId)}/test-spawn`,
+      { method: "POST", body, tolerateStatus: true },
+    );
+  },
+
+  upsertNoun(body: UpsertNounRequest): Promise<StatusAck> {
+    return request<StatusAck>("/v1/nouns", {
+      method: "POST",
+      body,
+      tolerateStatus: true,
+    });
+  },
+
+  upsertVerb(body: UpsertVerbRequest): Promise<StatusAck> {
+    return request<StatusAck>("/v1/verbs", {
+      method: "POST",
+      body,
+      tolerateStatus: true,
+    });
+  },
+
+  setBinding(verbId: string, body: SetBindingRequest): Promise<StatusAck> {
+    return request<StatusAck>(
+      `/v1/verbs/${encodeURIComponent(verbId)}/binding`,
+      { method: "POST", body, tolerateStatus: true },
+    );
+  },
+
+  generateAdapter(
+    body: GenerateAdapterRequest,
+  ): Promise<GenerateAdapterResponse> {
+    return request<GenerateAdapterResponse>("/v1/adapters/generate", {
+      method: "POST",
+      body,
+      tolerateStatus: true,
+    });
+  },
+
+  adapterSource(adapterId: string): Promise<AdapterSourceResponse> {
+    return request<AdapterSourceResponse>(
+      `/v1/adapters/${encodeURIComponent(adapterId)}/source`,
+      { tolerateStatus: true },
+    );
+  },
+
+  activateAdapter(
+    adapterId: string,
+    body: ActivateAdapterRequest,
+  ): Promise<ActivateAdapterResponse> {
+    return request<ActivateAdapterResponse>(
+      `/v1/adapters/${encodeURIComponent(adapterId)}/activate`,
+      { method: "POST", body, tolerateStatus: true },
+    );
+  },
+
+  registerMcpServer(body: RegisterMcpRequest): Promise<StatusAck> {
+    return request<StatusAck>("/v1/mcp/servers", {
+      method: "POST",
+      body,
+      tolerateStatus: true,
+    });
+  },
+
+  adapters(): Promise<AdapterInventoryResponse> {
+    return request<AdapterInventoryResponse>("/v1/adapters");
+  },
+
+  workflows(): Promise<WorkflowsResponse> {
+    return request<WorkflowsResponse>("/v1/workflows");
+  },
+
+  upsertWorkflow(body: UpsertWorkflowRequest): Promise<StatusAck> {
+    return request<StatusAck>("/v1/workflows", {
+      method: "POST",
+      body,
+      tolerateStatus: true,
+    });
+  },
+
+  scheduleWorkflow(
+    wfId: string,
+    body: ScheduleWorkflowRequest,
+  ): Promise<ScheduleWorkflowResponse> {
+    return request<ScheduleWorkflowResponse>(
+      `/v1/workflows/${encodeURIComponent(wfId)}/schedule`,
+      { method: "POST", body, tolerateStatus: true },
+    );
+  },
+
+  triggerWorkflow(
+    wfId: string,
+    body: TriggerWorkflowRequest,
+  ): Promise<WorkflowRunDescriptor> {
+    return request<WorkflowRunDescriptor>(
+      `/v1/workflows/${encodeURIComponent(wfId)}/trigger`,
+      { method: "POST", body, tolerateStatus: true },
+    );
+  },
+
+  workflowRuns(wfId: string): Promise<WorkflowRunsResponse> {
+    return request<WorkflowRunsResponse>(
+      `/v1/workflows/${encodeURIComponent(wfId)}/runs`,
+    );
+  },
+
+  // === Round Three: admin console (org-admin / author roles) ===
+
+  getConfig(section: string): Promise<ConfigSectionResponse> {
+    return request<ConfigSectionResponse>(
+      `/v1/admin/config/${encodeURIComponent(section)}`,
+      { tolerateStatus: true },
+    );
+  },
+
+  putConfig(
+    section: string,
+    body: PutConfigRequest,
+  ): Promise<PutConfigResponse> {
+    return request<PutConfigResponse>(
+      `/v1/admin/config/${encodeURIComponent(section)}`,
+      { method: "PUT", body, tolerateStatus: true },
+    );
+  },
+
+  configHistory(section: string): Promise<ConfigHistoryResponse> {
+    return request<ConfigHistoryResponse>(
+      `/v1/admin/config/${encodeURIComponent(section)}/history`,
+      { tolerateStatus: true },
+    );
+  },
+
+  configRollback(
+    section: string,
+    body: ConfigRollbackRequest,
+  ): Promise<ConfigRollbackResponse> {
+    return request<ConfigRollbackResponse>(
+      `/v1/admin/config/${encodeURIComponent(section)}/rollback`,
+      { method: "POST", body, tolerateStatus: true },
+    );
+  },
+
+  configExport(): Promise<ConfigExportResponse> {
+    return request<ConfigExportResponse>("/v1/admin/config/export", {
+      method: "POST",
+      tolerateStatus: true,
+    });
+  },
+
+  adminCredentials(): Promise<CredentialsResponse> {
+    return request<CredentialsResponse>("/v1/admin/credentials", {
+      tolerateStatus: true,
+    });
+  },
+
+  // === Round Three: insight (scope-filtered server-side, SEC-33) ===
+
+  cost(): Promise<CostResponse> {
+    return request<CostResponse>("/v1/cost");
+  },
+
+  auditSearch(
+    params: { actor?: string; verb?: string; run?: string } = {},
+  ): Promise<AuditSearchResponse> {
+    const q = new URLSearchParams();
+    if (params.actor) q.set("actor", params.actor);
+    if (params.verb) q.set("verb", params.verb);
+    if (params.run) q.set("run", params.run);
+    const qs = q.toString();
+    return request<AuditSearchResponse>(
+      `/v1/audit/search${qs ? `?${qs}` : ""}`,
+    );
+  },
+
+  auditExport(): Promise<AuditExportResponse> {
+    return request<AuditExportResponse>("/v1/audit/export", {
+      method: "POST",
+      tolerateStatus: true,
+    });
+  },
+
+  runs(): Promise<RunsResponse> {
+    return request<RunsResponse>("/v1/runs");
+  },
+
+  // === Round Three: evaluation ===
+
+  createEvalCase(body: CreateEvalCaseRequest): Promise<StatusAck> {
+    return request<StatusAck>("/v1/eval/cases", {
+      method: "POST",
+      body,
+      tolerateStatus: true,
+    });
+  },
+
+  runEval(body: RunEvalRequest): Promise<EvalRunResult> {
+    return request<EvalRunResult>("/v1/eval/run", {
+      method: "POST",
+      body,
+      tolerateStatus: true,
+    });
+  },
+
+  evalRuns(caseId?: string): Promise<EvalRunsResponse> {
+    const q = caseId ? `?case_id=${encodeURIComponent(caseId)}` : "";
+    return request<EvalRunsResponse>(`/v1/eval/runs${q}`);
+  },
+
+  // === Round Three: personal agent / notifications / memory ===
+
+  configurePersonalAgent(
+    body: ConfigurePersonalAgentRequest,
+  ): Promise<ConfigurePersonalAgentResponse> {
+    return request<ConfigurePersonalAgentResponse>("/v1/me/agent", {
+      method: "POST",
+      body,
+    });
+  },
+
+  // delegated-only: spawns on-behalf-of the owner, capped to the owner's grants
+  // (SEC-30); effective_grants in the result show that cap.
+  invokePersonalAgent(
+    body: InvokePersonalAgentRequest,
+  ): Promise<SpawnResult> {
+    return request<SpawnResult>("/v1/me/agent/invoke", {
+      method: "POST",
+      body,
+      tolerateStatus: true,
+    });
+  },
+
+  notificationPrefs(): Promise<NotificationPrefsResponse> {
+    return request<NotificationPrefsResponse>("/v1/notifications/prefs");
+  },
+
+  putNotificationPref(body: PutNotificationPrefRequest): Promise<StatusAck> {
+    return request<StatusAck>("/v1/notifications/prefs", {
+      method: "PUT",
+      body,
+    });
+  },
+
+  memoryQuery(body: MemoryQueryRequest): Promise<MemoryQueryResponse> {
+    return request<MemoryQueryResponse>("/v1/memory/query", {
+      method: "POST",
+      body,
+    });
   },
 };
 

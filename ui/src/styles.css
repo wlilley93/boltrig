@@ -616,3 +616,268 @@ textarea:focus {
   width: 100%;
   resize: vertical;
 }
+
+/* ==========================================================================
+   Round Three: studios / admin / insight / eval / me
+   Reuses the existing card / badge / field vocabulary; adds form, table and
+   layout helpers for the console surfaces.
+   ========================================================================== */
+
+/* select inherits the input look */
+select {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font: inherit;
+}
+
+select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* sub-tab nav inside a panel (Studio sections) */
+.subtabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 10px;
+}
+
+.subtab {
+  background: var(--bg-2);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 12px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.subtab:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.subtab--active {
+  background: var(--bg-1);
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+/* layout helpers */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+.cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: var(--gap);
+  align-items: start;
+}
+
+/* forms */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+}
+
+.form__title {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.form__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+}
+
+.form__actions {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/* inside a form, fields and controls fill their column */
+.form .field,
+.form__grid .field {
+  width: 100%;
+}
+
+.form .field input,
+.form .field select,
+.form .field textarea,
+.form__grid .field input,
+.form__grid .field select,
+.form__grid .field textarea {
+  width: 100%;
+}
+
+textarea.code {
+  width: 100%;
+  min-height: 110px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+textarea.code--tall {
+  min-height: 200px;
+}
+
+.codeblock {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+  overflow: auto;
+  margin: 0;
+  max-height: 320px;
+  font-size: 12px;
+}
+
+/* a callout/notice block (left accent bar) */
+.notice {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  margin: 0;
+}
+
+.notice.warn {
+  border-left-color: var(--warn);
+}
+
+/* a titled list card (inventories, history, prefs) */
+.list-card {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.list-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.list-card__head h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.list-card__body {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* a single justified row in a card body */
+.row-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.row-line:last-child {
+  border-bottom: none;
+}
+
+/* inline group of chips/badges */
+.kv {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* monospace pill (grants, run ids, scopes) */
+.tag {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+  color: var(--muted);
+}
+
+/* data table (audit search) */
+.table-scroll {
+  overflow-x: auto;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.data-table th,
+.data-table td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.data-table th {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+/* status badges added this round */
+.badge--activated {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+
+.badge--inert {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+
+.badge--pass {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+
+.badge--fail {
+  color: var(--down);
+  border-color: var(--down);
+}
+
+/* desktop-console nicety: let the sub-grids collapse to one column on narrow
+   viewports (full mobile/responsive is a later round) */
+@media (max-width: 720px) {
+  .cols {
+    grid-template-columns: 1fr;
+  }
+  .form__grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -3,18 +3,66 @@ import { useState } from "react";
 import { api } from "./api/client";
 import { resetIdentity, updateIdentity, useIdentity } from "./identity";
 import { useFetch } from "./useFetch";
+import { AdminPanel } from "./panels/AdminPanel";
 import { ApprovalsPanel } from "./panels/ApprovalsPanel";
 import { ChatPanel } from "./panels/ChatPanel";
+import { EvalPanel } from "./panels/EvalPanel";
+import { InsightPanel } from "./panels/InsightPanel";
 import { KanbanPanel } from "./panels/KanbanPanel";
+import { MePanel } from "./panels/MePanel";
 import { RouterPanel } from "./panels/RouterPanel";
+import { StudioPanel } from "./panels/StudioPanel";
 
-type Tab = "router" | "kanban" | "approvals" | "chat";
+type Tab =
+  | "router"
+  | "kanban"
+  | "approvals"
+  | "chat"
+  | "studio"
+  | "admin"
+  | "insight"
+  | "eval"
+  | "me";
 
-const TABS: ReadonlyArray<{ id: Tab; label: string; hint: string }> = [
+// Roles permitted to author (studios) / administer (admin console). The server
+// is the real gate (403); these only decide whether the tab is offered up front.
+const AUTHOR_ROLES: ReadonlySet<string> = new Set([
+  "org-admin",
+  "department-head",
+  "manager",
+  "lead",
+  "integrator",
+]);
+const ADMIN_ROLES: ReadonlySet<string> = new Set(["org-admin"]);
+
+interface TabDef {
+  id: Tab;
+  label: string;
+  hint: string;
+  // when present, the tab is shown only if the predicate accepts the role.
+  gate?: (role: string) => boolean;
+}
+
+const TABS: ReadonlyArray<TabDef> = [
   { id: "router", label: "Router", hint: "Nouns, verbs and adapter health" },
   { id: "kanban", label: "Kanban", hint: "Work items by status" },
   { id: "approvals", label: "Approvals", hint: "Pending human-in-the-loop" },
   { id: "chat", label: "Chat", hint: "Converse with the orchestrator" },
+  {
+    id: "studio",
+    label: "Studio",
+    hint: "Authoring: skills, router, adapters, workflows",
+    gate: (role) => AUTHOR_ROLES.has(role),
+  },
+  {
+    id: "admin",
+    label: "Admin",
+    hint: "Manifest config, history, credentials",
+    gate: (role) => ADMIN_ROLES.has(role),
+  },
+  { id: "insight", label: "Insight", hint: "Cost, audit and runs (scoped)" },
+  { id: "eval", label: "Eval", hint: "No-escalation evaluation harness" },
+  { id: "me", label: "Me", hint: "Personal agent, prefs and memory" },
 ];
 
 function IdentityBar() {
@@ -51,6 +99,14 @@ function IdentityBar() {
           onChange={(e) => updateIdentity({ role: e.target.value })}
         />
       </label>
+      <label className="field field--wide">
+        <span>departments</span>
+        <input
+          value={id.departments}
+          placeholder="support,billing (scopes audit/runs)"
+          onChange={(e) => updateIdentity({ departments: e.target.value })}
+        />
+      </label>
       <button className="btn btn--ghost" onClick={() => resetIdentity()}>
         reset
       </button>
@@ -78,7 +134,14 @@ function HealthDot() {
 }
 
 export function App() {
+  const identity = useIdentity();
   const [tab, setTab] = useState<Tab>("router");
+
+  // Tabs gated by role are hidden when the role does not qualify. If the active
+  // tab becomes hidden (role changed), fall back to Router for the render.
+  const visibleTabs = TABS.filter((t) => !t.gate || t.gate(identity.role));
+  const active: Tab = visibleTabs.some((t) => t.id === tab) ? tab : "router";
+
   return (
     <div className="app">
       <header className="app__header">
@@ -92,11 +155,11 @@ export function App() {
       <IdentityBar />
 
       <nav className="tabs" aria-label="Panels">
-        {TABS.map((t) => (
+        {visibleTabs.map((t) => (
           <button
             key={t.id}
-            className={`tab ${tab === t.id ? "tab--active" : ""}`}
-            aria-current={tab === t.id ? "page" : undefined}
+            className={`tab ${active === t.id ? "tab--active" : ""}`}
+            aria-current={active === t.id ? "page" : undefined}
             title={t.hint}
             onClick={() => setTab(t.id)}
           >
@@ -106,10 +169,15 @@ export function App() {
       </nav>
 
       <main className="app__main">
-        {tab === "router" && <RouterPanel />}
-        {tab === "kanban" && <KanbanPanel />}
-        {tab === "approvals" && <ApprovalsPanel />}
-        {tab === "chat" && <ChatPanel />}
+        {active === "router" && <RouterPanel />}
+        {active === "kanban" && <KanbanPanel />}
+        {active === "approvals" && <ApprovalsPanel />}
+        {active === "chat" && <ChatPanel />}
+        {active === "studio" && <StudioPanel />}
+        {active === "admin" && <AdminPanel />}
+        {active === "insight" && <InsightPanel />}
+        {active === "eval" && <EvalPanel />}
+        {active === "me" && <MePanel />}
       </main>
     </div>
   );

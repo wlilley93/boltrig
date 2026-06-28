@@ -12,8 +12,11 @@ The gate (the K-29 / K-30 ratchet) fails the build if:
   (an undeclared invariant), or
 - the catalogue claims a test node id that no marker actually backs (drift).
 
-Binding debt may only ever decrease. Today: **20 declared, 20 bound, debt 0**
-(26 bound test node ids).
+Binding debt may only ever decrease. Today: **52 declared, debt 0** (70 bound
+test node ids), per `python scripts/check_invariants.py`. `tests/invariants.yaml`
+is the authoritative, machine-checked list; the table below is the curated
+human-readable view and highlights the core kernel set plus each round's new
+guarantees (it does not restate every id - the yaml does).
 
 The ids draw from three families: SRS principles (`P*`), the kernel doctrine
 (`K-*`), and SRS security / functional requirements (`SEC-*`, `FR-*`).
@@ -45,6 +48,21 @@ and `FR*` ids are Nankle-local (drawn from the SRS) and never restate a `K-*`.
 | **SEC-21** | Verb params are schema-validated before any dispatch side effect. | `tests/kernel/test_dispatch.py::test_invalid_params_rejected_before_dispatch` |
 | **FR-KER-05** | Per-verb / per-tenant rate limits are enforced at the kernel. | `tests/kernel/test_ratelimit_degraded.py::test_rate_limit_enforced` |
 | **FR-COST-02** | A hard-stop budget halts before exceeding; a soft budget records overage only. | `tests/security/test_budget_and_pii.py::test_budget_hard_stop_halts_before_exceeding`, `tests/security/test_budget_and_pii.py::test_soft_budget_does_not_halt` |
+
+### Round Three (authoring studios, admin, observability, eval, personal agents, memory)
+
+| Invariant | Meaning | Bound test(s) |
+| --- | --- | --- |
+| **SEC-29** | Test-spawns / eval run under the initiator's grants - no escalation. | `tests/security/test_round_three.py::test_test_spawn_cannot_escalate` |
+| **SEC-30** | A personal agent acts only with the owner's delegated authority (on-behalf-of, capped). | `tests/security/test_round_three.py::test_personal_agent_is_delegated_only` |
+| **SEC-31** | Memory is scope-isolated - cross-user / cross-department reads are denied. | `tests/security/test_round_three.py::test_memory_scope_isolation` |
+| **SEC-32** | Authoring / admin is RBAC-gated and audited with the actor. | `tests/security/test_round_three.py::test_authoring_requires_role_and_is_audited` |
+| **SEC-33** | Cost / audit / runs insight is scope-filtered - a dept cannot read another's. | `tests/security/test_round_three.py::test_audit_and_runs_are_scope_filtered` |
+| **FR-OBS-02** | The audit browser is scope-filtered (search / run links preserved). | `tests/security/test_round_three.py::test_audit_and_runs_are_scope_filtered` |
+| **FR-EVAL-02** | An eval runs through the chokepoint under a defined scope, no escalation. | `tests/security/test_round_three.py::test_eval_runs_without_escalation` |
+| **FR-ADM-02** | Admin config round-trips to a manifest and supports rollback (C1, NFR-REL-01). | `tests/integration/test_round_three_studios.py::test_admin_config_round_trips` |
+| **FR-WFS-04** | A registered workflow becomes a live durable run with the durable executor. | `tests/integration/test_round_three_studios.py::test_workflow_live_durable_registration` |
+| **FR-ADS-02** | Adapter Studio binds a generated adapter's verbs only after a named review (gate). | `tests/integration/test_round_three_studios.py::test_adapter_studio_review_gate` |
 
 ## How a new invariant is added
 

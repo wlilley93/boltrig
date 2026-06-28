@@ -191,6 +191,47 @@ all requests (fail-closed).
 
 ---
 
+## 7.1 Round Three (authoring studios, admin, observability, eval, personal agents, memory)
+
+Round Three adds the operate-and-author surface over the kernel. The dispatch
+sequence is unchanged - this is routes, services, data, and UI only. Cross-cutting
+rules: C1 the manifest stays the source of truth (edits round-trip), C2 authoring
+writes versioned data not code, C3 RBAC-gated + audited, C4 actions still pass the
+chokepoint under the author's grants, C5 every view is scope-filtered.
+
+- **Platform routes** (`kernel/platform_routes.py`, ~30 endpoints, wired in
+  `kernel/app.py` via `api/bootstrap.py:platform_factory`): authoring for
+  skills / nouns / verbs / bindings / adapters / workflows; admin config
+  (get/put/history/rollback/export, credential refs only); insight (cost,
+  scope-filtered audit search/export, runs); eval (cases/run/runs); personal
+  agent (on-behalf-of, capped); notification prefs; memory query.
+- **AdminConfig** (`config/admin.py`): the manifest as an editing surface -
+  section get/update records a `ConfigRevision`, with history, rollback, and a
+  loadable manifest export (FR-ADM-02).
+- **EvalRunner** (`fleet/eval.py`): spawns a target under the initiator's grants
+  as a ceiling and asserts must_call / must_not_call / forbidden_grants /
+  expect_output (FR-EVAL-02).
+- **Grant ceiling** (`fleet/spawn.py`): `spawn(..., grant_ceiling=...)` plus
+  `effective_grants` in the return - the testable proof that a test-spawn, eval,
+  or personal agent can never exceed the author/owner (SEC-29/30).
+- **RBAC helpers** (`identity/rbac.py`): `AUTHOR_ROLES`, `can_author`,
+  `memory_owner_scopes` (SEC-31/32).
+- **Data** (`models/platform.py`, `store/*`, `store/schema.sql`): ConfigRevision,
+  EvalCase/EvalRun, NotificationPref, PersonalAgent, MemoryItem.
+- **Manifest** (`manifest.example.yaml`): `evaluation`, `notifications`,
+  `personal_agents`, `memory` sections (C1).
+- **Alembic baseline** (`alembic.ini`, `migrations/`): `0001_baseline` replays
+  `store/schema.sql`, so `alembic upgrade head` equals the bootstrap schema
+  (FR-OPS-01). `alembic upgrade head --sql` emits all 28 tables offline.
+- **UI** (`ui/src/panels/*`): Studio (Skill/Router/Adapter/Workflow), Admin
+  Console, Insight, Eval, and a per-user Me panel, with author/admin tabs gated
+  to author/admin identities (the server enforces in all cases).
+
+New bound invariants (debt still 0): SEC-29..33, FR-OBS-02, FR-EVAL-02, FR-ADM-02,
+FR-WFS-04, FR-ADS-02. Full DoD: `docs/DEFINITION-OF-DONE-round-three.md`.
+
+---
+
 ## 8. Quality / governance gate
 
 `scripts/check_invariants.py` is the K-29/K-30 ratchet: every `@pytest.mark.

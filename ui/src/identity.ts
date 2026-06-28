@@ -10,6 +10,10 @@ export interface Identity {
   subject: string;
   grants: string; // comma-separated grant patterns, e.g. "*" or "noun.verb,other.*"
   role: string;
+  // comma-separated department refs sent as x-nankle-departments; the kernel
+  // uses it to scope-filter audit/cost/runs (SEC-33). Empty = unrestricted by
+  // this header (the role/scope still governs server-side).
+  departments: string;
 }
 
 const STORAGE_KEY = "nankle.identity";
@@ -19,6 +23,7 @@ const DEFAULT_IDENTITY: Identity = {
   subject: "dev",
   grants: "*",
   role: "org-admin",
+  departments: "",
 };
 
 function load(): Identity {

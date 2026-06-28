@@ -215,3 +215,413 @@ export type ChatEvent =
   | ChatSubagent
   | ChatHitlEvent
   | ChatMessageEnd;
+
+// ===========================================================================
+// Round Three: authoring studios, admin console, insight, eval, personal.
+// Every shape below mirrors nankle/kernel/platform_routes.py (and the services
+// it delegates to). Fields that depend on the response branch are optional so
+// the client can render a denial / 404 / 503 alongside the happy path.
+// ===========================================================================
+
+// A small acknowledgement body returned by most write routes:
+// {"status": "ok", ...} on success or {"status": "denied"|"error", "reason"}.
+export interface StatusAck {
+  status: string;
+  id?: string;
+  version?: string;
+  verb?: string;
+  reason?: string;
+  [key: string]: unknown;
+}
+
+// The free-form spawn/agent result (nankle/fleet/spawn.py::spawn). The fields
+// present depend on status ("ok" | "error" | "partial"); effective_grants is the
+// child's grants after the initiator-ceiling intersection (proves no escalation,
+// SEC-29/30). Absent on the budget-partial branch.
+export interface SpawnResult {
+  run_id?: string;
+  agent_type?: string;
+  status?: string;
+  reason?: string;
+  summary?: string;
+  output?: unknown;
+  tokens_used?: number;
+  cost_micros?: number;
+  new_work_items?: unknown[];
+  effective_grants?: string[];
+  [key: string]: unknown;
+}
+
+// --- Skill Studio -----------------------------------------------------------
+
+export interface SkillSummary {
+  id: string;
+  version: string;
+  extends?: string | null;
+  tool_grants: string[];
+  locale: string;
+}
+
+export interface SkillsResponse {
+  skills: SkillSummary[];
+}
+
+export interface UpsertSkillRequest {
+  id: string;
+  version?: string;
+  prompt_fragment?: string;
+  tool_grants?: string[];
+  context_requirements?: Record<string, unknown>;
+  extends?: string | null;
+  locale?: string;
+}
+
+export interface TestSpawnRequest {
+  task?: string;
+  context?: Record<string, unknown>;
+}
+
+// --- Router authoring -------------------------------------------------------
+
+export interface UpsertNounRequest {
+  id: string;
+  description?: string;
+  schema?: Record<string, unknown>;
+}
+
+export interface UpsertVerbRequest {
+  id: string;
+  noun_id: string;
+  input_schema?: Record<string, unknown>;
+  output_schema?: Record<string, unknown>;
+  description?: string;
+  consequence?: "low" | "high";
+}
+
+export type TargetTypeValue = "adapter" | "agent";
+
+export interface SetBindingRequest {
+  target_type: TargetTypeValue;
+  target_ref: string;
+}
+
+// --- Adapter Studio ---------------------------------------------------------
+
+export interface GenerateAdapterRequest {
+  spec: unknown;
+  adapter_id: string;
+}
+
+export interface GenerateAdapterResponse {
+  status: string;
+  id?: string;
+  // false on generate: the adapter is loaded but inert until reviewed/activated.
+  activated?: boolean;
+  verbs?: string[];
+  reason?: string;
+}
+
+export interface AdapterSourceResponse {
+  id?: string;
+  source?: string;
+  error?: string;
+}
+
+export interface ActivateAdapterRequest {
+  reviewer?: string;
+}
+
+export interface ActivateAdapterResponse {
+  status?: string;
+  id?: string;
+  verbs?: string[];
+  error?: string;
+  reason?: string;
+}
+
+export interface RegisterMcpRequest {
+  id: string;
+  url?: string;
+  token?: string;
+}
+
+export interface AdapterRecord {
+  id: string;
+  runtime: string;
+  version: string;
+  source: string;
+  activated: boolean;
+  health: AdapterHealth | string;
+}
+
+export interface AdapterInventoryResponse {
+  adapters: AdapterRecord[];
+}
+
+// --- Workflow Studio --------------------------------------------------------
+
+export type WorkflowSourceValue = "precreated" | "generated" | "learned";
+
+export interface WorkflowSummary {
+  id: string;
+  version: string;
+  source: string;
+  intent_tags: string[];
+}
+
+export interface WorkflowsResponse {
+  workflows: WorkflowSummary[];
+}
+
+export interface UpsertWorkflowRequest {
+  id: string;
+  version?: string;
+  source?: WorkflowSourceValue;
+  definition?: Record<string, unknown>;
+  intent_tags?: string[];
+}
+
+export interface ScheduleWorkflowRequest {
+  cron: string;
+  timezone?: string;
+}
+
+export interface ScheduleWorkflowResponse {
+  status: string;
+  id?: string;
+  schedule?: unknown;
+  reason?: string;
+}
+
+export interface TriggerWorkflowRequest {
+  inputs?: Record<string, unknown>;
+}
+
+// The run descriptor returned by trigger (nankle/workflows/library.py::trigger).
+export interface WorkflowRunDescriptor {
+  run_id?: string;
+  tenant_id?: string;
+  workflow_id?: string;
+  version?: string;
+  source?: string;
+  engine?: string;
+  durable?: boolean;
+  status?: string;
+  inputs?: Record<string, unknown>;
+  queued_at?: string;
+  error?: string;
+  [key: string]: unknown;
+}
+
+export interface WorkflowRunsResponse {
+  workflow_id: string;
+  runs: string[];
+}
+
+// --- Admin console ----------------------------------------------------------
+
+export interface ConfigSectionResponse {
+  section?: string;
+  value?: unknown;
+  status?: string;
+  reason?: string;
+  error?: string;
+}
+
+export interface PutConfigRequest {
+  value: unknown;
+}
+
+export interface PutConfigResponse {
+  status: string;
+  section?: string;
+  revision?: string;
+  reason?: string;
+}
+
+export interface ConfigRevisionSummary {
+  id: number;
+  version: string;
+  actor: string;
+  rolled_back: boolean;
+  created_at: string;
+}
+
+export interface ConfigHistoryResponse {
+  section?: string;
+  revisions?: ConfigRevisionSummary[];
+  error?: string;
+}
+
+export interface ConfigRollbackRequest {
+  revision_id: number;
+}
+
+export interface ConfigRollbackResponse {
+  status: string;
+  section?: string;
+  value?: unknown;
+  reason?: string;
+}
+
+export interface ConfigExportResponse {
+  manifest?: Record<string, unknown>;
+  error?: string;
+}
+
+export interface CredentialRef {
+  adapter?: string;
+  credential?: string;
+}
+
+export interface CredentialsResponse {
+  credentials?: CredentialRef[];
+  error?: string;
+}
+
+// --- Insight (scope-filtered server-side) -----------------------------------
+
+export interface CostResponse {
+  total_cost_micros: number;
+  by_actor: Record<string, number>;
+  // "all" (unrestricted) or the list of departments the caller may see.
+  scope: string[] | string;
+}
+
+export interface AuditRow {
+  seq: number;
+  ts: string;
+  actor: string;
+  verb: string;
+  status: string;
+  run_id?: string | null;
+}
+
+export interface AuditSearchResponse {
+  results: AuditRow[];
+  scope: string[] | string;
+}
+
+export interface AuditExportRow extends AuditRow {
+  on_behalf_of?: string | null;
+}
+
+export interface AuditExportResponse {
+  format?: string;
+  count?: number;
+  events?: AuditExportRow[];
+  error?: string;
+}
+
+export interface RunRow {
+  run_id?: string | null;
+  work_item: string;
+  intent: string;
+  status: string;
+  owner?: string | null;
+}
+
+export interface RunsResponse {
+  runs: RunRow[];
+}
+
+// --- Evaluation -------------------------------------------------------------
+
+export interface CreateEvalCaseRequest {
+  id?: string;
+  target_kind: string;
+  target_ref: string;
+  input?: Record<string, unknown>;
+  assertions?: Record<string, unknown>;
+  labels?: string[];
+}
+
+export interface RunEvalRequest {
+  case_id: string;
+}
+
+export interface EvalRunDetail {
+  checks?: Record<string, boolean>;
+  effective_grants?: string[];
+  spawn_error?: string;
+  [key: string]: unknown;
+}
+
+export interface EvalRunResult {
+  id?: string;
+  passed?: boolean;
+  score?: number;
+  run_id?: string;
+  detail?: EvalRunDetail;
+  error?: string;
+}
+
+export interface EvalRunSummary {
+  id: string;
+  case_id: string;
+  passed: boolean;
+  score: number;
+  run_id?: string;
+}
+
+export interface EvalRunsResponse {
+  runs: EvalRunSummary[];
+}
+
+// --- Personal agent / notifications / memory --------------------------------
+
+export interface ConfigurePersonalAgentRequest {
+  runtime?: string;
+  skills?: string[];
+}
+
+export interface ConfigurePersonalAgentResponse {
+  status: string;
+  id?: string;
+  owner?: string;
+}
+
+export interface InvokePersonalAgentRequest {
+  message: string;
+  context?: Record<string, unknown>;
+}
+
+export interface NotificationPrefItem {
+  id: string;
+  event_type: string;
+  channel: string;
+  target?: string | null;
+  enabled: boolean;
+}
+
+export interface NotificationPrefsResponse {
+  prefs: NotificationPrefItem[];
+}
+
+export interface PutNotificationPrefRequest {
+  id?: string;
+  scope_kind?: string;
+  scope_ref?: string;
+  event_type: string;
+  channel: string;
+  target?: string | null;
+  enabled?: boolean;
+}
+
+export interface MemoryQueryRequest {
+  kind?: string;
+  limit?: number;
+}
+
+export interface MemoryItem {
+  id: string;
+  owner_scope: string;
+  kind: string;
+  content: unknown;
+  source_ref?: string | null;
+}
+
+export interface MemoryQueryResponse {
+  items: MemoryItem[];
+  scopes: string[];
+}
