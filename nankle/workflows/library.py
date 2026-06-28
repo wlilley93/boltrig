@@ -16,10 +16,15 @@ from nankle.models import WorkflowDefinition, utcnow
 
 
 class WorkflowLibrary:
-    """Selection facade over the store's :class:`WorkflowDefinition` records."""
+    """Selection facade over the store's :class:`WorkflowDefinition` records.
 
-    def __init__(self, store: Any) -> None:
+    An optional ``executor`` (the fleet's durable backbone from
+    ``register_workers``) makes ``trigger`` actually enqueue a run; without one,
+    ``trigger`` returns a plain descriptor (offline-safe, P9)."""
+
+    def __init__(self, store: Any, executor: Any | None = None) -> None:
         self._store = store
+        self._executor = executor
 
     async def register(self, wf: WorkflowDefinition) -> None:
         """Persist (or replace) a workflow definition."""
@@ -68,14 +73,29 @@ class WorkflowLibrary:
         wf = await self.get(tenant, wf_id)
         if wf is None:
             raise LookupError(f"unknown workflow '{wf_id}' for tenant '{tenant}'")
-        return {
-            "run_id": uuid.uuid4().hex,
+        durable = bool(self._executor and getattr(self._executor, "durable", False))
+        run_id = (
+            self._executor.new_run_id() if self._executor is not None else uuid.uuid4().hex
+        )
+        descriptor = {
+            "run_id": run_id,
             "tenant_id": tenant,
             "workflow_id": wf.id,
             "version": wf.version,
             "source": wf.source.value,
-            "engine": "hatchet",
+            "engine": "hatchet" if durable else "local",
+            "durable": durable,
             "status": "queued",
             "inputs": dict(inputs or {}),
             "queued_at": utcnow().isoformat(),
         }
+        if self._executor is not None:
+            # enqueue through the backbone so the run boundary is recorded
+            # (durable under Hatchet; in-process under the local fallback).
+            async def _enqueue() -> dict[str, Any]:
+                return descriptor
+
+            await self._executor.run_step(
+                f"workflow:{wf.id}", _enqueue, run_id=run_id
+            )
+        return descriptor

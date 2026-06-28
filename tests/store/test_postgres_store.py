@@ -23,6 +23,7 @@ from nankle.models import (
     GrantMissing,
     GrantSet,
     InvocationContext,
+    PendingHuman,
     TenantPermissions,
     WorkItem,
     WorkStatus,
@@ -176,3 +177,40 @@ async def test_cross_tenant_fails_closed(store_kind):
     finally:
         if store_kind == "postgres":
             await store.close()
+
+
+@_pg
+@pytest.mark.invariant("NFR-REL-01")
+async def test_blocking_pause_survives_restart_and_resumes():
+    """A blocking HITL pause is durable: it survives a restart and then resumes
+    the work to completion on approval (NFR-REL-01, the core durability property).
+
+    The full live-Hatchet run-resume is the production backbone (a CI-gated
+    end-to-end); here the durable record (the pending HITL request + the approval)
+    lives in Postgres, so a fresh process picks the pause up and resumes it."""
+    from nankle.adapters.builtin.memory_tickets import build as build_tickets
+    from nankle.store import PostgresStore
+
+    store1 = await _fresh_pg()
+    await _seed_perms(store1, T, ["ticket.*"])
+    k1 = Kernel(store1, blocking_verbs={"ticket.create"})
+    await k1.register_adapter(T, build_tickets())
+    with pytest.raises(PendingHuman) as exc:
+        await k1.invoke("ticket", "ticket.create", {"title": "x"}, _ctx(["ticket.create"]))
+    req_id = exc.value.hitl_request_id
+    await store1.close()  # restart: drop the process/pool entirely
+
+    store2 = await PostgresStore.connect(DSN)  # fresh process on the same database
+    try:
+        pending = await store2.list_pending_hitl(T)
+        assert any(r.id == req_id for r in pending)  # the pause survived the restart
+        k2 = Kernel(store2, blocking_verbs={"ticket.create"})
+        await k2.register_adapter(T, build_tickets())
+        await k2.hitl.answer(T, req_id, "approve", "lead@acme")
+        out = await k2.invoke(
+            "ticket", "ticket.create", {"title": "x"}, _ctx(["ticket.create"]),
+            approval_id=req_id,
+        )
+        assert out["status"] == "open"  # resumed to completion after approval
+    finally:
+        await store2.close()

@@ -52,6 +52,10 @@ invariants:
       - tests/security/test_auth.py::test_missing_bearer_rejected
       - tests/security/test_auth.py::test_invalid_bearer_rejected
       - tests/security/test_auth.py::test_valid_bearer_yields_scoped_principal
+  NFR-REL-01:
+    description: A blocking HITL pause is durable - survives a restart and resumes on approval.
+    tests:
+      - tests/store/test_postgres_store.py::test_blocking_pause_survives_restart_and_resumes
   FR-EXE-03:
     description: Recursion depth is bounded - a spawn past the capability max depth is refused.
     tests:
