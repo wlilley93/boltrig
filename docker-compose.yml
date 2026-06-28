@@ -183,5 +183,29 @@ services:
               count: all
               capabilities: ["gpu"]
 
+  pi-sidecar:
+    # Round Two: the Pi reasoning sidecar (Epic RUN). Sandboxed: it has no native
+    # tools and reaches ONLY the kernel MCP face + the model endpoint (SEC-24).
+    # It is not internet-facing (no published ports). For hard egress isolation in
+    # production, place it on a restricted network / firewall it to kernel + model.
+    build:
+      context: ./services/pi_sidecar
+      dockerfile: Dockerfile
+    image: nankle/pi-sidecar:0.1.0
+    restart: unless-stopped
+    expose:
+      - "8090"
+    depends_on:
+      kernel:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - python -c "import urllib.request; urllib.request.urlopen('http://localhost:8090/health')" || exit 1
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
 volumes:
   pgdata:

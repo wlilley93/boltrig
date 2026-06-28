@@ -53,6 +53,23 @@ codebase of its own (the difference between installations is config, never a
 forked Nankle, per P7). Breach of any condition routes Nankle to consolidation.
 See `docs/decisions/0002-nankle-consolidation-ruling.md`.
 
+## Round Two: conversation, Pi, MCP
+
+Three additions sit on the same thin core (the dispatch sequence is unchanged):
+
+- **MCP server face** (`nankle/kernel/mcp.py`, `POST /v1/mcp`): granted verbs are
+  advertised as MCP tools over a run-scoped token; every `tools/call` runs the
+  full chokepoint. Any MCP-capable runtime drives the fleet with no bespoke glue.
+- **Pi sidecar runtime** (`nankle/fleet/pi_runtime.py` + `services/pi_sidecar/`):
+  a `pi` capability runs through a sandboxed sidecar whose only tools are the
+  run's granted verbs over MCP (no native tools, no credentials, SEC-24/27); it
+  degrades offline.
+- **Conversational layer** (`nankle/fleet/chat.py`, `POST /v1/chat` + a fourth
+  Chat panel): a turn routes through the fleet and streams reasoning/tool/
+  sub-agent/inline-HITL events; conversations persist and are owner-scoped.
+
+See `docs/DEFINITION-OF-DONE-round-two.md`.
+
 ## Quick start
 
 ### Run the tests + checks (no docker)
