@@ -12,7 +12,7 @@ The gate (the K-29 / K-30 ratchet) fails the build if:
   (an undeclared invariant), or
 - the catalogue claims a test node id that no marker actually backs (drift).
 
-Binding debt may only ever decrease. Today: **52 declared, debt 0** (70 bound
+Binding debt may only ever decrease. Today: **58 declared, debt 0** (76 bound
 test node ids), per `python scripts/check_invariants.py`. `tests/invariants.yaml`
 is the authoritative, machine-checked list; the table below is the curated
 human-readable view and highlights the core kernel set plus each round's new
@@ -63,6 +63,17 @@ and `FR*` ids are Nankle-local (drawn from the SRS) and never restate a `K-*`.
 | **FR-ADM-02** | Admin config round-trips to a manifest and supports rollback (C1, NFR-REL-01). | `tests/integration/test_round_three_studios.py::test_admin_config_round_trips` |
 | **FR-WFS-04** | A registered workflow becomes a live durable run with the durable executor. | `tests/integration/test_round_three_studios.py::test_workflow_live_durable_registration` |
 | **FR-ADS-02** | Adapter Studio binds a generated adapter's verbs only after a named review (gate). | `tests/integration/test_round_three_studios.py::test_adapter_studio_review_gate` |
+
+### Round Four (settings, account & access management)
+
+| Invariant | Meaning | Bound test(s) |
+| --- | --- | --- |
+| **SEC-34** | A personal access token never escalates (scope ∩ current grants, re-checked) and a deactivated / de-provisioned user's tokens stop working. | `tests/security/test_round_four.py::test_pat_never_escalates_and_dies_with_user` |
+| **SEC-35** | Invitations do not bypass the IdP - they pre-stage a role/scope, grant no access until SSO login, and are consumed once. | `tests/security/test_round_four.py::test_invitations_do_not_bypass_idp` |
+| **SEC-36** | Settings writes enforce RBAC server-side and are audited with the actor. | `tests/security/test_round_four.py::test_settings_changes_are_authz_checked_and_audited` |
+| **SEC-37** | Headless REST / MCP runs the same chokepoint scoped to the user - no weak path. | `tests/security/test_round_four.py::test_headless_parity_no_weak_path` |
+| **SEC-38** | No unauthenticated access to tokens or connection details (mobile / web follow the same auth rules). | `tests/security/test_round_four.py::test_no_unauthenticated_access_to_tokens` |
+| **SEC-39** | An authored verb with a destructive / outbound name defaults to high-consequence so the HITL gate engages. | `tests/security/test_round_four.py::test_authored_verbs_safe_by_default` |
 
 ## How a new invariant is added
 

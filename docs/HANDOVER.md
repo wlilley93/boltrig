@@ -232,6 +232,44 @@ FR-WFS-04, FR-ADS-02. Full DoD: `docs/DEFINITION-OF-DONE-round-three.md`.
 
 ---
 
+## 7.2 Round Four (settings, account & access management)
+
+The account & access surface. Dispatch is unchanged (NFR-MNT-01: dispatch.py /
+grants.py / registry.py untouched); this is routes, data, identity, and one MCP
+entry path.
+
+- **Provisioning** (`identity/provisioning.py`): JIT on login - a mapped IdP group
+  or a pending invitation, else denied (fail-closed). The `users` row is the
+  authority for a user's CURRENT role/scope/status; `current_grants_for_user`
+  returns nothing for a deactivated user. `build_principal_resolver(..., store=...)`
+  provisions on a real SSO login.
+- **Personal access tokens** (`identity/tokens.py`): minted as a subset of the
+  caller's grants (secret shown once, stored as a sha256 hash); `resolve_pat_principal`
+  re-checks PAT scope ∩ the owner's current grants on every call and fails closed on
+  revoked / expired / deactivated (SEC-34). The PAT-aware `principal` dependency in
+  `kernel/app.py` makes a PAT bearer flow through the same chokepoint as the site.
+- **User-scoped MCP** (`kernel/mcp.py::handle_user`, the `/v1/mcp` user path): a
+  bearer/PAT connection advertises and runs only the user's permitted tools (SEC-37).
+- **Access routes** (`kernel/access_routes.py`): `/v1/me/settings`, `activity`,
+  `export`, `conversations` delete, `tokens` (mint/list/revoke), `connections`,
+  `sessions`, `notifications`, `agent`; `/v1/admin/users` (GET/PATCH incl deactivate),
+  `/v1/admin/invitations` (GET/POST/DELETE). RBAC server-side + audited (SEC-36),
+  API parity with the UI (SET-03).
+- **Safe-by-default authoring** (`kernel/platform_routes.py::safe_consequence`): a
+  destructive/outbound verb name defaults to high-consequence so the HITL gate
+  engages (SEC-39).
+- **Data** (`models/access.py`, `models/identity.py` User, `store/*`, `schema.sql`,
+  Alembic `0002_round_four`).
+- **UI** (`ui/src/panels/SettingsPanel.tsx`, `ui/src/appearance.ts`): the Settings
+  area (Account, Appearance & a11y, Notifications, Developer & Connections + PAT,
+  Personal Agent, Privacy & My Data, Security & Sessions, Organisation directory +
+  invitations) plus a mobile-responsive + WCAG pass in `styles.css`.
+
+New bound invariants (debt still 0): SEC-34..39. Full DoD:
+`docs/DEFINITION-OF-DONE-round-four.md`.
+
+---
+
 ## 8. Quality / governance gate
 
 `scripts/check_invariants.py` is the K-29/K-30 ratchet: every `@pytest.mark.
