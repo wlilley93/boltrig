@@ -48,9 +48,14 @@ invariants:
     tests:
       - tests/integration/test_generated_adapter.py::test_generator_derives_verbs_from_openapi
   SEC-22:
-    description: A generated adapter is inert until a human review gate activates it.
+    description: A generated / consumed adapter is inert until a human review gate activates it.
     tests:
       - tests/integration/test_generated_adapter.py::test_generated_adapter_inert_until_reviewed
+      - tests/integration/test_mcp_consumer.py::test_consumed_server_inert_until_reviewed
+  FR-MCP-03:
+    description: An external MCP server is consumed as an adapter - its tools register as verbs.
+    tests:
+      - tests/integration/test_mcp_consumer.py::test_consume_external_mcp_server_as_verbs
   SEC-01:
     description: Real auth - an invalid/missing bearer is rejected 401; a valid token is scoped.
     tests:

@@ -294,6 +294,20 @@ CREATE TABLE IF NOT EXISTS conversations (
 );
 CREATE INDEX IF NOT EXISTS conversations_user_idx ON conversations (tenant_id, user_id);
 
+-- Round Two (optional): external MCP servers Nankle consumes as adapters
+-- (US-MCP-03). Inert (pending_review) until activated through the review gate.
+CREATE TABLE IF NOT EXISTS mcp_servers (
+    id          TEXT NOT NULL,
+    tenant_id   TEXT NOT NULL,
+    url         TEXT NOT NULL,
+    transport   TEXT NOT NULL,                          -- stdio | http
+    credential  TEXT,                                   -- secret reference (refs only)
+    status      TEXT NOT NULL DEFAULT 'pending_review', -- pending_review | active | disabled
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, id)
+);
+
 CREATE TABLE IF NOT EXISTS conversation_messages (
     id              TEXT NOT NULL,
     conversation_id TEXT NOT NULL,
