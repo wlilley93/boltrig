@@ -22,6 +22,10 @@ from nankle.models import (
     AuditEvent,
     Budget,
     Consequence,
+    Conversation,
+    ConversationMessage,
+    ConversationStatus,
+    MessageRole,
     EMPTY_GRANTS,
     GrantSet,
     HITLRequest,
@@ -464,6 +468,54 @@ class PostgresStore:
             ref.get("expires_at"),
         )
 
+    # --- conversations ---
+    async def create_conversation(self, c: Conversation):
+        await self._pool.execute(
+            """INSERT INTO conversations (id, tenant_id, user_id, title, status, created_at, updated_at)
+               VALUES ($1,$2,$3,$4,$5,$6,$7)
+               ON CONFLICT (tenant_id, id) DO NOTHING""",
+            c.id, c.tenant_id, c.user_id, c.title, c.status.value, c.created_at, c.updated_at,
+        )
+
+    async def get_conversation(self, tenant_id, conv_id):
+        row = await self._pool.fetchrow(
+            "SELECT * FROM conversations WHERE tenant_id=$1 AND id=$2", tenant_id, conv_id
+        )
+        return _conversation(row)
+
+    async def list_conversations(self, tenant_id, user_id):
+        rows = await self._pool.fetch(
+            """SELECT * FROM conversations WHERE tenant_id=$1 AND user_id=$2
+               ORDER BY updated_at DESC""",
+            tenant_id, user_id,
+        )
+        return [_conversation(r) for r in rows]
+
+    async def update_conversation(self, c: Conversation):
+        await self._pool.execute(
+            """UPDATE conversations SET title=$3, status=$4, updated_at=$5
+               WHERE tenant_id=$1 AND id=$2""",
+            c.tenant_id, c.id, c.title, c.status.value, c.updated_at,
+        )
+
+    async def add_message(self, m: ConversationMessage):
+        await self._pool.execute(
+            """INSERT INTO conversation_messages
+               (id, conversation_id, tenant_id, role, content, run_id, hitl_request_id, events, created_at)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+               ON CONFLICT (tenant_id, id) DO NOTHING""",
+            m.id, m.conversation_id, m.tenant_id, m.role.value, m.content, m.run_id,
+            m.hitl_request_id, m.events, m.created_at,
+        )
+
+    async def list_messages(self, tenant_id, conv_id):
+        rows = await self._pool.fetch(
+            """SELECT * FROM conversation_messages WHERE tenant_id=$1 AND conversation_id=$2
+               ORDER BY created_at ASC""",
+            tenant_id, conv_id,
+        )
+        return [_message(r) for r in rows]
+
 
 # --- row -> dataclass mappers (None-safe) ---------------------------------
 def _noun(r):
@@ -589,6 +641,27 @@ def _audit(r):
         on_behalf_of=r["on_behalf_of"], latency_ms=r["latency_ms"], tokens_used=r["tokens_used"],
         cost_micros=r["cost_micros"], skills_loaded=list(r["skills_loaded"] or []),
         detail=r["detail"] or {}, seq=r["seq"], prev_hash=r["prev_hash"], hash=r["hash"],
+    )
+
+
+def _conversation(r):
+    if r is None:
+        return None
+    return Conversation(
+        id=r["id"], tenant_id=r["tenant_id"], user_id=r["user_id"], title=r["title"],
+        status=ConversationStatus(r["status"]), created_at=r["created_at"],
+        updated_at=r["updated_at"],
+    )
+
+
+def _message(r):
+    if r is None:
+        return None
+    return ConversationMessage(
+        id=r["id"], conversation_id=r["conversation_id"], tenant_id=r["tenant_id"],
+        role=MessageRole(r["role"]), content=r["content"], run_id=r["run_id"],
+        hitl_request_id=r["hitl_request_id"], events=list(r["events"] or []),
+        created_at=r["created_at"],
     )
 
 

@@ -237,13 +237,18 @@ def _result_from_chat(
 
 
 def build_runtime(
-    capability: AgentCapability, endpoint_lookup: EndpointLookup | None = None
+    capability: AgentCapability,
+    endpoint_lookup: EndpointLookup | None = None,
+    *,
+    pi_config: dict[str, Any] | None = None,
 ) -> Runtime:
-    """Select the runtime implementation for a capability (P4, US-FLT-04).
+    """Select the runtime implementation for a capability (P4, US-FLT-04, US-RUN-01).
 
     Dispatch is by ``capability.runtime``. The model endpoint (if any) is
     resolved through ``endpoint_lookup`` so the chosen model is pinned by data,
-    not code. Unknown runtimes fall back to the offline-safe ``ScriptRuntime``.
+    not code. ``pi_config`` supplies the Pi sidecar wiring (sidecar_url, mcp_url,
+    issue_token, ...); absent it, a ``pi`` capability still resolves to a
+    PiRuntime that degrades offline. Unknown runtimes fall back to ScriptRuntime.
     """
     endpoint: ModelEndpoint | None = None
     if capability.model_endpoint and endpoint_lookup is not None:
@@ -254,5 +259,13 @@ def build_runtime(
         return HermesRuntime(endpoint=endpoint, cost_tier=capability.cost_tier)
     if kind == "claude-api":
         return ClaudeApiRuntime(endpoint=endpoint, cost_tier=capability.cost_tier)
+    if kind == "pi":
+        from .pi_runtime import PiRuntime
+
+        cfg = dict(pi_config or {})
+        cfg.setdefault("sidecar_url", None)  # no config -> degrades offline (FR-RUN-05)
+        return PiRuntime(
+            endpoint=endpoint, cost_tier=capability.cost_tier or "standard", **cfg
+        )
     # 'script' / 'python-script' / 'go-binary' / anything unknown -> deterministic.
     return ScriptRuntime(cost_tier=capability.cost_tier or "cheap")

@@ -148,10 +148,20 @@ def build_app():
 
     The kernel is built by the app lifespan on the serving loop (not here), so
     loop-bound resources like the asyncpg pool attach to uvicorn's loop."""
+    from nankle.fleet import build_spawner
+    from nankle.fleet.chat import ChatService, build_turn_executor
     from nankle.kernel.app import create_app
+
+    def chat_factory(kernel):
+        # the conversational service routes turns through the fleet (US-CONV-02)
+        return ChatService(
+            kernel.store, kernel.events,
+            turn_executor=build_turn_executor(kernel, build_spawner(kernel)),
+        )
 
     return create_app(
         kernel_factory=build_kernel_async,
         spawner_factory=make_app_spawner,
         principal_resolver=select_principal_resolver(),
+        chat_factory=chat_factory,
     )

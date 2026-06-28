@@ -279,3 +279,31 @@ CREATE TABLE IF NOT EXISTS tenant_permissions (
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Round Two: conversations (human<->fleet chat threads). Tenant + owner scoped
+-- (SEC-25): only the owner and appropriately-scoped roles may read a thread.
+CREATE TABLE IF NOT EXISTS conversations (
+    id          TEXT NOT NULL,
+    tenant_id   TEXT NOT NULL,
+    user_id     TEXT NOT NULL,                          -- owner
+    title       TEXT,
+    status      TEXT NOT NULL DEFAULT 'active',         -- active | closed
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, id)
+);
+CREATE INDEX IF NOT EXISTS conversations_user_idx ON conversations (tenant_id, user_id);
+
+CREATE TABLE IF NOT EXISTS conversation_messages (
+    id              TEXT NOT NULL,
+    conversation_id TEXT NOT NULL,
+    tenant_id       TEXT NOT NULL,
+    role            TEXT NOT NULL,                      -- user | assistant | tool | system
+    content         TEXT,
+    run_id          TEXT,                               -- the fleet run this turn used
+    hitl_request_id TEXT,                               -- set for an inline HITL prompt
+    events          JSONB,                              -- structured render data
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, id)
+);
+CREATE INDEX IF NOT EXISTS conv_messages_idx ON conversation_messages (conversation_id, created_at);

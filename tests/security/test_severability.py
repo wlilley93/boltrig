@@ -22,6 +22,14 @@ _FORBIDDEN = re.compile(
     re.IGNORECASE,
 )
 
+# Round Two: the kernel/models must not import Pi or the sidecar; the sidecar is
+# reached over the wire only (SEC-28). Also forbid runtime-backbone specifics
+# (hatchet, the fleet's pi_runtime) leaking into the core.
+_FORBIDDEN_PI = re.compile(
+    r"^\s*(?:from|import)\s+(.*\b)?(pi_runtime|pi_sidecar|hatchet|hatchet_sdk)\b",
+    re.IGNORECASE,
+)
+
 
 def _python_files() -> list[pathlib.Path]:
     files: list[pathlib.Path] = []
@@ -30,13 +38,27 @@ def _python_files() -> list[pathlib.Path]:
     return files
 
 
-@pytest.mark.security
-def test_kernel_and_models_have_no_estate_coupling():
+def _scan(pattern: re.Pattern[str]) -> list[str]:
     offenders: list[str] = []
     for path in _python_files():
         for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-            if _FORBIDDEN.match(line):
+            if pattern.match(line):
                 offenders.append(f"{path}:{n}: {line.strip()}")
+    return offenders
+
+
+@pytest.mark.security
+def test_kernel_and_models_have_no_estate_coupling():
+    offenders = _scan(_FORBIDDEN)
     assert not offenders, "estate-coupling imports found (D5 severability):\n" + "\n".join(
+        offenders
+    )
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-28")
+def test_kernel_and_models_have_no_pi_or_sidecar_coupling():
+    offenders = _scan(_FORBIDDEN_PI)
+    assert not offenders, "Pi/sidecar coupling in kernel/models (SEC-28):\n" + "\n".join(
         offenders
     )

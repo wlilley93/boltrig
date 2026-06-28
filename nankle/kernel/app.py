@@ -10,12 +10,13 @@ the request body.
 from __future__ import annotations
 
 import inspect
+import json
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable
 
 from fastapi import Depends, FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from nankle.models import (
@@ -115,6 +116,11 @@ class RespondBody(BaseModel):
     notes: str = ""
 
 
+class ChatBody(BaseModel):
+    message: str
+    conversation_id: str | None = None
+
+
 # Spawner seam: the fleet attaches an async (principal, body) -> dict callable.
 Spawner = Callable[[Principal, SpawnBody], Awaitable[dict]]
 KernelFactory = Callable[[], Awaitable[Kernel]]
@@ -134,11 +140,21 @@ def create_app(
     spawner: Spawner | None = None,
     kernel_factory: KernelFactory | None = None,
     spawner_factory: SpawnerFactory | None = None,
+    chat_service: Any = None,
+    chat_factory: Callable[[Kernel], Any] | None = None,
 ) -> FastAPI:
     """Build the ASGI app. Pass a prebuilt ``kernel`` (tests/in-process), or a
     ``kernel_factory`` that the lifespan runs on the SERVING loop so loop-bound
-    resources (the asyncpg pool) attach to the loop that handles requests."""
+    resources (the asyncpg pool) attach to the loop that handles requests.
+
+    ``chat_service`` (or ``chat_factory(kernel)``) supplies the conversational
+    service; it is injected (the kernel stays unaware of the fleet)."""
     resolver = principal_resolver or _dev_principal
+
+    def _chat_for(k: Kernel):
+        if chat_service is not None:
+            return chat_service
+        return chat_factory(k) if chat_factory is not None else None
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -148,6 +164,7 @@ def create_app(
             built = await kernel_factory()
             app.state.kernel = built
             app.state.spawner = spawner_factory(built) if spawner_factory else spawner
+            app.state.chat = _chat_for(built)
         try:
             yield
         finally:
@@ -164,6 +181,7 @@ def create_app(
     if kernel is not None:
         app.state.kernel = kernel
         app.state.spawner = spawner
+        app.state.chat = _chat_for(kernel)
 
     async def principal(request: Request) -> Principal:
         return await resolver(request)
@@ -215,6 +233,78 @@ def create_app(
             scheme, _, value = auth.partition(" ")
             token = value.strip() if scheme.lower() == "bearer" else None
         return JSONResponse(await k.mcp.handle(token, body))
+
+    @app.post("/v1/chat")
+    async def chat(
+        body: ChatBody, request: Request, p: Principal = Depends(principal)
+    ):
+        chat_svc = getattr(request.app.state, "chat", None)
+        if chat_svc is None:
+            return JSONResponse({"error": "chat_unavailable"}, status_code=503)
+        gen = chat_svc.handle_turn(
+            tenant_id=p.tenant_id, user_id=p.subject, role=p.role,
+            message=body.message, conversation_id=body.conversation_id,
+        )
+        # RBAC / access errors happen before the first event - surface them as JSON
+        try:
+            first = await gen.__anext__()
+        except NankleError as e:
+            return JSONResponse(
+                {"status": "denied" if e.status_code == 403 else "error", "reason": e.reason},
+                status_code=e.status_code,
+            )
+        except StopAsyncIteration:
+            first = None
+
+        async def stream():
+            if first is not None:
+                yield f"data: {json.dumps(first)}\n\n"
+            async for event in gen:
+                yield f"data: {json.dumps(event)}\n\n"
+
+        return StreamingResponse(stream(), media_type="text/event-stream")
+
+    @app.get("/v1/conversations")
+    async def conversations(request: Request, p: Principal = Depends(principal)) -> dict:
+        chat_svc = getattr(request.app.state, "chat", None)
+        if chat_svc is None:
+            return {"conversations": []}
+        convs = await chat_svc.list_conversations(p.tenant_id, p.subject)
+        return {
+            "conversations": [
+                {
+                    "id": c.id, "title": c.title, "status": c.status.value,
+                    "updated_at": c.updated_at.isoformat(),
+                }
+                for c in convs
+            ]
+        }
+
+    @app.get("/v1/conversations/{conversation_id}")
+    async def conversation(
+        conversation_id: str, request: Request, p: Principal = Depends(principal)
+    ):
+        chat_svc = getattr(request.app.state, "chat", None)
+        if chat_svc is None:
+            return JSONResponse({"error": "chat_unavailable"}, status_code=503)
+        try:
+            messages = await chat_svc.get_messages(
+                p.tenant_id, p.subject, p.role, conversation_id
+            )
+        except NankleError as e:  # ConversationForbidden -> 403 (SEC-25)
+            return JSONResponse({"status": "denied", "reason": e.reason}, status_code=e.status_code)
+        if messages is None:
+            return JSONResponse({"error": "not_found"}, status_code=404)
+        return {
+            "messages": [
+                {
+                    "id": m.id, "role": m.role.value, "content": m.content,
+                    "run_id": m.run_id, "hitl_request_id": m.hitl_request_id,
+                    "events": m.events, "created_at": m.created_at.isoformat(),
+                }
+                for m in messages
+            ]
+        }
 
     @app.get("/v1/capabilities")
     async def capabilities(

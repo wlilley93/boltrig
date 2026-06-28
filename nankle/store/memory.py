@@ -14,6 +14,8 @@ from nankle.models import (
     AgentCapability,
     AuditEvent,
     Budget,
+    Conversation,
+    ConversationMessage,
     EMPTY_GRANTS,
     HITLRequest,
     HITLResponse,
@@ -49,6 +51,8 @@ class InMemoryStore:
         self._budgets: dict[tuple[str, str], Budget] = {}
         self._idem: dict[tuple[str, str], dict] = {}
         self._creds: dict[tuple[str, str], dict] = {}
+        self._convs: dict[tuple[str, str], Conversation] = {}
+        self._messages: dict[str, list[ConversationMessage]] = {}
 
     # --- registry ---
     async def get_noun(self, tenant_id, noun_id):
@@ -222,3 +226,26 @@ class InMemoryStore:
 
     def set_credential_ref(self, tenant_id: str, cred_id: str, ref: dict) -> None:
         self._creds[(tenant_id, cred_id)] = ref
+
+    # --- conversations ---
+    async def create_conversation(self, conv):
+        self._convs[(conv.tenant_id, conv.id)] = conv
+
+    async def get_conversation(self, tenant_id, conv_id):
+        return self._convs.get((tenant_id, conv_id))
+
+    async def list_conversations(self, tenant_id, user_id):
+        out = [
+            c for (t, _), c in self._convs.items()
+            if t == tenant_id and c.user_id == user_id
+        ]
+        return sorted(out, key=lambda c: c.updated_at, reverse=True)
+
+    async def update_conversation(self, conv):
+        self._convs[(conv.tenant_id, conv.id)] = conv
+
+    async def add_message(self, message):
+        self._messages.setdefault(message.conversation_id, []).append(message)
+
+    async def list_messages(self, tenant_id, conv_id):
+        return [m for m in self._messages.get(conv_id, []) if m.tenant_id == tenant_id]

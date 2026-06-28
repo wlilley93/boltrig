@@ -22,6 +22,12 @@ from .base import (
     utcnow,
 )
 from .context import InvocationContext
+from .conversation import (
+    Conversation,
+    ConversationMessage,
+    ConversationStatus,
+    MessageRole,
+)
 from .errors import (
     BindingNotFound,
     BudgetExceeded,
@@ -69,6 +75,10 @@ __all__ = [
     "WorkItemId",
     "utcnow",
     "InvocationContext",
+    "Conversation",
+    "ConversationMessage",
+    "ConversationStatus",
+    "MessageRole",
     "NankleError",
     "SchemaValidationError",
     "BindingNotFound",

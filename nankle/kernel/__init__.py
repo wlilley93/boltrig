@@ -50,11 +50,14 @@ class Kernel:
 
         from nankle.adapters.loader import AdapterLoader
 
+        from .events import EventRelay
         from .mcp import McpFace
 
         self.loader = AdapterLoader()
         # MCP server face: granted verbs as MCP tools, every call via the chokepoint.
         self.mcp = McpFace(self)
+        # Event relay: run/conversation event streams for the conversational layer.
+        self.events = EventRelay()
         self.dispatcher = Dispatcher(
             store,
             grants=self.grants,

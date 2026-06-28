@@ -102,6 +102,13 @@ ephemeral_runtimes:
     supported_skills: ["*"]
     max_depth: 2
     cost_tier: standard
+  # Round Two: a Pi-backed ephemeral runtime (Epic RUN)
+  - name: pi-worker
+    runtime: pi
+    model_endpoint: standard
+    supported_skills: ["*"]
+    max_depth: 2
+    cost_tier: standard
 
 # --- spawn rules: match a task to a runtime + skill set (S6) -----------------
 spawn_rules:
@@ -177,3 +184,29 @@ privacy:
   redact_fields:
     - email
     - phone
+
+# === Round Two additions (S9) ===============================================
+
+# --- runtime sidecars: Pi as a sandboxed reasoning runtime (Epic RUN) -------
+runtimes:
+  pi:
+    enabled: true
+    sidecar_url: http://pi-sidecar:8090
+    model_endpoint: standard                 # pins Pi's model via the endpoints above
+    max_steps: 12                            # per-run reasoning/tool-call cap
+    sandbox:
+      network_allow: [kernel_mcp, model_endpoint]   # nothing else (SEC-24)
+      native_tools: false                    # no Pi filesystem/bash/network tools
+
+# --- expose the kernel as an MCP server, and optionally consume external ones
+mcp:
+  server:
+    enabled: true                            # granted verbs exposed as MCP tools
+  consume: []                                # optional external MCP servers (US-MCP-03)
+
+# --- the conversational layer (Epic CONV) -----------------------------------
+chat:
+  enabled: true
+  transport: sse                             # sse | websocket
+  retention_days: 365
+  panel: true                                # show the Chat panel in the UI

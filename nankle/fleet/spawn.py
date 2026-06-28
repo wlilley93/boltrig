@@ -18,6 +18,7 @@ with no SDK / keys, runtimes degrade rather than crash (P9).
 from __future__ import annotations
 
 import json
+import os
 import uuid
 from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
@@ -183,6 +184,13 @@ class Spawner:
         self._kernel = kernel
         # the tenant's local endpoint for sensitive data (manifest sensitive_endpoint)
         self._sensitive_endpoint_id = sensitive_endpoint_id
+        # Pi sidecar wiring (manifest runtimes.pi maps to these env vars). Absent a
+        # sidecar url, a pi capability resolves to a PiRuntime that degrades (P9).
+        self._pi = {
+            "sidecar_url": os.environ.get("NANKLE_PI_SIDECAR_URL") or None,
+            "mcp_url": os.environ.get("NANKLE_PI_MCP_URL", "http://kernel:8000/v1/mcp"),
+            "max_steps": int(os.environ.get("NANKLE_PI_MAX_STEPS", "12")),
+        }
 
     async def spawn(
         self,
@@ -350,6 +358,18 @@ class Spawner:
                 return endpoint
             return None
 
+        if capability.runtime == "pi":
+            pi_config: dict[str, Any] = {
+                "sidecar_url": self._pi["sidecar_url"],
+                "mcp_url": self._pi["mcp_url"],
+                "max_steps": self._pi["max_steps"],
+                "issue_token": self._kernel.mcp.issue_run_token,
+                "revoke_token": self._kernel.mcp.revoke,
+            }
+            if context is not None and context.run_id:
+                run_id = context.run_id  # bind for the relay sink
+                pi_config["event_sink"] = lambda ev: self._kernel.events.publish(run_id, ev)
+            return build_runtime(capability, lookup, pi_config=pi_config)
         return build_runtime(capability, lookup)
 
     def _compose_prompt(self, merged_prompt: str, task: str) -> str:
