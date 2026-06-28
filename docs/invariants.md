@@ -12,11 +12,18 @@ The gate (the K-29 / K-30 ratchet) fails the build if:
   (an undeclared invariant), or
 - the catalogue claims a test node id that no marker actually backs (drift).
 
-Binding debt may only ever decrease. Today: **16 declared, 16 bound, debt 0**
-(22 bound test node ids).
+Binding debt may only ever decrease. Today: **20 declared, 20 bound, debt 0**
+(26 bound test node ids).
 
 The ids draw from three families: SRS principles (`P*`), the kernel doctrine
 (`K-*`), and SRS security / functional requirements (`SEC-*`, `FR-*`).
+
+**Canonical source of the `K-*` ids (per [2026] VJS-CC NANKLE-CONSOLIDATION 001,
+directive D2):** every `K-*` id in this catalogue is the canonical invariant id
+from the doctrine's Appendix A, in the `agent-kernel-doctrine` repository
+(`volume-1-the-rust-kernel/appendices/appendix-A-invariant-catalog.md`). Nankle
+binds these ids to tests; it does not define or renumber them. The `P*`, `SEC*`
+and `FR*` ids are Nankle-local (drawn from the SRS) and never restate a `K-*`.
 
 ## Catalogue
 

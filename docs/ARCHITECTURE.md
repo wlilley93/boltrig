@@ -7,6 +7,14 @@ manifest and the libraries. This document maps the components, the dispatch
 flow, the data model, the internal contracts (SRS S7), and where the binding
 architectural principles P1-P10 are enforced.
 
+> **Doctrine source (binding, [2026] VJS-CC NANKLE-CONSOLIDATION 001).** The
+> chokepoint + capability + audit discipline Nankle implements (the `K-1..K-30`
+> invariants) is owned by the `agent-kernel-doctrine` repository, which is its
+> single source. Nankle conforms to that doctrine and does not author it. As the
+> doctrine's unified capability primitive advances, Nankle's grant model
+> (`nankle/models/grants.py`) tracks it and must not ship competing capability
+> semantics (directive D4).
+
 ## Component map
 
 | Area | Package | Role |

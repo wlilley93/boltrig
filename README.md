@@ -27,6 +27,26 @@ real but some external legs are seams (see "Implemented vs scaffolded" below).
    which concrete system sits behind a verb (`nankle/kernel/registry.py`,
    `nankle/models/registry.py`).
 
+## Governance: the doctrine and the consolidation ruling
+
+Nankle implements, but does not author, a kernel doctrine. The **single source
+of that doctrine (the K-1..K-30 invariant catalogue) is the `agent-kernel-doctrine`
+repository.** Nankle conforms to it; it never redefines or forks it. Any change to
+the meaning of a `K-*` invariant originates there, and Nankle tracks it.
+
+Nankle exists as its own repository by the ruling of the VJS County Court,
+**[2026] VJS-CC NANKLE-CONSOLIDATION 001** ("conditioned standalone"). The court
+held that the single-source-of-law precedents govern unity of *law*, not the
+coexistence of conforming *code* implementations of one doctrine, and permitted
+Nankle to stand alone on binding conditions: it cites the doctrine as the single
+source (above), keys its invariants to the doctrine's Appendix A, keeps the
+binding-invariant gate at debt 0 in required CI, converges on (never competes
+with) the doctrine's unified capability primitive, stays severable (the kernel
+and models import nothing from sibling estate kernels), and forks no parallel
+codebase of its own (the difference between installations is config, never a
+forked Nankle, per P7). Breach of any condition routes Nankle to consolidation.
+See `docs/decisions/0002-nankle-consolidation-ruling.md`.
+
 ## Quick start
 
 ### Run the tests + checks (no docker)
