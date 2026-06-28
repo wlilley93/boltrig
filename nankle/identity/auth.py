@@ -184,6 +184,7 @@ def build_principal_resolver(
             role=role,
             actor_tier="human",
             on_behalf_of=_on_behalf_of(claims),
+            scope=scope,  # row-level department isolation in prod (US-IAM-02)
         )
 
     return resolver

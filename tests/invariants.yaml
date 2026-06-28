@@ -46,6 +46,12 @@ invariants:
     description: A generated adapter is inert until a human review gate activates it.
     tests:
       - tests/integration/test_generated_adapter.py::test_generated_adapter_inert_until_reviewed
+  SEC-01:
+    description: Real auth - an invalid/missing bearer is rejected 401; a valid token is scoped.
+    tests:
+      - tests/security/test_auth.py::test_missing_bearer_rejected
+      - tests/security/test_auth.py::test_invalid_bearer_rejected
+      - tests/security/test_auth.py::test_valid_bearer_yields_scoped_principal
   FR-EXE-03:
     description: Recursion depth is bounded - a spawn past the capability max depth is refused.
     tests:

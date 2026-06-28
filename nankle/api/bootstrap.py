@@ -100,6 +100,49 @@ def build_kernel() -> Kernel:
     return asyncio.run(build_kernel_async())
 
 
+def _deny_all_resolver():
+    """A fail-closed resolver: refuse every request (no auth configured, SEC-01)."""
+    from fastapi import HTTPException, Request
+
+    async def resolver(request: Request):  # noqa: ARG001
+        raise HTTPException(status_code=401, detail="authentication is not configured")
+
+    return resolver
+
+
+def select_principal_resolver():
+    """Choose the auth resolver from the environment (SEC-01).
+
+    OIDC when the OIDC_* trio is set; the header-trusting dev resolver only when
+    NANKLE_DEV_AUTH=1 (local dev); otherwise fail closed (refuse all requests).
+    """
+    settings = load_settings()
+    if settings.oidc_configured:
+        from nankle.identity import OidcVerifier, build_principal_resolver
+
+        manifest_path = _find(_MANIFEST_CANDIDATES)
+        if manifest_path:
+            manifest = load_manifest(manifest_path)
+            mappings, tenant = list(manifest.role_mappings), manifest.tenant_id
+        else:
+            mappings, tenant = [], _DEFAULT_TENANT
+        verifier = OidcVerifier(
+            settings.oidc_issuer, settings.oidc_audience, settings.oidc_jwks_uri
+        )
+        log.info("OIDC auth enabled (issuer %s)", settings.oidc_issuer)
+        return build_principal_resolver(verifier=verifier, mappings=mappings, tenant_id=tenant)
+    if settings.dev_auth:
+        log.warning(
+            "NANKLE_DEV_AUTH=1: header-trusting dev auth is active. NOT for production (SEC-01)."
+        )
+        return None  # create_app default is the dev header resolver
+    log.warning(
+        "no OIDC_* config and NANKLE_DEV_AUTH unset: refusing all requests (fail-closed). "
+        "Set OIDC_ISSUER/OIDC_AUDIENCE/OIDC_JWKS_URI for production, or NANKLE_DEV_AUTH=1 for dev."
+    )
+    return _deny_all_resolver()
+
+
 def build_app():
     """Build the FastAPI app for uvicorn (target: nankle.api.asgi:app).
 
@@ -107,4 +150,8 @@ def build_app():
     loop-bound resources like the asyncpg pool attach to uvicorn's loop."""
     from nankle.kernel.app import create_app
 
-    return create_app(kernel_factory=build_kernel_async, spawner_factory=make_app_spawner)
+    return create_app(
+        kernel_factory=build_kernel_async,
+        spawner_factory=make_app_spawner,
+        principal_resolver=select_principal_resolver(),
+    )

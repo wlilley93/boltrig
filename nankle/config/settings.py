@@ -33,6 +33,16 @@ class Settings:
     https_proxy: str | None = None  # egress proxy for adapter HTTP calls
     ca_bundle: str | None = None  # custom CA bundle for TLS verification
     air_gapped: bool = False  # no outbound network allowed (SEC / local-only)
+    # Identity (SEC-01). When the OIDC trio is set, real token verification is
+    # used; dev_auth gates the header-trusting fallback for local dev only.
+    oidc_issuer: str | None = None
+    oidc_audience: str | None = None
+    oidc_jwks_uri: str | None = None
+    dev_auth: bool = False  # NANKLE_DEV_AUTH=1 -> header-trust resolver (dev only)
+
+    @property
+    def oidc_configured(self) -> bool:
+        return bool(self.oidc_issuer and self.oidc_audience and self.oidc_jwks_uri)
 
 
 def load_settings(env: Mapping[str, str] | None = None) -> Settings:
@@ -46,4 +56,8 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         https_proxy=e.get("HTTPS_PROXY") or e.get("https_proxy") or None,
         ca_bundle=e.get("CA_BUNDLE") or None,
         air_gapped=_as_bool(e.get("AIR_GAPPED")),
+        oidc_issuer=e.get("OIDC_ISSUER") or None,
+        oidc_audience=e.get("OIDC_AUDIENCE") or None,
+        oidc_jwks_uri=e.get("OIDC_JWKS_URI") or None,
+        dev_auth=_as_bool(e.get("NANKLE_DEV_AUTH")),
     )

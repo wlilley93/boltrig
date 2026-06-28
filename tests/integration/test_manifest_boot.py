@@ -11,6 +11,7 @@ from nankle.api.bootstrap import build_app
 @pytest.fixture(scope="module")
 def client():
     os.environ["NANKLE_MANIFEST"] = "manifest.example.yaml"
+    os.environ["NANKLE_DEV_AUTH"] = "1"  # select the dev resolver (no IdP in tests)
     # enter the context so the lifespan builds the kernel on the serving loop
     with TestClient(build_app()) as c:
         yield c
