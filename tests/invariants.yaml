@@ -38,6 +38,11 @@ invariants:
     description: Spawn selects the cheapest capable runtime for a child agent.
     tests:
       - tests/integration/test_fleet_spawn.py::test_cheapest_capable_runtime_chosen
+  US-WFL-02:
+    description: Workflow synthesis uses a reasoning runtime when present, else a deterministic fallback.
+    tests:
+      - tests/integration/test_workflow_synthesis.py::test_reasoned_synthesis_uses_runtime_steps
+      - tests/integration/test_workflow_synthesis.py::test_reasoned_falls_back_to_deterministic_offline
   US-ADP-01:
     description: An adapter is generated from an OpenAPI spec, deriving its verbs.
     tests:

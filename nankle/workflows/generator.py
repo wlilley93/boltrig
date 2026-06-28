@@ -93,6 +93,86 @@ async def learn_from_success(
     return learned
 
 
+def _extract_steps(result: Any) -> list[dict[str, Any]]:
+    """Pull a proposed step list out of a runtime result (output or JSON summary)."""
+    output = getattr(result, "output", None) or {}
+    if isinstance(output, dict) and isinstance(output.get("steps"), list):
+        return [s for s in output["steps"] if isinstance(s, dict)]
+    summary = getattr(result, "summary", "") or ""
+    try:
+        import json
+
+        parsed = json.loads(summary)
+        if isinstance(parsed, dict) and isinstance(parsed.get("steps"), list):
+            return [s for s in parsed["steps"] if isinstance(s, dict)]
+    except Exception:
+        pass
+    return []
+
+
+async def generate_workflow_reasoned(
+    task: str, intent_tags: list[str], tenant_id: str, *, runtime: Any | None = None
+) -> WorkflowDefinition:
+    """Synthesise a workflow, optionally via a reasoning runtime (US-WFL-02).
+
+    When a ``runtime`` is supplied it is asked to propose ordered steps; the
+    proposal is validated and compiled into a Hatchet-style spec marked
+    ``synthesis: reasoned``. With no runtime, an unusable proposal, or any failure
+    (offline, no model), it falls back to the deterministic linear pipeline
+    (:func:`generate_workflow`), so synthesis never crashes the fleet (P9).
+    """
+    if runtime is None:
+        return generate_workflow(task, intent_tags, tenant_id)
+    try:
+        from nankle.models import InvocationContext
+
+        prompt = (
+            f"Propose ordered workflow steps for this task: {task}\n"
+            'Return JSON only: {"steps":[{"name":"...","description":"..."}]}'
+        )
+        result = await runtime.run(prompt, InvocationContext(tenant_id=tenant_id), tools=[])
+        proposed = _extract_steps(result)
+        if not proposed:
+            return generate_workflow(task, intent_tags, tenant_id)
+    except Exception:
+        return generate_workflow(task, intent_tags, tenant_id)
+
+    steps: list[dict[str, Any]] = []
+    previous: str | None = None
+    for index, item in enumerate(proposed, start=1):
+        stage = _slug(str(item.get("name", f"step{index}")))
+        step_id = f"step-{index}-{stage}"
+        steps.append(
+            {
+                "id": step_id,
+                "name": item.get("name", stage),
+                "parents": [previous] if previous else [],
+                "action": f"agent.{stage}",
+                "description": str(item.get("description", "")),
+            }
+        )
+        previous = step_id
+
+    name = f"gen-{_slug(task)}"
+    definition = {
+        "name": name,
+        "version": "1.0.0",
+        "on": {"event": "work_item.dispatched"},
+        "inputs": {"task": task},
+        "steps": steps,
+        "synthesis": "reasoned",
+    }
+    return WorkflowDefinition(
+        id=name,
+        tenant_id=tenant_id,
+        version="1.0.0",
+        source=WorkflowSource.GENERATED,
+        definition=definition,
+        intent_tags=list(intent_tags or []),
+        origin_task=task,
+    )
+
+
 def schedule_spec(cron: str, timezone: str) -> dict[str, Any]:
     """Build a timezone-aware cron trigger spec for a workflow (US-WFL-05).
 
