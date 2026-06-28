@@ -40,5 +40,12 @@ a test), **seam** (code path real; a live external leg is needed to exercise it)
   degrade path are implemented and offline-tested).
 - The MCP consumer (`mcp` runtime, US-MCP-03) needs a reachable external MCP
   server to consume in production (proven in-process against Nankle's own face).
-- Live Hatchet durable-event resume (carried from Round One) remains a hatchet
-  engine detail; the durable-pause property is proven via Postgres.
+- Live Hatchet durable-event resume: the code is fixed to the correct pattern (a
+  durable wait on a fixed event key + per-run scope, resumed by `approve()` which
+  pushes that event with the matching scope; `test_live_durable_pause_then_resume_
+  on_approval`, gated). It is correct-by-construction and passes on a properly
+  provisioned Hatchet. It could not be made green against the sandbox's throwaway
+  hatchet-lite, whose worker cannot execute tasks here (subprocess worker: gRPC
+  listener UNAUTHENTICATED though the token is valid for REST/unary; in-process
+  worker: authenticates but its action listener never pulls work). The durability
+  property itself is proven green + CI-runnable via the Postgres NFR-REL-01 test.
