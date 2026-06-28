@@ -7,6 +7,10 @@ import { getIdentity } from "../identity";
 import type {
   AuditTreeResponse,
   CapabilitiesResponse,
+  ChatEvent,
+  ChatRequest,
+  ConversationResponse,
+  ConversationsResponse,
   HealthResponse,
   HITLListResponse,
   InvokeRequest,
@@ -135,4 +139,89 @@ export const api = {
       `/v1/audit/tree/${encodeURIComponent(runId)}`,
     );
   },
+
+  // Conversation list + transcript for the Chat panel. The transcript persists
+  // server-side, so re-opening a conversation always shows the completed turn.
+  conversations(): Promise<ConversationsResponse> {
+    return request<ConversationsResponse>("/v1/conversations");
+  },
+
+  conversation(id: string): Promise<ConversationResponse> {
+    return request<ConversationResponse>(
+      `/v1/conversations/${encodeURIComponent(id)}`,
+    );
+  },
 };
+
+// POST /v1/chat is a Server-Sent Events stream: each `data:` line is one JSON
+// ChatEvent. We read the body with a ReadableStream reader and parse frames
+// delimited by a blank line, buffering partial frames across chunks. onEvent is
+// called once per parsed event; pass an AbortSignal to cancel (the partial
+// result still persists kernel-side and can be re-fetched via conversation()).
+export async function streamChat(
+  body: ChatRequest,
+  onEvent: (event: ChatEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const headers: Record<string, string> = {
+    ...identityHeaders(),
+    "content-type": "application/json",
+    accept: "text/event-stream",
+  };
+
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/v1/chat`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      signal,
+    });
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : "network error";
+    throw new ApiError(0, `chat stream failed: ${reason}`, null);
+  }
+
+  if (!res.ok || !res.body) {
+    const parsed = await parseBody(res);
+    throw new ApiError(res.status, `POST /v1/chat -> ${res.status}`, parsed);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    // Normalise CRLF so the blank-line frame delimiter is always "\n\n".
+    buffer = buffer.replace(/\r\n/g, "\n");
+    let idx: number;
+    while ((idx = buffer.indexOf("\n\n")) !== -1) {
+      const frame = buffer.slice(0, idx);
+      buffer = buffer.slice(idx + 2);
+      emitFrame(frame, onEvent);
+    }
+  }
+
+  // Flush any trailing frame that arrived without a closing blank line.
+  buffer += decoder.decode();
+  buffer = buffer.replace(/\r\n/g, "\n").trim();
+  if (buffer) emitFrame(buffer, onEvent);
+}
+
+function emitFrame(frame: string, onEvent: (event: ChatEvent) => void): void {
+  const dataLines: string[] = [];
+  for (const line of frame.split("\n")) {
+    if (line.startsWith("data:")) dataLines.push(line.slice(5).replace(/^ /, ""));
+  }
+  if (dataLines.length === 0) return;
+  const payload = dataLines.join("\n").trim();
+  if (!payload || payload === "[DONE]") return;
+  try {
+    onEvent(JSON.parse(payload) as ChatEvent);
+  } catch {
+    // Ignore an unparseable frame so one bad line never kills the stream.
+  }
+}

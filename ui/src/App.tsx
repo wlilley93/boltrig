@@ -4,15 +4,17 @@ import { api } from "./api/client";
 import { resetIdentity, updateIdentity, useIdentity } from "./identity";
 import { useFetch } from "./useFetch";
 import { ApprovalsPanel } from "./panels/ApprovalsPanel";
+import { ChatPanel } from "./panels/ChatPanel";
 import { KanbanPanel } from "./panels/KanbanPanel";
 import { RouterPanel } from "./panels/RouterPanel";
 
-type Tab = "router" | "kanban" | "approvals";
+type Tab = "router" | "kanban" | "approvals" | "chat";
 
 const TABS: ReadonlyArray<{ id: Tab; label: string; hint: string }> = [
   { id: "router", label: "Router", hint: "Nouns, verbs and adapter health" },
   { id: "kanban", label: "Kanban", hint: "Work items by status" },
   { id: "approvals", label: "Approvals", hint: "Pending human-in-the-loop" },
+  { id: "chat", label: "Chat", hint: "Converse with the orchestrator" },
 ];
 
 function IdentityBar() {
@@ -107,6 +109,7 @@ export function App() {
         {tab === "router" && <RouterPanel />}
         {tab === "kanban" && <KanbanPanel />}
         {tab === "approvals" && <ApprovalsPanel />}
+        {tab === "chat" && <ChatPanel />}
       </main>
     </div>
   );

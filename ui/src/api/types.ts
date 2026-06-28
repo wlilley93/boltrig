@@ -120,3 +120,98 @@ export interface AuditNode {
 export interface AuditTreeResponse {
   root: AuditNode;
 }
+
+// --- Conversational chat surface (US-CONV-01..04, US-CONV-07) ---------------
+// Mirrors the kernel chat endpoints. POST /v1/chat returns Server-Sent Events;
+// each `data:` line is one JSON object of the ChatEvent union below.
+
+export interface ConversationSummary {
+  id: string;
+  title: string;
+  status: string;
+  updated_at: string;
+}
+
+export interface ConversationsResponse {
+  conversations: ConversationSummary[];
+}
+
+export type ChatRole = "user" | "assistant" | "system" | string;
+
+// A persisted message. `events` carries the structured turn (tool calls,
+// sub-agents, HITL) so a re-opened conversation re-renders the same cards as
+// the live stream did.
+export interface ChatMessage {
+  id: string;
+  role: ChatRole;
+  content: string;
+  run_id?: string | null;
+  hitl_request_id?: string | null;
+  events?: ChatEvent[];
+  created_at: string;
+}
+
+export interface ConversationResponse {
+  messages: ChatMessage[];
+}
+
+export interface ChatRequest {
+  // omit to start a new conversation; the first message_start returns the id
+  conversation_id?: string;
+  message: string;
+}
+
+// --- The streamed event union (one JSON object per SSE data line) -----------
+
+export interface ChatMessageStart {
+  type: "message_start";
+  run_id: string;
+  conversation_id: string;
+}
+export interface ChatTextDelta {
+  type: "text_delta";
+  delta: string;
+}
+export interface ChatReasoningDelta {
+  type: "reasoning_delta";
+  delta: string;
+}
+export interface ChatToolCall {
+  type: "tool_call";
+  verb: string;
+  input?: unknown;
+  status: "running";
+}
+export interface ChatToolResult {
+  type: "tool_result";
+  verb: string;
+  status: "ok" | "error";
+  output?: unknown;
+}
+export interface ChatSubagent {
+  type: "subagent";
+  child_run_id: string;
+  task: string;
+  skills?: string[];
+}
+export interface ChatHitlEvent {
+  type: "hitl";
+  hitl_request_id: string;
+  kind: HITLKind;
+  question: string;
+  options?: string[];
+}
+export interface ChatMessageEnd {
+  type: "message_end";
+  run_id: string;
+}
+
+export type ChatEvent =
+  | ChatMessageStart
+  | ChatTextDelta
+  | ChatReasoningDelta
+  | ChatToolCall
+  | ChatToolResult
+  | ChatSubagent
+  | ChatHitlEvent
+  | ChatMessageEnd;
