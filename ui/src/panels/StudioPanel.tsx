@@ -16,7 +16,9 @@ import type {
   SpawnResult,
   StatusAck,
   TargetTypeValue,
+  VerbInfo,
   WorkflowRunDescriptor,
+  WorkflowRunRecord,
   WorkflowSourceValue,
   WorkflowSummary,
 } from "../api/types";
@@ -785,6 +787,36 @@ function AdapterStudio() {
 
 // --- Workflow Studio --------------------------------------------------------
 
+// Map an overall run status to an existing badge colour modifier.
+function runBadgeClass(status: string): string {
+  switch (status) {
+    case "completed":
+      return "badge--ok";
+    case "failed":
+      return "badge--down";
+    case "paused":
+      return "badge--degraded";
+    default:
+      return "badge--unknown";
+  }
+}
+
+// Map a per-step status to an existing badge colour modifier.
+function stepBadgeClass(status: string): string {
+  switch (status) {
+    case "ok":
+      return "badge--ok";
+    case "failed":
+    case "error":
+      return "badge--down";
+    case "paused":
+      return "badge--degraded";
+    default:
+      // skipped (and anything unrecognised) reads as neutral.
+      return "badge--unknown";
+  }
+}
+
 function WorkflowStudio() {
   const workflows = useFetch(() => api.workflows(), []);
 
@@ -812,10 +844,21 @@ function WorkflowStudio() {
     null,
   );
 
+  const [execId, setExecId] = useState("");
+  const [execInputs, setExecInputs] = useState("{}");
+  const [execBusy, setExecBusy] = useState(false);
+  const [execError, setExecError] = useState<string | null>(null);
+  const [execResult, setExecResult] = useState<WorkflowRunRecord | null>(null);
+
   const [runsId, setRunsId] = useState("");
   const [runsBusy, setRunsBusy] = useState(false);
   const [runsError, setRunsError] = useState<string | null>(null);
   const [runs, setRuns] = useState<string[] | null>(null);
+
+  // The scoped verb registry powers the palette: each id can be pasted as a
+  // step "action" in the definition JSON above.
+  const caps = useFetch(() => api.capabilities(), []);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   async function upsert() {
     if (!id.trim()) {
@@ -917,7 +960,42 @@ function WorkflowStudio() {
     }
   }
 
+  async function execute() {
+    if (!execId.trim()) {
+      setExecError("workflow id is required.");
+      return;
+    }
+    let parsedInputs: Record<string, unknown>;
+    try {
+      parsedInputs = parseJson<Record<string, unknown>>(execInputs, {});
+    } catch (err) {
+      setExecError(`inputs: ${errText(err)}`);
+      return;
+    }
+    setExecBusy(true);
+    setExecError(null);
+    setExecResult(null);
+    try {
+      const res = await api.executeWorkflow(execId.trim(), parsedInputs);
+      setExecResult(res);
+    } catch (err) {
+      setExecError(errText(err));
+    } finally {
+      setExecBusy(false);
+    }
+  }
+
+  async function copyVerb(verbId: string) {
+    try {
+      await navigator.clipboard.writeText(verbId);
+      setCopiedId(verbId);
+    } catch {
+      // Clipboard may be unavailable (insecure context); fail quietly.
+    }
+  }
+
   const list: WorkflowSummary[] = workflows.data?.workflows ?? [];
+  const verbs: VerbInfo[] = caps.data?.verbs ?? [];
 
   return (
     <div className="cols">
@@ -1049,6 +1127,75 @@ function WorkflowStudio() {
         </div>
 
         <div className="form">
+          <div className="form__title">Execute (run steps)</div>
+          <label className="field">
+            <span>workflow id</span>
+            <input
+              value={execId}
+              onChange={(e) => setExecId(e.target.value)}
+            />
+          </label>
+          <label className="field">
+            <span>inputs (JSON)</span>
+            <textarea
+              className="code"
+              value={execInputs}
+              onChange={(e) => setExecInputs(e.target.value)}
+            />
+          </label>
+          <div className="form__actions">
+            <button
+              className="btn btn--primary"
+              disabled={execBusy}
+              onClick={execute}
+            >
+              {execBusy ? "..." : "Execute"}
+            </button>
+            {execError && <span className="error">{execError}</span>}
+          </div>
+          {execResult && (
+            <div className="stack">
+              <div className="kv">
+                <span className={`badge ${runBadgeClass(execResult.status)}`}>
+                  {execResult.status}
+                </span>
+                <code className="tag">{execResult.run_id}</code>
+                <span className="muted">
+                  {execResult.workflow_id} v{execResult.version}
+                </span>
+              </div>
+              {execResult.steps.length === 0 ? (
+                <p className="muted">No steps.</p>
+              ) : (
+                <ul className="verb-list">
+                  {execResult.steps.map((s, i) => (
+                    <li className="verb-row" key={`${s.id}-${i}`}>
+                      <div className="verb-row__main">
+                        <code className="verb-row__id">{s.id}</code>
+                        {s.action && (
+                          <span className="muted">{s.action}</span>
+                        )}
+                        <span className={`badge ${stepBadgeClass(s.status)}`}>
+                          {s.status}
+                        </span>
+                      </div>
+                      {s.reason && (
+                        <div className="verb-row__meta">
+                          <span className="muted">reason: {s.reason}</span>
+                        </div>
+                      )}
+                      {s.output !== undefined && (
+                        <CodeBlock value={s.output} />
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="form">
           <div className="form__title">View runs</div>
           <div className="form__actions">
             <label className="field">
@@ -1106,6 +1253,51 @@ function WorkflowStudio() {
               </div>
             </div>
           ))}
+        </div>
+
+        <div className="list-card">
+          <div className="list-card__head">
+            <h3>Verb palette</h3>
+            <button className="btn" onClick={() => caps.reload()}>
+              Refresh
+            </button>
+          </div>
+          <div className="list-card__body">
+            <p className="muted">
+              Scoped to this identity. Click a verb to copy its id, then paste it
+              as a step <code>action</code> in the definition JSON.
+            </p>
+            {caps.loading && !caps.data && <p className="muted">Loading...</p>}
+            {caps.error && (
+              <p className="error">Failed to load: {caps.error}</p>
+            )}
+            {!caps.loading && !caps.error && verbs.length === 0 && (
+              <p className="muted">No verbs visible for this identity.</p>
+            )}
+            {verbs.map((v) => (
+              <button
+                className="row-line palette-row"
+                key={v.id}
+                onClick={() => copyVerb(v.id)}
+                title="Copy verb id"
+              >
+                <div>
+                  <code>{v.id}</code>{" "}
+                  {v.consequence && (
+                    <span className="muted">({v.consequence})</span>
+                  )}
+                </div>
+                <div className="kv">
+                  {v.binding && (
+                    <span className="badge">{v.binding.target_type}</span>
+                  )}
+                  <span className="muted">
+                    {copiedId === v.id ? "copied" : "copy"}
+                  </span>
+                </div>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     </div>

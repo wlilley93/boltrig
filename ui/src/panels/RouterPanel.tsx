@@ -5,7 +5,7 @@
 import { useMemo } from "react";
 
 import { api } from "../api/client";
-import type { AdapterHealth, HealthResponse, Verb } from "../api/types";
+import type { AdapterHealth, HealthResponse, VerbInfo } from "../api/types";
 import { useIdentity } from "../identity";
 import { useFetch } from "../useFetch";
 
@@ -16,15 +16,14 @@ const HEALTH_VALUES: ReadonlySet<string> = new Set([
   "unknown",
 ]);
 
-function bindingOf(verb: Verb): string | undefined {
-  const candidate = verb.binding ?? verb.target;
-  return typeof candidate === "string" ? candidate : undefined;
+function bindingOf(verb: VerbInfo): string | undefined {
+  return verb.binding?.target_ref;
 }
 
 // Resolve a verb's adapter health from its own field or from the /healthz map,
 // which is keyed "<tenant>/<adapterId>".
 function resolveHealth(
-  verb: Verb,
+  verb: VerbInfo,
   health: HealthResponse | null,
   tenant: string,
 ): AdapterHealth {
@@ -65,7 +64,7 @@ export function RouterPanel() {
 
   const grouped = useMemo(() => {
     const verbs = caps.data?.verbs ?? [];
-    const byNoun = new Map<string, Verb[]>();
+    const byNoun = new Map<string, VerbInfo[]>();
     for (const v of verbs) {
       const noun = v.noun || "(unspecified)";
       const bucket = byNoun.get(noun);

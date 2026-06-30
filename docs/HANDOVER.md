@@ -330,6 +330,37 @@ documented, not enforced.
 New bound invariants (debt still 0): SEC-46..49. Full DoD:
 `docs/DEFINITION-OF-DONE-round-six.md`.
 
+## 7.5 Round Seven (control plane: interpreter, live profiles, governed writes)
+
+Amend models / agent profiles / workflows live, governed by the kernel
+(`docs/requirements-control-plane.md`). Grounding confirmed the one real gap
+(nothing executed stored workflow steps) and dissolved the "two dispatch kinds"
+fork (the chokepoint already routes verb->adapter-or-agent by
+`binding.target_type`, so the interpreter dispatches every step as one kernel
+verb, P2).
+
+- **Generic interpreter** (`workflows/interpreter.py` + `WorkflowLibrary.execute`):
+  walks a stored definition's steps in dependency order (Kahn) honouring
+  `parents`, dispatches each `action` as its OWN durable boundary through
+  `kernel.invoke` (per-step retry/durability + grant + audit + HITL). Failed/
+  unbound steps recorded, descendants skipped; a held gate is `paused` (P9). The
+  core unlock: a workflow defined purely as DATA now runs. `POST
+  /v1/workflows/{id}/execute` runs it under the caller's grants (no escalation).
+- **Live profiles** (`fleet/chief_of_staff.py`): `departments_provider` re-read per
+  route, so a config edit lands without reconstructing the router.
+- **Governed config writes** (`config/control_plane.py`): a kernel-side adapter
+  with `control.workflow/capability/model_endpoint.upsert` high-consequence verbs
+  - config amendment runs the chokepoint (grant + audit + HITL), not a direct
+  store write. Registered in bootstrap.
+- **UI**: the Round Three Workflow Studio gains an interpreter Execute view +
+  a scoped-verb palette from `GET /v1/capabilities`. No n8n runtime.
+
+Accounts for Round Three (reuses AdminConfig + the Workflow Studio authoring
+route; adds the interpreter + governed path, not a duplicate console). Migrating
+the legacy direct-write studio routes onto the `control.*` verbs is a documented
+follow-on. New bound invariants (debt still 0): FR-CTL-01/02, SEC-50/51. Full
+DoD: `docs/DEFINITION-OF-DONE-round-seven.md`.
+
 ---
 
 ## 8. Quality / governance gate

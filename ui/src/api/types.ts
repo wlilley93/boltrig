@@ -12,22 +12,29 @@ export interface HealthResponse {
 
 export type Consequence = "low" | "high" | string;
 
-export interface Verb {
+// Where a verb is fulfilled: an adapter or an agent, named by target_ref.
+export interface VerbBinding {
+  target_type: "adapter" | "agent";
+  target_ref: string;
+}
+
+// One entry in the scoped verb registry (GET /v1/capabilities). The registry is
+// caller-scoped: only verbs this identity may use come back. Forward-compatible
+// fields the kernel may add later are tolerated via the index signature.
+export interface VerbInfo {
   id: string;
   noun: string;
   input_schema?: unknown;
   output_schema?: unknown;
   consequence?: Consequence;
-  // possibly-present forward-compatible fields:
-  binding?: string;
-  target?: string;
-  target_type?: string;
-  health?: AdapterHealth;
+  binding?: VerbBinding;
+  health?: AdapterHealth | string;
   [key: string]: unknown;
 }
 
 export interface CapabilitiesResponse {
-  verbs: Verb[];
+  verbs: VerbInfo[];
+  nouns?: unknown;
 }
 
 export type WorkStatus =
@@ -416,6 +423,29 @@ export interface WorkflowRunDescriptor {
 export interface WorkflowRunsResponse {
   workflow_id: string;
   runs: string[];
+}
+
+// --- Round Seven: workflow interpreter ("execute") --------------------------
+// POST /v1/workflows/{id}/execute actually RUNS the stored workflow's steps
+// through the kernel chokepoint (each step is a governed verb call), unlike
+// trigger() which only queues a descriptor. The run record carries the overall
+// status plus a per-step result (output on success, reason on a stop).
+
+export interface WorkflowStepResult {
+  id: string;
+  action?: string;
+  status: "ok" | "failed" | "skipped" | "paused" | "error" | string;
+  output?: unknown;
+  reason?: string;
+}
+
+export interface WorkflowRunRecord {
+  run_id: string;
+  workflow_id: string;
+  version: string;
+  status: "completed" | "failed" | "paused" | string;
+  steps: WorkflowStepResult[];
+  inputs: Record<string, unknown>;
 }
 
 // --- Admin console ----------------------------------------------------------

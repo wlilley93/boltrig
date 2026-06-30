@@ -92,6 +92,7 @@ import type {
   WorkResponse,
   WorkStatus,
   WorkflowRunDescriptor,
+  WorkflowRunRecord,
   WorkflowRunsResponse,
   WorkflowsResponse,
 } from "./types";
@@ -344,6 +345,19 @@ export const api = {
     return request<WorkflowRunDescriptor>(
       `/v1/workflows/${encodeURIComponent(wfId)}/trigger`,
       { method: "POST", body, tolerateStatus: true },
+    );
+  },
+
+  // execute RUNS the stored workflow's steps through the chokepoint and returns
+  // the resulting run record (overall status + per-step results); distinct from
+  // trigger, which only queues a descriptor.
+  executeWorkflow(
+    wfId: string,
+    inputs: Record<string, unknown>,
+  ): Promise<WorkflowRunRecord> {
+    return request<WorkflowRunRecord>(
+      `/v1/workflows/${encodeURIComponent(wfId)}/execute`,
+      { method: "POST", body: { inputs } },
     );
   },
 

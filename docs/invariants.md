@@ -12,7 +12,7 @@ The gate (the K-29 / K-30 ratchet) fails the build if:
   (an undeclared invariant), or
 - the catalogue claims a test node id that no marker actually backs (drift).
 
-Binding debt may only ever decrease. Today: **68 declared, debt 0** (87 bound
+Binding debt may only ever decrease. Today: **72 declared, debt 0** (93 bound
 test node ids), per `python scripts/check_invariants.py`. `tests/invariants.yaml`
 is the authoritative, machine-checked list; the table below is the curated
 human-readable view and highlights the core kernel set plus each round's new
@@ -94,6 +94,15 @@ and `FR*` ids are Nankle-local (drawn from the SRS) and never restate a `K-*`.
 | **SEC-47** | The model gateway binds per conversation (not per run), pins a conversation to one model across turns, and never re-routes sensitive data (residency preserved). | `tests/security/test_round_six.py::test_gateway_binds_per_conversation_not_run`, `::test_gateway_never_reroutes_sensitive_and_is_inert_when_unset` |
 | **SEC-48** | The Pi sidecar's network egress is enforced by the deploy manifests (sandbox-only; internal in the secure overlay), not merely documented. | `tests/security/test_round_six.py::test_pi_sidecar_egress_is_enforced_in_manifests` |
 | **SEC-49** | Continuity is scope-safe - only the caller's own tenant/conversation history is ever composed into a prompt. | `tests/security/test_round_six.py::test_continuity_only_composes_the_callers_own_conversation` |
+
+### Round Seven (control plane: interpreter, live profiles, governed writes)
+
+| Invariant | Meaning | Bound test(s) |
+| --- | --- | --- |
+| **FR-CTL-01** | Agent / department profile config takes effect live (re-read per call via the provider), with no router reconstruction. | `tests/integration/test_round_seven.py::test_chief_of_staff_reloads_departments_live` |
+| **FR-CTL-02** | The generic interpreter executes a stored workflow's steps in dependency order, each as its own durable boundary through the kernel, skipping descendants of a failed step. | `tests/integration/test_round_seven.py::test_interpreter_runs_steps_in_dependency_order_each_durable`, `::test_interpreter_skips_descendants_of_a_failed_step` |
+| **SEC-50** | Every workflow step is dispatched through the kernel chokepoint under the caller's own grants - a step can neither escalate nor bypass governance. | `tests/security/test_round_seven.py::test_workflow_step_cannot_escalate_past_caller_grants` |
+| **SEC-51** | Control-plane config writes are dispatched as kernel verbs (grant-checked, audited, HITL-gateable), not an ungoverned store write. | `tests/security/test_round_seven.py::test_control_plane_write_is_grant_checked`, `::test_control_plane_write_is_hitl_gated_and_audited` |
 
 ## How a new invariant is added
 

@@ -885,6 +885,22 @@ textarea.code--tall {
   border-bottom: none;
 }
 
+/* a row-line that is itself a clickable button (the verb palette) */
+.palette-row {
+  width: 100%;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.palette-row:hover {
+  background: var(--bg-2);
+}
+
 /* inline group of chips/badges */
 .kv {
   display: flex;
