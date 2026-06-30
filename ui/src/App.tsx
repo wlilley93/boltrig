@@ -8,6 +8,7 @@ import { useFetch } from "./useFetch";
 import { AdminPanel } from "./panels/AdminPanel";
 import { ApprovalsPanel } from "./panels/ApprovalsPanel";
 import { ChatPanel } from "./panels/ChatPanel";
+import { DevConsolePanel } from "./panels/DevConsolePanel";
 import { EvalPanel } from "./panels/EvalPanel";
 import { HomePanel } from "./panels/HomePanel";
 import { InsightPanel } from "./panels/InsightPanel";
@@ -26,12 +27,26 @@ type Tab =
   | "approvals"
   | "chat"
   | "studio"
+  | "dev"
   | "admin"
   | "insight"
   | "eval"
   | "memory"
   | "me"
   | "settings";
+
+// The three planes from the front-end spec (plus a small Account group). Each
+// tab declares its plane; the nav renders the tabs grouped under these labels.
+// This is presentation only: tab ids, routes (navigate) and role gates are
+// unchanged, so deep links keep working.
+type Plane = "capability" | "orchestration" | "activity" | "account";
+
+const PLANES: ReadonlyArray<{ id: Plane; label: string }> = [
+  { id: "capability", label: "Capability" },
+  { id: "orchestration", label: "Orchestration" },
+  { id: "activity", label: "Activity" },
+  { id: "account", label: "Account" },
+];
 
 // Roles permitted to author (studios) / administer (admin console). The server
 // is the real gate (403); these only decide whether the tab is offered up front.
@@ -48,40 +63,93 @@ interface TabDef {
   id: Tab;
   label: string;
   hint: string;
+  // which plane the tab is grouped under in the nav (presentation only).
+  plane: Plane;
   // when present, the tab is shown only if the predicate accepts the role.
   gate?: (role: string) => boolean;
 }
 
 const TABS: ReadonlyArray<TabDef> = [
-  { id: "home", label: "Home", hint: "Your dashboard: approvals, runs and work" },
-  { id: "router", label: "Router", hint: "Nouns, verbs and adapter health" },
-  { id: "kanban", label: "Kanban", hint: "Work items by status" },
-  { id: "approvals", label: "Approvals", hint: "Pending human-in-the-loop" },
-  { id: "chat", label: "Chat", hint: "Converse with the orchestrator" },
+  {
+    id: "router",
+    label: "Router",
+    hint: "Nouns, verbs and adapter health",
+    plane: "capability",
+  },
   {
     id: "studio",
     label: "Studio",
     hint: "Authoring: skills, router, adapters, workflows",
+    plane: "capability",
     gate: (role) => AUTHOR_ROLES.has(role),
+  },
+  {
+    id: "dev",
+    label: "Dev console",
+    hint: "Invoke a verb, spawn an agent, view adapter source",
+    plane: "capability",
+    gate: (role) => AUTHOR_ROLES.has(role),
+  },
+  {
+    id: "chat",
+    label: "Chat",
+    hint: "Converse with the orchestrator",
+    plane: "orchestration",
+  },
+  {
+    id: "home",
+    label: "Home",
+    hint: "Your dashboard: approvals, runs and work",
+    plane: "activity",
+  },
+  {
+    id: "kanban",
+    label: "Kanban",
+    hint: "Work items by status",
+    plane: "activity",
+  },
+  {
+    id: "approvals",
+    label: "Approvals",
+    hint: "Pending human-in-the-loop",
+    plane: "activity",
+  },
+  {
+    id: "insight",
+    label: "Insight",
+    hint: "Cost, audit and runs (scoped)",
+    plane: "activity",
+  },
+  {
+    id: "eval",
+    label: "Eval",
+    hint: "No-escalation evaluation harness",
+    plane: "activity",
+  },
+  {
+    id: "memory",
+    label: "Memory",
+    hint: "Recall, browse, remember and ingest (scoped)",
+    plane: "activity",
   },
   {
     id: "admin",
     label: "Admin",
     hint: "Manifest config, history, credentials",
+    plane: "account",
     gate: (role) => ADMIN_ROLES.has(role),
   },
-  { id: "insight", label: "Insight", hint: "Cost, audit and runs (scoped)" },
-  { id: "eval", label: "Eval", hint: "No-escalation evaluation harness" },
   {
-    id: "memory",
-    label: "Memory",
-    hint: "Recall, browse, remember and ingest (scoped)",
+    id: "me",
+    label: "Me",
+    hint: "Personal agent, prefs and memory",
+    plane: "account",
   },
-  { id: "me", label: "Me", hint: "Personal agent, prefs and memory" },
   {
     id: "settings",
     label: "Settings",
     hint: "Account, tokens, connections, directory",
+    plane: "account",
   },
 ];
 
@@ -224,18 +292,29 @@ export function App() {
 
       {identityOpen && <IdentityBar />}
 
-      <nav className="tabs" aria-label="Panels">
-        {visibleTabs.map((t) => (
-          <button
-            key={t.id}
-            className={`tab ${active === t.id ? "tab--active" : ""}`}
-            aria-current={active === t.id ? "page" : undefined}
-            title={t.hint}
-            onClick={() => navigate(`/${t.id}`)}
-          >
-            {t.label}
-          </button>
-        ))}
+      <nav className="tabs tabs--grouped" aria-label="Panels">
+        {PLANES.map((plane) => {
+          const planeTabs = visibleTabs.filter((t) => t.plane === plane.id);
+          if (planeTabs.length === 0) return null;
+          return (
+            <div className="tab-group" key={plane.id} role="group" aria-label={plane.label}>
+              <span className="tab-group__label">{plane.label}</span>
+              <div className="tab-group__tabs">
+                {planeTabs.map((t) => (
+                  <button
+                    key={t.id}
+                    className={`tab ${active === t.id ? "tab--active" : ""}`}
+                    aria-current={active === t.id ? "page" : undefined}
+                    title={t.hint}
+                    onClick={() => navigate(`/${t.id}`)}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })}
       </nav>
 
       <main className="app__main">
@@ -245,6 +324,7 @@ export function App() {
         {active === "approvals" && <ApprovalsPanel />}
         {active === "chat" && <ChatPanel />}
         {active === "studio" && <StudioPanel />}
+        {active === "dev" && <DevConsolePanel />}
         {active === "admin" && <AdminPanel />}
         {active === "insight" && <InsightPanel />}
         {active === "eval" && <EvalPanel />}

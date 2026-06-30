@@ -17,6 +17,7 @@ export function InsightPanel() {
 
   const [actor, setActor] = useState("");
   const [verb, setVerb] = useState("");
+  const [run, setRun] = useState("");
   const [searchBusy, setSearchBusy] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [rows, setRows] = useState<AuditRow[] | null>(null);
@@ -33,6 +34,7 @@ export function InsightPanel() {
       const res = await api.auditSearch({
         actor: actor.trim() || undefined,
         verb: verb.trim() || undefined,
+        run: run.trim() || undefined,
       });
       setRows(res.results);
       setSearchScope(scopeLabel(res.scope));
@@ -162,6 +164,10 @@ export function InsightPanel() {
           <label className="field">
             <span>verb</span>
             <input value={verb} onChange={(e) => setVerb(e.target.value)} />
+          </label>
+          <label className="field">
+            <span>run id</span>
+            <input value={run} onChange={(e) => setRun(e.target.value)} />
           </label>
           <button className="btn btn--primary" disabled={searchBusy} onClick={search}>
             {searchBusy ? "..." : "Search"}

@@ -261,6 +261,35 @@ textarea:focus {
   border-color: var(--border);
 }
 
+/* grouped tabs - the three-plane nav: each plane is a small label above its
+   own row of tabs; groups sit side by side and the bottom edge of every tab
+   aligns to the nav border (so the active tab still reads as connected). */
+.tabs--grouped {
+  gap: 18px;
+  align-items: flex-end;
+}
+
+.tab-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 0 0 auto;
+}
+
+.tab-group__label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  padding: 0 8px;
+  white-space: nowrap;
+}
+
+.tab-group__tabs {
+  display: flex;
+  gap: 4px;
+}
+
 /* main + panels */
 .app__main {
   flex: 1;
