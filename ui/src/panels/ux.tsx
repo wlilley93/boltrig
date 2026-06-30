@@ -245,6 +245,90 @@ export function Hint({ children }: { children: ReactNode }) {
   return <p className="ux-hint">{children}</p>;
 }
 
+// --- SchemaForm: render typed inputs from a JSON-Schema object, so a verb's
+// arguments are a guided form rather than a blank JSON box. Strings, numbers,
+// booleans and enums get real controls; nested object/array fields fall back to
+// "edit in JSON". value/onChange operate on a plain object. ------------------
+interface JsonProp {
+  type?: string;
+  description?: string;
+  enum?: string[];
+}
+
+export function SchemaForm({
+  schema,
+  value,
+  onChange,
+}: {
+  schema: unknown;
+  value: Record<string, unknown>;
+  onChange: (v: Record<string, unknown>) => void;
+}) {
+  const s = (schema ?? {}) as { properties?: Record<string, JsonProp>; required?: string[] };
+  const props = s.properties ?? {};
+  const required = new Set(s.required ?? []);
+  const keys = Object.keys(props);
+  if (keys.length === 0) return null;
+
+  const set = (k: string, v: unknown) => onChange({ ...value, [k]: v });
+
+  return (
+    <div className="form__grid">
+      {keys.map((k) => {
+        const spec = props[k];
+        const t = spec.type;
+        const cur = value[k];
+        const field = (control: ReactNode) => (
+          <Field key={k} label={k} hint={spec.description} required={required.has(k)}>
+            {control}
+          </Field>
+        );
+        if (spec.enum && spec.enum.length) {
+          return field(
+            <Select
+              value={cur == null ? "" : String(cur)}
+              ariaLabel={k}
+              onChange={(v) => set(k, v)}
+              options={[{ value: "", label: "Choose..." }, ...spec.enum.map((e) => ({ value: e, label: e }))]}
+            />,
+          );
+        }
+        if (t === "boolean") {
+          return field(
+            <Segmented
+              value={cur ? "true" : "false"}
+              ariaLabel={k}
+              onChange={(v) => set(k, v === "true")}
+              options={[
+                { value: "true", label: "Yes" },
+                { value: "false", label: "No" },
+              ]}
+            />,
+          );
+        }
+        if (t === "number" || t === "integer") {
+          return field(
+            <input
+              type="number"
+              value={cur == null ? "" : String(cur)}
+              onChange={(e) => set(k, e.target.value === "" ? undefined : Number(e.target.value))}
+            />,
+          );
+        }
+        if (t === "object" || t === "array") {
+          return field(<span className="ux-hint">Edit this field in the JSON view.</span>);
+        }
+        return field(
+          <input
+            value={cur == null ? "" : String(cur)}
+            onChange={(e) => set(k, e.target.value)}
+          />,
+        );
+      })}
+    </div>
+  );
+}
+
 // --- Glossary: one home for the plain-language meaning of every status /
 // run-state / governance term surfaced across the panels. Keep copy calm and
 // glanceable; the badges below read their label + tooltip from here. ---------

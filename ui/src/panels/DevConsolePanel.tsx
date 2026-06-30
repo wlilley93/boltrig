@@ -31,9 +31,21 @@ import {
   Hint,
   InfoCallout,
   PageIntro,
+  SchemaForm,
   Select,
   StatusBadge,
 } from "./ux";
+
+// Safely parse the params JSON into an object for the schema form (an in-progress
+// edit may be invalid; the form just sees {} until it is valid again).
+function safeObj(text: string): Record<string, unknown> {
+  try {
+    const v = JSON.parse(text || "{}");
+    return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
 
 // Build a starter params object from a verb's JSON-Schema input_schema, so the
 // box is never blank: each declared property gets a typed placeholder.
@@ -323,33 +335,44 @@ export function DevConsolePanel() {
           </InfoCallout>
         )}
 
-        <Field
-          label="Arguments"
-          hint={
-            selectedVerb
-              ? keys.required.length || keys.optional.length
-                ? `This verb expects: ${[
-                    ...keys.required.map((k) => `${k} (required)`),
-                    ...keys.optional,
-                  ].join(", ")}. Edit the values below.`
-                : "This verb takes no arguments."
-              : "Pick a verb to see the arguments it expects. Arguments are JSON the kernel passes to the verb - they are data, never executed."
-          }
-        >
-          <textarea
-            className="code"
-            value={params}
-            onChange={(e) => setParams(e.target.value)}
-          />
-        </Field>
-
-        {selectedVerb?.input_schema != null && (
-          <details>
-            <summary className="ux-hint" style={{ cursor: "pointer" }}>
-              Show this verb's full input schema
-            </summary>
-            <CodeBlock value={selectedVerb.input_schema} />
-          </details>
+        {selectedVerb && (keys.required.length || keys.optional.length) ? (
+          <>
+            <div className="form__title" style={{ fontSize: "var(--fs-sm)" }}>
+              Arguments
+            </div>
+            <Hint>The values this verb expects. They are data the kernel passes in, never executed.</Hint>
+            <SchemaForm
+              schema={selectedVerb.input_schema}
+              value={safeObj(params)}
+              onChange={(o) => setParams(JSON.stringify(o, null, 2))}
+            />
+            <details>
+              <summary className="ux-hint" style={{ cursor: "pointer" }}>
+                Edit as JSON / show schema
+              </summary>
+              <textarea
+                className="code"
+                value={params}
+                onChange={(e) => setParams(e.target.value)}
+              />
+              <CodeBlock value={selectedVerb.input_schema} />
+            </details>
+          </>
+        ) : (
+          <Field
+            label="Arguments"
+            hint={
+              selectedVerb
+                ? "This verb takes no arguments."
+                : "Pick a verb to see the arguments it expects. Arguments are JSON the kernel passes to the verb - they are data, never executed."
+            }
+          >
+            <textarea
+              className="code"
+              value={params}
+              onChange={(e) => setParams(e.target.value)}
+            />
+          </Field>
         )}
 
         <details open={manual} onToggle={(e) => setManual((e.target as HTMLDetailsElement).open)}>

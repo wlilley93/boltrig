@@ -11,7 +11,7 @@
 // Authz stays server-side: a 404 from auditTree / streamRunEvents renders as a
 // clean "run not found / not in scope" state, never a pre-check.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { api, streamRunEvents } from "../api/client";
 import type { AuditNode, ChatEvent } from "../api/types";
@@ -93,14 +93,26 @@ function RunDrawer({ runId }: { runId: string }) {
     setResolvedHitls((prev) => ({ ...prev, [id]: status }));
   }
 
+  // a11y: Esc closes the drawer, and focus moves into it on open.
+  const drawerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    drawerRef.current?.focus();
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") closeRun();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   return (
     <div
       className="drawer-overlay"
       role="dialog"
       aria-modal="true"
+      aria-label="Run details"
       onClick={() => closeRun()}
     >
-      <div className="drawer" onClick={(e) => e.stopPropagation()}>
+      <div className="drawer" ref={drawerRef} tabIndex={-1} onClick={(e) => e.stopPropagation()}>
         <div className="drawer__head">
           <h3>Run</h3>
           <button className="btn btn--ghost" onClick={() => closeRun()}>
