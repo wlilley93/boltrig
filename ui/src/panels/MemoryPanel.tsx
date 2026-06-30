@@ -21,6 +21,15 @@ import type {
 } from "../api/types";
 import { useFetch } from "../useFetch";
 import { CodeBlock, errText } from "./shared";
+import {
+  EmptyState,
+  Field,
+  Hint,
+  InfoCallout,
+  PageIntro,
+  Select,
+  type Option,
+} from "./ux";
 
 type MemoryTab = "recall" | "browse" | "remember" | "ingest";
 
@@ -29,6 +38,28 @@ const MEMORY_TABS: ReadonlyArray<{ id: MemoryTab; label: string }> = [
   { id: "browse", label: "Browse" },
   { id: "remember", label: "Remember" },
   { id: "ingest", label: "Ingest" },
+];
+
+// A fact's type. Closed set; shown with plain-language labels.
+const KIND_OPTIONS: Option[] = [
+  { value: "entity", label: "Entity (a person or thing)" },
+  { value: "relationship", label: "Relationship (a link between two)" },
+  { value: "summary", label: "Summary" },
+  { value: "document_chunk", label: "Document chunk" },
+];
+const KIND_FILTER_OPTIONS: Option[] = [{ value: "", label: "Any type" }, ...KIND_OPTIONS];
+
+// Where ingested items come from. Small known provenance vocabulary.
+const SOURCE_KIND_OPTIONS: Option[] = [
+  { value: "document", label: "Document" },
+  { value: "conversation", label: "Conversation" },
+  { value: "verb_result", label: "Verb result" },
+  { value: "feedback", label: "Feedback" },
+];
+
+const RECALL_MODE_OPTIONS: Option[] = [
+  { value: "graph_completion", label: "Connections (default)" },
+  { value: "similarity", label: "Similarity" },
 ];
 
 // The verb routes answer with {status:"error"|"denied", reason} when memory is
@@ -60,12 +91,22 @@ function FactCard({
     <div className="mem-fact">
       <div className="mem-fact__head">
         <span className="kv">
-          <code className="tag">{fact.kind}</code>
-          <span className="badge">{fact.owner_scope}</span>
+          <code className="tag" title="The type of fact">{fact.kind}</code>
+          <span
+            className="badge ux-termtip"
+            title="Who this fact belongs to - your user scope, a department, or the org."
+          >
+            {fact.owner_scope}
+          </span>
           <span
             className={`badge ${
               fact.data_class === "sensitive" ? "badge--down" : "badge--ok"
             }`}
+            title={
+              fact.data_class === "sensitive"
+                ? "Sensitive - kept on a local-only endpoint."
+                : "Standard data."
+            }
           >
             {fact.data_class}
           </span>
@@ -88,7 +129,11 @@ function FactCard({
         {prov.created_at && (
           <span className="muted">{prov.created_at}</span>
         )}
-        {hasHops && <span className="badge">hops: {prov.hops}</span>}
+        {hasHops && (
+          <span className="badge" title="How many links away this fact was reached in Connections mode.">
+            {prov.hops} link(s) away
+          </span>
+        )}
       </div>
 
       {path.length > 0 && (
@@ -151,56 +196,43 @@ function RecallTab() {
   return (
     <div className="stack">
       <div className="form">
-        <div className="form__title">Recall</div>
-        <p className="muted">
-          Results are scope-filtered to you (SEC-40): you only ever see your
-          user scope, the org scope and your departments. Each fact shows its
-          provenance - in graph mode that includes the hops and the path taken -
-          so you can see why a fact is known.
-        </p>
-        <label className="field">
-          <span>query</span>
-          <textarea
-            className="code"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </label>
+        <div className="form__title">Search your memory</div>
+        <Field
+          label="What are you looking for?"
+          hint="A plain-language question or keywords. You only ever see memory you're allowed to (your scope, your departments, the org)."
+          example="what does Priya own?"
+        >
+          <input value={query} onChange={(e) => setQuery(e.target.value)} />
+        </Field>
         <div className="form__grid">
-          <label className="field">
-            <span>mode</span>
-            <select
+          <Field
+            label="How to search"
+            hint="Connections starts from matching facts and follows links to related ones (showing the path). Similarity just finds facts that read like your query."
+          >
+            <Select
               value={mode}
-              onChange={(e) =>
-                setMode(
-                  e.target.value === "similarity"
-                    ? "similarity"
-                    : "graph_completion",
-                )
-              }
-            >
-              <option value="graph_completion">graph_completion</option>
-              <option value="similarity">similarity</option>
-            </select>
-          </label>
-          <label className="field">
-            <span>limit</span>
+              ariaLabel="Search mode"
+              onChange={(v) => setMode(v === "similarity" ? "similarity" : "graph_completion")}
+              options={RECALL_MODE_OPTIONS}
+            />
+          </Field>
+          <Field label="Max results">
             <input
               value={limit}
               inputMode="numeric"
               onChange={(e) => setLimit(e.target.value)}
             />
-          </label>
+          </Field>
         </div>
         <div className="form__actions">
           <button className="btn btn--primary" disabled={busy} onClick={recall}>
-            {busy ? "..." : "Recall"}
+            {busy ? "Searching..." : "Search"}
           </button>
           {error && <span className="error">{error}</span>}
         </div>
       </div>
 
-      {facts && (
+      {facts ? (
         <div className="list-card">
           <div className="list-card__head">
             <h3>Results</h3>
@@ -208,7 +240,10 @@ function RecallTab() {
           </div>
           <div className="list-card__body">
             {facts.length === 0 ? (
-              <p className="muted">No facts in scope for this query.</p>
+              <p className="muted">
+                No facts in scope match this query. Try different words, or
+                remember a fact first.
+              </p>
             ) : (
               <div className="mem-facts">
                 {facts.map((f) => (
@@ -218,6 +253,8 @@ function RecallTab() {
             )}
           </div>
         </div>
+      ) : (
+        <EmptyState title="Search your memory" body="Ask a question above to see what the assistant remembers." />
       )}
     </div>
   );
@@ -274,16 +311,17 @@ function BrowseTab() {
           another user's or department's memory never appears here.
         </p>
         <div className="form__actions">
-          <label className="field">
-            <span>kind (optional)</span>
-            <input value={kind} onChange={(e) => setKind(e.target.value)} />
-          </label>
-          <button
-            className="btn btn--primary"
-            onClick={() => setApplied(kind)}
-          >
-            Apply
-          </button>
+          <Field label="Show only" hint="Filter to one type of fact.">
+            <Select
+              value={kind}
+              ariaLabel="Filter by type"
+              onChange={(v) => {
+                setKind(v);
+                setApplied(v);
+              }}
+              options={KIND_FILTER_OPTIONS}
+            />
+          </Field>
           <button className="btn" onClick={() => facts.reload()}>
             Refresh
           </button>
@@ -313,7 +351,10 @@ function BrowseTab() {
             <p className="error">Failed to load: {facts.error}</p>
           )}
           {!facts.loading && list.length === 0 && (
-            <p className="muted">No facts in scope.</p>
+            <p className="muted">
+              No facts in your scope yet. Add one in the Remember tab, or load a
+              source in Ingest.
+            </p>
           )}
           {list.length > 0 && (
             <div className="mem-facts">
@@ -323,11 +364,12 @@ function BrowseTab() {
                   key={f.id}
                   footer={
                     <button
-                      className="btn"
+                      className="btn btn--danger"
                       disabled={forgetting === f.id}
+                      title="Erase this fact and its links - permanent."
                       onClick={() => forget(f.id)}
                     >
-                      {forgetting === f.id ? "..." : "Forget"}
+                      {forgetting === f.id ? "Forgetting..." : "Forget"}
                     </button>
                   }
                 />
@@ -387,34 +429,47 @@ function RememberTab() {
           in your own scope. Sensitive content is held to a local-only endpoint
           (SEC-43).
         </p>
-        <label className="field">
-          <span>content</span>
+        <Field
+          label="What should the assistant remember?"
+          hint="A single fact, in plain language. It is screened before it is saved, and lands in your own scope."
+          example="Priya is the account owner for Acme."
+        >
           <textarea
             className="code"
             value={content}
             onChange={(e) => setContent(e.target.value)}
           />
-        </label>
+        </Field>
         <div className="form__grid">
-          <label className="field">
-            <span>kind (optional)</span>
-            <input value={kind} onChange={(e) => setKind(e.target.value)} />
-          </label>
-          <label className="field">
-            <span>data_class</span>
-            <select
+          <Field label="Type" hint="What kind of fact this is.">
+            <Select
+              value={kind || "entity"}
+              ariaLabel="Fact type"
+              onChange={setKind}
+              options={KIND_OPTIONS}
+            />
+          </Field>
+          <Field
+            label="Sensitivity"
+            hint="Sensitive facts never leave this deployment (SEC-43) - choose this for personal or confidential content."
+          >
+            <Select
               value={dataClass}
-              onChange={(e) =>
-                setDataClass(
-                  e.target.value === "sensitive" ? "sensitive" : "standard",
-                )
-              }
-            >
-              <option value="standard">standard</option>
-              <option value="sensitive">sensitive</option>
-            </select>
-          </label>
+              ariaLabel="Sensitivity"
+              onChange={(v) => setDataClass(v === "sensitive" ? "sensitive" : "standard")}
+              options={[
+                { value: "standard", label: "Standard" },
+                { value: "sensitive", label: "Sensitive (kept local-only)" },
+              ]}
+            />
+          </Field>
         </div>
+        {dataClass === "sensitive" && (
+          <InfoCallout tone="warn">
+            Sensitive content is held to a local-only endpoint and never sent to
+            an external model.
+          </InfoCallout>
+        )}
         <div className="form__actions">
           <button
             className="btn btn--primary"
@@ -496,36 +551,40 @@ function IngestTab() {
   return (
     <div className="stack">
       <div className="form">
-        <div className="form__title">Ingest a source</div>
-        <p className="muted">
-          Cognify a source into memory. Items are screened for injection /
-          malware before any of them become facts (SEC-42); screened-out items
-          are reported but never persisted.
-        </p>
+        <div className="form__title">Load a source into memory</div>
+        <Hint>
+          Each line below becomes a fact. Everything is screened for injection or
+          malware before any of it is saved (SEC-42); anything risky is reported
+          and never persisted.
+        </Hint>
         <div className="form__grid">
-          <label className="field">
-            <span>source_kind</span>
-            <input
+          <Field label="Where it comes from" hint="The kind of source you're loading.">
+            <Select
               value={sourceKind}
-              onChange={(e) => setSourceKind(e.target.value)}
+              ariaLabel="Source kind"
+              onChange={setSourceKind}
+              options={SOURCE_KIND_OPTIONS}
             />
-          </label>
-          <label className="field">
-            <span>source_ref</span>
+          </Field>
+          <Field
+            label="Source reference"
+            hint="A URL or identifier for the source, for provenance."
+            example="https://wiki/onboarding"
+          >
             <input
               value={sourceRef}
               onChange={(e) => setSourceRef(e.target.value)}
             />
-          </label>
+          </Field>
         </div>
-        <label className="field">
-          <span>items (one per line)</span>
+        <Field label="Items" hint="One fact or passage per line.">
           <textarea
             className="code"
             value={items}
+            placeholder={"One fact or passage per line\nAnother fact"}
             onChange={(e) => setItems(e.target.value)}
           />
-        </label>
+        </Field>
         <div className="form__actions">
           <button className="btn btn--primary" disabled={busy} onClick={ingest}>
             {busy ? "..." : "Ingest"}
@@ -607,19 +666,11 @@ export function MemoryPanel() {
 
   return (
     <section className="panel">
-      <div className="panel__head">
-        <h2>Memory</h2>
-        <div className="panel__actions">
-          <span className="muted">scope-filtered knowledge</span>
-        </div>
-      </div>
-
-      <p className="notice">
-        Memory is governed by the kernel: every read is scope-filtered to you
-        (SEC-40) and every write runs the memory.* verbs through the chokepoint
-        (grant check + audit). If memory is not enabled for this tenant, the
-        actions below report "memory not enabled".
-      </p>
+      <PageIntro
+        title="Memory"
+        lead="This is what the assistant remembers - facts it can use to help you."
+        how="Recall searches it, Browse lists it, Remember adds a fact, Ingest loads a whole source. You only ever see memory you're allowed to. If memory isn't enabled for your org, the actions report 'memory not enabled'."
+      />
 
       <nav className="subtabs" aria-label="Memory sections">
         {MEMORY_TABS.map((t) => (

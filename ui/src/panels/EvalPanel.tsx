@@ -5,12 +5,13 @@
 // evidence: e.g. an assertion {"forbidden_grants":["ticket.create"]} passes only
 // if that grant is absent from effective_grants.
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { api } from "../api/client";
 import type { EvalRunResult, EvalRunSummary } from "../api/types";
 import { useFetch } from "../useFetch";
 import { CodeBlock, GrantList, csvToList, errText, parseJson } from "./shared";
+import { EmptyState, Field, Hint, InfoCallout, PageIntro, Segmented, Select } from "./ux";
 
 export function EvalPanel() {
   const [caseId, setCaseId] = useState("");
@@ -36,9 +37,55 @@ export function EvalPanel() {
     [filterCase],
   );
 
+  // live option sources: targets (skills / workflows), verbs (forbidden grants).
+  const skills = useFetch(() => api.skills(), []);
+  const workflows = useFetch(() => api.workflows(), []);
+  const caps = useFetch(() => api.capabilities(), []);
+
+  const targetOptions = useMemo(() => {
+    const ids =
+      targetKind === "skill"
+        ? (skills.data?.skills ?? []).map((s) => s.id)
+        : (workflows.data?.workflows ?? []).map((w) => w.id);
+    return [{ value: "", label: `Choose a ${targetKind}...` }, ...ids.map((id) => ({ value: id, label: id }))];
+  }, [targetKind, skills.data, workflows.data]);
+
+  const verbs = caps.data?.verbs ?? [];
+
+  // the forbidden-grants set is derived from (and written back to) the assertions
+  // JSON, so the guided chips and the raw JSON never disagree.
+  const forbidden = useMemo(() => {
+    try {
+      const o = parseJson<{ forbidden_grants?: unknown }>(assertions, {});
+      return Array.isArray(o.forbidden_grants) ? (o.forbidden_grants as string[]) : [];
+    } catch {
+      return [];
+    }
+  }, [assertions]);
+
+  function toggleForbidden(verbId: string) {
+    if (!verbId) return;
+    let o: Record<string, unknown>;
+    try {
+      o = parseJson<Record<string, unknown>>(assertions, {});
+    } catch {
+      o = {};
+    }
+    const list = Array.isArray(o.forbidden_grants) ? (o.forbidden_grants as string[]) : [];
+    const next = list.includes(verbId) ? list.filter((x) => x !== verbId) : [...list, verbId];
+    setAssertions(JSON.stringify({ ...o, forbidden_grants: next }, null, 2));
+  }
+
+  const caseIdOptions = useMemo(() => {
+    const ids = new Set<string>();
+    for (const r of runs.data?.runs ?? []) if (r.case_id) ids.add(r.case_id);
+    if (runId) ids.add(runId);
+    return [{ value: "", label: "Choose a case..." }, ...[...ids].map((id) => ({ value: id, label: id }))];
+  }, [runs.data, runId]);
+
   async function createCase() {
     if (!targetRef.trim()) {
-      setCreateError("target_ref is required.");
+      setCreateError("Pick a skill or workflow to test first.");
       return;
     }
     let parsedInput: Record<string, unknown>;
@@ -63,7 +110,7 @@ export function EvalPanel() {
         labels: csvToList(labels),
       });
       if (res.status === "ok") {
-        setCreateMsg(`Created case ${res.id}.`);
+        setCreateMsg(`Created case ${res.id}. It's selected below - run it next.`);
         if (res.id) setRunId(res.id);
         runs.reload();
       } else {
@@ -78,7 +125,7 @@ export function EvalPanel() {
 
   async function run() {
     if (!runId.trim()) {
-      setRunError("case_id is required.");
+      setRunError("Pick a case to run first.");
       return;
     }
     setRunBusy(true);
@@ -102,77 +149,116 @@ export function EvalPanel() {
 
   return (
     <section className="panel">
-      <div className="panel__head">
-        <h2>Eval</h2>
-        <div className="panel__actions">
-          <span className="muted">no-escalation harness</span>
-        </div>
-      </div>
+      <PageIntro
+        title="Eval"
+        lead="Test that a skill or workflow does the right thing - and only uses the permissions it's supposed to."
+        how="1. Create a case (what to run + what to assert). 2. Run it. 3. Review pass/fail with the permissions the run actually had. The test runs under your permissions, so it can never exceed them."
+      />
 
       <div className="cols">
         <div className="stack">
           <div className="form">
-            <div className="form__title">Create case</div>
+            <div className="form__title">1. Create a case</div>
             <div className="form__grid">
-              <label className="field">
-                <span>id (optional)</span>
-                <input
-                  value={caseId}
-                  onChange={(e) => setCaseId(e.target.value)}
-                />
-              </label>
-              <label className="field">
-                <span>target_kind</span>
-                <select
+              <Field label="Test" hint="Is the thing under test a skill or a workflow?">
+                <Segmented
                   value={targetKind}
-                  onChange={(e) =>
-                    setTargetKind(
-                      e.target.value === "workflow" ? "workflow" : "skill",
-                    )
-                  }
-                >
-                  <option value="skill">skill</option>
-                  <option value="workflow">workflow</option>
-                </select>
-              </label>
-              <label className="field">
-                <span>target_ref</span>
-                <input
-                  value={targetRef}
-                  onChange={(e) => setTargetRef(e.target.value)}
+                  ariaLabel="Target kind"
+                  onChange={(v) => {
+                    setTargetKind(v === "workflow" ? "workflow" : "skill");
+                    setTargetRef("");
+                  }}
+                  options={[
+                    { value: "skill", label: "A skill" },
+                    { value: "workflow", label: "A workflow" },
+                  ]}
                 />
-              </label>
+              </Field>
+              <Field label="Which one" hint="The skill or workflow this case runs.">
+                <Select
+                  value={targetRef}
+                  ariaLabel="Target"
+                  onChange={setTargetRef}
+                  options={targetOptions}
+                />
+              </Field>
+              <Field
+                label="Case id"
+                hint="Leave blank to auto-generate. Set one to overwrite an existing case."
+              >
+                <input value={caseId} onChange={(e) => setCaseId(e.target.value)} />
+              </Field>
             </div>
-            <label className="field">
-              <span>input (JSON)</span>
+
+            <Field
+              label="Input"
+              hint="The input passed to the skill or workflow under test, as JSON."
+              example='{"ticket_id": "4821"}'
+            >
               <textarea
                 className="code"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
               />
-            </label>
-            <label className="field">
-              <span>assertions (JSON)</span>
-              <textarea
-                className="code"
-                value={assertions}
-                onChange={(e) => setAssertions(e.target.value)}
+            </Field>
+
+            <Field
+              label="Permissions the run must NOT use"
+              hint="The case passes only if none of these appear in the run's actual permissions. This is the core safety check."
+            >
+              <div className="kv">
+                {forbidden.length === 0 ? (
+                  <span className="ux-hint">None set - add one below.</span>
+                ) : (
+                  forbidden.map((g) => (
+                    <button
+                      key={g}
+                      type="button"
+                      className="tag tag--accent"
+                      title="Remove"
+                      style={{ cursor: "pointer" }}
+                      onClick={() => toggleForbidden(g)}
+                    >
+                      {g} x
+                    </button>
+                  ))
+                )}
+              </div>
+              <Select
+                value=""
+                ariaLabel="Add a forbidden permission"
+                onChange={toggleForbidden}
+                options={[
+                  { value: "", label: "Add a permission..." },
+                  ...verbs.filter((v) => !forbidden.includes(v.id)).map((v) => ({ value: v.id, label: v.id })),
+                ]}
               />
-            </label>
-            <label className="field">
-              <span>labels (comma list)</span>
-              <input
-                value={labels}
-                onChange={(e) => setLabels(e.target.value)}
-              />
-            </label>
+            </Field>
+
+            <details>
+              <summary className="ux-hint" style={{ cursor: "pointer" }}>
+                Advanced: edit assertions as JSON
+              </summary>
+              <Field label="Assertions (JSON)" hint="The full assertion object. forbidden_grants is the supported key.">
+                <textarea
+                  className="code"
+                  value={assertions}
+                  onChange={(e) => setAssertions(e.target.value)}
+                />
+              </Field>
+            </details>
+
+            <Field label="Labels" hint="Tags to group cases." example="regression, security">
+              <input value={labels} onChange={(e) => setLabels(e.target.value)} />
+            </Field>
+
             <div className="form__actions">
               <button
                 className="btn btn--primary"
                 disabled={createBusy}
                 onClick={createCase}
               >
-                {createBusy ? "..." : "Create case"}
+                {createBusy ? "Creating..." : "Create case"}
               </button>
               {createMsg && <span className="ok">{createMsg}</span>}
               {createError && <span className="error">{createError}</span>}
@@ -180,21 +266,17 @@ export function EvalPanel() {
           </div>
 
           <div className="form">
-            <div className="form__title">Run case</div>
+            <div className="form__title">2. Run a case</div>
             <div className="form__actions">
-              <label className="field">
-                <span>case_id</span>
-                <input
-                  value={runId}
-                  onChange={(e) => setRunId(e.target.value)}
-                />
-              </label>
+              <Field label="Case" hint="Pick the case to run.">
+                <Select value={runId} ariaLabel="Case to run" onChange={setRunId} options={caseIdOptions} />
+              </Field>
               <button className="btn btn--primary" disabled={runBusy} onClick={run}>
-                {runBusy ? "..." : "Run"}
+                {runBusy ? "Running..." : "Run"}
               </button>
               {runError && <span className="error">{runError}</span>}
             </div>
-            {runResult && (
+            {runResult ? (
               <div className="stack">
                 <div className="kv">
                   <span
@@ -203,33 +285,36 @@ export function EvalPanel() {
                     {runResult.passed ? "passed" : "failed"}
                   </span>
                   {typeof runResult.score === "number" && (
-                    <span className="badge">score {runResult.score}</span>
+                    <span className="badge" title="0 to 1">score {runResult.score}</span>
                   )}
                   {runResult.run_id && (
                     <code className="tag">{runResult.run_id}</code>
                   )}
                 </div>
                 <div className="row-line">
-                  <span className="muted">effective_grants</span>
+                  <span className="muted">Permissions the run actually used</span>
                   <GrantList grants={runResult.detail?.effective_grants} />
                 </div>
                 <CodeBlock value={runResult.detail ?? {}} />
               </div>
+            ) : (
+              <Hint>Run a case to see pass/fail and the permissions it used.</Hint>
             )}
           </div>
         </div>
 
         <div className="list-card">
           <div className="list-card__head">
-            <h3>Runs</h3>
+            <h3>3. Runs</h3>
             <div className="panel__actions">
-              <label className="field">
-                <span>filter case_id</span>
-                <input
+              <Field label="Filter by case">
+                <Select
                   value={filterCase}
-                  onChange={(e) => setFilterCase(e.target.value)}
+                  ariaLabel="Filter by case"
+                  onChange={setFilterCase}
+                  options={[{ value: "", label: "All cases" }, ...caseIdOptions.slice(1)]}
                 />
-              </label>
+              </Field>
               <button className="btn" onClick={() => runs.reload()}>
                 Refresh
               </button>
@@ -237,11 +322,12 @@ export function EvalPanel() {
           </div>
           <div className="list-card__body">
             {runs.loading && !runs.data && <p className="muted">Loading...</p>}
-            {runs.error && (
-              <p className="error">Failed to load: {runs.error}</p>
-            )}
+            {runs.error && <p className="error">Could not load: {runs.error}</p>}
             {!runs.loading && runList.length === 0 && (
-              <p className="muted">No eval runs.</p>
+              <EmptyState
+                title="No eval runs yet"
+                body="Create and run a case to see results here."
+              />
             )}
             {runList.map((r) => (
               <div className="row-line" key={r.id}>
@@ -255,13 +341,19 @@ export function EvalPanel() {
                   >
                     {r.passed ? "pass" : "fail"}
                   </span>
-                  <span className="badge">score {r.score}</span>
+                  <span className="badge" title="0 to 1">score {r.score}</span>
                 </div>
               </div>
             ))}
           </div>
         </div>
       </div>
+
+      <InfoCallout>
+        "No-escalation" means the run can never gain more permissions than you
+        have. The permissions a run actually used are its{" "}
+        <code>effective_grants</code> - the proof it stayed within bounds.
+      </InfoCallout>
     </section>
   );
 }
