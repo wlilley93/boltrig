@@ -153,8 +153,64 @@ const TABS: ReadonlyArray<TabDef> = [
   },
 ];
 
+// Compact line icons for the sidebar rail (kept dependency-free: small inline
+// SVGs, stroke = currentColor, so they inherit the nav item's colour + glow).
+const ICON: Record<Tab, JSX.Element> = {
+  home: (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 11.5 12 5l8 6.5" /><path d="M6 10.5V19h12v-8.5" /></svg>
+  ),
+  router: (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="6" cy="12" r="2" /><circle cx="18" cy="6" r="2" /><circle cx="18" cy="18" r="2" /><path d="M8 12h3M11 12V6.5h5M11 12v5.5h5" /></svg>
+  ),
+  studio: (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="9.5" width="5" height="5" /><rect x="16" y="4" width="5" height="5" /><rect x="16" y="15" width="5" height="5" /><path d="M8 12h3.5M11.5 12V6.5H16M11.5 12v5.5H16" /></svg>
+  ),
+  dev: (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="5" width="16" height="14" rx="1" /><path d="m8 10 2.5 2L8 14M13.5 14H16" /></svg>
+  ),
+  chat: (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 5h14v10H9l-4 4V5Z" /></svg>
+  ),
+  kanban: (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="4" height="16" /><rect x="10" y="4" width="4" height="11" /><rect x="16" y="4" width="4" height="8" /></svg>
+  ),
+  approvals: (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3 5 6v6c0 4 3 6.5 7 9 4-2.5 7-5 7-9V6l-7-3Z" /><path d="m9 12 2 2 4-4" /></svg>
+  ),
+  insight: (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4v16h16" /><rect x="7" y="12" width="3" height="5" /><rect x="12" y="8" width="3" height="9" /><rect x="17" y="14" width="3" height="3" /></svg>
+  ),
+  eval: (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="4" width="14" height="16" rx="1" /><path d="m8 10 2 2 3-4" /><path d="M8 15h7" /></svg>
+  ),
+  memory: (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><ellipse cx="12" cy="6" rx="7" ry="3" /><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6" /><path d="M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6" /></svg>
+  ),
+  admin: (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 8h16M4 16h16" /><circle cx="9" cy="8" r="2" /><circle cx="15" cy="16" r="2" /></svg>
+  ),
+  me: (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="3.5" /><path d="M5 20c0-3.9 3.1-7 7-7s7 3.1 7 7" /></svg>
+  ),
+  settings: (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1" /></svg>
+  ),
+};
+
+// The Boltrig mark: a lightning bolt between two "rig" bracket uprights.
+function BoltMark() {
+  return (
+    <svg className="side__mark" viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true">
+      <path d="M7.5 3.5H4.5V20.5H7.5" stroke="currentColor" strokeWidth="2" strokeLinecap="square" />
+      <path d="M16.5 3.5H19.5V20.5H16.5" stroke="currentColor" strokeWidth="2" strokeLinecap="square" />
+      <path d="M13.2 4.5L8.5 12.6H12L10.8 19.5L15.5 11.4H12L13.2 4.5Z" fill="currentColor" />
+    </svg>
+  );
+}
+
 // The chip that stands in for an always-on dev form: it reads like an identity
-// ("Signed in as ...") and expands the editable dev sign-in below the header.
+// ("Signed in as ...") and expands the editable dev sign-in. In the collapsed
+// rail only the avatar initial shows; the text is hidden by CSS.
 function IdentityChip({
   expanded,
   onToggle,
@@ -163,17 +219,19 @@ function IdentityChip({
   onToggle: () => void;
 }) {
   const id = useIdentity();
+  const initial = (id.subject || "?").trim().charAt(0).toUpperCase() || "?";
   return (
     <button
       className={`identity-chip ${expanded ? "identity-chip--open" : ""}`}
       aria-expanded={expanded}
-      title="Session and identity (dev sign-in)"
+      title={`Signed in as ${id.subject} (${id.role}) @ ${id.tenant} - dev sign-in`}
       onClick={onToggle}
     >
+      <span className="identity-chip__avatar" aria-hidden="true">{initial}</span>
       <span className="identity-chip__who">
-        Signed in as <strong>{id.subject}</strong> ({id.role})
+        <strong>{id.subject}</strong> ({id.role})
+        <span className="identity-chip__where">@ {id.tenant}</span>
       </span>
-      <span className="identity-chip__where">@ {id.tenant}</span>
     </button>
   );
 }
@@ -245,7 +303,7 @@ function HealthDot() {
   return (
     <span className="health-dot" title={text}>
       <span className={cls} aria-hidden="true" />
-      {text}
+      <span className="health-dot__text">{text}</span>
     </span>
   );
 }
@@ -257,9 +315,32 @@ export function App() {
   const route = useRoute();
   const tab = route.tab as Tab;
 
-  // The dev sign-in is collapsed behind the header chip by default; expanding it
+  // The dev sign-in is collapsed behind the identity chip by default; expanding it
   // reveals the editable identity bar (the dev auth mechanism).
   const [identityOpen, setIdentityOpen] = useState(false);
+
+  // The expandable sidebar (Opbox pattern): collapsed state persists in
+  // localStorage, and drives a single CSS variable on :root that BOTH the sidebar
+  // and the main content offset consume, so they move in lockstep.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("boltrig:sidebar-collapsed") === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    document.documentElement.style.setProperty(
+      "--app-sidebar-width",
+      sidebarCollapsed ? "64px" : "236px",
+    );
+    try {
+      localStorage.setItem("boltrig:sidebar-collapsed", sidebarCollapsed ? "true" : "false");
+    } catch {
+      /* storage may be unavailable; the in-memory state still drives the layout */
+    }
+  }, [sidebarCollapsed]);
 
   // Apply the persisted appearance (theme / density / contrast / font scale /
   // reduced motion) to the document root on first load, before any panel paints,
@@ -275,63 +356,82 @@ export function App() {
   const active: Tab = visibleTabs.some((t) => t.id === tab) ? tab : "home";
 
   return (
-    <div className="app">
-      <header className="app__header">
-        <div className="app__brand">
-          <strong>Boltrig</strong>
-          <span className="app__subtitle">orchestration console</span>
+    <div className="app app--shell">
+      <aside
+        className="side"
+        data-collapsed={sidebarCollapsed ? "true" : undefined}
+        aria-label="Primary navigation"
+      >
+        <div className="side__brand">
+          <BoltMark />
+          <strong className="side__word">boltrig</strong>
+          <button
+            className="side__collapse"
+            aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            onClick={() => setSidebarCollapsed((v) => !v)}
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              {sidebarCollapsed ? (
+                <path d="m9 6 6 6-6 6" />
+              ) : (
+                <path d="m15 6-6 6 6 6" />
+              )}
+            </svg>
+          </button>
         </div>
-        <div className="app__header-right">
-          <IdentityChip
-            expanded={identityOpen}
-            onToggle={() => setIdentityOpen((v) => !v)}
-          />
-          <HealthDot />
-        </div>
-      </header>
 
-      {identityOpen && <IdentityBar />}
-
-      <nav className="tabs tabs--grouped" aria-label="Panels">
-        {PLANES.map((plane) => {
-          const planeTabs = visibleTabs.filter((t) => t.plane === plane.id);
-          if (planeTabs.length === 0) return null;
-          return (
-            <div className="tab-group" key={plane.id} role="group" aria-label={plane.label}>
-              <span className="tab-group__label">{plane.label}</span>
-              <div className="tab-group__tabs">
+        <nav className="side__nav" aria-label="Panels">
+          {PLANES.map((plane) => {
+            const planeTabs = visibleTabs.filter((t) => t.plane === plane.id);
+            if (planeTabs.length === 0) return null;
+            return (
+              <div className="side-group" key={plane.id} role="group" aria-label={plane.label}>
+                <span className="side-group__label">{plane.label}</span>
                 {planeTabs.map((t) => (
                   <button
                     key={t.id}
-                    className={`tab ${active === t.id ? "tab--active" : ""}`}
+                    className={`side-item ${active === t.id ? "side-item--active" : ""}`}
                     aria-current={active === t.id ? "page" : undefined}
                     title={t.hint}
                     onClick={() => navigate(`/${t.id}`)}
                   >
-                    {t.label}
+                    <span className="side-item__icon" aria-hidden="true">{ICON[t.id]}</span>
+                    <span className="side-item__label">{t.label}</span>
                   </button>
                 ))}
               </div>
-            </div>
-          );
-        })}
-      </nav>
+            );
+          })}
+        </nav>
 
-      <main className="app__main">
-        {active === "home" && <HomePanel />}
-        {active === "router" && <RouterPanel />}
-        {active === "kanban" && <KanbanPanel />}
-        {active === "approvals" && <ApprovalsPanel />}
-        {active === "chat" && <ChatPanel />}
-        {active === "studio" && <StudioPanel />}
-        {active === "dev" && <DevConsolePanel />}
-        {active === "admin" && <AdminPanel />}
-        {active === "insight" && <InsightPanel />}
-        {active === "eval" && <EvalPanel />}
-        {active === "memory" && <MemoryPanel />}
-        {active === "me" && <MePanel />}
-        {active === "settings" && <SettingsPanel />}
-      </main>
+        <div className="side__foot">
+          <HealthDot />
+          <IdentityChip
+            expanded={identityOpen}
+            onToggle={() => setIdentityOpen((v) => !v)}
+          />
+        </div>
+      </aside>
+
+      <div className="app__body">
+        {identityOpen && <IdentityBar />}
+        <main className="app__main">
+          {active === "home" && <HomePanel />}
+          {active === "router" && <RouterPanel />}
+          {active === "kanban" && <KanbanPanel />}
+          {active === "approvals" && <ApprovalsPanel />}
+          {active === "chat" && <ChatPanel />}
+          {active === "studio" && <StudioPanel />}
+          {active === "dev" && <DevConsolePanel />}
+          {active === "admin" && <AdminPanel />}
+          {active === "insight" && <InsightPanel />}
+          {active === "eval" && <EvalPanel />}
+          {active === "memory" && <MemoryPanel />}
+          {active === "me" && <MePanel />}
+          {active === "settings" && <SettingsPanel />}
+        </main>
+      </div>
 
       {/* The global Run drawer: any surface can raise it via openRun(runId). */}
       <RunView />
