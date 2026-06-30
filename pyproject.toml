@@ -51,6 +51,7 @@ markers = [
     "unit: fast pure-Python model and schema tests",
     "kernel: dispatch, rate limiting, degraded mode, audit chain, cost/budget",
     "security: grant enforcement, credential isolation, tenant isolation, HITL gates, PII",
+    "store: store-contract parity across InMemoryStore and PostgresStore",
     "invariant(id): a binding invariant (P-/SEC-/K-) the test covers",
 ]
 

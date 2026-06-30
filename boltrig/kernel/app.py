@@ -20,13 +20,12 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from boltrig.models import (
+    BoltrigError,
     DegradedMode,
     GrantSet,
     HITLType,
     InvocationContext,
-    BoltrigError,
     PendingHuman,
-    Urgency,
 )
 
 from . import Kernel
@@ -407,8 +406,6 @@ def create_app(
         k: Kernel = Depends(_get_kernel),
         p: Principal = Depends(principal),
     ) -> dict:
-        from boltrig.models import HITLType
-
         req = await k.hitl.get(p.tenant_id, request_id)
         if req is None:
             raise HTTPException(status_code=404, detail="unknown request")
@@ -499,6 +496,4 @@ def create_app(
 
     register_memory_routes(app, principal_dep=principal, get_kernel=_get_kernel)
 
-    # keep an unused import referenced for the HITL enums in scope
-    _ = (HITLType, Urgency)
     return app
