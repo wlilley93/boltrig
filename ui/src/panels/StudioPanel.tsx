@@ -847,6 +847,25 @@ function AdapterStudio() {
 // React Flow canvas. Both round-trip the same definition.steps shape.
 type WorkflowView = "form" | "canvas";
 
+const TZ_OPTIONS = [
+  "UTC",
+  "Europe/London",
+  "Europe/Paris",
+  "America/New_York",
+  "America/Chicago",
+  "America/Los_Angeles",
+  "Asia/Singapore",
+  "Asia/Tokyo",
+  "Australia/Sydney",
+].map((z) => ({ value: z, label: z }));
+
+const CRON_PRESETS: ReadonlyArray<{ label: string; value: string }> = [
+  { label: "Hourly", value: "0 * * * *" },
+  { label: "Daily 9am", value: "0 9 * * *" },
+  { label: "Weekdays 9am", value: "0 9 * * 1-5" },
+  { label: "Mondays 9am", value: "0 9 * * 1" },
+];
+
 function WorkflowForm() {
   const workflows = useFetch(() => api.workflows(), []);
 
@@ -1025,6 +1044,10 @@ function WorkflowForm() {
   }
 
   const list: WorkflowSummary[] = workflows.data?.workflows ?? [];
+  const wfOptions = [
+    { value: "", label: "Choose a workflow..." },
+    ...list.map((w) => ({ value: w.id, label: w.id })),
+  ];
   const verbs: VerbInfo[] = caps.data?.verbs ?? [];
 
   return (
@@ -1086,25 +1109,30 @@ function WorkflowForm() {
         <div className="form">
           <div className="form__title">Schedule (cron)</div>
           <div className="form__grid">
-            <label className="field">
-              <span>workflow id</span>
-              <input
-                value={schedId}
-                onChange={(e) => setSchedId(e.target.value)}
-              />
-            </label>
-            <label className="field">
-              <span>cron</span>
-              <input
-                value={cron}
-                placeholder="0 9 * * 1"
-                onChange={(e) => setCron(e.target.value)}
-              />
-            </label>
-            <label className="field">
-              <span>timezone</span>
-              <input value={tz} onChange={(e) => setTz(e.target.value)} />
-            </label>
+            <Field label="Workflow" hint="The workflow to run on a schedule.">
+              <Select value={schedId} ariaLabel="Workflow" onChange={setSchedId} options={wfOptions} />
+            </Field>
+            <Field label="When (cron)" hint="A 5-field cron expression, or pick a preset below." example="0 9 * * 1">
+              <input value={cron} placeholder="0 9 * * 1" onChange={(e) => setCron(e.target.value)} />
+            </Field>
+            <Field label="Timezone" hint="The timezone the schedule runs in.">
+              <Select value={tz} ariaLabel="Timezone" onChange={setTz} options={TZ_OPTIONS} />
+            </Field>
+          </div>
+          <div className="kv">
+            <span className="ux-hint">Presets:</span>
+            {CRON_PRESETS.map((p) => (
+              <button
+                key={p.value}
+                type="button"
+                className="tag tag--accent"
+                style={{ cursor: "pointer" }}
+                title={p.value}
+                onClick={() => setCron(p.value)}
+              >
+                {p.label}
+              </button>
+            ))}
           </div>
           <div className="form__actions">
             <button className="btn" disabled={schedBusy} onClick={schedule}>
@@ -1117,21 +1145,16 @@ function WorkflowForm() {
 
         <div className="form">
           <div className="form__title">Trigger</div>
-          <label className="field">
-            <span>workflow id</span>
-            <input
-              value={trigId}
-              onChange={(e) => setTrigId(e.target.value)}
-            />
-          </label>
-          <label className="field">
-            <span>inputs (JSON)</span>
+          <Field label="Workflow" hint="The workflow to start now.">
+            <Select value={trigId} ariaLabel="Workflow" onChange={setTrigId} options={wfOptions} />
+          </Field>
+          <Field label="Inputs (JSON)" hint="Values passed into the workflow." example='{"ticket_id": "4821"}'>
             <textarea
               className="code"
               value={inputs}
               onChange={(e) => setInputs(e.target.value)}
             />
-          </label>
+          </Field>
           <div className="form__actions">
             <button className="btn" disabled={trigBusy} onClick={trigger}>
               {trigBusy ? "..." : "Trigger"}
@@ -1159,21 +1182,16 @@ function WorkflowForm() {
 
         <div className="form">
           <div className="form__title">Execute (run steps)</div>
-          <label className="field">
-            <span>workflow id</span>
-            <input
-              value={execId}
-              onChange={(e) => setExecId(e.target.value)}
-            />
-          </label>
-          <label className="field">
-            <span>inputs (JSON)</span>
+          <Field label="Workflow" hint="The workflow to run step-by-step now.">
+            <Select value={execId} ariaLabel="Workflow" onChange={setExecId} options={wfOptions} />
+          </Field>
+          <Field label="Inputs (JSON)" hint="Values passed into the workflow." example='{"ticket_id": "4821"}'>
             <textarea
               className="code"
               value={execInputs}
               onChange={(e) => setExecInputs(e.target.value)}
             />
-          </label>
+          </Field>
           <div className="form__actions">
             <button
               className="btn btn--primary"
@@ -1229,13 +1247,9 @@ function WorkflowForm() {
         <div className="form">
           <div className="form__title">View runs</div>
           <div className="form__actions">
-            <label className="field">
-              <span>workflow id</span>
-              <input
-                value={runsId}
-                onChange={(e) => setRunsId(e.target.value)}
-              />
-            </label>
+            <Field label="Workflow" hint="See past runs of this workflow.">
+              <Select value={runsId} ariaLabel="Workflow" onChange={setRunsId} options={wfOptions} />
+            </Field>
             <button className="btn" disabled={runsBusy} onClick={loadRuns}>
               {runsBusy ? "..." : "Load runs"}
             </button>

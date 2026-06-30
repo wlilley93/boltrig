@@ -257,7 +257,7 @@ export function ChatPanel() {
         </aside>
 
         <div className="chat__main">
-          <div className="chat__messages">
+          <div className="chat__messages" aria-live="polite" aria-busy={streaming}>
             {msgsLoading && messages.length === 0 && (
               <p className="muted">Loading conversation...</p>
             )}
