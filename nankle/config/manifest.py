@@ -564,12 +564,17 @@ async def apply_manifest(
             await _seed_call(store, "set_credential_ref", tenant, cred.id, cred.as_ref())
             kernel.credentials.bind_adapter_credential(tenant, adapter.id, cred.id)
 
-    # 6. builtin adapters: import the module, build(), register (P1)
+    # 6. adapters: import the module, build(), register (P1). A builtin id maps to
+    #    a known module; otherwise the adapter's own `module_ref` ("pkg.mod" or
+    #    "pkg.mod:factory") is honoured, so a PROJECT ships its adapter as an
+    #    importable module + a manifest entry and extends the kernel from OUTSIDE,
+    #    no core edit (the extension contract, Round Fifteen).
     if load_builtin_adapters:
         for adapter in manifest.adapters:
-            module_path = _BUILTIN_MODULES.get(adapter.id)
-            if module_path is None:
-                continue  # unknown / non-builtin id -> skip gracefully
-            module = importlib.import_module(module_path)
-            instance = module.build()
-            await kernel.register_adapter(tenant, instance)
+            module_path = _BUILTIN_MODULES.get(adapter.id) or adapter.module_ref
+            if not module_path:
+                continue  # unknown id and no module_ref -> skip gracefully
+            mod_name, _, factory = module_path.partition(":")
+            module = importlib.import_module(mod_name)
+            build = getattr(module, factory or "build")
+            await kernel.register_adapter(tenant, build())

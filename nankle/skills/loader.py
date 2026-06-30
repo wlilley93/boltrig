@@ -118,6 +118,7 @@ async def resolve_skill(store: Any, tenant_id: str, skill_id: str) -> Skill:
         context_requirements=merged_req,
         extends=None,
         locale=leaf.locale,
+        description=leaf.description,
     )
 
 

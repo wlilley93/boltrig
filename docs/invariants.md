@@ -12,7 +12,7 @@ The gate (the K-29 / K-30 ratchet) fails the build if:
   (an undeclared invariant), or
 - the catalogue claims a test node id that no marker actually backs (drift).
 
-Binding debt may only ever decrease. Today: **78 declared, debt 0** (105 bound
+Binding debt may only ever decrease. Today: **87 declared, debt 0** (115 bound
 test node ids), per `python scripts/check_invariants.py`. `tests/invariants.yaml`
 is the authoritative, machine-checked list; the table below is the curated
 human-readable view and highlights the core kernel set plus each round's new
@@ -124,6 +124,16 @@ and `FR*` ids are Nankle-local (drawn from the SRS) and never restate a `K-*`.
 | **FR-EVT-01** | A verb invoked under a run publishes a paired `tool_call` + `tool_result` to that run's stream; a failed call reports status with no output leak. | `tests/security/test_round_ten.py::test_verb_publishes_paired_tool_events`, `::test_failed_verb_emits_error_result_without_leaking` |
 | **FR-EVT-02** | Run events are a pure side-channel - a relay failure never breaks a call, a call with no run_id publishes nothing, and a paused call surfaces a `hitl` event. | `tests/security/test_round_ten.py::test_no_run_id_publishes_nothing_and_call_still_works`, `::test_relay_failure_never_breaks_dispatch`, `::test_pending_human_emits_hitl_event` |
 | **SEC-55** | Run events are run-keyed and credential-free - a verb's events publish only to its own run's stream and never carry credential material. | `tests/security/test_round_ten.py::test_events_are_run_keyed_and_credential_free` |
+
+### Round Fifteen (the extension contract)
+
+| Invariant | Meaning | Bound test(s) |
+| --- | --- | --- |
+| **FR-SKILL-01** | The skill shelf (`skill.search`) returns lightweight descriptions only, never the body, and filters by query (progressive disclosure). | `tests/security/test_round_fifteen.py::test_skill_search_returns_descriptions_not_bodies` |
+| **FR-SKILL-02** | `skill.load` composes the inheritance-merged body bound to the job's context, validated against `context_requirements`. | `tests/security/test_round_fifteen.py::test_skill_load_composes_body_and_binds_context` |
+| **SEC-57** | The skill shelf runs the chokepoint (grant-checked, tenant-scoped) and a loaded skill is data not authority - `load` returns the skill's `tool_grants` but does not grant them, so it cannot escalate. | `tests/security/test_round_fifteen.py::test_skill_shelf_is_governed_and_load_does_not_escalate` |
+| **FR-EXT-01** | A project adapter declared in the manifest by `module_ref` (a non-builtin id) is imported and registered at boot - extend from outside, no core edit. | `tests/integration/test_round_fifteen_bundle.py::test_project_adapter_loads_by_module_ref` |
+| **FR-EXT-02** | External MCP servers declared in the manifest `mcp.consume` register inert at boot, exposing no verbs until the review/activate gate (SEC-22 preserved). | `tests/integration/test_round_fifteen_bundle.py::test_consumed_mcp_servers_register_inert_pending_review` |
 
 ## How a new invariant is added
 

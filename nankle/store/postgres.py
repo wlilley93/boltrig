@@ -200,14 +200,14 @@ class PostgresStore:
     async def upsert_skill(self, s: Skill):
         await self._pool.execute(
             """INSERT INTO skills (id, tenant_id, version, prompt_fragment, tool_grants,
-                                   context_requirements, extends, locale)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+                                   context_requirements, extends, locale, description)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
                ON CONFLICT (tenant_id, id, version) DO UPDATE SET
                  prompt_fragment=EXCLUDED.prompt_fragment, tool_grants=EXCLUDED.tool_grants,
                  context_requirements=EXCLUDED.context_requirements, extends=EXCLUDED.extends,
-                 locale=EXCLUDED.locale, updated_at=now()""",
+                 locale=EXCLUDED.locale, description=EXCLUDED.description, updated_at=now()""",
             s.id, s.tenant_id, s.version, s.prompt_fragment, s.tool_grants,
-            s.context_requirements, s.extends, s.locale,
+            s.context_requirements, s.extends, s.locale, s.description,
         )
 
     async def get_skill(self, tenant_id, skill_id):
@@ -216,6 +216,15 @@ class PostgresStore:
             tenant_id, skill_id,
         )
         return _skill(row)
+
+    async def list_skills(self, tenant_id):
+        # Latest version per skill id for the tenant (the shelf).
+        rows = await self._pool.fetch(
+            """SELECT DISTINCT ON (id) * FROM skills WHERE tenant_id=$1
+               ORDER BY id, version DESC""",
+            tenant_id,
+        )
+        return [_skill(r) for r in rows]
 
     async def upsert_capability(self, c: AgentCapability):
         await self._pool.execute(
@@ -945,6 +954,7 @@ def _skill(r):
         prompt_fragment=r["prompt_fragment"], tool_grants=list(r["tool_grants"] or []),
         context_requirements=r["context_requirements"] or {}, extends=r["extends"],
         locale=r["locale"] or "en",
+        description=(r["description"] if "description" in r else "") or "",
     )
 
 

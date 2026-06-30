@@ -5,6 +5,7 @@ id: analysis/ticket-decomposition
 version: 1.0.0
 extends: analysis/base-decomposition
 locale: en
+description: Break a ticket into an ordered set of actionable sub-tasks.
 prompt_fragment: |
   Apply decomposition to a tracker ticket. Read the ticket and its links, then
   produce child tickets each sized to a single owner and a single acceptance

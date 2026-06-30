@@ -133,6 +133,13 @@ spawn_rules:
 # ids are the builtin adapters (nankle/adapters/builtin/*); credential refs map
 # to the JSON env vars in .env. memory-tickets needs no credential.
 adapters:
+  # A PROJECT adapter (Round Fifteen, the extension contract): a non-builtin id
+  # with its own module_ref is imported + registered from the bundle, so a project
+  # adds an integration with no core edit. (Builtin ids below map to known modules.)
+  # - id: trello
+  #   runtime: http
+  #   module_ref: billandben.adapters.trello:build   # the project's importable pkg
+  #   credential: { id: TRELLO_API, store: env, kind: api_key }
   - id: ms-graph
     runtime: http
     credential:
@@ -212,7 +219,13 @@ runtimes:
 mcp:
   server:
     enabled: true                            # granted verbs exposed as MCP tools
-  consume: []                                # optional external MCP servers (US-MCP-03)
+  # External MCP servers a project consumes (Round Fifteen): each registers an
+  # INERT consumer at boot (no verbs until the review/activate gate, SEC-22). The
+  # credential is ${ENV}-interpolated and held kernel-side, never given to an agent.
+  consume: []                                # e.g.:
+    # - id: linear-mcp
+    #   url: https://linear-mcp.internal
+    #   credential: ${LINEAR_MCP_TOKEN}
 
 # --- the conversational layer (Epic CONV) -----------------------------------
 chat:

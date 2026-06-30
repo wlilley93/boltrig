@@ -101,6 +101,11 @@ def parse_skill(doc: dict, tenant_id: str) -> Skill:
         errors.append("'locale' must be a non-empty string")
         locale = DEFAULT_LOCALE
 
+    description = doc.get("description", "") or ""
+    if not isinstance(description, str):
+        errors.append("'description' must be a string when present")
+        description = ""
+
     context_requirements = doc.get("context_requirements", {}) or {}
     if not isinstance(context_requirements, dict):
         errors.append("'context_requirements' must be a JSON Schema object")
@@ -123,6 +128,7 @@ def parse_skill(doc: dict, tenant_id: str) -> Skill:
         context_requirements=dict(context_requirements),
         extends=extends,
         locale=locale,
+        description=description,
     )
 
 

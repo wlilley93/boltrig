@@ -442,6 +442,26 @@ the spawner's `subagent` event now emits `child_run_id` (was `run_id`) to match 
 UI reader - a tsc-invisible runtime break, caught at integration. New bound
 invariant (debt still 0): FR-EVT-04. DoD: `docs/DEFINITION-OF-DONE-round-twelve.md`.
 
+## 7.11 Round Fifteen (the extension contract)
+
+Pin vanilla Nankle, extend from a per-project bundle, no core edit
+(`docs/extension-contract.md`). Three substrate primitives:
+- **The on-demand skill shelf** (`nankle/skills/shelf.py`): `skill.search/describe/
+  load` governed verbs (the `skill` noun) - browse descriptions, load one body on
+  demand bound to the job's context. Progressive disclosure (search = labels never
+  bodies), data-not-authority (load returns wanted grants but does not grant them,
+  SEC-57). Needed a `Skill.description` shelf label (model + YAML + schema.sql +
+  migration 0004) and `list_skills` on the Store Protocol + both backends (also
+  fixed `GET /v1/skills` being Postgres-blind). The eager spawn-by-id path is
+  unchanged - this is the additional on-demand mode.
+- **Adapters from the bundle**: `apply_manifest` honours an adapter's `module_ref`
+  (`pkg.mod:factory`) for non-builtin ids (FR-EXT-01).
+- **External MCP from the bundle**: `_register_consumed_mcp` wires `manifest.mcp.
+  consume` at boot, each inert pending review (SEC-22), credential `${ENV}`-held
+  kernel-side (FR-EXT-02).
+New bound invariants (debt still 0): FR-SKILL-01/02, SEC-57, FR-EXT-01/02. DoD:
+`docs/DEFINITION-OF-DONE-round-fifteen.md`.
+
 ---
 
 ## 8. Quality / governance gate

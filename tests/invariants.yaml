@@ -312,6 +312,26 @@ invariants:
     description: The model gateway (Bifrost) is wired into the stack - a profile-gated bifrost service on :8080 and the documented gateway URL matches it - so activation is one env line plus provider keys.
     tests:
       - tests/security/test_round_six.py::test_bifrost_is_wired_into_the_stack
+  FR-SKILL-01:
+    description: The skill shelf (skill.search) returns lightweight descriptions only - never the prompt_fragment body - and filters by query (progressive disclosure).
+    tests:
+      - tests/security/test_round_fifteen.py::test_skill_search_returns_descriptions_not_bodies
+  FR-SKILL-02:
+    description: skill.load composes the inheritance-merged body bound to the job's context, validated against the skill's context_requirements (ContextRequirementsUnmet on mismatch).
+    tests:
+      - tests/security/test_round_fifteen.py::test_skill_load_composes_body_and_binds_context
+  SEC-57:
+    description: The skill shelf runs the chokepoint (grant-checked, tenant-scoped) and a loaded skill is data not authority - load returns the skill's tool_grants but does not grant them, so it cannot escalate.
+    tests:
+      - tests/security/test_round_fifteen.py::test_skill_shelf_is_governed_and_load_does_not_escalate
+  FR-EXT-01:
+    description: A project adapter declared in the manifest by module_ref (a non-builtin id) is imported and registered at boot - extend the kernel from outside, no core edit.
+    tests:
+      - tests/integration/test_round_fifteen_bundle.py::test_project_adapter_loads_by_module_ref
+  FR-EXT-02:
+    description: External MCP servers declared in the manifest mcp.consume register inert at boot, exposing no verbs until the review/activate gate runs (SEC-22 preserved).
+    tests:
+      - tests/integration/test_round_fifteen_bundle.py::test_consumed_mcp_servers_register_inert_pending_review
   SEC-48:
     description: The Pi sidecar's network egress is enforced by the deploy manifests (sandbox-only, internal in the secure overlay), not merely documented.
     tests:

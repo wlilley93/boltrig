@@ -45,6 +45,10 @@ class Skill:
     context_requirements: dict[str, Any] = field(default_factory=dict)  # JSON Schema
     extends: SkillId | None = None  # optional parent for inheritance
     locale: str = "en"
+    # The shelf label: a short "what this is / when to use it" the skill registry
+    # exposes for browsing (progressive disclosure) WITHOUT the prompt_fragment
+    # body. Empty is allowed; the registry falls back to the id.
+    description: str = ""
 
 
 @dataclass

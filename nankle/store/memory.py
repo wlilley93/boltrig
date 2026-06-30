@@ -134,6 +134,9 @@ class InMemoryStore:
     async def get_skill(self, tenant_id, skill_id):
         return self._skills.get((tenant_id, skill_id))
 
+    async def list_skills(self, tenant_id):
+        return [s for (t, _), s in self._skills.items() if t == tenant_id]
+
     async def upsert_capability(self, cap):
         self._caps[(cap.tenant_id, cap.name)] = cap
 

@@ -64,6 +64,7 @@ async def _seed_default(kernel: Kernel) -> None:
     await kernel.register_adapter(_DEFAULT_TENANT, build_tickets())
     await _register_control_plane(kernel, _DEFAULT_TENANT)
     await _register_web_fetch(kernel, _DEFAULT_TENANT, {})
+    await _register_skill_shelf(kernel, _DEFAULT_TENANT)
 
 
 async def _register_memory(kernel: Kernel, tenant_id: str, memory_cfg) -> None:
@@ -109,10 +110,42 @@ async def _register_web_fetch(kernel: Kernel, tenant_id: str, network_cfg) -> No
     log.info("web.fetch verb registered (governed internet access, SSRF-guarded)")
 
 
+async def _register_skill_shelf(kernel: Kernel, tenant_id: str) -> None:
+    """Register the on-demand skill shelf so an agent can browse + load skills by
+    description through the chokepoint (Round Fifteen; FR-SKILL-01/02, SEC-57).
+    The engine owns the shelf mechanism; the project owns the skill content."""
+    from nankle.skills.shelf import build_skill_shelf_adapter
+
+    await kernel.register_adapter(tenant_id, build_skill_shelf_adapter(kernel.store))
+    log.info("skill shelf registered (skill.search/describe/load)")
+
+
+async def _register_consumed_mcp(kernel: Kernel, tenant_id: str, mcp_cfg) -> None:
+    """Register external MCP servers declared in the bundle's manifest
+    (`mcp.consume`), each INERT pending review (SEC-22) - the review/activate route
+    still gates them. Lets a project declare its external MCP servers as data
+    rather than POSTing them at runtime (Round Fifteen)."""
+    for entry in (mcp_cfg or {}).get("consume", []) or []:
+        if not isinstance(entry, dict) or not entry.get("id"):
+            continue
+        from nankle.adapters.mcp_consumer import McpConsumerAdapter
+
+        consumer = McpConsumerAdapter(
+            entry["id"], url=entry.get("url"),
+            # credential enters via ${ENV} interpolation at manifest load - held
+            # kernel-side, never handed to an agent.
+            token=entry.get("credential") or entry.get("token"),
+        )
+        await kernel.register_adapter(tenant_id, consumer)  # describe()=[] until review
+        log.info("external MCP server '%s' registered (inert, pending review)", entry["id"])
+
+
 async def _seed_from_manifest(kernel: Kernel, manifest) -> None:
     await apply_manifest(kernel, manifest)
     await _register_memory(kernel, manifest.tenant_id, manifest.section("memory"))
     await _register_control_plane(kernel, manifest.tenant_id)
+    await _register_skill_shelf(kernel, manifest.tenant_id)
+    await _register_consumed_mcp(kernel, manifest.tenant_id, manifest.section("mcp"))
     net = manifest.network
     await _register_web_fetch(kernel, manifest.tenant_id, {
         "air_gapped": net.air_gapped, "https_proxy": net.https_proxy,

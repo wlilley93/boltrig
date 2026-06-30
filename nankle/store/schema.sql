@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS skills (
     context_requirements JSONB NOT NULL,                -- JSON Schema
     extends              TEXT,                          -- parent skill id
     locale               TEXT DEFAULT 'en',
+    description          TEXT NOT NULL DEFAULT '',      -- the shelf label (when-to-use)
     created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (tenant_id, id, version)
