@@ -144,6 +144,14 @@ services:
       DATABASE_URL: ${HATCHET_DATABASE_URL:-postgresql://boltrig:boltrig@postgres:5432/hatchet?sslmode=disable}
       SERVER_GRPC_BROADCAST_ADDRESS: hatchet-engine:7077
       SERVER_GRPC_BIND_ADDRESS: 0.0.0.0
+      # hatchet-lite required auth/session config (it refuses to boot without a
+      # cookie domain). The engine is internal (loopback / compose network only),
+      # so an insecure cookie over the private network is fine.
+      SERVER_AUTH_COOKIE_DOMAIN: ${HATCHET_COOKIE_DOMAIN:-localhost}
+      SERVER_AUTH_COOKIE_INSECURE: "t"
+      SERVER_AUTH_SET_EMAIL_VERIFIED: "t"
+      SERVER_GRPC_INSECURE: "t"
+      SERVER_URL: ${HATCHET_SERVER_URL:-http://localhost:8888}
     ports:
       - "${HATCHET_GRPC_PORT:-7077}:7077"
       - "${HATCHET_API_PORT:-8888}:8888"
