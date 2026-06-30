@@ -316,7 +316,7 @@ class Spawner:
             try:
                 kernel.events.publish(context.run_id, {
                     "type": "subagent", "task": task,
-                    "skills": list(skills), "run_id": run_id,
+                    "skills": list(skills), "child_run_id": run_id,
                     "capability": capability.name,
                 })
             except Exception:

@@ -212,6 +212,15 @@ export interface ChatMessageEnd {
   type: "message_end";
   run_id: string;
 }
+// Emitted by the interpreter per step as it walks the workflow (the live canvas
+// lights each node by matching step_id to a graph node id). Delivered on a run's
+// event stream alongside the step's underlying tool_call / tool_result.
+export interface ChatWorkflowStep {
+  type: "workflow_step";
+  step_id: string;
+  action: string;
+  status: "running" | "ok" | "failed" | "skipped" | "error";
+}
 
 export type ChatEvent =
   | ChatMessageStart
@@ -221,7 +230,8 @@ export type ChatEvent =
   | ChatToolResult
   | ChatSubagent
   | ChatHitlEvent
-  | ChatMessageEnd;
+  | ChatMessageEnd
+  | ChatWorkflowStep;
 
 // ===========================================================================
 // Round Three: authoring studios, admin console, insight, eval, personal.

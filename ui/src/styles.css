@@ -1638,6 +1638,42 @@ summary:focus-visible,
   border-color: var(--bg-1);
 }
 
+/* live run overlay: per-node execution state (WorkflowRunCanvas). The pulse is
+   honoured against prefers-reduced-motion by the global media query above. */
+.wf-node__run {
+  align-self: flex-start;
+}
+.wf-node--run-pending {
+  opacity: 0.5;
+}
+.wf-node--run-running {
+  border-color: var(--accent);
+  border-left-color: var(--accent);
+  animation: wf-node-pulse 1.2s ease-in-out infinite;
+}
+.wf-node--run-ok {
+  border-left-color: var(--ok);
+}
+.wf-node--run-failed,
+.wf-node--run-error {
+  border-color: var(--down);
+  border-left-color: var(--down);
+}
+.wf-node--run-skipped {
+  border-left-color: var(--warn);
+  opacity: 0.7;
+}
+
+@keyframes wf-node-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(91, 157, 255, 0);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(91, 157, 255, 0.35);
+  }
+}
+
 @media (max-width: 900px) {
   .wf-studio {
     grid-template-columns: 1fr;

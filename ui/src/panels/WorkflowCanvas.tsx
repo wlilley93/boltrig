@@ -58,12 +58,13 @@ import {
   runBadgeClass,
   stepBadgeClass,
 } from "./shared";
+import { WorkflowRunCanvas } from "./WorkflowRunCanvas";
 
 // --- the data contract ------------------------------------------------------
 
 // One step in definition.steps. The backend walks these parents-before-children
 // and dispatches each `action` (a "noun.verb" id) through the kernel chokepoint.
-interface WorkflowStep {
+export interface WorkflowStep {
   id: string;
   parents: string[];
   action: string;
@@ -74,14 +75,27 @@ interface WorkflowStep {
 type NodeKind = "agent" | "service" | "kernel-run";
 type TriggerKind = "chat" | "cron" | "webhook";
 
+// Per-node run state overlaid in run mode (WorkflowRunCanvas). "pending" is the
+// default before any workflow_step event names the node; the rest mirror the
+// interpreter's per-step status vocabulary.
+export type RunNodeStatus =
+  | "pending"
+  | "running"
+  | "ok"
+  | "failed"
+  | "error"
+  | "skipped";
+
 // Object-literal type aliases (not interfaces) so the node data satisfies React
-// Flow's `Record<string, unknown>` data constraint.
-type StepNodeData = {
+// Flow's `Record<string, unknown>` data constraint. `runStatus` is unset in edit
+// mode and set by the live canvas to colour the node by execution state.
+export type StepNodeData = {
   action: string;
   params: Record<string, unknown>;
   kind: NodeKind;
   label: string;
   description?: string;
+  runStatus?: RunNodeStatus;
 };
 
 type TriggerNodeData = {
@@ -89,13 +103,13 @@ type TriggerNodeData = {
   label: string;
 };
 
-type StepNode = Node<StepNodeData, "step">;
+export type StepNode = Node<StepNodeData, "step">;
 type TriggerNode = Node<TriggerNodeData, "trigger">;
-type CanvasNode = StepNode | TriggerNode;
+export type CanvasNode = StepNode | TriggerNode;
 
 // --- kind derivation (binding-driven, no authority list) --------------------
 
-function deriveKind(verb: VerbInfo | undefined): NodeKind {
+export function deriveKind(verb: VerbInfo | undefined): NodeKind {
   const target = verb?.binding?.target_type;
   if (target === "agent") return "agent";
   if (target === "adapter") return "service";
@@ -104,17 +118,25 @@ function deriveKind(verb: VerbInfo | undefined): NodeKind {
 
 // --- custom nodes -----------------------------------------------------------
 
-// A step: target handle on the left (incoming parent), source on the right.
+// A step: target handle on the left (incoming parent), source on the right. In
+// run mode `runStatus` adds a wf-node--run-<status> modifier (and the running one
+// pulses, honoured against prefers-reduced-motion in CSS).
 function StepNodeView({ data, selected }: NodeProps) {
   const d = data as StepNodeData;
+  const runClass = d.runStatus ? `wf-node--run-${d.runStatus}` : "";
   return (
-    <div className={`wf-node wf-node--${d.kind} ${selected ? "wf-node--sel" : ""}`}>
+    <div
+      className={`wf-node wf-node--${d.kind} ${selected ? "wf-node--sel" : ""} ${runClass}`.trim()}
+    >
       <Handle type="target" position={Position.Left} />
       <div className="wf-node__label">{d.label}</div>
       <div className="wf-node__action">
         <code>{d.action}</code>
       </div>
       <span className="badge wf-node__kind">{d.kind}</span>
+      {d.runStatus && (
+        <span className="badge wf-node__run">{d.runStatus}</span>
+      )}
       <Handle type="source" position={Position.Right} />
     </div>
   );
@@ -132,7 +154,7 @@ function TriggerNodeView({ data }: NodeProps) {
   );
 }
 
-const nodeTypes: NodeTypes = { step: StepNodeView, trigger: TriggerNodeView };
+export const nodeTypes: NodeTypes = { step: StepNodeView, trigger: TriggerNodeView };
 
 // --- round-trip: graph <-> steps --------------------------------------------
 
@@ -203,7 +225,7 @@ function graphToSteps(nodes: CanvasNode[], edges: Edge[]): WorkflowStep[] {
 
 // Load: definition.steps -> nodes + edges (inverse of graphToSteps). Lays steps
 // out left-to-right by dependency depth.
-function stepsToGraph(
+export function stepsToGraph(
   steps: WorkflowStep[],
   verbsById: Map<string, VerbInfo>,
 ): { nodes: StepNode[]; edges: Edge[] } {
@@ -257,7 +279,7 @@ function stepsToGraph(
 
 // Accept a pasted array of steps, a {steps:[...]} object, or a full
 // {definition:{steps:[...]}} workflow, returning the steps array or null.
-function extractSteps(value: unknown): WorkflowStep[] | null {
+export function extractSteps(value: unknown): WorkflowStep[] | null {
   if (Array.isArray(value)) return value as WorkflowStep[];
   if (value && typeof value === "object") {
     const obj = value as Record<string, unknown>;
@@ -304,6 +326,14 @@ export function WorkflowCanvas() {
   const [runBusy, setRunBusy] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
   const [runResult, setRunResult] = useState<WorkflowRunRecord | null>(null);
+
+  // When set, the canvas switches to the read-only live run view (the graph
+  // lighting up). Either Run sets it (to the fresh run_id) or the "view run"
+  // control opens an existing run for the current workflow id.
+  const [runView, setRunView] = useState<{ runId: string; wfId: string } | null>(
+    null,
+  );
+  const [viewRunId, setViewRunId] = useState("");
 
   const counter = useRef(0);
 
@@ -531,12 +561,28 @@ export function WorkflowCanvas() {
     setRunError(null);
     setRunResult(null);
     try {
-      setRunResult(await api.executeWorkflow(id, {}));
+      const record = await api.executeWorkflow(id, {});
+      setRunResult(record);
+      // Open the live canvas on the new run; follow:true replays the steps it
+      // just walked so the graph still lights up after a synchronous execute.
+      if (record.run_id) setRunView({ runId: record.run_id, wfId: id });
     } catch (err) {
       setRunError(errText(err));
     } finally {
       setRunBusy(false);
     }
+  }
+
+  // Open the live run canvas for an already-existing run of the current workflow.
+  function openRunCanvas() {
+    const id = wfId.trim();
+    const rid = viewRunId.trim();
+    if (!id || !rid) {
+      setRunError("Workflow id and run id are required to view a run.");
+      return;
+    }
+    setRunError(null);
+    setRunView({ runId: rid, wfId: id });
   }
 
   const list: WorkflowSummary[] = workflows.data?.workflows ?? [];
@@ -545,6 +591,17 @@ export function WorkflowCanvas() {
     () => graphToSteps(nodes, edges),
     [nodes, edges],
   );
+
+  // Run mode takes over the canvas: the read-only graph lighting up live.
+  if (runView) {
+    return (
+      <WorkflowRunCanvas
+        runId={runView.runId}
+        wfId={runView.wfId}
+        onBack={() => setRunView(null)}
+      />
+    );
+  }
 
   return (
     <div className="wf-studio">
@@ -611,6 +668,16 @@ export function WorkflowCanvas() {
             ))}
           {saveError && <p className="error">{saveError}</p>}
           {runError && <p className="error">{runError}</p>}
+          <div className="kv">
+            <input
+              placeholder="existing run id"
+              value={viewRunId}
+              onChange={(e) => setViewRunId(e.target.value)}
+            />
+            <button className="btn" onClick={openRunCanvas}>
+              View run
+            </button>
+          </div>
         </div>
 
         <div className="form">

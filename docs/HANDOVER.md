@@ -427,6 +427,21 @@ consumer-side nesting). Cross-linked from Kanban/Chat/Insight/Approvals/Studio/
 Canvas via a shared `RunLink`/`openRun`. New bound invariants (debt still 0):
 SEC-56, FR-EVT-03. DoD: `docs/DEFINITION-OF-DONE-round-eleven.md`.
 
+## 7.10 Round Twelve (the live run canvas)
+
+Backlog item 3: the workflow graph lights up as the interpreter walks it. Beat A
+(backend): `interpreter.py` emits a `workflow_step` event per step (step_id +
+running/ok/failed/skipped) on the run stream (fail-safe), and binds the whole run
+to one stream id (`replace(context, run_id=rid)`) so step events, the steps' tool
+events, and audit cohere - also fixing route-runs that previously emitted nothing
+and orphaned their audit rows. Beat B (frontend, no new dep): `WorkflowRunCanvas.tsx`
+- a read-only sibling reusing `WorkflowCanvas`'s graph helpers, overlaying per-node
+state from live `workflow_step` events (`node.id === step_id`), pulsing on running
+(reduced-motion respected), opening the Run drawer on node click. Integration catch:
+the spawner's `subagent` event now emits `child_run_id` (was `run_id`) to match the
+UI reader - a tsc-invisible runtime break, caught at integration. New bound
+invariant (debt still 0): FR-EVT-04. DoD: `docs/DEFINITION-OF-DONE-round-twelve.md`.
+
 ---
 
 ## 8. Quality / governance gate
