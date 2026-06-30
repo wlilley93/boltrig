@@ -2757,6 +2757,18 @@ select:focus {
   padding: 0 4px;
 }
 
+/* --- Run replay scrubber -------------------------------------------------- */
+.run-replay {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0 10px;
+}
+.run-replay input[type="range"] {
+  flex: 1;
+  accent-color: var(--color-accent);
+}
+
 /* --- Budget burn-down rows (Insight) -------------------------------------- */
 .budget-row {
   display: flex;

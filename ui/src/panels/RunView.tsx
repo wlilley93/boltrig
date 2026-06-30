@@ -60,6 +60,10 @@ function RunDrawer({ runId }: { runId: string }) {
   const [events, setEvents] = useState<ChatEvent[]>([]);
   const [streamError, setStreamError] = useState<string | null>(null);
   const [resolvedHitls, setResolvedHitls] = useState<Record<string, string>>({});
+  // replay: once the run has settled, the scrubber reveals events up to an index
+  // (null = show everything / follow live).
+  const [settled, setSettled] = useState(false);
+  const [replayIdx, setReplayIdx] = useState<number | null>(null);
 
   // Follow the run's event stream live; the same SSE vocabulary Chat renders.
   useEffect(() => {
@@ -67,17 +71,26 @@ function RunDrawer({ runId }: { runId: string }) {
     setEvents([]);
     setStreamError(null);
     setResolvedHitls({});
+    setSettled(false);
+    setReplayIdx(null);
     streamRunEvents(
       runId,
       (ev) => setEvents((prev) => [...prev, ev]),
       { signal: ctrl.signal, follow: true },
-    ).catch((err) => {
-      if (!ctrl.signal.aborted) setStreamError(errText(err));
-    });
+    )
+      .then(() => {
+        if (!ctrl.signal.aborted) setSettled(true);
+      })
+      .catch((err) => {
+        if (!ctrl.signal.aborted) setStreamError(errText(err));
+      });
     return () => ctrl.abort();
   }, [runId]);
 
-  const turn = useMemo(() => normalizeEvents(events), [events]);
+  const canReplay = settled && events.length > 1;
+  const shownEvents =
+    replayIdx !== null ? events.slice(0, Math.max(0, Math.min(replayIdx, events.length))) : events;
+  const turn = useMemo(() => normalizeEvents(shownEvents), [shownEvents]);
   const root = tree.data?.root;
   const statuses = root?.statuses
     ? Object.entries(root.statuses)
@@ -143,7 +156,33 @@ function RunDrawer({ runId }: { runId: string }) {
 
             {/* Live / snapshot event stream, rendered with the chat renderer. */}
             <div className="run-events">
-              <h4>Events</h4>
+              <div className="kv" style={{ justifyContent: "space-between" }}>
+                <h4 style={{ margin: 0 }}>Events</h4>
+                {canReplay && (
+                  <span className="muted" style={{ fontSize: 11 }}>
+                    {replayIdx === null ? "showing all" : `step ${shownEvents.length} / ${events.length}`}
+                  </span>
+                )}
+              </div>
+              {canReplay && (
+                <div className="run-replay">
+                  <input
+                    type="range"
+                    min={1}
+                    max={events.length}
+                    value={replayIdx ?? events.length}
+                    aria-label="Replay position"
+                    onChange={(e) => setReplayIdx(Number(e.target.value))}
+                  />
+                  <button
+                    className="btn btn--sm"
+                    onClick={() => setReplayIdx(null)}
+                    title="Show the whole run"
+                  >
+                    End
+                  </button>
+                </div>
+              )}
               <TurnExtras
                 turn={turn}
                 resolvedHitls={resolvedHitls}
