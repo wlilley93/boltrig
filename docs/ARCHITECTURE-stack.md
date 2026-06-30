@@ -3,11 +3,15 @@
 A disposition record. The question raised: should Nankle be split into four
 distinct `nankle-[piece]` units (kernel / frontend / database / agent-runtime)?
 
-This is a first-impression consolidation/split fork, governed by the SPEC-LAW-3
-three-gate test (single-source / demonstrated-need / severability) and the
-consolidation-over-fragmentation steering principle. It is disposed here against
-the ground-truthed code; formal enactment as binding caselaw is a matter for the
-VJS court when the realm is reachable.
+This is a consolidation/split fork, governed by the SPEC-LAW-3 three-gate test
+(single-source / demonstrated-need / severability) and the
+consolidation-over-fragmentation steering principle. It was routed through the VJS
+realm: `vjs route` returned **AllowedWithConditions, court_required=false,
+log_required=true** (permit `PERMIT-1782822939`, basis `ACT-COMPUTER-FIRST-REALM:s11`
+- the kernel is clerk not court, no court trigger fires), and the disposition below
+is recorded as binding decision log **LOG-2026-06-30-123606**. It is not a court
+matter; it is a routable implementation decision, disposed here against the
+ground-truthed code.
 
 ## The finding: Nankle is already a stack with enforced layer boundaries
 
