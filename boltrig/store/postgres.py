@@ -457,6 +457,10 @@ class PostgresStore:
         )
         return _budget(row)
 
+    async def list_budgets(self, tenant_id):
+        rows = await self._pool.fetch("SELECT * FROM budgets WHERE tenant_id=$1", tenant_id)
+        return [_budget(r) for r in rows]
+
     async def set_budget(self, b: Budget) -> None:
         await self._pool.execute(
             """INSERT INTO budgets (id, tenant_id, scope_type, token_limit, cost_limit_micros,

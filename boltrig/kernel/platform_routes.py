@@ -398,6 +398,30 @@ def register_platform_routes(app, *, principal_dep, get_kernel) -> None:
             by_actor[e.actor] = by_actor.get(e.actor, 0) + c
         return {"total_cost_micros": total, "by_actor": by_actor, "scope": depts or "all"}
 
+    @app.get("/v1/budgets")
+    async def budgets(request: Request, k=K, p=P) -> dict:
+        # The tenant's budgets with live burn-down. Department-scoped budgets are
+        # filtered to the caller's own departments (SEC-33); tenant + workflow
+        # budgets are visible to anyone in the tenant.
+        depts = _scope_depts(p)
+        out = []
+        for b in await k.store.list_budgets(p.tenant_id):
+            if b.scope_type == "department" and depts is not None and b.id not in depts:
+                continue
+            out.append(
+                {
+                    "id": b.id,
+                    "scope_type": b.scope_type,
+                    "window": b.window,
+                    "hard_stop": b.hard_stop,
+                    "token_limit": b.token_limit,
+                    "spent_tokens": b.spent_tokens,
+                    "cost_limit_micros": b.cost_limit_micros,
+                    "spent_micros": b.spent_micros,
+                }
+            )
+        return {"budgets": out, "scope": depts or "all"}
+
     @app.get("/v1/audit/search")
     async def audit_search(request: Request, actor: str | None = None, verb: str | None = None,
                            run: str | None = None, k=K, p=P) -> dict:

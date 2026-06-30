@@ -2757,6 +2757,39 @@ select:focus {
   padding: 0 4px;
 }
 
+/* --- Budget burn-down rows (Insight) -------------------------------------- */
+.budget-row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+.budget-row:last-child {
+  border-bottom: none;
+}
+.budget-bar {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+.budget-bar__fill {
+  display: block;
+  height: 100%;
+  background: var(--color-accent);
+  box-shadow: 0 0 6px rgba(61, 211, 240, 0.4);
+  transition: width var(--dur-med) var(--ease);
+}
+.budget-bar__fill.is-warn {
+  background: var(--color-warn);
+  box-shadow: 0 0 6px rgba(232, 179, 57, 0.4);
+}
+.budget-bar__fill.is-down {
+  background: var(--color-down);
+  box-shadow: 0 0 6px rgba(240, 101, 74, 0.4);
+}
+
 /* --- Sidebar drag-to-resize handle ---------------------------------------- */
 .side__resizer {
   position: absolute;

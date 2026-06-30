@@ -27,6 +27,7 @@ import type {
   ConnectionsResponse,
   ConversationResponse,
   ConversationsResponse,
+  BudgetsResponse,
   CostResponse,
   CreateEvalCaseRequest,
   CreateInvitationRequest,
@@ -425,6 +426,10 @@ export const api = {
 
   cost(): Promise<CostResponse> {
     return request<CostResponse>("/v1/cost");
+  },
+
+  budgets(): Promise<BudgetsResponse> {
+    return request<BudgetsResponse>("/v1/budgets");
   },
 
   auditSearch(

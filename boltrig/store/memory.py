@@ -228,6 +228,9 @@ class InMemoryStore:
     def set_budget(self, budget: Budget) -> None:
         self._budgets[(budget.tenant_id, budget.id)] = budget
 
+    async def list_budgets(self, tenant_id):
+        return [b for (t, _), b in self._budgets.items() if t == tenant_id]
+
     async def consume_budget(self, tenant_id, scope_id, tokens, micros):
         """Reserve budget. Returns False (without spending) if a hard-stop budget
         would be exceeded; True otherwise. The read-modify-write has no await

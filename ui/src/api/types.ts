@@ -536,6 +536,22 @@ export interface CostResponse {
   scope: string[] | string;
 }
 
+export interface BudgetItem {
+  id: string;
+  scope_type: string; // tenant | department | workflow
+  window: string; // run | daily | monthly
+  hard_stop: boolean;
+  token_limit: number | null;
+  spent_tokens: number;
+  cost_limit_micros: number | null;
+  spent_micros: number;
+}
+
+export interface BudgetsResponse {
+  budgets: BudgetItem[];
+  scope: string[] | string;
+}
+
 export interface AuditRow {
   seq: number;
   ts: string;
