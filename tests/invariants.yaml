@@ -345,3 +345,7 @@ invariants:
     tests:
       - tests/security/test_round_eight.py::test_web_fetch_is_grant_checked
       - tests/security/test_round_eight.py::test_web_fetch_is_hitl_gated
+  SEC-54:
+    description: The stack foundation layers never depend upward - models/store/adapters import only the foundation, keeping the seam a future repo-split would cleave along clean.
+    tests:
+      - tests/security/test_severability.py::test_foundation_layers_do_not_depend_upward

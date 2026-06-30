@@ -12,7 +12,7 @@ The gate (the K-29 / K-30 ratchet) fails the build if:
   (an undeclared invariant), or
 - the catalogue claims a test node id that no marker actually backs (drift).
 
-Binding debt may only ever decrease. Today: **74 declared, debt 0** (98 bound
+Binding debt may only ever decrease. Today: **75 declared, debt 0** (99 bound
 test node ids), per `python scripts/check_invariants.py`. `tests/invariants.yaml`
 is the authoritative, machine-checked list; the table below is the curated
 human-readable view and highlights the core kernel set plus each round's new
@@ -110,6 +110,12 @@ and `FR*` ids are Nankle-local (drawn from the SRS) and never restate a `K-*`.
 | --- | --- | --- |
 | **SEC-52** | `web.fetch` is SSRF-guarded and NetworkConfig-enforced - private/loopback/link-local/metadata targets, blocked or non-allowed domains, and air-gap are refused before any network call. | `tests/security/test_round_eight.py::test_ssrf_guard_blocks_internal_addresses`, `::test_network_policy_enforced`, `::test_adapter_refuses_internal_target_before_any_fetch` |
 | **SEC-53** | Internet access is a governed verb - `web.fetch` runs the chokepoint (grant-checked and HITL-gated as a high-consequence verb), so it cannot bypass the kernel and injected content cannot escalate. | `tests/security/test_round_eight.py::test_web_fetch_is_grant_checked`, `::test_web_fetch_is_hitl_gated` |
+
+### Round Nine (stack boundary)
+
+| Invariant | Meaning | Bound test(s) |
+| --- | --- | --- |
+| **SEC-54** | The stack foundation layers never depend upward - `models`/`store`/`adapters` import only the foundation, keeping the seam a future repo-split would cleave along clean. | `tests/security/test_severability.py::test_foundation_layers_do_not_depend_upward` |
 
 ## How a new invariant is added
 

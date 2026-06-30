@@ -62,3 +62,38 @@ def test_kernel_and_models_have_no_pi_or_sidecar_coupling():
     assert not offenders, "Pi/sidecar coupling in kernel/models (SEC-28):\n" + "\n".join(
         offenders
     )
+
+
+# --- The stack layer-dependency rule (Round Nine, ARCHITECTURE-stack.md) -------
+# Nankle is a stack: foundation (models) -> data (store) / capability (adapters)
+# -> kernel -> runtime (fleet) -> api/ui. The foundation layers must never depend
+# UPWARD on the kernel or the runtime, so the seam a future repo-split would cleave
+# along stays clean. The kernel is the integration layer and may pull lower layers;
+# this rule pins only the lower layers (SEC-54).
+_LAYER_RULES = {
+    # layer dir -> the nankle subpackages it must NOT import
+    "models": ("kernel", "fleet", "api", "store", "adapters", "workflows",
+               "memory", "identity", "observability", "config", "skills", "work"),
+    "store": ("kernel", "fleet", "api", "adapters", "workflows", "memory",
+              "identity", "observability", "config", "skills", "work"),
+    "adapters": ("kernel", "fleet", "api", "store", "workflows", "memory",
+                 "identity", "observability", "config", "skills", "work"),
+}
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-54")
+def test_foundation_layers_do_not_depend_upward():
+    offenders: list[str] = []
+    for layer, forbidden in _LAYER_RULES.items():
+        pattern = re.compile(
+            r"^\s*(?:from|import)\s+nankle\.(" + "|".join(forbidden) + r")\b"
+        )
+        for path in (_ROOT / layer).rglob("*.py"):
+            for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                if pattern.match(line):
+                    offenders.append(f"{path}:{n}: {line.strip()}")
+    assert not offenders, (
+        "stack boundary breach - a foundation layer depends upward (SEC-54):\n"
+        + "\n".join(offenders)
+    )
