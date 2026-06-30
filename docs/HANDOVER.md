@@ -302,6 +302,34 @@ Round Three flat memory (`memory_items` + `/v1/memory/query`, SEC-31) is kept as
 the seed. New bound invariants (debt still 0): SEC-40..45. Full DoD:
 `docs/DEFINITION-OF-DONE-round-five.md`.
 
+## 7.4 Round Six (pi runtime: continuity, model gateway, egress)
+
+The pi lane is the only agentic runtime; this closes its three fleet-layer gaps
+(`docs/requirements-pi-runtime.md`). Kernel dispatch untouched. The spec's
+repo-grounding was verified first - notably `PiRuntime` gets a pre-resolved
+endpoint, so the gateway seam is at the spawner; and the sidecar egress was only
+documented, not enforced.
+
+- **Continuity** (`fleet/continuity.py` + `fleet/chat.py`): renders the
+  owner-scoped conversation transcript into the task before `spawn()`. Plain
+  per-message concatenation => deterministic + append-only (prefix stable for the
+  gateway cache, SEC-46); composed from the tenant/conversation-scoped
+  `list_messages` so only the caller's own history enters (SEC-49). On by default
+  (`NANKLE_CONTINUITY`). Native/Store-backed (the spec's pick over Rivet).
+- **Model gateway** (`fleet/model_gateway.py` + `fleet/spawn.py`): a read-side
+  seam (no authz, P1). TTL `conversation_id -> model` binding pins a conversation
+  to one model across turns (run_id is the wrong key, SEC-47). Spawner points
+  `base_url` at the gateway; **sensitive data is never re-routed** (residency).
+  Inert unless `NANKLE_MODEL_GATEWAY_URL` set.
+- **Enforced egress** (`docker-compose.yml` + `deploy/compose.secure.yml`): the
+  Pi sidecar sits on a `sandbox` network only (reaches the kernel MCP, not the
+  DB/rest); the secure overlay makes `sandbox` `internal: true` (no arbitrary
+  egress). Bound by a manifest-lint test (SEC-48). A hard sandbox substrate
+  (agentOS) is deferred until a real third-party Pi loop replaces the stand-in.
+
+New bound invariants (debt still 0): SEC-46..49. Full DoD:
+`docs/DEFINITION-OF-DONE-round-six.md`.
+
 ---
 
 ## 8. Quality / governance gate

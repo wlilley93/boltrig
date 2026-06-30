@@ -12,7 +12,7 @@ The gate (the K-29 / K-30 ratchet) fails the build if:
   (an undeclared invariant), or
 - the catalogue claims a test node id that no marker actually backs (drift).
 
-Binding debt may only ever decrease. Today: **64 declared, debt 0** (82 bound
+Binding debt may only ever decrease. Today: **68 declared, debt 0** (87 bound
 test node ids), per `python scripts/check_invariants.py`. `tests/invariants.yaml`
 is the authoritative, machine-checked list; the table below is the curated
 human-readable view and highlights the core kernel set plus each round's new
@@ -85,6 +85,15 @@ and `FR*` ids are Nankle-local (drawn from the SRS) and never restate a `K-*`.
 | **SEC-43** | Sensitive memory must use a local endpoint; a misroute is blocked and audited. | `tests/security/test_round_five.py::test_sensitive_memory_stays_local` |
 | **SEC-44** | Erasure is complete (node + derived edges/facts), engine-confirmed, ledgered and audited. | `tests/security/test_round_five.py::test_complete_audited_erasure` |
 | **SEC-45** | Recall is least-privilege and audited - query and count recorded, fact contents never. | `tests/security/test_round_five.py::test_recall_is_audited_without_leaking_contents` |
+
+### Round Six (pi runtime: continuity, model gateway, egress)
+
+| Invariant | Meaning | Bound test(s) |
+| --- | --- | --- |
+| **SEC-46** | Conversation continuity is deterministic and append-only - an earlier turn's render is a prefix of a later one (prefix stability for the gateway cache) - and adds no authority (it composes only persisted text). | `tests/security/test_round_six.py::test_continuity_is_deterministic_and_append_only` |
+| **SEC-47** | The model gateway binds per conversation (not per run), pins a conversation to one model across turns, and never re-routes sensitive data (residency preserved). | `tests/security/test_round_six.py::test_gateway_binds_per_conversation_not_run`, `::test_gateway_never_reroutes_sensitive_and_is_inert_when_unset` |
+| **SEC-48** | The Pi sidecar's network egress is enforced by the deploy manifests (sandbox-only; internal in the secure overlay), not merely documented. | `tests/security/test_round_six.py::test_pi_sidecar_egress_is_enforced_in_manifests` |
+| **SEC-49** | Continuity is scope-safe - only the caller's own tenant/conversation history is ever composed into a prompt. | `tests/security/test_round_six.py::test_continuity_only_composes_the_callers_own_conversation` |
 
 ## How a new invariant is added
 
