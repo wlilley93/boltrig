@@ -7,7 +7,7 @@ RUN corepack enable
 
 # Install with pnpm (the dev package manager) from the frozen lockfile, so the
 # image is built from the SAME dependency graph developers run - reproducible.
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 
 COPY . .
