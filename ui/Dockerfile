@@ -1,14 +1,14 @@
 # Multi-stage: build the static SPA with node, then serve it with nginx.
 # nginx also reverse-proxies /v1 and /healthz to the kernel service.
 
-FROM node:20-alpine AS build
+FROM node:22-alpine AS build
 WORKDIR /app
 RUN corepack enable
 
 # Install with pnpm (the dev package manager) from the frozen lockfile, so the
 # image is built from the SAME dependency graph developers run - reproducible.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile --ignore-scripts && pnpm rebuild esbuild
 
 COPY . .
 RUN pnpm run build
