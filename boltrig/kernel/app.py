@@ -61,6 +61,13 @@ class Principal:
 PrincipalResolver = Callable[[Request], Awaitable[Principal]]
 
 
+def _error_envelope(e: BoltrigError) -> dict:
+    """The one canonical kernel error body: a 403 is a denial, anything else is
+    an error. Every transport surface returns this shape so a client parses one
+    envelope, never per-route variants."""
+    return {"status": "denied" if e.status_code == 403 else "error", "reason": e.reason}
+
+
 async def _dev_principal(request: Request) -> Principal:
     """Development resolver. Trusts headers; replace with OIDC/SAML in prod
     (see ``boltrig.identity.auth``). SEC-01 requires real auth in production."""
@@ -204,6 +211,15 @@ def create_app(
     from .web_security import install_security
 
     install_security(app)
+
+    # One central envelope for any BoltrigError that reaches the transport
+    # uncaught: a route no longer needs its own try/except to render the
+    # canonical {status, reason} body (it still may, e.g. to add PendingHuman /
+    # DegradedMode handling). This is the single source of the error shape.
+    @app.exception_handler(BoltrigError)
+    async def _on_boltrig_error(_request: Request, exc: BoltrigError) -> JSONResponse:
+        return JSONResponse(_error_envelope(exc), status_code=exc.status_code)
+
     # Prebuilt kernel is set synchronously so it works even without lifespan
     # (Starlette TestClient used without a context manager).
     if kernel is not None:
@@ -264,11 +280,7 @@ def create_app(
             )
         except DegradedMode as e:
             return JSONResponse({"status": "degraded", "output": e.output}, status_code=503)
-        except BoltrigError as e:
-            return JSONResponse(
-                {"status": "denied" if e.status_code == 403 else "error", "reason": e.reason},
-                status_code=e.status_code,
-            )
+        # any other BoltrigError -> the central exception handler (canonical envelope)
 
     @app.post("/v1/mcp")
     async def mcp(
@@ -302,14 +314,10 @@ def create_app(
             tenant_id=p.tenant_id, user_id=p.subject, role=p.role,
             message=body.message, conversation_id=body.conversation_id,
         )
-        # RBAC / access errors happen before the first event - surface them as JSON
+        # RBAC / access errors happen before the first event and propagate to the
+        # central exception handler (canonical envelope) - the stream hasn't begun.
         try:
             first = await gen.__anext__()
-        except BoltrigError as e:
-            return JSONResponse(
-                {"status": "denied" if e.status_code == 403 else "error", "reason": e.reason},
-                status_code=e.status_code,
-            )
         except StopAsyncIteration:
             first = None
 
@@ -344,12 +352,10 @@ def create_app(
         chat_svc = getattr(request.app.state, "chat", None)
         if chat_svc is None:
             return JSONResponse({"error": "chat_unavailable"}, status_code=503)
-        try:
-            messages = await chat_svc.get_messages(
-                p.tenant_id, p.subject, p.role, conversation_id
-            )
-        except BoltrigError as e:  # ConversationForbidden -> 403 (SEC-25)
-            return JSONResponse({"status": "denied", "reason": e.reason}, status_code=e.status_code)
+        # ConversationForbidden (403, SEC-25) propagates to the central handler.
+        messages = await chat_svc.get_messages(
+            p.tenant_id, p.subject, p.role, conversation_id
+        )
         if messages is None:
             return JSONResponse({"error": "not_found"}, status_code=404)
         return {
@@ -378,10 +384,9 @@ def create_app(
         spawner_fn = getattr(request.app.state, "spawner", None)
         if spawner_fn is None:
             return JSONResponse({"error": "spawner_unavailable"}, status_code=503)
-        try:
-            return JSONResponse(await spawner_fn(p, body))
-        except BoltrigError as e:
-            return JSONResponse({"error": e.reason}, status_code=e.status_code)
+        # a BoltrigError propagates to the central handler (canonical envelope -
+        # was the odd {"error": ...} shape before this consolidation)
+        return JSONResponse(await spawner_fn(p, body))
 
     @app.get("/v1/hitl")
     async def list_hitl(
