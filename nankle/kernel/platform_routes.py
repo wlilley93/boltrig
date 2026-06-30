@@ -286,6 +286,23 @@ def register_platform_routes(app, *, principal_dep, get_kernel) -> None:
         except LookupError:
             return JSONResponse({"error": "unknown_workflow"}, status_code=404)
 
+    @app.post("/v1/workflows/{wf_id}/execute")
+    async def execute_workflow(wf_id: str, body: dict, request: Request, k=K, p=P) -> JSONResponse:
+        # Run the stored definition's steps through the chokepoint, each as its own
+        # durable boundary (Round Seven interpreter). Steps run under the caller's
+        # own grants - a step cannot escalate (SEC-50).
+        lib = _platform(request).get("workflows")
+        if lib is None:
+            return JSONResponse({"error": "workflows_unavailable"}, status_code=503)
+        try:
+            ctx = p.context()
+            record = await lib.execute(p.tenant_id, wf_id, body.get("inputs", {}), ctx)
+            await _audit(k, p, "workflow.execute",
+                         {"id": wf_id, "run_id": record.get("run_id"), "status": record.get("status")})
+            return JSONResponse(record)
+        except LookupError:
+            return JSONResponse({"error": "unknown_workflow"}, status_code=404)
+
     @app.get("/v1/workflows/{wf_id}/runs")
     async def workflow_runs(wf_id: str, k=K, p=P) -> dict:
         events = await k.store.audit_query(p.tenant_id, limit=1000)

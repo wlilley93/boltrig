@@ -316,3 +316,21 @@ invariants:
     description: Continuity is scope-safe - only the caller's own tenant/conversation history is ever composed into a prompt.
     tests:
       - tests/security/test_round_six.py::test_continuity_only_composes_the_callers_own_conversation
+  FR-CTL-01:
+    description: Agent/department profile config takes effect live (re-read per call via the provider), with no router reconstruction.
+    tests:
+      - tests/integration/test_round_seven.py::test_chief_of_staff_reloads_departments_live
+  FR-CTL-02:
+    description: The generic interpreter executes a stored workflow's steps in dependency order, each as its own durable boundary through the kernel, skipping descendants of a failed step.
+    tests:
+      - tests/integration/test_round_seven.py::test_interpreter_runs_steps_in_dependency_order_each_durable
+      - tests/integration/test_round_seven.py::test_interpreter_skips_descendants_of_a_failed_step
+  SEC-50:
+    description: Every workflow step is dispatched through the kernel chokepoint under the caller's own grants - a step can neither escalate nor bypass governance.
+    tests:
+      - tests/security/test_round_seven.py::test_workflow_step_cannot_escalate_past_caller_grants
+  SEC-51:
+    description: Control-plane config writes are dispatched as kernel verbs (grant-checked, audited, HITL-gateable), not an ungoverned store write.
+    tests:
+      - tests/security/test_round_seven.py::test_control_plane_write_is_grant_checked
+      - tests/security/test_round_seven.py::test_control_plane_write_is_hitl_gated_and_audited

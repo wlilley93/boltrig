@@ -9,6 +9,7 @@ is fully functional offline (P9). It never executes work itself - it delegates.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -45,6 +46,7 @@ class ChiefOfStaff:
         *,
         runtime: Runtime | None = None,
         default_department: str | None = None,
+        departments_provider: Callable[[], list[Department]] | None = None,
     ) -> None:
         self._kernel = kernel
         self._departments = list(departments)
@@ -52,6 +54,22 @@ class ChiefOfStaff:
         self._default = default_department or (
             departments[0].name if departments else "general"
         )
+        # Control-plane live-reload (Round Seven gap 2.1): when a provider is
+        # given, the current department set is re-read on every route, so an
+        # admin/manifest edit takes effect WITHOUT reconstructing the router. The
+        # provider must never raise the routing path - it falls back to the
+        # construction-time list on any failure (P9).
+        self._departments_provider = departments_provider
+
+    def _current_departments(self) -> list[Department]:
+        """The live department set (re-read per call when a provider is wired)."""
+        if self._departments_provider is None:
+            return self._departments
+        try:
+            current = self._departments_provider()
+        except Exception:  # config read must never crash routing (P9)
+            return self._departments
+        return list(current) if current else self._departments
 
     async def global_view(self, tenant_id: str) -> list[WorkItem]:
         """The maintained global view: all work items for the tenant (US-FLT-01)."""
@@ -80,7 +98,7 @@ class ChiefOfStaff:
         ctx = context or InvocationContext(
             tenant_id=work_item.tenant_id, actor="chief-of-staff", actor_tier="tier1"
         )
-        names = [d.name for d in self._departments]
+        names = [d.name for d in self._current_departments()]
         prompt = (
             "Route this work item to exactly one department.\n"
             f"Departments: {', '.join(names)}\n"
@@ -98,11 +116,12 @@ class ChiefOfStaff:
 
     def _route_deterministic(self, work_item: WorkItem) -> str:
         """Deterministic fallback: source channel, then intent keyword."""
-        for dept in self._departments:
+        departments = self._current_departments()
+        for dept in departments:
             if work_item.source in dept.queue_sources:
                 return dept.name
         intent = (work_item.intent or "").lower()
-        for dept in self._departments:
+        for dept in departments:
             if any(kw.lower() in intent for kw in dept.intent_keywords):
                 return dept.name
         return self._default

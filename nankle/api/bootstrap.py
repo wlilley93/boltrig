@@ -62,6 +62,7 @@ async def _seed_default(kernel: Kernel) -> None:
     if inspect.isawaitable(res):  # PostgresStore seed helper is async
         await res
     await kernel.register_adapter(_DEFAULT_TENANT, build_tickets())
+    await _register_control_plane(kernel, _DEFAULT_TENANT)
 
 
 async def _register_memory(kernel: Kernel, tenant_id: str, memory_cfg) -> None:
@@ -86,9 +87,20 @@ async def _register_memory(kernel: Kernel, tenant_id: str, memory_cfg) -> None:
     log.info("memory subsystem enabled (engine=%s)", memory_cfg.get("engine", "local"))
 
 
+async def _register_control_plane(kernel: Kernel, tenant_id: str) -> None:
+    """Register the control-plane adapter so config amendment flows through the
+    chokepoint (Round Seven, 5.1): control.* verbs are grant-checked, audited and
+    HITL-gateable like any other action (SEC-51)."""
+    from nankle.config.control_plane import build_control_plane_adapter
+
+    await kernel.register_adapter(tenant_id, build_control_plane_adapter(kernel.store))
+    log.info("control-plane verbs registered (governed config amendment)")
+
+
 async def _seed_from_manifest(kernel: Kernel, manifest) -> None:
     await apply_manifest(kernel, manifest)
     await _register_memory(kernel, manifest.tenant_id, manifest.section("memory"))
+    await _register_control_plane(kernel, manifest.tenant_id)
     skills_dir = _find(_SKILLS_DIR_CANDIDATES)
     if skills_dir:
         from nankle.skills import load_skills_dir
@@ -201,7 +213,9 @@ def build_app():
             "admin": AdminConfig(kernel.store, tenant_id=tenant, path=manifest_path),
             "eval": EvalRunner(kernel, spawner),
             "spawner": spawner,
-            "workflows": WorkflowLibrary(kernel.store, executor=register_workers(kernel)),
+            "workflows": WorkflowLibrary(
+                kernel.store, executor=register_workers(kernel), kernel=kernel
+            ),
         }
 
     return create_app(

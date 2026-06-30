@@ -12,7 +12,9 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from nankle.models import WorkflowDefinition, utcnow
+from nankle.models import InvocationContext, WorkflowDefinition, utcnow
+
+from .interpreter import run_workflow_definition
 
 
 class WorkflowLibrary:
@@ -20,11 +22,17 @@ class WorkflowLibrary:
 
     An optional ``executor`` (the fleet's durable backbone from
     ``register_workers``) makes ``trigger`` actually enqueue a run; without one,
-    ``trigger`` returns a plain descriptor (offline-safe, P9)."""
+    ``trigger`` returns a plain descriptor (offline-safe, P9).
 
-    def __init__(self, store: Any, executor: Any | None = None) -> None:
+    An optional ``kernel`` enables ``execute`` (Round Seven): the generic
+    interpreter that walks a stored definition's steps and dispatches each
+    through the chokepoint. ``trigger`` stays the enqueue seam (in production the
+    enqueued run's body calls ``execute``)."""
+
+    def __init__(self, store: Any, executor: Any | None = None, *, kernel: Any | None = None) -> None:
         self._store = store
         self._executor = executor
+        self._kernel = kernel
 
     async def register(self, wf: WorkflowDefinition) -> None:
         """Persist (or replace) a workflow definition."""
@@ -99,3 +107,23 @@ class WorkflowLibrary:
                 f"workflow:{wf.id}", _enqueue, run_id=run_id
             )
         return descriptor
+
+    async def execute(
+        self, tenant: str, wf_id: str, inputs: dict[str, Any], context: InvocationContext
+    ) -> dict[str, Any]:
+        """Interpret a stored workflow: run its steps through the chokepoint.
+
+        Resolves the definition, then hands it to the generic interpreter, which
+        walks the steps in dependency order and dispatches each as its own
+        durable boundary via ``kernel.invoke`` (Round Seven, control-plane gap 3).
+        Raises ``LookupError`` if the workflow is unknown (fail-closed). Requires
+        a ``kernel`` (wired at construction); without one this is a config error.
+        """
+        if self._kernel is None:
+            raise RuntimeError("WorkflowLibrary.execute requires a kernel")
+        wf = await self.get(tenant, wf_id)
+        if wf is None:
+            raise LookupError(f"unknown workflow '{wf_id}' for tenant '{tenant}'")
+        return await run_workflow_definition(
+            self._kernel, wf, inputs, context, executor=self._executor
+        )
