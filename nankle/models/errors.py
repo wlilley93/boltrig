@@ -99,6 +99,16 @@ class SensitiveDataMisrouted(NankleError):
     reason = "sensitive_data_misrouted"
 
 
+class NetworkPolicyViolation(NankleError):
+    """An egress (web.fetch) target was refused by network policy or SSRF guard.
+
+    Either the NetworkConfig (air-gap / allow / block lists) denied the domain, or
+    the target resolved to a private / link-local / metadata address (SEC-52)."""
+
+    status_code = 403
+    reason = "network_policy_violation"
+
+
 # --- Control-flow signals (carry a payload; not failures) ---------------------
 class PendingHuman(NankleError):
     """Execution paused for a human decision (HITL gate, US-HIL-01).

@@ -63,6 +63,7 @@ async def _seed_default(kernel: Kernel) -> None:
         await res
     await kernel.register_adapter(_DEFAULT_TENANT, build_tickets())
     await _register_control_plane(kernel, _DEFAULT_TENANT)
+    await _register_web_fetch(kernel, _DEFAULT_TENANT, {})
 
 
 async def _register_memory(kernel: Kernel, tenant_id: str, memory_cfg) -> None:
@@ -97,10 +98,26 @@ async def _register_control_plane(kernel: Kernel, tenant_id: str) -> None:
     log.info("control-plane verbs registered (governed config amendment)")
 
 
+async def _register_web_fetch(kernel: Kernel, tenant_id: str, network_cfg) -> None:
+    """Register the governed internet-access verb (Round Eight, S4). web.fetch runs
+    the chokepoint like any verb; registering it does NOT grant it (the tenant
+    ceiling + caller grants still decide). It enforces NetworkConfig + the SSRF
+    guard (SEC-52)."""
+    from nankle.adapters.builtin.web_fetch import build_web_fetch_adapter
+
+    await kernel.register_adapter(tenant_id, build_web_fetch_adapter(network_cfg or {}))
+    log.info("web.fetch verb registered (governed internet access, SSRF-guarded)")
+
+
 async def _seed_from_manifest(kernel: Kernel, manifest) -> None:
     await apply_manifest(kernel, manifest)
     await _register_memory(kernel, manifest.tenant_id, manifest.section("memory"))
     await _register_control_plane(kernel, manifest.tenant_id)
+    net = manifest.network
+    await _register_web_fetch(kernel, manifest.tenant_id, {
+        "air_gapped": net.air_gapped, "https_proxy": net.https_proxy,
+        "allowed_domains": net.allowed_domains, "blocked_domains": net.blocked_domains,
+    })
     skills_dir = _find(_SKILLS_DIR_CANDIDATES)
     if skills_dir:
         from nankle.skills import load_skills_dir
