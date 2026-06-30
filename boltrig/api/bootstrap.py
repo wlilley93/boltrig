@@ -260,12 +260,31 @@ def refuse_dev_auth_in_prod(env: dict | None = None) -> None:
         )
 
 
+def refuse_default_audit_key_in_prod(env: dict | None = None) -> None:
+    """Abort if the audit-chain HMAC key is unset/default with a production signal
+    (K-19). The hash chain is only tamper-evident while the key is secret; shipping
+    the in-source `dev-insecure-audit-key` in prod makes the chain forgeable. Fail
+    hard, mirroring refuse_dev_auth_in_prod."""
+    import os
+
+    e = env if env is not None else os.environ
+    signal = production_signal(e)
+    key = e.get("BOLTRIG_AUDIT_HMAC_KEY")
+    if signal is not None and (not key or key == "dev-insecure-audit-key"):
+        raise RuntimeError(
+            f"FATAL: BOLTRIG_AUDIT_HMAC_KEY is unset/default with a production signal "
+            f"({signal}). The audit chain is forgeable without a secret key (K-19). "
+            "Set a strong BOLTRIG_AUDIT_HMAC_KEY."
+        )
+
+
 def select_principal_resolver():
     """Choose the auth resolver from the environment (SEC-01).
 
     OIDC when the OIDC_* trio is set; the header-trusting dev resolver only when
     BOLTRIG_DEV_AUTH=1 (local dev); otherwise fail closed (refuse all requests).
     """
+    refuse_default_audit_key_in_prod()  # K-19: a default audit key in prod is fatal
     settings = load_settings()
     if settings.oidc_configured:
         from boltrig.identity import OidcVerifier, build_principal_resolver

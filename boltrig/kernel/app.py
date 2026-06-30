@@ -151,7 +151,22 @@ def create_app(
 
     ``chat_service`` (or ``chat_factory(kernel)``) supplies the conversational
     service; it is injected (the kernel stays unaware of the fleet)."""
-    resolver = principal_resolver or _dev_principal
+    resolver = principal_resolver
+    if resolver is None:
+        # SEC-60/IAM-09: the header-trusting dev resolver is the dangerous default.
+        # Refuse to fall back to it under any production signal - a deployment that
+        # builds the app without a resolver must not silently get full-trust auth.
+        from boltrig.api.bootstrap import production_signal
+
+        sig = production_signal()
+        if sig is not None:
+            raise RuntimeError(
+                f"FATAL: create_app() received no principal_resolver with a production "
+                f"signal ({sig}); the header-trusting dev resolver must never be the "
+                "default in production. Pass an OIDC/PAT resolver (or use "
+                "bootstrap.select_principal_resolver())."
+            )
+        resolver = _dev_principal
 
     def _chat_for(k: Kernel):
         if chat_service is not None:

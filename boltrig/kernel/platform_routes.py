@@ -90,9 +90,9 @@ def register_platform_routes(app, *, principal_dep, get_kernel) -> None:
     # === Skill Studio (SKS) ===
     @app.get("/v1/skills")
     async def list_skills(k=K, p=P) -> dict:
-        skills = [
-            s for (t, _), s in getattr(k.store, "_skills", {}).items() if t == p.tenant_id
-        ] if hasattr(k.store, "_skills") else []
+        # Use the public store method - the old getattr(_skills) only existed on the
+        # in-memory store, so this list rendered empty on Postgres.
+        skills = await k.store.list_skills(p.tenant_id)
         return {"skills": [{"id": s.id, "version": s.version, "extends": s.extends,
                             "tool_grants": s.tool_grants, "locale": s.locale} for s in skills]}
 
@@ -423,10 +423,17 @@ def register_platform_routes(app, *, principal_dep, get_kernel) -> None:
         return {"budgets": out, "scope": depts or "all"}
 
     @app.get("/v1/capabilities/changelog")
-    async def capability_changelog(request: Request, k=K, p=P) -> dict:
+    async def capability_changelog(request: Request, k=K, p=P) -> JSONResponse:
         # A timeline of who changed capability (nouns / verbs / bindings / skills /
         # adapters / workflows / MCP) and when, read straight from the tamper-evident
-        # audit log (authoring.* actions). Tenant-isolated; newest first.
+        # audit log (authoring.* actions). Tenant-isolated; newest first. Gated to
+        # authors/admins - the actor + change history is not for every tenant member
+        # (SEC-33 consistency with cost/audit).
+        if not _can(p):
+            return JSONResponse(
+                {"status": "denied", "reason": "author_or_admin_required", "changes": []},
+                status_code=403,
+            )
         events = await k.store.audit_query(p.tenant_id, limit=2000)
         rows = []
         for e in events:
@@ -444,7 +451,7 @@ def register_platform_routes(app, *, principal_dep, get_kernel) -> None:
                 }
             )
         rows.reverse()
-        return {"changes": rows[:200]}
+        return JSONResponse({"changes": rows[:200]})
 
     @app.get("/v1/audit/search")
     async def audit_search(request: Request, actor: str | None = None, verb: str | None = None,

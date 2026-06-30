@@ -133,6 +133,31 @@ def test_dev_auth_refuses_production_signal():
         refuse_dev_auth_in_prod({"ENV": "prod"})
     refuse_dev_auth_in_prod({"ENV": "dev"})  # no signal -> no raise
 
+    # K-19: an unset/default audit HMAC key in prod is also fatal (forgeable chain)
+    from boltrig.api.bootstrap import refuse_default_audit_key_in_prod
+
+    with pytest.raises(RuntimeError):
+        refuse_default_audit_key_in_prod({"ENV": "prod"})
+    with pytest.raises(RuntimeError):
+        refuse_default_audit_key_in_prod({"ENV": "prod", "BOLTRIG_AUDIT_HMAC_KEY": "dev-insecure-audit-key"})
+    refuse_default_audit_key_in_prod({"ENV": "prod", "BOLTRIG_AUDIT_HMAC_KEY": "a-real-secret"})  # ok
+    refuse_default_audit_key_in_prod({"ENV": "dev"})  # no signal -> ok
+
+    # SEC-60 at the dangerous default: create_app() with a prod signal and no
+    # resolver refuses to fall back to header-trust auth.
+    import os
+
+    from boltrig.kernel import Kernel
+    from boltrig.kernel.app import create_app
+    from boltrig.store import InMemoryStore
+
+    os.environ["BOLTRIG_PRODUCTION"] = "1"
+    try:
+        with pytest.raises(RuntimeError):
+            create_app(Kernel(InMemoryStore()), platform={})
+    finally:
+        del os.environ["BOLTRIG_PRODUCTION"]
+
 
 # --------------------------------------------------------------------------- #
 # SEC-61  shared egress guard blocks metadata/link-local for any adapter

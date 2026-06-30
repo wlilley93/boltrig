@@ -58,3 +58,14 @@ def test_changelog_other_tenant_sees_only_its_own():
     c = _client()
     body = c.get("/v1/capabilities/changelog", headers=_h(OTHER)).json()
     assert [r["ref"] for r in body["changes"]] == ["secret.verb"]
+
+
+def test_changelog_requires_author_or_admin():
+    # a non-author tenant member cannot read the authoring history (SEC-33)
+    c = _client()
+    r = c.get(
+        "/v1/capabilities/changelog",
+        headers={"x-boltrig-tenant": T, "x-boltrig-subject": "eng",
+                 "x-boltrig-role": "agent", "x-boltrig-grants": "*"},
+    )
+    assert r.status_code == 403
