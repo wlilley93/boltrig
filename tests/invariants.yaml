@@ -226,6 +226,8 @@ invariants:
       - tests/integration/test_rls.py::test_rls_enforces_tenant_isolation_and_fails_closed
       - tests/unit/test_rls_pool.py::test_rls_pool_sets_tenant_guc_before_each_statement
       - tests/unit/test_rls_pool.py::test_rls_pool_is_fail_closed_when_no_tenant_bound
+      - tests/security/test_rls_auth_binding.py::test_pat_resolution_binds_tenant_before_the_owner_read
+      - tests/security/test_rls_auth_binding.py::test_provision_user_binds_tenant_before_the_first_read
   SEC-13:
     description: PII is detected and redacted before it leaves the boundary.
     tests:

@@ -96,6 +96,14 @@ class McpFace:
         return await self._dispatch(rt, request)
 
     async def _dispatch(self, rt: "RunToken", request: dict) -> dict:
+        # RLS-live: bind the run/user tenant before any RLS-scoped read below
+        # (list_verbs, get_tenant_permissions, get_verb). The run-token path never
+        # passes through the HTTP principal() binder, so without this the _RlsPool
+        # would see a null GUC and fail closed on every tool list/call. No-op for
+        # the in-memory store and when RLS is off.
+        from boltrig.store.postgres import set_current_tenant
+
+        set_current_tenant(rt.tenant_id)
         rid = request.get("id")
         method = request.get("method")
         params = request.get("params") or {}

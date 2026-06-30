@@ -95,6 +95,14 @@ async def resolve_pat_principal(store, secret: str) -> Principal | None:
         return None
     if pat.expires_at is not None and pat.expires_at <= utcnow():
         return None
+    # RLS-live: the PAT table is the one cross-tenant lookup (it resolves the
+    # tenant from the hash). Once the tenant is known, bind it BEFORE the
+    # RLS-scoped users read below, or the _RlsPool sees a null GUC and the owner
+    # read fails closed - a valid token would 401 as "de-provisioned". No-op for
+    # the in-memory store and when RLS is off.
+    from boltrig.store.postgres import set_current_tenant
+
+    set_current_tenant(pat.tenant_id)
     user = await store.get_user(pat.tenant_id, pat.user_id)
     if user is None or user.status != "active":
         return None  # de-provisioned / deactivated -> token stops working

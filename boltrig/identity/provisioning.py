@@ -89,6 +89,13 @@ async def provision_user(
     ``None`` (fail-closed - the caller is denied). A previously deactivated user
     stays deactivated until an admin re-enables them (re-login cannot self-revive).
     """
+    # RLS-live: the tenant is known on entry (from the verified IdP token), and
+    # every read/write below (invitations, users) is RLS-scoped. Bind it before
+    # the first read so the _RlsPool does not fail closed on login. No-op for the
+    # in-memory store and when RLS is off.
+    from boltrig.store.postgres import set_current_tenant
+
+    set_current_tenant(tenant_id)
     role, scope = resolve_role(groups, mappings)
     source = "idp"
     source_group: str | None = None
