@@ -1679,3 +1679,83 @@ summary:focus-visible,
     grid-template-columns: 1fr;
   }
 }
+
+/* header right cluster: identity chip + health dot */
+.app__header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* the deliberate "Signed in as ..." entry chip that expands the dev sign-in */
+.identity-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.identity-chip:hover,
+.identity-chip--open {
+  border-color: var(--accent);
+}
+
+.identity-chip__where {
+  color: var(--muted);
+}
+
+.identity-bar__note {
+  flex-basis: 100%;
+  margin: 4px 0 0;
+  font-size: 11px;
+}
+
+/* home dashboard pieces */
+.home-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.home-line__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.home-metric {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 56px;
+}
+
+.home-metric__count {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.home-metric__label {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.home-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}

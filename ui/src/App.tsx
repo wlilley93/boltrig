@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import { api } from "./api/client";
 import { applyAppearance, loadAppearance } from "./appearance";
@@ -9,6 +9,7 @@ import { AdminPanel } from "./panels/AdminPanel";
 import { ApprovalsPanel } from "./panels/ApprovalsPanel";
 import { ChatPanel } from "./panels/ChatPanel";
 import { EvalPanel } from "./panels/EvalPanel";
+import { HomePanel } from "./panels/HomePanel";
 import { InsightPanel } from "./panels/InsightPanel";
 import { KanbanPanel } from "./panels/KanbanPanel";
 import { MePanel } from "./panels/MePanel";
@@ -19,6 +20,7 @@ import { RunView } from "./panels/RunView";
 import { StudioPanel } from "./panels/StudioPanel";
 
 type Tab =
+  | "home"
   | "router"
   | "kanban"
   | "approvals"
@@ -33,7 +35,7 @@ type Tab =
 
 // Roles permitted to author (studios) / administer (admin console). The server
 // is the real gate (403); these only decide whether the tab is offered up front.
-const AUTHOR_ROLES: ReadonlySet<string> = new Set([
+export const AUTHOR_ROLES: ReadonlySet<string> = new Set([
   "org-admin",
   "department-head",
   "manager",
@@ -51,6 +53,7 @@ interface TabDef {
 }
 
 const TABS: ReadonlyArray<TabDef> = [
+  { id: "home", label: "Home", hint: "Your dashboard: approvals, runs and work" },
   { id: "router", label: "Router", hint: "Nouns, verbs and adapter health" },
   { id: "kanban", label: "Kanban", hint: "Work items by status" },
   { id: "approvals", label: "Approvals", hint: "Pending human-in-the-loop" },
@@ -81,6 +84,31 @@ const TABS: ReadonlyArray<TabDef> = [
     hint: "Account, tokens, connections, directory",
   },
 ];
+
+// The chip that stands in for an always-on dev form: it reads like an identity
+// ("Signed in as ...") and expands the editable dev sign-in below the header.
+function IdentityChip({
+  expanded,
+  onToggle,
+}: {
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const id = useIdentity();
+  return (
+    <button
+      className={`identity-chip ${expanded ? "identity-chip--open" : ""}`}
+      aria-expanded={expanded}
+      title="Session and identity (dev sign-in)"
+      onClick={onToggle}
+    >
+      <span className="identity-chip__who">
+        Signed in as <strong>{id.subject}</strong> ({id.role})
+      </span>
+      <span className="identity-chip__where">@ {id.tenant}</span>
+    </button>
+  );
+}
 
 function IdentityBar() {
   const id = useIdentity();
@@ -127,6 +155,10 @@ function IdentityBar() {
       <button className="btn btn--ghost" onClick={() => resetIdentity()}>
         reset
       </button>
+      <p className="identity-bar__note muted">
+        Dev sign-in: these headers set the caller. Production resolves identity
+        from SSO / PAT (the backend resolver already supports it).
+      </p>
     </div>
   );
 }
@@ -157,6 +189,10 @@ export function App() {
   const route = useRoute();
   const tab = route.tab as Tab;
 
+  // The dev sign-in is collapsed behind the header chip by default; expanding it
+  // reveals the editable identity bar (the dev auth mechanism).
+  const [identityOpen, setIdentityOpen] = useState(false);
+
   // Apply the persisted appearance (theme / density / contrast / font scale /
   // reduced motion) to the document root on first load, before any panel paints,
   // so the saved choice takes effect with no flash. The Settings panel keeps it
@@ -168,7 +204,7 @@ export function App() {
   // Tabs gated by role are hidden when the role does not qualify. If the active
   // tab becomes hidden (role changed), fall back to Router for the render.
   const visibleTabs = TABS.filter((t) => !t.gate || t.gate(identity.role));
-  const active: Tab = visibleTabs.some((t) => t.id === tab) ? tab : "router";
+  const active: Tab = visibleTabs.some((t) => t.id === tab) ? tab : "home";
 
   return (
     <div className="app">
@@ -177,10 +213,16 @@ export function App() {
           <strong>Nankle</strong>
           <span className="app__subtitle">orchestration console</span>
         </div>
-        <HealthDot />
+        <div className="app__header-right">
+          <IdentityChip
+            expanded={identityOpen}
+            onToggle={() => setIdentityOpen((v) => !v)}
+          />
+          <HealthDot />
+        </div>
       </header>
 
-      <IdentityBar />
+      {identityOpen && <IdentityBar />}
 
       <nav className="tabs" aria-label="Panels">
         {visibleTabs.map((t) => (
@@ -197,6 +239,7 @@ export function App() {
       </nav>
 
       <main className="app__main">
+        {active === "home" && <HomePanel />}
         {active === "router" && <RouterPanel />}
         {active === "kanban" && <KanbanPanel />}
         {active === "approvals" && <ApprovalsPanel />}

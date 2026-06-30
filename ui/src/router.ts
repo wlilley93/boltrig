@@ -26,7 +26,7 @@ function parse(hash: string): Route {
   const [path, query] = raw.split("?");
   const segs = path.split("/").filter(Boolean);
   const params = new URLSearchParams(query ?? "");
-  const tab = segs[0] || "router";
+  const tab = segs[0] || "home";
   let param = segs[1] || undefined;
   let runId = params.get("run") ?? undefined;
   // The #/runs/<id> deep link carries the run in the path, not the query.
