@@ -17,13 +17,41 @@ intended only for org-admin scope - never minted onto an ephemeral.
 
 from __future__ import annotations
 
+import unicodedata
 from dataclasses import dataclass, field
 
 from .base import VerbId
 
+# The safe identifier charset for verb ids / grant tokens (UPLOAD-05 / AZ-02). A
+# real id is ASCII alphanumerics plus these structural chars; anything else (a
+# Unicode homoglyph/confusable, a control char, a zero-width joiner) is NOT a safe
+# identifier and so can never match a grant.
+_SAFE_ID_CHARS = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-/@*")
+
+
+def normalize_identifier(value: str) -> str:
+    """NFKC-normalise an id/grant token so confusable/compatibility forms collapse
+    to one canonical form before any comparison (UPLOAD-05)."""
+    return unicodedata.normalize("NFKC", value or "")
+
+
+def is_safe_identifier(value: str) -> bool:
+    """True iff ``value`` is, after NFKC, only the safe identifier charset. A
+    homoglyph (e.g. Cyrillic 'а') or control/zero-width char makes it unsafe."""
+    norm = normalize_identifier(value)
+    return bool(norm) and all(ch in _SAFE_ID_CHARS for ch in norm)
+
 
 def _matches(pattern: str, verb_id: VerbId) -> bool:
-    """Match one grant pattern against a verb id (K-9 terminal-wildcard rule)."""
+    """Match one grant pattern against a verb id (K-9 terminal-wildcard rule).
+
+    Both sides are NFKC-normalised first, and a verb id that is not a SAFE
+    identifier never matches - so a Unicode-confusable verb id cannot impersonate
+    an ASCII verb to slip past a grant (UPLOAD-05 / AZ-02)."""
+    if not is_safe_identifier(verb_id):
+        return False  # a non-canonical / confusable id can never be authorised
+    pattern = normalize_identifier(pattern)
+    verb_id = normalize_identifier(verb_id)
     if pattern == "*":
         return True
     if pattern == verb_id:

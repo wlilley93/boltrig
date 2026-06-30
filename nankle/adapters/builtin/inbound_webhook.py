@@ -70,6 +70,26 @@ def _find_signature(lower_headers: dict[str, str]) -> str | None:
     return None
 
 
+def _extract_timestamp(raw_signature: str | None, lower_headers: dict[str, str]) -> int | None:
+    """Pull a unix timestamp from the Stripe-style ``t=`` signature part or an
+    ``x-nankle-timestamp`` / ``x-timestamp`` header, for the replay window (ADP-08)."""
+    if raw_signature and "t=" in raw_signature:
+        for part in raw_signature.split(","):
+            part = part.strip()
+            if part.startswith("t="):
+                try:
+                    return int(part[2:])
+                except ValueError:
+                    return None
+    ts = lower_headers.get("x-nankle-timestamp") or lower_headers.get("x-timestamp")
+    if ts:
+        try:
+            return int(float(ts))
+        except ValueError:
+            return None
+    return None
+
+
 def _extract_hex(raw_signature: str) -> str:
     """Pull the hex digest out of common signature header encodings.
 
@@ -91,12 +111,16 @@ def verify_and_normalise(
     payload: dict[str, Any],
     headers: dict[str, Any],
     secret: str | None,
+    *,
+    replay_window_seconds: int = 300,
+    now: float | None = None,
 ) -> dict[str, Any]:
     """Authenticate and validate an inbound webhook, returning a normalised
     work-item candidate (US-ADP-05).
 
     Raises :class:`WebhookValidationError` for a malformed payload and
-    :class:`WebhookAuthError` for a failed signature when a secret is set.
+    :class:`WebhookAuthError` for a failed signature, a missing signature, or a
+    stale (replayed) request outside the timestamp window (ADP-08).
     """
     if not isinstance(payload, dict):
         raise WebhookValidationError("webhook payload must be a JSON object")
@@ -110,6 +134,15 @@ def verify_and_normalise(
         expected = expected_signature(secret, canonical_body(payload))
         if not hmac.compare_digest(_extract_hex(provided), expected):
             raise WebhookAuthError("webhook signature mismatch")
+        # Replay protection (ADP-08): a captured signed request must not replay
+        # forever. When the source carries a timestamp, reject one outside the
+        # window. For sources that sign the timestamp (e.g. Stripe's t.body), an
+        # attacker cannot forge a fresh t without the secret.
+        ts = _extract_timestamp(provided, lower)
+        if ts is not None and replay_window_seconds > 0:
+            current = now if now is not None else utcnow().timestamp()
+            if abs(current - ts) > replay_window_seconds:
+                raise WebhookAuthError("stale webhook: replay window exceeded")
         authenticated = True
 
     source = lower.get("x-nankle-source") or lower.get("user-agent") or "webhook"

@@ -400,9 +400,12 @@ class InMemoryStore:
 
     async def get_pat_by_hash(self, token_hash):
         # The secret carries identity; lookup is by hash across tenants (the hash
-        # is globally unique). Returns at most one token.
+        # is globally unique). Constant-time compare so the lookup does not leak a
+        # hash prefix via timing (CRYPTO-04).
+        import hmac as _hmac
+
         for pat in self._pats.values():
-            if pat.token_hash == token_hash:
+            if _hmac.compare_digest(pat.token_hash, token_hash):
                 return pat
         return None
 

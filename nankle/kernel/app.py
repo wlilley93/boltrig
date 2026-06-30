@@ -184,6 +184,12 @@ def create_app(
                     await result
 
     app = FastAPI(title="Nankle Kernel", version="0.1.0", lifespan=lifespan)
+    # Edge/web hardening (Batch 1 WEB-02/03/05/06, RES-01): security headers, CORS
+    # allowlist, Host validation, request-body cap. Additive middleware; no route
+    # or kernel change.
+    from .web_security import install_security
+
+    install_security(app)
     # Prebuilt kernel is set synchronously so it works even without lifespan
     # (Starlette TestClient used without a context manager).
     if kernel is not None:

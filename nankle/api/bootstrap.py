@@ -195,6 +195,40 @@ def _deny_all_resolver():
     return resolver
 
 
+_PROD_SIGNALS = ("prod", "production", "staging")
+
+
+def production_signal(env: dict | None = None) -> str | None:
+    """Return a production signal if one is present, else None (IAM-09).
+
+    A signal is: ENV / NANKLE_ENV / APP_ENV set to prod/production/staging, or an
+    explicit NANKLE_PRODUCTION=1. Pure + env-injectable so it is unit-testable."""
+    import os
+
+    e = env if env is not None else os.environ
+    if (e.get("NANKLE_PRODUCTION") or "").strip().lower() in {"1", "true", "yes", "on"}:
+        return "NANKLE_PRODUCTION"
+    for key in ("ENV", "NANKLE_ENV", "APP_ENV"):
+        val = (e.get(key) or "").strip().lower()
+        if val in _PROD_SIGNALS:
+            return f"{key}={val}"
+    return None
+
+
+def refuse_dev_auth_in_prod(env: dict | None = None) -> None:
+    """Abort if dev auth is enabled with any production signal (IAM-09).
+
+    The header-trusting resolver is a debug bypass; leaving it reachable in
+    production is the #1 fast-build failure. Fail hard, do not merely warn."""
+    signal = production_signal(env)
+    if signal is not None:
+        raise RuntimeError(
+            f"FATAL: NANKLE_DEV_AUTH is set with a production signal ({signal}). "
+            "Dev auth is a header-trusting bypass and must never run in production "
+            "(IAM-09). Unset NANKLE_DEV_AUTH and configure OIDC_*."
+        )
+
+
 def select_principal_resolver():
     """Choose the auth resolver from the environment (SEC-01).
 
@@ -217,6 +251,9 @@ def select_principal_resolver():
         log.info("OIDC auth enabled (issuer %s)", settings.oidc_issuer)
         return build_principal_resolver(verifier=verifier, mappings=mappings, tenant_id=tenant)
     if settings.dev_auth:
+        # IAM-09: dev auth must be IMPOSSIBLE in production. Refuse to start (not
+        # just warn) if a production signal is present alongside dev auth.
+        refuse_dev_auth_in_prod()
         log.warning(
             "NANKLE_DEV_AUTH=1: header-trusting dev auth is active. NOT for production (SEC-01)."
         )

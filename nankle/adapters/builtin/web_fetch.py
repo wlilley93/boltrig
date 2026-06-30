@@ -31,76 +31,21 @@ fully testable offline, and a blocked target is refused BEFORE any network call.
 
 from __future__ import annotations
 
-import ipaddress
-import socket
 from typing import Any
 from urllib.parse import urlparse
 
 from nankle.adapters.base import Credential, Result, VerbSpec
+# The SSRF/policy guard now lives in the shared egress module so every HTTP
+# adapter uses one source of truth (consolidation). Re-exported here so callers /
+# tests that import them from web_fetch keep working.
+from nankle.adapters.egress import (  # noqa: F401
+    check_network_policy,
+    is_blocked_ip,
+    resolve_host as _resolve,
+)
 from nankle.models import InvocationContext, NetworkPolicyViolation
 
 _MAX_BYTES = 256 * 1024  # default cap on returned content
-
-
-def _host_matches(host: str, domain: str) -> bool:
-    """A host matches a domain entry if it is that domain or a subdomain of it."""
-    host, domain = host.lower().rstrip("."), domain.lower().rstrip(".")
-    return host == domain or host.endswith("." + domain)
-
-
-def is_blocked_ip(ip: str) -> bool:
-    """True if an address is one the SSRF guard must refuse, independent of any
-    domain list: private, loopback, link-local (incl. 169.254.169.254 metadata),
-    reserved, multicast, or unspecified."""
-    try:
-        addr = ipaddress.ip_address(ip)
-    except ValueError:
-        return True  # unparseable -> fail closed
-    return (
-        addr.is_private or addr.is_loopback or addr.is_link_local
-        or addr.is_reserved or addr.is_multicast or addr.is_unspecified
-    )
-
-
-def check_network_policy(
-    url: str, config: dict[str, Any], *, resolved_ips: list[str] | None = None
-) -> str | None:
-    """Return a refusal reason if the fetch is not permitted, else ``None``.
-
-    ``resolved_ips`` is injectable so the policy is testable without DNS; at
-    runtime the adapter resolves the host and passes the result in. Order: scheme,
-    air-gap, block list, allow list, then the SSRF guard over every resolved IP."""
-    parsed = urlparse(url)
-    if parsed.scheme not in {"http", "https"}:
-        return f"unsupported scheme '{parsed.scheme}'"
-    host = parsed.hostname
-    if not host:
-        return "no host in url"
-    if config.get("air_gapped"):
-        return "air-gapped: no egress permitted"
-    blocked = config.get("blocked_domains") or ()
-    if any(_host_matches(host, d) for d in blocked):
-        return f"domain '{host}' is blocked"
-    allowed = config.get("allowed_domains") or ()
-    if allowed and not any(_host_matches(host, d) for d in allowed):
-        return f"domain '{host}' is not on the allow list"
-    # SSRF: every address the host resolves to must be external.
-    if resolved_ips is not None:
-        if not resolved_ips:
-            return "host did not resolve"
-        for ip in resolved_ips:
-            if is_blocked_ip(ip):
-                return f"target resolves to a non-routable/internal address ({ip})"
-    return None
-
-
-def _resolve(host: str) -> list[str]:
-    """Resolve a host to its addresses (an IP literal resolves to itself, no DNS)."""
-    try:
-        infos = socket.getaddrinfo(host, None)
-    except OSError:
-        return []  # caller treats empty as "did not resolve" -> fail closed
-    return list({info[4][0] for info in infos})
 
 
 class WebFetchAdapter:

@@ -267,6 +267,18 @@ class HttpAdapter:
     ) -> dict[str, Any]:
         """A single REST call with retry/backoff, rate-limit cooperation and
         error mapping. Returns the parsed JSON body or raises :class:`_HttpFailure`."""
+        # SSRF/IMDS guard (INJ-02, CLOUD-03): refuse any target resolving to a
+        # cloud-metadata / link-local address before the request leaves. Applies to
+        # the effective URL (base_url join), so an agent-/generated-supplied path
+        # cannot reach 169.254.169.254 to steal a managed-identity token.
+        from nankle.adapters.egress import EgressBlocked, assert_no_metadata_egress
+
+        try:
+            assert_no_metadata_egress(str(client.base_url.join(url)))
+        except EgressBlocked as exc:
+            raise _HttpFailure(
+                AdapterError(ErrorClass.INVALID, str(exc), retryable=False)
+            ) from exc
         attempt = 0
         while True:
             attempt += 1

@@ -401,3 +401,27 @@ invariants:
     tests:
       - tests/integration/test_round_twelve.py::test_interpreter_emits_step_events_on_the_run_stream
       - tests/integration/test_round_twelve.py::test_skipped_descendant_emits_skipped_step_event
+  SEC-58:
+    description: Edge/web hardening - the kernel app stamps security headers (HSTS/nosniff/frame-deny/CSP) on every response, validates the Host header, and caps request-body size (WEB-02/03/06, RES-01).
+    tests:
+      - tests/security/test_round_sixteen.py::test_security_headers_host_and_body_cap
+  SEC-59:
+    description: JWT verification pins an explicit algorithm allowlist, rejects an ID token used as an access token, and rejects a token with no expiry (IAM-02/03/04).
+    tests:
+      - tests/security/test_round_sixteen.py::test_jwt_alg_allowlist_and_access_token_only
+  SEC-60:
+    description: Dev auth is impossible in production - the header-trusting resolver refuses to start when a production signal is present (IAM-09).
+    tests:
+      - tests/security/test_round_sixteen.py::test_dev_auth_refuses_production_signal
+  SEC-61:
+    description: The shared egress guard blocks cloud-metadata / link-local targets for every HTTP adapter (not just web.fetch), closing the SSRF to IMDS token-theft path (INJ-02 / CLOUD-03).
+    tests:
+      - tests/security/test_round_sixteen.py::test_shared_egress_guard_blocks_metadata
+  SEC-62:
+    description: A Unicode-confusable or non-canonical verb id can never match a grant - matching is NFKC-normalised and restricted to a safe identifier charset (UPLOAD-05 / AZ-02).
+    tests:
+      - tests/security/test_round_sixteen.py::test_confusable_verb_id_never_matches_a_grant
+  SEC-63:
+    description: An inbound webhook carrying a timestamp outside the replay window is rejected, so a captured signed request cannot replay forever (ADP-08).
+    tests:
+      - tests/security/test_round_sixteen.py::test_webhook_replay_window

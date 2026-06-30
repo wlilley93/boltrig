@@ -14,6 +14,9 @@ if it is missing. Production MUST use the real verifier (SEC-01/02); the
 
 from __future__ import annotations
 
+import base64
+import json
+import time
 from typing import Any, Protocol
 
 import httpx
@@ -25,9 +28,18 @@ from nankle.models import RoleMapping
 from .rbac import grants_for_scope, resolve_role
 
 
-def _load_authlib_jwt() -> Any:
-    """Lazy-import authlib's JWT codec, with a clear error if it is absent."""
+def _load_authlib_jwt(algorithms: list[str] | None = None) -> Any:
+    """Lazy-import authlib's JWT codec, with a clear error if it is absent.
+
+    When ``algorithms`` is given, return a ``JsonWebToken`` PINNED to exactly that
+    allowlist (IAM-02) - authlib then rejects any token whose ``alg`` is not in it
+    (incl. ``none`` and HS* confusion). Without it, the module default is returned.
+    """
     try:
+        if algorithms is not None:
+            from authlib.jose import JsonWebToken
+
+            return JsonWebToken(list(algorithms))
         from authlib.jose import jwt
     except ImportError as exc:  # pragma: no cover - exercised only without authlib
         raise RuntimeError(
@@ -36,6 +48,12 @@ def _load_authlib_jwt() -> Any:
             "production; only dev_principal_resolver may run without it."
         ) from exc
     return jwt
+
+
+def _b64url(segment: str) -> bytes:
+    """Decode a base64url JWT segment (padding-tolerant) for header inspection."""
+    pad = "=" * (-len(segment) % 4)
+    return base64.urlsafe_b64decode(segment + pad)
 
 
 class Verifier(Protocol):
@@ -51,6 +69,13 @@ class OidcVerifier:
     are validated. The JWKS is fetched once over httpx and cached.
     """
 
+    # Explicit asymmetric signature allowlist (IAM-02). alg=none and any symmetric
+    # (HS*) algorithm are rejected outright - never inferred from the JWKS - so an
+    # RS256->HS256 / alg=none confusion cannot forge a token.
+    _ALLOWED_ALGS = ("RS256", "RS384", "RS512", "ES256", "ES384", "ES512")
+    # A token may not claim a longer life than this regardless of its exp (IAM-03).
+    _MAX_LIFETIME = 24 * 3600
+
     def __init__(
         self,
         issuer: str,
@@ -59,37 +84,83 @@ class OidcVerifier:
         *,
         http_client: httpx.AsyncClient | None = None,
         leeway: int = 60,
+        jwks_ttl: int = 600,
+        allowed_algs: tuple[str, ...] | None = None,
     ) -> None:
         self.issuer = issuer
         self.audience = audience
         self.jwks_uri = jwks_uri
         self._http = http_client
-        self._leeway = leeway
+        # Clamp leeway to <=120s (IAM-03): no token gets unbounded clock slack.
+        self._leeway = max(0, min(int(leeway), 120))
+        self._algs = tuple(allowed_algs or self._ALLOWED_ALGS)
+        self._jwks_ttl = jwks_ttl
         self._jwks: dict[str, Any] | None = None
+        self._jwks_at: float = 0.0
 
-    async def _load_jwks(self) -> dict[str, Any]:
-        if self._jwks is None:
-            client = self._http or httpx.AsyncClient()
-            try:
-                resp = await client.get(self.jwks_uri)
-                resp.raise_for_status()
-                self._jwks = resp.json()
-            finally:
-                if self._http is None:
-                    await client.aclose()
+    async def _fetch_jwks(self) -> dict[str, Any]:
+        client = self._http or httpx.AsyncClient(timeout=10.0)  # explicit timeout (IAM-05)
+        try:
+            resp = await client.get(self.jwks_uri)  # TLS verified by httpx default
+            resp.raise_for_status()
+            return resp.json()
+        finally:
+            if self._http is None:
+                await client.aclose()
+
+    async def _load_jwks(self, *, force: bool = False) -> dict[str, Any]:
+        # JWKS cache with a TTL + forced refetch on a kid miss (IAM-05).
+        now = time.monotonic()
+        if force or self._jwks is None or (now - self._jwks_at) > self._jwks_ttl:
+            self._jwks = await self._fetch_jwks()
+            self._jwks_at = now
         return self._jwks
+
+    def _kid(self, token: str) -> str | None:
+        try:
+            header = json.loads(_b64url(token.split(".", 1)[0]))
+            return header.get("kid")
+        except Exception:
+            return None
+
+    def _kid_present(self, jwks: dict[str, Any], kid: str | None) -> bool:
+        if kid is None:
+            return True  # let the verifier resolve a single-key JWKS
+        return any(k.get("kid") == kid for k in (jwks.get("keys") or []))
 
     async def verify(self, token: str) -> dict[str, Any]:
         """Verify ``token`` and return its claims, or raise on any failure."""
-        jwt = _load_authlib_jwt()
+        jwt = _load_authlib_jwt(list(self._algs))  # alg allowlist pinned (IAM-02)
+        kid = self._kid(token)
         jwks = await self._load_jwks()
+        if not self._kid_present(jwks, kid):  # kid miss -> refetch then fail closed
+            jwks = await self._load_jwks(force=True)
+            if not self._kid_present(jwks, kid):
+                raise HTTPException(status_code=401, detail="unknown signing key")
+        # IAM-02: pin the algorithm allowlist; iat/exp/nbf essential (IAM-03).
         claims_options = {
             "iss": {"essential": True, "value": self.issuer},
             "aud": {"essential": True, "value": self.audience},
+            "exp": {"essential": True},   # reject a token with no expiry (IAM-03)
         }
-        claims = jwt.decode(token, jwks, claims_options=claims_options)
-        claims.validate(leeway=self._leeway)  # exp / nbf / iss / aud
-        return dict(claims)
+        try:
+            claims = jwt.decode(token, jwks, claims_options=claims_options)
+            claims.validate(leeway=self._leeway)  # exp / nbf / iat / iss / aud
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=401, detail="invalid token") from exc
+        data = dict(claims)
+        # IAM-04: accept access tokens only - reject an ID token presented as one.
+        token_use = data.get("token_use") or data.get("typ")
+        if token_use is not None and str(token_use).lower() in {"id", "id_token"}:
+            raise HTTPException(status_code=401, detail="id token is not an access token")
+        # IAM-03: cap absolute lifetime regardless of the token's own exp.
+        iat, exp = data.get("iat"), data.get("exp")
+        if isinstance(iat, (int, float)) and isinstance(exp, (int, float)):
+            if exp - iat > self._MAX_LIFETIME:
+                raise HTTPException(status_code=401, detail="token lifetime too long")
+        return data
 
 
 class SamlVerifier:

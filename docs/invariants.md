@@ -12,7 +12,7 @@ The gate (the K-29 / K-30 ratchet) fails the build if:
   (an undeclared invariant), or
 - the catalogue claims a test node id that no marker actually backs (drift).
 
-Binding debt may only ever decrease. Today: **87 declared, debt 0** (115 bound
+Binding debt may only ever decrease. Today: **93 declared, debt 0** (121 bound
 test node ids), per `python scripts/check_invariants.py`. `tests/invariants.yaml`
 is the authoritative, machine-checked list; the table below is the curated
 human-readable view and highlights the core kernel set plus each round's new
@@ -134,6 +134,17 @@ and `FR*` ids are Nankle-local (drawn from the SRS) and never restate a `K-*`.
 | **SEC-57** | The skill shelf runs the chokepoint (grant-checked, tenant-scoped) and a loaded skill is data not authority - `load` returns the skill's `tool_grants` but does not grant them, so it cannot escalate. | `tests/security/test_round_fifteen.py::test_skill_shelf_is_governed_and_load_does_not_escalate` |
 | **FR-EXT-01** | A project adapter declared in the manifest by `module_ref` (a non-builtin id) is imported and registered at boot - extend from outside, no core edit. | `tests/integration/test_round_fifteen_bundle.py::test_project_adapter_loads_by_module_ref` |
 | **FR-EXT-02** | External MCP servers declared in the manifest `mcp.consume` register inert at boot, exposing no verbs until the review/activate gate (SEC-22 preserved). | `tests/integration/test_round_fifteen_bundle.py::test_consumed_mcp_servers_register_inert_pending_review` |
+
+### Round Sixteen (security hardening - the buildable code controls)
+
+| Invariant | Meaning | Bound test(s) |
+| --- | --- | --- |
+| **SEC-58** | Edge/web hardening - security headers on every response, Host validation, request-body cap (WEB-02/03/06, RES-01). | `tests/security/test_round_sixteen.py::test_security_headers_host_and_body_cap` |
+| **SEC-59** | JWT verification pins an algorithm allowlist, rejects an ID token used as an access token, and rejects a token with no expiry (IAM-02/03/04). | `tests/security/test_round_sixteen.py::test_jwt_alg_allowlist_and_access_token_only` |
+| **SEC-60** | Dev auth is impossible in production - the header-trusting resolver refuses to start with a production signal (IAM-09). | `tests/security/test_round_sixteen.py::test_dev_auth_refuses_production_signal` |
+| **SEC-61** | The shared egress guard blocks cloud-metadata / link-local targets for every HTTP adapter, closing SSRF -> IMDS token theft (INJ-02 / CLOUD-03). | `tests/security/test_round_sixteen.py::test_shared_egress_guard_blocks_metadata` |
+| **SEC-62** | A Unicode-confusable / non-canonical verb id can never match a grant (NFKC + safe charset) (UPLOAD-05 / AZ-02). | `tests/security/test_round_sixteen.py::test_confusable_verb_id_never_matches_a_grant` |
+| **SEC-63** | An inbound webhook outside the replay window is rejected, so a captured signed request cannot replay forever (ADP-08). | `tests/security/test_round_sixteen.py::test_webhook_replay_window` |
 
 ## How a new invariant is added
 
