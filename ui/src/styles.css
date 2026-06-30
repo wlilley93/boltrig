@@ -2854,6 +2854,39 @@ select:focus {
   box-shadow: 0 0 0 1px rgba(61, 211, 240, 0.5), 0 0 16px rgba(61, 211, 240, 0.4);
 }
 
+/* --- Workflow node: denser layout + a high-consequence marker ------------- */
+.wf-node {
+  position: relative;
+}
+.wf-node__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.wf-node__conseq {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  width: 15px;
+  height: 15px;
+  background: var(--color-consequence-high);
+  color: #04060d;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  clip-path: polygon(50% 0%, 100% 100%, 0% 100%);
+  filter: drop-shadow(0 0 4px rgba(255, 122, 69, 0.45));
+  z-index: 2;
+}
+.wf-palette__search {
+  width: 100%;
+  margin-bottom: 6px;
+}
+
 /* --- Budget burn-down rows (Insight) -------------------------------------- */
 .budget-row {
   display: flex;

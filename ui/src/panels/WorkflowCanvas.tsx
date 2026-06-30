@@ -59,6 +59,18 @@ import {
   stepBadgeClass,
 } from "./shared";
 import { WorkflowRunCanvas } from "./WorkflowRunCanvas";
+import { SchemaForm } from "./ux";
+
+// Parse the inspector params JSON into an object for the schema form (an
+// in-progress edit may be invalid; the form just sees {} until valid again).
+function safeObj(text: string): Record<string, unknown> {
+  try {
+    const v = JSON.parse(text || "{}");
+    return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
 
 // --- the data contract ------------------------------------------------------
 
@@ -95,6 +107,7 @@ export type StepNodeData = {
   kind: NodeKind;
   label: string;
   description?: string;
+  consequence?: string; // "high" -> a marker foreshadowing the approval pause
   runStatus?: RunNodeStatus;
 };
 
@@ -129,14 +142,23 @@ function StepNodeView({ data, selected }: NodeProps) {
       className={`wf-node wf-node--${d.kind} ${selected ? "wf-node--sel" : ""} ${runClass}`.trim()}
     >
       <Handle type="target" position={Position.Left} />
-      <div className="wf-node__label">{d.label}</div>
+      {d.consequence === "high" && (
+        <span
+          className="wf-node__conseq"
+          title="High consequence - this step may pause for human approval"
+          aria-label="high consequence"
+        >
+          !
+        </span>
+      )}
+      <div className="wf-node__top">
+        <span className="wf-node__label">{d.label}</span>
+        <span className="badge wf-node__kind">{d.kind}</span>
+      </div>
       <div className="wf-node__action">
         <code>{d.action}</code>
       </div>
-      <span className="badge wf-node__kind">{d.kind}</span>
-      {d.runStatus && (
-        <span className="badge wf-node__run">{d.runStatus}</span>
-      )}
+      {d.runStatus && <span className="badge wf-node__run">{d.runStatus}</span>}
       <Handle type="source" position={Position.Right} />
     </div>
   );
@@ -260,6 +282,7 @@ export function stepsToGraph(
         params: s.params ?? {},
         kind: deriveKind(verbsById.get(s.action)),
         label: s.id,
+        consequence: verbsById.get(s.action)?.consequence,
         ...(s.description ? { description: s.description } : {}),
       },
     };
@@ -314,6 +337,7 @@ export function WorkflowCanvas() {
   const [editId, setEditId] = useState("");
   const [editParams, setEditParams] = useState("{}");
   const [editDesc, setEditDesc] = useState("");
+  const [paletteFilter, setPaletteFilter] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
 
   const [loadText, setLoadText] = useState("");
@@ -385,7 +409,13 @@ export function WorkflowCanvas() {
       id,
       type: "step",
       position: { x: 60 + (index % 3) * 60, y: 60 + index * 70 },
-      data: { action: verb.id, params: {}, kind: deriveKind(verb), label: id },
+      data: {
+        action: verb.id,
+        params: {},
+        kind: deriveKind(verb),
+        label: id,
+        consequence: verb.consequence,
+      },
     };
     setNodes((ns) => [...ns, node]);
     setSelectedId(id);
@@ -692,23 +722,37 @@ export function WorkflowCanvas() {
           {!caps.loading && !caps.error && verbs.length === 0 && (
             <p className="muted">No verbs visible for this identity.</p>
           )}
+          {verbs.length > 6 && (
+            <input
+              className="wf-palette__search"
+              placeholder="Search actions..."
+              value={paletteFilter}
+              onChange={(e) => setPaletteFilter(e.target.value)}
+              aria-label="Search actions"
+            />
+          )}
           <div className="wf-palette">
-            {verbs.map((v) => (
-              <button
-                className="row-line palette-row"
-                key={v.id}
-                onClick={() => addVerbNode(v)}
-                title="Add as a step node"
-              >
-                <div>
-                  <code>{v.id}</code>{" "}
-                  {v.consequence && (
-                    <span className="muted">({v.consequence})</span>
-                  )}
-                </div>
-                <span className="badge">{deriveKind(v)}</span>
-              </button>
-            ))}
+            {verbs
+              .filter((v) => {
+                const q = paletteFilter.trim().toLowerCase();
+                return !q || v.id.toLowerCase().includes(q) || v.noun.toLowerCase().includes(q);
+              })
+              .map((v) => (
+                <button
+                  className="row-line palette-row"
+                  key={v.id}
+                  onClick={() => addVerbNode(v)}
+                  title="Add as a step node"
+                >
+                  <div className="kv">
+                    <code>{v.id}</code>
+                    {v.consequence === "high" && (
+                      <span className="badge badge--conseq-high">high</span>
+                    )}
+                  </div>
+                  <span className="badge">{deriveKind(v)}</span>
+                </button>
+              ))}
           </div>
         </div>
 
@@ -831,14 +875,40 @@ export function WorkflowCanvas() {
                 onChange={(e) => setEditDesc(e.target.value)}
               />
             </label>
-            <label className="field">
-              <span>params (JSON)</span>
-              <textarea
-                className="code"
-                value={editParams}
-                onChange={(e) => setEditParams(e.target.value)}
-              />
-            </label>
+            {(() => {
+              const sv = verbsById.get(selectedNode.data.action);
+              const props = (sv?.input_schema as { properties?: object } | undefined)?.properties;
+              const hasSchema = props && Object.keys(props).length > 0;
+              return hasSchema ? (
+                <>
+                  <span className="field"><span>parameters</span></span>
+                  <SchemaForm
+                    schema={sv!.input_schema}
+                    value={safeObj(editParams)}
+                    onChange={(o) => setEditParams(JSON.stringify(o, null, 2))}
+                  />
+                  <details>
+                    <summary className="ux-hint" style={{ cursor: "pointer" }}>
+                      Edit as JSON
+                    </summary>
+                    <textarea
+                      className="code"
+                      value={editParams}
+                      onChange={(e) => setEditParams(e.target.value)}
+                    />
+                  </details>
+                </>
+              ) : (
+                <label className="field">
+                  <span>params (JSON)</span>
+                  <textarea
+                    className="code"
+                    value={editParams}
+                    onChange={(e) => setEditParams(e.target.value)}
+                  />
+                </label>
+              );
+            })()}
             <div className="form__actions">
               <button className="btn btn--primary" onClick={applyParams}>
                 Apply
