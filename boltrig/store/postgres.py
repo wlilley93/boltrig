@@ -9,6 +9,7 @@ Schema is ``schema.sql`` (the single source of truth); the DDL is idempotent so
 
 from __future__ import annotations
 
+import contextlib
 import json
 from pathlib import Path
 
@@ -62,6 +63,7 @@ from boltrig.models import (
 )
 
 _SCHEMA = Path(__file__).with_name("schema.sql")
+_RLS = Path(__file__).with_name("rls.sql")
 
 
 def normalize_dsn(dsn: str) -> str:
@@ -101,6 +103,29 @@ class PostgresStore:
 
     async def close(self) -> None:
         await self._pool.close()
+
+    async def apply_rls(self) -> None:
+        """Apply the opt-in RLS overlay (boltrig/store/rls.sql): the tenant-isolation
+        policies + the least-privilege ``boltrig_app`` role. Idempotent. A deployment
+        that wants DB-enforced isolation runs this, connects the app as ``boltrig_app``
+        and uses :meth:`with_tenant` so ``app.tenant_id`` is set per transaction. NOT
+        run by default - the owner-connected default path relies on the SQL-level
+        ``WHERE tenant_id = $1`` filter every method already applies (SEC-08)."""
+        async with self._pool.acquire() as conn:
+            await conn.execute(_RLS.read_text(encoding="utf-8"))
+
+    @contextlib.asynccontextmanager
+    async def with_tenant(self, tenant_id: str):
+        """Yield a connection bound to one tenant for RLS. Opens a transaction and
+        sets ``app.tenant_id`` with ``SET LOCAL`` semantics (``set_config(.., true)``),
+        so under the RLS policies every statement on the connection sees only that
+        tenant's rows, and a write into any other tenant is rejected by WITH CHECK.
+        A null GUC yields zero rows (fail-closed). This is the RLS-correct read/write
+        path when connected as the non-bypassing ``boltrig_app`` role."""
+        async with self._pool.acquire() as conn:
+            async with conn.transaction():
+                await conn.execute("SELECT set_config('app.tenant_id', $1, true)", tenant_id)
+                yield conn
 
     # --- registry ---------------------------------------------------------
     async def get_noun(self, tenant_id, noun_id):

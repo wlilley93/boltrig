@@ -38,7 +38,7 @@ The honest implemented-vs-scaffolded map for the two security-hardening specs
 | **RES** (DoS/resource) | **PARTIAL + HARDENED** | RES-01 request-body cap HARDENED (SEC-58); rate limiting + budgets built (AGT-04). SEAM: RES-02 stream caps, RES-05 per-tenant quotas, RES-04 queue backpressure (infra). |
 | **UPLOAD** (ingestion) | **PARTIAL + HARDENED** | UPLOAD-05 identifier normalization HARDENED (SEC-62); UPLOAD-02 spec-fetch SSRF reuses the egress guard (SEC-61); ADP-04 generated-artefact gate (SEC-22). SEAM: UPLOAD-01 magic-byte content validation, UPLOAD-04 malware scanning. |
 | **APIX** (API surface) | **PARTIAL** | APIX-02 upstream-untrusted (output-schema validation, SEC-21) + APIX-05 error hygiene (built). SEAM: APIX-01 surface inventory/versioning, APIX-03 bulk-extraction limits. |
-| **TEN** (multi-tenancy) | **BUILT + SEAM** | TEN-01 code isolation (SEC-09, hostile-tenant tested); RLS (TEN-01 depth) + per-tenant quotas (TEN-03) are deploy/infra seams. |
+| **TEN** (multi-tenancy) | **BUILT + SEAM** | TEN-01 code isolation (SEC-09, hostile-tenant tested) + DB-enforced isolation (SEC-65: FORCE RLS policies + the non-bypassing `boltrig_app` role, `boltrig/store/rls.sql`, bound by an integration test). SEAM: the per-method `with_tenant` retrofit + per-tenant quotas (TEN-03). |
 | **PIPE** (CI/CD) | **SEAM** | Hardened pipeline, keyless deploy, artifact signing/admission, required gates - all CI/ops; the billing block is the live blocker. |
 | **CONV** (conversation/memory) | **BUILT** | CONV-01/02 poisoning screen at ingestion (SEC-42), CONV-03 scope-controlled retrieval (SEC-40), CONV-04 residency (SEC-43), CONV-05 conversation confidentiality (SEC-25). |
 | **PRIV** (privacy/provider) | **PARTIAL + SEAM** | PRIV-04 retention/erasure + PRIV-05 PII minimisation/redaction (built); PRIV-03 audit-access control (scope-filtered). SEAM: PRIV-01 DPIA/data-flow map, PRIV-02 provider zero-retention contracts (legal/ops). |
@@ -65,8 +65,17 @@ egress guard module (`boltrig/adapters/egress.py`) and constant-time PAT compare
 - **Container hardening (INF-01):** DONE (Round 17, SEC-64) - non-root images +
   read-only/cap-drop/no-new-privileges/limits in the manifests, deploy-lint bound;
   the only residue is exercising it on a live docker host (ops).
-- **TLS/at-rest/RLS:** the secure compose overlay + a least-privilege DB role +
-  Postgres RLS policies - a buildable+deploy follow-on.
+- **RLS / least-privilege DB role:** BUILT (SEC-65) - `boltrig/store/rls.sql`
+  ships FORCE row-level-security tenant policies + the non-bypassing `boltrig_app`
+  role, with `PostgresStore.apply_rls()` / `with_tenant()` plumbing and a bound
+  integration test (FORCE binds the owner, the role sees only its tenant, WITH
+  CHECK blocks cross-tenant writes, an unset GUC is fail-closed). Residue: wiring
+  `with_tenant` through every store method (today the SQL-level `tenant_id = $1`
+  filter is the active fence and RLS is the opt-in DB belt) + the live deploy
+  (run rls.sql, connect as `boltrig_app`). personal_access_tokens is excluded by
+  design (auth resolves a PAT by hash before the tenant is known).
+- **TLS/at-rest:** the secure compose overlay + at-rest encryption - a deploy
+  follow-on.
 - **Pi runtime (PI-01/02/03):** real native-tool-disable + micro-VM isolation
   land when the real Pi loop replaces the first-party stand-in.
 
