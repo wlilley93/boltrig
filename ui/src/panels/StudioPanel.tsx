@@ -27,6 +27,7 @@ import { useFetch } from "../useFetch";
 import {
   CodeBlock,
   GrantList,
+  RunLink,
   csvToList,
   errText,
   listToCsv,
@@ -1097,6 +1098,7 @@ function WorkflowForm() {
                 {trigResult.status && (
                   <span className="badge">{trigResult.status}</span>
                 )}
+                {trigResult.run_id && <RunLink runId={trigResult.run_id} />}
               </div>
               <CodeBlock value={trigResult} />
             </div>
@@ -1136,7 +1138,7 @@ function WorkflowForm() {
                 <span className={`badge ${runBadgeClass(execResult.status)}`}>
                   {execResult.status}
                 </span>
-                <code className="tag">{execResult.run_id}</code>
+                <RunLink runId={execResult.run_id} />
                 <span className="muted">
                   {execResult.workflow_id} v{execResult.version}
                 </span>
@@ -1191,9 +1193,7 @@ function WorkflowForm() {
             <p className="muted">
               {runs.length === 0 ? "No runs." : `${runs.length} run(s):`}{" "}
               {runs.map((r) => (
-                <code className="tag" key={r}>
-                  {r}
-                </code>
+                <RunLink runId={r} key={r} />
               ))}
             </p>
           )}

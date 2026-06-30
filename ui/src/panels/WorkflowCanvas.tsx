@@ -50,6 +50,7 @@ import type {
 import { useFetch } from "../useFetch";
 import {
   CodeBlock,
+  RunLink,
   csvToList,
   errText,
   listToCsv,
@@ -807,7 +808,7 @@ export function WorkflowCanvas() {
               <span className={`badge ${runBadgeClass(runResult.status)}`}>
                 {runResult.status}
               </span>
-              <code className="tag">{runResult.run_id}</code>
+              <RunLink runId={runResult.run_id} />
               <span className="muted">
                 {runResult.workflow_id} v{runResult.version}
               </span>

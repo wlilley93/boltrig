@@ -7,6 +7,7 @@ import { useState } from "react";
 import { api } from "../api/client";
 import type { HITLRequest } from "../api/types";
 import { useFetch } from "../useFetch";
+import { RunLink } from "./shared";
 
 function renderContext(context: unknown): string | null {
   if (context === null || context === undefined) return null;
@@ -18,6 +19,15 @@ function renderContext(context: unknown): string | null {
   }
 }
 
+// An approval may carry the run it gates in its free-form context; pull a run id
+// out so it can be opened in the Run drawer. Returns null when none is present.
+function runFromContext(context: unknown): string | null {
+  if (!context || typeof context !== "object") return null;
+  const obj = context as Record<string, unknown>;
+  const candidate = obj.run_id ?? obj.run;
+  return typeof candidate === "string" && candidate ? candidate : null;
+}
+
 function HitlCard({ req, onAnswered }: { req: HITLRequest; onAnswered: () => void }) {
   const [decision, setDecision] = useState("");
   const [notes, setNotes] = useState("");
@@ -26,6 +36,7 @@ function HitlCard({ req, onAnswered }: { req: HITLRequest; onAnswered: () => voi
   const [done, setDone] = useState<string | null>(null);
 
   const ctx = renderContext(req.context);
+  const runId = runFromContext(req.context);
   const options = req.options ?? [];
 
   async function submit(value: string) {
@@ -60,6 +71,12 @@ function HitlCard({ req, onAnswered }: { req: HITLRequest; onAnswered: () => voi
       {req.work_item_id ? (
         <p className="muted">
           work item: <code>{req.work_item_id}</code>
+        </p>
+      ) : null}
+
+      {runId ? (
+        <p className="muted">
+          run: <RunLink runId={runId} />
         </p>
       ) : null}
 

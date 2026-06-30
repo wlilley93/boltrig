@@ -412,6 +412,21 @@ is swallowed, P9). Run-keyed and credential-free (one run, one stream; nesting i
 consumer concern via the `subagent` link). New bound invariants (debt still 0):
 FR-EVT-01/02, SEC-55. DoD: `docs/DEFINITION-OF-DONE-round-ten.md`.
 
+## 7.9 Round Eleven (the router + the Run drawer)
+
+Backlog item 2 of the front-end spec, "turn the islands into a system." Beat A
+(backend): `GET /v1/runs/{run_id}/events` - tenant-scoped (SEC-56; cross-tenant
+404), `follow=0` snapshot / `follow=1` live via the relay; `EventRelay.snapshot`;
+`streamRunEvents` client primitive. Beat B (frontend, no new dep): `router.ts` -
+a bespoke hash-router mirroring `identity.ts` (`useSyncExternalStore` over
+`window.location.hash`, `?run=` overlay, `navigate`/`openRun`/`closeRun`);
+`chatTurn.tsx` - the chat event renderer extracted for reuse; `RunView.tsx` - the
+global `run_id`-keyed Run drawer (live events via the shared renderer + the audit
+tree + inline HITL; a sub-agent link re-keys the drawer to the child run -
+consumer-side nesting). Cross-linked from Kanban/Chat/Insight/Approvals/Studio/
+Canvas via a shared `RunLink`/`openRun`. New bound invariants (debt still 0):
+SEC-56, FR-EVT-03. DoD: `docs/DEFINITION-OF-DONE-round-eleven.md`.
+
 ---
 
 ## 8. Quality / governance gate

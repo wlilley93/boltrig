@@ -9,303 +9,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { api, streamChat } from "../api/client";
-import type {
-  ChatEvent,
-  ChatMessage,
-  HITLKind,
-} from "../api/types";
+import type { ChatEvent, ChatMessage } from "../api/types";
+import { openRun } from "../router";
 import { useFetch } from "../useFetch";
+import { TurnExtras, normalizeEvents } from "./chatTurn";
 
-// --- normalisation: ChatEvent[] -> renderable turn -------------------------
-// The same reducer serves the live stream (events accumulated as they arrive)
-// and a persisted message's `events`, so both render identically.
-
-interface ToolEntry {
-  key: string;
-  verb: string;
-  input?: unknown;
-  status: "running" | "ok" | "error";
-  output?: unknown;
-}
-
-interface SubagentEntry {
-  key: string;
-  childRunId: string;
-  task: string;
-  skills: string[];
-}
-
-interface HitlEntry {
-  hitlRequestId: string;
-  kind: HITLKind;
-  question: string;
-  options: string[];
-}
-
-interface NormalizedTurn {
-  runId?: string;
-  conversationId?: string;
-  text: string;
-  reasoning: string;
-  tools: ToolEntry[];
-  subagents: SubagentEntry[];
-  hitls: HitlEntry[];
-  ended: boolean;
-}
-
-function normalizeEvents(events: ChatEvent[]): NormalizedTurn {
-  let runId: string | undefined;
-  let conversationId: string | undefined;
-  let text = "";
-  let reasoning = "";
-  let ended = false;
-  const tools: ToolEntry[] = [];
-  const subagents: SubagentEntry[] = [];
-  const hitls: HitlEntry[] = [];
-
-  events.forEach((ev, i) => {
-    switch (ev.type) {
-      case "message_start":
-        runId = ev.run_id;
-        conversationId = ev.conversation_id;
-        break;
-      case "text_delta":
-        text += ev.delta;
-        break;
-      case "reasoning_delta":
-        reasoning += ev.delta;
-        break;
-      case "tool_call":
-        tools.push({ key: `t${i}`, verb: ev.verb, input: ev.input, status: "running" });
-        break;
-      case "tool_result": {
-        // Pair a result with the most recent still-running call of the same verb.
-        const match = [...tools]
-          .reverse()
-          .find((t) => t.verb === ev.verb && t.status === "running");
-        if (match) {
-          match.status = ev.status;
-          match.output = ev.output;
-        } else {
-          tools.push({ key: `t${i}`, verb: ev.verb, status: ev.status, output: ev.output });
-        }
-        break;
-      }
-      case "subagent":
-        subagents.push({
-          key: `s${i}`,
-          childRunId: ev.child_run_id,
-          task: ev.task,
-          skills: ev.skills ?? [],
-        });
-        break;
-      case "hitl":
-        hitls.push({
-          hitlRequestId: ev.hitl_request_id,
-          kind: ev.kind,
-          question: ev.question,
-          options: ev.options ?? [],
-        });
-        break;
-      case "message_end":
-        ended = true;
-        runId = ev.run_id ?? runId;
-        break;
-    }
-  });
-
-  return { runId, conversationId, text, reasoning, tools, subagents, hitls, ended };
-}
-
-function asPretty(value: unknown): string {
-  if (typeof value === "string") return value;
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
-  }
-}
+// The turn normaliser and renderer (tool / sub-agent / inline-HITL cards) live
+// in chatTurn.tsx so the Run drawer reuses the exact same rendering.
 
 function errText(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
-}
-
-// --- structured-turn sub-views ---------------------------------------------
-
-function ToolCard({ tool }: { tool: ToolEntry }) {
-  return (
-    <details className="tool-card">
-      <summary className="tool-card__head">
-        <code className="badge badge--verb">{tool.verb}</code>
-        <span className={`badge badge--tool-${tool.status}`}>{tool.status}</span>
-      </summary>
-      <div className="tool-card__body">
-        {tool.input !== undefined && (
-          <div className="tool-card__io">
-            <span className="muted">input</span>
-            <pre>{asPretty(tool.input)}</pre>
-          </div>
-        )}
-        {tool.output !== undefined && (
-          <div className="tool-card__io">
-            <span className="muted">output</span>
-            <pre>{asPretty(tool.output)}</pre>
-          </div>
-        )}
-      </div>
-    </details>
-  );
-}
-
-function SubagentCard({ sub }: { sub: SubagentEntry }) {
-  return (
-    <div className="subagent-card">
-      <div className="subagent-card__head">
-        <span className="badge">sub-agent</span>
-        <span className="subagent-card__task">{sub.task || "(no task)"}</span>
-      </div>
-      {sub.skills.length > 0 && (
-        <div className="subagent-card__skills">
-          {sub.skills.map((s) => (
-            <span className="chip" key={s}>
-              {s}
-            </span>
-          ))}
-        </div>
-      )}
-      <code className="muted">{sub.childRunId}</code>
-    </div>
-  );
-}
-
-// Inline HITL. The same request also surfaces in the Approvals panel (one
-// shared store), so answering it here resolves it there too, and vice versa.
-function ChatHitlCard({
-  entry,
-  resolved,
-  onResolve,
-}: {
-  entry: HitlEntry;
-  resolved: string | undefined;
-  onResolve: (id: string, status: string) => void;
-}) {
-  const [value, setValue] = useState("");
-  const [notes, setNotes] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // approval shows option buttons (falling back to approve/reject); a
-  // clarification shows a free-text input.
-  const options =
-    entry.kind === "approval"
-      ? entry.options.length > 0
-        ? entry.options
-        : ["approve", "reject"]
-      : entry.options;
-
-  async function submit(decision: string) {
-    if (!decision) {
-      setError("Provide a response.");
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await api.respondHitl(entry.hitlRequestId, { decision, notes });
-      onResolve(entry.hitlRequestId, `recorded (${res.status})`);
-    } catch (err) {
-      setError(errText(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <article className="chat-hitl">
-      <div className="chat-hitl__head">
-        <span className={`badge badge--type badge--type-${entry.kind}`}>{entry.kind}</span>
-        <code className="muted">{entry.hitlRequestId}</code>
-      </div>
-      <p className="chat-hitl__question">{entry.question || "(no question)"}</p>
-
-      {resolved ? (
-        <p className="ok">Answered: {resolved}</p>
-      ) : (
-        <div className="chat-hitl__respond">
-          {entry.kind === "clarification" ? (
-            <div className="chat-hitl__row">
-              <input
-                className="chat-hitl__text"
-                placeholder="your answer"
-                value={value}
-                disabled={busy}
-                onChange={(e) => setValue(e.target.value)}
-              />
-              <button
-                className="btn btn--primary"
-                disabled={busy}
-                onClick={() => submit(value)}
-              >
-                {busy ? "..." : "Send"}
-              </button>
-            </div>
-          ) : (
-            <div className="chat-hitl__options">
-              {options.map((opt) => (
-                <button key={opt} className="btn" disabled={busy} onClick={() => submit(opt)}>
-                  {opt}
-                </button>
-              ))}
-            </div>
-          )}
-          <textarea
-            className="chat-hitl__notes"
-            placeholder="notes (optional)"
-            value={notes}
-            disabled={busy}
-            rows={1}
-            onChange={(e) => setNotes(e.target.value)}
-          />
-          {error && <p className="error">{error}</p>}
-        </div>
-      )}
-    </article>
-  );
-}
-
-function TurnExtras({
-  turn,
-  resolvedHitls,
-  onResolve,
-}: {
-  turn: NormalizedTurn;
-  resolvedHitls: Record<string, string>;
-  onResolve: (id: string, status: string) => void;
-}) {
-  return (
-    <>
-      {turn.reasoning && (
-        <div className="thinking">
-          <span className="thinking__label">thinking</span>
-          <div className="thinking__body">{turn.reasoning}</div>
-        </div>
-      )}
-      {turn.tools.map((t) => (
-        <ToolCard key={t.key} tool={t} />
-      ))}
-      {turn.subagents.map((s) => (
-        <SubagentCard key={s.key} sub={s} />
-      ))}
-      {turn.hitls.map((h) => (
-        <ChatHitlCard
-          key={h.hitlRequestId}
-          entry={h}
-          resolved={resolvedHitls[h.hitlRequestId]}
-          onResolve={onResolve}
-        />
-      ))}
-    </>
-  );
 }
 
 function MessageBubble({
@@ -323,7 +36,14 @@ function MessageBubble({
     <div className={`chat-msg chat-msg--${isAssistant ? "assistant" : message.role}`}>
       <div className="chat-msg__role">{message.role}</div>
       <div className="chat-msg__bubble">
-        {isAssistant && <TurnExtras turn={turn} resolvedHitls={resolvedHitls} onResolve={onResolve} />}
+        {isAssistant && (
+          <TurnExtras
+            turn={turn}
+            resolvedHitls={resolvedHitls}
+            onResolve={onResolve}
+            onOpenRun={openRun}
+          />
+        )}
         {message.content && <div className="chat-msg__text">{message.content}</div>}
       </div>
     </div>
@@ -544,7 +264,12 @@ export function ChatPanel() {
               <div className="chat-msg chat-msg--assistant">
                 <div className="chat-msg__role">assistant</div>
                 <div className="chat-msg__bubble">
-                  <TurnExtras turn={live} resolvedHitls={resolvedHitls} onResolve={resolveHitl} />
+                  <TurnExtras
+                    turn={live}
+                    resolvedHitls={resolvedHitls}
+                    onResolve={resolveHitl}
+                    onOpenRun={openRun}
+                  />
                   {live.text ? (
                     <div className="chat-msg__text">{live.text}</div>
                   ) : (

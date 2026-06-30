@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 
 import { api } from "./api/client";
 import { applyAppearance, loadAppearance } from "./appearance";
 import { resetIdentity, updateIdentity, useIdentity } from "./identity";
+import { navigate, useRoute } from "./router";
 import { useFetch } from "./useFetch";
 import { AdminPanel } from "./panels/AdminPanel";
 import { ApprovalsPanel } from "./panels/ApprovalsPanel";
@@ -14,6 +15,7 @@ import { MePanel } from "./panels/MePanel";
 import { MemoryPanel } from "./panels/MemoryPanel";
 import { RouterPanel } from "./panels/RouterPanel";
 import { SettingsPanel } from "./panels/SettingsPanel";
+import { RunView } from "./panels/RunView";
 import { StudioPanel } from "./panels/StudioPanel";
 
 type Tab =
@@ -150,7 +152,10 @@ function HealthDot() {
 
 export function App() {
   const identity = useIdentity();
-  const [tab, setTab] = useState<Tab>("router");
+  // The active tab is driven by the URL hash (#/chat, #/work, ...) so deep links
+  // and browser back / forward work; navigate() writes the hash, useRoute reads.
+  const route = useRoute();
+  const tab = route.tab as Tab;
 
   // Apply the persisted appearance (theme / density / contrast / font scale /
   // reduced motion) to the document root on first load, before any panel paints,
@@ -184,7 +189,7 @@ export function App() {
             className={`tab ${active === t.id ? "tab--active" : ""}`}
             aria-current={active === t.id ? "page" : undefined}
             title={t.hint}
-            onClick={() => setTab(t.id)}
+            onClick={() => navigate(`/${t.id}`)}
           >
             {t.label}
           </button>
@@ -204,6 +209,9 @@ export function App() {
         {active === "me" && <MePanel />}
         {active === "settings" && <SettingsPanel />}
       </main>
+
+      {/* The global Run drawer: any surface can raise it via openRun(runId). */}
+      <RunView />
     </div>
   );
 }

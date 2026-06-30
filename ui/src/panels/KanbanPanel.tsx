@@ -2,10 +2,9 @@
 // source, confidence, the convergent flag, owner and a handle to its
 // hatchet_run_id, with a trace action that pulls the audit execution tree.
 
-import { useState } from "react";
-
 import { api } from "../api/client";
-import type { AuditNode, WorkItem, WorkStatus } from "../api/types";
+import type { WorkItem, WorkStatus } from "../api/types";
+import { openRun } from "../router";
 import { useFetch } from "../useFetch";
 
 const LANES: ReadonlyArray<{ status: WorkStatus; label: string }> = [
@@ -67,69 +66,8 @@ function WorkCard({
   );
 }
 
-function AuditNodeView({ node }: { node: AuditNode }) {
-  const statuses = node.statuses
-    ? Object.entries(node.statuses)
-        .map(([s, n]) => `${s}:${n}`)
-        .join(" ")
-    : "";
-  return (
-    <li className="audit-node">
-      <div className="audit-node__line">
-        <code>{node.run_id}</code>
-        {node.actor ? <span className="muted"> {node.actor}</span> : null}
-        {node.tier ? <span className="badge">{node.tier}</span> : null}
-        {statuses ? <span className="muted"> [{statuses}]</span> : null}
-        {typeof node.total_cost_micros === "number" ? (
-          <span className="muted"> cost: {node.total_cost_micros}µ</span>
-        ) : null}
-      </div>
-      {node.children && node.children.length > 0 ? (
-        <ul className="audit-tree">
-          {node.children.map((c) => (
-            <AuditNodeView node={c} key={c.run_id} />
-          ))}
-        </ul>
-      ) : null}
-    </li>
-  );
-}
-
-function AuditDrawer({
-  runId,
-  onClose,
-}: {
-  runId: string;
-  onClose: () => void;
-}) {
-  const tree = useFetch(() => api.auditTree(runId), [runId]);
-  return (
-    <div className="drawer-overlay" role="dialog" aria-modal="true" onClick={onClose}>
-      <div className="drawer" onClick={(e) => e.stopPropagation()}>
-        <div className="drawer__head">
-          <h3>Audit tree</h3>
-          <button className="btn btn--ghost" onClick={onClose}>
-            close
-          </button>
-        </div>
-        <p className="muted">
-          run <code>{runId}</code>
-        </p>
-        {tree.loading && <p className="muted">Loading...</p>}
-        {tree.error && <p className="error">{tree.error}</p>}
-        {tree.data && (
-          <ul className="audit-tree audit-tree--root">
-            <AuditNodeView node={tree.data.root} />
-          </ul>
-        )}
-      </div>
-    </div>
-  );
-}
-
 export function KanbanPanel() {
   const work = useFetch(() => api.work(), [], 10000);
-  const [traceRun, setTraceRun] = useState<string | null>(null);
 
   const items = work.data?.items ?? [];
   const byStatus = new Map<WorkStatus, WorkItem[]>();
@@ -169,7 +107,7 @@ export function KanbanPanel() {
                   <p className="lane__empty muted">empty</p>
                 ) : (
                   laneItems.map((item) => (
-                    <WorkCard key={item.id} item={item} onTrace={setTraceRun} />
+                    <WorkCard key={item.id} item={item} onTrace={openRun} />
                   ))
                 )}
               </div>
@@ -177,10 +115,6 @@ export function KanbanPanel() {
           );
         })}
       </div>
-
-      {traceRun && (
-        <AuditDrawer runId={traceRun} onClose={() => setTraceRun(null)} />
-      )}
     </section>
   );
 }

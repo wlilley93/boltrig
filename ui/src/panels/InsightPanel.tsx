@@ -9,7 +9,7 @@ import { useState } from "react";
 import { api } from "../api/client";
 import type { AuditRow, RunRow } from "../api/types";
 import { useFetch } from "../useFetch";
-import { CodeBlock, errText, scopeLabel } from "./shared";
+import { CodeBlock, RunLink, errText, scopeLabel } from "./shared";
 
 export function InsightPanel() {
   const cost = useFetch(() => api.cost(), []);
@@ -135,7 +135,11 @@ export function InsightPanel() {
             {runRows.map((r) => (
               <div className="row-line" key={r.work_item}>
                 <div>
-                  <code>{r.run_id}</code>
+                  {r.run_id ? (
+                    <RunLink runId={r.run_id} />
+                  ) : (
+                    <code className="muted">no run</code>
+                  )}
                   <div className="muted">{r.intent}</div>
                 </div>
                 <div className="kv">
@@ -197,7 +201,11 @@ export function InsightPanel() {
                       </td>
                       <td>{row.status}</td>
                       <td>
-                        <code>{row.run_id ?? "-"}</code>
+                        {row.run_id ? (
+                          <RunLink runId={row.run_id} />
+                        ) : (
+                          <code>-</code>
+                        )}
                       </td>
                     </tr>
                   ))}

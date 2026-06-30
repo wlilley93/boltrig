@@ -624,6 +624,17 @@ textarea:focus {
   flex-wrap: wrap;
 }
 
+/* run drawer sections (live events + execution tree) */
+.run-events,
+.run-tree {
+  margin-top: 16px;
+}
+
+.run-events h4,
+.run-tree h4 {
+  margin: 0 0 8px;
+}
+
 /* approvals / hitl */
 .hitl-list {
   display: flex;

@@ -2,6 +2,8 @@
 // rendering, comma-list conversion, and a couple of tiny presentational pieces.
 // Keeping these here keeps each panel focused on its own flow.
 
+import { openRun } from "../router";
+
 export function errText(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
@@ -48,6 +50,21 @@ export function scopeLabel(scope: string[] | string | undefined): string {
 
 export function CodeBlock({ value }: { value: unknown }) {
   return <pre className="codeblock">{prettyJson(value)}</pre>;
+}
+
+// A run id rendered as a handle that raises the global Run drawer (router.openRun).
+// Used wherever a panel surfaces a run_id so every run is one click from its
+// live events, execution tree and cost.
+export function RunLink({ runId, label }: { runId: string; label?: string }) {
+  return (
+    <button
+      className="run-handle"
+      title="Open run drawer"
+      onClick={() => openRun(runId)}
+    >
+      <code>{label ?? runId}</code>
+    </button>
+  );
 }
 
 // Map an overall workflow-run status to an existing badge colour modifier. Used
