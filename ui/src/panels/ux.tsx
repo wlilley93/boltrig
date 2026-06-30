@@ -284,6 +284,23 @@ export function TermTip({ term, children }: { term: string; children: ReactNode 
   );
 }
 
+// Notification value spaces (one source of truth for Me + Settings).
+export const NOTIFY_EVENT_OPTIONS: Option[] = [
+  { value: "approval", label: "Approval needed" },
+  { value: "escalation", label: "Escalation" },
+  { value: "work_status", label: "Work status change" },
+  { value: "budget_alert", label: "Budget alert" },
+  { value: "error", label: "Error" },
+];
+export const NOTIFY_CHANNEL_OPTIONS: Option[] = [
+  { value: "in_app", label: "In-app" },
+  { value: "email", label: "Email" },
+  { value: "slack", label: "Slack" },
+  { value: "teams", label: "Teams" },
+  { value: "webhook", label: "Webhook" },
+  { value: "pager", label: "Pager" },
+];
+
 // The canonical role value space (one source of truth; identity + admin + invite
 // selects all read this so they can never drift). org-admin is the most
 // powerful; agent the most limited.

@@ -13,17 +13,22 @@ import type {
 } from "../api/types";
 import { useIdentity } from "../identity";
 import { CodeBlock, errText, prettyJson } from "./shared";
+import { PageIntro, Select } from "./ux";
 
-const SECTIONS: ReadonlyArray<string> = [
-  "privacy",
-  "network",
-  "hitl",
-  "models",
-  "notifications",
-  "personal_agents",
-  "evaluation",
-  "memory",
+// Each manifest section + a one-line plain-language description, so a section
+// picker is never a list of cryptic keys.
+const SECTION_INFO: ReadonlyArray<{ key: string; label: string; blurb: string }> = [
+  { key: "privacy", label: "Privacy", blurb: "Data handling, retention and redaction." },
+  { key: "network", label: "Network", blurb: "Outbound network policy and egress rules." },
+  { key: "hitl", label: "Approvals (HITL)", blurb: "When actions pause for a human to approve." },
+  { key: "models", label: "Models", blurb: "Which AI models are available and how requests route." },
+  { key: "notifications", label: "Notifications", blurb: "Default notification channels and events." },
+  { key: "personal_agents", label: "Personal agents", blurb: "Defaults for users' personal agents." },
+  { key: "evaluation", label: "Evaluation", blurb: "Configuration for the eval harness." },
+  { key: "memory", label: "Memory", blurb: "The memory subsystem: engine, scopes and residency." },
 ];
+const SECTIONS: ReadonlyArray<string> = SECTION_INFO.map((s) => s.key);
+const SECTION_OPTIONS = SECTION_INFO.map((s) => ({ value: s.key, label: s.label }));
 
 const ADMIN_ROLES: ReadonlySet<string> = new Set(["org-admin"]);
 
@@ -122,6 +127,13 @@ export function AdminPanel() {
   }
 
   async function rollback(revId: number) {
+    if (
+      !window.confirm(
+        `Roll back "${section}" to revision #${revId}? This changes live configuration and records a new revision.`,
+      )
+    ) {
+      return;
+    }
     setSaveError(null);
     setSaveMsg(null);
     try {
@@ -162,29 +174,30 @@ export function AdminPanel() {
     }
   }
 
+  const sectionBlurb = SECTION_INFO.find((s) => s.key === section)?.blurb;
+
   return (
     <section className="panel">
-      <div className="panel__head">
-        <h2>Admin</h2>
-        <div className="panel__actions">
-          <label className="field">
-            <span>section</span>
-            <select
-              value={section}
-              onChange={(e) => setSection(e.target.value)}
-            >
-              {SECTIONS.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button className="btn" onClick={() => loadSection(section)}>
-            Reload
-          </button>
-        </div>
-      </div>
+      <PageIntro
+        title="Admin"
+        lead="Edit your organisation's configuration."
+        how="Pick a section, change its settings, and Save - every Save is recorded as a revision you can roll back to. Secrets are never shown, only referenced."
+        actions={
+          <>
+            <div style={{ minWidth: 180 }}>
+              <Select
+                value={section}
+                ariaLabel="Manifest section"
+                onChange={setSection}
+                options={SECTION_OPTIONS}
+              />
+            </div>
+            <button className="btn" onClick={() => loadSection(section)}>
+              Reload
+            </button>
+          </>
+        }
+      />
 
       {!isAdmin && (
         <p className="notice warn">
@@ -197,31 +210,36 @@ export function AdminPanel() {
         <div className="stack">
           <div className="form">
             <div className="form__title">
-              Manifest section: <code>{section}</code>
+              {SECTION_INFO.find((s) => s.key === section)?.label ?? section}
             </div>
-            {loading && <p className="muted">Loading section...</p>}
+            {sectionBlurb && <p className="ux-hint">{sectionBlurb}</p>}
+            {loading && <p className="muted">Loading...</p>}
             {loadError && (
-              <p className="error">Failed to load: {loadError}</p>
+              <p className="error">Could not load: {loadError}</p>
             )}
             {denied ? (
               <p className="error">denied: {denied}</p>
             ) : (
               <>
                 <label className="field">
-                  <span>value (JSON)</span>
+                  <span>Settings (JSON)</span>
                   <textarea
                     className="code"
                     value={editor}
                     onChange={(e) => setEditor(e.target.value)}
                   />
                 </label>
+                <p className="ux-hint">
+                  This is the section's live configuration. Saving changes it
+                  immediately and records a revision.
+                </p>
                 <div className="form__actions">
                   <button
                     className="btn btn--primary"
                     disabled={saveBusy}
                     onClick={save}
                   >
-                    {saveBusy ? "..." : "Save (records a revision)"}
+                    {saveBusy ? "Saving..." : "Save"}
                   </button>
                   {saveMsg && <span className="ok">{saveMsg}</span>}
                   {saveError && <span className="error">{saveError}</span>}
@@ -263,8 +281,10 @@ export function AdminPanel() {
                 <div className="stack">
                   {creds.map((c, i) => (
                     <div className="row-line" key={`${c.adapter}-${i}`}>
-                      <span className="muted">{c.adapter ?? "(adapter)"}</span>
-                      <code className="tag">{c.credential}</code>
+                      <span className="muted">{c.adapter ?? "unassigned"}</span>
+                      <code className="tag" title="Credential reference - the secret value is held server-side.">
+                        {c.credential}
+                      </code>
                     </div>
                   ))}
                 </div>
@@ -296,7 +316,7 @@ export function AdminPanel() {
                     {r.actor} - {r.created_at}
                   </div>
                 </div>
-                <button className="btn" onClick={() => rollback(r.id)}>
+                <button className="btn btn--danger" onClick={() => rollback(r.id)}>
                   Rollback
                 </button>
               </div>

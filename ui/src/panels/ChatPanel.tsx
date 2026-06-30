@@ -13,12 +13,30 @@ import type { ChatEvent, ChatMessage } from "../api/types";
 import { openRun } from "../router";
 import { useFetch } from "../useFetch";
 import { TurnExtras, normalizeEvents } from "./chatTurn";
+import { EmptyState, PageIntro } from "./ux";
 
 // The turn normaliser and renderer (tool / sub-agent / inline-HITL cards) live
 // in chatTurn.tsx so the Run drawer reuses the exact same rendering.
 
+const EXAMPLE_PROMPTS: ReadonlyArray<string> = [
+  "Create a ticket for a refund request",
+  "Summarise today's escalations",
+  "What can you do for me?",
+];
+
 function errText(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+function whenText(ts: string): string {
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return ts;
+  const mins = Math.round((Date.now() - d.getTime()) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return d.toLocaleDateString();
 }
 
 function MessageBubble({
@@ -195,22 +213,26 @@ export function ChatPanel() {
 
   return (
     <section className="panel chat">
-      <div className="panel__head">
-        <h2>Chat</h2>
-        <div className="panel__actions">
-          <span className="muted">{conversations.length} conversation(s)</span>
-          <button className="btn" onClick={newConversation}>
-            New conversation
-          </button>
-        </div>
-      </div>
+      <PageIntro
+        title="Chat"
+        lead="Talk to the orchestrator in plain language; it plans, calls tools, and asks for approval when an action needs a human."
+        how="Everything it does shows here as a live transcript - its reasoning, each tool call, and any approval it needs."
+        actions={
+          <>
+            <span className="muted">{conversations.length} conversation(s)</span>
+            <button className="btn" onClick={newConversation}>
+              New conversation
+            </button>
+          </>
+        }
+      />
 
       <div className="chat__layout">
         <aside className="chat__rail" aria-label="Conversations">
           {convs.loading && !convs.data && <p className="muted">Loading...</p>}
           {convs.error && <p className="error">Failed to load: {convs.error}</p>}
           {!convs.loading && conversations.length === 0 && (
-            <p className="muted">No conversations yet.</p>
+            <p className="muted">No conversations yet - start one below.</p>
           )}
           <ul className="conv-list">
             {conversations.map((c) => (
@@ -221,8 +243,12 @@ export function ChatPanel() {
                 >
                   <span className="conv-item__title">{c.title || "(untitled)"}</span>
                   <span className="conv-item__meta">
-                    <span className="badge">{c.status}</span>
-                    <span className="muted">{c.updated_at}</span>
+                    <span className="badge" title={`Conversation status: ${c.status}`}>
+                      {c.status}
+                    </span>
+                    <span className="muted" title={c.updated_at}>
+                      {whenText(c.updated_at)}
+                    </span>
                   </span>
                 </button>
               </li>
@@ -237,9 +263,27 @@ export function ChatPanel() {
             )}
             {msgsError && <p className="error">Failed to load conversation: {msgsError}</p>}
             {isEmpty && (
-              <p className="muted chat__empty">
-                Start a new conversation, or pick one from the left.
-              </p>
+              <div className="chat__empty">
+                <EmptyState
+                  title="Start a conversation"
+                  body="Ask in plain language, or pick one to try:"
+                  action={
+                    <div className="kv" style={{ justifyContent: "center" }}>
+                      {EXAMPLE_PROMPTS.map((ex) => (
+                        <button
+                          key={ex}
+                          type="button"
+                          className="tag tag--accent"
+                          style={{ cursor: "pointer" }}
+                          onClick={() => setInput(ex)}
+                        >
+                          {ex}
+                        </button>
+                      ))}
+                    </div>
+                  }
+                />
+              </div>
             )}
 
             {messages.map((m) => (
@@ -305,7 +349,7 @@ export function ChatPanel() {
               disabled={streaming || input.trim().length === 0}
               onClick={() => void send()}
             >
-              {streaming ? "..." : "Send"}
+              {streaming ? "Sending..." : "Send"}
             </button>
           </div>
         </div>
