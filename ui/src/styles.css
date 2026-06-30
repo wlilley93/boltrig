@@ -2769,6 +2769,91 @@ select:focus {
   accent-color: var(--color-accent);
 }
 
+/* --- Chat composer: a moving electric-blue blob + a thinking glow ---------- */
+.chat__composer {
+  position: relative;
+  align-items: stretch;
+}
+.chat__inputwrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  border-radius: 8px;
+  isolation: isolate;
+}
+/* the slow-drifting blue blob behind the bar */
+.chat__inputwrap::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  z-index: 0;
+  border-radius: 10px;
+  background: conic-gradient(
+    from 0deg,
+    #1fb6d6,
+    #3dd3f0,
+    #7c8bff,
+    #6fe3f7,
+    #1fb6d6
+  );
+  filter: blur(12px);
+  opacity: 0.26;
+  animation: chat-blob 9s linear infinite;
+}
+@keyframes chat-blob {
+  to {
+    transform: rotate(1turn);
+  }
+}
+.chat__input {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  resize: vertical;
+  min-height: 46px;
+  padding: 12px 14px;
+  background: rgba(4, 6, 13, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 7px;
+  color: var(--color-text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--fs-md);
+  line-height: 1.55;
+  letter-spacing: 0.01em;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+.chat__input:focus {
+  outline: none;
+  border-color: rgba(61, 211, 240, 0.45);
+}
+/* thinking: the blob brightens + speeds up, the bar pulses electric-blue */
+.chat__composer--thinking .chat__inputwrap::before {
+  opacity: 0.6;
+  animation-duration: 3.2s;
+}
+.chat__composer--thinking .chat__input {
+  border-color: rgba(61, 211, 240, 0.6);
+  animation: chat-bar-pulse 1.6s ease-in-out infinite;
+}
+@keyframes chat-bar-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 1px rgba(61, 211, 240, 0.3), 0 0 12px rgba(61, 211, 240, 0.22);
+  }
+  50% {
+    box-shadow: 0 0 0 1px rgba(61, 211, 240, 0.65), 0 0 24px rgba(61, 211, 240, 0.5);
+  }
+}
+/* reduced motion: no drift/pulse - a calm static glow while thinking */
+:root.reduce-motion .chat__inputwrap::before {
+  animation: none;
+}
+:root.reduce-motion .chat__composer--thinking .chat__input {
+  animation: none;
+  box-shadow: 0 0 0 1px rgba(61, 211, 240, 0.5), 0 0 16px rgba(61, 211, 240, 0.4);
+}
+
 /* --- Budget burn-down rows (Insight) -------------------------------------- */
 .budget-row {
   display: flex;

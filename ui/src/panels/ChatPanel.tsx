@@ -334,22 +334,23 @@ export function ChatPanel() {
             )}
           </div>
 
-          <div className="chat__composer">
-            <textarea
-              className="chat__input"
-              placeholder="Message the orchestrator... (Enter to send, Shift+Enter for newline)"
-              value={input}
-              rows={2}
-              disabled={streaming}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={onComposerKey}
-            />
+          <div className={`chat__composer ${streaming ? "chat__composer--thinking" : ""}`}>
+            <div className="chat__inputwrap">
+              <textarea
+                className="chat__input"
+                placeholder="Message the orchestrator..."
+                value={input}
+                rows={2}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={onComposerKey}
+              />
+            </div>
             <button
               className="btn btn--primary"
               disabled={streaming || input.trim().length === 0}
               onClick={() => void send()}
             >
-              {streaming ? "Sending..." : "Send"}
+              {streaming ? "Thinking..." : "Send"}
             </button>
           </div>
         </div>
