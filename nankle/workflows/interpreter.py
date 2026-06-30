@@ -32,6 +32,7 @@ business, not the interpreter's. Imports only models; severable from the kernel.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 from nankle.models import InvocationContext, NankleError
@@ -94,6 +95,21 @@ async def run_workflow_definition(
     definition = wf.definition or {}
     steps = list(definition.get("steps", []) or [])
     rid = run_id or (executor.new_run_id() if executor is not None else context.run_id)
+    # Bind the whole run to rid: run every step under a context keyed to rid, so the
+    # step dispatches' tool events, the workflow_step events below, and the audit
+    # rows all share one coherent stream the live canvas (and Run drawer) follow.
+    run_ctx = replace(context, run_id=rid) if rid else context
+
+    def _emit_step(event: dict[str, Any]) -> None:
+        # Fail-safe side-channel (Round Twelve): light the canvas node for this
+        # step. Never affects the run (P9).
+        relay = getattr(kernel, "events", None)
+        if relay is None or not rid:
+            return
+        try:
+            relay.publish(rid, {"type": "workflow_step", **event})
+        except Exception:
+            pass
 
     ordered, unrunnable = _topological_order(steps)
     results: dict[str, dict[str, Any]] = {}
@@ -101,6 +117,8 @@ async def run_workflow_definition(
     for s in unrunnable:
         results[s["id"]] = {"action": s.get("action"), "status": "skipped",
                             "reason": "missing_parent_or_cycle"}
+        _emit_step({"step_id": s["id"], "action": s.get("action"),
+                    "status": "skipped", "reason": "missing_parent_or_cycle"})
 
     paused = False
     for step in ordered:
@@ -110,14 +128,17 @@ async def run_workflow_definition(
             results[step_id] = {"action": step.get("action"), "status": "skipped",
                                 "reason": "parent_failed"}
             failed_or_skipped.add(step_id)
+            _emit_step({"step_id": step_id, "action": step.get("action"),
+                        "status": "skipped", "reason": "parent_failed"})
             continue
 
         action = step.get("action", "")
         noun, verb = _split_action(action)
         params = step.get("params") or step.get("with") or {}
+        _emit_step({"step_id": step_id, "action": action, "status": "running"})
 
         async def _dispatch(noun=noun, verb=verb, params=params) -> dict[str, Any]:
-            return await kernel.invoke(noun, verb, params, context)
+            return await kernel.invoke(noun, verb, params, run_ctx)
 
         boundary = f"workflow:{wf.id}:{step_id}"
         try:
@@ -126,6 +147,7 @@ async def run_workflow_definition(
             else:
                 output = await _dispatch()
             results[step_id] = {"action": action, "status": "ok", "output": output}
+            _emit_step({"step_id": step_id, "action": action, "status": "ok"})
         except NankleError as exc:
             reason = getattr(exc, "reason", type(exc).__name__)
             # A held HITL gate is a pause, not a failure - the run can resume.
@@ -135,10 +157,14 @@ async def run_workflow_definition(
             else:
                 failed_or_skipped.add(step_id)
             results[step_id] = {"action": action, "status": status, "reason": reason}
+            _emit_step({"step_id": step_id, "action": action, "status": status,
+                        "reason": reason})
         except Exception as exc:  # an adapter bug must not crash the fleet (P9)
             failed_or_skipped.add(step_id)
             results[step_id] = {"action": action, "status": "error",
                                 "reason": type(exc).__name__}
+            _emit_step({"step_id": step_id, "action": action, "status": "error",
+                        "reason": type(exc).__name__})
 
     if paused:
         overall = "paused"

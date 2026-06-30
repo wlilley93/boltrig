@@ -372,3 +372,8 @@ invariants:
     description: The run-events endpoint returns the events a run emitted as SSE frames (snapshot), and an unknown run is a 404.
     tests:
       - tests/security/test_round_eleven.py::test_unknown_run_is_404
+  FR-EVT-04:
+    description: The interpreter emits a workflow_step event per step (step_id + running/ok/failed/skipped) on the run's stream, bound to one run id so step events, the steps' tool events, and audit cohere.
+    tests:
+      - tests/integration/test_round_twelve.py::test_interpreter_emits_step_events_on_the_run_stream
+      - tests/integration/test_round_twelve.py::test_skipped_descendant_emits_skipped_step_event
