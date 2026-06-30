@@ -37,6 +37,7 @@ import {
   loadAppearance,
   saveAppearanceLocal,
 } from "../appearance";
+import { PageIntro } from "./ux";
 
 const ADMIN_ROLES: ReadonlySet<string> = new Set(["org-admin"]);
 
@@ -1445,12 +1446,11 @@ export function SettingsPanel() {
 
   return (
     <section className="panel">
-      <div className="panel__head">
-        <h2>Settings</h2>
-        <div className="panel__actions">
-          <span className="muted">account & access</span>
-        </div>
-      </div>
+      <PageIntro
+        title="Settings"
+        lead="Your account, security, and how Boltrig looks and reaches you."
+        how="Org-admins also manage the directory and invitations here. Each section explains itself as you go."
+      />
 
       <nav className="subtabs" aria-label="Settings sections">
         {visible.map((t) => (

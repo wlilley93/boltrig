@@ -36,6 +36,7 @@ import {
   stepBadgeClass,
 } from "./shared";
 import { WorkflowCanvas } from "./WorkflowCanvas";
+import { Field, Hint, PageIntro, Segmented, Select } from "./ux";
 
 const AUTHOR_ROLES: ReadonlySet<string> = new Set([
   "org-admin",
@@ -74,6 +75,7 @@ function AckLine({ ack }: { ack: StatusAck | null }) {
 
 function SkillsStudio() {
   const skills = useFetch(() => api.skills(), []);
+  const caps = useFetch(() => api.capabilities(), []);
 
   const [id, setId] = useState("");
   const [version, setVersion] = useState("1.0.0");
@@ -144,49 +146,79 @@ function SkillsStudio() {
   }
 
   const list: SkillSummary[] = skills.data?.skills ?? [];
+  const allVerbs = caps.data?.verbs ?? [];
+  function addGrant(id: string) {
+    const have = csvToList(grants);
+    if (!have.includes(id)) setGrants([...have, id].join(", "));
+  }
 
   return (
     <div className="cols">
       <div className="stack">
         <div className="form">
-          <div className="form__title">Upsert skill</div>
+          <div className="form__title">Create or update a skill</div>
+          <Hint>A skill gives an agent an instruction plus the permissions it needs.</Hint>
           <div className="form__grid">
-            <label className="field">
-              <span>id</span>
+            <Field label="Skill id" hint="Lowercase, dotted, unique." example="triage.summarise">
               <input value={id} onChange={(e) => setId(e.target.value)} />
-            </label>
-            <label className="field">
-              <span>version</span>
-              <input
-                value={version}
-                onChange={(e) => setVersion(e.target.value)}
-              />
-            </label>
+            </Field>
+            <Field label="Version" hint="Semver; bump on every change.">
+              <input value={version} onChange={(e) => setVersion(e.target.value)} />
+            </Field>
           </div>
-          <label className="field">
-            <span>prompt_fragment</span>
+          <Field
+            label="Instruction"
+            hint="The text injected into the agent when this skill loads."
+            example="Summarise the ticket in 3 bullets"
+          >
             <textarea
               className="code"
               value={fragment}
               onChange={(e) => setFragment(e.target.value)}
             />
-          </label>
-          <label className="field">
-            <span>tool_grants (comma list)</span>
+          </Field>
+          <Field
+            label="Permissions"
+            hint="The verbs an agent using this skill may call (comma-separated). It still can't exceed the caller's own grants."
+          >
             <input
               value={grants}
               placeholder="ticket.read, ticket.comment"
               onChange={(e) => setGrants(e.target.value)}
             />
-          </label>
-          <label className="field">
-            <span>context_requirements (JSON)</span>
-            <textarea
-              className="code"
-              value={ctxReq}
-              onChange={(e) => setCtxReq(e.target.value)}
-            />
-          </label>
+          </Field>
+          {allVerbs.length > 0 && (
+            <div className="kv">
+              <span className="ux-hint">Add a permission:</span>
+              {allVerbs.map((v) => (
+                <button
+                  key={v.id}
+                  type="button"
+                  className="tag tag--accent"
+                  style={{ cursor: "pointer" }}
+                  onClick={() => addGrant(v.id)}
+                >
+                  {v.id}
+                </button>
+              ))}
+            </div>
+          )}
+          <details>
+            <summary className="ux-hint" style={{ cursor: "pointer" }}>
+              Advanced: context requirements (JSON)
+            </summary>
+            <Field
+              label="Context requirements (JSON)"
+              hint="Fields the skill needs in context before it can run."
+              example='{"requires": ["customer_id"]}'
+            >
+              <textarea
+                className="code"
+                value={ctxReq}
+                onChange={(e) => setCtxReq(e.target.value)}
+              />
+            </Field>
+          </details>
           <div className="form__actions">
             <button className="btn btn--primary" disabled={busy} onClick={upsert}>
               {busy ? "..." : "Save skill"}
@@ -447,6 +479,8 @@ function VerbForm() {
 }
 
 function BindingForm() {
+  const caps = useFetch(() => api.capabilities(), []);
+  const adapters = useFetch(() => api.adapters(), []);
   const [verbId, setVerbId] = useState("");
   const [targetType, setTargetType] = useState<TargetTypeValue>("adapter");
   const [targetRef, setTargetRef] = useState("");
@@ -456,7 +490,7 @@ function BindingForm() {
 
   async function submit() {
     if (!verbId.trim() || !targetRef.trim()) {
-      setError("verb_id and target_ref are required.");
+      setError("Pick a verb and what should run it.");
       return;
     }
     setBusy(true);
@@ -476,37 +510,55 @@ function BindingForm() {
     }
   }
 
+  const verbOptions = [
+    { value: "", label: "Choose a verb..." },
+    ...(caps.data?.verbs ?? []).map((v) => ({ value: v.id, label: v.id })),
+  ];
+  const adapterOptions = [
+    { value: "", label: "Choose an adapter..." },
+    ...(adapters.data?.adapters ?? []).map((a) => ({ value: a.id, label: a.id })),
+  ];
+
   return (
     <div className="form">
       <div className="form__title">Set binding</div>
+      <Hint>Wire a verb to what actually runs it - an adapter, or an agent.</Hint>
       <div className="form__grid">
-        <label className="field">
-          <span>verb_id</span>
-          <input value={verbId} onChange={(e) => setVerbId(e.target.value)} />
-        </label>
-        <label className="field">
-          <span>target_type</span>
-          <select
+        <Field label="Verb" hint="The action to wire up.">
+          <Select value={verbId} ariaLabel="Verb" onChange={setVerbId} options={verbOptions} />
+        </Field>
+        <Field label="Runs via" hint="An adapter (a service) or an agent (a reasoning model).">
+          <Segmented
             value={targetType}
-            onChange={(e) =>
-              setTargetType(e.target.value === "agent" ? "agent" : "adapter")
-            }
-          >
-            <option value="adapter">adapter</option>
-            <option value="agent">agent</option>
-          </select>
-        </label>
-        <label className="field">
-          <span>target_ref</span>
-          <input
-            value={targetRef}
-            onChange={(e) => setTargetRef(e.target.value)}
+            ariaLabel="Target type"
+            onChange={(v) => {
+              setTargetType(v === "agent" ? "agent" : "adapter");
+              setTargetRef("");
+            }}
+            options={[
+              { value: "adapter", label: "An adapter" },
+              { value: "agent", label: "An agent" },
+            ]}
           />
-        </label>
+        </Field>
+        <Field
+          label={targetType === "adapter" ? "Which adapter" : "Which agent"}
+          hint={
+            targetType === "adapter"
+              ? "The registered adapter that fulfils this verb."
+              : "The agent id that fulfils this verb."
+          }
+        >
+          {targetType === "adapter" ? (
+            <Select value={targetRef} ariaLabel="Adapter" onChange={setTargetRef} options={adapterOptions} />
+          ) : (
+            <input value={targetRef} onChange={(e) => setTargetRef(e.target.value)} />
+          )}
+        </Field>
       </div>
       <div className="form__actions">
         <button className="btn btn--primary" disabled={busy} onClick={submit}>
-          {busy ? "..." : "Set binding"}
+          {busy ? "Saving..." : "Set binding"}
         </button>
         <AckLine ack={ack} />
         {error && <span className="error">{error}</span>}
@@ -1317,12 +1369,11 @@ export function StudioPanel() {
 
   return (
     <section className="panel">
-      <div className="panel__head">
-        <h2>Studio</h2>
-        <div className="panel__actions">
-          <span className="muted">authoring hub</span>
-        </div>
-      </div>
+      <PageIntro
+        title="Studio"
+        lead="Where you compose what agents can do: skills, capability (nouns, verbs and what runs them), adapters, and workflows."
+        how="Everything you build here is data, not code. Skills give agents instructions + permissions; Router wires a verb to an adapter or agent; Adapters turn an external service into governed verbs; Workflows chain verbs into a flow."
+      />
 
       {!isAuthor && (
         <p className="notice warn">
