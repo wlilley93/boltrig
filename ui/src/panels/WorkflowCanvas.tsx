@@ -59,7 +59,7 @@ import {
   stepBadgeClass,
 } from "./shared";
 import { WorkflowRunCanvas } from "./WorkflowRunCanvas";
-import { SchemaForm } from "./ux";
+import { SchemaForm, Select } from "./ux";
 
 // Parse the inspector params JSON into an object for the schema form (an
 // in-progress edit may be invalid; the form just sees {} until valid again).
@@ -443,6 +443,22 @@ export function WorkflowCanvas() {
   }
 
   // Inspector: apply the edited params JSON to the selected step.
+  // Inspector: rewire the selected step to a different verb in place (re-derives
+  // kind + consequence from the new verb's binding).
+  function swapVerb(verbId: string) {
+    if (!selectedNode || !verbId) return;
+    const v = verbsById.get(verbId);
+    if (!v) return;
+    const id = selectedNode.id;
+    setNodes((ns) =>
+      ns.map((n) =>
+        n.id === id && isStepNode(n)
+          ? { ...n, data: { ...n.data, action: v.id, kind: deriveKind(v), consequence: v.consequence } }
+          : n,
+      ),
+    );
+  }
+
   function applyParams() {
     if (!selectedNode) return;
     let parsed: Record<string, unknown>;
@@ -861,7 +877,12 @@ export function WorkflowCanvas() {
               </label>
               <label className="field">
                 <span>action (verb)</span>
-                <input value={selectedNode.data.action} readOnly />
+                <Select
+                  value={selectedNode.data.action}
+                  ariaLabel="Action verb"
+                  onChange={swapVerb}
+                  options={verbs.map((v) => ({ value: v.id, label: v.id }))}
+                />
               </label>
               <label className="field">
                 <span>kind</span>
