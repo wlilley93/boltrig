@@ -12,6 +12,7 @@ import { useFetch } from "../useFetch";
 import { CodeBlock, RunLink, errText, scopeLabel } from "./shared";
 import {
   AUDIT_STATUS,
+  FetchError,
   Field,
   Hint,
   PageIntro,
@@ -123,9 +124,7 @@ export function InsightPanel() {
           </div>
           <div className="list-card__body">
             {cost.loading && !cost.data && <p className="muted">Loading...</p>}
-            {cost.error && (
-              <p className="error">Could not load cost: {cost.error}</p>
-            )}
+            <FetchError error={cost.error} status={cost.errorStatus} onRetry={cost.reload} />
             {costData && (
               <>
                 <div className="row-line">
@@ -159,9 +158,7 @@ export function InsightPanel() {
           </div>
           <div className="list-card__body">
             {runs.loading && !runs.data && <p className="muted">Loading...</p>}
-            {runs.error && (
-              <p className="error">Could not load runs: {runs.error}</p>
-            )}
+            <FetchError error={runs.error} status={runs.errorStatus} onRetry={runs.reload} />
             {!runs.loading && runRows.length === 0 && (
               <p className="muted">No runs in your scope yet.</p>
             )}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 
 import { api } from "./api/client";
 import { applyAppearance, loadAppearance } from "./appearance";
@@ -19,7 +19,12 @@ import { MemoryPanel } from "./panels/MemoryPanel";
 import { RouterPanel } from "./panels/RouterPanel";
 import { SettingsPanel } from "./panels/SettingsPanel";
 import { RunView } from "./panels/RunView";
-import { StudioPanel } from "./panels/StudioPanel";
+
+// Studio pulls in the @xyflow/react canvas; lazy-load it so that heavy chunk
+// only downloads when the user opens the authoring hub (code-split, Fix 5).
+const StudioPanel = lazy(() =>
+  import("./panels/StudioPanel").then((m) => ({ default: m.StudioPanel })),
+);
 
 type Tab =
   | "home"
@@ -470,19 +475,21 @@ export function App() {
       <div className="app__body">
         {identityOpen && <IdentityBar />}
         <main className="app__main">
-          {active === "home" && <HomePanel />}
-          {active === "router" && <RouterPanel />}
-          {active === "kanban" && <KanbanPanel />}
-          {active === "approvals" && <ApprovalsPanel />}
-          {active === "chat" && <ChatPanel />}
-          {active === "studio" && <StudioPanel />}
-          {active === "dev" && <DevConsolePanel />}
-          {active === "admin" && <AdminPanel />}
-          {active === "insight" && <InsightPanel />}
-          {active === "eval" && <EvalPanel />}
-          {active === "memory" && <MemoryPanel />}
-          {active === "me" && <MePanel />}
-          {active === "settings" && <SettingsPanel />}
+          <Suspense fallback={<p className="muted">Loading...</p>}>
+            {active === "home" && <HomePanel />}
+            {active === "router" && <RouterPanel />}
+            {active === "kanban" && <KanbanPanel />}
+            {active === "approvals" && <ApprovalsPanel />}
+            {active === "chat" && <ChatPanel />}
+            {active === "studio" && <StudioPanel />}
+            {active === "dev" && <DevConsolePanel />}
+            {active === "admin" && <AdminPanel />}
+            {active === "insight" && <InsightPanel />}
+            {active === "eval" && <EvalPanel />}
+            {active === "memory" && <MemoryPanel />}
+            {active === "me" && <MePanel />}
+            {active === "settings" && <SettingsPanel />}
+          </Suspense>
         </main>
       </div>
 

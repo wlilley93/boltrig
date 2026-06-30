@@ -13,6 +13,7 @@ import type { ChatEvent, ChatMessage } from "../api/types";
 import { openRun } from "../router";
 import { useFetch } from "../useFetch";
 import { TurnExtras, normalizeEvents } from "./chatTurn";
+import { apiReason } from "./shared";
 import { EmptyState, PageIntro } from "./ux";
 
 // The turn normaliser and renderer (tool / sub-agent / inline-HITL cards) live
@@ -24,9 +25,8 @@ const EXAMPLE_PROMPTS: ReadonlyArray<string> = [
   "What can you do for me?",
 ];
 
-function errText(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
-}
+// Faithful server reason (a denied chat shows the kernel's message, not a 403).
+const errText = apiReason;
 
 function whenText(ts: string): string {
   const d = new Date(ts);

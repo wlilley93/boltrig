@@ -7,23 +7,11 @@
 import { useState } from "react";
 
 import { api } from "../api/client";
-import type {
-  MemoryItem,
-  NotificationPrefItem,
-  SpawnResult,
-} from "../api/types";
+import type { MemoryItem, SpawnResult } from "../api/types";
+import { navigate } from "../router";
 import { useFetch } from "../useFetch";
-import { CodeBlock, GrantList, csvToList, errText } from "./shared";
-import {
-  Field,
-  Hint,
-  InfoCallout,
-  NOTIFY_CHANNEL_OPTIONS,
-  NOTIFY_EVENT_OPTIONS,
-  PageIntro,
-  Segmented,
-  Select,
-} from "./ux";
+import { CodeBlock, GrantList, apiReason, csvToList, errText } from "./shared";
+import { Field, Hint, InfoCallout, PageIntro } from "./ux";
 
 function PersonalAgent() {
   const skillsList = useFetch(() => api.skills(), []);
@@ -55,7 +43,7 @@ function PersonalAgent() {
       });
       setCfgMsg(`Saved agent ${res.id} (owner ${res.owner}).`);
     } catch (err) {
-      setCfgError(errText(err));
+      setCfgError(apiReason(err));
     } finally {
       setCfgBusy(false);
     }
@@ -161,112 +149,17 @@ function PersonalAgent() {
   );
 }
 
-function NotificationPrefs() {
-  const prefs = useFetch(() => api.notificationPrefs(), []);
-
-  const [eventType, setEventType] = useState("approval");
-  const [channel, setChannel] = useState("email");
-  const [target, setTarget] = useState("");
-  const [enabled, setEnabled] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [msg, setMsg] = useState<string | null>(null);
-
-  async function save() {
-    if (!eventType.trim() || !channel.trim()) {
-      setError("event_type and channel are required.");
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    setMsg(null);
-    try {
-      const res = await api.putNotificationPref({
-        event_type: eventType.trim(),
-        channel: channel.trim(),
-        target: target.trim() || undefined,
-        enabled,
-      });
-      setMsg(`Saved pref ${res.id}.`);
-      prefs.reload();
-    } catch (err) {
-      setError(errText(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const list: NotificationPrefItem[] = prefs.data?.prefs ?? [];
-
+// Notifications are edited in one place (Settings -> Notifications) to avoid two
+// divergent editors. This card points there.
+function NotificationsPointer() {
   return (
-    <div className="stack">
-      <div className="form">
-        <div className="form__title">Notification preference</div>
-        <div className="form__grid">
-          <Field label="When" hint="The event to be notified about.">
-            <Select value={eventType} ariaLabel="Event" onChange={setEventType} options={NOTIFY_EVENT_OPTIONS} />
-          </Field>
-          <Field label="Notify me by" hint="Where the notification is sent.">
-            <Select value={channel} ariaLabel="Channel" onChange={setChannel} options={NOTIFY_CHANNEL_OPTIONS} />
-          </Field>
-          <Field
-            label="Destination"
-            hint="The address, channel or webhook URL for the channel above."
-            example="me@acme.com"
-          >
-            <input value={target} placeholder="address / channel / url" onChange={(e) => setTarget(e.target.value)} />
-          </Field>
-          <Field label="State">
-            <Segmented
-              value={enabled ? "yes" : "no"}
-              ariaLabel="Enabled"
-              onChange={(v) => setEnabled(v === "yes")}
-              options={[
-                { value: "yes", label: "On" },
-                { value: "no", label: "Off" },
-              ]}
-            />
-          </Field>
-        </div>
-        <div className="form__actions">
-          <button className="btn btn--primary" disabled={busy} onClick={save}>
-            {busy ? "..." : "Save preference"}
-          </button>
-          {msg && <span className="ok">{msg}</span>}
-          {error && <span className="error">{error}</span>}
-        </div>
-      </div>
-
-      <div className="list-card">
-        <div className="list-card__head">
-          <h3>My preferences</h3>
-          <button className="btn" onClick={() => prefs.reload()}>
-            Refresh
-          </button>
-        </div>
-        <div className="list-card__body">
-          {prefs.loading && !prefs.data && <p className="muted">Loading...</p>}
-          {prefs.error && (
-            <p className="error">Failed to load: {prefs.error}</p>
-          )}
-          {!prefs.loading && list.length === 0 && (
-            <p className="muted">No preferences set.</p>
-          )}
-          {list.map((pref) => (
-            <div className="row-line" key={pref.id}>
-              <div>
-                <code>{pref.event_type}</code>{" "}
-                <span className="muted">
-                  via {pref.channel}
-                  {pref.target ? ` -> ${pref.target}` : ""}
-                </span>
-              </div>
-              <span className={`badge ${pref.enabled ? "badge--ok" : ""}`}>
-                {pref.enabled ? "on" : "off"}
-              </span>
-            </div>
-          ))}
-        </div>
+    <div className="form">
+      <div className="form__title">Notifications</div>
+      <Hint>Choose how and when Boltrig reaches you - approvals, escalations and more.</Hint>
+      <div className="form__actions">
+        <button className="btn" onClick={() => navigate("/settings")}>
+          Manage in Settings
+        </button>
       </div>
     </div>
   );
@@ -351,7 +244,7 @@ export function MePanel() {
       <div className="cols">
         <PersonalAgent />
         <div className="stack">
-          <NotificationPrefs />
+          <NotificationsPointer />
           <MemoryQuery />
         </div>
       </div>

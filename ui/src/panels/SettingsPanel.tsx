@@ -37,18 +37,12 @@ import {
   loadAppearance,
   saveAppearanceLocal,
 } from "../appearance";
-import { PageIntro } from "./ux";
+import { PageIntro, ROLE_VALUES } from "./ux";
 
 const ADMIN_ROLES: ReadonlySet<string> = new Set(["org-admin"]);
 
-const ROLE_OPTIONS: ReadonlyArray<string> = [
-  "org-admin",
-  "department-head",
-  "manager",
-  "lead",
-  "integrator",
-  "agent",
-];
+// One source of truth for the role set (shared with the identity + admin selects).
+const ROLE_OPTIONS: ReadonlyArray<string> = ROLE_VALUES;
 
 const EVENT_TYPES: ReadonlyArray<string> = [
   "approval",

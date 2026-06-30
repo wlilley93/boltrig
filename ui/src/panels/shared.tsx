@@ -2,9 +2,24 @@
 // rendering, comma-list conversion, and a couple of tiny presentational pieces.
 // Keeping these here keeps each panel focused on its own flow.
 
+import { ApiError } from "../api/client";
 import { openRun } from "../router";
 
 export function errText(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+// The faithful server reason for a thrown call: an ApiError carries the kernel's
+// {reason} in its body on a 403/409, which is more useful than "POST ... -> 403".
+export function apiReason(err: unknown): string {
+  if (err instanceof ApiError) {
+    if (err.body && typeof err.body === "object" && "reason" in err.body) {
+      const r = (err.body as { reason: unknown }).reason;
+      if (typeof r === "string" && r) return r;
+    }
+    if (err.status === 403) return "You don't have access to this.";
+    if (err.status === 0) return "Can't reach the server - check your connection.";
+  }
   return err instanceof Error ? err.message : String(err);
 }
 

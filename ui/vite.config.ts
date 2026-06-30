@@ -14,4 +14,18 @@ export default defineConfig({
       "/healthz": { target: KERNEL, changeOrigin: true },
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // Split the heavy vendor code (React + the @xyflow/react canvas) into
+        // their own chunks so the initial app bundle stays small; the canvas
+        // chunk only loads when a canvas-using panel (Studio / Router tree) is
+        // lazy-mounted.
+        manualChunks: {
+          react: ["react", "react-dom"],
+          reactflow: ["@xyflow/react"],
+        },
+      },
+    },
+  },
 });

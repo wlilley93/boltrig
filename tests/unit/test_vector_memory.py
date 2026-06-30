@@ -12,12 +12,27 @@ and prove two things the engine claims:
 """
 
 import asyncio
+import re
+from pathlib import Path
 
 import pytest
 
-from boltrig.memory import EngineFact, HashingEmbedder, VectorMemoryEngine, cosine
+from boltrig.memory import DEFAULT_DIM, EngineFact, HashingEmbedder, VectorMemoryEngine, cosine
 
 T = "acme"
+
+
+def test_embedding_dim_matches_schema():
+    """The pgvector column dimension in schema.sql must equal DEFAULT_DIM, or a
+    durable insert fails at runtime. Pin them together so changing one without the
+    other turns the build red (Fix: dim coupling)."""
+    schema = Path(__file__).resolve().parents[2] / "boltrig" / "store" / "schema.sql"
+    text = schema.read_text(encoding="utf-8")
+    m = re.search(r"embedding\s+vector\((\d+)\)", text)
+    assert m, "memory_vectors.embedding vector(N) column not found in schema.sql"
+    assert int(m.group(1)) == DEFAULT_DIM, (
+        f"schema.sql vector({m.group(1)}) != DEFAULT_DIM {DEFAULT_DIM}; update both"
+    )
 
 
 def test_embedder_is_deterministic_and_unit_norm():

@@ -23,6 +23,7 @@ import { useFetch } from "../useFetch";
 import { CodeBlock, errText } from "./shared";
 import {
   EmptyState,
+  FetchError,
   Field,
   Hint,
   InfoCallout,
@@ -264,10 +265,9 @@ function RecallTab() {
 
 function BrowseTab() {
   const [kind, setKind] = useState("");
-  const [applied, setApplied] = useState("");
   const facts = useFetch(
-    () => api.memoryFacts({ kind: applied.trim() || undefined }),
-    [applied],
+    () => api.memoryFacts({ kind: kind.trim() || undefined }),
+    [kind],
   );
 
   // forget state, keyed by fact id so each row's button is independent.
@@ -315,10 +315,7 @@ function BrowseTab() {
             <Select
               value={kind}
               ariaLabel="Filter by type"
-              onChange={(v) => {
-                setKind(v);
-                setApplied(v);
-              }}
+              onChange={setKind}
               options={KIND_FILTER_OPTIONS}
             />
           </Field>
@@ -347,10 +344,13 @@ function BrowseTab() {
         </div>
         <div className="list-card__body">
           {facts.loading && !facts.data && <p className="muted">Loading...</p>}
-          {facts.error && (
-            <p className="error">Failed to load: {facts.error}</p>
-          )}
-          {!facts.loading && list.length === 0 && (
+          {facts.error &&
+            (/binding_not_found/.test(facts.error) ? (
+              <InfoCallout tone="warn">Memory is not enabled for your org.</InfoCallout>
+            ) : (
+              <FetchError error={facts.error} status={facts.errorStatus} onRetry={facts.reload} />
+            ))}
+          {!facts.loading && !facts.error && list.length === 0 && (
             <p className="muted">
               No facts in your scope yet. Add one in the Remember tab, or load a
               source in Ingest.

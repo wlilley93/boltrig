@@ -6,7 +6,7 @@ import { api } from "../api/client";
 import type { WorkItem, WorkStatus } from "../api/types";
 import { navigate, openRun } from "../router";
 import { useFetch } from "../useFetch";
-import { EmptyState, PageIntro, WORK_STATUS } from "./ux";
+import { EmptyState, FetchError, PageIntro, WORK_STATUS } from "./ux";
 
 const LANES: ReadonlyArray<{ status: WorkStatus; label: string }> = [
   { status: "pending", label: "Pending" },
@@ -102,14 +102,7 @@ export function KanbanPanel() {
       />
 
       {work.loading && !work.data && <p className="muted">Loading...</p>}
-      {work.error && (
-        <div className="ux-error" role="alert">
-          <span className="ux-error__msg">Could not load work: {work.error}</span>
-          <button className="btn btn--sm" onClick={() => work.reload()}>
-            Try again
-          </button>
-        </div>
-      )}
+      <FetchError error={work.error} status={work.errorStatus} onRetry={work.reload} />
 
       {empty ? (
         <EmptyState

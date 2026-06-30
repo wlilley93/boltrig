@@ -7,14 +7,19 @@
 // Flow Capability plane: noun -> verb -> binding). Both share these fetches; the
 // resolveHealth / badge helpers below are exported so the canvas reuses them.
 
-import { useMemo, useState } from "react";
+import { Suspense, lazy, useMemo, useState } from "react";
 
 import { api } from "../api/client";
 import type { AdapterHealth, HealthResponse, VerbInfo } from "../api/types";
 import { useIdentity } from "../identity";
 import { useFetch } from "../useFetch";
-import { RegistryCanvas } from "./RegistryCanvas";
-import { CONSEQUENCE, InfoCallout, PageIntro } from "./ux";
+
+// The tree view uses the @xyflow/react canvas; lazy-load it so the heavy chunk
+// only downloads when the user switches to Tree (code-split, Fix 5).
+const RegistryCanvas = lazy(() =>
+  import("./RegistryCanvas").then((m) => ({ default: m.RegistryCanvas })),
+);
+import { CONSEQUENCE, FetchError, InfoCallout, PageIntro } from "./ux";
 
 const HEALTH_TIP: Record<string, string> = {
   ok: "This service is healthy.",
@@ -144,7 +149,7 @@ export function RouterPanel() {
       </InfoCallout>
 
       {caps.loading && !caps.data && <p className="muted">Loading...</p>}
-      {caps.error && <p className="error">Could not load capabilities: {caps.error}</p>}
+      <FetchError error={caps.error} status={caps.errorStatus} onRetry={caps.reload} />
       {health.error && (
         <p className="warn">
           Health unavailable ({health.error}); showing adapter health as unknown.
@@ -152,11 +157,13 @@ export function RouterPanel() {
       )}
 
       {view === "tree" ? (
-        <RegistryCanvas
-          verbs={caps.data?.verbs ?? []}
-          health={health.data}
-          tenant={identity.tenant}
-        />
+        <Suspense fallback={<p className="muted">Loading canvas...</p>}>
+          <RegistryCanvas
+            verbs={caps.data?.verbs ?? []}
+            health={health.data}
+            tenant={identity.tenant}
+          />
+        </Suspense>
       ) : (
         <RouterList
           grouped={grouped}
