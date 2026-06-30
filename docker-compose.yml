@@ -61,6 +61,11 @@ services:
     restart: unless-stopped
     command: ["uvicorn", "nankle.api.asgi:app", "--host", "0.0.0.0", "--port", "8000"]
     env_file: .env
+    # On both the app network and the sandbox, so the Pi sidecar can reach the
+    # MCP face (sandbox) while the kernel keeps its normal connectivity (default).
+    networks:
+      - default
+      - sandbox
     ports:
       - "${KERNEL_PORT:-8000}:8000"
     volumes:
@@ -186,8 +191,16 @@ services:
   pi-sidecar:
     # Round Two: the Pi reasoning sidecar (Epic RUN). Sandboxed: it has no native
     # tools and reaches ONLY the kernel MCP face + the model endpoint (SEC-24).
-    # It is not internet-facing (no published ports). For hard egress isolation in
-    # production, place it on a restricted network / firewall it to kernel + model.
+    # It is not internet-facing (no published ports).
+    #
+    # Egress is ENFORCED, not just documented (Round Six gap 3.3, SEC-48): the
+    # sidecar sits on the `sandbox` network ONLY, so it can reach the kernel (its
+    # MCP face) but NOT postgres/redis/the other services on `default`. The secure
+    # overlay (deploy/compose.secure.yml) flips `sandbox` to internal: true, which
+    # removes arbitrary internet egress entirely - in that posture the model must
+    # be local (the `local` profile model on `sandbox`) or routed via the proxy.
+    networks:
+      - sandbox
     build:
       context: ./services/pi_sidecar
       dockerfile: Dockerfile
@@ -206,6 +219,17 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+networks:
+  # The app network: every service joins this by default.
+  default:
+    driver: bridge
+  # The Pi sidecar's isolation network (SEC-48). Only the sidecar and the kernel
+  # MCP face sit here. In the base (dev) stack it is a normal bridge so an
+  # external model endpoint is reachable; the secure overlay flips it to
+  # internal: true to enforce no arbitrary egress.
+  sandbox:
+    driver: bridge
 
 volumes:
   pgdata:

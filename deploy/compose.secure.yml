@@ -6,6 +6,13 @@
 # the kernel/UI ports directly (only Caddy is reachable), mounts a custom CA
 # bundle into the app containers, and shows the encrypted-at-rest volume wiring.
 # All of this is config + env, no image rebuild (P7).
+#
+# It also ENFORCES the Pi sidecar's egress isolation (SEC-48): the `sandbox`
+# network becomes internal: true, so the sidecar (which sits on sandbox only) has
+# NO route to the internet - it can reach only the kernel MCP face. In this
+# posture the model endpoint must be local (the `local` profile model placed on
+# sandbox) or reached through the egress proxy; an external provider URL called
+# directly from the sidecar will be unreachable by design.
 
 services:
   caddy:
@@ -50,6 +57,13 @@ services:
     volumes:
       - ${PGDATA_HOST:-pgdata}:/var/lib/postgresql/data
       - ./nankle/store/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+
+networks:
+  # Enforce no arbitrary egress for the Pi sidecar (SEC-48). internal: true means
+  # Docker attaches no gateway to this network, so containers on it cannot reach
+  # any external address - only their sandbox peers (the kernel MCP face).
+  sandbox:
+    internal: true
 
 volumes:
   caddy_data:

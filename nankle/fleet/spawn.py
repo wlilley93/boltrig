@@ -39,6 +39,7 @@ from nankle.models import (
     utcnow,
 )
 
+from .model_gateway import ModelGateway, apply_gateway, gateway_config
 from .model_router import select_model_endpoint
 from .result import AgentResult
 from .runtime import _MICROS_PER_TOKEN, build_runtime
@@ -191,6 +192,11 @@ class Spawner:
             "mcp_url": os.environ.get("NANKLE_PI_MCP_URL", "http://kernel:8000/v1/mcp"),
             "max_steps": int(os.environ.get("NANKLE_PI_MAX_STEPS", "12")),
         }
+        # Conversation-scoped model-gateway binding (Round Six gap 3.2). Inert
+        # unless NANKLE_MODEL_GATEWAY_URL is set; bindings live on this spawner
+        # instance, which the chat path constructs once and reuses across turns.
+        self._gateway = gateway_config()
+        self._bindings = ModelGateway(ttl_seconds=int(self._gateway["ttl_seconds"]))
 
     async def spawn(
         self,
@@ -364,6 +370,19 @@ class Spawner:
             sensitive_endpoint_id=self._sensitive_endpoint_id,
             audit=self._kernel.audit,
             actor=capability.name,
+        )
+
+        # Route standard (non-sensitive) conversation traffic through the model
+        # gateway, pinned to the conversation's bound model so its prompt cache
+        # stays warm across turns (gap 3.2). Inert when no gateway is configured;
+        # sensitive data is never re-routed (residency, SEC-47).
+        conversation_id = context.extra.get("conversation_id") if context is not None else None
+        endpoint = apply_gateway(
+            endpoint,
+            gateway_url=self._gateway["base_url"],
+            binding=self._bindings,
+            conversation_id=conversation_id,
+            sensitive=sensitive,
         )
 
         def lookup(endpoint_id: str) -> ModelEndpoint | None:

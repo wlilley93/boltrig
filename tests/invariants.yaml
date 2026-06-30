@@ -299,3 +299,20 @@ invariants:
     description: Recall is least-privilege and audited - query and count are recorded, fact contents never are.
     tests:
       - tests/security/test_round_five.py::test_recall_is_audited_without_leaking_contents
+  SEC-46:
+    description: Conversation continuity is deterministic and append-only (an earlier turn's render is a prefix of a later one) and adds no authority - it composes only persisted text.
+    tests:
+      - tests/security/test_round_six.py::test_continuity_is_deterministic_and_append_only
+  SEC-47:
+    description: The model gateway binds per conversation (not per run), pins a conversation to one model across turns, and never re-routes sensitive data (residency preserved).
+    tests:
+      - tests/security/test_round_six.py::test_gateway_binds_per_conversation_not_run
+      - tests/security/test_round_six.py::test_gateway_never_reroutes_sensitive_and_is_inert_when_unset
+  SEC-48:
+    description: The Pi sidecar's network egress is enforced by the deploy manifests (sandbox-only, internal in the secure overlay), not merely documented.
+    tests:
+      - tests/security/test_round_six.py::test_pi_sidecar_egress_is_enforced_in_manifests
+  SEC-49:
+    description: Continuity is scope-safe - only the caller's own tenant/conversation history is ever composed into a prompt.
+    tests:
+      - tests/security/test_round_six.py::test_continuity_only_composes_the_callers_own_conversation

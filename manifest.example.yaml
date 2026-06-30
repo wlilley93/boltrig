@@ -198,6 +198,16 @@ runtimes:
       network_allow: [kernel_mcp, model_endpoint]   # nothing else (SEC-24)
       native_tools: false                    # no Pi filesystem/bash/network tools
 
+  # --- model gateway (Round Six gap 3.2) - cost/cache routing for STANDARD data.
+  # When base_url is set, standard (non-sensitive) conversation traffic is routed
+  # through the gateway and pinned to one model per conversation so the gateway's
+  # prompt cache stays warm across turns (SEC-47). Sensitive data is NEVER routed
+  # here - it goes to its local endpoint directly (residency, SEC-43). Maps to
+  # NANKLE_MODEL_GATEWAY_URL / NANKLE_MODEL_GATEWAY_TTL. Unset => inert.
+  gateway:
+    base_url:                                # e.g. http://bifrost:9000 (empty = off)
+    cache_ttl_seconds: 900                   # sync to the gateway's own cache TTL
+
 # --- expose the kernel as an MCP server, and optionally consume external ones
 mcp:
   server:
@@ -210,6 +220,8 @@ chat:
   transport: sse                             # sse | websocket
   retention_days: 365
   panel: true                                # show the Chat panel in the UI
+  continuity: true                           # compose prior turns into the prompt
+                                             # (Round Six gap 3.1; NANKLE_CONTINUITY)
 
 # === Round Three additions (S10) - the manifest stays the source of truth (C1)
 # --- evaluation harness (Epic EVAL) -----------------------------------------
