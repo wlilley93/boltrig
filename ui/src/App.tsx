@@ -5,6 +5,7 @@ import { applyAppearance, loadAppearance } from "./appearance";
 import { resetIdentity, updateIdentity, useIdentity } from "./identity";
 import { navigate, useRoute } from "./router";
 import { useFetch } from "./useFetch";
+import { Field, InfoCallout, ROLE_OPTIONS, Select } from "./panels/ux";
 import { AdminPanel } from "./panels/AdminPanel";
 import { ApprovalsPanel } from "./panels/ApprovalsPanel";
 import { ChatPanel } from "./panels/ChatPanel";
@@ -224,67 +225,119 @@ function IdentityChip({
     <button
       className={`identity-chip ${expanded ? "identity-chip--open" : ""}`}
       aria-expanded={expanded}
-      title={`Signed in as ${id.subject} (${id.role}) @ ${id.tenant} - dev sign-in`}
+      title={`Acting as ${id.subject} (${id.role}) @ ${id.tenant}. Click to change the dev sign-in.`}
       onClick={onToggle}
     >
       <span className="identity-chip__avatar" aria-hidden="true">{initial}</span>
       <span className="identity-chip__who">
-        <strong>{id.subject}</strong> ({id.role})
-        <span className="identity-chip__where">@ {id.tenant}</span>
+        <span className="identity-chip__line">
+          <strong>{id.subject}</strong>
+          <span className="identity-chip__dev" title="Dev sign-in - you can change who you are acting as">dev</span>
+        </span>
+        <span className="identity-chip__where">{id.role} @ {id.tenant}</span>
       </span>
     </button>
   );
 }
 
+const GRANT_PRESETS: ReadonlyArray<{ label: string; value: string }> = [
+  { label: "Admin (everything)", value: "*" },
+  { label: "Support agent", value: "ticket.*, conversation.*" },
+  { label: "Read-only", value: "*.read" },
+];
+
 function IdentityBar() {
   const id = useIdentity();
   return (
     <div className="identity-bar" role="group" aria-label="Dev identity">
-      <span className="identity-bar__title">Identity</span>
-      <label className="field">
-        <span>tenant</span>
-        <input
-          value={id.tenant}
-          onChange={(e) => updateIdentity({ tenant: e.target.value })}
-        />
-      </label>
-      <label className="field">
-        <span>subject</span>
-        <input
-          value={id.subject}
-          onChange={(e) => updateIdentity({ subject: e.target.value })}
-        />
-      </label>
-      <label className="field field--wide">
-        <span>grants</span>
-        <input
-          value={id.grants}
-          placeholder="* or noun.verb,other.*"
-          onChange={(e) => updateIdentity({ grants: e.target.value })}
-        />
-      </label>
-      <label className="field">
-        <span>role</span>
-        <input
-          value={id.role}
-          onChange={(e) => updateIdentity({ role: e.target.value })}
-        />
-      </label>
-      <label className="field field--wide">
-        <span>departments</span>
-        <input
-          value={id.departments}
-          placeholder="support,billing (scopes audit/runs)"
-          onChange={(e) => updateIdentity({ departments: e.target.value })}
-        />
-      </label>
-      <button className="btn btn--ghost" onClick={() => resetIdentity()}>
-        reset
-      </button>
-      <p className="identity-bar__note muted">
-        Dev sign-in: these headers set the caller. Production resolves identity
-        from SSO / PAT (the backend resolver already supports it).
-      </p>
+      <InfoCallout title="Dev sign-in">
+        These five values become the <code>x-boltrig-*</code> headers on every
+        request, so you can act as any user while building. Production resolves
+        identity from SSO or a personal access token instead - the backend
+        already supports it.
+      </InfoCallout>
+
+      <div className="identity-bar__fields">
+        <Field
+          label="Organisation"
+          hint="Your organisation (tenant) id. Use 'default' for local dev."
+        >
+          <input
+            value={id.tenant}
+            onChange={(e) => updateIdentity({ tenant: e.target.value })}
+          />
+        </Field>
+
+        <Field
+          label="Acting as"
+          hint="The user id you are acting as - anything works in dev."
+          example="alice"
+        >
+          <input
+            value={id.subject}
+            onChange={(e) => updateIdentity({ subject: e.target.value })}
+          />
+        </Field>
+
+        <Field
+          label="Role"
+          hint="Controls which tabs you see and what the server lets you do. org-admin sees everything; agent is the most limited."
+        >
+          <Select
+            value={id.role}
+            ariaLabel="Role"
+            onChange={(v) => updateIdentity({ role: v })}
+            options={ROLE_OPTIONS}
+          />
+        </Field>
+
+        <Field
+          label="Departments"
+          hint="Comma-separated departments you belong to. Narrows what you see in Insight, runs and audit. Leave blank for no extra restriction."
+          example="support, billing"
+          wide
+        >
+          <input
+            value={id.departments}
+            placeholder="support, billing"
+            onChange={(e) => updateIdentity({ departments: e.target.value })}
+          />
+        </Field>
+
+        <Field
+          label="Grants"
+          hint="What this identity is allowed to do. A grant is a verb id or pattern: * is everything, ticket.* is all ticket actions, ticket.create is one action."
+          wide
+        >
+          <input
+            value={id.grants}
+            placeholder="* or ticket.*, conversation.read"
+            onChange={(e) => updateIdentity({ grants: e.target.value })}
+          />
+        </Field>
+      </div>
+
+      <div className="identity-bar__presets">
+        <span className="ux-hint">Quick presets:</span>
+        {GRANT_PRESETS.map((p) => (
+          <button
+            key={p.label}
+            type="button"
+            className="tag tag--accent identity-bar__preset"
+            title={`Set grants to ${p.value}`}
+            onClick={() => updateIdentity({ grants: p.value })}
+          >
+            {p.label}
+          </button>
+        ))}
+        <button
+          className="btn btn--ghost btn--sm"
+          title="Restore the default dev identity (org 'default', acting as 'dev', role org-admin, grants *)"
+          onClick={() => resetIdentity()}
+        >
+          Reset to defaults
+        </button>
+      </div>
     </div>
   );
 }

@@ -10,10 +10,33 @@ import { api } from "../api/client";
 import type { AuditRow, RunRow } from "../api/types";
 import { useFetch } from "../useFetch";
 import { CodeBlock, RunLink, errText, scopeLabel } from "./shared";
+import {
+  AUDIT_STATUS,
+  Field,
+  Hint,
+  PageIntro,
+  Select,
+  StatusBadge,
+  WORK_STATUS,
+} from "./ux";
+
+// micros are millionths of a currency unit; show a readable amount, raw on hover.
+function money(micros: number): string {
+  return (micros / 1_000_000).toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4,
+  });
+}
+
+function whenText(ts: string): string {
+  const d = new Date(ts);
+  return Number.isNaN(d.getTime()) ? ts : d.toLocaleString();
+}
 
 export function InsightPanel() {
   const cost = useFetch(() => api.cost(), []);
   const runs = useFetch(() => api.runs(), []);
+  const caps = useFetch(() => api.capabilities(), []);
 
   const [actor, setActor] = useState("");
   const [verb, setVerb] = useState("");
@@ -62,13 +85,22 @@ export function InsightPanel() {
 
   const costData = cost.data;
   const runRows: RunRow[] = runs.data?.runs ?? [];
+  const actorOptions = [
+    { value: "", label: "Any actor" },
+    ...Object.keys(costData?.by_actor ?? {}).map((a) => ({ value: a, label: a })),
+  ];
+  const verbOptions = [
+    { value: "", label: "Any action" },
+    ...(caps.data?.verbs ?? []).map((v) => ({ value: v.id, label: v.id })),
+  ];
 
   return (
     <section className="panel">
-      <div className="panel__head">
-        <h2>Insight</h2>
-        <div className="panel__actions">
-          <span className="muted">scope-filtered to your departments</span>
+      <PageIntro
+        title="Insight"
+        lead="See what your departments have been doing, what it cost, and search the full audit trail."
+        how="Every number here is scoped to what you're allowed to see (SEC-33), so an empty result can simply mean nothing in your scope - not a bug."
+        actions={
           <button
             className="btn"
             onClick={() => {
@@ -78,19 +110,13 @@ export function InsightPanel() {
           >
             Refresh
           </button>
-        </div>
-      </div>
-
-      <p className="notice">
-        Every view here is filtered to the caller's visibility scope (SEC-33).
-        Another department's runs and cost are not shown, so an empty result can
-        simply mean nothing in your scope.
-      </p>
+        }
+      />
 
       <div className="cols">
         <div className="list-card">
           <div className="list-card__head">
-            <h3>Cost rollup</h3>
+            <h3>Cost</h3>
             <span className="muted">
               scope: {costData ? scopeLabel(costData.scope) : "..."}
             </span>
@@ -98,23 +124,28 @@ export function InsightPanel() {
           <div className="list-card__body">
             {cost.loading && !cost.data && <p className="muted">Loading...</p>}
             {cost.error && (
-              <p className="error">Failed to load cost: {cost.error}</p>
+              <p className="error">Could not load cost: {cost.error}</p>
             )}
             {costData && (
               <>
                 <div className="row-line">
-                  <span className="muted">total_cost_micros</span>
-                  <strong>{costData.total_cost_micros}</strong>
+                  <span className="muted">Total cost</span>
+                  <strong title={`${costData.total_cost_micros} micros`}>
+                    {money(costData.total_cost_micros)}
+                  </strong>
                 </div>
                 {Object.entries(costData.by_actor).length === 0 ? (
-                  <p className="muted">No cost recorded in scope.</p>
+                  <p className="muted">No cost recorded in scope yet.</p>
                 ) : (
-                  Object.entries(costData.by_actor).map(([who, micros]) => (
-                    <div className="row-line" key={who}>
-                      <code>{who}</code>
-                      <span>{micros}</span>
-                    </div>
-                  ))
+                  <>
+                    <Hint>Who has spent what:</Hint>
+                    {Object.entries(costData.by_actor).map(([who, micros]) => (
+                      <div className="row-line" key={who}>
+                        <code>{who}</code>
+                        <span title={`${micros} micros`}>{money(micros)}</span>
+                      </div>
+                    ))}
+                  </>
                 )}
               </>
             )}
@@ -129,10 +160,10 @@ export function InsightPanel() {
           <div className="list-card__body">
             {runs.loading && !runs.data && <p className="muted">Loading...</p>}
             {runs.error && (
-              <p className="error">Failed to load runs: {runs.error}</p>
+              <p className="error">Could not load runs: {runs.error}</p>
             )}
             {!runs.loading && runRows.length === 0 && (
-              <p className="muted">No runs in scope.</p>
+              <p className="muted">No runs in your scope yet.</p>
             )}
             {runRows.map((r) => (
               <div className="row-line" key={r.work_item}>
@@ -145,7 +176,7 @@ export function InsightPanel() {
                   <div className="muted">{r.intent}</div>
                 </div>
                 <div className="kv">
-                  <span className="badge">{r.status}</span>
+                  <StatusBadge value={r.status} glossary={WORK_STATUS} />
                   {r.owner && <span className="muted">{r.owner}</span>}
                 </div>
               </div>
@@ -156,68 +187,77 @@ export function InsightPanel() {
 
       <div className="form">
         <div className="form__title">Audit search</div>
-        <div className="form__actions">
-          <label className="field">
-            <span>actor</span>
-            <input value={actor} onChange={(e) => setActor(e.target.value)} />
-          </label>
-          <label className="field">
-            <span>verb</span>
-            <input value={verb} onChange={(e) => setVerb(e.target.value)} />
-          </label>
-          <label className="field">
-            <span>run id</span>
+        <Hint>
+          Search the tamper-evident log of every governed action. Results are
+          limited to your scope.
+        </Hint>
+        <div className="form__grid">
+          <Field label="Actor" hint="Who performed the action.">
+            <Select value={actor} ariaLabel="Actor" onChange={setActor} options={actorOptions} />
+          </Field>
+          <Field label="Action" hint="The verb that was called.">
+            <Select value={verb} ariaLabel="Action" onChange={setVerb} options={verbOptions} />
+          </Field>
+          <Field label="Run id" hint="Paste a run id to see only its events." example="run_5f3a...">
             <input value={run} onChange={(e) => setRun(e.target.value)} />
-          </label>
+          </Field>
+        </div>
+        <div className="form__actions">
           <button className="btn btn--primary" disabled={searchBusy} onClick={search}>
-            {searchBusy ? "..." : "Search"}
+            {searchBusy ? "Searching..." : "Search"}
           </button>
-          <button className="btn" disabled={exportBusy} onClick={exportAudit}>
-            {exportBusy ? "..." : "Export audit"}
+          <button className="btn" disabled={exportBusy} onClick={exportAudit} title="Download the full audit log as a file - available to authors and admins.">
+            {exportBusy ? "Exporting..." : "Export audit"}
           </button>
         </div>
         {searchError && <p className="error">{searchError}</p>}
-        {exportError && <p className="error">Export: {exportError}</p>}
+        {exportError && <p className="notice warn">Export: {exportError}</p>}
 
         {rows && (
           <>
             <p className="muted">
-              {rows.length} result(s); scope: {searchScope || "all"}
+              {rows.length === 0
+                ? "No audit events match - try clearing a filter (results are limited to your scope)."
+                : `${rows.length} result(s); scope: ${searchScope || "all"}`}
             </p>
-            <div className="table-scroll">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>seq</th>
-                    <th>ts</th>
-                    <th>actor</th>
-                    <th>verb</th>
-                    <th>status</th>
-                    <th>run_id</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row) => (
-                    <tr key={row.seq}>
-                      <td>{row.seq}</td>
-                      <td>{row.ts}</td>
-                      <td>{row.actor}</td>
-                      <td>
-                        <code>{row.verb}</code>
-                      </td>
-                      <td>{row.status}</td>
-                      <td>
-                        {row.run_id ? (
-                          <RunLink runId={row.run_id} />
-                        ) : (
-                          <code>-</code>
-                        )}
-                      </td>
+            {rows.length > 0 && (
+              <div className="table-scroll">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>When</th>
+                      <th>Actor</th>
+                      <th>Action</th>
+                      <th>Status</th>
+                      <th>Run</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {rows.map((row) => (
+                      <tr key={row.seq}>
+                        <td>{row.seq}</td>
+                        <td title={row.ts}>{whenText(row.ts)}</td>
+                        <td>{row.actor}</td>
+                        <td>
+                          <code>{row.verb}</code>
+                        </td>
+                        <td>
+                          <StatusBadge value={row.status} glossary={AUDIT_STATUS} />
+                        </td>
+                        <td>
+                          {row.run_id ? (
+                            <RunLink runId={row.run_id} />
+                          ) : (
+                            <code>-</code>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </>
         )}
 

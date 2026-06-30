@@ -14,6 +14,7 @@ import { useIdentity } from "../identity";
 import { navigate } from "../router";
 import { useFetch } from "../useFetch";
 import { RunLink } from "./shared";
+import { HITL_TYPE, PageIntro, StatusBadge, WORK_STATUS } from "./ux";
 
 // The lanes that read as "in flight" for the compact count summary; mirrors the
 // Kanban board order. Done / failed are terminal so they sit at the end.
@@ -48,7 +49,7 @@ function NeedsYou() {
           <p className="error">Failed to load approvals: {hitl.error}</p>
         )}
         {!hitl.loading && !hitl.error && requests.length === 0 && (
-          <p className="muted">Nothing is waiting on you right now.</p>
+          <p className="muted">You're all caught up - nothing needs your sign-off.</p>
         )}
         {top.map((req) => (
           <button
@@ -58,11 +59,9 @@ function NeedsYou() {
             onClick={() => navigate("/approvals")}
           >
             <span className="home-line">
-              <span className={`badge badge--type badge--type-${req.type}`}>
-                {req.type}
-              </span>
+              <StatusBadge value={req.type} glossary={HITL_TYPE} />
               <span className="home-line__text">
-                {req.question || "(no question)"}
+                {req.question || "A high-consequence action needs you."}
               </span>
             </span>
           </button>
@@ -97,13 +96,15 @@ function RecentRuns() {
           <p className="error">Failed to load runs: {runs.error}</p>
         )}
         {!runs.loading && !runs.error && top.length === 0 && (
-          <p className="muted">No runs yet.</p>
+          <p className="muted">
+            No runs yet - start a conversation and your activity shows up here.
+          </p>
         )}
         {top.map((run) => (
           <div className="row-line" key={run.run_id ?? run.work_item}>
             <span className="home-line__text">{run.intent || "(no intent)"}</span>
             <span className="kv">
-              <span className="badge">{run.status}</span>
+              <StatusBadge value={run.status} glossary={WORK_STATUS} />
               {run.run_id ? (
                 <RunLink runId={run.run_id} label="open" />
               ) : (
@@ -147,11 +148,15 @@ function WorkInFlight() {
           <>
             <div className="home-metrics">
               {WORK_LANES.map((lane) => (
-                <div className="home-metric" key={lane.status}>
+                <div
+                  className="home-metric"
+                  key={lane.status}
+                  title={WORK_STATUS[lane.status]?.tip}
+                >
                   <span className="home-metric__count">
                     {counts.get(lane.status) ?? 0}
                   </span>
-                  <span className="home-metric__label">{lane.label}</span>
+                  <span className="home-metric__label ux-termtip">{lane.label}</span>
                 </div>
               ))}
             </div>
@@ -185,27 +190,31 @@ function WhatICanDo() {
     <div className="list-card">
       <div className="list-card__head">
         <h3>What I can do</h3>
-        <span className="muted">{verbs.length} verb(s)</span>
+        <span className="muted">{verbs.length} action(s)</span>
       </div>
       <div className="list-card__body">
         {caps.loading && !caps.data && (
-          <p className="muted">Loading capabilities...</p>
+          <p className="muted">Loading...</p>
         )}
         {caps.error && (
-          <p className="error">Failed to load capabilities: {caps.error}</p>
+          <p className="error">Could not load your capabilities: {caps.error}</p>
         )}
         {!caps.loading && !caps.error && byNoun.length === 0 && (
-          <p className="muted">No verbs are scoped to this identity.</p>
+          <p className="muted">
+            Nothing is in scope for this identity yet - ask an admin to widen your
+            access.
+          </p>
         )}
         {byNoun.length > 0 && (
           <p className="muted">
-            You are scoped to {verbs.length} verb(s) across {byNoun.length}{" "}
-            noun(s).
+            You can act on {byNoun.length} area(s) - {verbs.length} action(s) in
+            total. The server enforces this; nothing outside your scope is
+            reachable.
           </p>
         )}
         <div className="kv">
           {byNoun.map(([noun, count]) => (
-            <span className="tag" key={noun}>
+            <span className="tag" key={noun} title={`${count} action(s) on ${noun}`}>
               {noun} ({count})
             </span>
           ))}
@@ -254,12 +263,16 @@ export function HomePanel() {
 
   return (
     <section className="panel">
-      <div className="panel__head">
-        <h2>Home</h2>
-        <span className="muted">
-          {identity.subject} @ {identity.tenant}
-        </span>
-      </div>
+      <PageIntro
+        title="Home"
+        lead="Your calm landing pad - what's waiting on you, what's running, and what you're allowed to do, all in one glance."
+        how="Everything here reflects only what's scoped to you; the server decides what you can see and do."
+        actions={
+          <span className="muted">
+            {identity.subject} @ {identity.tenant}
+          </span>
+        }
+      />
 
       <div className="cols">
         <NeedsYou />

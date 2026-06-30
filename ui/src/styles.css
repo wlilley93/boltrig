@@ -2140,6 +2140,52 @@ summary:focus-visible,
 }
 .dot--ok { box-shadow: 0 0 5px var(--color-ok); }
 
+.identity-chip__line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.identity-chip__dev {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-warn);
+  border: 1px solid rgba(232, 179, 57, 0.5);
+  background: rgba(232, 179, 57, 0.1);
+  border-radius: 2px;
+  padding: 0 4px;
+  line-height: 1.5;
+}
+
+/* the dev sign-in bar: a calm explained column, not a row of naked inputs */
+.identity-bar {
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--gap);
+  background: rgba(8, 14, 26, 0.6);
+}
+.identity-bar__fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--gap);
+  align-items: start;
+}
+.identity-bar__presets {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.identity-bar__preset {
+  cursor: pointer;
+  font-family: var(--font-ui);
+}
+.identity-bar__preset:hover {
+  border-color: rgba(61, 211, 240, 0.6);
+  color: var(--color-accent);
+}
+
 /* --- Buttons: glass + a glowing cyan primary ------------------------------ */
 .btn {
   background: rgba(255, 255, 255, 0.06);
@@ -2429,6 +2475,200 @@ select:focus {
 .lane__head--awaiting_human {
   border-top-color: var(--color-consequence-high);
   box-shadow: 0 -1px 8px rgba(255, 122, 69, 0.2);
+}
+
+/* ==========================================================================
+   UX primitives (panels/ux.tsx): page intros, guided fields, callouts, and calm
+   empty / error states. The vocabulary every per-page pass uses to explain the
+   page and guide input instead of presenting naked free-text.
+   ========================================================================== */
+
+.page-intro {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+.page-intro__text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.page-intro h2 {
+  margin: 0;
+  font-size: var(--fs-xl);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+.page-intro__lead {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--fs-md);
+  max-width: 68ch;
+  line-height: 1.5;
+}
+.page-intro__how {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--fs-sm);
+  max-width: 72ch;
+  line-height: 1.5;
+}
+.page-intro__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+/* guided field: label + control + hint + example */
+.ux-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.ux-field--wide {
+  grid-column: 1 / -1;
+}
+.ux-field__label {
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+.ux-field__req {
+  color: var(--color-accent);
+  font-style: normal;
+}
+.ux-field > input,
+.ux-field > textarea,
+.ux-field > select,
+.ux-field .seg {
+  width: 100%;
+}
+.ux-field__hint {
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+  line-height: 1.45;
+}
+.ux-field__example {
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+}
+.ux-field__example code {
+  color: var(--color-text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 0 4px;
+  border-radius: 2px;
+}
+
+/* explanatory callout: a calm aside that teaches without nagging */
+.ux-callout {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 11px 14px 11px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 2px solid var(--color-accent);
+  background: rgba(61, 211, 240, 0.05);
+  border-radius: 0;
+  font-size: var(--fs-sm);
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+.ux-callout--warn {
+  border-left-color: var(--color-warn);
+  background: rgba(232, 179, 57, 0.06);
+}
+.ux-callout--consequence {
+  border-left-color: var(--color-consequence-high);
+  background: rgba(255, 122, 69, 0.07);
+}
+.ux-callout__title {
+  color: var(--color-text-primary);
+  font-weight: 600;
+  font-size: var(--fs-sm);
+}
+.ux-callout__body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ux-callout code {
+  font-family: var(--font-mono);
+  color: var(--color-text-primary);
+}
+
+/* calm empty state: title + what-to-do-next + a primary action */
+.ux-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  padding: 40px 24px;
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  border-radius: 0;
+  background: rgba(12, 20, 36, 0.4);
+}
+.ux-empty__icon {
+  color: var(--color-text-muted);
+  opacity: 0.7;
+}
+.ux-empty__title {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.ux-empty__body {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--fs-sm);
+  max-width: 46ch;
+  line-height: 1.55;
+}
+.ux-empty__action {
+  margin-top: 4px;
+}
+
+/* error / denied: the server's reason, faithfully, with a retry */
+.ux-error {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 11px 14px;
+  border: 1px solid rgba(240, 101, 74, 0.4);
+  border-left: 2px solid var(--color-down);
+  background: rgba(240, 101, 74, 0.08);
+  border-radius: 0;
+  font-size: var(--fs-sm);
+}
+.ux-error__msg {
+  color: var(--color-text-primary);
+  flex: 1;
+  min-width: 0;
+}
+
+.ux-hint {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+.ux-termtip {
+  border-bottom: 1px dotted rgba(255, 255, 255, 0.25);
+  cursor: help;
+}
+
+.btn--sm {
+  padding: 5px 10px;
+  font-size: var(--fs-xs);
 }
 
 /* --- Responsive: on a phone the sidebar is always an icon rail ------------ */

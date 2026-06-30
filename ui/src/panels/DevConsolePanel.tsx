@@ -24,24 +24,49 @@ import {
   errText,
   parseJson,
 } from "./shared";
+import {
+  CONSEQUENCE,
+  EmptyState,
+  Field,
+  Hint,
+  InfoCallout,
+  PageIntro,
+  Select,
+  StatusBadge,
+} from "./ux";
 
-// Read a run_id off an arbitrary result body without widening the typed unions:
-// the kernel may carry it at the top level or inside `output`.
-function pluckRunId(value: unknown): string | undefined {
-  if (value && typeof value === "object" && "run_id" in value) {
-    const id = (value as { run_id?: unknown }).run_id;
-    if (typeof id === "string" && id) return id;
+// Build a starter params object from a verb's JSON-Schema input_schema, so the
+// box is never blank: each declared property gets a typed placeholder.
+function skeletonFromSchema(schema: unknown): string {
+  if (!schema || typeof schema !== "object") return "{}";
+  const props = (schema as { properties?: Record<string, { type?: string }> }).properties;
+  if (!props || typeof props !== "object") return "{}";
+  const obj: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(props)) {
+    const t = v?.type;
+    obj[k] =
+      t === "number" || t === "integer"
+        ? 0
+        : t === "boolean"
+          ? false
+          : t === "array"
+            ? []
+            : t === "object"
+              ? {}
+              : "";
   }
-  return undefined;
+  return JSON.stringify(obj, null, 2);
 }
 
-function runIdOf(value: unknown): string | undefined {
-  const direct = pluckRunId(value);
-  if (direct) return direct;
-  if (value && typeof value === "object" && "output" in value) {
-    return pluckRunId((value as { output?: unknown }).output);
+function schemaKeys(schema: unknown): { required: string[]; optional: string[] } {
+  const out = { required: [] as string[], optional: [] as string[] };
+  if (!schema || typeof schema !== "object") return out;
+  const s = schema as { properties?: Record<string, unknown>; required?: string[] };
+  const req = new Set(s.required ?? []);
+  for (const k of Object.keys(s.properties ?? {})) {
+    (req.has(k) ? out.required : out.optional).push(k);
   }
-  return undefined;
+  return out;
 }
 
 // Render the InvokeResult union faithfully: ok / degraded show the output, a
@@ -79,11 +104,32 @@ function InvokeResultView({ result }: { result: InvokeResult }) {
   );
 }
 
+// Read a run_id off an arbitrary result body without widening the typed unions:
+// the kernel may carry it at the top level or inside `output`.
+function pluckRunId(value: unknown): string | undefined {
+  if (value && typeof value === "object" && "run_id" in value) {
+    const id = (value as { run_id?: unknown }).run_id;
+    if (typeof id === "string" && id) return id;
+  }
+  return undefined;
+}
+
+function runIdOf(value: unknown): string | undefined {
+  const direct = pluckRunId(value);
+  if (direct) return direct;
+  if (value && typeof value === "object" && "output" in value) {
+    return pluckRunId((value as { output?: unknown }).output);
+  }
+  return undefined;
+}
+
 export function DevConsolePanel() {
   // The scoped verb registry powers the invoke picker; the adapter inventory
-  // powers the source viewer. Both are caller-scoped server-side.
+  // powers the source viewer; the skills list powers the spawn chips. All are
+  // caller-scoped server-side.
   const caps = useFetch(() => api.capabilities(), []);
   const adapters = useFetch(() => api.adapters(), []);
+  const skillsList = useFetch(() => api.skills(), []);
 
   // --- Invoke a verb ---
   const [noun, setNoun] = useState("");
@@ -91,6 +137,7 @@ export function DevConsolePanel() {
   const [params, setParams] = useState("{}");
   const [invRun, setInvRun] = useState("");
   const [invContext, setInvContext] = useState("");
+  const [manual, setManual] = useState(false);
   const [invBusy, setInvBusy] = useState(false);
   const [invError, setInvError] = useState<string | null>(null);
   const [invResult, setInvResult] = useState<InvokeResult | null>(null);
@@ -111,18 +158,30 @@ export function DevConsolePanel() {
 
   const verbs = caps.data?.verbs ?? [];
   const adapterRecords = adapters.data?.adapters ?? [];
+  const availableSkills = skillsList.data?.skills ?? [];
+  const selectedVerb = verbs.find((v) => v.id === verb);
+  const keys = schemaKeys(selectedVerb?.input_schema);
 
   function pickVerb(verbId: string) {
     const v = verbs.find((x) => x.id === verbId);
     if (v) {
       setNoun(v.noun);
       setVerb(v.id);
+      // prefill the params box from the verb's schema unless the user has typed.
+      if (params.trim() === "" || params.trim() === "{}") {
+        setParams(skeletonFromSchema(v.input_schema));
+      }
     }
+  }
+
+  function addSkill(id: string) {
+    const have = csvToList(skills);
+    if (!have.includes(id)) setSkills([...have, id].join(", "));
   }
 
   async function invoke() {
     if (!noun.trim() || !verb.trim()) {
-      setInvError("noun and verb are required.");
+      setInvError("Pick a verb first.");
       return;
     }
     let p: Record<string, unknown>;
@@ -158,7 +217,7 @@ export function DevConsolePanel() {
 
   async function spawn() {
     if (!task.trim()) {
-      setSpawnError("task is required.");
+      setSpawnError("Describe a task for the agent first.");
       return;
     }
     let preferObj: Record<string, unknown>;
@@ -176,8 +235,6 @@ export function DevConsolePanel() {
       const sk = csvToList(skills);
       if (sk.length > 0) req.skills = sk;
       if (Object.keys(preferObj).length > 0) req.prefer = preferObj;
-      // api.spawn is typed Promise<unknown> (free-form body); narrow to the
-      // SpawnResult shape so effective_grants / run_id render.
       const res = (await api.spawn(req)) as SpawnResult;
       setSpawnResult(res);
     } catch (err) {
@@ -189,7 +246,7 @@ export function DevConsolePanel() {
 
   async function loadSource() {
     if (!adapterId.trim()) {
-      setSrcError("pick an adapter.");
+      setSrcError("Pick an adapter first.");
       return;
     }
     setSrcBusy(true);
@@ -206,178 +263,252 @@ export function DevConsolePanel() {
     }
   }
 
+  const verbOptions = [
+    { value: "", label: caps.loading ? "Loading verbs..." : "Choose a verb..." },
+    ...verbs.map((v) => ({ value: v.id, label: `${v.noun} / ${v.id}` })),
+  ];
+
   return (
     <section className="panel">
-      <div className="panel__head">
-        <h2>Dev console</h2>
-        <div className="panel__actions">
-          <span className="muted">server-authoritative</span>
+      <PageIntro
+        title="Dev console"
+        lead="Run one verb at a time, by hand, to test or debug a capability."
+        how="Pick a verb from the registry; the kernel checks your grants and shows the real result - success, a denial, or a pause for human approval. Nothing here bypasses governance."
+        actions={
           <button
             className="btn"
             onClick={() => {
               caps.reload();
               adapters.reload();
+              skillsList.reload();
             }}
           >
             Refresh
           </button>
-        </div>
-      </div>
-
-      <p className="notice">
-        Direct access to the kernel chokepoint. Every call is governed and
-        scoped server-side: a denial, a human-in-the-loop pause or a degraded
-        result is shown exactly as the kernel returned it. The tab gate is
-        cosmetic.
-      </p>
+        }
+      />
 
       <div className="form">
         <div className="form__title">Invoke a verb</div>
-        <div className="form__actions">
-          <label className="field field--wide">
-            <span>pick from registry</span>
-            <select value="" onChange={(e) => pickVerb(e.target.value)}>
-              <option value="">
-                {caps.loading ? "loading..." : "-- choose a verb --"}
-              </option>
-              {verbs.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.noun} / {v.id}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
-            <span>noun</span>
-            <input value={noun} onChange={(e) => setNoun(e.target.value)} />
-          </label>
-          <label className="field">
-            <span>verb</span>
-            <input value={verb} onChange={(e) => setVerb(e.target.value)} />
-          </label>
-          <label className="field">
-            <span>run_id (optional)</span>
-            <input value={invRun} onChange={(e) => setInvRun(e.target.value)} />
-          </label>
-        </div>
-        <label className="field">
-          <span>params (JSON)</span>
+
+        {caps.error ? (
+          <p className="error">Could not load the verb registry: {caps.error}</p>
+        ) : verbs.length === 0 && !caps.loading ? (
+          <EmptyState
+            title="No verbs are available to you"
+            body="Your grants decide which verbs appear here. Switch identity in the sidebar, or ask an admin to widen your scope."
+          />
+        ) : null}
+
+        <Field
+          label="Verb"
+          hint="Choose an action from the capabilities you are allowed to call."
+        >
+          <Select value="" ariaLabel="Pick a verb" onChange={pickVerb} options={verbOptions} />
+        </Field>
+
+        {selectedVerb && (
+          <div className="row-line" style={{ borderBottom: "none", paddingBottom: 0 }}>
+            <span className="ux-hint">
+              Selected: <code className="mono">{verb}</code> on{" "}
+              <code className="mono">{noun}</code>
+            </span>
+            <StatusBadge value={selectedVerb.consequence} glossary={CONSEQUENCE} />
+          </div>
+        )}
+        {selectedVerb?.consequence === "high" && (
+          <InfoCallout tone="consequence" title="High-consequence verb">
+            This performs a real, possibly irreversible action (it changes state,
+            sends, or spends). It may pause for human approval before running.
+          </InfoCallout>
+        )}
+
+        <Field
+          label="Arguments"
+          hint={
+            selectedVerb
+              ? keys.required.length || keys.optional.length
+                ? `This verb expects: ${[
+                    ...keys.required.map((k) => `${k} (required)`),
+                    ...keys.optional,
+                  ].join(", ")}. Edit the values below.`
+                : "This verb takes no arguments."
+              : "Pick a verb to see the arguments it expects. Arguments are JSON the kernel passes to the verb - they are data, never executed."
+          }
+        >
           <textarea
             className="code"
             value={params}
             onChange={(e) => setParams(e.target.value)}
           />
-        </label>
-        <label className="field">
-          <span>context (JSON, optional)</span>
-          <textarea
-            className="code"
-            value={invContext}
-            onChange={(e) => setInvContext(e.target.value)}
-          />
-        </label>
+        </Field>
+
+        {selectedVerb?.input_schema != null && (
+          <details>
+            <summary className="ux-hint" style={{ cursor: "pointer" }}>
+              Show this verb's full input schema
+            </summary>
+            <CodeBlock value={selectedVerb.input_schema} />
+          </details>
+        )}
+
+        <details open={manual} onToggle={(e) => setManual((e.target as HTMLDetailsElement).open)}>
+          <summary className="ux-hint" style={{ cursor: "pointer" }}>
+            Advanced: run id, context, manual verb entry
+          </summary>
+          <div className="form__grid" style={{ marginTop: 10 }}>
+            <Field
+              label="Run id"
+              hint="Attach this call to an existing run for audit threading. Leave blank to start fresh."
+            >
+              <input value={invRun} onChange={(e) => setInvRun(e.target.value)} />
+            </Field>
+            <Field label="Noun" hint="Set automatically from the verb you pick.">
+              <input value={noun} onChange={(e) => setNoun(e.target.value)} />
+            </Field>
+            <Field label="Verb id" hint="Set automatically from the picker.">
+              <input value={verb} onChange={(e) => setVerb(e.target.value)} />
+            </Field>
+          </div>
+          <Field
+            label="Extra context (JSON)"
+            hint="Extra execution context for the kernel. Most calls leave this empty."
+            example='{"idempotency_key": "..."}'
+          >
+            <textarea
+              className="code"
+              value={invContext}
+              onChange={(e) => setInvContext(e.target.value)}
+            />
+          </Field>
+        </details>
+
         <div className="form__actions">
           <button
             className="btn btn--primary"
-            disabled={invBusy}
+            disabled={invBusy || !verb}
             onClick={invoke}
           >
-            {invBusy ? "..." : "Run"}
+            {invBusy ? "Running..." : "Run verb"}
           </button>
           {invError && <span className="error">{invError}</span>}
         </div>
-        {caps.error && (
-          <p className="error">Failed to load capabilities: {caps.error}</p>
-        )}
         {invResult && <InvokeResultView result={invResult} />}
       </div>
 
       <div className="form">
         <div className="form__title">Spawn an agent</div>
-        <p className="muted">
-          Runs an ephemeral agent under your grants. effective_grants in the
-          result is the no-escalation evidence: the child can never exceed the
-          initiator ceiling (SEC-29).
-        </p>
-        <label className="field">
-          <span>task</span>
+        <InfoCallout title="Permissions the agent actually gets">
+          A spawned agent runs under your grants and can never have more
+          permissions than you do. The <code>effective_grants</code> in the
+          result proves it stayed within your limits.
+        </InfoCallout>
+        <Field
+          label="Task"
+          hint="Describe what the agent should do, in plain language."
+          example="triage the 5 oldest open tickets"
+        >
           <textarea
             className="code"
             value={task}
             onChange={(e) => setTask(e.target.value)}
           />
-        </label>
-        <div className="form__actions">
-          <label className="field field--wide">
-            <span>skills (comma-separated)</span>
-            <input value={skills} onChange={(e) => setSkills(e.target.value)} />
-          </label>
-        </div>
-        <label className="field">
-          <span>prefer (JSON, optional)</span>
-          <textarea
-            className="code"
-            value={prefer}
-            onChange={(e) => setPrefer(e.target.value)}
-          />
-        </label>
+        </Field>
+        <Field
+          label="Skills"
+          hint="Which skills the agent may use (comma-separated). It still cannot exceed your grants."
+        >
+          <input value={skills} onChange={(e) => setSkills(e.target.value)} />
+        </Field>
+        {availableSkills.length > 0 && (
+          <div className="kv">
+            <span className="ux-hint">Add a skill:</span>
+            {availableSkills.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                className="tag tag--accent"
+                style={{ cursor: "pointer" }}
+                title={`Add ${s.id}`}
+                onClick={() => addSkill(s.id)}
+              >
+                {s.id}
+              </button>
+            ))}
+          </div>
+        )}
+        <details>
+          <summary className="ux-hint" style={{ cursor: "pointer" }}>
+            Advanced: routing preferences
+          </summary>
+          <Field
+            label="Prefer (JSON)"
+            hint="Optional routing or runtime preferences for the agent. Leave empty for defaults."
+            example='{"runtime": "pi-worker"}'
+          >
+            <textarea
+              className="code"
+              value={prefer}
+              onChange={(e) => setPrefer(e.target.value)}
+            />
+          </Field>
+        </details>
         <div className="form__actions">
           <button
             className="btn btn--primary"
             disabled={spawnBusy}
             onClick={spawn}
           >
-            {spawnBusy ? "..." : "Spawn"}
+            {spawnBusy ? "Spawning..." : "Spawn agent"}
           </button>
           {spawnError && <span className="error">{spawnError}</span>}
         </div>
-        {spawnResult && (
+        {spawnResult ? (
           <div className="stack">
             <div className="row-line">
               <span className="badge">{spawnResult.status ?? "?"}</span>
               {spawnResult.run_id && <RunLink runId={spawnResult.run_id} />}
             </div>
-            {spawnResult.reason && (
-              <p className="error">{spawnResult.reason}</p>
-            )}
+            {spawnResult.reason && <p className="error">{spawnResult.reason}</p>}
             <div className="row-line">
-              <span className="muted">effective_grants (no escalation)</span>
+              <span className="muted">Permissions the agent got</span>
               <GrantList grants={spawnResult.effective_grants} />
             </div>
             <CodeBlock value={spawnResult} />
           </div>
+        ) : (
+          <Hint>Run a spawn to see the agent's permissions and result here.</Hint>
         )}
       </div>
 
       <div className="form">
         <div className="form__title">Adapter source</div>
-        <p className="muted">
-          The generated source for a registered adapter (read-only).
+        <p className="ux-hint">
+          The generated source for a registered adapter, read-only - useful to
+          see exactly what a verb runs.
         </p>
         <div className="form__actions">
-          <label className="field field--wide">
-            <span>adapter</span>
-            <select
+          <Field label="Adapter">
+            <Select
               value={adapterId}
-              onChange={(e) => setAdapterId(e.target.value)}
-            >
-              <option value="">
-                {adapters.loading ? "loading..." : "-- choose an adapter --"}
-              </option>
-              {adapterRecords.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.id} ({a.runtime} {a.version})
-                </option>
-              ))}
-            </select>
-          </label>
+              ariaLabel="Pick an adapter"
+              onChange={setAdapterId}
+              options={[
+                { value: "", label: adapters.loading ? "Loading adapters..." : "Choose an adapter..." },
+                ...adapterRecords.map((a) => ({
+                  value: a.id,
+                  label: `${a.id} (${a.runtime} ${a.version})`,
+                })),
+              ]}
+            />
+          </Field>
           <button className="btn" disabled={srcBusy} onClick={loadSource}>
-            {srcBusy ? "..." : "View source"}
+            {srcBusy ? "Loading..." : "View source"}
           </button>
           {srcError && <span className="error">{srcError}</span>}
         </div>
         {adapters.error && (
-          <p className="error">Failed to load adapters: {adapters.error}</p>
+          <p className="error">Could not load adapters: {adapters.error}</p>
         )}
         {source !== null && <CodeBlock value={source} />}
       </div>

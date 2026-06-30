@@ -1,11 +1,12 @@
 // US-WRK-03: a board of work items in status lanes. Each card shows intent,
-// source, confidence, the convergent flag, owner and a handle to its
-// hatchet_run_id, with a trace action that pulls the audit execution tree.
+// where it came from, confidence, owner and a handle to its run, with a trace
+// action that pulls the audit execution tree.
 
 import { api } from "../api/client";
 import type { WorkItem, WorkStatus } from "../api/types";
-import { openRun } from "../router";
+import { navigate, openRun } from "../router";
 import { useFetch } from "../useFetch";
+import { EmptyState, PageIntro, WORK_STATUS } from "./ux";
 
 const LANES: ReadonlyArray<{ status: WorkStatus; label: string }> = [
   { status: "pending", label: "Pending" },
@@ -17,7 +18,7 @@ const LANES: ReadonlyArray<{ status: WorkStatus; label: string }> = [
 ];
 
 function confidenceText(c: WorkItem["confidence"]): string {
-  if (c === null || c === undefined) return "n/a";
+  if (c === null || c === undefined) return "unknown";
   return `${Math.round(c * 100)}%`;
 }
 
@@ -30,22 +31,26 @@ function WorkCard({
 }) {
   return (
     <article className="card">
-      <div className="card__intent">{item.intent || "(no intent)"}</div>
+      <div className="card__intent">{item.intent || "(no description)"}</div>
       <dl className="card__meta">
         <div>
-          <dt>source</dt>
-          <dd>{item.source ?? "n/a"}</dd>
+          <dt>Came from</dt>
+          <dd>{item.source ?? "unknown"}</dd>
         </div>
         <div>
-          <dt>owner</dt>
+          <dt>Owner</dt>
           <dd>{item.owner_member ?? "unassigned"}</dd>
         </div>
         <div>
-          <dt>confidence</dt>
+          <dt title="How sure the system is about this item.">
+            <span className="ux-termtip">Confidence</span>
+          </dt>
           <dd>{confidenceText(item.confidence)}</dd>
         </div>
         <div>
-          <dt>convergent</dt>
+          <dt title="The system expects this to settle on a single answer.">
+            <span className="ux-termtip">Convergent</span>
+          </dt>
           <dd>{item.convergent ? "yes" : "no"}</dd>
         </div>
       </dl>
@@ -53,13 +58,13 @@ function WorkCard({
         {item.hatchet_run_id ? (
           <button
             className="run-handle"
-            title="View audit execution tree"
+            title={`View run ${item.hatchet_run_id}`}
             onClick={() => onTrace(item.hatchet_run_id as string)}
           >
-            run: <code>{item.hatchet_run_id}</code>
+            View run -&gt;
           </button>
         ) : (
-          <span className="muted">no run</span>
+          <span className="muted">Not started yet</span>
         )}
       </div>
     </article>
@@ -78,43 +83,71 @@ export function KanbanPanel() {
     else byStatus.set(item.status, [item]);
   }
 
+  const empty = !work.loading && !work.error && items.length === 0;
+
   return (
     <section className="panel">
-      <div className="panel__head">
-        <h2>Kanban</h2>
-        <div className="panel__actions">
-          <span className="muted">{items.length} item(s)</span>
-          <button className="btn" onClick={() => work.reload()}>
-            Refresh
+      <PageIntro
+        title="Kanban"
+        lead="A live board of every work item, grouped by where it is in its journey - from pending to done."
+        how="Each card is one unit of work. Cards move left-to-right as the system makes progress; the board refreshes every 10 seconds."
+        actions={
+          <>
+            <span className="muted">{items.length} item(s)</span>
+            <button className="btn" onClick={() => work.reload()}>
+              Refresh
+            </button>
+          </>
+        }
+      />
+
+      {work.loading && !work.data && <p className="muted">Loading...</p>}
+      {work.error && (
+        <div className="ux-error" role="alert">
+          <span className="ux-error__msg">Could not load work: {work.error}</span>
+          <button className="btn btn--sm" onClick={() => work.reload()}>
+            Try again
           </button>
         </div>
-      </div>
+      )}
 
-      {work.loading && !work.data && <p className="muted">Loading work items...</p>}
-      {work.error && <p className="error">Failed to load work: {work.error}</p>}
-
-      <div className="board">
-        {LANES.map((lane) => {
-          const laneItems = byStatus.get(lane.status) ?? [];
-          return (
-            <div className="lane" key={lane.status}>
-              <div className={`lane__head lane__head--${lane.status}`}>
-                <span>{lane.label}</span>
-                <span className="lane__count">{laneItems.length}</span>
+      {empty ? (
+        <EmptyState
+          title="No work yet"
+          body="Work items appear here as conversations and workflows create them."
+          action={
+            <button className="btn btn--primary" onClick={() => navigate("/chat")}>
+              Start in Chat
+            </button>
+          }
+        />
+      ) : (
+        <div className="board">
+          {LANES.map((lane) => {
+            const laneItems = byStatus.get(lane.status) ?? [];
+            return (
+              <div className="lane" key={lane.status}>
+                <div
+                  className={`lane__head lane__head--${lane.status}`}
+                  title={WORK_STATUS[lane.status]?.tip}
+                >
+                  <span className="ux-termtip">{lane.label}</span>
+                  <span className="lane__count">{laneItems.length}</span>
+                </div>
+                <div className="lane__body">
+                  {laneItems.length === 0 ? (
+                    <p className="lane__empty muted">Nothing here</p>
+                  ) : (
+                    laneItems.map((item) => (
+                      <WorkCard key={item.id} item={item} onTrace={openRun} />
+                    ))
+                  )}
+                </div>
               </div>
-              <div className="lane__body">
-                {laneItems.length === 0 ? (
-                  <p className="lane__empty muted">empty</p>
-                ) : (
-                  laneItems.map((item) => (
-                    <WorkCard key={item.id} item={item} onTrace={openRun} />
-                  ))
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </section>
   );
 }
