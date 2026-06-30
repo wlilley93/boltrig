@@ -41,7 +41,8 @@ export function CommandPalette() {
   const [armed, setArmed] = useState(false);
   const caps = useFetch(() => (armed ? api.capabilities() : Promise.resolve(null)), [armed]);
 
-  // global hotkey: Cmd/Ctrl-K toggles; "/" opens when not typing in a field.
+  // global hotkey: Cmd/Ctrl-K toggles; a visible control dispatches the same open
+  // via a custom event, so the palette is discoverable, not just a hidden hotkey.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const k = e.key.toLowerCase();
@@ -53,8 +54,16 @@ export function CommandPalette() {
         setOpen(false);
       }
     }
+    function onOpen() {
+      setOpen(true);
+      setArmed(true);
+    }
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("boltrig:open-palette", onOpen);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("boltrig:open-palette", onOpen);
+    };
   }, []);
 
   useEffect(() => {

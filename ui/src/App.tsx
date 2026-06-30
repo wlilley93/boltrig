@@ -472,6 +472,19 @@ export function App() {
           </button>
         </div>
 
+        <button
+          className="side-search"
+          title="Search and run anything (Cmd/Ctrl-K)"
+          onClick={() => window.dispatchEvent(new Event("boltrig:open-palette"))}
+        >
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
+            <circle cx="11" cy="11" r="7" />
+            <path d="m20 20-3.5-3.5" />
+          </svg>
+          <span className="side-search__label">Search</span>
+          <kbd className="side-search__kbd">⌘K</kbd>
+        </button>
+
         <nav className="side__nav" aria-label="Panels">
           {PLANES.map((plane) => {
             const planeTabs = visibleTabs.filter((t) => t.plane === plane.id);
