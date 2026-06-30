@@ -161,6 +161,29 @@ services:
       retries: 5
       start_period: 10s
 
+  bifrost:
+    # The model gateway (Pi runtime spec S4.2, the cost/cache layer in front of
+    # providers). Bifrost is OpenAI-compatible on :8080, so the kernel's
+    # model-gateway seam (NANKLE_MODEL_GATEWAY_URL) points standard conversation
+    # traffic here and it stays warm per conversation (SEC-47). Sensitive data is
+    # never routed through it (residency) - that goes to local-model.
+    #
+    # Profile-gated like local-model: bring it up with
+    #   docker compose --profile gateway up -d
+    # then set NANKLE_MODEL_GATEWAY_URL=http://bifrost:8080 in .env and configure
+    # provider keys in the Bifrost web UI at http://localhost:${BIFROST_PORT:-8080}
+    # (keys + running it are operator-supplied; the seam is inert until the URL is
+    # set, so the default stack is unaffected).
+    profiles: ["gateway"]
+    image: maximhq/bifrost:latest
+    restart: unless-stopped
+    ports:
+      - "${BIFROST_PORT:-8080}:8080"
+    volumes:
+      # Bifrost persists its config (providers, routing, cache) here; no config
+      # file is required - it is configured via the web UI / API.
+      - bifrost_data:/app/data
+
   local-model:
     # Optional on-box inference for air-gapped / sensitive-classified data
     # (SEC-12, the manifest sensitive_endpoint). OpenAI-compatible on :8000.
@@ -233,3 +256,4 @@ networks:
 
 volumes:
   pgdata:
+  bifrost_data:

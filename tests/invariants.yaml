@@ -308,6 +308,10 @@ invariants:
     tests:
       - tests/security/test_round_six.py::test_gateway_binds_per_conversation_not_run
       - tests/security/test_round_six.py::test_gateway_never_reroutes_sensitive_and_is_inert_when_unset
+  FR-GW-01:
+    description: The model gateway (Bifrost) is wired into the stack - a profile-gated bifrost service on :8080 and the documented gateway URL matches it - so activation is one env line plus provider keys.
+    tests:
+      - tests/security/test_round_six.py::test_bifrost_is_wired_into_the_stack
   SEC-48:
     description: The Pi sidecar's network egress is enforced by the deploy manifests (sandbox-only, internal in the secure overlay), not merely documented.
     tests:

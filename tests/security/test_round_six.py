@@ -92,6 +92,22 @@ def test_gateway_binds_per_conversation_not_run():
     assert ep_c2.model == "model-B"
 
 
+@pytest.mark.invariant("FR-GW-01")
+def test_bifrost_is_wired_into_the_stack():
+    # The model gateway (Bifrost) is declared in the stack so activation is one
+    # env line + provider keys, and the documented URL matches the service. Pins
+    # the deploy wiring so the seam's target cannot silently drift.
+    compose = yaml.safe_load((_REPO / "docker-compose.yml").read_text())
+    bifrost = compose["services"].get("bifrost")
+    assert bifrost is not None, "no bifrost service in docker-compose.yml"
+    # OpenAI-compatible on :8080; our seam points base_url here and the runtimes
+    # call {base_url}/v1/chat/completions.
+    assert any(str(p).endswith(":8080") for p in bifrost.get("ports", []))
+    assert "gateway" in (bifrost.get("profiles") or [])  # opt-in, default stack lean
+    env = (_REPO / ".env.example").read_text()
+    assert "http://bifrost:8080" in env  # the documented gateway URL matches
+
+
 @pytest.mark.security
 @pytest.mark.invariant("SEC-47")
 def test_gateway_never_reroutes_sensitive_and_is_inert_when_unset():
