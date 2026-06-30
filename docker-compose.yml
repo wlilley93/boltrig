@@ -173,9 +173,11 @@ services:
     depends_on:
       - kernel
     healthcheck:
+      # 127.0.0.1 (not "localhost"): nginx binds IPv4 0.0.0.0:80, but localhost
+      # can resolve to IPv6 ::1 first in the container -> connection refused.
       test:
         - CMD-SHELL
-        - wget -q --spider http://localhost/index.html || exit 1
+        - wget -q --spider http://127.0.0.1/index.html || exit 1
       interval: 30s
       timeout: 5s
       retries: 5
