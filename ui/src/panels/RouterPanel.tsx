@@ -1,13 +1,19 @@
 // US-UI-01 / US-UI-03: the capability router. Lists nouns and, per noun, their
 // verbs with consequence, binding target (when present) and live adapter health
 // cross-referenced from /healthz. Every later-added field is treated as optional.
+//
+// Two views over the same caller-scoped /v1/capabilities read: "List" (the flat
+// noun -> verb browser, the safe default) and "Tree" (RegistryCanvas, the React
+// Flow Capability plane: noun -> verb -> binding). Both share these fetches; the
+// resolveHealth / badge helpers below are exported so the canvas reuses them.
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 import { api } from "../api/client";
 import type { AdapterHealth, HealthResponse, VerbInfo } from "../api/types";
 import { useIdentity } from "../identity";
 import { useFetch } from "../useFetch";
+import { RegistryCanvas } from "./RegistryCanvas";
 
 const HEALTH_VALUES: ReadonlySet<string> = new Set([
   "ok",
@@ -16,13 +22,13 @@ const HEALTH_VALUES: ReadonlySet<string> = new Set([
   "unknown",
 ]);
 
-function bindingOf(verb: VerbInfo): string | undefined {
+export function bindingOf(verb: VerbInfo): string | undefined {
   return verb.binding?.target_ref;
 }
 
 // Resolve a verb's adapter health from its own field or from the /healthz map,
 // which is keyed "<tenant>/<adapterId>".
-function resolveHealth(
+export function resolveHealth(
   verb: VerbInfo,
   health: HealthResponse | null,
   tenant: string,
@@ -44,23 +50,27 @@ function resolveHealth(
   return "unknown";
 }
 
-function HealthBadge({ health }: { health: AdapterHealth }) {
+export function HealthBadge({ health }: { health: AdapterHealth }) {
   return (
     <span className={`badge badge--health badge--${health}`}>{health}</span>
   );
 }
 
-function ConsequenceBadge({ value }: { value?: string }) {
+export function ConsequenceBadge({ value }: { value?: string }) {
   const v = value ?? "unknown";
   return (
     <span className={`badge badge--conseq badge--conseq-${v}`}>{v}</span>
   );
 }
 
+type RouterView = "list" | "tree";
+
 export function RouterPanel() {
   const identity = useIdentity();
   const caps = useFetch(() => api.capabilities(), [], 0);
   const health = useFetch(() => api.health(), [], 15000);
+  // "list" is the safe default; "tree" is the visual Capability plane.
+  const [view, setView] = useState<RouterView>("list");
 
   const grouped = useMemo(() => {
     const verbs = caps.data?.verbs ?? [];
@@ -82,6 +92,20 @@ export function RouterPanel() {
           <span className="muted">
             {caps.data ? `${caps.data.verbs.length} verbs` : ""}
           </span>
+          <div className="seg" role="group" aria-label="Router view">
+            <button
+              className={`btn btn--seg ${view === "list" ? "btn--seg-on" : ""}`}
+              onClick={() => setView("list")}
+            >
+              List
+            </button>
+            <button
+              className={`btn btn--seg ${view === "tree" ? "btn--seg-on" : ""}`}
+              onClick={() => setView("tree")}
+            >
+              Tree
+            </button>
+          </div>
           <button
             className="btn"
             onClick={() => {
@@ -102,6 +126,32 @@ export function RouterPanel() {
         </p>
       )}
 
+      {view === "tree" ? (
+        <RegistryCanvas
+          verbs={caps.data?.verbs ?? []}
+          health={health.data}
+          tenant={identity.tenant}
+        />
+      ) : (
+        <RouterList grouped={grouped} health={health.data} tenant={identity.tenant} caps={caps} />
+      )}
+    </section>
+  );
+}
+
+function RouterList({
+  grouped,
+  health,
+  tenant,
+  caps,
+}: {
+  grouped: [string, VerbInfo[]][];
+  health: HealthResponse | null;
+  tenant: string;
+  caps: { loading: boolean; error: string | null };
+}) {
+  return (
+    <>
       {grouped.length === 0 && !caps.loading && !caps.error && (
         <p className="muted">No verbs visible for this identity.</p>
       )}
@@ -119,7 +169,7 @@ export function RouterPanel() {
                 .sort((a, b) => a.id.localeCompare(b.id))
                 .map((v) => {
                   const binding = bindingOf(v);
-                  const h = resolveHealth(v, health.data, identity.tenant);
+                  const h = resolveHealth(v, health, tenant);
                   return (
                     <li className="verb-row" key={v.id}>
                       <div className="verb-row__main">
@@ -143,6 +193,6 @@ export function RouterPanel() {
           </div>
         ))}
       </div>
-    </section>
+    </>
   );
 }

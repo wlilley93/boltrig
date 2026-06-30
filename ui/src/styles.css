@@ -320,6 +320,28 @@ textarea:focus {
   background: transparent;
 }
 
+/* segmented toggle (e.g. Router List / Tree views) */
+.seg {
+  display: inline-flex;
+}
+.seg .btn--seg {
+  border-radius: 0;
+}
+.seg .btn--seg:first-child {
+  border-top-left-radius: var(--radius);
+  border-bottom-left-radius: var(--radius);
+}
+.seg .btn--seg:last-child {
+  border-top-right-radius: var(--radius);
+  border-bottom-right-radius: var(--radius);
+  border-left: 0;
+}
+.btn--seg-on {
+  background: var(--accent-2);
+  border-color: var(--accent-2);
+  color: #fff;
+}
+
 /* helper text */
 .muted {
   color: var(--muted);
@@ -1672,6 +1694,28 @@ summary:focus-visible,
   50% {
     box-shadow: 0 0 0 4px rgba(91, 157, 255, 0.35);
   }
+}
+
+/* Registry canvas: the Capability plane tree. Reuses the .wf-node card and the
+   agent / service binding colours; adds the noun / verb tier accents and the
+   high-consequence highlight so a governed verb (e.g. web.fetch) stands out. */
+.reg-node--noun {
+  border-left-color: var(--muted);
+  font-weight: 600;
+}
+.reg-node--verb {
+  border-left-color: var(--accent);
+}
+.reg-node--high {
+  border-color: var(--high);
+  border-left-color: var(--high);
+  border-left-width: 3px;
+}
+.reg-node__meta {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
 @media (max-width: 900px) {
