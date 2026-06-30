@@ -419,6 +419,32 @@ def create_app(
 
         return await build_tree(k.store, p.tenant_id, run_id)
 
+    @app.get("/v1/runs/{run_id}/events")
+    async def run_events(
+        run_id: str, request: Request, follow: int = 0,
+        k: Kernel = Depends(_get_kernel), p: Principal = Depends(principal),
+    ):
+        # Subscribe to a run's live event stream (Round Eleven, the Run drawer).
+        # Tenant-scoped (SEC-56): a run is streamable only if it produced audited
+        # activity in the caller's tenant - you cannot read another tenant's run.
+        rows = await k.store.audit_query(p.tenant_id, run_id=run_id, limit=1)
+        if not rows:
+            return JSONResponse({"error": "unknown_run"}, status_code=404)
+
+        if not follow:
+            # Snapshot: the events emitted so far, then end (historical inspection).
+            async def snapshot():
+                for event in k.events.snapshot(run_id):
+                    yield f"data: {json.dumps(event)}\n\n"
+
+            return StreamingResponse(snapshot(), media_type="text/event-stream")
+
+        async def live():  # backlog (re-attach) then live until the run closes
+            async for event in k.events.subscribe(run_id, replay=True):
+                yield f"data: {json.dumps(event)}\n\n"
+
+        return StreamingResponse(live(), media_type="text/event-stream")
+
     # Round Three: authoring studios, admin console, observability, eval, etc.
     from .platform_routes import register_platform_routes
 

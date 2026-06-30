@@ -364,3 +364,11 @@ invariants:
     description: Run events are run-keyed and credential-free - a verb's events publish only to its own run's stream and never carry credential material.
     tests:
       - tests/security/test_round_ten.py::test_events_are_run_keyed_and_credential_free
+  SEC-56:
+    description: A run's event stream is tenant-scoped - the run-events endpoint streams only runs that produced audited activity in the caller's tenant; another tenant gets 404.
+    tests:
+      - tests/security/test_round_eleven.py::test_run_events_are_tenant_scoped
+  FR-EVT-03:
+    description: The run-events endpoint returns the events a run emitted as SSE frames (snapshot), and an unknown run is a 404.
+    tests:
+      - tests/security/test_round_eleven.py::test_unknown_run_is_404

@@ -69,3 +69,9 @@ class EventRelay:
         self._backlog.pop(stream_id, None)
         self._closed.discard(stream_id)
         self._subs.pop(stream_id, None)
+
+    def snapshot(self, stream_id: str) -> list[dict[str, Any]]:
+        """A copy of a stream's current backlog (a point-in-time read, no
+        subscription). Used by the run-events endpoint for a non-following
+        snapshot of what a run has emitted so far."""
+        return list(self._backlog.get(stream_id, []))

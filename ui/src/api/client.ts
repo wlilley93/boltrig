@@ -745,6 +745,54 @@ export async function streamChat(
   if (buffer) emitFrame(buffer, onEvent);
 }
 
+// Subscribe to a run's event stream (Round Eleven, the Run drawer / live canvas).
+// follow=false (default) yields the current snapshot then ends; follow=true keeps
+// streaming live until the run closes. Same SSE frame format as streamChat.
+export async function streamRunEvents(
+  runId: string,
+  onEvent: (event: ChatEvent) => void,
+  opts: { signal?: AbortSignal; follow?: boolean } = {},
+): Promise<void> {
+  const headers: Record<string, string> = {
+    ...identityHeaders(),
+    accept: "text/event-stream",
+  };
+  const q = opts.follow ? "?follow=1" : "";
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/v1/runs/${encodeURIComponent(runId)}/events${q}`, {
+      method: "GET",
+      headers,
+      signal: opts.signal,
+    });
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : "network error";
+    throw new ApiError(0, `run events stream failed: ${reason}`, null);
+  }
+  if (!res.ok || !res.body) {
+    const parsed = await parseBody(res);
+    throw new ApiError(res.status, `GET /v1/runs/${runId}/events -> ${res.status}`, parsed);
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    buffer = buffer.replace(/\r\n/g, "\n");
+    let idx: number;
+    while ((idx = buffer.indexOf("\n\n")) !== -1) {
+      const frame = buffer.slice(0, idx);
+      buffer = buffer.slice(idx + 2);
+      emitFrame(frame, onEvent);
+    }
+  }
+  buffer += decoder.decode();
+  buffer = buffer.replace(/\r\n/g, "\n").trim();
+  if (buffer) emitFrame(buffer, onEvent);
+}
+
 function emitFrame(frame: string, onEvent: (event: ChatEvent) => void): void {
   const dataLines: string[] = [];
   for (const line of frame.split("\n")) {
