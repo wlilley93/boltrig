@@ -416,22 +416,44 @@ export function App() {
     }
   }, [sidebarCollapsed, sidebarWidth]);
 
+  const clampWidth = (w: number) => Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, w));
+
   // drag-to-resize the sidebar from its right edge (no-op while collapsed).
+  // During the drag we drive the CSS variable IMPERATIVELY so the layout tracks
+  // the pointer without a React re-render (and a localStorage write) on every
+  // frame; we commit the final width to state once on pointerup, which persists.
   function startResize(e: React.PointerEvent) {
     if (sidebarCollapsed) return;
     e.preventDefault();
     setResizing(true);
+    let latest = sidebarWidth;
     const move = (ev: PointerEvent) => {
-      const w = Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, ev.clientX));
-      setSidebarWidth(w);
+      latest = clampWidth(ev.clientX);
+      document.documentElement.style.setProperty("--app-sidebar-width", `${latest}px`);
     };
     const up = () => {
       setResizing(false);
+      setSidebarWidth(latest); // single state update -> single persist
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
+  }
+
+  // Keyboard-operable resizer (WAI-ARIA separator): arrows nudge, Home/End jump.
+  function onResizerKey(e: React.KeyboardEvent) {
+    if (sidebarCollapsed) return;
+    const step = e.shiftKey ? 32 : 8;
+    let next: number | null = null;
+    if (e.key === "ArrowLeft") next = sidebarWidth - step;
+    else if (e.key === "ArrowRight") next = sidebarWidth + step;
+    else if (e.key === "Home") next = SIDEBAR_MIN;
+    else if (e.key === "End") next = SIDEBAR_MAX;
+    if (next !== null) {
+      e.preventDefault();
+      setSidebarWidth(clampWidth(next));
+    }
   }
 
   // Apply the persisted appearance (theme / density / contrast / font scale /
@@ -524,7 +546,12 @@ export function App() {
             role="separator"
             aria-orientation="vertical"
             aria-label="Resize sidebar"
+            aria-valuenow={sidebarWidth}
+            aria-valuemin={SIDEBAR_MIN}
+            aria-valuemax={SIDEBAR_MAX}
+            tabIndex={0}
             onPointerDown={startResize}
+            onKeyDown={onResizerKey}
           />
         )}
       </aside>

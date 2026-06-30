@@ -90,9 +90,16 @@ export function ChatPanel() {
   // without churning React state mid-stream.
   const pendingConvId = useRef<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const alive = useRef(true); // false after unmount: guards setState past an await
 
-  // Abort any in-flight stream when the panel unmounts.
-  useEffect(() => () => abortRef.current?.abort(), []);
+  // Abort any in-flight stream and stop touching state when the panel unmounts.
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+      abortRef.current?.abort();
+    };
+  }, []);
 
   const live = useMemo(() => normalizeEvents(liveEvents), [liveEvents]);
 
@@ -105,11 +112,12 @@ export function ChatPanel() {
     setMsgsError(null);
     try {
       const res = await api.conversation(id);
+      if (!alive.current) return;
       setMessages(res.messages);
     } catch (err) {
-      setMsgsError(errText(err));
+      if (alive.current) setMsgsError(errText(err));
     } finally {
-      setMsgsLoading(false);
+      if (alive.current) setMsgsLoading(false);
     }
   }
 
@@ -152,6 +160,7 @@ export function ChatPanel() {
       await streamChat(
         activeId ? { conversation_id: activeId, message: text } : { message: text },
         (ev) => {
+          if (ctrl.signal.aborted || !alive.current) return;
           if (ev.type === "message_start" && ev.conversation_id) {
             pendingConvId.current = ev.conversation_id;
           }
@@ -160,6 +169,7 @@ export function ChatPanel() {
         ctrl.signal,
       );
 
+      if (!alive.current) return;
       // Stream finished cleanly. The transcript persists kernel-side, so reload
       // it (and the conversation list) and drop the local live/optimistic state.
       setStreaming(false);
@@ -167,11 +177,13 @@ export function ChatPanel() {
       if (convId) {
         if (!activeId) setActiveId(convId);
         await loadConversation(convId);
+        if (!alive.current) return;
         convs.reload();
       }
       setPendingUser(null);
       setLiveEvents([]);
     } catch (err) {
+      if (!alive.current) return;
       setStreaming(false);
       if (ctrl.signal.aborted) return; // user switched/cancelled; not an error
       // US-CONV-07: keep the partial turn on screen and offer a reconnect.
@@ -189,6 +201,7 @@ export function ChatPanel() {
     if (convId) {
       if (!activeId) setActiveId(convId);
       await loadConversation(convId);
+      if (!alive.current) return;
       convs.reload();
     }
     setPendingUser(null);

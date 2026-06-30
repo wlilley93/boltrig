@@ -17,6 +17,7 @@ import { api, streamRunEvents } from "../api/client";
 import type { AuditNode, ChatEvent } from "../api/types";
 import { closeRun, openRun, useRoute } from "../router";
 import { useFetch } from "../useFetch";
+import { useFocusTrap } from "../useFocusTrap";
 import { TurnExtras, normalizeEvents } from "./chatTurn";
 import { errText } from "./shared";
 
@@ -106,10 +107,11 @@ function RunDrawer({ runId }: { runId: string }) {
     setResolvedHitls((prev) => ({ ...prev, [id]: status }));
   }
 
-  // a11y: Esc closes the drawer, and focus moves into it on open.
+  // a11y: Esc closes the drawer; focus is trapped inside it while open and
+  // restored to the opener on close (useFocusTrap).
   const drawerRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(drawerRef);
   useEffect(() => {
-    drawerRef.current?.focus();
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") closeRun();
     }

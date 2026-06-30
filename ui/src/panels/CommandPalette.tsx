@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api/client";
 import { navigate } from "../router";
 import { useFetch } from "../useFetch";
+import { useFocusTrap } from "../useFocusTrap";
 
 interface Cmd {
   id: string;
@@ -36,6 +37,7 @@ export function CommandPalette() {
   const [q, setQ] = useState("");
   const [sel, setSel] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   // capabilities only fetch once the palette is first opened.
   const [armed, setArmed] = useState(false);
@@ -118,11 +120,22 @@ export function CommandPalette() {
     }
   }
 
+  // Trap Tab inside the palette while open and restore focus to the opener on
+  // close. (The input still gets focus first via the open effect above.)
+  useFocusTrap(dialogRef, open);
+
   if (!open) return null;
 
   return (
     <div className="cmdk-overlay" onClick={() => setOpen(false)}>
-      <div className="cmdk" role="dialog" aria-label="Command palette" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="cmdk"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Command palette"
+        ref={dialogRef}
+        onClick={(e) => e.stopPropagation()}
+      >
         <input
           ref={inputRef}
           className="cmdk__input"

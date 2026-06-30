@@ -403,6 +403,9 @@ export function WorkflowCanvas() {
   }
 
   function addVerbNode(verb: VerbInfo) {
+    // Preserve unsaved edits on the currently selected step before selection
+    // moves to the new node (BUG #8). Invalid JSON aborts the add.
+    if (selectedNode && inspectorDirty(selectedNode) && !commitInspector(selectedNode)) return;
     const id = uniqueStepId(verb);
     const index = nodes.filter(isStepNode).length;
     const node: StepNode = {
@@ -439,7 +442,15 @@ export function WorkflowCanvas() {
   }
 
   function onNodeClick(_event: React.MouseEvent, node: CanvasNode) {
-    setSelectedId(node.type === "step" ? node.id : null);
+    const nextId = node.type === "step" ? node.id : null;
+    if (nextId === selectedId) return;
+    // Don't lose unsaved inspector edits: if the current step has dirty params,
+    // commit them first. Invalid JSON blocks the switch (the error is shown) so
+    // the edits stay put to be fixed, instead of vanishing on navigation.
+    if (selectedNode && inspectorDirty(selectedNode)) {
+      if (!commitInspector(selectedNode)) return;
+    }
+    setSelectedId(nextId);
   }
 
   // Inspector: apply the edited params JSON to the selected step.
@@ -459,17 +470,26 @@ export function WorkflowCanvas() {
     );
   }
 
-  function applyParams() {
-    if (!selectedNode) return;
+  // Whether the inspector holds param/description edits not yet written to the
+  // node (compared against the exact strings the sync effect set on selection).
+  function inspectorDirty(node: StepNode): boolean {
+    const nodeParams = JSON.stringify(node.data.params ?? {}, null, 2);
+    return editParams !== nodeParams || editDesc !== (node.data.description ?? "");
+  }
+
+  // Write the inspector's params + description to a node. Returns false (and
+  // surfaces the parse error) if the params JSON is invalid, so a caller can
+  // refuse to navigate away rather than silently drop the edits (BUG #8).
+  function commitInspector(node: StepNode): boolean {
     let parsed: Record<string, unknown>;
     try {
       parsed = parseJson<Record<string, unknown>>(editParams, {});
     } catch (err) {
       setEditError(`params: ${errText(err)}`);
-      return;
+      return false;
     }
     setEditError(null);
-    const id = selectedNode.id;
+    const id = node.id;
     setNodes((ns) =>
       ns.map((n) =>
         n.id === id && isStepNode(n)
@@ -477,6 +497,12 @@ export function WorkflowCanvas() {
           : n,
       ),
     );
+    return true;
+  }
+
+  function applyParams() {
+    if (!selectedNode) return;
+    commitInspector(selectedNode);
   }
 
   // Inspector: rename the selected step id (and re-point its edges).

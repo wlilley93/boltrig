@@ -40,32 +40,44 @@ export function useFetch<T>(
   const [errorStatus, setErrorStatus] = useState<number | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const active = useRef(true);
+  const hasData = useRef(false); // mirrors data!=null without re-capturing the closure
+  const seq = useRef(0); // monotonic request id: drop stale in-flight responses
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const run = useCallback(fn, deps);
 
   const load = useCallback(async () => {
-    setLoading(true);
+    const mine = ++seq.current;
+    // Only show the blocking "loading" state on the first load; a poll/reload
+    // that already has data refreshes in place (no spinner flash, no button
+    // flicker). Panels keep using `loading && !data` for the initial spinner.
+    if (!hasData.current) setLoading(true);
     try {
       const result = await run();
-      if (active.current) {
+      // A newer load() superseded this one (fast poll, changed deps) - its
+      // response is the source of truth; drop this stale one.
+      if (active.current && mine === seq.current) {
         setData(result);
+        hasData.current = true;
         setError(null);
         setErrorStatus(null);
       }
     } catch (err) {
-      if (active.current) {
+      if (active.current && mine === seq.current) {
         const d = describe(err);
         setError(d.message);
         setErrorStatus(d.status);
       }
     } finally {
-      if (active.current) setLoading(false);
+      if (active.current && mine === seq.current) setLoading(false);
     }
   }, [run]);
 
   useEffect(() => {
     active.current = true;
+    // `load` identity changes only when deps change (or first mount): the data we
+    // hold is for the previous query, so re-show the initial loading state.
+    hasData.current = false;
     void load();
     return () => {
       active.current = false;

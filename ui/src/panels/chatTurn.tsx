@@ -34,6 +34,12 @@ interface HitlEntry {
   options: string[];
 }
 
+interface StepEntry {
+  stepId: string;
+  action: string;
+  status: "running" | "ok" | "failed" | "skipped" | "error";
+}
+
 export interface NormalizedTurn {
   runId?: string;
   conversationId?: string;
@@ -42,6 +48,7 @@ export interface NormalizedTurn {
   tools: ToolEntry[];
   subagents: SubagentEntry[];
   hitls: HitlEntry[];
+  steps: StepEntry[];
   ended: boolean;
 }
 
@@ -54,6 +61,8 @@ export function normalizeEvents(events: ChatEvent[]): NormalizedTurn {
   const tools: ToolEntry[] = [];
   const subagents: SubagentEntry[] = [];
   const hitls: HitlEntry[] = [];
+  const steps: StepEntry[] = [];
+  const stepIndex = new Map<string, StepEntry>(); // fold running -> ok per step_id
 
   events.forEach((ev, i) => {
     switch (ev.type) {
@@ -99,6 +108,21 @@ export function normalizeEvents(events: ChatEvent[]): NormalizedTurn {
           options: ev.options ?? [],
         });
         break;
+      case "workflow_step": {
+        // The interpreter emits one event per step transition (running -> ok /
+        // failed / skipped). Fold by step_id so each step shows once with its
+        // latest status, in first-seen order.
+        const existing = stepIndex.get(ev.step_id);
+        if (existing) {
+          existing.status = ev.status;
+          existing.action = ev.action;
+        } else {
+          const entry: StepEntry = { stepId: ev.step_id, action: ev.action, status: ev.status };
+          stepIndex.set(ev.step_id, entry);
+          steps.push(entry);
+        }
+        break;
+      }
       case "message_end":
         ended = true;
         runId = ev.run_id ?? runId;
@@ -106,7 +130,7 @@ export function normalizeEvents(events: ChatEvent[]): NormalizedTurn {
     }
   });
 
-  return { runId, conversationId, text, reasoning, tools, subagents, hitls, ended };
+  return { runId, conversationId, text, reasoning, tools, subagents, hitls, steps, ended };
 }
 
 function asPretty(value: unknown): string {
@@ -142,6 +166,30 @@ function ToolCard({ tool }: { tool: ToolEntry }) {
         )}
       </div>
     </details>
+  );
+}
+
+// The interpreter's step walk: a compact ordered checklist that mirrors the
+// canvas nodes (each step lights as it runs). Distinct from ToolCards, which
+// show the underlying verb dispatch a step makes.
+function StepsCard({ steps }: { steps: StepEntry[] }) {
+  return (
+    <div className="steps-card">
+      <div className="steps-card__head">
+        <span className="badge">workflow</span>
+        <span className="muted">{steps.length} step(s)</span>
+      </div>
+      <ol className="steps-card__list">
+        {steps.map((s) => (
+          <li className="steps-card__item" key={s.stepId}>
+            <span className={`badge badge--tool-${s.status === "failed" ? "error" : s.status}`}>
+              {s.status}
+            </span>
+            <code className="badge badge--verb">{s.action}</code>
+          </li>
+        ))}
+      </ol>
+    </div>
   );
 }
 
@@ -299,6 +347,7 @@ export function TurnExtras({
           <div className="thinking__body">{turn.reasoning}</div>
         </div>
       )}
+      {turn.steps.length > 0 && <StepsCard steps={turn.steps} />}
       {turn.tools.map((t) => (
         <ToolCard key={t.key} tool={t} />
       ))}

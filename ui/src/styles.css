@@ -1469,6 +1469,37 @@ textarea.code--tall {
   color: var(--muted);
 }
 
+/* interpreter step walk (workflow_step events) */
+.steps-card {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.steps-card__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.steps-card__list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.steps-card__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 /* inline HITL inside the chat */
 .chat-hitl {
   border: 1px solid var(--warn);
