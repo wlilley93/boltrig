@@ -24,7 +24,7 @@ The honest implemented-vs-scaffolded map for the two security-hardening specs
 | **DATA** (privacy) | **BUILT + SEAM** | DATA-04 PII redaction + sensitive->local (SEC-12), DATA-05 tamper-evident hash-chained audit (SEC-19/20), DATA-03 tenant isolation (SEC-09), DATA-07 retention/erasure (built). SEAM: DATA-01/02 TLS-everywhere + encryption-at-rest (deploy overlay), DATA-06 tested restore (ops). |
 | **ADP** (adapters) | **BUILT + HARDENED** | ADP-02 credential confinement (SEC-05), ADP-04 generated-adapter review gate (SEC-22), ADP-10 high-consequence marking (SEC-39), ADP-09 MCP-consumer isolation. HARDENED: ADP-03 per-adapter metadata egress block (SEC-61), ADP-08 webhook replay window (SEC-63). |
 | **SUP** (supply chain) | **SEAM** | SUP-01/02/03/04 pinned+hash-locked deps, SCA, SBOM, signing; SUP-06 the CI gate must run - **GitHub Actions is billing-blocked (Principal action)**. All CI/ops. |
-| **INF** (infra) | **SEAM** | INF-01 hardened containers (Dockerfile non-root/read-only/caps), INF-03 network segmentation, INF-05 least-priv DB role - deploy/ops. Partially expressible in the compose/Dockerfiles (a follow-on); not exercised here. |
+| **INF** (infra) | **HARDENED + SEAM** | HARDENED (Round 17, SEC-64): INF-01 hardened containers - non-root images + read-only rootfs + cap_drop ALL + no-new-privileges + pids/mem limits on kernel/fleet/pi-sidecar (deploy-lint bound; runtime start needs a live docker host - ops). SEAM: INF-03 network segmentation (sandbox net exists, SEC-48), INF-05 least-priv DB role + RLS (next code+deploy round). |
 | **DET** (detection) | **PARTIAL + SEAM** | DET-01 security-event logging via the audit log (built); DET-03/04/05 anomaly alerting, IR playbooks, periodic pen-test - ops/SIEM (seam). |
 
 ## Batch 2 (Azure/cloud/host/runtime) - by family
@@ -62,8 +62,9 @@ egress guard module (`nankle/adapters/egress.py`) and constant-time PAT compare.
 - **CI/CD (SUP/PIPE):** pinned/hash-locked deps + SCA + secret/image scan + SBOM +
   signing + required gates; **the GitHub Actions billing block is the live blocker
   (Principal)**.
-- **Container hardening (INF-01):** non-root/read-only/cap-drop in the Dockerfiles
-  is a buildable follow-on (next code round), not done here.
+- **Container hardening (INF-01):** DONE (Round 17, SEC-64) - non-root images +
+  read-only/cap-drop/no-new-privileges/limits in the manifests, deploy-lint bound;
+  the only residue is exercising it on a live docker host (ops).
 - **TLS/at-rest/RLS:** the secure compose overlay + a least-privilege DB role +
   Postgres RLS policies - a buildable+deploy follow-on.
 - **Pi runtime (PI-01/02/03):** real native-tool-disable + micro-VM isolation

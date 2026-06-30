@@ -17,6 +17,21 @@
 #   ui                the React console: Router, Kanban, Approvals (Epic L)
 #   local-model       optional on-box inference for sensitive data (profile: local)
 
+# Container runtime hardening (INF-01): our first-party app containers run
+# read-only, drop all Linux capabilities, forbid privilege escalation, and are
+# resource-capped. The app writes nothing to disk (logs -> stdout); a tmpfs backs
+# /tmp. Merged into the kernel / fleet-worker / pi-sidecar services below.
+x-app-hardening: &app-hardening
+  read_only: true
+  tmpfs:
+    - /tmp
+  cap_drop:
+    - ALL
+  security_opt:
+    - "no-new-privileges:true"
+  pids_limit: 512
+  mem_limit: 1g
+
 services:
   postgres:
     image: postgres:16
@@ -59,6 +74,7 @@ services:
         NO_PROXY: ${NO_PROXY:-}
     image: nankle/kernel:0.1.0
     restart: unless-stopped
+    <<: *app-hardening
     command: ["uvicorn", "nankle.api.asgi:app", "--host", "0.0.0.0", "--port", "8000"]
     env_file: .env
     # On both the app network and the sandbox, so the Pi sidecar can reach the
@@ -95,6 +111,7 @@ services:
         NO_PROXY: ${NO_PROXY:-}
     image: nankle/fleet:0.1.0
     restart: unless-stopped
+    <<: *app-hardening
     command: ["python", "-m", "nankle.api.worker"]
     env_file: .env
     volumes:
@@ -224,6 +241,7 @@ services:
     # be local (the `local` profile model on `sandbox`) or routed via the proxy.
     networks:
       - sandbox
+    <<: *app-hardening
     build:
       context: ./services/pi_sidecar
       dockerfile: Dockerfile

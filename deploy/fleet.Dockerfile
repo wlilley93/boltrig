@@ -35,5 +35,10 @@ COPY pyproject.toml /app/pyproject.toml
 COPY nankle/ /app/nankle/
 RUN pip install ".[durable,inference]"
 
+# Run as an unprivileged user (INF-01). Writes nothing to disk; compose runs it
+# read-only with a tmpfs for /tmp.
+RUN useradd --create-home --uid 10001 nankle
+USER nankle
+
 # Compose overrides this; it is the sensible default for `docker run`.
 CMD ["python", "-m", "nankle.api.worker"]

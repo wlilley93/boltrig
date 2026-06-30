@@ -12,7 +12,7 @@ The gate (the K-29 / K-30 ratchet) fails the build if:
   (an undeclared invariant), or
 - the catalogue claims a test node id that no marker actually backs (drift).
 
-Binding debt may only ever decrease. Today: **93 declared, debt 0** (121 bound
+Binding debt may only ever decrease. Today: **94 declared, debt 0** (123 bound
 test node ids), per `python scripts/check_invariants.py`. `tests/invariants.yaml`
 is the authoritative, machine-checked list; the table below is the curated
 human-readable view and highlights the core kernel set plus each round's new
@@ -145,6 +145,12 @@ and `FR*` ids are Nankle-local (drawn from the SRS) and never restate a `K-*`.
 | **SEC-61** | The shared egress guard blocks cloud-metadata / link-local targets for every HTTP adapter, closing SSRF -> IMDS token theft (INJ-02 / CLOUD-03). | `tests/security/test_round_sixteen.py::test_shared_egress_guard_blocks_metadata` |
 | **SEC-62** | A Unicode-confusable / non-canonical verb id can never match a grant (NFKC + safe charset) (UPLOAD-05 / AZ-02). | `tests/security/test_round_sixteen.py::test_confusable_verb_id_never_matches_a_grant` |
 | **SEC-63** | An inbound webhook outside the replay window is rejected, so a captured signed request cannot replay forever (ADP-08). | `tests/security/test_round_sixteen.py::test_webhook_replay_window` |
+
+### Round Seventeen (container hardening)
+
+| Invariant | Meaning | Bound test(s) |
+| --- | --- | --- |
+| **SEC-64** | The first-party app containers are hardened (INF-01) - read-only rootfs, all caps dropped, no-new-privileges, resource-capped, non-root images - enforced in the deploy manifests. | `tests/security/test_round_seventeen.py::test_app_containers_are_hardened`, `::test_app_images_run_non_root` |
 
 ## How a new invariant is added
 

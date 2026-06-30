@@ -425,3 +425,8 @@ invariants:
     description: An inbound webhook carrying a timestamp outside the replay window is rejected, so a captured signed request cannot replay forever (ADP-08).
     tests:
       - tests/security/test_round_sixteen.py::test_webhook_replay_window
+  SEC-64:
+    description: The first-party app containers are hardened (INF-01) - read-only rootfs, all caps dropped, no-new-privileges, resource-capped, and non-root images - enforced in the deploy manifests so it cannot silently regress.
+    tests:
+      - tests/security/test_round_seventeen.py::test_app_containers_are_hardened
+      - tests/security/test_round_seventeen.py::test_app_images_run_non_root

@@ -45,6 +45,12 @@ COPY pyproject.toml /app/pyproject.toml
 COPY nankle/ /app/nankle/
 RUN pip install .
 
+# Run as an unprivileged user (INF-01 defence in depth). The app reads /app + the
+# read-only mounts and writes nothing to disk (logs go to stdout); the compose
+# runs the container read-only with a tmpfs for /tmp.
+RUN useradd --create-home --uid 10001 nankle
+USER nankle
+
 EXPOSE 8000
 
 # Compose overrides this; it is the sensible default for `docker run`.
