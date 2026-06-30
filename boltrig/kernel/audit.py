@@ -9,6 +9,7 @@ or identity verbatim - it stores a digest + bounded preview instead.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import json
@@ -75,18 +76,34 @@ def _scrub(detail: dict) -> dict:
 class AuditWriter:
     def __init__(self, store: Store) -> None:
         self._store = store
+        # SEC-16: serialise the read-head -> append per tenant so two concurrent
+        # writes cannot both claim seq=N+1 (a unique-violation on Postgres thrown
+        # from dispatch's finally, or a forked hash chain on the in-memory store).
+        # One lock per tenant; for a multi-process deployment the Postgres
+        # UNIQUE(tenant_id, seq) is the backstop.
+        self._locks: dict[str, asyncio.Lock] = {}
+
+    def _lock(self, tenant_id: str) -> asyncio.Lock:
+        lk = self._locks.get(tenant_id)
+        if lk is None:
+            lk = asyncio.Lock()
+            self._locks[tenant_id] = lk
+        return lk
 
     async def write(self, event: AuditEvent) -> AuditEvent:
-        """Scrub, chain, and append. Returns the persisted event with seq/hash."""
+        """Scrub, chain, and append. Returns the persisted event with seq/hash.
+        The chain step is serialised per tenant so concurrent writes do not collide
+        on the seq (SEC-16)."""
         event.detail = _scrub(event.detail)
-        head_seq, prev_hash = await self._store.audit_head(event.tenant_id)
-        event.seq = head_seq + 1
-        event.prev_hash = prev_hash
-        if event.ts is None:
-            event.ts = utcnow()
-        digest = hmac.new(_HMAC_KEY, _canonical(event).encode(), hashlib.sha256).hexdigest()
-        event.hash = digest
-        await self._store.audit_append(event)
+        async with self._lock(event.tenant_id):
+            head_seq, prev_hash = await self._store.audit_head(event.tenant_id)
+            event.seq = head_seq + 1
+            event.prev_hash = prev_hash
+            if event.ts is None:
+                event.ts = utcnow()
+            digest = hmac.new(_HMAC_KEY, _canonical(event).encode(), hashlib.sha256).hexdigest()
+            event.hash = digest
+            await self._store.audit_append(event)
         return event
 
     async def verify(self, tenant_id: str) -> tuple[bool, int | None]:

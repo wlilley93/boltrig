@@ -1,5 +1,7 @@
 """Audit is append-only, hash-chained, and tamper-evident (SEC-16, K-19)."""
 
+import asyncio
+
 import pytest
 
 from tests.conftest import TENANT, make_ctx
@@ -27,6 +29,52 @@ async def test_denied_actions_are_also_audited(kernel):
         await kernel.invoke("ticket", "ticket.create", {"title": "x"}, make_ctx([]))
     events = await kernel.store.audit_query(TENANT)
     assert events[-1].status == "grant_missing"
+
+
+@pytest.mark.kernel
+@pytest.mark.invariant("SEC-16")
+async def test_concurrent_writes_keep_a_contiguous_verifiable_chain():
+    # On Postgres, audit_head and audit_append are separate awaited round-trips,
+    # so two concurrent same-tenant writes can both read head=N and claim seq=N+1
+    # - colliding on UNIQUE(tenant_id, seq) or forking the hash chain. The
+    # in-memory store never suspends between the two, so to exercise the race
+    # deterministically we subclass it with a head read that yields control. The
+    # writer must serialise per tenant so the chain stays contiguous regardless.
+    from boltrig.kernel.audit import AuditWriter
+    from boltrig.models import ActionType, AuditEvent
+    from boltrig.store import InMemoryStore
+
+    class YieldingStore(InMemoryStore):
+        async def audit_head(self, tenant_id):
+            head = await super().audit_head(tenant_id)
+            await asyncio.sleep(0)  # force a scheduler yield between head and append
+            return head
+
+    store = YieldingStore()
+    writer = AuditWriter(store)
+
+    def _event(i: int) -> AuditEvent:
+        return AuditEvent(
+            tenant_id=TENANT,
+            run_id=f"r{i}",
+            actor="tester",
+            actor_tier="human",
+            action_type=ActionType.TOOL_CALL,
+            noun="ticket",
+            verb="ticket.create",
+            status="ok",
+            detail={},
+            ts=None,
+        )
+
+    n = 24
+    await asyncio.gather(*[writer.write(_event(i)) for i in range(n)])
+
+    events = await store.audit_query(TENANT, limit=10_000)
+    seqs = sorted(e.seq for e in events)
+    assert seqs == list(range(1, len(events) + 1))  # contiguous, no dup/gap
+    ok, bad = await writer.verify(TENANT)
+    assert ok and bad is None
 
 
 @pytest.mark.kernel

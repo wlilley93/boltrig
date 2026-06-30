@@ -243,6 +243,7 @@ invariants:
     tests:
       - tests/kernel/test_audit_chain.py::test_every_action_is_audited
       - tests/kernel/test_audit_chain.py::test_denied_actions_are_also_audited
+      - tests/kernel/test_audit_chain.py::test_concurrent_writes_keep_a_contiguous_verifiable_chain
   SEC-21:
     description: Verb params are schema-validated before any dispatch side effect.
     tests:
