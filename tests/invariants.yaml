@@ -221,9 +221,11 @@ invariants:
       - tests/security/test_tenant_isolation.py::test_other_tenant_dispatch_fails_closed
       - tests/store/test_postgres_store.py::test_cross_tenant_fails_closed
   SEC-65:
-    description: DB-enforced tenant isolation (RLS) - under FORCE row-level security a non-bypassing role sees only its app.tenant_id rows, cannot write into another tenant (WITH CHECK), and an unset GUC yields zero rows (fail-closed).
+    description: DB-enforced tenant isolation (RLS) - under FORCE row-level security a non-bypassing role sees only its app.tenant_id rows, cannot write into another tenant (WITH CHECK), and an unset GUC yields zero rows (fail-closed); and the live wiring sets app.tenant_id from the request context before every statement.
     tests:
       - tests/integration/test_rls.py::test_rls_enforces_tenant_isolation_and_fails_closed
+      - tests/unit/test_rls_pool.py::test_rls_pool_sets_tenant_guc_before_each_statement
+      - tests/unit/test_rls_pool.py::test_rls_pool_is_fail_closed_when_no_tenant_bound
   SEC-13:
     description: PII is detected and redacted before it leaves the boundary.
     tests:

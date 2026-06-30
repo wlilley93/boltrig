@@ -200,6 +200,7 @@ def create_app(
 
     async def principal(request: Request) -> Principal:
         from boltrig.identity.tokens import looks_like_pat, resolve_pat_principal
+        from boltrig.store.postgres import set_current_tenant
 
         # Headless parity (US-HEAD-02, SEC-37): a personal access token bearer is
         # resolved to its owner's effective grants (PAT scope ∩ owner's current
@@ -212,8 +213,12 @@ def create_app(
             p = await resolve_pat_principal(_get_kernel(request).store, token)
             if p is None:
                 raise HTTPException(status_code=401, detail="invalid or expired access token")
-            return p
-        return await resolver(request)
+        else:
+            p = await resolver(request)
+        # RLS-live: bind this request's tenant so the _RlsPool scopes every DB call
+        # (a no-op for the in-memory store and when RLS is off).
+        set_current_tenant(p.tenant_id)
+        return p
 
     @app.get("/healthz")
     async def healthz(k: Kernel = Depends(_get_kernel)) -> dict:

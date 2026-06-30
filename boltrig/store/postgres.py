@@ -10,6 +10,7 @@ Schema is ``schema.sql`` (the single source of truth); the DDL is idempotent so
 from __future__ import annotations
 
 import contextlib
+import contextvars
 import json
 from pathlib import Path
 
@@ -65,6 +66,62 @@ from boltrig.models import (
 _SCHEMA = Path(__file__).with_name("schema.sql")
 _RLS = Path(__file__).with_name("rls.sql")
 
+# RLS LIVE (opt-in): the active tenant for the current async context, set by the
+# API per request (set_current_tenant). The _RlsPool reads it to scope every
+# statement, so the opt-in RLS policies activate through the store's UNCHANGED
+# method bodies - no per-method retrofit. Default off; the running app is
+# unaffected until BOLTRIG_RLS is set and the app connects as boltrig_app.
+_current_tenant: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "boltrig_current_tenant", default=None
+)
+
+
+def set_current_tenant(tenant_id: str | None) -> None:
+    """Bind the active tenant for RLS for this async context (the API calls this
+    per request from the resolved Principal)."""
+    _current_tenant.set(tenant_id)
+
+
+async def _apply_guc(conn: asyncpg.Connection) -> None:
+    """SET LOCAL app.tenant_id from the request context. An unset tenant becomes
+    '' so the RLS predicate is never true (fail-closed, never wide-open)."""
+    await conn.execute("SELECT set_config('app.tenant_id', $1, true)", _current_tenant.get() or "")
+
+
+class _RlsPool:
+    """An asyncpg-pool facade that runs every convenience call inside a transaction
+    with app.tenant_id set from the request context. This is what makes RLS LIVE:
+    the store's existing ``self._pool.fetch/fetchrow/execute`` calls become
+    tenant-scoped at the DB without touching any method body. acquire()/close()
+    pass through - the few explicit-transaction methods set the GUC themselves."""
+
+    def __init__(self, pool: asyncpg.Pool) -> None:
+        self._pool = pool
+
+    async def _scoped(self, op: str, query: str, *args):
+        async with self._pool.acquire() as conn:
+            async with conn.transaction():
+                await _apply_guc(conn)
+                return await getattr(conn, op)(query, *args)
+
+    async def fetch(self, query, *args):
+        return await self._scoped("fetch", query, *args)
+
+    async def fetchrow(self, query, *args):
+        return await self._scoped("fetchrow", query, *args)
+
+    async def fetchval(self, query, *args):
+        return await self._scoped("fetchval", query, *args)
+
+    async def execute(self, query, *args):
+        return await self._scoped("execute", query, *args)
+
+    def acquire(self):
+        return self._pool.acquire()
+
+    async def close(self):
+        await self._pool.close()
+
 
 def normalize_dsn(dsn: str) -> str:
     """Accept a SQLAlchemy-style DSN ("postgresql+asyncpg://...") as well as a
@@ -91,7 +148,9 @@ class PostgresStore:
         self._pool = pool
 
     @classmethod
-    async def connect(cls, dsn: str, *, apply_schema: bool = True) -> "PostgresStore":
+    async def connect(
+        cls, dsn: str, *, apply_schema: bool = True, rls: bool = False
+    ) -> "PostgresStore":
         pool = await asyncpg.create_pool(
             normalize_dsn(dsn), init=_init_conn, min_size=1, max_size=10
         )
@@ -99,6 +158,11 @@ class PostgresStore:
         if apply_schema:
             async with pool.acquire() as conn:
                 await conn.execute(_SCHEMA.read_text(encoding="utf-8"))
+        if rls:
+            # activate RLS-live: every store call is now tenant-scoped at the DB
+            # via the request contextvar. Connect as boltrig_app with apply_schema
+            # False (an owner connection provisions the schema + rls.sql first).
+            store._pool = _RlsPool(pool)
         return store
 
     async def close(self) -> None:
@@ -390,6 +454,7 @@ class PostgresStore:
     async def answer_hitl(self, resp: HITLResponse):
         async with self._pool.acquire() as conn:
             async with conn.transaction():
+                await _apply_guc(conn)  # RLS-live: scope this explicit transaction
                 await conn.execute(
                     """INSERT INTO hitl_responses (id, request_id, tenant_id, decision, notes,
                                                    respondent, responded_at)
@@ -477,6 +542,7 @@ class PostgresStore:
     async def consume_budget(self, tenant_id, scope_id, tokens, micros):
         async with self._pool.acquire() as conn:
             async with conn.transaction():
+                await _apply_guc(conn)  # RLS-live: scope this explicit transaction
                 row = await conn.fetchrow(
                     """SELECT token_limit, cost_limit_micros, hard_stop, spent_tokens, spent_micros
                        FROM budgets WHERE tenant_id=$1 AND id=$2 FOR UPDATE""",

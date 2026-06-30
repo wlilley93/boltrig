@@ -50,8 +50,15 @@ async def build_store() -> Store:
     if settings.database_url:
         from boltrig.store import PostgresStore
 
-        log.info("DATABASE_URL set; using durable PostgresStore")
-        return await PostgresStore.connect(settings.database_url)
+        # RLS-live (opt-in): BOLTRIG_RLS=1 activates the DB-enforced tenant fence.
+        # It requires the schema + rls.sql already provisioned by an owner and the
+        # app to connect as the non-bypassing boltrig_app role, so apply_schema is
+        # off in that mode (an owner connection runs the DDL).
+        rls = os.environ.get("BOLTRIG_RLS", "").lower() in ("1", "true", "yes")
+        log.info("DATABASE_URL set; using durable PostgresStore (rls=%s)", rls)
+        return await PostgresStore.connect(
+            settings.database_url, apply_schema=not rls, rls=rls
+        )
     return InMemoryStore()
 
 
