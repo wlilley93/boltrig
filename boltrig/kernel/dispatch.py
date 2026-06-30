@@ -115,6 +115,9 @@ class Dispatcher:
         status = "ok"
         target_adapter: str | None = None
         detail: dict[str, Any] = {}
+        # _invoke_inner records the resolved adapter ref here so the audit row
+        # attributes which adapter serviced the call (it was always None before).
+        meta: dict[str, Any] = {}
         output: dict[str, Any] | None = None
         # Live run event: the agent is calling a tool. Keyed by the run so the chat
         # / run-canvas subscribed to it sees the call as it happens (Round Ten).
@@ -122,7 +125,7 @@ class Dispatcher:
                                     "input": params})
         try:
             output = await self._invoke_inner(
-                noun, verb, params, context, idempotency_key, approval_id
+                noun, verb, params, context, idempotency_key, approval_id, meta
             )
             return output
         except PendingHuman as e:
@@ -152,6 +155,7 @@ class Dispatcher:
                                             "status": status,
                                             "output": output if status == "ok" else None})
             latency_ms = int((time.monotonic() - started) * 1000)
+            target_adapter = meta.get("target_adapter")
             await self._audit.write(
                 AuditEvent(
                     tenant_id=context.tenant_id,
@@ -173,7 +177,7 @@ class Dispatcher:
                 )
             )
 
-    async def _invoke_inner(self, noun, verb, params, context, idempotency_key, approval_id):
+    async def _invoke_inner(self, noun, verb, params, context, idempotency_key, approval_id, meta=None):
         tenant = context.tenant_id
 
         # 1. resolve verb + binding (tenant-scoped; fail-closed)
@@ -183,6 +187,9 @@ class Dispatcher:
         binding = await self._store.get_binding(tenant, verb)
         if binding is None:
             raise BindingNotFound(f"verb '{verb}' has no binding")
+        # record which adapter/agent services this call so the audit can attribute it.
+        if meta is not None:
+            meta["target_adapter"] = binding.target_ref
 
         # 2. validate params (SEC-21)
         errors = _validate(verb_def.input_schema, params)

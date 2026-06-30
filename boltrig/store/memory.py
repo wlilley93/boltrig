@@ -329,7 +329,9 @@ class InMemoryStore:
 
     async def list_eval_runs(self, tenant_id, case_id=None):
         out = [r for r in self._eval_runs if r.tenant_id == tenant_id]
-        return [r for r in out if case_id is None or r.case_id == case_id]
+        out = [r for r in out if case_id is None or r.case_id == case_id]
+        # newest-first, matching Postgres ORDER BY created_at DESC.
+        return sorted(out, key=lambda r: r.created_at, reverse=True)
 
     # --- notifications ---
     async def upsert_notification_pref(self, pref):
@@ -356,7 +358,8 @@ class InMemoryStore:
             if m.tenant_id == tenant_id and m.owner_scope in scopes
             and (kind is None or m.kind == kind)
         ]
-        return out[-limit:]
+        # newest-first, matching the Postgres ORDER BY created_at DESC contract.
+        return sorted(out, key=lambda m: m.created_at, reverse=True)[:limit]
 
     # --- Round Five: structured memory governance ---
     async def add_memory_fact(self, fact):
@@ -372,7 +375,7 @@ class InMemoryStore:
             if t == tenant_id and f.owner_scope in scopes
             and (kind is None or f.kind == kind)
         ]
-        return out[-limit:]
+        return sorted(out, key=lambda f: f.created_at, reverse=True)[:limit]
 
     async def delete_memory_fact(self, tenant_id, fact_id):
         self._mem_facts.pop((tenant_id, fact_id), None)
@@ -385,13 +388,14 @@ class InMemoryStore:
 
     async def list_memory_ingestions(self, tenant_id, limit=50):
         out = [i for (t, _), i in self._mem_ingest.items() if t == tenant_id]
-        return out[-limit:]
+        return sorted(out, key=lambda i: i.created_at, reverse=True)[:limit]
 
     async def add_memory_erasure(self, er):
         self._mem_erase.append(er)
 
     async def list_memory_erasures(self, tenant_id, limit=50):
-        return [e for e in self._mem_erase if e.tenant_id == tenant_id][-limit:]
+        out = [e for e in self._mem_erase if e.tenant_id == tenant_id]
+        return sorted(out, key=lambda e: e.created_at, reverse=True)[:limit]
 
     # --- Round Four: users + provisioning (USR) ---
     async def upsert_user(self, user):
