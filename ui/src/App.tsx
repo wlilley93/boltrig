@@ -20,6 +20,7 @@ import { RouterPanel } from "./panels/RouterPanel";
 import { SettingsPanel } from "./panels/SettingsPanel";
 import { RunView } from "./panels/RunView";
 import { CommandPalette } from "./panels/CommandPalette";
+import { ErrorBoundary } from "./ErrorBoundary";
 
 // Studio pulls in the @xyflow/react canvas; lazy-load it so that heavy chunk
 // only downloads when the user opens the authoring hub (code-split, Fix 5).
@@ -531,6 +532,7 @@ export function App() {
       <div className="app__body">
         {identityOpen && <IdentityBar />}
         <main className="app__main">
+          <ErrorBoundary label="This panel" key={active}>
           <Suspense fallback={<p className="muted">Loading...</p>}>
             {active === "home" && <HomePanel />}
             {active === "router" && <RouterPanel />}
@@ -546,6 +548,7 @@ export function App() {
             {active === "me" && <MePanel />}
             {active === "settings" && <SettingsPanel />}
           </Suspense>
+          </ErrorBoundary>
         </main>
       </div>
 

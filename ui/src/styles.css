@@ -88,14 +88,14 @@
   --color-bg-base:#F5F6F8; --color-bg-raised:#FFFFFF; --color-bg-card:#FFFFFF;
   --color-bg-inset:#EEF1F6; --color-bg-overlay:rgba(20,24,33,0.45);
   --color-border-subtle:#D4D8E0; --color-border-strong:#B7BECC;
-  --color-text-primary:#141823; --color-text-secondary:#4A5366; --color-text-muted:#6B7488;
+  --color-text-primary:#141823; --color-text-secondary:#4A5366; --color-text-muted:#56607A;
   --color-text-oncolor:#FFFFFF;
-  --color-accent:#0E8FAF; --color-accent-hover:#0B7E9B; --color-accent-press:#096A84; --color-accent-2:#4F5BD5;
-  --color-ok:#1E8E63; --color-warn:#B07A12; --color-down:#C8462E; --color-unknown:#6B7488;
-  --color-consequence-low:#6B7488; --color-consequence-high:#C75A23;
-  --color-run-pending:#B7BECC; --color-run-running:#0E8FAF; --color-run-ok:#1E8E63;
+  --color-accent:#0B7E9B; --color-accent-hover:#096A84; --color-accent-press:#075A70; --color-accent-2:#4F5BD5;
+  --color-ok:#1E8E63; --color-warn:#B07A12; --color-down:#C8462E; --color-unknown:#56607A;
+  --color-consequence-low:#56607A; --color-consequence-high:#C75A23;
+  --color-run-pending:#B7BECC; --color-run-running:#0B7E9B; --color-run-ok:#1E8E63;
   --color-run-failed:#C8462E; --color-run-skipped:#B07A12; --color-run-paused:#C75A23;
-  --color-node-kernel:#B7BECC; --color-node-service:#4F5BD5; --color-node-agent:#0E8FAF; --color-node-trigger:#B07A12;
+  --color-node-kernel:#B7BECC; --color-node-service:#4F5BD5; --color-node-agent:#0B7E9B; --color-node-trigger:#B07A12;
 }
 
 @media (prefers-color-scheme: light) {
@@ -104,14 +104,14 @@
     --color-bg-base:#F5F6F8; --color-bg-raised:#FFFFFF; --color-bg-card:#FFFFFF;
     --color-bg-inset:#EEF1F6; --color-bg-overlay:rgba(20,24,33,0.45);
     --color-border-subtle:#D4D8E0; --color-border-strong:#B7BECC;
-    --color-text-primary:#141823; --color-text-secondary:#4A5366; --color-text-muted:#6B7488;
+    --color-text-primary:#141823; --color-text-secondary:#4A5366; --color-text-muted:#56607A;
     --color-text-oncolor:#FFFFFF;
-    --color-accent:#0E8FAF; --color-accent-hover:#0B7E9B; --color-accent-press:#096A84; --color-accent-2:#4F5BD5;
-    --color-ok:#1E8E63; --color-warn:#B07A12; --color-down:#C8462E; --color-unknown:#6B7488;
-    --color-consequence-low:#6B7488; --color-consequence-high:#C75A23;
-    --color-run-pending:#B7BECC; --color-run-running:#0E8FAF; --color-run-ok:#1E8E63;
+    --color-accent:#0B7E9B; --color-accent-hover:#096A84; --color-accent-press:#075A70; --color-accent-2:#4F5BD5;
+    --color-ok:#1E8E63; --color-warn:#B07A12; --color-down:#C8462E; --color-unknown:#56607A;
+    --color-consequence-low:#56607A; --color-consequence-high:#C75A23;
+    --color-run-pending:#B7BECC; --color-run-running:#0B7E9B; --color-run-ok:#1E8E63;
     --color-run-failed:#C8462E; --color-run-skipped:#B07A12; --color-run-paused:#C75A23;
-    --color-node-kernel:#B7BECC; --color-node-service:#4F5BD5; --color-node-agent:#0E8FAF; --color-node-trigger:#B07A12;
+    --color-node-kernel:#B7BECC; --color-node-service:#4F5BD5; --color-node-agent:#0B7E9B; --color-node-trigger:#B07A12;
   }
 }
 
@@ -2676,7 +2676,50 @@ select:focus {
   justify-content: center;
   align-items: flex-start;
   padding-top: 12vh;
-  z-index: 60;
+  z-index: 80; /* stacking scale: sidebar 10/12 < drawer 70 < palette 80 */
+}
+
+/* The Run drawer scrim must sit ABOVE the sidebar (z-index 10/12) so the modal
+   actually covers the nav and is not click-through (it had no z-index). */
+.drawer-overlay {
+  z-index: 70;
+}
+
+/* Render-error boundary card */
+.errbnd {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--color-bg-base);
+  z-index: 90;
+}
+.errbnd__card {
+  max-width: 460px;
+  border: 1px solid rgba(240, 101, 74, 0.4);
+  border-left: 2px solid var(--color-down);
+  background: rgba(12, 20, 36, 0.9);
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.errbnd__title {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.errbnd__body {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--fs-sm);
+  line-height: 1.55;
+}
+.errbnd__actions {
+  display: flex;
+  gap: 10px;
 }
 .cmdk {
   width: min(600px, 92vw);

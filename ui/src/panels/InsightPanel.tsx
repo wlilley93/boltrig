@@ -75,7 +75,11 @@ function Budgets() {
               <div
                 className="budget-bar"
                 title={`${worst}% of the tightest limit used`}
-                aria-label={`${worst}% used`}
+                role="progressbar"
+                aria-valuenow={worst}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label={`${b.id} budget: ${worst}% used`}
               >
                 <span
                   className={`budget-bar__fill ${worst >= 90 ? "is-down" : worst >= 70 ? "is-warn" : ""}`}

@@ -3,13 +3,15 @@
 
 FROM node:20-alpine AS build
 WORKDIR /app
+RUN corepack enable
 
-# Install dependencies first for better layer caching.
-COPY package.json package-lock.json* ./
-RUN npm install
+# Install with pnpm (the dev package manager) from the frozen lockfile, so the
+# image is built from the SAME dependency graph developers run - reproducible.
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
 
 COPY . .
-RUN npm run build
+RUN pnpm run build
 
 FROM nginx:1.27-alpine AS runtime
 COPY nginx.conf /etc/nginx/conf.d/default.conf
