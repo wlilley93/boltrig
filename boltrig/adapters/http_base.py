@@ -215,7 +215,10 @@ class HttpAdapter:
             headers=headers,
             timeout=self.timeout,
             auth=auth,
-            follow_redirects=True,
+            # SSRF: never auto-follow redirects - a 302 to 169.254.169.254 would
+            # bypass the pre-flight egress guard (CLOUD-03). A 3xx is returned to
+            # the caller as-is instead of being chased into internal space.
+            follow_redirects=False,
         )
 
     def _auth(
@@ -267,14 +270,16 @@ class HttpAdapter:
     ) -> dict[str, Any]:
         """A single REST call with retry/backoff, rate-limit cooperation and
         error mapping. Returns the parsed JSON body or raises :class:`_HttpFailure`."""
-        # SSRF/IMDS guard (INJ-02, CLOUD-03): refuse any target resolving to a
-        # cloud-metadata / link-local address before the request leaves. Applies to
-        # the effective URL (base_url join), so an agent-/generated-supplied path
-        # cannot reach 169.254.169.254 to steal a managed-identity token.
-        from boltrig.adapters.egress import EgressBlocked, assert_no_metadata_egress
+        # SSRF guard (INJ-02, CLOUD-03, SEC-61): refuse any target resolving to an
+        # internal/non-routable address - private, loopback, link-local (incl.
+        # 169.254.169.254 metadata), reserved - before the request leaves. Applies
+        # to the effective URL (base_url join), so an agent-/generated-supplied path
+        # cannot reach internal services or steal a managed-identity token. Combined
+        # with follow_redirects=False, a redirect into internal space is also closed.
+        from boltrig.adapters.egress import EgressBlocked, assert_egress_allowed
 
         try:
-            assert_no_metadata_egress(str(client.base_url.join(url)))
+            assert_egress_allowed(str(client.base_url.join(url)))
         except EgressBlocked as exc:
             raise _HttpFailure(
                 AdapterError(ErrorClass.INVALID, str(exc), retryable=False)

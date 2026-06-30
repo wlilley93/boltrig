@@ -95,7 +95,17 @@ class McpConsumerAdapter:
             return await self._rpc(request)
         import httpx
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        from boltrig.adapters.egress import EgressBlocked, assert_egress_allowed
+
+        # SSRF (SEC-61): refuse an internal/metadata target before posting - this
+        # path carries the MCP bearer token, so an internal URL would also leak it.
+        try:
+            assert_egress_allowed(self._url or "")
+        except EgressBlocked as exc:
+            raise AdapterError(ErrorClass.INVALID, str(exc), retryable=False) from exc
+
+        # never auto-follow a redirect into internal space.
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=False) as client:
             r = await client.post(
                 self._url, json=request, headers={"x-boltrig-mcp-token": self._token or ""}
             )

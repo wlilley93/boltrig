@@ -22,7 +22,13 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from boltrig.adapters.builtin.inbound_webhook import WebhookAuthError, verify_and_normalise
-from boltrig.adapters.egress import EgressBlocked, assert_no_metadata_egress, is_metadata_ip
+from boltrig.adapters.egress import (
+    EgressBlocked,
+    assert_egress_allowed,
+    assert_no_metadata_egress,
+    is_blocked_ip,
+    is_metadata_ip,
+)
 from boltrig.api.bootstrap import production_signal, refuse_dev_auth_in_prod
 from boltrig.models.grants import GrantSet, is_safe_identifier
 from boltrig.kernel.web_security import install_security
@@ -142,6 +148,18 @@ def test_shared_egress_guard_blocks_metadata():
         assert_no_metadata_egress("http://169.254.169.254/latest/meta-data/")
     # a public target is allowed through the metadata guard
     assert_no_metadata_egress("https://93.184.216.34/")
+
+    # The FULL guard (used by http_base + the MCP consumer, which also set
+    # follow_redirects=False) blocks private/loopback/reserved too - so a 302 into
+    # internal space or a mis-set internal target is refused, not just metadata.
+    assert is_blocked_ip("127.0.0.1") and is_blocked_ip("10.0.0.1")
+    assert is_blocked_ip("192.168.1.5") and is_blocked_ip("169.254.169.254")
+    assert is_blocked_ip("93.184.216.34") is False  # public ok
+    with pytest.raises(EgressBlocked):
+        assert_egress_allowed("http://127.0.0.1/internal")
+    with pytest.raises(EgressBlocked):
+        assert_egress_allowed("http://10.0.0.5/admin")
+    assert_egress_allowed("https://93.184.216.34/")  # public still allowed
 
 
 # --------------------------------------------------------------------------- #

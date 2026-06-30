@@ -119,12 +119,23 @@ class ModelEmbedder:
         import json
         import urllib.request
 
+        # The base_url is trusted admin/manifest config and MAY legitimately be a
+        # local endpoint (SEC-43 routes sensitive embedding locally), so we do not
+        # block private addresses here. The real risk is a compromised endpoint
+        # 30x-redirecting and forwarding the API key elsewhere, so we never follow
+        # redirects.
+        class _NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, *a, **k):  # noqa: ANN001 - urllib signature
+                return None
+
+        url = self.base_url + "/embeddings"
         payload = json.dumps({"model": self.model, "input": text}).encode("utf-8")
         headers = {"content-type": "application/json"}
         if self._api_key:
             headers["authorization"] = f"Bearer {self._api_key}"
-        req = urllib.request.Request(self.base_url + "/embeddings", data=payload, headers=headers)
-        with urllib.request.urlopen(req, timeout=self._timeout) as resp:  # noqa: S310 - configured base_url
+        req = urllib.request.Request(url, data=payload, headers=headers)
+        opener = urllib.request.build_opener(_NoRedirect())
+        with opener.open(req, timeout=self._timeout) as resp:  # noqa: S310 - configured base_url
             data = json.loads(resp.read())
         vec = [float(x) for x in data["data"][0]["embedding"]]
         norm = math.sqrt(sum(x * x for x in vec))
