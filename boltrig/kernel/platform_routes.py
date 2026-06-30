@@ -422,6 +422,30 @@ def register_platform_routes(app, *, principal_dep, get_kernel) -> None:
             )
         return {"budgets": out, "scope": depts or "all"}
 
+    @app.get("/v1/capabilities/changelog")
+    async def capability_changelog(request: Request, k=K, p=P) -> dict:
+        # A timeline of who changed capability (nouns / verbs / bindings / skills /
+        # adapters / workflows / MCP) and when, read straight from the tamper-evident
+        # audit log (authoring.* actions). Tenant-isolated; newest first.
+        events = await k.store.audit_query(p.tenant_id, limit=2000)
+        rows = []
+        for e in events:
+            verb = e.verb or ""
+            if not verb.startswith("authoring."):
+                continue
+            d = e.detail or {}
+            rows.append(
+                {
+                    "ts": e.ts.isoformat(),
+                    "actor": e.actor,
+                    "action": verb[len("authoring.") :],
+                    "ref": d.get("id") or d.get("verb_id") or d.get("verb") or "",
+                    "status": e.status,
+                }
+            )
+        rows.reverse()
+        return {"changes": rows[:200]}
+
     @app.get("/v1/audit/search")
     async def audit_search(request: Request, actor: str | None = None, verb: str | None = None,
                            run: str | None = None, k=K, p=P) -> dict:

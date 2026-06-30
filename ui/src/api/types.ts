@@ -552,6 +552,18 @@ export interface BudgetsResponse {
   scope: string[] | string;
 }
 
+export interface CapabilityChange {
+  ts: string;
+  actor: string;
+  action: string;
+  ref: string;
+  status: string;
+}
+
+export interface CapabilityChangelogResponse {
+  changes: CapabilityChange[];
+}
+
 export interface AuditRow {
   seq: number;
   ts: string;

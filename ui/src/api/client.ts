@@ -15,6 +15,7 @@ import type {
   AuditSearchResponse,
   AuditTreeResponse,
   CapabilitiesResponse,
+  CapabilityChangelogResponse,
   ChatEvent,
   ChatRequest,
   ConfigExportResponse,
@@ -174,6 +175,10 @@ export const api = {
   capabilities(noun?: string): Promise<CapabilitiesResponse> {
     const q = noun ? `?noun=${encodeURIComponent(noun)}` : "";
     return request<CapabilitiesResponse>(`/v1/capabilities${q}`);
+  },
+
+  capabilityChangelog(): Promise<CapabilityChangelogResponse> {
+    return request<CapabilityChangelogResponse>("/v1/capabilities/changelog");
   },
 
   // invoke returns one of several bodies keyed by status; never throws on a

@@ -21,6 +21,52 @@ const RegistryCanvas = lazy(() =>
 );
 import { CONSEQUENCE, FetchError, InfoCallout, PageIntro } from "./ux";
 
+function changeWhen(ts: string): string {
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return ts;
+  const mins = Math.round((Date.now() - d.getTime()) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  return hrs < 24 ? `${hrs}h ago` : d.toLocaleDateString();
+}
+
+function CapabilityChangelog() {
+  const log = useFetch(() => api.capabilityChangelog(), []);
+  const changes = log.data?.changes ?? [];
+  return (
+    <div className="list-card">
+      <div className="list-card__head">
+        <h3>Recent capability changes</h3>
+        <button className="btn" onClick={() => log.reload()}>
+          Refresh
+        </button>
+      </div>
+      <div className="list-card__body">
+        {log.loading && !log.data && <p className="muted">Loading...</p>}
+        <FetchError error={log.error} status={log.errorStatus} onRetry={log.reload} />
+        {!log.loading && !log.error && changes.length === 0 && (
+          <p className="muted">No capability changes recorded yet.</p>
+        )}
+        {changes.slice(0, 12).map((c, i) => (
+          <div className="row-line" key={`${c.ts}-${i}`}>
+            <span className="kv">
+              <code className="tag">{c.action}</code>
+              {c.ref && <code className="mono">{c.ref}</code>}
+            </span>
+            <span className="kv">
+              <span className="muted" style={{ fontSize: 11 }}>{c.actor}</span>
+              <span className="muted" style={{ fontSize: 11 }} title={c.ts}>
+                {changeWhen(c.ts)}
+              </span>
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const HEALTH_TIP: Record<string, string> = {
   ok: "This service is healthy.",
   degraded: "Working, but the service is unhealthy.",
@@ -173,6 +219,8 @@ export function RouterPanel() {
           grants={identity.grants}
         />
       )}
+
+      <CapabilityChangelog />
     </section>
   );
 }
