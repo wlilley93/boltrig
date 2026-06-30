@@ -12,7 +12,7 @@ The gate (the K-29 / K-30 ratchet) fails the build if:
   (an undeclared invariant), or
 - the catalogue claims a test node id that no marker actually backs (drift).
 
-Binding debt may only ever decrease. Today: **75 declared, debt 0** (99 bound
+Binding debt may only ever decrease. Today: **78 declared, debt 0** (105 bound
 test node ids), per `python scripts/check_invariants.py`. `tests/invariants.yaml`
 is the authoritative, machine-checked list; the table below is the curated
 human-readable view and highlights the core kernel set plus each round's new
@@ -116,6 +116,14 @@ and `FR*` ids are Nankle-local (drawn from the SRS) and never restate a `K-*`.
 | Invariant | Meaning | Bound test(s) |
 | --- | --- | --- |
 | **SEC-54** | The stack foundation layers never depend upward - `models`/`store`/`adapters` import only the foundation, keeping the seam a future repo-split would cleave along clean. | `tests/security/test_severability.py::test_foundation_layers_do_not_depend_upward` |
+
+### Round Ten (the event backbone)
+
+| Invariant | Meaning | Bound test(s) |
+| --- | --- | --- |
+| **FR-EVT-01** | A verb invoked under a run publishes a paired `tool_call` + `tool_result` to that run's stream; a failed call reports status with no output leak. | `tests/security/test_round_ten.py::test_verb_publishes_paired_tool_events`, `::test_failed_verb_emits_error_result_without_leaking` |
+| **FR-EVT-02** | Run events are a pure side-channel - a relay failure never breaks a call, a call with no run_id publishes nothing, and a paused call surfaces a `hitl` event. | `tests/security/test_round_ten.py::test_no_run_id_publishes_nothing_and_call_still_works`, `::test_relay_failure_never_breaks_dispatch`, `::test_pending_human_emits_hitl_event` |
+| **SEC-55** | Run events are run-keyed and credential-free - a verb's events publish only to its own run's stream and never carry credential material. | `tests/security/test_round_ten.py::test_events_are_run_keyed_and_credential_free` |
 
 ## How a new invariant is added
 

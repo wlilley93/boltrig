@@ -387,6 +387,31 @@ modeled but enforced nowhere.
 New bound invariants (debt still 0): SEC-52/53. DoD:
 `docs/DEFINITION-OF-DONE-round-eight.md`.
 
+## 7.7 Round Nine (the front-end experience spec + the stack disposition)
+
+Design + governance, no behaviour change. `docs/requirements-frontend-experience.md`
+is the whole-product front-end spec ("bring Nankle to life"): diagnosis (the
+rich-event plumbing is built but nothing flows; panels are islands; nothing is
+live), the three-plane IA (Capability/Orchestration/Activity), the node system as
+the spine (registry tree / workflow canvas / live run canvas), the run as the unit
+of continuity, and a prioritised backlog. `docs/ARCHITECTURE-stack.md` disposes the
+"split into four nankle-[piece]" fork: routed through the VJS realm (`vjs route` ->
+AllowedWithConditions, court_required=false, decision log LOG-2026-06-30-123606) -
+the stack model is affirmed, the repo-split deferred (single-source fails today,
+demonstrated-need weak), and **SEC-54** machine-enforces that the foundation layers
+(models/store/adapters) never depend upward, keeping the future split seam clean.
+
+## 7.8 Round Ten (the event backbone)
+
+Backlog item 1 of the front-end spec, the highest-leverage move: make real agent
+events flow to the relay the UI already renders. The dispatch chokepoint's outer
+`invoke` wrapper (beside audit) now emits `tool_call` / `tool_result` / `hitl`
+keyed by `context.run_id`, and the spawner emits `subagent` on the parent stream -
+all a fail-safe side-channel (`_emit`: no relay/no run_id => no-op; a relay error
+is swallowed, P9). Run-keyed and credential-free (one run, one stream; nesting is a
+consumer concern via the `subagent` link). New bound invariants (debt still 0):
+FR-EVT-01/02, SEC-55. DoD: `docs/DEFINITION-OF-DONE-round-ten.md`.
+
 ---
 
 ## 8. Quality / governance gate

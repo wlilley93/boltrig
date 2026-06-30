@@ -73,6 +73,7 @@ class Dispatcher:
         adapter_provider: AdapterProvider,
         agent_invoker: AgentInvoker | None = None,
         blocking_verbs: set[str] | None = None,
+        events: Any | None = None,
     ) -> None:
         self._store = store
         self._grants = grants
@@ -84,6 +85,21 @@ class Dispatcher:
         self._adapter_provider = adapter_provider
         self._agent_invoker = agent_invoker
         self._blocking_verbs = blocking_verbs or set()
+        # Optional run-event relay (Round Ten). Emitting run events is a pure
+        # observability side-channel - like audit, it never affects the dispatch
+        # decision and a relay failure never breaks a call (P9).
+        self._events = events
+
+    def _emit(self, run_id: str | None, event: dict[str, Any]) -> None:
+        """Publish a run event, fail-safe. Only when a relay is wired and the call
+        belongs to a run; a publish error is swallowed so observability can never
+        break the chokepoint."""
+        if self._events is None or not run_id:
+            return
+        try:
+            self._events.publish(run_id, event)
+        except Exception:  # observability must never break dispatch (P9)
+            pass
 
     async def invoke(
         self,
@@ -99,6 +115,11 @@ class Dispatcher:
         status = "ok"
         target_adapter: str | None = None
         detail: dict[str, Any] = {}
+        output: dict[str, Any] | None = None
+        # Live run event: the agent is calling a tool. Keyed by the run so the chat
+        # / run-canvas subscribed to it sees the call as it happens (Round Ten).
+        self._emit(context.run_id, {"type": "tool_call", "verb": verb, "noun": noun,
+                                    "input": params})
         try:
             output = await self._invoke_inner(
                 noun, verb, params, context, idempotency_key, approval_id
@@ -107,6 +128,10 @@ class Dispatcher:
         except PendingHuman as e:
             status = "pending_human"
             detail = {"hitl_request_id": e.hitl_request_id}
+            # the call paused for a human - surface it on the run stream so the
+            # inline approval card appears where the agent is working.
+            self._emit(context.run_id, {"type": "hitl", "verb": verb,
+                                        "hitl_request_id": e.hitl_request_id})
             raise
         except DegradedMode:
             status = "degraded"
@@ -120,6 +145,12 @@ class Dispatcher:
             detail = {"message": type(e).__name__}
             raise
         finally:
+            # Paired result event (success -> output; failure -> status only, no
+            # leak). pending_human already emitted its own event above.
+            if status != "pending_human":
+                self._emit(context.run_id, {"type": "tool_result", "verb": verb,
+                                            "status": status,
+                                            "output": output if status == "ok" else None})
             latency_ms = int((time.monotonic() - started) * 1000)
             await self._audit.write(
                 AuditEvent(

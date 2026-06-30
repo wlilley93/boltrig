@@ -69,6 +69,7 @@ class Kernel:
             adapter_provider=self.loader.get,
             agent_invoker=None,
             blocking_verbs=self._blocking_verbs,
+            events=self.events,
         )
 
     # --- wiring ---

@@ -309,6 +309,18 @@ class Spawner:
         #    data classification on the context gates sensitive->local routing.
         runtime = await self._runtime_for(tenant_id, capability, context)
         prompt = self._compose_prompt(merged_prompt, task)
+        # Live run event (Round Ten): announce the sub-agent on the PARENT's run
+        # stream so the chat / run-canvas shows the spawn as it happens. Fail-safe
+        # observability side-channel - never affects the spawn (P9).
+        if context.run_id:
+            try:
+                kernel.events.publish(context.run_id, {
+                    "type": "subagent", "task": task,
+                    "skills": list(skills), "run_id": run_id,
+                    "capability": capability.name,
+                })
+            except Exception:
+                pass
         result: AgentResult = await runtime.run(
             prompt, child_ctx, tools=list(merged.tool_grants)
         )
