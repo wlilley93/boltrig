@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from nankle.adapters.builtin.memory_tickets import build as build_tickets
-from nankle.kernel import Kernel
-from nankle.models import GrantSet, InvocationContext, TenantPermissions
-from nankle.store import InMemoryStore
+from boltrig.adapters.builtin.memory_tickets import build as build_tickets
+from boltrig.kernel import Kernel
+from boltrig.models import GrantSet, InvocationContext, TenantPermissions
+from boltrig.store import InMemoryStore
 
 TENANT = "acme"
 

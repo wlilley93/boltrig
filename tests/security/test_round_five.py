@@ -13,13 +13,13 @@ import asyncio
 import pytest
 from fastapi.testclient import TestClient
 
-from nankle.adapters.builtin.memory_tickets import build as build_tickets
-from nankle.kernel import Kernel
-from nankle.kernel.app import create_app
-from nankle.memory import EngineFact, LocalMemoryEngine
-from nankle.memory.adapter import build_memory_adapter
-from nankle.models import GrantSet, MemoryFact, TenantPermissions
-from nankle.store import InMemoryStore
+from boltrig.adapters.builtin.memory_tickets import build as build_tickets
+from boltrig.kernel import Kernel
+from boltrig.kernel.app import create_app
+from boltrig.memory import EngineFact, LocalMemoryEngine
+from boltrig.memory.adapter import build_memory_adapter
+from boltrig.models import GrantSet, MemoryFact, TenantPermissions
+from boltrig.store import InMemoryStore
 
 T = "acme"
 
@@ -43,8 +43,8 @@ def _client(k) -> TestClient:
 
 
 def _h(sub, role="employee", grants="*"):
-    return {"x-nankle-tenant": T, "x-nankle-subject": sub, "x-nankle-role": role,
-            "x-nankle-grants": grants}
+    return {"x-boltrig-tenant": T, "x-boltrig-subject": sub, "x-boltrig-role": role,
+            "x-boltrig-grants": grants}
 
 
 # --- SEC-40: the kernel is the isolation boundary (incl. a hostile multi-hop) -

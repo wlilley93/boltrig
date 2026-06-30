@@ -1,5 +1,5 @@
 // A tiny dev-identity store. The kernel's dev principal resolver trusts the
-// x-nankle-* headers (nankle/kernel/app.py::_dev_principal), so the UI lets you
+// x-boltrig-* headers (boltrig/kernel/app.py::_dev_principal), so the UI lets you
 // set the caller identity used on every request. Backed by localStorage and
 // exposed to React via useSyncExternalStore (no state library needed).
 
@@ -10,13 +10,13 @@ export interface Identity {
   subject: string;
   grants: string; // comma-separated grant patterns, e.g. "*" or "noun.verb,other.*"
   role: string;
-  // comma-separated department refs sent as x-nankle-departments; the kernel
+  // comma-separated department refs sent as x-boltrig-departments; the kernel
   // uses it to scope-filter audit/cost/runs (SEC-33). Empty = unrestricted by
   // this header (the role/scope still governs server-side).
   departments: string;
 }
 
-const STORAGE_KEY = "nankle.identity";
+const STORAGE_KEY = "boltrig.identity";
 
 const DEFAULT_IDENTITY: Identity = {
   tenant: "default",

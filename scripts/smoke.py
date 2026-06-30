@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Offline, in-process smoke test of the Nankle kernel guarantees.
+"""Offline, in-process smoke test of the Boltrig kernel guarantees.
 
 No docker, no database, no network: it builds an InMemoryStore + Kernel, loads
 the builtin ``memory-tickets`` adapter, and exercises the dispatch chokepoint
@@ -29,9 +29,9 @@ from pathlib import Path
 # on the path before importing the package, so `make smoke` works out of the box.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from nankle.adapters.builtin.memory_tickets import build as build_tickets  # noqa: E402
-from nankle.kernel import Kernel  # noqa: E402
-from nankle.models import (  # noqa: E402
+from boltrig.adapters.builtin.memory_tickets import build as build_tickets  # noqa: E402
+from boltrig.kernel import Kernel  # noqa: E402
+from boltrig.models import (  # noqa: E402
     DegradedMode,
     GrantMissing,
     GrantSet,
@@ -39,7 +39,7 @@ from nankle.models import (  # noqa: E402
     PendingHuman,
     TenantPermissions,
 )
-from nankle.store import InMemoryStore  # noqa: E402
+from boltrig.store import InMemoryStore  # noqa: E402
 
 TENANT = "acme"
 _results: list[tuple[str, bool, str]] = []
@@ -161,11 +161,11 @@ async def step_degraded_when_backend_down() -> None:
 # The credential env holds the reference *material* as JSON (an OAuth/token dict,
 # or a SQL DSN dict); the kernel never inlines secrets, it resolves references.
 _LIVE_TARGETS = [
-    ("jira", "nankle.adapters.builtin.jira", "ticket.search",
+    ("jira", "boltrig.adapters.builtin.jira", "ticket.search",
      {"jql": "order by created DESC", "max_results": 1}, "JIRA_OAUTH", "oauth"),
-    ("ms-graph", "nankle.adapters.builtin.ms_graph", "directory.get_user",
+    ("ms-graph", "boltrig.adapters.builtin.ms_graph", "directory.get_user",
      {"id": "me"}, "GRAPH_APP", "oauth"),
-    ("crm-sql", "nankle.adapters.builtin.crm_sql", "contact.search",
+    ("crm-sql", "boltrig.adapters.builtin.crm_sql", "contact.search",
      {"query": ""}, "CRM_DB_RO", "basic"),
 ]
 
@@ -175,11 +175,11 @@ async def live_adapter_smoke() -> list[tuple[str, bool, str]]:
 
     Returns per-adapter (name, ok, detail). Adapters with no credential env are
     reported as skipped (ok=True) so the live run is green where it cannot test.
-    Only invoked when NANKLE_LIVE_SMOKE=1.
+    Only invoked when BOLTRIG_LIVE_SMOKE=1.
     """
     import importlib
 
-    from nankle.adapters.base import Credential
+    from boltrig.adapters.base import Credential
 
     out: list[tuple[str, bool, str]] = []
     for adapter_id, module_path, verb, params, cred_env, kind in _LIVE_TARGETS:
@@ -205,18 +205,18 @@ async def live_adapter_smoke() -> list[tuple[str, bool, str]]:
 
 
 async def main() -> int:
-    print("Nankle offline smoke test (in-process, no docker)\n")
+    print("Boltrig offline smoke test (in-process, no docker)\n")
     await step_granted_create_and_read()
     await step_ungranted_is_denied()
     await step_gated_pause_then_resume()
     await step_degraded_when_backend_down()
 
     live: list[tuple[str, bool, str]] = []
-    if os.environ.get("NANKLE_LIVE_SMOKE") in {"1", "true", "yes"}:
+    if os.environ.get("BOLTRIG_LIVE_SMOKE") in {"1", "true", "yes"}:
         print("\nLive adapter smoke (real reads where credentials are present):")
         live = await live_adapter_smoke()
     else:
-        print("\nLive adapter smoke: skipped (set NANKLE_LIVE_SMOKE=1 + per-adapter creds)")
+        print("\nLive adapter smoke: skipped (set BOLTRIG_LIVE_SMOKE=1 + per-adapter creds)")
 
     all_results = _results + live
     passed = sum(1 for _, ok, _ in all_results if ok)

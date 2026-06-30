@@ -1,4 +1,4 @@
-# Nankle fleet manifest (SRS S11.2). Copy to manifest.yaml and edit.
+# Boltrig fleet manifest (SRS S11.2). Copy to manifest.yaml and edit.
 #
 #   cp manifest.example.yaml manifest.yaml
 #
@@ -8,7 +8,7 @@
 # Adding an org, a model, a capability, or an integration is a manifest edit
 # (plus an adapter/skill/workflow in libraries/) - never a core code change
 # (P1/P7). ${ENV} references are interpolated from the process environment
-# (nankle/config/manifest.py).
+# (boltrig/config/manifest.py).
 
 organisation: Acme Corp
 tenant_id: acme
@@ -130,7 +130,7 @@ spawn_rules:
     skills: ["writing/long-form"]
 
 # --- adapters: the integrations this tenant uses + their credential refs -----
-# ids are the builtin adapters (nankle/adapters/builtin/*); credential refs map
+# ids are the builtin adapters (boltrig/adapters/builtin/*); credential refs map
 # to the JSON env vars in .env. memory-tickets needs no credential.
 adapters:
   # A PROJECT adapter (Round Fifteen, the extension contract): a non-builtin id
@@ -210,7 +210,7 @@ runtimes:
   # through the gateway and pinned to one model per conversation so the gateway's
   # prompt cache stays warm across turns (SEC-47). Sensitive data is NEVER routed
   # here - it goes to its local endpoint directly (residency, SEC-43). Maps to
-  # NANKLE_MODEL_GATEWAY_URL / NANKLE_MODEL_GATEWAY_TTL. Unset => inert.
+  # BOLTRIG_MODEL_GATEWAY_URL / BOLTRIG_MODEL_GATEWAY_TTL. Unset => inert.
   gateway:
     base_url:                                # e.g. http://bifrost:9000 (empty = off)
     cache_ttl_seconds: 900                   # sync to the gateway's own cache TTL
@@ -234,7 +234,7 @@ chat:
   retention_days: 365
   panel: true                                # show the Chat panel in the UI
   continuity: true                           # compose prior turns into the prompt
-                                             # (Round Six gap 3.1; NANKLE_CONTINUITY)
+                                             # (Round Six gap 3.1; BOLTRIG_CONTINUITY)
 
 # === Round Three additions (S10) - the manifest stays the source of truth (C1)
 # --- evaluation harness (Epic EVAL) -----------------------------------------

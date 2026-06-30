@@ -5,7 +5,7 @@ import asyncio
 import pytest
 from fastapi.testclient import TestClient
 
-from nankle.kernel.app import create_app
+from boltrig.kernel.app import create_app
 from tests.conftest import _build_kernel
 
 
@@ -15,7 +15,7 @@ def _client(blocking=None):
 
 
 def _headers(grants: str, tenant="acme"):
-    return {"x-nankle-tenant": tenant, "x-nankle-grants": grants, "x-nankle-subject": "u1"}
+    return {"x-boltrig-tenant": tenant, "x-boltrig-grants": grants, "x-boltrig-subject": "u1"}
 
 
 @pytest.mark.kernel
@@ -37,7 +37,7 @@ def test_invoke_denied_403():
     r = c.post(
         "/v1/invoke",
         json={"noun": "ticket", "verb": "ticket.create", "params": {"title": "x"}},
-        headers={"x-nankle-tenant": "acme", "x-nankle-subject": "u1", "x-nankle-role": "agent"},
+        headers={"x-boltrig-tenant": "acme", "x-boltrig-subject": "u1", "x-boltrig-role": "agent"},
     )
     assert r.status_code == 403
     assert r.json()["status"] == "denied"

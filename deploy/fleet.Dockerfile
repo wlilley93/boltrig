@@ -1,4 +1,4 @@
-# Nankle fleet image (the fleet runtime + durable workers, Epics F/G).
+# Boltrig fleet image (the fleet runtime + durable workers, Epics F/G).
 #
 # Same shape as deploy/kernel.Dockerfile but installs the [durable,inference]
 # extras so the worker can talk to Hatchet (durable execution) and to inference
@@ -32,13 +32,13 @@ ENV REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt \
 
 # Install the project plus the durable-execution and inference extras.
 COPY pyproject.toml /app/pyproject.toml
-COPY nankle/ /app/nankle/
+COPY boltrig/ /app/boltrig/
 RUN pip install ".[durable,inference]"
 
 # Run as an unprivileged user (INF-01). Writes nothing to disk; compose runs it
 # read-only with a tmpfs for /tmp.
-RUN useradd --create-home --uid 10001 nankle
-USER nankle
+RUN useradd --create-home --uid 10001 boltrig
+USER boltrig
 
 # Compose overrides this; it is the sensible default for `docker run`.
-CMD ["python", "-m", "nankle.api.worker"]
+CMD ["python", "-m", "boltrig.api.worker"]

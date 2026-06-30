@@ -1,4 +1,4 @@
-# Nankle front-end experience spec (Round Nine) - bringing Nankle to life
+# Boltrig front-end experience spec (Round Nine) - bringing Boltrig to life
 
 The whole-product front-end spec. Not a React Flow canvas in isolation and not an
 n8n clone: the experience that makes the governed kernel, the fleet, the memory,
@@ -48,7 +48,7 @@ about **connecting and animating what is already there**, not new capability.
 
 ## 2. The product thesis
 
-**Nankle is a governed agent operating system.** The front end should present it as
+**Boltrig is a governed agent operating system.** The front end should present it as
 one, organised into three planes that mirror the kernel and read top-to-bottom as
 "define -> compose -> watch":
 
@@ -88,7 +88,7 @@ concerns strictly separate; never let one do another's job.
 ## 4. The connective tissue: the run as the unit of continuity
 
 The one structural change that turns islands into a system. Every meaningful thing
-in Nankle already carries a `run_id` (chat turns mint one; work items set
+in Boltrig already carries a `run_id` (chat turns mint one; work items set
 `hatchet_run_id`; audit rows, workflow run records, and HITL requests all reference
 it). The front end must treat **the run as a first-class, linkable object**.
 
@@ -159,7 +159,7 @@ drawn. Save -> `upsertWorkflow`; Run -> `executeWorkflow`; palette from the scop
 
 ### 5.3 The Run canvas (Activity plane) - the same graph, alive
 
-The missing piece that most makes Nankle "come to life", and the payoff for the
+The missing piece that most makes Boltrig "come to life", and the payoff for the
 event-backbone work (S6). The workflow canvas, in read-only run mode, with the
 SAME node layout lighting up as the interpreter executes:
 
@@ -290,7 +290,7 @@ Sequenced by leverage. Each is a buildable round; the early ones unlock the most
 6. **Polish + connect (S7).** Cross-entity links everywhere, the `run` audit filter,
    the developer console (11.4), three-plane left-nav.
 
-This is the plan to bring Nankle to life: make the events flow (the plumbing is
+This is the plan to bring Boltrig to life: make the events flow (the plumbing is
 built), give the run a home and a URL (so the parts connect), animate the canvas
 (so execution is visible), and put a real front door on it (so it is someone's
 system) - each step building on capability that already ships, none of it asking the

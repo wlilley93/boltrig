@@ -21,11 +21,11 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from nankle.adapters.builtin.inbound_webhook import WebhookAuthError, verify_and_normalise
-from nankle.adapters.egress import EgressBlocked, assert_no_metadata_egress, is_metadata_ip
-from nankle.api.bootstrap import production_signal, refuse_dev_auth_in_prod
-from nankle.models.grants import GrantSet, is_safe_identifier
-from nankle.kernel.web_security import install_security
+from boltrig.adapters.builtin.inbound_webhook import WebhookAuthError, verify_and_normalise
+from boltrig.adapters.egress import EgressBlocked, assert_no_metadata_egress, is_metadata_ip
+from boltrig.api.bootstrap import production_signal, refuse_dev_auth_in_prod
+from boltrig.models.grants import GrantSet, is_safe_identifier
+from boltrig.kernel.web_security import install_security
 
 
 # --------------------------------------------------------------------------- #
@@ -44,7 +44,7 @@ def test_security_headers_host_and_body_cap():
     def echo(body: dict):
         return body
 
-    install_security(app, env={"NANKLE_ALLOWED_HOSTS": "testserver", "NANKLE_MAX_BODY_BYTES": "100"})
+    install_security(app, env={"BOLTRIG_ALLOWED_HOSTS": "testserver", "BOLTRIG_MAX_BODY_BYTES": "100"})
     c = TestClient(app)
 
     r = c.get("/ping")
@@ -84,7 +84,7 @@ async def test_jwt_alg_allowlist_and_access_token_only():
     from authlib.jose import JsonWebKey, jwt
     from cryptography.hazmat.primitives.asymmetric import rsa
 
-    from nankle.identity.auth import OidcVerifier
+    from boltrig.identity.auth import OidcVerifier
 
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     priv_pem = key.private_bytes(
@@ -93,12 +93,12 @@ async def test_jwt_alg_allowlist_and_access_token_only():
         __import__("cryptography").hazmat.primitives.serialization.NoEncryption(),
     )
     jwk = JsonWebKey.import_key(key.public_key(), {"kty": "RSA", "use": "sig", "kid": "k1"})
-    v = OidcVerifier("https://idp", "nankle", "https://idp/jwks")
+    v = OidcVerifier("https://idp", "boltrig", "https://idp/jwks")
     v._jwks = {"keys": [jwk.as_dict()]}
     v._jwks_at = time.monotonic()
 
     now = int(time.time())
-    base = {"iss": "https://idp", "aud": "nankle", "sub": "u", "iat": now, "exp": now + 600}
+    base = {"iss": "https://idp", "aud": "boltrig", "sub": "u", "iat": now, "exp": now + 600}
 
     def sign(claims):
         return jwt.encode({"alg": "RS256", "kid": "k1"}, claims, priv_pem).decode()
@@ -120,7 +120,7 @@ async def test_jwt_alg_allowlist_and_access_token_only():
 @pytest.mark.invariant("SEC-60")
 def test_dev_auth_refuses_production_signal():
     assert production_signal({"ENV": "production"}) is not None
-    assert production_signal({"NANKLE_PRODUCTION": "1"}) is not None
+    assert production_signal({"BOLTRIG_PRODUCTION": "1"}) is not None
     assert production_signal({"ENV": "dev"}) is None
     # a prod signal makes dev auth a fatal start error
     with pytest.raises(RuntimeError):
@@ -166,7 +166,7 @@ def test_confusable_verb_id_never_matches_a_grant():
 @pytest.mark.security
 @pytest.mark.invariant("SEC-63")
 def test_webhook_replay_window():
-    from nankle.adapters.builtin.inbound_webhook import canonical_body, expected_signature
+    from boltrig.adapters.builtin.inbound_webhook import canonical_body, expected_signature
 
     secret = "whsec"
     payload = {"type": "issue.opened", "id": "e1"}
@@ -179,6 +179,6 @@ def test_webhook_replay_window():
     # a captured request whose timestamp is far in the past is rejected as a replay
     with pytest.raises(WebhookAuthError):
         verify_and_normalise(
-            payload, {"x-signature": f"sha256={sig}", "x-nankle-timestamp": str(fresh - 10_000)},
+            payload, {"x-signature": f"sha256={sig}", "x-boltrig-timestamp": str(fresh - 10_000)},
             secret, now=fresh,
         )

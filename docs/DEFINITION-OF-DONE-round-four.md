@@ -17,13 +17,13 @@ and one MCP entry path only.
 - [x] **done** An unmapped, un-invited identity is denied; an invited identity is
   provisioned with its intended role/scope (the invitation is consumed); a mapped
   identity is provisioned from its group with the source group recorded.
-  `nankle/identity/provisioning.py`,
+  `boltrig/identity/provisioning.py`,
   `tests/security/test_round_four.py::test_invitations_do_not_bypass_idp`
   (SEC-35, US-USR-01/02/04).
 - [x] **done** An admin can view the directory, adjust a user's role/scope, and
   deactivate a user - which revokes access at once (a deactivated user's grants
   become empty and their tokens stop working).
-  `nankle/kernel/access_routes.py` (`/v1/admin/users`),
+  `boltrig/kernel/access_routes.py` (`/v1/admin/users`),
   `tests/security/test_round_four.py::test_pat_never_escalates_and_dies_with_user`
   (US-USR-03).
 - [ ] **seam** Just-in-time provisioning on a real SSO login. The OIDC resolver
@@ -39,7 +39,7 @@ and one MCP entry path only.
   studio tests).
 - [x] **done** A verb authored with a destructive / outbound name defaults to
   high-consequence, so the HITL gate engages by default; an explicit choice is
-  honoured. `nankle/kernel/platform_routes.py` (`safe_consequence`),
+  honoured. `boltrig/kernel/platform_routes.py` (`safe_consequence`),
   `tests/security/test_round_four.py::test_authored_verbs_safe_by_default`
   (SEC-39, US-RTR-02/04).
 
@@ -48,8 +48,8 @@ and one MCP entry path only.
 - [x] **done** A personal access token scoped to a subset of the user's grants
   drives `/v1/invoke` and the user-authenticated `/v1/mcp` face, cannot exceed the
   user, and revokes immediately; the secret is shown once and stored only as a
-  hash. `nankle/identity/tokens.py`, the PAT-aware principal dependency and the
-  user-MCP path in `nankle/kernel/app.py` + `nankle/kernel/mcp.py`,
+  hash. `boltrig/identity/tokens.py`, the PAT-aware principal dependency and the
+  user-MCP path in `boltrig/kernel/app.py` + `boltrig/kernel/mcp.py`,
   `tests/security/test_round_four.py::test_pat_never_escalates_and_dies_with_user`,
   `::test_headless_parity_no_weak_path` (SEC-34, SEC-37, US-HEAD-01/02/04).
 - [x] **done** Connection details and copy-paste client snippets are available in
@@ -73,7 +73,7 @@ and one MCP entry path only.
   org-admin for the organisation section), persisted, validated and audited; every
   UI setting has an API equivalent with identical authorization (SET-03); org
   config edits version, roll back and export to a manifest (the Round Three Admin
-  Console, hosted here). `nankle/kernel/access_routes.py`,
+  Console, hosted here). `boltrig/kernel/access_routes.py`,
   `ui/src/panels/SettingsPanel.tsx`,
   `tests/security/test_round_four.py::test_settings_changes_are_authz_checked_and_audited`
   (SEC-36, SET-00..03).
@@ -89,7 +89,7 @@ and one MCP entry path only.
   (`declared=58 bound_tests=76 binding_debt=0 PASS`). A diff confirms the kernel
   dispatch sequence is unchanged (NFR-MNT-01).
 - [x] **done** Full offline suite green: `python -m pytest -q` -> 102 passed, 14
-  skipped. Lint clean: `ruff check nankle/ tests/ --select F,E9`.
+  skipped. Lint clean: `ruff check boltrig/ tests/ --select F,E9`.
 
 ## Operational
 

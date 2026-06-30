@@ -1,10 +1,10 @@
-# Nankle - Handover
+# Boltrig - Handover
 
-A complete pickup guide for the Nankle agent-orchestration platform: what it is,
+A complete pickup guide for the Boltrig agent-orchestration platform: what it is,
 how it is built, how to run and verify it, what is done versus a seam, the
 governance that binds it, and the gotchas worth knowing.
 
-- Repo: `~/Projects/Nankle` (public: github.com/wlilley93/Nankle, branch `main`)
+- Repo: `~/Projects/Boltrig` (public: github.com/wlilley93/Boltrig, branch `main`)
 - Stack: Python 3.12 / FastAPI kernel, React + TypeScript + Vite UI, Postgres,
   Redis, Hatchet (durable execution), a Pi reasoning sidecar.
 - Status at handover: 87 tests pass offline / 95 with Postgres, invariant gate at
@@ -12,7 +12,7 @@ governance that binds it, and the gotchas worth knowing.
 
 ---
 
-## 1. What Nankle is
+## 1. What Boltrig is
 
 A self-hostable system that runs a fleet of AI agents over an organisation's
 tools and work queues. Three defining characteristics:
@@ -37,14 +37,14 @@ It was built greenfield from the "Hermes Fleet" Software Requirements Spec
 
 ## 2. Provenance and governance
 
-Nankle is a clean-room reference implementation of the same kernel doctrine the
+Boltrig is a clean-room reference implementation of the same kernel doctrine the
 rest of the estate shares (one chokepoint, visibility != authority, deny-dominant
 fail-closed grants, hash-chained audit; the `K-1..K-30` catalogue in
 `agent-kernel-doctrine`). The single source of that doctrine is
-`agent-kernel-doctrine`; Nankle conforms to it and does not author it.
+`agent-kernel-doctrine`; Boltrig conforms to it and does not author it.
 
 The greenfield-vs-consolidation fork went to the VJS County Court, which ruled
-**[2026] VJS-CC NANKLE-CONSOLIDATION 001** ("conditioned standalone"): Nankle may
+**[2026] VJS-CC NANKLE-CONSOLIDATION 001** ("conditioned standalone"): Boltrig may
 stand alone on seven binding conditions (cite the doctrine as the single source,
 key invariants to Appendix A, keep the gate at debt 0 in required CI, converge on
 the unified capability primitive, stay severable, be recorded as the Python/
@@ -57,7 +57,7 @@ is machine-enforced (`tests/security/test_severability.py`).
 ## 3. Repository map
 
 ```
-nankle/                     the thin core (Python package)
+boltrig/                     the thin core (Python package)
   kernel/                   THE CHOKEPOINT
     __init__.py             Kernel composition root (wires everything)
     dispatch.py             the fixed dispatch order (the heart)
@@ -138,9 +138,9 @@ implementations behave identically:
   applied on connect / compose first-boot). Tenant isolation is scoped on every
   query; production should additionally enable Postgres RLS (see the schema header).
 
-Verify Postgres on-box: `docker run -d --name pg -e POSTGRES_PASSWORD=nankle -e
-POSTGRES_DB=nankle -p 55432:5432 postgres:16`, then
-`NANKLE_TEST_DATABASE_URL=postgresql://postgres:nankle@127.0.0.1:55432/nankle make test`.
+Verify Postgres on-box: `docker run -d --name pg -e POSTGRES_PASSWORD=boltrig -e
+POSTGRES_DB=boltrig -p 55432:5432 postgres:16`, then
+`BOLTRIG_TEST_DATABASE_URL=postgresql://postgres:boltrig@127.0.0.1:55432/boltrig make test`.
 
 ---
 
@@ -151,7 +151,7 @@ POSTGRES_DB=nankle -p 55432:5432 postgres:16`, then
 python -m venv .venv
 .venv/bin/pip install -e ".[durable,inference]"
 .venv/bin/pip install pytest pytest-asyncio aiosqlite ruff
-make test          # full suite (set NANKLE_TEST_DATABASE_URL to add the PG suite)
+make test          # full suite (set BOLTRIG_TEST_DATABASE_URL to add the PG suite)
 make smoke         # offline in-process demo of the kernel guarantees (4/4)
 make invariants    # the binding-invariant gate (must be debt 0)
 
@@ -165,11 +165,11 @@ make secure-up     # adds the TLS terminator + encrypted-at-rest overlay
 cd ui && npm install && npm run dev     # or npm run build
 
 # backups
-make backup        # pg_dump -Fc -> ./backups/nankle.dump
+make backup        # pg_dump -Fc -> ./backups/boltrig.dump
 make restore
 ```
 
-Local dev auth: set `NANKLE_DEV_AUTH=1` (header-trusting resolver). Production
+Local dev auth: set `BOLTRIG_DEV_AUTH=1` (header-trusting resolver). Production
 sets `OIDC_ISSUER/OIDC_AUDIENCE/OIDC_JWKS_URI`; with neither, the kernel refuses
 all requests (fail-closed).
 
@@ -275,7 +275,7 @@ New bound invariants (debt still 0): SEC-34..39. Full DoD:
 Kernel-governed structured memory, opt-in (`memory.enabled`). The engine is
 adopted, not built; the kernel - not the engine - is the isolation boundary; every
 memory op runs the unchanged chokepoint (NFR-MEM-05: dispatch/grants/registry
-untouched). Severable: `nankle/memory/*` imports only models + adapters.base.
+untouched). Severable: `boltrig/memory/*` imports only models + adapters.base.
 
 - **Engine interface** (`memory/engine.py`): `MemoryEngine` Protocol +
   EngineFact/RecallHit. **Reference** (`memory/local.py`): keyword similarity +
@@ -315,12 +315,12 @@ documented, not enforced.
   per-message concatenation => deterministic + append-only (prefix stable for the
   gateway cache, SEC-46); composed from the tenant/conversation-scoped
   `list_messages` so only the caller's own history enters (SEC-49). On by default
-  (`NANKLE_CONTINUITY`). Native/Store-backed (the spec's pick over Rivet).
+  (`BOLTRIG_CONTINUITY`). Native/Store-backed (the spec's pick over Rivet).
 - **Model gateway** (`fleet/model_gateway.py` + `fleet/spawn.py`): a read-side
   seam (no authz, P1). TTL `conversation_id -> model` binding pins a conversation
   to one model across turns (run_id is the wrong key, SEC-47). Spawner points
   `base_url` at the gateway; **sensitive data is never re-routed** (residency).
-  Inert unless `NANKLE_MODEL_GATEWAY_URL` set.
+  Inert unless `BOLTRIG_MODEL_GATEWAY_URL` set.
 - **Enforced egress** (`docker-compose.yml` + `deploy/compose.secure.yml`): the
   Pi sidecar sits on a `sandbox` network only (reaches the kernel MCP, not the
   DB/rest); the secure overlay makes `sandbox` `internal: true` (no arbitrary
@@ -390,12 +390,12 @@ New bound invariants (debt still 0): SEC-52/53. DoD:
 ## 7.7 Round Nine (the front-end experience spec + the stack disposition)
 
 Design + governance, no behaviour change. `docs/requirements-frontend-experience.md`
-is the whole-product front-end spec ("bring Nankle to life"): diagnosis (the
+is the whole-product front-end spec ("bring Boltrig to life"): diagnosis (the
 rich-event plumbing is built but nothing flows; panels are islands; nothing is
 live), the three-plane IA (Capability/Orchestration/Activity), the node system as
 the spine (registry tree / workflow canvas / live run canvas), the run as the unit
 of continuity, and a prioritised backlog. `docs/ARCHITECTURE-stack.md` disposes the
-"split into four nankle-[piece]" fork: routed through the VJS realm (`vjs route` ->
+"split into four boltrig-[piece]" fork: routed through the VJS realm (`vjs route` ->
 AllowedWithConditions, court_required=false, decision log LOG-2026-06-30-123606) -
 the stack model is affirmed, the repo-split deferred (single-source fails today,
 demonstrated-need weak), and **SEC-54** machine-enforces that the foundation layers
@@ -444,9 +444,9 @@ invariant (debt still 0): FR-EVT-04. DoD: `docs/DEFINITION-OF-DONE-round-twelve.
 
 ## 7.11 Round Fifteen (the extension contract)
 
-Pin vanilla Nankle, extend from a per-project bundle, no core edit
+Pin vanilla Boltrig, extend from a per-project bundle, no core edit
 (`docs/extension-contract.md`). Three substrate primitives:
-- **The on-demand skill shelf** (`nankle/skills/shelf.py`): `skill.search/describe/
+- **The on-demand skill shelf** (`boltrig/skills/shelf.py`): `skill.search/describe/
   load` governed verbs (the `skill` noun) - browse descriptions, load one body on
   demand bound to the job's context. Progressive disclosure (search = labels never
   bodies), data-not-authority (load returns wanted grants but does not grant them,
@@ -493,7 +493,7 @@ Fully implemented and test-bound:
 Seams (interface real; needs the external service to exercise):
 - A real Pi reasoning run needs a model key + the running sidecar.
 - A live IdP (OIDC verifier is tested against minted RS256 tokens).
-- Live MS Graph / Jira / SQL adapter credentials (opt-in `NANKLE_LIVE_SMOKE=1`).
+- Live MS Graph / Jira / SQL adapter credentials (opt-in `BOLTRIG_LIVE_SMOKE=1`).
 - An on-box model for sensitive inference (the routing guard that requires it is done).
 - Alembic ordered migrations (schema.sql applied idempotently today).
 - **Live Hatchet durable resume:** the code is fixed to the correct pattern (a
@@ -529,7 +529,7 @@ Seams (interface real; needs the external service to exercise):
   tokens), serves REST on 8888 (not 8080), and mint a token with
   `docker exec hatchet-lite /hatchet-admin token create --config /config
   --tenant-id 707d0855-80ab-4e1f-a156-f1c4546cbf52`.
-- Running a driver script from `/tmp` fails to import `nankle`; run from the repo
+- Running a driver script from `/tmp` fails to import `boltrig`; run from the repo
   root or set `PYTHONPATH`.
 
 ---
@@ -563,5 +563,5 @@ P2-x reasoned workflow synthesis / live adapter smoke / idempotency
 P1-x OIDC auth / durable HITL / sensitive routing
 P0-x PostgresStore / department isolation / caller-scoped discovery
 Comply with [2026] VJS-CC NANKLE-CONSOLIDATION 001
-Initial build: Nankle agent orchestration platform
+Initial build: Boltrig agent orchestration platform
 ```

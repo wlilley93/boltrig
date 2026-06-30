@@ -1,7 +1,7 @@
-# Nankle as a stack - the four pieces, the boundary, and the split trigger
+# Boltrig as a stack - the four pieces, the boundary, and the split trigger
 
-A disposition record. The question raised: should Nankle be split into four
-distinct `nankle-[piece]` units (kernel / frontend / database / agent-runtime)?
+A disposition record. The question raised: should Boltrig be split into four
+distinct `boltrig-[piece]` units (kernel / frontend / database / agent-runtime)?
 
 This is a consolidation/split fork, governed by the SPEC-LAW-3 three-gate test
 (single-source / demonstrated-need / severability) and the
@@ -13,17 +13,17 @@ is recorded as binding decision log **LOG-2026-06-30-123606**. It is not a court
 matter; it is a routable implementation decision, disposed here against the
 ground-truthed code.
 
-## The finding: Nankle is already a stack with enforced layer boundaries
+## The finding: Boltrig is already a stack with enforced layer boundaries
 
 The four pieces exist today as clean, measured layers, and deploy as four distinct
-containers. Splitting the *repo* is not what makes Nankle a stack - it already is
+containers. Splitting the *repo* is not what makes Boltrig a stack - it already is
 one.
 
 | Piece | Lives in | Deploy unit (docker-compose) | Measured coupling |
 | --- | --- | --- | --- |
-| **kernel** (policy core) | `nankle/kernel` + `nankle/models` | `kernel` service | imports only the `Store` **Protocol**, never an implementation |
-| **database** (persistence) | `nankle/store` + `schema.sql` + `migrations` | `postgres` + the store impls | **0** imports from kernel/fleet (inverted) |
-| **agent-runtime** (the fleet + Pi) | `nankle/fleet` + `services/pi_sidecar` | `fleet-worker` + `pi-sidecar` | sidecar already severed, HTTP-only, SEC-28 tested |
+| **kernel** (policy core) | `boltrig/kernel` + `boltrig/models` | `kernel` service | imports only the `Store` **Protocol**, never an implementation |
+| **database** (persistence) | `boltrig/store` + `schema.sql` + `migrations` | `postgres` + the store impls | **0** imports from kernel/fleet (inverted) |
+| **agent-runtime** (the fleet + Pi) | `boltrig/fleet` + `services/pi_sidecar` | `fleet-worker` + `pi-sidecar` | sidecar already severed, HTTP-only, SEC-28 tested |
 | **frontend** | `ui/` | `ui` service | separate npm app + build |
 
 Dependency direction is already correct and inverted at the contract: kernel
@@ -38,9 +38,9 @@ SEC-28).
 Under the three-gate test, ground-truthed:
 
 - **Severability: PASS** (proven above).
-- **Single-source: FAIL today.** All four pieces share `nankle/models` + the
+- **Single-source: FAIL today.** All four pieces share `boltrig/models` + the
   `Store`/`Adapter` Protocols + the event shapes. A 4-repo split duplicates those
-  unless a fifth `nankle-contracts` package is extracted first. Splitting now breaks
+  unless a fifth `boltrig-contracts` package is extracted first. Splitting now breaks
   single-source.
 - **Demonstrated-need: WEAK today.** Independent deployment already exists at the
   container level. Independent release cadence / separate team / an external
@@ -62,8 +62,8 @@ future split would cleave along. Split for real only when demonstrated-need arri
    rule explicitly: `models` depends on nothing; `store` depends only on `models`;
    `kernel` depends only on `models` + the `Store` Protocol; `fleet` may depend on
    `kernel`; nothing depends on `ui`. A boundary breach fails the gate.
-3. **Identify the shared-contract seam** (`nankle/models` + the `Store`/`Adapter`
-   Protocols + the event-shape definitions). This is the future `nankle-contracts`
+3. **Identify the shared-contract seam** (`boltrig/models` + the `Store`/`Adapter`
+   Protocols + the event-shape definitions). This is the future `boltrig-contracts`
    package and the line a repo-split would cut along. Keep it cohesive and
    dependency-free so the cut stays cheap.
 
@@ -73,7 +73,7 @@ Revisit and convene the court to split a piece into its own repo when ANY holds:
 
 - **Release cadence diverges:** a piece needs to ship on its own schedule (e.g. the
   frontend releasing independently of the kernel).
-- **A separate consumer appears:** something outside Nankle wants to depend on one
+- **A separate consumer appears:** something outside Boltrig wants to depend on one
   piece alone (e.g. the kernel as an embeddable library, or the contracts package
   consumed by a third party).
 - **Ownership diverges:** a distinct team owns a piece end to end.

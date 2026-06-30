@@ -10,7 +10,7 @@ against this build. Each item is marked:
 
 ## Core kernel
 
-- [x] **done** Single dispatch chokepoint with a fixed, audited order (P2). `nankle/kernel/dispatch.py`; `tests/kernel/test_dispatch.py`.
+- [x] **done** Single dispatch chokepoint with a fixed, audited order (P2). `boltrig/kernel/dispatch.py`; `tests/kernel/test_dispatch.py`.
 - [x] **done** Stable nouns / verbs resolved via bindings; agents never see the backend (P4). `kernel/registry.py`; `tests/kernel/test_app.py::test_discovery_is_role_scoped`.
 - [x] **done** Schema validation of params and output (SEC-21). `tests/kernel/test_dispatch.py::test_invalid_params_rejected_before_dispatch`.
 - [x] **done** Fail-closed on unknown verb / missing binding (K-13). `tests/kernel/test_dispatch.py::test_unknown_verb_fails_closed`.
@@ -23,14 +23,14 @@ against this build. Each item is marked:
 - [x] **done** Credentials resolved only inside the kernel; never returned or audited (SEC-05, K-20). `kernel/credentials.py`; `tests/security/test_credential_isolation.py`.
 - [x] **done** Append-only, hash-chained, tamper-evident audit (SEC-16, K-19). `kernel/audit.py`; `tests/kernel/test_audit_chain.py`.
 - [x] **done** PII redaction + secret scanning (SEC-13). `kernel/pii.py`; `tests/security/test_budget_and_pii.py`.
-- [x] **done** Real OIDC/SAML token verification (SEC-01/02). `OidcVerifier` verifies RS256 JWTs against the issuer JWKS; bootstrap selects it when `OIDC_*` is set, the header resolver only with `NANKLE_DEV_AUTH=1`, else fail-closed. `identity/auth.py`; `tests/security/test_auth.py`. The only external leg is a live IdP.
+- [x] **done** Real OIDC/SAML token verification (SEC-01/02). `OidcVerifier` verifies RS256 JWTs against the issuer JWKS; bootstrap selects it when `OIDC_*` is set, the header resolver only with `BOLTRIG_DEV_AUTH=1`, else fail-closed. `identity/auth.py`; `tests/security/test_auth.py`. The only external leg is a live IdP.
 
 ## Fleet + execution
 
 - [x] **done** Spawn pipeline: skill inheritance, cheapest-capable runtime, depth limit, budget-before-run, audited (US-FLT-03/04, FR-EXE-03). `fleet/spawn.py`.
 - [x] **done** Graceful degradation: a runtime/backend failure degrades, never crashes (P9). `dispatch.py` (`_degrade_or_fail`), `fleet/spawn.py`; `tests/kernel/test_ratelimit_degraded.py::test_degraded_mode_when_backend_down`.
 - [x] **done** Durable HITL pause (NFR-REL-01): a blocking pause survives a restart and resumes on approval over Postgres; `trigger` enqueues through the durable backbone. `tests/store/test_postgres_store.py`, `tests/integration/test_workflow_trigger.py`.
-- [x] **done** Live Hatchet integration (P6, US-FLT-06): the engine + SDK are wired (`fleet/hatchet_app.py`, `fleet/hatchet_worker.py`); a Nankle workflow registers and runs end to end on a real engine, and the durable HITL task pauses live (`tests/integration/test_hatchet_live.py`, gated on `HATCHET_CLIENT_TOKEN`). Proven on-box against hatchet-lite.
+- [x] **done** Live Hatchet integration (P6, US-FLT-06): the engine + SDK are wired (`fleet/hatchet_app.py`, `fleet/hatchet_worker.py`); a Boltrig workflow registers and runs end to end on a real engine, and the durable HITL task pauses live (`tests/integration/test_hatchet_live.py`, gated on `HATCHET_CLIENT_TOKEN`). Proven on-box against hatchet-lite.
 - [~] **seam** Live durable-event *resume* across a worker restart over Hatchet depends on the engine's durable-event wiring (a hatchet-lite v1 detail); the durability property itself is proven by the Postgres NFR-REL-01 test, and the local executor is the offline fallback.
 - [x] **done** Source-agnostic work normalisation to one WorkItem (P10). `work/normalise.py`, `work/store.py`.
 
@@ -58,7 +58,7 @@ against this build. Each item is marked:
 
 ## Quality gate
 
-- [x] **done** Test suite green (74 tests + opt-in Postgres/live-adapter tests). `make test`; set `NANKLE_TEST_DATABASE_URL` to add the Postgres-backed suite.
+- [x] **done** Test suite green (74 tests + opt-in Postgres/live-adapter tests). `make test`; set `BOLTRIG_TEST_DATABASE_URL` to add the Postgres-backed suite.
 - [x] **done** Offline, in-process smoke of the kernel guarantees. `make smoke` (4/4 steps pass).
 - [x] **done** Binding-invariant gate at debt 0 (27 declared, 27 bound). `make invariants`; `docs/invariants.md`, `tests/invariants.yaml`, `scripts/check_invariants.py`.
 - [~] **seam** UI end-to-end against a live kernel. The React console (Router, Kanban, Approvals) is built and proxies `/v1`; full e2e needs the running stack.

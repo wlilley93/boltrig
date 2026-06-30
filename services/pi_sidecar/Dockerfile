@@ -1,7 +1,7 @@
-# Nankle Pi sidecar image (Round Two, Epic RUN; SRS S5.3).
+# Boltrig Pi sidecar image (Round Two, Epic RUN; SRS S5.3).
 #
-# A STANDALONE reasoning-loop service reached over HTTP by Nankle's PiRuntime.
-# It is not the nankle package and ships its own pinned deps.
+# A STANDALONE reasoning-loop service reached over HTTP by Boltrig's PiRuntime.
+# It is not the boltrig package and ships its own pinned deps.
 #
 # SECURITY (SEC-24, SEC-27): this container must have its egress RESTRICTED at
 # the network layer to exactly two destinations:

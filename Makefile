@@ -1,4 +1,4 @@
-# Nankle developer + operator targets.
+# Boltrig developer + operator targets.
 #
 # The Python targets prefer a local virtualenv at .venv (create it with
 #   python -m venv .venv && .venv/bin/pip install -e ".[durable,inference]" \
@@ -7,10 +7,10 @@
 
 PY ?= .venv/bin/python
 COMPOSE ?= docker compose
-PG_USER ?= nankle
-PG_DB ?= nankle
+PG_USER ?= boltrig
+PG_DB ?= boltrig
 BACKUP_DIR ?= ./backups
-BACKUP ?= $(BACKUP_DIR)/nankle.dump
+BACKUP ?= $(BACKUP_DIR)/boltrig.dump
 
 .DEFAULT_GOAL := help
 .PHONY: help up down logs test lint smoke invariants migrate secure-up backup restore
@@ -31,11 +31,11 @@ down: ## Stop the stack (keep the postgres volume)
 logs: ## Tail logs for every service (SERVICE=kernel to scope it)
 	$(COMPOSE) logs -f $(SERVICE)
 
-test: ## Run the test suite (set NANKLE_TEST_DATABASE_URL to also run the Postgres tests)
+test: ## Run the test suite (set BOLTRIG_TEST_DATABASE_URL to also run the Postgres tests)
 	$(PY) -m pytest -q
 
 lint: ## Run ruff if it is installed (no-op otherwise)
-	@$(PY) -m ruff --version >/dev/null 2>&1 && $(PY) -m ruff check nankle scripts \
+	@$(PY) -m ruff --version >/dev/null 2>&1 && $(PY) -m ruff check boltrig scripts \
 		|| echo "ruff not installed; skipping lint"
 
 smoke: ## Offline, in-process smoke test of the kernel guarantees (no docker)

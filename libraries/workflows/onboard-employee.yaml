@@ -1,5 +1,5 @@
 # Precreated workflow library data (US-WFL-01). intent_tags drive matching.
-# Maps directly onto nankle.models.WorkflowDefinition; definition is a
+# Maps directly onto boltrig.models.WorkflowDefinition; definition is a
 # Hatchet-style spec (steps with parents form the DAG).
 id: onboard-employee
 version: 1.0.0

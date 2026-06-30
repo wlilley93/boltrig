@@ -13,13 +13,13 @@ from __future__ import annotations
 
 import pytest
 
-from nankle.adapters.builtin.web_fetch import (
+from boltrig.adapters.builtin.web_fetch import (
     build_web_fetch_adapter,
     check_network_policy,
     is_blocked_ip,
 )
-from nankle.kernel import Kernel
-from nankle.models import (
+from boltrig.kernel import Kernel
+from boltrig.models import (
     GrantMissing,
     GrantSet,
     InvocationContext,
@@ -27,7 +27,7 @@ from nankle.models import (
     PendingHuman,
     TenantPermissions,
 )
-from nankle.store import InMemoryStore
+from boltrig.store import InMemoryStore
 
 T = "acme"
 

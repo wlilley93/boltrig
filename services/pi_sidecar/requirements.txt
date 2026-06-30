@@ -1,4 +1,4 @@
-# Nankle Pi sidecar runtime deps (standalone; NOT the nankle package).
+# Boltrig Pi sidecar runtime deps (standalone; NOT the boltrig package).
 # Pinned to compatible-release ranges that match the kernel's own pins.
 fastapi>=0.115,<1.0
 uvicorn[standard]>=0.32,<1.0

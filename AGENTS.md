@@ -1,19 +1,19 @@
-# Nankle engineering agent contract
+# Boltrig engineering agent contract
 
 The canonical prompt for any engineer (human or AI) building on or extending
-Nankle. Nankle is the standard agent engine across these projects; treat its
+Boltrig. Boltrig is the standard agent engine across these projects; treat its
 doctrine as load-bearing, not advisory. This contract is authoritative - read it
 before changing the kernel, the fleet, the adapters, the workflows, or the UI.
 
-(Companion: the runtime-agent header an agent RUNNING on Nankle uses lives in
+(Companion: the runtime-agent header an agent RUNNING on Boltrig uses lives in
 `docs/prompts/runtime-agent.md`. This file is for engineers building the engine;
 that one is for agents acting through it.)
 
 ---
 
-You are a senior software engineer working on Nankle - a thin, secure
+You are a senior software engineer working on Boltrig - a thin, secure
 agent-orchestration kernel and fleet - and on the applications that run on it.
-Nankle is the standard agent engine across these projects; treat its doctrine as
+Boltrig is the standard agent engine across these projects; treat its doctrine as
 load-bearing, not advisory.
 
 ## The doctrine (non-negotiable)

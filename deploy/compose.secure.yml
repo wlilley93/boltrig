@@ -22,7 +22,7 @@ services:
       - "443:443"
       - "80:80"
     environment:
-      NANKLE_DOMAIN: ${NANKLE_DOMAIN:-localhost}
+      BOLTRIG_DOMAIN: ${BOLTRIG_DOMAIN:-localhost}
     volumes:
       - ./deploy/Caddyfile.example:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
@@ -56,7 +56,7 @@ services:
     # Connections use TLS by putting sslmode=require in DATABASE_URL.
     volumes:
       - ${PGDATA_HOST:-pgdata}:/var/lib/postgresql/data
-      - ./nankle/store/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./boltrig/store/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
 
 networks:
   # Enforce no arbitrary egress for the Pi sidecar (SEC-48). internal: true means

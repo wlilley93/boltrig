@@ -2,12 +2,12 @@
 
 import pytest
 
-from nankle.adapters.builtin.memory_tickets import build as build_tickets
-from nankle.fleet.pi_runtime import PiRuntime
-from nankle.fleet.runtime import build_runtime
-from nankle.kernel import Kernel
-from nankle.models import AgentCapability, GrantSet, InvocationContext, TenantPermissions
-from nankle.store import InMemoryStore
+from boltrig.adapters.builtin.memory_tickets import build as build_tickets
+from boltrig.fleet.pi_runtime import PiRuntime
+from boltrig.fleet.runtime import build_runtime
+from boltrig.kernel import Kernel
+from boltrig.models import AgentCapability, GrantSet, InvocationContext, TenantPermissions
+from boltrig.store import InMemoryStore
 
 T = "acme"
 
@@ -59,4 +59,4 @@ async def test_pi_run_tool_call_passes_chokepoint():
         {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
          "params": {"name": "ticket.create", "arguments": {"title": "x"}}},
     )
-    assert res["result"]["_nankle"]["status"] == "denied"  # chokepoint denied it
+    assert res["result"]["_boltrig"]["status"] == "denied"  # chokepoint denied it

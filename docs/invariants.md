@@ -1,6 +1,6 @@
 # Binding invariants
 
-A binding invariant is a guarantee Nankle enforces that is pinned by at least
+A binding invariant is a guarantee Boltrig enforces that is pinned by at least
 one test. The catalogue below is the human-readable view; the machine-checkable
 map is `tests/invariants.yaml`, and the gate that keeps them honest is
 `scripts/check_invariants.py` (run it with `make invariants`).
@@ -24,9 +24,9 @@ The ids draw from three families: SRS principles (`P*`), the kernel doctrine
 **Canonical source of the `K-*` ids (per [2026] VJS-CC NANKLE-CONSOLIDATION 001,
 directive D2):** every `K-*` id in this catalogue is the canonical invariant id
 from the doctrine's Appendix A, in the `agent-kernel-doctrine` repository
-(`volume-1-the-rust-kernel/appendices/appendix-A-invariant-catalog.md`). Nankle
+(`volume-1-the-rust-kernel/appendices/appendix-A-invariant-catalog.md`). Boltrig
 binds these ids to tests; it does not define or renumber them. The `P*`, `SEC*`
-and `FR*` ids are Nankle-local (drawn from the SRS) and never restate a `K-*`.
+and `FR*` ids are Boltrig-local (drawn from the SRS) and never restate a `K-*`.
 
 ## Catalogue
 

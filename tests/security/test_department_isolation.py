@@ -10,10 +10,10 @@ import asyncio
 import pytest
 from fastapi.testclient import TestClient
 
-from nankle.kernel import Kernel
-from nankle.kernel.app import create_app
-from nankle.models import GrantSet, TenantPermissions, WorkItem, WorkStatus
-from nankle.store import InMemoryStore
+from boltrig.kernel import Kernel
+from boltrig.kernel.app import create_app
+from boltrig.models import GrantSet, TenantPermissions, WorkItem, WorkStatus
+from boltrig.store import InMemoryStore
 
 T = "acme"
 
@@ -36,8 +36,8 @@ def _client() -> TestClient:
 
 def _hdr(role: str, departments: str = ""):
     return {
-        "x-nankle-tenant": T, "x-nankle-subject": "u",
-        "x-nankle-role": role, "x-nankle-departments": departments,
+        "x-boltrig-tenant": T, "x-boltrig-subject": "u",
+        "x-boltrig-role": role, "x-boltrig-departments": departments,
     }
 
 

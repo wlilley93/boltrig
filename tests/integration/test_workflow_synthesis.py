@@ -2,8 +2,8 @@
 
 import pytest
 
-from nankle.fleet.result import AgentResult
-from nankle.workflows.generator import generate_workflow_reasoned
+from boltrig.fleet.result import AgentResult
+from boltrig.workflows.generator import generate_workflow_reasoned
 
 T = "acme"
 _LINEAR = ["understand", "plan", "execute", "verify", "report"]

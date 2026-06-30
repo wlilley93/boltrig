@@ -74,7 +74,7 @@ governed verbs).
 
 - `pytest`: **119 passed, 14 skipped** (+6 over Round Six).
 - `check_invariants.py`: **declared=72, bound_tests=93, binding_debt=0, PASS**.
-- `ruff check nankle scripts`: clean. UI `npm run build`: green.
+- `ruff check boltrig scripts`: clean. UI `npm run build`: green.
 
 ## Decisions recorded (no court convened)
 

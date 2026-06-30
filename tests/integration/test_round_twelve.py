@@ -10,18 +10,18 @@ from __future__ import annotations
 
 import pytest
 
-from nankle.adapters.builtin.memory_tickets import build as build_tickets
-from nankle.fleet.workers import LocalDurableExecutor
-from nankle.kernel import Kernel
-from nankle.models import (
+from boltrig.adapters.builtin.memory_tickets import build as build_tickets
+from boltrig.fleet.workers import LocalDurableExecutor
+from boltrig.kernel import Kernel
+from boltrig.models import (
     GrantSet,
     InvocationContext,
     TenantPermissions,
     WorkflowDefinition,
     WorkflowSource,
 )
-from nankle.store import InMemoryStore
-from nankle.workflows import WorkflowLibrary
+from boltrig.store import InMemoryStore
+from boltrig.workflows import WorkflowLibrary
 
 T = "acme"
 

@@ -1,12 +1,12 @@
-# Nankle runtime-agent prompt
+# Boltrig runtime-agent prompt
 
-The prompt for an agent RUNNING on the Nankle kernel (not the engineer building it
+The prompt for an agent RUNNING on the Boltrig kernel (not the engineer building it
 - that contract is the repo-root `AGENTS.md`).
 
 It has two parts:
 
-- The **reusable header** below (the Nankle engine conventions) is canonical and
-  lives here in the Nankle repo. Every app that runs an agent on Nankle prepends
+- The **reusable header** below (the Boltrig engine conventions) is canonical and
+  lives here in the Boltrig repo. Every app that runs an agent on Boltrig prepends
   it verbatim.
 - The **app block** (the persona, the task, the domain) is owned by the consuming
   app and ships with that app, NOT here. For example, the Bill&Ben app block ships
@@ -14,9 +14,9 @@ It has two parts:
 
 ---
 
-## NANKLE ENGINE CONVENTIONS (reusable header)
+## BOLTRIG ENGINE CONVENTIONS (reusable header)
 
-You are an agent on the Nankle kernel. You act ONLY through the verbs exposed to
+You are an agent on the Boltrig kernel. You act ONLY through the verbs exposed to
 you this turn - you have no other powers.
 
 - The kernel is the source of truth for what you may do. Use the verbs available;

@@ -1,6 +1,6 @@
-# Nankle architecture
+# Boltrig architecture
 
-Nankle is a thin kernel with a fleet on top. The kernel owns policy and is the
+Boltrig is a thin kernel with a fleet on top. The kernel owns policy and is the
 only path to an external action; everything organisation-specific (adapters,
 skills, workflows, the agent org chart, credentials) is data loaded from the
 manifest and the libraries. This document maps the components, the dispatch
@@ -8,34 +8,34 @@ flow, the data model, the internal contracts (SRS S7), and where the binding
 architectural principles P1-P10 are enforced.
 
 > **Doctrine source (binding, [2026] VJS-CC NANKLE-CONSOLIDATION 001).** The
-> chokepoint + capability + audit discipline Nankle implements (the `K-1..K-30`
+> chokepoint + capability + audit discipline Boltrig implements (the `K-1..K-30`
 > invariants) is owned by the `agent-kernel-doctrine` repository, which is its
-> single source. Nankle conforms to that doctrine and does not author it. As the
-> doctrine's unified capability primitive advances, Nankle's grant model
-> (`nankle/models/grants.py`) tracks it and must not ship competing capability
+> single source. Boltrig conforms to that doctrine and does not author it. As the
+> doctrine's unified capability primitive advances, Boltrig's grant model
+> (`boltrig/models/grants.py`) tracks it and must not ship competing capability
 > semantics (directive D4).
 
 ## Component map
 
 | Area | Package | Role |
 | --- | --- | --- |
-| Kernel | `nankle/kernel/` | The composition root (`__init__.py`) wiring the dispatch chokepoint (`dispatch.py`) and its policy components: grants (`grants.py`), rate limiting (`ratelimit.py`), credentials (`credentials.py`), audit (`audit.py`), HITL (`hitl.py`), cost (`cost.py`), registry (`registry.py`), PII (`pii.py`). HTTP surface in `app.py`. |
-| Models | `nankle/models/` | Frozen domain dataclasses: registry (`registry.py`), grants (`grants.py`), context (`context.py`), audit (`audit.py`), hitl (`hitl.py`), identity (`identity.py`), libraries (`libraries.py`), work (`work.py`), and the error taxonomy (`errors.py`). |
-| Store | `nankle/store/` | The `Store` Protocol (`base.py`), the reference `InMemoryStore` (`memory.py`), and the Postgres schema (`schema.sql`). |
-| Adapters | `nankle/adapters/` | The single adapter Protocol (`base.py`), the loader (`loader.py`), builtin adapters (`builtin/`), and HTTP/SQL bases + a generator (`http_base.py`, `sql_base.py`, `generator.py`). |
-| Fleet | `nankle/fleet/` | The durable hierarchy and ephemeral spawning: spawner (`spawn.py`), runtimes (`runtime.py`), chief-of-staff (`chief_of_staff.py`), department head (`department_head.py`), workers/Hatchet seam (`workers.py`). |
-| Skills | `nankle/skills/` | Skill schema + loader (`schema.py`, `loader.py`) over `libraries/skills/`. |
-| Workflows | `nankle/workflows/` | Precreated/generated workflow library (`library.py`, `generator.py`) over `libraries/workflows/`. |
-| Work | `nankle/work/` | Source-agnostic work-item normalise/queue/store (`normalise.py`, `queue.py`, `store.py`). |
-| Identity | `nankle/identity/` | Token verification + principal resolver (`auth.py`), IdP-group to role/scope (`rbac.py`), delegation (`delegation.py`). |
-| Config | `nankle/config/` | Process settings from env (`settings.py`) and the fleet manifest loader/applier (`manifest.py`). |
-| Observability | `nankle/observability/` | Execution-tree reconstruction from the audit log (`tree.py`). |
+| Kernel | `boltrig/kernel/` | The composition root (`__init__.py`) wiring the dispatch chokepoint (`dispatch.py`) and its policy components: grants (`grants.py`), rate limiting (`ratelimit.py`), credentials (`credentials.py`), audit (`audit.py`), HITL (`hitl.py`), cost (`cost.py`), registry (`registry.py`), PII (`pii.py`). HTTP surface in `app.py`. |
+| Models | `boltrig/models/` | Frozen domain dataclasses: registry (`registry.py`), grants (`grants.py`), context (`context.py`), audit (`audit.py`), hitl (`hitl.py`), identity (`identity.py`), libraries (`libraries.py`), work (`work.py`), and the error taxonomy (`errors.py`). |
+| Store | `boltrig/store/` | The `Store` Protocol (`base.py`), the reference `InMemoryStore` (`memory.py`), and the Postgres schema (`schema.sql`). |
+| Adapters | `boltrig/adapters/` | The single adapter Protocol (`base.py`), the loader (`loader.py`), builtin adapters (`builtin/`), and HTTP/SQL bases + a generator (`http_base.py`, `sql_base.py`, `generator.py`). |
+| Fleet | `boltrig/fleet/` | The durable hierarchy and ephemeral spawning: spawner (`spawn.py`), runtimes (`runtime.py`), chief-of-staff (`chief_of_staff.py`), department head (`department_head.py`), workers/Hatchet seam (`workers.py`). |
+| Skills | `boltrig/skills/` | Skill schema + loader (`schema.py`, `loader.py`) over `libraries/skills/`. |
+| Workflows | `boltrig/workflows/` | Precreated/generated workflow library (`library.py`, `generator.py`) over `libraries/workflows/`. |
+| Work | `boltrig/work/` | Source-agnostic work-item normalise/queue/store (`normalise.py`, `queue.py`, `store.py`). |
+| Identity | `boltrig/identity/` | Token verification + principal resolver (`auth.py`), IdP-group to role/scope (`rbac.py`), delegation (`delegation.py`). |
+| Config | `boltrig/config/` | Process settings from env (`settings.py`) and the fleet manifest loader/applier (`manifest.py`). |
+| Observability | `boltrig/observability/` | Execution-tree reconstruction from the audit log (`tree.py`). |
 | UI | `ui/` | The React console: Router, Kanban, Approvals. |
 
 ## The dispatch flow (the fixed order)
 
 Every verb invocation runs the same ordered path in
-`nankle/kernel/dispatch.py` (`Dispatcher._invoke_inner`), and `invoke` always
+`boltrig/kernel/dispatch.py` (`Dispatcher._invoke_inner`), and `invoke` always
 writes one audit row in its `finally` block regardless of outcome:
 
 | # | Step | Failure / signal | Pinned by |
@@ -57,7 +57,7 @@ the kernel boundary.
 
 ## Data model summary
 
-The durable state (`nankle/store/schema.sql`, PostgreSQL 16) carries `tenant_id`
+The durable state (`boltrig/store/schema.sql`, PostgreSQL 16) carries `tenant_id`
 on every table and is designed for `FORCE ROW LEVEL SECURITY` keyed on a
 per-transaction `app.tenant_id` GUC (a null GUC yields zero rows, fail-closed).
 

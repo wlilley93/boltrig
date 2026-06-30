@@ -1,6 +1,6 @@
 """PostgresStore: the kernel guarantees + durability hold on real Postgres (P0-1).
 
-These run only when NANKLE_TEST_DATABASE_URL points at a Postgres (CI provides a
+These run only when BOLTRIG_TEST_DATABASE_URL points at a Postgres (CI provides a
 service; offline they skip cleanly, P9). They prove the security-relevant kernel
 behaviours behave identically on the durable store, that state survives a
 reconnect (restart), and that apply_manifest's async seed path works.
@@ -14,9 +14,9 @@ from dataclasses import replace
 
 import pytest
 
-from nankle.adapters.builtin.memory_tickets import build as build_tickets
-from nankle.kernel import Kernel
-from nankle.models import (
+from boltrig.adapters.builtin.memory_tickets import build as build_tickets
+from boltrig.kernel import Kernel
+from boltrig.models import (
     BindingNotFound,
     Budget,
     BudgetExceeded,
@@ -28,10 +28,10 @@ from nankle.models import (
     WorkItem,
     WorkStatus,
 )
-from nankle.store import InMemoryStore
+from boltrig.store import InMemoryStore
 
-DSN = os.environ.get("NANKLE_TEST_DATABASE_URL")
-_pg = pytest.mark.skipif(not DSN, reason="set NANKLE_TEST_DATABASE_URL for Postgres tests")
+DSN = os.environ.get("BOLTRIG_TEST_DATABASE_URL")
+_pg = pytest.mark.skipif(not DSN, reason="set BOLTRIG_TEST_DATABASE_URL for Postgres tests")
 T = "acme"
 _TABLES = (
     "nouns,verbs,verb_bindings,adapters,skills,agent_capabilities,workflow_definitions,"
@@ -41,7 +41,7 @@ _TABLES = (
 
 
 async def _fresh_pg():
-    from nankle.store import PostgresStore
+    from boltrig.store import PostgresStore
 
     store = await PostgresStore.connect(DSN)
     await store._pool.execute(f"TRUNCATE {_TABLES} RESTART IDENTITY CASCADE")
@@ -124,7 +124,7 @@ async def test_pg_budget_hard_stop():
 @_pg
 async def test_pg_durability_across_reconnect():
     """A work item written, then read after a fresh connection (a restart)."""
-    from nankle.store import PostgresStore
+    from boltrig.store import PostgresStore
 
     store = await _fresh_pg()
     await store.create_work_item(
@@ -145,7 +145,7 @@ async def test_pg_durability_across_reconnect():
 @_pg
 async def test_pg_apply_manifest_async_seed():
     """apply_manifest's seed helpers work against the async Postgres store."""
-    from nankle.config import apply_manifest, load_manifest
+    from boltrig.config import apply_manifest, load_manifest
 
     store = await _fresh_pg()
     try:
@@ -188,8 +188,8 @@ async def test_blocking_pause_survives_restart_and_resumes():
     The full live-Hatchet run-resume is the production backbone (a CI-gated
     end-to-end); here the durable record (the pending HITL request + the approval)
     lives in Postgres, so a fresh process picks the pause up and resumes it."""
-    from nankle.adapters.builtin.memory_tickets import build as build_tickets
-    from nankle.store import PostgresStore
+    from boltrig.adapters.builtin.memory_tickets import build as build_tickets
+    from boltrig.store import PostgresStore
 
     store1 = await _fresh_pg()
     await _seed_perms(store1, T, ["ticket.*"])

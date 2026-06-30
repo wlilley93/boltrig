@@ -21,7 +21,7 @@ async def test_every_action_is_audited(kernel):
 @pytest.mark.kernel
 @pytest.mark.invariant("SEC-16")
 async def test_denied_actions_are_also_audited(kernel):
-    from nankle.models import GrantMissing
+    from boltrig.models import GrantMissing
 
     with pytest.raises(GrantMissing):
         await kernel.invoke("ticket", "ticket.create", {"title": "x"}, make_ctx([]))

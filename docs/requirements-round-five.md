@@ -1,8 +1,8 @@
-# Nankle - Requirements, Round Five
+# Boltrig - Requirements, Round Five
 
 ## Memory & Knowledge: Conversation History and a Structured, Kernel-Governed Memory Layer
 
-**Document type:** Requirements addendum to the Nankle SRS (Rounds One to Four)
+**Document type:** Requirements addendum to the Boltrig SRS (Rounds One to Four)
 and the Security Hardening Specification. **Status:** build-ready. **Supersedes
 Round Three Epic MEM** (which was optional and specified only a flat embedding
 store) and replaces it with a structured knowledge-graph memory layer. Memory
@@ -150,7 +150,7 @@ transcript/document source.
 
 # Chapter 4 - Engine Selection (Build vs. Adopt)
 
-- **MEM-ENG-01 - Adopt, do not build.** Nankle MUST NOT build a knowledge-graph
+- **MEM-ENG-01 - Adopt, do not build.** Boltrig MUST NOT build a knowledge-graph
   memory engine; entity extraction, graph construction, multi-hop retrieval, and
   edge reweighting are a deep specialised problem. An existing engine is adopted
   behind the `MemoryEngine` interface.
@@ -163,7 +163,7 @@ transcript/document source.
   licensed, MCP-/agent-SDK-integrable, with built-in tenant isolation). The
   selection MUST be validated against alternatives (Mem0, Zep/Graphiti, LightRAG)
   on the criteria below before commitment.
-- **MEM-ENG-04 - Selection criteria (weighted to Nankle's needs).** Strength of
+- **MEM-ENG-04 - Selection criteria (weighted to Boltrig's needs).** Strength of
   **multi-tenant/scope isolation**; **complete erasure** (forget a node and its
   derived edges/facts); **self-hosting and data residency**;
   **provenance/traceability**; **sensitive-data handling** (provider-agnostic
@@ -175,14 +175,14 @@ transcript/document source.
 
 # Chapter 5 - Data Model Additions
 
-The engine owns the graph/vector store internally; Nankle persists the
+The engine owns the graph/vector store internally; Boltrig persists the
 **governance and provenance metadata** it must control independently of the
 engine.
 
 ```sql
--- Memory facts Nankle governs (mirrors/links engine nodes; the kernel's control plane)
+-- Memory facts Boltrig governs (mirrors/links engine nodes; the kernel's control plane)
 CREATE TABLE memory_facts (
-    id            TEXT PRIMARY KEY,        -- Nankle id, mapped to the engine node id
+    id            TEXT PRIMARY KEY,        -- Boltrig id, mapped to the engine node id
     tenant_id     TEXT NOT NULL,
     owner_scope   TEXT NOT NULL,           -- 'user:<id>' | 'department:<name>' | 'org' (the RBAC boundary)
     engine_ref    TEXT NOT NULL,           -- the engine's node/record identifier
@@ -514,7 +514,7 @@ remediate after a corpus exists.
 *Memory is what turns a fleet of capable-but-forgetful agents into an organisation
 that accumulates knowledge, and it is also the single largest new data-isolation
 and privacy surface the platform has. This round adds the capability the way the
-rest of Nankle is built: the engine is adopted, not invented; it sits behind
+rest of Boltrig is built: the engine is adopted, not invented; it sits behind
 kernel-governed verbs; every fact is scoped and provenanced; and the kernel, never
 the engine alone, is the boundary that decides who may recall what.*
 

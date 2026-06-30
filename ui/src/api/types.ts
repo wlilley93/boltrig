@@ -1,4 +1,4 @@
-// Types that mirror the kernel HTTP surface (nankle/kernel/app.py).
+// Types that mirror the kernel HTTP surface (boltrig/kernel/app.py).
 // Fields the kernel may add later (binding target, live verb health) are kept
 // optional so the client tolerates their absence.
 
@@ -107,7 +107,7 @@ export interface SpawnRequest {
   context?: Record<string, unknown>;
 }
 
-// Audit execution tree (nankle/observability/tree.py). Shape is recursive and
+// Audit execution tree (boltrig/observability/tree.py). Shape is recursive and
 // partly free-form, so it is typed loosely.
 export interface AuditNode {
   run_id: string;
@@ -235,7 +235,7 @@ export type ChatEvent =
 
 // ===========================================================================
 // Round Three: authoring studios, admin console, insight, eval, personal.
-// Every shape below mirrors nankle/kernel/platform_routes.py (and the services
+// Every shape below mirrors boltrig/kernel/platform_routes.py (and the services
 // it delegates to). Fields that depend on the response branch are optional so
 // the client can render a denial / 404 / 503 alongside the happy path.
 // ===========================================================================
@@ -251,7 +251,7 @@ export interface StatusAck {
   [key: string]: unknown;
 }
 
-// The free-form spawn/agent result (nankle/fleet/spawn.py::spawn). The fields
+// The free-form spawn/agent result (boltrig/fleet/spawn.py::spawn). The fields
 // present depend on status ("ok" | "error" | "partial"); effective_grants is the
 // child's grants after the initiator-ceiling intersection (proves no escalation,
 // SEC-29/30). Absent on the budget-partial branch.
@@ -422,7 +422,7 @@ export interface TriggerWorkflowRequest {
   inputs?: Record<string, unknown>;
 }
 
-// The run descriptor returned by trigger (nankle/workflows/library.py::trigger).
+// The run descriptor returned by trigger (boltrig/workflows/library.py::trigger).
 export interface WorkflowRunDescriptor {
   run_id?: string;
   tenant_id?: string;
@@ -675,7 +675,7 @@ export interface MemoryQueryResponse {
 }
 
 // ===========================================================================
-// Round Four: settings, account & access management (nankle/kernel/
+// Round Four: settings, account & access management (boltrig/kernel/
 // access_routes.py). Per-user routes act on the caller's own scope; admin
 // routes require org-admin (a 403 returns {status:"denied", reason} which the
 // UI renders as a notice). User/invitation scope is a free-form dict
@@ -892,7 +892,7 @@ export interface CreateInvitationResponse {
 }
 
 // ===========================================================================
-// Round Five: memory & knowledge (nankle/kernel/memory_routes.py). recall /
+// Round Five: memory & knowledge (boltrig/kernel/memory_routes.py). recall /
 // remember / forget / ingest run the memory.* verbs through the chokepoint, so
 // when memory is disabled the verb routes return {status:"error",
 // reason:"binding_not_found"} (the UI surfaces that as "memory not enabled").

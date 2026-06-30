@@ -1,6 +1,6 @@
 """Round Fifteen - bundle loading (FR-EXT-01/02).
 
-A project pins vanilla Nankle and extends it from a bundle: its own adapter (by
+A project pins vanilla Boltrig and extends it from a bundle: its own adapter (by
 module_ref) and its external MCP servers (mcp.consume), all as DATA, no core edit.
 """
 
@@ -10,11 +10,11 @@ import tempfile
 
 import pytest
 
-from nankle.api.bootstrap import _register_consumed_mcp
-from nankle.config import load_manifest
-from nankle.config.manifest import apply_manifest
-from nankle.kernel import Kernel
-from nankle.store import InMemoryStore
+from boltrig.api.bootstrap import _register_consumed_mcp
+from boltrig.config import load_manifest
+from boltrig.config.manifest import apply_manifest
+from boltrig.kernel import Kernel
+from boltrig.store import InMemoryStore
 
 T = "acme"
 
@@ -25,7 +25,7 @@ _MANIFEST = """
 tenant_id: acme
 adapters:
   - id: project-tickets
-    module_ref: nankle.adapters.builtin.memory_tickets:build
+    module_ref: boltrig.adapters.builtin.memory_tickets:build
 """
 
 

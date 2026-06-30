@@ -3,7 +3,7 @@
 import pytest
 import yaml
 
-from nankle.config import load_manifest
+from boltrig.config import load_manifest
 
 _MANIFEST = "manifest.example.yaml"
 

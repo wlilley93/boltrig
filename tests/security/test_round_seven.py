@@ -10,10 +10,10 @@ from __future__ import annotations
 
 import pytest
 
-from nankle.adapters.builtin.memory_tickets import build as build_tickets
-from nankle.config.control_plane import build_control_plane_adapter
-from nankle.kernel import Kernel
-from nankle.models import (
+from boltrig.adapters.builtin.memory_tickets import build as build_tickets
+from boltrig.config.control_plane import build_control_plane_adapter
+from boltrig.kernel import Kernel
+from boltrig.models import (
     GrantMissing,
     GrantSet,
     InvocationContext,
@@ -22,8 +22,8 @@ from nankle.models import (
     WorkflowDefinition,
     WorkflowSource,
 )
-from nankle.store import InMemoryStore
-from nankle.workflows import WorkflowLibrary
+from boltrig.store import InMemoryStore
+from boltrig.workflows import WorkflowLibrary
 
 T = "acme"
 

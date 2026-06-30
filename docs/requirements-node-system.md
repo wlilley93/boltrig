@@ -1,10 +1,10 @@
-# Nankle node system spec (Round Eight)
+# Boltrig node system spec (Round Eight)
 
 A clean surface over the registry, the workflow canvas, and chat - with internet
 access as a governed verb, not an exception.
 
-- **Status:** Draft, grounded against wlilley93/Nankle (main) as provided.
-- **Scope:** three front-end surfaces over existing Nankle data (a registry/adapter
+- **Status:** Draft, grounded against wlilley93/Boltrig (main) as provided.
+- **Scope:** three front-end surfaces over existing Boltrig data (a registry/adapter
   tree editor, a multi-node-kind workflow canvas, a chat trigger surface), plus the
   one genuinely new backend capability: governed internet access.
 - **Companion to:** the workflow editor / control plane specs + the addendum. This
@@ -91,7 +91,7 @@ evaluation) is untouched.
 ## Build note (Round Eight disposition)
 
 - **Backend (S4) is the substantive new capability and is built:**
-  `nankle/adapters/builtin/web_fetch.py` - read-only `web.fetch`, high-consequence,
+  `boltrig/adapters/builtin/web_fetch.py` - read-only `web.fetch`, high-consequence,
   SSRF-guarded, `NetworkConfig`-enforced, governed by the chokepoint (SEC-52/53).
   This closes the spec's central "uncaged" question and open item 7.1.
 - **Dependency decision (recorded, disposed by principle):** adopt **React Flow**

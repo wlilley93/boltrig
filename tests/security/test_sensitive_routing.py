@@ -7,11 +7,11 @@ data is unconstrained. The guard is also enforced on the spawn path.
 
 import pytest
 
-from nankle.fleet import build_spawner
-from nankle.fleet.model_router import select_model_endpoint
-from nankle.kernel import Kernel
-from nankle.kernel.audit import AuditWriter
-from nankle.models import (
+from boltrig.fleet import build_spawner
+from boltrig.fleet.model_router import select_model_endpoint
+from boltrig.kernel import Kernel
+from boltrig.kernel.audit import AuditWriter
+from boltrig.models import (
     AgentCapability,
     GrantSet,
     InvocationContext,
@@ -20,7 +20,7 @@ from nankle.models import (
     Skill,
     TenantPermissions,
 )
-from nankle.store import InMemoryStore
+from boltrig.store import InMemoryStore
 
 T = "acme"
 

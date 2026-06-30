@@ -2,9 +2,9 @@
 
 import pytest
 
-from nankle.fleet.chat import ChatService, ConversationForbidden
-from nankle.kernel.events import EventRelay
-from nankle.store import InMemoryStore
+from boltrig.fleet.chat import ChatService, ConversationForbidden
+from boltrig.kernel.events import EventRelay
+from boltrig.store import InMemoryStore
 
 T = "acme"
 

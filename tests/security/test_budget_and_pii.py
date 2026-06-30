@@ -2,8 +2,8 @@
 
 import pytest
 
-from nankle.kernel import pii
-from nankle.models import Budget, BudgetExceeded
+from boltrig.kernel import pii
+from boltrig.models import Budget, BudgetExceeded
 from tests.conftest import TENANT
 
 

@@ -930,7 +930,7 @@ function PrivacyData() {
           {data && (
             <button
               className="btn"
-              onClick={() => downloadJson("nankle-export.json", data)}
+              onClick={() => downloadJson("boltrig-export.json", data)}
             >
               Download JSON
             </button>
@@ -1087,7 +1087,7 @@ function SecuritySessions() {
   return (
     <div className="stack">
       <p className="notice">
-        Nankle stores no passwords and runs no MFA of its own - sign-in, MFA and
+        Boltrig stores no passwords and runs no MFA of its own - sign-in, MFA and
         password resets are managed entirely by your identity provider (SET-71).
         Tokens and sessions below are your standing credentials here; revoke any
         you do not recognise.

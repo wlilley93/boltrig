@@ -2,7 +2,7 @@
 
 Gated on a reachable Hatchet engine (HATCHET_CLIENT_TOKEN set); skipped offline so
 the default suite stays green (P9). It proves the live execution path end to end:
-a Nankle workflow registers, a worker runs it, and the result comes back from the
+a Boltrig workflow registers, a worker runs it, and the result comes back from the
 real engine. The durability *property* (a paused run resuming) is proven
 deterministically by the Postgres-backed NFR-REL-01 test; the production durable
 backbone (the hitl_demo durable task) is registered here and exercised live, and
@@ -30,7 +30,7 @@ pytestmark = pytest.mark.skipif(
 
 def _start_worker() -> subprocess.Popen:
     return subprocess.Popen(
-        [sys.executable, "-m", "nankle.fleet.hatchet_worker"],
+        [sys.executable, "-m", "boltrig.fleet.hatchet_worker"],
         cwd=str(_REPO),
         env=dict(os.environ),
         stdout=subprocess.DEVNULL,
@@ -39,8 +39,8 @@ def _start_worker() -> subprocess.Popen:
 
 
 async def test_live_workflow_executes_end_to_end():
-    """A Nankle workflow runs on the real engine and returns its result."""
-    from nankle.fleet.hatchet_app import PingInput, build_hatchet_app
+    """A Boltrig workflow runs on the real engine and returns its result."""
+    from boltrig.fleet.hatchet_app import PingInput, build_hatchet_app
 
     hatchet, workflows = build_hatchet_app()
     worker = _start_worker()
@@ -64,7 +64,7 @@ async def test_live_workflow_executes_end_to_end():
 async def test_live_durable_task_pauses():
     """The durable HITL task is accepted by the engine and pauses (does not
     complete immediately) - the production durable backbone, registered live."""
-    from nankle.fleet.hatchet_app import HitlInput, build_hatchet_app
+    from boltrig.fleet.hatchet_app import HitlInput, build_hatchet_app
 
     hatchet, workflows = build_hatchet_app()
     worker = _start_worker()
@@ -88,7 +88,7 @@ async def test_live_durable_pause_then_resume_on_approval():
     specific durable wait. (Also proven over a worker restart with two workers.)"""
     import uuid
 
-    from nankle.fleet.hatchet_app import HitlInput, approve, build_hatchet_app
+    from boltrig.fleet.hatchet_app import HitlInput, approve, build_hatchet_app
 
     hatchet, workflows = build_hatchet_app()
     worker = _start_worker()

@@ -2,7 +2,7 @@
 
 import pytest
 
-from nankle.models import GrantSet
+from boltrig.models import GrantSet
 
 
 @pytest.mark.unit

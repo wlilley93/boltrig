@@ -1,5 +1,5 @@
 // Typed fetch client over the kernel HTTP surface. Every request carries the
-// dev identity headers (x-nankle-*) read from the identity store. Paths are
+// dev identity headers (x-boltrig-*) read from the identity store. Paths are
 // relative: the Vite dev server and the nginx prod image both proxy /v1 and
 // /healthz to the kernel.
 
@@ -116,11 +116,11 @@ export class ApiError extends Error {
 function identityHeaders(): Record<string, string> {
   const id = getIdentity();
   return {
-    "x-nankle-tenant": id.tenant,
-    "x-nankle-subject": id.subject,
-    "x-nankle-grants": id.grants,
-    "x-nankle-role": id.role,
-    "x-nankle-departments": id.departments ?? "",
+    "x-boltrig-tenant": id.tenant,
+    "x-boltrig-subject": id.subject,
+    "x-boltrig-grants": id.grants,
+    "x-boltrig-role": id.role,
+    "x-boltrig-departments": id.departments ?? "",
   };
 }
 

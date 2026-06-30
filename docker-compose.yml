@@ -1,4 +1,4 @@
-# Nankle - one self-hostable stack (SRS S11.1).
+# Boltrig - one self-hostable stack (SRS S11.1).
 #
 # The same first-party images run in every environment; only .env and the fleet
 # manifest change between them (P7, NFR-PORT-01). Bring it up with:
@@ -8,7 +8,7 @@
 #   docker compose up -d                 # add: --profile local for on-box inference
 #
 # Services:
-#   postgres          durable state (SRS S6 / nankle/store/schema.sql)
+#   postgres          durable state (SRS S6 / boltrig/store/schema.sql)
 #   redis             rate-limit + ephemeral counters (FR-KER-05)
 #   kernel            the dispatch chokepoint HTTP surface (P2)
 #   fleet-worker      the fleet runtime + durable workers (Epics F/G)
@@ -37,18 +37,18 @@ services:
     image: postgres:16
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-nankle}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nankle}
-      POSTGRES_DB: ${POSTGRES_DB:-nankle}
+      POSTGRES_USER: ${POSTGRES_USER:-boltrig}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-boltrig}
+      POSTGRES_DB: ${POSTGRES_DB:-boltrig}
     volumes:
       - pgdata:/var/lib/postgresql/data
       # First-boot schema load (idempotent; CREATE TABLE IF NOT EXISTS).
       # Production schema changes go through `make migrate` (alembic).
-      - ./nankle/store/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./boltrig/store/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
     healthcheck:
       test:
         - CMD-SHELL
-        - pg_isready -U $${POSTGRES_USER:-nankle} -d $${POSTGRES_DB:-nankle}
+        - pg_isready -U $${POSTGRES_USER:-boltrig} -d $${POSTGRES_DB:-boltrig}
       interval: 10s
       timeout: 5s
       retries: 10
@@ -72,10 +72,10 @@ services:
         HTTP_PROXY: ${HTTP_PROXY:-}
         HTTPS_PROXY: ${HTTPS_PROXY:-}
         NO_PROXY: ${NO_PROXY:-}
-    image: nankle/kernel:0.1.0
+    image: boltrig/kernel:0.1.0
     restart: unless-stopped
     <<: *app-hardening
-    command: ["uvicorn", "nankle.api.asgi:app", "--host", "0.0.0.0", "--port", "8000"]
+    command: ["uvicorn", "boltrig.api.asgi:app", "--host", "0.0.0.0", "--port", "8000"]
     env_file: .env
     # On both the app network and the sandbox, so the Pi sidecar can reach the
     # MCP face (sandbox) while the kernel keeps its normal connectivity (default).
@@ -109,10 +109,10 @@ services:
         HTTP_PROXY: ${HTTP_PROXY:-}
         HTTPS_PROXY: ${HTTPS_PROXY:-}
         NO_PROXY: ${NO_PROXY:-}
-    image: nankle/fleet:0.1.0
+    image: boltrig/fleet:0.1.0
     restart: unless-stopped
     <<: *app-hardening
-    command: ["python", "-m", "nankle.api.worker"]
+    command: ["python", "-m", "boltrig.api.worker"]
     env_file: .env
     volumes:
       - ./manifest.yaml:/app/manifest.yaml:ro
@@ -125,7 +125,7 @@ services:
     healthcheck:
       test:
         - CMD-SHELL
-        - python -c "import nankle" || exit 1
+        - python -c "import boltrig" || exit 1
       interval: 60s
       timeout: 5s
       retries: 3
@@ -138,7 +138,7 @@ services:
     image: ghcr.io/hatchet-dev/hatchet/hatchet-lite:latest
     restart: unless-stopped
     environment:
-      DATABASE_URL: ${HATCHET_DATABASE_URL:-postgresql://nankle:nankle@postgres:5432/hatchet?sslmode=disable}
+      DATABASE_URL: ${HATCHET_DATABASE_URL:-postgresql://boltrig:boltrig@postgres:5432/hatchet?sslmode=disable}
       SERVER_GRPC_BROADCAST_ADDRESS: hatchet-engine:7077
       SERVER_GRPC_BIND_ADDRESS: 0.0.0.0
     ports:
@@ -163,7 +163,7 @@ services:
     build:
       context: ./ui
       dockerfile: Dockerfile
-    image: nankle/ui:0.1.0
+    image: boltrig/ui:0.1.0
     restart: unless-stopped
     ports:
       - "${UI_PORT:-8080}:80"
@@ -181,13 +181,13 @@ services:
   bifrost:
     # The model gateway (Pi runtime spec S4.2, the cost/cache layer in front of
     # providers). Bifrost is OpenAI-compatible on :8080, so the kernel's
-    # model-gateway seam (NANKLE_MODEL_GATEWAY_URL) points standard conversation
+    # model-gateway seam (BOLTRIG_MODEL_GATEWAY_URL) points standard conversation
     # traffic here and it stays warm per conversation (SEC-47). Sensitive data is
     # never routed through it (residency) - that goes to local-model.
     #
     # Profile-gated like local-model: bring it up with
     #   docker compose --profile gateway up -d
-    # then set NANKLE_MODEL_GATEWAY_URL=http://bifrost:8080 in .env and configure
+    # then set BOLTRIG_MODEL_GATEWAY_URL=http://bifrost:8080 in .env and configure
     # provider keys in the Bifrost web UI at http://localhost:${BIFROST_PORT:-8080}
     # (keys + running it are operator-supplied; the seam is inert until the URL is
     # set, so the default stack is unaffected).
@@ -245,7 +245,7 @@ services:
     build:
       context: ./services/pi_sidecar
       dockerfile: Dockerfile
-    image: nankle/pi-sidecar:0.1.0
+    image: boltrig/pi-sidecar:0.1.0
     restart: unless-stopped
     expose:
       - "8090"

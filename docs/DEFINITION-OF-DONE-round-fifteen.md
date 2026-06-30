@@ -1,6 +1,6 @@
 # Definition of Done - Round Fifteen (the extension contract)
 
-Brief: pin a vanilla Nankle and extend it from a per-project bundle, never editing
+Brief: pin a vanilla Boltrig and extend it from a per-project bundle, never editing
 core; add the missing generic primitives as substrate. Full deliverable:
 `docs/extension-contract.md`.
 
@@ -15,7 +15,7 @@ inbound works at runtime but `mcp.consume` is parsed-and-inert.
 
 ### The on-demand skill shelf (the substantive gap)
 
-- `nankle/skills/shelf.py` (new): `SkillShelfAdapter` exposing the `skill` noun -
+- `boltrig/skills/shelf.py` (new): `SkillShelfAdapter` exposing the `skill` noun -
   `skill.search` / `skill.describe` / `skill.load` - as governed verbs (the
   MemoryAdapter/ControlPlaneAdapter pattern), so the shelf runs the chokepoint
   (grant + audit + tenant scope). Progressive disclosure: `search` returns

@@ -1,4 +1,4 @@
-"""baseline: the full Nankle schema (FR-OPS-01).
+"""baseline: the full Boltrig schema (FR-OPS-01).
 
 This revision applies store/schema.sql verbatim so the Alembic head equals the
 hand-maintained schema. ``alembic upgrade head`` on a fresh database produces
@@ -20,7 +20,7 @@ branch_labels = None
 depends_on = None
 
 # store/schema.sql is the source of truth (P1); the baseline replays it.
-_SCHEMA = Path(__file__).resolve().parents[2] / "nankle" / "store" / "schema.sql"
+_SCHEMA = Path(__file__).resolve().parents[2] / "boltrig" / "store" / "schema.sql"
 
 
 def upgrade() -> None:

@@ -1,8 +1,8 @@
-# Nankle - Requirements, Round Four
+# Boltrig - Requirements, Round Four
 
 ## Settings, Account & Access Management, with Errata from Confirmation
 
-**Document type:** Requirements addendum to the Nankle SRS (Rounds One to Three)
+**Document type:** Requirements addendum to the Boltrig SRS (Rounds One to Three)
 and the Security Hardening Specification. **Status:** build-ready. Extends, does
 not replace, the prior specifications. This is the closing functional round
 before the refactoring + security-refinement phase.
@@ -244,7 +244,7 @@ optional.
   personal access tokens; revoke any session or token; see last-used and origin
   where available.
 - **SET-71 - MFA and IdP security status.** Show the user's authentication/MFA
-  status as reported by the IdP and link to the IdP for changes; Nankle does not
+  status as reported by the IdP and link to the IdP for changes; Boltrig does not
   store passwords or MFA secrets (IAM-11) and never presents itself as the
   authoritative authentication authority.
 - **SET-72 - My activity.** A user can view an audit of their own recent activity

@@ -5,20 +5,20 @@ import os
 import pytest
 from fastapi.testclient import TestClient
 
-from nankle.api.bootstrap import build_app
+from boltrig.api.bootstrap import build_app
 
 
 @pytest.fixture(scope="module")
 def client():
-    os.environ["NANKLE_MANIFEST"] = "manifest.example.yaml"
-    os.environ["NANKLE_DEV_AUTH"] = "1"  # select the dev resolver (no IdP in tests)
+    os.environ["BOLTRIG_MANIFEST"] = "manifest.example.yaml"
+    os.environ["BOLTRIG_DEV_AUTH"] = "1"  # select the dev resolver (no IdP in tests)
     # enter the context so the lifespan builds the kernel on the serving loop
     with TestClient(build_app()) as c:
         yield c
 
 
 def _admin(grants="*"):
-    return {"x-nankle-tenant": "acme", "x-nankle-grants": grants, "x-nankle-subject": "u1"}
+    return {"x-boltrig-tenant": "acme", "x-boltrig-grants": grants, "x-boltrig-subject": "u1"}
 
 
 def test_healthz_green(client):

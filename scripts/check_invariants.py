@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The binding-invariant gate (K-29 / K-30 ratchet). Stdlib only.
 
-A binding invariant is a guarantee Nankle claims to enforce. The claim is only
+A binding invariant is a guarantee Boltrig claims to enforce. The claim is only
 worth anything if a test pins it. This script makes that mechanical:
 
   (a) scan tests/ for every ``@pytest.mark.invariant("X")`` marker and the test

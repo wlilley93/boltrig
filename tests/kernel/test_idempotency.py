@@ -3,10 +3,10 @@
 
 import pytest
 
-from nankle.adapters.base import Result, VerbSpec
-from nankle.kernel import Kernel
-from nankle.models import GrantSet, InvocationContext, TenantPermissions
-from nankle.store import InMemoryStore
+from boltrig.adapters.base import Result, VerbSpec
+from boltrig.kernel import Kernel
+from boltrig.models import GrantSet, InvocationContext, TenantPermissions
+from boltrig.store import InMemoryStore
 
 T = "acme"
 

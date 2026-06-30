@@ -15,8 +15,8 @@ from __future__ import annotations
 
 import pytest
 
-from nankle.kernel.events import EventRelay
-from nankle.models import GrantSet, InvocationContext
+from boltrig.kernel.events import EventRelay
+from boltrig.models import GrantSet, InvocationContext
 from tests.conftest import _build_kernel  # ticket adapter + gated variant
 
 T = "acme"
@@ -92,7 +92,7 @@ async def test_relay_failure_never_breaks_dispatch():
 @pytest.mark.invariant("FR-EVT-02")
 async def test_pending_human_emits_hitl_event():
     k, _ = await _build_kernel(blocking_verbs={"ticket.create"})
-    from nankle.models import PendingHuman
+    from boltrig.models import PendingHuman
 
     with pytest.raises(PendingHuman):
         await k.invoke("ticket", "ticket.create", {"title": "x"}, _ctx("run-D"))

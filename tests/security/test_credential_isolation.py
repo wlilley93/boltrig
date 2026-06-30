@@ -2,7 +2,7 @@
 
 import pytest
 
-from nankle.adapters.base import Credential
+from boltrig.adapters.base import Credential
 from tests.conftest import TENANT, make_ctx
 
 
@@ -30,7 +30,7 @@ async def test_secret_material_never_enters_audit(kernel):
 @pytest.mark.invariant("K-20")
 async def test_audit_scrubs_secret_in_detail(kernel):
     # Write an audit event whose detail contains a secret; the writer must scrub it.
-    from nankle.models import ActionType, AuditEvent, utcnow
+    from boltrig.models import ActionType, AuditEvent, utcnow
 
     await kernel.audit.write(
         AuditEvent(

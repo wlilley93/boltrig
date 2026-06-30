@@ -1,8 +1,8 @@
 """The Pi sidecar service (Round Two, Epic RUN; SRS S5.3).
 
-A STANDALONE reasoning-loop service reached over HTTP by Nankle's PiRuntime.
-It is deliberately NOT part of the ``nankle`` package: ``nankle/kernel`` and
-``nankle/models`` import nothing from here (severability, court-blessed). The
+A STANDALONE reasoning-loop service reached over HTTP by Boltrig's PiRuntime.
+It is deliberately NOT part of the ``boltrig`` package: ``boltrig/kernel`` and
+``boltrig/models`` import nothing from here (severability, court-blessed). The
 only coupling is the wire protocol below.
 
 What it is (US-RUN-02, US-RUN-03)
@@ -54,7 +54,7 @@ _DEFAULT_MAX_STEPS = 12
 # price. Best-effort only (cost may legitimately be 0). Millionths per token.
 _MICROS_PER_TOKEN = int(os.environ.get("PI_SIDECAR_MICROS_PER_TOKEN", "0"))
 
-_MCP_TOKEN_HEADER = "x-nankle-mcp-token"
+_MCP_TOKEN_HEADER = "x-boltrig-mcp-token"
 
 
 # ---------------------------------------------------------------------------
@@ -106,7 +106,7 @@ class McpClient:
 
     The connection is scoped by ``token`` (skill grants intersect tenant ceiling,
     SEC-23): the tool list and every ``tools/call`` are least-privilege by
-    construction. The token is sent only in the ``x-nankle-mcp-token`` header and
+    construction. The token is sent only in the ``x-boltrig-mcp-token`` header and
     is never logged or placed into an event (SEC-27).
     """
 
@@ -152,7 +152,7 @@ class McpClient:
             {
                 "protocolVersion": "2024-11-05",
                 "capabilities": {},
-                "clientInfo": {"name": "nankle-pi-sidecar", "version": "0.1.0"},
+                "clientInfo": {"name": "boltrig-pi-sidecar", "version": "0.1.0"},
             },
         )
         try:  # best-effort; the kernel face treats it as a no-op
@@ -168,19 +168,19 @@ class McpClient:
         return [t for t in tools if isinstance(t, dict) and t.get("name")]
 
     async def call_tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        """``tools/call`` -> the raw MCP result (includes ``_nankle``)."""
+        """``tools/call`` -> the raw MCP result (includes ``_boltrig``)."""
         return await self._call("tools/call", {"name": name, "arguments": arguments})
 
 
 def _tool_outcome(mcp_result: dict[str, Any]) -> tuple[str, Any]:
     """Map a raw MCP ``tools/call`` result to ``(status, payload)``.
 
-    The kernel face annotates every result with ``_nankle.status`` (one of
+    The kernel face annotates every result with ``_boltrig.status`` (one of
     ``ok`` / ``pending_human`` / ``denied`` / ``degraded`` / ``error``). We honour
     that as the source of truth and pull the matching payload field so the loop
     can surface it (a ``tool_result`` event) and the model can read it back.
     """
-    meta = mcp_result.get("_nankle") or {}
+    meta = mcp_result.get("_boltrig") or {}
     status = str(meta.get("status") or ("error" if mcp_result.get("isError") else "ok"))
     if status == "ok":
         return "ok", meta.get("output")
@@ -301,7 +301,7 @@ def _final_event(
 # ---------------------------------------------------------------------------
 
 _SYSTEM_PROMPT = (
-    "You are a Nankle worker agent. Your only available tools are the kernel "
+    "You are a Boltrig worker agent. Your only available tools are the kernel "
     "verbs provided to you. Use them to accomplish the task, then give a short "
     "final answer. Do not assume any other capabilities."
 )
@@ -482,7 +482,7 @@ async def run_loop(req: RunRequest) -> AsyncIterator[str]:
 # model (those are per-request only); the app is runnable via `uvicorn app:app`.
 # ---------------------------------------------------------------------------
 
-app = FastAPI(title="Nankle Pi Sidecar", version="0.1.0")
+app = FastAPI(title="Boltrig Pi Sidecar", version="0.1.0")
 
 
 @app.get("/health")

@@ -19,18 +19,18 @@ from pathlib import Path
 import pytest
 import yaml
 
-from nankle.fleet.chat import ChatService, build_turn_executor
-from nankle.fleet.continuity import compose_turn_task, render_transcript
-from nankle.fleet.model_gateway import ModelGateway, apply_gateway
-from nankle.kernel.events import EventRelay
-from nankle.models import (
+from boltrig.fleet.chat import ChatService, build_turn_executor
+from boltrig.fleet.continuity import compose_turn_task, render_transcript
+from boltrig.fleet.model_gateway import ModelGateway, apply_gateway
+from boltrig.kernel.events import EventRelay
+from boltrig.models import (
     ConversationMessage,
     GrantSet,
     MessageRole,
     ModelEndpoint,
     TenantPermissions,
 )
-from nankle.store import InMemoryStore
+from boltrig.store import InMemoryStore
 
 T = "acme"
 _REPO = Path(__file__).resolve().parents[2]

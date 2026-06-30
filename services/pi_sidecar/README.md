@@ -1,8 +1,8 @@
-# Nankle Pi sidecar
+# Boltrig Pi sidecar
 
 A standalone agent reasoning-loop service (Round Two, Epic RUN; SRS S5.3). It is
-reached over HTTP by Nankle's `PiRuntime`. It is deliberately NOT part of the
-`nankle` Python package: `nankle/kernel` and `nankle/models` import nothing from
+reached over HTTP by Boltrig's `PiRuntime`. It is deliberately NOT part of the
+`boltrig` Python package: `boltrig/kernel` and `boltrig/models` import nothing from
 here (severability). The only coupling is the wire protocol below.
 
 ## What it does
@@ -46,7 +46,7 @@ event:
 {"type":"final","output":{...},"summary":"...","tokens_used":N,"cost_micros":N,"new_work_items":[]}
 ```
 
-`tool_result.status` mirrors the kernel's `_nankle.status`: `ok`,
+`tool_result.status` mirrors the kernel's `_boltrig.status`: `ok`,
 `pending_human`, `denied`, `degraded`, or `error`. On `pending_human` the loop
 stops and returns a `final` whose `output._paused` summarises the pause.
 
@@ -59,10 +59,10 @@ stops and returns a `final` whose `output._paused` summarises the pause.
 ## How the MCP connection works
 
 The kernel MCP face is JSON-RPC 2.0 over HTTP. The sidecar POSTs to `mcp.url`
-with header `x-nankle-mcp-token: <mcp.token>`:
+with header `x-boltrig-mcp-token: <mcp.token>`:
 
 - `tools/list` -> `result.tools = [{name, description, inputSchema}, ...]`
-- `tools/call` -> `result.{content, isError, _nankle:{status, output|reason|hitl_request_id}}`
+- `tools/call` -> `result.{content, isError, _boltrig:{status, output|reason|hitl_request_id}}`
 
 The token scopes the connection to one run (skill grants intersect tenant
 ceiling, SEC-23), so the loop sees and can call only its own tools.
@@ -84,7 +84,7 @@ ceiling, SEC-23), so the loop sees and can call only its own tools.
 pip install -r requirements.txt
 uvicorn app:app --host 0.0.0.0 --port 8090
 # or
-docker build -t nankle-pi-sidecar . && docker run -p 8090:8090 nankle-pi-sidecar
+docker build -t boltrig-pi-sidecar . && docker run -p 8090:8090 boltrig-pi-sidecar
 ```
 
 Importing the app needs no live kernel or model (those are per request only), so

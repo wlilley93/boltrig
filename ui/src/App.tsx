@@ -278,7 +278,7 @@ export function App() {
     <div className="app">
       <header className="app__header">
         <div className="app__brand">
-          <strong>Nankle</strong>
+          <strong>Boltrig</strong>
           <span className="app__subtitle">orchestration console</span>
         </div>
         <div className="app__header-right">

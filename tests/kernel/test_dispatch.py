@@ -2,7 +2,7 @@
 
 import pytest
 
-from nankle.models import BindingNotFound, SchemaValidationError
+from boltrig.models import BindingNotFound, SchemaValidationError
 from tests.conftest import make_ctx
 
 

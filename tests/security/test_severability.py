@@ -1,6 +1,6 @@
 """Severability: the kernel and models import nothing from sibling estate kernels.
 
-Machine-enforces directive D5 of [2026] VJS-CC NANKLE-CONSOLIDATION 001: Nankle
+Machine-enforces directive D5 of [2026] VJS-CC NANKLE-CONSOLIDATION 001: Boltrig
 stays a clean, deletable boundary with zero code coupling to Hermes / Phoenix /
 Opbox / Agent-libOS / VJS. This turns the "quarterly severability audit" into a
 build-red check rather than a manual ritual.
@@ -13,7 +13,7 @@ import re
 
 import pytest
 
-_ROOT = pathlib.Path(__file__).resolve().parents[2] / "nankle"
+_ROOT = pathlib.Path(__file__).resolve().parents[2] / "boltrig"
 _SCOPED = [_ROOT / "kernel", _ROOT / "models"]
 
 # import tokens that would indicate coupling to a sibling estate kernel
@@ -65,13 +65,13 @@ def test_kernel_and_models_have_no_pi_or_sidecar_coupling():
 
 
 # --- The stack layer-dependency rule (Round Nine, ARCHITECTURE-stack.md) -------
-# Nankle is a stack: foundation (models) -> data (store) / capability (adapters)
+# Boltrig is a stack: foundation (models) -> data (store) / capability (adapters)
 # -> kernel -> runtime (fleet) -> api/ui. The foundation layers must never depend
 # UPWARD on the kernel or the runtime, so the seam a future repo-split would cleave
 # along stays clean. The kernel is the integration layer and may pull lower layers;
 # this rule pins only the lower layers (SEC-54).
 _LAYER_RULES = {
-    # layer dir -> the nankle subpackages it must NOT import
+    # layer dir -> the boltrig subpackages it must NOT import
     "models": ("kernel", "fleet", "api", "store", "adapters", "workflows",
                "memory", "identity", "observability", "config", "skills", "work"),
     "store": ("kernel", "fleet", "api", "adapters", "workflows", "memory",
@@ -87,7 +87,7 @@ def test_foundation_layers_do_not_depend_upward():
     offenders: list[str] = []
     for layer, forbidden in _LAYER_RULES.items():
         pattern = re.compile(
-            r"^\s*(?:from|import)\s+nankle\.(" + "|".join(forbidden) + r")\b"
+            r"^\s*(?:from|import)\s+boltrig\.(" + "|".join(forbidden) + r")\b"
         )
         for path in (_ROOT / layer).rglob("*.py"):
             for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):

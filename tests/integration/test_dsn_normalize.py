@@ -6,7 +6,7 @@ understands postgresql:// / postgres://. connect() normalizes it; this pins that
 
 from __future__ import annotations
 
-from nankle.store.postgres import normalize_dsn
+from boltrig.store.postgres import normalize_dsn
 
 
 def test_strips_sqlalchemy_driver_suffix():

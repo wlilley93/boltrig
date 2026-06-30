@@ -18,11 +18,11 @@ from __future__ import annotations
 
 import pytest
 
-from nankle.adapters.builtin.memory_tickets import build as build_tickets
-from nankle.kernel import Kernel
-from nankle.models import GrantMissing, GrantSet, InvocationContext, Skill, TenantPermissions
-from nankle.skills.shelf import build_skill_shelf_adapter
-from nankle.store import InMemoryStore
+from boltrig.adapters.builtin.memory_tickets import build as build_tickets
+from boltrig.kernel import Kernel
+from boltrig.models import GrantMissing, GrantSet, InvocationContext, Skill, TenantPermissions
+from boltrig.skills.shelf import build_skill_shelf_adapter
+from boltrig.store import InMemoryStore
 
 T = "acme"
 
@@ -85,7 +85,7 @@ async def test_skill_load_composes_body_and_binds_context():
     assert out["bound_context"] == {"entity_id": "E-1"}  # the job context bound in
 
     # missing required job context is refused (ContextRequirementsUnmet -> 400)
-    from nankle.models import ContextRequirementsUnmet
+    from boltrig.models import ContextRequirementsUnmet
 
     with pytest.raises(ContextRequirementsUnmet):
         await k.invoke("skill", "skill.load", {"id": "renewal/adgm"}, _ctx(["*"]))

@@ -39,7 +39,7 @@ a test), **seam** (code path real; a live external leg is needed to exercise it)
 - A real Pi reasoning run needs a model key + the running sidecar (the loop +
   degrade path are implemented and offline-tested).
 - The MCP consumer (`mcp` runtime, US-MCP-03) needs a reachable external MCP
-  server to consume in production (proven in-process against Nankle's own face).
+  server to consume in production (proven in-process against Boltrig's own face).
 - Live Hatchet durable-event resume: the code is fixed to the correct pattern (a
   durable wait on a fixed event key + per-run scope, resumed by `approve()` which
   pushes that event with the matching scope; `test_live_durable_pause_then_resume_

@@ -10,7 +10,7 @@ Run the secure overlay, which puts a Caddy TLS terminator in front of the UI and
 the kernel and stops publishing their ports directly:
 
 ```bash
-NANKLE_DOMAIN=nankle.example.com \
+BOLTRIG_DOMAIN=boltrig.example.com \
   docker compose -f docker-compose.yml -f deploy/compose.secure.yml up -d
 # or: make secure-up
 ```
@@ -31,7 +31,7 @@ Postgres data, library artefacts, and backups must sit on encrypted storage. The
 app does not encrypt the disk; the deployment does, with no image change:
 
 - Point the Postgres data dir at an encrypted device or path and set it via env:
-  `PGDATA_HOST=/mnt/luks/nankle-pgdata docker compose ... up -d`. Use a LUKS
+  `PGDATA_HOST=/mnt/luks/boltrig-pgdata docker compose ... up -d`. Use a LUKS
   volume on-prem, or a cloud encrypted disk (EBS/PD/Azure Disk with CMK).
 - Put backups (`./backups`, see `backup-restore.md`) on the same encrypted media.
 - The external secret store (Vault/KMS) holds credentials; the app DB stores only
@@ -53,4 +53,4 @@ app does not encrypt the disk; the deployment does, with no image change:
 - [ ] `DATABASE_URL` has `sslmode=require`
 - [ ] `PGDATA_HOST` on an encrypted device; backups on encrypted media
 - [ ] `CA_BUNDLE` set and the bundle mounted; proxy env set if required
-- [ ] real OIDC configured (`OIDC_*`), `NANKLE_DEV_AUTH` unset (SEC-01)
+- [ ] real OIDC configured (`OIDC_*`), `BOLTRIG_DEV_AUTH` unset (SEC-01)

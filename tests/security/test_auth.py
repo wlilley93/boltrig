@@ -11,11 +11,11 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from nankle.identity.auth import build_principal_resolver
-from nankle.kernel import Kernel
-from nankle.kernel.app import create_app
-from nankle.models import GrantSet, RoleMapping, TenantPermissions
-from nankle.store import InMemoryStore
+from boltrig.identity.auth import build_principal_resolver
+from boltrig.kernel import Kernel
+from boltrig.kernel.app import create_app
+from boltrig.models import GrantSet, RoleMapping, TenantPermissions
+from boltrig.store import InMemoryStore
 
 T = "acme"
 
@@ -30,7 +30,7 @@ class _StubVerifier:
 
 
 async def _kernel() -> Kernel:
-    from nankle.adapters.builtin.memory_tickets import build as build_tickets
+    from boltrig.adapters.builtin.memory_tickets import build as build_tickets
 
     store = InMemoryStore()
     store.set_tenant_permissions(TenantPermissions(T, GrantSet.of(["*"])))
@@ -92,7 +92,7 @@ async def test_oidc_verifier_accepts_valid_and_rejects_wrong_audience():
     from authlib.jose import jwt
     from cryptography.hazmat.primitives.asymmetric import rsa
 
-    from nankle.identity.auth import OidcVerifier
+    from boltrig.identity.auth import OidcVerifier
 
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     priv_pem = key.private_bytes(
@@ -105,7 +105,7 @@ async def test_oidc_verifier_accepts_valid_and_rejects_wrong_audience():
     jwk = JsonWebKey.import_key(key.public_key(), {"kty": "RSA", "use": "sig", "kid": "k1"})
     jwks = {"keys": [jwk.as_dict()]}
 
-    issuer, audience = "https://idp.example", "nankle"
+    issuer, audience = "https://idp.example", "boltrig"
     header = {"alg": "RS256", "kid": "k1"}
 
     import time

@@ -22,9 +22,9 @@ config = context.config
 def _sync_url() -> str:
     url = (
         os.environ.get("DATABASE_URL")
-        or os.environ.get("NANKLE_DATABASE_URL")
-        or os.environ.get("NANKLE_TEST_DATABASE_URL")
-        or "postgresql://localhost/nankle"
+        or os.environ.get("BOLTRIG_DATABASE_URL")
+        or os.environ.get("BOLTRIG_TEST_DATABASE_URL")
+        or "postgresql://localhost/boltrig"
     )
     # asyncpg is the app's runtime driver; Alembic runs synchronously.
     return url.replace("+asyncpg", "")

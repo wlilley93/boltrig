@@ -1,4 +1,4 @@
-# Caddy TLS terminator for Nankle (deploy/compose.secure.yml).
+# Caddy TLS terminator for Boltrig (deploy/compose.secure.yml).
 #
 # Caddy terminates TLS and reverse-proxies to the kernel API and the UI over the
 # internal compose network. For a public domain Caddy auto-provisions a
@@ -7,7 +7,7 @@
 #     tls /certs/site.crt /certs/site.key
 # and mount those files into the caddy service.
 
-{$NANKLE_DOMAIN:localhost} {
+{$BOLTRIG_DOMAIN:localhost} {
 	encode gzip
 
 	# kernel API + health (the dispatch chokepoint)

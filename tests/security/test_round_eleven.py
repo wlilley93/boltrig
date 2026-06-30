@@ -14,11 +14,11 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from nankle.adapters.builtin.memory_tickets import build as build_tickets
-from nankle.kernel import Kernel
-from nankle.kernel.app import create_app
-from nankle.models import GrantSet, TenantPermissions
-from nankle.store import InMemoryStore
+from boltrig.adapters.builtin.memory_tickets import build as build_tickets
+from boltrig.kernel import Kernel
+from boltrig.kernel.app import create_app
+from boltrig.models import GrantSet, TenantPermissions
+from boltrig.store import InMemoryStore
 
 T = "acme"
 
@@ -32,8 +32,8 @@ async def _kernel() -> Kernel:
 
 
 def _hdr(tenant=T, grants="*", role="org-admin"):
-    return {"x-nankle-tenant": tenant, "x-nankle-subject": "u",
-            "x-nankle-role": role, "x-nankle-grants": grants}
+    return {"x-boltrig-tenant": tenant, "x-boltrig-subject": "u",
+            "x-boltrig-role": role, "x-boltrig-grants": grants}
 
 
 def _frames(text: str) -> list[str]:

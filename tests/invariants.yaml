@@ -1,4 +1,4 @@
-# Nankle binding-invariant catalogue (the K-29/K-30 ratchet input).
+# Boltrig binding-invariant catalogue (the K-29/K-30 ratchet input).
 #
 # Each entry is a binding invariant: a one-line meaning plus the pytest node ids
 # that bind it (path::test_name). scripts/check_invariants.py cross-checks this
@@ -16,9 +16,9 @@
 #
 # Canonical source (per [2026] VJS-CC NANKLE-CONSOLIDATION 001, D2): every K-* id
 # below is the canonical invariant id from agent-kernel-doctrine Appendix A
-# (volume-1-the-rust-kernel/appendices/appendix-A-invariant-catalog.md). Nankle
+# (volume-1-the-rust-kernel/appendices/appendix-A-invariant-catalog.md). Boltrig
 # binds these ids to tests; it does not define or renumber them. P*/SEC*/FR* ids
-# are Nankle-local (from the SRS) and never restate a K-*.
+# are Boltrig-local (from the SRS) and never restate a K-*.
 
 invariants:
   P9:

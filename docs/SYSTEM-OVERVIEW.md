@@ -1,4 +1,4 @@
-# Nankle - system overview (the whole picture)
+# Boltrig - system overview (the whole picture)
 
 Addendum, not a replacement. The whole-system view that the Pi runtime spec
 (`requirements-pi-runtime.md`, Round Six) and the control plane spec
@@ -12,9 +12,9 @@ the corrected request-flow model, and the consolidated gap list.
 > Section 6. The honest residue is environmental (Bifrost + live Hatchet are
 > external services), not code.
 
-## 1. What Nankle is
+## 1. What Boltrig is
 
-Nankle is a thin, policy-owning kernel between every action an organisation's AI
+Boltrig is a thin, policy-owning kernel between every action an organisation's AI
 agents take and the outside world, forcing every action - chat message, webhook,
 or scheduled job - through one fixed, audited path that checks who is asking, what
 they may do, and whether a human must approve first, before anything happens.

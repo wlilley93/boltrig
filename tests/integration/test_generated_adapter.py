@@ -4,8 +4,8 @@ import asyncio
 
 import pytest
 
-from nankle.adapters.generator import generate_adapter_from_spec
-from nankle.models import InvocationContext
+from boltrig.adapters.generator import generate_adapter_from_spec
+from boltrig.models import InvocationContext
 
 _SPEC = {
     "openapi": "3.0.0",

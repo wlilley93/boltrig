@@ -19,15 +19,15 @@ jobs:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_PASSWORD: nankle
-          POSTGRES_DB: nankle
+          POSTGRES_PASSWORD: boltrig
+          POSTGRES_DB: boltrig
         ports:
           - 5432:5432
         options: >-
           --health-cmd "pg_isready -U postgres"
           --health-interval 5s --health-timeout 5s --health-retries 10
     env:
-      NANKLE_TEST_DATABASE_URL: postgresql://postgres:nankle@localhost:5432/nankle
+      BOLTRIG_TEST_DATABASE_URL: postgresql://postgres:boltrig@localhost:5432/boltrig
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

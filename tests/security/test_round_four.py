@@ -12,13 +12,13 @@ import asyncio
 import pytest
 from fastapi.testclient import TestClient
 
-from nankle.adapters.builtin.memory_tickets import build as build_tickets
-from nankle.identity.auth import build_principal_resolver
-from nankle.identity.provisioning import provision_user
-from nankle.kernel import Kernel
-from nankle.kernel.app import create_app
-from nankle.models import GrantSet, RoleMapping, TenantPermissions, UserInvitation, utcnow
-from nankle.store import InMemoryStore
+from boltrig.adapters.builtin.memory_tickets import build as build_tickets
+from boltrig.identity.auth import build_principal_resolver
+from boltrig.identity.provisioning import provision_user
+from boltrig.kernel import Kernel
+from boltrig.kernel.app import create_app
+from boltrig.models import GrantSet, RoleMapping, TenantPermissions, UserInvitation, utcnow
+from boltrig.store import InMemoryStore
 
 T = "acme"
 
@@ -36,12 +36,12 @@ def _client(k: Kernel) -> TestClient:
 
 
 def _hdr(role="org-admin", grants="*", subject="alice", departments=""):
-    return {"x-nankle-tenant": T, "x-nankle-subject": subject, "x-nankle-role": role,
-            "x-nankle-grants": grants, "x-nankle-departments": departments}
+    return {"x-boltrig-tenant": T, "x-boltrig-subject": subject, "x-boltrig-role": role,
+            "x-boltrig-grants": grants, "x-boltrig-departments": departments}
 
 
 def _bearer(secret: str) -> dict:
-    return {"Authorization": f"Bearer {secret}", "x-nankle-tenant": T}
+    return {"Authorization": f"Bearer {secret}", "x-boltrig-tenant": T}
 
 
 # --- SEC-34: a personal access token never escalates and dies with the user ---

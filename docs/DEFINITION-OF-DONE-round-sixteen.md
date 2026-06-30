@@ -14,7 +14,7 @@ controls are NOT claimed as built - they are seams, tracked honestly in
 ## What shipped (the real code gaps, all bound at binding-debt 0)
 
 - **SEC-58 - edge/web hardening (WEB-02/03/05/06, RES-01).** The kernel app
-  installed zero middleware. `nankle/kernel/web_security.py` adds security headers
+  installed zero middleware. `boltrig/kernel/web_security.py` adds security headers
   (HSTS/nosniff/frame-deny/referrer/permissions/CSP), a CORS allowlist (never `*`
   with credentials), TrustedHost Host-validation, and a request-body cap (413).
 - **SEC-59 - JWT verification hardening (IAM-02/03/04/05).** `identity/auth.py`:
@@ -23,9 +23,9 @@ controls are NOT claimed as built - they are seams, tracked honestly in
   <=120s, access-token-only (ID token rejected), JWKS cache TTL + kid-miss
   refetch-then-fail-closed + explicit fetch timeout.
 - **SEC-60 - dev auth impossible in prod (IAM-09).** `bootstrap.refuse_dev_auth_in_prod`
-  hard-aborts startup when `NANKLE_DEV_AUTH` coincides with a production signal
-  (ENV/NANKLE_ENV/APP_ENV=prod|staging or NANKLE_PRODUCTION=1) - not a warning.
-- **SEC-61 - shared egress/SSRF guard (INJ-02 / CLOUD-03).** `nankle/adapters/egress.py`
+  hard-aborts startup when `BOLTRIG_DEV_AUTH` coincides with a production signal
+  (ENV/BOLTRIG_ENV/APP_ENV=prod|staging or BOLTRIG_PRODUCTION=1) - not a warning.
+- **SEC-61 - shared egress/SSRF guard (INJ-02 / CLOUD-03).** `boltrig/adapters/egress.py`
   consolidates the SSRF/policy logic (web.fetch now re-exports it - one source of
   truth) and adds `assert_no_metadata_egress`, applied in `http_base.request` so
   EVERY HTTP adapter refuses a cloud-metadata / link-local target - closing the

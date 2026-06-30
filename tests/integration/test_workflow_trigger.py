@@ -6,10 +6,10 @@ fail closed."""
 
 import pytest
 
-from nankle.fleet.workers import LocalDurableExecutor
-from nankle.store import InMemoryStore
-from nankle.workflows.generator import generate_workflow
-from nankle.workflows.library import WorkflowLibrary
+from boltrig.fleet.workers import LocalDurableExecutor
+from boltrig.store import InMemoryStore
+from boltrig.workflows.generator import generate_workflow
+from boltrig.workflows.library import WorkflowLibrary
 
 T = "acme"
 

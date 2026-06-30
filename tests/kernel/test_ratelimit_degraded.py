@@ -2,7 +2,7 @@
 
 import pytest
 
-from nankle.models import DegradedMode, RateLimited, RateLimit, TargetType, VerbBinding
+from boltrig.models import DegradedMode, RateLimited, RateLimit, TargetType, VerbBinding
 from tests.conftest import TENANT, make_ctx
 
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Bring the local Nankle dev stack up and expose it on the tailnet.
+# Bring the local Boltrig dev stack up and expose it on the tailnet.
 #
 # Assumes .env (dev auth, model key) and manifest.yaml (tenant=default, the GLM
 # coding endpoint + glm-5.2) already exist on this box - both are gitignored
@@ -28,5 +28,5 @@ tailscale serve --bg --https=10000 --set-path=/ http://127.0.0.1:8080 >/dev/null
 
 URL="https://$(tailscale status --json 2>/dev/null | grep -oE '"DNSName": "[^"]+' | head -1 | cut -d'"' -f4 | sed 's/\.$//'):10000"
 echo
-echo "Nankle is up:  ${URL}"
+echo "Boltrig is up:  ${URL}"
 echo "(tailnet-only; tenant 'default'; live agent chat on the GLM coding endpoint)"

@@ -1,10 +1,10 @@
-# Nankle
+# Boltrig
 
-[![GitHub repo](https://img.shields.io/badge/GitHub-wlilley93%2FNankle-181717?logo=github)](https://github.com/wlilley93/Nankle)
-[![CI](https://github.com/wlilley93/Nankle/actions/workflows/ci.yml/badge.svg)](https://github.com/wlilley93/Nankle/actions/workflows/ci.yml)
+[![GitHub repo](https://img.shields.io/badge/GitHub-wlilley93%2FBoltrig-181717?logo=github)](https://github.com/wlilley93/Boltrig)
+[![CI](https://github.com/wlilley93/Boltrig/actions/workflows/ci.yml/badge.svg)](https://github.com/wlilley93/Boltrig/actions/workflows/ci.yml)
 
 A self-hostable agent-orchestration platform: a thin, secure kernel and a
-permanent agent fleet that spawns ephemeral workers to get work done. Nankle is
+permanent agent fleet that spawns ephemeral workers to get work done. Boltrig is
 a clean-room reference implementation of the "Hermes Fleet" SRS (the kernel
 doctrine: one dispatch chokepoint, stable nouns and verbs, everything-as-data).
 
@@ -20,51 +20,51 @@ model) are seams (see "Implemented vs scaffolded" below).
 1. **A thin core.** The kernel implements policy nowhere itself. It composes a
    dispatcher, grant checker, rate limiter, credential resolver, audit writer,
    HITL gate, and cost accountant, and it loads everything else (adapters,
-   skills, workflows, capabilities) as data (`nankle/kernel/__init__.py`,
-   `nankle/kernel/dispatch.py`). Adding an integration changes no core code.
+   skills, workflows, capabilities) as data (`boltrig/kernel/__init__.py`,
+   `boltrig/kernel/dispatch.py`). Adding an integration changes no core code.
 2. **A permanent fleet that spawns ephemerals.** A durable hierarchy (a tier1
    chief-of-staff over tier2 department heads) takes in work and spawns
    short-lived child agents to do it, picking the cheapest capable runtime,
    reserving budget first, and enforcing recursion depth
-   (`nankle/fleet/spawn.py`, `nankle/fleet/runtime.py`).
+   (`boltrig/fleet/spawn.py`, `boltrig/fleet/runtime.py`).
 3. **The kernel abstracts actions behind nouns and verbs.** Agents reason in
    stable nouns (`ticket`) and verbs (`ticket.create`); the kernel resolves each
    verb to a concrete adapter or agent via a binding. The agent never learns
-   which concrete system sits behind a verb (`nankle/kernel/registry.py`,
-   `nankle/models/registry.py`).
+   which concrete system sits behind a verb (`boltrig/kernel/registry.py`,
+   `boltrig/models/registry.py`).
 
 ## Governance: the doctrine and the consolidation ruling
 
-Nankle implements, but does not author, a kernel doctrine. The **single source
+Boltrig implements, but does not author, a kernel doctrine. The **single source
 of that doctrine (the K-1..K-30 invariant catalogue) is the `agent-kernel-doctrine`
-repository.** Nankle conforms to it; it never redefines or forks it. Any change to
-the meaning of a `K-*` invariant originates there, and Nankle tracks it.
+repository.** Boltrig conforms to it; it never redefines or forks it. Any change to
+the meaning of a `K-*` invariant originates there, and Boltrig tracks it.
 
-Nankle exists as its own repository by the ruling of the VJS County Court,
+Boltrig exists as its own repository by the ruling of the VJS County Court,
 **[2026] VJS-CC NANKLE-CONSOLIDATION 001** ("conditioned standalone"). The court
 held that the single-source-of-law precedents govern unity of *law*, not the
 coexistence of conforming *code* implementations of one doctrine, and permitted
-Nankle to stand alone on binding conditions: it cites the doctrine as the single
+Boltrig to stand alone on binding conditions: it cites the doctrine as the single
 source (above), keys its invariants to the doctrine's Appendix A, keeps the
 binding-invariant gate at debt 0 in required CI, converges on (never competes
 with) the doctrine's unified capability primitive, stays severable (the kernel
 and models import nothing from sibling estate kernels), and forks no parallel
 codebase of its own (the difference between installations is config, never a
-forked Nankle, per P7). Breach of any condition routes Nankle to consolidation.
+forked Boltrig, per P7). Breach of any condition routes Boltrig to consolidation.
 See `docs/decisions/0002-nankle-consolidation-ruling.md`.
 
 ## Round Two: conversation, Pi, MCP
 
 Three additions sit on the same thin core (the dispatch sequence is unchanged):
 
-- **MCP server face** (`nankle/kernel/mcp.py`, `POST /v1/mcp`): granted verbs are
+- **MCP server face** (`boltrig/kernel/mcp.py`, `POST /v1/mcp`): granted verbs are
   advertised as MCP tools over a run-scoped token; every `tools/call` runs the
   full chokepoint. Any MCP-capable runtime drives the fleet with no bespoke glue.
-- **Pi sidecar runtime** (`nankle/fleet/pi_runtime.py` + `services/pi_sidecar/`):
+- **Pi sidecar runtime** (`boltrig/fleet/pi_runtime.py` + `services/pi_sidecar/`):
   a `pi` capability runs through a sandboxed sidecar whose only tools are the
   run's granted verbs over MCP (no native tools, no credentials, SEC-24/27); it
   degrades offline.
-- **Conversational layer** (`nankle/fleet/chat.py`, `POST /v1/chat` + a fourth
+- **Conversational layer** (`boltrig/fleet/chat.py`, `POST /v1/chat` + a fourth
   Chat panel): a turn routes through the fleet and streams reasoning/tool/
   sub-agent/inline-HITL events; conversations persist and are owner-scoped.
 
@@ -129,7 +129,7 @@ run in every environment; only `.env` and `manifest.yaml` differ (P7).
 ```
 
 Every external action funnels through one ordered path in
-`nankle/kernel/dispatch.py`, and every action writes exactly one append-only,
+`boltrig/kernel/dispatch.py`, and every action writes exactly one append-only,
 hash-chained audit row regardless of outcome. See `docs/ARCHITECTURE.md` for the
 full component map, the dispatch contract, and where each principle (P1-P10) is
 enforced.
@@ -138,7 +138,7 @@ enforced.
 
 Adding a new integration is data + libraries, never a core edit:
 
-- a new **adapter** (`nankle/adapters/builtin/<x>.py` or a generated/manual one)
+- a new **adapter** (`boltrig/adapters/builtin/<x>.py` or a generated/manual one)
   declares its verbs, schemas, and recommended rate limits via `describe()`;
 - new **skills** and **workflows** are YAML in `libraries/`;
 - the **manifest** wires them to the tenant (credentials as refs, the agent org
@@ -146,13 +146,13 @@ Adding a new integration is data + libraries, never a core edit:
 
 The kernel registers an adapter's verbs as rows (`KernelRegistry`), resolves them
 through bindings, and dispatches them through the same chokepoint. No file under
-`nankle/kernel/` changes to add Jira, Salesforce, or a new department.
+`boltrig/kernel/` changes to add Jira, Salesforce, or a new department.
 
 ## Implemented vs scaffolded (honesty section)
 
 **Fully implemented and tested** (the load-bearing core):
 
-- The dispatch chokepoint and its fixed order (`nankle/kernel/dispatch.py`):
+- The dispatch chokepoint and its fixed order (`boltrig/kernel/dispatch.py`):
   resolve, schema-validate, grant-check, HITL gate, rate-limit, idempotency,
   in-kernel credential resolution, execute, output-validate, audit.
 - Grant semantics (deny-dominant, fail-closed, wildcard rules), the tenant
@@ -161,12 +161,12 @@ through bindings, and dispatches them through the same chokepoint. No file under
   hard-stops, rate limiting, and graceful degradation. These are pinned by the
   binding-invariant catalogue (`docs/invariants.md`, `tests/invariants.yaml`)
   and the gate at `scripts/check_invariants.py`.
-- Both Store implementations (in-memory + **Postgres**, `nankle/store/postgres.py`),
+- Both Store implementations (in-memory + **Postgres**, `boltrig/store/postgres.py`),
   the registry, the fleet spawner (skill inheritance, cheapest-runtime selection,
   depth + budget), the manifest loader/applier, and the kernel HTTP surface.
-- **Real OIDC token verification** (`nankle/identity/auth.py`, RS256 against the
+- **Real OIDC token verification** (`boltrig/identity/auth.py`, RS256 against the
   issuer JWKS), with bootstrap selecting it when `OIDC_*` is set and failing
-  closed otherwise; the header resolver only with `NANKLE_DEV_AUTH=1`.
+  closed otherwise; the header resolver only with `BOLTRIG_DEV_AUTH=1`.
 - **Sensitive->local model routing guard** (`fleet/model_router.py`): sensitive
   data is blocked from non-local endpoints and the misroute is audited (SEC-12).
 - **Durable HITL pause** (NFR-REL-01): a blocking pause survives a restart and
@@ -183,7 +183,7 @@ service or credentials to exercise):
   pointing it at a real Azure AD / Okta / Google issuer is the remaining leg.
 - **Live MS Graph / Jira / CRM adapters.** The builtin adapters are real HTTP/SQL
   clients but need credentials and reachable backends (opt-in `make smoke` with
-  `NANKLE_LIVE_SMOKE=1`). The `memory-tickets` adapter is fully self-contained.
+  `BOLTRIG_LIVE_SMOKE=1`). The `memory-tickets` adapter is fully self-contained.
 - **On-box model (local inference).** The `local-model` compose profile runs a
   local OpenAI-compatible endpoint for sensitive data; it needs a model + (for
   vLLM) a GPU, or swap in Ollama for CPU. (The routing guard that *requires* it
@@ -195,7 +195,7 @@ service or credentials to exercise):
 ## Layout
 
 ```
-nankle/        kernel, models, store, adapters, fleet, skills, workflows,
+boltrig/        kernel, models, store, adapters, fleet, skills, workflows,
                work, identity, config, observability
 ui/            React console (Router, Kanban, Approvals)
 libraries/     skills + workflows + prompts (data, not code)

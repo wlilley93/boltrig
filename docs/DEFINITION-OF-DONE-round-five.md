@@ -16,7 +16,7 @@ memory is an adapter, routes, data, and an engine behind an interface.
 - [x] **done** Memory is reached only via the `memory.*` verbs through the
   chokepoint; the engine is unreachable directly; the `MemoryEngine` interface
   keeps the kernel/models engine-agnostic. Severability verified: the kernel core
-  imports nothing from `nankle.memory`. `nankle/memory/{engine,local,cognee,adapter}.py`,
+  imports nothing from `boltrig.memory`. `boltrig/memory/{engine,local,cognee,adapter}.py`,
   `tests/security/test_round_five.py::test_memory_cannot_escalate` (FR-MEM-01/02,
   SEC-41).
 
@@ -26,7 +26,7 @@ memory is an adapter, routes, data, and an engine behind an interface.
   durable-or-local pipeline, with provenance, owner-scope assigned at ingestion,
   content screening, and a per-run `memory_ingestions` record. Sensitive ingestion
   routes to a local endpoint (a misroute is blocked + audited).
-  `nankle/memory/cognify.py`, `nankle/memory/adapter.py`,
+  `boltrig/memory/cognify.py`, `boltrig/memory/adapter.py`,
   `tests/security/test_round_five.py::test_ingestion_screens_poison`,
   `::test_sensitive_memory_stays_local` (FR-ING-01..06, SEC-40/42/43).
 - [ ] **seam** Live durable cognify on a running Hatchet engine. The pipeline runs
@@ -38,7 +38,7 @@ memory is an adapter, routes, data, and an engine behind an interface.
 - [x] **done** Scoped recall returns only permitted-scope facts with provenance,
   supports similarity and multi-hop graph-completion modes, and is grant-checked +
   audited. The reference engine bounds traversal to permitted scopes; the kernel
-  re-filters regardless. `nankle/memory/{local,adapter}.py`,
+  re-filters regardless. `boltrig/memory/{local,adapter}.py`,
   `tests/security/test_round_five.py::test_kernel_is_the_isolation_boundary`,
   `::test_recall_is_audited_without_leaking_contents` (FR-RCL-01..04, SEC-40/45).
 
@@ -48,7 +48,7 @@ memory is an adapter, routes, data, and an engine behind an interface.
   granting authority; `memory.forget` performs complete, engine-confirmed, audited
   erasure of a node and its derived edges/facts, recorded in the `memory_erasures`
   ledger (and marks transcript handling for a source erasure).
-  `nankle/memory/{local,adapter}.py`,
+  `boltrig/memory/{local,adapter}.py`,
   `tests/security/test_round_five.py::test_complete_audited_erasure`
   (FR-LRN-01..04, SEC-44).
 
@@ -71,7 +71,7 @@ memory is an adapter, routes, data, and an engine behind an interface.
 
 - [x] **done** The engine is adopted behind the interface, not built: a local
   reference for dev/offline and a `CogneeEngine` seam that documents the adoption
-  point and the MEM-ENG-04 selection criteria. `nankle/memory/cognee.py`
+  point and the MEM-ENG-04 selection criteria. `boltrig/memory/cognee.py`
   (MEM-ENG-01/02/03).
 - [ ] **seam** The full Cognee adoption (wiring `cognee.add`/`cognify`/`search`/
   `prune`) and the validation against Mem0 / Zep-Graphiti / LightRAG is the
@@ -86,7 +86,7 @@ memory is an adapter, routes, data, and an engine behind an interface.
   same cost path as any verb (the reference engine is free; a real engine's
   extraction/embedding cost is attributed via the chokepoint).
 - [x] **done** Full offline suite green: `python -m pytest -q` -> 108 passed, 14
-  skipped. Lint clean: `ruff check nankle/ tests/ --select F,E9`.
+  skipped. Lint clean: `ruff check boltrig/ tests/ --select F,E9`.
 
 ## Operational
 

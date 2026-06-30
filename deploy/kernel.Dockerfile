@@ -1,4 +1,4 @@
-# Nankle kernel image (the dispatch chokepoint HTTP surface, P2).
+# Boltrig kernel image (the dispatch chokepoint HTTP surface, P2).
 #
 # Identical base across environments; config is injected via env + manifest
 # (P7, NFR-PORT-01). Honours an optional corporate egress proxy and a custom CA
@@ -42,16 +42,16 @@ ENV REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt \
 # Install the project from pyproject (kernel needs only the base dependencies).
 # Copy metadata + package first so the layer caches across source-only edits.
 COPY pyproject.toml /app/pyproject.toml
-COPY nankle/ /app/nankle/
+COPY boltrig/ /app/boltrig/
 RUN pip install .
 
 # Run as an unprivileged user (INF-01 defence in depth). The app reads /app + the
 # read-only mounts and writes nothing to disk (logs go to stdout); the compose
 # runs the container read-only with a tmpfs for /tmp.
-RUN useradd --create-home --uid 10001 nankle
-USER nankle
+RUN useradd --create-home --uid 10001 boltrig
+USER boltrig
 
 EXPOSE 8000
 
 # Compose overrides this; it is the sensible default for `docker run`.
-CMD ["uvicorn", "nankle.api.asgi:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "boltrig.api.asgi:app", "--host", "0.0.0.0", "--port", "8000"]

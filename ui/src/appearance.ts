@@ -31,7 +31,7 @@ export const DEFAULT_APPEARANCE: Appearance = {
   highContrast: false,
 };
 
-const STORAGE_KEY = "nankle.appearance";
+const STORAGE_KEY = "boltrig.appearance";
 
 function asBool(value: unknown, fallback: boolean): boolean {
   if (typeof value === "boolean") return value;

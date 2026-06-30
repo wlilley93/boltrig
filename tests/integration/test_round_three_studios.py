@@ -8,17 +8,17 @@ import tempfile
 import pytest
 from fastapi.testclient import TestClient
 
-from nankle.adapters.builtin.memory_tickets import build as build_tickets
-from nankle.config import load_manifest
-from nankle.config.admin import AdminConfig
-from nankle.fleet import build_spawner
-from nankle.fleet.workers import LocalDurableExecutor
-from nankle.kernel import Kernel
-from nankle.kernel.app import create_app
-from nankle.models import GrantSet, TenantPermissions
-from nankle.store import InMemoryStore
-from nankle.workflows import WorkflowLibrary
-from nankle.workflows.generator import generate_workflow
+from boltrig.adapters.builtin.memory_tickets import build as build_tickets
+from boltrig.config import load_manifest
+from boltrig.config.admin import AdminConfig
+from boltrig.fleet import build_spawner
+from boltrig.fleet.workers import LocalDurableExecutor
+from boltrig.kernel import Kernel
+from boltrig.kernel.app import create_app
+from boltrig.models import GrantSet, TenantPermissions
+from boltrig.store import InMemoryStore
+from boltrig.workflows import WorkflowLibrary
+from boltrig.workflows.generator import generate_workflow
 
 T = "acme"
 
@@ -32,9 +32,9 @@ async def _kernel() -> Kernel:
 
 
 def _hdr(role="org-admin", grants=None):
-    h = {"x-nankle-tenant": T, "x-nankle-subject": "u", "x-nankle-role": role}
+    h = {"x-boltrig-tenant": T, "x-boltrig-subject": "u", "x-boltrig-role": role}
     if grants is not None:
-        h["x-nankle-grants"] = grants
+        h["x-boltrig-grants"] = grants
     return h
 
 

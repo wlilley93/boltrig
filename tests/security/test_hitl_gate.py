@@ -2,7 +2,7 @@
 
 import pytest
 
-from nankle.models import PendingHuman
+from boltrig.models import PendingHuman
 from tests.conftest import TENANT, make_ctx
 
 

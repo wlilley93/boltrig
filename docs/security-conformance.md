@@ -52,7 +52,7 @@ SEC-58 edge/web hardening (headers/CORS/Host/body-cap), SEC-59 JWT alg
 allowlist + access-token-only + exp-required, SEC-60 dev-auth-refuses-prod, SEC-61
 shared egress/IMDS guard for all HTTP adapters, SEC-62 id normalization
 (anti-homoglyph grant bypass), SEC-63 webhook replay window. Plus the consolidated
-egress guard module (`nankle/adapters/egress.py`) and constant-time PAT compare.
+egress guard module (`boltrig/adapters/egress.py`) and constant-time PAT compare.
 
 ## The honest residue (NOT built here - seams)
 

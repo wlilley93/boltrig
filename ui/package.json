@@ -1,9 +1,9 @@
 {
-  "name": "nankle-ui",
+  "name": "boltrig-ui",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Web UI for the Nankle agent-orchestration kernel (Router, Kanban, Approvals).",
+  "description": "Web UI for the Boltrig agent-orchestration kernel (Router, Kanban, Approvals).",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",

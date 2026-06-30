@@ -2,9 +2,9 @@
 
 import pytest
 
-from nankle.models import GrantMissing
+from boltrig.models import GrantMissing
 from tests.conftest import TENANT, make_ctx
-from nankle.models import GrantSet, TenantPermissions
+from boltrig.models import GrantSet, TenantPermissions
 
 
 @pytest.mark.security

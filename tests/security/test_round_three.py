@@ -10,12 +10,12 @@ import asyncio
 import pytest
 from fastapi.testclient import TestClient
 
-from nankle.adapters.builtin.memory_tickets import build as build_tickets
-from nankle.fleet import build_spawner
-from nankle.fleet.eval import EvalRunner
-from nankle.kernel import Kernel
-from nankle.kernel.app import create_app
-from nankle.models import (
+from boltrig.adapters.builtin.memory_tickets import build as build_tickets
+from boltrig.fleet import build_spawner
+from boltrig.fleet.eval import EvalRunner
+from boltrig.kernel import Kernel
+from boltrig.kernel.app import create_app
+from boltrig.models import (
     ActionType,
     AgentCapability,
     AuditEvent,
@@ -28,7 +28,7 @@ from nankle.models import (
     WorkStatus,
     utcnow,
 )
-from nankle.store import InMemoryStore
+from boltrig.store import InMemoryStore
 
 T = "acme"
 
@@ -53,10 +53,10 @@ def _client(k: Kernel) -> TestClient:
 
 
 def _hdr(role, grants=None, departments=""):
-    h = {"x-nankle-tenant": T, "x-nankle-subject": "u", "x-nankle-role": role,
-         "x-nankle-departments": departments}
+    h = {"x-boltrig-tenant": T, "x-boltrig-subject": "u", "x-boltrig-role": role,
+         "x-boltrig-departments": departments}
     if grants is not None:
-        h["x-nankle-grants"] = grants
+        h["x-boltrig-grants"] = grants
     return h
 
 
@@ -114,7 +114,7 @@ def test_personal_agent_is_delegated_only():
     c = _client(k)
     # owner with no ticket.create grant configures + invokes a personal agent
     h = _hdr("employee", grants="")
-    h["x-nankle-subject"] = "alice"
+    h["x-boltrig-subject"] = "alice"
     assert c.post("/v1/me/agent", json={"runtime": "script-worker", "skills": ["risky"]},
                   headers=h).status_code == 200
     res = c.post("/v1/me/agent/invoke", json={"message": "do it"}, headers=h)
@@ -140,7 +140,7 @@ def test_memory_scope_isolation():
                                                   kind="fact", content="org wide"))
     asyncio.run(_seed())
     c = _client(k)
-    h = _hdr("employee"); h["x-nankle-subject"] = "alice"
+    h = _hdr("employee"); h["x-boltrig-subject"] = "alice"
     items = c.post("/v1/memory/query", json={}, headers=h).json()["items"]
     contents = {i["content"] for i in items}
     assert "alice secret" in contents and "org wide" in contents

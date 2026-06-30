@@ -1,6 +1,6 @@
-# The Nankle extension contract
+# The Boltrig extension contract
 
-How a consuming app (Bill&Ben first) PINS a vanilla Nankle version and extends it
+How a consuming app (Bill&Ben first) PINS a vanilla Boltrig version and extends it
 from the OUTSIDE with a per-project bundle - no core edits. Everything a project
 adds is DATA the engine loads; the engine provides the mechanism, the project
 provides the content.
@@ -14,7 +14,7 @@ A project's bundle is data the kernel loads at boot; none of it is a core edit:
 
 | Bundle piece | How the kernel loads it | Where it lives |
 | --- | --- | --- |
-| **Manifest** (`manifest.yaml`) | `$NANKLE_MANIFEST` / `/app/manifest.yaml` / `manifest.yaml`; `${ENV}` interpolated | the project repo, mounted at the kernel |
+| **Manifest** (`manifest.yaml`) | `$BOLTRIG_MANIFEST` / `/app/manifest.yaml` / `manifest.yaml`; `${ENV}` interpolated | the project repo, mounted at the kernel |
 | **Adapters** (new verbs) | a manifest `adapters:` entry with `module_ref` (an importable `pkg.mod:factory`) - imported + `build()` + registered | the project's importable package |
 | **Skills** (the shelf) | YAML under `libraries/skills/`, scanned at boot (`load_skills_dir`) | the project's `libraries/skills/` |
 | **Workflows** | YAML under `libraries/workflows/`, registered as `WorkflowDefinition` data | the project's `libraries/workflows/` |
@@ -119,11 +119,11 @@ Everything added here is a generic substrate primitive (no Bill&Ben specifics in
 core); credentials resolve inside the kernel only; everything registers as data;
 and each guarantee is pinned to an invariant at binding-debt 0 (FR-SKILL-01/02,
 SEC-57, FR-EXT-01/02). Per-project adapters / skills / workflows / MCP config live
-in the consuming app's bundle, never in Nankle.
+in the consuming app's bundle, never in Boltrig.
 
 ## 5. So Bill&Ben can
 
-Pin a Nankle version, then ship a bundle: its Trello/Postgres/Linear adapters
+Pin a Boltrig version, then ship a bundle: its Trello/Postgres/Linear adapters
 (`module_ref`), its companion + task skills (`libraries/skills/`, the shelf), and
 its external MCP servers (`mcp.consume`) - plugging into the engine without
 touching it. The companion is one eager skill; the task shelf is what a spawned

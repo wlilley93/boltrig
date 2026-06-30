@@ -1,4 +1,4 @@
-"""Opt-in live adapter reads (P2-1). Skipped unless NANKLE_LIVE_SMOKE=1 and the
+"""Opt-in live adapter reads (P2-1). Skipped unless BOLTRIG_LIVE_SMOKE=1 and the
 per-adapter credential env is present; never runs in the offline suite / CI.
 
 These exercise one real read verb per builtin adapter through the secret-ref path
@@ -9,20 +9,20 @@ import os
 
 import pytest
 
-from nankle.adapters.base import Credential
-from nankle.models import GrantSet, InvocationContext
+from boltrig.adapters.base import Credential
+from boltrig.models import GrantSet, InvocationContext
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("NANKLE_LIVE_SMOKE") not in {"1", "true", "yes"},
-    reason="set NANKLE_LIVE_SMOKE=1 (and per-adapter creds) to run live adapter reads",
+    os.environ.get("BOLTRIG_LIVE_SMOKE") not in {"1", "true", "yes"},
+    reason="set BOLTRIG_LIVE_SMOKE=1 (and per-adapter creds) to run live adapter reads",
 )
 
 _TARGETS = [
-    ("nankle.adapters.builtin.jira", "ticket.search",
+    ("boltrig.adapters.builtin.jira", "ticket.search",
      {"jql": "order by created DESC", "max_results": 1}, "JIRA_OAUTH", "oauth"),
-    ("nankle.adapters.builtin.ms_graph", "directory.get_user",
+    ("boltrig.adapters.builtin.ms_graph", "directory.get_user",
      {"id": "me"}, "GRAPH_APP", "oauth"),
-    ("nankle.adapters.builtin.crm_sql", "contact.search",
+    ("boltrig.adapters.builtin.crm_sql", "contact.search",
      {"query": ""}, "CRM_DB_RO", "basic"),
 ]
 

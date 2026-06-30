@@ -2,7 +2,7 @@
 
 import pytest
 
-from nankle.models import BindingNotFound, GrantSet, TenantPermissions
+from boltrig.models import BindingNotFound, GrantSet, TenantPermissions
 from tests.conftest import make_ctx
 
 

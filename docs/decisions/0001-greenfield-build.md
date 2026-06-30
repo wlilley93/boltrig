@@ -1,11 +1,11 @@
-# 0001 - Nankle is a greenfield build from the SRS
+# 0001 - Boltrig is a greenfield build from the SRS
 
 - Status: accepted
 - Date: 2026-06-28
 
 ## Context
 
-Nankle implements the "Hermes Fleet" SRS: a self-hostable agent-orchestration
+Boltrig implements the "Hermes Fleet" SRS: a self-hostable agent-orchestration
 platform built around a thin kernel and a permanent fleet that spawns ephemeral
 workers. The same doctrine (one dispatch chokepoint, stable nouns and verbs,
 everything-as-data, credentials resolved only inside the kernel) already appears
@@ -16,7 +16,7 @@ documents, tenants-as-system-of-record) entangled with the doctrine.
 
 ## Decision
 
-Build Nankle greenfield, directly from the SRS, as a clean-room reference
+Build Boltrig greenfield, directly from the SRS, as a clean-room reference
 implementation of the chokepoint + noun/verb doctrine, rather than forking a
 sibling.
 
@@ -37,8 +37,8 @@ sibling.
 - Some external legs are seams (live Hatchet, live OIDC, live MS Graph / Jira /
   CRM, on-box inference) that need their services or credentials to exercise;
   this is recorded honestly in `docs/DEFINITION-OF-DONE.md`.
-- Relationship to the estate: Nankle does not depend on Hermes, Phoenix, or
+- Relationship to the estate: Boltrig does not depend on Hermes, Phoenix, or
   Opbox. It is the consolidation reference for the shared doctrine - the place
   to read (and test) the chokepoint + noun/verb + grant model in isolation,
   free of any one vertical. Where a sibling needs to converge on the doctrine,
-  Nankle is the yardstick, not a runtime dependency.
+  Boltrig is the yardstick, not a runtime dependency.

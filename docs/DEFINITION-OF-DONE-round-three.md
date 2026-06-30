@@ -17,8 +17,8 @@ Round Three adds routes, services, data, and UI only.
 - [x] **done** Skills, nouns, verbs, bindings, adapters and workflows are authored
   through `/v1` routes that persist library/manifest data and record a
   `ConfigRevision`; nothing is code-generated into the running image.
-  `nankle/kernel/platform_routes.py`, `nankle/config/admin.py`,
-  `nankle/models/platform.py`.
+  `boltrig/kernel/platform_routes.py`, `boltrig/config/admin.py`,
+  `boltrig/models/platform.py`.
 - [x] **done** Admin config edits round-trip: an org-setting change versions,
   rolls back, and re-exports to a loadable manifest (C1).
   `tests/integration/test_round_three_studios.py::test_admin_config_round_trips`
@@ -39,7 +39,7 @@ Round Three adds routes, services, data, and UI only.
 - [x] **done** A non-author role is denied (403); an author role may write and the
   write is audited with the actor.
   `tests/security/test_round_three.py::test_authoring_requires_role_and_is_audited`
-  (SEC-32). `nankle/identity/rbac.py` (`AUTHOR_ROLES`, `can_author`).
+  (SEC-32). `boltrig/identity/rbac.py` (`AUTHOR_ROLES`, `can_author`).
 
 ## No authoring path escalates authority (C4)
 
@@ -47,11 +47,11 @@ Round Three adds routes, services, data, and UI only.
   scoped author cannot grant the child a verb they lack; an org-admin can - the
   contrast proves the cap is real.
   `tests/security/test_round_three.py::test_test_spawn_cannot_escalate` (SEC-29).
-  `nankle/fleet/spawn.py` (`grant_ceiling`, `effective_grants`).
+  `boltrig/fleet/spawn.py` (`grant_ceiling`, `effective_grants`).
 - [x] **done** The evaluation harness spawns through the chokepoint under the
   initiator's grants and never grants the target a forbidden verb.
   `tests/security/test_round_three.py::test_eval_runs_without_escalation`
-  (FR-EVAL-02). `nankle/fleet/eval.py`.
+  (FR-EVAL-02). `boltrig/fleet/eval.py`.
 - [x] **done** A personal agent acts only with the owner's delegated authority,
   is capped to the owner's grants, and is audited on-behalf-of the owner.
   `tests/security/test_round_three.py::test_personal_agent_is_delegated_only`
@@ -70,13 +70,13 @@ Round Three adds routes, services, data, and UI only.
   sensitive (on-box) embedding endpoint when enabled. A user's query returns
   their own and org-scoped items but never another user's.
   `tests/security/test_round_three.py::test_memory_scope_isolation` (SEC-31).
-  `nankle/identity/rbac.py` (`memory_owner_scopes`).
+  `boltrig/identity/rbac.py` (`memory_owner_scopes`).
 
 ## Observability and cost
 
 - [x] **done** Cost rollups, an audit search (filterable by actor/verb), an audit
   export, and a runs list are exposed behind the scope filter (FR-OBS-01/02).
-  `nankle/kernel/platform_routes.py`.
+  `boltrig/kernel/platform_routes.py`.
 
 ## Operational maturity
 
@@ -112,7 +112,7 @@ Round Three adds routes, services, data, and UI only.
   SEC-32, SEC-33, FR-OBS-02, FR-EVAL-02, FR-ADM-02, FR-WFS-04, FR-ADS-02. No
   `K-*` ids were invented.
 - [x] **done** Full offline suite green: `python -m pytest -q` -> 96 passed, 14
-  skipped. Lint clean: `ruff check nankle/ tests/ --select F,E9`.
+  skipped. Lint clean: `ruff check boltrig/ tests/ --select F,E9`.
 
 ## Summary
 

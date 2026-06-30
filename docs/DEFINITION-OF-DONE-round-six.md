@@ -1,7 +1,7 @@
 # Definition of Done - Round Six (Pi runtime)
 
 Spec: [`requirements-pi-runtime.md`](./requirements-pi-runtime.md). Scope: the
-standalone Nankle repo, the **pi runtime lane only**. The `hermes` and
+standalone Boltrig repo, the **pi runtime lane only**. The `hermes` and
 `claude-api` lanes are single-shot, non-agentic, and untouched. The kernel needs
 no rework; all three gaps were in the fleet layer.
 
@@ -16,17 +16,17 @@ documented, never enforced** in the manifests.
 
 ### 3.1 Session continuity (gap is foundational - fixed first)
 
-- `nankle/fleet/continuity.py` (new): renders the already-persisted, owner-scoped
+- `boltrig/fleet/continuity.py` (new): renders the already-persisted, owner-scoped
   conversation transcript into the task string before `spawn()`. The render is a
   plain per-message concatenation, so it is **deterministic** and **append-only**
   - turn N's render is a prefix of turn N+1's (the prefix stability the gateway
   cache relies on). Pure functions, imports only models (severable, SEC-28).
-- `nankle/fleet/chat.py`: `build_turn_executor` composes the transcript from the
+- `boltrig/fleet/chat.py`: `build_turn_executor` composes the transcript from the
   tenant- and conversation-scoped `list_messages` before the spawn. Because
   `handle_turn` persists the current user message first, the scoped read already
   returns the full ordered transcript ending in the current turn.
 - Native, Store-backed, in-conventions (P1/P7), no new runtime - the spec's
-  recommended path over Rivet Actors. On by default; `NANKLE_CONTINUITY=0`
+  recommended path over Rivet Actors. On by default; `BOLTRIG_CONTINUITY=0`
   restores the exact prior single-message behaviour.
 - **Decision (recorded):** building the spec's recommended option (native first)
   is implementation of a provided spec, not a first-impression fork, so no court
@@ -35,14 +35,14 @@ documented, never enforced** in the manifests.
 
 ### 3.2 Model gateway (sequenced after 3.1)
 
-- `nankle/fleet/model_gateway.py` (new): a read-side seam only (no authorization
+- `boltrig/fleet/model_gateway.py` (new): a read-side seam only (no authorization
   role, P1). A TTL-bounded `conversation_id -> model` binding pins a conversation
   to one model across turns - keyed on the **conversation**, because `run_id` is
   minted fresh every turn and is the wrong cache key.
-- `nankle/fleet/spawn.py`: the spawner consults the binding at endpoint
+- `boltrig/fleet/spawn.py`: the spawner consults the binding at endpoint
   resolution and points `base_url` at the configured gateway. **Sensitive data is
   never re-routed** - it reaches its local endpoint directly (residency, SEC-43).
-  Inert when `NANKLE_MODEL_GATEWAY_URL` is unset (behaviour identical to before).
+  Inert when `BOLTRIG_MODEL_GATEWAY_URL` is unset (behaviour identical to before).
 - The gateway product itself (Bifrost or equivalent) is an external deployment;
   this is the seam + binding it attaches to.
 
@@ -75,7 +75,7 @@ Four new, all bound (`tests/security/test_round_six.py`):
 - `pytest`: **113 passed, 14 skipped** (+5 over Round Five).
 - `check_invariants.py`: **declared=68, marked=68, bound_tests=87,
   binding_debt=0, PASS**.
-- `ruff check nankle scripts`: clean.
+- `ruff check boltrig scripts`: clean.
 
 ## Honest seams (environmental, not code)
 

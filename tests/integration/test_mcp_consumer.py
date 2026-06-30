@@ -1,17 +1,17 @@
 """Consume an external MCP server as an adapter (US-MCP-03, SEC-22).
 
-Closes the loop: a Nankle kernel consumes another Nankle kernel's MCP face. The
+Closes the loop: a Boltrig kernel consumes another Boltrig kernel's MCP face. The
 consumed tools register as verbs; calls run the (external) chokepoint; the server
 is inert until reviewed.
 """
 
 import pytest
 
-from nankle.adapters.builtin.memory_tickets import build as build_tickets
-from nankle.adapters.mcp_consumer import McpConsumerAdapter
-from nankle.kernel import Kernel
-from nankle.models import GrantSet, InvocationContext, TenantPermissions
-from nankle.store import InMemoryStore
+from boltrig.adapters.builtin.memory_tickets import build as build_tickets
+from boltrig.adapters.mcp_consumer import McpConsumerAdapter
+from boltrig.kernel import Kernel
+from boltrig.models import GrantSet, InvocationContext, TenantPermissions
+from boltrig.store import InMemoryStore
 
 T = "acme"
 

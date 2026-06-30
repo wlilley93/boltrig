@@ -1,9 +1,9 @@
-# Nankle control plane spec (Round Seven)
+# Boltrig control plane spec (Round Seven)
 
 Live administration of models, agent profiles, and workflows - and what closes
 the gap to a durable, portable agent box.
 
-- **Status:** Draft, grounded against wlilley93/Nankle (main) as provided.
+- **Status:** Draft, grounded against wlilley93/Boltrig (main) as provided.
 - **Scope:** the administration / control-plane layer - amending model-gateway
   config, permanent agent profiles, and Hatchet workflows without a redeploy,
   plus the kernel-governance requirement any amendment carries.

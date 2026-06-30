@@ -3,11 +3,11 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from nankle.fleet.chat import ChatService
-from nankle.kernel import Kernel
-from nankle.kernel.app import create_app
-from nankle.kernel.events import EventRelay
-from nankle.store import InMemoryStore
+from boltrig.fleet.chat import ChatService
+from boltrig.kernel import Kernel
+from boltrig.kernel.app import create_app
+from boltrig.kernel.events import EventRelay
+from boltrig.store import InMemoryStore
 
 T = "acme"
 
@@ -70,7 +70,7 @@ def test_chat_http_streams_sse():
         [{"type": "text_delta", "delta": "hi there"}]
     ))
     client = TestClient(create_app(Kernel(store), chat_service=chat))
-    hdr = {"x-nankle-tenant": T, "x-nankle-subject": "alice", "x-nankle-role": "engineer"}
+    hdr = {"x-boltrig-tenant": T, "x-boltrig-subject": "alice", "x-boltrig-role": "engineer"}
     r = client.post("/v1/chat", json={"message": "hello"}, headers=hdr)
     assert r.status_code == 200
     assert "message_start" in r.text and "hi there" in r.text and "message_end" in r.text

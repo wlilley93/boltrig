@@ -66,7 +66,7 @@ HITL-gated verb).
 
 - `pytest`: **124 passed, 14 skipped** (+5 over Round Seven).
 - `check_invariants.py`: **declared=74, bound_tests=98, binding_debt=0, PASS**.
-- `ruff check nankle scripts`: clean. UI `npm run build`: green (with React Flow).
+- `ruff check boltrig scripts`: clean. UI `npm run build`: green (with React Flow).
 
 ## Honest seams / deferred (per the spec's own open items)
 

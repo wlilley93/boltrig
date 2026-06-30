@@ -1,6 +1,6 @@
 # Definition of Done - the front-end experience backlog (items 1-6)
 
-Spec: `requirements-frontend-experience.md`. The "bring Nankle to life" arc. All
+Spec: `requirements-frontend-experience.md`. The "bring Boltrig to life" arc. All
 six backlog items are built, behind the green gate, with the kernel never learning
 the UI exists. This is the honest implemented-vs-seam ledger for the whole arc.
 

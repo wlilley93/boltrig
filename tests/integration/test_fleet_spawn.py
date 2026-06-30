@@ -2,9 +2,9 @@
 
 import pytest
 
-from nankle.fleet import build_spawner
-from nankle.kernel import Kernel
-from nankle.models import (
+from boltrig.fleet import build_spawner
+from boltrig.kernel import Kernel
+from boltrig.models import (
     AgentCapability,
     ContextRequirementsUnmet,
     DepthExceeded,
@@ -13,7 +13,7 @@ from nankle.models import (
     Skill,
     TenantPermissions,
 )
-from nankle.store import InMemoryStore
+from boltrig.store import InMemoryStore
 
 T = "acme"
 

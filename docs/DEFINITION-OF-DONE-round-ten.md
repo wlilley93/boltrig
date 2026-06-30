@@ -44,7 +44,7 @@ Three new, all bound (`tests/security/test_round_ten.py`):
 
 - `pytest`: **131 passed, 14 skipped** (+6).
 - `check_invariants.py`: **declared=78, bound_tests=105, binding_debt=0, PASS**.
-- `ruff check nankle scripts`: clean.
+- `ruff check boltrig scripts`: clean.
 
 ## Design note: one run, one stream (kernel stays clean)
 
