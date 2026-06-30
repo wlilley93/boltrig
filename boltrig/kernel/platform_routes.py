@@ -26,7 +26,6 @@ from boltrig.models import (
     EvalCase,
     GrantMissing,
     BoltrigError,
-    NotificationPref,
     PersonalAgent,
     Skill,
     TargetType,
@@ -546,22 +545,11 @@ def register_platform_routes(app, *, principal_dep, get_kernel) -> None:
         return JSONResponse(result)
 
     # === Notifications (NOT) ===
-    @app.get("/v1/notifications/prefs")
-    async def get_prefs(k=K, p=P) -> dict:
-        prefs = await k.store.list_notification_prefs(p.tenant_id)
-        mine = [pr for pr in prefs if pr.scope_kind == "user" and pr.scope_ref == p.subject]
-        return {"prefs": [{"id": pr.id, "event_type": pr.event_type, "channel": pr.channel,
-                          "target": pr.target, "enabled": pr.enabled} for pr in mine]}
-
-    @app.put("/v1/notifications/prefs")
-    async def put_prefs(body: dict, k=K, p=P) -> JSONResponse:
-        pref = NotificationPref(id=body.get("id") or uuid.uuid4().hex, tenant_id=p.tenant_id,
-                                scope_kind=body.get("scope_kind", "user"),
-                                scope_ref=body.get("scope_ref", p.subject),
-                                event_type=body["event_type"], channel=body["channel"],
-                                target=body.get("target"), enabled=body.get("enabled", True))
-        await k.store.upsert_notification_pref(pref)
-        return JSONResponse({"status": "ok", "id": pref.id})
+    # Notification prefs live solely at /v1/me/notifications (access_routes): that
+    # variant locks the write to the caller's own user scope and audits it. The
+    # former /v1/notifications/prefs duplicate took scope_kind/scope_ref from the
+    # body (a caller could write prefs for a scope they don't own) and skipped the
+    # audit, so it was removed - it was also unused by the UI.
 
     # === Memory (MEM, optional) - scope-filtered + residency (SEC-31) ===
     @app.post("/v1/memory/query")

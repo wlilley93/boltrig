@@ -63,13 +63,11 @@ import type {
   MemoryRememberResponse,
   MintTokenRequest,
   MintTokenResponse,
-  NotificationPrefsResponse,
   PatchUserRequest,
   PatchUserResponse,
   PutConfigRequest,
   PutConfigResponse,
   PutMeNotificationRequest,
-  PutNotificationPrefRequest,
   PutSettingsRequest,
   PutSettingsResponse,
   RegisterMcpRequest,
@@ -507,16 +505,9 @@ export const api = {
     });
   },
 
-  notificationPrefs(): Promise<NotificationPrefsResponse> {
-    return request<NotificationPrefsResponse>("/v1/notifications/prefs");
-  },
-
-  putNotificationPref(body: PutNotificationPrefRequest): Promise<StatusAck> {
-    return request<StatusAck>("/v1/notifications/prefs", {
-      method: "PUT",
-      body,
-    });
-  },
+  // Notification prefs are served only at /v1/me/notifications (meNotifications /
+  // putMeNotification below) - the scope-locked, audited endpoint. The former
+  // /v1/notifications/prefs pair was a weaker unaudited duplicate and was removed.
 
   memoryQuery(body: MemoryQueryRequest): Promise<MemoryQueryResponse> {
     return request<MemoryQueryResponse>("/v1/memory/query", {

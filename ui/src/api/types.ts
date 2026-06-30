@@ -662,28 +662,6 @@ export interface InvokePersonalAgentRequest {
   context?: Record<string, unknown>;
 }
 
-export interface NotificationPrefItem {
-  id: string;
-  event_type: string;
-  channel: string;
-  target?: string | null;
-  enabled: boolean;
-}
-
-export interface NotificationPrefsResponse {
-  prefs: NotificationPrefItem[];
-}
-
-export interface PutNotificationPrefRequest {
-  id?: string;
-  scope_kind?: string;
-  scope_ref?: string;
-  event_type: string;
-  channel: string;
-  target?: string | null;
-  enabled?: boolean;
-}
-
 export interface MemoryQueryRequest {
   kind?: string;
   limit?: number;
