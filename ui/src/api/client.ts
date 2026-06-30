@@ -91,6 +91,7 @@ import type {
   UpsertWorkflowRequest,
   WorkResponse,
   WorkStatus,
+  WorkflowDetail,
   WorkflowRunDescriptor,
   WorkflowRunRecord,
   WorkflowRunsResponse,
@@ -318,6 +319,10 @@ export const api = {
 
   workflows(): Promise<WorkflowsResponse> {
     return request<WorkflowsResponse>("/v1/workflows");
+  },
+
+  getWorkflow(wfId: string): Promise<WorkflowDetail> {
+    return request<WorkflowDetail>(`/v1/workflows/${encodeURIComponent(wfId)}`);
   },
 
   upsertWorkflow(body: UpsertWorkflowRequest): Promise<StatusAck> {

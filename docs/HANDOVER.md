@@ -361,6 +361,32 @@ the legacy direct-write studio routes onto the `control.*` verbs is a documented
 follow-on. New bound invariants (debt still 0): FR-CTL-01/02, SEC-50/51. Full
 DoD: `docs/DEFINITION-OF-DONE-round-seven.md`.
 
+## 7.6 Round Eight (node system: internet access as a governed verb)
+
+Resolves "uncaged": an agent may reach the internet but never bypass the kernel
+(`docs/requirements-node-system.md`). Grounding confirmed `NetworkConfig` was
+modeled but enforced nowhere.
+
+- **web.fetch** (`adapters/builtin/web_fetch.py`): read-only GET, `consequence=
+  "high"` (untrusted-input/injection surface, so the HITL gate holds it - the next
+  verb's own gate still fires regardless). SSRF guard refuses private/loopback/
+  link-local/metadata targets independent of the domain list, plus air-gap +
+  allow/block domains from `NetworkConfig`; redirects not followed; the policy is a
+  pure function refusing before any network call (SEC-52). Governed by the
+  chokepoint - grant + HITL like any verb; registering it does not grant it
+  (SEC-53). `NetworkPolicyViolation` (403) added; registered in bootstrap.
+- **UI**: a React Flow (`@xyflow/react`) workflow canvas added to the Workflow
+  Studio - nodes=steps, edges=parents, node kind derived from the verb binding,
+  serialising to the exact steps shape so the Round Seven interpreter runs it;
+  authz stays server-side. **Dependency decision (recorded):** adopt React Flow
+  (graph-shaped, demonstrated-need); REJECT Vercel AI Elements/AI SDK (the
+  existing ChatPanel + SSE already does chat - consolidation-over-fragmentation).
+- Deferred (spec open items): interactive browsing, sub-workflow recursion limit,
+  live canvas execution state, the registry tree editor.
+
+New bound invariants (debt still 0): SEC-52/53. DoD:
+`docs/DEFINITION-OF-DONE-round-eight.md`.
+
 ---
 
 ## 8. Quality / governance gate

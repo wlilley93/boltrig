@@ -380,6 +380,14 @@ export interface WorkflowsResponse {
   workflows: WorkflowSummary[];
 }
 
+export interface WorkflowDetail {
+  id: string;
+  version: string;
+  source: string;
+  definition: Record<string, unknown>;
+  intent_tags: string[];
+}
+
 export interface UpsertWorkflowRequest {
   id: string;
   version?: string;

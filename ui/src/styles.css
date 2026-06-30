@@ -1546,3 +1546,89 @@ summary:focus-visible,
     max-width: 100%;
   }
 }
+
+/* ==========================================================================
+   Workflow Studio: Canvas view (React Flow). The graph fills a fixed-height
+   pane on the right; the controls stack on the left. Node colour is keyed to
+   the derived kind (agent / service / kernel-run) using the existing palette.
+   ========================================================================== */
+
+.wf-studio {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  gap: var(--gap);
+  align-items: start;
+}
+
+.wf-canvas {
+  height: 560px;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+/* palette / list scroll so the controls column stays compact */
+.wf-palette {
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+/* node card */
+.wf-node {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--unknown);
+  border-radius: 6px;
+  padding: 8px 10px;
+  min-width: 150px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.wf-node--sel {
+  border-color: var(--accent);
+}
+
+.wf-node--agent {
+  border-left-color: var(--high);
+}
+.wf-node--service {
+  border-left-color: var(--accent);
+}
+.wf-node--kernel-run {
+  border-left-color: var(--ok);
+}
+.wf-node--trigger {
+  border-left-color: var(--warn);
+  border-style: dashed;
+}
+
+.wf-node__label {
+  font-weight: 600;
+}
+
+.wf-node__action {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wf-node__kind {
+  align-self: flex-start;
+}
+
+/* keep the React Flow handles visible against the dark node */
+.wf-node .react-flow__handle {
+  background: var(--accent);
+  border-color: var(--bg-1);
+}
+
+@media (max-width: 900px) {
+  .wf-studio {
+    grid-template-columns: 1fr;
+  }
+}

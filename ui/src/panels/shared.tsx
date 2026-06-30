@@ -50,6 +50,37 @@ export function CodeBlock({ value }: { value: unknown }) {
   return <pre className="codeblock">{prettyJson(value)}</pre>;
 }
 
+// Map an overall workflow-run status to an existing badge colour modifier. Used
+// by both the form-based Execute view and the Canvas Run view.
+export function runBadgeClass(status: string): string {
+  switch (status) {
+    case "completed":
+      return "badge--ok";
+    case "failed":
+      return "badge--down";
+    case "paused":
+      return "badge--degraded";
+    default:
+      return "badge--unknown";
+  }
+}
+
+// Map a per-step run status to an existing badge colour modifier.
+export function stepBadgeClass(status: string): string {
+  switch (status) {
+    case "ok":
+      return "badge--ok";
+    case "failed":
+    case "error":
+      return "badge--down";
+    case "paused":
+      return "badge--degraded";
+    default:
+      // skipped (and anything unrecognised) reads as neutral.
+      return "badge--unknown";
+  }
+}
+
 // Renders a grant list as monospace chips (the no-escalation evidence shown by
 // test-spawn, eval and personal-agent invoke).
 export function GrantList({ grants }: { grants?: string[] }) {

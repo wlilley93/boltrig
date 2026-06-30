@@ -243,6 +243,17 @@ def register_platform_routes(app, *, principal_dep, get_kernel) -> None:
         return {"workflows": [{"id": w.id, "version": w.version, "source": w.source.value,
                               "intent_tags": w.intent_tags} for w in wfs]}
 
+    @app.get("/v1/workflows/{wf_id}")
+    async def get_workflow(wf_id: str, k=K, p=P) -> JSONResponse:
+        # The full stored definition (incl. steps) so the canvas can load + edit an
+        # existing workflow. Tenant-scoped read; 404 if unknown.
+        for w in await k.store.list_workflows(p.tenant_id):
+            if w.id == wf_id:
+                return JSONResponse({"id": w.id, "version": w.version,
+                                     "source": w.source.value, "definition": w.definition,
+                                     "intent_tags": w.intent_tags})
+        return JSONResponse({"error": "unknown_workflow"}, status_code=404)
+
     @app.post("/v1/workflows")
     async def upsert_workflow(body: dict, request: Request, k=K, p=P) -> JSONResponse:
         from nankle.models import WorkflowDefinition, WorkflowSource

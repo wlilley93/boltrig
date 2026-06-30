@@ -31,7 +31,10 @@ import {
   errText,
   listToCsv,
   parseJson,
+  runBadgeClass,
+  stepBadgeClass,
 } from "./shared";
+import { WorkflowCanvas } from "./WorkflowCanvas";
 
 const AUTHOR_ROLES: ReadonlySet<string> = new Set([
   "org-admin",
@@ -787,37 +790,11 @@ function AdapterStudio() {
 
 // --- Workflow Studio --------------------------------------------------------
 
-// Map an overall run status to an existing badge colour modifier.
-function runBadgeClass(status: string): string {
-  switch (status) {
-    case "completed":
-      return "badge--ok";
-    case "failed":
-      return "badge--down";
-    case "paused":
-      return "badge--degraded";
-    default:
-      return "badge--unknown";
-  }
-}
+// View toggle inside the Workflow Studio: the existing form flow or the new
+// React Flow canvas. Both round-trip the same definition.steps shape.
+type WorkflowView = "form" | "canvas";
 
-// Map a per-step status to an existing badge colour modifier.
-function stepBadgeClass(status: string): string {
-  switch (status) {
-    case "ok":
-      return "badge--ok";
-    case "failed":
-    case "error":
-      return "badge--down";
-    case "paused":
-      return "badge--degraded";
-    default:
-      // skipped (and anything unrecognised) reads as neutral.
-      return "badge--unknown";
-  }
-}
-
-function WorkflowStudio() {
+function WorkflowForm() {
   const workflows = useFetch(() => api.workflows(), []);
 
   const [id, setId] = useState("");
@@ -1300,6 +1277,33 @@ function WorkflowStudio() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// The Workflow Studio wraps the form flow and the canvas behind a view toggle.
+// Both speak the identical definition.steps contract, so an author can build a
+// workflow visually or by hand and Save either way.
+function WorkflowStudio() {
+  const [view, setView] = useState<WorkflowView>("form");
+
+  return (
+    <div className="stack">
+      <div className="subtabs" role="tablist" aria-label="Workflow view">
+        <button
+          className={`subtab ${view === "form" ? "subtab--active" : ""}`}
+          onClick={() => setView("form")}
+        >
+          Form
+        </button>
+        <button
+          className={`subtab ${view === "canvas" ? "subtab--active" : ""}`}
+          onClick={() => setView("canvas")}
+        >
+          Canvas
+        </button>
+      </div>
+      {view === "form" ? <WorkflowForm /> : <WorkflowCanvas />}
     </div>
   );
 }
