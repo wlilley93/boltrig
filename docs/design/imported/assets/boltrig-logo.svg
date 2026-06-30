@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 40" fill="none" role="img" aria-label="Boltrig">
+  <g>
+    <path d="M7.5 5.5H4.5V34.5H7.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="square"></path>
+    <path d="M30.5 5.5H33.5V34.5H30.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="square"></path>
+    <path d="M21.5 7L13.5 20.8H19.5L17.5 33L25.5 19.2H19.5L21.5 7Z" fill="currentColor"></path>
+  </g>
+  <text x="46" y="27" font-family="'JetBrains Mono','IBM Plex Mono',ui-monospace,monospace" font-size="20" font-weight="600" letter-spacing="0.5" fill="currentColor">boltrig</text>
+</svg>

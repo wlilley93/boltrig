@@ -1,0 +1,38 @@
+/* ==========================================================================
+   Boltrig - Typography tokens
+
+   Two families. The monospace is BRAND-LOAD-BEARING: every verb id, noun, run
+   id, grant token and audit row renders in --font-mono. "Mono = a real system
+   identifier" is a recurring signal across the whole UI.
+   ========================================================================== */
+
+:root {
+  --font-ui:   "IBM Plex Sans", "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Type scale (rem; 1rem = 16px). Compact, instrument-like. */
+  --fs-xs:  0.75rem;   /* 12 - micro labels, badge text        */
+  --fs-sm:  0.8125rem; /* 13 - table cells, meta, mono ids      */
+  --fs-md:  0.9375rem; /* 15 - body, controls                   */
+  --fs-lg:  1.125rem;  /* 18 - card titles, section heads       */
+  --fs-xl:  1.5rem;    /* 24 - panel headings                   */
+  --fs-2xl: 2rem;      /* 32 - display                          */
+
+  --fw-regular: 400;
+  --fw-medium:  500;
+  --fw-semibold: 600;
+
+  --lh-tight: 1.25;
+  --lh-body:  1.5;
+
+  --tracking-label: 0.06em; /* uppercase micro-labels */
+  --tracking-tight: 0.01em;
+
+  /* user font-scale hook (appearance setting multiplies the base) */
+  --font-scale: 1;
+}
+
+/* Compact density tightens line-height for developer / audit surfaces. */
+:root[data-density="compact"] {
+  --lh-body: 1.4;
+}

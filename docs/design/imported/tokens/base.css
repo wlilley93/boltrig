@@ -1,0 +1,75 @@
+/* ==========================================================================
+   Boltrig - Base layer
+   Element resets + the brand's body defaults. Component classes live in their
+   own files; this is just the document floor every surface inherits.
+   ========================================================================== */
+
+* { box-sizing: border-box; }
+
+html, body { height: 100%; margin: 0; }
+
+body {
+  background: var(--color-bg-base);
+  color: var(--color-text-primary);
+  font-family: var(--font-ui);
+  font-size: calc(var(--fs-md) * var(--font-scale, 1));
+  line-height: var(--lh-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* Ambient halo - applied when .kit-* wraps the page instead */
+  background-image: radial-gradient(ellipse 120% 55% at 50% -5%, rgba(61,211,240,0.05) 0%, transparent 65%);
+  background-attachment: fixed;
+}
+
+code, kbd, samp, pre, .mono {
+  font-family: var(--font-mono);
+  font-feature-settings: "liga" 0;
+}
+
+a { color: var(--color-accent-2); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+::selection { background: rgba(61, 211, 240, 0.28); }
+
+/* the dot-grid the canvas surfaces sit on */
+.bolt-grid {
+  background-color: var(--color-bg-base);
+  background-image: radial-gradient(var(--color-border-subtle) 1px, transparent 1px);
+  background-size: 22px 22px;
+  background-position: -1px -1px;
+}
+
+/* visible keyboard focus on every interactive element */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+summary:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* text-colour helpers (shared vocabulary) */
+.muted { color: var(--color-text-muted); }
+.secondary { color: var(--color-text-secondary); }
+.is-ok   { color: var(--color-ok); }
+.is-warn { color: var(--color-warn); }
+.is-down { color: var(--color-down); }
+
+/* honour reduced motion (OS preference + the app's own .reduce-motion flag) */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+:root.reduce-motion *,
+:root.reduce-motion *::before,
+:root.reduce-motion *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+}

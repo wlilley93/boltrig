@@ -1,0 +1,14 @@
+/* ==========================================================================
+   Boltrig design system - global entry point.
+   This is the ONE file consumers link. It is a manifest of @imports only:
+   tokens (colours, type, spacing, motion), webfonts, and the base element layer.
+   Component styling is colocated with each React component and references the
+   semantic tokens declared here.
+   ========================================================================== */
+
+@import "./tokens/fonts.css";
+@import "./tokens/colors.css";
+@import "./tokens/typography.css";
+@import "./tokens/spacing.css";
+@import "./tokens/base.css";
+@import "./tokens/components.css";

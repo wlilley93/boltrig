@@ -1,0 +1,191 @@
+/* ==========================================================================
+   Boltrig - Colour tokens
+   A charged graphite instrument: near-black surfaces, an electric-cyan current
+   for life + primary action, a warm amber-orange reserved for consequence.
+
+   Two layers:
+     1. PRIMITIVES  (--c-*)        raw values - never referenced by components
+     2. SEMANTIC    (--color-*)    intent names - the ONLY thing components use
+
+   Dark is the primary theme (the :root defaults). Light + high-contrast follow.
+   The app drives data-theme / data-contrast / data-density on :root.
+   ========================================================================== */
+
+:root {
+  color-scheme: dark light;
+
+  /* --- 1. Primitives ----------------------------------------------------- */
+
+  /* graphite (surfaces -> text) - cinematic deep-blue-black */
+  --c-ink-900: #04060D;
+  --c-ink-800: #080D18;
+  --c-ink-700: #0C1422;
+  --c-ink-600: #111C30;
+  --c-ink-500: #1E2E46;
+  --c-ink-400: #2E4060;
+  --c-ink-300: #4E637E;
+  --c-ink-200: #7E95B0;
+  --c-ink-100: #B8C8DA;
+  --c-ink-050: #E4EDF6;
+  --c-white:   #F2F7FC;
+
+  /* electric cyan - the current */
+  --c-cyan-600: #1FB6D6;
+  --c-cyan-500: #3DD3F0;
+  --c-cyan-400: #6FE3F7;
+
+  /* indigo - secondary / agent-flavoured */
+  --c-indigo-600: #5E6CF0;
+  --c-indigo-500: #7C8BFF;
+
+  /* signals */
+  --c-green-500:  #3FB984;
+  --c-amber-500:  #E8B339;
+  --c-red-500:    #F0654A;
+  --c-orange-500: #FF7A45; /* consequence-high - "a human is needed" */
+  --c-slate-500:  #5A6477;
+
+  /* --- 2. Semantic (dark theme defaults) --------------------------------- */
+
+  /* surfaces */
+  --color-bg-base:    var(--c-ink-900);              /* app background */
+  --color-bg-raised:  rgba(8, 14, 26, 0.82);         /* glass panels + sidebar */
+  --color-bg-card:    rgba(12, 20, 36, 0.88);        /* glass cards + nodes */
+  --color-bg-inset:   rgba(4, 6, 13, 0.9);           /* code/io wells, inputs */
+  --color-bg-overlay: rgba(2, 4, 10, 0.72);          /* drawer scrim */
+
+  /* lines + text */
+  --color-border-subtle: var(--c-ink-500);
+  --color-border-strong: var(--c-ink-400);
+  --color-text-primary:   var(--c-ink-050);
+  --color-text-secondary: var(--c-ink-200);
+  --color-text-muted:     var(--c-ink-300);
+  --color-text-oncolor:   var(--c-ink-900); /* text on accent fills  */
+
+  /* accents */
+  --color-accent:       var(--c-cyan-500); /* current: live, primary, focus */
+  --color-accent-hover: var(--c-cyan-400);
+  --color-accent-press: var(--c-cyan-600);
+  --color-accent-2:     var(--c-indigo-500); /* links, agent, service binding */
+
+  /* status (health / run outcomes) */
+  --color-ok:      var(--c-green-500);
+  --color-warn:    var(--c-amber-500);
+  --color-down:    var(--c-red-500);
+  --color-unknown: var(--c-slate-500);
+
+  /* consequence (governance) */
+  --color-consequence-low:  var(--c-slate-500);
+  --color-consequence-high: var(--c-orange-500); /* destructive/outbound; needs a human */
+
+  /* run / step state */
+  --color-run-pending: var(--c-ink-400);
+  --color-run-running: var(--c-cyan-500);
+  --color-run-ok:      var(--c-green-500);
+  --color-run-failed:  var(--c-red-500);
+  --color-run-skipped: var(--c-amber-500);
+  --color-run-paused:  var(--c-orange-500); /* paused-for-approval */
+
+  /* node-kind accents (the hero) */
+  --color-node-kernel:  var(--color-border-strong); /* steel - default governed */
+  --color-node-service: var(--c-indigo-500);        /* indigo - leaves the system */
+  --color-node-agent:   var(--c-cyan-500);          /* cyan - streams reasoning   */
+  --color-node-trigger: var(--c-amber-500);         /* dashed amber - entry point */
+}
+
+/* === Light theme ========================================================= */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --color-bg-base:    #F5F6F8;
+  --color-bg-raised:  #FFFFFF;
+  --color-bg-card:    #FFFFFF;
+  --color-bg-inset:   #EEF1F6;
+  --color-bg-overlay: rgba(20, 24, 33, 0.45);
+
+  --color-border-subtle: #D4D8E0;
+  --color-border-strong: #B7BECC;
+  --color-text-primary:   #141823;
+  --color-text-secondary: #4A5366;
+  --color-text-muted:     #6B7488;
+  --color-text-oncolor:   #FFFFFF;
+
+  --color-accent:       #0E8FAF; /* darker cyan for AA on light */
+  --color-accent-hover: #0B7E9B;
+  --color-accent-press: #096A84;
+  --color-accent-2:     #4F5BD5;
+
+  --color-ok:      #1E8E63;
+  --color-warn:    #B07A12;
+  --color-down:    #C8462E;
+  --color-unknown: #6B7488;
+
+  --color-consequence-low:  #6B7488;
+  --color-consequence-high: #C75A23;
+
+  --color-run-pending: #B7BECC;
+  --color-run-running: #0E8FAF;
+  --color-run-ok:      #1E8E63;
+  --color-run-failed:  #C8462E;
+  --color-run-skipped: #B07A12;
+  --color-run-paused:  #C75A23;
+
+  --color-node-kernel:  #B7BECC;
+  --color-node-service: #4F5BD5;
+  --color-node-agent:   #0E8FAF;
+  --color-node-trigger: #B07A12;
+}
+
+@media (prefers-color-scheme: light) {
+  :root[data-theme="system"] {
+    color-scheme: light;
+    --color-bg-base:    #F5F6F8;
+    --color-bg-raised:  #FFFFFF;
+    --color-bg-card:    #FFFFFF;
+    --color-bg-inset:   #EEF1F6;
+    --color-bg-overlay: rgba(20, 24, 33, 0.45);
+    --color-border-subtle: #D4D8E0;
+    --color-border-strong: #B7BECC;
+    --color-text-primary:   #141823;
+    --color-text-secondary: #4A5366;
+    --color-text-muted:     #6B7488;
+    --color-text-oncolor:   #FFFFFF;
+    --color-accent:       #0E8FAF;
+    --color-accent-hover: #0B7E9B;
+    --color-accent-press: #096A84;
+    --color-accent-2:     #4F5BD5;
+    --color-ok: #1E8E63; --color-warn: #B07A12; --color-down: #C8462E; --color-unknown: #6B7488;
+    --color-consequence-low: #6B7488; --color-consequence-high: #C75A23;
+    --color-run-pending: #B7BECC; --color-run-running: #0E8FAF; --color-run-ok: #1E8E63;
+    --color-run-failed: #C8462E; --color-run-skipped: #B07A12; --color-run-paused: #C75A23;
+    --color-node-kernel: #B7BECC; --color-node-service: #4F5BD5; --color-node-agent: #0E8FAF; --color-node-trigger: #B07A12;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+/* === High contrast - strengthen borders + secondary text for AA+ ========= */
+:root[data-contrast="high"] {
+  --color-border-subtle: #8B93A3;
+  --color-border-strong: #AAB2C2;
+  --color-text-secondary: #C9D0DC;
+  --color-text-muted:     #AEB6C4;
+}
+
+:root[data-theme="light"][data-contrast="high"] {
+  --color-border-subtle: #3A4150;
+  --color-border-strong: #2A313C;
+  --color-text-secondary: #2A313C;
+  --color-text-muted:     #3A4150;
+}
+
+@media (prefers-color-scheme: light) {
+  :root[data-theme="system"][data-contrast="high"] {
+    --color-border-subtle: #3A4150;
+    --color-border-strong: #2A313C;
+    --color-text-secondary: #2A313C;
+    --color-text-muted:     #3A4150;
+  }
+}
