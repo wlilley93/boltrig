@@ -165,12 +165,17 @@ CREATE TABLE IF NOT EXISTS hitl_requests (
     question     TEXT NOT NULL,
     options      JSONB,
     assignee     TEXT,
-    status       TEXT NOT NULL,                         -- pending | answered | timed_out | escalated
+    status       TEXT NOT NULL,                         -- pending | answered | consumed | timed_out | escalated
     timeout_at   TIMESTAMPTZ,
+    verb         TEXT,                                  -- SEC-14: the verb this approval gates
+    requested_by TEXT,                                  -- SEC-14: who raised it (anti-self-approval)
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (tenant_id, id)
 );
+-- Idempotent column adds for DBs created before SEC-14 verb-binding landed.
+ALTER TABLE hitl_requests ADD COLUMN IF NOT EXISTS verb TEXT;
+ALTER TABLE hitl_requests ADD COLUMN IF NOT EXISTS requested_by TEXT;
 
 CREATE TABLE IF NOT EXISTS hitl_responses (
     id           TEXT NOT NULL,

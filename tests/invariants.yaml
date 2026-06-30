@@ -231,10 +231,13 @@ invariants:
     tests:
       - tests/security/test_budget_and_pii.py::test_pii_redaction
   SEC-14:
-    description: High-consequence / blocking verbs pause for human approval and cannot be bypassed.
+    description: High-consequence / blocking verbs pause for human approval and cannot be bypassed - the approval is verb-bound, single-use (no replay or cross-verb reuse), and a human decision the requester cannot self-approve.
     tests:
       - tests/security/test_hitl_gate.py::test_blocking_verb_pauses_for_approval
       - tests/security/test_hitl_gate.py::test_resumes_after_approval
+      - tests/security/test_hitl_gate.py::test_approval_is_single_use
+      - tests/security/test_hitl_gate.py::test_approval_is_verb_bound_and_single_use
+      - tests/security/test_hitl_gate.py::test_respond_rejects_agent_and_self_approval
   SEC-16:
     description: Every action (allowed or denied) is audited, hash-chained, append-only.
     tests:

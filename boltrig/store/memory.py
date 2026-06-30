@@ -204,6 +204,15 @@ class InMemoryStore:
                 return resp
         return None
 
+    async def consume_hitl(self, tenant_id, request_id):
+        # atomic ANSWERED -> CONSUMED (single-use). No await between the check and
+        # the write, so it is atomic under cooperative scheduling.
+        req = self._hitl.get((tenant_id, request_id))
+        if req is None or req.status != HITLStatus.ANSWERED:
+            return False
+        req.status = HITLStatus.CONSUMED
+        return True
+
     # --- audit ---
     async def audit_head(self, tenant_id):
         chain = self._audit.get(tenant_id, [])

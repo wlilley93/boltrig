@@ -392,6 +392,19 @@ def create_app(
         k: Kernel = Depends(_get_kernel),
         p: Principal = Depends(principal),
     ) -> dict:
+        from boltrig.models import HITLType
+
+        req = await k.hitl.get(p.tenant_id, request_id)
+        if req is None:
+            raise HTTPException(status_code=404, detail="unknown request")
+        # SEC-14: an approval is a human decision and never self-approvable. An
+        # agent (non-human tier) cannot answer one, and the requester cannot
+        # approve their own request.
+        if req.type == HITLType.APPROVAL:
+            if p.actor_tier != "human":
+                raise HTTPException(status_code=403, detail="only a human may approve")
+            if req.requested_by and req.requested_by == p.subject:
+                raise HTTPException(status_code=403, detail="cannot approve your own request")
         resp = await k.hitl.answer(
             p.tenant_id, request_id, body.decision, p.subject, body.notes
         )

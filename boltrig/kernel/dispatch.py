@@ -196,8 +196,11 @@ class Dispatcher:
         # 4. consequence / HITL gate (SEC-14) - cannot be bypassed by an agent
         gated = verb_def.consequence == Consequence.HIGH or verb in self._blocking_verbs
         if gated:
+            # SEC-14: the approval must have been raised FOR THIS VERB and is spent
+            # single-use, so it cannot be reused across verbs or replayed.
             approved = bool(
-                approval_id and await self._hitl.is_approved(tenant, approval_id)
+                approval_id
+                and await self._hitl.consume_if_approved(tenant, approval_id, verb)
             )
             if not approved:
                 req = await self._hitl.create(
@@ -207,6 +210,8 @@ class Dispatcher:
                     question=f"Approve {verb} ?",
                     context=f"{context.actor} requests {verb}",
                     options=["approve", "reject"],
+                    verb=verb,
+                    requested_by=context.actor,
                 )
                 raise PendingHuman(req.id)
 

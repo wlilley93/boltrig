@@ -28,6 +28,7 @@ class Urgency(str, Enum):
 class HITLStatus(str, Enum):
     PENDING = "pending"
     ANSWERED = "answered"
+    CONSUMED = "consumed"  # an approving answer that has been spent by the gate (single-use)
     TIMED_OUT = "timed_out"
     ESCALATED = "escalated"
 
@@ -46,6 +47,11 @@ class HITLRequest:
     options: list[str] = field(default_factory=list)  # for approvals
     assignee: str | None = None  # user or group
     timeout_at: datetime | None = None
+    # SEC-14: an approval is bound to the verb it gates and to who asked, so an
+    # approval for one verb cannot authorise another, and the requester cannot
+    # approve their own request.
+    verb: str | None = None
+    requested_by: UserId | None = None
 
 
 @dataclass

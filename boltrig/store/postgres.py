@@ -430,13 +430,24 @@ class PostgresStore:
     async def create_hitl_request(self, r: HITLRequest):
         await self._pool.execute(
             """INSERT INTO hitl_requests (id, tenant_id, run_id, work_item_id, type, urgency,
-                                          context, question, options, assignee, status, timeout_at)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+                                          context, question, options, assignee, status, timeout_at,
+                                          verb, requested_by)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
                ON CONFLICT (tenant_id, id) DO UPDATE SET
                  status=EXCLUDED.status, updated_at=now()""",
             r.id, r.tenant_id, r.run_id, r.work_item_id, r.type.value, r.urgency.value,
             r.context, r.question, r.options, r.assignee, r.status.value, r.timeout_at,
+            r.verb, r.requested_by,
         )
+
+    async def consume_hitl(self, tenant_id, request_id):
+        # atomic ANSWERED -> CONSUMED; RETURNING tells us if we won the CAS.
+        row = await self._pool.fetchrow(
+            """UPDATE hitl_requests SET status='consumed', updated_at=now()
+               WHERE tenant_id=$1 AND id=$2 AND status='answered' RETURNING id""",
+            tenant_id, request_id,
+        )
+        return row is not None
 
     async def get_hitl_request(self, tenant_id, req_id):
         row = await self._pool.fetchrow(
@@ -1116,6 +1127,7 @@ def _hitl_req(r):
         urgency=Urgency(r["urgency"]), context=r["context"], question=r["question"],
         status=HITLStatus(r["status"]), work_item_id=r["work_item_id"],
         options=list(r["options"] or []), assignee=r["assignee"], timeout_at=r["timeout_at"],
+        verb=r["verb"], requested_by=r["requested_by"],
     )
 
 

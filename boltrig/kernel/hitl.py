@@ -43,6 +43,8 @@ class HITLManager:
         assignee: str | None = None,
         timeout_seconds: int | None = None,
         work_item_id: str | None = None,
+        verb: str | None = None,
+        requested_by: str | None = None,
     ) -> HITLRequest:
         req = HITLRequest(
             id=uuid.uuid4().hex,
@@ -55,6 +57,8 @@ class HITLManager:
             options=options or [],
             assignee=assignee,
             work_item_id=work_item_id,
+            verb=verb,
+            requested_by=requested_by,
             timeout_at=(
                 utcnow() + timedelta(seconds=timeout_seconds) if timeout_seconds else None
             ),
@@ -84,10 +88,29 @@ class HITLManager:
         return resp
 
     async def is_approved(self, tenant_id: str, request_id: str) -> bool:
-        """True iff the request was answered with an approving decision."""
+        """True iff the request was answered with an approving decision (read-only;
+        does NOT consume). The dispatch gate uses ``consume_if_approved`` instead so
+        an approval is single-use and verb-bound (SEC-14)."""
         req = await self._store.get_hitl_request(tenant_id, request_id)
         if req is None or req.status != HITLStatus.ANSWERED:
             return False
-        # The decision lives on the response; look it up via the store.
         resp = await self._store.get_hitl_response(tenant_id, request_id)
         return bool(resp and resp.decision.strip().lower() in _APPROVING)
+
+    async def consume_if_approved(self, tenant_id: str, request_id: str, verb: str) -> bool:
+        """The gate's authorisation check (SEC-14). Returns True only if the request
+        was answered with an approving decision, was raised FOR THIS VERB, and is
+        not already spent - and atomically marks it CONSUMED so the same approval
+        cannot authorise a second execution (single-use, anti-replay). A
+        verb mismatch fails closed, so an approval for one verb never authorises
+        another."""
+        req = await self._store.get_hitl_request(tenant_id, request_id)
+        if req is None or req.status != HITLStatus.ANSWERED:
+            return False
+        if req.verb is not None and req.verb != verb:
+            return False  # approval was raised for a different verb
+        resp = await self._store.get_hitl_response(tenant_id, request_id)
+        if not (resp and resp.decision.strip().lower() in _APPROVING):
+            return False
+        # atomic ANSWERED -> CONSUMED; only the winner of the CAS proceeds.
+        return await self._store.consume_hitl(tenant_id, request_id)
