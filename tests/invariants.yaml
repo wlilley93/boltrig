@@ -279,6 +279,13 @@ invariants:
     description: The kernel is the memory isolation boundary at ingestion AND retrieval - a hostile cross-scope edge (incl multi-hop) cannot leak an out-of-scope fact.
     tests:
       - tests/security/test_round_five.py::test_kernel_is_the_isolation_boundary
+      - tests/unit/test_vector_memory.py::test_vector_engine_recall_is_scope_bounded_multihop
+      - tests/integration/test_pgvector_engine.py::test_pgvector_recall_is_scope_bounded_multihop
+  MEM-VEC-01:
+    description: Native vector recall ranks by cosine similarity - a fact sharing the query's terms outranks one that does not, an unrelated (cosine ~0) fact is not returned, and the in-process and pgvector engines agree.
+    tests:
+      - tests/unit/test_vector_memory.py::test_vector_recall_ranks_by_cosine
+      - tests/integration/test_pgvector_engine.py::test_pgvector_recall_ranks_by_cosine
   SEC-41:
     description: Recalled memory is data, never authority - it cannot grant a caller a verb they lack.
     tests:
@@ -295,6 +302,7 @@ invariants:
     description: Erasure is complete (the node and its derived edges/facts), engine-confirmed, ledgered and audited.
     tests:
       - tests/security/test_round_five.py::test_complete_audited_erasure
+      - tests/integration/test_pgvector_engine.py::test_pgvector_forget_is_complete
   SEC-45:
     description: Recall is least-privilege and audited - query and count are recorded, fact contents never are.
     tests:

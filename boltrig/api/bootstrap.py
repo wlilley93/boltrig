@@ -81,14 +81,28 @@ async def _register_memory(kernel: Kernel, tenant_id: str, memory_cfg) -> None:
     MemoryAdapter, which is the kernel-side isolation boundary (SEC-40)."""
     if not memory_cfg or not memory_cfg.get("enabled"):
         return
-    from boltrig.memory import LocalMemoryEngine
     from boltrig.memory.adapter import build_memory_adapter
 
-    if memory_cfg.get("engine") == "cognee":
+    engine_kind = memory_cfg.get("engine", "local")
+    if engine_kind == "cognee":
+        # The flag-on graph upgrade (adopted, not built) - see boltrig/memory/cognee.py.
         from boltrig.memory.cognee import CogneeEngine
 
         engine = CogneeEngine(memory_cfg)
+    elif engine_kind == "pgvector":
+        # Native vector recall persisted to this Postgres + pgvector (MEM-ENG-02).
+        from boltrig.memory.pgvector import PgVectorMemoryEngine
+
+        dsn = memory_cfg.get("database_url") or os.environ.get("DATABASE_URL", "")
+        engine = PgVectorMemoryEngine(dsn)
+    elif engine_kind == "vector":
+        # In-process native vector recall (offline reference; same semantics).
+        from boltrig.memory.vector import VectorMemoryEngine
+
+        engine = VectorMemoryEngine()
     else:
+        from boltrig.memory import LocalMemoryEngine
+
         engine = LocalMemoryEngine()
     adapter = build_memory_adapter(engine, kernel.store, audit=kernel.audit, config=memory_cfg)
     await kernel.register_adapter(tenant_id, adapter)

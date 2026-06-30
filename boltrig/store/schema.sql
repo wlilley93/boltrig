@@ -5,6 +5,12 @@
 --   SET app.tenant_id = '<tenant>'
 -- per transaction; a null GUC yields zero rows (fail-closed).
 
+-- pgvector: the native vector Memory Engine (PgVectorMemoryEngine) keeps its
+-- graph/vector store in THIS Postgres (consolidation-faithful: no separate vector
+-- DB). The extension must exist before any `vector` column below. Provisioned by
+-- the pgvector/pgvector image; a no-op when already present.
+CREATE EXTENSION IF NOT EXISTS vector;
+
 -- ---------------------------------------------------------------------------
 -- 6.1 Registry
 -- ---------------------------------------------------------------------------
@@ -540,4 +546,36 @@ CREATE TABLE IF NOT EXISTS memory_erasures (
     created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
     completed_at       TIMESTAMPTZ,
     PRIMARY KEY (tenant_id, id)
+);
+
+-- ---------------------------------------------------------------------------
+-- Native vector Memory Engine store (PgVectorMemoryEngine, MEM-ENG-02).
+-- The engine OWNS these tables (the kernel governs scope/provenance via
+-- memory_facts above). owner_scope is the isolation boundary every recall query
+-- filters on in SQL; graph traversal loads only edges with BOTH endpoints in
+-- scope, so a cross-scope edge is structurally unfollowable (SEC-40). The
+-- embedding dimension (256) matches HashingEmbedder's DEFAULT_DIM; a deployment
+-- changing it changes both here and in boltrig/memory/embeddings.py.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS memory_vectors (
+    tenant_id   TEXT NOT NULL,
+    id          TEXT NOT NULL,
+    owner_scope TEXT NOT NULL,            -- user:<id> | department:<name> | org
+    kind        TEXT NOT NULL DEFAULT 'entity',
+    content     TEXT NOT NULL DEFAULT '',
+    data_class  TEXT NOT NULL DEFAULT 'standard',
+    source_kind TEXT NOT NULL DEFAULT 'verb_result',
+    source_ref  TEXT,
+    embedding   vector(256),
+    weight      DOUBLE PRECISION NOT NULL DEFAULT 0,  -- improve() reweighting; never scope/authority
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, id)
+);
+CREATE INDEX IF NOT EXISTS memory_vectors_scope_idx ON memory_vectors (tenant_id, owner_scope, kind);
+
+CREATE TABLE IF NOT EXISTS memory_vector_edges (
+    tenant_id TEXT NOT NULL,
+    src       TEXT NOT NULL,
+    dst       TEXT NOT NULL,
+    PRIMARY KEY (tenant_id, src, dst)
 );

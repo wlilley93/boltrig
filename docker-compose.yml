@@ -34,7 +34,10 @@ x-app-hardening: &app-hardening
 
 services:
   postgres:
-    image: postgres:16
+    # pgvector/pgvector:pg16 = stock Postgres 16 + the `vector` extension, so the
+    # native vector Memory Engine keeps its store in this one Postgres (no separate
+    # vector DB). Drop-in for postgres:16; same data dir, same env.
+    image: pgvector/pgvector:pg16
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-boltrig}
