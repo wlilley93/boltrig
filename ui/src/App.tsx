@@ -19,12 +19,17 @@ import { MemoryPanel } from "./panels/MemoryPanel";
 import { RouterPanel } from "./panels/RouterPanel";
 import { SettingsPanel } from "./panels/SettingsPanel";
 import { RunView } from "./panels/RunView";
+import { CommandPalette } from "./panels/CommandPalette";
 
 // Studio pulls in the @xyflow/react canvas; lazy-load it so that heavy chunk
 // only downloads when the user opens the authoring hub (code-split, Fix 5).
 const StudioPanel = lazy(() =>
   import("./panels/StudioPanel").then((m) => ({ default: m.StudioPanel })),
 );
+
+const SIDEBAR_MIN = 200;
+const SIDEBAR_MAX = 420;
+const SIDEBAR_DEFAULT = 236;
 
 type Tab =
   | "home"
@@ -387,18 +392,46 @@ export function App() {
       return false;
     }
   });
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    try {
+      const w = parseInt(localStorage.getItem("boltrig:sidebar-width") || "", 10);
+      return !Number.isNaN(w) && w >= SIDEBAR_MIN && w <= SIDEBAR_MAX ? w : SIDEBAR_DEFAULT;
+    } catch {
+      return SIDEBAR_DEFAULT;
+    }
+  });
+  const [resizing, setResizing] = useState(false);
 
   useEffect(() => {
     document.documentElement.style.setProperty(
       "--app-sidebar-width",
-      sidebarCollapsed ? "64px" : "236px",
+      sidebarCollapsed ? "64px" : `${sidebarWidth}px`,
     );
     try {
       localStorage.setItem("boltrig:sidebar-collapsed", sidebarCollapsed ? "true" : "false");
+      localStorage.setItem("boltrig:sidebar-width", String(sidebarWidth));
     } catch {
       /* storage may be unavailable; the in-memory state still drives the layout */
     }
-  }, [sidebarCollapsed]);
+  }, [sidebarCollapsed, sidebarWidth]);
+
+  // drag-to-resize the sidebar from its right edge (no-op while collapsed).
+  function startResize(e: React.PointerEvent) {
+    if (sidebarCollapsed) return;
+    e.preventDefault();
+    setResizing(true);
+    const move = (ev: PointerEvent) => {
+      const w = Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, ev.clientX));
+      setSidebarWidth(w);
+    };
+    const up = () => {
+      setResizing(false);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
 
   // Apply the persisted appearance (theme / density / contrast / font scale /
   // reduced motion) to the document root on first load, before any panel paints,
@@ -470,6 +503,16 @@ export function App() {
             onToggle={() => setIdentityOpen((v) => !v)}
           />
         </div>
+
+        {!sidebarCollapsed && (
+          <div
+            className={`side__resizer ${resizing ? "side__resizer--on" : ""}`}
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize sidebar"
+            onPointerDown={startResize}
+          />
+        )}
       </aside>
 
       <div className="app__body">
@@ -495,6 +538,9 @@ export function App() {
 
       {/* The global Run drawer: any surface can raise it via openRun(runId). */}
       <RunView />
+
+      {/* Cmd/Ctrl-K jump-to-anything palette. */}
+      <CommandPalette />
     </div>
   );
 }

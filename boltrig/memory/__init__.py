@@ -26,7 +26,14 @@ dependency. Heavy backends (pgvector's asyncpg pool, cognee) are lazy-imported, 
 
 from __future__ import annotations
 
-from .embeddings import DEFAULT_DIM, Embedder, HashingEmbedder, cosine
+from .embeddings import (
+    DEFAULT_DIM,
+    Embedder,
+    HashingEmbedder,
+    ModelEmbedder,
+    build_embedder,
+    cosine,
+)
 from .engine import EngineFact, MemoryEngine, RecallHit
 from .local import LocalMemoryEngine
 from .vector import VectorMemoryEngine
@@ -39,6 +46,8 @@ __all__ = [
     "VectorMemoryEngine",
     "Embedder",
     "HashingEmbedder",
+    "ModelEmbedder",
+    "build_embedder",
     "cosine",
     "DEFAULT_DIM",
 ]

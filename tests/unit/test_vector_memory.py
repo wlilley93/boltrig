@@ -17,9 +17,29 @@ from pathlib import Path
 
 import pytest
 
-from boltrig.memory import DEFAULT_DIM, EngineFact, HashingEmbedder, VectorMemoryEngine, cosine
+from boltrig.memory import (
+    DEFAULT_DIM,
+    EngineFact,
+    HashingEmbedder,
+    ModelEmbedder,
+    VectorMemoryEngine,
+    build_embedder,
+    cosine,
+)
 
 T = "acme"
+
+
+def test_build_embedder_selects_offline_by_default_and_model_when_configured():
+    # no config -> the deterministic offline embedder (no network)
+    assert isinstance(build_embedder(None), HashingEmbedder)
+    assert isinstance(build_embedder({}), HashingEmbedder)
+    # a configured embedding section -> the model-backed seam (constructed, not called)
+    e = build_embedder(
+        {"embedding": {"base_url": "http://local-embed/v1", "model": "e5-small", "dim": 384}}
+    )
+    assert isinstance(e, ModelEmbedder)
+    assert e.dim == 384 and e.base_url == "http://local-embed/v1" and e.model == "e5-small"
 
 
 def test_embedding_dim_matches_schema():

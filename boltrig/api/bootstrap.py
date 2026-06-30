@@ -91,15 +91,19 @@ async def _register_memory(kernel: Kernel, tenant_id: str, memory_cfg) -> None:
         engine = CogneeEngine(memory_cfg)
     elif engine_kind == "pgvector":
         # Native vector recall persisted to this Postgres + pgvector (MEM-ENG-02).
+        # The embedder is model-backed when the manifest configures one (route
+        # sensitive embedding to a local endpoint, SEC-43); offline default hashes.
+        from boltrig.memory import build_embedder
         from boltrig.memory.pgvector import PgVectorMemoryEngine
 
         dsn = memory_cfg.get("database_url") or os.environ.get("DATABASE_URL", "")
-        engine = PgVectorMemoryEngine(dsn)
+        engine = PgVectorMemoryEngine(dsn, build_embedder(memory_cfg))
     elif engine_kind == "vector":
         # In-process native vector recall (offline reference; same semantics).
+        from boltrig.memory import build_embedder
         from boltrig.memory.vector import VectorMemoryEngine
 
-        engine = VectorMemoryEngine()
+        engine = VectorMemoryEngine(build_embedder(memory_cfg))
     else:
         from boltrig.memory import LocalMemoryEngine
 

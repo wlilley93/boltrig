@@ -89,6 +89,64 @@ class HashingEmbedder:
         return [self.embed(t) for t in texts]
 
 
+class ModelEmbedder:
+    """A model-backed embedder (OpenAI-compatible ``/embeddings``).
+
+    For SENSITIVE data, point ``base_url`` at a LOCAL endpoint so vectors are
+    computed in-deployment (SEC-43). Lazy + offline-safe: construction imports
+    nothing and makes no call; only ``embed()`` reaches the network. The result
+    is L2-normalised so it composes with the same cosine path as HashingEmbedder.
+    This is the production seam; the offline suite uses HashingEmbedder, so no
+    test depends on a live model.
+    """
+
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        model: str,
+        api_key: str | None = None,
+        dim: int = DEFAULT_DIM,
+        timeout: float = 30.0,
+    ) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.model = model
+        self.dim = dim
+        self._api_key = api_key
+        self._timeout = timeout
+
+    def embed(self, text: str) -> list[float]:
+        import json
+        import urllib.request
+
+        payload = json.dumps({"model": self.model, "input": text}).encode("utf-8")
+        headers = {"content-type": "application/json"}
+        if self._api_key:
+            headers["authorization"] = f"Bearer {self._api_key}"
+        req = urllib.request.Request(self.base_url + "/embeddings", data=payload, headers=headers)
+        with urllib.request.urlopen(req, timeout=self._timeout) as resp:  # noqa: S310 - configured base_url
+            data = json.loads(resp.read())
+        vec = [float(x) for x in data["data"][0]["embedding"]]
+        norm = math.sqrt(sum(x * x for x in vec))
+        return [x / norm for x in vec] if norm else vec
+
+
+def build_embedder(config: dict | None = None) -> Embedder:
+    """Pick the embedder from a manifest ``memory`` config block. With an
+    ``embedding`` section naming a model + base_url, use the model-backed embedder;
+    otherwise the deterministic offline ``HashingEmbedder``. One place so the engine
+    and bootstrap agree."""
+    cfg = (config or {}).get("embedding") or {}
+    base_url = cfg.get("base_url")
+    model = cfg.get("model")
+    dim = int(cfg.get("dim", DEFAULT_DIM))
+    if base_url and model:
+        return ModelEmbedder(
+            base_url=base_url, model=model, api_key=cfg.get("api_key"), dim=dim
+        )
+    return HashingEmbedder(dim)
+
+
 def cosine(a: list[float], b: list[float]) -> float:
     """Cosine similarity. For unit-norm inputs this is the dot product; we divide
     by norms anyway so callers may pass un-normalised vectors safely."""

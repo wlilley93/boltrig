@@ -2666,6 +2666,116 @@ select:focus {
   cursor: help;
 }
 
+/* --- Command palette (Cmd/Ctrl-K) ----------------------------------------- */
+.cmdk-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--color-bg-overlay);
+  backdrop-filter: blur(4px);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 12vh;
+  z-index: 60;
+}
+.cmdk {
+  width: min(600px, 92vw);
+  background: rgba(8, 14, 26, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: var(--elev-2);
+  backdrop-filter: blur(24px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.cmdk__input {
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0;
+  background: transparent;
+  padding: 16px 18px;
+  font-size: var(--fs-lg);
+  color: var(--color-text-primary);
+}
+.cmdk__input:focus {
+  outline: none;
+  border-bottom-color: rgba(61, 211, 240, 0.5);
+}
+.cmdk__list {
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+.cmdk__empty {
+  padding: 16px;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+.cmdk__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  font: inherit;
+  text-align: left;
+  padding: 9px 12px;
+  cursor: pointer;
+  border-radius: 0;
+}
+.cmdk__item--sel,
+.cmdk__item:hover {
+  background: rgba(61, 211, 240, 0.08);
+  color: var(--color-text-primary);
+}
+.cmdk__label {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+}
+.cmdk__hint {
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+}
+.cmdk__foot {
+  padding: 8px 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+  display: flex;
+  gap: 10px;
+}
+.cmdk__foot kbd {
+  font-family: var(--font-mono);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  padding: 0 4px;
+}
+
+/* --- Sidebar drag-to-resize handle ---------------------------------------- */
+.side__resizer {
+  position: absolute;
+  top: 0;
+  right: -2px;
+  bottom: 0;
+  width: 5px;
+  cursor: col-resize;
+  z-index: 12;
+}
+.side__resizer:hover,
+.side__resizer--on {
+  background: linear-gradient(
+    to right,
+    transparent,
+    rgba(61, 211, 240, 0.5)
+  );
+}
+
 .btn--sm {
   padding: 5px 10px;
   font-size: var(--fs-xs);
