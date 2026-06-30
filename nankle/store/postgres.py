@@ -64,6 +64,17 @@ from nankle.models import (
 _SCHEMA = Path(__file__).with_name("schema.sql")
 
 
+def normalize_dsn(dsn: str) -> str:
+    """Accept a SQLAlchemy-style DSN ("postgresql+asyncpg://...") as well as a
+    plain libpq one. asyncpg only understands "postgresql://" / "postgres://", so
+    strip any "+driver" suffix from the scheme - the shipped .env.example uses the
+    +asyncpg form, which would otherwise fail at connect time."""
+    scheme, sep, rest = dsn.partition("://")
+    if sep and "+" in scheme:
+        return scheme.split("+", 1)[0] + "://" + rest
+    return dsn
+
+
 async def _init_conn(conn: asyncpg.Connection) -> None:
     # encode/decode JSONB as Python objects so dict/list params and columns just work
     await conn.set_type_codec(
@@ -79,7 +90,9 @@ class PostgresStore:
 
     @classmethod
     async def connect(cls, dsn: str, *, apply_schema: bool = True) -> "PostgresStore":
-        pool = await asyncpg.create_pool(dsn, init=_init_conn, min_size=1, max_size=10)
+        pool = await asyncpg.create_pool(
+            normalize_dsn(dsn), init=_init_conn, min_size=1, max_size=10
+        )
         store = cls(pool)
         if apply_schema:
             async with pool.acquire() as conn:

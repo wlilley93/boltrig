@@ -21,11 +21,17 @@ log = logging.getLogger("nankle.bootstrap")
 
 _DEFAULT_TENANT = "default"
 _MANIFEST_CANDIDATES = (
-    os.environ.get("NANKLE_MANIFEST", ""),
     "/app/manifest.yaml",
     "manifest.yaml",
     "manifest.example.yaml",
 )
+
+
+def _find_manifest() -> str | None:
+    """Locate the manifest, reading ``NANKLE_MANIFEST`` LIVE (not at import time)
+    so it is honoured even when set after import (tests / dynamic config), then
+    falling back to the well-known paths."""
+    return _find((os.environ.get("NANKLE_MANIFEST", ""), *_MANIFEST_CANDIDATES))
 _SKILLS_DIR_CANDIDATES = ("/app/libraries/skills", "libraries/skills")
 
 
@@ -165,7 +171,7 @@ async def _seed_from_manifest(kernel: Kernel, manifest) -> None:
 async def build_kernel_async() -> Kernel:
     """Construct and fully wire a Kernel (store, adapters, capabilities, invoker)."""
     store = await build_store()
-    manifest_path = _find(_MANIFEST_CANDIDATES)
+    manifest_path = _find_manifest()
     if manifest_path:
         manifest = load_manifest(manifest_path)
         kernel = Kernel(store, blocking_verbs=manifest.blocking_verbs())
@@ -239,7 +245,7 @@ def select_principal_resolver():
     if settings.oidc_configured:
         from nankle.identity import OidcVerifier, build_principal_resolver
 
-        manifest_path = _find(_MANIFEST_CANDIDATES)
+        manifest_path = _find_manifest()
         if manifest_path:
             manifest = load_manifest(manifest_path)
             mappings, tenant = list(manifest.role_mappings), manifest.tenant_id
@@ -288,7 +294,7 @@ def build_app():
         from nankle.fleet.eval import EvalRunner
         from nankle.workflows import WorkflowLibrary
 
-        manifest_path = _find(_MANIFEST_CANDIDATES)
+        manifest_path = _find_manifest()
         tenant = _DEFAULT_TENANT
         if manifest_path:
             try:
