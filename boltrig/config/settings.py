@@ -39,10 +39,23 @@ class Settings:
     oidc_audience: str | None = None
     oidc_jwks_uri: str | None = None
     dev_auth: bool = False  # BOLTRIG_DEV_AUTH=1 -> header-trust resolver (dev only)
+    # Cloudflare Access (zero-trust edge IdP). When the team domain + AUD are set,
+    # the kernel verifies the per-request Cf-Access-Jwt-Assertion against CF's
+    # JWKS and derives the principal from the authenticated email. Login, MFA and
+    # SSO happen at the CF edge; the kernel trusts only the verified assertion.
+    cf_access_team_domain: str | None = None  # https://<team>.cloudflareaccess.com
+    cf_access_aud: str | None = None  # the Access application AUD tag
+    cf_access_role_map: str | None = None  # JSON {email: role}
+    cf_access_default_role: str = "none"  # role for an authed-but-unmapped email
+    cf_access_tenant: str | None = None  # tenant the Access users belong to
 
     @property
     def oidc_configured(self) -> bool:
         return bool(self.oidc_issuer and self.oidc_audience and self.oidc_jwks_uri)
+
+    @property
+    def cf_access_configured(self) -> bool:
+        return bool(self.cf_access_team_domain and self.cf_access_aud)
 
 
 def load_settings(env: Mapping[str, str] | None = None) -> Settings:
@@ -60,4 +73,9 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         oidc_audience=e.get("OIDC_AUDIENCE") or None,
         oidc_jwks_uri=e.get("OIDC_JWKS_URI") or None,
         dev_auth=_as_bool(e.get("BOLTRIG_DEV_AUTH")),
+        cf_access_team_domain=(e.get("CF_ACCESS_TEAM_DOMAIN") or "").rstrip("/") or None,
+        cf_access_aud=e.get("CF_ACCESS_AUD") or None,
+        cf_access_role_map=e.get("CF_ACCESS_ROLE_MAP") or None,
+        cf_access_default_role=(e.get("CF_ACCESS_DEFAULT_ROLE") or "none").strip(),
+        cf_access_tenant=e.get("CF_ACCESS_TENANT") or None,
     )

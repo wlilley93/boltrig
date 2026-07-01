@@ -286,6 +286,32 @@ def select_principal_resolver():
     """
     refuse_default_audit_key_in_prod()  # K-19: a default audit key in prod is fatal
     settings = load_settings()
+    if settings.cf_access_configured:
+        import json
+
+        from boltrig.identity import OidcVerifier, build_cf_access_resolver
+
+        team = settings.cf_access_team_domain
+        try:
+            role_map = json.loads(settings.cf_access_role_map) if settings.cf_access_role_map else {}
+        except (ValueError, TypeError):
+            log.error("CF_ACCESS_ROLE_MAP is not valid JSON; treating as empty (deny-by-default)")
+            role_map = {}
+        tenant = settings.cf_access_tenant or _DEFAULT_TENANT
+        # CF Access JWTs are verified against the team's certs; the issuer IS the
+        # team domain and the audience IS the application's AUD tag.
+        verifier = OidcVerifier(
+            issuer=team,
+            audience=settings.cf_access_aud,
+            jwks_uri=f"{team}/cdn-cgi/access/certs",
+        )
+        log.info("Cloudflare Access auth enabled (team %s, %d mapped emails)", team, len(role_map))
+        return build_cf_access_resolver(
+            verifier=verifier,
+            tenant_id=tenant,
+            role_map=role_map,
+            default_role=settings.cf_access_default_role,
+        )
     if settings.oidc_configured:
         from boltrig.identity import OidcVerifier, build_principal_resolver
 

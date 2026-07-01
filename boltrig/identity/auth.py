@@ -25,7 +25,7 @@ from fastapi import HTTPException, Request
 from boltrig.kernel.app import Principal, PrincipalResolver
 from boltrig.models import RoleMapping
 
-from .rbac import grants_for_scope, resolve_role
+from .rbac import DEFAULT_ROLE, grants_for_scope, resolve_role
 
 
 def _load_authlib_jwt(algorithms: list[str] | None = None) -> Any:
@@ -288,6 +288,79 @@ def build_principal_resolver(
             actor_tier="human",
             on_behalf_of=_on_behalf_of(claims),
             scope=scope,  # row-level department isolation in prod (US-IAM-02)
+        )
+
+    return resolver
+
+
+def _cf_access_assertion(request: Request) -> str:
+    """The Cloudflare Access JWT for this request. Cloudflare injects it as the
+    ``Cf-Access-Jwt-Assertion`` header on every request to a protected hostname;
+    the ``CF_Authorization`` cookie is the browser fallback."""
+    token = request.headers.get("cf-access-jwt-assertion", "").strip()
+    if token:
+        return token
+    cookie = request.cookies.get("CF_Authorization", "").strip()
+    if cookie:
+        return cookie
+    raise HTTPException(status_code=401, detail="missing Cloudflare Access assertion")
+
+
+def _cf_access_scope(role: str) -> dict:
+    """Visibility scope for an Access-derived role. org-admin sees the whole
+    tenant; any other mapped role is tenant-scoped with no department widening
+    (least privilege - enrich via OIDC/groups when finer scoping is needed)."""
+    return {"all": True} if role == "org-admin" else {}
+
+
+def build_cf_access_resolver(
+    *,
+    verifier: Verifier,
+    tenant_id: str,
+    role_map: dict[str, str],
+    default_role: str = DEFAULT_ROLE,
+) -> PrincipalResolver:
+    """Build a ``PrincipalResolver`` backed by Cloudflare Access (zero-trust edge).
+
+    Cloudflare Access handles login / MFA / SSO at the edge and signs a JWT it
+    injects per request. This resolver verifies that JWT against CF's JWKS (via
+    ``verifier``, an ``OidcVerifier`` pointed at the team's certs) and derives the
+    principal from the authenticated ``email`` claim - identity comes only from
+    the verified assertion, never from the request (SEC-01/02). The email is
+    mapped to a platform role (``role_map``; ``default_role`` for an
+    authenticated-but-unmapped email). An unmapped/``none`` role is denied
+    fail-closed (K-13), even though Access already gated who reached the origin -
+    defence in depth.
+    """
+    role_map = {k.strip().lower(): v for k, v in (role_map or {}).items()}
+
+    async def resolver(request: Request) -> Principal:
+        token = _cf_access_assertion(request)
+        try:
+            claims = await verifier.verify(token)
+        except HTTPException:
+            raise
+        except Exception as exc:  # verification failure -> 401 (fail-closed)
+            raise HTTPException(
+                status_code=401, detail="Access assertion verification failed"
+            ) from exc
+
+        email = str(claims.get("email") or "").strip().lower()
+        if not email:
+            raise HTTPException(status_code=401, detail="Access assertion has no email claim")
+
+        role = role_map.get(email, default_role)
+        if role in (DEFAULT_ROLE, "none", ""):
+            raise HTTPException(status_code=403, detail=f"{email} is not authorized")
+
+        scope = _cf_access_scope(role)
+        return Principal(
+            tenant_id=tenant_id,
+            subject=email,
+            grants=grants_for_scope(scope),
+            role=role,
+            actor_tier="human",
+            scope=scope,
         )
 
     return resolver

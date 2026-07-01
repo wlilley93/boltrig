@@ -12,6 +12,7 @@ from .auth import (
     OidcVerifier,
     SamlVerifier,
     Verifier,
+    build_cf_access_resolver,
     build_principal_resolver,
     dev_principal_resolver,
 )
@@ -22,6 +23,7 @@ __all__ = [
     "OidcVerifier",
     "SamlVerifier",
     "Verifier",
+    "build_cf_access_resolver",
     "build_principal_resolver",
     "dev_principal_resolver",
     "OnBehalfOf",
