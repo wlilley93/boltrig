@@ -29,7 +29,7 @@ evidence gap, not a code defect. Full detail in `pre-arc/findings.md`.
 | Round | Files passing floor | % | Notes |
 |---|---|---|---|
 | 0 (baseline) | 102/110 | 92.7% | the 8 god files + scattered over-floor fns |
-| 1 | — | — | Tier-3 god files (route hoist + store partials) |
+| 1 (in progress) | 102/110 | 92.7% | channel store domain extracted (template proven); god files still over floor, one domain at a time |
 
 ## What "done" means for this arc
 

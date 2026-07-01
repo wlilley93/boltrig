@@ -102,3 +102,33 @@ Hoist `kernel/channel_routes.py` (the smallest route file, just written, 255/cc5
 to module-level handlers as the round-1 TEMPLATE, prove the pattern green, then
 apply it to `platform_routes` + `access_routes`. Channels is the safest first
 because its tests are fresh and comprehensive (14 channel tests).
+
+## Addendum (2026-07-01, post-preflight): first-beat pivot + a flagged fork
+
+Executing the named first beat surfaced an architectural nuance the plan
+under-specified. **The route-handler hoist is BLOCKED on a first-impression
+fork**, so round-1 instead led with the store domain-partial split, which is
+unambiguous and proven.
+
+**The fork (route dep-providers):** the route handlers are nested closures inside
+each `register_*_routes(app, *, principal_dep, get_kernel)` because `get_kernel`
+and `principal_dep` are **per-app closures over the kernel instance**, not
+module-level callables. A true module-level handler hoist (the cc win) requires
+restructuring how every route file obtains its deps - either (a) a module-level
+request-state singletons set at `create_app` time, or (b) keep a per-app factory
+that closes over the deps (which relocates but does not really reduce cc). This is
+a load-bearing pattern decision affecting all 5 route files, i.e. first-impression
+architecture: **-> court, not a silent landing.** Tracked as `fork` in progress.tsv.
+
+**What landed instead (round-1 template, proven):** the channel store domain
+extracted into `store/channels.py` (267 LOC) as `ChannelStorePG` +
+`ChannelStoreMem` mixins, composed into `PostgresStore` / `InMemoryStore`.
+`store/postgres.py` 1482 -> 1333, `store/memory.py` 579 -> 492. This is the
+template for the remaining ~9 store domains (identity, hitl, budgets, eval,
+memory, ...) - each a mixin partial, symmetric across both stores, re-exported so
+the public surface is unchanged. 195 passed, invariant gate 96/96.
+
+**Revised round-1 order:** store domain partials first (unambiguous, high LOC
+reduction), then the non-route god files (`fleet/spawn`, `adapters/generator`,
+`config/manifest`, `adapters/http_base`), with the route-hoist cluster waiting on
+the court's dep-provider ruling.

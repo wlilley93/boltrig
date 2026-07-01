@@ -1,15 +1,18 @@
 status	file	round	commit	notes
-planned	kernel/channel_routes.py	1		round-1 template: hoist 9 route closures to module-level handlers
-planned	kernel/platform_routes.py	1		cc69 route closures; apply channel template
-planned	kernel/access_routes.py	1		cc38 route closures; apply template
-planned	kernel/memory_routes.py	1		cc14; smaller route hoist
+done	store/channels.py (new)	1	9c31fc8	round-1 TEMPLATE: channel domain mixin partial (pg+mem+mappers), 267 LOC
+done	store/postgres.py	1	9c31fc8	1482->1333 (channel domain out); 9 more domains to go
+done	store/memory.py	1	9c31fc8	579->492 (channel domain out); lockstep with postgres
+fork	kernel/channel_routes.py	1		ROUTE HOIST BLOCKED: dep-providers (get_kernel/principal) are per-app closures, not module-level. A true module-level hoist needs a dep-provider pattern decision (first-impression) -> court, not silent. See arc-prompt.md addendum.
+planned	kernel/platform_routes.py	1		cc69 route closures; BLOCKED on same route-hoist fork
+planned	kernel/access_routes.py	1		cc38 route closures; BLOCKED on same fork
+planned	kernel/memory_routes.py	1		cc14; BLOCKED on same fork
 planned	kernel/app.py	1		create_app() god-fn (370/cc41/9p); after route hoists
-planned	store/postgres.py	1	1482 LOC; domain partials store/pg/
-planned	store/memory.py	1	579 LOC; lockstep domain partials store/memory/
+planned	store/postgres.py	1	1333 LOC remaining; domain partials (identity, hitl, budgets, eval, memory, ...)
+planned	store/memory.py	1	492 LOC remaining; lockstep domain partials
 planned	fleet/spawn.py	1	565 LOC; extract skill-resolution
 planned	adapters/generator.py	1	535 LOC; per-runtime generators
 planned	config/manifest.py	1	580 LOC; per-domain seeders
 planned	adapters/http_base.py	1	444 LOC; retry/pagination/egress sections
-housekeeping	scripts/cf-wire-boltrig.py	0		ruff E401 (deferred fix)
-housekeeping	tests/security/test_round_three.py	0		ruff E702 (deferred fix)
-housekeeping	kernel/channel_routes.py	0		SEC-003: binding channel_id consistency
+done	scripts/cf-wire-boltrig.py	0	ae3a0d9	ruff E401 fixed
+done	tests/security/test_round_three.py	0	ae3a0d9	ruff E702 fixed
+done	kernel/channel_routes.py	0	ae3a0d9	SEC-003: binding channel_id consistency
