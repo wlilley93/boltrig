@@ -24,6 +24,9 @@ durable = ["hatchet-sdk>=0.47"]
 # Pluggable inference back ends. None are required by the core (P4).
 inference = ["anthropic>=0.39", "openai>=1.54"]
 sql-adapters = ["psycopg[binary]>=3.2", "pymysql>=1.1"]
+# The adopted production Memory Engine (MEM-ENG-03). Optional so the core and the
+# offline suite never depend on it; the engine seam lazy-imports it (boltrig/memory/cognee.py).
+cognee = ["cognee>=1.2"]
 
 [dependency-groups]
 dev = [
