@@ -131,12 +131,12 @@ class HermesRuntime:
     ) -> AgentResult:
         """Call the Hermes gateway; degrade cleanly when unconfigured/offline."""
         if self.endpoint is None or not self.endpoint.base_url:
-            return AgentResult.degraded(
+            return AgentResult.degrade(
                 runtime=self.runtime, reason="no_endpoint", prompt=prompt
             )
         api_key = self._api_key()
         if api_key is None:
-            return AgentResult.degraded(
+            return AgentResult.degrade(
                 runtime=self.runtime, reason="no_api_key", prompt=prompt
             )
         try:  # lazy import: never required at module import time
@@ -157,7 +157,7 @@ class HermesRuntime:
                 data: dict[str, Any] = resp.json()
             return _result_from_chat(data, self.runtime, self.cost_tier, prompt, tools)
         except Exception as exc:  # network/SDK/parse failure -> degrade, never crash
-            return AgentResult.degraded(
+            return AgentResult.degrade(
                 runtime=self.runtime, reason=type(exc).__name__, prompt=prompt
             )
 
@@ -192,13 +192,13 @@ class ClaudeApiRuntime:
         """Call the Claude API; degrade cleanly when the SDK/key is absent."""
         api_key = self._api_key()
         if api_key is None:
-            return AgentResult.degraded(
+            return AgentResult.degrade(
                 runtime=self.runtime, reason="no_api_key", prompt=prompt
             )
         try:
             from anthropic import AsyncAnthropic  # lazy: optional dependency
         except Exception as exc:
-            return AgentResult.degraded(
+            return AgentResult.degrade(
                 runtime=self.runtime, reason=f"sdk_absent:{type(exc).__name__}",
                 prompt=prompt,
             )
@@ -233,7 +233,7 @@ class ClaudeApiRuntime:
                 cost_micros=cost,
             )
         except Exception as exc:  # API/network failure -> degrade, never crash
-            return AgentResult.degraded(
+            return AgentResult.degrade(
                 runtime=self.runtime, reason=type(exc).__name__, prompt=prompt
             )
 

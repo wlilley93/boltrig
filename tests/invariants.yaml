@@ -38,6 +38,11 @@ invariants:
     description: Spawn selects the cheapest capable runtime for a child agent.
     tests:
       - tests/integration/test_fleet_spawn.py::test_cheapest_capable_runtime_chosen
+  US-FLT-07:
+    description: Degraded results are first-class - a degraded runtime result is marked degraded end to end (spawn result, audit row, chat reply) and is never presented as ordinary success.
+    tests:
+      - tests/integration/test_degraded_honesty.py::test_spawn_without_runtime_is_marked_degraded_and_audited
+      - tests/integration/test_degraded_honesty.py::test_chat_turn_surfaces_a_degraded_spawn
   SEC-29:
     description: Test-spawns/eval run under the initiator's grants - no escalation.
     tests:

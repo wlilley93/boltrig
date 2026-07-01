@@ -278,6 +278,7 @@ class Spawner:
                 "run_id": run_id,
                 "agent_type": capability.name,
                 "status": "partial",
+                "degraded": False,
                 "reason": "budget_exceeded",
                 "summary": "spawn skipped: budget hard-stop reached",
                 "output": {},
@@ -325,10 +326,15 @@ class Spawner:
             prompt, child_ctx, tools=list(merged.tool_grants)
         )
 
-        # 8. Audit the spawn (AGENT_SPAWN) with real accounting.
+        # 8. Audit the spawn (AGENT_SPAWN) with real accounting. A degraded run
+        #    audits as "degraded", never "ok" (US-FLT-07).
+        if result.degraded:
+            audit_status = "degraded"
+        else:
+            audit_status = "ok" if result.ok else "error"
         await self._audit_spawn(
             tenant_id, context, capability, skills, run_id,
-            status="ok" if result.ok else "error",
+            status=audit_status,
             tokens=result.tokens_used, cost=result.cost_micros,
         )
 
@@ -336,6 +342,7 @@ class Spawner:
             "run_id": run_id,
             "agent_type": capability.name,
             "status": "ok" if result.ok else "error",
+            "degraded": result.degraded,
             "summary": result.summary,
             "output": result.output,
             "tokens_used": result.tokens_used,
@@ -557,7 +564,10 @@ def make_agent_invoker(kernel: Kernel) -> AgentInvoker:
                 prompt, context, tools=list(context.grants.allow)
             )
         if result.ok:
-            return Result.success(result.output)
+            output = dict(result.output)
+            if result.degraded:  # the flag survives the adapter seam (US-FLT-07)
+                output.setdefault("_degraded", {"reason": "degraded"})
+            return Result.success(output)
         return Result.failure(
             AdapterError(ErrorClass.INTERNAL, result.summary or "agent run failed")
         )

@@ -182,7 +182,16 @@ def build_turn_executor(kernel, spawner, *, continuity: bool | None = None) -> T
         try:
             result = await spawner.spawn(tenant_id, task, [], {}, ctx, partial_on_budget=True)
             summary = result.get("summary") or "Done."
-            relay.publish(run_id, {"type": "text_delta", "delta": summary})
+            if result.get("degraded"):
+                # Honesty about degradation (US-FLT-07): a degraded echo is never
+                # presented as ordinary success - the reply carries the flag and a
+                # visible prefix. Beat 3 adds the work_items.degraded column; until
+                # then the flag rides the reply event + the AGENT_SPAWN audit row.
+                if not summary.startswith("degraded"):
+                    summary = f"(degraded) {summary}"
+                relay.publish(run_id, {"type": "text_delta", "delta": summary, "degraded": True})
+            else:
+                relay.publish(run_id, {"type": "text_delta", "delta": summary})
             item.status = WorkStatus.DONE
         except BoltrigError as exc:
             relay.publish(run_id, {"type": "text_delta", "delta": f"({exc.reason})"})

@@ -39,3 +39,5 @@ class WorkItem:
     constraints: dict[str, Any] = field(default_factory=dict)  # deadlines, assignees, deps
     raw: dict[str, Any] = field(default_factory=dict)  # original payload, preserved
     on_behalf_of: UserId | None = None
+    # Beat 3 adds the work_items.degraded column; until then degradation is
+    # surfaced on the chat reply + the AGENT_SPAWN audit row only (US-FLT-07).

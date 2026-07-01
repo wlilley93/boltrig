@@ -91,7 +91,7 @@ class PiRuntime:
         self, prompt: str, context: InvocationContext, *, tools: list[str]
     ) -> AgentResult:
         if not self.sidecar_url or self._issue is None:
-            return AgentResult.degraded(runtime="pi", reason="no_sidecar", prompt=prompt)
+            return AgentResult.degrade(runtime="pi", reason="no_sidecar", prompt=prompt)
 
         # least privilege: an MCP connection scoped to exactly this run's grants
         token = self._issue(
@@ -124,7 +124,7 @@ class PiRuntime:
                         if event.get("type") == "final":
                             final = event
             if final is None:
-                return AgentResult.degraded(runtime="pi", reason="no_final", prompt=prompt)
+                return AgentResult.degrade(runtime="pi", reason="no_final", prompt=prompt)
             return AgentResult.succeeded(
                 output=final.get("output") or {},
                 summary=final.get("summary", ""),
@@ -133,7 +133,7 @@ class PiRuntime:
                 new_work_items=final.get("new_work_items") or [],
             )
         except Exception as exc:  # sidecar down / no key / transport error -> degrade
-            return AgentResult.degraded(runtime="pi", reason=type(exc).__name__, prompt=prompt)
+            return AgentResult.degrade(runtime="pi", reason=type(exc).__name__, prompt=prompt)
         finally:
             if self._revoke is not None:
                 try:
