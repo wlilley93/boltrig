@@ -43,6 +43,12 @@ invariants:
     tests:
       - tests/integration/test_degraded_honesty.py::test_spawn_without_runtime_is_marked_degraded_and_audited
       - tests/integration/test_degraded_honesty.py::test_chat_turn_surfaces_a_degraded_spawn
+  US-EXE-05:
+    description: Executor selection is honest and optionally fail-closed - with BOLTRIG_REQUIRE_DURABLE set a durable-engine failure refuses to boot instead of silently falling back, and the selected executor's durability is recorded.
+    tests:
+      - tests/integration/test_executor_selection.py::test_require_durable_refuses_to_fall_back
+      - tests/integration/test_executor_selection.py::test_default_falls_back_to_local_with_durable_false
+      - tests/integration/test_executor_selection.py::test_local_enqueue_runs_inline_and_push_event_records
   SEC-29:
     description: Test-spawns/eval run under the initiator's grants - no escalation.
     tests:

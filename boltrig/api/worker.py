@@ -23,7 +23,11 @@ _POLL_SECONDS = 5
 async def _run() -> None:
     kernel = await build_kernel_async()  # async build (no nested asyncio.run)
     executor = register_workers(kernel)
-    log.info("fleet worker started (%s)", type(executor).__name__)
+    # Honest executor selection (US-EXE-05): the boot record states durability.
+    log.info(
+        "fleet worker started (%s, durable=%s)",
+        type(executor).__name__, executor.durable,
+    )
     # The permanent tier is long-lived. With Hatchet this loop is replaced by the
     # engine's durable scheduling; the local fallback simply stays alive so the
     # process is a valid compose service and can be extended to poll queues.

@@ -384,12 +384,21 @@ def build_app():
             except Exception:
                 pass
         spawner = build_spawner(kernel)
+        # Honest executor selection (US-EXE-05): record which executor serves
+        # this app and whether it is durable. Workflow trigger descriptors
+        # already stamp `durable` per run; Beat 4 extends the same stamp into
+        # spawn/work-item execution metadata (fleet/spawner, not wired here).
+        executor = register_workers(kernel)
+        log.info(
+            "workflow executor: %s (durable=%s)",
+            type(executor).__name__, executor.durable,
+        )
         return {
             "admin": AdminConfig(kernel.store, tenant_id=tenant, path=manifest_path),
             "eval": EvalRunner(kernel, spawner),
             "spawner": spawner,
             "workflows": WorkflowLibrary(
-                kernel.store, executor=register_workers(kernel), kernel=kernel
+                kernel.store, executor=executor, kernel=kernel
             ),
         }
 
