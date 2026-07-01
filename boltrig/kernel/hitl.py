@@ -5,13 +5,17 @@ gate (in ``dispatch``) creates an approval before a high-consequence verb runs
 and refuses to proceed until it is answered with an approving decision
 (SEC-14). The web Approvals panel is the canonical record (US-HIL-05); chat
 adapters mirror it. Durable resume of paused runs is provided by Hatchet in the
-fleet workers; this manager owns the request/response records and the gate.
+fleet workers; this manager owns the request/response records and the gate, and
+``answer`` fires an injected resume notifier (Beat 5, NFR-REL-03) so the fleet
+can resume the paused run - the kernel never imports the fleet (P1).
 """
 
 from __future__ import annotations
 
+import inspect
 import uuid
 from datetime import timedelta
+from typing import Any, Callable
 
 from boltrig.models import (
     HITLRequest,
@@ -28,8 +32,17 @@ _APPROVING = {"approve", "approved", "yes", "ok", "allow"}
 
 
 class HITLManager:
-    def __init__(self, store: Store) -> None:
+    def __init__(
+        self, store: Store, resume_notifier: Callable[..., Any] | None = None
+    ) -> None:
         self._store = store
+        self._resume_notifier = resume_notifier
+
+    def set_resume_notifier(self, notifier: Callable[..., Any] | None) -> None:
+        """Attach the answer -> resume bridge (NFR-REL-03): a callable (sync or
+        async) fired with the answered :class:`HITLRequest`. Injected so the
+        kernel never imports the fleet (P1); fired fail-safe (P9)."""
+        self._resume_notifier = notifier
 
     async def create(
         self,
@@ -85,7 +98,25 @@ class HITLManager:
             notes=notes,
         )
         await self._store.answer_hitl(resp)
+        await self._fire_resume(tenant_id, request_id)
         return resp
+
+    async def _fire_resume(self, tenant_id: str, request_id: str) -> None:
+        """Fire the resume notifier with the answered request, fail-safe (P9):
+        the recorded answer is the truth; a notifier fault never voids it. The
+        durable resume itself is exactly-once via ``consume_if_approved``, so a
+        duplicate or lost notification is safe (NFR-REL-03)."""
+        if self._resume_notifier is None:
+            return
+        try:
+            req = await self._store.get_hitl_request(tenant_id, request_id)
+            if req is None:
+                return
+            out = self._resume_notifier(req)
+            if inspect.isawaitable(out):
+                await out
+        except Exception:
+            pass
 
     async def is_approved(self, tenant_id: str, request_id: str) -> bool:
         """True iff the request was answered with an approving decision (read-only;

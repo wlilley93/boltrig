@@ -162,6 +162,20 @@ invariants:
     description: A blocking HITL pause is durable - survives a restart and resumes on approval.
     tests:
       - tests/store/test_postgres_store.py::test_blocking_pause_survives_restart_and_resumes
+  NFR-REL-02:
+    description: An interrupted run resumes from its last checkpoint without re-executing completed steps (a checkpointed step replays its recorded output).
+    tests:
+      - tests/integration/test_durable_resume.py::test_interrupted_run_resumes_from_last_checkpoint
+  NFR-REL-03:
+    description: A HITL answer resumes the paused run exactly once - the answer bridge pushes the scoped approval event / requeues the parked work item, and the consume-if-approved CAS lets exactly one gated execution through.
+    tests:
+      - tests/integration/test_durable_resume.py::test_hitl_answer_resumes_paused_run_exactly_once
+      - tests/integration/test_durable_resume.py::test_hitl_answer_requeues_the_parked_work_item
+  FR-EXE-06:
+    description: Task bodies re-enter the chokepoint - governance is not bypassable from inside a durable task (an ungranted verb fails closed and the denial is audited; a payload/envelope tenant mismatch is refused).
+    tests:
+      - tests/integration/test_durable_resume.py::test_task_body_cannot_bypass_governance
+      - tests/integration/test_durable_resume.py::test_task_payload_tenant_must_match_the_envelope
   SEC-12:
     description: Sensitive data routes only to local endpoints - a misroute is blocked and audited.
     tests:

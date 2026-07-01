@@ -8,7 +8,7 @@ and audited at the end regardless of outcome:
     grant check              (GrantMissing, SEC-07)
     consequence/HITL gate    (PendingHuman, SEC-14 - cannot be bypassed)
     rate limit               (RateLimited, FR-KER-05)
-    idempotency replay       (NFR-REL-02)
+    idempotency replay       (SEC-15)
     resolve credential       (inside kernel only, SEC-05)
     execute adapter | agent  (degrade on UNAVAILABLE, P9)
     validate output          (SchemaValidationError)
@@ -225,7 +225,7 @@ class Dispatcher:
         # 5. rate limit (FR-KER-05)
         await self._rate.enforce(tenant, verb, binding.rate_limit)
 
-        # 6. idempotency replay (NFR-REL-02, SEC-15)
+        # 6. idempotency replay (SEC-15)
         if idempotency_key:
             prior = await self._store.idempotency_get(tenant, idempotency_key)
             if prior is not None:

@@ -25,6 +25,14 @@ A step that fails (an ungranted verb, an unbound action, a backend error) is
 recorded and its descendants are skipped; the run never crashes the fleet (P9).
 A high-consequence step that the HITL gate holds is recorded as ``paused``.
 
+* **Checkpoint-resume (Beat 5).** With an optional ``store`` seam, each
+  completed step is checkpointed ``ok`` with its output; a re-run of the same
+  ``run_id`` replays checkpointed steps instead of re-dispatching them
+  (NFR-REL-02). A HITL pause is checkpointed ``paused`` with its request id and
+  the walk stops; the resumed run re-invokes that step with the approval id, so
+  the kernel's consume-if-approved CAS executes the gated verb exactly once
+  (NFR-REL-03, SEC-14).
+
 The interpreter is generic: a step's ``action`` is a fully-qualified verb id
 (``"<noun>.<verb>"``); what it resolves to (adapter or agent) is the registry's
 business, not the interpreter's. Imports only models; severable from the kernel.
@@ -84,6 +92,7 @@ async def run_workflow_definition(
     *,
     executor: Any | None = None,
     run_id: str | None = None,
+    store: Any | None = None,
 ) -> dict[str, Any]:
     """Execute a ``WorkflowDefinition``'s steps and return a run record.
 
@@ -91,6 +100,10 @@ async def run_workflow_definition(
     boundary. The returned record carries per-step status/output so the run is
     observable; the overall ``status`` is ``completed`` (all ok), ``paused`` (a
     HITL gate held a step), or ``failed`` (a step errored / was skipped).
+
+    ``store`` (upsert_checkpoint / list_checkpoints) activates checkpoint-resume
+    for ``run_id`` (NFR-REL-02/NFR-REL-03); without it the walk is single-shot,
+    unchanged from Round Seven.
     """
     definition = wf.definition or {}
     steps = list(definition.get("steps", []) or [])
@@ -111,6 +124,13 @@ async def run_workflow_definition(
         except Exception:
             pass
 
+    # Prior checkpoints for this run (empty without the seam, NFR-REL-02): an
+    # ``ok`` step replays, a ``paused`` one carries the approval id to resume with.
+    checkpointing = store is not None and bool(rid)
+    prior: dict[str, Any] = {}
+    if checkpointing:
+        prior = {c.step: c for c in await store.list_checkpoints(wf.tenant_id, rid)}
+
     ordered, unrunnable = _topological_order(steps)
     results: dict[str, dict[str, Any]] = {}
     failed_or_skipped: set[str] = {s["id"] for s in unrunnable}
@@ -123,6 +143,15 @@ async def run_workflow_definition(
     paused = False
     for step in ordered:
         step_id = step["id"]
+        done = prior.get(step_id)
+        if done is not None and done.status == "ok":
+            # NFR-REL-02: a completed step replays its recorded output on a
+            # resumed run; it is never re-dispatched.
+            results[step_id] = {"action": step.get("action"), "status": "ok",
+                                "output": done.output, "replayed": True}
+            _emit_step({"step_id": step_id, "action": step.get("action"),
+                        "status": "ok", "replayed": True})
+            continue
         # A step whose parent failed/was skipped cannot run (fail-closed).
         if any(p in failed_or_skipped for p in step.get("parents", []) or []):
             results[step_id] = {"action": step.get("action"), "status": "skipped",
@@ -137,8 +166,17 @@ async def run_workflow_definition(
         params = step.get("params") or step.get("with") or {}
         _emit_step({"step_id": step_id, "action": action, "status": "running"})
 
-        async def _dispatch(noun=noun, verb=verb, params=params) -> dict[str, Any]:
-            return await kernel.invoke(noun, verb, params, run_ctx)
+        # A resumed paused step re-invokes with its approval id: the kernel's
+        # consume-if-approved CAS makes the gated execution exactly-once
+        # (NFR-REL-03, SEC-14); a second resume finds the approval spent.
+        approval_id = (
+            done.hitl_request_id if done is not None and done.status == "paused" else None
+        )
+
+        async def _dispatch(
+            noun=noun, verb=verb, params=params, approval_id=approval_id
+        ) -> dict[str, Any]:
+            return await kernel.invoke(noun, verb, params, run_ctx, approval_id=approval_id)
 
         boundary = f"workflow:{wf.id}:{step_id}"
         try:
@@ -147,18 +185,30 @@ async def run_workflow_definition(
             else:
                 output = await _dispatch()
             results[step_id] = {"action": action, "status": "ok", "output": output}
+            if checkpointing:
+                await store.upsert_checkpoint(wf.tenant_id, rid, step_id, "ok", output=output)
             _emit_step({"step_id": step_id, "action": action, "status": "ok"})
         except BoltrigError as exc:
             reason = getattr(exc, "reason", type(exc).__name__)
             # A held HITL gate is a pause, not a failure - the run can resume.
             status = "paused" if reason in {"pending_human", "approval_required"} else "failed"
+            hitl_id = getattr(exc, "hitl_request_id", None)
             if status == "paused":
                 paused = True
             else:
                 failed_or_skipped.add(step_id)
             results[step_id] = {"action": action, "status": status, "reason": reason}
+            if hitl_id:
+                results[step_id]["hitl_request_id"] = hitl_id
             _emit_step({"step_id": step_id, "action": action, "status": status,
                         "reason": reason})
+            if status == "paused" and checkpointing:
+                # NFR-REL-03: the pause is durable - the request id is the
+                # approval id the resumed run re-invokes with; stop the walk.
+                await store.upsert_checkpoint(
+                    wf.tenant_id, rid, step_id, "paused", hitl_request_id=hitl_id
+                )
+                break
         except Exception as exc:  # an adapter bug must not crash the fleet (P9)
             failed_or_skipped.add(step_id)
             results[step_id] = {"action": action, "status": "error",

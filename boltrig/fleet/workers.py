@@ -120,14 +120,15 @@ class HatchetExecutor:
 
     Constructed only when ``hatchet-sdk`` is importable. It keeps the same
     ``new_run_id`` / ``run_step`` surface as the local fallback so callers do not
-    branch on which executor they hold; richer Hatchet workflow registration is
-    layered on by the deployment that wires real workflow definitions in.
+    branch on which executor they hold. ``workflows`` maps registered task names
+    (hatchet_app.py) to the SDK workflow objects ``enqueue`` starts.
     """
 
     durable = True
 
-    def __init__(self, client: Any) -> None:
+    def __init__(self, client: Any, workflows: dict[str, Any] | None = None) -> None:
         self.client = client
+        self.workflows: dict[str, Any] = dict(workflows or {})
 
     def new_run_id(self) -> str:
         return uuid.uuid4().hex
@@ -147,14 +148,24 @@ class HatchetExecutor:
         return await fn(*args, **kwargs)
 
     async def enqueue(self, task_name: str, payload: dict) -> str | None:
-        # Beat 5 wires these to aio_run_no_wait / event push
-        raise NotImplementedError("HatchetExecutor.enqueue lands in Beat 5")
+        """Start the registered task on the engine without waiting (US-EXE-02).
+
+        Raises ``KeyError`` for an unregistered task name (fail-closed, K-13,
+        mirroring the local executor). Returns the engine's run id."""
+        wf = self.workflows[task_name]  # KeyError = unregistered task, fail-closed
+        ref = await wf.aio_run_no_wait(payload)
+        return getattr(ref, "workflow_run_id", None) or str(ref)
 
     async def push_event(
         self, key: str, payload: dict, scope: str | None = None
     ) -> None:
-        # Beat 5 wires these to aio_run_no_wait / event push
-        raise NotImplementedError("HatchetExecutor.push_event lands in Beat 5")
+        """Push a user event, scope-correlated so the engine routes it to the
+        one durable wait registered for that scope (NFR-REL-03)."""
+        from hatchet_sdk import PushEventOptions
+
+        await self.client.event.aio_push(
+            key, payload, options=PushEventOptions(scope=scope)
+        )
 
 
 def _require_durable() -> bool:
@@ -185,8 +196,19 @@ def register_workers(
         client = Hatchet()
     except Exception as exc:  # SDK present but not configured (e.g. no token)
         return _fallback_or_raise(f"Hatchet client config failed: {exc}", exc)
+    # Register the Boltrig task definitions on this client so ``enqueue`` can
+    # start them by name (the bodies only run in the worker process; here the
+    # workflow objects are the client-side handles). Fail-safe: a registration
+    # fault leaves enqueue fail-closed (KeyError), never breaks boot (P9).
+    try:
+        from .hatchet_app import build_hatchet_app
+
+        _, workflows = build_hatchet_app(hatchet=client)
+    except Exception as exc:
+        log.warning("hatchet task registration failed: %s", exc)
+        workflows = {}
     log.info("executor selected: HatchetExecutor (durable=True)")
-    return HatchetExecutor(client)
+    return HatchetExecutor(client, workflows=workflows)
 
 
 def _fallback_or_raise(reason: str, exc: Exception) -> LocalDurableExecutor:

@@ -205,6 +205,41 @@ async def _seed_from_manifest(kernel: Kernel, manifest) -> None:
             log.warning("skill load failed: %s", exc)
 
 
+def wire_hitl_resume(kernel: Kernel, *, executor=None, pump=None) -> None:
+    """Bridge a HITL answer to the durable lane (Beat 5, NFR-REL-03).
+
+    On answer: push the scoped approval event (resumes a durable workflow-run
+    waiting on the request's run) and requeue the request's AWAITING_HUMAN work
+    item back to PENDING. Both legs are independent, fail-safe and optional -
+    an API-only deployment has no pump, an offline one records events on the
+    local executor (P9). The kernel side only sees the injected callable; it
+    never imports the fleet (P1). Exactly-once execution of the gated verb is
+    the CAS's job (SEC-14), so a duplicate notification is harmless.
+    """
+    from boltrig.fleet.hatchet_app import APPROVAL_EVENT_KEY
+
+    async def _on_answer(request) -> None:
+        if executor is not None and request.run_id:
+            try:
+                resp = await kernel.store.get_hitl_response(request.tenant_id, request.id)
+                await executor.push_event(
+                    APPROVAL_EVENT_KEY,
+                    {"hitl_request_id": request.id, "run_id": request.run_id,
+                     "verb": request.verb,
+                     "decision": resp.decision if resp else None},
+                    scope=request.run_id,
+                )
+            except Exception:  # resume is best-effort; the answer stands (P9)
+                log.warning("HITL resume event push failed", exc_info=True)
+        if pump is not None and request.work_item_id:
+            try:
+                await pump.requeue(request.tenant_id, request.work_item_id)
+            except Exception:
+                log.warning("HITL work-item requeue failed", exc_info=True)
+
+    kernel.hitl.set_resume_notifier(_on_answer)
+
+
 async def build_kernel_async() -> Kernel:
     """Construct and fully wire a Kernel (store, adapters, capabilities, invoker)."""
     store = await build_store()
@@ -393,6 +428,17 @@ def build_app():
             "workflow executor: %s (durable=%s)",
             type(executor).__name__, executor.durable,
         )
+        # Beat 5: register the governed task bodies on the local executor (the
+        # Hatchet executor got its client-side handles in register_workers) and
+        # bridge HITL answers to the durable lane. No pump here - the API
+        # process is queue-side; the worker process wires its own (NFR-REL-03).
+        try:
+            from boltrig.fleet.hatchet_app import register_boltrig_tasks
+
+            register_boltrig_tasks(executor, kernel)
+        except Exception:  # task registration must never break boot (P9)
+            log.warning("boltrig task registration failed", exc_info=True)
+        wire_hitl_resume(kernel, executor=executor)
         return {
             "admin": AdminConfig(kernel.store, tenant_id=tenant, path=manifest_path),
             "eval": EvalRunner(kernel, spawner),
