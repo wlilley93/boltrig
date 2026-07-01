@@ -1,0 +1,56 @@
+[
+  {
+    "cell": null,
+    "code": "E401",
+    "end_location": {
+      "column": 51,
+      "row": 14
+    },
+    "filename": "/home/jellytot/Projects/boltrig/scripts/cf-wire-boltrig.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "import json\nimport os\nimport sys\nimport urllib.request\nimport urllib.error",
+          "end_location": {
+            "column": 51,
+            "row": 14
+          },
+          "location": {
+            "column": 1,
+            "row": 14
+          }
+        }
+      ],
+      "message": "Split imports"
+    },
+    "location": {
+      "column": 1,
+      "row": 14
+    },
+    "message": "Multiple imports on one line",
+    "name": "multiple-imports-on-one-line",
+    "noqa_row": 14,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/multiple-imports-on-one-line"
+  },
+  {
+    "cell": null,
+    "code": "E702",
+    "end_location": {
+      "column": 26,
+      "row": 143
+    },
+    "filename": "/home/jellytot/Projects/boltrig/tests/security/test_round_three.py",
+    "fix": null,
+    "location": {
+      "column": 25,
+      "row": 143
+    },
+    "message": "Multiple statements on one line (semicolon)",
+    "name": "multiple-statements-on-one-line-semicolon",
+    "noqa_row": 143,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/multiple-statements-on-one-line-semicolon"
+  }
+]

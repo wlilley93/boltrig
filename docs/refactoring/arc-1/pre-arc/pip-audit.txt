@@ -1,0 +1,1 @@
+ERROR:pip_audit._cli:apt-listchanges: Dependency not found on PyPI and could not be audited: apt-listchanges (4.8)

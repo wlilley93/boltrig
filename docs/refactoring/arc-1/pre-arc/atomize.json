@@ -1,0 +1,519 @@
+{
+  "floor": {
+    "file": 400,
+    "func": 80,
+    "cc": 15,
+    "nesting": 4,
+    "params": 5
+  },
+  "files": 110,
+  "functions": 1040,
+  "over_floor_files": [
+    "boltrig/adapters/generator.py",
+    "boltrig/adapters/http_base.py",
+    "boltrig/config/manifest.py",
+    "boltrig/fleet/spawn.py",
+    "boltrig/kernel/app.py",
+    "boltrig/kernel/platform_routes.py",
+    "boltrig/store/memory.py",
+    "boltrig/store/postgres.py"
+  ],
+  "over_floor_funcs": 55,
+  "violations": [
+    {
+      "file": "boltrig/kernel/app.py",
+      "name": "create_app",
+      "line": 142,
+      "length": 370,
+      "cc": 41,
+      "nesting": 3,
+      "params": 9
+    },
+    {
+      "file": "boltrig/fleet/spawn.py",
+      "name": "spawn",
+      "line": 201,
+      "length": 147,
+      "cc": 17,
+      "nesting": 3,
+      "params": 8
+    },
+    {
+      "file": "boltrig/workflows/interpreter.py",
+      "name": "run_workflow_definition",
+      "line": 79,
+      "length": 108,
+      "cc": 23,
+      "nesting": 4,
+      "params": 6
+    },
+    {
+      "file": "boltrig/memory/pgvector.py",
+      "name": "recall",
+      "line": 127,
+      "length": 83,
+      "cc": 19,
+      "nesting": 3,
+      "params": 7
+    },
+    {
+      "file": "boltrig/kernel/platform_routes.py",
+      "name": "register_platform_routes",
+      "line": 82,
+      "length": 483,
+      "cc": 69,
+      "nesting": 2,
+      "params": 3
+    },
+    {
+      "file": "boltrig/kernel/access_routes.py",
+      "name": "register_access_routes",
+      "line": 70,
+      "length": 273,
+      "cc": 38,
+      "nesting": 2,
+      "params": 3
+    },
+    {
+      "file": "boltrig/kernel/channel_routes.py",
+      "name": "register_channel_routes",
+      "line": 110,
+      "length": 255,
+      "cc": 57,
+      "nesting": 3,
+      "params": 3
+    },
+    {
+      "file": "boltrig/kernel/dispatch.py",
+      "name": "_invoke_inner",
+      "line": 180,
+      "length": 71,
+      "cc": 16,
+      "nesting": 2,
+      "params": 8
+    },
+    {
+      "file": "boltrig/fleet/pi_runtime.py",
+      "name": "run",
+      "line": 84,
+      "length": 53,
+      "cc": 19,
+      "nesting": 7,
+      "params": 4
+    },
+    {
+      "file": "boltrig/adapters/builtin/ms_graph.py",
+      "name": "describe",
+      "line": 61,
+      "length": 179,
+      "cc": 1,
+      "nesting": 0,
+      "params": 1
+    },
+    {
+      "file": "boltrig/adapters/builtin/jira.py",
+      "name": "describe",
+      "line": 68,
+      "length": 109,
+      "cc": 1,
+      "nesting": 0,
+      "params": 1
+    },
+    {
+      "file": "boltrig/kernel/memory_routes.py",
+      "name": "register_memory_routes",
+      "line": 25,
+      "length": 91,
+      "cc": 14,
+      "nesting": 2,
+      "params": 3
+    },
+    {
+      "file": "boltrig/skills/schema.py",
+      "name": "parse_skill",
+      "line": 57,
+      "length": 76,
+      "cc": 23,
+      "nesting": 4,
+      "params": 2
+    },
+    {
+      "file": "boltrig/config/manifest.py",
+      "name": "apply_manifest",
+      "line": 506,
+      "length": 75,
+      "cc": 17,
+      "nesting": 3,
+      "params": 3
+    },
+    {
+      "file": "boltrig/kernel/dispatch.py",
+      "name": "invoke",
+      "line": 104,
+      "length": 75,
+      "cc": 7,
+      "nesting": 3,
+      "params": 7
+    },
+    {
+      "file": "boltrig/memory/cognify.py",
+      "name": "cognify",
+      "line": 23,
+      "length": 69,
+      "cc": 11,
+      "nesting": 3,
+      "params": 8
+    },
+    {
+      "file": "boltrig/kernel/channel_routes.py",
+      "name": "channel_inbound",
+      "line": 135,
+      "length": 64,
+      "cc": 17,
+      "nesting": 3,
+      "params": 4
+    },
+    {
+      "file": "boltrig/adapters/http_base.py",
+      "name": "request",
+      "line": 258,
+      "length": 61,
+      "cc": 10,
+      "nesting": 4,
+      "params": 10
+    },
+    {
+      "file": "boltrig/adapters/builtin/inbound_webhook.py",
+      "name": "verify_and_normalise",
+      "line": 110,
+      "length": 60,
+      "cc": 19,
+      "nesting": 3,
+      "params": 5
+    },
+    {
+      "file": "boltrig/identity/provisioning.py",
+      "name": "provision_user",
+      "line": 76,
+      "length": 56,
+      "cc": 7,
+      "nesting": 2,
+      "params": 6
+    },
+    {
+      "file": "boltrig/fleet/chat.py",
+      "name": "handle_turn",
+      "line": 72,
+      "length": 51,
+      "cc": 6,
+      "nesting": 2,
+      "params": 6
+    },
+    {
+      "file": "boltrig/adapters/generator.py",
+      "name": "_build_operation",
+      "line": 323,
+      "length": 50,
+      "cc": 10,
+      "nesting": 1,
+      "params": 6
+    },
+    {
+      "file": "boltrig/memory/vector.py",
+      "name": "recall",
+      "line": 54,
+      "length": 49,
+      "cc": 14,
+      "nesting": 3,
+      "params": 7
+    },
+    {
+      "file": "boltrig/fleet/model_router.py",
+      "name": "select_model_endpoint",
+      "line": 23,
+      "length": 43,
+      "cc": 11,
+      "nesting": 2,
+      "params": 7
+    },
+    {
+      "file": "boltrig/kernel/__init__.py",
+      "name": "__init__",
+      "line": 32,
+      "length": 42,
+      "cc": 2,
+      "nesting": 0,
+      "params": 6
+    },
+    {
+      "file": "boltrig/memory/local.py",
+      "name": "recall",
+      "line": 36,
+      "length": 41,
+      "cc": 13,
+      "nesting": 3,
+      "params": 7
+    },
+    {
+      "file": "boltrig/adapters/generator.py",
+      "name": "_output_and_pagination",
+      "line": 433,
+      "length": 36,
+      "cc": 19,
+      "nesting": 3,
+      "params": 3
+    },
+    {
+      "file": "boltrig/identity/tokens.py",
+      "name": "mint_pat",
+      "line": 49,
+      "length": 34,
+      "cc": 2,
+      "nesting": 1,
+      "params": 7
+    },
+    {
+      "file": "boltrig/kernel/hitl.py",
+      "name": "create",
+      "line": 34,
+      "length": 34,
+      "cc": 3,
+      "nesting": 1,
+      "params": 13
+    },
+    {
+      "file": "boltrig/adapters/http_base.py",
+      "name": "paginate_offset",
+      "line": 341,
+      "length": 31,
+      "cc": 8,
+      "nesting": 2,
+      "params": 10
+    },
+    {
+      "file": "boltrig/fleet/spawn.py",
+      "name": "_audit_spawn",
+      "line": 425,
+      "length": 31,
+      "cc": 3,
+      "nesting": 0,
+      "params": 9
+    },
+    {
+      "file": "boltrig/kernel/dispatch.py",
+      "name": "__init__",
+      "line": 63,
+      "length": 29,
+      "cc": 2,
+      "nesting": 0,
+      "params": 12
+    },
+    {
+      "file": "boltrig/fleet/chat.py",
+      "name": "executor",
+      "line": 163,
+      "length": 28,
+      "cc": 4,
+      "nesting": 2,
+      "params": 6
+    },
+    {
+      "file": "boltrig/fleet/pi_runtime.py",
+      "name": "__init__",
+      "line": 45,
+      "length": 24,
+      "cc": 1,
+      "nesting": 0,
+      "params": 11
+    },
+    {
+      "file": "boltrig/config/settings.py",
+      "name": "load_settings",
+      "line": 61,
+      "length": 21,
+      "cc": 18,
+      "nesting": 1,
+      "params": 1
+    },
+    {
+      "file": "boltrig/fleet/chief_of_staff.py",
+      "name": "__init__",
+      "line": 42,
+      "length": 21,
+      "cc": 3,
+      "nesting": 1,
+      "params": 6
+    },
+    {
+      "file": "boltrig/fleet/department_head.py",
+      "name": "__init__",
+      "line": 25,
+      "length": 21,
+      "cc": 1,
+      "nesting": 0,
+      "params": 9
+    },
+    {
+      "file": "boltrig/identity/auth.py",
+      "name": "__init__",
+      "line": 79,
+      "length": 21,
+      "cc": 2,
+      "nesting": 0,
+      "params": 8
+    },
+    {
+      "file": "boltrig/adapters/http_base.py",
+      "name": "paginate",
+      "line": 320,
+      "length": 20,
+      "cc": 5,
+      "nesting": 2,
+      "params": 7
+    },
+    {
+      "file": "boltrig/memory/adapter.py",
+      "name": "__init__",
+      "line": 89,
+      "length": 20,
+      "cc": 2,
+      "nesting": 0,
+      "params": 9
+    },
+    {
+      "file": "boltrig/adapters/builtin/inbound_webhook.py",
+      "name": "_extract_timestamp",
+      "line": 73,
+      "length": 18,
+      "cc": 9,
+      "nesting": 5,
+      "params": 2
+    },
+    {
+      "file": "boltrig/adapters/mcp_consumer.py",
+      "name": "__init__",
+      "line": 28,
+      "length": 18,
+      "cc": 1,
+      "nesting": 0,
+      "params": 7
+    },
+    {
+      "file": "boltrig/fleet/result.py",
+      "name": "succeeded",
+      "line": 40,
+      "length": 18,
+      "cc": 3,
+      "nesting": 0,
+      "params": 6
+    },
+    {
+      "file": "boltrig/adapters/generator.py",
+      "name": "__init__",
+      "line": 96,
+      "length": 16,
+      "cc": 1,
+      "nesting": 0,
+      "params": 7
+    },
+    {
+      "file": "boltrig/fleet/chat.py",
+      "name": "_drive",
+      "line": 124,
+      "length": 16,
+      "cc": 3,
+      "nesting": 2,
+      "params": 6
+    },
+    {
+      "file": "boltrig/kernel/platform_routes.py",
+      "name": "audit_search",
+      "line": 456,
+      "length": 16,
+      "cc": 9,
+      "nesting": 2,
+      "params": 6
+    },
+    {
+      "file": "boltrig/adapters/http_base.py",
+      "name": "__init__",
+      "line": 125,
+      "length": 15,
+      "cc": 4,
+      "nesting": 0,
+      "params": 6
+    },
+    {
+      "file": "boltrig/kernel/__init__.py",
+      "name": "invoke",
+      "line": 100,
+      "length": 14,
+      "cc": 1,
+      "nesting": 0,
+      "params": 7
+    },
+    {
+      "file": "boltrig/kernel/hitl.py",
+      "name": "answer",
+      "line": 75,
+      "length": 14,
+      "cc": 1,
+      "nesting": 0,
+      "params": 6
+    },
+    {
+      "file": "boltrig/memory/embeddings.py",
+      "name": "__init__",
+      "line": 103,
+      "length": 14,
+      "cc": 1,
+      "nesting": 0,
+      "params": 6
+    },
+    {
+      "file": "boltrig/memory/engine.py",
+      "name": "recall",
+      "line": 51,
+      "length": 14,
+      "cc": 1,
+      "nesting": 0,
+      "params": 7
+    },
+    {
+      "file": "boltrig/kernel/app.py",
+      "name": "context",
+      "line": 46,
+      "length": 13,
+      "cc": 2,
+      "nesting": 0,
+      "params": 6
+    },
+    {
+      "file": "boltrig/memory/cognify.py",
+      "name": "cognify_conversation",
+      "line": 94,
+      "length": 12,
+      "cc": 1,
+      "nesting": 0,
+      "params": 6
+    },
+    {
+      "file": "boltrig/kernel/mcp.py",
+      "name": "issue_run_token",
+      "line": 57,
+      "length": 9,
+      "cc": 1,
+      "nesting": 0,
+      "params": 6
+    },
+    {
+      "file": "boltrig/memory/cognee.py",
+      "name": "recall",
+      "line": 47,
+      "length": 7,
+      "cc": 1,
+      "nesting": 0,
+      "params": 7
+    }
+  ]
+}
