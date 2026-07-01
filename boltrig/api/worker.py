@@ -1,8 +1,10 @@
 """The fleet worker process. Run with: python -m boltrig.api.worker
 
-Registers durable workers (Hatchet in production, a local executor as the
-offline dev fallback, P6) and runs the permanent tier: the Chief of Staff polls
-the work item store and routes pending items to department heads (US-FLT-01).
+Builds the kernel, selects the durable executor (Hatchet in production, the
+local fallback offline, US-EXE-05), builds the org from the manifest hierarchy
+(Chief of Staff + department heads, P7), and runs the delegation pump: pending
+work items are claimed, routed, decomposed, joined and completed (US-FLT-06).
+No manifest hierarchy degrades to the minimal default org, never a crash (P9).
 """
 
 from __future__ import annotations
@@ -10,14 +12,15 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from boltrig.fleet import register_workers
+from boltrig.config import load_manifest
+from boltrig.fleet import build_org, build_spawner, register_workers
 
-from .bootstrap import build_kernel_async
+from .bootstrap import _DEFAULT_TENANT, _find_manifest, build_kernel_async
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("boltrig.worker")
 
-_POLL_SECONDS = 5
+_POLL_SECONDS = 5.0
 
 
 async def _run() -> None:
@@ -28,11 +31,22 @@ async def _run() -> None:
         "fleet worker started (%s, durable=%s)",
         type(executor).__name__, executor.durable,
     )
-    # The permanent tier is long-lived. With Hatchet this loop is replaced by the
-    # engine's durable scheduling; the local fallback simply stays alive so the
-    # process is a valid compose service and can be extended to poll queues.
-    while True:
-        await asyncio.sleep(_POLL_SECONDS)
+    # The org from the manifest hierarchy; a missing/broken manifest degrades to
+    # the minimal default org (one CoS over one general head, P9).
+    manifest = None
+    manifest_path = _find_manifest()
+    if manifest_path:
+        try:
+            manifest = load_manifest(manifest_path)
+        except Exception as exc:
+            log.warning("manifest load failed (%s); using the default org", exc)
+    tenant = manifest.tenant_id if manifest is not None else _DEFAULT_TENANT
+    pump = build_org(kernel, build_spawner(kernel), manifest, executor=executor)
+    log.info(
+        "delegation pump live (tenant=%s, departments=%s)",
+        tenant, sorted(pump.heads),
+    )
+    await pump.run_forever(tenant, interval=_POLL_SECONDS)
 
 
 def main() -> None:

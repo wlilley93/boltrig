@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from .chief_of_staff import ChiefOfStaff, Department
 from .department_head import DepartmentHead
+from .pump import WorkPump, build_org
 from .result import AgentResult
 from .runtime import (
     ClaudeApiRuntime,
@@ -40,10 +41,12 @@ __all__ = [
     "build_spawner",
     "make_app_spawner",
     "make_agent_invoker",
-    # permanent agents
+    # permanent agents + the delegation pump
     "ChiefOfStaff",
     "Department",
     "DepartmentHead",
+    "WorkPump",
+    "build_org",
     # runtimes
     "Runtime",
     "ScriptRuntime",

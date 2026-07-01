@@ -32,6 +32,7 @@ from boltrig.models import (
 )
 
 from .continuity import compose_turn_task, continuity_enabled
+from .pump import persist_new_work_items
 
 # turn_executor(*, tenant_id, user_id, conversation_id, run_id, message, relay) -> awaitable.
 # It publishes events to relay.publish(run_id, ...) during the run; ChatService
@@ -182,16 +183,22 @@ def build_turn_executor(kernel, spawner, *, continuity: bool | None = None) -> T
         try:
             result = await spawner.spawn(tenant_id, task, [], {}, ctx, partial_on_budget=True)
             summary = result.get("summary") or "Done."
-            if result.get("degraded"):
-                # Honesty about degradation (US-FLT-07): a degraded echo is never
-                # presented as ordinary success - the reply carries the flag and a
-                # visible prefix. WorkItem.degraded persists it (Beat 3); Beat 4's
-                # pump stamps it from the spawn result on the claimed item.
+            # Honesty about degradation (US-FLT-07): the flag persists on the
+            # turn's work item, and a degraded echo is never presented as
+            # ordinary success - the reply carries the flag and a visible prefix.
+            item.degraded = bool(result.get("degraded"))
+            if item.degraded:
                 if not summary.startswith("degraded"):
                     summary = f"(degraded) {summary}"
                 relay.publish(run_id, {"type": "text_delta", "delta": summary, "degraded": True})
             else:
                 relay.publish(run_id, {"type": "text_delta", "delta": summary})
+            # Two-lane hand-off (D5/D7): the turn itself rode the direct-spawn
+            # fast lane; its discovered follow-on work is filed as PENDING
+            # children (owner/department unset) so the org lane pumps it onward.
+            await persist_new_work_items(
+                kernel.store, item, result.get("new_work_items"), source="chat"
+            )
             item.status = WorkStatus.DONE
         except BoltrigError as exc:
             relay.publish(run_id, {"type": "text_delta", "delta": f"({exc.reason})"})
