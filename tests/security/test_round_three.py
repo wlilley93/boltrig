@@ -140,7 +140,8 @@ def test_memory_scope_isolation():
                                                   kind="fact", content="org wide"))
     asyncio.run(_seed())
     c = _client(k)
-    h = _hdr("employee"); h["x-boltrig-subject"] = "alice"
+    h = _hdr("employee")
+    h["x-boltrig-subject"] = "alice"
     items = c.post("/v1/memory/query", json={}, headers=h).json()["items"]
     contents = {i["content"] for i in items}
     assert "alice secret" in contents and "org wide" in contents

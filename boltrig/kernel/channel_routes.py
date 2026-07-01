@@ -359,6 +359,11 @@ def register_channel_routes(app, *, principal_dep, get_kernel) -> None:
         denied = _admin(p)
         if denied:
             return denied
+        # the path channel_id is authoritative: the binding must belong to this
+        # channel (else a wrong-but-tenant-valid id would delete across channels).
+        rows = await k.store.list_channel_bindings(p.tenant_id, channel_id)
+        if not any(b.id == binding_id for b in rows):
+            return JSONResponse({"status": "error", "reason": "not_found"}, status_code=404)
         await k.store.delete_channel_binding(p.tenant_id, binding_id)
         await _audit(k, p, "channel.unbind", {"channel": channel_id, "binding": binding_id})
         return JSONResponse({"status": "ok"})

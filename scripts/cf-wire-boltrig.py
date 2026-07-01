@@ -11,7 +11,11 @@ Layout served by the host Caddy:
   app.boltrig.io               -> 127.0.0.1:8620 (the console UI)
   boltrig.dev / www.boltrig.dev-> 301 redirect to https://boltrig.io
 """
-import json, os, sys, urllib.request, urllib.error
+import json
+import os
+import sys
+import urllib.error
+import urllib.request
 
 TOK = os.environ["CLOUDFLARE_API_TOKEN"]
 ACC = os.environ["CLOUDFLARE_ACCOUNT_ID"]
