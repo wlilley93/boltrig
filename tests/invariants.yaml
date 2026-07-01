@@ -108,6 +108,10 @@ invariants:
       - tests/security/test_cf_access_auth.py::test_member_can_operate_but_not_author
       - tests/security/test_cf_access_auth.py::test_authenticated_but_unmapped_email_is_denied
       - tests/security/test_cf_access_auth.py::test_email_case_and_mapping_are_normalised
+      - tests/security/test_channel_gateway.py::test_bound_sender_resolves_to_its_internal_principal
+      - tests/security/test_channel_gateway.py::test_unbound_sender_is_denied_fail_closed
+      - tests/security/test_channel_gateway.py::test_unknown_tier_binding_is_denied
+      - tests/security/test_channel_gateway.py::test_binding_is_tenant_and_channel_scoped
   NFR-REL-01:
     description: A blocking HITL pause is durable - survives a restart and resumes on approval.
     tests:
