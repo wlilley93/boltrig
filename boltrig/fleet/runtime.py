@@ -39,6 +39,24 @@ def _estimate_tokens(prompt: str, tools: list[str]) -> int:
     return max(16, chars // 4)
 
 
+def _system_for(context) -> str | None:
+    """The kernel-composed system prompt for this run's tier (may be None)."""
+    from boltrig.fleet.prompt_stack import compose_system_prompt
+
+    return compose_system_prompt(getattr(context, "actor_tier", "ephemeral"))
+
+
+def _messages(context, prompt: str) -> list[dict]:
+    """OpenAI-style messages with the authoritative system prompt prepended; the
+    caller's prompt is the user content and can never strip the system frame."""
+    system = _system_for(context)
+    msgs: list[dict] = []
+    if system:
+        msgs.append({"role": "system", "content": system})
+    msgs.append({"role": "user", "content": prompt})
+    return msgs
+
+
 @runtime_checkable
 class Runtime(Protocol):
     """How one agent run is executed. Implementations are stateless per call."""
@@ -126,7 +144,7 @@ class HermesRuntime:
 
             payload = {
                 "model": self.endpoint.model,
-                "messages": [{"role": "user", "content": prompt}],
+                "messages": _messages(context, prompt),
                 "tools": list(tools),
             }
             async with httpx.AsyncClient(timeout=30.0) as client:
@@ -188,11 +206,16 @@ class ClaudeApiRuntime:
         base_url = self.endpoint.base_url if self.endpoint else None
         try:
             client = AsyncAnthropic(api_key=api_key, base_url=base_url)
-            msg = await client.messages.create(
-                model=model,
-                max_tokens=1024,
-                messages=[{"role": "user", "content": prompt}],
-            )
+            # Anthropic takes the system prompt as a top-level param, not a message.
+            system = _system_for(context)
+            create_kwargs: dict[str, Any] = {
+                "model": model,
+                "max_tokens": 1024,
+                "messages": [{"role": "user", "content": prompt}],
+            }
+            if system:
+                create_kwargs["system"] = system
+            msg = await client.messages.create(**create_kwargs)
             text = "".join(
                 getattr(block, "text", "") for block in getattr(msg, "content", [])
             )
