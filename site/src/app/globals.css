@@ -1,0 +1,90 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+
+  /* Boltrig scene chrome palette (matches the WebGL canvas background). Used by
+     the immersive loader + HUD so DOM chrome stays in lock-step with the scene
+     without raw hex in class names. Keep in sync with BRAIN_CONFIG. */
+  --brain-void: #04060d; /* canvas background / loader base (Boltrig ink-900) */
+  --brain-deep: #0c1422; /* deep ink (fold colour) */
+  --brain-azure: #3dd3f0; /* electric-cyan accent (silhouette) */
+  --brain-sky: #7c8bff; /* indigo highlight */
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  /* Boltrig typefaces (loaded from Google Fonts in layout.tsx): IBM Plex Sans
+     for copy, JetBrains Mono for the terminal-style chrome/telemetry - matching
+     the product console. */
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-brain-void: var(--brain-void);
+  --color-brain-deep: var(--brain-deep);
+  --color-brain-azure: var(--brain-azure);
+  --color-brain-sky: var(--brain-sky);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  /* Normal document flow so the page can grow taller than the viewport and
+     scroll. (A previous single-viewport layout pinned the body to `height:100vh`
+     and flex-centred it — that vertically centred a tall scrolling page inside one
+     screen, stranding the first section above the fold. See changelog 2026-06-06.) */
+  min-height: 100vh;
+  width: 100%;
+}
+
+@layer base {
+  /* Adaptive scaling grid — scales the root font-size with the viewport so a
+     rem-based layout stays proportional. Each breakpoint divides FONT_BASE
+     (16px) by the design base width its range was laid out at:
+       font-size: 16 * 100 / baseWidth  (vw)
+     Above 1920px the AdaptiveGrid component takes over (scale-up).
+     Keep in sync with src/components/common/grid/grid.config.ts. */
+  html {
+    font-size: 16px;
+  }
+
+  @media (max-width: 1920px) {
+    html {
+      font-size: 0.833333vw; /* 16 * 100 / 1920 */
+    }
+  }
+
+  @media (max-width: 1440px) {
+    html {
+      font-size: 1.111111vw; /* 16 * 100 / 1440 */
+    }
+  }
+
+  @media (max-width: 1024px) {
+    html {
+      font-size: 1.5625vw; /* 16 * 100 / 1024 */
+    }
+  }
+
+  @media (max-width: 640px) {
+    html {
+      font-size: 4.444444vw; /* 16 * 100 / 360 */
+    }
+  }
+}
+
+@layer utilities {
+}
+
+@layer components {
+}
