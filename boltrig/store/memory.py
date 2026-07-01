@@ -14,6 +14,9 @@ from boltrig.models import (
     AgentCapability,
     AuditEvent,
     Budget,
+    Channel,
+    ChannelBinding,
+    ChannelPairing,
     ConfigRevision,
     Conversation,
     ConversationMessage,
@@ -84,6 +87,11 @@ class InMemoryStore:
         self._invites: dict[tuple[str, str], UserInvitation] = {}
         self._settings: dict[tuple[str, str, str], UserSetting] = {}
         self._sessions: dict[tuple[str, str], UserSession] = {}
+        # Channels (decision 0003): channels keyed by id (cross-tenant lookup on
+        # the inbound path), bindings + pairings keyed per-tenant.
+        self._channels: dict[str, Channel] = {}
+        self._chan_bindings: dict[tuple[str, str], ChannelBinding] = {}
+        self._chan_pairings: dict[tuple[str, str], ChannelPairing] = {}
 
     # --- registry ---
     async def get_noun(self, tenant_id, noun_id):
@@ -346,6 +354,76 @@ class InMemoryStore:
 
     async def get_personal_agent(self, tenant_id, user_id):
         return self._personal.get((tenant_id, user_id))
+
+    # --- channels (decision 0003) ---
+    async def upsert_channel(self, channel):
+        self._channels[channel.id] = channel
+
+    async def get_channel(self, tenant_id, channel_id):
+        c = self._channels.get(channel_id)
+        return c if c and c.tenant_id == tenant_id else None
+
+    async def get_channel_by_id(self, channel_id):
+        return self._channels.get(channel_id)
+
+    async def list_channels(self, tenant_id):
+        return sorted(
+            [c for c in self._channels.values() if c.tenant_id == tenant_id],
+            key=lambda c: c.name,
+        )
+
+    async def delete_channel(self, tenant_id, channel_id):
+        c = self._channels.get(channel_id)
+        if c and c.tenant_id == tenant_id:
+            del self._channels[channel_id]
+            for k in [k for k, b in self._chan_bindings.items() if b.channel_id == channel_id]:
+                self._chan_bindings.pop(k, None)
+            for k in [k for k, p in self._chan_pairings.items() if p.channel_id == channel_id]:
+                self._chan_pairings.pop(k, None)
+
+    async def upsert_channel_binding(self, binding):
+        self._chan_bindings[(binding.tenant_id, binding.id)] = binding
+
+    async def get_channel_binding(self, tenant_id, channel_id, external_user_id):
+        for b in self._chan_bindings.values():
+            if (
+                b.tenant_id == tenant_id
+                and b.channel_id == channel_id
+                and b.external_user_id == external_user_id
+            ):
+                return b
+        return None
+
+    async def list_channel_bindings(self, tenant_id, channel_id):
+        return [
+            b
+            for b in self._chan_bindings.values()
+            if b.tenant_id == tenant_id and b.channel_id == channel_id
+        ]
+
+    async def delete_channel_binding(self, tenant_id, binding_id):
+        self._chan_bindings.pop((tenant_id, binding_id), None)
+
+    async def create_channel_pairing(self, pairing):
+        self._chan_pairings[(pairing.tenant_id, pairing.id)] = pairing
+
+    async def get_channel_pairing_by_code(self, tenant_id, channel_id, code_hash):
+        for p in self._chan_pairings.values():
+            if (
+                p.tenant_id == tenant_id
+                and p.channel_id == channel_id
+                and p.code_hash == code_hash
+                and p.status == "pending"
+            ):
+                return p
+        return None
+
+    async def consume_channel_pairing(self, tenant_id, pairing_id):
+        p = self._chan_pairings.get((tenant_id, pairing_id))
+        if p is None or p.status != "pending":
+            return False
+        p.status = "consumed"
+        return True
 
     # --- memory (scope-filtered, SEC-31) ---
     async def add_memory_item(self, item):

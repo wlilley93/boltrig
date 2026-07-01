@@ -38,7 +38,10 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 --
 --    personal_access_tokens is DELIBERATELY EXCLUDED: PAT authentication resolves
 --    a token by its hash BEFORE the tenant is known (a legitimate cross-tenant
---    read), so it keeps its own SQL-level + constant-time-compare guard.
+--    read), so it keeps its own SQL-level + constant-time-compare guard. The
+--    channels table is EXCLUDED for the same reason (decision 0003): the inbound
+--    path resolves the tenant from the unguessable channel id before any tenant
+--    is bound. channel_bindings + channel_pairings ARE scoped (below).
 DO $$
 DECLARE
   t text;
@@ -50,7 +53,8 @@ DECLARE
     'config_revisions','eval_cases','eval_runs','notification_prefs',
     'personal_agents','memory_items','mcp_servers','conversation_messages',
     'user_invitations','user_settings','user_sessions','memory_facts',
-    'memory_ingestions','memory_erasures','memory_vectors','memory_vector_edges'
+    'memory_ingestions','memory_erasures','memory_vectors','memory_vector_edges',
+    'channel_bindings','channel_pairings'
   ];
 BEGIN
   FOREACH t IN ARRAY scoped LOOP

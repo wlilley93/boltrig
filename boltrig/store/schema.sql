@@ -374,6 +374,58 @@ CREATE TABLE IF NOT EXISTS personal_agents (
 );
 CREATE INDEX IF NOT EXISTS personal_agents_user_idx ON personal_agents (tenant_id, user_id);
 
+-- Channels (decision 0003). A governed connection to an external messaging
+-- platform. This table is DELIBERATELY RLS-EXCLUDED (like personal_access_tokens):
+-- the inbound path resolves the tenant from the unguessable channel id BEFORE any
+-- tenant is bound. Credentials are references (SEC-04), never plaintext.
+CREATE TABLE IF NOT EXISTS channels (
+    id                 TEXT PRIMARY KEY,
+    tenant_id          TEXT NOT NULL,
+    platform           TEXT NOT NULL,          -- slack | discord | whatsapp | webhook | ...
+    name               TEXT NOT NULL,
+    transport          TEXT NOT NULL,          -- webhook | socket
+    credential_ref     TEXT,
+    config             JSONB NOT NULL DEFAULT '{}'::jsonb,
+    unpaired_behavior  TEXT NOT NULL DEFAULT 'reject',  -- reject | ignore | pair
+    enabled            BOOLEAN NOT NULL DEFAULT true,
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS channels_tenant_idx ON channels (tenant_id);
+
+-- Channel bindings: a verified external sender mapped to an internal identity,
+-- per tenant. RLS-scoped - tenant comes from the resolved channel, never the
+-- message body (decision 0003).
+CREATE TABLE IF NOT EXISTS channel_bindings (
+    id                TEXT NOT NULL,
+    tenant_id         TEXT NOT NULL,
+    channel_id        TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+    platform          TEXT NOT NULL,
+    external_user_id  TEXT NOT NULL,
+    subject           TEXT NOT NULL,
+    role              TEXT NOT NULL,
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, id)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS channel_bindings_sender_idx
+    ON channel_bindings (tenant_id, channel_id, external_user_id);
+
+-- Channel pairings: one-time codes to bind an unknown sender. Hashed at rest
+-- (SEC-05), TTL-bounded, lockout-guarded. RLS-scoped.
+CREATE TABLE IF NOT EXISTS channel_pairings (
+    id                TEXT NOT NULL,
+    tenant_id         TEXT NOT NULL,
+    channel_id        TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+    code_hash         TEXT NOT NULL,
+    external_user_id  TEXT NOT NULL,
+    status            TEXT NOT NULL DEFAULT 'pending',  -- pending | consumed | expired
+    attempts          INTEGER NOT NULL DEFAULT 0,
+    expires_at        TIMESTAMPTZ,
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, id)
+);
+CREATE INDEX IF NOT EXISTS channel_pairings_code_idx
+    ON channel_pairings (tenant_id, channel_id, code_hash);
+
 -- Round Three (optional): memory & knowledge (Epic MEM). owner_scope is the RBAC
 -- boundary; sensitive memory follows sensitive-routing (SEC-31).
 CREATE TABLE IF NOT EXISTS memory_items (

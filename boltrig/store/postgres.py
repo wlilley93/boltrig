@@ -23,6 +23,9 @@ from boltrig.models import (
     ActionType,
     AuditEvent,
     Budget,
+    Channel,
+    ChannelBinding,
+    ChannelPairing,
     Consequence,
     ConfigRevision,
     Conversation,
@@ -761,6 +764,104 @@ class PostgresStore:
         )
         return _personal(row)
 
+    # --- channels (decision 0003) ---
+    async def upsert_channel(self, channel):
+        await self._pool.execute(
+            """INSERT INTO channels
+                 (id, tenant_id, platform, name, transport, credential_ref, config,
+                  unpaired_behavior, enabled, created_at)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,COALESCE($10, now()))
+               ON CONFLICT (id) DO UPDATE SET
+                 platform=EXCLUDED.platform, name=EXCLUDED.name, transport=EXCLUDED.transport,
+                 credential_ref=EXCLUDED.credential_ref, config=EXCLUDED.config,
+                 unpaired_behavior=EXCLUDED.unpaired_behavior, enabled=EXCLUDED.enabled""",
+            channel.id, channel.tenant_id, channel.platform, channel.name, channel.transport,
+            channel.credential_ref, channel.config, channel.unpaired_behavior, channel.enabled,
+            channel.created_at,
+        )
+
+    async def get_channel(self, tenant_id, channel_id):
+        row = await self._pool.fetchrow(
+            "SELECT * FROM channels WHERE id=$1 AND tenant_id=$2", channel_id, tenant_id
+        )
+        return _channel(row)
+
+    async def get_channel_by_id(self, channel_id):
+        # cross-tenant inbound lookup by the unguessable id (channels is RLS-excluded)
+        row = await self._pool.fetchrow("SELECT * FROM channels WHERE id=$1", channel_id)
+        return _channel(row)
+
+    async def list_channels(self, tenant_id):
+        rows = await self._pool.fetch(
+            "SELECT * FROM channels WHERE tenant_id=$1 ORDER BY name", tenant_id
+        )
+        return [_channel(r) for r in rows]
+
+    async def delete_channel(self, tenant_id, channel_id):
+        # bindings + pairings cascade via FK ON DELETE CASCADE (schema.sql)
+        await self._pool.execute(
+            "DELETE FROM channels WHERE id=$1 AND tenant_id=$2", channel_id, tenant_id
+        )
+
+    async def upsert_channel_binding(self, binding):
+        await self._pool.execute(
+            """INSERT INTO channel_bindings
+                 (id, tenant_id, channel_id, platform, external_user_id, subject, role, created_at)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,COALESCE($8, now()))
+               ON CONFLICT (tenant_id, id) DO UPDATE SET
+                 subject=EXCLUDED.subject, role=EXCLUDED.role""",
+            binding.id, binding.tenant_id, binding.channel_id, binding.platform,
+            binding.external_user_id, binding.subject, binding.role, binding.created_at,
+        )
+
+    async def get_channel_binding(self, tenant_id, channel_id, external_user_id):
+        row = await self._pool.fetchrow(
+            """SELECT * FROM channel_bindings
+               WHERE tenant_id=$1 AND channel_id=$2 AND external_user_id=$3""",
+            tenant_id, channel_id, external_user_id,
+        )
+        return _channel_binding(row)
+
+    async def list_channel_bindings(self, tenant_id, channel_id):
+        rows = await self._pool.fetch(
+            "SELECT * FROM channel_bindings WHERE tenant_id=$1 AND channel_id=$2",
+            tenant_id, channel_id,
+        )
+        return [_channel_binding(r) for r in rows]
+
+    async def delete_channel_binding(self, tenant_id, binding_id):
+        await self._pool.execute(
+            "DELETE FROM channel_bindings WHERE tenant_id=$1 AND id=$2", tenant_id, binding_id
+        )
+
+    async def create_channel_pairing(self, pairing):
+        await self._pool.execute(
+            """INSERT INTO channel_pairings
+                 (id, tenant_id, channel_id, code_hash, external_user_id, status, attempts,
+                  expires_at, created_at)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,COALESCE($9, now()))""",
+            pairing.id, pairing.tenant_id, pairing.channel_id, pairing.code_hash,
+            pairing.external_user_id, pairing.status, pairing.attempts, pairing.expires_at,
+            pairing.created_at,
+        )
+
+    async def get_channel_pairing_by_code(self, tenant_id, channel_id, code_hash):
+        row = await self._pool.fetchrow(
+            """SELECT * FROM channel_pairings
+               WHERE tenant_id=$1 AND channel_id=$2 AND code_hash=$3 AND status='pending'""",
+            tenant_id, channel_id, code_hash,
+        )
+        return _channel_pairing(row)
+
+    async def consume_channel_pairing(self, tenant_id, pairing_id):
+        # atomic pending -> consumed CAS (single-use; mirrors consume_hitl)
+        row = await self._pool.fetchrow(
+            """UPDATE channel_pairings SET status='consumed'
+               WHERE tenant_id=$1 AND id=$2 AND status='pending' RETURNING id""",
+            tenant_id, pairing_id,
+        )
+        return row is not None
+
     # --- memory ---
     async def add_memory_item(self, m: MemoryItem):
         await self._pool.execute(
@@ -1232,6 +1333,37 @@ def _mem_fact(r):
         engine_ref=r["engine_ref"], kind=r["kind"], source_kind=r["source_kind"],
         source_ref=r["source_ref"], data_class=r["data_class"], content=r["content"] or "",
         created_at=r["created_at"], redacted=r["redacted"],
+    )
+
+
+def _channel(r):
+    if r is None:
+        return None
+    return Channel(
+        id=r["id"], tenant_id=r["tenant_id"], platform=r["platform"], name=r["name"],
+        transport=r["transport"], credential_ref=r["credential_ref"],
+        config=dict(r["config"] or {}), unpaired_behavior=r["unpaired_behavior"],
+        enabled=r["enabled"], created_at=r["created_at"],
+    )
+
+
+def _channel_binding(r):
+    if r is None:
+        return None
+    return ChannelBinding(
+        id=r["id"], tenant_id=r["tenant_id"], channel_id=r["channel_id"], platform=r["platform"],
+        external_user_id=r["external_user_id"], subject=r["subject"], role=r["role"],
+        created_at=r["created_at"],
+    )
+
+
+def _channel_pairing(r):
+    if r is None:
+        return None
+    return ChannelPairing(
+        id=r["id"], tenant_id=r["tenant_id"], channel_id=r["channel_id"], code_hash=r["code_hash"],
+        external_user_id=r["external_user_id"], status=r["status"], attempts=r["attempts"],
+        expires_at=r["expires_at"], created_at=r["created_at"],
     )
 
 

@@ -21,6 +21,16 @@ from .base import (
     WorkItemId,
     utcnow,
 )
+from .channels import (
+    CHANNEL_PLATFORMS,
+    SOCKET_PLATFORMS,
+    UNPAIRED_BEHAVIORS,
+    WEBHOOK_PLATFORMS,
+    Channel,
+    ChannelBinding,
+    ChannelPairing,
+    transport_for,
+)
 from .context import InvocationContext
 from .conversation import (
     Conversation,
@@ -91,6 +101,14 @@ __all__ = [
     "WorkItemId",
     "utcnow",
     "InvocationContext",
+    "Channel",
+    "ChannelBinding",
+    "ChannelPairing",
+    "CHANNEL_PLATFORMS",
+    "SOCKET_PLATFORMS",
+    "WEBHOOK_PLATFORMS",
+    "UNPAIRED_BEHAVIORS",
+    "transport_for",
     "Conversation",
     "ConversationMessage",
     "ConversationStatus",
