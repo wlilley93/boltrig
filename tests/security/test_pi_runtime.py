@@ -38,12 +38,15 @@ async def test_pi_degrades_without_sidecar():
 def test_sidecar_request_carries_no_tool_credentials():
     rt = PiRuntime(sidecar_url="http://pi", mcp_url="http://mcp", issue_token=lambda *a, **k: "TOK")
     body = rt.build_request("prompt", _ctx(), "TOK")
-    # the sidecar gets exactly: the prompt, the scoped MCP connection, the model,
-    # and limits - never a tool/verb credential (SEC-27); its only tools are MCP.
-    assert set(body) == {"prompt", "mcp", "model", "limits"}
+    # the sidecar gets exactly: the prompt, the kernel-composed system prompt
+    # (floor + tier character, decision Corporate Brain III/V), the scoped MCP
+    # connection, the model, and limits - never a tool/verb credential (SEC-27).
+    assert set(body) == {"prompt", "system", "mcp", "model", "limits"}
     assert body["mcp"]["token"] == "TOK"
     assert body["model"].get("api_key") in (None, "")  # no model key offline either
     assert "credential" not in repr(body).lower()
+    # the system prompt is the governance floor + character - it carries no secret
+    assert body["system"] is None or "kernel verbs" in body["system"]
 
 
 @pytest.mark.invariant("FR-RUN-03")

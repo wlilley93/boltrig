@@ -87,6 +87,10 @@ class RunRequest(BaseModel):
     """The ``POST /run`` request body (SRS S5.3)."""
 
     prompt: str
+    # kernel-composed governance floor + tier character; prepended to the loop
+    # system prompt so the cage is authoritative on the agentic lane (Corporate
+    # Brain III/V). None when the caller is a human / has no agent character.
+    system: str | None = None
     mcp: McpConfig
     model: ModelConfig = Field(default_factory=ModelConfig)
     limits: Limits = Field(default_factory=Limits)
@@ -349,10 +353,12 @@ async def run_loop(req: RunRequest) -> AsyncIterator[str]:
         )
         return
 
-    # 3) The live loop.
+    # 3) The live loop. The kernel-composed floor + character (req.system) is
+    # authoritative and comes FIRST, then the sidecar's own loop mechanics.
     openai_tools = _to_openai_tools(mcp_tools)
+    system_content = f"{req.system}\n\n{_SYSTEM_PROMPT}" if req.system else _SYSTEM_PROMPT
     messages: list[dict[str, Any]] = [
-        {"role": "system", "content": _SYSTEM_PROMPT},
+        {"role": "system", "content": system_content},
         {"role": "user", "content": req.prompt},
     ]
     tokens_used = 0

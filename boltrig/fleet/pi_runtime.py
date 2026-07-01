@@ -70,8 +70,14 @@ class PiRuntime:
     def build_request(self, prompt: str, context: InvocationContext, token: str) -> dict:
         """The sidecar /run payload. Carries the model key + a run-scoped MCP
         token ONLY - never a tool/verb credential (SEC-27)."""
+        from boltrig.fleet.prompt_stack import compose_system_prompt
+
         return {
             "prompt": prompt,
+            # the kernel-composed governance floor + tier character (decision:
+            # Corporate Brain III/V); the sidecar prepends it to its loop system
+            # prompt so the cage is authoritative on the agentic lane too.
+            "system": compose_system_prompt(getattr(context, "actor_tier", "ephemeral")),
             "mcp": {"url": self.mcp_url, "token": token},
             "model": {
                 "endpoint": getattr(self.endpoint, "base_url", None),
