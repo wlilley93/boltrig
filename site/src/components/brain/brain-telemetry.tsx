@@ -8,15 +8,15 @@ import { STORY_SECTIONS } from "@/data/story";
 import { useStory } from "./story/use-story";
 import { useBrainControls } from "./use-brain-controls";
 
-const NEURON_COUNT = "86,000,000,000";
+const DISPATCH_STEPS = "10-STEP";
 const REGIONS = [
-  "frontal cortex",
-  "occipital lobe",
-  "hippocampus",
-  "cerebellum",
-  "parietal lobe",
-  "brain stem",
-  "temporal lobe",
+  "identity",
+  "grants",
+  "consequence",
+  "rate limit",
+  "idempotency",
+  "execute",
+  "audit",
 ] as const;
 const SPARK_BARS = 36;
 
@@ -72,7 +72,7 @@ export const BrainTelemetry = () => {
   }, []);
 
   const enter = useSpring({
-    from: { opacity: 0, y: -12 },
+    from: { opacity: 0, y: 12 },
     to: { opacity: 1, y: 0 },
     delay: 350,
     config: { tension: 120, friction: 26 },
@@ -98,7 +98,7 @@ export const BrainTelemetry = () => {
     <animated.section
       aria-hidden
       style={{ opacity: enter.opacity, y: enter.y }}
-      className="fixed inset-x-0 top-0 z-30 flex h-9 items-center gap-4 overflow-hidden border-b border-brain-sky/15 bg-brain-void/55 px-5 text-[0.6rem] uppercase tracking-[0.2em] text-brain-sky/80 backdrop-blur-md md:h-10 md:gap-5 md:px-8"
+      className="fixed inset-x-0 bottom-0 z-30 flex h-9 items-center gap-4 overflow-hidden border-t border-brain-sky/15 bg-brain-void/55 px-5 text-[0.6rem] uppercase tracking-[0.2em] text-brain-sky/80 backdrop-blur-md md:h-10 md:gap-5 md:px-8"
     >
       {/* Brand */}
       <span className="flex items-center gap-2 font-semibold text-brain-sky/90">
@@ -106,20 +106,20 @@ export const BrainTelemetry = () => {
           style={{ opacity: pulse.o }}
           className="h-1.5 w-1.5 rounded-full bg-brain-sky shadow-[0_0_10px_2px] shadow-brain-azure/60"
         />
-        NEURAL_MONITOR
-        <span className="hidden text-brain-sky/35 sm:inline">{"// LIVE"}</span>
+        BOLTRIG
+        <span className="hidden text-brain-sky/35 sm:inline">{"// GOVERNED"}</span>
       </span>
 
-      <Seg label="NEURONS" className="hidden xl:flex">
-        {NEURON_COUNT}
+      <Seg label="DISPATCH" className="hidden xl:flex">
+        {DISPATCH_STEPS}
       </Seg>
-      <Seg label="PARTICLES" className="hidden lg:flex">
+      <Seg label="NODES" className="hidden lg:flex">
         {surfaceCount.toLocaleString("en-US")}
       </Seg>
-      <Seg label="FIRING" className="hidden sm:flex">
-        <animated.span>{firingSpring.v.to((v) => `${v.toFixed(2)} M/S`)}</animated.span>
+      <Seg label="THROUGHPUT" className="hidden sm:flex">
+        <animated.span>{firingSpring.v.to((v) => `${v.toFixed(2)} K/S`)}</animated.span>
       </Seg>
-      <Seg label="COHERENCE" className="hidden sm:flex">
+      <Seg label="INTEGRITY" className="hidden sm:flex">
         <animated.span>{cohSpring.v.to((v) => `${(v * 100).toFixed(1)}%`)}</animated.span>
       </Seg>
       <Seg label="FOCUS">

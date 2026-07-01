@@ -10,7 +10,7 @@ const MIN_VISIBLE_MS = 900; // never flash — hold a beat even on instant loads
 const HARD_CAP_MS = 6000; // ultimate fallback if the loader manager never settles
 
 const bootLine = (p: number) =>
-  p < 35 ? "INITIALIZING NEURAL FIELD" : p < 75 ? "SAMPLING CORTICAL SURFACE" : "CALIBRATING SYNAPSES";
+  p < 35 ? "INITIALIZING KERNEL" : p < 75 ? "RESOLVING GOVERNORS" : "SEALING AUDIT CHAIN";
 
 /**
  * Immersive entry loader for the particle brain — a slick console "boot
@@ -109,7 +109,7 @@ export const BrainLoader = () => {
       {/* Terminal boot readout */}
       <div className="flex w-full max-w-xs flex-col items-center gap-5">
         <p className="text-sm font-semibold uppercase tracking-[0.5em] text-brain-sky/85 md:text-base">
-          NEURAL_ATLAS
+          BOLTRIG
         </p>
         <p className="flex items-center gap-2 text-[0.66rem] uppercase tracking-[0.24em] text-brain-sky/55">
           <span aria-hidden className="text-brain-sky/40">

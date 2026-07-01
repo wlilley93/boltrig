@@ -9,6 +9,7 @@ import { getSiteStructuredData } from "@/utils/seo/structured-data";
 import { LazyCookie } from "@/components/common/Cookie";
 import { AdaptiveGrid } from "@/components/common/grid";
 import { ReducedMotion } from "@/components/common/reduced-motion";
+import { SiteHeader } from "@/components/common/site-header";
 import { ScrollLayout } from "@/layouts/scroll-layout";
 
 import "@/app/globals.css";
@@ -41,6 +42,7 @@ export default function RootLayout({
             __html: JSON.stringify(getSiteStructuredData()),
           }}
         />
+        <SiteHeader />
         <ScrollLayout>
           <AdaptiveGrid />
           <ReducedMotion />
