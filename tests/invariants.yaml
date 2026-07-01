@@ -112,6 +112,10 @@ invariants:
       - tests/security/test_channel_gateway.py::test_unbound_sender_is_denied_fail_closed
       - tests/security/test_channel_gateway.py::test_unknown_tier_binding_is_denied
       - tests/security/test_channel_gateway.py::test_binding_is_tenant_and_channel_scoped
+      - tests/security/test_channel_inbound.py::test_signed_inbound_creates_governed_work_item
+      - tests/security/test_channel_inbound.py::test_unsigned_inbound_rejected
+      - tests/security/test_channel_inbound.py::test_verified_but_unbound_sender_denied
+      - tests/security/test_channel_inbound.py::test_unknown_channel_404
   NFR-REL-01:
     description: A blocking HITL pause is durable - survives a restart and resumes on approval.
     tests:

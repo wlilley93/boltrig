@@ -501,4 +501,11 @@ def create_app(
 
     register_memory_routes(app, principal_dep=principal, get_kernel=_get_kernel)
 
+    # Channels (decision 0003): webhook-class ingress + admin management. The
+    # inbound route is signature-authenticated (no principal); everything it
+    # produces re-enters the one chokepoint as a governed work-item intake.
+    from .channel_routes import register_channel_routes
+
+    register_channel_routes(app, principal_dep=principal, get_kernel=_get_kernel)
+
     return app
