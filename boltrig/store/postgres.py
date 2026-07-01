@@ -63,6 +63,7 @@ from boltrig.models import (
     WorkItem,
     WorkStatus,
 )
+from boltrig.models.work import RunCheckpoint
 
 _SCHEMA = Path(__file__).with_name("schema.sql")
 _RLS = Path(__file__).with_name("rls.sql")
@@ -389,18 +390,23 @@ class PostgresStore(ChannelStorePG):
         await self._pool.execute(
             """INSERT INTO work_items (id, tenant_id, source, source_id, intent, confidence,
                                        convergent, status, owner_member, parent_id, hatchet_run_id,
-                                       depth, on_behalf_of, constraints, raw)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+                                       depth, on_behalf_of, constraints, raw, attempts, degraded,
+                                       result, lease_owner, lease_expires_at)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
                ON CONFLICT (tenant_id, id) DO UPDATE SET
                  source=EXCLUDED.source, source_id=EXCLUDED.source_id, intent=EXCLUDED.intent,
                  confidence=EXCLUDED.confidence, convergent=EXCLUDED.convergent,
                  status=EXCLUDED.status, owner_member=EXCLUDED.owner_member,
                  parent_id=EXCLUDED.parent_id, hatchet_run_id=EXCLUDED.hatchet_run_id,
                  depth=EXCLUDED.depth, on_behalf_of=EXCLUDED.on_behalf_of,
-                 constraints=EXCLUDED.constraints, raw=EXCLUDED.raw, updated_at=now()""",
+                 constraints=EXCLUDED.constraints, raw=EXCLUDED.raw,
+                 attempts=EXCLUDED.attempts, degraded=EXCLUDED.degraded,
+                 result=EXCLUDED.result, lease_owner=EXCLUDED.lease_owner,
+                 lease_expires_at=EXCLUDED.lease_expires_at, updated_at=now()""",
             w.id, w.tenant_id, w.source, w.source_id, w.intent, w.confidence, w.convergent,
             w.status.value, w.owner_member, w.parent_id, w.hatchet_run_id, w.depth,
-            w.on_behalf_of, w.constraints, w.raw,
+            w.on_behalf_of, w.constraints, w.raw, w.attempts, w.degraded, w.result,
+            w.lease_owner, w.lease_expires_at,
         )
 
     async def get_work_item(self, tenant_id, item_id):
@@ -429,6 +435,66 @@ class PostgresStore(ChannelStorePG):
             f"SELECT * FROM work_items WHERE {' AND '.join(clauses)}", *args
         )
         return [_work(r) for r in rows]
+
+    async def claim_work_item(self, tenant_id, worker_id, lease_seconds):
+        # atomic pending -> in_flight claim with a lease (US-FLT-05): one
+        # statement, FOR UPDATE SKIP LOCKED so concurrent claimers never block
+        # or double-claim; an expired lease is reclaimable. RETURNING tells us
+        # if we won (mirrors consume_hitl).
+        row = await self._pool.fetchrow(
+            """UPDATE work_items
+               SET status='in_flight', lease_owner=$2,
+                   lease_expires_at=now() + make_interval(secs => $3),
+                   attempts=attempts+1, updated_at=now()
+               WHERE tenant_id=$1 AND id IN (
+                 SELECT id FROM work_items
+                 WHERE tenant_id=$1 AND (status='pending'
+                        OR (status='in_flight' AND lease_expires_at < now()))
+                 ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED
+               )
+               RETURNING *""",
+            tenant_id, worker_id, float(lease_seconds),
+        )
+        return _work(row)
+
+    async def try_increment_fanout(self, tenant_id, tree_id, counter, n, cap):
+        # atomic capped increment (US-EXE-07): the conditional upsert applies
+        # the whole increment or none; no row returned means refused. The INSERT
+        # arm has no WHERE, so an over-cap first increment is refused up front.
+        if n > cap:
+            return False
+        row = await self._pool.fetchrow(
+            """INSERT INTO fanout_counters (tenant_id, tree_id, counter, value)
+               VALUES ($1,$2,$3,$4)
+               ON CONFLICT (tenant_id, tree_id, counter) DO UPDATE
+                 SET value = fanout_counters.value + EXCLUDED.value
+                 WHERE fanout_counters.value + EXCLUDED.value <= $5
+               RETURNING value""",
+            tenant_id, tree_id, counter, n, cap,
+        )
+        return row is not None
+
+    # --- run checkpoints (Beat 3 resume seam) ------------------------------
+    async def upsert_checkpoint(
+        self, tenant_id, run_id, step, status, output=None, hitl_request_id=None
+    ):
+        await self._pool.execute(
+            """INSERT INTO run_checkpoints (tenant_id, run_id, step, status, output,
+                                            hitl_request_id, updated_at)
+               VALUES ($1,$2,$3,$4,$5,$6,now())
+               ON CONFLICT (tenant_id, run_id, step) DO UPDATE SET
+                 status=EXCLUDED.status, output=EXCLUDED.output,
+                 hitl_request_id=EXCLUDED.hitl_request_id, updated_at=now()""",
+            tenant_id, run_id, step, status, output, hitl_request_id,
+        )
+
+    async def list_checkpoints(self, tenant_id, run_id):
+        rows = await self._pool.fetch(
+            """SELECT * FROM run_checkpoints WHERE tenant_id=$1 AND run_id=$2
+               ORDER BY updated_at, step""",
+            tenant_id, run_id,
+        )
+        return [_checkpoint(r) for r in rows]
 
     # --- hitl -------------------------------------------------------------
     async def create_hitl_request(self, r: HITLRequest):
@@ -1120,6 +1186,17 @@ def _work(r):
         source_id=r["source_id"], owner_member=r["owner_member"], parent_id=r["parent_id"],
         hatchet_run_id=r["hatchet_run_id"], depth=r["depth"], on_behalf_of=r["on_behalf_of"],
         constraints=r["constraints"] or {}, raw=r["raw"] or {},
+        attempts=r["attempts"], degraded=r["degraded"], result=r["result"],
+        lease_owner=r["lease_owner"], lease_expires_at=r["lease_expires_at"],
+    )
+
+
+def _checkpoint(r):
+    if r is None:
+        return None
+    return RunCheckpoint(
+        tenant_id=r["tenant_id"], run_id=r["run_id"], step=r["step"], status=r["status"],
+        output=r["output"], hitl_request_id=r["hitl_request_id"], updated_at=r["updated_at"],
     )
 
 

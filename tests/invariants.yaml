@@ -38,17 +38,29 @@ invariants:
     description: Spawn selects the cheapest capable runtime for a child agent.
     tests:
       - tests/integration/test_fleet_spawn.py::test_cheapest_capable_runtime_chosen
+  US-FLT-05:
+    description: A pending work item is claimed exactly once across concurrent claimers and an expired lease is reclaimable (attempts increments per claim).
+    tests:
+      - tests/store/test_durable_delegation.py::test_pending_item_claimed_exactly_once_concurrently
+      - tests/store/test_durable_delegation.py::test_expired_lease_is_reclaimable_and_attempts_increment
+      - tests/store/test_durable_delegation.py::test_claim_is_tenant_scoped_and_skips_unclaimable
   US-FLT-07:
     description: Degraded results are first-class - a degraded runtime result is marked degraded end to end (spawn result, audit row, chat reply) and is never presented as ordinary success.
     tests:
       - tests/integration/test_degraded_honesty.py::test_spawn_without_runtime_is_marked_degraded_and_audited
       - tests/integration/test_degraded_honesty.py::test_chat_turn_surfaces_a_degraded_spawn
+      - tests/store/test_durable_delegation.py::test_work_item_degraded_result_attempts_roundtrip
   US-EXE-05:
     description: Executor selection is honest and optionally fail-closed - with BOLTRIG_REQUIRE_DURABLE set a durable-engine failure refuses to boot instead of silently falling back, and the selected executor's durability is recorded.
     tests:
       - tests/integration/test_executor_selection.py::test_require_durable_refuses_to_fall_back
       - tests/integration/test_executor_selection.py::test_default_falls_back_to_local_with_durable_false
       - tests/integration/test_executor_selection.py::test_local_enqueue_runs_inline_and_push_event_records
+  US-EXE-07:
+    description: Fan-out caps are enforced by atomic store-backed counters shared across workers - the increment past the cap is refused, including under concurrency.
+    tests:
+      - tests/store/test_durable_delegation.py::test_fanout_cap_refuses_the_increment_past_cap
+      - tests/store/test_durable_delegation.py::test_fanout_cap_holds_under_concurrent_increments
   SEC-29:
     description: Test-spawns/eval run under the initiator's grants - no escalation.
     tests:

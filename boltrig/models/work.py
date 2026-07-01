@@ -7,10 +7,11 @@ are input/output channels, never the fleet's view of work.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from .base import RunId, TenantId, UserId, WorkItemId
+from .base import HITLId, RunId, TenantId, UserId, WorkItemId, utcnow
 
 
 class WorkStatus(str, Enum):
@@ -39,5 +40,26 @@ class WorkItem:
     constraints: dict[str, Any] = field(default_factory=dict)  # deadlines, assignees, deps
     raw: dict[str, Any] = field(default_factory=dict)  # original payload, preserved
     on_behalf_of: UserId | None = None
-    # Beat 3 adds the work_items.degraded column; until then degradation is
-    # surfaced on the chat reply + the AGENT_SPAWN audit row only (US-FLT-07).
+    # Durable delegation (Beat 3). A claim (claim_work_item) takes a lease: one
+    # winner per item across concurrent claimers, an expired lease is
+    # reclaimable (US-FLT-05). ``degraded`` persists degraded honesty on the
+    # item itself (US-FLT-07); Beat 4's pump wires it from the spawn result.
+    attempts: int = 0
+    degraded: bool = False
+    result: dict[str, Any] | None = None
+    lease_owner: str | None = None
+    lease_expires_at: datetime | None = None
+
+
+@dataclass
+class RunCheckpoint:
+    """A durable per-step checkpoint of a run - the resume seam for Beat 4's
+    pump. Keyed (tenant_id, run_id, step); upserts are idempotent."""
+
+    tenant_id: TenantId
+    run_id: RunId
+    step: str
+    status: str  # 'started' | 'done' | 'awaiting_human' | 'failed'
+    output: dict[str, Any] | None = None
+    hitl_request_id: HITLId | None = None
+    updated_at: datetime = field(default_factory=utcnow)

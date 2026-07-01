@@ -83,7 +83,7 @@ from .libraries import (
     WorkflowSource,
 )
 from .registry import Consequence, Noun, RateLimit, TargetType, Verb, VerbBinding
-from .work import WorkItem, WorkStatus
+from .work import RunCheckpoint, WorkItem, WorkStatus
 
 __all__ = [
     "ActionType",
@@ -164,6 +164,7 @@ __all__ = [
     "TargetType",
     "Verb",
     "VerbBinding",
+    "RunCheckpoint",
     "WorkItem",
     "WorkStatus",
 ]

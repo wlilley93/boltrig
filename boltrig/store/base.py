@@ -46,6 +46,7 @@ from boltrig.models import (
     WorkItem,
     WorkStatus,
 )
+from boltrig.models.work import RunCheckpoint
 
 
 @runtime_checkable
@@ -87,6 +88,29 @@ class Store(Protocol):
         parent_id: str | None = None,
         departments: list[str] | None = None,
     ) -> list[WorkItem]: ...
+    # atomic pending -> in_flight claim with a lease: one winner per item across
+    # concurrent claimers; an expired lease is reclaimable; attempts increments
+    # per claim (US-FLT-05). Mirrors the consume_hitl CAS shape.
+    async def claim_work_item(
+        self, tenant_id: str, worker_id: str, lease_seconds: int
+    ) -> WorkItem | None: ...
+    # atomic capped fan-out counter shared across workers (US-EXE-07): True and
+    # the whole increment applied when value + n <= cap, False (nothing applied)
+    # otherwise.
+    async def try_increment_fanout(
+        self, tenant_id: str, tree_id: str, counter: str, n: int, cap: int
+    ) -> bool: ...
+    # durable per-step run checkpoints - the resume seam for the pump (Beat 4).
+    async def upsert_checkpoint(
+        self,
+        tenant_id: str,
+        run_id: str,
+        step: str,
+        status: str,
+        output: dict | None = None,
+        hitl_request_id: str | None = None,
+    ) -> None: ...
+    async def list_checkpoints(self, tenant_id: str, run_id: str) -> list[RunCheckpoint]: ...
 
     # --- hitl ---
     async def create_hitl_request(self, req: HITLRequest) -> None: ...

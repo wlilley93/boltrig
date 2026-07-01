@@ -144,12 +144,47 @@ CREATE TABLE IF NOT EXISTS work_items (
     on_behalf_of    TEXT,
     constraints     JSONB,
     raw             JSONB,
+    lease_owner     TEXT,                                -- worker holding the claim (US-FLT-05)
+    lease_expires_at TIMESTAMPTZ,                        -- past-due lease -> reclaimable
+    attempts        INT NOT NULL DEFAULT 0,              -- claim count
+    degraded        BOOLEAN NOT NULL DEFAULT false,      -- degraded honesty persisted (US-FLT-07)
+    result          JSONB,                               -- terminal output of the run
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (tenant_id, id)
 );
 CREATE INDEX IF NOT EXISTS work_items_status_idx ON work_items (tenant_id, status);
 CREATE INDEX IF NOT EXISTS work_items_parent_idx ON work_items (parent_id);
+-- Idempotent column adds for DBs created before Beat 3 durable delegation landed
+-- (before the lease index, which references lease_expires_at).
+ALTER TABLE work_items ADD COLUMN IF NOT EXISTS lease_owner TEXT;
+ALTER TABLE work_items ADD COLUMN IF NOT EXISTS lease_expires_at TIMESTAMPTZ;
+ALTER TABLE work_items ADD COLUMN IF NOT EXISTS attempts INT NOT NULL DEFAULT 0;
+ALTER TABLE work_items ADD COLUMN IF NOT EXISTS degraded BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE work_items ADD COLUMN IF NOT EXISTS result JSONB;
+CREATE INDEX IF NOT EXISTS work_items_lease_idx ON work_items (tenant_id, status, lease_expires_at);
+
+-- Beat 3: durable per-step run checkpoints (the resume seam for the pump).
+CREATE TABLE IF NOT EXISTS run_checkpoints (
+    tenant_id       TEXT NOT NULL,
+    run_id          TEXT NOT NULL,
+    step            TEXT NOT NULL,
+    status          TEXT NOT NULL,                       -- started | done | awaiting_human | failed
+    output          JSONB,
+    hitl_request_id TEXT,
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, run_id, step)
+);
+
+-- Beat 3: atomic fan-out counters shared across workers (US-EXE-07). A capped
+-- conditional upsert either applies the whole increment or refuses it.
+CREATE TABLE IF NOT EXISTS fanout_counters (
+    tenant_id  TEXT NOT NULL,
+    tree_id    TEXT NOT NULL,
+    counter    TEXT NOT NULL,
+    value      INT NOT NULL DEFAULT 0,
+    PRIMARY KEY (tenant_id, tree_id, counter)
+);
 
 -- ---------------------------------------------------------------------------
 -- 6.4 Human-in-the-loop

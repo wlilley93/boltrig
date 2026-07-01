@@ -8,6 +8,7 @@ is enforced on every method (keys are ``(tenant_id, id)`` tuples).
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import timedelta
 
 from .channels import ChannelStoreMem
 from boltrig.models import (
@@ -46,7 +47,10 @@ from boltrig.models import (
     VerbBinding,
     WorkflowDefinition,
     WorkItem,
+    WorkStatus,
+    utcnow,
 )
+from boltrig.models.work import RunCheckpoint
 
 
 class InMemoryStore(ChannelStoreMem):
@@ -95,6 +99,10 @@ class InMemoryStore(ChannelStoreMem):
         self._channels: dict[str, Channel] = {}
         self._chan_bindings: dict[tuple[str, str], ChannelBinding] = {}
         self._chan_pairings: dict[tuple[str, str], ChannelPairing] = {}
+        # Beat 3: durable delegation (checkpoints keyed (tenant, run, step),
+        # fan-out counters keyed (tenant, tree, counter)).
+        self._checkpoints: dict[tuple[str, str, str], RunCheckpoint] = {}
+        self._fanout: dict[tuple[str, str, str], int] = {}
 
     # --- registry ---
     async def get_noun(self, tenant_id, noun_id):
@@ -186,6 +194,56 @@ class InMemoryStore(ChannelStoreMem):
             allowed = set(departments)
             out = [w for w in out if w.owner_member in allowed]
         return out
+
+    async def claim_work_item(self, tenant_id, worker_id, lease_seconds):
+        # atomic pending -> in_flight claim with a lease (US-FLT-05). No await
+        # between the scan and the write, so it is atomic under cooperative
+        # scheduling (mirrors consume_hitl). Insertion order stands in for the
+        # Postgres ORDER BY created_at (oldest first).
+        now = utcnow()
+        for (t, _), item in self._work.items():
+            if t != tenant_id:
+                continue
+            claimable = item.status == WorkStatus.PENDING or (
+                item.status == WorkStatus.IN_FLIGHT
+                and item.lease_expires_at is not None
+                and item.lease_expires_at < now
+            )
+            if not claimable:
+                continue
+            item.status = WorkStatus.IN_FLIGHT
+            item.lease_owner = worker_id
+            item.lease_expires_at = now + timedelta(seconds=lease_seconds)
+            item.attempts += 1
+            return item
+        return None
+
+    async def try_increment_fanout(self, tenant_id, tree_id, counter, n, cap):
+        # atomic capped increment (US-EXE-07): all-or-nothing, no await between
+        # the read and the write.
+        key = (tenant_id, tree_id, counter)
+        new_value = self._fanout.get(key, 0) + n
+        if new_value > cap:
+            return False
+        self._fanout[key] = new_value
+        return True
+
+    # --- run checkpoints (Beat 3 resume seam) ---
+    async def upsert_checkpoint(
+        self, tenant_id, run_id, step, status, output=None, hitl_request_id=None
+    ):
+        self._checkpoints[(tenant_id, run_id, step)] = RunCheckpoint(
+            tenant_id=tenant_id, run_id=run_id, step=step, status=status,
+            output=output, hitl_request_id=hitl_request_id, updated_at=utcnow(),
+        )
+
+    async def list_checkpoints(self, tenant_id, run_id):
+        out = [
+            c for (t, r, _), c in self._checkpoints.items()
+            if t == tenant_id and r == run_id
+        ]
+        # oldest-first with a step tiebreak, matching the Postgres ORDER BY.
+        return sorted(out, key=lambda c: (c.updated_at, c.step))
 
     # --- hitl ---
     async def create_hitl_request(self, req):

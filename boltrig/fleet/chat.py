@@ -185,8 +185,8 @@ def build_turn_executor(kernel, spawner, *, continuity: bool | None = None) -> T
             if result.get("degraded"):
                 # Honesty about degradation (US-FLT-07): a degraded echo is never
                 # presented as ordinary success - the reply carries the flag and a
-                # visible prefix. Beat 3 adds the work_items.degraded column; until
-                # then the flag rides the reply event + the AGENT_SPAWN audit row.
+                # visible prefix. WorkItem.degraded persists it (Beat 3); Beat 4's
+                # pump stamps it from the spawn result on the claimed item.
                 if not summary.startswith("degraded"):
                     summary = f"(degraded) {summary}"
                 relay.publish(run_id, {"type": "text_delta", "delta": summary, "degraded": True})
