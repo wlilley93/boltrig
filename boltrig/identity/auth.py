@@ -306,11 +306,12 @@ def _cf_access_assertion(request: Request) -> str:
     raise HTTPException(status_code=401, detail="missing Cloudflare Access assertion")
 
 
-def _cf_access_scope(role: str) -> dict:
-    """Visibility scope for an Access-derived role. org-admin sees the whole
-    tenant; any other mapped role is tenant-scoped with no department widening
-    (least privilege - enrich via OIDC/groups when finer scoping is needed)."""
-    return {"all": True} if role == "org-admin" else {}
+# The console's product access tiers. All three see the whole tenant; they are
+# differentiated by can_author (superadmin/admin author + administer, member does
+# not - see rbac.AUTHOR_ROLES) and, for high-consequence verbs, by the HITL gate
+# that applies to everyone. superadmin is the owner tier (reserved for roster
+# management). An email mapped to anything outside this set is denied.
+CF_ACCESS_TIERS: tuple[str, ...] = ("superadmin", "admin", "member")
 
 
 def build_cf_access_resolver(
@@ -350,10 +351,12 @@ def build_cf_access_resolver(
             raise HTTPException(status_code=401, detail="Access assertion has no email claim")
 
         role = role_map.get(email, default_role)
-        if role in (DEFAULT_ROLE, "none", ""):
+        if role not in CF_ACCESS_TIERS:
+            # Unmapped / none / an unknown tier -> denied fail-closed (K-13),
+            # even though Access already gated who reached the origin.
             raise HTTPException(status_code=403, detail=f"{email} is not authorized")
 
-        scope = _cf_access_scope(role)
+        scope = {"all": True}  # tenant-wide; can_author + HITL differentiate the tiers
         return Principal(
             tenant_id=tenant_id,
             subject=email,

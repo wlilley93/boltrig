@@ -46,7 +46,10 @@ def _client(role_map=None, default_role="none") -> TestClient:
     resolver = build_cf_access_resolver(
         verifier=_StubVerifier(),
         tenant_id=T,
-        role_map=role_map if role_map is not None else {"boss@acme.test": "org-admin"},
+        role_map=role_map if role_map is not None else {
+            "boss@acme.test": "superadmin",
+            "worker@acme.test": "member",
+        },
         default_role=default_role,
     )
     return TestClient(create_app(asyncio.run(_kernel()), principal_resolver=resolver))
@@ -69,12 +72,32 @@ def test_unverifiable_assertion_rejected():
 
 @pytest.mark.security
 @pytest.mark.invariant("SEC-01")
-def test_mapped_email_yields_admin_principal():
-    # verified email boss@acme.test -> org-admin -> tenant-wide grants
+def test_superadmin_gets_full_authority():
+    # verified email boss@acme.test -> superadmin -> tenant-wide grants
     r = _client().get("/v1/capabilities", headers={HDR: "good.boss@acme.test"})
     assert r.status_code == 200
     ids = {v["id"] for v in r.json()["verbs"]}
-    assert "ticket.create" in ids  # org-admin sees the tenant's verbs
+    assert "ticket.create" in ids  # superadmin sees the tenant's verbs
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-01")
+def test_member_can_operate_but_not_author():
+    # member operates (sees/runs verbs) but the authoring routes are role-gated
+    # (can_author=False), so configuration is denied - the admin/member boundary.
+    c = _client()
+    ok = c.get("/v1/capabilities", headers={HDR: "good.worker@acme.test"})
+    assert ok.status_code == 200
+    authoring = c.post(
+        "/v1/nouns", headers={HDR: "good.worker@acme.test"}, json={"id": "x"}
+    )
+    assert authoring.status_code == 403  # member cannot author
+
+    # a superadmin CAN author the same route
+    admin_authoring = c.post(
+        "/v1/nouns", headers={HDR: "good.boss@acme.test"}, json={"id": "x"}
+    )
+    assert admin_authoring.status_code in (200, 201)
 
 
 @pytest.mark.security
@@ -92,7 +115,7 @@ def test_authenticated_but_unmapped_email_is_denied():
 def test_email_case_and_mapping_are_normalised():
     # The mapping is case-insensitive on the email; identity comes from the
     # verified claim, not any request-supplied value.
-    r = _client(role_map={"Boss@Acme.test": "org-admin"}).get(
+    r = _client(role_map={"Boss@Acme.test": "superadmin"}).get(
         "/v1/capabilities", headers={HDR: "good.BOSS@acme.test"}
     )
     assert r.status_code == 200

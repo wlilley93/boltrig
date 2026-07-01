@@ -104,7 +104,8 @@ invariants:
       - tests/security/test_auth.py::test_valid_bearer_yields_scoped_principal
       - tests/security/test_cf_access_auth.py::test_missing_assertion_rejected
       - tests/security/test_cf_access_auth.py::test_unverifiable_assertion_rejected
-      - tests/security/test_cf_access_auth.py::test_mapped_email_yields_admin_principal
+      - tests/security/test_cf_access_auth.py::test_superadmin_gets_full_authority
+      - tests/security/test_cf_access_auth.py::test_member_can_operate_but_not_author
       - tests/security/test_cf_access_auth.py::test_authenticated_but_unmapped_email_is_denied
       - tests/security/test_cf_access_auth.py::test_email_case_and_mapping_are_normalised
   NFR-REL-01:

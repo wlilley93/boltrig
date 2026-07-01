@@ -16,11 +16,17 @@ from boltrig.models import EMPTY_GRANTS, GrantSet, RoleMapping
 
 # Most-privileged first. A caller in several groups gets the highest role they
 # are mapped to. Unknown roles rank below every named role (least privilege).
+# superadmin / admin / member are the console's product tiers (SEC-01): superadmin
+# is the owner, admin is a full operator+configurator, member operates but cannot
+# author or administer. They sit above the finer IdP-group roles.
 ROLE_PRECEDENCE: tuple[str, ...] = (
+    "superadmin",
+    "admin",
     "org-admin",
     "department-head",
     "manager",
     "engineer",
+    "member",
     "agent",
     "viewer",
 )
@@ -122,8 +128,10 @@ def grants_for_scope(scope: dict[str, Any] | None) -> GrantSet:
 
 
 # Roles permitted to author (studios) and administer (admin console) (C3, SEC-32).
+# superadmin + admin author/administer; member deliberately does NOT (it operates
+# only - the console's authoring studios and admin console are hidden from it).
 AUTHOR_ROLES: frozenset[str] = frozenset(
-    {"org-admin", "department-head", "manager", "lead", "integrator"}
+    {"superadmin", "admin", "org-admin", "department-head", "manager", "lead", "integrator"}
 )
 
 
