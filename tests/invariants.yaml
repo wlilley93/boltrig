@@ -305,6 +305,8 @@ invariants:
     description: An authored verb with a destructive/outbound name defaults to high-consequence so the HITL gate engages.
     tests:
       - tests/security/test_round_four.py::test_authored_verbs_safe_by_default
+      - tests/security/test_channel_send.py::test_channel_send_is_high_consequence
+      - tests/security/test_channel_send.py::test_channel_send_delivers_via_seam_and_is_tenant_scoped
 
   # --- Round Five: kernel-governed structured memory (SEC-40..45) ---
   SEC-40:

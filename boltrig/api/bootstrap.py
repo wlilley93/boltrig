@@ -78,6 +78,7 @@ async def _seed_default(kernel: Kernel) -> None:
     await _register_control_plane(kernel, _DEFAULT_TENANT)
     await _register_web_fetch(kernel, _DEFAULT_TENANT, {})
     await _register_skill_shelf(kernel, _DEFAULT_TENANT)
+    await _register_channel_send(kernel, _DEFAULT_TENANT)
 
 
 async def _register_memory(kernel: Kernel, tenant_id: str, memory_cfg) -> None:
@@ -141,6 +142,16 @@ async def _register_web_fetch(kernel: Kernel, tenant_id: str, network_cfg) -> No
     log.info("web.fetch verb registered (governed internet access, SSRF-guarded)")
 
 
+async def _register_channel_send(kernel: Kernel, tenant_id: str) -> None:
+    """Register the governed outbound channel verb (decision 0003). channel.send
+    runs the chokepoint like any verb: consequence=high (HITL by default, SEC-39),
+    grant-checked, audited; the kernel executes the outbound send directly."""
+    from boltrig.adapters.builtin.channel_send import build_channel_send
+
+    await kernel.register_adapter(tenant_id, build_channel_send(kernel.store))
+    log.info("channel.send verb registered (governed outbound, HITL by default)")
+
+
 async def _register_skill_shelf(kernel: Kernel, tenant_id: str) -> None:
     """Register the on-demand skill shelf so an agent can browse + load skills by
     description through the chokepoint (Round Fifteen; FR-SKILL-01/02, SEC-57).
@@ -176,6 +187,7 @@ async def _seed_from_manifest(kernel: Kernel, manifest) -> None:
     await _register_memory(kernel, manifest.tenant_id, manifest.section("memory"))
     await _register_control_plane(kernel, manifest.tenant_id)
     await _register_skill_shelf(kernel, manifest.tenant_id)
+    await _register_channel_send(kernel, manifest.tenant_id)
     await _register_consumed_mcp(kernel, manifest.tenant_id, manifest.section("mcp"))
     net = manifest.network
     await _register_web_fetch(kernel, manifest.tenant_id, {
