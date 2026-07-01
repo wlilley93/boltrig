@@ -30,11 +30,13 @@ export const StorySection = ({ data, side }: StorySectionProps) => {
   const centered = align === "center";
   const justify = centered ? "justify-center" : align === "left" ? "justify-start" : "justify-end";
 
+  // h-dvh (not h-screen): tracks the mobile URL-bar show/hide exactly like the
+  // scroll driver's `window.innerHeight`, keeping one-panel-per-viewport true.
   return (
     <section
       id={data.id}
       aria-label={data.title}
-      className={`pointer-events-none relative flex h-screen w-full items-center px-8 md:px-16 lg:px-24 ${justify}`}
+      className={`pointer-events-none relative flex h-dvh w-full items-center px-8 md:px-16 lg:px-24 ${justify}`}
     >
       <Inview
         tag="article"

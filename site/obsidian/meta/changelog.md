@@ -8,6 +8,29 @@ updated: 2026-05-23
 Chronological log of notable changes to the project. Newest first.
 This is a human-curated log — not a mirror of `git log`.
 
+## 2026-07-01
+
+- **Final story copy landed** - the 7 chapters in `src/data/story.ts` moved off
+  the governance-only draft onto the shipping script: arrival, the checkpoint,
+  in-flight checks (takeover), the agent workforce, orchestration (workflows /
+  board / channels / memory), interoperability (MCP in/out), and a
+  provably-governed finale. Ids, `kind` and order unchanged, so the camera
+  keyframes stay aligned. See [[story-sections]].
+- **New features section** - a post-story, data-driven feature catalogue
+  (`FeaturesSection` + `src/data/features.ts`): six themed groups of capability
+  rows in the site's console style, mounted after `StoryOverlay` in `HomeView`.
+  `relative z-10 bg-black` so it occludes the fixed canvas. See
+  [[features-section]].
+- **Story scroll mapping decoupled from document height** -
+  `StoryScrollDriver` now normalises progress over the story's own extent
+  (`(sectionCount - 1)` viewport heights, via Lenis pixel `scroll` / native
+  `scrollY`) instead of whole-document progress, so flow content after the story
+  (the features section) no longer stretches the camera-keyframe mapping.
+- **SEO sharpened** - `siteConfig.description` rewritten to the positioning
+  (under 160 chars); JSON-LD gains a `SoftwareApplication` node linked to the
+  Organization; the sr-only `h1` now reads "Boltrig - the governed operating
+  system for AI agents". See [[seo-metadata]].
+
 ## 2026-06-06
 
 - **Content arrives a beat after the loader** — `StoryOverlay` delays the copy +

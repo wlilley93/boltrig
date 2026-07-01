@@ -2,15 +2,17 @@
  * @fileoverview JSON-LD structured data helpers.
  *
  * Structured data lets search engines understand the site as entities
- * (Organization, WebSite) rather than just text — improving rich results.
+ * (Organization, WebSite) rather than just text, improving rich results.
  * Render the output inside a `<script type="application/ld+json">` tag.
  */
 
 import { siteConfig } from "@/lib/site";
 
 /**
- * Organization + WebSite schema for the site root. Emit once, in the root
- * layout. The two nodes are linked by `@id` so crawlers treat them as related.
+ * Organization + WebSite + SoftwareApplication schema for the site root. Emit
+ * once, in the root layout. The nodes are linked by `@id` so crawlers treat
+ * them as one entity graph: Boltrig the organisation publishes the website and
+ * the self-hosted software product it markets.
  */
 export function getSiteStructuredData() {
   return {
@@ -29,6 +31,16 @@ export function getSiteStructuredData() {
         name: siteConfig.name,
         description: siteConfig.description,
         url: siteConfig.url,
+        publisher: { "@id": `${siteConfig.url}/#organization` },
+      },
+      {
+        "@type": "SoftwareApplication",
+        "@id": `${siteConfig.url}/#software`,
+        name: siteConfig.name,
+        description: siteConfig.description,
+        url: siteConfig.url,
+        applicationCategory: "DeveloperApplication",
+        operatingSystem: "Self-hosted (Linux, Docker)",
         publisher: { "@id": `${siteConfig.url}/#organization` },
       },
     ],

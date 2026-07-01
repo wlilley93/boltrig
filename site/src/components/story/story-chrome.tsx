@@ -25,11 +25,12 @@ export const StoryChrome = ({ sections }: StoryChromeProps) => {
     config: { tension: 80, friction: 26 },
   });
 
+  // bottom-14 on mobile clears the h-9 telemetry bar (bottom-8 overlapped it).
   return (
     <animated.nav
       aria-hidden
       style={{ opacity: enter.opacity }}
-      className="pointer-events-none fixed inset-x-0 bottom-8 z-30 flex select-none items-end justify-center gap-3 md:bottom-10"
+      className="pointer-events-none fixed inset-x-0 bottom-14 z-30 flex select-none items-end justify-center gap-3 md:bottom-10"
     >
       {sections.map((s, i) => (
         <div key={s.id} className="flex flex-col items-center gap-1.5">

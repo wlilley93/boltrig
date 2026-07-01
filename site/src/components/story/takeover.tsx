@@ -120,12 +120,13 @@ export const TakeoverVisual = ({ activeIndex }: { activeIndex: number }) => {
 /**
  * The takeover chapter's in-flow text — a deliberately minimal centred block
  * (no scan frame), sitting over the signal field as it scrolls past.
+ * h-dvh: must match StorySection so the scroll driver's viewport math holds.
  */
 export const TakeoverPanel = ({ data }: { data: StorySectionData }) => (
   <section
     id={data.id}
     aria-label={data.title}
-    className="pointer-events-none relative flex h-screen w-full flex-col items-center justify-center px-8 text-center"
+    className="pointer-events-none relative flex h-dvh w-full flex-col items-center justify-center px-8 text-center"
   >
     <p className="mb-6 flex items-center gap-2 text-[0.72rem] font-semibold uppercase tracking-[0.45em] text-brain-sky/75 md:text-sm">
       <span aria-hidden className="text-brain-sky/45">

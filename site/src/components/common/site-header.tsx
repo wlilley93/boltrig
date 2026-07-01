@@ -25,7 +25,7 @@ export const SiteHeader = () => {
       <a
         href="#arrival"
         aria-label="Boltrig home"
-        className="pointer-events-auto inline-flex items-center gap-2.5 text-brain-sky transition-colors hover:text-white"
+        className="pointer-events-auto inline-flex items-center gap-2.5 text-brain-sky transition-colors hover:text-white max-md:min-h-11"
       >
         <svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden className="drop-shadow-[0_0_10px_rgba(61,211,240,0.5)]">
           <path d="M7.5 3.5H4.5V20.5H7.5" stroke="currentColor" strokeWidth="2" strokeLinecap="square" />
@@ -38,7 +38,7 @@ export const SiteHeader = () => {
       <nav className="pointer-events-auto flex items-center gap-2">
         <a
           href="https://app.boltrig.io"
-          className="inline-flex items-center gap-2 border border-brain-sky/45 bg-brain-sky/10 px-4 py-2 text-[0.62rem] font-semibold uppercase tracking-[0.24em] text-brain-sky backdrop-blur-md transition-colors hover:border-brain-sky hover:bg-brain-sky/20 hover:text-white md:px-5"
+          className="inline-flex items-center gap-2 border border-brain-sky/45 bg-brain-sky/10 px-4 py-2 text-[0.62rem] font-semibold uppercase tracking-[0.24em] text-brain-sky backdrop-blur-md transition-colors hover:border-brain-sky hover:bg-brain-sky/20 hover:text-white max-md:min-h-11 md:px-5"
         >
           <span aria-hidden className="hidden h-1.5 w-1.5 rounded-full bg-brain-sky shadow-[0_0_8px_1px] shadow-brain-azure/60 sm:inline-block" />
           Open console
