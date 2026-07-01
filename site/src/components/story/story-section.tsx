@@ -46,7 +46,7 @@ export const StorySection = ({ data, side }: StorySectionProps) => {
       >
         {/* Terminal prompt kicker */}
         <p
-          className={`mb-6 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.42em] text-brain-sky/75 md:text-sm ${
+          className={`mb-6 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.42em] text-white/70 md:text-sm ${
             centered ? "justify-center" : ""
           }`}
         >
@@ -93,7 +93,7 @@ export const StorySection = ({ data, side }: StorySectionProps) => {
           wordConfig={bodyConfig}
           delayIn={250}
           style={centered ? { justifyContent: "center" } : undefined}
-          className={`mt-7 text-lg leading-relaxed text-brain-sky/70 md:text-xl ${
+          className={`mt-7 text-lg leading-relaxed text-white/90 md:text-xl ${
             centered ? "mx-auto max-w-xl text-center" : "max-w-lg"
           }`}
         >
