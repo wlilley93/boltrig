@@ -31,7 +31,7 @@ async def _kernel_with_channel() -> tuple[Kernel, InMemoryStore]:
             credential_ref="cred-1", config={"sender_field": "sender"},
         )
     )
-    store.set_credential_ref(T, "cred-1", {"secret": SECRET})
+    await store.set_credential_ref(T, "cred-1", {"secret": SECRET})
     await store.upsert_channel_binding(
         ChannelBinding(
             id="b-1", tenant_id=T, channel_id="ch-1", platform="webhook",

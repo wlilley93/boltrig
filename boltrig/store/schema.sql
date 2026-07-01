@@ -417,6 +417,8 @@ CREATE TABLE IF NOT EXISTS channel_pairings (
     channel_id        TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
     code_hash         TEXT NOT NULL,
     external_user_id  TEXT NOT NULL,
+    subject           TEXT NOT NULL,
+    role              TEXT NOT NULL,
     status            TEXT NOT NULL DEFAULT 'pending',  -- pending | consumed | expired
     attempts          INTEGER NOT NULL DEFAULT 0,
     expires_at        TIMESTAMPTZ,

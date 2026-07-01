@@ -79,13 +79,17 @@ class ChannelBinding:
 @dataclass
 class ChannelPairing:
     """A one-time code to bind an unknown sender to an internal identity. Hashed at
-    rest (SEC-05), TTL-bounded, rate-limited, lockout-guarded (decision 0003)."""
+    rest (SEC-05), TTL-bounded, rate-limited, lockout-guarded (decision 0003). The
+    target (subject + role) travels on the pairing so consume can mint the binding
+    without re-trusting the message body."""
 
     id: str
     tenant_id: TenantId
     channel_id: str
     code_hash: str  # SEC-05: sha256 of the one-time code, never the plaintext
     external_user_id: str
+    subject: UserId  # the internal identity a successful pairing binds the sender to
+    role: str  # the console tier the bound sender operates at (member | admin | superadmin)
     status: str = "pending"  # pending | consumed | expired
     attempts: int = 0
     expires_at: datetime | None = None

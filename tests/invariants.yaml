@@ -116,6 +116,12 @@ invariants:
       - tests/security/test_channel_inbound.py::test_unsigned_inbound_rejected
       - tests/security/test_channel_inbound.py::test_verified_but_unbound_sender_denied
       - tests/security/test_channel_inbound.py::test_unknown_channel_404
+      - tests/security/test_channel_governance.py::test_member_cannot_connect_or_pair
+      - tests/security/test_channel_governance.py::test_connect_stores_secret_kernel_side_never_returns_it
+      - tests/security/test_channel_governance.py::test_disconnect_removes_channel_and_cascades
+      - tests/security/test_channel_governance.py::test_pairing_code_consumes_and_binds_unknown_sender
+      - tests/security/test_channel_governance.py::test_wrong_pairing_code_locks_out_after_cap
+      - tests/security/test_channel_governance.py::test_expired_pairing_is_denied
   NFR-REL-01:
     description: A blocking HITL pause is durable - survives a restart and resumes on approval.
     tests:

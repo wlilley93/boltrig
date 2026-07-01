@@ -278,7 +278,7 @@ class InMemoryStore:
     async def get_credential_ref(self, tenant_id, cred_id):
         return self._creds.get((tenant_id, cred_id))
 
-    def set_credential_ref(self, tenant_id: str, cred_id: str, ref: dict) -> None:
+    async def set_credential_ref(self, tenant_id: str, cred_id: str, ref: dict) -> None:
         self._creds[(tenant_id, cred_id)] = ref
 
     # --- conversations ---
@@ -424,6 +424,26 @@ class InMemoryStore:
             return False
         p.status = "consumed"
         return True
+
+    async def get_pending_pairing_for_sender(self, tenant_id, channel_id, external_user_id):
+        for p in self._chan_pairings.values():
+            if (
+                p.tenant_id == tenant_id
+                and p.channel_id == channel_id
+                and p.external_user_id == external_user_id
+                and p.status == "pending"
+            ):
+                return p
+        return None
+
+    async def bump_channel_pairing_attempts(self, tenant_id, pairing_id, *, cap):
+        p = self._chan_pairings.get((tenant_id, pairing_id))
+        if p is None or p.status != "pending":
+            return None
+        p.attempts += 1
+        if p.attempts >= cap:
+            p.status = "expired"  # lockout: cap hit -> unusable
+        return p
 
     # --- memory (scope-filtered, SEC-31) ---
     async def add_memory_item(self, item):

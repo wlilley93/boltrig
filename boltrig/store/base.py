@@ -160,6 +160,16 @@ class Store(Protocol):
     ) -> "ChannelPairing | None": ...
     # Atomic pending -> consumed CAS (single-use pairing, mirrors consume_hitl).
     async def consume_channel_pairing(self, tenant_id: str, pairing_id: str) -> bool: ...
+    # The pending pairing for a sender (for wrong-code lockout; the lookup is by
+    # sender, not code, so a bad code still finds the row to increment attempts).
+    async def get_pending_pairing_for_sender(
+        self, tenant_id: str, channel_id: str, external_user_id: str
+    ) -> "ChannelPairing | None": ...
+    # Increment attempts; auto-expire (lockout) once the cap is hit. Returns the
+    # updated pairing, or None if it no longer exists / is not pending.
+    async def bump_channel_pairing_attempts(
+        self, tenant_id: str, pairing_id: str, *, cap: int
+    ) -> "ChannelPairing | None": ...
     async def add_memory_item(self, item: MemoryItem) -> None: ...
     async def query_memory(
         self, tenant_id: str, owner_scopes: list[str], kind: str | None = None, limit: int = 20

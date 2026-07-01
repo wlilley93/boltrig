@@ -837,12 +837,12 @@ class PostgresStore:
     async def create_channel_pairing(self, pairing):
         await self._pool.execute(
             """INSERT INTO channel_pairings
-                 (id, tenant_id, channel_id, code_hash, external_user_id, status, attempts,
-                  expires_at, created_at)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,COALESCE($9, now()))""",
+                 (id, tenant_id, channel_id, code_hash, external_user_id, subject, role,
+                  status, attempts, expires_at, created_at)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,COALESCE($11, now()))""",
             pairing.id, pairing.tenant_id, pairing.channel_id, pairing.code_hash,
-            pairing.external_user_id, pairing.status, pairing.attempts, pairing.expires_at,
-            pairing.created_at,
+            pairing.external_user_id, pairing.subject, pairing.role,
+            pairing.status, pairing.attempts, pairing.expires_at, pairing.created_at,
         )
 
     async def get_channel_pairing_by_code(self, tenant_id, channel_id, code_hash):
@@ -861,6 +861,26 @@ class PostgresStore:
             tenant_id, pairing_id,
         )
         return row is not None
+
+    async def get_pending_pairing_for_sender(self, tenant_id, channel_id, external_user_id):
+        row = await self._pool.fetchrow(
+            """SELECT * FROM channel_pairings
+               WHERE tenant_id=$1 AND channel_id=$2 AND external_user_id=$3
+                 AND status='pending' ORDER BY created_at DESC LIMIT 1""",
+            tenant_id, channel_id, external_user_id,
+        )
+        return _channel_pairing(row)
+
+    async def bump_channel_pairing_attempts(self, tenant_id, pairing_id, *, cap):
+        # increment attempts; flip to 'expired' once the cap is hit (lockout).
+        row = await self._pool.fetchrow(
+            """UPDATE channel_pairings
+                  SET attempts = attempts + 1,
+                      status = CASE WHEN attempts + 1 >= $3 THEN 'expired' ELSE status END
+                WHERE tenant_id=$1 AND id=$2 AND status='pending' RETURNING *""",
+            tenant_id, pairing_id, cap,
+        )
+        return _channel_pairing(row)
 
     # --- memory ---
     async def add_memory_item(self, m: MemoryItem):
@@ -1362,7 +1382,8 @@ def _channel_pairing(r):
         return None
     return ChannelPairing(
         id=r["id"], tenant_id=r["tenant_id"], channel_id=r["channel_id"], code_hash=r["code_hash"],
-        external_user_id=r["external_user_id"], status=r["status"], attempts=r["attempts"],
+        external_user_id=r["external_user_id"], subject=r["subject"], role=r["role"],
+        status=r["status"], attempts=r["attempts"],
         expires_at=r["expires_at"], created_at=r["created_at"],
     )
 
