@@ -37,6 +37,8 @@ from boltrig.models import (
     utcnow,
 )
 
+from boltrig.kernel.pii import contains_secret
+
 from .engine import EngineFact
 
 # Markers that flag content as a possible prompt-injection / malware payload. A
@@ -183,6 +185,19 @@ class MemoryAdapter:
             await self._write_audit(context, "memory.ingest.rejected",
                                     {"reason": reason, "owner_scope": owner_scope}, status="denied")
             return Result.failure(AdapterError(ErrorClass.INVALID, f"content rejected: {reason}"))
+        # SEC-05 at ingestion: an API secret / credential must NEVER be persisted
+        # into ANY memory engine (Cognee or native) - this is the single boundary
+        # every remember passes through before engine.remember, so the guarantee is
+        # engine-agnostic. Fail-closed: reject rather than silently store a leak.
+        secret_kind = contains_secret(content)
+        if secret_kind:
+            await self._write_audit(context, "memory.ingest.secret_blocked",
+                                    {"secret_kind": secret_kind, "owner_scope": owner_scope},
+                                    status="denied")
+            return Result.failure(AdapterError(
+                ErrorClass.INVALID,
+                f"content contains a secret ({secret_kind}); memory ingestion blocked",
+            ))
         data_class = params.get("data_class", "standard")
         # SEC-43: sensitive memory must use a local endpoint, else block + audit.
         if data_class == "sensitive" and self._sensitive_endpoint not in self._local_endpoints:

@@ -175,3 +175,32 @@ def test_recall_is_audited_without_leaking_contents():
     assert detailed and "count" in detailed[-1].detail  # query + count audited
     # fact contents never appear in ANY audit detail (SEC-45)
     assert all("launch codes" not in str(e.detail) for e in events)
+
+
+# --- SEC-42: API secrets are never persisted into any memory engine ----------
+@pytest.mark.security
+@pytest.mark.invariant("SEC-42")
+def test_api_secret_is_never_remembered():
+    # Will's hard rule: an API secret / credential must never end up in the memory
+    # engine (Cognee or native). The single ingestion boundary (memory.remember)
+    # blocks it fail-closed before engine.remember, so it is never persisted.
+    k, store, engine = asyncio.run(_kernel())
+    c = _client(k)
+    g = "memory.recall,memory.remember"
+    blocked = c.post(
+        "/v1/memory/remember",
+        json={"content": "prod openai key sk-ABCDEFGHIJKLMNOPQRSTUV0123456789"},
+        headers=_h("alice", grants=g),
+    )
+    # not a successful remember with a fact id
+    assert not (blocked.status_code == 200 and blocked.json().get("fact_ids"))
+    # and never recallable (nothing carrying the secret was stored)
+    rc = c.post("/v1/memory/recall", json={"query": "openai key"}, headers=_h("alice", grants=g))
+    assert all("sk-" not in f.get("content", "") for f in rc.json().get("facts", []))
+    # the guard is targeted: a clean fact IS remembered
+    ok = c.post(
+        "/v1/memory/remember",
+        json={"content": "the client prefers email updates on fridays"},
+        headers=_h("alice", grants=g),
+    )
+    assert ok.status_code == 200 and ok.json().get("fact_ids")

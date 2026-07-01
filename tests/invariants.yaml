@@ -317,9 +317,10 @@ invariants:
     tests:
       - tests/security/test_round_five.py::test_memory_cannot_escalate
   SEC-42:
-    description: Content is screened for injection/malware before it becomes memory; poison is rejected, never persisted.
+    description: Content is screened for injection/malware AND API secrets before it becomes memory; poison/secrets are rejected fail-closed, never persisted into any engine (Cognee or native).
     tests:
       - tests/security/test_round_five.py::test_ingestion_screens_poison
+      - tests/security/test_round_five.py::test_api_secret_is_never_remembered
   SEC-43:
     description: Sensitive memory must use a local endpoint; a misroute is blocked and audited.
     tests:
