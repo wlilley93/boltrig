@@ -452,6 +452,51 @@ def create_app(
             ]
         }
 
+    @app.get("/v1/work/{item_id}")
+    async def work_detail(
+        item_id: str,
+        k: Kernel = Depends(_get_kernel),
+        p: Principal = Depends(principal),
+    ):
+        # A work item plus its children (the epic->story->task tree) and its audit
+        # trail - the data behind the hierarchical work board (#74). Scope-filtered
+        # by department (US-IAM-02): resolved from the caller's visible set, so an
+        # item outside the caller's departments is simply not found.
+        from boltrig.identity.rbac import departments_for
+
+        departments = departments_for(p.role, p.scope)
+        visible = await k.list_work(p.tenant_id, departments=departments)
+        by_id = {w.id: w for w in visible}
+        item = by_id.get(item_id)
+        if item is None:
+            return JSONResponse({"error": "not_found"}, status_code=404)
+
+        def _wd(w) -> dict:
+            return {
+                "id": w.id, "intent": w.intent, "status": w.status.value,
+                "confidence": w.confidence, "convergent": w.convergent,
+                "owner_member": w.owner_member, "source": w.source,
+                "parent_id": w.parent_id, "hatchet_run_id": w.hatchet_run_id,
+                "on_behalf_of": w.on_behalf_of,
+            }
+
+        children = [_wd(w) for w in visible if w.parent_id == item_id]
+        trail: list = []
+        if item.hatchet_run_id:
+            events = await k.store.audit_query(
+                p.tenant_id, run_id=item.hatchet_run_id, limit=200
+            )
+            trail = [
+                {
+                    "ts": e.ts.isoformat() if hasattr(e.ts, "isoformat") else str(e.ts),
+                    "actor": e.actor, "actor_tier": e.actor_tier,
+                    "verb": e.verb, "noun": e.noun, "status": e.status,
+                    "detail": e.detail,
+                }
+                for e in events
+            ]
+        return {"item": _wd(item), "children": children, "audit": trail}
+
     @app.get("/v1/audit/tree/{run_id}")
     async def audit_tree(
         run_id: str, k: Kernel = Depends(_get_kernel), p: Principal = Depends(principal)
