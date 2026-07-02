@@ -59,7 +59,8 @@ import {
   stepBadgeClass,
 } from "./shared";
 import { WorkflowRunCanvas } from "./WorkflowRunCanvas";
-import { SchemaForm, Select } from "./ux";
+import { Select } from "./ux";
+import { SchemaFormV2 } from "./uxForm";
 
 // Parse the inspector params JSON into an object for the schema form (an
 // in-progress edit may be invalid; the form just sees {} until valid again).
@@ -946,7 +947,7 @@ export function WorkflowCanvas({ routeWfId }: { routeWfId?: string }) {
               return hasSchema ? (
                 <>
                   <span className="field"><span>parameters</span></span>
-                  <SchemaForm
+                  <SchemaFormV2
                     schema={sv!.input_schema}
                     value={safeObj(editParams)}
                     onChange={(o) => setEditParams(JSON.stringify(o, null, 2))}

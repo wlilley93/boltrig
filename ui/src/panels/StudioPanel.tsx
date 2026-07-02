@@ -36,7 +36,8 @@ import {
   stepBadgeClass,
 } from "./shared";
 import { WorkflowCanvas } from "./WorkflowCanvas";
-import { Field, Hint, PageIntro, Segmented, Select } from "./ux";
+import { Field, Hint, PageIntro, Select } from "./ux";
+import { SegmentedV2 } from "./uxForm";
 
 const AUTHOR_ROLES: ReadonlySet<string> = new Set([
   "org-admin",
@@ -528,7 +529,7 @@ function BindingForm() {
           <Select value={verbId} ariaLabel="Verb" onChange={setVerbId} options={verbOptions} />
         </Field>
         <Field label="Runs via" hint="An adapter (a service) or an agent (a reasoning model).">
-          <Segmented
+          <SegmentedV2
             value={targetType}
             ariaLabel="Target type"
             onChange={(v) => {

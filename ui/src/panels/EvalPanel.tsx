@@ -11,7 +11,8 @@ import { api } from "../api/client";
 import type { EvalRunResult, EvalRunSummary } from "../api/types";
 import { useFetch } from "../useFetch";
 import { CodeBlock, GrantList, csvToList, errText, parseJson } from "./shared";
-import { EmptyState, Field, Hint, InfoCallout, PageIntro, Segmented, Select } from "./ux";
+import { EmptyState, Field, Hint, InfoCallout, PageIntro, Select } from "./ux";
+import { SegmentedV2 } from "./uxForm";
 
 export function EvalPanel() {
   const [caseId, setCaseId] = useState("");
@@ -161,7 +162,7 @@ export function EvalPanel() {
             <div className="form__title">1. Create a case</div>
             <div className="form__grid">
               <Field label="Test" hint="Is the thing under test a skill or a workflow?">
-                <Segmented
+                <SegmentedV2
                   value={targetKind}
                   ariaLabel="Target kind"
                   onChange={(v) => {

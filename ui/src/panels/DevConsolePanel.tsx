@@ -31,10 +31,10 @@ import {
   Hint,
   InfoCallout,
   PageIntro,
-  SchemaForm,
   Select,
   StatusBadge,
 } from "./ux";
+import { SchemaFormV2 } from "./uxForm";
 
 // Safely parse the params JSON into an object for the schema form (an in-progress
 // edit may be invalid; the form just sees {} until it is valid again).
@@ -341,7 +341,7 @@ export function DevConsolePanel() {
               Arguments
             </div>
             <Hint>The values this verb expects. They are data the kernel passes in, never executed.</Hint>
-            <SchemaForm
+            <SchemaFormV2
               schema={selectedVerb.input_schema}
               value={safeObj(params)}
               onChange={(o) => setParams(JSON.stringify(o, null, 2))}
