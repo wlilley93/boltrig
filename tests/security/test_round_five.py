@@ -204,3 +204,23 @@ def test_api_secret_is_never_remembered():
         headers=_h("alice", grants=g),
     )
     assert ok.status_code == 200 and ok.json().get("fact_ids")
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-42")
+def test_pem_private_key_is_never_remembered():
+    # M12: the broadened scanner (which backs this same memory-ingest guard) must
+    # refuse a PEM private-key block, not just the historically-recognised shapes.
+    k, store, engine = asyncio.run(_kernel())
+    c = _client(k)
+    g = "memory.recall,memory.remember"
+    pem = (
+        "deploy key\n-----BEGIN OPENSSH PRIVATE KEY-----\n"
+        "b3BlbnNzaC1rZXktdjEAAAAABG5vbmU\n-----END OPENSSH PRIVATE KEY-----\n"
+    )
+    blocked = c.post("/v1/memory/remember", json={"content": pem}, headers=_h("alice", grants=g))
+    # not a successful remember with a fact id
+    assert not (blocked.status_code == 200 and blocked.json().get("fact_ids"))
+    # and never recallable (nothing carrying the key material was stored)
+    rc = c.post("/v1/memory/recall", json={"query": "deploy key"}, headers=_h("alice", grants=g))
+    assert all("PRIVATE KEY" not in f.get("content", "") for f in rc.json().get("facts", []))

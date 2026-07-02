@@ -25,6 +25,7 @@ from fastapi.responses import JSONResponse
 from boltrig.adapters.builtin.inbound_webhook import (
     WebhookAuthError,
     WebhookValidationError,
+    is_duplicate_delivery,
     verify_and_normalise,
 )
 from boltrig.models import (
@@ -33,6 +34,8 @@ from boltrig.models import (
     Channel,
     ChannelBinding,
     ChannelPairing,
+    RateLimit,
+    RateLimited,
     utcnow,
 )
 from boltrig.models.channels import transport_for
@@ -46,6 +49,15 @@ from .channel_gateway import CHANNEL_TIERS, resolve_channel_principal
 PAIR_TTL_MINUTES = 15
 PAIR_MAX_TTL_MINUTES = 60
 PAIR_MAX_ATTEMPTS = 5
+
+# Inbound intake rate limits (M5). Each accepted inbound mints a work item that can
+# drive model spend, so the intake is throttled BEFORE create_work_item on two
+# axes: per-channel (a firehose channel), and per-(channel, sender) (one abusive
+# sender). Fixed-window via the existing kernel RateLimiter, keyed by a synthetic
+# verb id so the counter isolates each axis. Follow-on: a per-tenant intake budget
+# for cross-channel fairness (#81).
+INBOUND_RL_PER_CHANNEL = RateLimit(per="minute", max=120, scope="verb")
+INBOUND_RL_PER_SENDER = RateLimit(per="minute", max=30, scope="verb")
 
 
 def _hash_code(code: str) -> str:
@@ -144,9 +156,10 @@ def register_channel_routes(app, *, principal_dep, get_kernel) -> None:
             ref = await k.store.get_credential_ref(ch.tenant_id, ch.credential_ref)
             secret = (ref or {}).get("secret")
 
-        # 3. verify the signature at the edge, before acting on the body
+        # 3. verify the signature at the edge, before acting on the body. The
+        # verified candidate carries the delivery id used for replay dedup (M3).
         try:
-            verify_and_normalise(body, dict(request.headers), secret)
+            candidate = verify_and_normalise(body, dict(request.headers), secret)
         except WebhookAuthError:
             return JSONResponse({"status": "denied", "reason": "signature"}, status_code=401)
         except WebhookValidationError as exc:
@@ -181,12 +194,45 @@ def register_channel_routes(app, *, principal_dep, get_kernel) -> None:
                     {"status": "denied", "reason": "sender not paired"}, status_code=403
                 )
 
-        # 6. normalise -> a work-item intake (the CoS routes it), tenant-scoped
+        # 6. intake rate limit BEFORE minting a work item (M5): throttle per-channel
+        # and per-(channel, sender) so an abusive channel or sender cannot drive
+        # unbounded model spend. On the limit, return 429 and create nothing.
+        try:
+            await k.rate_limiter.enforce(
+                ch.tenant_id, f"channel.inbound:{ch.id}", INBOUND_RL_PER_CHANNEL
+            )
+            await k.rate_limiter.enforce(
+                ch.tenant_id, f"channel.inbound:{ch.id}:{external_user_id}", INBOUND_RL_PER_SENDER
+            )
+        except RateLimited as exc:
+            headers = {}
+            if exc.retry_after_seconds is not None:
+                headers["Retry-After"] = str(int(exc.retry_after_seconds))
+            return JSONResponse(
+                {"status": "throttled", "reason": "intake rate limit"},
+                status_code=429,
+                headers=headers,
+            )
+
+        # 7. replay dedup BEFORE minting a work item (M3): a captured signed request
+        # replays with a genuine signature, so the signature check cannot stop the
+        # second ingest. Skip it here on a stable delivery id. Note: process-local
+        # (matches the pairing-lockout pattern); durable store-backed dedup is the
+        # follow-on. Placed after sender resolution so only would-be intakes are
+        # marked, never a rejected/unpaired request.
+        delivery = candidate.get("delivery_id")
+        if delivery and is_duplicate_delivery(ch.id, str(delivery)):
+            return JSONResponse(
+                {"status": "duplicate", "reason": "delivery already ingested"},
+                status_code=200,
+            )
+
+        # 8. normalise -> a work-item intake (the CoS routes it), tenant-scoped
         item = normalise(body, source=ch.platform, tenant_id=ch.tenant_id)
         item.on_behalf_of = principal.subject
         await k.store.create_work_item(item)
 
-        # 7. audit the intake as the resolved principal (audit-always)
+        # 9. audit the intake as the resolved principal (audit-always)
         await k.audit.write(
             AuditEvent(
                 tenant_id=ch.tenant_id, ts=utcnow(), actor=principal.subject,

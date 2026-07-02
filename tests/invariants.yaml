@@ -382,10 +382,13 @@ invariants:
     tests:
       - tests/security/test_round_five.py::test_memory_cannot_escalate
   SEC-42:
-    description: Content is screened for injection/malware AND API secrets before it becomes memory; poison/secrets are rejected fail-closed, never persisted into any engine (Cognee or native).
+    description: Content is screened for injection/malware AND API secrets before it becomes memory; poison/secrets are rejected fail-closed, never persisted into any engine (Cognee or native). The secret scanner recognises PEM keys, Google/Slack/Stripe/Anthropic tokens and a high-entropy opaque-token fallback (M12), without tripping on hex SHAs, UUIDs or ordinary prose.
     tests:
       - tests/security/test_round_five.py::test_ingestion_screens_poison
       - tests/security/test_round_five.py::test_api_secret_is_never_remembered
+      - tests/security/test_round_five.py::test_pem_private_key_is_never_remembered
+      - tests/security/test_budget_and_pii.py::test_contains_secret_detects_pem_google_slack_stripe_anthropic_and_high_entropy
+      - tests/security/test_budget_and_pii.py::test_contains_secret_does_not_trip_on_prose_uuid_or_git_sha
       - tests/integration/test_cognee_engine.py::test_cognee_engine_refuses_secret_content_directly
   SEC-43:
     description: Sensitive memory must use a local endpoint; a misroute is blocked and audited.
@@ -522,9 +525,12 @@ invariants:
     tests:
       - tests/security/test_round_sixteen.py::test_dev_auth_refuses_production_signal
   SEC-61:
-    description: The shared egress guard blocks cloud-metadata / link-local targets for every HTTP adapter (not just web.fetch), closing the SSRF to IMDS token-theft path (INJ-02 / CLOUD-03).
+    description: The shared egress guard blocks cloud-metadata / link-local targets for every HTTP adapter (not just web.fetch), closing the SSRF to IMDS token-theft path (INJ-02 / CLOUD-03); and it PINS the vetted resolution - every egress client connects to the audited IP literal (host/SNI preserved), so a low-TTL domain cannot re-resolve to internal space between the check and the connect (H2 DNS-rebinding TOCTOU).
     tests:
       - tests/security/test_round_sixteen.py::test_shared_egress_guard_blocks_metadata
+      - tests/security/test_egress_pinning.py::test_egress_rejects_dns_rebind_between_check_and_connect
+      - tests/security/test_egress_pinning.py::test_pinned_client_uses_vetted_ip_and_preserves_host
+      - tests/security/test_egress_pinning.py::test_pinned_client_refuses_internal_resolution
   SEC-62:
     description: A Unicode-confusable or non-canonical verb id can never match a grant - matching is NFKC-normalised and restricted to a safe identifier charset (UPLOAD-05 / AZ-02).
     tests:
@@ -538,3 +544,16 @@ invariants:
     tests:
       - tests/security/test_round_seventeen.py::test_app_containers_are_hardened
       - tests/security/test_round_seventeen.py::test_app_images_run_non_root
+  SEC-66:
+    description: Inbound webhook replay is defeated - the timestamp is bound into the signed HMAC (t.body) so a captured signature cannot replay under a rewritten timestamp, a signing secret makes a timestamp mandatory, and a stable delivery id dedups a genuine replay so it never mints a second work item (M3).
+    tests:
+      - tests/security/test_channel_inbound.py::test_webhook_replay_with_rewritten_timestamp_rejected
+      - tests/security/test_channel_inbound.py::test_duplicate_delivery_not_double_ingested
+  SEC-67:
+    description: Inbound channel intake is rate-limited before a work item is minted - per-channel and per-(channel, sender) fixed-window limits return 429 without creating a work item, so an abusive channel or sender cannot drive unbounded model spend (M5; per-tenant intake budget is the follow-on #81).
+    tests:
+      - tests/security/test_channel_inbound.py::test_inbound_intake_rate_limited_per_sender
+  SEC-68:
+    description: An inert identity provider cannot be silently believed enforced - a manifest that advertises identity.provider 'saml' (which has no wired assertion validator) is rejected at load rather than falling back to env-selected auth; oidc/cf-access load fine (M13).
+    tests:
+      - tests/security/test_auth.py::test_saml_provider_config_refuses_to_boot

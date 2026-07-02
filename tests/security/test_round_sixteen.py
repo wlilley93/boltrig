@@ -233,19 +233,27 @@ def test_confusable_verb_id_never_matches_a_grant():
 @pytest.mark.security
 @pytest.mark.invariant("SEC-63")
 def test_webhook_replay_window():
-    from boltrig.adapters.builtin.inbound_webhook import canonical_body, expected_signature
+    from boltrig.adapters.builtin.inbound_webhook import (
+        canonical_body,
+        expected_signature,
+        signed_content,
+    )
 
     secret = "whsec"
     payload = {"type": "issue.opened", "id": "e1"}
-    sig = expected_signature(secret, canonical_body(payload))
     fresh = int(time.time())
-    # a fresh, signed request with a current timestamp is accepted
-    ok = verify_and_normalise(payload, {"x-signature": f"sha256={sig}"},
+    # the timestamp is bound into the signed content (M3/SEC-66); a fresh, signed
+    # request with a current timestamp is accepted
+    sig = expected_signature(secret, signed_content(fresh, canonical_body(payload)))
+    ok = verify_and_normalise(payload, {"x-signature": f"t={fresh},v1={sig}"},
                               secret, now=fresh)
     assert ok["authenticated"] is True
-    # a captured request whose timestamp is far in the past is rejected as a replay
+    # a captured request whose (bound) timestamp is far in the past is rejected as
+    # a replay: sign at the stale time, then present it now.
+    stale = fresh - 10_000
+    stale_sig = expected_signature(secret, signed_content(stale, canonical_body(payload)))
     with pytest.raises(WebhookAuthError):
         verify_and_normalise(
-            payload, {"x-signature": f"sha256={sig}", "x-boltrig-timestamp": str(fresh - 10_000)},
+            payload, {"x-signature": f"t={stale},v1={stale_sig}"},
             secret, now=fresh,
         )

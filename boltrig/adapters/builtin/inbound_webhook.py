@@ -6,12 +6,22 @@ layer calls :func:`verify_and_normalise` with the decoded payload, the request
 headers and the configured signing secret; it returns a normalised work-item
 candidate or raises.
 
-Authentication is an HMAC-SHA256 signature check (the common GitHub / Stripe
-style ``sha256=<hex>`` scheme) performed in constant time. When no secret is
-configured the signature step is skipped (running an unauthenticated webhook is
-a deliberate deployment choice, recorded by the absence of a secret) but the
-payload is still validated. The secret and the raw signature are NEVER logged
-(SEC-05).
+Authentication is an HMAC-SHA256 signature check (the Stripe-style
+``t=<unix>,v1=<hex>`` scheme, also accepting ``sha256=<hex>`` for the digest)
+performed in constant time. When no secret is configured the signature step is
+skipped (running an unauthenticated webhook is a deliberate deployment choice,
+recorded by the absence of a secret) but the payload is still validated. The
+secret and the raw signature are NEVER logged (SEC-05).
+
+Replay defence (M3 / SEC-66). The timestamp is bound INTO the signed bytes:
+the HMAC is taken over ``t + "." + canonical_body`` (Stripe's scheme), never the
+body alone. This is what stops a captured request from replaying under a
+rewritten ``t`` - rewriting the timestamp invalidates the signature. When a
+signing secret is configured a timestamp is therefore REQUIRED (a signed request
+without one is refused), and the replay-window check (ADP-08 / SEC-63) still
+applies on top. A stable delivery id (an explicit id in the payload, else the
+signature) lets the ingress dedup replays so a repeat never mints a second work
+item; see :func:`is_duplicate_delivery`.
 
 Note: an HMAC is strictly a function of exact bytes. Where the caller can supply
 the raw request body it should HMAC that. Here we receive a decoded payload, so
@@ -54,9 +64,60 @@ def canonical_body(payload: dict[str, Any]) -> bytes:
     ).encode("utf-8")
 
 
+def signed_content(timestamp: int | str, body: bytes) -> bytes:
+    """The exact bytes the HMAC binds: ``t + "." + canonical_body`` (M3/SEC-66).
+
+    Binding the timestamp into the signed content is what defeats replay under a
+    rewritten ``t``: an attacker who captured a valid signature cannot move the
+    timestamp forward without the secret, because the timestamp is part of what
+    was signed. This mirrors Stripe's ``signed_payload = timestamp.body`` scheme.
+    """
+    return f"{timestamp}.".encode("utf-8") + body
+
+
 def expected_signature(secret: str, body: bytes) -> str:
-    """The hex HMAC-SHA256 the sender should have produced over ``body``."""
+    """The hex HMAC-SHA256 the sender should have produced over ``body``.
+
+    ``body`` is the exact signed bytes. For a webhook that is the timestamp-bound
+    content from :func:`signed_content`, not the bare payload (M3/SEC-66)."""
     return hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
+
+
+# --- Delivery dedup (M3 / SEC-66): a bounded, TTL-scoped seen-set --------------
+# A replayed request carries a valid signature (nothing forged), so the signature
+# check alone cannot stop a second ingest. We dedup on a stable delivery id keyed
+# by (channel_id, delivery_id) within a short window. This is a PROCESS-LOCAL set,
+# matching the existing in-adapter lockout pattern (pairing attempts): it is a
+# real improvement (a single-process replay no longer double-ingests) but does
+# NOT dedup across worker processes/restarts. Durable, store-backed dedup (a
+# seen-delivery marker row keyed by (channel, delivery_id)) is the follow-on;
+# the channel store has no such primitive today.
+_SEEN_TTL_SECONDS = 600
+_seen_deliveries: dict[tuple[str, str], float] = {}
+
+
+def is_duplicate_delivery(
+    channel_id: str,
+    delivery_id: str,
+    *,
+    ttl_seconds: int = _SEEN_TTL_SECONDS,
+    now: float | None = None,
+) -> bool:
+    """Check-and-set: record ``(channel_id, delivery_id)`` as seen and return True
+    if it was already seen within the TTL window (i.e. this is a replay).
+
+    The first sighting returns False and arms the marker; a repeat within the
+    window returns True so the caller can skip creating a second work item
+    (M3/SEC-66)."""
+    current = now if now is not None else utcnow().timestamp()
+    key = (str(channel_id), str(delivery_id))
+    # opportunistic eviction of expired markers (keeps the set bounded)
+    for stale in [k for k, exp in _seen_deliveries.items() if exp <= current]:
+        del _seen_deliveries[stale]
+    if key in _seen_deliveries:
+        return True
+    _seen_deliveries[key] = current + ttl_seconds
+    return False
 
 
 def _lower_headers(headers: dict[str, Any] | None) -> dict[str, str]:
@@ -127,19 +188,25 @@ def verify_and_normalise(
 
     lower = _lower_headers(headers)
     authenticated = False
+    signature_hex: str | None = None
     if secret:
         provided = _find_signature(lower)
         if not provided:
             raise WebhookAuthError("signed webhook is missing its signature header")
-        expected = expected_signature(secret, canonical_body(payload))
-        if not hmac.compare_digest(_extract_hex(provided), expected):
-            raise WebhookAuthError("webhook signature mismatch")
-        # Replay protection (ADP-08): a captured signed request must not replay
-        # forever. When the source carries a timestamp, reject one outside the
-        # window. For sources that sign the timestamp (e.g. Stripe's t.body), an
-        # attacker cannot forge a fresh t without the secret.
+        # Replay protection (M3/SEC-66, ADP-08): the timestamp is bound INTO the
+        # signed bytes, so we must have one to reconstruct the signature. Refuse a
+        # signed request that omits it - without this, an attacker replays forever.
         ts = _extract_timestamp(provided, lower)
-        if ts is not None and replay_window_seconds > 0:
+        if ts is None:
+            raise WebhookAuthError("signed webhook is missing its timestamp (replay protection)")
+        expected = expected_signature(secret, signed_content(ts, canonical_body(payload)))
+        signature_hex = _extract_hex(provided)
+        # constant-time compare, unchanged (SEC-05): never branch on secret bytes.
+        if not hmac.compare_digest(signature_hex, expected):
+            raise WebhookAuthError("webhook signature mismatch")
+        # The window check still applies on top: a captured request whose bound
+        # timestamp is stale is refused even though its signature is genuine.
+        if replay_window_seconds > 0:
             current = now if now is not None else utcnow().timestamp()
             if abs(current - ts) > replay_window_seconds:
                 raise WebhookAuthError("stale webhook: replay window exceeded")
@@ -159,10 +226,16 @@ def verify_and_normalise(
         or lower.get("x-request-id")
         or lower.get("x-github-delivery")
     )
+    external_id_str = str(external_id) if external_id is not None else None
+    # A stable delivery id for dedup (M3/SEC-66): an explicit id the payload carries
+    # if present, otherwise the signature itself (a signed replay reuses it). None
+    # means we have no stable handle, so the caller cannot (and does not) dedup.
+    delivery = external_id_str or signature_hex
     return {
         "source": str(source),
         "type": str(event_type),
-        "external_id": str(external_id) if external_id is not None else None,
+        "external_id": external_id_str,
+        "delivery_id": delivery,
         "authenticated": authenticated,
         "received_at": utcnow().isoformat(),
         "payload": payload,

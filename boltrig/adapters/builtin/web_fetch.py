@@ -90,13 +90,24 @@ class WebFetchAdapter:
             # A blocked target is refused before any network call (fail-closed).
             raise NetworkPolicyViolation(f"web.fetch refused: {reason}")
 
-        import httpx
-
         cap = int(params.get("max_bytes") or _MAX_BYTES)
         proxy = self._config.get("https_proxy") or None
         # Redirects are NOT followed: a public URL must not redirect into internal
         # space and slip past the SSRF guard.
-        async with httpx.AsyncClient(follow_redirects=False, timeout=15.0, proxy=proxy) as client:
+        if proxy:
+            # With a proxy the proxy performs resolution, so local IP pinning does
+            # not apply; the guard above (over the local resolution) stands.
+            import httpx
+
+            client = httpx.AsyncClient(follow_redirects=False, timeout=15.0, proxy=proxy)
+        else:
+            # SSRF/rebinding (H2/SEC-61): pin the connection to an already-vetted
+            # IP from the single resolution above so httpx cannot re-resolve to
+            # internal space at connect time.
+            from boltrig.adapters.egress import pinned_async_client_for_ip
+
+            client = pinned_async_client_for_ip(resolved[0], timeout=15.0)
+        async with client:
             resp = await client.get(url)
         body = resp.content[:cap]
         return Result.success({

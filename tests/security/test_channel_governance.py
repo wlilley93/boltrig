@@ -9,11 +9,16 @@ toward lockout; an expired/locked pairing is denied fail-closed.
 """
 
 import asyncio
+import time
 
 import pytest
 from fastapi.testclient import TestClient
 
-from boltrig.adapters.builtin.inbound_webhook import canonical_body, expected_signature
+from boltrig.adapters.builtin.inbound_webhook import (
+    canonical_body,
+    expected_signature,
+    signed_content,
+)
 from boltrig.kernel import Kernel
 from boltrig.kernel.app import create_app
 from boltrig.models import GrantSet, TenantPermissions
@@ -42,7 +47,10 @@ def _member() -> dict:
 
 
 def _signed(secret: str, payload: dict) -> dict:
-    return {"x-boltrig-signature": "sha256=" + expected_signature(secret, canonical_body(payload))}
+    # timestamp bound into the HMAC (M3/SEC-66): a signed webhook now needs a t.
+    ts = int(time.time())
+    sig = expected_signature(secret, signed_content(ts, canonical_body(payload)))
+    return {"x-boltrig-signature": f"t={ts},v1={sig}"}
 
 
 @pytest.mark.security

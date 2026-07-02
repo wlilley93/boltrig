@@ -135,3 +135,29 @@ async def test_oidc_verifier_accepts_valid_and_rejects_wrong_audience():
     assert claims["sub"] == "bob"
     with pytest.raises(Exception):
         await v.verify(wrong_aud)
+
+
+# --- M13 / SEC-68: an inert SAML provider must not silently boot --------------
+@pytest.mark.security
+@pytest.mark.invariant("SEC-68")
+def test_saml_provider_config_refuses_to_boot(tmp_path):
+    # M13: the manifest advertises a SAML provider that is entirely inert
+    # (SamlVerifier.verify raises; resolver selection never reads it). Loading it
+    # must FAIL LOUDLY so an operator cannot believe SAML is enforced while the
+    # deployment silently runs env-selected auth. oidc / cf-access still load.
+    from boltrig.config import load_manifest
+
+    def _write(provider: str) -> str:
+        path = tmp_path / f"manifest-{provider}.yaml"
+        path.write_text(
+            f"tenant_id: acme\norganisation: Acme\nidentity:\n  provider: {provider}\n",
+            encoding="utf-8",
+        )
+        return str(path)
+
+    with pytest.raises(ValueError, match="(?i)saml"):
+        load_manifest(_write("saml"))
+
+    # the working providers load cleanly
+    assert load_manifest(_write("oidc")).identity.provider == "oidc"
+    assert load_manifest(_write("cf-access")).identity.provider == "cf-access"

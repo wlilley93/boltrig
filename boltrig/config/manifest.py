@@ -57,11 +57,11 @@ class CredentialRef:
 class IdentityConfig:
     """How the tenant authenticates and maps IdP groups to roles (US-IAM-01/02)."""
 
-    provider: str = "oidc"  # 'oidc' | 'saml'
+    provider: str = "oidc"  # 'oidc' | 'cf-access' ('saml' rejected at load, M13)
     issuer: str | None = None
     audience: str | None = None
     jwks_uri: str | None = None
-    metadata_url: str | None = None  # SAML IdP metadata
+    metadata_url: str | None = None  # SAML IdP metadata (unused until SAML is wired)
     role_mappings: tuple[RoleMapping, ...] = ()
 
 
@@ -277,6 +277,19 @@ def _parse_credential(raw: Any) -> CredentialRef | None:
 
 
 def _parse_identity(raw: Mapping[str, Any], tenant_id: str) -> IdentityConfig:
+    provider = str(raw.get("provider", "oidc"))
+    # M13: the manifest can advertise ``provider: saml`` but no SAML assertion
+    # validator is wired anywhere (``SamlVerifier.verify`` raises), and resolver
+    # selection never reads this field - so a deployment that sets it would
+    # silently run env-selected auth while the operator believes SAML is
+    # enforced. Fail loudly at load rather than boot a false belief. (SAML stays
+    # a seam: supply a concrete assertion validator and select it explicitly.)
+    if provider == "saml":
+        raise ValueError(
+            "identity.provider 'saml' is not implemented; set provider to "
+            "'oidc' or 'cf-access' (or supply a SAML assertion validator and "
+            "wire it explicitly). See audit finding M13."
+        )
     mappings = tuple(
         RoleMapping(
             tenant_id=tenant_id,
@@ -287,7 +300,7 @@ def _parse_identity(raw: Mapping[str, Any], tenant_id: str) -> IdentityConfig:
         for m in (raw.get("role_mappings") or [])
     )
     return IdentityConfig(
-        provider=str(raw.get("provider", "oidc")),
+        provider=provider,
         issuer=raw.get("issuer"),
         audience=raw.get("audience"),
         jwks_uri=raw.get("jwks_uri"),

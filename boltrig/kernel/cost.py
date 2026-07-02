@@ -9,10 +9,13 @@ pre-emptive alert.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Awaitable, Callable
 
 from boltrig.models import BudgetExceeded
 from boltrig.store import Store
+
+log = logging.getLogger("boltrig.kernel.cost")
 
 # alert callback: (tenant_id, scope_id, fraction_used) -> None
 AlertFn = Callable[[str, str, float], Awaitable[None]]
@@ -55,13 +58,23 @@ class CostAccountant:
                     f"budget '{scope_id}' hard-stop reached for tenant '{tenant_id}'"
                 )
 
-        # 2. pre-emptive alerts (soft signal, US-COST-02).
+        # 2. pre-emptive alerts (soft signal, US-COST-02). The alert is an
+        # observability side-channel, so its invocation is fail-safe (P9): a
+        # raising callback must never abort a metered reservation, matching every
+        # other side-channel in the kernel (dispatch._emit, hitl._fire_resume,
+        # spawn.events.publish, pi_runtime sink/revoke).
         if self._alert is not None:
             for scope_id, b in budgets.items():
                 if b.cost_limit_micros:
                     used = (b.spent_micros + micros) / b.cost_limit_micros
                     if used >= _ALERT_FRACTION:
-                        await self._alert(tenant_id, scope_id, used)
+                        try:
+                            await self._alert(tenant_id, scope_id, used)
+                        except Exception:  # alert side-channel must never break reserve (P9)
+                            log.debug(
+                                "budget alert callback failed for tenant '%s' scope '%s'",
+                                tenant_id, scope_id, exc_info=True,
+                            )
 
         # 3. commit all. Step 1's fail-fast guarantees headroom under single-threaded
         # use, but consume_budget re-checks the hard stop atomically (FOR UPDATE) and

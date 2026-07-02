@@ -168,7 +168,10 @@ class SamlVerifier:
 
     A placeholder for SAML-federated tenants: plug a concrete implementation
     (signature + audience + condition validation) via ``assertion_validator``.
-    Kept as a seam so the OIDC path ships without a SAML stack.
+    Kept as a seam so the OIDC path ships without a SAML stack. Until a validator
+    is wired and selected, ``verify`` fails closed; the manifest loader also
+    rejects ``identity.provider: saml`` so an operator cannot silently believe
+    SAML is enforced (audit finding M13).
     """
 
     def __init__(

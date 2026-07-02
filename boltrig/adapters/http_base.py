@@ -210,6 +210,17 @@ class HttpAdapter:
         if credential is not None:
             extra, auth = self._auth(credential)
             headers.update(extra)
+        # SSRF/rebinding (H2/SEC-61): pin the client's TCP target to the vetted IP
+        # of the base host so httpx cannot re-resolve to internal space at connect
+        # time. If the base host is internal (or empty), leave the client unpinned
+        # and let the per-request egress guard in request() refuse it with INVALID.
+        from boltrig.adapters.egress import EgressBlocked, pinned_transport
+
+        transport: httpx.AsyncBaseTransport | None = None
+        try:
+            transport = pinned_transport(base)
+        except EgressBlocked:
+            transport = None
         return httpx.AsyncClient(
             base_url=base,
             headers=headers,
@@ -219,6 +230,7 @@ class HttpAdapter:
             # bypass the pre-flight egress guard (CLOUD-03). A 3xx is returned to
             # the caller as-is instead of being chased into internal space.
             follow_redirects=False,
+            transport=transport,
         )
 
     def _auth(

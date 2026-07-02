@@ -32,12 +32,11 @@ async def _default_deliver(channel: Channel, text: str, target: str | None) -> d
     outbound_url = (channel.config or {}).get("outbound_url")
     if not outbound_url:
         return {"status": "queued", "transport": channel.transport}
-    import httpx
+    from boltrig.adapters.egress import pinned_async_client
 
-    from boltrig.adapters.egress import assert_egress_allowed
-
-    assert_egress_allowed(outbound_url)  # SSRF guard (raises EgressBlocked)
-    async with httpx.AsyncClient(timeout=10) as client:
+    # SSRF (H2/SEC-61): pin the connection to the vetted IP so httpx cannot
+    # re-resolve the outbound host to internal space (raises EgressBlocked).
+    async with pinned_async_client(outbound_url, timeout=10) as client:
         resp = await client.post(outbound_url, json={"text": text, "target": target})
     return {"status": "sent", "code": resp.status_code}
 
