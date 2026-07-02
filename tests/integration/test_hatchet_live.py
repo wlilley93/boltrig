@@ -1,4 +1,4 @@
-"""Live Hatchet integration (Beat 5; P1-1 lineage).
+"""Live Hatchet integration (Beat 5 + Beat 6; P1-1 lineage).
 
 Gated on a reachable Hatchet engine (HATCHET_CLIENT_TOKEN set); skipped offline so
 the default suite stays green (P9). It proves the live execution path of the
@@ -6,17 +6,26 @@ registered durable tasks: ``boltrig-invoke`` runs on the real engine and its bod
 re-enters the kernel chokepoint (FR-EXE-06); ``boltrig-workflow-run`` is accepted
 as a durable task and pauses on a HITL-gated step instead of completing
 (NFR-REL-01/NFR-REL-03 live half). The checkpoint-resume and exactly-once
-properties are proven deterministically offline in test_durable_resume.py; the
-full live pause -> approve -> resume loop over a shared Postgres store is the
-Beat 6 live gate.
+properties are proven deterministically offline in test_durable_resume.py;
+``test_live_kill_restart_approve_resume`` is the Beat 6 crown-jewel live gate:
+a worker crash (SIGKILL) mid-pause, an approval recorded over the shared
+Postgres store, and a fresh worker completing the run with checkpoint replay
+(NFR-REL-02) and exactly-once gated execution (NFR-REL-03).
+
+Live timing note: engine dispatch to a fresh worker can take 45-75s (worse just
+after an engine restart, or while dead "ghost" workers linger with unexpired
+liveness and burn a task timeout first). All live waits are therefore generous
+(>= 150s) and store-driven (poll checkpoints), never single fixed sleeps.
 """
 
 from __future__ import annotations
 
 import asyncio
 import os
+import signal
 import subprocess
 import sys
+import time
 import uuid
 from pathlib import Path
 
@@ -28,8 +37,23 @@ pytestmark = pytest.mark.skipif(
     reason="set HATCHET_CLIENT_TOKEN (+ a reachable Hatchet engine) for the live test",
 )
 
-# The worker boots from the repo manifest (manifest.example.yaml, tenant acme).
-_TENANT = "acme"
+def _worker_tenant() -> str:
+    """The tenant the worker will seed: derived exactly as the worker derives
+    it (first manifest found wins; a box-local manifest.yaml outranks the repo
+    example), so the test never assumes a tenant the worker did not seed."""
+    from boltrig.api.bootstrap import _find_manifest
+    from boltrig.config import load_manifest
+
+    path = _find_manifest()
+    if path:
+        try:
+            return load_manifest(path).tenant_id
+        except Exception:
+            pass
+    return "default"
+
+
+_TENANT = _worker_tenant()
 
 
 def _envelope(run_id: str) -> dict:
@@ -45,13 +69,43 @@ def _envelope(run_id: str) -> dict:
 
 
 def _start_worker() -> subprocess.Popen:
+    # Own process group (start_new_session): the hatchet SDK spawns listener
+    # child processes, and killing only the parent leaves them heartbeating as
+    # ghost "active" workers that swallow every subsequent dispatch.
     return subprocess.Popen(
         [sys.executable, "-m", "boltrig.fleet.hatchet_worker"],
         cwd=str(_REPO),
         env=dict(os.environ),
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
+        start_new_session=True,
     )
+
+
+def _kill_worker(worker: subprocess.Popen) -> None:
+    """SIGKILL the worker's WHOLE process group - honest crash semantics (a dead
+    box takes its children with it) and no ghost listeners left behind."""
+    try:
+        os.killpg(worker.pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        if worker.poll() is None:
+            worker.kill()
+    worker.wait()
+
+
+async def _poll_checkpoints(store, run_id: str, ready, *, budget: float, interval: float = 2.0):
+    """Poll the shared store's checkpoints for ``run_id`` until ``ready(by_step)``
+    accepts them, returning the by-step dict. Store-driven polling (not fixed
+    sleeps) because live engine dispatch to a fresh worker can take 45-75s."""
+    deadline = time.monotonic() + budget
+    by_step: dict = {}
+    while time.monotonic() < deadline:
+        by_step = {c.step: c for c in await store.list_checkpoints(_TENANT, run_id)}
+        if ready(by_step):
+            return by_step
+        await asyncio.sleep(interval)
+    state = {s: c.status for s, c in by_step.items()}
+    raise AssertionError(f"checkpoints not ready within {budget}s: {state}")
 
 
 async def test_live_invoke_reenters_the_chokepoint():
@@ -64,6 +118,8 @@ async def test_live_invoke_reenters_the_chokepoint():
     try:
         await asyncio.sleep(9)  # let the worker register with the engine
         rid = uuid.uuid4().hex
+        # generous window: engine dispatch to a fresh worker can take 45-75s
+        # (worse after an engine restart / with lingering ghost workers).
         result = await asyncio.wait_for(
             workflows[TASK_INVOKE].aio_run(
                 InvokeInput(
@@ -72,7 +128,7 @@ async def test_live_invoke_reenters_the_chokepoint():
                     run_id=rid,
                 )
             ),
-            timeout=45,
+            timeout=180,
         )
         # the task returns the chokepoint's Result data (tolerate a name wrap)
         out = result
@@ -80,8 +136,7 @@ async def test_live_invoke_reenters_the_chokepoint():
             out = next((v for v in out.values() if isinstance(v, dict)), out)
         assert isinstance(out, dict) and "skills" in out, result
     finally:
-        if worker.poll() is None:
-            worker.kill()
+        _kill_worker(worker)
 
 
 async def test_live_workflow_run_pauses_on_gated_step():
@@ -120,10 +175,153 @@ async def test_live_workflow_run_pauses_on_gated_step():
                 ctx_envelope=_envelope(rid), run_id=rid,
             )
         )
-        # it must NOT complete on its own within a short window (it is paused
-        # on the durable approval wait)
+        # Poll the shared store until the gated step's PAUSED checkpoint lands
+        # (dispatch latency can be 45-75s, so a fixed short timeout is flaky).
+        by_step = await _poll_checkpoints(
+            store, rid,
+            lambda c: c.get("s1") is not None and c["s1"].status == "paused",
+            budget=150,
+        )
+        assert by_step["s1"].hitl_request_id  # the pause carries its approval id
+        # and the run must NOT complete on its own: it is parked on the durable
+        # approval wait (NFR-REL-01), so the result stays unresolved.
         with pytest.raises(asyncio.TimeoutError):
-            await asyncio.wait_for(ref.aio_result(), timeout=12)
+            await asyncio.wait_for(ref.aio_result(), timeout=5)
     finally:
-        if worker.poll() is None:
-            worker.kill()
+        _kill_worker(worker)
+
+
+@pytest.mark.invariant("NFR-REL-02")
+@pytest.mark.invariant("NFR-REL-03")
+async def test_live_kill_restart_approve_resume():
+    """The Beat 6 crown jewel, live: a durable run survives a worker CRASH.
+
+    s1 (skill.search) completes and is checkpointed; s2 (channel.send,
+    consequence=high) pauses on the HITL gate; worker A is SIGKILLed mid-pause;
+    the approval is recorded over the SHARED Postgres store and the scoped
+    resume event pushed; worker B (a fresh process) receives the engine's
+    re-dispatch and completes the run. Proven live: s1 REPLAYS from its
+    checkpoint, never re-executes (NFR-REL-02); s2 executes exactly once via
+    the consume-if-approved CAS (NFR-REL-03, SEC-14); s3 runs to completion."""
+    if not os.environ.get("DATABASE_URL"):
+        pytest.skip("set DATABASE_URL (shared store) for the live kill/restart test")
+    from boltrig.fleet.hatchet_app import (
+        TASK_WORKFLOW_RUN,
+        WorkflowRunInput,
+        approve,
+        build_hatchet_app,
+    )
+    from boltrig.kernel.hitl import HITLManager
+    from boltrig.models import Channel, WorkflowDefinition, WorkflowSource
+    from boltrig.store import PostgresStore
+
+    store = await PostgresStore.connect(os.environ["DATABASE_URL"])
+    # A real enabled channel (no outbound_url) so the approved send SUCCEEDS:
+    # delivery is honestly "queued" for the sidecar and the Result is success,
+    # letting the run finish instead of failing on an unknown channel.
+    ch_id = f"live-ch-{uuid.uuid4().hex[:8]}"
+    await store.upsert_channel(
+        Channel(id=ch_id, tenant_id=_TENANT, platform="webhook",
+                name="live kill/restart", transport="webhook")
+    )
+    wf_id = f"live-crash-{uuid.uuid4().hex[:8]}"
+    await store.upsert_workflow(
+        WorkflowDefinition(
+            id=wf_id, tenant_id=_TENANT, version="1", source=WorkflowSource.PRECREATED,
+            definition={"steps": [
+                {"id": "s1", "action": "skill.search", "params": {"query": "s1"}},
+                # consequence=high: the gate holds it until approved (SEC-14)
+                {"id": "s2", "action": "channel.send",
+                 "params": {"channel_id": ch_id, "text": "x"}, "parents": ["s1"]},
+                {"id": "s3", "action": "skill.search", "params": {"query": "s3"},
+                 "parents": ["s2"]},
+            ]},
+        )
+    )
+    hatchet, workflows = build_hatchet_app()
+    rid = uuid.uuid4().hex
+    worker_a = _start_worker()
+    worker_b: subprocess.Popen | None = None
+    extra_workers: list[subprocess.Popen] = []
+    try:
+        await asyncio.sleep(9)  # let worker A register with the engine
+        ref = await workflows[TASK_WORKFLOW_RUN].aio_run_no_wait(
+            WorkflowRunInput(
+                tenant=_TENANT, workflow_id=wf_id, inputs={},
+                ctx_envelope=_envelope(rid), run_id=rid,
+            )
+        )
+        # Phase 1: s1 done, s2 paused with its approval id (dispatch can take
+        # 45-75s on this engine, so the budget is generous).
+        by_step = await _poll_checkpoints(
+            store, rid,
+            lambda c: (
+                c.get("s1") is not None and c["s1"].status == "ok"
+                and c.get("s2") is not None and c["s2"].status == "paused"
+                and bool(c["s2"].hitl_request_id)
+            ),
+            budget=180,
+        )
+        s1_stamp = by_step["s1"].updated_at
+        hitl_id = by_step["s2"].hitl_request_id
+
+        # Phase 2: CRASH worker A (SIGKILL to the whole group, no graceful drain).
+        _kill_worker(worker_a)
+
+        # Phase 3: approve over the shared store. The answer is recorded FIRST
+        # so consume_if_approved finds it, THEN the scoped resume event is
+        # pushed (the same order wire_hitl_resume uses, NFR-REL-03). The
+        # HITLManager over the shared store is exactly what the kernel wires
+        # (Kernel.__init__: HITLManager(store)).
+        await HITLManager(store).answer(_TENANT, hitl_id, "approve", respondent="live-test")
+        await approve(hatchet, rid)
+
+        # Phase 4: a FRESH worker picks up the engine's re-dispatch and the
+        # interpreter resumes from checkpoints to completion. Because the crash
+        # window briefly leaves ZERO registered workers, the engine parks the
+        # re-dispatch as REQUEUED_NO_WORKER, and (observed on this engine) the
+        # rescue reassignment fires on a fresh worker REGISTRATION and only for
+        # requeues older than about two minutes. So poll in slices and, between
+        # slices, scale up another worker - the ops-realistic nudge - until the
+        # run completes or the overall budget runs out.
+        worker_b = _start_worker()
+        done = lambda c: c.get("s3") is not None and c["s3"].status == "ok"  # noqa: E731
+        deadline = time.monotonic() + 480
+        while True:
+            try:
+                by_step = await _poll_checkpoints(
+                    store, rid, done,
+                    budget=max(5.0, min(90.0, deadline - time.monotonic())),
+                )
+                break
+            except AssertionError:
+                if time.monotonic() >= deadline:
+                    raise
+                extra_workers.append(_start_worker())  # registration nudge
+        assert by_step["s2"].status == "ok"
+        # NFR-REL-02: s1 replayed from its checkpoint on the resumed run - the
+        # interpreter never re-dispatched it, so its row was never rewritten.
+        assert by_step["s1"].updated_at == s1_stamp
+        # NFR-REL-03: the gated verb executed exactly once (the CAS), and the
+        # replayed s1 added no second skill.search execution (2 = s1 + s3).
+        events = await store.audit_query(_TENANT, run_id=rid, limit=500)
+        sends_ok = [e for e in events if e.verb == "channel.send" and e.status == "ok"]
+        assert len(sends_ok) == 1, [(e.verb, e.status) for e in events]
+        searches_ok = [e for e in events if e.verb == "skill.search" and e.status == "ok"]
+        assert len(searches_ok) == 2, [(e.verb, e.status) for e in events]
+        # Best-effort SDK-side confirmation: the workflow-run result, when the
+        # listener delivers it, reports completed. Checkpoints above are the
+        # authoritative proof either way.
+        try:
+            result = await asyncio.wait_for(ref.aio_result(), timeout=30)
+        except Exception:
+            result = None
+        if isinstance(result, dict):
+            record = result if "status" in result else next(
+                (v for v in result.values() if isinstance(v, dict) and "status" in v), {}
+            )
+            assert record.get("status") == "completed", result
+    finally:
+        for w in (worker_a, worker_b, *extra_workers):
+            if w is not None:
+                _kill_worker(w)
