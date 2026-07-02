@@ -172,6 +172,14 @@ class Store(Protocol):
     async def consume_budget(
         self, tenant_id: str, scope_id: str, tokens: int, micros: int
     ) -> bool: ...
+    # Post-run cost true-up (FR-COST-03, audit M14): apply a SIGNED delta to the
+    # scope's accumulators atomically (FOR UPDATE in postgres, under the lock in
+    # memory), each floored at 0. Unlike consume_budget this never gates on the
+    # hard stop - it corrects the ledger for a call that already ran. A scope with
+    # no budget row is a no-op (unmetered), mirroring consume_budget.
+    async def reconcile_budget(
+        self, tenant_id: str, scope_id: str, delta_tokens: int, delta_micros: int
+    ) -> None: ...
 
     # --- idempotency (SEC-15) ---
     async def idempotency_get(self, tenant_id: str, key: str) -> dict | None: ...

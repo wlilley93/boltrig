@@ -341,6 +341,21 @@ class InMemoryStore(ChannelStoreMem):
         )
         return True
 
+    async def reconcile_budget(self, tenant_id, scope_id, delta_tokens, delta_micros):
+        """Post-run cost true-up (FR-COST-03): apply a SIGNED delta to the scope,
+        each accumulator floored at 0. No hard-stop gate (this corrects a call that
+        already ran). No budget row for the scope -> no-op. The read-modify-write
+        has no await between steps, so it is atomic under cooperative scheduling
+        (mirrors consume_budget)."""
+        b = self._budgets.get((tenant_id, scope_id))
+        if b is None:
+            return  # no budget configured for this scope -> unmetered
+        new_tokens = max(0, b.spent_tokens + delta_tokens)
+        new_micros = max(0, b.spent_micros + delta_micros)
+        self._budgets[(tenant_id, scope_id)] = replace(
+            b, spent_tokens=new_tokens, spent_micros=new_micros
+        )
+
     # --- idempotency ---
     async def idempotency_get(self, tenant_id, key):
         return self._idem.get((tenant_id, key))

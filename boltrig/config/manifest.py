@@ -72,6 +72,11 @@ class ModelsConfig:
     endpoints: tuple[ModelEndpoint, ...] = ()
     default: str | None = None
     sensitive_endpoint: str | None = None  # endpoint id for sensitive data (local)
+    # Per-model price table (policy-as-data, FR-COST-04 / audit M14): model name ->
+    # micros per token. A model listed here is charged at its real price; a model
+    # absent here falls back to its capability's cost-tier default. Replaces static
+    # tier micros as the source of truth for cost accounting.
+    prices: Mapping[str, int] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -322,10 +327,20 @@ def _parse_models(raw: Mapping[str, Any], tenant_id: str) -> ModelsConfig:
         )
         for e in (raw.get("endpoints") or [])
     )
+    # Per-model price table (FR-COST-04): {model_name: micros_per_token}. Values
+    # are coerced to int; a malformed entry is dropped rather than failing load, so
+    # a bad price never blocks boot (the model just falls back to its tier default).
+    prices: dict[str, int] = {}
+    for name, rate in (raw.get("prices") or {}).items():
+        try:
+            prices[str(name)] = int(rate)
+        except (TypeError, ValueError):
+            continue
     return ModelsConfig(
         endpoints=endpoints,
         default=raw.get("default"),
         sensitive_endpoint=raw.get("sensitive_endpoint"),
+        prices=prices,
     )
 
 
@@ -529,9 +544,14 @@ async def apply_manifest(
     tenant = manifest.tenant_id
     store = kernel.store
 
-    # 1. model endpoints (P4)
+    # 1. model endpoints (P4) + the per-model price table (FR-COST-04, audit M14).
+    #    Prices are policy-as-data on the cost accountant so post-run true-up and
+    #    reservations price real spend; absent any prices the tier defaults stand.
     for endpoint in manifest.models.endpoints:
         await store.upsert_model_endpoint(endpoint)
+    cost = getattr(kernel, "cost", None)
+    if cost is not None and manifest.models.prices:
+        cost.set_prices(manifest.models.prices)
 
     # 2. agent capabilities: ephemeral runtimes + hierarchy tiers
     for rt in manifest.ephemeral_runtimes:

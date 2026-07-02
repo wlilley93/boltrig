@@ -658,6 +658,29 @@ class PostgresStore(ChannelStorePG):
                 )
                 return True
 
+    async def reconcile_budget(self, tenant_id, scope_id, delta_tokens, delta_micros):
+        """Post-run cost true-up (FR-COST-03, audit M14): apply a SIGNED delta to
+        the scope's accumulators atomically (FOR UPDATE), each floored at 0. No
+        hard-stop gate - this corrects the ledger for a call that already ran. No
+        budget row -> no-op (unmetered), mirroring consume_budget."""
+        async with self._pool.acquire() as conn:
+            async with conn.transaction():
+                await _apply_guc(conn)  # RLS-live: scope this explicit transaction
+                row = await conn.fetchrow(
+                    """SELECT spent_tokens, spent_micros
+                       FROM budgets WHERE tenant_id=$1 AND id=$2 FOR UPDATE""",
+                    tenant_id, scope_id,
+                )
+                if row is None:
+                    return  # unmetered
+                new_tokens = max(0, row["spent_tokens"] + delta_tokens)
+                new_micros = max(0, row["spent_micros"] + delta_micros)
+                await conn.execute(
+                    """UPDATE budgets SET spent_tokens=$3, spent_micros=$4, updated_at=now()
+                       WHERE tenant_id=$1 AND id=$2""",
+                    tenant_id, scope_id, new_tokens, new_micros,
+                )
+
     # --- idempotency ------------------------------------------------------
     async def idempotency_get(self, tenant_id, key):
         row = await self._pool.fetchrow(

@@ -39,10 +39,12 @@ from boltrig.models import (
     utcnow,
 )
 
+from boltrig.kernel.cost import price_micros
+
 from .model_gateway import ModelGateway, apply_gateway, gateway_config
 from .model_router import select_model_endpoint
 from .result import AgentResult
-from .runtime import _MICROS_PER_TOKEN, build_runtime
+from .runtime import build_runtime
 
 if TYPE_CHECKING:  # type-only: keeps fleet import independent of fastapi/kernel
     from boltrig.kernel import Kernel
@@ -171,10 +173,14 @@ def _missing_requirements(
 
 
 def _estimate(task: str, prompt: str, skills: list[str], cost_tier: str) -> tuple[int, int]:
-    """A deterministic pre-run (tokens, micros) estimate for budget reservation."""
+    """A deterministic pre-run (tokens, micros) estimate for budget reservation.
+
+    Priced at the cost-tier default (no model yet at reservation time); the real
+    per-model price and actual token count are applied post-run by the true-up
+    (FR-COST-03), so a drift here is corrected, never carried."""
     chars = len(task) + len(prompt) + sum(len(s) for s in skills)
     tokens = max(16, chars // 4)
-    micros = tokens * _MICROS_PER_TOKEN.get(cost_tier, 5)
+    micros = price_micros(tokens, cost_tier)
     return tokens, micros
 
 
@@ -324,6 +330,34 @@ class Spawner:
                 pass
         result: AgentResult = await runtime.run(
             prompt, child_ctx, tools=list(merged.tool_grants)
+        )
+
+        # 7b. Cost true-up (FR-COST-03, audit M14). The reserve at step 5 debited an
+        #     ESTIMATE. Now that the run reported real usage, reconcile every reserved
+        #     scope by the signed delta (actual - estimate) so the ledger reflects
+        #     real spend, not the guess. The actual cost is priced from the real
+        #     per-model price table (FR-COST-04), falling back to the same tier rate
+        #     the estimate used when no price is configured (so an unconfigured
+        #     deployment simply corrects the token-count drift). A degraded /
+        #     zero-usage run reports tokens_used == 0, so the actual is 0 and the
+        #     delta fully refunds the reserved estimate.
+        actual_tokens = int(result.tokens_used or 0)
+        # Resolve the model name for pricing only when a price table is configured;
+        # otherwise the tier fallback needs no model and we skip the extra read.
+        priced_model: str | None = None
+        if capability.model_endpoint and kernel.cost.has_prices:
+            ep = await kernel.store.get_model_endpoint(
+                tenant_id, capability.model_endpoint
+            )
+            priced_model = ep.model if ep is not None else None
+        actual_micros = kernel.cost.price(
+            actual_tokens, capability.cost_tier, model=priced_model
+        )
+        await kernel.cost.reconcile(
+            tenant_id,
+            scope_ids=scope_ids,
+            delta_tokens=actual_tokens - tokens_est,
+            delta_micros=actual_micros - micros_est,
         )
 
         # 8. Audit the spawn (AGENT_SPAWN) with real accounting. A degraded run

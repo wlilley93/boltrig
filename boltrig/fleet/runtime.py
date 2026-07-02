@@ -167,6 +167,68 @@ class HermesRuntime:
             )
 
 
+class OpenAiRuntime:
+    """A native OpenAI-compatible runtime (lazy HTTP, degrade if absent).
+
+    First-class runtime for the sensitive-local lane (US-RUN-01): it talks the
+    OpenAI ``/chat/completions`` shape directly, so a local server (vLLM, Ollama)
+    or a z.ai/GLM endpoint is a runtime, not only a routing guard. The model is
+    pinned by the resolved ``ModelEndpoint`` (P4). With no endpoint or a
+    transport failure it returns a degraded result instead of crashing (P9).
+
+    Keyless-local: local servers usually need no auth, so an empty key is NOT a
+    hard degrade - only an unset endpoint is. When a key is present it is sent as
+    a bearer; when empty, the Authorization header is omitted and the call still
+    proceeds. No tool/verb credential is ever placed in the body (SEC-27).
+    """
+
+    runtime = "openai"
+    _KEY_ENVS = ("BOLTRIG_OPENAI_API_KEY", "OPENAI_API_KEY")
+
+    def __init__(
+        self, *, endpoint: ModelEndpoint | None = None, cost_tier: str = "standard"
+    ) -> None:
+        self.endpoint = endpoint
+        self.cost_tier = cost_tier
+
+    def _api_key(self) -> str | None:
+        return _first_env(self._KEY_ENVS)
+
+    async def run(
+        self, prompt: str, context: InvocationContext, *, tools: list[str]
+    ) -> AgentResult:
+        """Call an OpenAI-compatible endpoint; degrade cleanly when unconfigured."""
+        if self.endpoint is None or not self.endpoint.base_url:
+            return AgentResult.degrade(
+                runtime=self.runtime, reason="no_endpoint", prompt=prompt
+            )
+        api_key = self._api_key()  # empty is fine: keyless local is allowed
+        try:  # lazy import: never required at module import time
+            import httpx
+
+            payload = {
+                "model": self.endpoint.model,
+                "messages": _messages(context, prompt),
+                "tools": list(tools),  # names only - never a tool/verb credential (SEC-27)
+            }
+            headers = {}
+            if api_key:  # only present a bearer when a real key exists (keyless local)
+                headers["Authorization"] = f"Bearer {api_key}"
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(
+                    f"{self.endpoint.base_url.rstrip('/')}/chat/completions",
+                    json=payload,
+                    headers=headers,
+                )
+                resp.raise_for_status()
+                data: dict[str, Any] = resp.json()
+            return _result_from_chat(data, self.runtime, self.cost_tier, prompt, tools)
+        except Exception as exc:  # network/SDK/parse failure -> degrade, never crash
+            return AgentResult.degrade(
+                runtime=self.runtime, reason=type(exc).__name__, prompt=prompt
+            )
+
+
 class ClaudeApiRuntime:
     """A Claude-API-backed runtime (lazy ``anthropic`` import, degrade if absent).
 
@@ -281,6 +343,8 @@ def build_runtime(
     kind = capability.runtime
     if kind == "hermes":
         return HermesRuntime(endpoint=endpoint, cost_tier=capability.cost_tier)
+    if kind == "openai":
+        return OpenAiRuntime(endpoint=endpoint, cost_tier=capability.cost_tier)
     if kind == "claude-api":
         return ClaudeApiRuntime(endpoint=endpoint, cost_tier=capability.cost_tier)
     if kind == "pi":

@@ -254,6 +254,22 @@ invariants:
     description: PiRuntime degrades (never crashes) when the sidecar or model is absent.
     tests:
       - tests/security/test_pi_runtime.py::test_pi_degrades_without_sidecar
+  FR-RUN-06:
+    description: An 'openai' capability resolves via build_runtime to OpenAiRuntime.
+    tests:
+      - tests/security/test_openai_runtime.py::test_build_runtime_resolves_openai
+  FR-RUN-07:
+    description: OpenAiRuntime degrades (never crashes) when no model endpoint is configured.
+    tests:
+      - tests/security/test_openai_runtime.py::test_openai_runtime_degrades_without_endpoint
+  FR-RUN-08:
+    description: OpenAiRuntime reads real OpenAI usage and its body carries no tool/verb credential.
+    tests:
+      - tests/security/test_openai_runtime.py::test_openai_runtime_reads_usage_and_carries_no_credential
+  FR-RUN-09:
+    description: OpenAiRuntime attempts a keyless local endpoint (vLLM/Ollama) rather than hard-degrading.
+    tests:
+      - tests/security/test_openai_runtime.py::test_openai_runtime_allows_keyless_local_endpoint
   SEC-24:
     description: The Pi sidecar is sandboxed - no native tools, egress only to the kernel + model.
     tests:
@@ -336,6 +352,15 @@ invariants:
     description: A soft (non-hard-stop) budget fires exactly one pre-emptive alert when a reservation crosses the 0.8 threshold, and none below it.
     tests:
       - tests/security/test_budget_and_pii.py::test_soft_budget_fires_preemptive_alert_when_crossing_the_threshold
+  FR-COST-03:
+    description: The budget ledger is trued-up to ACTUAL usage post-run - the pre-run estimate is reconciled by the signed (actual - estimate) delta, and a degraded/zero-usage run refunds the whole estimate (audit M14).
+    tests:
+      - tests/security/test_cost_trueup.py::test_budget_trued_up_to_actual_after_run
+      - tests/security/test_cost_trueup.py::test_degraded_run_refunds_the_estimate
+  FR-COST-04:
+    description: Cost is priced from a policy-as-data per-model price table - an explicit per-model micros-per-token rate wins, an unpriced model falls back to the cost-tier default (audit M14).
+    tests:
+      - tests/security/test_cost_trueup.py::test_model_price_from_config_overrides_tier_default
 
   # --- Round Four: settings, account & access management (SEC-34..39) ---
   SEC-34:

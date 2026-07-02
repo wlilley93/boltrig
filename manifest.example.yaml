@@ -54,6 +54,12 @@ models:
   default: standard
   # Sensitive-classified data is routed to the on-box endpoint (never egresses).
   sensitive_endpoint: local-sensitive
+  # Per-model price table (policy-as-data, FR-COST-04 / audit M14): micros per
+  # token. A model listed here is charged at its real price for budgets and the
+  # post-run cost true-up; a model absent here falls back to its capability's
+  # cost-tier default. Replaces static tier micros as the accounting source.
+  prices:
+    claude-sonnet-4-6: 9
 
 # --- hierarchy: the durable agent org chart (one tier1 over many tier2) ------
 hierarchy:
