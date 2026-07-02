@@ -58,3 +58,41 @@ jobs:
         run: |
           npm install --no-audit --no-fund
           npm run build
+
+  # UI browser-test harness ([2026] VJS-COUNTY 2, order
+  # 2026-VJS-CC-BOLTRIG-UI-TEST-HARNESS-001): the chromium-only smoke drives the
+  # BUILT UI (vite preview over dist) against the real kernel booted with the
+  # in-memory store and no turn executor - hermetic, no model keys, no
+  # credentials, no egress. Make this a REQUIRED status check in branch
+  # protection alongside test-and-gate and ui-build.
+  ui-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install kernel (in-memory store, offline)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install UI deps (frozen lockfile)
+        working-directory: ui
+        # same flow as ui/Dockerfile: scripts off at install, then rebuild
+        # esbuild explicitly (its postinstall compiles the native binary)
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile --ignore-scripts
+          pnpm rebuild esbuild
+      - name: Install Playwright chromium
+        working-directory: ui
+        run: npx playwright install --with-deps chromium
+      - name: Build UI
+        working-directory: ui
+        run: pnpm run build
+      - name: UI e2e smoke
+        working-directory: ui
+        run: npx playwright test
