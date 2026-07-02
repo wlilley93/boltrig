@@ -1,0 +1,43 @@
+# Dev overlay: give the stack its OWN Caddy front door (single origin), so the
+# React console and the kernel API are served from one host/port with no CORS
+# and the same shape production uses. Layer it over the base stack:
+#
+#   docker compose -f docker-compose.yml -f deploy/compose.dev.yml up -d
+#
+# Unlike deploy/compose.secure.yml (TLS on :443, air-gapped sandbox), this is the
+# plain dev posture: a lightweight Caddy bound to loopback only. It does not touch
+# :80/:443 (left free for other stacks on the box) and it is this stack's own
+# Caddy, not shared with any other project's front door.
+services:
+  caddy:
+    image: caddy:2
+    container_name: boltrig-dev-caddy
+    restart: unless-stopped
+    ports:
+      # Loopback-only single front door. Reach the console at http://localhost:8080
+      # and the API at http://localhost:8080/v1/... (same origin). Override with
+      # UI_PORT in .env.
+      - "127.0.0.1:${UI_PORT:-8080}:80"
+    environment:
+      # ":80" makes Caddy serve PLAIN HTTP on :80 with no auto-HTTPS redirect - the
+      # right posture for a loopback dev door mapped to a single host port. (The
+      # secure overlay instead sets a real domain here to get auto-TLS on :443.)
+      BOLTRIG_DOMAIN: ${BOLTRIG_DOMAIN:-:80}
+    volumes:
+      # Same routing as the secure overlay: /v1 + /healthz -> kernel, everything -> ui.
+      - ./deploy/Caddyfile.example:/etc/caddy/Caddyfile:ro
+      - caddy_dev_data:/data
+      - caddy_dev_config:/config
+    depends_on:
+      - kernel
+      - ui
+
+  ui:
+    # The console is reachable only through the dev Caddy now (no direct host port).
+    # !override replaces the base list entirely (a plain [] would merge-append and
+    # leave the base 8080:80, colliding with Caddy).
+    ports: !override []
+
+volumes:
+  caddy_dev_data:
+  caddy_dev_config:
