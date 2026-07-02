@@ -701,3 +701,9 @@ invariants:
       - tests/security/test_chat_regenerate.py::test_regenerate_is_owner_only_fail_closed
       - tests/security/test_chat_regenerate.py::test_regenerate_rejects_earlier_message
       - tests/security/test_chat_regenerate.py::test_supersede_emits_keys_only_audit_event
+  SEC-84:
+    description: Self-improvement raises competence, never authority ([2026] VJS-COUNTY 5) - a WorkflowDefinition carries no authority-bearing field (execution authority comes only from the caller ceiling at dispatch, so provenance cannot widen it), learn_from_success changes only provenance (source/origin_task), and the memory.improve reweight verb accepts no scope/grant/authority argument.
+    tests:
+      - tests/security/test_self_improvement_authority.py::test_workflow_definition_carries_no_authority_field
+      - tests/security/test_self_improvement_authority.py::test_learn_from_success_changes_only_provenance
+      - tests/security/test_self_improvement_authority.py::test_memory_improve_verb_takes_no_authority_argument
