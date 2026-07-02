@@ -22,16 +22,24 @@ from fastapi.responses import JSONResponse
 from boltrig.models import (
     ActionType,
     AuditEvent,
-    Consequence,
     EvalCase,
     GrantMissing,
     BoltrigError,
     PersonalAgent,
-    Skill,
-    TargetType,
-    Verb,
-    VerbBinding,
     utcnow,
+)
+
+# The safe-by-default consequence rule and the per-noun authoring write helpers
+# live with the ControlPlaneAdapter (Beat 3.5): the direct routes below and the
+# governed control.* verbs call the SAME helpers, so the two paths cannot drift
+# (one write path per noun, SEC-75). Re-exported here for compatibility.
+from boltrig.config.control_plane import (
+    register_mcp_consumer,
+    safe_consequence,  # noqa: F401  (kept importable from its historical home)
+    set_binding_record,
+    upsert_noun_record,
+    upsert_skill_record,
+    upsert_verb_record,
 )
 
 
@@ -40,25 +48,6 @@ def _require_author(p) -> None:
 
     if not can_author(p.role):
         raise GrantMissing("authoring/admin not permitted for this role")
-
-
-# Verb-name tokens that imply a mutating / destructive / outbound effect. A verb
-# authored with such a name and no explicit consequence defaults to high, so the
-# HITL gate engages by default (US-RTR-02/04, SEC-39: safe-by-default authoring).
-_DESTRUCTIVE_TOKENS: frozenset[str] = frozenset({
-    "delete", "remove", "destroy", "drop", "purge", "wipe", "erase",
-    "send", "email", "post", "pay", "transfer", "charge", "refund",
-    "deactivate", "revoke", "cancel", "terminate", "approve", "publish",
-})
-
-
-def safe_consequence(verb_id: str, explicit) -> str:
-    """The consequence to store for an authored verb. An explicit low/high is
-    honoured; otherwise a destructive/outbound verb name defaults to high (SEC-39)."""
-    if explicit in ("low", "high"):
-        return explicit
-    tail = verb_id.rsplit(".", 1)[-1].lower()
-    return "high" if any(tok in tail for tok in _DESTRUCTIVE_TOKENS) else "low"
 
 
 async def _audit(kernel, p, action: str, detail: dict, status: str = "ok") -> None:
@@ -99,14 +88,7 @@ def register_platform_routes(app, *, principal_dep, get_kernel) -> None:
     async def upsert_skill(body: dict, k=K, p=P) -> JSONResponse:
         try:
             _require_author(p)
-            skill = Skill(
-                id=body["id"], tenant_id=p.tenant_id, version=body.get("version", "1.0.0"),
-                prompt_fragment=body.get("prompt_fragment", ""),
-                tool_grants=body.get("tool_grants", []),
-                context_requirements=body.get("context_requirements", {}),
-                extends=body.get("extends"), locale=body.get("locale", "en"),
-            )
-            await k.store.upsert_skill(skill)
+            skill = await upsert_skill_record(k.store, p.tenant_id, body)
             await _audit(k, p, "skill.upsert", {"id": skill.id, "version": skill.version})
             return JSONResponse({"status": "ok", "id": skill.id, "version": skill.version})
         except BoltrigError as e:
@@ -134,15 +116,11 @@ def register_platform_routes(app, *, principal_dep, get_kernel) -> None:
     # === Router authoring (RTR) ===
     @app.post("/v1/nouns")
     async def upsert_noun(body: dict, k=K, p=P) -> JSONResponse:
-        from boltrig.models import Noun
-
         try:
             _require_author(p)
-            await k.store.upsert_noun(Noun(id=body["id"], tenant_id=p.tenant_id,
-                                           description=body.get("description", ""),
-                                           schema=body.get("schema", {})))
-            await _audit(k, p, "noun.upsert", {"id": body["id"]})
-            return JSONResponse({"status": "ok", "id": body["id"]})
+            noun = await upsert_noun_record(k.store, p.tenant_id, body)
+            await _audit(k, p, "noun.upsert", {"id": noun.id})
+            return JSONResponse({"status": "ok", "id": noun.id})
         except BoltrigError as e:
             return JSONResponse({"status": "denied", "reason": e.reason}, status_code=e.status_code)
 
@@ -150,14 +128,8 @@ def register_platform_routes(app, *, principal_dep, get_kernel) -> None:
     async def upsert_verb(body: dict, k=K, p=P) -> JSONResponse:
         try:
             _require_author(p)
-            conseq = safe_consequence(body["id"], body.get("consequence"))
-            verb = Verb(
-                id=body["id"], tenant_id=p.tenant_id, noun_id=body["noun_id"],
-                input_schema=body.get("input_schema", {}), output_schema=body.get("output_schema", {}),
-                description=body.get("description", ""),
-                consequence=Consequence(conseq),
-            )
-            await k.store.upsert_verb(verb)
+            verb = await upsert_verb_record(k.store, p.tenant_id, body)
+            conseq = verb.consequence.value
             await _audit(k, p, "verb.upsert", {"id": verb.id, "consequence": conseq})
             return JSONResponse({"status": "ok", "id": verb.id, "consequence": conseq})
         except BoltrigError as e:
@@ -167,10 +139,7 @@ def register_platform_routes(app, *, principal_dep, get_kernel) -> None:
     async def set_binding(verb_id: str, body: dict, k=K, p=P) -> JSONResponse:
         try:
             _require_author(p)
-            await k.store.upsert_binding(VerbBinding(
-                verb_id=verb_id, tenant_id=p.tenant_id,
-                target_type=TargetType(body["target_type"]), target_ref=body["target_ref"],
-            ))
+            await set_binding_record(k.store, p.tenant_id, verb_id, body)
             await _audit(k, p, "binding.set", {"verb": verb_id, "target": body["target_ref"]})
             return JSONResponse({"status": "ok", "verb": verb_id})
         except BoltrigError as e:
@@ -216,12 +185,9 @@ def register_platform_routes(app, *, principal_dep, get_kernel) -> None:
 
     @app.post("/v1/mcp/servers")
     async def register_mcp_server(body: dict, k=K, p=P) -> JSONResponse:
-        from boltrig.adapters.mcp_consumer import McpConsumerAdapter
-
         try:
             _require_author(p)
-            consumer = McpConsumerAdapter(body["id"], url=body.get("url"), token=body.get("token"))
-            k.loader.register(p.tenant_id, consumer)  # inert pending review (SEC-22)
+            register_mcp_consumer(k.loader, p.tenant_id, body)  # inert pending review (SEC-22)
             await _audit(k, p, "mcp.register", {"id": body["id"], "activated": False})
             return JSONResponse({"status": "ok", "id": body["id"], "activated": False})
         except BoltrigError as e:

@@ -1,0 +1,24 @@
+# Authoring skill: perform the console's authoring operations from chat.
+# Grants the governed control.* verbs (Beat 3.5). Authority is granted at spawn
+# and always intersects the tenant ceiling and any caller grant ceiling, so
+# loading this skill can never escalate past what the tenant/caller permits;
+# every amendment is high consequence, so the HITL gate holds it for approval.
+id: authoring/control-plane
+version: 1.0.0
+locale: en
+description: Author skills, nouns, verbs, bindings, workflows, capabilities, model endpoints, MCP-server registrations and config sections through the governed control.* verbs - use when asked to change the platform's own configuration from chat.
+prompt_fragment: |
+  You can amend the platform's own configuration through the governed
+  control.* verbs: author a skill (control.skill.upsert), define a noun or a
+  verb (control.noun.define / control.verb.define), point a verb at an
+  implementation (control.binding.set), register an external MCP server -
+  it stays inert until a human reviews and activates it
+  (control.mcp_server.register), author workflows, capabilities and model
+  endpoints (control.workflow.upsert / control.capability.upsert /
+  control.model_endpoint.upsert), and update a manifest config section
+  (control.config.upsert). Every amendment is high consequence: expect a
+  human approval hold before it applies, and report the pending approval
+  honestly. Never place a secret in verb parameters; credential values are
+  handled outside your view.
+tool_grants:
+  - control.*
