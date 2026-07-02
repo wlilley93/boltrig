@@ -24,7 +24,6 @@ from boltrig.models import (
     AuditEvent,
     ConversationStatus,
     GrantMissing,
-    BoltrigError,
     NotificationPref,
     UserInvitation,
     UserSetting,
@@ -282,19 +281,13 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
     # === Organisation administration: user directory & invitations (US-USR-02/03) ===
     @app.get("/v1/admin/users")
     async def list_directory(k=K, p=P) -> JSONResponse:
-        try:
-            _require_admin(p)
-        except BoltrigError as e:
-            return JSONResponse({"status": "denied", "reason": e.reason}, status_code=e.status_code)
+        _require_admin(p)
         users = await k.store.list_users(p.tenant_id)
         return JSONResponse({"users": [_user_view(u) for u in users]})
 
     @app.patch("/v1/admin/users/{user_id}")
     async def update_user(user_id: str, body: dict, k=K, p=P) -> JSONResponse:
-        try:
-            _require_admin(p)
-        except BoltrigError as e:
-            return JSONResponse({"status": "denied", "reason": e.reason}, status_code=e.status_code)
+        _require_admin(p)
         user = await k.store.get_user(p.tenant_id, user_id)
         if user is None:
             return JSONResponse({"status": "error", "reason": "not_found"}, status_code=404)
@@ -311,10 +304,7 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
 
     @app.get("/v1/admin/invitations")
     async def list_invites(k=K, p=P) -> JSONResponse:
-        try:
-            _require_admin(p)
-        except BoltrigError as e:
-            return JSONResponse({"status": "denied", "reason": e.reason}, status_code=e.status_code)
+        _require_admin(p)
         invites = await k.store.list_invitations(p.tenant_id)
         return JSONResponse({"invitations": [
             {"id": i.id, "email": i.email, "intended_role": i.intended_role,
@@ -328,32 +318,26 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
     async def create_invite(body: dict, k=K, p=P) -> JSONResponse:
         from boltrig.identity.tokens import bounded_expiry
 
-        try:
-            _require_admin(p)
-            email = (body.get("email") or "").strip()
-            if not email:
-                return JSONResponse({"status": "error", "reason": "email is required"},
-                                    status_code=400)
-            inv = UserInvitation(
-                id=uuid.uuid4().hex, tenant_id=p.tenant_id, email=email,
-                intended_role=body.get("role", "agent"),
-                intended_scope=body.get("scope", {}),
-                invited_by=p.subject,
-                expires_at=bounded_expiry(utcnow(), body.get("ttl_days", 14)),
-            )
-            await k.store.add_invitation(inv)
-            await _audit(k, p, "admin.invite.create",
-                         {"email": email, "role": inv.intended_role})
-            return JSONResponse({"status": "ok", "id": inv.id, "email": email})
-        except BoltrigError as e:
-            return JSONResponse({"status": "denied", "reason": e.reason}, status_code=e.status_code)
+        _require_admin(p)
+        email = (body.get("email") or "").strip()
+        if not email:
+            return JSONResponse({"status": "error", "reason": "email is required"},
+                                status_code=400)
+        inv = UserInvitation(
+            id=uuid.uuid4().hex, tenant_id=p.tenant_id, email=email,
+            intended_role=body.get("role", "agent"),
+            intended_scope=body.get("scope", {}),
+            invited_by=p.subject,
+            expires_at=bounded_expiry(utcnow(), body.get("ttl_days", 14)),
+        )
+        await k.store.add_invitation(inv)
+        await _audit(k, p, "admin.invite.create",
+                     {"email": email, "role": inv.intended_role})
+        return JSONResponse({"status": "ok", "id": inv.id, "email": email})
 
     @app.delete("/v1/admin/invitations/{invite_id}")
     async def revoke_invite(invite_id: str, k=K, p=P) -> JSONResponse:
-        try:
-            _require_admin(p)
-        except BoltrigError as e:
-            return JSONResponse({"status": "denied", "reason": e.reason}, status_code=e.status_code)
+        _require_admin(p)
         inv = await k.store.get_invitation(p.tenant_id, invite_id)
         if inv is None:
             return JSONResponse({"status": "error", "reason": "not_found"}, status_code=404)

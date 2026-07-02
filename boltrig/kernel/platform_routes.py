@@ -86,13 +86,10 @@ def register_platform_routes(app, *, principal_dep, get_kernel) -> None:
 
     @app.post("/v1/skills")
     async def upsert_skill(body: dict, k=K, p=P) -> JSONResponse:
-        try:
-            _require_author(p)
-            skill = await upsert_skill_record(k.store, p.tenant_id, body)
-            await _audit(k, p, "skill.upsert", {"id": skill.id, "version": skill.version})
-            return JSONResponse({"status": "ok", "id": skill.id, "version": skill.version})
-        except BoltrigError as e:
-            return JSONResponse({"status": "denied", "reason": e.reason}, status_code=e.status_code)
+        _require_author(p)
+        skill = await upsert_skill_record(k.store, p.tenant_id, body)
+        await _audit(k, p, "skill.upsert", {"id": skill.id, "version": skill.version})
+        return JSONResponse({"status": "ok", "id": skill.id, "version": skill.version})
 
     @app.post("/v1/skills/{skill_id}/test-spawn")
     async def test_spawn(skill_id: str, body: dict, request: Request, k=K, p=P) -> JSONResponse:
@@ -101,64 +98,49 @@ def register_platform_routes(app, *, principal_dep, get_kernel) -> None:
         spawner = plat.get("spawner")
         if spawner is None:
             return JSONResponse({"error": "spawner_unavailable"}, status_code=503)
-        try:
-            _require_author(p)
-            ctx = p.context(extra=body.get("context", {}))
-            result = await spawner.spawn(
-                p.tenant_id, body.get("task", f"test {skill_id}"), [skill_id], {}, ctx,
-                partial_on_budget=True, grant_ceiling=p.grants,
-            )
-            await _audit(k, p, "skill.test_spawn", {"skill": skill_id, "run_id": result.get("run_id")})
-            return JSONResponse(result)
-        except BoltrigError as e:
-            return JSONResponse({"status": "denied", "reason": e.reason}, status_code=e.status_code)
+        _require_author(p)
+        ctx = p.context(extra=body.get("context", {}))
+        result = await spawner.spawn(
+            p.tenant_id, body.get("task", f"test {skill_id}"), [skill_id], {}, ctx,
+            partial_on_budget=True, grant_ceiling=p.grants,
+        )
+        await _audit(k, p, "skill.test_spawn", {"skill": skill_id, "run_id": result.get("run_id")})
+        return JSONResponse(result)
 
     # === Router authoring (RTR) ===
     @app.post("/v1/nouns")
     async def upsert_noun(body: dict, k=K, p=P) -> JSONResponse:
-        try:
-            _require_author(p)
-            noun = await upsert_noun_record(k.store, p.tenant_id, body)
-            await _audit(k, p, "noun.upsert", {"id": noun.id})
-            return JSONResponse({"status": "ok", "id": noun.id})
-        except BoltrigError as e:
-            return JSONResponse({"status": "denied", "reason": e.reason}, status_code=e.status_code)
+        _require_author(p)
+        noun = await upsert_noun_record(k.store, p.tenant_id, body)
+        await _audit(k, p, "noun.upsert", {"id": noun.id})
+        return JSONResponse({"status": "ok", "id": noun.id})
 
     @app.post("/v1/verbs")
     async def upsert_verb(body: dict, k=K, p=P) -> JSONResponse:
-        try:
-            _require_author(p)
-            verb = await upsert_verb_record(k.store, p.tenant_id, body)
-            conseq = verb.consequence.value
-            await _audit(k, p, "verb.upsert", {"id": verb.id, "consequence": conseq})
-            return JSONResponse({"status": "ok", "id": verb.id, "consequence": conseq})
-        except BoltrigError as e:
-            return JSONResponse({"status": "denied", "reason": e.reason}, status_code=e.status_code)
+        _require_author(p)
+        verb = await upsert_verb_record(k.store, p.tenant_id, body)
+        conseq = verb.consequence.value
+        await _audit(k, p, "verb.upsert", {"id": verb.id, "consequence": conseq})
+        return JSONResponse({"status": "ok", "id": verb.id, "consequence": conseq})
 
     @app.post("/v1/verbs/{verb_id}/binding")
     async def set_binding(verb_id: str, body: dict, k=K, p=P) -> JSONResponse:
-        try:
-            _require_author(p)
-            await set_binding_record(k.store, p.tenant_id, verb_id, body)
-            await _audit(k, p, "binding.set", {"verb": verb_id, "target": body["target_ref"]})
-            return JSONResponse({"status": "ok", "verb": verb_id})
-        except BoltrigError as e:
-            return JSONResponse({"status": "denied", "reason": e.reason}, status_code=e.status_code)
+        _require_author(p)
+        await set_binding_record(k.store, p.tenant_id, verb_id, body)
+        await _audit(k, p, "binding.set", {"verb": verb_id, "target": body["target_ref"]})
+        return JSONResponse({"status": "ok", "verb": verb_id})
 
     # === Adapter Studio (ADS) ===
     @app.post("/v1/adapters/generate")
     async def gen_adapter(body: dict, k=K, p=P) -> JSONResponse:
         from boltrig.adapters.generator import generate_adapter_from_spec
 
-        try:
-            _require_author(p)
-            gen = generate_adapter_from_spec(body["spec"], adapter_id=body["adapter_id"])
-            k.loader.register(p.tenant_id, gen)  # loaded but inert until activated
-            await _audit(k, p, "adapter.generate", {"id": body["adapter_id"], "activated": False})
-            return JSONResponse({"status": "ok", "id": gen.id, "activated": gen.activated,
-                                 "verbs": [v.verb_id for v in gen.describe()]})
-        except BoltrigError as e:
-            return JSONResponse({"status": "denied", "reason": e.reason}, status_code=e.status_code)
+        _require_author(p)
+        gen = generate_adapter_from_spec(body["spec"], adapter_id=body["adapter_id"])
+        k.loader.register(p.tenant_id, gen)  # loaded but inert until activated
+        await _audit(k, p, "adapter.generate", {"id": body["adapter_id"], "activated": False})
+        return JSONResponse({"status": "ok", "id": gen.id, "activated": gen.activated,
+                             "verbs": [v.verb_id for v in gen.describe()]})
 
     @app.get("/v1/adapters/{adapter_id}/source")
     async def adapter_source(adapter_id: str, request: Request, k=K, p=P) -> JSONResponse:
@@ -169,29 +151,23 @@ def register_platform_routes(app, *, principal_dep, get_kernel) -> None:
 
     @app.post("/v1/adapters/{adapter_id}/activate")
     async def activate_adapter(adapter_id: str, body: dict, k=K, p=P) -> JSONResponse:
-        try:
-            _require_author(p)
-            adapter = await k.loader.get(p.tenant_id, adapter_id)
-            if adapter is None:
-                return JSONResponse({"error": "not_found"}, status_code=404)
-            reviewer = body.get("reviewer") or p.subject
-            if hasattr(adapter, "review_and_activate"):
-                adapter.review_and_activate(reviewer)
-            verbs = await k.registry.register_adapter_verbs(p.tenant_id, adapter)  # bind only now
-            await _audit(k, p, "adapter.activate", {"id": adapter_id, "reviewer": reviewer})
-            return JSONResponse({"status": "ok", "id": adapter_id, "verbs": verbs})
-        except BoltrigError as e:
-            return JSONResponse({"status": "denied", "reason": e.reason}, status_code=e.status_code)
+        _require_author(p)
+        adapter = await k.loader.get(p.tenant_id, adapter_id)
+        if adapter is None:
+            return JSONResponse({"error": "not_found"}, status_code=404)
+        reviewer = body.get("reviewer") or p.subject
+        if hasattr(adapter, "review_and_activate"):
+            adapter.review_and_activate(reviewer)
+        verbs = await k.registry.register_adapter_verbs(p.tenant_id, adapter)  # bind only now
+        await _audit(k, p, "adapter.activate", {"id": adapter_id, "reviewer": reviewer})
+        return JSONResponse({"status": "ok", "id": adapter_id, "verbs": verbs})
 
     @app.post("/v1/mcp/servers")
     async def register_mcp_server(body: dict, k=K, p=P) -> JSONResponse:
-        try:
-            _require_author(p)
-            register_mcp_consumer(k.loader, p.tenant_id, body)  # inert pending review (SEC-22)
-            await _audit(k, p, "mcp.register", {"id": body["id"], "activated": False})
-            return JSONResponse({"status": "ok", "id": body["id"], "activated": False})
-        except BoltrigError as e:
-            return JSONResponse({"status": "denied", "reason": e.reason}, status_code=e.status_code)
+        _require_author(p)
+        register_mcp_consumer(k.loader, p.tenant_id, body)  # inert pending review (SEC-22)
+        await _audit(k, p, "mcp.register", {"id": body["id"], "activated": False})
+        return JSONResponse({"status": "ok", "id": body["id"], "activated": False})
 
     @app.get("/v1/adapters")
     async def adapter_inventory(k=K, p=P) -> dict:
@@ -223,18 +199,15 @@ def register_platform_routes(app, *, principal_dep, get_kernel) -> None:
     async def upsert_workflow(body: dict, request: Request, k=K, p=P) -> JSONResponse:
         from boltrig.models import WorkflowDefinition, WorkflowSource
 
-        try:
-            _require_author(p)
-            wf = WorkflowDefinition(
-                id=body["id"], tenant_id=p.tenant_id, version=body.get("version", "1.0.0"),
-                source=WorkflowSource(body.get("source", "precreated")),
-                definition=body.get("definition", {}), intent_tags=body.get("intent_tags", []),
-            )
-            await k.store.upsert_workflow(wf)
-            await _audit(k, p, "workflow.upsert", {"id": wf.id})
-            return JSONResponse({"status": "ok", "id": wf.id})
-        except BoltrigError as e:
-            return JSONResponse({"status": "denied", "reason": e.reason}, status_code=e.status_code)
+        _require_author(p)
+        wf = WorkflowDefinition(
+            id=body["id"], tenant_id=p.tenant_id, version=body.get("version", "1.0.0"),
+            source=WorkflowSource(body.get("source", "precreated")),
+            definition=body.get("definition", {}), intent_tags=body.get("intent_tags", []),
+        )
+        await k.store.upsert_workflow(wf)
+        await _audit(k, p, "workflow.upsert", {"id": wf.id})
+        return JSONResponse({"status": "ok", "id": wf.id})
 
     @app.post("/v1/workflows/{wf_id}/schedule")
     async def schedule_workflow(wf_id: str, body: dict, k=K, p=P) -> JSONResponse:
@@ -457,16 +430,13 @@ def register_platform_routes(app, *, principal_dep, get_kernel) -> None:
     # === Evaluation (EVAL) ===
     @app.post("/v1/eval/cases")
     async def create_case(body: dict, k=K, p=P) -> JSONResponse:
-        try:
-            _require_author(p)
-            case = EvalCase(id=body.get("id") or uuid.uuid4().hex, tenant_id=p.tenant_id,
-                            target_kind=body["target_kind"], target_ref=body["target_ref"],
-                            input=body.get("input", {}), assertions=body.get("assertions", {}),
-                            labels=body.get("labels", []))
-            await k.store.upsert_eval_case(case)
-            return JSONResponse({"status": "ok", "id": case.id})
-        except BoltrigError as e:
-            return JSONResponse({"status": "denied", "reason": e.reason}, status_code=e.status_code)
+        _require_author(p)
+        case = EvalCase(id=body.get("id") or uuid.uuid4().hex, tenant_id=p.tenant_id,
+                        target_kind=body["target_kind"], target_ref=body["target_ref"],
+                        input=body.get("input", {}), assertions=body.get("assertions", {}),
+                        labels=body.get("labels", []))
+        await k.store.upsert_eval_case(case)
+        return JSONResponse({"status": "ok", "id": case.id})
 
     @app.post("/v1/eval/run")
     async def run_eval(body: dict, request: Request, k=K, p=P) -> JSONResponse:

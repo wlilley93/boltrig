@@ -14,13 +14,9 @@ from __future__ import annotations
 from fastapi import Depends, Request
 from fastapi.responses import JSONResponse
 
-from boltrig.models import BoltrigError
 from boltrig.store.base import MAX_INGEST_ITEMS, clamp_memory_list
 
 
-def _err(e: BoltrigError) -> JSONResponse:
-    status = "denied" if e.status_code == 403 else "error"
-    return JSONResponse({"status": status, "reason": e.reason}, status_code=e.status_code)
 
 
 def register_memory_routes(app, *, principal_dep, get_kernel) -> None:
@@ -37,22 +33,16 @@ def register_memory_routes(app, *, principal_dep, get_kernel) -> None:
 
     @app.post("/v1/memory/recall")
     async def recall(body: dict, k=K, p=P) -> JSONResponse:
-        try:
-            out = await k.invoke("memory", "memory.recall", {
-                "query": body.get("query", ""), "mode": body.get("mode", "graph_completion"),
-                "limit": body.get("limit", 20),
-            }, _ctx(p))
-            return JSONResponse(out)
-        except BoltrigError as e:
-            return _err(e)
+        out = await k.invoke("memory", "memory.recall", {
+            "query": body.get("query", ""), "mode": body.get("mode", "graph_completion"),
+            "limit": body.get("limit", 20),
+        }, _ctx(p))
+        return JSONResponse(out)
 
     @app.post("/v1/memory/remember")
     async def remember(body: dict, k=K, p=P) -> JSONResponse:
-        try:
-            out = await k.invoke("memory", "memory.remember", body, _ctx(p))
-            return JSONResponse({"status": "ok", **out})
-        except BoltrigError as e:
-            return _err(e)
+        out = await k.invoke("memory", "memory.remember", body, _ctx(p))
+        return JSONResponse({"status": "ok", **out})
 
     @app.post("/v1/memory/forget")
     async def forget(body: dict, k=K, p=P) -> JSONResponse:
@@ -60,11 +50,8 @@ def register_memory_routes(app, *, principal_dep, get_kernel) -> None:
         # is not a string).
         params = {key: body[key] for key in ("target", "source_ref")
                   if body.get(key) is not None}
-        try:
-            out = await k.invoke("memory", "memory.forget", params, _ctx(p))
-            return JSONResponse({"status": "ok", **out})
-        except BoltrigError as e:
-            return _err(e)
+        out = await k.invoke("memory", "memory.forget", params, _ctx(p))
+        return JSONResponse({"status": "ok", **out})
 
     @app.post("/v1/memory/ingest")
     async def ingest(body: dict, request: Request, k=K, p=P) -> JSONResponse:
@@ -83,19 +70,16 @@ def register_memory_routes(app, *, principal_dep, get_kernel) -> None:
                 status_code=413,
             )
         executor = (getattr(request.app.state, "platform", {}) or {}).get("workflow_executor")
-        try:
-            if body.get("source_kind") == "conversation" and body.get("source_ref"):
-                ing = await cognify_conversation(
-                    k, p.tenant_id, body["source_ref"], owner_scope=owner_scope,
-                    context=_ctx(p), executor=executor)
-            else:
-                ing = await cognify(
-                    k, p.tenant_id, source_kind=body.get("source_kind", "document"),
-                    source_ref=body.get("source_ref", ""), owner_scope=owner_scope,
-                    items=[str(x) for x in (body.get("items") or [])], context=_ctx(p),
-                    executor=executor)
-        except BoltrigError as e:
-            return _err(e)
+        if body.get("source_kind") == "conversation" and body.get("source_ref"):
+            ing = await cognify_conversation(
+                k, p.tenant_id, body["source_ref"], owner_scope=owner_scope,
+                context=_ctx(p), executor=executor)
+        else:
+            ing = await cognify(
+                k, p.tenant_id, source_kind=body.get("source_kind", "document"),
+                source_ref=body.get("source_ref", ""), owner_scope=owner_scope,
+                items=[str(x) for x in (body.get("items") or [])], context=_ctx(p),
+                executor=executor)
         return JSONResponse({"status": "ok", "id": ing.id, "ingestion_status": ing.status,
                              "facts_added": ing.facts_added, "screened": ing.screened})
 
