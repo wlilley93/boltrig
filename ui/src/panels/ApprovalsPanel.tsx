@@ -8,6 +8,7 @@ import { useState } from "react";
 
 import { api } from "../api/client";
 import type { HITLRequest } from "../api/types";
+import { useSlideActive } from "../deck/context";
 import { useFetch } from "../useFetch";
 import { RunLink } from "./shared";
 import {
@@ -225,7 +226,10 @@ function HitlCard({ req, onAnswered }: { req: HITLRequest; onAnswered: () => voi
 }
 
 export function ApprovalsPanel() {
-  const hitl = useFetch(() => api.hitl(), [], 8000);
+  // Quiesce the 8s poll while this slide is not the active deck cell; the
+  // paused->active edge triggers one immediate refresh (useFetch opts).
+  const active = useSlideActive();
+  const hitl = useFetch(() => api.hitl(), [], 8000, { paused: !active });
   const requests = hitl.data?.requests ?? [];
 
   return (

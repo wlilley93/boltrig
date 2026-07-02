@@ -1,13 +1,19 @@
-import { Suspense, lazy, useEffect, useState } from "react";
+import { Fragment, lazy, useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 
 import { api } from "./api/client";
 import { applyAppearance, loadAppearance } from "./appearance";
+import { Deck } from "./deck/Deck";
+import type { DeckCol } from "./deck/Deck";
+import { buildRows, routeToCell } from "./deck/deckMap";
 import { resetIdentity, updateIdentity, useIdentity } from "./identity";
 import { navigate, useRoute } from "./router";
 import { useFetch } from "./useFetch";
 import { Field, InfoCallout, ROLE_OPTIONS, Select } from "./panels/ux";
 import { AdminPanel } from "./panels/AdminPanel";
+import { AgentsSlide } from "./panels/AgentsSlide";
 import { ApprovalsPanel } from "./panels/ApprovalsPanel";
+import { AutomationsSlide } from "./panels/AutomationsSlide";
 import { ChatPanel } from "./panels/ChatPanel";
 import { DevConsolePanel } from "./panels/DevConsolePanel";
 import { EvalPanel } from "./panels/EvalPanel";
@@ -20,7 +26,10 @@ import { RouterPanel } from "./panels/RouterPanel";
 import { SettingsPanel } from "./panels/SettingsPanel";
 import { RunView } from "./panels/RunView";
 import { CommandPalette } from "./panels/CommandPalette";
-import { ErrorBoundary } from "./ErrorBoundary";
+
+// The role gates live with the deck row model now; App re-exports them so the
+// existing `import { AUTHOR_ROLES } from "../App"` call sites keep working.
+export { ADMIN_ROLES, AUTHOR_ROLES } from "./deck/deckMap";
 
 // Studio pulls in the @xyflow/react canvas; lazy-load it so that heavy chunk
 // only downloads when the user opens the authoring hub (code-split, Fix 5).
@@ -32,142 +41,29 @@ const SIDEBAR_MIN = 200;
 const SIDEBAR_MAX = 420;
 const SIDEBAR_DEFAULT = 236;
 
-type Tab =
-  | "home"
-  | "router"
-  | "kanban"
-  | "approvals"
-  | "chat"
-  | "studio"
-  | "dev"
-  | "admin"
-  | "insight"
-  | "eval"
-  | "memory"
-  | "me"
-  | "settings";
-
-// The three planes from the front-end spec (plus a small Account group). Each
-// tab declares its plane; the nav renders the tabs grouped under these labels.
-// This is presentation only: tab ids, routes (navigate) and role gates are
-// unchanged, so deep links keep working.
-type Plane = "capability" | "orchestration" | "activity" | "account";
-
-const PLANES: ReadonlyArray<{ id: Plane; label: string }> = [
-  { id: "capability", label: "Capability" },
-  { id: "orchestration", label: "Orchestration" },
-  { id: "activity", label: "Activity" },
-  { id: "account", label: "Account" },
-];
-
-// Roles permitted to author (studios) / administer (admin console). The server
-// is the real gate (403); these only decide whether the tab is offered up front.
-export const AUTHOR_ROLES: ReadonlySet<string> = new Set([
-  "org-admin",
-  "department-head",
-  "manager",
-  "lead",
-  "integrator",
-]);
-const ADMIN_ROLES: ReadonlySet<string> = new Set(["org-admin"]);
-
-interface TabDef {
-  id: Tab;
-  label: string;
-  hint: string;
-  // which plane the tab is grouped under in the nav (presentation only).
-  plane: Plane;
-  // when present, the tab is shown only if the predicate accepts the role.
-  gate?: (role: string) => boolean;
-}
-
-const TABS: ReadonlyArray<TabDef> = [
-  {
-    id: "router",
-    label: "Router",
-    hint: "Nouns, verbs and adapter health",
-    plane: "capability",
-  },
-  {
-    id: "studio",
-    label: "Studio",
-    hint: "Authoring: skills, router, adapters, workflows",
-    plane: "capability",
-    gate: (role) => AUTHOR_ROLES.has(role),
-  },
-  {
-    id: "dev",
-    label: "Dev console",
-    hint: "Invoke a verb, spawn an agent, view adapter source",
-    plane: "capability",
-    gate: (role) => AUTHOR_ROLES.has(role),
-  },
-  {
-    id: "chat",
-    label: "Chat",
-    hint: "Converse with the orchestrator",
-    plane: "orchestration",
-  },
-  {
-    id: "home",
-    label: "Home",
-    hint: "Your dashboard: approvals, runs and work",
-    plane: "activity",
-  },
-  {
-    id: "kanban",
-    label: "Kanban",
-    hint: "Work items by status",
-    plane: "activity",
-  },
-  {
-    id: "approvals",
-    label: "Approvals",
-    hint: "Pending human-in-the-loop",
-    plane: "activity",
-  },
-  {
-    id: "insight",
-    label: "Insight",
-    hint: "Cost, audit and runs (scoped)",
-    plane: "activity",
-  },
-  {
-    id: "eval",
-    label: "Eval",
-    hint: "No-escalation evaluation harness",
-    plane: "activity",
-  },
-  {
-    id: "memory",
-    label: "Memory",
-    hint: "Recall, browse, remember and ingest (scoped)",
-    plane: "activity",
-  },
-  {
-    id: "admin",
-    label: "Admin",
-    hint: "Manifest config, history, credentials",
-    plane: "account",
-    gate: (role) => ADMIN_ROLES.has(role),
-  },
-  {
-    id: "me",
-    label: "Me",
-    hint: "Personal agent, prefs and memory",
-    plane: "account",
-  },
-  {
-    id: "settings",
-    label: "Settings",
-    hint: "Account, tokens, connections, directory",
-    plane: "account",
-  },
-];
+// One-line purpose per nav id (zone rows + ops columns), surfaced as title
+// hints. Ids match the deck row / column keys from deckMap.
+const HINT: Record<string, string> = {
+  chat: "Converse with the orchestrator",
+  agents: "The durable agent org chart and worker pool",
+  automations: "Workflows: pick one to see its canvas",
+  settings: "Account, tokens, connections, directory",
+  home: "Your dashboard: approvals, runs and work",
+  router: "Nouns, verbs and adapter health",
+  studio: "Authoring: skills, router, adapters, workflows",
+  dev: "Invoke a verb, spawn an agent, view adapter source",
+  kanban: "Work items by status",
+  approvals: "Pending human-in-the-loop",
+  insight: "Cost, audit and runs (scoped)",
+  eval: "No-escalation evaluation harness",
+  memory: "Recall, browse, remember and ingest (scoped)",
+  admin: "Manifest config, history, credentials",
+  me: "Personal agent, prefs and memory",
+};
 
 // Compact line icons for the sidebar rail (kept dependency-free: small inline
 // SVGs, stroke = currentColor, so they inherit the nav item's colour + glow).
-const ICON: Record<Tab, JSX.Element> = {
+const ICON: Record<string, JSX.Element> = {
   home: (
     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 11.5 12 5l8 6.5" /><path d="M6 10.5V19h12v-8.5" /></svg>
   ),
@@ -182,6 +78,12 @@ const ICON: Record<Tab, JSX.Element> = {
   ),
   chat: (
     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 5h14v10H9l-4 4V5Z" /></svg>
+  ),
+  agents: (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="5.5" r="2.5" /><circle cx="6" cy="18" r="2.5" /><circle cx="18" cy="18" r="2.5" /><path d="M12 8v3.5M12 11.5l-4.5 4M12 11.5l4.5 4" /></svg>
+  ),
+  automations: (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" /><path d="M7 12h3M14 12h3" /></svg>
   ),
   kanban: (
     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="4" height="16" /><rect x="10" y="4" width="4" height="11" /><rect x="16" y="4" width="4" height="8" /></svg>
@@ -372,12 +274,106 @@ function HealthDot() {
   );
 }
 
+// The deck cell -> panel mapping. Module-level so its identity stays stable
+// across renders. Unknown cells render null (the deck only asks for cells the
+// row model names, so this is a type-level backstop).
+function renderCell(rowId: string, colKey: string): ReactNode {
+  if (rowId === "chat") return <ChatPanel />;
+  if (rowId === "agents") return <AgentsSlide />;
+  if (rowId === "automations") return <AutomationsSlide />;
+  if (rowId === "settings") return <SettingsPanel />;
+  if (rowId === "ops") {
+    switch (colKey) {
+      case "home":
+        return <HomePanel />;
+      case "router":
+        return <RouterPanel />;
+      case "studio":
+        return <StudioPanel />;
+      case "dev":
+        return <DevConsolePanel />;
+      case "kanban":
+        return <KanbanPanel />;
+      case "approvals":
+        return <ApprovalsPanel />;
+      case "insight":
+        return <InsightPanel />;
+      case "eval":
+        return <EvalPanel />;
+      case "memory":
+        return <MemoryPanel />;
+      case "admin":
+        return <AdminPanel />;
+      case "me":
+        return <MePanel />;
+    }
+  }
+  return null;
+}
+
+// The chat anchor keeps its React state (an in-flight SSE stream included)
+// once visited, even when it is no longer a neighbour of the active cell.
+const KEEP_ALIVE = ["chat:chat"];
+
+// The Ops group: Home + the remaining tabs as deck columns, with a pending
+// approvals count. The lightweight 30s poll lives HERE so its re-render stays
+// inside this sidebar group instead of re-rendering the whole shell + deck.
+function OpsGroup({
+  cols,
+  active,
+}: {
+  cols: DeckCol[];
+  active: { rowId: string; colKey: string };
+}) {
+  const hitl = useFetch(() => api.hitl(), [], 30000);
+  const pending = hitl.data?.requests.length ?? 0;
+  const badgeTitle = `${pending} approval(s) waiting`;
+  return (
+    <div className="side-group" role="group" aria-label="Ops">
+      <div className="side-group__head">
+        <span className="side-group__label">Ops</span>
+        {pending > 0 && (
+          <span className="side-badge side-badge--group" title={badgeTitle}>
+            {pending}
+          </span>
+        )}
+      </div>
+      {cols.map((col) => {
+        const isActive = active.rowId === "ops" && active.colKey === col.key;
+        return (
+          <button
+            key={col.key}
+            className={`side-item ${isActive ? "side-item--active" : ""}`}
+            aria-current={isActive ? "page" : undefined}
+            title={HINT[col.key]}
+            onClick={() => navigate(col.path)}
+          >
+            <span className="side-item__icon" aria-hidden="true">{ICON[col.key]}</span>
+            <span className="side-item__label">{col.label}</span>
+            {col.key === "approvals" && pending > 0 && (
+              <span className="side-badge side-badge--item" title={badgeTitle}>
+                {pending}
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function App() {
   const identity = useIdentity();
-  // The active tab is driven by the URL hash (#/chat, #/work, ...) so deep links
-  // and browser back / forward work; navigate() writes the hash, useRoute reads.
+  // The URL hash drives everything: the deck cell via routeToCell, and the Run
+  // drawer via route.runId; navigate() writes the hash, useRoute reads it.
   const route = useRoute();
-  const tab = route.tab as Tab;
+
+  // Visible rows derive from the CURRENT role each render (the dev IdentityBar
+  // changes role live); the deck addresses cells by id, never a stored index.
+  const rows = useMemo(() => buildRows(identity.role, [], []), [identity.role]);
+  const active = routeToCell(route, rows);
+  const zoneRows = rows.filter((r) => r.id !== "ops");
+  const opsCols = rows.find((r) => r.id === "ops")?.cols ?? [];
 
   // The dev sign-in is collapsed behind the identity chip by default; expanding it
   // reveals the editable identity bar (the dev auth mechanism).
@@ -464,11 +460,6 @@ export function App() {
     applyAppearance(loadAppearance());
   }, []);
 
-  // Tabs gated by role are hidden when the role does not qualify. If the active
-  // tab becomes hidden (role changed), fall back to Router for the render.
-  const visibleTabs = TABS.filter((t) => !t.gate || t.gate(identity.role));
-  const active: Tab = visibleTabs.some((t) => t.id === tab) ? tab : "home";
-
   return (
     <div className="app app--shell">
       <aside
@@ -509,27 +500,43 @@ export function App() {
         </button>
 
         <nav className="side__nav" aria-label="Panels">
-          {PLANES.map((plane) => {
-            const planeTabs = visibleTabs.filter((t) => t.plane === plane.id);
-            if (planeTabs.length === 0) return null;
-            return (
-              <div className="side-group" key={plane.id} role="group" aria-label={plane.label}>
-                <span className="side-group__label">{plane.label}</span>
-                {planeTabs.map((t) => (
+          <div className="side-group" role="group" aria-label="Zones">
+            {zoneRows.map((row) => {
+              const rowActive = active.rowId === row.id;
+              return (
+                <Fragment key={row.id}>
                   <button
-                    key={t.id}
-                    className={`side-item ${active === t.id ? "side-item--active" : ""}`}
-                    aria-current={active === t.id ? "page" : undefined}
-                    title={t.hint}
-                    onClick={() => navigate(`/${t.id}`)}
+                    className={`side-item ${rowActive ? "side-item--active" : ""}`}
+                    aria-current={rowActive ? "page" : undefined}
+                    title={HINT[row.id]}
+                    onClick={() => navigate(row.cols[0].path)}
                   >
-                    <span className="side-item__icon" aria-hidden="true">{ICON[t.id]}</span>
-                    <span className="side-item__label">{t.label}</span>
+                    <span className="side-item__icon" aria-hidden="true">{ICON[row.id]}</span>
+                    <span className="side-item__label">{row.label}</span>
                   </button>
-                ))}
-              </div>
-            );
-          })}
+                  {rowActive && row.cols.length > 1 && (
+                    <div
+                      className="side-sublist"
+                      role="group"
+                      aria-label={`${row.label} slides`}
+                    >
+                      {row.cols.map((col) => (
+                        <button
+                          key={col.key}
+                          className={`side-subitem ${active.colKey === col.key ? "side-subitem--active" : ""}`}
+                          aria-current={active.colKey === col.key ? "page" : undefined}
+                          onClick={() => navigate(col.path)}
+                        >
+                          <span className="side-subitem__label">{col.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </Fragment>
+              );
+            })}
+          </div>
+          <OpsGroup cols={opsCols} active={active} />
         </nav>
 
         <div className="side__foot">
@@ -558,31 +565,21 @@ export function App() {
 
       <div className="app__body">
         {identityOpen && <IdentityBar />}
-        <main className="app__main">
-          <ErrorBoundary label="This panel" key={active}>
-          <Suspense fallback={<p className="muted">Loading...</p>}>
-            {active === "home" && <HomePanel />}
-            {active === "router" && <RouterPanel />}
-            {active === "kanban" && <KanbanPanel />}
-            {active === "approvals" && <ApprovalsPanel />}
-            {active === "chat" && <ChatPanel />}
-            {active === "studio" && <StudioPanel />}
-            {active === "dev" && <DevConsolePanel />}
-            {active === "admin" && <AdminPanel />}
-            {active === "insight" && <InsightPanel />}
-            {active === "eval" && <EvalPanel />}
-            {active === "memory" && <MemoryPanel />}
-            {active === "me" && <MePanel />}
-            {active === "settings" && <SettingsPanel />}
-          </Suspense>
-          </ErrorBoundary>
+        <main className="app__main app__main--deck">
+          <Deck
+            rows={rows}
+            active={active}
+            render={renderCell}
+            keepAlive={KEEP_ALIVE}
+          />
         </main>
       </div>
 
-      {/* The global Run drawer: any surface can raise it via openRun(runId). */}
+      {/* The global Run drawer: any surface can raise it via openRun(runId).
+          It is position:fixed, so it must stay OUTSIDE the transformed deck. */}
       <RunView />
 
-      {/* Cmd/Ctrl-K jump-to-anything palette. */}
+      {/* Cmd/Ctrl-K jump-to-anything palette - also outside the deck. */}
       <CommandPalette />
     </div>
   );

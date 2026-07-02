@@ -12,6 +12,7 @@ import { Suspense, lazy, useMemo, useState } from "react";
 import { api } from "../api/client";
 import type { AdapterHealth, HealthResponse, VerbInfo } from "../api/types";
 import { useIdentity } from "../identity";
+import { useSlideActive } from "../deck/context";
 import { useFetch } from "../useFetch";
 
 // The tree view uses the @xyflow/react canvas; lazy-load it so the heavy chunk
@@ -131,8 +132,11 @@ type RouterView = "list" | "tree";
 
 export function RouterPanel() {
   const identity = useIdentity();
+  // The 15s health poll quiesces while this slide is not the active deck
+  // cell; capabilities are fetch-once so they stay as-is.
+  const active = useSlideActive();
   const caps = useFetch(() => api.capabilities(), [], 0);
-  const health = useFetch(() => api.health(), [], 15000);
+  const health = useFetch(() => api.health(), [], 15000, { paused: !active });
   // "list" is the safe default; "tree" is the visual Capability plane.
   const [view, setView] = useState<RouterView>("list");
 

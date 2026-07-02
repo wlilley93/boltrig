@@ -5,6 +5,7 @@
 import { api } from "../api/client";
 import type { WorkItem, WorkStatus } from "../api/types";
 import { navigate, openRun } from "../router";
+import { useSlideActive } from "../deck/context";
 import { useFetch } from "../useFetch";
 import { EmptyState, FetchError, PageIntro, WORK_STATUS } from "./ux";
 
@@ -72,7 +73,9 @@ function WorkCard({
 }
 
 export function KanbanPanel() {
-  const work = useFetch(() => api.work(), [], 10000);
+  // Quiesce the 10s board poll while this slide is not the active deck cell.
+  const active = useSlideActive();
+  const work = useFetch(() => api.work(), [], 10000, { paused: !active });
 
   const items = work.data?.items ?? [];
   const byStatus = new Map<WorkStatus, WorkItem[]>();

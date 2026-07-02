@@ -12,6 +12,7 @@ import { api } from "../api/client";
 import type { RunRow, VerbInfo, WorkStatus } from "../api/types";
 import { useIdentity } from "../identity";
 import { navigate } from "../router";
+import { useSlideActive } from "../deck/context";
 import { useFetch } from "../useFetch";
 import { RunLink } from "./shared";
 import { HITL_TYPE, PageIntro, StatusBadge, WORK_STATUS } from "./ux";
@@ -31,7 +32,9 @@ const WORK_LANES: ReadonlyArray<{ status: WorkStatus; label: string }> = [
 // surface the top few questions and link the section into the Approvals tab,
 // where they are answered inline (answering here is out of scope).
 function NeedsYou() {
-  const hitl = useFetch(() => api.hitl(), [], 8000);
+  // Quiesce the 8s poll while the home slide is not the active deck cell.
+  const active = useSlideActive();
+  const hitl = useFetch(() => api.hitl(), [], 8000, { paused: !active });
   const requests = hitl.data?.requests ?? [];
   const top = requests.slice(0, 3);
 

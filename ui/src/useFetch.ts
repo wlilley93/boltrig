@@ -34,6 +34,10 @@ export function useFetch<T>(
   fn: () => Promise<T>,
   deps: ReadonlyArray<unknown> = [],
   pollMs?: number,
+  // paused pauses ONLY the poll interval (the initial fetch still runs); a
+  // paused -> active edge triggers one immediate load so a deck slide that
+  // quiesced while parked is fresh the moment it is revealed.
+  opts?: { paused?: boolean },
 ): FetchState<T> {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -42,6 +46,7 @@ export function useFetch<T>(
   const active = useRef(true);
   const hasData = useRef(false); // mirrors data!=null without re-capturing the closure
   const seq = useRef(0); // monotonic request id: drop stale in-flight responses
+  const paused = opts?.paused ?? false;
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const run = useCallback(fn, deps);
@@ -85,10 +90,18 @@ export function useFetch<T>(
   }, [load]);
 
   useEffect(() => {
-    if (!pollMs) return;
+    if (!pollMs || paused) return;
     const handle = window.setInterval(() => void load(), pollMs);
     return () => window.clearInterval(handle);
-  }, [load, pollMs]);
+  }, [load, pollMs, paused]);
+
+  // one immediate refresh on the paused -> active edge (not on mount: the
+  // initial-load effect above already covers that).
+  const wasPaused = useRef(false);
+  useEffect(() => {
+    if (wasPaused.current && !paused) void load();
+    wasPaused.current = paused;
+  }, [paused, load]);
 
   return { data, error, errorStatus, loading, reload: () => void load() };
 }

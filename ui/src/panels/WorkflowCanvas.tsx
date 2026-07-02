@@ -318,7 +318,7 @@ export function extractSteps(value: unknown): WorkflowStep[] | null {
 
 // --- the canvas -------------------------------------------------------------
 
-export function WorkflowCanvas() {
+export function WorkflowCanvas({ routeWfId }: { routeWfId?: string }) {
   const workflows = useFetch(() => api.workflows(), []);
   const caps = useFetch(() => api.capabilities(), []);
 
@@ -575,6 +575,23 @@ export function WorkflowCanvas() {
       setLoadError(`load '${w.id}': ${errText(err)}`);
     }
   }
+
+  // Route-driven selection (the Automations slide passes the wfid from the
+  // URL): load once per id, after the list and capabilities settle so node
+  // kinds derive from real bindings. The applied-ref keeps later list
+  // refreshes from clobbering in-progress canvas edits.
+  const appliedRouteWf = useRef<string | null>(null);
+  useEffect(() => {
+    if (!routeWfId || appliedRouteWf.current === routeWfId) return;
+    if (workflows.loading || caps.loading) return;
+    appliedRouteWf.current = routeWfId;
+    const summary = (workflows.data?.workflows ?? []).find(
+      (w) => w.id === routeWfId,
+    );
+    if (summary) void pickWorkflow(summary);
+    else setWfId(routeWfId); // unknown id: still target it so Save / Run name it
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeWfId, workflows.loading, workflows.data, caps.loading]);
 
   function loadFromJson() {
     let parsed: unknown;

@@ -11,6 +11,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api, streamChat } from "../api/client";
 import type { ChatEvent, ChatMessage } from "../api/types";
 import { openRun } from "../router";
+import { useSlideActive } from "../deck/context";
 import { useFetch } from "../useFetch";
 import { TurnExtras, normalizeEvents } from "./chatTurn";
 import { apiReason } from "./shared";
@@ -71,6 +72,10 @@ function MessageBubble({
 // --- the panel --------------------------------------------------------------
 
 export function ChatPanel() {
+  // The kept-alive chat slide streams in the background; its live region goes
+  // quiet ("off") while the slide is not active so it never talks over the
+  // panel the user is actually on.
+  const slideActive = useSlideActive();
   const convs = useFetch(() => api.conversations(), []);
 
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -270,7 +275,11 @@ export function ChatPanel() {
         </aside>
 
         <div className="chat__main">
-          <div className="chat__messages" aria-live="polite" aria-busy={streaming}>
+          <div
+            className="chat__messages"
+            aria-live={slideActive ? "polite" : "off"}
+            aria-busy={streaming}
+          >
             {msgsLoading && messages.length === 0 && (
               <p className="muted">Loading conversation...</p>
             )}
