@@ -44,22 +44,23 @@ async def test_reserve_is_all_or_nothing_across_scopes(kernel):
 
 @pytest.mark.security
 @pytest.mark.invariant("FR-COST-02")
-async def test_reserve_honors_consume_budget_refusal(kernel, monkeypatch):
-    # H4: the fail-fast read (step 1) can see headroom, yet a concurrent reserve
-    # may debit the scope before this reserve's atomic consume runs. consume_budget
-    # then returns False (hard-stop, no debit). reserve MUST honour that refusal and
-    # raise, not silently run unmetered past the cap.
+async def test_reserve_honors_atomic_store_refusal(kernel, monkeypatch):
+    # H4 / Phase 6: the fail-fast read (step 1) can see headroom, yet a concurrent
+    # reserve may consume the scope's headroom before this reserve's transactional
+    # commit runs. The atomic multi-scope reserve (step 3) then re-checks the hard
+    # stop under the row lock and returns False WITHOUT debiting. reserve MUST honour
+    # that refusal and raise, not silently run unmetered past the cap.
     kernel.store.set_budget(
         Budget(id="dept:eng", tenant_id=TENANT, scope_type="department",
                cost_limit_micros=1000, hard_stop=True)
     )
 
-    async def racing_consume(tenant_id, scope_id, tokens, micros):
+    async def racing_reserve(tenant_id, reservations):
         # stand in for a concurrent reserve that exhausted the hard stop between
-        # our headroom read and this commit: refuse without debiting.
+        # our headroom read and this commit: refuse without debiting any scope.
         return False
 
-    monkeypatch.setattr(kernel.store, "consume_budget", racing_consume)
+    monkeypatch.setattr(kernel.store, "reserve_budgets_atomic", racing_reserve)
     with pytest.raises(BudgetExceeded):
         # step 1 sees full headroom (spent=0), so only step 3 can catch this.
         await kernel.cost.reserve(TENANT, ["dept:eng"], tokens=0, micros=100)

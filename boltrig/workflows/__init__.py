@@ -12,6 +12,7 @@ from .generator import (
     generate_workflow_reasoned,
     learn_from_success,
     schedule_spec,
+    select_or_generate_workflow,
 )
 from .library import WorkflowLibrary
 
@@ -21,4 +22,5 @@ __all__ = [
     "generate_workflow_reasoned",
     "learn_from_success",
     "schedule_spec",
+    "select_or_generate_workflow",
 ]

@@ -96,6 +96,34 @@ async def learn_from_success(
     return learned
 
 
+async def select_or_generate_workflow(
+    store: Any,
+    task: str,
+    intent_tags: list[str],
+    tenant_id: str,
+    *,
+    runtime: Any | None = None,
+) -> WorkflowDefinition:
+    """Prefer a matched (learned/precreated/generated) workflow, else synthesise.
+
+    The flywheel's retrieval half (Phase 3, US-WFL-04): consult the library FIRST
+    so a workflow whose intent overlaps the request - including one saved by
+    :func:`learn_from_success` after a prior success - is reused instead of
+    synthesised again. When nothing overlaps (an empty or non-matching library)
+    ``match`` returns ``None`` and we fall back to synthesis, so behaviour is
+    unchanged today and improves as the library fills.
+    """
+    from .library import WorkflowLibrary  # local import: no package-load cycle
+
+    library = WorkflowLibrary(store)
+    matched = await library.match(tenant_id, list(intent_tags or []))
+    if matched is not None:
+        return matched
+    return await generate_workflow_reasoned(
+        task, intent_tags, tenant_id, runtime=runtime
+    )
+
+
 def _extract_steps(result: Any) -> list[dict[str, Any]]:
     """Pull a proposed step list out of a runtime result (output or JSON summary)."""
     output = getattr(result, "output", None) or {}

@@ -180,6 +180,21 @@ class Store(Protocol):
     async def reconcile_budget(
         self, tenant_id: str, scope_id: str, delta_tokens: int, delta_micros: int
     ) -> None: ...
+    # Transactional multi-scope reserve (audit H4, engine-plan Phase 6, FR-COST-05):
+    # debit EVERY scope in ``reservations`` (each a (scope_id, tokens, micros)
+    # triple) in ONE all-or-nothing step. Either every hard-stop scope has headroom
+    # and all are debited (returns True), or the first hard-stop scope with no
+    # headroom aborts the whole thing and NONE is debited (returns False). Postgres
+    # locks every scope's row FOR UPDATE in a deterministic order (sorted by
+    # scope_id, so concurrent reserves on overlapping scopes cannot deadlock) and
+    # re-checks each hard stop under the lock; memory applies the same semantics
+    # under its no-await lock. A scope with no budget row is a no-op (unmetered),
+    # mirroring consume_budget. This closes the partial-debit window the old
+    # per-scope consume_budget loop left open: scope A debited, scope B refuses,
+    # A stays charged for a call that never ran.
+    async def reserve_budgets_atomic(
+        self, tenant_id: str, reservations: list[tuple[str, int, int]]
+    ) -> bool: ...
 
     # --- idempotency (SEC-15) ---
     async def idempotency_get(self, tenant_id: str, key: str) -> dict | None: ...

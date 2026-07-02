@@ -681,6 +681,60 @@ class PostgresStore(ChannelStorePG):
                     tenant_id, scope_id, new_tokens, new_micros,
                 )
 
+    async def reserve_budgets_atomic(self, tenant_id, reservations):
+        """Transactional multi-scope reserve (audit H4, Phase 6, FR-COST-05):
+        all-or-nothing debit across every scope in ONE transaction. Every scope's
+        budget row is locked FOR UPDATE in a DETERMINISTIC order (sorted by
+        scope_id), so two concurrent reserves on overlapping scopes always take the
+        locks in the same order and cannot deadlock; each hard stop is re-checked
+        under its lock. The moment a hard-stop scope has no headroom we return False
+        BEFORE issuing any UPDATE, so the (write-empty) transaction commits nothing -
+        no partial debit. Only when every scope has headroom do we apply all debits
+        and return True. A scope with no budget row is a no-op (unmetered), mirroring
+        consume_budget."""
+        # Aggregate per scope (a scope named twice is locked + debited once, its
+        # amounts summed). Negative amounts floor to 0 (a refund is reconcile's job).
+        agg: dict[str, tuple[int, int]] = {}
+        for scope_id, tokens, micros in reservations:
+            t, m = agg.get(scope_id, (0, 0))
+            agg[scope_id] = (t + max(0, tokens), m + max(0, micros))
+        async with self._pool.acquire() as conn:
+            async with conn.transaction():
+                await _apply_guc(conn)  # RLS-live: scope this explicit transaction
+                planned: list[tuple[str, int, int]] = []
+                # Lock in a stable order to avoid deadlock between concurrent reserves.
+                for scope_id in sorted(agg):
+                    tokens, micros = agg[scope_id]
+                    row = await conn.fetchrow(
+                        """SELECT token_limit, cost_limit_micros, hard_stop,
+                                  spent_tokens, spent_micros
+                           FROM budgets WHERE tenant_id=$1 AND id=$2 FOR UPDATE""",
+                        tenant_id, scope_id,
+                    )
+                    if row is None:
+                        continue  # unmetered scope -> skip (no-op)
+                    new_tokens = row["spent_tokens"] + tokens
+                    new_micros = row["spent_micros"] + micros
+                    over = (
+                        row["token_limit"] is not None and new_tokens > row["token_limit"]
+                    ) or (
+                        row["cost_limit_micros"] is not None
+                        and new_micros > row["cost_limit_micros"]
+                    )
+                    if over and row["hard_stop"]:
+                        # No UPDATE has run yet, so the transaction that now commits
+                        # writes nothing - all-or-nothing holds with no partial debit.
+                        return False
+                    planned.append((scope_id, new_tokens, new_micros))
+                for scope_id, new_tokens, new_micros in planned:
+                    await conn.execute(
+                        """UPDATE budgets SET spent_tokens=$3, spent_micros=$4,
+                               updated_at=now()
+                           WHERE tenant_id=$1 AND id=$2""",
+                        tenant_id, scope_id, new_tokens, new_micros,
+                    )
+                return True
+
     # --- idempotency ------------------------------------------------------
     async def idempotency_get(self, tenant_id, key):
         row = await self._pool.fetchrow(

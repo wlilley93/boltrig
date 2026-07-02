@@ -356,6 +356,42 @@ class InMemoryStore(ChannelStoreMem):
             b, spent_tokens=new_tokens, spent_micros=new_micros
         )
 
+    async def reserve_budgets_atomic(self, tenant_id, reservations):
+        """Transactional multi-scope reserve (audit H4, Phase 6, FR-COST-05):
+        all-or-nothing debit across every scope in ``reservations``. Compute every
+        debit first; if ANY hard-stop scope lacks headroom, apply NONE and return
+        False; otherwise apply them all and return True. A scope with no budget row
+        is a no-op (unmetered), mirroring consume_budget. The whole compute-then-apply
+        has no await between steps, so it is atomic under cooperative scheduling - two
+        concurrent reserves can never interleave into a partial debit."""
+        # Aggregate per scope so a scope named twice is locked and debited once
+        # (its amounts summed), matching the postgres FOR UPDATE that locks a row
+        # once. Negative amounts are floored to 0 (a refund is reconcile's job).
+        agg: dict[str, tuple[int, int]] = {}
+        for scope_id, tokens, micros in reservations:
+            t, m = agg.get(scope_id, (0, 0))
+            agg[scope_id] = (t + max(0, tokens), m + max(0, micros))
+        # Phase 1: compute every debit + hard-stop check; touch nothing yet.
+        planned: list[tuple[str, Budget, int, int]] = []
+        for scope_id, (tokens, micros) in agg.items():
+            b = self._budgets.get((tenant_id, scope_id))
+            if b is None:
+                continue  # unmetered scope -> skip (no-op)
+            new_tokens = b.spent_tokens + tokens
+            new_micros = b.spent_micros + micros
+            over = (b.token_limit is not None and new_tokens > b.token_limit) or (
+                b.cost_limit_micros is not None and new_micros > b.cost_limit_micros
+            )
+            if over and b.hard_stop:
+                return False  # all-or-nothing: nothing has been applied
+            planned.append((scope_id, b, new_tokens, new_micros))
+        # Phase 2: apply every debit (no await above, so this is atomic).
+        for scope_id, b, new_tokens, new_micros in planned:
+            self._budgets[(tenant_id, scope_id)] = replace(
+                b, spent_tokens=new_tokens, spent_micros=new_micros
+            )
+        return True
+
     # --- idempotency ---
     async def idempotency_get(self, tenant_id, key):
         return self._idem.get((tenant_id, key))

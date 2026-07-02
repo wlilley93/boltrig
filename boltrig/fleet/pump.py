@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import uuid
 from typing import TYPE_CHECKING, Any
 
@@ -28,10 +29,12 @@ from boltrig.models import (
     HITLType,
     InvocationContext,
     Urgency,
+    WorkflowSource,
     WorkItem,
     WorkStatus,
 )
 from boltrig.work import normalise
+from boltrig.workflows.generator import learn_from_success
 
 from .chief_of_staff import ChiefOfStaff, Department
 from .department_head import DepartmentHead, tree_root_id
@@ -51,6 +54,50 @@ WORK_ITEM_TASK = "boltrig-work-item"
 DEFAULT_MAX_ATTEMPTS = 3
 DEFAULT_LEASE_SECONDS = 300
 DEFAULT_SPAWN_BUDGET = 32
+
+# The key under which a step's outcome may carry a synthesised workflow to learn
+# from (Phase 3, US-WFL-03). The full generate -> run -> learn path completes when
+# workflow synthesis is on the delegation path; today the pump learns from any
+# outcome that already carries a GENERATED definition (proven by the wiring test).
+GENERATED_WORKFLOW_KEY = "generated_workflow"
+
+
+def outcome_score(terminal_status: str, degraded: bool) -> dict[str, Any]:
+    """A deterministic outcome score for a terminal work item (Phase 3, US-WFL-06).
+
+    DONE + not degraded is a clean success (1.0); DONE + degraded is a half win
+    (0.5); FAILED is 0.0; a parked item (AWAITING_HUMAN) is neutral (``None``) -
+    it is not a success or a failure, a human still owns it. The sub-dict is
+    stashed on ``WorkItem.result['outcome']`` (which already round-trips as JSONB);
+    a first-class ``outcome_score`` column is a follow-on (it needs a schema
+    change to persist).
+    """
+    if terminal_status == WorkStatus.DONE.value:
+        score: float | None = 0.5 if degraded else 1.0
+    elif terminal_status == WorkStatus.FAILED.value:
+        score = 0.0
+    else:  # AWAITING_HUMAN and any other non-terminal-success: neutral
+        score = None
+    return {
+        "score": score,
+        "terminal_status": terminal_status,
+        "degraded": bool(degraded),
+    }
+
+
+def reflection_lesson(item: WorkItem, terminal_status: str, outcome: dict) -> str:
+    """A short, deterministic lesson distilled from an outcome (Phase 3, US-WFL-07).
+
+    Deliberately a fixed template, not a model call, so reflection is cheap and
+    reproducible. The content is bland by construction so it clears the memory
+    adapter's secret / injection screen; it is stored THROUGH the chokepoint, so
+    the screen still runs on it (it is never bypassed)."""
+    score = outcome.get("score")
+    return (
+        f"Lesson from work item {item.id} ({item.source}): the task "
+        f"'{item.intent}' reached {terminal_status} with outcome score {score} "
+        f"(degraded={bool(item.degraded)})."
+    )
 
 
 async def persist_new_work_items(
@@ -88,8 +135,19 @@ class WorkPump:
         max_attempts: int = DEFAULT_MAX_ATTEMPTS,
         lease_seconds: int = DEFAULT_LEASE_SECONDS,
         worker_id: str | None = None,
+        reflect: bool | None = None,
     ) -> None:
         self._store = getattr(kernel_or_store, "store", kernel_or_store)
+        # Post-run reflection (Phase 3, US-WFL-07) goes through the kernel
+        # chokepoint, so it needs the kernel itself, not just its store. A bare
+        # store has no ``invoke``: reflection is then simply unavailable (P9).
+        self._kernel = kernel_or_store if hasattr(kernel_or_store, "invoke") else None
+        # OFF by default so a per-item memory write is opt-in (env or flag). It is
+        # deterministic (no model call), but still a governed write per item, so it
+        # must be asked for. ``reflect=True`` overrides the env for tests.
+        self._reflect_enabled = (
+            reflect if reflect is not None else os.getenv("BOLTRIG_REFLECT") == "1"
+        )
         hitl = getattr(kernel_or_store, "hitl", None)
         if hitl is None:  # bare store: build the manager lazily (no kernel import cost)
             from boltrig.kernel.hitl import HITLManager
@@ -191,11 +249,16 @@ class WorkPump:
             return item
 
         item.status = WorkStatus.DONE  # degraded=true is carried, never hidden
+        self._stamp_outcome(item, WorkStatus.DONE.value)
+        # flywheel: a clean success that carries a synthesised workflow is learned
+        # so the library can reuse it next time (US-WFL-03).
+        await self._maybe_learn(item, outcome)
         await store.update_work_item(item)
         await store.upsert_checkpoint(
             tenant, run_id, "execute", "done",
             output={"spawned": outcome.get("spawned", 0), "degraded": item.degraded},
         )
+        await self._reflect(item, run_id, WorkStatus.DONE.value)
         return item
 
     async def requeue(self, tenant_id: str, item_id: str) -> WorkItem | None:
@@ -250,11 +313,14 @@ class WorkPump:
                 "detail": str(exc),
                 "attempts": item.attempts,
             }
+            self._stamp_outcome(item, WorkStatus.FAILED.value)
         await self._store.update_work_item(item)
         await self._store.upsert_checkpoint(
             item.tenant_id, run_id, "execute", "failed",
             output={"error": type(exc).__name__, "will_retry": will_retry},
         )
+        if not will_retry:  # reflect only on the terminal failure, not each retry
+            await self._reflect(item, run_id, WorkStatus.FAILED.value)
 
     def _head_for(self, department: str) -> Any:
         head = self.heads.get(department)
@@ -292,11 +358,75 @@ class WorkPump:
         self, item: WorkItem, run_id: str, hitl_request_id: str | None
     ) -> None:
         item.status = WorkStatus.AWAITING_HUMAN
+        self._stamp_outcome(item, WorkStatus.AWAITING_HUMAN.value)
         await self._store.update_work_item(item)
         await self._store.upsert_checkpoint(
             item.tenant_id, run_id, "execute", "awaiting_human",
             hitl_request_id=hitl_request_id,
         )
+        await self._reflect(item, run_id, WorkStatus.AWAITING_HUMAN.value)
+
+    # --- learning loop (Phase 3, US-WFL-03/06/07) ---------------------------------
+    def _stamp_outcome(self, item: WorkItem, terminal_status: str) -> None:
+        """Record the deterministic outcome score on the item's result (US-WFL-06).
+
+        Stashed in the existing ``result`` JSONB dict (which round-trips) under an
+        ``outcome`` sub-dict; the head's aggregate result (children/spawned) is
+        preserved. A first-class column is a follow-on (needs a schema change)."""
+        item.result = dict(item.result or {})
+        item.result["outcome"] = outcome_score(terminal_status, item.degraded)
+
+    async def _maybe_learn(self, item: WorkItem, outcome: dict) -> None:
+        """Re-save a succeeded, synthesised workflow as learned (US-WFL-03).
+
+        Only a clean (non-degraded) success whose outcome carries a GENERATED
+        definition is learned; a precreated/already-learned or degraded run is a
+        no-op, so existing completions are unaffected. Best-effort: a learn
+        failure never fails the item (P9)."""
+        if item.degraded:
+            return
+        wf = outcome.get(GENERATED_WORKFLOW_KEY)
+        if wf is None or getattr(wf, "source", None) != WorkflowSource.GENERATED:
+            return
+        try:
+            await learn_from_success(self._store, wf, item.intent)
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # learning is best-effort; never fail the run (P9)
+            log.debug("learn_from_success failed for %s; continuing", item.id,
+                      exc_info=True)
+
+    async def _reflect(
+        self, item: WorkItem, run_id: str, terminal_status: str
+    ) -> None:
+        """Distil one lesson and store it via the memory verb, best-effort (US-WFL-07).
+
+        Governed: the write goes through ``kernel.invoke`` (the one chokepoint), so
+        the memory adapter's scope + secret + injection screens all run on it - it
+        is never bypassed. Provenance is the run id (``source_ref``) and the work
+        item id (in the lesson). OFF unless enabled, and a reflection failure - a
+        missing memory binding, a screen rejection, any error - is swallowed so it
+        can never fail the run (P9)."""
+        if not self._reflect_enabled or self._kernel is None:
+            return
+        outcome = (item.result or {}).get("outcome") or {}
+        lesson = reflection_lesson(item, terminal_status, outcome)
+        try:
+            ctx = await self._context_for(item, run_id)
+            await self._kernel.invoke(
+                "memory", "memory.remember",
+                {
+                    "content": lesson,
+                    "kind": "lesson",
+                    "source_kind": "reflection",
+                    "source_ref": run_id,
+                },
+                ctx,
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # reflection is best-effort; never fail the run (P9)
+            log.debug("reflection failed for %s; continuing", item.id, exc_info=True)
 
 
 # --- the org factory ----------------------------------------------------------

@@ -97,10 +97,15 @@ class CostAccountant:
         workflow). Raises ``BudgetExceeded`` if any hard-stop scope would be
         exceeded - and reserves on NONE of them in that case.
 
-        All-or-nothing: read every scope, fail-fast if any hard-stop has no
-        headroom, and only then commit. The old loop committed scopes one at a
-        time and raised on the first breach, leaving earlier scopes debited for a
-        call that never ran (a budget double-charge on every retry)."""
+        True all-or-nothing (audit H4, engine-plan Phase 6): the debit runs in a
+        single transactional multi-scope reserve (``store.reserve_budgets_atomic``,
+        FR-COST-05) that locks every scope FOR UPDATE, re-checks each hard stop, and
+        commits every debit or none. This replaces the old per-scope
+        ``consume_budget`` loop, which - even with the fail-fast read below - could
+        still leave scope A debited when scope B refused under a concurrent
+        reservation (a partial reserve for a call that never ran). The fail-fast
+        read (step 1) stays as a cheap early-out with a precise scope-named error;
+        the atomic reserve (step 3) is the authoritative guarantee."""
         budgets = {}
         for scope_id in scope_ids:
             b = await self._store.get_budget(tenant_id, scope_id)
@@ -138,24 +143,22 @@ class CostAccountant:
                                 tenant_id, scope_id, exc_info=True,
                             )
 
-        # 3. commit all. Step 1's fail-fast guarantees headroom under single-threaded
-        # use, but consume_budget re-checks the hard stop atomically (FOR UPDATE) and
-        # returns False WITHOUT debiting when a concurrent reserve has consumed the
-        # headroom between our read and this commit. Honour that refusal (H4): raise
-        # rather than run unmetered past a hard stop.
-        #
-        # Compensation limitation: the Store exposes no refund verb, so scopes already
-        # debited earlier in this loop stay charged for a call that will not run. That
-        # is a bounded over-count on the losing side of a race, never an under-count -
-        # the hard stop always holds. The single-transaction FOR UPDATE fix is a
-        # store-level day-2 item (audit H4).
-        for scope_id in scope_ids:
-            committed = await self._store.consume_budget(tenant_id, scope_id, tokens, micros)
-            if not committed:
-                raise BudgetExceeded(
-                    f"budget '{scope_id}' hard-stop reached for tenant '{tenant_id}' "
-                    "under a concurrent reservation"
-                )
+        # 3. commit all, transactionally (audit H4, Phase 6, FR-COST-05). One
+        # transaction locks every scope FOR UPDATE, re-checks each hard stop, and
+        # debits EVERY scope or NONE. This is the authoritative all-or-nothing: even
+        # when step 1's unlocked read saw headroom, a concurrent reserve may have
+        # consumed it between that read and this commit - the atomic reserve then
+        # returns False without debiting ANY scope, closing the partial-debit window
+        # the old per-scope loop left open (scope A debited, scope B refused, A stays
+        # charged for a call that never ran).
+        committed = await self._store.reserve_budgets_atomic(
+            tenant_id, [(scope_id, tokens, micros) for scope_id in scope_ids]
+        )
+        if not committed:
+            raise BudgetExceeded(
+                f"budget hard-stop reached for tenant '{tenant_id}' "
+                "under a concurrent reservation"
+            )
 
     async def reconcile(
         self,
