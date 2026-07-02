@@ -44,6 +44,31 @@ const OPS_COLS: ReadonlyArray<{
   { key: "me", label: "Me" },
 ];
 
+// The settings row: one column per section, keyed by section id (the spec's
+// section 0 grid amendment). Routes: #/settings (anchor) and
+// #/settings/<section>. Order and ids mirror the retired SETTINGS_TABS; the
+// organisation column is gated to org-admins (cosmetic only, like the ops
+// admin column - the server 403 stays authoritative). Exported so the
+// settings anchor renders its card directory from the same list.
+export const SETTINGS_COLS: ReadonlyArray<{
+  key: string;
+  label: string;
+  gate?: (role: string) => boolean;
+}> = [
+  { key: "account", label: "Account & Profile" },
+  { key: "appearance", label: "Appearance & Accessibility" },
+  { key: "notifications", label: "Notifications" },
+  { key: "developer", label: "Developer & Connections" },
+  { key: "agent", label: "Personal Agent" },
+  { key: "privacy", label: "Privacy & My Data" },
+  { key: "security", label: "Security & Sessions" },
+  {
+    key: "organisation",
+    label: "Organisation",
+    gate: (r) => ADMIN_ROLES.has(r),
+  },
+];
+
 function anchor(key: string, label: string): DeckCol {
   return { key, label, path: `/${key}` };
 }
@@ -72,7 +97,18 @@ export function buildRows(
       cols: [anchor("automations", "Automations"), ...automationCols],
     });
   }
-  rows.push({ id: "settings", label: "Settings", cols: [anchor("settings", "Settings")] });
+  rows.push({
+    id: "settings",
+    label: "Settings",
+    cols: [
+      anchor("settings", "Settings"),
+      ...SETTINGS_COLS.filter((c) => !c.gate || c.gate(role)).map((c) => ({
+        key: c.key,
+        label: c.label,
+        path: `/settings/${c.key}`,
+      })),
+    ],
+  });
   rows.push({
     id: "ops",
     label: "Ops",
@@ -87,8 +123,10 @@ export function buildRows(
 
 // TOTAL route -> cell mapping over the rows the caller passes:
 //   - a row id matching the tab wins; segs[1] selects a column when it names
-//     one, otherwise that row's anchor (so #/agents/:name and
-//     #/automations/:wfid resolve to their anchors until Beats 2-3 add cols)
+//     one, otherwise that row's anchor (so #/settings/<section> resolves to
+//     its column, and a gated or unknown section - e.g. #/settings/organisation
+//     while not org-admin - falls back to the settings anchor, the same
+//     treatment the gated ops columns get)
 //   - otherwise a column key matching the tab wins (the ops tabs keep their
 //     legacy #/<tab> routes)
 //   - unknown tabs and #/runs/<id> land on the chat anchor (the run drawer is

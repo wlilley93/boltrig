@@ -24,7 +24,15 @@ import { KanbanPanel } from "./panels/KanbanPanel";
 import { MePanel } from "./panels/MePanel";
 import { MemoryPanel } from "./panels/MemoryPanel";
 import { RouterPanel } from "./panels/RouterPanel";
-import { SettingsPanel } from "./panels/SettingsPanel";
+import { SettingsAnchorSlide } from "./panels/settings/AnchorSlide";
+import { AccountSlide } from "./panels/settings/AccountSlide";
+import { AppearanceSlide } from "./panels/settings/AppearanceSlide";
+import { NotificationsSlide } from "./panels/settings/NotificationsSlide";
+import { DeveloperSlide } from "./panels/settings/DeveloperSlide";
+import { PersonalAgentSlide } from "./panels/settings/PersonalAgentSlide";
+import { PrivacySlide } from "./panels/settings/PrivacySlide";
+import { SecuritySlide } from "./panels/settings/SecuritySlide";
+import { OrganisationSlide } from "./panels/settings/OrganisationSlide";
 import { StepSlide } from "./panels/StepSlide";
 import { RunView } from "./panels/RunView";
 import { CommandPalette } from "./panels/CommandPalette";
@@ -287,7 +295,28 @@ function renderCell(rowId: string, colKey: string): ReactNode {
   if (rowId === "automations") {
     return colKey === "automations" ? <AutomationsSlide /> : <StepSlide stepKey={colKey} />;
   }
-  if (rowId === "settings") return <SettingsPanel />;
+  if (rowId === "settings") {
+    switch (colKey) {
+      case "settings":
+        return <SettingsAnchorSlide />;
+      case "account":
+        return <AccountSlide />;
+      case "appearance":
+        return <AppearanceSlide />;
+      case "notifications":
+        return <NotificationsSlide />;
+      case "developer":
+        return <DeveloperSlide />;
+      case "agent":
+        return <PersonalAgentSlide />;
+      case "privacy":
+        return <PrivacySlide />;
+      case "security":
+        return <SecuritySlide />;
+      case "organisation":
+        return <OrganisationSlide />;
+    }
+  }
   if (rowId === "ops") {
     switch (colKey) {
       case "home":
