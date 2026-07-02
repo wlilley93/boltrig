@@ -241,6 +241,18 @@ chat:
   panel: true                                # show the Chat panel in the UI
   continuity: true                           # compose prior turns into the prompt
                                              # (Round Six gap 3.1; BOLTRIG_CONTINUITY)
+  # Bare-turn authority ([2026] VJS-COUNTY 1): the skill set a bare chat turn
+  # spawns with, per caller role; an unmapped role gets default_skills. This
+  # example manifest carries the shipped default (policy-as-data, P7; the
+  # ChatConfig code defaults stay empty so a manifest-less boot is fail-closed).
+  # Grounded in identity.role_mappings above: org-admin is the only role whose
+  # scope reaches the control noun ({all: true} -> the "*" grant); the
+  # department-head and agent scopes name ticket/jira only, so they resolve to
+  # []. Every chat spawn also intersects the caller's role-resolved grants, so
+  # this knob can only reduce authority, never widen it.
+  skills_by_role:
+    org-admin: ["authoring/control-plane"]
+  default_skills: []
 
 # === Round Three additions (S10) - the manifest stays the source of truth (C1)
 # --- evaluation harness (Epic EVAL) -----------------------------------------

@@ -10,6 +10,7 @@ from __future__ import annotations
 from .manifest import (
     AdapterConfig,
     BudgetConfig,
+    ChatConfig,
     CredentialRef,
     EphemeralRuntime,
     FleetManifest,
@@ -44,4 +45,5 @@ __all__ = [
     "NetworkConfig",
     "PrivacyConfig",
     "BudgetConfig",
+    "ChatConfig",
 ]

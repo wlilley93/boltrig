@@ -49,7 +49,8 @@ async def test_transcript_history_enveloped_before_spawn():
     store.set_tenant_permissions(TenantPermissions(T, GrantSet.of(["*"])))
     captured: list[str] = []
 
-    async def spawn(tenant_id, task, skills, prefer, context, *, partial_on_budget=True):
+    async def spawn(tenant_id, task, skills, prefer, context, *,
+                    partial_on_budget=True, grant_ceiling=None):
         captured.append(task)
         return {"summary": "ok"}
 

@@ -161,7 +161,8 @@ async def test_continuity_only_composes_the_callers_own_conversation():
     store.set_tenant_permissions(TenantPermissions(T, GrantSet.of(["*"])))
     captured: list[str] = []
 
-    async def spawn(tenant_id, task, skills, prefer, context, *, partial_on_budget=True):
+    async def spawn(tenant_id, task, skills, prefer, context, *,
+                    partial_on_budget=True, grant_ceiling=None):
         captured.append(task)
         return {"summary": "ok"}
 

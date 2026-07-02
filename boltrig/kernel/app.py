@@ -311,8 +311,10 @@ def create_app(
         chat_svc = getattr(request.app.state, "chat", None)
         if chat_svc is None:
             return JSONResponse({"error": "chat_unavailable"}, status_code=503)
+        # The caller's role-resolved grants ride along as the ceiling every chat
+        # spawn intersects ([2026] VJS-COUNTY 1) - same resolution as any verb call.
         gen = chat_svc.handle_turn(
-            tenant_id=p.tenant_id, user_id=p.subject, role=p.role,
+            tenant_id=p.tenant_id, user_id=p.subject, role=p.role, grants=p.grants,
             message=body.message, conversation_id=body.conversation_id,
         )
         # RBAC / access errors happen before the first event and propagate to the

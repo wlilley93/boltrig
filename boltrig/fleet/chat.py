@@ -17,10 +17,13 @@ import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
 
+from boltrig.config.manifest import ChatConfig
 from boltrig.models import (
+    EMPTY_GRANTS,
     Conversation,
     ConversationMessage,
     ConversationStatus,
+    GrantSet,
     InvocationContext,
     MessageRole,
     BoltrigError,
@@ -33,9 +36,9 @@ from .continuity import compose_turn_task, continuity_enabled
 from .prompt_stack import wrap_untrusted
 from .pump import persist_new_work_items
 
-# turn_executor(*, tenant_id, user_id, conversation_id, run_id, message, relay) -> awaitable.
-# It publishes events to relay.publish(run_id, ...) during the run; ChatService
-# closes the relay stream when it returns.
+# turn_executor(*, tenant_id, user_id, role, grants, conversation_id, run_id,
+# message, relay) -> awaitable. It publishes events to relay.publish(run_id, ...)
+# during the run; ChatService closes the relay stream when it returns.
 TurnExecutor = Callable[..., Awaitable[Any]]
 
 _SCOPED_ROLES = {"org-admin", "compliance"}  # may read others' threads (SEC-25)
@@ -77,6 +80,7 @@ class ChatService:
         role: str,
         message: str,
         conversation_id: str | None = None,
+        grants: GrantSet | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         # RBAC before anything streams (SEC-25): continuing a thread requires access
         if conversation_id:
@@ -101,7 +105,9 @@ class ChatService:
         yield {"type": "message_start", "run_id": run_id, "conversation_id": conv.id}
 
         collected: list[dict[str, Any]] = []
-        async for event in self._drive(tenant_id, user_id, conv.id, run_id, message):
+        async for event in self._drive(
+            tenant_id, user_id, conv.id, run_id, message, role, grants
+        ):
             collected.append(event)
             yield event
 
@@ -121,7 +127,7 @@ class ChatService:
         conv.updated_at = utcnow()
         await self._store.update_conversation(conv)
 
-    async def _drive(self, tenant_id, user_id, conv_id, run_id, message):
+    async def _drive(self, tenant_id, user_id, conv_id, run_id, message, role, grants):
         if self._exec is None:
             yield {"type": "text_delta", "delta": "(no runtime configured)"}
             return
@@ -129,7 +135,7 @@ class ChatService:
         task = asyncio.create_task(
             self._safe_exec(
                 tenant_id=tenant_id, user_id=user_id, conversation_id=conv_id,
-                run_id=run_id, message=message,
+                run_id=run_id, message=message, role=role, grants=grants,
             )
         )
         try:
@@ -148,7 +154,13 @@ class ChatService:
             self._relay.close(run_id)
 
 
-def build_turn_executor(kernel, spawner, *, continuity: bool | None = None) -> TurnExecutor:
+def build_turn_executor(
+    kernel,
+    spawner,
+    *,
+    continuity: bool | None = None,
+    chat_config: ChatConfig | None = None,
+) -> TurnExecutor:
     """The production turn executor: normalise the turn to a work item linked by
     run id (US-CONV-02, kanban), route it through the fleet, and stream the
     result. Degrades to a plain reply when no capability can run it (P9).
@@ -157,11 +169,30 @@ def build_turn_executor(kernel, spawner, *, continuity: bool | None = None) -> T
     prior turns are composed into the task before the spawn so the turn carries
     its own context forward; the composition is deterministic + append-only
     (``continuity.compose_turn_task``) and reads only the caller's own
-    tenant/conversation-scoped messages (SEC-27/SEC-49)."""
-    use_continuity = continuity_enabled() if continuity is None else continuity
+    tenant/conversation-scoped messages (SEC-27/SEC-49).
 
-    async def executor(*, tenant_id, user_id, conversation_id, run_id, message, relay):
+    ``chat_config`` is the manifest ``chat`` knob deciding which skill set a
+    bare turn spawns with per caller role; absent a manifest it defaults to the
+    fail-closed ``ChatConfig()`` (no skills for any role)."""
+    use_continuity = continuity_enabled() if continuity is None else continuity
+    chat_cfg = chat_config if chat_config is not None else ChatConfig()
+
+    async def executor(*, tenant_id, user_id, role, grants, conversation_id,
+                       run_id, message, relay):
         perms = await kernel.store.get_tenant_permissions(tenant_id)
+        # Bare-turn authority is manifest data under a caller ceiling
+        # ([2026] VJS-COUNTY 1): the chat.skills_by_role knob selects the turn's
+        # skill set for the caller's role (default_skills when unmapped), and a
+        # manifest entry naming a missing skill is skipped, never escalated, so
+        # the knob can only reduce authority (fail-closed).
+        turn_skills: list[str] = []
+        for skill_id in chat_cfg.skills_by_role.get(role, chat_cfg.default_skills):
+            if await kernel.store.get_skill(tenant_id, skill_id) is not None:
+                turn_skills.append(skill_id)
+        # Every chat spawn is ceilinged by the caller's role-resolved grants
+        # (the Principal's, resolved via identity/rbac.py); a caller whose role
+        # resolution failed carries the empty set (SEC-78).
+        ceiling = grants if grants is not None else EMPTY_GRANTS
         item = WorkItem(
             id=run_id, tenant_id=tenant_id, source="chat", intent=message,
             confidence=1.0, convergent=False, status=WorkStatus.IN_FLIGHT,
@@ -185,7 +216,10 @@ def build_turn_executor(kernel, spawner, *, continuity: bool | None = None) -> T
             history = await kernel.store.list_messages(tenant_id, conversation_id)
             task = compose_turn_task(history, message)
         try:
-            result = await spawner.spawn(tenant_id, task, [], {}, ctx, partial_on_budget=True)
+            result = await spawner.spawn(
+                tenant_id, task, turn_skills, {}, ctx,
+                partial_on_budget=True, grant_ceiling=ceiling,
+            )
             summary = result.get("summary") or "Done."
             # Honesty about degradation (US-FLT-07): the flag persists on the
             # turn's work item, and a degraded echo is never presented as

@@ -409,10 +409,21 @@ def build_app():
     from boltrig.kernel.app import create_app
 
     def chat_factory(kernel):
-        # the conversational service routes turns through the fleet (US-CONV-02)
+        # the conversational service routes turns through the fleet (US-CONV-02);
+        # the manifest chat knob decides a bare turn's skill set per caller role
+        # ([2026] VJS-COUNTY 1) - no manifest means the fail-closed empty knob
+        manifest_path = _find_manifest()
+        chat_cfg = None
+        if manifest_path:
+            try:
+                chat_cfg = load_manifest(manifest_path).chat
+            except Exception:
+                pass
         return ChatService(
             kernel.store, kernel.events,
-            turn_executor=build_turn_executor(kernel, build_spawner(kernel)),
+            turn_executor=build_turn_executor(
+                kernel, build_spawner(kernel), chat_config=chat_cfg
+            ),
         )
 
     def platform_factory(kernel):

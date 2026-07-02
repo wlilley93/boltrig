@@ -180,6 +180,18 @@ class PrivacyConfig:
 
 
 @dataclass(frozen=True)
+class ChatConfig:
+    """Bare chat-turn authority ([2026] VJS-COUNTY 1): which skill set a bare
+    chat turn spawns with, per caller role. The turn executor selects
+    ``skills_by_role.get(role, default_skills)``; the shipped author-role
+    mapping is carried by manifest.example.yaml (policy-as-data, P7), so these
+    code defaults stay empty and a manifest-less boot is fail-closed."""
+
+    skills_by_role: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    default_skills: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class FleetManifest:
     """The fully-typed fleet manifest (S11.2)."""
 
@@ -196,6 +208,7 @@ class FleetManifest:
     hitl: HitlConfig = field(default_factory=HitlConfig)
     network: NetworkConfig = field(default_factory=NetworkConfig)
     privacy: PrivacyConfig = field(default_factory=PrivacyConfig)
+    chat: ChatConfig = field(default_factory=ChatConfig)
     # Sections surfaced as raw config rather than typed dataclasses (Round Three+:
     # evaluation/notifications/personal_agents, and Round Five: memory).
     extra: dict[str, Any] = field(default_factory=dict)
@@ -439,6 +452,17 @@ def _parse_privacy(raw: Mapping[str, Any]) -> PrivacyConfig:
     )
 
 
+def _parse_chat(raw: Mapping[str, Any]) -> ChatConfig:
+    skills_by_role = {
+        str(role): _as_tuple(skills)
+        for role, skills in (raw.get("skills_by_role") or {}).items()
+    }
+    return ChatConfig(
+        skills_by_role=skills_by_role,
+        default_skills=_as_tuple(raw.get("default_skills")),
+    )
+
+
 def load_manifest(path: str, *, env: Mapping[str, str] | None = None) -> FleetManifest:
     """Load + type the fleet manifest at ``path`` (S11.2).
 
@@ -467,6 +491,7 @@ def load_manifest(path: str, *, env: Mapping[str, str] | None = None) -> FleetMa
         hitl=_parse_hitl(doc.get("hitl") or {}),
         network=_parse_network(doc.get("network") or {}),
         privacy=_parse_privacy(doc.get("privacy") or {}),
+        chat=_parse_chat(doc.get("chat") or {}),
         extra={k: doc[k] for k in ("evaluation", "notifications", "personal_agents",
                                    "memory", "runtimes", "mcp", "chat") if k in doc},
     )

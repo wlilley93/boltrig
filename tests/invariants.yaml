@@ -631,3 +631,7 @@ invariants:
     tests:
       - tests/security/test_control_plane_parity.py::test_chat_lane_spawn_with_authoring_skill_reaches_control_verbs
       - tests/security/test_control_plane_parity.py::test_chat_lane_non_author_ceiling_strips_control_grants
+  SEC-78:
+    description: Bare chat-turn authority is manifest data under a caller ceiling - chat.skills_by_role selects the spawned skill set by caller role, missing manifest skills are skipped fail-closed, every spawn carries the caller's role-resolved grant ceiling, and the shipped manifest gives authoring/control-plane only to org-admin while default_skills stays empty ([2026] VJS-COUNTY 1).
+    tests:
+      - tests/security/test_control_plane_parity.py::test_bare_chat_turn_uses_manifest_skills_under_caller_ceiling

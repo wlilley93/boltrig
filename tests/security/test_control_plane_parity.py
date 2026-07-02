@@ -14,6 +14,13 @@ SEC-77  the chat/agent lane preserves grant context end to end: a chat-style
         (intersected with the caller ceiling), and the run-scoped MCP token the
         Pi runtime issues reaches the control verbs through the chokepoint; a
         non-author ceiling strips them.
+SEC-78  bare chat-turn authority is manifest data under a caller ceiling
+        ([2026] VJS-COUNTY 1): the turn executor selects the spawn's skill set
+        from the chat.skills_by_role knob (default_skills when unmapped,
+        shipped []), passes a grant ceiling equal to the caller's role-resolved
+        grants on EVERY chat spawn (empty when unresolved), skips a manifest
+        entry naming a missing skill without escalation, and trims a manifest
+        skill's grants to the caller intersection - the knob can only reduce.
 
 Authority note (recorded per the beat): like the Round Seven control.* verbs,
 the new verbs rely on the grant lattice, not a role check - a caller reaches
@@ -33,9 +40,12 @@ from fastapi.testclient import TestClient
 from boltrig.adapters.builtin.memory_tickets import build as build_tickets
 from boltrig.config.admin import AdminConfig
 from boltrig.config.control_plane import build_control_plane_adapter
+from boltrig.config.manifest import ChatConfig, load_manifest
 from boltrig.fleet import build_spawner
+from boltrig.fleet.chat import ChatService, build_turn_executor
 from boltrig.kernel import Kernel
 from boltrig.kernel.app import create_app
+from boltrig.kernel.events import EventRelay
 from boltrig.models import (
     AgentCapability,
     GrantMissing,
@@ -43,13 +53,16 @@ from boltrig.models import (
     InvocationContext,
     PendingHuman,
     SchemaValidationError,
+    Skill,
     TenantPermissions,
 )
 from boltrig.skills.loader import load_skills_dir
 from boltrig.store import InMemoryStore
 
 T = "acme"
-_AUTHORING_SKILLS_DIR = Path(__file__).resolve().parents[2] / "libraries" / "skills" / "authoring"
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_AUTHORING_SKILLS_DIR = _REPO_ROOT / "libraries" / "skills" / "authoring"
+_EXAMPLE_MANIFEST = _REPO_ROOT / "manifest.example.yaml"
 
 # The six Beat 3.5 verbs with schema-valid params (used by the gate/deny loops).
 _VERB_PARAMS: dict[str, dict] = {
@@ -278,10 +291,83 @@ async def test_chat_lane_non_author_ceiling_strips_control_grants():
         "params": {"name": "control.skill.upsert", "arguments": {"id": "x"}},
     })
     assert call["result"]["_boltrig"]["status"] == "denied"
-    # Recorded fork, not a fix (see the beat notes): the production turn executor
-    # spawns with skills=[] (fleet/chat.py), so a BARE chat turn's child carries
-    # no verb grants at all - authoring from chat needs the authoring skill in
-    # the spawn's skill set. Which authority a bare turn should carry is a
-    # design decision, deliberately not changed here.
+    # The bare-turn authority fork recorded here was resolved by
+    # [2026] VJS-COUNTY 1 (SEC-78 below): the production turn executor now
+    # selects a bare turn's skill set from the manifest chat.skills_by_role knob
+    # and ceilings every chat spawn with the caller's role-resolved grants. A
+    # skill-less spawn still carries no verb grants at all:
     bare = await _chat_lane_spawn(k, [], None)
     assert bare["effective_grants"] == []
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-78")
+async def test_bare_chat_turn_uses_manifest_skills_under_caller_ceiling():
+    manifest = load_manifest(str(_EXAMPLE_MANIFEST))
+    assert manifest.chat.skills_by_role["org-admin"] == ("authoring/control-plane",)
+    assert manifest.chat.default_skills == ()
+
+    k = await _kernel()
+    await k.store.upsert_skill(
+        Skill(
+            id="authoring/control-plane",
+            tenant_id=T,
+            version="1.0.0",
+            prompt_fragment="authoring",
+            tool_grants=["control.*"],
+        )
+    )
+    calls: list[dict] = []
+
+    class _SpySpawner:
+        async def spawn(self, tenant_id, task, skills, prefer, context, *,
+                        partial_on_budget=True, grant_ceiling=None):
+            calls.append({
+                "tenant_id": tenant_id,
+                "skills": list(skills),
+                "grant_ceiling": grant_ceiling,
+                "partial_on_budget": partial_on_budget,
+            })
+            return {"summary": "ok"}
+
+    svc = ChatService(
+        k.store,
+        EventRelay(),
+        turn_executor=build_turn_executor(
+            k,
+            _SpySpawner(),
+            continuity=False,
+            chat_config=ChatConfig(
+                skills_by_role={
+                    "org-admin": ("authoring/control-plane", "missing/skill")
+                },
+                default_skills=("missing/default",),
+            ),
+        ),
+    )
+
+    events = [
+        ev
+        async for ev in svc.handle_turn(
+            tenant_id=T,
+            user_id="alice",
+            role="org-admin",
+            grants=GrantSet.of(["ticket.*"]),
+            message="author a workflow",
+        )
+    ]
+    assert any(ev.get("type") == "text_delta" and ev.get("delta") == "ok" for ev in events)
+    assert calls[0]["skills"] == ["authoring/control-plane"]
+    assert calls[0]["grant_ceiling"] == GrantSet.of(["ticket.*"])
+    assert calls[0]["partial_on_budget"] is True
+
+    async for _ in svc.handle_turn(
+        tenant_id=T,
+        user_id="bob",
+        role="viewer",
+        grants=None,
+        message="read only",
+    ):
+        pass
+    assert calls[-1]["skills"] == []
+    assert calls[-1]["grant_ceiling"] == GrantSet.of([])
