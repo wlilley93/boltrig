@@ -52,12 +52,19 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
+      - name: Install UI deps (frozen lockfile)
+        working-directory: ui
+        # same flow as ui/Dockerfile and the ui-e2e job: pnpm from the frozen
+        # lockfile (ui/ has only pnpm-lock.yaml), scripts off at install, then
+        # rebuild esbuild explicitly (its postinstall compiles the native binary)
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile --ignore-scripts
+          pnpm rebuild esbuild
       - name: Build UI
         working-directory: ui
-        run: |
-          npm install --no-audit --no-fund
-          npm run build
+        run: pnpm run build
 
   # UI browser-test harness ([2026] VJS-COUNTY 2, order
   # 2026-VJS-CC-BOLTRIG-UI-TEST-HARNESS-001): the chromium-only smoke drives the

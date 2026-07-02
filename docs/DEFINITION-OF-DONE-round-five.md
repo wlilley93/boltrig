@@ -70,12 +70,17 @@ memory is an adapter, routes, data, and an engine behind an interface.
 ## 7. Engine selection
 
 - [x] **done** The engine is adopted behind the interface, not built: a local
-  reference for dev/offline and a `CogneeEngine` seam that documents the adoption
-  point and the MEM-ENG-04 selection criteria. `boltrig/memory/cognee.py`
+  reference for dev/offline and a wired `CogneeEngine` adoption that documents
+  the MEM-ENG-04 selection criteria. `boltrig/memory/cognee.py`
   (MEM-ENG-01/02/03).
-- [ ] **seam** The full Cognee adoption (wiring `cognee.add`/`cognify`/`search`/
-  `prune`) and the validation against Mem0 / Zep-Graphiti / LightRAG is the
-  external leg; the interface + seam are in place so the swap touches no core.
+- [ ] **seam** The Cognee wiring is built but not live. `CogneeEngine` drives
+  `cognee.add`/`cognify`/`search` and erases via `cognee.forget`
+  (`boltrig/memory/cognee.py`; `tests/integration/test_cognee_engine.py`, live
+  legs gated behind `BOLTRIG_COGNEE_LIVE=1`). The live deployment does not select
+  it: the manifest ships `engine: local` and `cognee` stays an optional extra
+  (`pip install 'boltrig[cognee]'`). The MEM-ENG-04 comparative validation
+  against Mem0 / Zep-Graphiti / LightRAG is still open; the interface is in
+  place so the swap touches no core.
 
 ## 8. Governance & cost
 
@@ -104,7 +109,9 @@ SEC-31) is kept as the seed and remains green; Round Five adds the structured
 ## Summary
 
 Round Five is complete offline and bound at binding-debt 0. The open legs are
-environmental, not code: the full Cognee adoption + comparative validation, live
-durable cognify on a running Hatchet engine, and hosted CI (billing-blocked). This
+environmental, not code: going live on Cognee (the wiring is built; the
+MEM-ENG-04 comparative validation and the deployment flip from `engine: local`
+are open), live durable cognify on a running Hatchet engine, and hosted CI
+(billing-blocked). This
 closes the planned requirement rounds (One to Five); the remaining backlog is the
 security-refinement consolidation (Security Batch 1 + Batch 2).
