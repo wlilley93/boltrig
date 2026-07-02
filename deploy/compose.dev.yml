@@ -32,6 +32,17 @@ services:
       - kernel
       - ui
 
+  kernel:
+    # Bind the kernel API to LOOPBACK only in dev. The base stack publishes
+    # ${KERNEL_PORT}:8000 on all interfaces, but dev-auth trusts x-boltrig-*
+    # headers with no verification, so an all-interfaces :8000 on a shared box is
+    # an impersonation surface. Caddy stays the single front door on :8080;
+    # localhost:8000 remains available for direct API debugging. !override
+    # replaces the base ports list (a plain list would merge-append the base
+    # all-interfaces binding straight back).
+    ports: !override
+      - "127.0.0.1:${KERNEL_PORT:-8000}:8000"
+
   ui:
     # The console is reachable only through the dev Caddy now (no direct host port).
     # !override replaces the base list entirely (a plain [] would merge-append and
