@@ -74,11 +74,21 @@ def test_rls_enforces_tenant_isolation_and_fails_closed():
                         "ON CONFLICT DO NOTHING"
                     )
 
-                # FORCE binds the owner: scoped to A, every visible row is A's
+                # FORCE binds the owner: scoped to A, every visible row is A's.
+                # A SUPERUSER connection bypasses RLS unconditionally (documented
+                # Postgres behaviour; FORCE only binds a non-superuser owner), so
+                # this owner-only assertion is meaningful only off a superuser DSN.
+                # The substantive proof below runs as the NOBYPASSRLS boltrig_app
+                # role, which binds regardless of the connecting user's superuser
+                # bit, so RLS is always exercised.
+                is_super = await c.fetchval(
+                    "SELECT rolsuper FROM pg_roles WHERE rolname = current_user"
+                )
                 async with c.transaction():
                     await c.execute("SELECT set_config('app.tenant_id','rls_A',true)")
                     rows = await c.fetch("SELECT tenant_id FROM nouns")
-                    assert rows and all(r["tenant_id"] == "rls_A" for r in rows)
+                    if not is_super:
+                        assert rows and all(r["tenant_id"] == "rls_A" for r in rows)
 
                 # the least-privilege role: sees only its tenant
                 async with c.transaction():
