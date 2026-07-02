@@ -429,6 +429,15 @@ class InMemoryStore(ChannelStoreMem):
     async def list_messages(self, tenant_id, conv_id):
         return [m for m in self._messages.get(conv_id, []) if m.tenant_id == tenant_id]
 
+    async def mark_message_superseded(self, tenant_id, message_id, superseded_by):
+        # Marker-only ([2026] VJS-COUNTY 4, D3): set superseded_by and NOTHING else,
+        # so content/events/run_id/created_at stay immutable. Tenant-scoped.
+        for msgs in self._messages.values():
+            for m in msgs:
+                if m.tenant_id == tenant_id and m.id == message_id:
+                    m.superseded_by = superseded_by
+                    return
+
     async def purge_closed_conversations(self, tenant_id, older_than):
         # M11 / SEC-74: hard-erase CLOSED conversations past the cutoff plus their
         # messages; audit rows are elsewhere and never touched. Tenant-scoped.

@@ -49,4 +49,14 @@ class ConversationMessage:
     run_id: RunId | None = None  # the fleet run this turn produced/used
     hitl_request_id: str | None = None  # set when this message is an inline HITL prompt
     events: list[dict[str, Any]] = field(default_factory=list)  # render data (tool/subagent)
+    # Inline, size-capped attachments carried on the message row itself
+    # ([2026] VJS-COUNTY 3): each is a record dict {name, media_type, data (base64),
+    # size} written/read ONLY via the message contract (add_message / list_messages).
+    # This is an inline blob in the row, NOT an object store; see docs/decisions.
+    attachments: list[dict[str, Any]] = field(default_factory=list)
+    # Append-plus-supersede marker ([2026] VJS-COUNTY 4): when a later turn
+    # regenerates this reply, this points at the id of the message that supersedes
+    # it. A superseded message is frozen (only this marker is ever written) and is
+    # filtered out of continuity - it is never presented as live.
+    superseded_by: str | None = None
     created_at: datetime = field(default_factory=utcnow)

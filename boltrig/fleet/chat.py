@@ -13,6 +13,8 @@ import nothing from it.
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
@@ -37,8 +39,9 @@ from .prompt_stack import wrap_untrusted
 from .pump import persist_new_work_items
 
 # turn_executor(*, tenant_id, user_id, role, grants, conversation_id, run_id,
-# message, relay) -> awaitable. It publishes events to relay.publish(run_id, ...)
-# during the run; ChatService closes the relay stream when it returns.
+# message, attachments, relay) -> awaitable. It publishes events to
+# relay.publish(run_id, ...) during the run; ChatService closes the relay stream
+# when it returns.
 TurnExecutor = Callable[..., Awaitable[Any]]
 
 _SCOPED_ROLES = {"org-admin", "compliance"}  # may read others' threads (SEC-25)
@@ -49,15 +52,124 @@ class ConversationForbidden(BoltrigError):
     reason = "conversation_forbidden"
 
 
+class AttachmentRejected(BoltrigError):
+    """A chat turn's attachments breached the ChatConfig caps ([2026] VJS-COUNTY 3).
+
+    The whole turn is refused at intake before anything is persisted or streamed;
+    over-cap input is never truncated to fit."""
+
+    status_code = 413
+    reason = "attachment_rejected"
+
+
+class RegenerateNotEligible(BoltrigError):
+    """Regenerate was asked of a message that is not the last assistant reply, or a
+    conversation with no reply to regenerate ([2026] VJS-COUNTY 4, D6)."""
+
+    status_code = 409
+    reason = "regenerate_not_eligible"
+
+
 def _can_read(conv: Conversation, user_id: str, role: str) -> bool:
     return conv.user_id == user_id or role in _SCOPED_ROLES
 
 
+def _is_text_attachment(media_type: str) -> bool:
+    """Only a ``text/*`` attachment is agent-readable and gets enveloped into the
+    task ([2026] VJS-COUNTY 3, D4). Every other media type is persisted record-only
+    and is NEVER decoded into the model input."""
+    return (media_type or "").lower().startswith("text/")
+
+
+def _validate_attachments(
+    attachments: list[dict[str, Any]] | None, cfg: ChatConfig
+) -> list[dict[str, Any]]:
+    """Enforce the attachment caps on DECODED bytes and count at chat intake
+    ([2026] VJS-COUNTY 3, D3), returning the normalised record list to persist.
+
+    The whole turn is rejected (nothing persisted, nothing streamed) the moment a
+    cap is breached; over-cap input is never truncated. Caps come only from the
+    typed ``ChatConfig`` (never call-site constants)."""
+    if not attachments:
+        return []
+    if not isinstance(attachments, list):
+        raise AttachmentRejected("attachments must be a list")
+    if len(attachments) > cfg.max_attachments:
+        raise AttachmentRejected(
+            f"too many attachments (max {cfg.max_attachments})"
+        )
+    total = 0
+    records: list[dict[str, Any]] = []
+    for raw in attachments:
+        if not isinstance(raw, dict):
+            raise AttachmentRejected("each attachment must be an object")
+        name = str(raw.get("name") or "attachment")
+        media_type = str(raw.get("media_type") or "application/octet-stream")
+        data = raw.get("data") or ""
+        try:
+            decoded = base64.b64decode(data, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise AttachmentRejected("attachment data is not valid base64") from exc
+        size = len(decoded)
+        if size > cfg.max_attachment_bytes:
+            raise AttachmentRejected(
+                f"attachment {name!r} is {size} bytes "
+                f"(max {cfg.max_attachment_bytes} decoded)"
+            )
+        total += size
+        if total > cfg.max_total_attachment_bytes:
+            raise AttachmentRejected(
+                f"attachments total {total} bytes "
+                f"(max {cfg.max_total_attachment_bytes} decoded)"
+            )
+        # Record-only persistence: the base64 blob plus metadata. Whether it is
+        # decoded into the task later is decided at composition time by media type.
+        records.append(
+            {"name": name, "media_type": media_type, "data": str(data), "size": size}
+        )
+    return records
+
+
+def attachment_task_supplement(attachments: list[dict[str, Any]] | None) -> str:
+    """Compose the model-visible supplement for a turn's attachments ([2026]
+    VJS-COUNTY 3, D4). ONLY ``text/*`` attachments are decoded, and each is wrapped
+    in a typed ``wrap_untrusted(kind="attachment")`` envelope so its bytes are DATA,
+    never instructions (M1 / SEC-72). Every non-text attachment is skipped here, so
+    its content never reaches the task or the model. Returns an empty string when no
+    text attachment is present, so the bare/continuity task is unchanged."""
+    parts: list[str] = []
+    for att in attachments or []:
+        if not _is_text_attachment(str(att.get("media_type", ""))):
+            continue  # record-only; never decoded into the task
+        try:
+            text = base64.b64decode(att.get("data") or "", validate=True).decode(
+                "utf-8", "replace"
+            )
+        except (binascii.Error, ValueError):
+            continue
+        parts.append(
+            wrap_untrusted("attachment", str(att.get("name") or "attachment"), text)
+        )
+    if not parts:
+        return ""
+    return "\n\n" + "\n\n".join(parts)
+
+
 class ChatService:
-    def __init__(self, store, relay, *, turn_executor: TurnExecutor | None = None) -> None:
+    def __init__(
+        self,
+        store,
+        relay,
+        *,
+        turn_executor: TurnExecutor | None = None,
+        chat_config: ChatConfig | None = None,
+    ) -> None:
         self._store = store
         self._relay = relay
         self._exec = turn_executor
+        # The attachment caps live on ChatConfig ([2026] VJS-COUNTY 3); absent a
+        # manifest the fail-closed defaults (conservative, non-zero) apply.
+        self._cfg = chat_config if chat_config is not None else ChatConfig()
 
     async def list_conversations(self, tenant_id: str, user_id: str) -> list[Conversation]:
         return await self._store.list_conversations(tenant_id, user_id)
@@ -81,7 +193,14 @@ class ChatService:
         message: str,
         conversation_id: str | None = None,
         grants: GrantSet | None = None,
+        attachments: list[dict[str, Any]] | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
+        # Enforce the attachment caps FIRST ([2026] VJS-COUNTY 3, D3): an over-cap
+        # turn is refused whole before ANY side effect - before a new conversation is
+        # created, before add_message, and before any stream yield - so nothing is
+        # persisted and over-cap input is never truncated to fit.
+        records = _validate_attachments(attachments, self._cfg)
+
         # RBAC before anything streams (SEC-25): continuing a thread requires access
         if conversation_id:
             conv = await self._store.get_conversation(tenant_id, conversation_id)
@@ -99,14 +218,14 @@ class ChatService:
         await self._store.add_message(
             ConversationMessage(
                 id=uuid.uuid4().hex, conversation_id=conv.id, tenant_id=tenant_id,
-                role=MessageRole.USER, content=message,
+                role=MessageRole.USER, content=message, attachments=records,
             )
         )
         yield {"type": "message_start", "run_id": run_id, "conversation_id": conv.id}
 
         collected: list[dict[str, Any]] = []
         async for event in self._drive(
-            tenant_id, user_id, conv.id, run_id, message, role, grants
+            tenant_id, user_id, conv.id, run_id, message, role, grants, records
         ):
             collected.append(event)
             yield event
@@ -127,7 +246,10 @@ class ChatService:
         conv.updated_at = utcnow()
         await self._store.update_conversation(conv)
 
-    async def _drive(self, tenant_id, user_id, conv_id, run_id, message, role, grants):
+    async def _drive(
+        self, tenant_id, user_id, conv_id, run_id, message, role, grants,
+        attachments=None,
+    ):
         if self._exec is None:
             yield {"type": "text_delta", "delta": "(no runtime configured)"}
             return
@@ -136,6 +258,7 @@ class ChatService:
             self._safe_exec(
                 tenant_id=tenant_id, user_id=user_id, conversation_id=conv_id,
                 run_id=run_id, message=message, role=role, grants=grants,
+                attachments=attachments or [],
             )
         )
         try:
@@ -143,6 +266,74 @@ class ChatService:
                 yield event
         finally:
             await task
+
+    async def regenerate_turn(
+        self,
+        *,
+        tenant_id: str,
+        user_id: str,
+        role: str,
+        conversation_id: str,
+        target_message_id: str,
+        grants: GrantSet | None = None,
+    ) -> tuple[ConversationMessage, str]:
+        """Regenerate the last assistant reply (append-plus-supersede, [2026]
+        VJS-COUNTY 4). Re-runs the last USER message on a NEW run id through the
+        ordinary executor path, APPENDS a fresh assistant message (add_message stays
+        insert-only - no forking, no in-place edit), and returns
+        ``(new_message, superseded_id)``. The caller then writes the marker via
+        ``store.mark_message_superseded`` (D2) and audits it (D7).
+
+        Eligibility is bounded to the LAST assistant message (D6): ``target_message_id``
+        must be the last non-superseded assistant reply, else ``RegenerateNotEligible``
+        is raised BEFORE anything is re-run or persisted (fail-closed). Owner-only
+        RBAC is enforced by the route, mirroring delete (D5)."""
+        messages = await self._store.list_messages(tenant_id, conversation_id)
+        live = [m for m in messages if m.superseded_by is None]
+        last_assistant = next(
+            (m for m in reversed(live) if m.role == MessageRole.ASSISTANT), None
+        )
+        if last_assistant is None or last_assistant.id != target_message_id:
+            raise RegenerateNotEligible(
+                "only the last assistant message may be regenerated"
+            )
+        last_user = next(
+            (m for m in reversed(live) if m.role == MessageRole.USER), None
+        )
+        if last_user is None:
+            raise RegenerateNotEligible("no user message to regenerate")
+
+        # Re-run the last user turn on a NEW run id through the ordinary audited
+        # executor path. The prior reply is still live at this point (the marker is
+        # written AFTER, per D2), so the executor's continuity read composes it as
+        # context; the append below is what makes this a fresh, separately-audited
+        # run rather than a mutation of the frozen prior reply.
+        run_id = uuid.uuid4().hex
+        collected: list[dict[str, Any]] = []
+        async for event in self._drive(
+            tenant_id, user_id, conversation_id, run_id,
+            last_user.content or "", role, grants, last_user.attachments,
+        ):
+            collected.append(event)
+
+        text = "".join(
+            e.get("delta", "") for e in collected if e.get("type") == "text_delta"
+        )
+        hitl_id = next(
+            (e.get("hitl_request_id") for e in collected if e.get("type") == "hitl"),
+            None,
+        )
+        new_message = ConversationMessage(
+            id=uuid.uuid4().hex, conversation_id=conversation_id, tenant_id=tenant_id,
+            role=MessageRole.ASSISTANT, content=text, run_id=run_id,
+            hitl_request_id=hitl_id, events=collected,
+        )
+        await self._store.add_message(new_message)
+        conv = await self._store.get_conversation(tenant_id, conversation_id)
+        if conv is not None:
+            conv.updated_at = utcnow()
+            await self._store.update_conversation(conv)
+        return new_message, last_assistant.id
 
     async def _safe_exec(self, **kw):
         run_id = kw["run_id"]
@@ -178,7 +369,7 @@ def build_turn_executor(
     chat_cfg = chat_config if chat_config is not None else ChatConfig()
 
     async def executor(*, tenant_id, user_id, role, grants, conversation_id,
-                       run_id, message, relay):
+                       run_id, message, relay, attachments=None):
         perms = await kernel.store.get_tenant_permissions(tenant_id)
         # Bare-turn authority is manifest data under a caller ceiling
         # ([2026] VJS-COUNTY 1): the chat.skills_by_role knob selects the turn's
@@ -213,8 +404,14 @@ def build_turn_executor(
         if use_continuity:
             # The current user message was already persisted by handle_turn, so
             # this scoped read returns the full ordered transcript ending in it.
+            # compose_turn_task FILTERS superseded messages ([2026] VJS-COUNTY 4,
+            # D4), so a regenerated-away reply never re-enters continuity.
             history = await kernel.store.list_messages(tenant_id, conversation_id)
             task = compose_turn_task(history, message)
+        # Attachments reach the model only as data ([2026] VJS-COUNTY 3, D4): text
+        # attachments are enveloped via wrap_untrusted(kind=attachment) and appended;
+        # every non-text attachment is skipped here, never decoded into the task.
+        task += attachment_task_supplement(attachments)
         try:
             result = await spawner.spawn(
                 tenant_id, task, turn_skills, {}, ctx,

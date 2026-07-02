@@ -303,6 +303,14 @@ class Store(Protocol):
     async def list_messages(
         self, tenant_id: str, conv_id: str
     ) -> list[ConversationMessage]: ...
+    # Append-plus-supersede marker ([2026] VJS-COUNTY 4): set ONLY superseded_by on
+    # the message, freezing everything else (content/events/run_id/created_at are
+    # immutable). This is the marker-only write regenerate uses; add_message stays
+    # insert-only, so there is no general-purpose message update. Tenant-scoped
+    # (SEC-08).
+    async def mark_message_superseded(
+        self, tenant_id: str, message_id: str, superseded_by: str
+    ) -> None: ...
     # Right-to-erasure (M11 / SEC-74): HARD-DELETE every CLOSED conversation whose
     # close/update timestamp is at or before ``older_than``, together with its
     # conversation_messages, and return how many conversations were purged. The

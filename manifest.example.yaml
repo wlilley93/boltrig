@@ -253,6 +253,15 @@ chat:
   skills_by_role:
     org-admin: ["authoring/control-plane"]
   default_skills: []
+  # Inline attachment caps ([2026] VJS-COUNTY 3). These are enforced on DECODED
+  # bytes/count at chat intake; the whole turn is refused (nothing persisted) if a
+  # cap is breached, never truncated. A manifest may only TIGHTEN a cap below its
+  # conservative code default (min(default, manifest)), never loosen it - attachments
+  # are inline blobs on the message row, so the ceiling keeps row growth bounded.
+  attachments:
+    max_count: 8            # <= code default 8
+    max_bytes: 262144       # <= code default 256 KiB per attachment (decoded)
+    max_total_bytes: 1048576  # <= code default 1 MiB total per turn (decoded)
 
 # === Round Three additions (S10) - the manifest stays the source of truth (C1)
 # --- evaluation harness (Epic EVAL) -----------------------------------------

@@ -163,6 +163,42 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
                      {"conversation_id": conversation_id, "title_len": len(title)})
         return JSONResponse({"status": "ok", "id": conversation_id})
 
+    @app.post("/v1/me/conversations/{conversation_id}/messages/{message_id}/regenerate")
+    async def regenerate_message(
+        conversation_id: str, message_id: str, request: Request, k=K, p=P
+    ) -> JSONResponse:
+        # Append-plus-supersede ([2026] VJS-COUNTY 4). Owner-only, fail-closed,
+        # mirroring the delete route (D5): a scoped read role may READ a thread but
+        # never regenerate it, so a non-owner is refused 403 with NO write.
+        conv = await k.store.get_conversation(p.tenant_id, conversation_id)
+        if conv is None:
+            return JSONResponse({"status": "error", "reason": "not_found"}, status_code=404)
+        if conv.user_id != p.subject:
+            return JSONResponse({"status": "denied", "reason": "not your conversation"},
+                                status_code=403)
+        chat_svc = getattr(request.app.state, "chat", None)
+        if chat_svc is None:
+            return JSONResponse({"status": "error", "reason": "chat_unavailable"},
+                                status_code=503)
+        # Re-run the last user turn on a NEW run id through the ordinary audited
+        # executor path, appending a fresh assistant reply. Eligibility is bounded to
+        # the LAST assistant message (D6); RegenerateNotEligible (409) propagates to
+        # the central handler with nothing written.
+        new_message, superseded_id = await chat_svc.regenerate_turn(
+            tenant_id=p.tenant_id, user_id=p.subject, role=p.role,
+            conversation_id=conversation_id, target_message_id=message_id,
+            grants=p.grants,
+        )
+        # THEN set the marker (D2), marker-only (D3), and audit the supersede keys
+        # only - never any message content (D7).
+        await k.store.mark_message_superseded(p.tenant_id, superseded_id, new_message.id)
+        await _audit(k, p, "data.conversation.message.supersede",
+                     {"conversation_id": conversation_id, "superseded": superseded_id,
+                      "superseded_by": new_message.id, "run_id": new_message.run_id})
+        return JSONResponse({"status": "ok", "conversation_id": conversation_id,
+                             "message_id": new_message.id, "superseded": superseded_id,
+                             "run_id": new_message.run_id})
+
     # === Developer & Connections: personal access tokens (PAT-*, SEC-34) ===
     @app.get("/v1/me/tokens")
     async def list_my_tokens(k=K, p=P) -> dict:

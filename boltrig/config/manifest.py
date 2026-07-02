@@ -179,16 +179,34 @@ class PrivacyConfig:
     redact_fields: tuple[str, ...] = ()
 
 
+# Attachment caps ([2026] VJS-COUNTY 3): conservative, NON-ZERO code defaults for
+# inline message attachments. They are the ceiling - a manifest may only TIGHTEN a
+# cap (min(default, manifest)), never loosen it (see ``_tighten_cap`` below). Kept
+# deliberately small because an attachment is an inline blob on the message row
+# (row-growth cost is real; docs/decisions/0006-inline-chat-attachments.md).
+DEFAULT_MAX_ATTACHMENTS = 8
+DEFAULT_MAX_ATTACHMENT_BYTES = 256 * 1024  # 256 KiB per attachment (decoded)
+DEFAULT_MAX_TOTAL_ATTACHMENT_BYTES = 1024 * 1024  # 1 MiB total per turn (decoded)
+
+
 @dataclass(frozen=True)
 class ChatConfig:
     """Bare chat-turn authority ([2026] VJS-COUNTY 1): which skill set a bare
     chat turn spawns with, per caller role. The turn executor selects
     ``skills_by_role.get(role, default_skills)``; the shipped author-role
     mapping is carried by manifest.example.yaml (policy-as-data, P7), so these
-    code defaults stay empty and a manifest-less boot is fail-closed."""
+    code defaults stay empty and a manifest-less boot is fail-closed.
+
+    It also carries the inline-attachment caps ([2026] VJS-COUNTY 3): typed data
+    with conservative NON-ZERO code defaults. ``_parse_chat`` lets a manifest only
+    tighten each cap below its default, never loosen it, so the code default is a
+    hard ceiling on how much a turn may carry."""
 
     skills_by_role: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
     default_skills: tuple[str, ...] = ()
+    max_attachments: int = DEFAULT_MAX_ATTACHMENTS
+    max_attachment_bytes: int = DEFAULT_MAX_ATTACHMENT_BYTES
+    max_total_attachment_bytes: int = DEFAULT_MAX_TOTAL_ATTACHMENT_BYTES
 
 
 @dataclass(frozen=True)
@@ -452,14 +470,36 @@ def _parse_privacy(raw: Mapping[str, Any]) -> PrivacyConfig:
     )
 
 
+def _tighten_cap(default: int, raw_value: Any) -> int:
+    """Resolve an attachment cap: a manifest may only TIGHTEN it, never loosen it
+    ([2026] VJS-COUNTY 3, D2). Absent/malformed manifest value keeps the code
+    default; a supplied value is clamped into ``[0, default]`` so it can only ever
+    reduce the ceiling (0 disables attachments entirely, a valid tightening)."""
+    if raw_value is None:
+        return default
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError):
+        return default
+    return min(default, max(0, value))
+
+
 def _parse_chat(raw: Mapping[str, Any]) -> ChatConfig:
     skills_by_role = {
         str(role): _as_tuple(skills)
         for role, skills in (raw.get("skills_by_role") or {}).items()
     }
+    caps = raw.get("attachments") or {}
     return ChatConfig(
         skills_by_role=skills_by_role,
         default_skills=_as_tuple(raw.get("default_skills")),
+        max_attachments=_tighten_cap(DEFAULT_MAX_ATTACHMENTS, caps.get("max_count")),
+        max_attachment_bytes=_tighten_cap(
+            DEFAULT_MAX_ATTACHMENT_BYTES, caps.get("max_bytes")
+        ),
+        max_total_attachment_bytes=_tighten_cap(
+            DEFAULT_MAX_TOTAL_ATTACHMENT_BYTES, caps.get("max_total_bytes")
+        ),
     )
 
 

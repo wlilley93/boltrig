@@ -671,3 +671,33 @@ invariants:
     tests:
       - tests/kernel/test_event_relay.py::test_closed_streams_are_bounded_and_oldest_forgotten
       - tests/kernel/test_event_relay.py::test_open_streams_are_never_evicted
+
+  # --- Chat attachments ([2026] VJS-COUNTY 3) --------------------------------
+  SEC-79:
+    description: Inline attachment caps are enforced fail-closed at chat intake - an over-cap turn (count, per-attachment decoded bytes, or total decoded bytes) is rejected whole before add_message and before any stream yield with nothing persisted, over-cap input is never truncated, and a manifest can only tighten a cap below its conservative non-zero code default (min(default, manifest)), never loosen it.
+    tests:
+      - tests/security/test_chat_attachments.py::test_over_cap_turn_is_rejected_with_nothing_persisted
+      - tests/security/test_chat_attachments.py::test_per_attachment_and_total_byte_caps_enforced_on_decoded_bytes
+      - tests/security/test_chat_attachments.py::test_manifest_can_only_tighten_caps_never_loosen
+  SEC-80:
+    description: Attachment content reaches the model only as data - an agent-readable text/* attachment is enveloped via wrap_untrusted(kind=attachment) into the task, and every non-text attachment persists record-only and is never decoded into the task or model input.
+    tests:
+      - tests/security/test_chat_attachments.py::test_text_attachment_is_enveloped_into_the_task
+      - tests/security/test_chat_attachments.py::test_non_text_attachment_never_enters_the_task
+
+  # --- Regenerate: append-plus-supersede ([2026] VJS-COUNTY 4) ---------------
+  SEC-81:
+    description: Regenerate is append-plus-supersede - it appends a fresh assistant reply on a NEW run id via insert-only add_message (no forking, no in-place edit) and the marker write freezes the superseded message, setting only superseded_by while content/events/run_id/created_at stay immutable.
+    tests:
+      - tests/security/test_chat_regenerate.py::test_regenerate_appends_new_reply_and_freezes_the_old
+      - tests/security/test_chat_regenerate.py::test_marker_write_sets_only_superseded_by
+  SEC-82:
+    description: The continuity composer excludes superseded messages and stays prefix-stable for the surviving set - a regenerated-away reply is never composed into a prompt (never presented as live or re-fed to the model), and an earlier turn's render remains a prefix of a later one over the non-superseded messages.
+    tests:
+      - tests/security/test_chat_regenerate.py::test_continuity_excludes_superseded_and_is_prefix_stable
+  SEC-83:
+    description: Regenerate is owner-only fail-closed and bounded to the last assistant message - a non-owner or scoped-read caller gets 403 with no write, regenerating any earlier (non-last) message is rejected with nothing written, and the marker write emits the data.conversation.message.supersede audit event with keys only (no content).
+    tests:
+      - tests/security/test_chat_regenerate.py::test_regenerate_is_owner_only_fail_closed
+      - tests/security/test_chat_regenerate.py::test_regenerate_rejects_earlier_message
+      - tests/security/test_chat_regenerate.py::test_supersede_emits_keys_only_audit_event

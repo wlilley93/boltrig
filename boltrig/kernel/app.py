@@ -126,6 +126,10 @@ class RespondBody(BaseModel):
 class ChatBody(BaseModel):
     message: str
     conversation_id: str | None = None
+    # Inline, size-capped attachments ([2026] VJS-COUNTY 3): each is a record
+    # {name, media_type, data (base64)}. Caps are enforced fail-closed at intake
+    # from ChatConfig; an over-cap turn is refused whole before anything persists.
+    attachments: list[dict[str, Any]] = Field(default_factory=list)
 
 
 # Spawner seam: the fleet attaches an async (principal, body) -> dict callable.
@@ -316,6 +320,7 @@ def create_app(
         gen = chat_svc.handle_turn(
             tenant_id=p.tenant_id, user_id=p.subject, role=p.role, grants=p.grants,
             message=body.message, conversation_id=body.conversation_id,
+            attachments=body.attachments,
         )
         # RBAC / access errors happen before the first event and propagate to the
         # central exception handler (canonical envelope) - the stream hasn't begun.
@@ -366,7 +371,9 @@ def create_app(
                 {
                     "id": m.id, "role": m.role.value, "content": m.content,
                     "run_id": m.run_id, "hitl_request_id": m.hitl_request_id,
-                    "events": m.events, "created_at": m.created_at.isoformat(),
+                    "events": m.events, "attachments": m.attachments,
+                    "superseded_by": m.superseded_by,
+                    "created_at": m.created_at.isoformat(),
                 }
                 for m in messages
             ]

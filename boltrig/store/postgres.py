@@ -803,11 +803,12 @@ class PostgresStore(ChannelStorePG):
     async def add_message(self, m: ConversationMessage):
         await self._pool.execute(
             """INSERT INTO conversation_messages
-               (id, conversation_id, tenant_id, role, content, run_id, hitl_request_id, events, created_at)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+               (id, conversation_id, tenant_id, role, content, run_id, hitl_request_id,
+                events, attachments, superseded_by, created_at)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
                ON CONFLICT (tenant_id, id) DO NOTHING""",
             m.id, m.conversation_id, m.tenant_id, m.role.value, m.content, m.run_id,
-            m.hitl_request_id, m.events, m.created_at,
+            m.hitl_request_id, m.events, m.attachments, m.superseded_by, m.created_at,
         )
 
     async def list_messages(self, tenant_id, conv_id):
@@ -817,6 +818,15 @@ class PostgresStore(ChannelStorePG):
             tenant_id, conv_id,
         )
         return [_message(r) for r in rows]
+
+    async def mark_message_superseded(self, tenant_id, message_id, superseded_by):
+        # Marker-only ([2026] VJS-COUNTY 4, D3): the UPDATE touches superseded_by and
+        # NOTHING else, so content/events/run_id/created_at are frozen. Tenant-scoped.
+        await self._pool.execute(
+            """UPDATE conversation_messages SET superseded_by=$3
+               WHERE tenant_id=$1 AND id=$2""",
+            tenant_id, message_id, superseded_by,
+        )
 
     async def purge_closed_conversations(self, tenant_id, older_than):
         # M11 / SEC-74 right-to-erasure: HARD-DELETE CLOSED conversations past the
@@ -1368,6 +1378,7 @@ def _message(r):
         id=r["id"], conversation_id=r["conversation_id"], tenant_id=r["tenant_id"],
         role=MessageRole(r["role"]), content=r["content"], run_id=r["run_id"],
         hitl_request_id=r["hitl_request_id"], events=list(r["events"] or []),
+        attachments=list(r["attachments"] or []), superseded_by=r["superseded_by"],
         created_at=r["created_at"],
     )
 

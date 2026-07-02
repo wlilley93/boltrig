@@ -77,7 +77,16 @@ def compose_turn_task(messages: list[ConversationMessage], current_message: str)
     ends with the just-persisted current user turn, so rendering it yields the
     whole context terminating in the current message. When there is no history
     (continuity off, or a store that did not persist), fall back to the bare
-    current message so behaviour is identical to the pre-continuity path."""
-    if not messages:
+    current message so behaviour is identical to the pre-continuity path.
+
+    Superseded messages are FILTERED before rendering ([2026] VJS-COUNTY 4, D4): a
+    reply that a regenerate replaced (``superseded_by`` set) is never composed into
+    a prompt, so it can neither be presented as live nor re-enter the model context.
+    Because a supersede only ever replaces the LAST assistant reply with a fresh one
+    APPENDED at the end, the surviving (non-superseded) set stays append-structured,
+    so ``render_transcript`` remains prefix-stable over it (the gateway-cache
+    guarantee, SEC-46) - a superseded message is dropped, never edited in place."""
+    live = [m for m in messages if getattr(m, "superseded_by", None) is None]
+    if not live:
         return current_message
-    return render_transcript(messages)
+    return render_transcript(live)

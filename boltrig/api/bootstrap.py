@@ -424,6 +424,9 @@ def build_app():
             turn_executor=build_turn_executor(
                 kernel, build_spawner(kernel), chat_config=chat_cfg
             ),
+            # The same ChatConfig carries the attachment caps ([2026] VJS-COUNTY 3);
+            # ChatService enforces them fail-closed at intake.
+            chat_config=chat_cfg,
         )
 
     def platform_factory(kernel):

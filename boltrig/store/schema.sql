@@ -502,6 +502,8 @@ CREATE TABLE IF NOT EXISTS conversation_messages (
     run_id          TEXT,                               -- the fleet run this turn used
     hitl_request_id TEXT,                               -- set for an inline HITL prompt
     events          JSONB,                              -- structured render data
+    attachments     JSONB,                              -- inline size-capped attachment records ([2026] VJS-COUNTY 3)
+    superseded_by   TEXT,                               -- append-plus-supersede marker ([2026] VJS-COUNTY 4)
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (tenant_id, id)
 );
