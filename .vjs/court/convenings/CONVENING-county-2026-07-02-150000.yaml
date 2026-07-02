@@ -1,0 +1,8 @@
+id: CONVENING-county-2026-07-02-150000
+court: county
+submission_id: SUBMISSION-2026-07-02-145651
+issue: browser_test_harness_dependency
+case_file_digest: sha256:812c70431a4023deac61b42a5dfbba0aa4712c3f645c8a4f07f43ad8cf3fb9dc
+bench:
+- county-judge-1
+convened_at: 2026-07-02T15:00:00.030125435+00:00

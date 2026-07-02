@@ -1,0 +1,12 @@
+id: LOG-2026-07-02-133033
+time: 2026-07-02T13:30:33.519563372+00:00
+actor: lexby
+kind: design_fork
+issue: bare_chat_turn_default_authority
+decision: 'County Court [2026] VJS-COUNTY 1 adopts Option C modified: manifest knob chat.skills_by_role + chat.default_skills (shipped empty; authoring skill defaulted for author-capable roles) and a MANDATORY caller-role-resolved grant ceiling on every chat spawn, empty on resolution failure; missing/invalid skills reduce grants only; dispatch untouched; pinned by new tests per D5.'
+basis:
+- 2026-VJS-CC-BOLTRIG-CHAT-AUTHORITY-001
+risk: high
+reversibility: easy
+court_required: false
+why: First-impression authority fork recorded by Beat 3.5; kernel routed court_required=true; symmetric case file SUBMISSION-2026-07-02-132627; single-judge County Court verified spawn.py ceiling intersect, chat.py skills=[] and SEC-77 in code before ruling. Implementation follows as a kernel beat.

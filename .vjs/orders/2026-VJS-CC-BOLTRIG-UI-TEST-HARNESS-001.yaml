@@ -1,0 +1,43 @@
+id: 2026-VJS-CC-BOLTRIG-UI-TEST-HARNESS-001
+court: county
+jurisdiction: default
+repo_code: null
+status: binding
+issue: browser_test_harness_dependency
+holding: |
+  Option A is adopted with conditions: @playwright/test enters ui/package.json as a dev-only dependency at an exact pinned version, with a chromium-only config and one hermetic smoke spec driving the built UI against the deterministic no-runtime-configured path. The smoke is gating (CI-blocking). The runtime image must remain nginx plus dist with no node_modules and no browser binaries. Options B (ad-hoc scratchpad scripts) and C (vitest plus jsdom) are rejected.
+directives:
+- id: D1
+  actor: lexby
+  must: add_playwright_test_as_exact_pinned_devdependency_and_regenerate_lockfile_so_frozen_lockfile_build_still_resolves
+  when: null
+- id: D2
+  actor: lexby
+  must: add_chromium_only_playwright_config_with_webserver_serving_built_ui_no_credentials_no_external_egress
+  when: null
+- id: D3
+  actor: lexby
+  must: add_one_smoke_spec_asserting_the_deterministic_no_runtime_configured_chat_reply
+  when: null
+- id: D4
+  actor: lexby
+  must: add_gating_ci_job_running_the_smoke_as_a_required_status_check
+  when: null
+- id: D5
+  actor: lexby
+  must: prove_runtime_image_hygiene_nginx_plus_dist_only_and_keep_ignore_scripts_in_the_docker_build_stage
+  when: null
+forbidden:
+- placing_playwright_or_any_test_package_in_runtime_dependencies
+- adding_browser_binaries_or_test_tooling_to_the_ui_dockerfile
+- requiring_model_credentials_or_network_egress_in_the_smoke
+- floating_the_version_with_caret_or_tilde
+- expanding_scope_to_vitest_jsdom_or_a_multi_browser_matrix_under_this_ruling
+exceptions: null
+supersedes: []
+source_opinion: null
+runtime_summary: |
+  The UI carries @playwright/test as an exact-pinned dev-only dependency with a chromium-only hermetic smoke that asserts the no-runtime-configured chat contract and gates CI. Runtime images stay nginx plus dist; the smoke needs no credentials and no egress. Ad-hoc scratchpad verification and jsdom substitutes are rejected.
+created_at: 2026-07-02T15:00:00Z
+citation: '[2026] VJS-COUNTY 2'
+assent_source: standing_bounded_assent

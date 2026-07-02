@@ -1,0 +1,60 @@
+id: 2026-VJS-CC-BOLTRIG-SELF-IMPROVEMENT-AUTHORITY-001
+court: county
+jurisdiction: default
+repo_code: null
+status: binding
+issue: self_improvement_authority_boundary
+holding: |
+  Option A is adopted. The self-improvement loop may raise COMPETENCE but never
+  AUTHORITY. Provenance is authority-blind: a learned, generated, precreated, or
+  reflected-upon artifact executes under exactly the same grant ceiling, scope,
+  tier, and HITL gates as an authored one, enforced at the single dispatch
+  chokepoint regardless of where the artifact came from. No self-improvement path
+  may add a grant, escalate a tier, widen a scope, bypass or downgrade a HITL
+  gate, or let any workflow run beyond its author's ceiling. Promotion of a
+  generated workflow to learned or candidate status changes reuse likelihood and
+  ranking ONLY, never the authority under which it runs. memory.improve stays
+  reweight-only and may not mutate scope, grants, tier, or authority. Eval-gated
+  promotion and selection loops, when built, must gate on competence metrics
+  only and are forbidden from altering any authority field. The rail is enforced
+  by data and the provenance-blind chokepoint, not by trust, and is entrenched by
+  a machine-checked invariant. Options B (leave implicit) and C (defer) are
+  rejected: the loop is already live and already reuses learned artifacts, so the
+  boundary must be pinned now, before the loop is extended.
+directives:
+- id: D1
+  actor: lexby
+  must: pin_invariant_self_improvement_never_widens_authority_bound_to_tests_a_learned_or_generated_workflow_executes_under_the_callers_grant_ceiling_and_b_memory_improve_cannot_mutate_scope_or_authority_and_c_provenance_is_never_read_as_an_authority_signal
+  when: after_beat6_invariants_land_to_avoid_a_yaml_collision
+- id: D2
+  actor: lexby
+  must: keep_every_learned_generated_or_reflected_artifact_flowing_through_the_one_dispatch_chokepoint_so_grant_and_hitl_enforcement_is_provenance_blind
+  when: null
+- id: D3
+  actor: lexby
+  must: keep_reflection_writes_going_through_the_chokepoint_memory_verb_so_the_scope_secret_and_injection_screens_always_run_on_a_lesson
+  when: null
+- id: D4
+  actor: lexby
+  must: constrain_future_eval_gated_promotion_and_selection_loops_to_competence_signals_only_promotion_changes_ranking_and_reuse_likelihood_never_execution_authority
+  when: when_those_legs_are_built
+forbidden:
+- any_learned_generated_precreated_or_reflected_artifact_executing_under_a_widened_ceiling_scope_tier_or_relaxed_hitl_gate
+- memory_improve_or_any_reflection_path_mutating_scope_grants_tier_or_authority_fields
+- reading_provenance_learned_or_generated_as_an_authority_or_trust_signal_at_dispatch
+- a_self_improvement_path_adding_a_grant_escalating_a_tier_or_bypassing_a_hitl_gate
+- promotion_of_a_generated_workflow_changing_the_authority_under_which_it_runs_rather_than_only_its_reuse_likelihood
+exceptions: null
+supersedes: []
+source_opinion: null
+runtime_summary: |
+  Self-improvement raises competence, never authority. Learned/generated/reflected
+  artifacts run under the SAME grant ceiling, scope, tier, and HITL gates as
+  authored ones, enforced provenance-blind at the one dispatch chokepoint.
+  memory.improve is reweight-only; promotion changes reuse likelihood, never
+  execution authority; future eval-gated promotion and selection loops gate on
+  competence only. Pinned by a machine-checked invariant. Leaving the boundary
+  implicit or deferring it are rejected because the loop is already live.
+created_at: 2026-07-02T20:29:10Z
+citation: '[2026] VJS-COUNTY 5'
+assent_source: standing_bounded_assent

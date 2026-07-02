@@ -1,0 +1,59 @@
+id: SUBMISSION-2026-07-02-202839
+court_requested: county
+jurisdiction: default
+question: May a self-improvement path (reflection, lesson recall, learned-workflow reuse, memory.improve, eval-gated promotion, selection loops) ever change the AUTHORITY under which work runs (grant ceiling, scope, tier, HITL gates) rather than only COMPETENCE, and how should that boundary be entrenched?
+facts: |
+  # Case: the authority boundary of the self-improvement loop
+
+  ## Facts (verified)
+  1. The learning loop is now LIVE in main (commit d41f7fc): terminal work items
+     get a deterministic outcome_score; a clean success carrying a GENERATED
+     workflow is re-saved as source='learned' (learn_from_success) for reuse;
+     post-run reflection distils a bounded lesson stored THROUGH the kernel
+     chokepoint (memory.remember), off by default (BOLTRIG_REFLECT).
+  2. select_or_generate_workflow consults the library FIRST and reuses a matching
+     (learned/precreated/generated) workflow before synthesising.
+  3. Every verb, whether from an authored or a learned/generated workflow, runs
+     through the ONE dispatch chokepoint, which binds schema -> grant -> HITL ->
+     rate-limit -> idempotency -> credential -> execute -> audit. Grants are
+     enforced at dispatch regardless of a workflow's provenance.
+  4. memory.improve is documented as reweight-only and cannot change scope or
+     authority; reflection writes pass the memory adapter's scope/secret/injection
+     screens because they go through the chokepoint.
+  5. Planned next legs of the loop (engine-plan): eval-gated promotion of
+     generated workflows, harvesting free signals (regenerate = negative, HITL =
+     endorsement), and model/skill selection loops.
+  6. There is today NO explicit, machine-pinned invariant that the loop may not
+     widen authority. The property holds structurally (3, 4) but is not entrenched.
+
+  ## The question
+  May a self-improvement path (reflection, lesson recall, learned-workflow reuse,
+  memory.improve, eval-gated promotion, selection loops) ever change the AUTHORITY
+  under which work runs - the grant ceiling, scope, tier, or HITL gates - as
+  opposed to merely changing COMPETENCE (which artifact is chosen, how it is
+  weighted, how likely it is reused)? And how should that boundary be entrenched?
+
+  ## Options
+  A. Rule the boundary explicitly and entrench it: self-improvement may raise
+     competence, never authority; every learned/generated artifact executes under
+     the SAME ceiling as an authored one, enforced at the chokepoint by data and
+     provenance-blindness; pin an invariant + tests. Strongest case: protects a
+     now-live capability against a whole class of future escalation bugs before
+     the loop is extended (eval-gated promotion, selection). Cost: one more
+     binding rail to honour in every future loop leg.
+  B. Leave it implicit (rely on the chokepoint enforcing grants regardless of
+     provenance, as it does today). Strongest case: no new ceremony; the property
+     already holds. Cost: it is unpinned, so a future leg (promotion, a
+     provenance-aware shortcut) could silently erode it with nothing to catch it.
+  C. Defer until eval-gated promotion is built. Cost: the loop is already live and
+     already reuses learned artifacts; deferring leaves the live capability
+     ungoverned in the interim.
+
+  ## Constraints
+  The repo's doctrine: policy-as-data, credentials kernel-only, the single
+  chokepoint, the invariant gate at binding_debt=0. Any rail adopted must be
+  enforced by data + the chokepoint, not by trust, and must be bound to a real
+  test so the gate holds it.
+requested_order: TBD
+private_boundary: local
+word_count: 487

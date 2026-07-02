@@ -1,0 +1,44 @@
+id: SUBMISSION-2026-07-02-132627
+court_requested: county
+jurisdiction: default
+question: 'What default verb authority should a bare Boltrig chat turn''s spawned child carry: zero-grant with a manifest chat-skill data knob (A), caller-grant minting (B), or the composite knob-with-default-authoring-skill-under-caller-ceiling (C)?'
+facts: |
+  # Case: default verb authority of a bare Boltrig chat turn
+
+  ## Facts (verified)
+  1. Chokepoint order fixed; every consequence-high verb pauses for human
+     approval on first invoke (dispatch.py).
+  2. An ephemeral child's grants = union of its loaded skills' tool_grants,
+     optionally intersected with a spawner-supplied ceiling (spawn.py:297-301).
+     No stored per-agent grant list.
+  3. The chat turn executor spawns with skills=[], so a bare chat turn carries
+     NO verb grants; every verb from bare chat is denied at the grant check.
+     This is shipped behaviour (chat.py build_turn_executor).
+  4. Beat 3.5 added governed control.* verbs for every console authoring write
+     plus an authoring skill (tool_grants: [control.*]). SEC-77 proves the
+     chat-style spawn WITH that skill reaches control.* under the caller
+     ceiling, HITL holds it, and a non-author ceiling strips control.*.
+  5. Product promise: the user should be able to use the chat rather than the
+     interface. The console invokes verbs with the user's own grants directly.
+
+  ## Options
+  A. Keep zero-grant default; add a manifest-selected chat skill set (data
+     knob, default empty). Fail-closed, policy-as-data; but parity is inert
+     until configured, and chat vs console authority can diverge.
+  B. Mint the caller's grants onto the child (ceiling = caller grants). Parity
+     by construction and HITL still backstops; but every bare turn hands the
+     orchestrator the user's FULL ambient authority on the product's largest
+     injection surface, against least-privilege and K-2 doctrine.
+  C. Composite: the A knob, plus the authoring skill in the DEFAULT manifest
+     for author-role callers, child ceiling intersected with caller grants
+     (both mechanisms exist). Out-of-box parity for the promised users,
+     fail-closed for everyone else, data-expressed; default-manifest policy
+     plus skill upkeep are the costs.
+
+  ## Constraints
+  Chokepoint and HITL non-negotiable; fail-closed (bad config yields fewer
+  grants, never more); the choice must be data (manifest/skills), not code in
+  the loop; changing the shipped zero-grant default requires this ruling.
+requested_order: TBD
+private_boundary: local
+word_count: 333

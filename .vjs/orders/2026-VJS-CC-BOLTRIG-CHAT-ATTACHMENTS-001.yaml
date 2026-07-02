@@ -1,0 +1,48 @@
+id: 2026-VJS-CC-BOLTRIG-CHAT-ATTACHMENTS-001
+court: county
+jurisdiction: default
+repo_code: null
+status: binding
+issue: chat_attachment_storage_shape
+holding: |
+  Option A is adopted with modification: chat attachments are an inline size-capped attachments JSONB field on the conversation_messages row, persisted through the existing message contract. Caps live as typed data on ChatConfig with conservative non-zero code defaults; a manifest may only tighten a cap, never loosen it. Over-cap turns are rejected, not truncated, before any persistence or streaming. Agent-readable text attachments pass wrap_untrusted; all other types persist record-only and never enter the task. Option B (object-storage seam plus MinIO now) is rejected as premature; Option C (defer) is rejected.
+directives:
+- id: D1
+  actor: lexby
+  must: add_attachments_jsonb_field_on_conversation_message_plus_column_and_migration_read_write_via_existing_message_contract_only
+  when: null
+- id: D2
+  actor: lexby
+  must: put_caps_as_typed_chatconfig_data_with_nonzero_code_defaults_manifest_min_with_default_tighten_only
+  when: null
+- id: D3
+  actor: lexby
+  must: enforce_caps_on_decoded_bytes_and_count_at_chat_intake_reject_before_add_message_and_before_any_yield
+  when: null
+- id: D4
+  actor: lexby
+  must: envelope_agent_readable_text_via_wrap_untrusted_kind_attachment_and_keep_all_other_types_record_only_never_decoded_into_the_task
+  when: null
+- id: D5
+  actor: lexby
+  must: pin_invariants_overcap_rejected_nothing_persisted_manifest_cannot_loosen_envelope_enforced_nontext_never_in_task_debt_stays_zero
+  when: null
+- id: D6
+  actor: lexby
+  must: record_in_honesty_docs_inline_blob_in_row_not_an_object_store_with_row_growth_cost_stated
+  when: null
+forbidden:
+- introducing_minio_s3_object_store_storagebackend_interface_or_multipart_route_under_this_ruling
+- adding_any_storage_credential_or_credential_surface_to_chat_or_fleet_layers
+- caps_as_code_constants_at_the_call_site_or_manifest_raising_a_cap_above_its_code_default
+- feeding_attachment_content_to_the_model_outside_wrap_untrusted
+- persisting_or_streaming_before_cap_checks_or_truncating_overcap_input_to_fit
+- describing_the_inline_field_as_an_object_store_in_any_doc
+exceptions: null
+supersedes: []
+source_opinion: null
+runtime_summary: |
+  Chat attachments ride inline as a size-capped attachments JSONB field on the message row through the existing message contract. Caps are ChatConfig data, tighten-only from conservative code defaults, enforced on decoded bytes at intake with rejection before persistence. Text made agent-readable is enveloped via wrap_untrusted; everything else is record-only. No object store, no new dependency; the future seam, if earned, slots behind this message contract by court order.
+created_at: 2026-07-02T15:00:30Z
+citation: '[2026] VJS-COUNTY 3'
+assent_source: standing_bounded_assent

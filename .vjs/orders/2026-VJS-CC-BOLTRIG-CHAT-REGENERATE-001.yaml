@@ -1,0 +1,55 @@
+id: 2026-VJS-CC-BOLTRIG-CHAT-REGENERATE-001
+court: county
+jurisdiction: default
+repo_code: null
+status: binding
+issue: regenerate_amendment_vocabulary
+holding: |
+  Option B is adopted with modification: regenerate appends a fresh assistant message from a new normally-audited run and records the disowning additively by setting a single nullable forward pointer (superseded_by = new run id) on the prior assistant message. The prior message's content, events, run_id and created_at are frozen forever; the marker is the amendment, expressed as data, written by a narrow marker-only store method. Superseded turns are filtered deterministically by the continuity composer and collapsed in the head. Eligibility is bounded to the last assistant message of a conversation; the write is owner-only, fail-closed, and audited. Options C (replace in place) and D (forking) are rejected outright; Option A (plain append) is rejected as dishonest continuity input.
+directives:
+- id: D1
+  actor: lexby
+  must: add_nullable_superseded_by_field_on_conversation_message_wired_through_both_store_readers_and_the_postgres_insert
+  when: null
+- id: D2
+  actor: lexby
+  must: rerun_last_user_message_on_a_new_run_id_through_the_ordinary_audited_executor_path_then_set_the_marker_via_a_narrow_mark_message_superseded_store_method
+  when: null
+- id: D3
+  actor: lexby
+  must: freeze_superseded_messages_marker_write_sets_superseded_by_and_nothing_else
+  when: null
+- id: D4
+  actor: lexby
+  must: filter_superseded_messages_from_the_continuity_composer_keeping_the_render_deterministic_for_the_nonsuperseded_set
+  when: null
+- id: D5
+  actor: lexby
+  must: gate_owner_only_fail_closed_mirroring_the_delete_route_scoped_read_roles_get_403_with_no_write
+  when: null
+- id: D6
+  actor: lexby
+  must: bound_eligibility_to_the_last_assistant_message_rejecting_regenerate_of_any_earlier_message
+  when: null
+- id: D7
+  actor: lexby
+  must: emit_audit_event_data_conversation_message_supersede_on_the_marker_write
+  when: null
+- id: D8
+  actor: lexby
+  must: pin_invariants_immutability_continuity_exclusion_with_prefix_stability_fail_closed_rbac_last_message_only_audit_row_on_supersede
+  when: null
+forbidden:
+- mutating_persisted_message_content_events_run_id_or_created_at
+- introducing_conversation_forking_or_branching_for_this_need
+- adding_a_general_purpose_update_message_store_method_add_message_stays_insert_only
+- feeding_a_superseded_reply_into_continuity_input_or_presenting_it_as_live
+- permitting_any_nonowner_to_regenerate_or_touching_the_audit_chain
+exceptions: null
+supersedes: []
+source_opinion: null
+runtime_summary: |
+  Regenerate is append-plus-supersede: a new audited run appends the fresh assistant message and the old one gains only a superseded_by pointer via a narrow marker-only write. Content and events are frozen; continuity filters superseded turns; only the last assistant message is eligible; owner-only fail-closed RBAC; the marker write is audited. Replace-in-place, forking, plain append, and a general update_message are all forbidden. Regenerating earlier history requires a fresh ruling.
+created_at: 2026-07-02T15:00:45Z
+citation: '[2026] VJS-COUNTY 4'
+assent_source: standing_bounded_assent

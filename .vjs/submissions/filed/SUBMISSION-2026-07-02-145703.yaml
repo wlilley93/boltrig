@@ -1,0 +1,47 @@
+id: SUBMISSION-2026-07-02-145703
+court_requested: county
+jurisdiction: default
+question: 'What amendment vocabulary governs regenerating an assistant reply on the conversation record: plain append (A), append-plus-supersede-marker (B), replace-in-place (C), or conversation forking (D)?'
+facts: |
+  # Case: regenerate semantics on the governed conversation record
+
+  ## Facts (verified)
+  1. Chat turns append ConversationMessage rows (USER then ASSISTANT); each turn
+     links a WorkItem run, an audit trail, and the persisted event stream
+     (fleet/chat.py:99-126, 196-201). Messages are the governed record of what
+     the orchestrator did and why; they may serve as legal record.
+  2. Continuity: prior turns are composed into the next task's input
+     (compose_turn_task, chat.py:216-217). Whatever remains in the record feeds
+     the model on later turns.
+  3. Product need: a standard "regenerate answer" affordance for the last
+     assistant reply. Nothing exists server-side today; each turn only appends.
+  4. RBAC idiom on this surface: owner-only writes, scoped read roles cannot
+     write (delete route, SEC-25).
+
+  ## Options
+  A. Plain append: re-run the last user message, append a second assistant
+     message. Strongest case: zero schema change, purely append-only, complete
+     record. Cost: the rejected answer stays live in continuity input and the
+     visible thread; the record cannot say which answer the user disowned.
+  B. Supersede marker: append the new assistant message and set one nullable
+     column (superseded_by = new run id) on the old one; content and events are
+     never mutated; superseded turns are filtered from continuity and collapsed
+     in the UI. Strongest case: append-only preserved, the record captures the
+     disowning as data, continuity stays honest, one-column delta. Cost: a new
+     vocabulary item on the message model plus filter logic at the composer.
+  C. Replace in place: overwrite the prior assistant message's content/events
+     with the new run's. Strongest case: simplest data and UI shape, no record
+     growth. Cost: destroys the governed record; audit trail and message
+     diverge permanently.
+  D. Fork the conversation: regenerate branches a new conversation. Strongest
+     case: total history preservation and side-by-side exploration. Cost: a new
+     core concept (branching) with UI and store weight, no demonstrated need.
+
+  ## Constraints
+  The audit chain must remain intact; nothing already recorded may be destroyed
+  or silently mutated. Smallest-change doctrine applies. Owner-only, fail-closed
+  RBAC as on the sibling routes. The choice sets the amendment vocabulary for
+  the conversation record and is therefore for the court, not a silent default.
+requested_order: TBD
+private_boundary: local
+word_count: 369

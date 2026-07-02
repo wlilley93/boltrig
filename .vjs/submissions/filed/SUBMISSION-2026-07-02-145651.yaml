@@ -1,0 +1,44 @@
+id: SUBMISSION-2026-07-02-145651
+court_requested: county
+jurisdiction: default
+question: 'May the UI gain an in-repo browser test harness: @playwright/test as a devDependency with a hermetic smoke (A), continue ad-hoc scratchpad scripts (B), or vitest+jsdom instead (C)?'
+facts: |
+  # Case: an in-repo browser test harness for the UI
+
+  ## Facts (verified)
+  1. ui/ has no test harness at all: package.json carries only vite and tsc
+     scripts. No vitest, no Playwright, no e2e directory.
+  2. Every UI beat so far (deck, agents, automations, chat) was verified by
+     ad-hoc Playwright scripts living in session scratchpads outside the repo,
+     driven against a dev server or the deployed bundle, with screenshots.
+     Those scripts are unversioned and die with their scratchpads.
+  3. A deterministic no-credential smoke exists: with no runtime configured the
+     chat path returns a fixed "(no runtime configured)" reply
+     (fleet/chat.py:132), so an e2e run needs no model keys.
+  4. The UI's risk concentrates in real-browser behaviour: SSE streaming, deck
+     navigation/keep-alive, hash routing - exactly what unit-level DOM
+     emulation does not exercise.
+
+  ## Options
+  A. Add @playwright/test as a devDependency with a playwright config and one
+     smoke spec covering the chat surface contracts. Strongest case:
+     verification becomes versioned, repeatable by anyone, CI-runnable, and
+     pins regressions on the highest-risk behaviours; dev-only, never enters
+     runtime images. Cost: a heavyweight dev dependency (browser binaries),
+     slower CI, one more toolchain to maintain.
+  B. Continue with ad-hoc scratchpad scripts per beat. Strongest case: zero
+     repo dependency, maximum flexibility per beat. Cost: verification is
+     unversioned and unrepeatable; every beat re-authors it; nothing gates
+     regressions between beats.
+  C. Adopt vitest + jsdom component tests instead. Strongest case: much lighter
+     dependency, fast unit-level coverage of components. Cost: does not
+     exercise real browser SSE, keep-alive, or navigation, where the actual
+     regressions have occurred; a false sense of coverage.
+
+  ## Constraints
+  The repo's standing contract requires new dependencies to be surfaced to the
+  court before landing. Whatever is chosen must be dev-scoped only (never in
+  runtime images) and must run deterministically without credentials.
+requested_order: TBD
+private_boundary: local
+word_count: 318

@@ -1,0 +1,47 @@
+id: SUBMISSION-2026-07-02-145712
+court_requested: county
+jurisdiction: default
+question: 'What storage shape do chat attachments take: inline size-capped JSONB on the message row with caps as manifest data (A), a new kernel object-storage seam plus MinIO backend now (B), or defer attachments this beat (C)?'
+facts: |
+  # Case: storage shape for chat attachments
+
+  ## Facts (verified)
+  1. No blob/object store, no multipart route, no storage seam exists anywhere
+     in the Boltrig kernel. ConversationMessage has no attachment field. The
+     only "upload" is an MS Graph adapter verb (an external capability, not a
+     seam).
+  2. Security posture on this surface: untrusted content entering a task must
+     be enveloped via wrap_untrusted (SEC-72); request bodies are bounded
+     before anything streams or persists (SEC-69 posture).
+  3. Product need: users attach small files (text, JSON, small docs) to a chat
+     turn; text-typed content should be readable by the agent; everything
+     attached should persist on the record.
+  4. Postgres is the only persistent store; messages already persist JSONB-ish
+     payloads (events) per row.
+
+  ## Options
+  A. Inline, size-capped attachments as a JSONB field on the message row.
+     Caps live as data on ChatConfig (e.g. max 4 files, 512KB each; a manifest
+     can only tighten). Text types are decoded and enveloped into the task;
+     other types persist record-only, labelled not-agent-readable. Strongest
+     case: zero new dependency, severable, caps as policy-data, an object-store
+     seam can later slot behind the same message contract unchanged. Cost: row
+     growth, base64 binary in Postgres, caps bound the use cases.
+  B. Build the object-storage seam now: a kernel-owned StorageBackend interface
+     plus a MinIO/S3-compatible backend; messages store references. Strongest
+     case: the right long-term shape, no row bloat, unbounded sizes, one seam
+     for every future file feature. Cost: a new infrastructure dependency,
+     credential surface, and deploy change carried by a first-cut chat feature;
+     weight ahead of demonstrated need.
+  C. Defer attachments entirely this beat; ship rename/regenerate/stop only.
+     Strongest case: no new surface, no risk. Cost: the committed scope names
+     attachments; the product promise slips.
+
+  ## Constraints
+  Any new dependency must be surfaced to the court (this filing is that
+  surfacing). Anything agent-readable must pass the injection envelope. Inputs
+  must be bounded and rejected before persistence or streaming begins.
+  Smallest-change doctrine applies; severability must be preserved either way.
+requested_order: TBD
+private_boundary: local
+word_count: 359

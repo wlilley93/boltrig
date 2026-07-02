@@ -1,0 +1,8 @@
+id: CONVENING-county-2026-07-02-150000-2
+court: county
+submission_id: SUBMISSION-2026-07-02-145712
+issue: chat_attachment_storage_shape
+case_file_digest: sha256:8dfe6913146a1f748577bc75a9ea0696e75f0442fd644d7f446b62364b827067
+bench:
+- county-judge-2
+convened_at: 2026-07-02T15:00:00.042828517+00:00
