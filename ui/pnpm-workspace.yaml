@@ -1,5 +1,5 @@
 allowBuilds:
-  esbuild: set this to true or false
+  esbuild: true
 # pnpm 10/11 moved build-script approval here (out of package.json's "pnpm" key).
 # esbuild ships a postinstall that compiles its native binary; approve it so
 # `pnpm install` / `pnpm run build` work in CI and the Docker image.
