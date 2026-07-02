@@ -82,6 +82,31 @@ async def test_approval_is_verb_bound_and_single_use():
 
 @pytest.mark.security
 @pytest.mark.invariant("SEC-14")
+async def test_escalation_answer_cannot_clear_high_consequence_gate():
+    # H1: a null-verb, non-APPROVAL request (the fleet raises escalations /
+    # clarifications this way) answered "approve" must NOT clear a gated verb.
+    # Only a genuine, verb-bound APPROVAL may authorise. A normal APPROVAL still
+    # clears its verb and is single-use.
+    k, _ = await _build_kernel(blocking_verbs={"ticket.create"})
+    esc = await k.hitl.create(
+        tenant_id=TENANT, run_id="r", type=HITLType.ESCALATION, question="help?",
+        verb=None, requested_by="agent:x",
+    )
+    await k.hitl.answer(TENANT, esc.id, "approve", "agent:x")
+    # laundering the escalation id into the gate fails closed (type + null verb)
+    assert await k.hitl.consume_if_approved(TENANT, esc.id, "ticket.create") is False
+    # a genuine APPROVAL for the verb still clears it, exactly once
+    appr = await k.hitl.create(
+        tenant_id=TENANT, run_id="r", type=HITLType.APPROVAL, question="q",
+        verb="ticket.create", requested_by="agent:x",
+    )
+    await k.hitl.answer(TENANT, appr.id, "approve", "human@acme")
+    assert await k.hitl.consume_if_approved(TENANT, appr.id, "ticket.create") is True
+    assert await k.hitl.consume_if_approved(TENANT, appr.id, "ticket.create") is False
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-14")
 def test_respond_rejects_agent_and_self_approval():
     # The respond route: an agent cannot answer an approval, and the requester
     # cannot approve their own request; a different human can.

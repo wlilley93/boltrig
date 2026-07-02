@@ -130,16 +130,24 @@ class HITLManager:
 
     async def consume_if_approved(self, tenant_id: str, request_id: str, verb: str) -> bool:
         """The gate's authorisation check (SEC-14). Returns True only if the request
-        was answered with an approving decision, was raised FOR THIS VERB, and is
-        not already spent - and atomically marks it CONSUMED so the same approval
-        cannot authorise a second execution (single-use, anti-replay). A
+        is a genuine, verb-bound APPROVAL that was answered with an approving
+        decision and is not already spent - and atomically marks it CONSUMED so the
+        same approval cannot authorise a second execution (single-use, anti-replay).
+
+        H1 hardening: require ``type == APPROVAL`` and fail closed on a null verb.
+        Escalation / clarification requests (which the fleet raises with
+        ``verb=None`` and a non-human answer path) can no longer be laundered into
+        authorisation by replaying their id as ``approval_id`` on a gated verb. A
         verb mismatch fails closed, so an approval for one verb never authorises
-        another."""
+        another. dispatch always raises the gate's APPROVAL WITH a verb, so this is
+        safe for every legitimate flow."""
         req = await self._store.get_hitl_request(tenant_id, request_id)
         if req is None or req.status != HITLStatus.ANSWERED:
             return False
-        if req.verb is not None and req.verb != verb:
-            return False  # approval was raised for a different verb
+        if req.type != HITLType.APPROVAL:
+            return False  # only a genuine approval clears the gate (H1)
+        if req.verb != verb:
+            return False  # fail closed on a null or mismatched verb (H1)
         resp = await self._store.get_hitl_response(tenant_id, request_id)
         if not (resp and resp.decision.strip().lower() in _APPROVING):
             return False

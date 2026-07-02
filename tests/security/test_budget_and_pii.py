@@ -42,6 +42,32 @@ async def test_reserve_is_all_or_nothing_across_scopes(kernel):
 
 @pytest.mark.security
 @pytest.mark.invariant("FR-COST-02")
+async def test_reserve_honors_consume_budget_refusal(kernel, monkeypatch):
+    # H4: the fail-fast read (step 1) can see headroom, yet a concurrent reserve
+    # may debit the scope before this reserve's atomic consume runs. consume_budget
+    # then returns False (hard-stop, no debit). reserve MUST honour that refusal and
+    # raise, not silently run unmetered past the cap.
+    kernel.store.set_budget(
+        Budget(id="dept:eng", tenant_id=TENANT, scope_type="department",
+               cost_limit_micros=1000, hard_stop=True)
+    )
+
+    async def racing_consume(tenant_id, scope_id, tokens, micros):
+        # stand in for a concurrent reserve that exhausted the hard stop between
+        # our headroom read and this commit: refuse without debiting.
+        return False
+
+    monkeypatch.setattr(kernel.store, "consume_budget", racing_consume)
+    with pytest.raises(BudgetExceeded):
+        # step 1 sees full headroom (spent=0), so only step 3 can catch this.
+        await kernel.cost.reserve(TENANT, ["dept:eng"], tokens=0, micros=100)
+    # the over-cap reservation did not proceed to debit the real budget.
+    b = await kernel.store.get_budget(TENANT, "dept:eng")
+    assert b.spent_micros == 0
+
+
+@pytest.mark.security
+@pytest.mark.invariant("FR-COST-02")
 async def test_soft_budget_does_not_halt(kernel):
     kernel.store.set_budget(
         Budget(id="t", tenant_id=TENANT, scope_type="tenant",

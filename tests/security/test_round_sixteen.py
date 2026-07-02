@@ -160,6 +160,30 @@ def test_dev_auth_refuses_production_signal():
 
 
 # --------------------------------------------------------------------------- #
+# K-19  audit-key guard on every kernel-building path (H3)
+# --------------------------------------------------------------------------- #
+@pytest.mark.security
+@pytest.mark.invariant("K-19")
+async def test_worker_boot_refuses_default_audit_key_under_prod_signal(monkeypatch):
+    # H3: build_kernel_async is the path the fleet + Hatchet workers boot through
+    # (not create_app). Under a production signal with no audit HMAC key it must
+    # refuse to boot, so no worker writes forgeable audit rows under the in-source
+    # default. With a real key it boots.
+    from boltrig.api.bootstrap import build_kernel_async
+
+    monkeypatch.setenv("BOLTRIG_PRODUCTION", "1")
+    monkeypatch.delenv("BOLTRIG_AUDIT_HMAC_KEY", raising=False)
+    monkeypatch.delenv("DATABASE_URL", raising=False)  # stay offline (in-memory store)
+    monkeypatch.delenv("BOLTRIG_MANIFEST", raising=False)
+    with pytest.raises(RuntimeError):
+        await build_kernel_async()
+
+    monkeypatch.setenv("BOLTRIG_AUDIT_HMAC_KEY", "a-real-secret")
+    kernel = await build_kernel_async()
+    assert kernel is not None
+
+
+# --------------------------------------------------------------------------- #
 # SEC-61  shared egress guard blocks metadata/link-local for any adapter
 # --------------------------------------------------------------------------- #
 @pytest.mark.security

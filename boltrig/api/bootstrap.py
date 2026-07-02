@@ -241,7 +241,14 @@ def wire_hitl_resume(kernel: Kernel, *, executor=None, pump=None) -> None:
 
 
 async def build_kernel_async() -> Kernel:
-    """Construct and fully wire a Kernel (store, adapters, capabilities, invoker)."""
+    """Construct and fully wire a Kernel (store, adapters, capabilities, invoker).
+
+    H3 (K-19): enforce the audit-key guard on EVERY kernel-building path, not just
+    create_app. The fleet worker and Hatchet worker boot through here (not
+    create_app), so without this a production worker missing BOLTRIG_AUDIT_HMAC_KEY
+    would silently write forgeable audit rows under the in-source default key. Fail
+    hard before building anything; create_app keeps its own idempotent call."""
+    refuse_default_audit_key_in_prod()
     store = await build_store()
     manifest_path = _find_manifest()
     if manifest_path:

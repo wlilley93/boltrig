@@ -212,6 +212,7 @@ invariants:
     description: The audit chain is tamper-evident - a re-derive detects any reorder, drop, or edit.
     tests:
       - tests/kernel/test_audit_chain.py::test_chain_verifies_and_detects_tampering
+      - tests/security/test_round_sixteen.py::test_worker_boot_refuses_default_audit_key_under_prod_signal
   K-20:
     description: Bounded observability - the audit writer scrubs secrets / identity in detail.
     tests:
@@ -310,6 +311,7 @@ invariants:
       - tests/security/test_hitl_gate.py::test_approval_is_single_use
       - tests/security/test_hitl_gate.py::test_approval_is_verb_bound_and_single_use
       - tests/security/test_hitl_gate.py::test_respond_rejects_agent_and_self_approval
+      - tests/security/test_hitl_gate.py::test_escalation_answer_cannot_clear_high_consequence_gate
   SEC-16:
     description: Every action (allowed or denied) is audited, hash-chained, append-only.
     tests:
@@ -329,6 +331,7 @@ invariants:
     tests:
       - tests/security/test_budget_and_pii.py::test_budget_hard_stop_halts_before_exceeding
       - tests/security/test_budget_and_pii.py::test_soft_budget_does_not_halt
+      - tests/security/test_budget_and_pii.py::test_reserve_honors_consume_budget_refusal
 
   # --- Round Four: settings, account & access management (SEC-34..39) ---
   SEC-34:

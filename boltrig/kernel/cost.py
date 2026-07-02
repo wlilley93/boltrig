@@ -63,7 +63,21 @@ class CostAccountant:
                     if used >= _ALERT_FRACTION:
                         await self._alert(tenant_id, scope_id, used)
 
-        # 3. commit all - hard-stops are guaranteed within headroom by step 1;
-        # consume_budget remains atomic per scope as defence-in-depth.
+        # 3. commit all. Step 1's fail-fast guarantees headroom under single-threaded
+        # use, but consume_budget re-checks the hard stop atomically (FOR UPDATE) and
+        # returns False WITHOUT debiting when a concurrent reserve has consumed the
+        # headroom between our read and this commit. Honour that refusal (H4): raise
+        # rather than run unmetered past a hard stop.
+        #
+        # Compensation limitation: the Store exposes no refund verb, so scopes already
+        # debited earlier in this loop stay charged for a call that will not run. That
+        # is a bounded over-count on the losing side of a race, never an under-count -
+        # the hard stop always holds. The single-transaction FOR UPDATE fix is a
+        # store-level day-2 item (audit H4).
         for scope_id in scope_ids:
-            await self._store.consume_budget(tenant_id, scope_id, tokens, micros)
+            committed = await self._store.consume_budget(tenant_id, scope_id, tokens, micros)
+            if not committed:
+                raise BudgetExceeded(
+                    f"budget '{scope_id}' hard-stop reached for tenant '{tenant_id}' "
+                    "under a concurrent reservation"
+                )

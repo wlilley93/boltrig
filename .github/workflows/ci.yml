@@ -17,7 +17,10 @@ jobs:
     # durable PostgresStore, not just in-memory (P0-1 done-when).
     services:
       postgres:
-        image: postgres:16
+        # pgvector image, not plain postgres:16: the store schema declares a
+        # vector column, so the [postgres] test leg errors at setup without the
+        # extension (audit 2026-07-02 H5). Matches the local test container.
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_PASSWORD: boltrig
           POSTGRES_DB: boltrig
