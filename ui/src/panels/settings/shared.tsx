@@ -2,12 +2,12 @@
 // split into one slide per section). Only helpers used by MORE than one slide
 // live here; single-section helpers moved with their slide.
 
-import { useState } from "react";
-
 import { api } from "../../api/client";
 import type { PatView } from "../../api/types";
 import { useFetch } from "../../useFetch";
-import { GrantList, errText } from "../shared";
+import { GrantList } from "../shared";
+import { EmptyState, FetchError } from "../ux";
+import { ArmConfirm, Skeleton } from "../uxFlow";
 
 // A scope dict (departments / nouns / verbs visible) rendered compactly.
 // Used by the account (own profile) and organisation (directory) slides.
@@ -24,24 +24,14 @@ export function scopeReadable(scope: Record<string, unknown> | undefined): strin
 
 export function TokenList({ bump = 0 }: { bump?: number }) {
   const tokens = useFetch(() => api.meTokens(), [bump]);
-  const [error, setError] = useState<string | null>(null);
 
+  // Throws on a rejected revoke so the row's ArmConfirm renders the reason.
   async function revoke(id: string) {
-    if (
-      !window.confirm(
-        "Revoke this token? Any client using it stops working immediately.",
-      )
-    ) {
-      return;
+    const res = await api.revokeToken(id);
+    if (res.status !== "ok") {
+      throw new Error(res.reason ?? "revoke rejected");
     }
-    setError(null);
-    try {
-      const res = await api.revokeToken(id);
-      if (res.status === "ok") tokens.reload();
-      else setError(res.reason ?? "revoke rejected");
-    } catch (err) {
-      setError(errText(err));
-    }
+    tokens.reload();
   }
 
   const list: PatView[] = tokens.data?.tokens ?? [];
@@ -55,13 +45,17 @@ export function TokenList({ bump = 0 }: { bump?: number }) {
         </button>
       </div>
       <div className="list-card__body">
-        {tokens.loading && !tokens.data && <p className="muted">Loading...</p>}
-        {tokens.error && (
-          <p className="error">Failed to load: {tokens.error}</p>
-        )}
-        {error && <p className="error">{error}</p>}
-        {!tokens.loading && list.length === 0 && (
-          <p className="muted">No tokens yet.</p>
+        {tokens.loading && !tokens.data && <Skeleton variant="rows" />}
+        <FetchError
+          error={tokens.error}
+          status={tokens.errorStatus}
+          onRetry={tokens.reload}
+        />
+        {tokens.data && list.length === 0 && (
+          <EmptyState
+            title="No tokens yet"
+            body="Mint one to connect Claude Code, curl, or any MCP client."
+          />
         )}
         {list.map((t) => (
           <div className="row-line" key={t.id}>
@@ -75,9 +69,19 @@ export function TokenList({ bump = 0 }: { bump?: number }) {
               <GrantList grants={t.scope} />
             </div>
             {!t.revoked && (
-              <button className="btn" onClick={() => void revoke(t.id)}>
-                Revoke
-              </button>
+              <ArmConfirm
+                label="Revoke"
+                armLabel={
+                  <>
+                    Revoke <code>{t.name}</code>? Any client using it stops
+                    working immediately.
+                  </>
+                }
+                confirmLabel="Confirm revoke"
+                tone="danger"
+                busyLabel="Revoking..."
+                onConfirm={() => revoke(t.id)}
+              />
             )}
           </div>
         ))}

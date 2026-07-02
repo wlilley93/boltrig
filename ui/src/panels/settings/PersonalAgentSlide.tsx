@@ -8,7 +8,8 @@ import { useState } from "react";
 import { api } from "../../api/client";
 import { useFetch } from "../../useFetch";
 import { GrantList, csvToList, errText } from "../shared";
-import { PageIntro } from "../ux";
+import { EmptyState, FetchError, PageIntro } from "../ux";
+import { Skeleton } from "../uxFlow";
 
 function PersonalAgentSection() {
   const agent = useFetch(() => api.meAgent(), []);
@@ -49,12 +50,17 @@ function PersonalAgentSection() {
           </button>
         </div>
         <div className="list-card__body">
-          {agent.loading && !agent.data && <p className="muted">Loading...</p>}
-          {agent.error && (
-            <p className="error">Failed to load: {agent.error}</p>
-          )}
-          {!agent.loading && current === null && (
-            <p className="muted">No personal agent configured yet.</p>
+          {agent.loading && !agent.data && <Skeleton variant="rows" />}
+          <FetchError
+            error={agent.error}
+            status={agent.errorStatus}
+            onRetry={agent.reload}
+          />
+          {agent.data && current === null && (
+            <EmptyState
+              title="No personal agent configured yet"
+              body="Configure one alongside; it runs as you, capped to your own grants."
+            />
           )}
           {current && (
             <>

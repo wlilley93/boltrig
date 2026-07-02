@@ -5,8 +5,10 @@
 import { useState } from "react";
 
 import { api } from "../../api/client";
+import { navigate } from "../../router";
 import { CodeBlock, errText, prettyJson } from "../shared";
-import { PageIntro } from "../ux";
+import { EmptyState, PageIntro } from "../ux";
+import { ArmConfirm } from "../uxFlow";
 
 function downloadJson(filename: string, value: unknown): void {
   const blob = new Blob([prettyJson(value)], { type: "application/json" });
@@ -39,20 +41,13 @@ function PrivacyData() {
     }
   }
 
+  // Throws on a rejected delete so the row's ArmConfirm renders the reason.
   async function remove(id: string) {
-    if (
-      !window.confirm("Delete this conversation? This closes it for your account.")
-    ) {
-      return;
+    const res = await api.deleteMyConversation(id);
+    if (res.status !== "ok") {
+      throw new Error(res.reason ?? "delete rejected");
     }
-    setError(null);
-    try {
-      const res = await api.deleteMyConversation(id);
-      if (res.status === "ok") void load();
-      else setError(res.reason ?? "delete rejected");
-    } catch (err) {
-      setError(errText(err));
-    }
+    void load();
   }
 
   const conversations = data?.conversations ?? [];
@@ -96,7 +91,15 @@ function PrivacyData() {
             <p className="muted">Load the export to list your conversations.</p>
           )}
           {data && conversations.length === 0 && (
-            <p className="muted">No conversations.</p>
+            <EmptyState
+              title="No conversations"
+              body="Start one in Chat."
+              action={
+                <button className="btn" onClick={() => navigate("/chat")}>
+                  Open Chat
+                </button>
+              }
+            />
           )}
           {conversations.map((c) => (
             <div className="row-line" key={c.id}>
@@ -106,9 +109,19 @@ function PrivacyData() {
                   <code>{c.id}</code> - {c.status}
                 </div>
               </div>
-              <button className="btn" onClick={() => void remove(c.id)}>
-                Delete
-              </button>
+              <ArmConfirm
+                label="Delete"
+                armLabel={
+                  <>
+                    Delete "{c.title || "(untitled)"}"? This closes it for your
+                    account; retention rules govern the underlying records.
+                  </>
+                }
+                confirmLabel="Confirm delete"
+                tone="danger"
+                busyLabel="Deleting..."
+                onConfirm={() => remove(c.id)}
+              />
             </div>
           ))}
         </div>

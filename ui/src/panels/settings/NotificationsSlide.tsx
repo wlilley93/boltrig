@@ -7,7 +7,9 @@ import { api } from "../../api/client";
 import type { MeNotificationItem } from "../../api/types";
 import { useFetch } from "../../useFetch";
 import { errText } from "../shared";
-import { PageIntro } from "../ux";
+import { EmptyState, FetchError, PageIntro } from "../ux";
+import { Skeleton } from "../uxFlow";
+import { Switch } from "../uxForm";
 
 const EVENT_TYPES: ReadonlyArray<string> = [
   "approval",
@@ -107,16 +109,12 @@ function NotificationsSection() {
               onChange={(e) => setTarget(e.target.value)}
             />
           </label>
-          <label className="field">
-            <span>enabled</span>
-            <select
-              value={enabled ? "yes" : "no"}
-              onChange={(e) => setEnabled(e.target.value === "yes")}
-            >
-              <option value="yes">enabled</option>
-              <option value="no">disabled</option>
-            </select>
-          </label>
+          <Switch
+            checked={enabled}
+            onChange={setEnabled}
+            label="Enabled"
+            hint="Whether this rule routes the event."
+          />
         </div>
         <div className="form__actions">
           <button
@@ -146,12 +144,17 @@ function NotificationsSection() {
           </button>
         </div>
         <div className="list-card__body">
-          {prefs.loading && !prefs.data && <p className="muted">Loading...</p>}
-          {prefs.error && (
-            <p className="error">Failed to load: {prefs.error}</p>
-          )}
-          {!prefs.loading && list.length === 0 && (
-            <p className="muted">No routing configured.</p>
+          {prefs.loading && !prefs.data && <Skeleton variant="rows" />}
+          <FetchError
+            error={prefs.error}
+            status={prefs.errorStatus}
+            onRetry={prefs.reload}
+          />
+          {prefs.data && list.length === 0 && (
+            <EmptyState
+              title="No routing configured"
+              body="Add a rule so approvals and escalations reach you somewhere you will see them."
+            />
           )}
           {list.map((pref) => (
             <div className="row-line" key={pref.id}>

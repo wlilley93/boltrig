@@ -7,7 +7,8 @@ import { useEffect, useState } from "react";
 import { api } from "../../api/client";
 import { useFetch } from "../../useFetch";
 import { errText } from "../shared";
-import { PageIntro } from "../ux";
+import { FetchError, PageIntro } from "../ux";
+import { Skeleton } from "../uxFlow";
 import { scopeReadable } from "./shared";
 
 function AccountProfile() {
@@ -70,11 +71,13 @@ function AccountProfile() {
         </div>
         <div className="list-card__body">
           {settings.loading && !settings.data && (
-            <p className="muted">Loading...</p>
+            <Skeleton variant="rows" count={6} />
           )}
-          {settings.error && (
-            <p className="error">Failed to load: {settings.error}</p>
-          )}
+          <FetchError
+            error={settings.error}
+            status={settings.errorStatus}
+            onRetry={settings.reload}
+          />
           {profile && (
             <>
               <div className="row-line">

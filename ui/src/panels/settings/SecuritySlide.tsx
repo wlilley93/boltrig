@@ -2,29 +2,30 @@
 // caller's own activity (SET-71, SET-72).
 // Mechanical extraction of SecuritySessions from SettingsPanel.tsx (Beat 5).
 
-import { useState } from "react";
-
 import { api } from "../../api/client";
 import type { ActivityRow, SessionView } from "../../api/types";
 import { useFetch } from "../../useFetch";
-import { errText } from "../shared";
-import { PageIntro } from "../ux";
+import { RunLink } from "../shared";
+import {
+  AUDIT_STATUS,
+  EmptyState,
+  FetchError,
+  PageIntro,
+  StatusBadge,
+} from "../ux";
+import { ArmConfirm, Skeleton } from "../uxFlow";
 import { TokenList } from "./shared";
 
 function SessionsList() {
   const sessions = useFetch(() => api.meSessions(), []);
-  const [error, setError] = useState<string | null>(null);
 
+  // Throws on a rejected revoke so the row's ArmConfirm renders the reason.
   async function revoke(id: string) {
-    if (!window.confirm("Revoke this session?")) return;
-    setError(null);
-    try {
-      const res = await api.revokeSession(id);
-      if (res.status === "ok") sessions.reload();
-      else setError(res.reason ?? "revoke rejected");
-    } catch (err) {
-      setError(errText(err));
+    const res = await api.revokeSession(id);
+    if (res.status !== "ok") {
+      throw new Error(res.reason ?? "revoke rejected");
     }
+    sessions.reload();
   }
 
   const list: SessionView[] = sessions.data?.sessions ?? [];
@@ -38,15 +39,14 @@ function SessionsList() {
         </button>
       </div>
       <div className="list-card__body">
-        {sessions.loading && !sessions.data && (
-          <p className="muted">Loading...</p>
-        )}
-        {sessions.error && (
-          <p className="error">Failed to load: {sessions.error}</p>
-        )}
-        {error && <p className="error">{error}</p>}
-        {!sessions.loading && list.length === 0 && (
-          <p className="muted">No sessions.</p>
+        {sessions.loading && !sessions.data && <Skeleton variant="rows" />}
+        <FetchError
+          error={sessions.error}
+          status={sessions.errorStatus}
+          onRetry={sessions.reload}
+        />
+        {sessions.data && list.length === 0 && (
+          <EmptyState title="No sessions" />
         )}
         {list.map((s) => (
           <div className="row-line" key={s.id}>
@@ -59,9 +59,14 @@ function SessionsList() {
               </div>
             </div>
             {!s.revoked && (
-              <button className="btn" onClick={() => void revoke(s.id)}>
-                Revoke
-              </button>
+              <ArmConfirm
+                label="Revoke"
+                armLabel="Revoke this session? That device is signed out immediately."
+                confirmLabel="Confirm revoke"
+                tone="danger"
+                busyLabel="Revoking..."
+                onConfirm={() => revoke(s.id)}
+              />
             )}
           </div>
         ))}
@@ -80,36 +85,42 @@ function ActivityList() {
       <p className="muted">
         Your own recent actions, filtered to you (SET-72).
       </p>
-      {activity.loading && !activity.data && <p className="muted">Loading...</p>}
-      {activity.error && (
-        <p className="error">Failed to load: {activity.error}</p>
-      )}
-      {!activity.loading && rows.length === 0 && (
-        <p className="muted">No recent activity.</p>
+      {activity.loading && !activity.data && <Skeleton variant="rows" />}
+      <FetchError
+        error={activity.error}
+        status={activity.errorStatus}
+        onRetry={activity.reload}
+      />
+      {activity.data && rows.length === 0 && (
+        <EmptyState title="No recent activity" />
       )}
       {rows.length > 0 && (
         <div className="table-scroll">
           <table className="data-table">
             <thead>
               <tr>
-                <th>seq</th>
-                <th>ts</th>
-                <th>verb</th>
-                <th>status</th>
-                <th>run_id</th>
+                <th>When</th>
+                <th>Action</th>
+                <th>Result</th>
+                <th>Run</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => (
                 <tr key={r.seq}>
-                  <td>{r.seq}</td>
                   <td>{r.ts ?? "-"}</td>
                   <td>
                     <code>{r.verb}</code>
                   </td>
-                  <td>{r.status}</td>
                   <td>
-                    <code>{r.run_id ?? "-"}</code>
+                    <StatusBadge value={r.status} glossary={AUDIT_STATUS} />
+                  </td>
+                  <td>
+                    {r.run_id ? (
+                      <RunLink runId={r.run_id} />
+                    ) : (
+                      <span className="muted">-</span>
+                    )}
                   </td>
                 </tr>
               ))}

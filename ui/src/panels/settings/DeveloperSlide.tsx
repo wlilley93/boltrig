@@ -8,7 +8,8 @@ import { api } from "../../api/client";
 import type { MintTokenResponse } from "../../api/types";
 import { useFetch } from "../../useFetch";
 import { csvToList, errText } from "../shared";
-import { PageIntro } from "../ux";
+import { FetchError, PageIntro } from "../ux";
+import { SecretOnce, Skeleton } from "../uxFlow";
 import { TokenList } from "./shared";
 
 function copyText(text: string): void {
@@ -123,29 +124,18 @@ function DeveloperConnections() {
           </div>
 
           {minted && minted.secret && (
-            <div className="notice warn secret-box">
-              <p className="warn">
-                <strong>Copy your token now.</strong> This is the only time the
-                secret is shown - it is never stored in the clear and cannot be
-                retrieved again.
-              </p>
-              <div className="copy-row">
-                <code className="copy-row__value secret-box__value">
-                  {minted.secret}
-                </code>
-                <button
-                  className="btn btn--primary"
-                  aria-label="Copy token secret"
-                  onClick={() => copyText(minted.secret ?? "")}
-                >
-                  Copy
-                </button>
-              </div>
-              <p className="muted">
-                token <code>{minted.name}</code> ({minted.id}); expires{" "}
-                {minted.expires_at ?? "-"}
-              </p>
-            </div>
+            <SecretOnce
+              secret={minted.secret}
+              title="Copy your token now."
+              body="This is the only time the secret is shown. It is never stored in the clear and cannot be retrieved again."
+              meta={
+                <p className="muted">
+                  token <code>{minted.name}</code> ({minted.id}); expires{" "}
+                  {minted.expires_at ?? "-"}
+                </p>
+              }
+              onDone={() => setMinted(null)}
+            />
           )}
         </div>
 
@@ -161,11 +151,13 @@ function DeveloperConnections() {
         </div>
         <div className="list-card__body">
           {connections.loading && !connections.data && (
-            <p className="muted">Loading...</p>
+            <Skeleton variant="rows" count={5} />
           )}
-          {connections.error && (
-            <p className="error">Failed to load: {connections.error}</p>
-          )}
+          <FetchError
+            error={connections.error}
+            status={connections.errorStatus}
+            onRetry={connections.reload}
+          />
           {conn && (
             <>
               <CopyRow label="MCP endpoint" value={conn.mcp_endpoint} />

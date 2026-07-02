@@ -14,7 +14,8 @@ import type {
 } from "../../api/types";
 import { useFetch } from "../../useFetch";
 import { errText, parseJson, prettyJson } from "../shared";
-import { PageIntro, ROLE_VALUES } from "../ux";
+import { EmptyState, FetchError, PageIntro, ROLE_VALUES } from "../ux";
+import { ArmConfirm, Skeleton } from "../uxFlow";
 import { scopeReadable } from "./shared";
 
 // One source of truth for the role set (shared with the identity + admin selects).
@@ -94,15 +95,39 @@ function UserRow({
           >
             {user.status}
           </span>
-          <button
-            className="btn"
-            disabled={busy}
-            onClick={() =>
-              void patch({ status: deactivated ? "active" : "deactivated" })
-            }
-          >
-            {deactivated ? "Activate" : "Deactivate"}
-          </button>
+          {deactivated ? (
+            // Restorative and low-blast: a plain button, no arm step.
+            <button
+              className="btn"
+              disabled={busy}
+              onClick={() => void patch({ status: "active" })}
+            >
+              Activate
+            </button>
+          ) : (
+            <ArmConfirm
+              label="Deactivate"
+              armLabel={
+                <>
+                  Deactivate <code>{user.email ?? user.id}</code>? Their access
+                  stops immediately and their tokens stop resolving.
+                </>
+              }
+              confirmLabel="Confirm deactivate"
+              tone="danger"
+              busyLabel="Deactivating..."
+              disabled={busy}
+              onConfirm={async () => {
+                const res = await api.patchUser(user.id, {
+                  status: "deactivated",
+                });
+                if (res.status !== "ok") {
+                  throw new Error(res.reason ?? "update rejected");
+                }
+                onChanged();
+              }}
+            />
+          )}
         </div>
       </div>
       <details className="dir-row__scope">
@@ -168,16 +193,13 @@ function OrganisationSection() {
     }
   }
 
+  // Throws on a rejected revoke so the row's ArmConfirm renders the reason.
   async function revokeInvite(id: string) {
-    if (!window.confirm("Revoke this invitation?")) return;
-    setError(null);
-    try {
-      const res = await api.revokeInvitation(id);
-      if (res.status === "ok") invites.reload();
-      else setError(res.reason ?? "revoke rejected");
-    } catch (err) {
-      setError(errText(err));
+    const res = await api.revokeInvitation(id);
+    if (res.status !== "ok") {
+      throw new Error(res.reason ?? "revoke rejected");
     }
+    invites.reload();
   }
 
   // The server returns {status:"denied", reason} (no users/invitations key) when
@@ -211,15 +233,17 @@ function OrganisationSection() {
           </button>
         </div>
         <div className="list-card__body">
-          {users.loading && !users.data && <p className="muted">Loading...</p>}
-          {users.error && (
-            <p className="error">Failed to load: {users.error}</p>
-          )}
+          {users.loading && !users.data && <Skeleton variant="rows" />}
+          <FetchError
+            error={users.error}
+            status={users.errorStatus}
+            onRetry={users.reload}
+          />
           {usersDenied && (
             <p className="notice warn">denied: {usersDenied}</p>
           )}
-          {!usersDenied && !users.loading && userList.length === 0 && (
-            <p className="muted">No users.</p>
+          {!usersDenied && users.data && userList.length === 0 && (
+            <EmptyState title="No users" />
           )}
           {userList.map((u) => (
             <UserRow key={u.id} user={u} onChanged={() => users.reload()} />
@@ -279,17 +303,20 @@ function OrganisationSection() {
             </button>
           </div>
           <div className="list-card__body">
-            {invites.loading && !invites.data && (
-              <p className="muted">Loading...</p>
-            )}
-            {invites.error && (
-              <p className="error">Failed to load: {invites.error}</p>
-            )}
+            {invites.loading && !invites.data && <Skeleton variant="rows" />}
+            <FetchError
+              error={invites.error}
+              status={invites.errorStatus}
+              onRetry={invites.reload}
+            />
             {invitesDenied && (
               <p className="notice warn">denied: {invitesDenied}</p>
             )}
-            {!invitesDenied && !invites.loading && inviteList.length === 0 && (
-              <p className="muted">No invitations.</p>
+            {!invitesDenied && invites.data && inviteList.length === 0 && (
+              <EmptyState
+                title="No invitations"
+                body="Invite someone above; they get access the first time they sign in through your IdP."
+              />
             )}
             {inviteList.map((inv: AdminInvitation) => (
               <div className="row-line" key={inv.id}>
@@ -302,12 +329,19 @@ function OrganisationSection() {
                   </div>
                 </div>
                 {inv.status === "pending" && (
-                  <button
-                    className="btn"
-                    onClick={() => void revokeInvite(inv.id)}
-                  >
-                    Revoke
-                  </button>
+                  <ArmConfirm
+                    label="Revoke"
+                    armLabel={
+                      <>
+                        Revoke the invitation for <code>{inv.email}</code>?
+                        They will not be pre-staged when they sign in.
+                      </>
+                    }
+                    confirmLabel="Confirm revoke"
+                    tone="danger"
+                    busyLabel="Revoking..."
+                    onConfirm={() => revokeInvite(inv.id)}
+                  />
                 )}
               </div>
             ))}
