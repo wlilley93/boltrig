@@ -48,6 +48,30 @@ from boltrig.models import (
 )
 from boltrig.models.work import RunCheckpoint
 
+# --- resource-bounding ceilings (M7 / M9 DoS-bounding, SEC-69) --------------
+# A list read must never be able to return an unbounded slice: an ever-growing
+# tenant table would otherwise let one caller exhaust memory/latency. The store
+# clamps every explicit page to MAX_WORK_PAGE; the HTTP surface asks for
+# DEFAULT_WORK_PAGE by default. limit=None on the store keeps the legacy
+# full-slice contract for internal callers (e.g. the own-data export) that must
+# see every row, and is never reachable from the /v1/work HTTP surface.
+MAX_WORK_PAGE = 500
+DEFAULT_WORK_PAGE = 100
+# The structured-memory list reads (M9-memory / SEC-009): the caller may ask for
+# a page size but the server caps it, and a batch ingest is capped by item count.
+MAX_MEMORY_LIST = 200
+MAX_INGEST_ITEMS = 100
+
+
+def clamp_work_page(limit: int) -> int:
+    """Clamp a caller-supplied work-list page size into [1, MAX_WORK_PAGE]."""
+    return max(1, min(int(limit), MAX_WORK_PAGE))
+
+
+def clamp_memory_list(limit: int) -> int:
+    """Clamp a caller-supplied memory-list page size into [1, MAX_MEMORY_LIST]."""
+    return max(1, min(int(limit), MAX_MEMORY_LIST))
+
 
 @runtime_checkable
 class Store(Protocol):
@@ -87,7 +111,18 @@ class Store(Protocol):
         status: WorkStatus | None = None,
         parent_id: str | None = None,
         departments: list[str] | None = None,
-    ) -> list[WorkItem]: ...
+        limit: int | None = None,
+        cursor: str | None = None,
+    ) -> list[WorkItem]:
+        # M7 / SEC-69 DoS-bounding: an explicit ``limit`` (server-clamped to
+        # MAX_WORK_PAGE) plus a keyset ``cursor`` on the row id bounds the page.
+        # id is the table's stable PRIMARY KEY (tenant_id, id) and rides on every
+        # returned row, so the next cursor is simply the last item's id - no
+        # created_at is carried on the WorkItem, so an id keyset (not (created_at,
+        # id)) is the stable, overlap-free scheme. ``limit=None`` = full slice
+        # (legacy internal callers only). The tenant + status + department filters
+        # are unchanged. Rows come back ordered by id so paging never overlaps.
+        ...
     # atomic pending -> in_flight claim with a lease: one winner per item across
     # concurrent claimers; an expired lease is reclaimable; attempts increments
     # per claim (US-FLT-05). Mirrors the consume_hitl CAS shape.

@@ -27,6 +27,7 @@ from boltrig.models import (
     InvocationContext,
     PendingHuman,
 )
+from boltrig.store.base import DEFAULT_WORK_PAGE, MAX_WORK_PAGE, clamp_work_page
 
 from . import Kernel
 
@@ -430,6 +431,8 @@ def create_app(
     @app.get("/v1/work")
     async def work(
         status: str | None = None,
+        limit: int = DEFAULT_WORK_PAGE,
+        cursor: str | None = None,
         k: Kernel = Depends(_get_kernel),
         p: Principal = Depends(principal),
     ) -> dict:
@@ -439,7 +442,15 @@ def create_app(
         st = WorkStatus(status) if status else None
         # row-level department isolation enforced at the store (US-IAM-02)
         departments = departments_for(p.role, p.scope)
-        items = await k.list_work(p.tenant_id, departments=departments, status=st)
+        # M7 / SEC-69: bound the page. The store clamps the limit to MAX_WORK_PAGE
+        # and pages by keyset on id; the department filter is passed through, so no
+        # caller can widen what it sees. The next cursor is the last item's id when
+        # the page came back full (a short page means the end of the slice).
+        page = clamp_work_page(limit)
+        items = await k.store.list_work_items(
+            p.tenant_id, st, departments=departments, limit=page, cursor=cursor
+        )
+        next_cursor = items[-1].id if len(items) == page else None
         return {
             "items": [
                 {
@@ -449,7 +460,9 @@ def create_app(
                     "parent_id": w.parent_id, "hatchet_run_id": w.hatchet_run_id,
                 }
                 for w in items
-            ]
+            ],
+            "limit": page,
+            "next_cursor": next_cursor,
         }
 
     @app.get("/v1/work/{item_id}")
@@ -460,15 +473,22 @@ def create_app(
     ):
         # A work item plus its children (the epic->story->task tree) and its audit
         # trail - the data behind the hierarchical work board (#74). Scope-filtered
-        # by department (US-IAM-02): resolved from the caller's visible set, so an
-        # item outside the caller's departments is simply not found.
+        # by department (US-IAM-02): an item outside the caller's departments is
+        # simply not found. M7 / SEC-69: fetch the one item and query its children
+        # DIRECTLY by parent_id (bounded by the department filter + the page cap),
+        # never load the whole visible set into a dict - that was O(all items).
         from boltrig.identity.rbac import departments_for
 
         departments = departments_for(p.role, p.scope)
-        visible = await k.list_work(p.tenant_id, departments=departments)
-        by_id = {w.id: w for w in visible}
-        item = by_id.get(item_id)
-        if item is None:
+
+        def _in_scope(w) -> bool:
+            # mirror the store's US-IAM-02 department predicate exactly: None =
+            # unrestricted (org-admin), else the owner_member must be in-scope.
+            return departments is None or w.owner_member in set(departments)
+
+        item = await k.store.get_work_item(p.tenant_id, item_id)
+        if item is None or not _in_scope(item):
+            # out-of-scope reads 404 (not 403) so the item's existence never leaks.
             return JSONResponse({"error": "not_found"}, status_code=404)
 
         def _wd(w) -> dict:
@@ -480,7 +500,13 @@ def create_app(
                 "on_behalf_of": w.on_behalf_of,
             }
 
-        children = [_wd(w) for w in visible if w.parent_id == item_id]
+        # children queried directly by parent_id, still department-scoped and
+        # bounded to a page (US-IAM-02 preserved; M7 / SEC-69 bounding).
+        child_items = await k.store.list_work_items(
+            p.tenant_id, parent_id=item_id, departments=departments,
+            limit=MAX_WORK_PAGE,
+        )
+        children = [_wd(w) for w in child_items]
         trail: list = []
         if item.hatchet_run_id:
             events = await k.store.audit_query(

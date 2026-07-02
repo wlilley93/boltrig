@@ -41,7 +41,10 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-boltrig}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-boltrig}
+      # M9 (SEC-69): no baked default credential. The stack refuses to start
+      # unless POSTGRES_PASSWORD is set (compose required-var form). Generate a
+      # strong value and put it in .env - see .env.example.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD (see .env.example)}
       POSTGRES_DB: ${POSTGRES_DB:-boltrig}
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -141,7 +144,8 @@ services:
     image: ghcr.io/hatchet-dev/hatchet/hatchet-lite:latest
     restart: unless-stopped
     environment:
-      DATABASE_URL: ${HATCHET_DATABASE_URL:-postgresql://boltrig:boltrig@postgres:5432/hatchet?sslmode=disable}
+      # M9 (SEC-69): interpolate the DB credential instead of a literal boltrig:boltrig.
+      DATABASE_URL: ${HATCHET_DATABASE_URL:-postgresql://${POSTGRES_USER:-boltrig}:${POSTGRES_PASSWORD}@postgres:5432/hatchet?sslmode=disable}
       SERVER_GRPC_BROADCAST_ADDRESS: hatchet-engine:7077
       SERVER_GRPC_BIND_ADDRESS: 0.0.0.0
       # hatchet-lite binds gRPC on 7070 by default; pin the bind port to the
@@ -155,9 +159,13 @@ services:
       SERVER_AUTH_SET_EMAIL_VERIFIED: "t"
       SERVER_GRPC_INSECURE: "t"
       SERVER_URL: ${HATCHET_SERVER_URL:-http://localhost:8888}
+    # M8 (SEC-69): bind the published ports to loopback so the plaintext gRPC
+    # control plane (SERVER_GRPC_INSECURE) and API are NOT on all interfaces by
+    # default - on a multi-homed host 0.0.0.0 would make them LAN-reachable in
+    # cleartext. The secure overlay drops these host ports entirely (ports: []).
     ports:
-      - "${HATCHET_GRPC_PORT:-7077}:7077"
-      - "${HATCHET_API_PORT:-8888}:8888"
+      - "127.0.0.1:${HATCHET_GRPC_PORT:-7077}:7077"
+      - "127.0.0.1:${HATCHET_API_PORT:-8888}:8888"
     depends_on:
       postgres:
         condition: service_healthy
@@ -168,8 +176,10 @@ services:
     restart: unless-stopped
     environment:
       SERVER_URL: http://hatchet-engine:8888
+    # M8 (SEC-69): the dashboard is UNAUTHENTICATED - keep it off 0.0.0.0. Bind to
+    # loopback in the base stack; the secure overlay drops the host port entirely.
     ports:
-      - "${HATCHET_DASHBOARD_PORT:-8889}:80"
+      - "127.0.0.1:${HATCHET_DASHBOARD_PORT:-8889}:80"
     depends_on:
       - hatchet-engine
 
@@ -263,6 +273,17 @@ services:
       dockerfile: Dockerfile
     image: boltrig/pi-sidecar:0.1.0
     restart: unless-stopped
+    environment:
+      # M2 (SEC-73): the shared /run bearer. Unset = dev-open (fail-closed only
+      # under a production signal). The fleet-worker (env_file: .env) must carry
+      # the SAME PI_SIDECAR_TOKEN so PiRuntime presents it. See .env.example.
+      PI_SIDECAR_TOKEN: ${PI_SIDECAR_TOKEN:-}
+      PI_SIDECAR_EGRESS_ALLOW: ${PI_SIDECAR_EGRESS_ALLOW:-}
+      # Pass the prod signals the sidecar's fail-closed auth checks (it reads
+      # these directly, mirroring the kernel), so an unset token fails closed
+      # in prod but stays open in dev.
+      BOLTRIG_ENV: ${BOLTRIG_ENV:-}
+      BOLTRIG_PRODUCTION: ${BOLTRIG_PRODUCTION:-}
     expose:
       - "8090"
     depends_on:
@@ -276,6 +297,53 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+  backup:
+    # M10 (SEC-70): scheduled off-box backup. The base `make backup` is a manual,
+    # same-host dump; this sidecar SHIPS the scheduled + off-box path so a self-
+    # hosted deployment with a durable audit chain is not one-disk-failure away
+    # from total loss. Profile-gated so the DEFAULT (dev) stack is unaffected:
+    #   docker compose --profile backup up -d
+    # It loops scripts/backup.sh every BACKUP_INTERVAL seconds: pg_dump (custom
+    # format) -> a timestamped file under /backups, optional passphrase encryption,
+    # and an off-box copy via rclone when BACKUP_REMOTE is set (skipped cleanly,
+    # with a warning, when it is unset - so it is safe to enable in dev too).
+    profiles: ["backup"]
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      PGHOST: postgres
+      PGUSER: ${POSTGRES_USER:-boltrig}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD (see .env.example)}
+      PGDATABASE: ${POSTGRES_DB:-boltrig}
+      BACKUP_DIR: /backups
+      BACKUP_INTERVAL: ${BACKUP_INTERVAL:-86400}
+      BACKUP_KEEP: ${BACKUP_KEEP:-7}
+      BACKUP_REMOTE: ${BACKUP_REMOTE:-}
+      BACKUP_PASSPHRASE: ${BACKUP_PASSPHRASE:-}
+    volumes:
+      - ./scripts/backup.sh:/usr/local/bin/backup.sh:ro
+      - ${BACKUP_DIR:-./backups}:/backups
+      # rclone config for the off-box leg (remotes, tokens). Only read when
+      # BACKUP_REMOTE is set; mount your own configured rclone.conf here.
+      - ${RCLONE_CONFIG_DIR:-./deploy/rclone}:/root/.config/rclone:ro
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -euo pipefail
+        # rclone is only needed for the off-box copy; install it once if a remote
+        # is configured (the dump-only path needs nothing beyond pg_dump).
+        if [ -n "${BACKUP_REMOTE:-}" ] && ! command -v rclone >/dev/null 2>&1; then
+          apt-get update && apt-get install -y --no-install-recommends rclone \
+            && rm -rf /var/lib/apt/lists/*
+        fi
+        while true; do
+          /usr/local/bin/backup.sh || echo "backup: run failed (retrying next interval)" >&2
+          sleep "${BACKUP_INTERVAL:-86400}"
+        done
+    depends_on:
+      postgres:
+        condition: service_healthy
 
 networks:
   # The app network: every service joins this by default.

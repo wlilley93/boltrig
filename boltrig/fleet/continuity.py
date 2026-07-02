@@ -31,6 +31,8 @@ import os
 
 from boltrig.models import ConversationMessage, MessageRole
 
+from .prompt_stack import wrap_untrusted
+
 _ROLE_LABEL = {
     MessageRole.USER: "User",
     MessageRole.ASSISTANT: "Assistant",
@@ -47,9 +49,15 @@ def continuity_enabled() -> bool:
 
 def _render_message(message: ConversationMessage) -> str:
     label = _ROLE_LABEL.get(message.role, str(getattr(message.role, "value", message.role)))
-    # A fixed, content-stable frame per message. Empty content (e.g. a turn that
-    # produced only tool/HITL events) still renders deterministically.
-    return f"{label}: {message.content or ''}\n\n"
+    # A fixed, content-stable frame per message. The label ("User:" / "Assistant:")
+    # is trusted framing we add; the message *body* is untrusted conversation data,
+    # so it is wrapped in a typed envelope (M1 / SEC-72) - a prior turn cannot smuggle
+    # instructions into a later turn's prompt. Wrapping per message keeps the render
+    # deterministic and append-only (prefix stable), so SEC-46 still holds. Empty
+    # content (e.g. a turn that produced only tool/HITL events) still renders
+    # deterministically as an empty envelope.
+    body = wrap_untrusted("conversation_turn", label.lower(), message.content or "")
+    return f"{label}: {body}\n\n"
 
 
 def render_transcript(messages: list[ConversationMessage]) -> str:

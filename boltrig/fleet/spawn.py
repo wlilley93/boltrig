@@ -424,7 +424,16 @@ class Spawner:
         return build_runtime(capability, lookup)
 
     def _compose_prompt(self, merged_prompt: str, task: str) -> str:
-        """Compose the skills' prompt fragments with the concrete task."""
+        """Compose the skills' prompt fragments with the concrete task.
+
+        M1 / SEC-72 boundary note: the only inputs here are ``merged_prompt`` (the
+        skills' authored ``prompt_fragment`` bodies, which are trusted admin-curated
+        content) and ``task``. The spawner composes no untrusted recall / tool
+        context of its own - untrusted spans are enveloped at their source (the chat
+        transcript via continuity, the inbound message via chat, tool results in the
+        Pi sidecar). ``task`` therefore arrives already enveloped on the chat path,
+        or is the initiating principal's own instruction on the direct-spawn path, so
+        it is NOT re-wrapped here (a second wrap would defang the inner envelopes)."""
         if merged_prompt:
             return f"{merged_prompt}\n\nTask:\n{task}"
         return f"Task:\n{task}"

@@ -16,6 +16,7 @@ from pathlib import Path
 
 import asyncpg
 
+from .base import clamp_work_page
 from .channels import ChannelStorePG
 from boltrig.models import (
     AdapterHealth,
@@ -418,7 +419,10 @@ class PostgresStore(ChannelStorePG):
     async def update_work_item(self, item: WorkItem):
         await self.create_work_item(item)  # upsert
 
-    async def list_work_items(self, tenant_id, status=None, parent_id=None, departments=None):
+    async def list_work_items(
+        self, tenant_id, status=None, parent_id=None, departments=None,
+        limit=None, cursor=None,
+    ):
         clauses = ["tenant_id=$1"]
         args: list = [tenant_id]
         if status is not None:
@@ -431,9 +435,18 @@ class PostgresStore(ChannelStorePG):
             # row-level department scope (US-IAM-02). owner_member encodes the dept.
             args.append(list(departments))
             clauses.append(f"owner_member = ANY(${len(args)}::text[])")
-        rows = await self._pool.fetch(
-            f"SELECT * FROM work_items WHERE {' AND '.join(clauses)}", *args
-        )
+        if cursor is not None:
+            # keyset on the stable PRIMARY KEY id (M7 / SEC-69): everything after
+            # the last id the caller saw.
+            args.append(cursor)
+            clauses.append(f"id > ${len(args)}")
+        # ORDER BY id makes the keyset overlap-free; the LIMIT (server-clamped)
+        # bounds the page. limit=None keeps the legacy full-slice contract.
+        sql = f"SELECT * FROM work_items WHERE {' AND '.join(clauses)} ORDER BY id"
+        if limit is not None:
+            args.append(clamp_work_page(limit))
+            sql += f" LIMIT ${len(args)}"
+        rows = await self._pool.fetch(sql, *args)
         return [_work(r) for r in rows]
 
     async def claim_work_item(self, tenant_id, worker_id, lease_seconds):

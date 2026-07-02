@@ -557,3 +557,31 @@ invariants:
     description: An inert identity provider cannot be silently believed enforced - a manifest that advertises identity.provider 'saml' (which has no wired assertion validator) is rejected at load rather than falling back to env-selected auth; oidc/cf-access load fine (M13).
     tests:
       - tests/security/test_auth.py::test_saml_provider_config_refuses_to_boot
+  SEC-69:
+    description: List reads are resource-bounded so no caller can exhaust memory/latency - /v1/work is keyset-paginated with a server-clamped page size, the memory facts/ingestions reads clamp the caller-supplied limit, and a batch memory ingest is capped by item count (M7, M9-memory / SEC-009 DoS-bounding).
+    tests:
+      - tests/security/test_dos_bounding.py::test_list_work_is_paginated_and_clamped
+      - tests/security/test_dos_bounding.py::test_memory_list_limits_clamped_and_ingest_capped
+  SEC-70:
+    description: The durable control plane is not LAN-exposed and the DB carries no baked default credential - Hatchet's engine (plaintext gRPC + API) and its unauthenticated dashboard bind their host ports to 127.0.0.1 in the base compose and are dropped entirely (ports []) by the secure overlay, and POSTGRES_PASSWORD uses the compose required-var form so the stack refuses to start unset while the Hatchet DSN interpolates the password rather than hardcoding boltrig:boltrig (M8/M9).
+    tests:
+      - tests/deploy/test_compose_hardening.py::test_hatchet_ports_are_loopback_only_in_base_compose
+      - tests/deploy/test_compose_hardening.py::test_secure_overlay_drops_hatchet_host_ports
+      - tests/deploy/test_compose_hardening.py::test_postgres_password_has_no_literal_default
+  SEC-71:
+    description: A scheduled off-box backup ships by default - a profile-gated backup sidecar (so the dev stack is unaffected) loops scripts/backup.sh to pg_dump the durable state, optionally encrypt it, and copy it off-box via rclone, failing loudly when a configured remote is broken (M10).
+    tests:
+      - tests/deploy/test_compose_hardening.py::test_backup_sidecar_ships_profile_gated
+  SEC-72:
+    description: Untrusted input is structurally enveloped - external tool results, the conversation transcript, and inbound channel/user text are wrapped in typed <untrusted ...>...</untrusted> delimiters at every composition site, a hostile payload that tries to close/forge the envelope is neutralised so it cannot break out, and the governance floor asserts that enveloped content is DATA never instructions (M1).
+    tests:
+      - tests/unit/test_prompt_stack.py::test_governance_floor_declares_untrusted_content_is_data
+      - tests/unit/test_prompt_stack.py::test_wrap_untrusted_envelopes_and_neutralises_breakout
+      - tests/security/test_prompt_injection_hardening.py::test_transcript_history_enveloped_before_spawn
+      - tests/security/test_prompt_injection_hardening.py::test_tool_result_wrapped_as_untrusted_envelope
+  SEC-73:
+    description: The Pi sidecar POST /run is hardened - it requires a shared-secret bearer (constant-time compare; fail-closed under a production signal when unset), and it egress-guards the caller-supplied mcp.url / model.endpoint, refusing a metadata/loopback/internal target BEFORE any outbound connection, closing an SSRF pivot from the sidecar (M2).
+    tests:
+      - tests/security/test_prompt_injection_hardening.py::test_sidecar_run_requires_auth
+      - tests/security/test_prompt_injection_hardening.py::test_sidecar_unconfigured_auth_fails_closed_in_prod
+      - tests/security/test_prompt_injection_hardening.py::test_sidecar_refuses_metadata_endpoint

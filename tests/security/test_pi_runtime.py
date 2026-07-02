@@ -49,6 +49,53 @@ def test_sidecar_request_carries_no_tool_credentials():
     assert body["system"] is None or "kernel verbs" in body["system"]
 
 
+@pytest.mark.invariant("SEC-73")
+async def test_pi_run_presents_sidecar_bearer_when_configured(monkeypatch):
+    """PiRuntime presents the shared PI_SIDECAR_TOKEN as a bearer so the
+    sidecar's fail-closed /run auth accepts it in prod (M2); unset in dev."""
+    seen: dict = {}
+
+    class _FakeStream:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        def raise_for_status(self):
+            pass
+
+        async def aiter_lines(self):
+            yield '{"type": "final", "output": {}, "summary": "ok"}'
+
+    class _FakeClient:
+        def __init__(self, *a, **k):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        def stream(self, method, url, *, json, headers):
+            seen["headers"] = headers
+            return _FakeStream()
+
+    import httpx
+
+    monkeypatch.setattr(httpx, "AsyncClient", _FakeClient)
+    monkeypatch.setenv("PI_SIDECAR_TOKEN", "shhh")
+    rt = PiRuntime(sidecar_url="http://pi", mcp_url="http://mcp", issue_token=lambda *a, **k: "TOK")
+    await rt.run("prompt", _ctx(), tools=[])
+    assert seen["headers"].get("Authorization") == "Bearer shhh"
+
+    seen.clear()
+    monkeypatch.delenv("PI_SIDECAR_TOKEN", raising=False)
+    await rt.run("prompt", _ctx(), tools=[])
+    assert "Authorization" not in seen["headers"]  # dev: no bearer sent
+
+
 @pytest.mark.invariant("FR-RUN-03")
 async def test_pi_run_tool_call_passes_chokepoint():
     store = InMemoryStore()

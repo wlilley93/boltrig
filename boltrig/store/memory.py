@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import timedelta
 
+from .base import clamp_work_page
 from .channels import ChannelStoreMem
 from boltrig.models import (
     AdapterRecord,
@@ -184,7 +185,10 @@ class InMemoryStore(ChannelStoreMem):
     async def update_work_item(self, item):
         self._work[(item.tenant_id, item.id)] = item
 
-    async def list_work_items(self, tenant_id, status=None, parent_id=None, departments=None):
+    async def list_work_items(
+        self, tenant_id, status=None, parent_id=None, departments=None,
+        limit=None, cursor=None,
+    ):
         out = [w for (t, _), w in self._work.items() if t == tenant_id]
         if status is not None:
             out = [w for w in out if w.status == status]
@@ -193,6 +197,14 @@ class InMemoryStore(ChannelStoreMem):
         if departments is not None:  # row-level department scope (US-IAM-02)
             allowed = set(departments)
             out = [w for w in out if w.owner_member in allowed]
+        # Keyset pagination on the stable id (M7 / SEC-69): order by id, drop
+        # everything up to and including the cursor, then take the clamped page.
+        # Mirrors the Postgres ORDER BY id / id > cursor / LIMIT contract.
+        out.sort(key=lambda w: w.id)
+        if cursor is not None:
+            out = [w for w in out if w.id > cursor]
+        if limit is not None:
+            out = out[: clamp_work_page(limit)]
         return out
 
     async def claim_work_item(self, tenant_id, worker_id, lease_seconds):

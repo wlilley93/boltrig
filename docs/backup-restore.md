@@ -21,8 +21,73 @@ make backup                 # -> ./backups/boltrig.dump (pg_dump custom format)
 docker compose exec -T postgres pg_dump -U boltrig -d boltrig -Fc > backups/boltrig.dump
 ```
 
-Run it on a schedule (cron / a scheduled workflow) and copy the dump off-box to
-encrypted storage. The custom format (`-Fc`) supports selective, parallel restore.
+The custom format (`-Fc`) supports selective, parallel restore.
+
+## Scheduled off-box backup (M10, SEC-70)
+
+`make backup` is a manual, same-host dump. For a self-hosted deployment with a
+durable audit chain, a single disk failure between manual runs is total loss, so
+the stack ships a scheduled + off-box path: the profile-gated `backup` sidecar in
+`docker-compose.yml`, which loops `scripts/backup.sh`.
+
+It is profile-gated, so the default (dev) stack is unaffected. Enable it with:
+
+```bash
+docker compose --profile backup up -d backup
+```
+
+Each run does: `pg_dump -Fc` to a timestamped file under `BACKUP_DIR`, optional
+passphrase encryption, prune to the newest `BACKUP_KEEP` archives, and (when
+`BACKUP_REMOTE` is set) an off-box copy via rclone.
+
+Configure it in `.env` (see `.env.example`):
+
+| Var | Meaning | Default |
+| --- | --- | --- |
+| `BACKUP_INTERVAL` | seconds between runs | `86400` (24h) |
+| `BACKUP_KEEP` | local archives to retain | `7` |
+| `BACKUP_DIR` | host dir for dumps (bind-mounted) | `./backups` |
+| `BACKUP_REMOTE` | rclone remote path (off-box) | unset (local-only) |
+| `RCLONE_CONFIG_DIR` | dir holding `rclone.conf` | `./deploy/rclone` |
+| `BACKUP_PASSPHRASE` | openssl AES-256 passphrase | unset (no encryption) |
+
+Off-box copy and encryption are OPTIONAL and fail loudly when misconfigured:
+
+- `BACKUP_REMOTE` **unset** -> the dump is written locally and the run warns that
+  the off-box leg was skipped (safe for dev).
+- `BACKUP_REMOTE` **set** -> a failed copy (or a missing `rclone`) exits non-zero,
+  so a broken remote can never pass silently. Point it at any rclone backend
+  (S3, B2, GCS, SFTP, etc.), e.g. `BACKUP_REMOTE=s3:my-bucket/boltrig`, and mount
+  your configured `rclone.conf` via `RCLONE_CONFIG_DIR`.
+
+Set `BACKUP_PASSPHRASE` to encrypt each archive at rest before it is written or
+copied off-box; keep the passphrase in your secret store (without it a restore is
+impossible). The archives are `boltrig-<UTC timestamp>.dump` (or `.dump.enc`).
+
+### systemd-timer alternative
+
+If you would rather not run the sidecar, `scripts/backup.sh` runs standalone with
+the same env vars (it uses libpq's `PGHOST`/`PGUSER`/`PGPASSWORD`/`PGDATABASE`).
+Drop a unit + timer on the host:
+
+```ini
+# /etc/systemd/system/boltrig-backup.service
+[Service]
+Type=oneshot
+EnvironmentFile=/opt/boltrig/.env
+Environment=PGHOST=127.0.0.1 BACKUP_DIR=/var/backups/boltrig
+ExecStart=/opt/boltrig/scripts/backup.sh
+
+# /etc/systemd/system/boltrig-backup.timer
+[Timer]
+OnCalendar=daily
+Persistent=true
+[Install]
+WantedBy=timers.target
+```
+
+Then `systemctl enable --now boltrig-backup.timer`. `pg_dump`, `rclone` and
+`openssl` must be installed on the host for this path.
 
 ## Restore
 
@@ -30,6 +95,17 @@ encrypted storage. The custom format (`-Fc`) supports selective, parallel restor
 make restore                # restores ./backups/boltrig.dump into the postgres service
 # or explicitly:
 docker compose exec -T postgres pg_restore -U boltrig -d boltrig --clean --if-exists < backups/boltrig.dump
+```
+
+To restore a sidecar-produced archive, pick the timestamped file and (if it was
+encrypted with `BACKUP_PASSPHRASE`) decrypt it first:
+
+```bash
+# encrypted archive (.dump.enc) -> plaintext custom-format dump
+openssl enc -d -aes-256-cbc -pbkdf2 -in boltrig-<ts>.dump.enc \
+  -out boltrig-<ts>.dump -pass env:BACKUP_PASSPHRASE
+docker compose exec -T postgres pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+  --clean --if-exists < boltrig-<ts>.dump
 ```
 
 Restore order for a full rebuild:

@@ -15,6 +15,7 @@ from fastapi import Depends, Request
 from fastapi.responses import JSONResponse
 
 from boltrig.models import BoltrigError
+from boltrig.store.base import MAX_INGEST_ITEMS, clamp_memory_list
 
 
 def _err(e: BoltrigError) -> JSONResponse:
@@ -73,6 +74,14 @@ def register_memory_routes(app, *, principal_dep, get_kernel) -> None:
         if owner_scope not in set(_scopes(p)):
             return JSONResponse({"status": "denied", "reason": f"scope {owner_scope} not permitted"},
                                 status_code=403)
+        # M9-memory / SEC-009 / SEC-69: cap the batch item count so one ingest
+        # request cannot enqueue an unbounded amount of screening work.
+        items = body.get("items") or []
+        if len(items) > MAX_INGEST_ITEMS:
+            return JSONResponse(
+                {"status": "error", "reason": f"too many items (max {MAX_INGEST_ITEMS})"},
+                status_code=413,
+            )
         executor = (getattr(request.app.state, "platform", {}) or {}).get("workflow_executor")
         try:
             if body.get("source_kind") == "conversation" and body.get("source_ref"):
@@ -92,6 +101,8 @@ def register_memory_routes(app, *, principal_dep, get_kernel) -> None:
 
     @app.get("/v1/memory/facts")
     async def list_facts(kind: str | None = None, limit: int = 50, k=K, p=P) -> dict:
+        # M9-memory / SEC-009 / SEC-69: clamp the caller-supplied page size.
+        limit = clamp_memory_list(limit)
         facts = await k.store.list_memory_facts(p.tenant_id, _scopes(p), kind=kind, limit=limit)
         return {"facts": [
             {"id": f.id, "owner_scope": f.owner_scope, "kind": f.kind, "content": f.content,
@@ -103,6 +114,8 @@ def register_memory_routes(app, *, principal_dep, get_kernel) -> None:
 
     @app.get("/v1/memory/ingestions")
     async def list_ingestions(limit: int = 50, k=K, p=P) -> dict:
+        # M9-memory / SEC-009 / SEC-69: clamp the caller-supplied page size.
+        limit = clamp_memory_list(limit)
         rows = await k.store.list_memory_ingestions(p.tenant_id, limit=limit)
         permitted = set(_scopes(p))
         is_admin = p.role == "org-admin"

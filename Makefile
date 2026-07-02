@@ -13,7 +13,7 @@ BACKUP_DIR ?= ./backups
 BACKUP ?= $(BACKUP_DIR)/boltrig.dump
 
 .DEFAULT_GOAL := help
-.PHONY: help up down logs test lint smoke invariants migrate secure-up backup restore
+.PHONY: help up down logs test lint smoke invariants migrate secure-up backup backup-schedule restore
 
 help: ## List the available targets
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -51,6 +51,10 @@ backup: ## Dump durable state to $(BACKUP) (pg_dump custom format). See docs/bac
 	@mkdir -p $(BACKUP_DIR)
 	$(COMPOSE) exec -T postgres pg_dump -U $(PG_USER) -d $(PG_DB) -Fc > $(BACKUP)
 	@echo "backup written to $(BACKUP)"
+
+backup-schedule: ## Start the scheduled off-box backup sidecar (M10; needs BACKUP_* in .env)
+	$(COMPOSE) --profile backup up -d backup
+	@echo "backup sidecar started (loops scripts/backup.sh; see docs/backup-restore.md)"
 
 restore: ## Restore durable state from $(BACKUP) (drops + recreates objects)
 	$(COMPOSE) exec -T postgres pg_restore -U $(PG_USER) -d $(PG_DB) --clean --if-exists < $(BACKUP)

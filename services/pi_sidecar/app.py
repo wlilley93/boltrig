@@ -33,13 +33,18 @@ Where a real Pi loop slots in
 
 from __future__ import annotations
 
+import hmac
+import ipaddress
 import json
 import os
+import re
+import socket
 from collections.abc import AsyncIterator
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -55,6 +60,158 @@ _DEFAULT_MAX_STEPS = 12
 _MICROS_PER_TOKEN = int(os.environ.get("PI_SIDECAR_MICROS_PER_TOKEN", "0"))
 
 _MCP_TOKEN_HEADER = "x-boltrig-mcp-token"
+
+# The shared secret for POST /run (M2 / SEC-73). When set, every /run request must
+# carry a matching bearer. When UNSET the sidecar runs open in dev only; under a
+# production signal it fails closed (mirrors the kernel's BOLTRIG_DEV_AUTH posture).
+_RUN_TOKEN_ENV = "PI_SIDECAR_TOKEN"
+_PROD_SIGNALS = {"prod", "production", "live"}
+
+
+# ---------------------------------------------------------------------------
+# M1 (SEC-72): the untrusted-input envelope, vendored locally.
+#
+# A tool result comes from an external MCP verb / the open web via web.fetch and is
+# attacker-controllable, so it is wrapped in a typed envelope before it is fed back
+# to the model as a tool message. This is a deliberate local copy of the fleet's
+# ``wrap_untrusted`` helper: the sidecar is a SEVERED service and must NOT import
+# ``boltrig.*`` (SEC-28), so the ~10 lines are duplicated rather than shared.
+# ---------------------------------------------------------------------------
+
+_UNTRUSTED_TAG_RE = re.compile(r"<(?=\s*/?\s*untrusted\b)", re.IGNORECASE)
+_ATTR_UNSAFE_RE = re.compile(r'[<>"\r\n]')
+
+
+def _wrap_untrusted(kind: str, source: str, content: str) -> str:
+    """Wrap an untrusted span in ``<untrusted kind=".." source="..">..</untrusted>``,
+    defanging any literal ``untrusted`` delimiter inside the payload so it cannot
+    break out of the envelope (M1). The governance floor (req.system) tells the model
+    envelope content is data, never instructions."""
+    body = _UNTRUSTED_TAG_RE.sub("&lt;", content or "")
+    safe_kind = _ATTR_UNSAFE_RE.sub("_", str(kind))
+    safe_source = _ATTR_UNSAFE_RE.sub("_", str(source))
+    return f'<untrusted kind="{safe_kind}" source="{safe_source}">{body}</untrusted>'
+
+
+# ---------------------------------------------------------------------------
+# M2 (SEC-73): request auth + a local egress guard.
+#
+# The egress guard is likewise a minimal local implementation (no ``boltrig``
+# import): before the sidecar connects to a caller-supplied mcp.url / model.endpoint
+# it refuses any host that resolves to metadata / loopback / private / link-local /
+# reserved space, closing an SSRF pivot from the sidecar's network position.
+# ---------------------------------------------------------------------------
+
+
+def _production_signal() -> str | None:
+    """A best-effort production signal (mirrors the kernel's detection)."""
+    if (os.environ.get("BOLTRIG_PRODUCTION") or "").strip().lower() in {"1", "true", "yes", "on"}:
+        return "BOLTRIG_PRODUCTION"
+    for key in ("ENV", "BOLTRIG_ENV", "APP_ENV"):
+        val = (os.environ.get(key) or "").strip().lower()
+        if val in _PROD_SIGNALS:
+            return f"{key}={val}"
+    return None
+
+
+def check_run_auth(request: Request) -> JSONResponse | None:
+    """Authenticate a /run request against the shared secret (M2 / SEC-73).
+
+    Returns a refusal response, or ``None`` when the request may proceed. Uses a
+    constant-time compare so a bearer cannot be discovered by timing."""
+    token = os.environ.get(_RUN_TOKEN_ENV)
+    if not token:
+        # No shared secret configured: open in dev, fail CLOSED under a prod signal.
+        signal = _production_signal()
+        if signal is not None:
+            return JSONResponse(
+                {"error": f"sidecar auth not configured under a production signal ({signal})"},
+                status_code=503,
+            )
+        return None  # dev default (documented): unauthenticated /run is dev-only
+    header = request.headers.get("authorization", "")
+    presented = header[7:] if header[:7].lower() == "bearer " else header
+    if not presented or not hmac.compare_digest(presented, token):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    return None
+
+
+def _is_metadata_or_loopback_ip(ip: str) -> bool:
+    """The always-unsafe subset: link-local (incl. 169.254.169.254 cloud metadata),
+    loopback, unspecified. NEVER a legitimate sidecar target, so it is refused even
+    for an allow-listed host. Unparseable fails closed."""
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return True
+    return addr.is_link_local or addr.is_loopback or addr.is_unspecified
+
+
+def _is_blocked_ip(ip: str) -> bool:
+    """True if an address must be refused by default: private / loopback / link-local
+    (incl. 169.254.169.254 cloud metadata) / reserved / multicast / unspecified. An
+    unparseable address fails closed."""
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return True
+    return (
+        addr.is_private or addr.is_loopback or addr.is_link_local
+        or addr.is_reserved or addr.is_multicast or addr.is_unspecified
+    )
+
+
+def _egress_allowlist() -> set[str]:
+    """Operator-configured hosts permitted on the private network (the kernel MCP
+    face and the model endpoint). Comma-separated in ``PI_SIDECAR_EGRESS_ALLOW``.
+    The metadata/loopback subset is refused even for an allow-listed host."""
+    raw = os.environ.get("PI_SIDECAR_EGRESS_ALLOW", "")
+    return {h.strip().lower() for h in raw.split(",") if h.strip()}
+
+
+def egress_refusal(url: str | None) -> str | None:
+    """Return a refusal reason if ``url`` is not a safe outbound target, else None
+    (M2 / SEC-73). Refuses non-http(s) schemes, unresolvable hosts (fail-closed),
+    metadata/loopback always, and every other internal/private address unless the
+    host is on the operator allow-list (the sidecar's legitimate kernel-MCP / model
+    targets live on a private container network, so a blanket RFC1918 block would
+    break normal runs; the allow-list is the documented, fail-safe escape hatch)."""
+    if not url:
+        return None
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"}:
+        return f"unsupported scheme '{parsed.scheme}'"
+    host = parsed.hostname
+    if not host:
+        return "no host in url"
+    host_l = host.lower()
+    allow = _egress_allowlist()
+    allowlisted = any(host_l == a or host_l.endswith("." + a) for a in allow)
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except OSError:
+        return "host did not resolve"
+    ips = {info[4][0] for info in infos}
+    if not ips:
+        return "host did not resolve"
+    for ip in ips:
+        if _is_metadata_or_loopback_ip(ip):
+            return f"target resolves to a metadata/loopback address ({ip})"
+        if not allowlisted and _is_blocked_ip(ip):
+            return f"target resolves to a non-routable/internal address ({ip})"
+    return None
+
+
+def check_run_egress(req: RunRequest) -> JSONResponse | None:
+    """Refuse a /run whose mcp.url or model.endpoint resolves to internal space,
+    BEFORE any outbound connection is made (M2 / SEC-73)."""
+    for label, url in (("mcp.url", req.mcp.url), ("model.endpoint", req.model.endpoint)):
+        reason = egress_refusal(url)
+        if reason:
+            return JSONResponse(
+                {"error": f"egress refused for {label}: {reason}"}, status_code=403
+            )
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -427,13 +584,21 @@ async def run_loop(req: RunRequest) -> AsyncIterator[str]:
                 if status == "ok" and "create" in verb:
                     new_work_items.append({"verb": verb, "output": payload})
 
-                # Feed the result back to the model as a tool message.
+                # Feed the result back to the model as a tool message. The result is
+                # attacker-controllable (an external MCP verb / web.fetch output), so
+                # it is wrapped in a typed untrusted envelope (M1 / SEC-72): the model
+                # treats it as DATA per the governance floor and a hostile payload
+                # (e.g. an embedded "</untrusted>") cannot break out of the envelope.
                 messages.append(
                     {
                         "role": "tool",
                         "tool_call_id": call.get("id") if isinstance(call, dict) else None,
                         "name": verb,
-                        "content": json.dumps({"status": status, "output": payload}),
+                        "content": _wrap_untrusted(
+                            "tool_result",
+                            verb,
+                            json.dumps({"status": status, "output": payload}),
+                        ),
                     }
                 )
 
@@ -498,10 +663,19 @@ async def health() -> JSONResponse:
 
 
 @app.post("/run")
-async def run(req: RunRequest) -> StreamingResponse:
+async def run(req: RunRequest, request: Request) -> Response:
     """Run one agent loop and stream newline-delimited JSON events (SRS S5.3).
 
-    Always returns 200 with a well-formed stream; failures are degraded into the
-    final event rather than raised (P9, US-RUN-05).
+    Two security gates run BEFORE any work (M2 / SEC-73): the shared-secret bearer
+    check, then the egress guard over the caller-supplied mcp.url / model.endpoint.
+    Either gate returns a refusal (401 / 403 / 503) with no outbound connection. A
+    permitted run then streams as before - always 200 with a well-formed stream;
+    backend failures degrade into the final event rather than raise (P9, US-RUN-05).
     """
+    auth_refusal = check_run_auth(request)
+    if auth_refusal is not None:
+        return auth_refusal
+    egress_refusal_resp = check_run_egress(req)
+    if egress_refusal_resp is not None:
+        return egress_refusal_resp
     return StreamingResponse(run_loop(req), media_type="application/x-ndjson")

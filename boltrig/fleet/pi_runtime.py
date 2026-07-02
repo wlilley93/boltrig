@@ -103,9 +103,16 @@ class PiRuntime:
         try:
             import httpx
 
+            # SEC-73 (M2): present the shared sidecar bearer so the sidecar's
+            # fail-closed /run auth accepts this call in prod. Unset in dev, where
+            # the sidecar runs open; separate from the run-scoped MCP token.
+            sidecar_token = os.environ.get("PI_SIDECAR_TOKEN")
+            headers = (
+                {"Authorization": f"Bearer {sidecar_token}"} if sidecar_token else {}
+            )
             async with httpx.AsyncClient(timeout=self._timeout) as client:
                 async with client.stream(
-                    "POST", self.sidecar_url.rstrip("/") + "/run", json=body
+                    "POST", self.sidecar_url.rstrip("/") + "/run", json=body, headers=headers
                 ) as resp:
                     resp.raise_for_status()
                     async for line in resp.aiter_lines():

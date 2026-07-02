@@ -30,6 +30,7 @@ from boltrig.models import (
 )
 
 from .continuity import compose_turn_task, continuity_enabled
+from .prompt_stack import wrap_untrusted
 from .pump import persist_new_work_items
 
 # turn_executor(*, tenant_id, user_id, conversation_id, run_id, message, relay) -> awaitable.
@@ -172,7 +173,12 @@ def build_turn_executor(kernel, spawner, *, continuity: bool | None = None) -> T
             actor_tier="tier1", run_id=run_id, on_behalf_of=user_id,
             extra={"conversation_id": conversation_id},
         )
-        task = message
+        # The inbound turn text is untrusted user/channel input, so it is enveloped
+        # before it reaches the model (M1 / SEC-72). On the continuity path the
+        # transcript renderer envelopes every turn body (continuity._render_message);
+        # on the bare path we wrap the single message here so neither path ever feeds
+        # raw inbound text into the prompt.
+        task = wrap_untrusted("channel_inbound", user_id or "user", message)
         if use_continuity:
             # The current user message was already persisted by handle_turn, so
             # this scoped read returns the full ordered transcript ending in it.

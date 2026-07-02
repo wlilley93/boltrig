@@ -50,6 +50,17 @@ services:
   ui:
     ports: []
 
+  # M8 (SEC-69): drop the Hatchet host ports entirely in the secure posture. The
+  # engine (plaintext gRPC + API) and the unauthenticated dashboard become
+  # reachable ONLY over the compose network (the fleet-worker still reaches the
+  # engine by service name), never from any host interface - matching how this
+  # overlay already strips kernel/ui.
+  hatchet-engine:
+    ports: []
+
+  hatchet-dashboard:
+    ports: []
+
   postgres:
     # Encrypted-at-rest (SEC-11): point the data dir at an encrypted device/path
     # (LUKS volume, or a cloud encrypted disk). Set PGDATA_HOST to that mount.
