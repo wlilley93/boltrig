@@ -3678,3 +3678,1121 @@ body {
   gap: 10px;
   margin-bottom: 12px;
 }
+
+/* ==========================================================================
+   Form primitive register (uxForm.tsx seat): N1 Switch + saved wisp,
+   N2 CardSelect, N3 ChipPicker, N4 EntityPicker, N5 ScopeBuilder, N6 Stepper,
+   N8 Field v2 slots, N9 JsonDisclosure, N17 OrderedPicker, P9 SchemaFormV2
+   inset groups. Appended after the v3 cascade; semantic --color-* tokens
+   only; BEM-ish ux- prefix; 3px radii. No bespoke keyframes: transitions
+   only, so the global reduce-motion rules quiet everything at once; the
+   global focus-visible ring is relied on, never restyled.
+   ========================================================================== */
+
+/* --- N8 Field v2: meta (label row) + error (below hint) slots -------------- */
+.ux-field__labelrow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.ux-field__meta {
+  font-size: var(--fs-xs);
+  color: var(--color-text-secondary);
+  text-align: right;
+  white-space: nowrap;
+}
+.ux-field__error {
+  font-size: var(--fs-xs);
+  color: var(--color-down);
+  line-height: 1.45;
+}
+.ux-field--error > input,
+.ux-field--error > textarea,
+.ux-field--error > select,
+.ux-field--error .ux-picker__trigger,
+.ux-field--error .ux-chips,
+.ux-field--error .ux-stepper__box {
+  border-color: var(--color-down);
+}
+
+/* --- N1 Switch: instant-apply boolean; label left, control right ----------- */
+.ux-switch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ux-switch__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.ux-switch__label {
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+.ux-switch__hint {
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+  line-height: 1.45;
+}
+.ux-switch__ctl {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 22px;
+  padding: 2px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 11px;
+  background: var(--color-bg-inset);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+.ux-switch__ctl[aria-checked="true"] {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+.ux-switch__ctl:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.ux-switch--busy .ux-switch__ctl {
+  cursor: progress;
+}
+.ux-switch__thumb {
+  display: block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--color-text-primary);
+  transition: transform var(--dur-fast) var(--ease);
+}
+.ux-switch__ctl[aria-checked="true"] .ux-switch__thumb {
+  transform: translateX(18px);
+  background: var(--color-text-oncolor);
+}
+
+/* the transient "Saved" affirmation (P16); timer-driven, transition-faded */
+.ux-wisp {
+  font-size: var(--fs-xs);
+  color: var(--color-ok);
+  opacity: 0;
+  transition: opacity var(--dur-med) var(--ease);
+}
+.ux-wisp--on {
+  opacity: 1;
+}
+
+/* --- N2 CardSelect: enum-with-metadata cards, radio semantics -------------- */
+.ux-cardsel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+}
+.ux-cardsel__card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 11px 13px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 3px;
+  background: var(--color-bg-card);
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-family: var(--font-ui);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease);
+}
+.ux-cardsel__card:hover {
+  border-color: var(--color-border-strong);
+}
+.ux-cardsel__card[aria-checked="true"] {
+  border-color: var(--color-accent);
+}
+.ux-cardsel__card:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.ux-cardsel__title {
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.ux-cardsel__body {
+  font-size: var(--fs-xs);
+  line-height: 1.45;
+}
+.ux-cardsel__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+/* --- N3 ChipPicker: chips + searchable candidates --------------------------- */
+.ux-chips {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 8px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 3px;
+  background: var(--color-bg-inset);
+}
+.ux-chips__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+.ux-chips__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 4px 2px 8px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 2px;
+  background: var(--color-bg-card);
+  font-size: var(--fs-xs);
+  color: var(--color-text-secondary);
+}
+.ux-chips__chip--mono {
+  font-family: var(--font-mono);
+}
+.ux-chips__chip--warn {
+  border-color: var(--color-warn);
+  color: var(--color-warn);
+}
+.ux-chips__rm {
+  border: none;
+  background: none;
+  color: var(--color-text-muted);
+  font: inherit;
+  line-height: 1;
+  padding: 1px 3px;
+  cursor: pointer;
+}
+.ux-chips__rm:hover {
+  color: var(--color-down);
+}
+.ux-chips__search {
+  width: 100%;
+}
+.ux-chips__list {
+  display: flex;
+  flex-direction: column;
+  max-height: 180px;
+  overflow: auto;
+}
+.ux-chips__cand {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  background: none;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: var(--fs-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.ux-chips--mono .ux-chips__cand {
+  font-family: var(--font-mono);
+}
+.ux-chips__cand:hover,
+.ux-chips__cand--act {
+  background: var(--color-bg-card);
+  color: var(--color-text-primary);
+}
+/* amendment 12: a candidate can be disabled with a visible reason line */
+.ux-chips__cand--off {
+  cursor: not-allowed;
+  color: var(--color-text-muted);
+}
+.ux-chips__cand--off:hover {
+  background: none;
+  color: var(--color-text-muted);
+}
+.ux-chips__cand-hint,
+.ux-chips__cand-why {
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+}
+.ux-chips__err {
+  font-size: var(--fs-xs);
+  color: var(--color-down);
+}
+.ux-chips__addbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: 2px;
+  background: none;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+.ux-chips__addbtn:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+/* --- N4 EntityPicker: combobox trigger + in-flow absolute panel ------------ */
+/* no portals; the deck transform breaks position:fixed, so the panel is
+   absolutely positioned inside the field wrapper (z 30 < drawer 70 < palette 80) */
+.ux-picker {
+  position: relative;
+}
+.ux-picker__trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  padding: 5px 10px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 3px;
+  background: var(--color-bg-inset);
+  color: var(--color-text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ux-picker__trigger:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.ux-picker__val {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ux-picker__ph {
+  color: var(--color-text-muted);
+  font-size: var(--fs-sm);
+}
+.ux-picker__chev {
+  margin-left: auto;
+  color: var(--color-text-muted);
+  font-size: var(--fs-xs);
+}
+.ux-picker__panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 3px;
+  background: var(--color-bg-raised);
+  box-shadow: var(--elev-2);
+}
+.ux-picker__list {
+  display: flex;
+  flex-direction: column;
+  max-height: 240px;
+  overflow: auto;
+}
+.ux-picker__group {
+  padding: 6px 8px 2px;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+}
+.ux-picker__opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  background: none;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: var(--fs-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.ux-picker__opt code {
+  font-size: var(--fs-sm);
+  color: var(--color-text-primary);
+}
+.ux-picker__opt:hover,
+.ux-picker__opt--act {
+  background: var(--color-bg-card);
+}
+.ux-picker__opt[aria-selected="true"] {
+  color: var(--color-accent);
+}
+.ux-picker__optlabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ux-picker__preview {
+  margin-top: 6px;
+}
+.ux-picker__none {
+  padding: 8px;
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+}
+
+/* --- N5 ScopeBuilder: chips + verb tree + live match preview --------------- */
+.ux-scope {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.ux-scope__presets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.ux-scope__search {
+  width: 100%;
+}
+.ux-scope__tree {
+  display: flex;
+  flex-direction: column;
+  max-height: 260px;
+  overflow: auto;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 3px;
+  background: var(--color-bg-inset);
+}
+.ux-scope__noun {
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+.ux-scope__noun:last-child {
+  border-bottom: none;
+}
+.ux-scope__nounrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+}
+.ux-scope__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  padding: 3px 2px;
+  border: none;
+  background: none;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: var(--fs-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.ux-scope__caret {
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+}
+.ux-scope__nounname {
+  font-family: var(--font-mono);
+  color: var(--color-text-primary);
+}
+.ux-scope__count {
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+}
+.ux-scope__verbs {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 8px 6px 22px;
+}
+.ux-scope__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+}
+.ux-scope__verbid {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--color-text-secondary);
+}
+.ux-scope__row .badge {
+  flex: 0 0 auto;
+}
+.ux-scope__covered {
+  font-size: var(--fs-xs);
+  color: var(--color-ok);
+}
+.ux-scope__preview {
+  font-size: var(--fs-sm);
+  color: var(--color-text-secondary);
+}
+.ux-scope__preview summary {
+  cursor: pointer;
+}
+.ux-scope__matchlist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 6px 0 0;
+}
+/* pattern-no-match is information, not a failure: warn, never red (P24) */
+.ux-scope__warn {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--color-warn);
+  line-height: 1.45;
+}
+
+/* --- N6 Stepper: number nudger with unit + caller-computed meta ------------ */
+.ux-stepper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ux-stepper__box {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px 0 0;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 3px;
+  background: var(--color-bg-inset);
+}
+.ux-stepper__box input {
+  width: 72px;
+  border: none;
+  background: none;
+  text-align: right;
+}
+.ux-stepper__unit {
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+.ux-stepper__meta {
+  font-size: var(--fs-xs);
+  color: var(--color-text-secondary);
+}
+
+/* --- N9 JsonDisclosure: the collapsed JSON escape hatch -------------------- */
+.ux-jsond {
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 3px;
+  background: var(--color-bg-inset);
+}
+.ux-jsond--invalid {
+  border-color: var(--color-down);
+}
+.ux-jsond__summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  font-size: var(--fs-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  list-style: none;
+}
+.ux-jsond__summary::-webkit-details-marker {
+  display: none;
+}
+.ux-jsond__summary::before {
+  content: "\25B8";
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+}
+.ux-jsond[open] > .ux-jsond__summary::before {
+  content: "\25BE";
+}
+/* invalid stays visible while collapsed (amendment 9 guard is caller-side) */
+.ux-jsond__flag {
+  margin-left: auto;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--color-down);
+}
+.ux-jsond__note {
+  margin-left: auto;
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+}
+.ux-jsond__body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 10px 10px;
+}
+.ux-jsond__text {
+  width: 100%;
+  min-height: 120px;
+  resize: vertical;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+}
+.ux-jsond__err {
+  font-size: var(--fs-xs);
+  color: var(--color-down);
+}
+
+/* --- N17 OrderedPicker: numbered rows, moves announced --------------------- */
+.ux-ordered {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ux-ordered__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 3px;
+  background: var(--color-bg-inset);
+}
+.ux-ordered__row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+.ux-ordered__row:last-child {
+  border-bottom: none;
+}
+.ux-ordered__num {
+  flex: 0 0 auto;
+  min-width: 18px;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+}
+.ux-ordered__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-sm);
+  color: var(--color-text-primary);
+}
+.ux-ordered__acts {
+  display: inline-flex;
+  gap: 3px;
+}
+.ux-ordered__add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+/* --- P9 SchemaFormV2: nested object as an inset group of rows -------------- */
+.ux-inset {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border-subtle);
+  border-left: 2px solid var(--color-border-strong);
+  border-radius: 3px;
+  background: var(--color-bg-card);
+}
+.ux-inset__label {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.ux-inset__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+}
+
+/* visually hidden live region (OrderedPicker announcements) */
+.ux-vh {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* 44px targets under coarse pointers (P36); the global rule covers .btn,
+   input, select, textarea already, so only the register's custom controls
+   are listed here. */
+@media (pointer: coarse) {
+  .ux-switch__ctl {
+    width: 52px;
+    height: 30px;
+    min-height: 30px;
+  }
+  .ux-switch__thumb {
+    width: 24px;
+    height: 24px;
+  }
+  .ux-switch__ctl[aria-checked="true"] .ux-switch__thumb {
+    transform: translateX(22px);
+  }
+  .ux-switch {
+    min-height: 44px;
+  }
+  .ux-chips__chip,
+  .ux-chips__cand,
+  .ux-chips__addbtn,
+  .ux-chips__rm,
+  .ux-picker__trigger,
+  .ux-picker__opt,
+  .ux-cardsel__card,
+  .ux-ordered__row,
+  .ux-scope__toggle,
+  .ux-jsond__summary {
+    min-height: 44px;
+  }
+}
+
+/* ==========================================================================
+   Flow primitives (uxFlow seat): SaveBar N10, Disclosure N11, CoachMark N12,
+   Skeleton N13, ArmConfirm N14, PendingHumanCard N15, ByChat N16, SecretOnce
+   N18, DiffView N19, GrantList. Appended after the v3 layer; semantic
+   --color-* tokens only; 3px radii; BEM-ish ux- prefix. The global focus
+   ring, coarse-pointer targets and reduce-motion rules apply as-is; the only
+   motion added is the skeleton shimmer, which the global reduce-motion rules
+   freeze to a static block. Amber appears ONLY on the kernel-governed pieces
+   (L4). No em or en dashes.
+   ========================================================================== */
+
+/* --- ArmConfirm (N14): in-place two-step confirm --------------------------- */
+.ux-arm {
+  outline: none;
+}
+.ux-arm__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+.ux-arm__error {
+  color: var(--color-down);
+  font-size: var(--fs-xs);
+}
+
+/* tone tints for the CONFIRM button only (rest buttons stay plain, P27) */
+.ux-btn--danger {
+  color: var(--color-down);
+  border-color: rgba(240, 101, 74, 0.5);
+  background: rgba(240, 101, 74, 0.1);
+}
+.ux-btn--danger:hover {
+  border-color: var(--color-down);
+  background: rgba(240, 101, 74, 0.16);
+}
+.ux-btn--warn {
+  color: var(--color-warn);
+  border-color: rgba(232, 179, 57, 0.5);
+  background: rgba(232, 179, 57, 0.08);
+}
+.ux-btn--warn:hover {
+  border-color: var(--color-warn);
+  background: rgba(232, 179, 57, 0.14);
+}
+/* amber lawful here: the consequence tone is only for kernel-governed acts */
+.ux-btn--consequence {
+  color: var(--color-consequence-high);
+  border-color: rgba(255, 122, 69, 0.5);
+  background: rgba(255, 122, 69, 0.08);
+}
+.ux-btn--consequence:hover {
+  border-color: var(--color-consequence-high);
+  background: rgba(255, 122, 69, 0.14);
+}
+
+/* --- SaveBar (N10): pinned to the slide frame bottom ----------------------- */
+/* sticky INSIDE the frame scroller, never fixed: the deck plane transform
+   makes position:fixed resolve to the slide. margin-top:auto lets a
+   flex-column panel push the bar to the frame bottom when content is short. */
+.ux-savebar {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border: 1px solid var(--color-border-strong);
+  border-left: 2px solid var(--color-accent);
+  border-radius: 3px;
+  background: var(--color-bg-card);
+  backdrop-filter: blur(8px);
+  box-shadow: var(--elev-2);
+}
+.ux-savebar__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.ux-savebar__label {
+  font-size: var(--fs-sm);
+  color: var(--color-text-primary);
+}
+/* amber only because governed = the kernel gate is certainly in play (L4) */
+.ux-savebar__foreshadow {
+  font-size: var(--fs-xs);
+  color: var(--color-consequence-high);
+}
+.ux-savebar__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ux-savebar__confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  outline: none;
+}
+.ux-savebar__restate {
+  font-size: var(--fs-xs);
+  color: var(--color-text-secondary);
+}
+
+/* --- Disclosure (N11) ------------------------------------------------------ */
+.ux-disclosure {
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 3px;
+  background: var(--color-bg-raised);
+}
+.ux-disclosure__summary {
+  padding: 7px 11px;
+  font-size: var(--fs-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+.ux-disclosure__summary:hover {
+  color: var(--color-text-primary);
+}
+.ux-disclosure__count {
+  margin-left: 8px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--color-accent);
+  border: 1px solid rgba(61, 211, 240, 0.3);
+  border-radius: 2px;
+  padding: 0 5px;
+}
+.ux-disclosure__body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 11px 11px;
+}
+
+/* --- Skeleton (N13): first load only, static under reduce-motion ----------- */
+.ux-skel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ux-skel__item {
+  position: relative;
+  overflow: hidden;
+  height: 16px;
+  border-radius: 3px;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border-subtle);
+}
+/* reduce-motion zeroes the duration: the highlight ends offscreen, leaving a
+   static block; no bespoke motion override needed */
+.ux-skel__item::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.06), transparent);
+  animation: ux-skel-shimmer var(--pulse) var(--ease) infinite;
+}
+@keyframes ux-skel-shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+.ux-skel--rows .ux-skel__item:nth-child(4n + 2) {
+  width: 84%;
+}
+.ux-skel--rows .ux-skel__item:nth-child(4n + 3) {
+  width: 92%;
+}
+.ux-skel--rows .ux-skel__item:nth-child(4n + 4) {
+  width: 70%;
+}
+.ux-skel--cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+.ux-skel--cards .ux-skel__item {
+  height: 96px;
+}
+.ux-skel--transcript .ux-skel__item {
+  height: 42px;
+  width: 72%;
+}
+.ux-skel--transcript .ux-skel__item:nth-child(2n) {
+  width: 54%;
+  margin-left: auto;
+}
+
+/* --- CoachMark (N12) -------------------------------------------------------- */
+.ux-coach {
+  max-width: 60ch;
+}
+.ux-coach__actions {
+  display: inline-flex;
+  margin-top: 2px;
+}
+
+/* --- GrantList: mono chips, wrapping ---------------------------------------- */
+.ux-grants {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+/* --- PendingHumanCard (N15): steady amber accent, never pulsing (canon) ----- */
+.ux-pending {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px 12px 16px;
+  border: 1px solid var(--color-border-subtle);
+  border-left: 3px solid var(--color-consequence-high);
+  border-radius: 3px;
+  background: rgba(255, 122, 69, 0.05);
+}
+.ux-pending--ok {
+  border-left-color: var(--color-ok);
+  background: rgba(63, 185, 132, 0.05);
+}
+.ux-pending--down {
+  border-left-color: var(--color-down);
+  background: rgba(240, 101, 74, 0.05);
+}
+.ux-pending__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ux-pending__headline {
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.ux-pending__sentence,
+.ux-pending__verb,
+.ux-pending__status,
+.ux-pending__ok,
+.ux-pending__down {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--color-text-secondary);
+}
+.ux-pending__verb code {
+  font-family: var(--font-mono);
+  color: var(--color-text-primary);
+}
+.ux-pending__status {
+  color: var(--color-consequence-high);
+}
+.ux-pending__ok {
+  color: var(--color-ok);
+}
+.ux-pending__down {
+  color: var(--color-down);
+}
+.ux-pending__idrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ux-pending__idlabel {
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+}
+.ux-pending__id {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--color-bg-inset);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 3px;
+  padding: 2px 8px;
+  cursor: pointer;
+  color: var(--color-text-primary);
+  font: inherit;
+}
+.ux-pending__id code {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+}
+.ux-pending__copy {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+}
+.ux-pending__id:hover .ux-pending__copy {
+  color: var(--color-accent);
+}
+.ux-pending__foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* --- ByChat (N16): quiet, always visible ------------------------------------ */
+.ux-bychat {
+  color: var(--color-text-muted);
+}
+.ux-bychat:hover {
+  color: var(--color-text-primary);
+}
+
+/* --- SecretOnce (N18): warn tone, never amber (no kernel governance, L4) ---- */
+.ux-secret {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px 12px 16px;
+  border: 1px solid rgba(232, 179, 57, 0.35);
+  border-left: 3px solid var(--color-warn);
+  border-radius: 3px;
+  background: rgba(232, 179, 57, 0.05);
+}
+.ux-secret__title {
+  font-size: var(--fs-md);
+  color: var(--color-text-primary);
+}
+.ux-secret__body {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--color-text-secondary);
+}
+.ux-secret__block {
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--color-bg-inset);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--color-text-primary);
+  white-space: pre-wrap;
+  word-break: break-all;
+  cursor: pointer;
+  user-select: all;
+}
+.ux-secret__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ux-secret__meta {
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+}
+
+/* --- DiffView (N19): ok/down TEXT tints only, never amber (L4) -------------- */
+.ux-diff {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  background: var(--color-bg-inset);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 3px;
+  padding: 8px 10px;
+  overflow-x: auto;
+}
+.ux-diff__row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  white-space: nowrap;
+}
+.ux-diff__path {
+  color: var(--color-text-secondary);
+}
+.ux-diff__row--added .ux-diff__path::before {
+  content: "+ ";
+  color: var(--color-ok);
+}
+.ux-diff__row--removed .ux-diff__path::before {
+  content: "- ";
+  color: var(--color-down);
+}
+.ux-diff__row--changed .ux-diff__path::before {
+  content: "~ ";
+  color: var(--color-text-muted);
+}
+.ux-diff__before {
+  color: var(--color-down);
+}
+.ux-diff__row--changed .ux-diff__before {
+  text-decoration: line-through;
+  text-decoration-color: rgba(240, 101, 74, 0.6);
+}
+.ux-diff__after {
+  color: var(--color-ok);
+}
+.ux-diff__arrow {
+  color: var(--color-text-muted);
+}
+.ux-diff__same {
+  color: var(--color-text-muted);
+}
+
+/* --- Touch targets for the new interactive non-.btn elements ---------------- */
+@media (pointer: coarse) {
+  .ux-pending__id,
+  .ux-disclosure__summary,
+  .ux-secret__block {
+    min-height: 44px;
+  }
+}
