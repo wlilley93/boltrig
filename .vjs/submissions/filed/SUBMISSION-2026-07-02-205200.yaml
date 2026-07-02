@@ -1,0 +1,52 @@
+id: SUBMISSION-2026-07-02-205200
+court_requested: county
+jurisdiction: default
+question: Should a run be server-side cancellable via a first-class terminal CANCELLED status (cooperative, owner-only, audited, durable), or should stop stay a client-only stream abort while the server run and its cost continue?
+facts: |
+  # Case: does a run gain a server-side CANCELLED status, or is stop client-only?
+
+  ## Facts (verified)
+  1. Today "stop" is a client-side abort of the SSE stream only. The server-side
+     run (WorkPump execution, model calls, token/cost spend, side effects) keeps
+     going to completion. Stopping the browser does not stop the work or the cost.
+  2. WorkStatus has DONE, FAILED, AWAITING_HUMAN and running/queued states; there
+     is NO terminal CANCELLED state. So a user cannot durably say "abandon this
+     run" and have the server honour it.
+  3. Every verb runs through the ONE dispatch chokepoint (schema -> grant -> HITL
+     -> rate-limit -> idempotency -> credential -> execute -> output -> audit), and
+     work items are persisted through the store with checkpoints. There is a
+     natural cooperative point: between steps / at the chokepoint boundary.
+  4. The learning loop now scores terminal items (outcome_score) and the pump
+     persists status transitions with a checkpoint; a terminal write already exists
+     for DONE / FAILED / AWAITING_HUMAN.
+  5. Regenerate (COUNTY 4) and rename (8c3f776) established the owner-only,
+     fail-closed, audited route pattern under /v1/me/conversations.
+
+  ## The question
+  Should a run be server-side cancellable via a first-class terminal CANCELLED
+  status - and if so, how is the cancel signalled, where is it honoured, and what
+  are its safety bounds - or should stop stay a client-only stream abort?
+
+  ## Options
+  A. Add a terminal WorkStatus.CANCELLED and a COOPERATIVE cancel: an owner-only
+     audited signal (a cancel flag/row keyed by run id) that the pump checks at the
+     step / chokepoint boundary; on observing it the run stops BEFORE the next verb,
+     writes CANCELLED in a finally (durable even if mid-flight), scores the outcome
+     neutral, and audits it. A cancel never interrupts an in-flight adapter call
+     (no half-done external side effect); it takes effect at the next cooperative
+     point. Strongest case: stop actually stops the work and the spend, durably and
+     safely, reusing the terminal-write + audit machinery already there. Cost: a
+     cancel is not instantaneous (bounded by the current step).
+  B. Leave stop client-only. Strongest case: zero new state. Cost: "stop" is a lie
+     - work and cost continue; a runaway run cannot be halted.
+  C. Hard-kill the run mid-step (cancel the asyncio task immediately). Strongest
+     case: instant. Cost: can abort mid-adapter-call, leaving a partial external
+     side effect that never reaches the audit/output stage - unsafe.
+
+  ## Constraints
+  Any mechanism must go through the chokepoint (owner-only, fail-closed, audited),
+  persist durably (finally), never leave an un-audited partial side effect, and be
+  bound to a real test so the invariant gate holds it at binding_debt=0.
+requested_order: TBD
+private_boundary: local
+word_count: 458

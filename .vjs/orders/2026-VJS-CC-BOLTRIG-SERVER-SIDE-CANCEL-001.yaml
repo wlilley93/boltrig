@@ -1,0 +1,65 @@
+id: 2026-VJS-CC-BOLTRIG-SERVER-SIDE-CANCEL-001
+court: county
+jurisdiction: default
+repo_code: null
+status: binding
+issue: server_side_cancel_status
+holding: |
+  Option A is adopted. A run gains a first-class terminal WorkStatus.CANCELLED and
+  a COOPERATIVE server-side cancel. Cancel is signalled by an owner-only, audited
+  request keyed by run id (a cancel flag/row written through the chokepoint), which
+  the WorkPump checks at the step / chokepoint boundary. On observing the signal the
+  run stops BEFORE dispatching the next verb, writes CANCELLED in a finally (so the
+  terminal state is durable even if the process dies mid-flight), scores the outcome
+  neutral (a cancel is neither success nor failure), and audits the transition. A
+  cancel MUST NOT interrupt an in-flight adapter call: it takes effect at the next
+  cooperative point, so no partial external side effect is ever left un-audited. The
+  cancel route is owner-only and fail-closed (scoped-read callers get 403 with no
+  write), mirroring the rename and regenerate routes; ChatService exposes the cancel
+  and the SSE stream ends cleanly on it. Option B (client-only) is rejected as a
+  false stop that halts neither work nor cost. Option C (hard-kill mid-step) is
+  rejected as unsafe: it can abort mid-adapter-call and orphan a side effect outside
+  the audit/output stage.
+directives:
+- id: D1
+  actor: lexby
+  must: add_terminal_workstatus_cancelled_and_treat_it_as_a_terminal_state_everywhere_a_terminal_status_is_handled_including_outcome_score_neutral
+  when: null
+- id: D2
+  actor: lexby
+  must: add_an_owner_only_audited_cancel_signal_keyed_by_run_id_written_through_the_chokepoint_and_a_narrow_store_read_the_pump_consults
+  when: null
+- id: D3
+  actor: lexby
+  must: check_the_cancel_signal_at_the_step_chokepoint_boundary_and_stop_before_the_next_verb_never_interrupting_an_in_flight_adapter_call
+  when: null
+- id: D4
+  actor: lexby
+  must: write_cancelled_in_a_finally_so_the_terminal_state_is_durable_and_persist_a_checkpoint_and_audit_row_on_the_transition
+  when: null
+- id: D5
+  actor: lexby
+  must: expose_post_v1_runs_run_id_cancel_owner_only_fail_closed_mirroring_the_rename_regenerate_routes_and_wire_chatservice_cancel_so_the_sse_stream_ends_cleanly
+  when: null
+- id: D6
+  actor: lexby
+  must: pin_invariants_cancel_is_owner_only_fail_closed_cancel_takes_effect_only_at_a_cooperative_point_never_mid_adapter_call_cancelled_is_terminal_and_durable_via_finally_audited_debt_stays_zero
+  when: null
+forbidden:
+- hard_killing_a_run_mid_step_or_interrupting_an_in_flight_adapter_call_leaving_an_un_audited_partial_side_effect
+- a_non_owner_or_scoped_read_caller_cancelling_a_run_or_the_cancel_bypassing_the_audit_chain
+- treating_stop_as_client_only_while_the_server_run_and_its_cost_continue
+- a_cancel_that_is_not_persisted_durably_so_a_process_restart_resurrects_the_run
+exceptions: null
+supersedes: []
+source_opinion: null
+runtime_summary: |
+  Stop becomes real: a terminal WorkStatus.CANCELLED plus a cooperative,
+  owner-only, audited cancel signal keyed by run id. The pump checks it at the
+  step boundary and stops before the next verb, never mid-adapter-call; the
+  terminal state is written in a finally (durable), scored neutral, and audited.
+  POST /v1/runs/{run_id}/cancel is owner-only fail-closed; ChatService.cancel ends
+  the SSE stream cleanly. Client-only stop and hard-kill are rejected.
+created_at: 2026-07-02T20:52:20Z
+citation: '[2026] VJS-COUNTY 6'
+assent_source: standing_bounded_assent
