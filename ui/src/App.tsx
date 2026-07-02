@@ -14,7 +14,7 @@ import { AgentSlide } from "./panels/AgentSlide";
 import { AdminPanel } from "./panels/AdminPanel";
 import { AgentsSlide, useAgentDeckCols } from "./panels/AgentsSlide";
 import { ApprovalsPanel } from "./panels/ApprovalsPanel";
-import { AutomationsSlide } from "./panels/AutomationsSlide";
+import { AutomationsSlide, useAutomationDeckCols } from "./panels/AutomationsSlide";
 import { ChatPanel } from "./panels/ChatPanel";
 import { DevConsolePanel } from "./panels/DevConsolePanel";
 import { EvalPanel } from "./panels/EvalPanel";
@@ -25,6 +25,7 @@ import { MePanel } from "./panels/MePanel";
 import { MemoryPanel } from "./panels/MemoryPanel";
 import { RouterPanel } from "./panels/RouterPanel";
 import { SettingsPanel } from "./panels/SettingsPanel";
+import { StepSlide } from "./panels/StepSlide";
 import { RunView } from "./panels/RunView";
 import { CommandPalette } from "./panels/CommandPalette";
 
@@ -283,7 +284,9 @@ function renderCell(rowId: string, colKey: string): ReactNode {
   if (rowId === "agents") {
     return colKey === "agents" ? <AgentsSlide /> : <AgentSlide agentName={colKey} />;
   }
-  if (rowId === "automations") return <AutomationsSlide />;
+  if (rowId === "automations") {
+    return colKey === "automations" ? <AutomationsSlide /> : <StepSlide stepKey={colKey} />;
+  }
   if (rowId === "settings") return <SettingsPanel />;
   if (rowId === "ops") {
     switch (colKey) {
@@ -374,7 +377,11 @@ export function App() {
   // Visible rows derive from the CURRENT role each render (the dev IdentityBar
   // changes role live); the deck addresses cells by id, never a stored index.
   const agentCols = useAgentDeckCols();
-  const rows = useMemo(() => buildRows(identity.role, agentCols, []), [identity.role, agentCols]);
+  const automationCols = useAutomationDeckCols();
+  const rows = useMemo(
+    () => buildRows(identity.role, agentCols, automationCols),
+    [identity.role, agentCols, automationCols],
+  );
   const active = routeToCell(route, rows);
   const zoneRows = rows.filter((r) => r.id !== "ops");
   const opsCols = rows.find((r) => r.id === "ops")?.cols ?? [];

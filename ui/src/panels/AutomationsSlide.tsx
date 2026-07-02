@@ -5,11 +5,14 @@
 // Step columns (one slide per workflow step) land in Beat 3; this beat reuses
 // the canvas as-is via its routeWfId seed (see the WorkflowCanvas patch).
 
-import { Suspense, lazy, useState } from "react";
+import { Suspense, lazy, useMemo, useState } from "react";
 
 import { api } from "../api/client";
+import type { WorkflowDetail } from "../api/types";
+import type { DeckCol } from "../deck/Deck";
 import { navigate, useRoute } from "../router";
 import { useFetch } from "../useFetch";
+import { useWorkflowDraft } from "./automations/draft";
 import { EmptyState, FetchError, PageIntro } from "./ux";
 
 // The canvas pulls in @xyflow/react; lazy-load it so the heavy chunk only
@@ -17,6 +20,39 @@ import { EmptyState, FetchError, PageIntro } from "./ux";
 const WorkflowCanvas = lazy(() =>
   import("./WorkflowCanvas").then((m) => ({ default: m.WorkflowCanvas })),
 );
+
+interface AutomationStep {
+  id: string;
+}
+
+function extractStepIds(value: unknown): AutomationStep[] {
+  if (!value || typeof value !== "object") return [];
+  const steps = (value as { steps?: unknown }).steps;
+  return Array.isArray(steps)
+    ? steps.filter((s): s is AutomationStep =>
+        !!s && typeof s === "object" && typeof (s as { id?: unknown }).id === "string",
+      )
+    : [];
+}
+
+export function useAutomationDeckCols(): DeckCol[] {
+  const route = useRoute();
+  const wfid = route.tab === "automations" ? route.segs[1] : undefined;
+  const detail = useFetch<WorkflowDetail | null>(
+    () => (wfid ? api.getWorkflow(wfid) : Promise.resolve(null)),
+    [wfid],
+  );
+  const draftSteps = useWorkflowDraft(wfid);
+  return useMemo(() => {
+    if (!wfid || (!detail.data && !draftSteps)) return [];
+    const steps = draftSteps ?? extractStepIds(detail.data?.definition);
+    return steps.map((step) => ({
+      key: step.id,
+      label: step.id,
+      path: `/automations/${encodeURIComponent(wfid)}/step/${encodeURIComponent(step.id)}`,
+    }));
+  }, [wfid, detail.data, draftSteps]);
+}
 
 function WorkflowPicker() {
   const workflows = useFetch(() => api.workflows(), []);

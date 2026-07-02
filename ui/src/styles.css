@@ -3394,6 +3394,11 @@ body {
   background: var(--color-accent);
   border-color: var(--color-accent);
 }
+@supports selector(:has(*)) {
+  .deck:has(.ux-savebar) .deck__map {
+    bottom: 104px;
+  }
+}
 
 /* --- Settle announcer: visually hidden, outside the plane ----------------- */
 .deck__announcer {
@@ -5031,5 +5036,68 @@ body {
   .ag-profile,
   .ag-facts {
     display: grid;
+  }
+}
+
+/* --- Automations row (Beat 3): per-step slides ---------------------------- */
+.au-step {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 100%;
+}
+.au-step__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-raised);
+}
+.au-step__toolbar .ux-arm {
+  min-width: min(100%, 420px);
+}
+.au-step__grid {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.9fr) minmax(320px, 1.1fr);
+  gap: 14px;
+  align-items: start;
+}
+.au-step__card {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  background: var(--color-bg-card);
+}
+.au-step__card h3 {
+  margin: 0;
+  font-size: var(--fs-md);
+}
+.au-step__card textarea,
+.au-step__card select {
+  width: 100%;
+}
+.au-step__verbfacts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-raised);
+}
+.au-step__verbfacts code {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 980px) {
+  .au-step__grid {
+    grid-template-columns: 1fr;
   }
 }

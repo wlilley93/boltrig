@@ -101,7 +101,10 @@ export function routeToCell(
   if (tab !== "runs") {
     const row = rows.find((r) => r.id === tab);
     if (row && row.cols.length > 0) {
-      const sub = route.segs[1];
+      const sub =
+        tab === "automations" && route.segs[2] === "step"
+          ? route.segs[3]
+          : route.segs[1];
       const col = sub ? row.cols.find((c) => c.key === sub) : undefined;
       return { rowId: row.id, colKey: (col ?? row.cols[0]).key };
     }
