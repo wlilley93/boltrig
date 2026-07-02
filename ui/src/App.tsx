@@ -10,8 +10,9 @@ import { resetIdentity, updateIdentity, useIdentity } from "./identity";
 import { navigate, useRoute } from "./router";
 import { useFetch } from "./useFetch";
 import { Field, InfoCallout, ROLE_OPTIONS, Select } from "./panels/ux";
+import { AgentSlide } from "./panels/AgentSlide";
 import { AdminPanel } from "./panels/AdminPanel";
-import { AgentsSlide } from "./panels/AgentsSlide";
+import { AgentsSlide, useAgentDeckCols } from "./panels/AgentsSlide";
 import { ApprovalsPanel } from "./panels/ApprovalsPanel";
 import { AutomationsSlide } from "./panels/AutomationsSlide";
 import { ChatPanel } from "./panels/ChatPanel";
@@ -279,7 +280,9 @@ function HealthDot() {
 // row model names, so this is a type-level backstop).
 function renderCell(rowId: string, colKey: string): ReactNode {
   if (rowId === "chat") return <ChatPanel />;
-  if (rowId === "agents") return <AgentsSlide />;
+  if (rowId === "agents") {
+    return colKey === "agents" ? <AgentsSlide /> : <AgentSlide agentName={colKey} />;
+  }
   if (rowId === "automations") return <AutomationsSlide />;
   if (rowId === "settings") return <SettingsPanel />;
   if (rowId === "ops") {
@@ -370,7 +373,8 @@ export function App() {
 
   // Visible rows derive from the CURRENT role each render (the dev IdentityBar
   // changes role live); the deck addresses cells by id, never a stored index.
-  const rows = useMemo(() => buildRows(identity.role, [], []), [identity.role]);
+  const agentCols = useAgentDeckCols();
+  const rows = useMemo(() => buildRows(identity.role, agentCols, []), [identity.role, agentCols]);
   const active = routeToCell(route, rows);
   const zoneRows = rows.filter((r) => r.id !== "ops");
   const opsCols = rows.find((r) => r.id === "ops")?.cols ?? [];

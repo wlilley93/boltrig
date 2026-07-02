@@ -1,152 +1,193 @@
-// Beat 1 INTERIM agents anchor: a read-only listing of the durable agent org
-// (manifest hierarchy: one tier1 chief over the tier2 department heads) plus
-// the ephemeral runtime pool the fleet spawns workers from. A real org chart
-// with per-agent slides replaces this in Beat 2; this stays lean but honest -
-// it reflects the live admin config, never a hardcoded chart. The config read
-// is author-gated server-side; a denial renders calmly (the AdminPanel
-// pattern: check status === "denied" / error on the tolerated response).
+import { useMemo, useState } from "react";
 
 import { api } from "../api/client";
-import type { ConfigSectionResponse } from "../api/types";
+import type { DeckCol } from "../deck/Deck";
+import { navigate } from "../router";
 import { useFetch } from "../useFetch";
-import { EmptyState, FetchError, Hint, InfoCallout, PageIntro } from "./ux";
+import { ByChat, CoachMark, GrantList } from "./uxFlow";
+import { EmptyState, FetchError, InfoCallout, PageIntro, StatusBadge, CONSEQUENCE } from "./ux";
+import {
+  agentColumns,
+  budgetPct,
+  deniedOf,
+  enrichAgents,
+  readAgentSpecs,
+} from "./agents/model";
 
-// The manifest agent shape (hierarchy tier1/tier2 and ephemeral_runtimes
-// entries share it). Config is data: every field is optional and the coercers
-// below render defensively rather than trusting the wire.
-interface AgentSpec {
-  name?: string;
-  department?: string;
-  runtime?: string;
-  model_endpoint?: string;
-  cost_tier?: string;
-  max_depth?: number;
-  supported_skills?: string[];
+export function useAgentDeckCols(): DeckCol[] {
+  const hierarchy = useFetch(() => api.getConfig("hierarchy"), []);
+  const pool = useFetch(() => api.getConfig("ephemeral_runtimes"), []);
+  return useMemo(() => {
+    if (deniedOf(hierarchy.data) || deniedOf(pool.data)) return [];
+    return agentColumns(readAgentSpecs(hierarchy.data, pool.data));
+  }, [hierarchy.data, pool.data]);
 }
 
-function str(v: unknown): string | undefined {
-  return typeof v === "string" && v ? v : undefined;
+function kindLabel(kind: string): string {
+  if (kind === "chief") return "chief of staff";
+  if (kind === "head") return "department head";
+  return "worker profile";
 }
 
-function strList(v: unknown): string[] {
-  return Array.isArray(v) ? v.filter((s): s is string => typeof s === "string") : [];
-}
-
-function asRecord(v: unknown): Record<string, unknown> | null {
-  return v && typeof v === "object" && !Array.isArray(v)
-    ? (v as Record<string, unknown>)
-    : null;
-}
-
-function toAgent(v: unknown): AgentSpec | null {
-  const r = asRecord(v);
-  if (!r) return null;
-  return {
-    name: str(r.name),
-    department: str(r.department),
-    runtime: str(r.runtime),
-    model_endpoint: str(r.model_endpoint),
-    cost_tier: str(r.cost_tier),
-    max_depth: typeof r.max_depth === "number" ? r.max_depth : undefined,
-    supported_skills: strList(r.supported_skills),
-  };
-}
-
-// getConfig tolerates non-2xx, so a 403 arrives as data, not a throw: the
-// kernel answers { status: "denied", reason } (or { error } when the admin
-// surface is unavailable) - exactly what AdminPanel checks.
-function deniedOf(res: ConfigSectionResponse | null): string | null {
-  if (!res) return null;
-  if (res.status === "denied" || res.error) {
-    return res.reason ?? res.error ?? "admin_forbidden";
-  }
-  return null;
-}
-
-function AgentCard({
+function AgentNode({
   agent,
-  tier,
+  selected,
+  onSelect,
 }: {
-  agent: AgentSpec;
-  tier: "chief" | "head";
+  agent: ReturnType<typeof enrichAgents>[number];
+  selected: boolean;
+  onSelect: () => void;
 }) {
-  const skills = agent.supported_skills ?? [];
+  const pct = budgetPct(agent.budget);
+  const open = () => navigate(`/agents/${encodeURIComponent(agent.name)}`);
   return (
-    <article className={`org-card ${tier === "chief" ? "org-card--chief" : ""}`.trim()}>
-      <div className="org-card__top">
-        <span className="org-card__name">{agent.name ?? "(unnamed)"}</span>
-        <span className="badge">{tier === "chief" ? "tier 1" : "tier 2"}</span>
-      </div>
-      <dl className="org-card__meta">
-        {agent.department && (
-          <>
-            <dt>department</dt>
-            <dd>{agent.department}</dd>
-          </>
+    <button
+      type="button"
+      className={`ag-node ag-node--${agent.kind} ${selected ? "ag-node--selected" : ""}`}
+      aria-pressed={selected}
+      onClick={onSelect}
+      onDoubleClick={open}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" && selected) {
+          e.preventDefault();
+          open();
+        }
+      }}
+      title={`Open ${agent.name}`}
+    >
+      <span className="ag-node__kind">{kindLabel(agent.kind)}</span>
+      <strong className="ag-node__name">{agent.name}</strong>
+      {agent.department && <span className="ag-node__dept">{agent.department}</span>}
+      <span className="ag-node__facts">
+        <span>{agent.runtime}</span>
+        <span>{agent.model_endpoint ?? "default model"}</span>
+        <span>depth {agent.max_depth}</span>
+      </span>
+      <span className="ag-node__chips">
+        <span className="badge">{agent.cost_tier}</span>
+        <span className="badge">{agent.matchedSkills.length} skills</span>
+        <span className="badge">{agent.effectiveVerbs.length} verbs</span>
+        {agent.boundVerbs.length > 0 && (
+          <span className="badge badge--conseq-low">{agent.boundVerbs.length} bound</span>
         )}
-        <dt>runtime</dt>
-        <dd>{agent.runtime ?? "unknown"}</dd>
-        <dt>model</dt>
-        <dd>{agent.model_endpoint ?? "default"}</dd>
-        <dt>cost tier</dt>
-        <dd>{agent.cost_tier ?? "standard"}</dd>
-      </dl>
-      {skills.length > 0 && (
-        <div className="org-card__skills">
-          {skills.map((s) => (
-            <code className="tag" key={s} title="Skill pattern this agent may run">
-              {s}
-            </code>
-          ))}
-        </div>
+      </span>
+      {pct !== null && (
+        <span className="ag-budget" title="Department budget used">
+          <span className="ag-budget__fill" style={{ width: `${pct}%` }} />
+        </span>
       )}
-    </article>
+    </button>
+  );
+}
+
+function FactsStrip({
+  agent,
+}: {
+  agent: ReturnType<typeof enrichAgents>[number] | undefined;
+}) {
+  if (!agent) return null;
+  return (
+    <aside className="ag-facts" aria-label="Selected agent">
+      <div>
+        <span className="badge">{kindLabel(agent.kind)}</span>{" "}
+        <code>{agent.name}</code>
+        <span className="ag-facts__muted">
+          {" "}
+          {agent.runtime} / {agent.model_endpoint ?? "default"} / depth {agent.max_depth}
+        </span>
+      </div>
+      <div className="ag-facts__metrics">
+        <span>{agent.matchedSkills.length} matched skills</span>
+        <span>{agent.effectiveGrants.length} grants</span>
+        <span>{agent.effectiveVerbs.length} callable verbs</span>
+        <span>{agent.workItems.length} work items</span>
+      </div>
+      <button
+        type="button"
+        className="btn btn--sm"
+        onClick={() => navigate(`/agents/${encodeURIComponent(agent.name)}`)}
+      >
+        Open agent
+      </button>
+    </aside>
   );
 }
 
 export function AgentsSlide() {
-  const hier = useFetch(() => api.getConfig("hierarchy"), []);
+  const hierarchy = useFetch(() => api.getConfig("hierarchy"), []);
   const pool = useFetch(() => api.getConfig("ephemeral_runtimes"), []);
+  const skills = useFetch(() => api.skills(), []);
+  const caps = useFetch(() => api.capabilities(), []);
+  const budgets = useFetch(() => api.budgets(), [], 30000);
+  const work = useFetch(() => api.work(), [], 30000);
+  const [selected, setSelected] = useState<string | null>(null);
 
-  const denied = deniedOf(hier.data) ?? deniedOf(pool.data);
+  const denied = deniedOf(hierarchy.data) ?? deniedOf(pool.data);
+  const specs = useMemo(
+    () => readAgentSpecs(hierarchy.data, pool.data),
+    [hierarchy.data, pool.data],
+  );
+  const agents = useMemo(
+    () =>
+      enrichAgents(
+        specs,
+        skills.data?.skills ?? [],
+        caps.data?.verbs ?? [],
+        budgets.data?.budgets ?? [],
+        work.data?.items ?? [],
+      ),
+    [specs, skills.data, caps.data, budgets.data, work.data],
+  );
+  const chief = agents.find((a) => a.kind === "chief");
+  const heads = agents.filter((a) => a.kind === "head");
+  const workers = agents.filter((a) => a.kind === "worker");
+  const selectedAgent = agents.find((a) => a.name === selected) ?? chief ?? agents[0];
 
-  const hierValue = asRecord(hier.data?.value);
-  const chief = toAgent(hierValue?.tier1 ?? null);
-  const tier2Raw = hierValue?.tier2;
-  const heads = (Array.isArray(tier2Raw) ? tier2Raw : [])
-    .map(toAgent)
-    .filter((a): a is AgentSpec => a !== null);
-  const poolRaw = pool.data?.value;
-  const runtimes = (Array.isArray(poolRaw) ? poolRaw : [])
-    .map(toAgent)
-    .filter((a): a is AgentSpec => a !== null);
-
-  const loading = (hier.loading && !hier.data) || (pool.loading && !pool.data);
-  const emptyOrg =
-    !loading && !denied && !hier.error && !chief && heads.length === 0;
+  const loading =
+    (hierarchy.loading && !hierarchy.data) || (pool.loading && !pool.data);
+  const empty = !loading && !denied && agents.length === 0;
 
   return (
-    <section className="panel">
+    <section className="panel ag-slide">
       <PageIntro
         title="Agents"
-        lead="The durable agent org: one chief of staff over the department heads, plus the ephemeral worker pool they spawn from."
-        how="This reflects the live hierarchy configuration. Agents are configured in the manifest (see Admin); per-agent slides arrive in the next beat."
+        lead="A structured view of the durable org and the worker profiles it can convene."
+        how="Open a card to inspect skills, callable verbs, budget context and work ownership. Capability changes use the governed control plane."
         actions={
-          <button
-            className="btn"
-            onClick={() => {
-              hier.reload();
-              pool.reload();
-            }}
-          >
-            Refresh
-          </button>
+          <>
+            <ByChat phrase="Show me the agent org, their skills, and the worker pool." />
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={() => navigate("/studio")}
+              title="Agent creation is a governed capability write. The full guided creator lands with the capability registry read."
+            >
+              New agent
+            </button>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => {
+                hierarchy.reload();
+                pool.reload();
+                skills.reload();
+                caps.reload();
+              }}
+            >
+              Refresh
+            </button>
+          </>
         }
       />
 
+      <CoachMark id="boltrig.coach.agents-org">
+        Each card is an agent profile. Select one to see live facts, or open it
+        for the full slide.
+      </CoachMark>
+
       {loading && <p className="muted">Loading the org...</p>}
-      <FetchError error={hier.error} status={hier.errorStatus} onRetry={hier.reload} />
-      {!hier.error && (
+      <FetchError error={hierarchy.error} status={hierarchy.errorStatus} onRetry={hierarchy.reload} />
+      {!hierarchy.error && (
         <FetchError error={pool.error} status={pool.errorStatus} onRetry={pool.reload} />
       )}
 
@@ -157,54 +198,97 @@ export function AgentsSlide() {
         </InfoCallout>
       )}
 
-      {emptyOrg && (
+      {empty && (
         <EmptyState
           title="No agent hierarchy configured"
-          body="The hierarchy section is empty for this organisation. Configure tier1 / tier2 in the Admin console's manifest."
+          body="The hierarchy and worker pool config sections are empty for this organisation."
+          action={
+            <button type="button" className="btn" onClick={() => navigate("/admin")}>
+              Open Admin
+            </button>
+          }
         />
       )}
 
-      {!denied && chief && (
+      {!denied && agents.length > 0 && (
         <>
-          <h3 className="org-tier">Tier 1 - chief</h3>
-          <div className="org-grid">
-            <AgentCard agent={chief} tier="chief" />
+          <div className="ag-counts" aria-label="Agent counts">
+            <span>{chief ? "1" : "0"} chief</span>
+            <span>{heads.length} departments</span>
+            <span>{workers.length} worker profiles</span>
+            {caps.data?.verbs && <span>{caps.data.verbs.length} scoped verbs visible</span>}
           </div>
-        </>
-      )}
 
-      {!denied && heads.length > 0 && (
-        <>
-          <h3 className="org-tier">Tier 2 - department heads</h3>
-          <div className="org-grid">
-            {heads.map((a, i) => (
-              <AgentCard agent={a} tier="head" key={a.name ?? i} />
-            ))}
+          <div className="ag-chart" aria-label="Agent org chart">
+            {chief && (
+              <div className="ag-chart__row ag-chart__row--chief">
+                <AgentNode
+                  agent={chief}
+                  selected={selectedAgent?.name === chief.name}
+                  onSelect={() => setSelected(chief.name)}
+                />
+              </div>
+            )}
+
+            {heads.length > 0 && (
+              <div className="ag-chart__row ag-chart__row--heads">
+                {heads.map((agent) => (
+                  <AgentNode
+                    key={agent.name}
+                    agent={agent}
+                    selected={selectedAgent?.name === agent.name}
+                    onSelect={() => setSelected(agent.name)}
+                  />
+                ))}
+              </div>
+            )}
+
+            {workers.length > 0 && (
+              <div className="ag-worker-band">
+                <div className="ag-worker-band__head">
+                  <strong>Worker pool</strong>
+                  <span>
+                    Ephemeral profiles are chosen per task and discarded after
+                    the run.
+                  </span>
+                </div>
+                <div className="ag-chart__row ag-chart__row--workers">
+                  {workers.map((agent) => (
+                    <AgentNode
+                      key={agent.name}
+                      agent={agent}
+                      selected={selectedAgent?.name === agent.name}
+                      onSelect={() => setSelected(agent.name)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
-        </>
-      )}
 
-      {!denied && runtimes.length > 0 && (
-        <>
-          <h3 className="org-tier">Ephemeral runtime pool</h3>
-          <div className="org-pool">
-            {runtimes.map((r, i) => (
-              <span className="org-pool__item" key={r.name ?? i}>
-                <span className="org-pool__name">{r.name ?? "(unnamed)"}</span>
-                <span>{r.runtime ?? "?"}</span>
-                {r.model_endpoint && <code className="tag">{r.model_endpoint}</code>}
-                {r.cost_tier && <span className="badge">{r.cost_tier}</span>}
-              </span>
-            ))}
-          </div>
-        </>
-      )}
+          <FactsStrip agent={selectedAgent} />
 
-      {!denied && !loading && (
-        <Hint>
-          Cards are read-only in this beat - per-agent slides (one column per
-          agent, to the right of this anchor) arrive next.
-        </Hint>
+          {selectedAgent && selectedAgent.effectiveGrants.length > 0 && (
+            <div className="ag-anchor-grants">
+              <span className="muted">Selected effective grants</span>
+              <GrantList grants={selectedAgent.effectiveGrants.slice(0, 8)} />
+            </div>
+          )}
+
+          {selectedAgent?.boundVerbs.some((verb) => verb.consequence === "high") && (
+            <InfoCallout tone="consequence" title="High consequence bindings">
+              This selected agent fulfils at least one high-consequence verb. The
+              kernel still pauses those calls for approval.
+            </InfoCallout>
+          )}
+
+          {selectedAgent?.boundVerbs.slice(0, 3).map((verb) => (
+            <span className="ag-bound-preview" key={verb.id}>
+              <code>{verb.id}</code>
+              <StatusBadge value={verb.consequence} glossary={CONSEQUENCE} />
+            </span>
+          ))}
+        </>
       )}
     </section>
   );
