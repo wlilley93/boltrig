@@ -11,27 +11,79 @@ import type {
   AdminInvitation,
   DirectoryUser,
   PatchUserRequest,
+  VerbInfo,
 } from "../../api/types";
 import { useFetch } from "../../useFetch";
-import { errText, parseJson, prettyJson } from "../shared";
+import { errText } from "../shared";
 import { EmptyState, FetchError, PageIntro, ROLE_VALUES } from "../ux";
+import { ChipPicker, ScopeBuilder } from "../uxForm";
+import type { ScopeVerb } from "../uxForm";
 import { ArmConfirm, Skeleton } from "../uxFlow";
 import { scopeReadable } from "./shared";
 
 // One source of truth for the role set (shared with the identity + admin selects).
 const ROLE_OPTIONS: ReadonlyArray<string> = ROLE_VALUES;
 
+// A user's permission scope (manifest role-mapping shape): an all-access flag,
+// visible departments, and the verb dimension expressed as noun/verb grants.
+// ScopeBuilder owns the verb dimension as a flat pattern list; these helpers
+// translate the dict <-> patterns while preserving departments and any keys the
+// UI does not surface (fail-safe: an unknown scope key is never dropped).
+const SCOPE_VERB_KEYS: ReadonlySet<string> = new Set(["all", "nouns", "verbs"]);
+
+function asStringList(v: unknown): string[] {
+  return Array.isArray(v) ? v.map((x) => String(x)) : [];
+}
+
+function scopeToPatterns(scope: Record<string, unknown>): string[] {
+  if (scope.all) return ["*"];
+  const nouns = asStringList(scope.nouns).map((n) => `${n}.*`);
+  return [...nouns, ...asStringList(scope.verbs)];
+}
+
+// The verb-dimension part of a scope dict, derived from the pattern list.
+function patternsToScopeVerbPart(patterns: string[]): Record<string, unknown> {
+  if (patterns.includes("*")) return { all: true };
+  const nouns: string[] = [];
+  const verbs: string[] = [];
+  for (const p of patterns) {
+    if (p === "*") continue;
+    if (p.endsWith(".*")) nouns.push(p.slice(0, -2));
+    else if (p.endsWith("*")) nouns.push(p.slice(0, -1));
+    else verbs.push(p);
+  }
+  const part: Record<string, unknown> = {};
+  if (nouns.length > 0) part.nouns = nouns;
+  if (verbs.length > 0) part.verbs = verbs;
+  return part;
+}
+
+// VerbInfo registry -> ScopeBuilder's verb shape (id + noun + consequence).
+function toScopeVerbs(verbs: VerbInfo[]): ScopeVerb[] {
+  return verbs.map((v) => ({
+    id: v.id,
+    noun: v.noun,
+    consequence: typeof v.consequence === "string" ? v.consequence : undefined,
+  }));
+}
+
 function UserRow({
   user,
+  verbs,
   onChanged,
 }: {
   user: DirectoryUser;
+  verbs: ScopeVerb[];
   onChanged: () => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [scopeText, setScopeText] = useState(() =>
-    prettyJson(user.scope ?? {}),
+  const original = user.scope ?? {};
+  const [patterns, setPatterns] = useState<string[]>(() =>
+    scopeToPatterns(original),
+  );
+  const [departments, setDepartments] = useState<string[]>(() =>
+    asStringList(original.departments),
   );
 
   async function patch(body: PatchUserRequest) {
@@ -49,13 +101,15 @@ function UserRow({
   }
 
   function saveScope() {
-    let scope: Record<string, unknown>;
-    try {
-      scope = parseJson<Record<string, unknown>>(scopeText, {});
-    } catch (err) {
-      setError(`scope: ${errText(err)}`);
-      return;
+    // Preserve any scope keys the editor does not surface (never drop them), and
+    // rewrite only the verb dimension + departments from the controls.
+    const scope: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(original)) {
+      if (k === "departments" || SCOPE_VERB_KEYS.has(k)) continue;
+      scope[k] = v;
     }
+    if (departments.length > 0) scope.departments = departments;
+    Object.assign(scope, patternsToScopeVerbPart(patterns));
     void patch({ scope });
   }
 
@@ -133,11 +187,25 @@ function UserRow({
       <details className="dir-row__scope">
         <summary>Edit scope</summary>
         <label className="field">
-          <span>scope (JSON: departments / nouns / verbs visible)</span>
-          <textarea
-            className="code"
-            value={scopeText}
-            onChange={(e) => setScopeText(e.target.value)}
+          <span>Departments visible</span>
+          <ChipPicker
+            value={departments}
+            onChange={setDepartments}
+            allowFree
+            ariaLabel={`Departments for ${user.email ?? user.id}`}
+            emptyHint="No departments. Add one to scope this user to a department."
+          />
+        </label>
+        <label className="field">
+          <span>Verb grants (what this user may call)</span>
+          <ScopeBuilder
+            value={patterns}
+            onChange={setPatterns}
+            verbs={verbs}
+            presets={[
+              { label: "All (org-wide)", value: ["*"] },
+              { label: "Clear", value: [] },
+            ]}
           />
         </label>
         <button className="btn" disabled={busy} onClick={saveScope}>
@@ -151,6 +219,11 @@ function UserRow({
 function OrganisationSection() {
   const users = useFetch(() => api.adminUsers(), []);
   const invites = useFetch(() => api.adminInvitations(), []);
+  // The caller-scoped verb registry powers the ScopeBuilder live preview; for an
+  // org-admin this is the full registry. A read failure just yields an empty
+  // list, so the scope editor still functions (patterns still edit cleanly).
+  const caps = useFetch(() => api.capabilities(), []);
+  const scopeVerbs = toScopeVerbs(caps.data?.verbs ?? []);
 
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("agent");
@@ -246,7 +319,12 @@ function OrganisationSection() {
             <EmptyState title="No users" />
           )}
           {userList.map((u) => (
-            <UserRow key={u.id} user={u} onChanged={() => users.reload()} />
+            <UserRow
+              key={u.id}
+              user={u}
+              verbs={scopeVerbs}
+              onChanged={() => users.reload()}
+            />
           ))}
         </div>
       </div>

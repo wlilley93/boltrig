@@ -527,6 +527,98 @@ export interface CredentialsResponse {
   error?: string;
 }
 
+// --- Channels (decision 0003, admin-gated CRUD) -----------------------------
+// The webhook / request-response channel class the kernel exposes at
+// /v1/channels. Management is admin-gated (the server 403s a non-author); the
+// ingress webhook authenticates by the channel's own signature, never here.
+
+export interface ChannelSummary {
+  id: string;
+  platform: string;
+  name: string;
+  transport: string;
+  enabled: boolean;
+  unpaired_behavior: string;
+}
+
+// channels present on success; {status:"denied", reason} when not an author.
+export interface ChannelsResponse {
+  channels?: ChannelSummary[];
+  status?: string;
+  reason?: string;
+}
+
+export interface ConnectChannelRequest {
+  platform: string;
+  name: string;
+  // Optional HMAC signing secret; stored kernel-side (SEC-05), never returned.
+  signing_secret?: string;
+  unpaired_behavior?: string;
+  enabled?: boolean;
+  config?: Record<string, unknown>;
+}
+
+export interface ConnectChannelResponse {
+  status: string;
+  channel?: string;
+  inbound_url?: string;
+  reason?: string;
+}
+
+export interface ConfigureChannelRequest {
+  name?: string;
+  unpaired_behavior?: string;
+  enabled?: boolean;
+  config?: Record<string, unknown>;
+}
+
+export interface ChannelBindingSummary {
+  id: string;
+  external_user_id: string;
+  subject: string;
+  role: string;
+}
+
+export interface ChannelBindingsResponse {
+  bindings?: ChannelBindingSummary[];
+  status?: string;
+  reason?: string;
+}
+
+export interface PairChannelRequest {
+  external_user_id: string;
+  subject: string;
+  role: string;
+  ttl_minutes?: number;
+}
+
+// The one-time pairing code is returned ONCE and never again (shown via
+// SecretOnce); a later fetch cannot retrieve it.
+export interface PairChannelResponse {
+  status: string;
+  pairing_id?: string;
+  code?: string;
+  reason?: string;
+}
+
+export interface BindChannelRequest {
+  external_user_id: string;
+  subject: string;
+  role: string;
+}
+
+export interface BindChannelResponse {
+  status: string;
+  binding?: string;
+  reason?: string;
+}
+
+// A minimal {status, reason} ack for channel mutations that return no body.
+export interface ChannelAck {
+  status: string;
+  reason?: string;
+}
+
 // --- Insight (scope-filtered server-side) -----------------------------------
 
 export interface CostResponse {

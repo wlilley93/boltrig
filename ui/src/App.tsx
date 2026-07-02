@@ -14,6 +14,7 @@ import { AgentSlide } from "./panels/AgentSlide";
 import { AdminPanel } from "./panels/AdminPanel";
 import { AgentsSlide, useAgentDeckCols } from "./panels/AgentsSlide";
 import { ApprovalsPanel } from "./panels/ApprovalsPanel";
+import { ChannelsPanel } from "./panels/ChannelsPanel";
 import { AutomationsSlide, useAutomationDeckCols } from "./panels/AutomationsSlide";
 import { ChatPanel } from "./panels/ChatPanel";
 import { DevConsolePanel } from "./panels/DevConsolePanel";
@@ -339,6 +340,8 @@ function renderCell(rowId: string, colKey: string): ReactNode {
         return <MemoryPanel />;
       case "admin":
         return <AdminPanel />;
+      case "channels":
+        return <ChannelsPanel />;
       case "me":
         return <MePanel />;
     }
