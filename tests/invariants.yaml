@@ -332,6 +332,10 @@ invariants:
       - tests/security/test_budget_and_pii.py::test_budget_hard_stop_halts_before_exceeding
       - tests/security/test_budget_and_pii.py::test_soft_budget_does_not_halt
       - tests/security/test_budget_and_pii.py::test_reserve_honors_consume_budget_refusal
+  US-COST-02:
+    description: A soft (non-hard-stop) budget fires exactly one pre-emptive alert when a reservation crosses the 0.8 threshold, and none below it.
+    tests:
+      - tests/security/test_budget_and_pii.py::test_soft_budget_fires_preemptive_alert_when_crossing_the_threshold
 
   # --- Round Four: settings, account & access management (SEC-34..39) ---
   SEC-34:

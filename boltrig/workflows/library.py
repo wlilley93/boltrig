@@ -53,6 +53,9 @@ class WorkflowLibrary:
         Picks the definition sharing the most ``intent_tags`` with the request.
         Ties break deterministically on workflow id. Returns ``None`` when no
         workflow overlaps at all (a generated workflow is the fallback path).
+
+        The learning-loop retrieval half, wired by the engine plan Phase 3
+        (``learn_from_success`` + ``match``); a reserved API.
         """
         wanted = set(intent_tags or [])
         if not wanted:

@@ -3,7 +3,9 @@
 import pytest
 
 from boltrig.kernel import pii
+from boltrig.kernel.cost import CostAccountant
 from boltrig.models import Budget, BudgetExceeded
+from boltrig.store import InMemoryStore
 from tests.conftest import TENANT
 
 
@@ -75,6 +77,39 @@ async def test_soft_budget_does_not_halt(kernel):
     )
     # over the soft limit, but no exception
     await kernel.cost.reserve(TENANT, ["t"], tokens=0, micros=500)
+
+
+@pytest.mark.security
+@pytest.mark.invariant("US-COST-02")
+async def test_soft_budget_fires_preemptive_alert_when_crossing_the_threshold():
+    alerts: list[tuple[str, str, float]] = []
+
+    async def recorder(tenant_id: str, scope_id: str, used: float) -> None:
+        alerts.append((tenant_id, scope_id, used))
+
+    # crossing 0.8 of a soft budget fires exactly one pre-emptive alert
+    store = InMemoryStore()
+    store.set_budget(
+        Budget(id="dept:eng", tenant_id=TENANT, scope_type="department",
+               cost_limit_micros=1000, hard_stop=False)
+    )
+    acct = CostAccountant(store, alert=recorder)
+    await acct.reserve(TENANT, ["dept:eng"], tokens=0, micros=800)
+    assert len(alerts) == 1
+    tenant_id, scope_id, used = alerts[0]
+    assert tenant_id == TENANT and scope_id == "dept:eng"
+    assert used >= 0.8
+
+    # staying below 0.8 fires nothing (fresh scope so the reserve above is isolated)
+    alerts.clear()
+    store2 = InMemoryStore()
+    store2.set_budget(
+        Budget(id="dept:eng", tenant_id=TENANT, scope_type="department",
+               cost_limit_micros=1000, hard_stop=False)
+    )
+    acct2 = CostAccountant(store2, alert=recorder)
+    await acct2.reserve(TENANT, ["dept:eng"], tokens=0, micros=700)
+    assert alerts == []
 
 
 @pytest.mark.security

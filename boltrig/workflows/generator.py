@@ -87,6 +87,9 @@ async def learn_from_success(
     Builds a new record (the input is not mutated) tagged ``learned`` and stamped
     with the ``origin_task`` that proved it, then upserts it for future matching.
     Returns the learned definition.
+
+    Reserved for engine plan Phase 3 (wired into run completion to save learned
+    workflows).
     """
     learned = replace(wf, source=WorkflowSource.LEARNED, origin_task=origin_task)
     await store.upsert_workflow(learned)

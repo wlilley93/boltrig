@@ -16,6 +16,7 @@ a deterministic decomposition fallback (P9).
 from __future__ import annotations
 
 import asyncio
+import logging
 import uuid
 from typing import TYPE_CHECKING, Any
 
@@ -24,6 +25,8 @@ from boltrig.models import HITLType, InvocationContext, Urgency, WorkItem, WorkS
 if TYPE_CHECKING:  # type-only seams (no runtime import cost / no cycle)
     from .runtime import Runtime
     from .spawn import Spawner
+
+log = logging.getLogger("boltrig.fleet.department_head")
 
 
 async def tree_root_id(store: Any, item: WorkItem) -> str:
@@ -236,7 +239,10 @@ class DepartmentHead:
                 if tasks:
                     return tasks
             except Exception:  # decomposition must never crash the loop (P9)
-                pass
+                log.debug(
+                    "decomposition failed for %s; using fallback",
+                    work_item.id, exc_info=True,
+                )
         # Deterministic fallback: a single sub-task carrying the item's intent.
         return [work_item.intent]
 

@@ -25,7 +25,7 @@ from __future__ import annotations
 from boltrig.store.postgres import normalize_dsn
 
 from .embeddings import DEFAULT_DIM, Embedder, HashingEmbedder
-from .engine import EngineFact, RecallHit
+from .engine import EngineFact, RecallHit, signal_delta
 
 
 def _vec_literal(vec: list[float]) -> str:
@@ -210,7 +210,7 @@ class PgVectorMemoryEngine:
 
     async def improve(self, tenant_id: str, signal: str, target: str) -> int:
         pool = await self._ensure()
-        delta = 1.0 if signal not in ("down", "negative", "fail") else -1.0
+        delta = signal_delta(signal)
         async with pool.acquire() as conn:
             res = await conn.execute(
                 "UPDATE memory_vectors SET weight = weight + $3 WHERE tenant_id=$1 AND id=$2",

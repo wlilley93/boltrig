@@ -177,7 +177,16 @@ class Dispatcher:
                 )
             )
 
-    async def _invoke_inner(self, noun, verb, params, context, idempotency_key, approval_id, meta=None):
+    async def _invoke_inner(
+        self,
+        noun: str,
+        verb: str,
+        params: dict[str, Any],
+        context: InvocationContext,
+        idempotency_key: str | None,
+        approval_id: str | None,
+        meta: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         tenant = context.tenant_id
 
         # 1. resolve verb + binding (tenant-scoped; fail-closed)
@@ -249,7 +258,9 @@ class Dispatcher:
             await self._store.idempotency_put(tenant, idempotency_key, output)
         return output
 
-    async def _execute_adapter(self, verb_def, binding, params, context) -> dict:
+    async def _execute_adapter(
+        self, verb_def, binding, params: dict, context: InvocationContext
+    ) -> dict:
         adapter = await self._adapter_provider(context.tenant_id, binding.target_ref)
         if adapter is None:
             return self._degrade_or_fail(verb_def, reason="adapter_not_loaded")
@@ -266,7 +277,9 @@ class Dispatcher:
             return self._degrade_or_fail(verb_def, reason="backend_unavailable")
         raise BoltrigError(err.message if err else "adapter error")
 
-    async def _execute_agent(self, verb_def, binding, params, context) -> dict:
+    async def _execute_agent(
+        self, verb_def, binding, params: dict, context: InvocationContext
+    ) -> dict:
         if self._agent_invoker is None:
             return self._degrade_or_fail(verb_def, reason="agent_runtime_absent")
         result = await self._agent_invoker(verb_def.id, params, context, binding.target_ref)

@@ -61,7 +61,7 @@ from typing import Any
 
 from boltrig.kernel.pii import contains_secret
 
-from .engine import EngineFact, RecallHit
+from .engine import EngineFact, RecallHit, signal_delta
 
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
 
@@ -161,7 +161,14 @@ class CogneeEngine:
         return ids
 
     async def recall(
-        self, tenant_id, query, *, scopes, mode="graph_completion", limit=20, max_hops=4
+        self,
+        tenant_id: str,
+        query: str,
+        *,
+        scopes: list[str],
+        mode: str = "graph_completion",
+        limit: int = 20,
+        max_hops: int = 4,
     ) -> list[RecallHit]:
         cognee = self._ready()
         allowed = set(scopes)
@@ -230,14 +237,21 @@ class CogneeEngine:
         so a signal adjusts the recall boost only - never scope or authority
         (SEC-41). Instance-scoped, exactly like the native engines' weights."""
         self._ready()
-        delta = 1.0 if signal not in ("down", "negative", "fail") else -1.0
+        delta = signal_delta(signal)
         if target in self._index.get(tenant_id, {}):
             key = (tenant_id, target)
             self._weight[key] = self._weight.get(key, 0.0) + delta
             return 1
         return 0
 
-    async def forget(self, tenant_id, *, fact_ids=None, source_ref=None, scopes=None) -> list[str]:
+    async def forget(
+        self,
+        tenant_id: str,
+        *,
+        fact_ids: list[str] | None = None,
+        source_ref: str | None = None,
+        scopes: list[str] | None = None,
+    ) -> list[str]:
         """REAL erasure (SEC-44): resolve targets (plus derived relationship nodes),
         then drop each affected (tenant, scope) dataset in cognee and rebuild it
         from the surviving facts only."""

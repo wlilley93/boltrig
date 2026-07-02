@@ -9,6 +9,7 @@ is fully functional offline (P9). It never executes work itself - it delegates.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
@@ -19,6 +20,8 @@ if TYPE_CHECKING:  # type-only seams (no runtime import cost / no cycle)
     from boltrig.kernel import Kernel
 
     from .runtime import Runtime
+
+log = logging.getLogger("boltrig.fleet.chief_of_staff")
 
 
 @dataclass
@@ -108,6 +111,10 @@ class ChiefOfStaff:
         try:
             result = await self._runtime.run(prompt, ctx, tools=[])
         except Exception:  # routing must never crash the loop (P9)
+            log.debug(
+                "runtime routing failed for %s; using deterministic fallback",
+                work_item.id, exc_info=True,
+            )
             return None
         candidate = _extract_department(result.output, result.summary)
         if candidate and candidate in names:

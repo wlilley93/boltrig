@@ -10,7 +10,7 @@ fact. The kernel re-checks scope regardless; this engine simply does not cheat.
 
 from __future__ import annotations
 
-from .engine import EngineFact, RecallHit
+from .engine import EngineFact, RecallHit, signal_delta
 
 
 def _tokens(text: str) -> set[str]:
@@ -77,7 +77,7 @@ class LocalMemoryEngine:
 
     async def improve(self, tenant_id: str, signal: str, target: str) -> int:
         # a positive signal boosts the target's recall weight; scope is untouched.
-        delta = 1.0 if signal not in ("down", "negative", "fail") else -1.0
+        delta = signal_delta(signal)
         if target in self._tenant(tenant_id):
             self._weight[(tenant_id, target)] = self._weight.get((tenant_id, target), 0.0) + delta
             return 1

@@ -33,6 +33,15 @@ EndpointLookup = Callable[[str], "ModelEndpoint | None"]
 _MICROS_PER_TOKEN: dict[str, int] = {"cheap": 1, "standard": 5, "expensive": 25}
 
 
+def _first_env(names: tuple[str, ...]) -> str | None:
+    """The first non-empty environment value among ``names`` (empty is falsy)."""
+    for env in names:
+        value = os.environ.get(env)
+        if value:
+            return value
+    return None
+
+
 def _estimate_tokens(prompt: str, tools: list[str]) -> int:
     """A deterministic, offline token estimate (~4 chars/token)."""
     chars = len(prompt) + sum(len(t) for t in tools)
@@ -120,11 +129,7 @@ class HermesRuntime:
         self.cost_tier = cost_tier
 
     def _api_key(self) -> str | None:
-        for env in self._KEY_ENVS:
-            value = os.environ.get(env)
-            if value:
-                return value
-        return None
+        return _first_env(self._KEY_ENVS)
 
     async def run(
         self, prompt: str, context: InvocationContext, *, tools: list[str]
@@ -180,11 +185,7 @@ class ClaudeApiRuntime:
         self.cost_tier = cost_tier
 
     def _api_key(self) -> str | None:
-        for env in self._KEY_ENVS:
-            value = os.environ.get(env)
-            if value:
-                return value
-        return None
+        return _first_env(self._KEY_ENVS)
 
     async def run(
         self, prompt: str, context: InvocationContext, *, tools: list[str]

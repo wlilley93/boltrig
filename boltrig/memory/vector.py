@@ -22,7 +22,7 @@ does not cheat.
 from __future__ import annotations
 
 from .embeddings import DEFAULT_DIM, Embedder, HashingEmbedder, cosine
-from .engine import EngineFact, RecallHit
+from .engine import EngineFact, RecallHit, signal_delta
 
 
 class VectorMemoryEngine:
@@ -102,7 +102,7 @@ class VectorMemoryEngine:
         return hits[:limit]
 
     async def improve(self, tenant_id: str, signal: str, target: str) -> int:
-        delta = 1.0 if signal not in ("down", "negative", "fail") else -1.0
+        delta = signal_delta(signal)
         if target in self._tenant(tenant_id):
             self._weight[(tenant_id, target)] = self._weight.get((tenant_id, target), 0.0) + delta
             return 1

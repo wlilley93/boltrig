@@ -201,10 +201,10 @@ class WorkPump:
     async def requeue(self, tenant_id: str, item_id: str) -> WorkItem | None:
         """Re-queue a parked (AWAITING_HUMAN / BLOCKED) item to PENDING.
 
-        The pump-side half of the HITL answer loop: Beat 5 wires the HITL answer
-        seam to call this; until then the console / an operator calls it. A
-        human re-queue resets ``attempts`` - intervention restores the retry
-        budget (US-EXE-06).
+        The pump-side half of the HITL answer loop: the answer bridge
+        (``bootstrap.wire_hitl_resume``) calls this on a HITL answer; the console
+        or an operator may also call it directly. A human re-queue resets
+        ``attempts`` - intervention restores the retry budget (US-EXE-06).
         """
         item = await self._store.get_work_item(tenant_id, item_id)
         if item is None or item.status not in (

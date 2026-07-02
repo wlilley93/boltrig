@@ -42,6 +42,12 @@ class RecallHit:
     path: list[str] = field(default_factory=list)
 
 
+def signal_delta(signal: str) -> float:
+    """The recall-weight delta for a feedback signal: negative signals subtract,
+    everything else adds (shared by every engine's ``improve``, SEC-41)."""
+    return 1.0 if signal not in ("down", "negative", "fail") else -1.0
+
+
 @runtime_checkable
 class MemoryEngine(Protocol):
     async def remember(self, tenant_id: str, facts: list[EngineFact]) -> list[str]:

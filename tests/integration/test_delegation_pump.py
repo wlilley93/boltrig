@@ -241,6 +241,43 @@ async def test_two_pumps_over_one_store_cannot_jointly_exceed_the_fanout_cap():
     assert len(spawned) == 2
 
 
+# --- US-FLT-07: a child spawn crash is captured, never raised past the join ---
+@pytest.mark.invariant("US-FLT-07")
+async def test_child_spawn_failure_is_captured_not_raised_and_parent_terminates():
+    kernel = _kernel()
+
+    class _ExplodingSpawner:
+        """A spawner whose spawn always raises - the D8 join must absorb it."""
+
+        _kernel = kernel
+
+        async def spawn(self, *args, **kwargs):
+            raise RuntimeError("spawn blew up")
+
+    # no runtime -> the deterministic decomposition yields one child sub-task
+    head = DepartmentHead(DEPT, [], [], 32, spawner=_ExplodingSpawner(), store=kernel.store)
+    pump = _pump(kernel, heads={DEPT: head})
+    item = _item("fix the login bug")
+    await kernel.store.create_work_item(item)
+
+    # the join swallows the child crash: run_once completes, no exception escapes
+    assert await pump.run_once(T) is True
+
+    done = await kernel.store.get_work_item(T, item.id)
+    # the parent reached a terminal state, carrying the degradation honestly
+    assert done.status == WorkStatus.DONE
+    assert done.degraded is True
+    child = done.result["children"][0]
+    assert child["status"] == "error"
+    assert child["degraded"] is True
+    assert child["summary"].startswith("child failed")
+    # the child WorkItem in the tree is recorded FAILED + degraded (US-FLT-06 tree)
+    kids = await kernel.store.list_work_items(T, parent_id=item.id)
+    assert len(kids) == 1
+    assert kids[0].status == WorkStatus.FAILED
+    assert kids[0].degraded is True
+
+
 # --- US-FLT-07(b): a degraded convergent aggregate is never DONE (D6) ---------
 @pytest.mark.invariant("US-FLT-07")
 async def test_convergent_degraded_aggregate_parks_for_a_human_never_done():

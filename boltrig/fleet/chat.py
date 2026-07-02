@@ -13,7 +13,6 @@ import nothing from it.
 from __future__ import annotations
 
 import asyncio
-import json
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
@@ -22,7 +21,6 @@ from boltrig.models import (
     Conversation,
     ConversationMessage,
     ConversationStatus,
-    GrantSet,
     InvocationContext,
     MessageRole,
     BoltrigError,
@@ -206,12 +204,3 @@ def build_turn_executor(kernel, spawner, *, continuity: bool | None = None) -> T
         await kernel.store.update_work_item(item)
 
     return executor
-
-
-def sse(event: dict[str, Any]) -> str:
-    """Format one event as a Server-Sent Events frame."""
-    return f"data: {json.dumps(event)}\n\n"
-
-
-# keep GrantSet referenced for type clarity in the executor's context grants
-_ = GrantSet
