@@ -635,3 +635,17 @@ invariants:
     description: Bare chat-turn authority is manifest data under a caller ceiling - chat.skills_by_role selects the spawned skill set by caller role, missing manifest skills are skipped fail-closed, every spawn carries the caller's role-resolved grant ceiling, and the shipped manifest gives authoring/control-plane only to org-admin while default_skills stays empty ([2026] VJS-COUNTY 1).
     tests:
       - tests/security/test_control_plane_parity.py::test_bare_chat_turn_uses_manifest_skills_under_caller_ceiling
+  # --- Beat 6: conversation rename + relay retention (appended as one block) -
+  US-CONV-08:
+    description: Conversation rename is owner-only and validated; scoped read roles cannot write.
+    tests:
+      - tests/security/test_conversations.py::test_owner_can_rename_their_conversation
+      - tests/security/test_conversations.py::test_non_owner_cannot_rename_conversation
+      - tests/security/test_conversations.py::test_org_admin_cannot_rename_another_users_conversation
+      - tests/security/test_conversations.py::test_rename_rejects_empty_title
+      - tests/security/test_conversations.py::test_rename_rejects_overlong_title
+  NFR-CONV-02:
+    description: Relay stream state is bounded; closed streams are forgotten past the retention cap.
+    tests:
+      - tests/kernel/test_event_relay.py::test_closed_streams_are_bounded_and_oldest_forgotten
+      - tests/kernel/test_event_relay.py::test_open_streams_are_never_evicted

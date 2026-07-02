@@ -170,32 +170,91 @@ function ConversationRow({
   active,
   onSelect,
   onDeleted,
+  onRenamed,
 }: {
   conversation: ConversationSummary;
   active: boolean;
   onSelect: () => void;
   onDeleted: () => void;
+  onRenamed: () => void;
 }) {
   const title = conversation.title || "(untitled)";
+  const [renaming, setRenaming] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [renameError, setRenameError] = useState<string | null>(null);
+  // Escape cancels; the blur that follows must not commit the draft.
+  const cancelledRef = useRef(false);
   async function deleteConversation() {
     const res = await api.deleteMyConversation(conversation.id);
     if (res.status !== "ok") throw new Error(res.reason ?? `Delete failed: ${res.status}`);
     onDeleted();
   }
+  function startRename() {
+    setDraft(conversation.title || "");
+    setRenameError(null);
+    cancelledRef.current = false;
+    setRenaming(true);
+  }
+  async function commitRename() {
+    const next = draft.trim();
+    if (!next || next === (conversation.title ?? "")) {
+      setRenaming(false);
+      return;
+    }
+    const res = await api.renameConversation(conversation.id, next);
+    if (res.status !== "ok") {
+      setRenameError(res.reason ?? `Rename failed: ${res.status}`);
+      return;
+    }
+    setRenaming(false);
+    onRenamed();
+  }
   return (
     <li className="conv-row">
-      <button
-        className={`conv-item ${active ? "conv-item--active" : ""}`}
-        onClick={onSelect}
-      >
-        <span className="conv-item__title">{title}</span>
-        <span className="conv-item__meta">
-          <span className="muted" title={conversation.updated_at}>
-            {whenText(conversation.updated_at)}
+      {renaming ? (
+        <input
+          className="chat__search"
+          aria-label="Conversation title"
+          value={draft}
+          autoFocus
+          maxLength={120}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.currentTarget.blur(); // blur commits (single commit path)
+            } else if (e.key === "Escape") {
+              e.stopPropagation();
+              cancelledRef.current = true;
+              setRenaming(false);
+            }
+          }}
+          onBlur={() => {
+            if (cancelledRef.current) {
+              cancelledRef.current = false;
+              return;
+            }
+            void commitRename();
+          }}
+        />
+      ) : (
+        <button
+          className={`conv-item ${active ? "conv-item--active" : ""}`}
+          onClick={onSelect}
+        >
+          <span className="conv-item__title">{title}</span>
+          <span className="conv-item__meta">
+            <span className="muted" title={conversation.updated_at}>
+              {whenText(conversation.updated_at)}
+            </span>
           </span>
-        </span>
-      </button>
+        </button>
+      )}
       <div className="conv-row__actions">
+        {!renaming && (
+          <button type="button" className="btn" onClick={startRename}>
+            Rename
+          </button>
+        )}
         <ArmConfirm
           label="Delete"
           armLabel={<>Delete <strong>{title}</strong>? The audit log is kept.</>}
@@ -205,6 +264,11 @@ function ConversationRow({
           onConfirm={deleteConversation}
         />
       </div>
+      {renameError && (
+        <p className="error" role="alert">
+          {renameError}
+        </p>
+      )}
     </li>
   );
 }
@@ -573,6 +637,7 @@ export function ChatPanel() {
                   if (c.id === activeId) newConversation();
                   convs.reload();
                 }}
+                onRenamed={() => convs.reload()}
               />
             ))}
           </ul>

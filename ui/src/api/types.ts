@@ -756,6 +756,11 @@ export interface DeleteAck {
   reason?: string;
 }
 
+// PATCH /v1/me/conversations/{id}: the new title (1-120 chars, owner-only).
+export interface RenameConversationRequest {
+  title: string;
+}
+
 // A personal access token as listed: never the secret or the hash (PAT-02).
 export interface PatView {
   id: string;

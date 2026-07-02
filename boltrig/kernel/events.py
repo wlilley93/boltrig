@@ -8,6 +8,12 @@ producing regardless of whether anyone is listening (NFR-CONV-01, US-CONV-07).
 
 In-memory and single-process by design (thin). A multi-replica deployment swaps
 this for a Redis pub/sub behind the same interface.
+
+Retention is bounded (NFR-CONV-02): each stream keeps at most ``backlog``
+events, and once more than ``max_closed`` streams have been closed the oldest
+closed ones are forgotten. A forgotten run's /v1/runs/{id}/events snapshot is
+empty; the durable record is the persisted ConversationMessage.events and the
+audit trail.
 """
 
 from __future__ import annotations
@@ -20,11 +26,13 @@ _SENTINEL = object()  # end-of-stream marker placed on subscriber queues
 
 
 class EventRelay:
-    def __init__(self, backlog: int = 500) -> None:
+    def __init__(self, backlog: int = 500, max_closed: int = 256) -> None:
         self._subs: dict[str, set[asyncio.Queue]] = {}
         self._backlog: dict[str, list[dict[str, Any]]] = {}
-        self._closed: set[str] = set()
+        # insertion-ordered so eviction drops the oldest-closed streams first
+        self._closed: dict[str, None] = {}
         self._max = backlog
+        self._max_closed = max_closed
 
     def publish(self, stream_id: str, event: dict[str, Any]) -> None:
         """Record an event and fan it out to current subscribers (non-blocking)."""
@@ -36,10 +44,16 @@ class EventRelay:
             q.put_nowait(event)
 
     def close(self, stream_id: str) -> None:
-        """Mark a stream complete; live subscribers end after draining."""
-        self._closed.add(stream_id)
+        """Mark a stream complete; live subscribers end after draining.
+
+        Retention (NFR-CONV-02): once more than ``max_closed`` streams are
+        closed, the oldest closed ones are forgotten (backlog dropped).
+        """
+        self._closed[stream_id] = None
         for q in list(self._subs.get(stream_id, ())):
             q.put_nowait(_SENTINEL)
+        while len(self._closed) > self._max_closed:
+            self.forget(next(iter(self._closed)))
 
     async def subscribe(
         self, stream_id: str, *, replay: bool = True
@@ -67,7 +81,7 @@ class EventRelay:
     def forget(self, stream_id: str) -> None:
         """Drop a stream's backlog + state once it is fully consumed/persisted."""
         self._backlog.pop(stream_id, None)
-        self._closed.discard(stream_id)
+        self._closed.pop(stream_id, None)
         self._subs.pop(stream_id, None)
 
     def snapshot(self, stream_id: str) -> list[dict[str, Any]]:

@@ -71,6 +71,7 @@ import type {
   PutSettingsRequest,
   PutSettingsResponse,
   RegisterMcpRequest,
+  RenameConversationRequest,
   RespondResult,
   RunEvalRequest,
   RunsResponse,
@@ -597,6 +598,14 @@ export const api = {
     return request<DeleteAck>(
       `/v1/me/conversations/${encodeURIComponent(id)}`,
       { method: "DELETE", tolerateStatus: true },
+    );
+  },
+
+  renameConversation(id: string, title: string): Promise<DeleteAck> {
+    const body: RenameConversationRequest = { title };
+    return request<DeleteAck>(
+      `/v1/me/conversations/${encodeURIComponent(id)}`,
+      { method: "PATCH", body, tolerateStatus: true },
     );
   },
 

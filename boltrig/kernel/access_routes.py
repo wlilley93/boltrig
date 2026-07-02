@@ -143,6 +143,27 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
         await _audit(k, p, "data.conversation.delete", {"conversation_id": conversation_id})
         return JSONResponse({"status": "ok", "id": conversation_id})
 
+    @app.patch("/v1/me/conversations/{conversation_id}")
+    async def rename_my_conversation(conversation_id: str, body: dict, k=K, p=P) -> JSONResponse:
+        conv = await k.store.get_conversation(p.tenant_id, conversation_id)
+        if conv is None:
+            return JSONResponse({"status": "error", "reason": "not_found"}, status_code=404)
+        if conv.user_id != p.subject:
+            return JSONResponse({"status": "denied", "reason": "not your conversation"},
+                                status_code=403)
+        title = body.get("title")
+        title = title.strip() if isinstance(title, str) else ""
+        if not title or len(title) > 120:
+            return JSONResponse({"status": "error", "reason": "title must be 1-120 characters"},
+                                status_code=400)
+        conv.title = title
+        conv.updated_at = utcnow()
+        await k.store.update_conversation(conv)
+        # keys-only audit: the length, never the title text (US-CONV-08)
+        await _audit(k, p, "data.conversation.rename",
+                     {"conversation_id": conversation_id, "title_len": len(title)})
+        return JSONResponse({"status": "ok", "id": conversation_id})
+
     # === Developer & Connections: personal access tokens (PAT-*, SEC-34) ===
     @app.get("/v1/me/tokens")
     async def list_my_tokens(k=K, p=P) -> dict:
