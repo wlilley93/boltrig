@@ -26,12 +26,15 @@ import uuid
 from typing import TYPE_CHECKING, Any
 
 from boltrig.models import (
+    ActionType,
+    AuditEvent,
     HITLType,
     InvocationContext,
     Urgency,
     WorkflowSource,
     WorkItem,
     WorkStatus,
+    utcnow,
 )
 from boltrig.work import normalise
 from boltrig.workflows.generator import learn_from_success
@@ -76,7 +79,10 @@ def outcome_score(terminal_status: str, degraded: bool) -> dict[str, Any]:
         score: float | None = 0.5 if degraded else 1.0
     elif terminal_status == WorkStatus.FAILED.value:
         score = 0.0
-    else:  # AWAITING_HUMAN and any other non-terminal-success: neutral
+    else:
+        # AWAITING_HUMAN, CANCELLED, and any other non-success: neutral. A cancel
+        # is NEUTRAL - neither a success nor a failure ([2026] VJS-COUNTY 6, D1),
+        # exactly as a parked (AWAITING_HUMAN) item scores neutral.
         score = None
     return {
         "score": score,
@@ -154,6 +160,15 @@ class WorkPump:
 
             hitl = HITLManager(self._store)
         self._hitl = hitl
+        # A cancel transition emits one audit row ([2026] VJS-COUNTY 6, D4). Prefer
+        # the kernel's shared writer (one hash chain); a bare store builds one
+        # lazily, mirroring how the HITL manager is built above.
+        audit = getattr(kernel_or_store, "audit", None)
+        if audit is None:
+            from boltrig.kernel.audit import AuditWriter
+
+            audit = AuditWriter(self._store)
+        self._audit = audit
         self._spawner = spawner
         self._cos = chief_of_staff
         self.heads = dict(heads)
@@ -212,54 +227,78 @@ class WorkPump:
             )
             return item
 
-        ctx = await self._context_for(item, run_id)
-        await store.upsert_checkpoint(tenant, run_id, "route", "started")
-        department = await self._cos.route(item, ctx)
-        head = self._head_for(department)
-        item.owner_member = head.name
-        await store.update_work_item(item)
-        await store.upsert_checkpoint(
-            tenant, run_id, "route", "done", output={"department": department}
-        )
+        # Cooperative server-side cancel ([2026] VJS-COUNTY 6, D3/D4): the cancel
+        # signal is consulted at each step boundary and the run stops BEFORE
+        # dispatching the next verb; an in-flight adapter call is never interrupted
+        # (cancellation takes effect only at the next cooperative point). CANCELLED
+        # is written in the `finally` (D4), so the terminal state is durable even if
+        # a later step raises; the durable cancel-request row is the backstop that
+        # re-detects a cancel after a mid-flight process death.
+        cancelled = await self._store.is_run_cancel_requested(tenant, run_id)
+        try:
+            if cancelled:  # boundary 0: before any dispatch, nothing has run yet
+                return item
 
-        await store.upsert_checkpoint(tenant, run_id, "execute", "started")
-        tree_id = await tree_root_id(store, item)
-        outcome = await head.handle(item, ctx, tree_id=tree_id)
-
-        # Join the step onto the parent: the aggregate is the item's result and
-        # the degraded flag is any child's degradation (US-FLT-07).
-        children = list(outcome.get("children") or [])
-        item.result = outcome
-        item.degraded = any(bool(c.get("degraded")) for c in children)
-        await persist_new_work_items(
-            store, item, outcome.get("new_work_items"), source="internal"
-        )
-
-        if outcome.get("status") == "escalated":
-            # cap breach: the head already filed the HITL escalation (US-EXE-04).
-            await self._await_human(item, run_id, outcome.get("hitl_request_id"))
-            return item
-        if item.convergent and item.degraded:
-            # D6: a convergent item whose aggregate is degraded is never DONE.
-            await self._park(
-                item, run_id,
-                reason="convergent_degraded",
-                detail="a convergent item's aggregate is degraded; it needs a human",
+            ctx = await self._context_for(item, run_id)
+            await store.upsert_checkpoint(tenant, run_id, "route", "started")
+            department = await self._cos.route(item, ctx)
+            head = self._head_for(department)
+            item.owner_member = head.name
+            await store.update_work_item(item)
+            await store.upsert_checkpoint(
+                tenant, run_id, "route", "done", output={"department": department}
             )
-            return item
 
-        item.status = WorkStatus.DONE  # degraded=true is carried, never hidden
-        self._stamp_outcome(item, WorkStatus.DONE.value)
-        # flywheel: a clean success that carries a synthesised workflow is learned
-        # so the library can reuse it next time (US-WFL-03).
-        await self._maybe_learn(item, outcome)
-        await store.update_work_item(item)
-        await store.upsert_checkpoint(
-            tenant, run_id, "execute", "done",
-            output={"spawned": outcome.get("spawned", 0), "degraded": item.degraded},
-        )
-        await self._reflect(item, run_id, WorkStatus.DONE.value)
-        return item
+            # boundary 1: the chokepoint before dispatching the execute verb. If a
+            # cancel arrived while routing, head.handle (the dispatch) never runs.
+            cancelled = await self._store.is_run_cancel_requested(tenant, run_id)
+            if cancelled:
+                return item
+
+            await store.upsert_checkpoint(tenant, run_id, "execute", "started")
+            tree_id = await tree_root_id(store, item)
+            # In-flight adapter call: a cancel requested DURING this never interrupts
+            # it - it runs to completion and cancellation takes effect (if any) only
+            # at the next cooperative point (D3, FORBIDDEN: no mid-step hard kill).
+            outcome = await head.handle(item, ctx, tree_id=tree_id)
+
+            # Join the step onto the parent: the aggregate is the item's result and
+            # the degraded flag is any child's degradation (US-FLT-07).
+            children = list(outcome.get("children") or [])
+            item.result = outcome
+            item.degraded = any(bool(c.get("degraded")) for c in children)
+            await persist_new_work_items(
+                store, item, outcome.get("new_work_items"), source="internal"
+            )
+
+            if outcome.get("status") == "escalated":
+                # cap breach: the head already filed the HITL escalation (US-EXE-04).
+                await self._await_human(item, run_id, outcome.get("hitl_request_id"))
+                return item
+            if item.convergent and item.degraded:
+                # D6: a convergent item whose aggregate is degraded is never DONE.
+                await self._park(
+                    item, run_id,
+                    reason="convergent_degraded",
+                    detail="a convergent item's aggregate is degraded; it needs a human",
+                )
+                return item
+
+            item.status = WorkStatus.DONE  # degraded=true is carried, never hidden
+            self._stamp_outcome(item, WorkStatus.DONE.value)
+            # flywheel: a clean success that carries a synthesised workflow is learned
+            # so the library can reuse it next time (US-WFL-03).
+            await self._maybe_learn(item, outcome)
+            await store.update_work_item(item)
+            await store.upsert_checkpoint(
+                tenant, run_id, "execute", "done",
+                output={"spawned": outcome.get("spawned", 0), "degraded": item.degraded},
+            )
+            await self._reflect(item, run_id, WorkStatus.DONE.value)
+            return item
+        finally:
+            if cancelled:
+                await self._cancel(item, run_id)
 
     async def requeue(self, tenant_id: str, item_id: str) -> WorkItem | None:
         """Re-queue a parked (AWAITING_HUMAN / BLOCKED) item to PENDING.
@@ -365,6 +404,38 @@ class WorkPump:
             hitl_request_id=hitl_request_id,
         )
         await self._reflect(item, run_id, WorkStatus.AWAITING_HUMAN.value)
+
+    async def _cancel(self, item: WorkItem, run_id: str) -> None:
+        """Durably record a cooperative cancel ([2026] VJS-COUNTY 6, D1/D4).
+
+        Writes the terminal ``WorkStatus.CANCELLED`` (neutral outcome - neither
+        success nor failure, mirroring AWAITING_HUMAN), persists a checkpoint, and
+        emits one audit row on the transition. Called only from ``handle_claimed_item``'s
+        ``finally`` so the terminal state is durable even if a later step raised.
+        Idempotent: re-running it on an already-cancelled item re-writes the same
+        terminal state, so a restart that re-detects the cancel-request row never
+        resurrects the run (FORBIDDEN: a cancelled run coming back to life)."""
+        item.status = WorkStatus.CANCELLED
+        item.lease_owner = None
+        item.lease_expires_at = None
+        self._stamp_outcome(item, WorkStatus.CANCELLED.value)
+        await self._store.update_work_item(item)
+        await self._store.upsert_checkpoint(
+            item.tenant_id, run_id, "execute", "cancelled"
+        )
+        # D4: one audit row marks the transition. Best-effort chain via the shared
+        # writer; keys only (no intent/content), matching the bounded-observability
+        # rule (K-20).
+        await self._audit.write(
+            AuditEvent(
+                tenant_id=item.tenant_id, ts=utcnow(), actor=self.worker_id,
+                actor_tier="tier1", action_type=ActionType.TOOL_CALL,
+                status="cancelled", run_id=run_id, verb="work.cancel",
+                on_behalf_of=item.on_behalf_of,
+                detail={"work_item_id": item.id, "reason": "cancel_requested"},
+            )
+        )
+        await self._reflect(item, run_id, WorkStatus.CANCELLED.value)
 
     # --- learning loop (Phase 3, US-WFL-03/06/07) ---------------------------------
     def _stamp_outcome(self, item: WorkItem, terminal_status: str) -> None:

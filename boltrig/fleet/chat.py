@@ -335,6 +335,20 @@ class ChatService:
             await self._store.update_conversation(conv)
         return new_message, last_assistant.id
 
+    async def cancel(self, run_id: str) -> None:
+        """End a live chat turn's SSE stream cleanly on a server-side cancel
+        ([2026] VJS-COUNTY 6, D5).
+
+        Cooperative, never a hard kill: this publishes a terminal ``cancelled``
+        notice and closes the run's event stream, so a subscribed client stops
+        waiting and the stream ends cleanly. The in-flight spawn is NEVER
+        interrupted - it runs to completion and writes its work item; the durable
+        cancel-request row (written by the owner-only audited route) is the record
+        that persists and stops a restart resurrecting the run. Idempotent: a
+        second close is a no-op (the executor's own finally also closes the relay)."""
+        self._relay.publish(run_id, {"type": "cancelled", "run_id": run_id})
+        self._relay.close(run_id)
+
     async def _safe_exec(self, **kw):
         run_id = kw["run_id"]
         try:

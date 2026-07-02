@@ -105,6 +105,9 @@ class InMemoryStore(ChannelStoreMem):
         # fan-out counters keyed (tenant, tree, counter)).
         self._checkpoints: dict[tuple[str, str, str], RunCheckpoint] = {}
         self._fanout: dict[tuple[str, str, str], int] = {}
+        # [2026] VJS-COUNTY 6: cooperative run-cancel markers keyed (tenant, run)
+        # -> the requester. A marker row, never a mutable run table.
+        self._cancels: dict[tuple[str, str], str] = {}
 
     # --- registry ---
     async def get_noun(self, tenant_id, noun_id):
@@ -257,6 +260,16 @@ class InMemoryStore(ChannelStoreMem):
         ]
         # oldest-first with a step tiebreak, matching the Postgres ORDER BY.
         return sorted(out, key=lambda c: (c.updated_at, c.step))
+
+    # --- server-side run cancellation ([2026] VJS-COUNTY 6) ---
+    async def request_run_cancel(self, tenant_id, run_id, requested_by):
+        # Idempotent marker (D2): the first request wins, a re-request is a no-op
+        # so the original requester is never overwritten. Durable for the process
+        # lifetime (the Postgres row is durable across restarts).
+        self._cancels.setdefault((tenant_id, run_id), requested_by)
+
+    async def is_run_cancel_requested(self, tenant_id, run_id):
+        return (tenant_id, run_id) in self._cancels
 
     # --- hitl ---
     async def create_hitl_request(self, req):

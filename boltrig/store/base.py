@@ -148,6 +148,21 @@ class Store(Protocol):
     ) -> None: ...
     async def list_checkpoints(self, tenant_id: str, run_id: str) -> list[RunCheckpoint]: ...
 
+    # --- server-side run cancellation ([2026] VJS-COUNTY 6) ------------------
+    # A cooperative, owner-only cancel signal keyed by run id. The route writes
+    # the request THROUGH this narrow seam (owner-only + audited at the route,
+    # mirroring rename/regenerate); the pump consults ``is_run_cancel_requested``
+    # at each step boundary and stops BEFORE dispatching the next verb, never
+    # interrupting an in-flight adapter call (D2/D3). A marker row, NOT a broad
+    # mutable run table; idempotent (a re-request is a no-op, the first requester
+    # stands). Durable: a restart re-detects the request and re-writes the
+    # terminal CANCELLED state, so a cancelled run is never resurrected. Tenant-
+    # scoped (SEC-08).
+    async def request_run_cancel(
+        self, tenant_id: str, run_id: str, requested_by: str
+    ) -> None: ...
+    async def is_run_cancel_requested(self, tenant_id: str, run_id: str) -> bool: ...
+
     # --- hitl ---
     async def create_hitl_request(self, req: HITLRequest) -> None: ...
     async def get_hitl_request(self, tenant_id: str, req_id: str) -> HITLRequest | None: ...

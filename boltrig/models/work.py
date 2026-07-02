@@ -21,6 +21,11 @@ class WorkStatus(str, Enum):
     AWAITING_HUMAN = "awaiting_human"
     DONE = "done"
     FAILED = "failed"
+    # A cooperative, owner-only server-side cancel ([2026] VJS-COUNTY 6): a
+    # terminal state written when a run is cancelled at a step boundary. It is
+    # NEUTRAL - neither a success nor a failure (mirrors how AWAITING_HUMAN scores
+    # neutral); the pump writes it in a finally so it is durable (D1/D4).
+    CANCELLED = "cancelled"
 
 
 @dataclass

@@ -199,6 +199,33 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
                              "message_id": new_message.id, "superseded": superseded_id,
                              "run_id": new_message.run_id})
 
+    @app.post("/v1/runs/{run_id}/cancel")
+    async def cancel_run(run_id: str, request: Request, k=K, p=P) -> JSONResponse:
+        # Server-side run cancellation ([2026] VJS-COUNTY 6, D5). Owner-only,
+        # fail-closed, audited - mirroring the regenerate route: a scoped-read role
+        # (org-admin/compliance) may READ a run's events but never cancel it, so a
+        # non-owner is refused 403 with NO write and NO audit. Run ownership is the
+        # owning work item's on_behalf_of (a chat turn's item id IS its run id; a
+        # pumped item's run id is its own id), the same identity the run was
+        # authorised under.
+        item = await k.store.get_work_item(p.tenant_id, run_id)
+        if item is None:
+            return JSONResponse({"status": "error", "reason": "not_found"}, status_code=404)
+        if item.on_behalf_of != p.subject:
+            return JSONResponse({"status": "denied", "reason": "not your run"},
+                                status_code=403)
+        # Cooperative cancel (D2/D3): write the durable cancel-request signal the
+        # pump consults at its next step boundary. The in-flight step/adapter is
+        # never interrupted; the terminal CANCELLED state is written server-side by
+        # the pump (in a finally). Keys-only audit: the run id, never any content.
+        await k.store.request_run_cancel(p.tenant_id, run_id, p.subject)
+        await _audit(k, p, "run.cancel", {"run_id": run_id})
+        # If this run is a live chat turn, end its SSE stream cleanly (D5).
+        chat_svc = getattr(request.app.state, "chat", None)
+        if chat_svc is not None and hasattr(chat_svc, "cancel"):
+            await chat_svc.cancel(run_id)
+        return JSONResponse({"status": "ok", "run_id": run_id})
+
     # === Developer & Connections: personal access tokens (PAT-*, SEC-34) ===
     @app.get("/v1/me/tokens")
     async def list_my_tokens(k=K, p=P) -> dict:

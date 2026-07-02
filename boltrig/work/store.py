@@ -15,23 +15,31 @@ from typing import Any
 from boltrig.models import WorkItem, WorkStatus
 from boltrig.work.queue import QueueAdapter
 
-# The legal status transitions (a small guard, not a full state machine). DONE is
-# terminal; FAILED may be retried back to PENDING.
+# The legal status transitions (a small guard, not a full state machine). DONE and
+# CANCELLED are terminal; FAILED may be retried back to PENDING. CANCELLED is a
+# cooperative server-side cancel ([2026] VJS-COUNTY 6, D1) reachable from any
+# active (non-terminal) state, and, like DONE, has no outgoing transition - a
+# cancelled run is never resurrected.
 _TRANSITIONS: dict[WorkStatus, set[WorkStatus]] = {
     WorkStatus.PENDING: {
         WorkStatus.IN_FLIGHT, WorkStatus.BLOCKED, WorkStatus.AWAITING_HUMAN,
-        WorkStatus.FAILED,
+        WorkStatus.FAILED, WorkStatus.CANCELLED,
     },
     WorkStatus.IN_FLIGHT: {
         WorkStatus.BLOCKED, WorkStatus.AWAITING_HUMAN, WorkStatus.DONE,
-        WorkStatus.FAILED,
+        WorkStatus.FAILED, WorkStatus.CANCELLED,
     },
-    WorkStatus.BLOCKED: {WorkStatus.PENDING, WorkStatus.IN_FLIGHT, WorkStatus.FAILED},
+    WorkStatus.BLOCKED: {
+        WorkStatus.PENDING, WorkStatus.IN_FLIGHT, WorkStatus.FAILED,
+        WorkStatus.CANCELLED,
+    },
     WorkStatus.AWAITING_HUMAN: {
         WorkStatus.IN_FLIGHT, WorkStatus.BLOCKED, WorkStatus.DONE, WorkStatus.FAILED,
+        WorkStatus.CANCELLED,
     },
     WorkStatus.DONE: set(),
     WorkStatus.FAILED: {WorkStatus.PENDING, WorkStatus.IN_FLIGHT},
+    WorkStatus.CANCELLED: set(),
 }
 
 

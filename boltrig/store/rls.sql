@@ -54,7 +54,8 @@ DECLARE
     'personal_agents','memory_items','mcp_servers','conversation_messages',
     'user_invitations','user_settings','user_sessions','memory_facts',
     'memory_ingestions','memory_erasures','memory_vectors','memory_vector_edges',
-    'channel_bindings','channel_pairings','run_checkpoints','fanout_counters'
+    'channel_bindings','channel_pairings','run_checkpoints','fanout_counters',
+    'run_cancel_requests'
   ];
 BEGIN
   FOREACH t IN ARRAY scoped LOOP

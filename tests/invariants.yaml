@@ -707,3 +707,22 @@ invariants:
       - tests/security/test_self_improvement_authority.py::test_workflow_definition_carries_no_authority_field
       - tests/security/test_self_improvement_authority.py::test_learn_from_success_changes_only_provenance
       - tests/security/test_self_improvement_authority.py::test_memory_improve_verb_takes_no_authority_argument
+
+  # --- Server-side run cancellation ([2026] VJS-COUNTY 6) --------------------
+  SEC-85:
+    description: Server-side run cancel is owner-only, fail-closed and audited ([2026] VJS-COUNTY 6, D5) - POST /v1/runs/{run_id}/cancel refuses a non-owner or scoped-read caller with 403 and NO cancel-request write and NO audit, an unknown run is 404 with no write, the owner's cancel writes the durable cancel-request row plus a keys-only run.cancel audit event, and ChatService.cancel ends a live chat turn's SSE stream cleanly.
+    tests:
+      - tests/security/test_run_cancel.py::test_cancel_is_owner_only_fail_closed
+      - tests/security/test_run_cancel.py::test_cancel_unknown_run_is_404_no_write
+      - tests/security/test_run_cancel.py::test_chat_cancel_closes_the_run_stream
+  SEC-86:
+    description: Cancel takes effect only at a cooperative point, never mid-adapter-call ([2026] VJS-COUNTY 6, D3) - the pump consults the cancel signal at each step boundary and stops BEFORE dispatching the next verb (the head's execute dispatch never runs), and a cancel arriving during an in-flight adapter call never interrupts it (the step runs to completion; cancellation lands only at the next cooperative point).
+    tests:
+      - tests/security/test_run_cancel.py::test_pump_stops_before_dispatch_at_the_chokepoint_boundary
+      - tests/security/test_run_cancel.py::test_in_flight_adapter_call_is_not_interrupted
+  SEC-87:
+    description: CANCELLED is terminal, neutral and durable ([2026] VJS-COUNTY 6, D1/D4) - the pump writes WorkStatus.CANCELLED in a finally with a checkpoint and exactly one audit row on the transition, outcome_score treats a cancel as neutral (score None, neither success nor failure) regardless of degraded, and a restart that re-detects the durable cancel-request row re-cancels the run rather than resurrecting it to running/DONE.
+    tests:
+      - tests/security/test_run_cancel.py::test_cancelled_is_terminal_neutral_checkpointed_and_audited
+      - tests/security/test_run_cancel.py::test_outcome_score_cancelled_is_neutral
+      - tests/security/test_run_cancel.py::test_restart_does_not_resurrect_a_cancelled_run

@@ -509,6 +509,26 @@ class PostgresStore(ChannelStorePG):
         )
         return [_checkpoint(r) for r in rows]
 
+    # --- server-side run cancellation ([2026] VJS-COUNTY 6) ----------------
+    async def request_run_cancel(self, tenant_id, run_id, requested_by):
+        # Idempotent marker (D2): INSERT .. ON CONFLICT DO NOTHING, so a
+        # re-request never overwrites the original requester. Durable across
+        # restarts - the row is the backstop that stops a cancelled run being
+        # resurrected (the pump re-detects it and re-writes CANCELLED).
+        await self._pool.execute(
+            """INSERT INTO run_cancel_requests (tenant_id, run_id, requested_by)
+               VALUES ($1,$2,$3)
+               ON CONFLICT (tenant_id, run_id) DO NOTHING""",
+            tenant_id, run_id, requested_by,
+        )
+
+    async def is_run_cancel_requested(self, tenant_id, run_id):
+        row = await self._pool.fetchrow(
+            "SELECT 1 FROM run_cancel_requests WHERE tenant_id=$1 AND run_id=$2",
+            tenant_id, run_id,
+        )
+        return row is not None
+
     # --- hitl -------------------------------------------------------------
     async def create_hitl_request(self, r: HITLRequest):
         await self._pool.execute(

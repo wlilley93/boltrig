@@ -136,7 +136,7 @@ CREATE TABLE IF NOT EXISTS work_items (
     intent          TEXT NOT NULL,
     confidence      DOUBLE PRECISION NOT NULL,          -- 0.0-1.0
     convergent      BOOLEAN NOT NULL,
-    status          TEXT NOT NULL,                      -- pending|in_flight|blocked|awaiting_human|done|failed
+    status          TEXT NOT NULL,                      -- pending|in_flight|blocked|awaiting_human|done|failed|cancelled
     owner_member    TEXT,
     parent_id       TEXT,
     hatchet_run_id  TEXT,
@@ -184,6 +184,20 @@ CREATE TABLE IF NOT EXISTS fanout_counters (
     counter    TEXT NOT NULL,
     value      INT NOT NULL DEFAULT 0,
     PRIMARY KEY (tenant_id, tree_id, counter)
+);
+
+-- [2026] VJS-COUNTY 6: server-side run cancellation. A cooperative, owner-only
+-- cancel signal keyed by run id - a marker row the pump consults at each step
+-- boundary and stops BEFORE dispatching the next verb, NOT a broad mutable run
+-- table. Idempotent (INSERT .. ON CONFLICT DO NOTHING). The terminal CANCELLED
+-- state is written on the work item + a checkpoint in a finally, so a restart
+-- re-detects this request and re-writes it - a cancelled run is never resurrected.
+CREATE TABLE IF NOT EXISTS run_cancel_requests (
+    tenant_id     TEXT NOT NULL,
+    run_id        TEXT NOT NULL,
+    requested_by  TEXT NOT NULL,
+    requested_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, run_id)
 );
 
 -- ---------------------------------------------------------------------------
