@@ -615,3 +615,19 @@ invariants:
     tests:
       - tests/store/test_retention_purge.py::test_closed_conversation_body_is_hard_purged_after_retention
       - tests/store/test_retention_purge.py::test_retention_purge_is_tenant_scoped
+  # --- Beat 3.5: control-plane verb parity (appended as one block) -----------
+  SEC-75:
+    description: Every console authoring operation (skill / noun / verb / binding / MCP-server registration / config section) is dispatchable as a governed control.* verb through the one chokepoint - grant-checked, held by the HITL gate at high consequence, audited - and writes the SAME store state as the direct author-gated route via one shared write helper per noun, so the two paths cannot drift (Beat 3.5).
+    tests:
+      - tests/security/test_control_plane_parity.py::test_control_verbs_write_the_same_state_as_the_direct_routes
+      - tests/security/test_control_plane_parity.py::test_every_control_verb_is_hitl_held_and_writes_nothing_while_pending
+  SEC-76:
+    description: The control.* authoring verbs are denied to any caller whose grants lack them (discovery hides them too), and control.mcp_server.register leaves the consumer INERT pending the SEC-22 human review route (activation has no verb) and refuses a secret in verb params so a credential never transits the run event stream (Beat 3.5).
+    tests:
+      - tests/security/test_control_plane_parity.py::test_control_verbs_denied_to_a_caller_without_the_grant
+      - tests/security/test_control_plane_parity.py::test_mcp_register_verb_is_inert_and_refuses_a_secret
+  SEC-77:
+    description: The chat/agent lane preserves grant context end to end for authoring - a chat-style spawn carrying the shipped authoring skill hands control.* to the child (intersected with the caller ceiling and the tenant ceiling), the run-scoped MCP token reaches the control verbs through the unchanged chokepoint where the HITL gate holds them, and a non-author caller ceiling strips them (Beat 3.5).
+    tests:
+      - tests/security/test_control_plane_parity.py::test_chat_lane_spawn_with_authoring_skill_reaches_control_verbs
+      - tests/security/test_control_plane_parity.py::test_chat_lane_non_author_ceiling_strips_control_grants

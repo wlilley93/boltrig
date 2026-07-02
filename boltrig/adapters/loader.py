@@ -43,6 +43,11 @@ class AdapterLoader:
         """The kernel's ``adapter_provider``."""
         return self._live.get((tenant_id, adapter_id))
 
+    def peek(self, tenant_id: str, adapter_id: str) -> Adapter | None:
+        """Synchronous lookup of a live adapter (bootstrap wiring; ``get`` is the
+        kernel's async provider)."""
+        return self._live.get((tenant_id, adapter_id))
+
     async def refresh_health(self) -> dict[tuple[str, str], str]:
         for key, adapter in list(self._live.items()):
             try:

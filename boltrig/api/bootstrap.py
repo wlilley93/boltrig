@@ -124,10 +124,14 @@ async def _register_memory(kernel: Kernel, tenant_id: str, memory_cfg) -> None:
 async def _register_control_plane(kernel: Kernel, tenant_id: str) -> None:
     """Register the control-plane adapter so config amendment flows through the
     chokepoint (Round Seven, 5.1): control.* verbs are grant-checked, audited and
-    HITL-gateable like any other action (SEC-51)."""
+    HITL-gateable like any other action (SEC-51). The loader is injected so
+    control.mcp_server.register can park a consumer inert pending SEC-22 review;
+    the AdminConfig is late-bound by platform_factory (SEC-75)."""
     from boltrig.config.control_plane import build_control_plane_adapter
 
-    await kernel.register_adapter(tenant_id, build_control_plane_adapter(kernel.store))
+    await kernel.register_adapter(
+        tenant_id, build_control_plane_adapter(kernel.store, loader=kernel.loader)
+    )
     log.info("control-plane verbs registered (governed config amendment)")
 
 
@@ -446,8 +450,15 @@ def build_app():
         except Exception:  # task registration must never break boot (P9)
             log.warning("boltrig task registration failed", exc_info=True)
         wire_hitl_resume(kernel, executor=executor)
+        admin = AdminConfig(kernel.store, tenant_id=tenant, path=manifest_path)
+        # Share the ONE AdminConfig with the governed control.config.upsert verb
+        # so the PUT route and the verb mutate one config doc and record revisions
+        # through one path (SEC-75).
+        control = kernel.loader.peek(tenant, "control")
+        if control is not None and hasattr(control, "set_admin"):
+            control.set_admin(admin)
         return {
-            "admin": AdminConfig(kernel.store, tenant_id=tenant, path=manifest_path),
+            "admin": admin,
             "eval": EvalRunner(kernel, spawner),
             "spawner": spawner,
             "workflows": WorkflowLibrary(
