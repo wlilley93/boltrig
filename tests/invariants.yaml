@@ -585,3 +585,8 @@ invariants:
       - tests/security/test_prompt_injection_hardening.py::test_sidecar_run_requires_auth
       - tests/security/test_prompt_injection_hardening.py::test_sidecar_unconfigured_auth_fails_closed_in_prod
       - tests/security/test_prompt_injection_hardening.py::test_sidecar_refuses_metadata_endpoint
+  SEC-74:
+    description: Closed conversations are hard-purged past retention (right-to-erasure) - the retention worker HARD-DELETES a CLOSED conversation and all its messages once its close/update timestamp is older than the retention cutoff, leaves open or recently-closed threads intact, is tenant-scoped, and never touches the tamper-evident audit log (audit is exempt) so DELETE /v1/me/conversations no longer leaves the body in Postgres indefinitely (M11).
+    tests:
+      - tests/store/test_retention_purge.py::test_closed_conversation_body_is_hard_purged_after_retention
+      - tests/store/test_retention_purge.py::test_retention_purge_is_tenant_scoped

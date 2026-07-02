@@ -23,6 +23,7 @@ from boltrig.models import (
     ConfigRevision,
     Conversation,
     ConversationMessage,
+    ConversationStatus,
     EMPTY_GRANTS,
     EvalCase,
     EvalRun,
@@ -376,6 +377,20 @@ class InMemoryStore(ChannelStoreMem):
 
     async def list_messages(self, tenant_id, conv_id):
         return [m for m in self._messages.get(conv_id, []) if m.tenant_id == tenant_id]
+
+    async def purge_closed_conversations(self, tenant_id, older_than):
+        # M11 / SEC-74: hard-erase CLOSED conversations past the cutoff plus their
+        # messages; audit rows are elsewhere and never touched. Tenant-scoped.
+        doomed = [
+            c for (t, _), c in self._convs.items()
+            if t == tenant_id
+            and c.status == ConversationStatus.CLOSED
+            and c.updated_at <= older_than
+        ]
+        for conv in doomed:
+            self._convs.pop((conv.tenant_id, conv.id), None)
+            self._messages.pop(conv.id, None)
+        return len(doomed)
 
     # --- Round Three: config revisions ---
     async def add_config_revision(self, rev):

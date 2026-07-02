@@ -741,6 +741,32 @@ class PostgresStore(ChannelStorePG):
         )
         return [_message(r) for r in rows]
 
+    async def purge_closed_conversations(self, tenant_id, older_than):
+        # M11 / SEC-74 right-to-erasure: HARD-DELETE CLOSED conversations past the
+        # cutoff (updated_at is the close timestamp - the soft-close stamps it) and
+        # their conversation_messages. conversation_messages carries no FK to
+        # conversations, so the child rows are deleted explicitly first. The audit
+        # log is EXEMPT and never touched here (erasing the SEC-16 hash chain would
+        # break tamper-evidence). Tenant-scoped (SEC-08).
+        rows = await self._pool.fetch(
+            """SELECT id FROM conversations
+               WHERE tenant_id=$1 AND status=$2 AND updated_at <= $3""",
+            tenant_id, ConversationStatus.CLOSED.value, older_than,
+        )
+        conv_ids = [r["id"] for r in rows]
+        if not conv_ids:
+            return 0
+        await self._pool.execute(
+            """DELETE FROM conversation_messages
+               WHERE tenant_id=$1 AND conversation_id = ANY($2::text[])""",
+            tenant_id, conv_ids,
+        )
+        await self._pool.execute(
+            """DELETE FROM conversations WHERE tenant_id=$1 AND id = ANY($2::text[])""",
+            tenant_id, conv_ids,
+        )
+        return len(conv_ids)
+
     # --- Round Three: config revisions ---
     async def add_config_revision(self, rev: ConfigRevision) -> ConfigRevision:
         row = await self._pool.fetchrow(

@@ -8,6 +8,7 @@ contract of every method: an id lookup is always scoped by ``tenant_id``.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Protocol, runtime_checkable
 
 from boltrig.models import (
@@ -279,3 +280,14 @@ class Store(Protocol):
     async def list_messages(
         self, tenant_id: str, conv_id: str
     ) -> list[ConversationMessage]: ...
+    # Right-to-erasure (M11 / SEC-74): HARD-DELETE every CLOSED conversation whose
+    # close/update timestamp is at or before ``older_than``, together with its
+    # conversation_messages, and return how many conversations were purged. The
+    # soft-close (DELETE /v1/me/conversations/{id}) only sets status=CLOSED; this
+    # is the durable erasure the retention worker drives past the retention window
+    # so a deleted thread's body does not persist indefinitely. Tenant-scoped
+    # (SEC-08). The audit log is EXEMPT - erasing the tamper-evident hash chain
+    # (SEC-16) would break verify() and the accountability record.
+    async def purge_closed_conversations(
+        self, tenant_id: str, older_than: datetime
+    ) -> int: ...
