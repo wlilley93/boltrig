@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import binascii
+import contextlib
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
@@ -45,6 +46,43 @@ from .pump import persist_new_work_items
 TurnExecutor = Callable[..., Awaitable[Any]]
 
 _SCOPED_ROLES = {"org-admin", "compliance"}  # may read others' threads (SEC-25)
+
+
+def _project_chat_event(event: dict[str, Any]) -> dict[str, Any]:
+    """Bound the tool events before they reach the user-facing chat stream (K-20,
+    US-CHAT-10).
+
+    The run relay carries the FULL ``tool_call``/``tool_result`` payloads (``input``
+    / ``output``) for the run canvas and the durable audit record (FR-EVT-01). The
+    chat SSE, which a browser renders live, must NEVER carry the raw params or
+    output of a verb: they can hold sensitive values or untrusted content. For
+    those two event types this forwards only the bounded keys + summaries the UI
+    needs to render a tool callout (``tool``/``call_id``/``args_summary`` and
+    ``call_id``/``status``/``result_summary``); every other event passes through
+    untouched, so message_start / text_delta / message_end / cancelled / hitl /
+    question are unchanged."""
+    etype = event.get("type")
+    if etype == "tool_call":
+        out: dict[str, Any] = {
+            "type": "tool_call",
+            "run_id": event.get("run_id"),
+            "tool": event.get("tool") or event.get("verb"),
+            "call_id": event.get("call_id"),
+        }
+        if "args_summary" in event:
+            out["args_summary"] = event["args_summary"]
+        return out
+    if etype == "tool_result":
+        out = {
+            "type": "tool_result",
+            "run_id": event.get("run_id"),
+            "call_id": event.get("call_id"),
+            "status": event.get("status"),
+        }
+        if "result_summary" in event:
+            out["result_summary"] = event["result_summary"]
+        return out
+    return event
 
 
 class ConversationForbidden(BoltrigError):
@@ -227,7 +265,10 @@ class ChatService:
         async for event in self._drive(
             tenant_id, user_id, conv.id, run_id, message, role, grants, records
         ):
-            collected.append(event)
+            # Heartbeats are transport keepalives (US-CHAT-11), not turn content:
+            # stream them but never persist them on the turn's event record.
+            if event.get("type") != "heartbeat":
+                collected.append(event)
             yield event
 
         yield {"type": "message_end", "run_id": run_id}
@@ -248,12 +289,14 @@ class ChatService:
 
     async def _drive(
         self, tenant_id, user_id, conv_id, run_id, message, role, grants,
-        attachments=None,
+        attachments=None, *, heartbeat=True,
     ):
         if self._exec is None:
             yield {"type": "text_delta", "delta": "(no runtime configured)"}
             return
-        # run the turn concurrently; forward its relay events until the stream closes.
+        # run the turn concurrently; forward its relay events until the stream
+        # closes. Each forwarded event is bounded for the chat stream (K-20,
+        # US-CHAT-10) so full tool params/output never reach the browser.
         task = asyncio.create_task(
             self._safe_exec(
                 tenant_id=tenant_id, user_id=user_id, conversation_id=conv_id,
@@ -261,10 +304,42 @@ class ChatService:
                 attachments=attachments or [],
             )
         )
+        # SSE keepalive (US-CHAT-11): a relay-pump task feeds a local queue; the
+        # forward loop races each next event against the heartbeat interval and
+        # emits a heartbeat frame whenever the run has been quiet, so a slow-but-
+        # alive stream never trips a client idle-timeout. The heartbeat stops the
+        # moment the relay closes (a terminal event), because the pump then signals
+        # done and the loop breaks. Racing a plain ``queue.get`` (never the relay
+        # generator itself) keeps the relay subscription intact on a timeout.
+        interval = self._cfg.heartbeat_seconds if heartbeat else 0
+        queue: asyncio.Queue = asyncio.Queue()
+        done = object()
+
+        async def _pump() -> None:
+            try:
+                async for event in self._relay.subscribe(run_id, replay=True):
+                    await queue.put(event)
+            finally:
+                await queue.put(done)
+
+        pump = asyncio.create_task(_pump())
         try:
-            async for event in self._relay.subscribe(run_id, replay=True):
-                yield event
+            while True:
+                if interval and interval > 0:
+                    try:
+                        item = await asyncio.wait_for(queue.get(), timeout=interval)
+                    except asyncio.TimeoutError:
+                        yield {"type": "heartbeat", "run_id": run_id}
+                        continue
+                else:
+                    item = await queue.get()
+                if item is done:
+                    break
+                yield _project_chat_event(item)
         finally:
+            pump.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await pump
             await task
 
     async def regenerate_turn(
@@ -310,9 +385,12 @@ class ChatService:
         # run rather than a mutation of the frozen prior reply.
         run_id = uuid.uuid4().hex
         collected: list[dict[str, Any]] = []
+        # Regenerate collects for persistence, it does not stream to a client, so
+        # the transport keepalive is off - no heartbeat frames enter the record.
         async for event in self._drive(
             tenant_id, user_id, conversation_id, run_id,
             last_user.content or "", role, grants, last_user.attachments,
+            heartbeat=False,
         ):
             collected.append(event)
 

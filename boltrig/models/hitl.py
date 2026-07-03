@@ -18,6 +18,12 @@ class HITLType(str, Enum):
     APPROVAL = "approval"
     CLARIFICATION = "clarification"
     ESCALATION = "escalation"
+    # A turn's agent asking the USER a clarifying question via the governed
+    # ``chat.ask_user`` verb (US-CHAT-12). It is answered by the owner through the
+    # fail-closed ``/v1/hitl/{id}/answer`` route, never by the approvals gate: an
+    # approval clears a HIGH-consequence verb, a QUESTION only feeds an answer back
+    # into a paused run, so the two must never be interchangeable (H1 / SEC-14).
+    QUESTION = "question"
 
 
 class Urgency(str, Enum):

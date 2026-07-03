@@ -209,6 +209,48 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
                              "message_id": new_message.id, "superseded": superseded_id,
                              "run_id": new_message.run_id})
 
+    @app.post("/v1/hitl/{question_id}/answer")
+    async def answer_question(question_id: str, body: dict, k=K, p=P) -> JSONResponse:
+        # Owner-only, fail-closed, audited answer to an agent's clarifying QUESTION
+        # (US-CHAT-12), mirroring the regenerate / cancel pattern. This route answers
+        # ONLY a QUESTION HITL - never an approval (those stay on the approvals panel
+        # with their human / anti-self-approval checks, SEC-14), so a question can
+        # never be laundered into clearing a gated verb.
+        from boltrig.fleet.prompt_stack import wrap_untrusted
+        from boltrig.models import HITLType
+
+        req = await k.hitl.get(p.tenant_id, question_id)
+        if req is None:
+            return JSONResponse({"status": "error", "reason": "not_found"}, status_code=404)
+        if req.type != HITLType.QUESTION:
+            return JSONResponse({"status": "error", "reason": "not_a_question"},
+                                status_code=409)
+        # Owner = the run's owner (the owning work item's on_behalf_of), the same
+        # identity the run was authorised under - a scoped-read role may SEE a run
+        # but never answer for its owner. Fail closed with NO write and NO audit
+        # when ownership cannot be confirmed (mirrors the cancel route).
+        item = await k.store.get_work_item(p.tenant_id, req.work_item_id or req.run_id)
+        if item is None or item.on_behalf_of != p.subject:
+            return JSONResponse({"status": "denied", "reason": "not your run"},
+                                status_code=403)
+        raw = body.get("answer")
+        answer = raw.strip() if isinstance(raw, str) else ""
+        if not answer:
+            return JSONResponse({"status": "error", "reason": "answer is required"},
+                                status_code=400)
+        # The answer is user-supplied, so it is enveloped as DATA before it is
+        # recorded and replayed into the run (M1 / SEC-72): the resume wiring pushes
+        # the recorded decision back into the paused run, so wrapping it here is what
+        # guarantees the run never re-ingests raw inbound text as instructions.
+        wrapped = wrap_untrusted("user_answer", p.subject, answer)
+        resp = await k.hitl.answer(p.tenant_id, question_id, wrapped, p.subject)
+        # keys-only audit: the length, never the answer text (K-20 / US-CONV-08).
+        await _audit(k, p, "hitl.question.answer",
+                     {"question_id": question_id, "run_id": req.run_id,
+                      "answer_len": len(answer)})
+        return JSONResponse({"status": "ok", "question_id": question_id,
+                             "response_id": resp.id, "run_id": req.run_id})
+
     @app.post("/v1/runs/{run_id}/cancel")
     async def cancel_run(run_id: str, request: Request, k=K, p=P) -> JSONResponse:
         # Server-side run cancellation ([2026] VJS-COUNTY 6, D5). Owner-only,

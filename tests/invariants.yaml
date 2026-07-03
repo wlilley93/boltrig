@@ -741,3 +741,28 @@ invariants:
       - tests/security/test_run_cancel.py::test_cancelled_is_terminal_neutral_checkpointed_and_audited
       - tests/security/test_run_cancel.py::test_outcome_score_cancelled_is_neutral
       - tests/security/test_run_cancel.py::test_restart_does_not_resurrect_a_cancelled_run
+
+  # --- Streaming-richness chat contracts (tool events / heartbeat / questions) -
+  US-CHAT-10:
+    description: Tool events on the chat stream are keys + summaries only and paired - a verb dispatched under a turn publishes a tool_call (tool, call_id, args_summary of key names + count) and a paired tool_result (call_id, status, result_summary of key names) to the user-facing stream, carrying NO raw input/output, so a client can render a tool callout without the raw payload.
+    tests:
+      - tests/security/test_chat_streaming_richness.py::test_chat_tool_events_are_bounded_and_paired
+  US-CHAT-11:
+    description: The SSE heartbeat keeps a slow-but-alive stream open and stops on a terminal event - a run that produces nothing emits periodic heartbeat frames at the ChatConfig interval until real content/terminal arrives (no heartbeat lands at or after the terminal), heartbeats are never persisted as turn content, and a zero/negative interval disables the keepalive entirely.
+    tests:
+      - tests/security/test_chat_streaming_richness.py::test_heartbeat_keeps_slow_stream_open_then_stops_on_terminal
+      - tests/security/test_chat_streaming_richness.py::test_heartbeat_can_be_disabled
+  US-CHAT-12:
+    description: The governed chat.ask_user verb pauses the run on the existing HITL machinery - dispatched through the ONE chokepoint under the caller ceiling it creates a HITLType.QUESTION bound to the run/work item, emits a rich question stream event (question_id, prompt, choices), raises PendingHuman (audited pending_human), and is grant-ceilinged like any verb (a caller without the grant is refused, never allowed to pause).
+    tests:
+      - tests/security/test_chat_streaming_richness.py::test_ask_user_pauses_via_hitl_and_emits_question
+      - tests/security/test_chat_streaming_richness.py::test_ask_user_is_grant_ceilinged_like_any_verb
+  SEC-88:
+    description: Chat tool events never leak verb values (K-20 bounded observability on the user-facing surface) - a secret/untrusted value passed to a verb appears nowhere on the chat stream nor in the persisted turn events (only key names + counts do), while the full payload still exists on the run relay for the canvas + durable audit.
+    tests:
+      - tests/security/test_chat_streaming_richness.py::test_chat_tool_events_never_leak_verb_values
+  SEC-89:
+    description: The questions answer route is owner-only, fail-closed, audited and wrap_untrusted-enveloped - POST /v1/hitl/{id}/answer answers ONLY a QUESTION (an approval id is refused 409, never laundered into clearing a gated verb), a non-owner/scoped-read caller is refused 403 with NO response write and NO resume fired, the owner's answer is enveloped by wrap_untrusted before it is recorded (so the ordinary resume wiring replays it as data, never raw instructions), and the audit row carries the answer length only, never the answer text.
+    tests:
+      - tests/security/test_chat_streaming_richness.py::test_answer_route_owner_only_wrapped_and_audited
+      - tests/security/test_chat_streaming_richness.py::test_answer_route_refuses_to_answer_an_approval

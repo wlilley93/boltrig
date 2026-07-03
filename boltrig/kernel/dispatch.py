@@ -18,6 +18,7 @@ and audited at the end regardless of outcome:
 from __future__ import annotations
 
 import time
+import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -46,6 +47,7 @@ from .cost import CostAccountant
 from .credentials import CredentialResolver
 from .grants import GrantChecker
 from .hitl import HITLManager
+from .questions import QUESTIONS_VERB
 from .ratelimit import RateLimiter
 
 AdapterProvider = Callable[[str, str], Awaitable[Adapter | None]]
@@ -57,6 +59,24 @@ def _validate(schema: dict, instance: dict) -> list[str]:
         return []
     validator = Draft202012Validator(schema)
     return [e.message for e in validator.iter_errors(instance)]
+
+
+def _summarise_params(params: Any) -> dict[str, Any]:
+    """A bounded, VALUE-FREE description of a verb's params for the chat stream
+    (K-20 bounded observability): the sorted top-level KEY NAMES and their count,
+    never the values (which can carry secrets or untrusted content). Mirrors the
+    keys-only rule the audit rows follow."""
+    if isinstance(params, dict):
+        return {"keys": sorted(str(k) for k in params), "count": len(params)}
+    return {"keys": [], "count": 0}
+
+
+def _summarise_output(output: Any) -> dict[str, Any]:
+    """A bounded, VALUE-FREE description of a verb's output (K-20): the output's
+    top-level key names only, never the values."""
+    if isinstance(output, dict):
+        return {"keys": sorted(str(k) for k in output)}
+    return {"keys": []}
 
 
 class Dispatcher:
@@ -101,6 +121,39 @@ class Dispatcher:
         except Exception:  # observability must never break dispatch (P9)
             pass
 
+    async def _ask_user(self, params: dict[str, Any], context: InvocationContext) -> None:
+        """Create a QUESTION HITL, emit a ``question`` run event, and pause the run
+        (US-CHAT-12). Built entirely on the existing HITL machinery: the request is
+        a ``HITLType.QUESTION`` bound to the run/work item, so the ordinary answer
+        route + resume wiring carry it forward. Always raises PendingHuman.
+
+        The ``prompt``/``choices`` are agent-authored model output (the question it
+        is asking), so they may surface on the stream; the user's ANSWER is what is
+        untrusted, and that enters the run via ``wrap_untrusted`` at the answer route.
+        """
+        prompt = str(params.get("prompt") or "")
+        raw_choices = params.get("choices") or []
+        choices = (
+            [str(c) for c in raw_choices] if isinstance(raw_choices, list) else []
+        )
+        req = await self._hitl.create(
+            tenant_id=context.tenant_id,
+            run_id=context.run_id or "",
+            type=HITLType.QUESTION,
+            question=prompt,
+            context=f"{context.actor} asks the user a question",
+            options=choices,
+            # a chat turn's work item id IS its run id, so binding the request to it
+            # lets the ordinary resume wiring requeue the paused run on an answer.
+            work_item_id=context.run_id,
+            requested_by=context.actor,
+        )
+        self._emit(context.run_id, {
+            "type": "question", "run_id": context.run_id,
+            "question_id": req.id, "prompt": prompt, "choices": choices,
+        })
+        raise PendingHuman(req.id)
+
     async def invoke(
         self,
         noun: str,
@@ -119,10 +172,18 @@ class Dispatcher:
         # attributes which adapter serviced the call (it was always None before).
         meta: dict[str, Any] = {}
         output: dict[str, Any] | None = None
+        # A per-call id correlates the tool_call with its paired tool_result on the
+        # stream so a client can pair a callout with its outcome (US-CHAT-10).
+        call_id = uuid.uuid4().hex
         # Live run event: the agent is calling a tool. Keyed by the run so the chat
-        # / run-canvas subscribed to it sees the call as it happens (Round Ten).
+        # / run-canvas subscribed to it sees the call as it happens (Round Ten). The
+        # full input rides for the run canvas + the durable record (FR-EVT-01); the
+        # chat stream forwards only the bounded ``tool``/``call_id``/``args_summary``
+        # keys (K-20), never the raw input (see fleet/chat._project_chat_event).
         self._emit(context.run_id, {"type": "tool_call", "verb": verb, "noun": noun,
-                                    "input": params})
+                                    "input": params, "run_id": context.run_id,
+                                    "tool": verb, "call_id": call_id,
+                                    "args_summary": _summarise_params(params)})
         try:
             output = await self._invoke_inner(
                 noun, verb, params, context, idempotency_key, approval_id, meta
@@ -134,6 +195,7 @@ class Dispatcher:
             # the call paused for a human - surface it on the run stream so the
             # inline approval card appears where the agent is working.
             self._emit(context.run_id, {"type": "hitl", "verb": verb,
+                                        "call_id": call_id,
                                         "hitl_request_id": e.hitl_request_id})
             raise
         except DegradedMode:
@@ -149,11 +211,20 @@ class Dispatcher:
             raise
         finally:
             # Paired result event (success -> output; failure -> status only, no
-            # leak). pending_human already emitted its own event above.
+            # leak). pending_human already emitted its own event above. The full
+            # output rides for the run canvas + the durable record (FR-EVT-01); the
+            # chat stream forwards only the bounded ``call_id``/``status``/
+            # ``result_summary`` keys (K-20), never the raw output.
             if status != "pending_human":
-                self._emit(context.run_id, {"type": "tool_result", "verb": verb,
-                                            "status": status,
-                                            "output": output if status == "ok" else None})
+                self._emit(context.run_id, {
+                    "type": "tool_result", "verb": verb, "status": status,
+                    "output": output if status == "ok" else None,
+                    "run_id": context.run_id, "call_id": call_id,
+                    "result_summary": (
+                        _summarise_output(output) if status == "ok"
+                        else {"status": status}
+                    ),
+                })
             latency_ms = int((time.monotonic() - started) * 1000)
             target_adapter = meta.get("target_adapter")
             await self._audit.write(
@@ -239,6 +310,15 @@ class Dispatcher:
             prior = await self._store.idempotency_get(tenant, idempotency_key)
             if prior is not None:
                 return prior
+
+        # 6b. Governed built-in: the "ask the user a question" verb (US-CHAT-12).
+        # It reached here only after passing schema validation + the grant check +
+        # the HITL gate above, so it is fully governed like any verb. Its effect is
+        # to PAUSE: it creates a QUESTION HITL, emits a ``question`` run event and
+        # raises PendingHuman - it never touches an adapter/agent. Handled in-kernel
+        # so it rides the ONE chokepoint and the EXISTING HITL machinery.
+        if verb == QUESTIONS_VERB:
+            await self._ask_user(params, context)
 
         # 7. execute
         if binding.target_type == TargetType.ADAPTER:

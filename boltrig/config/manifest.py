@@ -188,6 +188,13 @@ DEFAULT_MAX_ATTACHMENTS = 8
 DEFAULT_MAX_ATTACHMENT_BYTES = 256 * 1024  # 256 KiB per attachment (decoded)
 DEFAULT_MAX_TOTAL_ATTACHMENT_BYTES = 1024 * 1024  # 1 MiB total per turn (decoded)
 
+# SSE keepalive (US-CHAT-11): a live chat stream emits a heartbeat frame every N
+# seconds while a run is producing nothing, so a slow-but-alive run never trips a
+# client idle-timeout. Conservative default (well under a typical 30-60s proxy /
+# browser idle window) and it stops the moment the stream reaches a terminal
+# event. 0 (or below) disables the keepalive entirely.
+DEFAULT_HEARTBEAT_SECONDS = 15.0
+
 
 @dataclass(frozen=True)
 class ChatConfig:
@@ -207,6 +214,9 @@ class ChatConfig:
     max_attachments: int = DEFAULT_MAX_ATTACHMENTS
     max_attachment_bytes: int = DEFAULT_MAX_ATTACHMENT_BYTES
     max_total_attachment_bytes: int = DEFAULT_MAX_TOTAL_ATTACHMENT_BYTES
+    # SSE keepalive interval in seconds (US-CHAT-11). Data, not a call-site
+    # constant; a manifest may retune it. 0 or below disables the heartbeat.
+    heartbeat_seconds: float = DEFAULT_HEARTBEAT_SECONDS
 
 
 @dataclass(frozen=True)
@@ -500,7 +510,20 @@ def _parse_chat(raw: Mapping[str, Any]) -> ChatConfig:
         max_total_attachment_bytes=_tighten_cap(
             DEFAULT_MAX_TOTAL_ATTACHMENT_BYTES, caps.get("max_total_bytes")
         ),
+        heartbeat_seconds=_parse_heartbeat(raw.get("heartbeat_seconds")),
     )
+
+
+def _parse_heartbeat(raw_value: Any) -> float:
+    """Resolve the SSE keepalive interval (US-CHAT-11). A malformed/absent value
+    keeps the conservative code default; a supplied value is honoured as given (0
+    or below disables the heartbeat)."""
+    if raw_value is None:
+        return DEFAULT_HEARTBEAT_SECONDS
+    try:
+        return float(raw_value)
+    except (TypeError, ValueError):
+        return DEFAULT_HEARTBEAT_SECONDS
 
 
 def load_manifest(path: str, *, env: Mapping[str, str] | None = None) -> FleetManifest:
@@ -654,6 +677,13 @@ async def apply_manifest(
         "set_tenant_permissions",
         TenantPermissions(tenant, manifest.tenant_grants()),
     )
+
+    # 4b. governed built-in verbs: the "ask the user a question" tool (US-CHAT-12).
+    #     A first-class governed verb so a turn can pause for a human answer through
+    #     the ONE chokepoint; seeded per tenant so discovery + the grant check apply.
+    from boltrig.kernel.questions import register_questions_verb
+
+    await register_questions_verb(store, tenant)
 
     # 5. credential references + adapter bindings (refs only, SEC-04)
     for adapter in manifest.adapters:

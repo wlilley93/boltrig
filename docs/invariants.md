@@ -165,6 +165,22 @@ ranking, always through the one dispatch chokepoint under the caller ceiling.
 | **US-WFL-09** | Harvested free signals (regenerate-supersede, HITL verdict) reweight reuse via `memory.improve` (reweight-only, no scope/grant argument) and a bounded promotion score in [-1, 1] that never moves the eval-gated state; every harvest is best-effort so it can never fail the run that produced it (P9). | `tests/security/test_self_improvement_competence.py::test_harvested_signal_reweights_reuse_only`, `::test_harvest_reuse_signal_is_reweight_only_and_best_effort` |
 | **US-WFL-10** | Post-run reflection is opt-in and rides the chokepoint - enabled, a terminal item stores exactly one lesson through `kernel.invoke` (audited `memory.remember`); disabled, none; `build_org` wires the pump the kernel so the memory verb is reachable but stays off by default. | `tests/security/test_self_improvement_competence.py::test_reflection_is_opt_in_through_the_chokepoint`, `::test_build_org_wires_the_kernel_so_reflection_is_reachable` |
 
+### Streaming-richness chat contracts (tool events / heartbeat / questions)
+
+Three additive contracts on the conversational SSE stream, each built on the
+existing kernel machinery (the one dispatch chokepoint, the event relay, the HITL
+manager), never a parallel mechanism. The run relay keeps the full tool payloads
+for the run canvas + durable audit (FR-EVT-01); the chat stream forwards a bounded
+projection so the browser never receives raw verb input/output.
+
+| Invariant | Meaning | Bound test(s) |
+| --- | --- | --- |
+| **US-CHAT-10** | Tool events on the chat stream are keys + summaries only and paired - a verb dispatched under a turn publishes a `tool_call` (`tool`, `call_id`, `args_summary` = key names + count) and a paired `tool_result` (`call_id`, `status`, `result_summary` = key names), carrying no raw input/output, so a client can render a tool callout without the payload. | `tests/security/test_chat_streaming_richness.py::test_chat_tool_events_are_bounded_and_paired` |
+| **US-CHAT-11** | The SSE heartbeat keeps a slow-but-alive stream open and stops on a terminal event - periodic `heartbeat` frames at the `ChatConfig` interval until content/terminal arrives (none at/after terminal), never persisted as turn content, and a zero/negative interval disables it. | `tests/security/test_chat_streaming_richness.py::test_heartbeat_keeps_slow_stream_open_then_stops_on_terminal`, `::test_heartbeat_can_be_disabled` |
+| **US-CHAT-12** | The governed `chat.ask_user` verb pauses the run on the existing HITL machinery - through the one chokepoint under the caller ceiling it creates a `HITLType.QUESTION` bound to the run/work item, emits a rich `question` event (`question_id`, `prompt`, `choices`), raises `PendingHuman` (audited `pending_human`), and is grant-ceilinged like any verb. | `tests/security/test_chat_streaming_richness.py::test_ask_user_pauses_via_hitl_and_emits_question`, `::test_ask_user_is_grant_ceilinged_like_any_verb` |
+| **SEC-88** | Chat tool events never leak verb values (K-20 on the user-facing surface) - a secret/untrusted value passed to a verb appears nowhere on the chat stream nor in the persisted turn events (only key names + counts), while the full payload still exists on the run relay for the canvas + durable audit. | `tests/security/test_chat_streaming_richness.py::test_chat_tool_events_never_leak_verb_values` |
+| **SEC-89** | The questions answer route is owner-only, fail-closed, audited and `wrap_untrusted`-enveloped - `POST /v1/hitl/{id}/answer` answers only a QUESTION (an approval id is refused 409, never laundered into clearing a gated verb), a non-owner/scoped-read caller is 403 with no write and no resume fired, the owner's answer is enveloped before it is recorded (the ordinary resume wiring replays it as data), and the audit row carries the answer length only, never the text. | `tests/security/test_chat_streaming_richness.py::test_answer_route_owner_only_wrapped_and_audited`, `::test_answer_route_refuses_to_answer_an_approval` |
+
 ## How a new invariant is added
 
 1. Write the test and mark it: `@pytest.mark.invariant("NEW-ID")`.
