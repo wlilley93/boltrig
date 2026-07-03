@@ -16,6 +16,7 @@ from boltrig.models import (
     AdapterRecord,
     AgentCapability,
     AuditEvent,
+    AuditRollupAnchor,
     Budget,
     Channel,
     ChannelBinding,
@@ -44,6 +45,7 @@ from boltrig.models import (
     AiConfig,
     Organisation,
     OrgMember,
+    SecurityEvent,
     Skill,
     TenantPermissions,
     User,
@@ -85,6 +87,11 @@ class InMemoryStore(ChannelStoreMem):
         self._hitl: dict[tuple[str, str], HITLRequest] = {}
         self._hitl_resp: dict[tuple[str, str], HITLResponse] = {}
         self._audit: dict[str, list[AuditEvent]] = {}
+        # [2026] VJS-COUNTY 9, D3/D4: the distinct security-signal chain (per tenant)
+        # + the audit rollup anchors (per tenant, newest last). Both tenant-keyed so
+        # tenant stays the isolation boundary.
+        self._security: dict[str, list[SecurityEvent]] = {}
+        self._anchors: dict[str, list[AuditRollupAnchor]] = {}
         self._budgets: dict[tuple[str, str], Budget] = {}
         self._idem: dict[tuple[str, str], dict] = {}
         self._creds: dict[tuple[str, str], dict] = {}
@@ -360,6 +367,41 @@ class InMemoryStore(ChannelStoreMem):
         if run_id is not None:
             chain = [e for e in chain if e.run_id == run_id or e.parent_run_id == run_id]
         return chain[-limit:]
+
+    # --- security event stream ([2026] VJS-COUNTY 9, D3) ---
+    async def security_head(self, tenant_id):
+        chain = self._security.get(tenant_id, [])
+        if not chain:
+            return (0, None)
+        last = chain[-1]
+        return (last.seq or 0, last.hash)
+
+    async def security_append(self, event):
+        self._security.setdefault(event.tenant_id, []).append(event)
+
+    async def security_query(self, tenant_id, event_type=None, limit=200):
+        chain = list(self._security.get(tenant_id, []))
+        if event_type is not None:
+            chain = [e for e in chain if e.event_type.value == event_type]
+        return chain[-limit:]
+
+    # --- audit rollup anchors ([2026] VJS-COUNTY 9, D4) ---
+    async def add_audit_anchor(self, anchor):
+        self._anchors.setdefault(anchor.tenant_id, []).append(anchor)
+
+    async def latest_audit_anchor(self, tenant_id, workspace_id=None):
+        rows = [
+            a for a in self._anchors.get(tenant_id, [])
+            if a.workspace_id == workspace_id
+        ]
+        return rows[-1] if rows else None
+
+    async def list_audit_anchors(self, tenant_id, workspace_id=None, limit=200):
+        rows = [
+            a for a in self._anchors.get(tenant_id, [])
+            if workspace_id is None or a.workspace_id == workspace_id
+        ]
+        return rows[-limit:]
 
     # --- budgets ---
     async def get_budget(self, tenant_id, scope_id):

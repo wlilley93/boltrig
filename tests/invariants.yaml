@@ -956,3 +956,35 @@ invariants:
     description: Org management is org-admin fail-closed (D6) - PATCH /v1/orgs/current refuses a non-admin with 403 and NO write (the name + allow_own_ai_keys + require_two_factor are unchanged), while an org-admin may rename the org and toggle both policy flags; the GET view exposes the handle + settings + policy flags but never any secret/credential material.
     tests:
       - tests/security/test_tenancy_management.py::test_org_management_is_admin_fail_closed
+
+  # --- Opbox-depth audit ([2026] VJS-COUNTY 9) --------------------------------
+  SEC-120:
+    description: An MCP-initiated audit row carries the caller's identity + org/workspace + ip/ua at the SAME field-depth as a human action (D2) - a human invoke populates actor/workspace_id/ip_address/user_agent/resource, and an MCP tools/call through the same chokepoint populates every one of those fields (identity + workspace from the run token, ip/ua from the request), so a headless MCP action is as attributable as a site action.
+    tests:
+      - tests/kernel/test_audit_opbox_depth.py::test_mcp_action_is_audited_at_the_same_depth_as_a_human_action
+  SEC-121:
+    description: The SecurityEvent stream is its OWN tamper-evident (hash-chained), append-only, keys-only stream, SEPARATE from the business audit log (D3) - signals chain seq/prev_hash/hash and verify detects a tamper, a secret handed in detail is scrubbed (never stored verbatim, K-20), a business action never lands in the security stream, and it is wired at the security-relevant paths: permission denial (GrantMissing at the chokepoint), MCP auth failure (a bad run token), and login failure + login throttle trip (auth_routes).
+    tests:
+      - tests/security/test_security_event_stream.py::test_security_stream_is_hash_chained_and_keys_only
+      - tests/security/test_security_event_stream.py::test_security_stream_is_separate_from_the_audit_log
+      - tests/security/test_security_event_stream.py::test_permission_denial_at_chokepoint_records_a_security_signal
+      - tests/security/test_security_event_stream.py::test_bad_mcp_run_token_records_an_mcp_auth_failure
+      - tests/security/test_security_event_stream.py::test_login_failure_and_throttle_record_security_signals
+  SEC-122:
+    description: A rollup anchor's root hash equals a recompute over the anchored audit-chain segment and the LOCAL dev-fallback is flagged with the RFC3161/KMS fields left as a NULL seam (D4) - anchoring writes rollup_root_hash == segment_root_hash over [seq_start, seq_end] with is_dev_fallback True and rfc3161_token/kms_signature None, verify_latest confirms the intact anchor and detects a REWRITE of a row in the anchored segment (the recomputed root no longer matches), and a subsequent anchor advances only over the un-anchored tail.
+    tests:
+      - tests/kernel/test_audit_opbox_depth.py::test_rollup_anchor_root_matches_recompute_and_flags_dev_fallback
+      - tests/kernel/test_audit_opbox_depth.py::test_anchor_advances_only_over_the_unanchored_tail
+  SEC-123:
+    description: The audit browser reads are org/workspace-scoped fail-closed and the verify endpoint detects a broken chain (D5) - a caller with an active workspace sees only org-wide (NULL) + its OWN workspace's rows (never another workspace's), search filters by user/resource and can pivot to the SecurityEvent stream (and filter it by type), the verify endpoint reports the chain + latest anchor intact then flags a broken chain with the first bad seq after a tamper, and both verify and the integrity view are author/admin gated (a non-author is 403).
+    tests:
+      - tests/security/test_audit_browser.py::test_audit_search_is_workspace_scoped_fail_closed
+      - tests/security/test_audit_browser.py::test_audit_search_filters_by_user_and_resource
+      - tests/security/test_audit_browser.py::test_audit_search_can_pivot_to_the_security_stream
+      - tests/security/test_audit_browser.py::test_verify_endpoint_reports_intact_then_detects_a_broken_chain
+      - tests/security/test_audit_browser.py::test_verify_and_search_are_gated_and_fail_closed_for_non_authors
+  SEC-124:
+    description: The new audit fields are additive - a row written without them canonicalises byte-for-byte as before so the existing hash chain is unchanged (D1) - a row with all enrichment fields None serialises WITHOUT the new keys (its stored hash still verifies), a chain of un-enriched rows verifies and an enriched row appended after them keeps the chain contiguous and verifiable, while tampering a NEW field on an enriched row is detected (that field IS folded into that row's hash); the enrichment fields also round-trip identically on the in-memory and Postgres stores.
+    tests:
+      - tests/kernel/test_audit_opbox_depth.py::test_new_fields_are_additive_old_rows_unchanged
+      - tests/store/test_store_parity.py::test_audit_enrichment_and_security_stream_roundtrip_on_both_stores

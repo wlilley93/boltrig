@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
-from ._shared import can_author_route, dept_run_ids, scope_depts
+from ._shared import can_author_route, dept_run_ids, scope_depts  # noqa: F401
 
 
 def register(app, P, K) -> None:
@@ -78,23 +78,112 @@ def register(app, P, K) -> None:
         rows.reverse()
         return JSONResponse({"changes": rows[:200]})
 
+    def _ws_visible(p, ws_id) -> bool:
+        # Workspace fail-closed scoping ([2026] VJS-COUNTY 9, D5): a caller with an
+        # active workspace sees ONLY org-wide (NULL) rows + its OWN workspace's rows,
+        # never another workspace's. A caller with no active workspace sees the tenant
+        # set (org boundary is tenant_id, already fenced). Mirrors workflow scoping.
+        active = getattr(p, "active_workspace_id", None)
+        if active is None:
+            return True
+        return ws_id is None or ws_id == active
+
     @app.get("/v1/audit/search")
     async def audit_search(request: Request, actor: str | None = None, verb: str | None = None,
-                           run: str | None = None, k=K, p=P) -> dict:
+                           run: str | None = None, resource: str | None = None,
+                           since: str | None = None, until: str | None = None,
+                           security: int = 0, event_type: str | None = None,
+                           k=K, p=P) -> dict:
+        # D5: filter by user (actor) / resource / date-range, and pivot to the
+        # distinct SecurityEvent stream when ``security`` is set. Reads are
+        # org/workspace-scoped fail-closed (tenant fence + the workspace filter).
         depts = scope_depts(p)
         allowed = await dept_run_ids(k, p.tenant_id, depts)
+
+        def _in_range(ts) -> bool:
+            iso = ts.isoformat()
+            if since and iso < since:
+                return False
+            if until and iso > until:
+                return False
+            return True
+
+        if security:
+            events = await k.store.security_query(
+                p.tenant_id, event_type=event_type, limit=10_000
+            )
+            rows = []
+            for e in events:
+                if not _ws_visible(p, e.workspace_id):
+                    continue
+                if actor and e.actor != actor:
+                    continue
+                if resource and e.resource != resource:
+                    continue
+                if not _in_range(e.ts):
+                    continue
+                rows.append({"seq": e.seq, "ts": e.ts.isoformat(), "actor": e.actor,
+                             "event_type": e.event_type.value, "reason": e.reason,
+                             "workspace_id": e.workspace_id, "ip_address": e.ip_address,
+                             "user_agent": e.user_agent, "resource": e.resource,
+                             "resource_id": e.resource_id})
+            return {"stream": "security", "results": rows[-500:], "scope": depts or "all"}
+
         events = await k.store.audit_query(p.tenant_id, run_id=run, limit=10_000)
         rows = []
         for e in events:
             if allowed is not None and (e.run_id not in allowed):
                 continue  # SEC-33: another department's runs are not visible
+            if not _ws_visible(p, e.workspace_id):
+                continue
             if actor and e.actor != actor:
                 continue
             if verb and e.verb != verb:
                 continue
+            if resource and e.resource != resource:
+                continue
+            if not _in_range(e.ts):
+                continue
             rows.append({"seq": e.seq, "ts": e.ts.isoformat(), "actor": e.actor,
-                         "verb": e.verb, "status": e.status, "run_id": e.run_id})
-        return {"results": rows[-500:], "scope": depts or "all"}
+                         "verb": e.verb, "status": e.status, "run_id": e.run_id,
+                         "workspace_id": e.workspace_id, "ip_address": e.ip_address,
+                         "user_agent": e.user_agent, "resource": e.resource,
+                         "resource_id": e.resource_id})
+        return {"stream": "audit", "results": rows[-500:], "scope": depts or "all"}
+
+    @app.get("/v1/audit/verify")
+    async def audit_verify(request: Request, workspace: str | None = None, k=K, p=P) -> JSONResponse:
+        # D5: recompute the audit hash chain + check the latest rollup anchor for the
+        # tenant (optionally one workspace), and report intact/broken. Author/admin
+        # gated like export (integrity status is not for every member, SEC-33). The
+        # tenant fence makes this org-scoped fail-closed; a workspace narrows it.
+        if not can_author_route(p):
+            return JSONResponse(
+                {"status": "denied", "reason": "author_or_admin_required"}, status_code=403
+            )
+        chain_ok, first_bad = await k.audit.verify(p.tenant_id)
+        anchor_ok, anchor = await k.anchorer.verify_latest(
+            p.tenant_id, workspace_id=workspace
+        )
+        sec_ok, sec_bad = await k.security.verify(p.tenant_id)
+        return JSONResponse({
+            "tenant_id": p.tenant_id,
+            "workspace_id": workspace,
+            "chain_intact": chain_ok,
+            "chain_first_bad_seq": first_bad,
+            "security_chain_intact": sec_ok,
+            "security_first_bad_seq": sec_bad,
+            "anchor_intact": anchor_ok,
+            "anchor": None if anchor is None else {
+                "id": anchor.id, "seq_start": anchor.seq_start, "seq_end": anchor.seq_end,
+                "rollup_root_hash": anchor.rollup_root_hash,
+                "anchored_at": anchor.anchored_at.isoformat(),
+                "is_dev_fallback": anchor.is_dev_fallback,
+                "rfc3161_token": anchor.rfc3161_token,
+                "kms_signature": anchor.kms_signature,
+            },
+            "intact": bool(chain_ok and sec_ok and anchor_ok),
+        })
 
     @app.post("/v1/audit/export")
     async def audit_export(request: Request, k=K, p=P) -> JSONResponse:

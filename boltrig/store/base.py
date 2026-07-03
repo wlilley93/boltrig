@@ -16,6 +16,7 @@ from boltrig.models import (
     AgentCapability,
     AiConfig,
     AuditEvent,
+    AuditRollupAnchor,
     Budget,
     Channel,
     ChannelBinding,
@@ -39,6 +40,7 @@ from boltrig.models import (
     HITLResponse,
     ModelEndpoint,
     Noun,
+    SecurityEvent,
     Skill,
     Workspace,
     WorkspaceMember,
@@ -196,6 +198,22 @@ class Store(Protocol):
     async def audit_query(
         self, tenant_id: str, run_id: str | None = None, limit: int = 200
     ) -> list[AuditEvent]: ...
+
+    # --- security event stream ([2026] VJS-COUNTY 9, D3): its OWN hash chain ---
+    async def security_head(self, tenant_id: str) -> tuple[int, str | None]: ...
+    async def security_append(self, event: SecurityEvent) -> None: ...
+    async def security_query(
+        self, tenant_id: str, event_type: str | None = None, limit: int = 200
+    ) -> list[SecurityEvent]: ...
+
+    # --- audit rollup anchors ([2026] VJS-COUNTY 9, D4) ---
+    async def add_audit_anchor(self, anchor: AuditRollupAnchor) -> None: ...
+    async def latest_audit_anchor(
+        self, tenant_id: str, workspace_id: str | None = None
+    ) -> AuditRollupAnchor | None: ...
+    async def list_audit_anchors(
+        self, tenant_id: str, workspace_id: str | None = None, limit: int = 200
+    ) -> list[AuditRollupAnchor]: ...
 
     # --- budgets ---
     async def get_budget(self, tenant_id: str, scope_id: str) -> Budget | None: ...

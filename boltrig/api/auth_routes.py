@@ -34,7 +34,14 @@ from boltrig.identity import (
 from boltrig.identity.invites import hash_invite_token
 from boltrig.identity.passwords import WeakPassword
 from boltrig.identity.sessions import SESSION_TTL_HOURS
-from boltrig.models import ActionType, AuditEvent, RateLimited, User, utcnow
+from boltrig.models import (
+    ActionType,
+    AuditEvent,
+    RateLimited,
+    SecurityEventType,
+    User,
+    utcnow,
+)
 from boltrig.models.registry import RateLimit
 
 # Login rate limits enforced through the existing RateLimiter (D5). Per-identity
@@ -254,6 +261,7 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
             request.headers.get("cf-connecting-ip")
             or (request.client.host if request.client else "unknown")
         )
+        user_agent = request.headers.get("user-agent") or None
         try:
             # Enforce BOTH bounds before touching the credential store (D5).
             await k.rate_limiter.enforce(tenant, f"auth.login.ip:{client_ip}", _LOGIN_RL_IP)
@@ -261,6 +269,13 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
                 tenant, f"auth.login.id:{email}", _LOGIN_RL_IDENTITY
             )
         except RateLimited:
+            # [2026] VJS-COUNTY 9, D3: a login throttle trip is a security signal on
+            # the distinct stream (keys-only: the email is identity, never a secret).
+            await k.security.record(
+                tenant, SecurityEventType.RATE_LIMIT_TRIP, "login_rate_limited",
+                actor=email or "unknown", actor_tier="human",
+                ip_address=client_ip, user_agent=user_agent, resource="auth.login",
+            )
             # Generic 429; identical whether or not the email exists.
             return JSONResponse({"status": "error", "reason": "too many attempts"},
                                 status_code=429)
@@ -277,6 +292,14 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
         if not ok:
             await _audit(k, tenant, email or "unknown", "auth.login",
                          {"email": email, "outcome": "rejected"}, status="denied")
+            # [2026] VJS-COUNTY 9, D3: a login failure is a security signal on the
+            # distinct stream, at the same field depth (ip/ua). Keys-only: never the
+            # password (only the email, which is identity not a secret).
+            await k.security.record(
+                tenant, SecurityEventType.LOGIN_FAILURE, "invalid_email_or_password",
+                actor=email or "unknown", actor_tier="human",
+                ip_address=client_ip, user_agent=user_agent, resource="auth.login",
+            )
             return JSONResponse(_GENERIC_LOGIN_FAILURE, status_code=401)
 
         session, secret, csrf = new_session(tenant, user.id, client="web")

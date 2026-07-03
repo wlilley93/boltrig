@@ -281,6 +281,37 @@ workspace owner/admin + allow_own; user = self + allow_own).
 | **SEC-114** | `ai_config` reads are tenant-scoped and never cross tenants (D5, SEC-08) - get/list of an AI-config are keyed on `tenant_id`, so a caller can never read another org/workspace's AI key (a lookup/list under a different tenant is None/empty) and a cross-tenant delete is a no-op. | `tests/store/test_ai_config.py::test_ai_config_reads_are_tenant_scoped` |
 | **SEC-115** | The governed set-key route is role-scoped (D5, SEC-36) - `PUT /v1/ai-keys` refuses an org-level key from a non-admin, a workspace-level key from a non-owner/admin of that workspace, and a user-level key for anyone but the caller; workspace/user levels additionally require the org `allow_own_ai_keys` gate, while the org may always set its own key. | `tests/security/test_ai_keys.py::test_set_key_route_is_role_scoped` |
 
+### Opbox-depth audit ([2026] VJS-COUNTY 9)
+
+The tamper-evident, hash-chained audit (SEC-16 / K-19) is deepened to an
+Opbox-grade forensic surface WITHOUT touching the existing chain. Five nullable
+fields (`ip_address`, `user_agent`, `resource`, `resource_id`, `workspace_id`) are
+added to the audit row; they fold into the row hash ONLY when non-None, so a
+pre-existing row canonicalises byte-for-byte as before and its stored hash still
+verifies (strictly additive, D1). ip/ua ride from the request door, `workspace_id`
+from the `InvocationContext`, and `resource`/`resource_id` name the acted-on object
+best-effort. An MCP-initiated action carries the caller's identity + org/workspace +
+ip/ua at the SAME depth as a human action (D2). A DISTINCT `SecurityEvent` stream -
+its own hash chain, its own `security_log` table - captures security SIGNALS (login
+failure, rate-limit trip, permission denial, MCP auth failure), keys-only and
+separate from the business trail (D3). A periodic per-org/workspace ROLLUP ANCHOR
+(`audit_rollup_anchors`) records a deterministic root over a chain segment; the
+LOCAL dev-fallback ships now (`is_dev_fallback=True`) with the RFC3161 TSA token +
+KMS signature left as a NULL seam behind a documented env credential - wiring a live
+TSA/KMS is a Principal dependency (D4). The audit browser (`/v1/audit/search`) filters
+by user / resource / date-range and pivots to the security stream, and a new
+`/v1/audit/verify` endpoint recomputes the chain + latest anchor and reports
+intact/broken; both reads are org/workspace-scoped fail-closed (D5). Secrets never
+enter a row (K-20), reads are tenant + workspace fenced, and rows are append-only (D6).
+
+| Invariant | Meaning | Bound test(s) |
+| --- | --- | --- |
+| **SEC-120** | An MCP-initiated audit row carries the caller's identity + org/workspace + ip/ua at the SAME field-depth as a human action (D2) - a human invoke and an MCP `tools/call` through the same chokepoint both populate actor / workspace_id / ip_address / user_agent / resource (identity + workspace from the run token, ip/ua from the request), so a headless MCP action is as attributable as a site action. | `tests/kernel/test_audit_opbox_depth.py::test_mcp_action_is_audited_at_the_same_depth_as_a_human_action` |
+| **SEC-121** | The `SecurityEvent` stream is its OWN tamper-evident (hash-chained), append-only, keys-only stream, SEPARATE from the audit log (D3) - signals chain seq/prev_hash/hash and verify detects a tamper, a secret in `detail` is scrubbed (K-20), a business action never lands in it, and it is wired at permission denial (chokepoint), MCP auth failure, and login failure + login throttle (auth_routes). | `tests/security/test_security_event_stream.py::test_security_stream_is_hash_chained_and_keys_only`, `::test_security_stream_is_separate_from_the_audit_log`, `::test_permission_denial_at_chokepoint_records_a_security_signal`, `::test_bad_mcp_run_token_records_an_mcp_auth_failure`, `::test_login_failure_and_throttle_record_security_signals` |
+| **SEC-122** | A rollup anchor's root hash equals a recompute over the anchored segment and the LOCAL dev-fallback is flagged with the RFC3161/KMS fields left as a NULL seam (D4) - `rollup_root_hash == segment_root_hash([seq_start, seq_end])`, `is_dev_fallback=True`, `rfc3161_token`/`kms_signature` None; `verify_latest` confirms the intact anchor and detects a REWRITE of a row in the anchored segment, and a later anchor advances only over the un-anchored tail. | `tests/kernel/test_audit_opbox_depth.py::test_rollup_anchor_root_matches_recompute_and_flags_dev_fallback`, `::test_anchor_advances_only_over_the_unanchored_tail` |
+| **SEC-123** | The audit browser reads are org/workspace-scoped fail-closed and the verify endpoint detects a broken chain (D5) - a caller with an active workspace sees only org-wide (NULL) + its OWN workspace's rows, search filters by user/resource and can pivot to the security stream (filtered by type), `/v1/audit/verify` reports the chain + latest anchor intact then flags a broken chain with the first bad seq, and both are author/admin gated (a non-author is 403). | `tests/security/test_audit_browser.py::test_audit_search_is_workspace_scoped_fail_closed`, `::test_audit_search_filters_by_user_and_resource`, `::test_audit_search_can_pivot_to_the_security_stream`, `::test_verify_endpoint_reports_intact_then_detects_a_broken_chain`, `::test_verify_and_search_are_gated_and_fail_closed_for_non_authors` |
+| **SEC-124** | The new audit fields are additive - a row written without them canonicalises byte-for-byte as before so the existing hash chain is unchanged (D1) - a row with all enrichment fields None serialises WITHOUT the new keys (its stored hash still verifies), a chain of un-enriched rows verifies and an enriched row appended after them stays contiguous + verifiable, tampering a NEW field on an enriched row is detected, and the fields round-trip identically on the in-memory and Postgres stores. | `tests/kernel/test_audit_opbox_depth.py::test_new_fields_are_additive_old_rows_unchanged`, `tests/store/test_store_parity.py::test_audit_enrichment_and_security_stream_roundtrip_on_both_stores` |
+
 ## How a new invariant is added
 
 1. Write the test and mark it: `@pytest.mark.invariant("NEW-ID")`.

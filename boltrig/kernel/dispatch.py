@@ -31,12 +31,14 @@ from boltrig.models import (
     BindingNotFound,
     Consequence,
     DegradedMode,
+    GrantMissing,
     HITLType,
     InvocationContext,
     BoltrigError,
     PendingHuman,
     RateLimited,
     SchemaValidationError,
+    SecurityEventType,
     TargetType,
     utcnow,
 )
@@ -79,6 +81,29 @@ def _summarise_output(output: Any) -> dict[str, Any]:
     return {"keys": []}
 
 
+# Param keys that plausibly name the acted-on object's id (best-effort, D1). Only
+# a short scalar is taken - never free text, never a secret-bearing value.
+_RESOURCE_ID_KEYS = ("id", "resource_id", "target_id", "object_id", "item_id", "key")
+_RESOURCE_ID_MAXLEN = 128
+
+
+def _resource_ref(noun: str, params: Any) -> tuple[str | None, str | None]:
+    """Best-effort (resource, resource_id) for the enriched audit row (D1). The
+    resource is the noun (the object TYPE); the id is a short scalar id-like param
+    when present, else None. Bounded + keys-only: an over-long or non-scalar value
+    is dropped rather than folded into the row."""
+    resource = noun or None
+    if not isinstance(params, dict):
+        return (resource, None)
+    for key in _RESOURCE_ID_KEYS:
+        val = params.get(key)
+        if isinstance(val, (str, int)) and not isinstance(val, bool):
+            sval = str(val)
+            if 0 < len(sval) <= _RESOURCE_ID_MAXLEN:
+                return (resource, sval)
+    return (resource, None)
+
+
 class Dispatcher:
     def __init__(
         self,
@@ -94,6 +119,7 @@ class Dispatcher:
         agent_invoker: AgentInvoker | None = None,
         blocking_verbs: set[str] | None = None,
         events: Any | None = None,
+        security: Any | None = None,
     ) -> None:
         self._store = store
         self._grants = grants
@@ -109,6 +135,30 @@ class Dispatcher:
         # observability side-channel - like audit, it never affects the dispatch
         # decision and a relay failure never breaks a call (P9).
         self._events = events
+        # Optional SecurityEvent stream ([2026] VJS-COUNTY 9, D3). A denied grant or
+        # a throttle trip at THIS chokepoint is a security signal; recording it is
+        # fail-safe (like the event relay) and never changes the dispatch outcome.
+        self._security = security
+
+    async def _record_security(
+        self, event_type, reason: str, noun: str, verb: str,
+        params: dict[str, Any], context: InvocationContext,
+    ) -> None:
+        """Record a security signal on the distinct stream (D3), at the same field
+        depth as the audit row. Fail-safe: no writer wired, or a write error, must
+        never break the dispatch path (the security event is observability)."""
+        if self._security is None:
+            return
+        resource, resource_id = _resource_ref(noun, params)
+        await self._security.record(
+            context.tenant_id, event_type, reason,
+            actor=context.actor, actor_tier=context.actor_tier,
+            workspace_id=context.workspace_id,
+            ip_address=context.ip_address, user_agent=context.user_agent,
+            resource=resource, resource_id=resource_id,
+            on_behalf_of=context.on_behalf_of,
+            detail={"verb": verb},
+        )
 
     def _emit(self, run_id: str | None, event: dict[str, Any]) -> None:
         """Publish a run event, fail-safe. Only when a relay is wired and the call
@@ -204,6 +254,20 @@ class Dispatcher:
         except BoltrigError as e:
             status = e.reason
             detail = {"message": str(e)}
+            # D3: a denied grant or a throttle trip at the chokepoint is a security
+            # signal on the distinct stream, recorded at the SAME field-depth as the
+            # audit row (actor / workspace / ip / ua). Fail-safe: never breaks the
+            # call (the raise below is what governs the outcome).
+            if isinstance(e, GrantMissing):
+                await self._record_security(
+                    SecurityEventType.PERMISSION_DENIED, "grant_missing",
+                    noun, verb, params, context,
+                )
+            elif isinstance(e, RateLimited):
+                await self._record_security(
+                    SecurityEventType.RATE_LIMIT_TRIP, "rate_limited",
+                    noun, verb, params, context,
+                )
             raise
         except Exception as e:  # adapter/agent crash -> audited error, not a leak
             status = "error"
@@ -227,6 +291,7 @@ class Dispatcher:
                 })
             latency_ms = int((time.monotonic() - started) * 1000)
             target_adapter = meta.get("target_adapter")
+            resource, resource_id = _resource_ref(noun, params)
             await self._audit.write(
                 AuditEvent(
                     tenant_id=context.tenant_id,
@@ -245,6 +310,14 @@ class Dispatcher:
                     latency_ms=latency_ms,
                     skills_loaded=list(context.skills_loaded),
                     detail=detail,
+                    # Opbox-depth enrichment (D1). ip/ua ride on the context from the
+                    # door (None off the HTTP path); workspace_id from the active
+                    # workspace; resource/resource_id name the acted-on object.
+                    ip_address=context.ip_address,
+                    user_agent=context.user_agent,
+                    resource=resource,
+                    resource_id=resource_id,
+                    workspace_id=context.workspace_id,
                 )
             )
 

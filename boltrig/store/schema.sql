@@ -310,12 +310,74 @@ CREATE TABLE IF NOT EXISTS audit_log (
     cost_micros   BIGINT,
     skills_loaded JSONB,
     detail        JSONB,
+    -- Opbox-depth enrichment ([2026] VJS-COUNTY 9, D1). ALL nullable + backfilled
+    -- NULL: a pre-enrichment row canonicalises byte-for-byte as before and its hash
+    -- stays valid (the writer folds a field into the hash only when non-None), so
+    -- the existing chain is unchanged. Keys-only (K-20): never a secret here.
+    ip_address    TEXT,
+    user_agent    TEXT,
+    resource      TEXT,
+    resource_id   TEXT,
+    workspace_id  TEXT,
     prev_hash     TEXT,
     hash          TEXT NOT NULL,
     UNIQUE (tenant_id, seq)
 );
 CREATE INDEX IF NOT EXISTS audit_ts_idx ON audit_log (tenant_id, ts);
 CREATE INDEX IF NOT EXISTS audit_run_idx ON audit_log (run_id);
+CREATE INDEX IF NOT EXISTS audit_ws_idx ON audit_log (tenant_id, workspace_id);
+CREATE INDEX IF NOT EXISTS audit_actor_idx ON audit_log (tenant_id, actor);
+
+-- The distinct SecurityEvent stream ([2026] VJS-COUNTY 9, D3): its OWN
+-- append-only, hash-chained table for security SIGNALS (login failures,
+-- rate-limit trips, permission denials, MCP auth failures). Same chaining as
+-- audit_log (UNIQUE(tenant_id, seq), prev_hash -> hash) but kept separate so
+-- signals never dilute the action trail. Keys-only (K-20): detail is scrubbed and
+-- a row never carries a secret / password / session token.
+CREATE TABLE IF NOT EXISTS security_log (
+    id            BIGSERIAL PRIMARY KEY,
+    tenant_id     TEXT NOT NULL,
+    seq           BIGINT NOT NULL,
+    ts            TIMESTAMPTZ NOT NULL,
+    event_type    TEXT NOT NULL,   -- login_failure|rate_limit_trip|permission_denied|mcp_auth_failure
+    reason        TEXT NOT NULL,
+    actor         TEXT,
+    actor_tier    TEXT,
+    workspace_id  TEXT,
+    ip_address    TEXT,
+    user_agent    TEXT,
+    resource      TEXT,
+    resource_id   TEXT,
+    on_behalf_of  TEXT,
+    detail        JSONB,
+    prev_hash     TEXT,
+    hash          TEXT NOT NULL,
+    UNIQUE (tenant_id, seq)
+);
+CREATE INDEX IF NOT EXISTS security_ts_idx ON security_log (tenant_id, ts);
+CREATE INDEX IF NOT EXISTS security_type_idx ON security_log (tenant_id, event_type);
+
+-- Periodic per-org/workspace ROLLUP ANCHOR over an audit-chain segment ([2026]
+-- VJS-COUNTY 9, D4). rollup_root_hash is a deterministic digest over the segment
+-- [seq_start, seq_end]. workspace_id NULL == an org-wide anchor over the tenant.
+-- is_dev_fallback flags the LOCAL anchor (no external call); rfc3161_token / the
+-- kms_signature are a clean seam left NULL until a Principal wires an external
+-- TSA/KMS (never called live from the kernel).
+CREATE TABLE IF NOT EXISTS audit_rollup_anchors (
+    id               TEXT NOT NULL,
+    tenant_id        TEXT NOT NULL,
+    workspace_id     TEXT,
+    seq_start        BIGINT NOT NULL,
+    seq_end          BIGINT NOT NULL,
+    rollup_root_hash TEXT NOT NULL,
+    anchored_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    is_dev_fallback  BOOLEAN NOT NULL DEFAULT true,
+    rfc3161_token    TEXT,
+    kms_signature    TEXT,
+    PRIMARY KEY (tenant_id, id)
+);
+CREATE INDEX IF NOT EXISTS audit_anchor_scope_idx
+    ON audit_rollup_anchors (tenant_id, workspace_id, seq_end);
 
 -- Idempotency keys for side-effecting verbs (NFR-REL-02, SEC-15).
 CREATE TABLE IF NOT EXISTS idempotency_keys (

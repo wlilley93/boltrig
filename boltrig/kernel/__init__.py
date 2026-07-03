@@ -18,6 +18,7 @@ from boltrig.store import Store
 
 from .audit import AuditWriter
 from .cost import AlertFn, CostAccountant
+from .security_events import AuditAnchorer, SecurityWriter
 from .credentials import CredentialResolver, SecretStore
 from .dispatch import AgentInvoker, Dispatcher
 from .grants import GrantChecker
@@ -43,6 +44,11 @@ class Kernel:
         self.rate_limiter = RateLimiter(counter)
         self.credentials = CredentialResolver(store, secret_store)
         self.audit = AuditWriter(store)
+        # [2026] VJS-COUNTY 9: the distinct, tamper-evident security-signal stream
+        # (D3) and the audit rollup anchorer (D4). Both are thin over the store; the
+        # security writer records fail-safe so a signal never breaks a guarded path.
+        self.security = SecurityWriter(store)
+        self.anchorer = AuditAnchorer(store)
         self.hitl = HITLManager(store)
         self.cost = CostAccountant(store, alert)
         self.registry = KernelRegistry(store)
@@ -70,6 +76,7 @@ class Kernel:
             agent_invoker=None,
             blocking_verbs=self._blocking_verbs,
             events=self.events,
+            security=self.security,
         )
 
     # --- wiring ---

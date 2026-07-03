@@ -49,6 +49,10 @@ DECLARE
     'nouns','verbs','verb_bindings','adapters','skills','agent_capabilities',
     'workflow_definitions','workflow_promotions','model_endpoints','work_items','hitl_requests',
     'hitl_responses','users','role_mappings','audit_log','idempotency_keys',
+    -- [2026] VJS-COUNTY 9: the distinct security-signal chain + the audit rollup
+    -- anchors. Both carry a real tenant_id, so the generic tenant_id policy fences
+    -- them (a null GUC -> zero rows, fail-closed) exactly like audit_log.
+    'security_log','audit_rollup_anchors',
     'budgets','credential_refs','tenant_permissions','conversations',
     'config_revisions','eval_cases','eval_runs','notification_prefs',
     'personal_agents','memory_items','mcp_servers','conversation_messages',

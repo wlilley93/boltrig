@@ -48,6 +48,12 @@ class Principal:
     # request (fail-closed to None); never read from the request body. Threaded onto
     # every InvocationContext this principal builds so the kernel carries it.
     active_workspace_id: str | None = None
+    # Request provenance ([2026] VJS-COUNTY 9, D1/D2), stamped at the door by the
+    # principal resolver from the request (client peer / CF client header + the
+    # User-Agent), never from a body field. Threaded onto every context this
+    # principal builds so the enriched audit row carries ip/ua.
+    ip_address: str | None = None
+    user_agent: str | None = None
 
     def context(self, *, run_id=None, parent_run_id=None, depth=0, skills=(), extra=None):
         return InvocationContext(
@@ -62,10 +68,24 @@ class Principal:
             skills_loaded=tuple(skills),
             extra=dict(extra or {}),
             workspace_id=self.active_workspace_id,
+            ip_address=self.ip_address,
+            user_agent=self.user_agent,
         )
 
 
 PrincipalResolver = Callable[[Request], Awaitable[Principal]]
+
+
+def _client_ip(request: Request) -> str | None:
+    """The caller's client IP for the enriched audit row ([2026] VJS-COUNTY 9, D1).
+    Trust Cloudflare's authoritative client header when present (CF sets it and
+    strips any client-supplied copy); fall back to the TCP peer off-tunnel.
+    X-Forwarded-For is deliberately NOT trusted (spoofable unless behind a known
+    trusted proxy)."""
+    return (
+        request.headers.get("cf-connecting-ip")
+        or (request.client.host if request.client else None)
+    )
 
 
 def _error_envelope(e: BoltrigError) -> dict:
@@ -277,6 +297,13 @@ def create_app(
                 raise HTTPException(status_code=401, detail="invalid or expired access token")
         else:
             p = await resolver(request)
+        # Stamp request provenance for the enriched audit row ([2026] VJS-COUNTY 9,
+        # D1). Taken from the request at the door, never from a body field. Behind
+        # the CF tunnel the TCP peer is the tunnel, so trust CF's authoritative
+        # client header when present (CF strips any client-supplied copy), else the
+        # TCP peer. X-Forwarded-For is deliberately NOT trusted (spoofable).
+        p.ip_address = _client_ip(request)
+        p.user_agent = (request.headers.get("user-agent") or None)
         # RLS-live: bind this request's tenant so the _RlsPool scopes every DB call
         # (a no-op for the in-memory store and when RLS is off).
         set_current_tenant(p.tenant_id)
@@ -328,12 +355,19 @@ def create_app(
             bearer = value.strip() if scheme.lower() == "bearer" else None
             if k.mcp.is_run_token(bearer):  # a run token presented as a bearer
                 run_token = bearer
+        # D2: thread the request's ip/ua so an MCP-initiated audit row carries them
+        # at the SAME depth as a human action.
+        ip, ua = _client_ip(request), (request.headers.get("user-agent") or None)
         if run_token is not None:
-            return JSONResponse(await k.mcp.handle(run_token, body))
+            return JSONResponse(
+                await k.mcp.handle(run_token, body, ip_address=ip, user_agent=ua)
+            )
         # user-authenticated MCP: resolve the caller (PAT or configured resolver)
         # and advertise/scope tools to their effective grants (no weak path, SEC-37).
         p = await principal(request)
-        return JSONResponse(await k.mcp.handle_user(p, body))
+        return JSONResponse(
+            await k.mcp.handle_user(p, body, ip_address=ip, user_agent=ua)
+        )
 
     @app.post("/v1/chat")
     async def chat(

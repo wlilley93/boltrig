@@ -24,6 +24,7 @@ from boltrig.models import (
     AgentCapability,
     ActionType,
     AuditEvent,
+    AuditRollupAnchor,
     Budget,
     Consequence,
     ConfigRevision,
@@ -58,6 +59,8 @@ from boltrig.models import (
     Organisation,
     OrgMember,
     RateLimit,
+    SecurityEvent,
+    SecurityEventType,
     Skill,
     TargetType,
     PromotionState,
@@ -644,11 +647,14 @@ class PostgresStore(ChannelStorePG):
             """INSERT INTO audit_log (tenant_id, seq, ts, run_id, parent_run_id, actor, actor_tier,
                                       depth, action_type, noun, verb, target_adapter, on_behalf_of,
                                       status, latency_ms, tokens_used, cost_micros, skills_loaded,
-                                      detail, prev_hash, hash)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)""",
+                                      detail, ip_address, user_agent, resource, resource_id,
+                                      workspace_id, prev_hash, hash)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,
+                       $22,$23,$24,$25,$26)""",
             e.tenant_id, e.seq, e.ts, e.run_id, e.parent_run_id, e.actor, e.actor_tier, e.depth,
             e.action_type.value, e.noun, e.verb, e.target_adapter, e.on_behalf_of, e.status,
             e.latency_ms, e.tokens_used, e.cost_micros, e.skills_loaded, e.detail,
+            e.ip_address, e.user_agent, e.resource, e.resource_id, e.workspace_id,
             e.prev_hash, e.hash,
         )
 
@@ -665,6 +671,77 @@ class PostgresStore(ChannelStorePG):
                 tenant_id, run_id, limit,
             )
         return [_audit(r) for r in reversed(rows)]  # ascending, like InMemoryStore
+
+    # --- security event stream ([2026] VJS-COUNTY 9, D3) ------------------
+    async def security_head(self, tenant_id):
+        row = await self._pool.fetchrow(
+            "SELECT seq, hash FROM security_log WHERE tenant_id=$1 ORDER BY seq DESC LIMIT 1",
+            tenant_id,
+        )
+        if row is None:
+            return (0, None)
+        return (row["seq"], row["hash"])
+
+    async def security_append(self, e: SecurityEvent):
+        await self._pool.execute(
+            """INSERT INTO security_log (tenant_id, seq, ts, event_type, reason, actor, actor_tier,
+                                         workspace_id, ip_address, user_agent, resource, resource_id,
+                                         on_behalf_of, detail, prev_hash, hash)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)""",
+            e.tenant_id, e.seq, e.ts, e.event_type.value, e.reason, e.actor, e.actor_tier,
+            e.workspace_id, e.ip_address, e.user_agent, e.resource, e.resource_id,
+            e.on_behalf_of, e.detail, e.prev_hash, e.hash,
+        )
+
+    async def security_query(self, tenant_id, event_type=None, limit=200):
+        if event_type is None:
+            rows = await self._pool.fetch(
+                "SELECT * FROM security_log WHERE tenant_id=$1 ORDER BY seq DESC LIMIT $2",
+                tenant_id, limit,
+            )
+        else:
+            rows = await self._pool.fetch(
+                """SELECT * FROM security_log WHERE tenant_id=$1 AND event_type=$2
+                   ORDER BY seq DESC LIMIT $3""",
+                tenant_id, event_type, limit,
+            )
+        return [_security(r) for r in reversed(rows)]  # ascending, like InMemoryStore
+
+    # --- audit rollup anchors ([2026] VJS-COUNTY 9, D4) -------------------
+    async def add_audit_anchor(self, a: AuditRollupAnchor):
+        await self._pool.execute(
+            """INSERT INTO audit_rollup_anchors (id, tenant_id, workspace_id, seq_start, seq_end,
+                                                 rollup_root_hash, anchored_at, is_dev_fallback,
+                                                 rfc3161_token, kms_signature)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)""",
+            a.id, a.tenant_id, a.workspace_id, a.seq_start, a.seq_end, a.rollup_root_hash,
+            a.anchored_at, a.is_dev_fallback, a.rfc3161_token, a.kms_signature,
+        )
+
+    async def latest_audit_anchor(self, tenant_id, workspace_id=None):
+        # workspace_id NULL selects the ORG-WIDE anchor stream (IS NULL), not "any".
+        row = await self._pool.fetchrow(
+            """SELECT * FROM audit_rollup_anchors
+               WHERE tenant_id=$1 AND workspace_id IS NOT DISTINCT FROM $2
+               ORDER BY seq_end DESC LIMIT 1""",
+            tenant_id, workspace_id,
+        )
+        return _anchor(row)
+
+    async def list_audit_anchors(self, tenant_id, workspace_id=None, limit=200):
+        if workspace_id is None:
+            rows = await self._pool.fetch(
+                """SELECT * FROM audit_rollup_anchors WHERE tenant_id=$1
+                   ORDER BY seq_end DESC LIMIT $2""",
+                tenant_id, limit,
+            )
+        else:
+            rows = await self._pool.fetch(
+                """SELECT * FROM audit_rollup_anchors
+                   WHERE tenant_id=$1 AND workspace_id=$2 ORDER BY seq_end DESC LIMIT $3""",
+                tenant_id, workspace_id, limit,
+            )
+        return [_anchor(r) for r in reversed(rows)]  # ascending, like InMemoryStore
 
     # --- budgets ----------------------------------------------------------
     async def get_budget(self, tenant_id, scope_id):
@@ -1772,7 +1849,33 @@ def _audit(r):
         noun=r["noun"], verb=r["verb"], target_adapter=r["target_adapter"],
         on_behalf_of=r["on_behalf_of"], latency_ms=r["latency_ms"], tokens_used=r["tokens_used"],
         cost_micros=r["cost_micros"], skills_loaded=list(r["skills_loaded"] or []),
+        detail=r["detail"] or {},
+        ip_address=r["ip_address"], user_agent=r["user_agent"], resource=r["resource"],
+        resource_id=r["resource_id"], workspace_id=r["workspace_id"],
+        seq=r["seq"], prev_hash=r["prev_hash"], hash=r["hash"],
+    )
+
+
+def _security(r):
+    if r is None:
+        return None
+    return SecurityEvent(
+        tenant_id=r["tenant_id"], ts=r["ts"], event_type=SecurityEventType(r["event_type"]),
+        reason=r["reason"], actor=r["actor"], actor_tier=r["actor_tier"],
+        workspace_id=r["workspace_id"], ip_address=r["ip_address"], user_agent=r["user_agent"],
+        resource=r["resource"], resource_id=r["resource_id"], on_behalf_of=r["on_behalf_of"],
         detail=r["detail"] or {}, seq=r["seq"], prev_hash=r["prev_hash"], hash=r["hash"],
+    )
+
+
+def _anchor(r):
+    if r is None:
+        return None
+    return AuditRollupAnchor(
+        id=r["id"], tenant_id=r["tenant_id"], workspace_id=r["workspace_id"],
+        seq_start=r["seq_start"], seq_end=r["seq_end"], rollup_root_hash=r["rollup_root_hash"],
+        anchored_at=r["anchored_at"], is_dev_fallback=r["is_dev_fallback"],
+        rfc3161_token=r["rfc3161_token"], kms_signature=r["kms_signature"],
     )
 
 

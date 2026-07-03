@@ -25,33 +25,46 @@ _PREVIEW_LEN = 256
 
 
 def _canonical(event: AuditEvent) -> str:
-    """A stable serialisation of the fields the hash covers."""
-    return json.dumps(
-        {
-            "tenant_id": event.tenant_id,
-            "seq": event.seq,
-            "ts": event.ts.isoformat(),
-            "run_id": event.run_id,
-            "parent_run_id": event.parent_run_id,
-            "actor": event.actor,
-            "actor_tier": event.actor_tier,
-            "depth": event.depth,
-            "action_type": event.action_type.value,
-            "noun": event.noun,
-            "verb": event.verb,
-            "target_adapter": event.target_adapter,
-            "on_behalf_of": event.on_behalf_of,
-            "status": event.status,
-            "latency_ms": event.latency_ms,
-            "tokens_used": event.tokens_used,
-            "cost_micros": event.cost_micros,
-            "skills_loaded": event.skills_loaded,
-            "detail": event.detail,
-            "prev_hash": event.prev_hash,
-        },
-        sort_keys=True,
-        separators=(",", ":"),
-    )
+    """A stable serialisation of the fields the hash covers.
+
+    The Opbox-depth fields ([2026] VJS-COUNTY 9, D1) are folded in ONLY when
+    non-None. This keeps the change strictly additive: a row written before those
+    fields existed (all None) canonicalises byte-for-byte identically to before,
+    so its hash still verifies and the existing chain (and its tests) is
+    unchanged. A row that actually carries e.g. an ip_address hashes WITH it, so
+    tampering with the new fields is detected too."""
+    body: dict = {
+        "tenant_id": event.tenant_id,
+        "seq": event.seq,
+        "ts": event.ts.isoformat(),
+        "run_id": event.run_id,
+        "parent_run_id": event.parent_run_id,
+        "actor": event.actor,
+        "actor_tier": event.actor_tier,
+        "depth": event.depth,
+        "action_type": event.action_type.value,
+        "noun": event.noun,
+        "verb": event.verb,
+        "target_adapter": event.target_adapter,
+        "on_behalf_of": event.on_behalf_of,
+        "status": event.status,
+        "latency_ms": event.latency_ms,
+        "tokens_used": event.tokens_used,
+        "cost_micros": event.cost_micros,
+        "skills_loaded": event.skills_loaded,
+        "detail": event.detail,
+        "prev_hash": event.prev_hash,
+    }
+    for key, val in (
+        ("ip_address", event.ip_address),
+        ("user_agent", event.user_agent),
+        ("resource", event.resource),
+        ("resource_id", event.resource_id),
+        ("workspace_id", event.workspace_id),
+    ):
+        if val is not None:
+            body[key] = val
+    return json.dumps(body, sort_keys=True, separators=(",", ":"))
 
 
 def _scrub(detail: dict) -> dict:

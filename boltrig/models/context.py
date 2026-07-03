@@ -29,6 +29,12 @@ class InvocationContext:
     # PLUMBS it through the context; the next phase (D11) reads it to scope grants /
     # credentials / AI keys / workflows. None == no active workspace.
     workspace_id: WorkspaceId | None = None
+    # Request provenance for the enriched audit row ([2026] VJS-COUNTY 9, D1/D2).
+    # Stamped at the door from the request (the client peer / CF client header and
+    # the User-Agent), never read from an untrusted body field by a handler. None
+    # off the HTTP path (a fleet/internal call). Additive with None defaults.
+    ip_address: str | None = None
+    user_agent: str | None = None
     grants: GrantSet = field(default_factory=lambda: EMPTY_GRANTS)
     actor: str = "unknown"  # agent capability name or user id
     actor_tier: str = "ephemeral"  # tier1 | tier2 | ephemeral | human

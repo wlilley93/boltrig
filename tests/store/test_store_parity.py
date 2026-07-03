@@ -34,7 +34,8 @@ T = "acme"
 _TABLES = (
     "nouns,verbs,verb_bindings,adapters,skills,agent_capabilities,workflow_definitions,"
     "model_endpoints,work_items,hitl_requests,hitl_responses,audit_log,budgets,"
-    "idempotency_keys,credential_refs,tenant_permissions,memory_facts"
+    "idempotency_keys,credential_refs,tenant_permissions,memory_facts,"
+    "security_log,audit_rollup_anchors"
 )
 
 
@@ -112,6 +113,55 @@ async def test_audit_head_tracks_last_appended(store):
     # re-derive it the same way on both stores.
     rows = await store.audit_query(T)
     assert [r.seq for r in rows] == [1, 2]
+
+
+# --- Opbox-depth audit enrichment + security stream ([2026] VJS-COUNTY 9) ---
+@pytest.mark.store
+@pytest.mark.invariant("SEC-124")
+async def test_audit_enrichment_and_security_stream_roundtrip_on_both_stores(store):
+    from boltrig.models import AuditRollupAnchor, SecurityEvent, SecurityEventType
+
+    # D1: the new audit fields round-trip identically (None on an un-enriched row,
+    # verbatim on an enriched one) on both backends.
+    plain = _event(1, None)
+    enriched = _event(2, "h1")
+    enriched.ip_address = "203.0.113.7"
+    enriched.user_agent = "boltrig-agent/1.0"
+    enriched.resource = "ticket"
+    enriched.resource_id = "T-9"
+    enriched.workspace_id = "ws-1"
+    await store.audit_append(plain)
+    await store.audit_append(enriched)
+    rows = await store.audit_query(T)
+    assert rows[0].ip_address is None and rows[0].workspace_id is None
+    assert rows[1].ip_address == "203.0.113.7" and rows[1].user_agent == "boltrig-agent/1.0"
+    assert rows[1].resource == "ticket" and rows[1].resource_id == "T-9"
+    assert rows[1].workspace_id == "ws-1"
+
+    # D3: the security stream head/append/query chain round-trips on both stores.
+    assert await store.security_head(T) == (0, None)
+    s1 = SecurityEvent(
+        tenant_id=T, ts=utcnow(), event_type=SecurityEventType.LOGIN_FAILURE,
+        reason="invalid_email_or_password", actor="eve", ip_address="1.2.3.4",
+        seq=1, prev_hash=None, hash="s1",
+    )
+    await store.security_append(s1)
+    assert await store.security_head(T) == (1, "s1")
+    got = await store.security_query(T)
+    assert [e.seq for e in got] == [1] and got[0].event_type == SecurityEventType.LOGIN_FAILURE
+    assert await store.security_query(T, event_type="rate_limit_trip") == []
+
+    # D4: an anchor round-trips, and latest_audit_anchor keys on (tenant, workspace).
+    a = AuditRollupAnchor(
+        id="anch-1", tenant_id=T, workspace_id=None, seq_start=1, seq_end=2,
+        rollup_root_hash="root-abc", anchored_at=utcnow(), is_dev_fallback=True,
+    )
+    await store.add_audit_anchor(a)
+    latest = await store.latest_audit_anchor(T)
+    assert latest.id == "anch-1" and latest.seq_end == 2 and latest.is_dev_fallback is True
+    assert latest.rfc3161_token is None and latest.kms_signature is None
+    # a workspace-scoped anchor is a DISTINCT stream from the org-wide (NULL) one.
+    assert await store.latest_audit_anchor(T, workspace_id="ws-1") is None
 
 
 # --- single-use HITL consume (SEC-14) --------------------------------------

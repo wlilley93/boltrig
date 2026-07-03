@@ -6,7 +6,13 @@ bodies are Pydantic and live with the FastAPI app.
 
 from __future__ import annotations
 
-from .audit import ActionType, AuditEvent
+from .audit import (
+    ActionType,
+    AuditEvent,
+    AuditRollupAnchor,
+    SecurityEvent,
+    SecurityEventType,
+)
 from .base import (
     AdapterId,
     CapabilityName,
@@ -102,6 +108,9 @@ from .work import RunCheckpoint, WorkItem, WorkStatus
 __all__ = [
     "ActionType",
     "AuditEvent",
+    "AuditRollupAnchor",
+    "SecurityEvent",
+    "SecurityEventType",
     "AdapterId",
     "CapabilityName",
     "HITLId",
