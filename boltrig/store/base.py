@@ -14,6 +14,7 @@ from typing import Protocol, runtime_checkable
 from boltrig.models import (
     AdapterRecord,
     AgentCapability,
+    AiConfig,
     AuditEvent,
     Budget,
     Channel,
@@ -399,6 +400,23 @@ class Store(Protocol):
     async def list_workspaces_for_user(
         self, tenant_id: str, user_id: str
     ) -> list[Workspace]: ...
+
+    # D5 (per-org / workspace / user AI keys): ONE unified ``ai_configs`` table keyed
+    # by (tenant_id, level, scope_id). Each row carries a provider/model selection and
+    # a ``credential_ref`` - the id of a SEALED credential (in ``credential_refs``),
+    # never the raw key. The store rejects an out-of-set ``level``
+    # (SchemaValidationError) so an invalid level can never be persisted, mirroring the
+    # workspace-role guard. All reads are tenant-scoped (SEC-08): they only ever return
+    # rows inside the bound tenant, so a caller can never read another org/workspace's
+    # AI key.
+    async def set_ai_config(self, config: AiConfig) -> None: ...
+    async def get_ai_config(
+        self, tenant_id: str, level: str, scope_id: str
+    ) -> AiConfig | None: ...
+    async def list_ai_configs(self, tenant_id: str) -> list[AiConfig]: ...
+    async def delete_ai_config(
+        self, tenant_id: str, level: str, scope_id: str
+    ) -> None: ...
 
     # --- conversations (Round Two, SEC-25 tenant + owner scoped) ---
     async def create_conversation(self, conv: Conversation) -> None: ...

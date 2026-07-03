@@ -36,6 +36,11 @@ from .sessions import (
     rotate_session,
 )
 from .tenancy import default_org_for, default_org_slug, ensure_default_org
+from .ai_keys import (
+    AiKeyResolution,
+    load_ai_key_material,
+    resolve_ai_key,
+)
 
 __all__ = [
     "OidcVerifier",
@@ -71,4 +76,8 @@ __all__ = [
     "default_org_for",
     "default_org_slug",
     "ensure_default_org",
+    # Per-org/workspace/user AI keys ([2026] VJS-COUNTY 8, D5).
+    "AiKeyResolution",
+    "resolve_ai_key",
+    "load_ai_key_material",
 ]

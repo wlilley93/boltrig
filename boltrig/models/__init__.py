@@ -89,7 +89,9 @@ from .libraries import (
 )
 from .registry import Consequence, Noun, RateLimit, TargetType, Verb, VerbBinding
 from .tenancy import (
+    AI_CONFIG_LEVELS,
     WORKSPACE_ROLES,
+    AiConfig,
     OrgMember,
     Organisation,
     Workspace,
@@ -182,6 +184,8 @@ __all__ = [
     "Verb",
     "VerbBinding",
     "WORKSPACE_ROLES",
+    "AI_CONFIG_LEVELS",
+    "AiConfig",
     "Organisation",
     "Workspace",
     "OrgMember",

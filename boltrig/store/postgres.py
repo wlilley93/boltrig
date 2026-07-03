@@ -53,6 +53,8 @@ from boltrig.models import (
     HITLType,
     ModelEndpoint,
     Noun,
+    AI_CONFIG_LEVELS,
+    AiConfig,
     Organisation,
     OrgMember,
     RateLimit,
@@ -1574,6 +1576,50 @@ class PostgresStore(ChannelStorePG):
         )
         return [_workspace(r) for r in rows]
 
+    # --- per-org/workspace/user AI keys ([2026] VJS-COUNTY 8, D5) -------------
+    async def set_ai_config(self, config: AiConfig) -> None:
+        # Reject an out-of-set level before it can be persisted (mirrors the
+        # workspace-role guard). The row carries a credential_ref only, never a key.
+        if config.level not in AI_CONFIG_LEVELS:
+            raise SchemaValidationError(
+                f"invalid ai-config level: {config.level!r}",
+                errors=[f"level must be one of {sorted(AI_CONFIG_LEVELS)}"],
+            )
+        await self._pool.execute(
+            """INSERT INTO ai_configs
+               (tenant_id, level, scope_id, provider, model, credential_ref,
+                created_at, updated_at)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,now())
+               ON CONFLICT (tenant_id, level, scope_id) DO UPDATE SET
+                 provider=EXCLUDED.provider, model=EXCLUDED.model,
+                 credential_ref=EXCLUDED.credential_ref, updated_at=now()""",
+            config.tenant_id, config.level, config.scope_id, config.provider,
+            config.model, config.credential_ref, config.created_at,
+        )
+
+    async def get_ai_config(self, tenant_id, level, scope_id):
+        # Tenant-scoped: the WHERE binds tenant_id, so it can never return another
+        # tenant's AI-config row (None when absent, fail-closed).
+        row = await self._pool.fetchrow(
+            """SELECT * FROM ai_configs
+               WHERE tenant_id=$1 AND level=$2 AND scope_id=$3""",
+            tenant_id, level, scope_id,
+        )
+        return _ai_config(row)
+
+    async def list_ai_configs(self, tenant_id):
+        rows = await self._pool.fetch(
+            "SELECT * FROM ai_configs WHERE tenant_id=$1 ORDER BY level, scope_id",
+            tenant_id,
+        )
+        return [_ai_config(r) for r in rows]
+
+    async def delete_ai_config(self, tenant_id, level, scope_id):
+        await self._pool.execute(
+            "DELETE FROM ai_configs WHERE tenant_id=$1 AND level=$2 AND scope_id=$3",
+            tenant_id, level, scope_id,
+        )
+
 
 # --- row -> dataclass mappers (None-safe) ---------------------------------
 def _noun(r):
@@ -1943,6 +1989,16 @@ def _workspace_member(r):
         user_id=r["user_id"], workspace_id=r["workspace_id"],
         tenant_id=r["tenant_id"], role=r["role"],
         permissions=r["permissions"] or {}, created_at=r["created_at"],
+    )
+
+
+def _ai_config(r):
+    if r is None:
+        return None
+    return AiConfig(
+        tenant_id=r["tenant_id"], level=r["level"], scope_id=r["scope_id"],
+        provider=r["provider"], model=r["model"], credential_ref=r["credential_ref"],
+        created_at=r["created_at"], updated_at=r["updated_at"],
     )
 
 

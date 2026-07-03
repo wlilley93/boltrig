@@ -123,13 +123,21 @@ class HermesRuntime:
     _KEY_ENVS = ("BOLTRIG_HERMES_API_KEY", "HERMES_API_KEY")
 
     def __init__(
-        self, *, endpoint: ModelEndpoint | None = None, cost_tier: str = "standard"
+        self,
+        *,
+        endpoint: ModelEndpoint | None = None,
+        cost_tier: str = "standard",
+        api_key: str | None = None,
     ) -> None:
         self.endpoint = endpoint
         self.cost_tier = cost_tier
+        # A resolved per-org/workspace/user AI key ([2026] VJS-COUNTY 8, D5). When
+        # present it overrides the env key; when None the runtime falls back to the
+        # env-configured provider key exactly as before (backward-compat).
+        self._key_override = api_key or None
 
     def _api_key(self) -> str | None:
-        return _first_env(self._KEY_ENVS)
+        return self._key_override or _first_env(self._KEY_ENVS)
 
     async def run(
         self, prompt: str, context: InvocationContext, *, tools: list[str]
@@ -186,13 +194,19 @@ class OpenAiRuntime:
     _KEY_ENVS = ("BOLTRIG_OPENAI_API_KEY", "OPENAI_API_KEY")
 
     def __init__(
-        self, *, endpoint: ModelEndpoint | None = None, cost_tier: str = "standard"
+        self,
+        *,
+        endpoint: ModelEndpoint | None = None,
+        cost_tier: str = "standard",
+        api_key: str | None = None,
     ) -> None:
         self.endpoint = endpoint
         self.cost_tier = cost_tier
+        # Resolved per-org/workspace/user AI key (D5); env fallback when None.
+        self._key_override = api_key or None
 
     def _api_key(self) -> str | None:
-        return _first_env(self._KEY_ENVS)
+        return self._key_override or _first_env(self._KEY_ENVS)
 
     async def run(
         self, prompt: str, context: InvocationContext, *, tools: list[str]
@@ -241,13 +255,19 @@ class ClaudeApiRuntime:
     _DEFAULT_MODEL = "claude-sonnet-4-5"
 
     def __init__(
-        self, *, endpoint: ModelEndpoint | None = None, cost_tier: str = "expensive"
+        self,
+        *,
+        endpoint: ModelEndpoint | None = None,
+        cost_tier: str = "expensive",
+        api_key: str | None = None,
     ) -> None:
         self.endpoint = endpoint
         self.cost_tier = cost_tier
+        # Resolved per-org/workspace/user AI key (D5); env fallback when None.
+        self._key_override = api_key or None
 
     def _api_key(self) -> str | None:
-        return _first_env(self._KEY_ENVS)
+        return self._key_override or _first_env(self._KEY_ENVS)
 
     async def run(
         self, prompt: str, context: InvocationContext, *, tools: list[str]
@@ -327,6 +347,7 @@ def build_runtime(
     endpoint_lookup: EndpointLookup | None = None,
     *,
     pi_config: dict[str, Any] | None = None,
+    api_key: str | None = None,
 ) -> Runtime:
     """Select the runtime implementation for a capability (P4, US-FLT-04, US-RUN-01).
 
@@ -335,6 +356,12 @@ def build_runtime(
     not code. ``pi_config`` supplies the Pi sidecar wiring (sidecar_url, mcp_url,
     issue_token, ...); absent it, a ``pi`` capability still resolves to a
     PiRuntime that degrades offline. Unknown runtimes fall back to ScriptRuntime.
+
+    ``api_key`` is the resolved per-org/workspace/user AI key ([2026] VJS-COUNTY 8,
+    D5): a network runtime uses it instead of the env-configured provider key. When
+    None (no org/workspace/user config, or a keyless local endpoint) the runtime
+    falls back to the env key exactly as before - so an existing single-tenant deploy
+    is unchanged.
     """
     endpoint: ModelEndpoint | None = None
     if capability.model_endpoint and endpoint_lookup is not None:
@@ -342,11 +369,17 @@ def build_runtime(
 
     kind = capability.runtime
     if kind == "hermes":
-        return HermesRuntime(endpoint=endpoint, cost_tier=capability.cost_tier)
+        return HermesRuntime(
+            endpoint=endpoint, cost_tier=capability.cost_tier, api_key=api_key
+        )
     if kind == "openai":
-        return OpenAiRuntime(endpoint=endpoint, cost_tier=capability.cost_tier)
+        return OpenAiRuntime(
+            endpoint=endpoint, cost_tier=capability.cost_tier, api_key=api_key
+        )
     if kind == "claude-api":
-        return ClaudeApiRuntime(endpoint=endpoint, cost_tier=capability.cost_tier)
+        return ClaudeApiRuntime(
+            endpoint=endpoint, cost_tier=capability.cost_tier, api_key=api_key
+        )
     if kind == "pi":
         from .pi_runtime import PiRuntime
 

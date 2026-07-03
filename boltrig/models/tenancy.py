@@ -30,6 +30,11 @@ WORKSPACE_ROLES: frozenset[str] = frozenset(
     {"owner", "admin", "member", "viewer", "agent"}
 )
 
+# The three levels an AI-key config row can sit at (per-org / workspace / user AI
+# keys, [2026] VJS-COUNTY 8 D5). ``org`` is keyed by the tenant_id (the org id IS
+# the tenant boundary), ``workspace`` by a workspace id, ``user`` by a user id.
+AI_CONFIG_LEVELS: frozenset[str] = frozenset({"org", "workspace", "user"})
+
 
 @dataclass
 class Organisation:
@@ -109,3 +114,29 @@ class WorkspaceMember:
     role: str = "member"
     permissions: dict[str, Any] = field(default_factory=dict)
     created_at: datetime = field(default_factory=utcnow)
+
+
+@dataclass
+class AiConfig:
+    """A per-org / workspace / user AI-key configuration row ([2026] VJS-COUNTY 8 D5).
+
+    ONE unified table keyed by ``(tenant_id, level, scope_id)`` where ``level`` is
+    one of ``AI_CONFIG_LEVELS`` and ``scope_id`` is the tenant_id (org level), a
+    workspace id (workspace level) or a user id (user level). The row holds a
+    provider/model SELECTION plus a ``credential_ref`` - the id of a row in the
+    sealed credential store (``credential_refs``) that holds the actual key. The
+    RAW KEY IS NEVER STORED HERE: this table carries only the reference, so a key
+    can never leak through an AI-config read/export. Tenant-scoped (RLS).
+
+    The org-level ``allow_own_ai_keys`` flag (on ``Organisation``) gates whether a
+    workspace/user row is honoured at all - see ``resolve_ai_key``.
+    """
+
+    tenant_id: TenantId
+    level: str  # one of AI_CONFIG_LEVELS: org | workspace | user
+    scope_id: str  # tenant_id (org) | workspace_id (workspace) | user_id (user)
+    provider: str  # 'anthropic' | 'openai' | 'hermes' | ... (selection, not a secret)
+    model: str  # pinned model/version
+    credential_ref: str  # id into credential_refs (the SEALED key); never the raw key
+    created_at: datetime = field(default_factory=utcnow)
+    updated_at: datetime = field(default_factory=utcnow)

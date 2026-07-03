@@ -255,6 +255,32 @@ org with no workspaces) keeps EXACTLY today's grants - no narrowing.
 | **SEC-110** | A caller with NO active workspace keeps their FULL org grants unchanged (D11 backward-compat, the critical rule) - `effective_grants_for_request` returns exactly `current_grants_for_user` when `active_workspace_id` is None, and applies no narrowing when the caller is not a member of the active workspace (fail-closed to the org ceiling, never widening). | `tests/security/test_workspace_grants.py::test_no_active_workspace_keeps_full_org_grants`, `::test_non_member_active_workspace_applies_no_narrowing` |
 | **SEC-111** | `get_workspace_member` is tenant-scoped and fail-closed (D11, SEC-08) - the single-membership lookup only ever returns a row inside the bound tenant, so a membership under another `tenant_id` resolves to None and can never confer a workspace role across a tenant boundary. | `tests/store/test_tenancy.py::test_get_workspace_member_is_tenant_scoped` |
 
+### Per-org / workspace / user AI keys ([2026] VJS-COUNTY 8, D5)
+
+An org / workspace / user may configure its OWN AI key. Config rows live in ONE
+unified `ai_configs` table keyed by `(tenant_id, level, scope_id)` (level =
+org / workspace / user). Each row carries a provider/model selection and a
+`credential_ref` - the id of a SEALED credential in `credential_refs` - NEVER the raw
+key (no plaintext key column). `resolve_ai_key(store, tenant_id, workspace_id,
+user_id)` chooses the key with precedence **user -> workspace -> org -> manifest/env
+default**, gated by the org's `allow_own_ai_keys`: when the org forbids member-owned
+keys a workspace/user row is IGNORED and only the org (or env) key is used. The
+spawner wires the resolved, sealed key into the model-key seam (`build_runtime` ->
+the network runtime's `_api_key()`); a tenant with no config falls straight through
+to the env-configured provider key, so every existing single-tenant deploy is
+unchanged (THE CRITICAL RULE). The governed `PUT /v1/ai-keys` accepts the key once,
+seals it through `set_credential_ref`, and is role-scoped (org = admin; workspace =
+workspace owner/admin + allow_own; user = self + allow_own).
+
+| Invariant | Meaning | Bound test(s) |
+| --- | --- | --- |
+| **FR-AIKEY-01** | An AI key config lives in ONE unified `ai_configs` table keyed by `(tenant_id, level, scope_id)` holding a provider/model selection and a SEALED `credential_ref`, never a raw key (D5) - the `AiConfig` row has no plaintext key field, `set_ai_config` upserts (never duplicates) and rejects an out-of-set level (`SchemaValidationError`), and every allowed level round-trips. | `tests/store/test_ai_config.py::test_ai_config_row_holds_a_credential_ref_never_a_raw_key`, `::test_ai_config_level_must_be_valid` |
+| **FR-AIKEY-02** | `resolve_ai_key` honours precedence user -> workspace -> org -> manifest/env default and the spawner wires the resolved SEALED key into the model-key seam (D5) - the resolver returns the highest-precedence configured level (material loaded from the sealed store) and, when nothing is configured, the default level with no ref so the runtime falls back to the env provider key exactly as before (backward-compat). | `tests/security/test_ai_keys.py::test_resolve_precedence_user_workspace_org_default`, `::test_no_config_tenant_falls_back_to_env_key`, `::test_spawner_wires_resolved_sealed_key_into_the_runtime` |
+| **SEC-112** | `allow_own_ai_keys=False` makes a workspace/user AI key IGNORED at resolution (D5) - when the org forbids member-owned keys, `resolve_ai_key` skips any workspace/user row and uses only the org key (or the env default when the org has none), so a member cannot bring their own key unless the org opts in. | `tests/security/test_ai_keys.py::test_allow_own_false_ignores_workspace_and_user_keys` |
+| **SEC-113** | An AI key is stored ONLY as a sealed credential ref and never returned or audited in plaintext (D5, SEC-05/K-20) - `PUT /v1/ai-keys` accepts the key once, stores it through `set_credential_ref` (the `ai_configs` row holds only the `credential_ref`), never echoes it, and writes a keys-only audit row, so the raw key appears in no audit detail; it remains retrievable only kernel-side from the sealed store. | `tests/security/test_ai_keys.py::test_ai_key_is_sealed_never_returned_or_audited` |
+| **SEC-114** | `ai_config` reads are tenant-scoped and never cross tenants (D5, SEC-08) - get/list of an AI-config are keyed on `tenant_id`, so a caller can never read another org/workspace's AI key (a lookup/list under a different tenant is None/empty) and a cross-tenant delete is a no-op. | `tests/store/test_ai_config.py::test_ai_config_reads_are_tenant_scoped` |
+| **SEC-115** | The governed set-key route is role-scoped (D5, SEC-36) - `PUT /v1/ai-keys` refuses an org-level key from a non-admin, a workspace-level key from a non-owner/admin of that workspace, and a user-level key for anyone but the caller; workspace/user levels additionally require the org `allow_own_ai_keys` gate, while the org may always set its own key. | `tests/security/test_ai_keys.py::test_set_key_route_is_role_scoped` |
+
 ## How a new invariant is added
 
 1. Write the test and mark it: `@pytest.mark.invariant("NEW-ID")`.

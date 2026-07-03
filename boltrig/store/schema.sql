@@ -733,6 +733,26 @@ CREATE INDEX IF NOT EXISTS workspace_members_user_idx
 CREATE INDEX IF NOT EXISTS workspace_members_ws_idx
     ON workspace_members (tenant_id, workspace_id);
 
+-- D5: per-org / workspace / user AI keys. ONE unified table keyed by
+-- (tenant_id, level, scope_id). level is org | workspace | user; scope_id is the
+-- tenant_id (org), a workspace id (workspace) or a user id (user). The row holds a
+-- provider/model selection and a credential_ref - the id of a SEALED credential in
+-- credential_refs. THE RAW KEY IS NEVER STORED HERE (no plaintext key column): only
+-- the reference, so a key can never leak through an AI-config read/export. The org
+-- allow_own_ai_keys flag gates whether a workspace/user row is honoured. Tenant-
+-- scoped (RLS).
+CREATE TABLE IF NOT EXISTS ai_configs (
+    tenant_id      TEXT NOT NULL,          -- the owning organisation (== organisations.id)
+    level          TEXT NOT NULL,          -- org | workspace | user
+    scope_id       TEXT NOT NULL,          -- org: tenant_id; workspace: workspace_id; user: user_id
+    provider       TEXT NOT NULL,          -- 'anthropic' | 'openai' | 'hermes' | ... (selection)
+    model          TEXT NOT NULL,          -- pinned model/version
+    credential_ref TEXT NOT NULL,          -- id into credential_refs (the SEALED key); NEVER the raw key
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, level, scope_id)
+);
+
 -- ===========================================================================
 -- Round Five: structured memory governance + provenance control plane (Epic MEM).
 -- The swappable Memory Engine owns the graph/vector store; Boltrig governs scope,

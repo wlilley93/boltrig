@@ -443,6 +443,14 @@ class Spawner:
                 return endpoint
             return None
 
+        # Resolve the per-org/workspace/user AI key ([2026] VJS-COUNTY 8, D5),
+        # precedence user -> workspace -> org -> env/manifest default, honouring the
+        # org allow_own_ai_keys gate. The key is loaded from the SEALED credential
+        # store kernel-side, at call time, and handed straight to the runtime; it is
+        # never returned to an agent or audited. None => the runtime falls back to the
+        # env-configured provider key (backward-compat for a tenant with no config).
+        api_key = await self._resolve_ai_key(tenant_id, context)
+
         if capability.runtime == "pi":
             pi_config: dict[str, Any] = {
                 "sidecar_url": self._pi["sidecar_url"],
@@ -454,8 +462,36 @@ class Spawner:
             if context is not None and context.run_id:
                 run_id = context.run_id  # bind for the relay sink
                 pi_config["event_sink"] = lambda ev: self._kernel.events.publish(run_id, ev)
-            return build_runtime(capability, lookup, pi_config=pi_config)
-        return build_runtime(capability, lookup)
+            return build_runtime(capability, lookup, pi_config=pi_config, api_key=api_key)
+        return build_runtime(capability, lookup, api_key=api_key)
+
+    async def _resolve_ai_key(
+        self, tenant_id: str, context: InvocationContext | None
+    ) -> str | None:
+        """Resolve + load the AI key for this run's model call ([2026] VJS-COUNTY 8, D5).
+
+        The workspace scope is the caller's ALREADY-authorized active workspace
+        (``context.workspace_id``, re-checked against membership every request) and
+        the user is the delegated human (``context.on_behalf_of``), so this can never
+        surface another org's or another workspace's key. Returns the sealed key
+        material, or None to fall back to the env/manifest key. A resolution failure
+        degrades to the env key (None) rather than crashing the run (P9)."""
+        if context is None:
+            return None
+        from boltrig.identity import load_ai_key_material, resolve_ai_key
+
+        try:
+            resolution = await resolve_ai_key(
+                self._kernel.store,
+                tenant_id,
+                workspace_id=context.workspace_id,
+                user_id=context.on_behalf_of,
+            )
+            return await load_ai_key_material(
+                self._kernel.store, tenant_id, resolution
+            )
+        except Exception:  # never let key resolution crash a run - fall back to env
+            return None
 
     def _compose_prompt(self, merged_prompt: str, task: str) -> str:
         """Compose the skills' prompt fragments with the concrete task.

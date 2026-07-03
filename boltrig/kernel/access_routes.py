@@ -20,7 +20,9 @@ from fastapi import Depends, Request
 from fastapi.responses import JSONResponse
 
 from boltrig.models import (
+    AI_CONFIG_LEVELS,
     ActionType,
+    AiConfig,
     AuditEvent,
     ConversationStatus,
     GrantMissing,
@@ -29,6 +31,9 @@ from boltrig.models import (
     UserSetting,
     utcnow,
 )
+
+# Per-workspace roles that may administer a workspace's AI key (D3 vocabulary).
+_WORKSPACE_ADMIN_ROLES = frozenset({"owner", "admin"})
 
 
 # Organisation-administration roles. org-admin is the IdP-role vocabulary; the
@@ -85,6 +90,16 @@ def _user_view(u) -> dict:
         "scope": u.scope, "status": u.status, "source": u.source,
         "source_group": u.source_group,
         "last_seen_at": u.last_seen_at.isoformat() if u.last_seen_at else None,
+    }
+
+
+def _ai_config_view(c) -> dict:
+    """An AI-config row for listing: provider/model + WHETHER a key is set, NEVER the
+    key itself (the secret lives only in the sealed credential store)."""
+    return {
+        "level": c.level, "scope_id": c.scope_id, "provider": c.provider,
+        "model": c.model, "has_key": bool(c.credential_ref),
+        "updated_at": c.updated_at.isoformat() if c.updated_at else None,
     }
 
 
@@ -419,6 +434,132 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
         await k.store.update_session(session)
         await _audit(k, p, "session.active_context.switch", {"workspace_id": workspace_id})
         return JSONResponse({"status": "ok", "workspace_id": workspace_id})
+
+    # === Per-org / workspace / user AI keys ([2026] VJS-COUNTY 8, D5) ===
+    async def _authz_ai_key(k, p, level: str, scope_id: str):
+        """Authorize a set/delete at ``level``/``scope_id``. Returns a 4xx JSONResponse
+        on denial, else None. Role scoping (SEC-36):
+
+          - org       : org-admin (the org may always set its OWN key).
+          - workspace : org-admin, OR a workspace owner/admin of that workspace; AND
+                        the org must allow own AI keys.
+          - user      : org-admin, OR the caller acting on their OWN user; AND the org
+                        must allow own AI keys.
+
+        The allow_own_ai_keys gate is enforced at write time for workspace/user levels
+        (a key that would be ignored at resolution is refused up front); the load-
+        bearing guarantee is the resolution-time ignore in resolve_ai_key."""
+        is_org_admin = p.role in _ADMIN_ROLES
+        if level == "org":
+            if not is_org_admin:
+                return JSONResponse(
+                    {"status": "denied", "reason": "org AI key requires org administration"},
+                    status_code=403,
+                )
+            return None
+        # workspace / user levels require the org to allow member-owned keys.
+        org = await k.store.get_org(p.tenant_id)
+        if org is None or not org.allow_own_ai_keys:
+            return JSONResponse(
+                {"status": "denied",
+                 "reason": "organisation does not allow own AI keys"},
+                status_code=403,
+            )
+        if level == "workspace":
+            if is_org_admin:
+                return None
+            member = await k.store.get_workspace_member(p.tenant_id, scope_id, p.subject)
+            if member is None or member.role not in _WORKSPACE_ADMIN_ROLES:
+                return JSONResponse(
+                    {"status": "denied",
+                     "reason": "must be a workspace owner/admin to set its AI key"},
+                    status_code=403,
+                )
+            return None
+        # user level: the caller may only set their OWN user key (org-admin may set any).
+        if not is_org_admin and scope_id != p.subject:
+            return JSONResponse(
+                {"status": "denied", "reason": "may only set your own user AI key"},
+                status_code=403,
+            )
+        return None
+
+    @app.get("/v1/ai-keys")
+    async def list_ai_keys(k=K, p=P) -> dict:
+        # The tenant's AI-config rows, provider/model + has_key only - NEVER the key.
+        # Tenant-scoped by the store; the org allow_own flag rides along so a client
+        # can render whether workspace/user keys are honoured.
+        configs = await k.store.list_ai_configs(p.tenant_id)
+        org = await k.store.get_org(p.tenant_id)
+        return {
+            "allow_own_ai_keys": bool(org.allow_own_ai_keys) if org else False,
+            "ai_keys": [_ai_config_view(c) for c in configs],
+        }
+
+    @app.put("/v1/ai-keys")
+    async def set_ai_key(body: dict, k=K, p=P) -> JSONResponse:
+        # Set (or replace) an AI key at a level. The key is accepted ONCE and stored
+        # ONLY through the sealed credential store (set_credential_ref); the ai_configs
+        # row carries just the credential_ref, provider and model. The key is never
+        # echoed back and never entered into the audit row (keys-only detail).
+        level = str(body.get("level") or "").strip()
+        if level not in AI_CONFIG_LEVELS:
+            return JSONResponse(
+                {"status": "error",
+                 "reason": f"level must be one of {sorted(AI_CONFIG_LEVELS)}"},
+                status_code=400,
+            )
+        # scope_id defaults sensibly per level: org -> the tenant_id, user -> the
+        # caller. A workspace level requires an explicit workspace id.
+        default_scope = {"org": p.tenant_id, "user": p.subject}.get(level)
+        scope_id = str(body.get("scope_id") or default_scope or "").strip()
+        if not scope_id:
+            return JSONResponse({"status": "error", "reason": "scope_id is required"},
+                                status_code=400)
+        provider = str(body.get("provider") or "").strip()
+        model = str(body.get("model") or "").strip()
+        api_key = str(body.get("api_key") or "").strip()
+        if not provider or not model or not api_key:
+            return JSONResponse(
+                {"status": "error", "reason": "provider, model and api_key are required"},
+                status_code=400,
+            )
+        denied = await _authz_ai_key(k, p, level, scope_id)
+        if denied is not None:
+            return denied
+        # Seal the key: store it through the credential store, keyed by an opaque
+        # generated id. The raw key never lands in ai_configs (no plaintext column).
+        credential_ref = f"cred_ai_{uuid.uuid4().hex[:16]}"
+        await k.store.set_credential_ref(p.tenant_id, credential_ref, {"secret": api_key})
+        await k.store.set_ai_config(AiConfig(
+            tenant_id=p.tenant_id, level=level, scope_id=scope_id,
+            provider=provider, model=model, credential_ref=credential_ref,
+        ))
+        # Keys-only audit: level/scope/provider/model + the credential REF id, NEVER
+        # the api_key itself (SEC-05, K-20).
+        await _audit(k, p, "ai_key.set", {
+            "level": level, "scope_id": scope_id, "provider": provider,
+            "model": model, "credential_ref": credential_ref,
+        })
+        return JSONResponse({"status": "ok", "level": level, "scope_id": scope_id,
+                             "provider": provider, "model": model})
+
+    @app.delete("/v1/ai-keys/{level}/{scope_id}")
+    async def delete_ai_key(level: str, scope_id: str, k=K, p=P) -> JSONResponse:
+        if level not in AI_CONFIG_LEVELS:
+            return JSONResponse({"status": "error", "reason": "unknown level"},
+                                status_code=400)
+        denied = await _authz_ai_key(k, p, level, scope_id)
+        if denied is not None:
+            return denied
+        existing = await k.store.get_ai_config(p.tenant_id, level, scope_id)
+        if existing is None:
+            return JSONResponse({"status": "error", "reason": "not_found"}, status_code=404)
+        # Drop the config row and the sealed credential together.
+        await k.store.delete_ai_config(p.tenant_id, level, scope_id)
+        await k.store.set_credential_ref(p.tenant_id, existing.credential_ref, {})
+        await _audit(k, p, "ai_key.delete", {"level": level, "scope_id": scope_id})
+        return JSONResponse({"status": "ok", "level": level, "scope_id": scope_id})
 
     # === Notifications (per-user, hosts SET-30) ===
     @app.get("/v1/me/notifications")

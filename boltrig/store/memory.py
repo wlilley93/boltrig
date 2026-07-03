@@ -40,6 +40,8 @@ from boltrig.models import (
     MemoryIngestion,
     ModelEndpoint,
     Noun,
+    AI_CONFIG_LEVELS,
+    AiConfig,
     Organisation,
     OrgMember,
     Skill,
@@ -129,6 +131,10 @@ class InMemoryStore(ChannelStoreMem):
         self._workspaces: dict[tuple[str, str], Workspace] = {}
         self._org_members: dict[tuple[str, str], OrgMember] = {}
         self._workspace_members: dict[tuple[str, str], WorkspaceMember] = {}
+        # [2026] VJS-COUNTY 8, D5: per-org/workspace/user AI keys. Keyed
+        # (tenant, level, scope_id); each value carries a credential_ref, never a raw
+        # key. Tenant stays the isolation key.
+        self._ai_configs: dict[tuple[str, str, str], AiConfig] = {}
 
     # --- registry ---
     async def get_noun(self, tenant_id, noun_id):
@@ -881,3 +887,26 @@ class InMemoryStore(ChannelStoreMem):
                 if ws is not None:
                     out.append(ws)
         return out
+
+    # --- per-org/workspace/user AI keys ([2026] VJS-COUNTY 8, D5) -------------
+    async def set_ai_config(self, config: AiConfig) -> None:
+        # Reject an out-of-set level (mirrors the workspace-role guard) so an invalid
+        # level can never be persisted. The row stores a credential_ref, never a key.
+        if config.level not in AI_CONFIG_LEVELS:
+            raise SchemaValidationError(
+                f"invalid ai-config level: {config.level!r}",
+                errors=[f"level must be one of {sorted(AI_CONFIG_LEVELS)}"],
+            )
+        config.updated_at = utcnow()
+        self._ai_configs[(config.tenant_id, config.level, config.scope_id)] = config
+
+    async def get_ai_config(self, tenant_id, level, scope_id):
+        # Tenant-scoped: the key includes tenant_id, so a lookup under another tenant
+        # never returns this tenant's row (fail-closed, never crosses the boundary).
+        return self._ai_configs.get((tenant_id, level, scope_id))
+
+    async def list_ai_configs(self, tenant_id):
+        return [c for (t, _, _), c in self._ai_configs.items() if t == tenant_id]
+
+    async def delete_ai_config(self, tenant_id, level, scope_id):
+        self._ai_configs.pop((tenant_id, level, scope_id), None)

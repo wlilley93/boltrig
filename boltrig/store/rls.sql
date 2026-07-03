@@ -60,7 +60,10 @@ DECLARE
     -- Org -> workspace tenancy ([2026] VJS-COUNTY 8). These three carry a real
     -- tenant_id column, so the generic tenant_id policy binds them. organisations
     -- is handled separately below (its isolation column is id, which IS tenant_id).
-    'workspaces','org_members','workspace_members'
+    'workspaces','org_members','workspace_members',
+    -- D5: per-org/workspace/user AI keys - tenant_id-scoped like the rest (the raw
+    -- key is not here; it lives in the RLS-fenced credential_refs table).
+    'ai_configs'
   ];
 BEGIN
   FOREACH t IN ARRAY scoped LOOP
