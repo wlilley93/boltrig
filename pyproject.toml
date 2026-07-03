@@ -40,6 +40,17 @@ dev = [
     "pytest-cov>=6.0",
     "aiosqlite>=0.20",
     "ruff>=0.7",
+    # Static type checker for the scoped strict gate (see [tool.mypy] below).
+    # EXACT-pinned dev tooling with a CI gate, on all fours with the UI harness's
+    # exact-pinned playwright ([2026] VJS-COUNTY 2, order
+    # 2026-VJS-CC-BOLTRIG-UI-TEST-HARNESS-001): a dev-only, deterministic, exact
+    # version so the gate is reproducible across the fleet and CI. No new ruling
+    # is needed - the pin + gate follows that precedent directly.
+    "mypy==2.1.0",
+    # Third-party stubs for jsonschema (dispatch.py's Draft202012Validator). Pinned
+    # exactly for the same reason; the stub is what lets the chokepoint be strict
+    # without a blanket type: ignore.
+    "types-jsonschema==4.26.0.20260518",
 ]
 
 [project.scripts]
@@ -66,3 +77,21 @@ markers = [
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+
+# Static type-checking gate. Scoped STRICT to the highest-value, most-typed core
+# FIRST - the domain models (boltrig.models.*) and the ONE dispatch chokepoint
+# (boltrig.kernel.dispatch, P2/K-1) - and NOT the whole tree in one pass. The
+# intent is to WIDEN module-by-module: add a package/module to `files` below (and
+# raise it to strict) once it types cleanly, one bounded change at a time, rather
+# than flip the entire codebase strict at once.
+#
+# `files` names exactly the scoped paths, so a bare `mypy` (no args) checks only
+# them; `follow_imports = "silent"` means the un-scoped modules those paths import
+# are followed for type info but NOT gated (their own errors are suppressed until
+# they are brought into scope). The rest of the tree is therefore not gated yet.
+[tool.mypy]
+python_version = "3.12"
+files = ["boltrig/models", "boltrig/kernel/dispatch.py"]
+strict = true
+follow_imports = "silent"
+warn_unused_ignores = true

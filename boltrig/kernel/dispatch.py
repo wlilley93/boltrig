@@ -40,6 +40,8 @@ from boltrig.models import (
     SchemaValidationError,
     SecurityEventType,
     TargetType,
+    Verb,
+    VerbBinding,
     utcnow,
 )
 from boltrig.store import Store
@@ -53,10 +55,10 @@ from .questions import QUESTIONS_VERB
 from .ratelimit import RateLimiter
 
 AdapterProvider = Callable[[str, str], Awaitable[Adapter | None]]
-AgentInvoker = Callable[[str, dict, InvocationContext, str], Awaitable[Result]]
+AgentInvoker = Callable[[str, dict[str, Any], InvocationContext, str], Awaitable[Result]]
 
 
-def _validate(schema: dict, instance: dict) -> list[str]:
+def _validate(schema: dict[str, Any], instance: dict[str, Any]) -> list[str]:
     if not schema:
         return []
     validator = Draft202012Validator(schema)
@@ -141,7 +143,7 @@ class Dispatcher:
         self._security = security
 
     async def _record_security(
-        self, event_type, reason: str, noun: str, verb: str,
+        self, event_type: SecurityEventType, reason: str, noun: str, verb: str,
         params: dict[str, Any], context: InvocationContext,
     ) -> None:
         """Record a security signal on the distinct stream (D3), at the same field
@@ -412,8 +414,12 @@ class Dispatcher:
         return output
 
     async def _execute_adapter(
-        self, verb_def, binding, params: dict, context: InvocationContext
-    ) -> dict:
+        self,
+        verb_def: Verb,
+        binding: VerbBinding,
+        params: dict[str, Any],
+        context: InvocationContext,
+    ) -> dict[str, Any]:
         adapter = await self._adapter_provider(context.tenant_id, binding.target_ref)
         if adapter is None:
             return self._degrade_or_fail(verb_def, reason="adapter_not_loaded")
@@ -431,8 +437,12 @@ class Dispatcher:
         raise BoltrigError(err.message if err else "adapter error")
 
     async def _execute_agent(
-        self, verb_def, binding, params: dict, context: InvocationContext
-    ) -> dict:
+        self,
+        verb_def: Verb,
+        binding: VerbBinding,
+        params: dict[str, Any],
+        context: InvocationContext,
+    ) -> dict[str, Any]:
         if self._agent_invoker is None:
             return self._degrade_or_fail(verb_def, reason="agent_runtime_absent")
         result = await self._agent_invoker(verb_def.id, params, context, binding.target_ref)
@@ -440,7 +450,7 @@ class Dispatcher:
             return result.output
         return self._degrade_or_fail(verb_def, reason="agent_failed")
 
-    def _degrade_or_fail(self, verb_def, reason: str) -> dict:
+    def _degrade_or_fail(self, verb_def: Verb, reason: str) -> dict[str, Any]:
         """Produce a degraded result if the verb defines one, else fail (P9)."""
         dm = verb_def.degraded_mode
         if not dm:

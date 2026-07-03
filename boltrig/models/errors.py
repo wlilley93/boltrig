@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from .base import HITLId
+
 
 class BoltrigError(Exception):
     """Base for every kernel-raised error."""
@@ -119,7 +121,7 @@ class PendingHuman(BoltrigError):
     status_code = 202
     reason = "pending_human"
 
-    def __init__(self, hitl_request_id: HITLId) -> None:  # noqa: F821 (alias)
+    def __init__(self, hitl_request_id: HITLId) -> None:
         super().__init__(f"pending human: {hitl_request_id}")
         self.hitl_request_id = hitl_request_id
 

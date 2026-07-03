@@ -13,7 +13,7 @@ BACKUP_DIR ?= ./backups
 BACKUP ?= $(BACKUP_DIR)/boltrig.dump
 
 .DEFAULT_GOAL := help
-.PHONY: help up down logs test lint smoke invariants migrate secure-up backup backup-schedule restore
+.PHONY: help up down logs test lint typecheck smoke invariants migrate secure-up backup backup-schedule restore
 
 help: ## List the available targets
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -37,6 +37,10 @@ test: ## Run the test suite (set BOLTRIG_TEST_DATABASE_URL to also run the Postg
 lint: ## Run ruff if it is installed (no-op otherwise)
 	@$(PY) -m ruff --version >/dev/null 2>&1 && $(PY) -m ruff check boltrig scripts \
 		|| echo "ruff not installed; skipping lint"
+
+typecheck: ## Scoped strict mypy gate (boltrig/models + kernel/dispatch.py; see [tool.mypy])
+	@$(PY) -m mypy --version >/dev/null 2>&1 && $(PY) -m mypy \
+		|| echo "mypy not installed; skipping typecheck (pip install mypy==2.1.0 types-jsonschema==4.26.0.20260518)"
 
 smoke: ## Offline, in-process smoke test of the kernel guarantees (no docker)
 	$(PY) scripts/smoke.py

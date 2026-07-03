@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any
 
 from .base import TenantId, UserId
 
@@ -54,7 +55,7 @@ class Channel:
     # app credentials) - never plaintext, never returned to an agent.
     credential_ref: str | None = None
     # policy-as-data: allowed_chats, home_channel, dm behaviour overrides, etc.
-    config: dict = field(default_factory=dict)
+    config: dict[str, Any] = field(default_factory=dict)
     unpaired_behavior: str = "reject"  # reject | ignore | pair
     enabled: bool = True
     created_at: datetime | None = None

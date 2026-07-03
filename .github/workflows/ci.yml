@@ -41,8 +41,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .
           pip install pytest pytest-asyncio aiosqlite
+          # Exact-pinned type-checker + stubs for the scoped strict gate below
+          # ([2026] VJS-COUNTY 2). Pins live in pyproject [dependency-groups].dev.
+          pip install mypy==2.1.0 types-jsonschema==4.26.0.20260518
       - name: Invariant binding gate (K-29/K-30, debt 0)
         run: python scripts/check_invariants.py
+      - name: Static type-check gate (scoped strict, mypy)
+        # Strict-checks ONLY boltrig/models + boltrig/kernel/dispatch.py (the
+        # [tool.mypy] `files` scope in pyproject). A type error in that core turns
+        # the build red. Widened module-by-module over time, not all at once.
+        run: python -m mypy
       - name: Test suite (in-memory + Postgres-backed)
         run: python -m pytest -q
 
