@@ -181,6 +181,22 @@ projection so the browser never receives raw verb input/output.
 | **SEC-88** | Chat tool events never leak verb values (K-20 on the user-facing surface) - a secret/untrusted value passed to a verb appears nowhere on the chat stream nor in the persisted turn events (only key names + counts), while the full payload still exists on the run relay for the canvas + durable audit. | `tests/security/test_chat_streaming_richness.py::test_chat_tool_events_never_leak_verb_values` |
 | **SEC-89** | The questions answer route is owner-only, fail-closed, audited and `wrap_untrusted`-enveloped - `POST /v1/hitl/{id}/answer` answers only a QUESTION (an approval id is refused 409, never laundered into clearing a gated verb), a non-owner/scoped-read caller is 403 with no write and no resume fired, the owner's answer is enveloped before it is recorded (the ordinary resume wiring replays it as data), and the audit row carries the answer length only, never the text. | `tests/security/test_chat_streaming_richness.py::test_answer_route_owner_only_wrapped_and_audited`, `::test_answer_route_refuses_to_answer_an_approval` |
 
+### Conversation history: pagination + owner-scoped search (US-CONV-09/10)
+
+Two additive read surfaces over the existing owner-scoped conversation store,
+never a new search engine or a parallel store. Pagination bounds the list under a
+`ChatConfig` ceiling with a deterministic order; search is a plain case-insensitive
+substring over the caller's own titles + live message content, parameterised and
+fail-closed to the caller's scope. The unpaginated list is untouched for callers
+that do not opt in.
+
+| Invariant | Meaning | Bound test(s) |
+| --- | --- | --- |
+| **FR-CONV-07** | The conversation list paginates stably and bounded - `list_conversations_page` returns one owner-scoped page ordered `updated_at` DESC with an id ASC tiebreak (deterministic for equal timestamps) plus the next offset (None once exhausted), the page size is a `ChatConfig` ceiling a caller-supplied `limit` is clamped down to (None => the conservative default, never zero rows), and the original unpaginated `list_conversations` still returns everything. | `tests/store/test_conversation_pagination.py::test_page_is_stable_ordered_and_next_offset_walks_to_exhaustion`, `::test_id_tiebreak_is_deterministic_for_equal_updated_at`, `::test_page_is_owner_scoped`, `::test_unpaginated_list_still_returns_everything`, `::test_config_clamps_page_size_under_the_max_ceiling`, `tests/integration/test_chat.py::test_http_conversation_list_is_backward_compatible_and_paginates` |
+| **SEC-94** | Conversation search is owner-scoped and fail-closed - `search_conversations` matches (case-insensitive substring) only over the caller's own conversation titles + live message content, so another user's conversation is never returned even when it matches the same term; it carries the matched live message content as a snippet (None when only the title matched); results are paginated + bounded. | `tests/security/test_conversation_search.py::test_search_is_owner_scoped_never_returns_another_users_conversation`, `::test_search_matches_title_and_live_message_with_snippet`, `::test_search_results_are_paginated_and_bounded`, `tests/integration/test_chat.py::test_http_conversation_search_is_owner_scoped` |
+| **SEC-95** | Superseded turns never surface as a live search match ([2026] VJS-COUNTY 4) - search only considers messages with `superseded_by IS NULL`, so a regenerated-away reply's term yields no hit while the same term in the live replacement does. | `tests/security/test_conversation_search.py::test_superseded_message_is_not_a_live_search_hit` |
+| **SEC-96** | Conversation search has no SQL/wildcard injection surface - the query is a bound parameter (never string-interpolated) with LIKE metacharacters escaped (`\` `%` `_`) and an ESCAPE clause, so a caller-supplied `%`/`_` is matched literally as a substring, never as a wildcard. | `tests/security/test_conversation_search.py::test_like_metacharacters_are_escaped_not_wildcards` |
+
 ## How a new invariant is added
 
 1. Write the test and mark it: `@pytest.mark.invariant("NEW-ID")`.

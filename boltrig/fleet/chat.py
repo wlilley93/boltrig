@@ -230,6 +230,32 @@ class ChatService:
     async def list_conversations(self, tenant_id: str, user_id: str) -> list[Conversation]:
         return await self._store.list_conversations(tenant_id, user_id)
 
+    async def list_conversations_page(
+        self, tenant_id: str, user_id: str, *, limit: int | None = None, offset: int = 0
+    ) -> tuple[list[Conversation], int | None]:
+        # Owner-scoped, bounded page (US-CONV-09). The page size is resolved against
+        # ChatConfig here (config-as-data lives on the service): a caller-supplied
+        # limit is clamped DOWN to the configured ceiling, None => the conservative
+        # default. The unpaginated list_conversations stays untouched for callers who
+        # do not opt in.
+        size = self._cfg.resolve_page_size(limit)
+        return await self._store.list_conversations_page(
+            tenant_id, user_id, limit=size, offset=max(0, offset)
+        )
+
+    async def search_conversations(
+        self, tenant_id: str, user_id: str, query: str,
+        *, limit: int | None = None, offset: int = 0,
+    ) -> tuple[list[tuple[Conversation, str | None]], int | None]:
+        # Owner-scoped search (US-CONV-10): scoping is the store's (tenant + this
+        # user only), so a caller only ever sees their own conversations - never
+        # another user's, even a scoped-read role. Same ChatConfig page ceiling as
+        # the list.
+        size = self._cfg.resolve_page_size(limit)
+        return await self._store.search_conversations(
+            tenant_id, user_id, query, limit=size, offset=max(0, offset)
+        )
+
     async def get_messages(
         self, tenant_id: str, user_id: str, role: str, conversation_id: str
     ) -> list[ConversationMessage] | None:

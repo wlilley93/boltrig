@@ -324,6 +324,27 @@ class Store(Protocol):
     async def create_conversation(self, conv: Conversation) -> None: ...
     async def get_conversation(self, tenant_id: str, conv_id: str) -> Conversation | None: ...
     async def list_conversations(self, tenant_id: str, user_id: str) -> list[Conversation]: ...
+    # Paginated conversation list (US-CONV-09). Same owner scope as
+    # ``list_conversations`` (tenant + user), stable ordering updated_at DESC with an
+    # id ASC tiebreak so a page boundary is deterministic. Returns the page's items
+    # plus the next offset (None when the list is exhausted). ``limit`` is the
+    # already-resolved page size (the caller clamps it under the config ceiling);
+    # ``offset`` is 0-based. Parameterised - never string-interpolated.
+    async def list_conversations_page(
+        self, tenant_id: str, user_id: str, *, limit: int, offset: int = 0
+    ) -> tuple[list[Conversation], int | None]: ...
+    # Owner-scoped conversation search (US-CONV-10). Case-insensitive substring
+    # match over the CALLER'S OWN conversations only (tenant + user) - it can never
+    # surface another user's thread. A conversation matches when its title matches OR
+    # any of its LIVE (non-superseded, [2026] VJS-COUNTY 4) messages' content matches;
+    # a superseded turn is never a live hit. Returns (Conversation, snippet) pairs
+    # (snippet = the matched live message content, or None when only the title
+    # matched) with the same stable ordering + next offset as the list page. The
+    # query is a bound parameter with LIKE metacharacters escaped, so there is no SQL
+    # injection or wildcard-injection surface.
+    async def search_conversations(
+        self, tenant_id: str, user_id: str, query: str, *, limit: int, offset: int = 0
+    ) -> tuple[list[tuple[Conversation, str | None]], int | None]: ...
     async def update_conversation(self, conv: Conversation) -> None: ...
     async def add_message(self, message: ConversationMessage) -> None: ...
     async def list_messages(

@@ -144,6 +144,27 @@ def _get_kernel(request: Request) -> Kernel:
     return request.app.state.kernel
 
 
+# The conversation-list item shape the UI consumes (shared by the plain list, the
+# paginated list, and search so all three surfaces agree field-for-field).
+def _conversation_view(c) -> dict:
+    return {
+        "id": c.id, "title": c.title, "status": c.status.value,
+        "updated_at": c.updated_at.isoformat(),
+    }
+
+
+_SNIPPET_MAX = 240
+
+
+def _snippet(text: str | None) -> str | None:
+    """A short, bounded preview of a matched message body for the search results
+    (US-CONV-10). Never the whole message - just enough to show why it matched."""
+    if not text:
+        return None
+    text = text.strip()
+    return text if len(text) <= _SNIPPET_MAX else text[:_SNIPPET_MAX].rstrip() + "..."
+
+
 def create_app(
     kernel: Kernel | None = None,
     *,
@@ -338,19 +359,59 @@ def create_app(
         return StreamingResponse(stream(), media_type="text/event-stream")
 
     @app.get("/v1/conversations")
-    async def conversations(request: Request, p: Principal = Depends(principal)) -> dict:
+    async def conversations(
+        request: Request,
+        limit: int | None = None,
+        offset: int = 0,
+        p: Principal = Depends(principal),
+    ) -> dict:
         chat_svc = getattr(request.app.state, "chat", None)
         if chat_svc is None:
             return {"conversations": []}
-        convs = await chat_svc.list_conversations(p.tenant_id, p.subject)
+        # Backward-compatible (US-CONV-09): a bare call (no limit, offset 0) returns
+        # the full owner-scoped list in the original shape. Opting into pagination
+        # (a limit, or a non-zero offset) returns one bounded page plus next_offset
+        # (null when the list is exhausted); the page size is clamped under the
+        # ChatConfig ceiling inside the service.
+        if limit is None and offset <= 0:
+            convs = await chat_svc.list_conversations(p.tenant_id, p.subject)
+            return {"conversations": [_conversation_view(c) for c in convs]}
+        items, next_offset = await chat_svc.list_conversations_page(
+            p.tenant_id, p.subject, limit=limit, offset=offset
+        )
         return {
-            "conversations": [
-                {
-                    "id": c.id, "title": c.title, "status": c.status.value,
-                    "updated_at": c.updated_at.isoformat(),
-                }
-                for c in convs
-            ]
+            "conversations": [_conversation_view(c) for c in items],
+            "next_offset": next_offset,
+        }
+
+    @app.get("/v1/conversations/search")
+    async def search_conversations(
+        request: Request,
+        q: str = "",
+        limit: int | None = None,
+        offset: int = 0,
+        p: Principal = Depends(principal),
+    ):
+        # Owner-scoped conversation search (US-CONV-10): case-insensitive substring
+        # over the CALLER'S OWN conversation titles + LIVE message content, paginated,
+        # fail-closed to the caller's scope. Registered BEFORE the /{conversation_id}
+        # route so "search" is never captured as a conversation id.
+        chat_svc = getattr(request.app.state, "chat", None)
+        if chat_svc is None:
+            return {"results": [], "next_offset": None}
+        query = q.strip()
+        if not query:
+            return JSONResponse({"status": "error", "reason": "q is required"},
+                                status_code=400)
+        pairs, next_offset = await chat_svc.search_conversations(
+            p.tenant_id, p.subject, query, limit=limit, offset=offset
+        )
+        return {
+            "results": [
+                {**_conversation_view(c), "snippet": _snippet(snippet)}
+                for c, snippet in pairs
+            ],
+            "next_offset": next_offset,
         }
 
     @app.get("/v1/conversations/{conversation_id}")

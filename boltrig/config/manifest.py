@@ -208,6 +208,16 @@ DEFAULT_HEARTBEAT_SECONDS = 15.0
 DEFAULT_COMPACTION_THRESHOLD = 40
 DEFAULT_COMPACTION_KEEP_RECENT = 12
 
+# Conversation list + search pagination (US-CONV-09). Conservative NON-ZERO code
+# defaults: ``conversation_page_size`` is the page size used when a caller asks for
+# none, and ``conversation_max_page_size`` is the HARD ceiling on how many rows any
+# single page may return (a caller-supplied ``limit`` is clamped down to it, so an
+# unbounded scan is impossible). Both are tighten-only ceilings like the attachment
+# caps: a manifest may only LOWER them (a smaller, more conservative page), never
+# grow a page past the code ceiling.
+DEFAULT_CONVERSATION_PAGE_SIZE = 25
+DEFAULT_CONVERSATION_MAX_PAGE_SIZE = 100
+
 
 @dataclass(frozen=True)
 class ChatConfig:
@@ -237,6 +247,28 @@ class ChatConfig:
     # continuity exactly.
     compaction_threshold: int = DEFAULT_COMPACTION_THRESHOLD
     compaction_keep_recent: int = DEFAULT_COMPACTION_KEEP_RECENT
+    # Conversation list + search pagination (US-CONV-09). ``conversation_page_size``
+    # is the conservative default page; ``conversation_max_page_size`` is the hard
+    # ceiling a caller-supplied limit is clamped down to. Both are tighten-only.
+    conversation_page_size: int = DEFAULT_CONVERSATION_PAGE_SIZE
+    conversation_max_page_size: int = DEFAULT_CONVERSATION_MAX_PAGE_SIZE
+
+    def resolve_page_size(self, requested: int | None) -> int:
+        """The effective page size for one conversation list/search page.
+
+        The max page size is the hard ceiling (US-CONV-09): a caller-supplied
+        ``limit`` is clamped DOWN into ``[1, conversation_max_page_size]`` so no
+        page can ever exceed the ceiling, and ``None`` falls back to the
+        conservative default (itself clamped under the ceiling). The floor of 1
+        keeps a page from degenerating to zero rows and stalling pagination."""
+        ceiling = max(1, self.conversation_max_page_size)
+        if requested is None:
+            return max(1, min(self.conversation_page_size, ceiling))
+        try:
+            value = int(requested)
+        except (TypeError, ValueError):
+            return max(1, min(self.conversation_page_size, ceiling))
+        return max(1, min(value, ceiling))
 
 
 @dataclass(frozen=True)
@@ -521,6 +553,7 @@ def _parse_chat(raw: Mapping[str, Any]) -> ChatConfig:
     }
     caps = raw.get("attachments") or {}
     compaction = raw.get("compaction") or {}
+    pagination = raw.get("pagination") or {}
     return ChatConfig(
         skills_by_role=skills_by_role,
         default_skills=_as_tuple(raw.get("default_skills")),
@@ -541,6 +574,14 @@ def _parse_chat(raw: Mapping[str, Any]) -> ChatConfig:
         ),
         compaction_keep_recent=_tighten_cap(
             DEFAULT_COMPACTION_KEEP_RECENT, compaction.get("keep_recent")
+        ),
+        # Pagination is tighten-only (US-CONV-09): a manifest may only shrink the
+        # default/ceiling page, never grow a page past the code ceiling.
+        conversation_page_size=_tighten_cap(
+            DEFAULT_CONVERSATION_PAGE_SIZE, pagination.get("page_size")
+        ),
+        conversation_max_page_size=_tighten_cap(
+            DEFAULT_CONVERSATION_MAX_PAGE_SIZE, pagination.get("max_page_size")
         ),
     )
 

@@ -441,11 +441,57 @@ class InMemoryStore(ChannelStoreMem):
         return self._convs.get((tenant_id, conv_id))
 
     async def list_conversations(self, tenant_id, user_id):
+        return self._owned_conversations(tenant_id, user_id)
+
+    def _owned_conversations(self, tenant_id, user_id):
+        # Owner scope (SEC-25) + stable ordering: updated_at DESC with an id ASC
+        # tiebreak. Python's sort is stable, so sorting by id first then by
+        # updated_at (reverse) leaves ties ordered by ascending id deterministically.
         out = [
             c for (t, _), c in self._convs.items()
             if t == tenant_id and c.user_id == user_id
         ]
-        return sorted(out, key=lambda c: c.updated_at, reverse=True)
+        out.sort(key=lambda c: c.id)
+        out.sort(key=lambda c: c.updated_at, reverse=True)
+        return out
+
+    @staticmethod
+    def _page(rows, limit, offset):
+        # A stable window over an already-ordered list: the slice plus the next
+        # offset (None once the list is exhausted). Mirrors the postgres LIMIT/OFFSET.
+        start = max(0, offset)
+        window = rows[start:start + limit]
+        nxt = start + limit if start + limit < len(rows) else None
+        return window, nxt
+
+    async def list_conversations_page(self, tenant_id, user_id, *, limit, offset=0):
+        return self._page(self._owned_conversations(tenant_id, user_id), limit, offset)
+
+    async def search_conversations(self, tenant_id, user_id, query, *, limit, offset=0):
+        # Owner-scoped substring search (US-CONV-10): only the caller's own
+        # conversations are ever considered, so another user's thread can never
+        # surface. A conversation matches on its title OR any LIVE (non-superseded,
+        # [2026] VJS-COUNTY 4) message content; the snippet is the matched live
+        # message content, or None when only the title matched.
+        needle = (query or "").casefold()
+        matches: list[tuple] = []
+        for conv in self._owned_conversations(tenant_id, user_id):
+            snippet = None
+            if not needle or (conv.title and needle in conv.title.casefold()):
+                matches.append((conv, None))
+                continue
+            for m in self._messages.get(conv.id, []):
+                if (
+                    m.tenant_id == tenant_id
+                    and m.superseded_by is None  # a superseded turn is never a live hit
+                    and m.content
+                    and needle in m.content.casefold()
+                ):
+                    snippet = m.content
+                    break
+            if snippet is not None:
+                matches.append((conv, snippet))
+        return self._page(matches, limit, offset)
 
     async def update_conversation(self, conv):
         self._convs[(conv.tenant_id, conv.id)] = conv

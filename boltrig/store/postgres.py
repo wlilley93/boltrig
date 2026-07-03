@@ -835,10 +835,66 @@ class PostgresStore(ChannelStorePG):
     async def list_conversations(self, tenant_id, user_id):
         rows = await self._pool.fetch(
             """SELECT * FROM conversations WHERE tenant_id=$1 AND user_id=$2
-               ORDER BY updated_at DESC""",
+               ORDER BY updated_at DESC, id ASC""",
             tenant_id, user_id,
         )
         return [_conversation(r) for r in rows]
+
+    async def list_conversations_page(self, tenant_id, user_id, *, limit, offset=0):
+        # Owner scope (SEC-25) + stable ordering (updated_at DESC, id ASC tiebreak),
+        # bounded by the resolved page size. Fetch limit+1 to learn whether a next
+        # page exists without a second COUNT query; parameterised throughout.
+        off = max(0, offset)
+        rows = await self._pool.fetch(
+            """SELECT * FROM conversations WHERE tenant_id=$1 AND user_id=$2
+               ORDER BY updated_at DESC, id ASC
+               LIMIT $3 OFFSET $4""",
+            tenant_id, user_id, limit + 1, off,
+        )
+        has_more = len(rows) > limit
+        items = [_conversation(r) for r in rows[:limit]]
+        return items, (off + limit if has_more else None)
+
+    async def search_conversations(self, tenant_id, user_id, query, *, limit, offset=0):
+        # Owner-scoped substring search (US-CONV-10): the WHERE pins the caller's own
+        # (tenant, user) rows, so another user's thread can never surface. A
+        # conversation matches on its title OR a LIVE (superseded_by IS NULL,
+        # [2026] VJS-COUNTY 4) message's content, so a superseded turn is never a live
+        # hit. ``query`` is a BOUND parameter with LIKE metacharacters escaped (see
+        # ``_like_escape`` + ESCAPE), so there is no SQL-injection or wildcard surface.
+        # The snippet is the matched live message content, or NULL when only the title
+        # matched (mirrors the in-memory store). Fetch limit+1 for the next offset.
+        off = max(0, offset)
+        pattern = f"%{_like_escape(query or '')}%"
+        rows = await self._pool.fetch(
+            r"""SELECT c.*,
+                       CASE WHEN c.title ILIKE $3 ESCAPE '\' THEN NULL ELSE (
+                         SELECT m.content FROM conversation_messages m
+                          WHERE m.tenant_id = c.tenant_id AND m.conversation_id = c.id
+                            AND m.superseded_by IS NULL
+                            AND m.content ILIKE $3 ESCAPE '\'
+                          ORDER BY m.created_at ASC
+                          LIMIT 1
+                       ) END AS matched_snippet
+                  FROM conversations c
+                 WHERE c.tenant_id = $1 AND c.user_id = $2
+                   AND (
+                         c.title ILIKE $3 ESCAPE '\'
+                         OR EXISTS (
+                              SELECT 1 FROM conversation_messages m
+                               WHERE m.tenant_id = c.tenant_id
+                                 AND m.conversation_id = c.id
+                                 AND m.superseded_by IS NULL
+                                 AND m.content ILIKE $3 ESCAPE '\'
+                            )
+                       )
+                 ORDER BY c.updated_at DESC, c.id ASC
+                 LIMIT $4 OFFSET $5""",
+            tenant_id, user_id, pattern, limit + 1, off,
+        )
+        has_more = len(rows) > limit
+        out = [(_conversation(r), r["matched_snippet"]) for r in rows[:limit]]
+        return out, (off + limit if has_more else None)
 
     async def update_conversation(self, c: Conversation):
         await self._pool.execute(
@@ -1448,6 +1504,15 @@ def _audit(r):
         cost_micros=r["cost_micros"], skills_loaded=list(r["skills_loaded"] or []),
         detail=r["detail"] or {}, seq=r["seq"], prev_hash=r["prev_hash"], hash=r["hash"],
     )
+
+
+def _like_escape(value: str) -> str:
+    """Escape LIKE/ILIKE metacharacters so a user query is a pure substring match
+    (US-CONV-10). Paired with ``ESCAPE '\\'`` in the SQL: a literal backslash,
+    percent or underscore in the query is neutralised, so a caller can never turn a
+    search term into a wildcard. This is substring hygiene; injection is already
+    foreclosed because the value is a bound parameter, never interpolated."""
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 def _conversation(r):

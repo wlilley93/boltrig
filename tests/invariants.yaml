@@ -784,3 +784,27 @@ invariants:
     description: Below the threshold the composition is unchanged - with fewer than compaction_threshold live messages (or compaction disabled) compose_turn_task renders the full verbatim history byte-identical to the pre-compaction continuity render, even when a summary row exists, so short conversations are never altered.
     tests:
       - tests/security/test_conversation_compaction.py::test_below_threshold_composition_is_unchanged
+
+  # --- Conversation history: pagination + owner-scoped search (US-CONV-09/10) --
+  FR-CONV-07:
+    description: The conversation list paginates stably and bounded (US-CONV-09) - list_conversations_page returns one owner-scoped page ordered updated_at DESC with an id ASC tiebreak (deterministic across runs and for equal timestamps) plus the next offset (None once exhausted), the page size is a ChatConfig ceiling a caller-supplied limit is clamped DOWN to (None => the conservative default, never zero rows) so an unbounded scan is impossible, and the original unpaginated list_conversations still returns everything unchanged.
+    tests:
+      - tests/store/test_conversation_pagination.py::test_page_is_stable_ordered_and_next_offset_walks_to_exhaustion
+      - tests/store/test_conversation_pagination.py::test_id_tiebreak_is_deterministic_for_equal_updated_at
+      - tests/store/test_conversation_pagination.py::test_page_is_owner_scoped
+      - tests/store/test_conversation_pagination.py::test_unpaginated_list_still_returns_everything
+      - tests/store/test_conversation_pagination.py::test_config_clamps_page_size_under_the_max_ceiling
+  SEC-94:
+    description: Conversation search is owner-scoped and fail-closed (US-CONV-10) - search_conversations matches (case-insensitive substring) ONLY over the caller's own (tenant, user) conversation titles + live message content, so another user's conversation is never returned even when it matches the same term, it carries the matched live message content as a snippet (None when only the title matched), and results are paginated + bounded with a next offset (None when exhausted).
+    tests:
+      - tests/security/test_conversation_search.py::test_search_is_owner_scoped_never_returns_another_users_conversation
+      - tests/security/test_conversation_search.py::test_search_matches_title_and_live_message_with_snippet
+      - tests/security/test_conversation_search.py::test_search_results_are_paginated_and_bounded
+  SEC-95:
+    description: Superseded turns never surface as a live search match ([2026] VJS-COUNTY 4 exclusion) - search_conversations only considers messages with superseded_by IS NULL, so a regenerated-away reply's term yields no hit while the same term in the live replacement message does (mirrors the continuity/compaction superseded filtering).
+    tests:
+      - tests/security/test_conversation_search.py::test_superseded_message_is_not_a_live_search_hit
+  SEC-96:
+    description: Conversation search has no SQL/wildcard injection surface (US-CONV-10) - the query is a BOUND parameter (never string-interpolated into SQL) with LIKE metacharacters escaped (backslash/percent/underscore) and an ESCAPE clause, so a caller-supplied percent or underscore is matched literally as a substring and can never act as a match-anything/single-char wildcard.
+    tests:
+      - tests/security/test_conversation_search.py::test_like_metacharacters_are_escaped_not_wildcards
