@@ -1404,6 +1404,22 @@ textarea.code--tall {
   gap: 6px;
 }
 
+/* A keys-only callout (the bounded chat stream carries no raw input/output), so
+   its head is not a disclosure toggle. */
+.tool-card--flat .tool-card__head {
+  cursor: default;
+}
+
+/* argument / result KEY chips (from args_summary / result_summary) - keys only,
+   never values. */
+.tool-card__keys {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
 .tool-card__io pre {
   background: var(--bg-1);
   border: 1px solid var(--border);

@@ -8,6 +8,7 @@ import type {
   ActivateAdapterRequest,
   ActivateAdapterResponse,
   AdapterInventoryResponse,
+  AnswerQuestionResponse,
   AdapterSourceResponse,
   AdminInvitationsResponse,
   AdminUsersResponse,
@@ -227,6 +228,21 @@ export const api = {
       method: "POST",
       body: { decision: body.decision, notes: body.notes ?? "" },
     });
+  },
+
+  // Answer an agent's clarifying QUESTION (US-CHAT-12). Owner-only and
+  // fail-closed server-side; tolerateStatus so a 400 (empty answer), 403 (not
+  // your run), 404 (unknown) or 409 (not a question) renders as a notice in the
+  // card instead of throwing. On success the backend requeues the paused run so
+  // the stream resumes on its own.
+  answerQuestion(
+    questionId: string,
+    answer: string,
+  ): Promise<AnswerQuestionResponse> {
+    return request<AnswerQuestionResponse>(
+      `/v1/hitl/${encodeURIComponent(questionId)}/answer`,
+      { method: "POST", body: { answer }, tolerateStatus: true },
+    );
   },
 
   auditTree(runId: string): Promise<AuditTreeResponse> {
@@ -977,6 +993,11 @@ function emitFrame(
   if (!payload || payload === "[DONE]") return null;
   try {
     const ev = JSON.parse(payload) as ChatEvent;
+    // A heartbeat is a keep-alive only: receiving its frame already reset the
+    // idle-timeout guard (the guard resets on every reader.read that returns),
+    // so we drop it here without dispatching. It must never reach a consumer or
+    // land in the transcript - it is not rendered and not folded into a turn.
+    if (ev.type === "heartbeat") return null;
     onEvent(ev);
     return ev;
   } catch {

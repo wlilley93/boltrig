@@ -223,17 +223,65 @@ export interface ChatReasoningDelta {
   type: "reasoning_delta";
   delta: string;
 }
+// A tool call as it appears live. The user-facing chat stream is bounded (K-20,
+// US-CHAT-10): it carries only `tool` (the verb id), a `call_id` to pair the
+// call with its result, and an `args_summary` of the argument KEYS (never the
+// values). The run relay additionally carries the full `verb`/`input` for the
+// run canvas + the durable record, which the Run drawer renders; both are
+// optional so this one type serves both streams.
+export interface ToolArgsSummary {
+  keys: string[];
+  count?: number;
+}
 export interface ChatToolCall {
   type: "tool_call";
-  verb: string;
+  run_id?: string;
+  // the verb id: the chat stream sends `tool`; the run relay also carries `verb`
+  tool?: string;
+  verb?: string;
+  call_id?: string;
+  args_summary?: ToolArgsSummary;
+  // full input rides only on the run relay (absent on the bounded chat stream)
   input?: unknown;
-  status: "running";
+  // legacy: older frames set a literal "running"; the normaliser no longer needs it
+  status?: "running";
+}
+// The paired result, matched to its call by `call_id`. The chat stream carries
+// only `call_id`, `status` and a keys-only `result_summary`; the run relay also
+// carries the full `output`.
+export interface ToolResultSummary {
+  keys?: string[];
+  status?: string;
+  [key: string]: unknown;
 }
 export interface ChatToolResult {
   type: "tool_result";
-  verb: string;
-  status: "ok" | "error";
+  run_id?: string;
+  call_id?: string;
+  verb?: string;
+  // "ok" | "error" | "degraded" | a denial/error reason string
+  status: string;
+  result_summary?: ToolResultSummary;
+  // full output rides only on the run relay (absent on the bounded chat stream)
   output?: unknown;
+}
+// A keep-alive on a quiet-but-live stream. It is NOT part of the transcript and
+// is never rendered: its sole job is to reset the client idle-timeout guard
+// (handled in the SSE pump, so it never reaches a consumer). See client.ts.
+export interface ChatHeartbeat {
+  type: "heartbeat";
+  run_id?: string;
+}
+// The agent is asking the user a clarifying QUESTION (US-CHAT-12). The prompt +
+// choices are agent-authored model output and may surface on the stream; the
+// user's ANSWER is submitted (and enveloped as untrusted data) via
+// POST /v1/hitl/{question_id}/answer, which requeues the paused run.
+export interface ChatQuestion {
+  type: "question";
+  run_id?: string;
+  question_id: string;
+  prompt: string;
+  choices?: string[];
 }
 export interface ChatSubagent {
   type: "subagent";
@@ -276,9 +324,23 @@ export type ChatEvent =
   | ChatToolResult
   | ChatSubagent
   | ChatHitlEvent
+  | ChatQuestion
+  | ChatHeartbeat
   | ChatMessageEnd
   | ChatCancelled
   | ChatWorkflowStep;
+
+// POST /v1/hitl/{question_id}/answer: owner-only, fail-closed answer to an
+// agent's clarifying QUESTION. On success {status:"ok", question_id, response_id,
+// run_id} and the backend requeues the paused run; a 400/403/404/409 returns
+// {status:"error"|"denied", reason} which the card surfaces in place.
+export interface AnswerQuestionResponse {
+  status: string;
+  question_id?: string;
+  response_id?: string;
+  run_id?: string;
+  reason?: string;
+}
 
 // ===========================================================================
 // Round Three: authoring studios, admin console, insight, eval, personal.

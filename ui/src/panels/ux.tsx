@@ -249,7 +249,7 @@ export function Hint({ children }: { children: ReactNode }) {
 // run-state / governance term surfaced across the panels. Keep copy calm and
 // glanceable; the badges below read their label + tooltip from here. ---------
 
-interface Term {
+export interface Term {
   label: string;
   tip: string;
   cls: string; // a .badge--* modifier for colour
@@ -285,6 +285,17 @@ export const HITL_TYPE: Record<string, Term> = {
 export const HITL_URGENCY: Record<string, Term> = {
   blocking: { label: "Blocks the run", tip: "The run is paused until you answer.", cls: "badge--conseq-high" },
   async: { label: "Can wait", tip: "Answer when you get to it; the run is not blocked.", cls: "badge" },
+};
+
+// The live state of a single tool call in a transcript callout: "pending" while
+// the call is in flight (before its paired result arrives), then the result
+// status. A denial / error reason string that is not one of these falls back to
+// the raw token via StatusBadge.
+export const TOOL_STATUS: Record<string, Term> = {
+  pending: { label: "Running", tip: "The tool call is in flight - awaiting its result.", cls: "badge--tool-running" },
+  ok: { label: "OK", tip: "The tool call succeeded.", cls: "badge--tool-ok" },
+  degraded: { label: "Degraded", tip: "Worked, but a system was unhealthy.", cls: "badge--degraded" },
+  error: { label: "Error", tip: "The tool call failed.", cls: "badge--tool-error" },
 };
 
 export const CONSEQUENCE: Record<string, Term> = {
