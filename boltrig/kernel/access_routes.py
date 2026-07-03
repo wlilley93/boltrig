@@ -31,9 +31,31 @@ from boltrig.models import (
 )
 
 
+# Organisation-administration roles. org-admin is the IdP-role vocabulary; the
+# console product tiers (superadmin/admin, per CF_ACCESS_TIERS) are the same
+# authority under the Cloudflare-Access / first-party-session vocabularies, so the
+# founding OWNER seated by ``boltrig initiate`` (role superadmin) can create the
+# first invitations that make invite-only login self-sustaining ([2026] VJS-COUNTY 7).
+_ADMIN_ROLES = frozenset({"org-admin", "superadmin", "admin"})
+
+
 def _require_admin(p) -> None:
-    if p.role != "org-admin":
+    if p.role not in _ADMIN_ROLES:
         raise GrantMissing("organisation administration not permitted for this role")
+
+
+def _reject_escalation(p, role, scope) -> None:
+    """Privilege ceiling (SEC-102): no principal may grant a role ranked above its
+    own, and only the owner tier (superadmin) may grant all-authority scope. Closes
+    the admin -> superadmin self-escalation via update_user / create_invite (the
+    role/scope were previously written from the request body with no clamp, and
+    first-party accept-invite materialises a pre-staged role as a real credential)."""
+    from boltrig.identity.rbac import _role_rank
+
+    if role is not None and _role_rank(str(role)) < _role_rank(p.role):
+        raise GrantMissing("cannot grant a role ranked above your own")
+    if isinstance(scope, dict) and scope.get("all") and p.role != "superadmin":
+        raise GrantMissing("only the owner may grant all-authority scope")
 
 
 async def _audit(kernel, p, verb: str, detail: dict, status: str = "ok") -> None:
@@ -403,6 +425,7 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
     @app.patch("/v1/admin/users/{user_id}")
     async def update_user(user_id: str, body: dict, k=K, p=P) -> JSONResponse:
         _require_admin(p)
+        _reject_escalation(p, body.get("role"), body.get("scope"))
         user = await k.store.get_user(p.tenant_id, user_id)
         if user is None:
             return JSONResponse({"status": "error", "reason": "not_found"}, status_code=404)
@@ -431,24 +454,35 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
 
     @app.post("/v1/admin/invitations")
     async def create_invite(body: dict, k=K, p=P) -> JSONResponse:
+        from boltrig.identity.invites import generate_invite_token, hash_invite_token
         from boltrig.identity.tokens import bounded_expiry
 
         _require_admin(p)
+        _reject_escalation(p, body.get("role"), body.get("scope"))
         email = (body.get("email") or "").strip()
         if not email:
             return JSONResponse({"status": "error", "reason": "email is required"},
                                 status_code=400)
+        # Mint a single-use invite-token secret for first-party invite-only login
+        # ([2026] VJS-COUNTY 7, D1): store ONLY its hash; return the secret ONCE so
+        # the admin can hand the invitee an accept-invite link. Mirrors the SEC-34
+        # PAT pattern (hashed at rest, bounded by the invitation's own expiry,
+        # revocable via the revoke route). SSO-only deployments simply ignore it.
+        invite_secret = generate_invite_token()
         inv = UserInvitation(
             id=uuid.uuid4().hex, tenant_id=p.tenant_id, email=email,
             intended_role=body.get("role", "agent"),
             intended_scope=body.get("scope", {}),
             invited_by=p.subject,
             expires_at=bounded_expiry(utcnow(), body.get("ttl_days", 14)),
+            token_hash=hash_invite_token(invite_secret),
         )
         await k.store.add_invitation(inv)
+        # Keys-only audit: email + role, never the invite secret (D8).
         await _audit(k, p, "admin.invite.create",
                      {"email": email, "role": inv.intended_role})
-        return JSONResponse({"status": "ok", "id": inv.id, "email": email})
+        return JSONResponse({"status": "ok", "id": inv.id, "email": email,
+                             "invite_token": invite_secret})
 
     @app.delete("/v1/admin/invitations/{invite_id}")
     async def revoke_invite(invite_id: str, k=K, p=P) -> JSONResponse:

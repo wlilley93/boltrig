@@ -378,6 +378,17 @@ def select_principal_resolver():
     """
     refuse_default_audit_key_in_prod()  # K-19: a default audit key in prod is fatal
     settings = load_settings()
+    if settings.session_auth_configured:
+        # First-party invite-only login ([2026] VJS-COUNTY 7, D3). Opt-in via
+        # BOLTRIG_AUTH_MODE=session; selected in place of Cloudflare Access. Verifies
+        # the Boltrig session cookie and resolves the Principal, fail-closed. The CF
+        # Access resolver stays in the code (below) so a deploy that has not opted in
+        # is unchanged - the prod cutover / CF-Access removal is Principal-gated (D10).
+        from boltrig.identity import build_session_resolver
+
+        tenant = settings.session_tenant or _DEFAULT_TENANT
+        log.info("first-party session auth enabled (tenant %s)", tenant)
+        return build_session_resolver(tenant)
     if settings.cf_access_configured:
         import json
 

@@ -637,6 +637,15 @@ def create_app(
 
     register_access_routes(app, principal_dep=principal, get_kernel=_get_kernel)
 
+    # First-party invite-only login ([2026] VJS-COUNTY 7): accept-invite / login /
+    # logout / refresh. The public login+accept routes take no principal; logout +
+    # refresh depend on the session principal (which enforces CSRF on these
+    # mutating requests). Registering them is harmless under other auth modes (no
+    # user has a password), so they are always wired.
+    from boltrig.api.auth_routes import register_auth_routes
+
+    register_auth_routes(app, principal_dep=principal, get_kernel=_get_kernel)
+
     # Round Five: kernel-governed memory verbs + scoped reads.
     from .memory_routes import register_memory_routes
 

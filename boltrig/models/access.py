@@ -8,6 +8,15 @@ bounded by a required expiry, is stored only as a hash, and is revocable. An
 invitation only pre-stages a role/scope for an SSO-authenticated identity; it
 creates no password and grants no access until the invitee authenticates through
 the IdP (SEC-35).
+
+First-party invite-only login ([2026] VJS-COUNTY 7) reuses these same records: an
+``UserInvitation`` optionally carries a single-use HASHED, EXPIRING invite token
+(``token_hash``, the secret shown once, never stored in the clear) that the
+accept-invite flow consumes to set a password; a ``UserSession`` becomes a
+Boltrig-issued browser session carrying its own hashed opaque secret
+(``token_hash``), a bounded ``expires_at``, and a session-bound CSRF token. No
+password ever lives on these records - the password hash is a credential kept
+apart from the identity row (see the store's password-credential seam).
 """
 
 from __future__ import annotations
@@ -46,6 +55,11 @@ class UserInvitation:
     created_at: datetime = field(default_factory=utcnow)
     expires_at: datetime | None = None
     status: str = "pending"  # pending | accepted | revoked | expired
+    # First-party invite-only login ([2026] VJS-COUNTY 7, D1): the sha256 of a
+    # single-use invite-token secret. The secret is shown ONCE at invite creation
+    # and never stored; accept-invite hashes the presented token and matches it
+    # here. None for a legacy SSO-only invitation that carries no token.
+    token_hash: str | None = None
 
 
 # --- per-user settings/preferences (SET-*) -----------------------------------
@@ -68,3 +82,12 @@ class UserSession:
     created_at: datetime = field(default_factory=utcnow)
     last_seen_at: datetime | None = None
     revoked: bool = False
+    # First-party session login ([2026] VJS-COUNTY 7, D2/D6). The cookie carries a
+    # high-entropy opaque secret; only its sha256 is persisted here (token_hash),
+    # mirroring the SEC-34 PAT pattern. expires_at bounds the session lifetime
+    # (fail-closed once past); csrf_token is the session-bound double-submit token
+    # a mutating cookie request must echo in the X-Boltrig-CSRF header. All three
+    # are None for a legacy directory-listing session row that carries no secret.
+    token_hash: str | None = None
+    expires_at: datetime | None = None
+    csrf_token: str | None = None

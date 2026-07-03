@@ -808,3 +808,31 @@ invariants:
     description: Conversation search has no SQL/wildcard injection surface (US-CONV-10) - the query is a BOUND parameter (never string-interpolated into SQL) with LIKE metacharacters escaped (backslash/percent/underscore) and an ESCAPE clause, so a caller-supplied percent or underscore is matched literally as a substring and can never act as a match-anything/single-char wildcard.
     tests:
       - tests/security/test_conversation_search.py::test_like_metacharacters_are_escaped_not_wildcards
+
+  # --- First-party invite-only login ([2026] VJS-COUNTY 7) -------------------
+  SEC-97:
+    description: Login is invite-only with no open self-signup - an account is created only by consuming a single-use, hashed, expiring admin invite token (accept-invite), there is no signup route, and a token redeems exactly once (a replay is refused).
+    tests:
+      - tests/security/test_first_party_login.py::test_invite_only_no_self_signup_and_single_use
+  SEC-98:
+    description: First-party passwords are hashed with argon2id and are non-reversible - the stored form is an argon2id PHC string (embedded per-user salt), never the plaintext, verify accepts the right password and rejects a wrong one, and the plaintext never enters the User identity row or the audit chain.
+    tests:
+      - tests/security/test_first_party_login.py::test_password_is_hashed_non_reversible_and_never_logged
+  SEC-99:
+    description: Login is rate-limited and non-enumerating - it is throttled through the existing RateLimiter (per-identity bound trips with 429) and an unknown email and a known-but-wrong password return a byte-identical generic failure, so response content never reveals which emails exist.
+    tests:
+      - tests/security/test_first_party_login.py::test_login_is_rate_limited_and_non_enumerating
+  SEC-100:
+    description: The session cookie is httpOnly + Secure + SameSite=strict with a bounded lifetime and is revocable - login sets those cookie flags and a Max-Age, the persisted session carries a future expires_at, and a logout revokes it so a subsequent authenticated request is denied.
+    tests:
+      - tests/security/test_first_party_login.py::test_session_cookie_is_httponly_secure_bounded_and_revocable
+  SEC-101:
+    description: The session principal resolver is fail-closed and CSRF-protected - a missing/expired/revoked session (and a deactivated user) is denied 401, a mutating cookie request without the session-bound X-Boltrig-CSRF header is refused 403 while a safe GET is exempt, and the correct CSRF token is accepted.
+    tests:
+      - tests/security/test_first_party_login.py::test_resolver_fail_closed_and_csrf_protected
+  SEC-102:
+    description: Privilege ceiling on the roster routes (security review of COUNTY 7) - update_user and create_invite reject granting a role ranked above the actor's own, and only the owner tier (superadmin) may grant all-authority scope, so an admin cannot self-escalate to superadmin or invite a superadmin (materialised by first-party accept-invite). Granting an equal or lower role is allowed.
+    tests:
+      - tests/security/test_privilege_ceiling.py::test_admin_cannot_grant_a_role_above_its_own
+      - tests/security/test_privilege_ceiling.py::test_only_owner_may_grant_all_authority_scope
+      - tests/security/test_privilege_ceiling.py::test_granting_an_equal_or_lower_role_is_allowed

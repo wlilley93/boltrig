@@ -48,6 +48,14 @@ class Settings:
     cf_access_role_map: str | None = None  # JSON {email: role}
     cf_access_default_role: str = "none"  # role for an authed-but-unmapped email
     cf_access_tenant: str | None = None  # tenant the Access users belong to
+    # First-party invite-only login ([2026] VJS-COUNTY 7). Opt-in: BOLTRIG_AUTH_MODE
+    # =session selects the session principal resolver in place of Cloudflare Access,
+    # so an existing deploy (mode unset) is unchanged. The console is single-tenant;
+    # session_tenant is the tenant its users belong to. session_cookie_secure lets a
+    # LOCAL http dev box drop the Secure flag - it defaults ON so prod is safe.
+    auth_mode: str | None = None  # 'session' | None
+    session_tenant: str | None = None
+    session_cookie_secure: bool = True
 
     @property
     def oidc_configured(self) -> bool:
@@ -56,6 +64,10 @@ class Settings:
     @property
     def cf_access_configured(self) -> bool:
         return bool(self.cf_access_team_domain and self.cf_access_aud)
+
+    @property
+    def session_auth_configured(self) -> bool:
+        return (self.auth_mode or "").strip().lower() == "session"
 
 
 def load_settings(env: Mapping[str, str] | None = None) -> Settings:
@@ -78,4 +90,7 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         cf_access_role_map=e.get("CF_ACCESS_ROLE_MAP") or None,
         cf_access_default_role=(e.get("CF_ACCESS_DEFAULT_ROLE") or "none").strip(),
         cf_access_tenant=e.get("CF_ACCESS_TENANT") or None,
+        auth_mode=(e.get("BOLTRIG_AUTH_MODE") or "").strip().lower() or None,
+        session_tenant=e.get("BOLTRIG_SESSION_TENANT") or None,
+        session_cookie_secure=_as_bool(e.get("BOLTRIG_SESSION_COOKIE_SECURE"), default=True),
     )

@@ -1272,12 +1272,50 @@ class PostgresStore(ChannelStorePG):
         await self._pool.execute(
             """INSERT INTO user_invitations
                (id, tenant_id, email, intended_role, intended_scope, invited_by,
-                created_at, expires_at, status)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+                created_at, expires_at, status, token_hash)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
                ON CONFLICT (tenant_id, id) DO NOTHING""",
             inv.id, inv.tenant_id, inv.email, inv.intended_role, inv.intended_scope,
-            inv.invited_by, inv.created_at, inv.expires_at, inv.status,
+            inv.invited_by, inv.created_at, inv.expires_at, inv.status, inv.token_hash,
         )
+
+    async def find_invitation_by_token_hash(self, tenant_id, token_hash):
+        # First-party invite ([2026] VJS-COUNTY 7, D1): tenant-scoped (RLS-safe)
+        # lookup of a still-pending invitation by its token hash.
+        row = await self._pool.fetchrow(
+            """SELECT * FROM user_invitations
+               WHERE tenant_id=$1 AND status='pending' AND token_hash=$2""",
+            tenant_id, token_hash,
+        )
+        return _invitation(row)
+
+    async def consume_invitation(self, tenant_id, inv_id):
+        # Atomic single-use consume (D1): pending -> accepted, True only for the
+        # winner. RETURNING makes the CAS observable across concurrent redeemers.
+        row = await self._pool.fetchrow(
+            """UPDATE user_invitations SET status='accepted'
+               WHERE tenant_id=$1 AND id=$2 AND status='pending'
+               RETURNING id""",
+            tenant_id, inv_id,
+        )
+        return row is not None
+
+    # --- first-party password credentials ([2026] VJS-COUNTY 7, D4) ---
+    async def set_password_credential(self, tenant_id, user_id, password_hash):
+        await self._pool.execute(
+            """INSERT INTO user_credentials (tenant_id, user_id, password_hash, updated_at)
+               VALUES ($1,$2,$3, now())
+               ON CONFLICT (tenant_id, user_id) DO UPDATE SET
+                 password_hash=EXCLUDED.password_hash, updated_at=now()""",
+            tenant_id, user_id, password_hash,
+        )
+
+    async def get_password_credential(self, tenant_id, user_id):
+        row = await self._pool.fetchrow(
+            "SELECT password_hash FROM user_credentials WHERE tenant_id=$1 AND user_id=$2",
+            tenant_id, user_id,
+        )
+        return None if row is None else row["password_hash"]
 
     async def get_invitation(self, tenant_id, inv_id):
         row = await self._pool.fetchrow(
@@ -1328,10 +1366,12 @@ class PostgresStore(ChannelStorePG):
     async def add_session(self, s: UserSession):
         await self._pool.execute(
             """INSERT INTO user_sessions (id, tenant_id, user_id, client, created_at,
-                                          last_seen_at, revoked)
-               VALUES ($1,$2,$3,$4,$5,$6,$7)
+                                          last_seen_at, revoked, token_hash, expires_at,
+                                          csrf_token)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
                ON CONFLICT (tenant_id, id) DO NOTHING""",
             s.id, s.tenant_id, s.user_id, s.client, s.created_at, s.last_seen_at, s.revoked,
+            s.token_hash, s.expires_at, s.csrf_token,
         )
 
     async def list_sessions(self, tenant_id, user_id):
@@ -1348,11 +1388,24 @@ class PostgresStore(ChannelStorePG):
         )
         return _session(row)
 
+    async def get_session_by_token_hash(self, tenant_id, token_hash):
+        # First-party session ([2026] VJS-COUNTY 7, D2): tenant-scoped (RLS-safe)
+        # lookup of a session by its cookie-secret hash.
+        row = await self._pool.fetchrow(
+            "SELECT * FROM user_sessions WHERE tenant_id=$1 AND token_hash=$2",
+            tenant_id, token_hash,
+        )
+        return _session(row)
+
     async def update_session(self, s: UserSession):
+        # Carries the rotating secret hash / bounded expiry / CSRF token too (D6),
+        # so a refresh (rotate_session) and a touch both persist through one path.
         await self._pool.execute(
-            """UPDATE user_sessions SET client=$3, last_seen_at=$4, revoked=$5
+            """UPDATE user_sessions SET client=$3, last_seen_at=$4, revoked=$5,
+                                        token_hash=$6, expires_at=$7, csrf_token=$8
                WHERE tenant_id=$1 AND id=$2""",
             s.tenant_id, s.id, s.client, s.last_seen_at, s.revoked,
+            s.token_hash, s.expires_at, s.csrf_token,
         )
 
 
@@ -1659,6 +1712,7 @@ def _invitation(r):
         intended_role=r["intended_role"], intended_scope=r["intended_scope"] or {},
         invited_by=r["invited_by"], created_at=r["created_at"], expires_at=r["expires_at"],
         status=r["status"],
+        token_hash=(r["token_hash"] if "token_hash" in r.keys() else None),
     )
 
 
@@ -1677,6 +1731,9 @@ def _session(r):
     return UserSession(
         id=r["id"], tenant_id=r["tenant_id"], user_id=r["user_id"], client=r["client"],
         created_at=r["created_at"], last_seen_at=r["last_seen_at"], revoked=r["revoked"],
+        token_hash=(r["token_hash"] if "token_hash" in r.keys() else None),
+        expires_at=(r["expires_at"] if "expires_at" in r.keys() else None),
+        csrf_token=(r["csrf_token"] if "csrf_token" in r.keys() else None),
     )
 
 

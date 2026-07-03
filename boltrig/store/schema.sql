@@ -603,8 +603,11 @@ CREATE TABLE IF NOT EXISTS personal_access_tokens (
 CREATE INDEX IF NOT EXISTS pat_user_idx ON personal_access_tokens (tenant_id, user_id);
 CREATE UNIQUE INDEX IF NOT EXISTS pat_hash_idx ON personal_access_tokens (token_hash);
 
--- Admin invitations (US-USR-02). Pre-stages a role/scope for an SSO identity;
--- creates no password and grants no access until the invitee authenticates (SEC-35).
+-- Admin invitations (US-USR-02). Pre-stages a role/scope for an identity. For SSO
+-- it creates no password and grants no access until the invitee authenticates
+-- (SEC-35). For first-party invite-only login ([2026] VJS-COUNTY 7, D1) it also
+-- carries the sha256 of a single-use, expiring invite-token secret (token_hash;
+-- the secret is shown once and never stored) that accept-invite consumes.
 CREATE TABLE IF NOT EXISTS user_invitations (
     id             TEXT NOT NULL,
     tenant_id      TEXT NOT NULL,
@@ -615,9 +618,24 @@ CREATE TABLE IF NOT EXISTS user_invitations (
     created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
     expires_at     TIMESTAMPTZ,
     status         TEXT NOT NULL DEFAULT 'pending',  -- pending | accepted | revoked | expired
+    token_hash     TEXT,                             -- sha256 of a single-use invite token
     PRIMARY KEY (tenant_id, id)
 );
 CREATE INDEX IF NOT EXISTS invitations_email_idx ON user_invitations (tenant_id, email);
+CREATE UNIQUE INDEX IF NOT EXISTS invitations_token_hash_idx
+    ON user_invitations (token_hash) WHERE token_hash IS NOT NULL;
+
+-- First-party password credentials ([2026] VJS-COUNTY 7, D4). Kept in its OWN
+-- table, apart from the users identity row, so the argon2id hash never rides in a
+-- user view/export. Stores ONLY the PHC-encoded hash (which embeds the per-user
+-- salt); never a plaintext or reversible form. Tenant-isolated + RLS-scoped.
+CREATE TABLE IF NOT EXISTS user_credentials (
+    tenant_id     TEXT NOT NULL,
+    user_id       TEXT NOT NULL,
+    password_hash TEXT NOT NULL,          -- argon2id PHC string ($argon2id$...)
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, user_id)
+);
 
 -- Per-user settings/preferences (SET-*).
 CREATE TABLE IF NOT EXISTS user_settings (
@@ -629,7 +647,10 @@ CREATE TABLE IF NOT EXISTS user_settings (
     PRIMARY KEY (tenant_id, user_id, key)
 );
 
--- Sessions (SET-70).
+-- Sessions (SET-70). For first-party login ([2026] VJS-COUNTY 7, D2/D6) a session
+-- carries the sha256 of its cookie secret (token_hash; only the hash is stored,
+-- mirroring the PAT pattern), a bounded expiry (expires_at) and a session-bound
+-- CSRF token. Legacy directory rows leave these NULL.
 CREATE TABLE IF NOT EXISTS user_sessions (
     id            TEXT NOT NULL,
     tenant_id     TEXT NOT NULL,
@@ -638,9 +659,14 @@ CREATE TABLE IF NOT EXISTS user_sessions (
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     last_seen_at  TIMESTAMPTZ,
     revoked       BOOLEAN NOT NULL DEFAULT false,
+    token_hash    TEXT,                             -- sha256 of the session cookie secret
+    expires_at    TIMESTAMPTZ,                      -- bounded session lifetime
+    csrf_token    TEXT,                             -- session-bound double-submit CSRF token
     PRIMARY KEY (tenant_id, id)
 );
 CREATE INDEX IF NOT EXISTS sessions_user_idx ON user_sessions (tenant_id, user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS sessions_token_hash_idx
+    ON user_sessions (token_hash) WHERE token_hash IS NOT NULL;
 
 -- ===========================================================================
 -- Round Five: structured memory governance + provenance control plane (Epic MEM).

@@ -2,6 +2,7 @@
 
     boltrig serve [--host H --port P]   start the kernel API
     boltrig worker                      start a fleet worker
+    boltrig initiate --email E [...]    seat the founding OWNER (invite-only, VJS-COUNTY 7)
     boltrig smoke                       run the offline in-process smoke test
     boltrig check-invariants            run the invariant-binding gate (K-29/K-30)
     boltrig version                     print the version
@@ -32,6 +33,18 @@ def main(argv: list[str] | None = None) -> int:
     p_serve.add_argument("--port", type=int, default=8000)
 
     sub.add_parser("worker", help="start a fleet worker")
+
+    p_init = sub.add_parser("initiate", help="seat the founding OWNER (invite-only)")
+    p_init.add_argument("--email", required=True, help="the owner's email (their login id)")
+    p_init.add_argument(
+        "--password", default=None,
+        help="owner password (else BOLTRIG_INIT_PASSWORD, else an interactive prompt)",
+    )
+    p_init.add_argument(
+        "--tenant", default=None,
+        help="tenant to seat the owner in (default: BOLTRIG_SESSION_TENANT or 'default')",
+    )
+
     sub.add_parser("smoke", help="offline in-process smoke test")
     sub.add_parser("check-invariants", help="run the invariant-binding gate")
     sub.add_parser("version", help="print version")
@@ -51,6 +64,13 @@ def main(argv: list[str] | None = None) -> int:
 
         worker_main()
         return 0
+    if args.cmd == "initiate":
+        from boltrig.config import load_settings
+
+        from .initiate import initiate
+
+        tenant = args.tenant or load_settings().session_tenant or "default"
+        return initiate(args.email, password=args.password, tenant=tenant)
     if args.cmd in ("smoke", "check-invariants"):
         script = _repo_script("smoke.py" if args.cmd == "smoke" else "check_invariants.py")
         if not script:

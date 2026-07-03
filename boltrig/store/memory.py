@@ -101,6 +101,9 @@ class InMemoryStore(ChannelStoreMem):
         self._invites: dict[tuple[str, str], UserInvitation] = {}
         self._settings: dict[tuple[str, str, str], UserSetting] = {}
         self._sessions: dict[tuple[str, str], UserSession] = {}
+        # First-party password credentials ([2026] VJS-COUNTY 7, D4): kept apart
+        # from the user identity row so the hash never rides in a User view/export.
+        self._password_creds: dict[tuple[str, str], str] = {}
         # Channels (decision 0003): channels keyed by id (cross-tenant lookup on
         # the inbound path), bindings + pairings keyed per-tenant.
         self._channels: dict[str, Channel] = {}
@@ -698,8 +701,41 @@ class InMemoryStore(ChannelStoreMem):
                 return inv
         return None
 
+    async def find_invitation_by_token_hash(self, tenant_id, token_hash):
+        # First-party invite ([2026] VJS-COUNTY 7, D1): match a still-pending
+        # invitation by its token hash, constant-time so the hash is not leaked by
+        # timing. Tenant-scoped (the console tenant is bound by the caller).
+        import hmac as _hmac
+
+        for (t, _), inv in self._invites.items():
+            if (
+                t == tenant_id
+                and inv.status == "pending"
+                and inv.token_hash
+                and _hmac.compare_digest(inv.token_hash, token_hash)
+            ):
+                return inv
+        return None
+
+    async def consume_invitation(self, tenant_id, inv_id):
+        # Atomic single-use consume (mirrors consume_hitl): pending -> accepted,
+        # True only for the winner. The in-memory store is single-threaded per
+        # event loop, so the read-modify-write is already atomic.
+        inv = self._invites.get((tenant_id, inv_id))
+        if inv is None or inv.status != "pending":
+            return False
+        inv.status = "accepted"
+        return True
+
     async def update_invitation(self, inv):
         self._invites[(inv.tenant_id, inv.id)] = inv
+
+    # --- first-party password credentials ([2026] VJS-COUNTY 7, D4) ---
+    async def set_password_credential(self, tenant_id, user_id, password_hash):
+        self._password_creds[(tenant_id, user_id)] = password_hash
+
+    async def get_password_credential(self, tenant_id, user_id):
+        return self._password_creds.get((tenant_id, user_id))
 
     # --- per-user settings (SET-*) ---
     async def upsert_user_setting(self, setting):
@@ -723,6 +759,16 @@ class InMemoryStore(ChannelStoreMem):
 
     async def get_session(self, tenant_id, session_id):
         return self._sessions.get((tenant_id, session_id))
+
+    async def get_session_by_token_hash(self, tenant_id, token_hash):
+        # First-party session ([2026] VJS-COUNTY 7, D2): match a session by its
+        # cookie-secret hash, constant-time, tenant-scoped.
+        import hmac as _hmac
+
+        for (t, _), s in self._sessions.items():
+            if t == tenant_id and s.token_hash and _hmac.compare_digest(s.token_hash, token_hash):
+                return s
+        return None
 
     async def update_session(self, session):
         self._sessions[(session.tenant_id, session.id)] = session
