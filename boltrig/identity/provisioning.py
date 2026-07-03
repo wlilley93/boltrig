@@ -12,7 +12,12 @@ from __future__ import annotations
 
 from boltrig.models import EMPTY_GRANTS, GrantSet, RoleMapping, User, utcnow
 
-from .rbac import DEFAULT_ROLE, grants_for_scope, resolve_role
+from .rbac import (
+    DEFAULT_ROLE,
+    grants_for_scope,
+    narrow_grants_to_workspace,
+    resolve_role,
+)
 
 
 def current_grants_for_user(user: User) -> GrantSet:
@@ -21,6 +26,35 @@ def current_grants_for_user(user: User) -> GrantSet:
     if user.status != "active":
         return EMPTY_GRANTS
     return grants_for_scope(user.scope)
+
+
+async def effective_grants_for_request(
+    store, user: User, active_workspace_id: str | None
+) -> GrantSet:
+    """The caller's EFFECTIVE grants for one request ([2026] VJS-COUNTY 8, D11).
+
+    Starts from the user's org/user grants (``current_grants_for_user``) and, ONLY
+    when the caller is operating in an active workspace they are a member of, NARROWS
+    them by that workspace role's ceiling (``effective = org grants ∩ ceiling``). This
+    composes with COUNTY 5: a workspace membership can only intersect authority DOWN,
+    never widen it.
+
+    Backward-compat (the critical rule): with NO active workspace - every existing
+    single-tenant deploy, and the backfilled default org that has no workspaces - this
+    returns EXACTLY today's grants, unchanged. If the caller is not (or no longer) a
+    member of the active workspace, it also returns today's grants (fail-closed to the
+    org ceiling, which never widens): the membership lookup is authoritative and a
+    missing membership row simply applies no narrowing rather than escalating.
+    """
+    base = current_grants_for_user(user)
+    if not active_workspace_id:
+        return base  # no active workspace -> today's grants, unchanged (backward-compat)
+    member = await store.get_workspace_member(
+        user.tenant_id, active_workspace_id, user.id
+    )
+    if member is None:
+        return base  # not a member -> no workspace narrowing (never widen)
+    return narrow_grants_to_workspace(base, member.role)
 
 
 def _conferring_group(groups: list[str], mappings: list[RoleMapping], role: str) -> str | None:

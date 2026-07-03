@@ -26,7 +26,7 @@ from fastapi import HTTPException, Request
 from boltrig.kernel.app import Principal, PrincipalResolver
 from boltrig.models import UserSession, utcnow
 
-from .provisioning import current_grants_for_user
+from .provisioning import effective_grants_for_request
 
 # Cookie + header names (the login-UI seat builds against these).
 SESSION_COOKIE = "boltrig_session"
@@ -212,18 +212,24 @@ def build_session_resolver(tenant_id: str) -> PrincipalResolver:
         # Active workspace ([2026] VJS-COUNTY 8, D4): RE-AUTHORIZE the session's
         # persisted active workspace against CURRENT membership every request. A
         # revoked membership (or a deleted workspace) drops to None here, fail-
-        # closed, so the kernel never carries a stale workspace scope. This PLUMBS
-        # the scope onto the principal; it does NOT yet change how grants are
-        # computed (that is the next phase, D11).
+        # closed, so the kernel never carries a stale workspace scope.
         active_workspace_id = await resolve_active_workspace(
             store, session.tenant_id, user.id, session.active_workspace_id
         )
+
+        # Grant resolution ([2026] VJS-COUNTY 8, D11): the caller's org/user grants,
+        # NARROWED by the active workspace role's ceiling when (and only when) the
+        # caller is a member of an active workspace. No active workspace -> today's
+        # grants, unchanged (backward-compat). The narrowing can only intersect DOWN,
+        # never widen (COUNTY 5). Computed ONCE here; the GrantChecker chokepoint then
+        # enforces these effective grants unchanged (no workspace logic in the routes).
+        grants = await effective_grants_for_request(store, user, active_workspace_id)
 
         request.state.boltrig_session = session
         return Principal(
             tenant_id=session.tenant_id,
             subject=user.id,
-            grants=current_grants_for_user(user),
+            grants=grants,
             role=user.role,
             actor_tier="human",
             scope=user.scope,

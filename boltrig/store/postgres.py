@@ -1551,6 +1551,16 @@ class PostgresStore(ChannelStorePG):
         )
         return [_workspace_member(r) for r in rows]
 
+    async def get_workspace_member(self, tenant_id, workspace_id, user_id):
+        # Tenant-scoped single-membership lookup (D11): the WHERE binds tenant_id, so
+        # it can never return another tenant's row (None when absent, fail-closed).
+        row = await self._pool.fetchrow(
+            """SELECT * FROM workspace_members
+               WHERE tenant_id=$1 AND workspace_id=$2 AND user_id=$3""",
+            tenant_id, workspace_id, user_id,
+        )
+        return _workspace_member(row)
+
     async def list_workspaces_for_user(self, tenant_id, user_id):
         # Tenant-scoped membership query (switching seam): only workspaces inside
         # the bound tenant the user belongs to.

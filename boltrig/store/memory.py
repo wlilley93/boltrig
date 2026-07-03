@@ -863,6 +863,14 @@ class InMemoryStore(ChannelStoreMem):
             if w == workspace_id and m.tenant_id == tenant_id
         ]
 
+    async def get_workspace_member(self, tenant_id, workspace_id, user_id):
+        # Tenant-scoped single-membership lookup (D11): only return the row when it
+        # is inside the bound tenant, else None (fail-closed, never crosses tenants).
+        m = self._workspace_members.get((workspace_id, user_id))
+        if m is not None and m.tenant_id == tenant_id:
+            return m
+        return None
+
     async def list_workspaces_for_user(self, tenant_id, user_id):
         # Tenant-scoped: only workspaces in the bound tenant whose id the user is a
         # member of. Never crosses a tenant boundary.

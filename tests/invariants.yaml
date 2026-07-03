@@ -873,3 +873,23 @@ invariants:
     description: A revoked-membership session drops to no active workspace (D4, fail-closed re-auth) - the session resolver re-authorizes the persisted active workspace against CURRENT membership every request via resolve_active_workspace, so once the user's workspace membership is revoked (or the workspace is deleted) the resolved active workspace becomes None (never the stale value) and the InvocationContext carries no workspace.
     tests:
       - tests/security/test_active_context.py::test_revoked_membership_session_drops_to_no_active_workspace
+
+  # --- Grant resolution from workspace membership ([2026] VJS-COUNTY 8, D11) --
+  SEC-108:
+    description: An active-workspace member's authority is the INTERSECTION of their org/user grants and their workspace-role ceiling, never a union ([2026] VJS-COUNTY 8 D11, composes with COUNTY 5) - effective_grants_for_request narrows the org grants by narrow_grants_to_workspace when the caller is a member of an active workspace, so the result is always a SUBSET of the org grants (owner keeps them broad, member loses the control.* configure namespace) and a workspace membership can only intersect authority DOWN, never widen it.
+    tests:
+      - tests/security/test_workspace_grants.py::test_active_member_authority_is_org_grants_intersected_with_ceiling
+      - tests/security/test_workspace_grants.py::test_membership_only_narrows_never_widens
+  SEC-109:
+    description: A viewer in a workspace cannot perform a write verb their org role would otherwise allow (D11 read-only ceiling) - narrow_grants_to_workspace for the viewer role keeps only the base allow-patterns that authorise a concrete read action (wildcards collapse, fail-closed), so a caller whose org grants include a write verb (or ticket.*) is denied that write verb at the chokepoint while retaining their explicit read grants.
+    tests:
+      - tests/security/test_workspace_grants.py::test_viewer_cannot_write_but_keeps_reads
+  SEC-110:
+    description: A caller with NO active workspace keeps their FULL org grants unchanged (D11 backward-compat, the critical rule) - effective_grants_for_request returns exactly current_grants_for_user when active_workspace_id is None (every existing single-tenant deploy and the backfilled default org with no workspaces), and also when the caller is not a member of the active workspace it applies no narrowing (fail-closed to the org ceiling, never widening).
+    tests:
+      - tests/security/test_workspace_grants.py::test_no_active_workspace_keeps_full_org_grants
+      - tests/security/test_workspace_grants.py::test_non_member_active_workspace_applies_no_narrowing
+  SEC-111:
+    description: get_workspace_member is tenant-scoped and fail-closed (D11, SEC-08) - the single-membership lookup only ever returns a row inside the bound tenant, so a membership under another tenant_id resolves to None and can never confer a workspace role across a tenant boundary.
+    tests:
+      - tests/store/test_tenancy.py::test_get_workspace_member_is_tenant_scoped

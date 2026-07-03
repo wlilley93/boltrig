@@ -390,6 +390,12 @@ class Store(Protocol):
     async def list_workspace_members(
         self, tenant_id: str, workspace_id: str
     ) -> list[WorkspaceMember]: ...
+    # D11 (grant resolution): the cheap single-membership lookup the chokepoint uses
+    # to resolve the caller's workspace role for the active workspace. Tenant-scoped:
+    # only ever returns a row inside the bound tenant (None otherwise, fail-closed).
+    async def get_workspace_member(
+        self, tenant_id: str, workspace_id: str, user_id: str
+    ) -> WorkspaceMember | None: ...
     async def list_workspaces_for_user(
         self, tenant_id: str, user_id: str
     ) -> list[Workspace]: ...

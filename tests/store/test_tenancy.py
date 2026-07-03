@@ -107,6 +107,31 @@ async def test_org_and_workspace_membership_roundtrip(store):
     assert {m.user_id for m in await store.list_org_members(T)} == {"u2"}
 
 
+@pytest.mark.security
+@pytest.mark.invariant("SEC-111")
+async def test_get_workspace_member_is_tenant_scoped(store):
+    # D11: the single-membership lookup the grant chokepoint uses must be tenant-
+    # scoped - it only ever returns a row inside the bound tenant, so a membership
+    # under another tenant_id can never confer a workspace role across the boundary.
+    await store.create_org(Organisation(id=T, name="Acme", slug="acme"))
+    await store.create_workspace(
+        Workspace(id="ws1", tenant_id=T, name="Delivery", slug="delivery")
+    )
+    await store.add_workspace_member(
+        WorkspaceMember(user_id="u1", workspace_id="ws1", tenant_id=T, role="admin")
+    )
+
+    # In-tenant: the row (and its role) is returned.
+    got = await store.get_workspace_member(T, "ws1", "u1")
+    assert got is not None and got.role == "admin"
+
+    # Cross-tenant: the SAME workspace_id/user_id under a different tenant resolves
+    # to None (fail-closed) - never another tenant's membership row.
+    assert await store.get_workspace_member("other-tenant", "ws1", "u1") is None
+    # Unknown member -> None.
+    assert await store.get_workspace_member(T, "ws1", "nobody") is None
+
+
 async def test_update_org_and_workspace(store):
     await store.create_org(Organisation(id=T, name="Acme", slug="acme"))
     org = await store.get_org(T)

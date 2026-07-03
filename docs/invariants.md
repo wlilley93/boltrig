@@ -231,6 +231,30 @@ value never confers access.
 | **SEC-106** | Switching the active workspace is membership-re-authorized and fail-closed (D4) - `POST /v1/me/active-context` refuses an unknown workspace 404 and a non-member workspace 403, both with NO write, so a client can never set an active workspace it is not a member of; a valid member switch persists on the session and is audited keys-only. | `tests/security/test_active_context.py::test_switch_is_membership_reauthorized_and_fail_closed` |
 | **SEC-107** | A revoked-membership session drops to no active workspace (D4, fail-closed re-auth) - the resolver re-authorizes the persisted active workspace against CURRENT membership every request via `resolve_active_workspace`, so once membership is revoked (or the workspace deleted) the resolved active workspace becomes None (never the stale value) and the `InvocationContext` carries no workspace. | `tests/security/test_active_context.py::test_revoked_membership_session_drops_to_no_active_workspace` |
 
+### Grant resolution from workspace membership ([2026] VJS-COUNTY 8, D11)
+
+The authorization leg: when a caller operates INSIDE an active workspace they are a
+member of, their org/user grants are NARROWED by that workspace role's ceiling
+(`effective = org grants ∩ ceiling`) at the grant-resolution path
+(`effective_grants_for_request`, called by the session resolver). This composes with
+[2026] VJS-COUNTY 5 - authority is only ever intersected DOWN, never widened. The
+one chokepoint (`GrantChecker`) then enforces these already-narrowed effective grants
+unchanged, so no workspace logic scatters into the routes. The WorkspaceRole ceilings
+(beside the RBAC role mapping in `rbac.py`): **owner** = broad (the org grants,
+unchanged); **admin** = operate + configure (all but the owner-only
+`control.workspace.*` self-administration); **member** / **agent** = operate only
+(the `control.*` configure namespace denied); **viewer** = read-only (only concrete
+read verbs survive; wildcards collapse fail-closed). THE CRITICAL RULE: a caller with
+NO active workspace (every existing single-tenant deploy, and the backfilled default
+org with no workspaces) keeps EXACTLY today's grants - no narrowing.
+
+| Invariant | Meaning | Bound test(s) |
+| --- | --- | --- |
+| **SEC-108** | An active-workspace member's authority is the INTERSECTION of their org/user grants and their workspace-role ceiling, never a union (D11, composes with COUNTY 5) - `effective_grants_for_request` narrows via `narrow_grants_to_workspace` for a member of an active workspace, so the result is always a SUBSET of the org grants (owner keeps them broad, member loses the `control.*` configure namespace) and a membership can only intersect authority DOWN, never widen it. | `tests/security/test_workspace_grants.py::test_active_member_authority_is_org_grants_intersected_with_ceiling`, `::test_membership_only_narrows_never_widens` |
+| **SEC-109** | A viewer in a workspace cannot perform a write verb their org role would otherwise allow (D11 read-only ceiling) - the viewer narrowing keeps only base allow-patterns that authorise a concrete read action (wildcards collapse, fail-closed), so a caller whose org grants include a write verb (or `ticket.*`) is denied that write while retaining their explicit read grants. | `tests/security/test_workspace_grants.py::test_viewer_cannot_write_but_keeps_reads` |
+| **SEC-110** | A caller with NO active workspace keeps their FULL org grants unchanged (D11 backward-compat, the critical rule) - `effective_grants_for_request` returns exactly `current_grants_for_user` when `active_workspace_id` is None, and applies no narrowing when the caller is not a member of the active workspace (fail-closed to the org ceiling, never widening). | `tests/security/test_workspace_grants.py::test_no_active_workspace_keeps_full_org_grants`, `::test_non_member_active_workspace_applies_no_narrowing` |
+| **SEC-111** | `get_workspace_member` is tenant-scoped and fail-closed (D11, SEC-08) - the single-membership lookup only ever returns a row inside the bound tenant, so a membership under another `tenant_id` resolves to None and can never confer a workspace role across a tenant boundary. | `tests/store/test_tenancy.py::test_get_workspace_member_is_tenant_scoped` |
+
 ## How a new invariant is added
 
 1. Write the test and mark it: `@pytest.mark.invariant("NEW-ID")`.
