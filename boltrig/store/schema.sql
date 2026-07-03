@@ -662,6 +662,7 @@ CREATE TABLE IF NOT EXISTS user_sessions (
     token_hash    TEXT,                             -- sha256 of the session cookie secret
     expires_at    TIMESTAMPTZ,                      -- bounded session lifetime
     csrf_token    TEXT,                             -- session-bound double-submit CSRF token
+    active_workspace_id TEXT,                       -- active workspace hint ([2026] VJS-COUNTY 8, D4); re-authorized every request
     PRIMARY KEY (tenant_id, id)
 );
 CREATE INDEX IF NOT EXISTS sessions_user_idx ON user_sessions (tenant_id, user_id);

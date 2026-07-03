@@ -31,6 +31,8 @@ from .sessions import (
     SESSION_COOKIE,
     build_session_resolver,
     new_session,
+    pick_default_workspace,
+    resolve_active_workspace,
     rotate_session,
 )
 from .tenancy import default_org_for, default_org_slug, ensure_default_org
@@ -60,6 +62,8 @@ __all__ = [
     "hash_invite_token",
     "new_session",
     "rotate_session",
+    "pick_default_workspace",
+    "resolve_active_workspace",
     "SESSION_COOKIE",
     "CSRF_COOKIE",
     "CSRF_HEADER",

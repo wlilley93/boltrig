@@ -25,7 +25,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from .base import TenantId, UserId, utcnow
+from .base import TenantId, UserId, WorkspaceId, utcnow
 
 
 # --- personal access tokens (SET-40 / PAT-*, SEC-34) -------------------------
@@ -91,3 +91,11 @@ class UserSession:
     token_hash: str | None = None
     expires_at: datetime | None = None
     csrf_token: str | None = None
+    # The session's ACTIVE WORKSPACE ([2026] VJS-COUNTY 8, D4). Nullable: it is the
+    # workspace the user last switched to (POST /v1/me/active-context) or the default
+    # resolved from membership at login, and None when the user has no workspace yet.
+    # It is a HINT persisted on the session, NEVER trusted on its own: the resolver
+    # RE-AUTHORIZES membership against workspace_members every request and drops to
+    # None if the user is no longer a member (fail-closed), so a stale row can never
+    # grant workspace access.
+    active_workspace_id: WorkspaceId | None = None

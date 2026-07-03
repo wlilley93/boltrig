@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from .base import RunId, TenantId, UserId
+from .base import RunId, TenantId, UserId, WorkspaceId
 from .grants import EMPTY_GRANTS, GrantSet
 
 
@@ -21,6 +21,14 @@ class InvocationContext:
     parent_run_id: RunId | None = None
     depth: int = 0
     on_behalf_of: UserId | None = None  # delegated human identity (US-IAM-03)
+    # The active WORKSPACE the caller is operating in ([2026] VJS-COUNTY 8, D4). The
+    # ORGANISATION is the tenant boundary (tenant_id); a workspace is a scope INSIDE
+    # it. Set from the session's active workspace only after the resolver has RE-
+    # AUTHORIZED the caller's membership every request (fail-closed to None), so it
+    # is never trusted from the client. Additive with a None default: this phase
+    # PLUMBS it through the context; the next phase (D11) reads it to scope grants /
+    # credentials / AI keys / workflows. None == no active workspace.
+    workspace_id: WorkspaceId | None = None
     grants: GrantSet = field(default_factory=lambda: EMPTY_GRANTS)
     actor: str = "unknown"  # agent capability name or user id
     actor_tier: str = "ephemeral"  # tier1 | tier2 | ephemeral | human

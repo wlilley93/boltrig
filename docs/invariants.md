@@ -215,6 +215,22 @@ workflow scoping.
 | **SEC-104** | A per-workspace role is always one of the allowed set (owner/admin/member/viewer/agent, D3) - `add_workspace_member` refuses an out-of-set role (`SchemaValidationError`) so it can never be persisted, while every allowed role is accepted. | `tests/security/test_tenancy_isolation.py::test_workspace_role_must_be_in_the_allowed_set` |
 | **SEC-105** | The four tenancy tables are RLS-fenced (SEC-08) - `workspaces`, `org_members` and `workspace_members` are in the `rls.sql` generic `tenant_id`-scoped set, and `organisations` is fenced by its own id-keyed policy (its id IS the tenant_id), all four defined in `schema.sql`. | `tests/security/test_tenancy_isolation.py::test_the_four_tenancy_tables_are_rls_scoped` |
 
+### Session active workspace context + switching ([2026] VJS-COUNTY 8, D4)
+
+The active-context phase: the active WORKSPACE lives on the session and is threaded
+through the `InvocationContext`, with an owner-only, membership-re-authorized switch.
+Authorization is unchanged this phase (the plumbing half of D11): the workspace is
+carried on the context but not yet read to compute grants. The active workspace is
+only a hint - the session resolver RE-AUTHORIZES it against `workspace_members` on
+every request, fail-closed to no active workspace, so a stale or client-supplied
+value never confers access.
+
+| Invariant | Meaning | Bound test(s) |
+| --- | --- | --- |
+| **FR-ORG-03** | The active workspace is plumbed through the session onto the `InvocationContext` and login seeds a deterministic default (D4) - login picks a stable default active workspace from membership (or None when the user belongs to none), persists it on the session, and the resolver surfaces it onto the principal so `principal.context().workspace_id` carries it; `pick_default_workspace` is deterministic regardless of store iteration order. | `tests/security/test_active_context.py::test_login_seeds_deterministic_default_and_context_carries_workspace`, `::test_pick_default_workspace_is_deterministic_or_none` |
+| **SEC-106** | Switching the active workspace is membership-re-authorized and fail-closed (D4) - `POST /v1/me/active-context` refuses an unknown workspace 404 and a non-member workspace 403, both with NO write, so a client can never set an active workspace it is not a member of; a valid member switch persists on the session and is audited keys-only. | `tests/security/test_active_context.py::test_switch_is_membership_reauthorized_and_fail_closed` |
+| **SEC-107** | A revoked-membership session drops to no active workspace (D4, fail-closed re-auth) - the resolver re-authorizes the persisted active workspace against CURRENT membership every request via `resolve_active_workspace`, so once membership is revoked (or the workspace deleted) the resolved active workspace becomes None (never the stale value) and the `InvocationContext` carries no workspace. | `tests/security/test_active_context.py::test_revoked_membership_session_drops_to_no_active_workspace` |
+
 ## How a new invariant is added
 
 1. Write the test and mark it: `@pytest.mark.invariant("NEW-ID")`.

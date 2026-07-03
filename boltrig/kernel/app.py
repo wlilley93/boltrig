@@ -43,6 +43,11 @@ class Principal:
     actor_tier: str = "ephemeral"
     on_behalf_of: str | None = None
     scope: dict[str, Any] = field(default_factory=dict)  # visibility scope (US-IAM-02)
+    # The active WORKSPACE the caller is operating in ([2026] VJS-COUNTY 8, D4). Set
+    # by the session resolver ONLY after it has re-authorized membership every
+    # request (fail-closed to None); never read from the request body. Threaded onto
+    # every InvocationContext this principal builds so the kernel carries it.
+    active_workspace_id: str | None = None
 
     def context(self, *, run_id=None, parent_run_id=None, depth=0, skills=(), extra=None):
         return InvocationContext(
@@ -56,6 +61,7 @@ class Principal:
             actor_tier=self.actor_tier,
             skills_loaded=tuple(skills),
             extra=dict(extra or {}),
+            workspace_id=self.active_workspace_id,
         )
 
 

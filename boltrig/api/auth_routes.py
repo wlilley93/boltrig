@@ -25,6 +25,7 @@ from boltrig.identity import (
     SESSION_COOKIE,
     hash_password,
     new_session,
+    pick_default_workspace,
     rotate_session,
     validate_password_strength,
     verify_dummy,
@@ -201,6 +202,12 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
             return JSONResponse(_GENERIC_LOGIN_FAILURE, status_code=401)
 
         session, secret, csrf = new_session(tenant, user.id, client="web")
+        # Seed the session's default active workspace from membership ([2026] VJS-
+        # COUNTY 8, D4): a deterministic pick of the user's workspaces, or None when
+        # they belong to none yet. This is only a hint - the resolver re-authorizes
+        # it against membership on every subsequent request (fail-closed).
+        workspaces = await k.store.list_workspaces_for_user(tenant, user.id)
+        session.active_workspace_id = pick_default_workspace(workspaces)
         await k.store.add_session(session)
         # Keys-only audit: the session id, never the secret / csrf / password (D8).
         await _audit(k, tenant, user.id, "auth.login",

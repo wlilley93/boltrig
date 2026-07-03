@@ -1373,11 +1373,11 @@ class PostgresStore(ChannelStorePG):
         await self._pool.execute(
             """INSERT INTO user_sessions (id, tenant_id, user_id, client, created_at,
                                           last_seen_at, revoked, token_hash, expires_at,
-                                          csrf_token)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+                                          csrf_token, active_workspace_id)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
                ON CONFLICT (tenant_id, id) DO NOTHING""",
             s.id, s.tenant_id, s.user_id, s.client, s.created_at, s.last_seen_at, s.revoked,
-            s.token_hash, s.expires_at, s.csrf_token,
+            s.token_hash, s.expires_at, s.csrf_token, s.active_workspace_id,
         )
 
     async def list_sessions(self, tenant_id, user_id):
@@ -1408,10 +1408,11 @@ class PostgresStore(ChannelStorePG):
         # so a refresh (rotate_session) and a touch both persist through one path.
         await self._pool.execute(
             """UPDATE user_sessions SET client=$3, last_seen_at=$4, revoked=$5,
-                                        token_hash=$6, expires_at=$7, csrf_token=$8
+                                        token_hash=$6, expires_at=$7, csrf_token=$8,
+                                        active_workspace_id=$9
                WHERE tenant_id=$1 AND id=$2""",
             s.tenant_id, s.id, s.client, s.last_seen_at, s.revoked,
-            s.token_hash, s.expires_at, s.csrf_token,
+            s.token_hash, s.expires_at, s.csrf_token, s.active_workspace_id,
         )
 
     # --- Org -> workspace tenancy ([2026] VJS-COUNTY 8) ----------------------
@@ -1889,6 +1890,9 @@ def _session(r):
         token_hash=(r["token_hash"] if "token_hash" in r.keys() else None),
         expires_at=(r["expires_at"] if "expires_at" in r.keys() else None),
         csrf_token=(r["csrf_token"] if "csrf_token" in r.keys() else None),
+        active_workspace_id=(
+            r["active_workspace_id"] if "active_workspace_id" in r.keys() else None
+        ),
     )
 
 

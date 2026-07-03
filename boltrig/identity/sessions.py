@@ -111,6 +111,45 @@ def rotate_session(session: UserSession) -> tuple[UserSession, str, str]:
     return session, secret, csrf
 
 
+def pick_default_workspace(workspaces) -> str | None:
+    """Pick the DETERMINISTIC default active workspace from a user's memberships.
+
+    Used on login to seed the session's active workspace ([2026] VJS-COUNTY 8, D4).
+    Ordered by (created_at, id) so the choice is stable regardless of store
+    iteration order (the in-memory store preserves insertion order; Postgres does
+    not order without an ORDER BY). Returns the workspace id, or None when the user
+    is a member of no workspace yet.
+    """
+    if not workspaces:
+        return None
+    ordered = sorted(
+        workspaces,
+        key=lambda w: (w.created_at.isoformat() if w.created_at else "", w.id),
+    )
+    return ordered[0].id
+
+
+async def resolve_active_workspace(
+    store, tenant_id: str, user_id: str, active_workspace_id: str | None
+) -> str | None:
+    """Re-authorize a session's active workspace against CURRENT membership (D4).
+
+    The active workspace persisted on a session is only a hint: this re-checks, on
+    EVERY request, that the user is still a member of it (via
+    ``list_workspaces_for_user``, tenant-scoped). If the session carries no active
+    workspace, or the workspace no longer exists, or the user's membership has been
+    revoked, this returns ``None`` (fail-closed) - never the stale value - so a
+    revoked-membership session drops to no active workspace and can never keep
+    workspace access it has lost.
+    """
+    if not active_workspace_id:
+        return None
+    workspaces = await store.list_workspaces_for_user(tenant_id, user_id)
+    if any(w.id == active_workspace_id for w in workspaces):
+        return active_workspace_id
+    return None
+
+
 async def resolve_session(store, tenant_id: str, secret: str) -> UserSession | None:
     """Resolve a session cookie secret to a live :class:`UserSession`, else None.
 
@@ -170,6 +209,16 @@ def build_session_resolver(tenant_id: str) -> PrincipalResolver:
             ):
                 raise HTTPException(status_code=403, detail="csrf token missing or invalid")
 
+        # Active workspace ([2026] VJS-COUNTY 8, D4): RE-AUTHORIZE the session's
+        # persisted active workspace against CURRENT membership every request. A
+        # revoked membership (or a deleted workspace) drops to None here, fail-
+        # closed, so the kernel never carries a stale workspace scope. This PLUMBS
+        # the scope onto the principal; it does NOT yet change how grants are
+        # computed (that is the next phase, D11).
+        active_workspace_id = await resolve_active_workspace(
+            store, session.tenant_id, user.id, session.active_workspace_id
+        )
+
         request.state.boltrig_session = session
         return Principal(
             tenant_id=session.tenant_id,
@@ -178,6 +227,7 @@ def build_session_resolver(tenant_id: str) -> PrincipalResolver:
             role=user.role,
             actor_tier="human",
             scope=user.scope,
+            active_workspace_id=active_workspace_id,
         )
 
     return resolver

@@ -382,6 +382,44 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
         await _audit(k, p, "session.revoke", {"id": session_id})
         return JSONResponse({"status": "ok", "id": session_id})
 
+    # === Active workspace context ([2026] VJS-COUNTY 8, D4) ===
+    @app.post("/v1/me/active-context")
+    async def switch_active_context(body: dict, request: Request, k=K, p=P) -> JSONResponse:
+        # Switch the session's ACTIVE WORKSPACE. Owner = the session's own user; the
+        # resolver already enforced CSRF on this mutating cookie request. The switch
+        # is RE-AUTHORIZED against membership, fail-closed: a workspace that does not
+        # exist is 404, and one the caller is NOT a member of is 403 with NO write -
+        # so a client can never set an active workspace it is not a member of, and a
+        # client-supplied value is never trusted without this check.
+        session = getattr(request.state, "boltrig_session", None)
+        if session is None:
+            # No first-party session (e.g. a PAT/bearer principal): there is no
+            # session to carry an active context. Fail closed.
+            return JSONResponse(
+                {"status": "error", "reason": "active context requires a session login"},
+                status_code=400,
+            )
+        workspace_id = body.get("workspace_id")
+        if not isinstance(workspace_id, str) or not workspace_id:
+            return JSONResponse({"status": "error", "reason": "workspace_id is required"},
+                                status_code=400)
+        # Existence first (tenant-scoped): unknown workspace -> 404, no write.
+        ws = await k.store.get_workspace(p.tenant_id, workspace_id)
+        if ws is None:
+            return JSONResponse({"status": "error", "reason": "not_found"}, status_code=404)
+        # Membership re-check (tenant-scoped): the caller must currently be a member
+        # of this workspace. A non-member is refused 403 with NO write and NO audit.
+        memberships = await k.store.list_workspaces_for_user(p.tenant_id, p.subject)
+        if not any(w.id == workspace_id for w in memberships):
+            return JSONResponse({"status": "denied", "reason": "not a member of that workspace"},
+                                status_code=403)
+        # Persist the new active workspace on the session (the resolver re-authorizes
+        # it again on every subsequent request). Keys-only audit: the workspace id.
+        session.active_workspace_id = workspace_id
+        await k.store.update_session(session)
+        await _audit(k, p, "session.active_context.switch", {"workspace_id": workspace_id})
+        return JSONResponse({"status": "ok", "workspace_id": workspace_id})
+
     # === Notifications (per-user, hosts SET-30) ===
     @app.get("/v1/me/notifications")
     async def my_notifications(k=K, p=P) -> dict:
