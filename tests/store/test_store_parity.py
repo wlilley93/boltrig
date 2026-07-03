@@ -169,3 +169,25 @@ async def test_list_memory_facts_is_newest_first(store):
     await store.add_memory_fact(_fact("c", base + timedelta(seconds=2)))
     rows = await store.list_memory_facts(T, ["tenant"])
     assert [r.id for r in rows] == ["c", "b", "a"]  # newest first on both stores
+
+
+# --- workflow workspace scope round-trip ([2026] VJS-COUNTY 8, D2) ----------
+@pytest.mark.store
+@pytest.mark.invariant("FR-WFL-11")
+async def test_workflow_workspace_id_roundtrips_on_both_stores(store):
+    from boltrig.models import WorkflowDefinition, WorkflowSource
+
+    def _wf(id: str, workspace_id: str | None) -> WorkflowDefinition:
+        return WorkflowDefinition(
+            id=id, tenant_id=T, version="1.0.0", source=WorkflowSource.LEARNED,
+            definition={"name": id, "steps": []}, intent_tags=["billing"],
+            origin_task="x", workspace_id=workspace_id,
+        )
+
+    # A SET workspace and a NULL (org-wide) workflow both round-trip identically on
+    # the durable store and the in-memory one - so the application-level scope filter
+    # reads the same value it wrote on either backend.
+    await store.upsert_workflow(_wf("scoped", "ws-1"))
+    await store.upsert_workflow(_wf("orgwide", None))
+    got = {w.id: w.workspace_id for w in await store.list_workflows(T)}
+    assert got == {"scoped": "ws-1", "orgwide": None}

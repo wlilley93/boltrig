@@ -9,18 +9,27 @@ from ._shared import audit_authoring, platform_state, require_author
 
 
 def register(app, P, K) -> None:
+    def _visible(w, ws_id) -> bool:
+        # Workspace visibility ([2026] VJS-COUNTY 8, D2): an org-wide (None) workflow
+        # is visible in every workspace; a scoped one only in its own. Never surfaces
+        # another workspace's workflow.
+        return w.workspace_id is None or w.workspace_id == ws_id
+
     @app.get("/v1/workflows")
     async def list_workflows(k=K, p=P) -> dict:
-        wfs = await k.store.list_workflows(p.tenant_id)
+        ws_id = p.active_workspace_id
+        wfs = [w for w in await k.store.list_workflows(p.tenant_id) if _visible(w, ws_id)]
         return {"workflows": [{"id": w.id, "version": w.version, "source": w.source.value,
                               "intent_tags": w.intent_tags} for w in wfs]}
 
     @app.get("/v1/workflows/{wf_id}")
     async def get_workflow(wf_id: str, k=K, p=P) -> JSONResponse:
         # The full stored definition (incl. steps) so the canvas can load + edit an
-        # existing workflow. Tenant-scoped read; 404 if unknown.
+        # existing workflow. Tenant-scoped read, workspace-scoped visibility (D2);
+        # 404 if unknown OR scoped to a different workspace (fail-closed).
+        ws_id = p.active_workspace_id
         for w in await k.store.list_workflows(p.tenant_id):
-            if w.id == wf_id:
+            if w.id == wf_id and _visible(w, ws_id):
                 return JSONResponse({"id": w.id, "version": w.version,
                                      "source": w.source.value, "definition": w.definition,
                                      "intent_tags": w.intent_tags})
@@ -31,10 +40,14 @@ def register(app, P, K) -> None:
         from boltrig.models import WorkflowDefinition, WorkflowSource
 
         require_author(p)
+        # Stamp the caller's ACTIVE workspace ([2026] VJS-COUNTY 8, D2), never a
+        # client-supplied value: scoping can only narrow visibility to the caller's
+        # own workspace, never claim another's. None == org-wide (backward-compat).
         wf = WorkflowDefinition(
             id=body["id"], tenant_id=p.tenant_id, version=body.get("version", "1.0.0"),
             source=WorkflowSource(body.get("source", "precreated")),
             definition=body.get("definition", {}), intent_tags=body.get("intent_tags", []),
+            workspace_id=p.active_workspace_id,
         )
         await k.store.upsert_workflow(wf)
         await audit_authoring(k, p, "workflow.upsert", {"id": wf.id})
@@ -59,7 +72,8 @@ def register(app, P, K) -> None:
         if lib is None:
             return JSONResponse({"error": "workflows_unavailable"}, status_code=503)
         try:
-            desc = await lib.trigger(p.tenant_id, wf_id, body.get("inputs", {}))
+            desc = await lib.trigger(p.tenant_id, wf_id, body.get("inputs", {}),
+                                     active_workspace_id=p.active_workspace_id)
             await audit_authoring(k, p, "workflow.trigger", {"id": wf_id, "run_id": desc.get("run_id"),
                                                     "durable": desc.get("durable")})
             return JSONResponse(desc)

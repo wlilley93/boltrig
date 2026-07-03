@@ -11,7 +11,15 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from .base import AdapterId, CapabilityName, SkillId, TenantId, WorkflowId, utcnow
+from .base import (
+    AdapterId,
+    CapabilityName,
+    SkillId,
+    TenantId,
+    WorkflowId,
+    WorkspaceId,
+    utcnow,
+)
 
 
 class AdapterHealth(str, Enum):
@@ -81,6 +89,16 @@ class WorkflowDefinition:
     definition: dict[str, Any]  # Hatchet workflow spec
     intent_tags: list[str] = field(default_factory=list)  # for task matching
     origin_task: str | None = None  # work item that generated it (if learned)
+    # The WORKSPACE this workflow is scoped to ([2026] VJS-COUNTY 8, D2). NULL means
+    # ORG-WIDE: visible + runnable in every workspace of the org, exactly as today
+    # (every existing workflow is NULL, so single-tenant deploys are unchanged). A
+    # SET value scopes the workflow to that one workspace: match/get/list return it
+    # only for a caller whose active workspace is this one (or org-wide), never for
+    # a caller in a DIFFERENT workspace. Scoping only NARROWS visibility, never
+    # authority (COUNTY 5) - execution authority still comes from the caller ceiling
+    # at the dispatch chokepoint. RLS stays tenant_id-fenced; this is an application
+    # filter on top (RLS on workspace_id would hide the org-wide NULL rows).
+    workspace_id: WorkspaceId | None = None
 
 
 class PromotionState(str, Enum):

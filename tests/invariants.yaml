@@ -922,3 +922,19 @@ invariants:
     description: The governed set-key route is role-scoped so a caller cannot set a level above its authority (D5, SEC-36) - PUT /v1/ai-keys refuses an org-level key from a non-admin (403) and accepts it from an org-admin, refuses a workspace-level key from a non-owner/admin of that workspace, and refuses a user-level key for anyone but the caller themselves; workspace/user levels additionally require the org allow_own_ai_keys gate (refused up front when false), while the org may always set its own key.
     tests:
       - tests/security/test_ai_keys.py::test_set_key_route_is_role_scoped
+
+  # --- Workspace-scoped workflow resources ([2026] VJS-COUNTY 8, D2) ----------
+  FR-WFL-11:
+    description: A workflow is workspace-scoped by an optional workspace_id where NULL means ORG-WIDE ([2026] VJS-COUNTY 8, D2) - creating/synthesising a workflow in an active workspace STAMPS that workspace (generate_workflow) and a learned workflow INHERITS the workspace of the run that produced it (learn_from_success carries it forward, never widening), while match/get return org-wide (NULL) OR own-workspace workflows only and never a workflow scoped to a DIFFERENT workspace; a caller with NO active workspace matches EXACTLY the org-wide set byte-for-byte (backward-compat), and the workspace_id round-trips identically on the in-memory and Postgres stores.
+    tests:
+      - tests/security/test_workflow_workspace_scope.py::test_generate_stamps_active_workspace_and_none_is_org_wide
+      - tests/security/test_workflow_workspace_scope.py::test_learned_workflow_inherits_the_runs_workspace
+      - tests/security/test_workflow_workspace_scope.py::test_match_returns_org_wide_or_own_workspace_never_another
+      - tests/security/test_workflow_workspace_scope.py::test_no_active_workspace_sees_exactly_the_org_wide_set_byte_for_byte
+      - tests/store/test_store_parity.py::test_workflow_workspace_id_roundtrips_on_both_stores
+  SEC-116:
+    description: Workspace scoping only NARROWS which workflows a workspace sees, never widens authority (COUNTY 5, D2) - a workflow scoped to another workspace is fail-closed UNKNOWN on the get / trigger / execute paths (get returns None, trigger and execute raise LookupError) so it can never be resolved or run cross-workspace, while the visibility filter never mutates the record (a visible workflow is byte-for-byte what was stored, adding no grant/scope) and workspace_id is the sole scoping field, carrying no execution authority.
+    tests:
+      - tests/security/test_workflow_workspace_scope.py::test_get_is_fail_closed_across_a_workspace_boundary
+      - tests/security/test_workflow_workspace_scope.py::test_trigger_and_execute_cannot_reach_another_workspace
+      - tests/security/test_workflow_workspace_scope.py::test_scoping_never_widens_authority_it_only_hides_rows

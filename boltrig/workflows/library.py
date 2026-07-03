@@ -17,6 +17,21 @@ from boltrig.models import InvocationContext, WorkflowDefinition, utcnow
 from .interpreter import run_workflow_definition
 
 
+def _visible_in_workspace(
+    wf: WorkflowDefinition, active_workspace_id: str | None
+) -> bool:
+    """Workspace visibility rule ([2026] VJS-COUNTY 8, D2).
+
+    A workflow is visible to the caller when it is ORG-WIDE (``workspace_id`` is
+    None - every existing workflow, so backward-compat) OR it belongs to the
+    caller's ACTIVE workspace. A workflow scoped to a DIFFERENT workspace is never
+    visible. With no active workspace (``None``) only org-wide workflows are visible
+    - which is exactly the pre-workspace set. Scoping only NARROWS which workflows a
+    workspace sees; it never widens authority (COUNTY 5).
+    """
+    return wf.workspace_id is None or wf.workspace_id == active_workspace_id
+
+
 class WorkflowLibrary:
     """Selection facade over the store's :class:`WorkflowDefinition` records.
 
@@ -38,15 +53,26 @@ class WorkflowLibrary:
         """Persist (or replace) a workflow definition."""
         await self._store.upsert_workflow(wf)
 
-    async def get(self, tenant: str, id: str) -> WorkflowDefinition | None:
-        """Return the workflow with ``id`` for ``tenant``, or ``None``."""
+    async def get(
+        self, tenant: str, id: str, *, active_workspace_id: str | None = None
+    ) -> WorkflowDefinition | None:
+        """Return the workflow with ``id`` for ``tenant``, or ``None``.
+
+        Workspace-scoped ([2026] VJS-COUNTY 8, D2): returns the workflow only when it
+        is org-wide (``workspace_id`` None) OR belongs to the caller's active
+        workspace; a workflow scoped to a DIFFERENT workspace is invisible (``None``,
+        as if it did not exist - fail-closed). ``active_workspace_id`` defaults to
+        None (no active workspace), which sees exactly the org-wide set (backward-
+        compat).
+        """
         for wf in await self._store.list_workflows(tenant):
-            if wf.id == id:
+            if wf.id == id and _visible_in_workspace(wf, active_workspace_id):
                 return wf
         return None
 
     async def match(
-        self, tenant: str, intent_tags: list[str]
+        self, tenant: str, intent_tags: list[str], *,
+        active_workspace_id: str | None = None,
     ) -> WorkflowDefinition | None:
         """Best workflow by intent-tag overlap, promotion-aware (US-WFL-01/08).
 
@@ -64,6 +90,14 @@ class WorkflowLibrary:
 
         The learning-loop retrieval half, wired by the engine plan Phase 3
         (``learn_from_success`` + ``match``); a reserved API.
+
+        Workspace-scoped ([2026] VJS-COUNTY 8, D2): a candidate must be visible to
+        the caller - org-wide (``workspace_id`` None) OR the caller's active
+        workspace - so ``match`` never surfaces a workflow scoped to a DIFFERENT
+        workspace. With no active workspace only org-wide workflows match (the pre-
+        workspace set, byte-for-byte backward-compat). Scoping is applied BEFORE the
+        reuse weighting, so it only narrows which workflows are reusable, never what
+        any workflow may do (COUNTY 5).
         """
         wanted = set(intent_tags or [])
         if not wanted:
@@ -72,6 +106,7 @@ class WorkflowLibrary:
         candidates = [
             wf for wf in await self._store.list_workflows(tenant)
             if wanted & set(wf.intent_tags)
+            and _visible_in_workspace(wf, active_workspace_id)
         ]
         if not candidates:
             return None
@@ -105,16 +140,19 @@ class WorkflowLibrary:
         return {p.workflow_id: reuse_weight(p) for p in promotions}
 
     async def trigger(
-        self, tenant: str, wf_id: str, inputs: dict[str, Any]
+        self, tenant: str, wf_id: str, inputs: dict[str, Any],
+        *, active_workspace_id: str | None = None,
     ) -> dict[str, Any]:
         """Start a workflow and return a run descriptor (Hatchet seam).
 
         The actual durable execution is owned by Hatchet; here we resolve the
         definition, mint a run id and hand back a descriptor the caller (or a
         Hatchet bridge) acts on. Raises ``LookupError`` if the workflow is
-        unknown for the tenant (fail-closed, K-13).
+        unknown for the tenant (fail-closed, K-13). Workspace-scoped ([2026]
+        VJS-COUNTY 8, D2): a workflow scoped to a DIFFERENT workspace is unknown to
+        this caller (LookupError), so it can never be triggered cross-workspace.
         """
-        wf = await self.get(tenant, wf_id)
+        wf = await self.get(tenant, wf_id, active_workspace_id=active_workspace_id)
         if wf is None:
             raise LookupError(f"unknown workflow '{wf_id}' for tenant '{tenant}'")
         durable = bool(self._executor and getattr(self._executor, "durable", False))
@@ -157,7 +195,12 @@ class WorkflowLibrary:
         """
         if self._kernel is None:
             raise RuntimeError("WorkflowLibrary.execute requires a kernel")
-        wf = await self.get(tenant, wf_id)
+        # Scope resolution to the caller's active workspace ([2026] VJS-COUNTY 8, D2):
+        # the InvocationContext already carries it (re-authorized every request), so a
+        # workflow scoped to a different workspace is unknown here (LookupError).
+        wf = await self.get(
+            tenant, wf_id, active_workspace_id=context.workspace_id
+        )
         if wf is None:
             raise LookupError(f"unknown workflow '{wf_id}' for tenant '{tenant}'")
         return await run_workflow_definition(

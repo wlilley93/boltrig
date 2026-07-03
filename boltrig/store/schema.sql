@@ -107,10 +107,20 @@ CREATE TABLE IF NOT EXISTS workflow_definitions (
     definition  JSONB NOT NULL,
     intent_tags JSONB,
     origin_task TEXT,
+    -- The WORKSPACE this workflow is scoped to ([2026] VJS-COUNTY 8, D2). NULL means
+    -- ORG-WIDE (visible + runnable in every workspace of the org, exactly as today);
+    -- a SET value scopes the workflow to that one workspace. RLS stays tenant_id-
+    -- fenced (below); workspace scoping is an APPLICATION filter on top, because a
+    -- NULL row must stay visible to every workspace and an RLS predicate on
+    -- workspace_id would hide those org-wide rows.
+    workspace_id TEXT,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (tenant_id, id, version)
 );
+-- Scope lookups by (tenant_id, workspace_id) without hiding org-wide NULL rows.
+CREATE INDEX IF NOT EXISTS workflow_definitions_ws_idx
+    ON workflow_definitions (tenant_id, workspace_id);
 
 -- Eval-gated reuse ranking ([2026] VJS-COUNTY 5). A ranking-only record keyed by
 -- workflow id: a generated/learned workflow becomes a promotion CANDIDATE, is

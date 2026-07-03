@@ -37,13 +37,19 @@ def _slug(text: str) -> str:
 
 
 def generate_workflow(
-    task: str, intent_tags: list[str], tenant_id: str
+    task: str, intent_tags: list[str], tenant_id: str,
+    *, workspace_id: str | None = None,
 ) -> WorkflowDefinition:
     """Build a deterministic linear workflow for ``task`` (US-WFL-02).
 
     The ``definition`` is a Hatchet-style spec dict: a named workflow whose steps
     form a single dependency line. ``source`` is ``generated`` and no LLM is
     involved, so the same task always yields the same spec.
+
+    ``workspace_id`` stamps the caller's ACTIVE workspace ([2026] VJS-COUNTY 8, D2)
+    so the synthesised workflow - and any workflow later learned from it - inherits
+    the scope of the run that produced it. None (the default) means org-wide, so an
+    existing caller with no active workspace synthesises exactly as before.
     """
     name = f"gen-{_slug(task)}"
     steps: list[dict[str, Any]] = []
@@ -76,6 +82,7 @@ def generate_workflow(
         definition=definition,
         intent_tags=list(intent_tags or []),
         origin_task=task,
+        workspace_id=workspace_id,
     )
 
 
@@ -86,7 +93,11 @@ async def learn_from_success(
 
     Builds a new record (the input is not mutated) tagged ``learned`` and stamped
     with the ``origin_task`` that proved it, then upserts it for future matching.
-    Returns the learned definition.
+    Returns the learned definition. The learned workflow INHERITS the ``workspace_id``
+    of the workflow that produced it ([2026] VJS-COUNTY 8, D2) - ``replace`` carries
+    every unchanged field forward - so a workspace-scoped run learns a workspace-
+    scoped workflow, and an org-wide (None) run learns an org-wide one. Learning
+    never widens scope or authority (COUNTY 5): only provenance changes.
 
     Reserved for engine plan Phase 3 (wired into run completion to save learned
     workflows).
@@ -103,6 +114,7 @@ async def select_or_generate_workflow(
     tenant_id: str,
     *,
     runtime: Any | None = None,
+    workspace_id: str | None = None,
 ) -> WorkflowDefinition:
     """Prefer a matched (learned/precreated/generated) workflow, else synthesise.
 
@@ -112,15 +124,24 @@ async def select_or_generate_workflow(
     synthesised again. When nothing overlaps (an empty or non-matching library)
     ``match`` returns ``None`` and we fall back to synthesis, so behaviour is
     unchanged today and improves as the library fills.
+
+    Workspace-scoped ([2026] VJS-COUNTY 8, D2): the caller's active ``workspace_id``
+    both narrows the library lookup (match returns org-wide OR own-workspace
+    workflows only, never another workspace's) and stamps a freshly synthesised
+    workflow, so a run inside a workspace reuses/creates within that workspace while
+    a run with no active workspace (None) sees + creates only org-wide workflows,
+    exactly as before.
     """
     from .library import WorkflowLibrary  # local import: no package-load cycle
 
     library = WorkflowLibrary(store)
-    matched = await library.match(tenant_id, list(intent_tags or []))
+    matched = await library.match(
+        tenant_id, list(intent_tags or []), active_workspace_id=workspace_id
+    )
     if matched is not None:
         return matched
     return await generate_workflow_reasoned(
-        task, intent_tags, tenant_id, runtime=runtime
+        task, intent_tags, tenant_id, runtime=runtime, workspace_id=workspace_id
     )
 
 
@@ -142,7 +163,8 @@ def _extract_steps(result: Any) -> list[dict[str, Any]]:
 
 
 async def generate_workflow_reasoned(
-    task: str, intent_tags: list[str], tenant_id: str, *, runtime: Any | None = None
+    task: str, intent_tags: list[str], tenant_id: str, *,
+    runtime: Any | None = None, workspace_id: str | None = None,
 ) -> WorkflowDefinition:
     """Synthesise a workflow, optionally via a reasoning runtime (US-WFL-02).
 
@@ -151,9 +173,14 @@ async def generate_workflow_reasoned(
     ``synthesis: reasoned``. With no runtime, an unusable proposal, or any failure
     (offline, no model), it falls back to the deterministic linear pipeline
     (:func:`generate_workflow`), so synthesis never crashes the fleet (P9).
+
+    ``workspace_id`` (the caller's active workspace, [2026] VJS-COUNTY 8, D2) is
+    stamped on the synthesised workflow on every path - reasoned and the
+    deterministic fallbacks - so scope is inherited regardless of how synthesis
+    resolves. None means org-wide (backward-compat).
     """
     if runtime is None:
-        return generate_workflow(task, intent_tags, tenant_id)
+        return generate_workflow(task, intent_tags, tenant_id, workspace_id=workspace_id)
     try:
         from boltrig.models import InvocationContext
 
@@ -161,12 +188,16 @@ async def generate_workflow_reasoned(
             f"Propose ordered workflow steps for this task: {task}\n"
             'Return JSON only: {"steps":[{"name":"...","description":"..."}]}'
         )
-        result = await runtime.run(prompt, InvocationContext(tenant_id=tenant_id), tools=[])
+        result = await runtime.run(
+            prompt,
+            InvocationContext(tenant_id=tenant_id, workspace_id=workspace_id),
+            tools=[],
+        )
         proposed = _extract_steps(result)
         if not proposed:
-            return generate_workflow(task, intent_tags, tenant_id)
+            return generate_workflow(task, intent_tags, tenant_id, workspace_id=workspace_id)
     except Exception:
-        return generate_workflow(task, intent_tags, tenant_id)
+        return generate_workflow(task, intent_tags, tenant_id, workspace_id=workspace_id)
 
     steps: list[dict[str, Any]] = []
     previous: str | None = None
@@ -201,6 +232,7 @@ async def generate_workflow_reasoned(
         definition=definition,
         intent_tags=list(intent_tags or []),
         origin_task=task,
+        workspace_id=workspace_id,
     )
 
 

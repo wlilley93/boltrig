@@ -367,12 +367,14 @@ class PostgresStore(ChannelStorePG):
     async def upsert_workflow(self, w: WorkflowDefinition):
         await self._pool.execute(
             """INSERT INTO workflow_definitions (id, tenant_id, version, source, definition,
-                                                 intent_tags, origin_task)
-               VALUES ($1,$2,$3,$4,$5,$6,$7)
+                                                 intent_tags, origin_task, workspace_id)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
                ON CONFLICT (tenant_id, id, version) DO UPDATE SET
                  source=EXCLUDED.source, definition=EXCLUDED.definition,
-                 intent_tags=EXCLUDED.intent_tags, origin_task=EXCLUDED.origin_task, updated_at=now()""",
-            w.id, w.tenant_id, w.version, w.source.value, w.definition, w.intent_tags, w.origin_task,
+                 intent_tags=EXCLUDED.intent_tags, origin_task=EXCLUDED.origin_task,
+                 workspace_id=EXCLUDED.workspace_id, updated_at=now()""",
+            w.id, w.tenant_id, w.version, w.source.value, w.definition, w.intent_tags,
+            w.origin_task, w.workspace_id,
         )
 
     async def list_workflows(self, tenant_id):
@@ -1691,6 +1693,7 @@ def _workflow(r):
         id=r["id"], tenant_id=r["tenant_id"], version=r["version"],
         source=WorkflowSource(r["source"]), definition=r["definition"],
         intent_tags=list(r["intent_tags"] or []), origin_task=r["origin_task"],
+        workspace_id=r["workspace_id"],
     )
 
 
