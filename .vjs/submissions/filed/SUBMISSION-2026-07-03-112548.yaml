@@ -1,0 +1,54 @@
+id: SUBMISSION-2026-07-03-112548
+court_requested: county
+jurisdiction: default
+question: How should one human identity span multiple organisations and switch between them without breaking the org=tenant RLS isolation?
+facts: |
+  # Case: a user identity that spans multiple organisations
+
+  ## Facts (verified)
+  1. Boltrig's tenancy ([2026] VJS-COUNTY 8): the organisation IS the tenant_id
+     boundary (RLS-fenced). A User row is keyed (tenant_id, id); a session carries the
+     active workspace within its tenant.
+  2. Org-provisioning-by-invite (COUNTY 8 phase 6) creates an OrgMember in a freshly
+     minted tenant but NO User identity row or password credential there, and there is
+     no way to log into or SWITCH into that new org. So a user is effectively single-org
+     today; cross-org is half-wired.
+  3. The first-party login (COUNTY 7) authenticates against one console tenant
+     (BOLTRIG_SESSION_TENANT); identity comes only from the verified session.
+  4. Opbox's model (the template): a global User (unique email) joined to many orgs via
+     OrganizationMember, switching the active org. Boltrig already has org_members +
+     list_orgs_for_user (the switching seam), just not a cross-tenant identity or login.
+  5. RLS fences every read to one tenant, so a naive cross-tenant identity must not
+     break isolation: a user acting in org A must never read org B's data.
+
+  ## The question
+  How should one human identity span multiple organisations and switch between them,
+  without breaking the org=tenant RLS isolation?
+
+  ## Options
+  A. A global identity anchored on the normalised email, with a per-org User row +
+     membership. Login authenticates the email against a credential (held once, not
+     per-org); the session then carries the ACTIVE org (tenant) + workspace, and an org
+     switch RE-AUTHORIZES against org_members (like the workspace switch) and rebinds the
+     RLS tenant for every subsequent request. Provisioning-by-invite completes by
+     creating the invitee's User row + membership in the new org (the credential is the
+     shared identity). Isolation holds: a request is always bound to exactly one active
+     tenant; the switch is the only thing that changes it, always membership-checked.
+     Strongest case: faithful to Opbox, reuses list_orgs_for_user + the switch pattern +
+     the RLS fence; one login, many orgs. Cost: deciding where the shared credential
+     lives (a global identity table vs the console-tenant user) and a per-request active
+     tenant that is re-authorized, not trusted.
+  B. Separate accounts per org (no cross-tenant identity). Rejected: the Principal wants
+     Opbox-style multi-org, and provisioning-by-invite already implies it.
+  C. A single super-tenant holding all users with app-level org scoping. Rejected:
+     collapses the org=tenant RLS fence that isolation depends on.
+
+  ## Constraints
+  Isolation is paramount: a request is bound to ONE active tenant, an org switch is
+  membership-re-authorized and rebinds RLS, never trusted from the client; the shared
+  credential is sealed; provisioning-by-invite must produce a usable login in the new
+  org; audited; composes with COUNTY 7 (login) + COUNTY 8 (active context) + COUNTY 10
+  (2FA travels with the identity). Prod cutover stays Principal-gated.
+requested_order: TBD
+private_boundary: local
+word_count: 461

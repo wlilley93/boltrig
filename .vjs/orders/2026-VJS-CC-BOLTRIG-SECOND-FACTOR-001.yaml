@@ -1,0 +1,72 @@
+id: 2026-VJS-CC-BOLTRIG-SECOND-FACTOR-001
+court: county
+jurisdiction: default
+repo_code: null
+status: binding
+issue: second_factor_auth
+holding: |
+  Option A is adopted. Boltrig adds TOTP (RFC 6238, authenticator app) plus a set of
+  one-time hashed recovery codes as the second factor on the first-party login, with
+  NO external dependency (TOTP verifies offline). The TOTP secret is stored SEALED
+  through the credential store (encrypted, never plaintext, never audited, never
+  returned after enrollment); recovery codes are stored only as hashes and each is
+  single-use. The factor sits BETWEEN password-verify and session-issue (COUNTY 7): a
+  user who has 2FA enabled OR whose org sets require_two_factor must pass a TOTP (or a
+  recovery code) challenge before any session issues. Enrollment is offered after
+  first login and is FORCED before console access when the org requires_two_factor (a
+  user with an unmet requirement reaches only the enrollment surface, nothing else).
+  The challenge is fail-closed (an enabled factor that fails is denied, never
+  bypassed), rate-limited via the existing RateLimiter, and constant-time; every
+  enroll / challenge-pass / challenge-fail / recovery-code-use / disable is audited
+  keys-only. A TOTP library is a surfaced dependency. Option B (WebAuthn/passkeys) is
+  a permitted later add-on, not the first factor. Option C (email/SMS OTP) is rejected
+  as needing an external dependency that becomes login's availability (the reason
+  magic-link was deferred in COUNTY 7). The live prod cutover stays Principal-gated.
+directives:
+- id: D1
+  actor: lexby
+  must: store_the_totp_secret_sealed_through_the_credential_store_encrypted_never_plaintext_never_audited_never_returned_after_enrollment
+  when: null
+- id: D2
+  actor: lexby
+  must: issue_one_time_recovery_codes_stored_only_as_hashes_each_single_use_as_the_fallback_never_a_bypass
+  when: null
+- id: D3
+  actor: lexby
+  must: challenge_the_second_factor_between_password_verify_and_session_issue_when_the_user_has_2fa_enabled_or_the_org_requires_it_fail_closed
+  when: null
+- id: D4
+  actor: lexby
+  must: enforce_org_require_two_factor_by_forcing_enrollment_before_console_access_a_user_with_an_unmet_requirement_reaches_only_the_enrollment_surface
+  when: null
+- id: D5
+  actor: lexby
+  must: rate_limit_and_constant_time_the_challenge_via_the_existing_ratelimiter_and_audit_enroll_pass_fail_recovery_use_disable_keys_only
+  when: null
+- id: D6
+  actor: lexby
+  must: surface_the_totp_library_dependency_and_pin_it
+  when: null
+- id: D7
+  actor: lexby
+  must: pin_invariants_secret_sealed_recovery_hashed_single_use_challenge_fail_closed_between_password_and_session_org_requirement_forces_enrollment_rate_limited_audited_debt_zero
+  when: null
+forbidden:
+- storing_the_totp_secret_or_a_recovery_code_in_plaintext_or_writing_either_into_an_audit_row
+- issuing_a_session_when_an_enabled_or_org_required_second_factor_has_not_been_satisfied
+- a_recovery_code_or_disable_path_that_bypasses_the_factor_or_is_reusable
+- adding_an_email_or_sms_dependency_for_the_second_factor
+- letting_a_user_with_an_unmet_org_requirement_reach_any_console_surface_other_than_enrollment
+exceptions: null
+supersedes: []
+source_opinion: null
+runtime_summary: |
+  Boltrig adds TOTP + one-time hashed recovery codes as the second factor: the secret
+  is sealed (encrypted, never plaintext/audited), the challenge sits between
+  password-verify and session-issue and is fail-closed + rate-limited + constant-time,
+  org require_two_factor forces enrollment before any other surface, and everything is
+  audited keys-only. No external dependency (TOTP is offline). WebAuthn is a later
+  add-on; email/SMS OTP is rejected. Prod cutover stays Principal-gated.
+created_at: 2026-07-03T11:25:10Z
+citation: '[2026] VJS-COUNTY 10'
+assent_source: standing_bounded_assent

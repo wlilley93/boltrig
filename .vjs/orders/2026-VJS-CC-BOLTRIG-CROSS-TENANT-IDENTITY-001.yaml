@@ -1,0 +1,67 @@
+id: 2026-VJS-CC-BOLTRIG-CROSS-TENANT-IDENTITY-001
+court: county
+jurisdiction: default
+repo_code: null
+status: binding
+issue: cross_tenant_identity
+holding: |
+  Option A is adopted. One human identity spans multiple organisations via a global
+  identity anchored on the normalised email, with a per-org User row + org membership.
+  Login authenticates the email against a credential held ONCE (not per-org); the
+  session then carries the ACTIVE org (tenant) + workspace, and an org switch
+  RE-AUTHORIZES against org_members (mirroring the workspace switch) and REBINDS the
+  RLS tenant for every subsequent request. Isolation is preserved absolutely: a
+  request is always bound to exactly ONE active tenant, and the switch is the only
+  thing that changes it, always membership-checked, never trusted from the client.
+  Provisioning-by-invite (COUNTY 8) is completed by creating the invitee's User row +
+  membership in the new org, the shared credential being the identity. The shared
+  credential + any 2FA (COUNTY 10) travel with the identity, not the per-org row.
+  Option B (separate accounts per org) is rejected as contrary to the Principal's
+  multi-org intent. Option C (a single super-tenant with app-level scoping) is
+  rejected as collapsing the org=tenant RLS fence isolation depends on. Composes with
+  COUNTY 7/8/10; the live prod cutover stays Principal-gated.
+directives:
+- id: D1
+  actor: lexby
+  must: anchor_identity_on_the_normalised_email_with_a_per_org_user_row_and_org_membership_and_a_credential_held_once_not_per_org
+  when: null
+- id: D2
+  actor: lexby
+  must: carry_the_active_org_tenant_plus_workspace_in_the_session_and_re_authorize_an_org_switch_against_org_members_rebinding_the_rls_tenant_every_request_never_trusting_the_client
+  when: null
+- id: D3
+  actor: lexby
+  must: keep_every_request_bound_to_exactly_one_active_tenant_so_a_user_in_org_a_can_never_read_org_b_the_switch_is_the_only_tenant_change
+  when: null
+- id: D4
+  actor: lexby
+  must: complete_provisioning_by_invite_by_creating_the_invitees_user_row_and_membership_in_the_new_org_reusing_the_shared_credential_identity
+  when: null
+- id: D5
+  actor: lexby
+  must: keep_the_shared_credential_sealed_and_let_2fa_travel_with_the_identity_not_the_per_org_row
+  when: null
+- id: D6
+  actor: lexby
+  must: pin_invariants_one_active_tenant_per_request_switch_membership_re_authorized_and_rebinds_rls_no_cross_org_read_provisioning_produces_a_usable_login_audited_debt_zero
+  when: null
+forbidden:
+- a_request_or_a_session_reading_more_than_one_tenants_data_or_a_switch_that_is_not_membership_re_authorized
+- trusting_a_client_supplied_active_org_without_re_authorizing_against_org_members_and_rebinding_rls
+- a_super_tenant_or_app_level_scoping_that_collapses_the_org_equals_tenant_rls_fence
+- leaving_a_provisioned_org_without_a_usable_login_for_the_invitee
+- storing_the_shared_credential_unsealed_or_duplicating_it_per_org
+exceptions: null
+supersedes: []
+source_opinion: null
+runtime_summary: |
+  One identity spans many orgs: a global email-anchored identity with per-org User +
+  membership and a credential held once. The session carries the active org+workspace;
+  an org switch is membership-re-authorized and rebinds the RLS tenant every request,
+  so a request is always bound to exactly one tenant and cross-org reads are
+  impossible. Provisioning-by-invite creates the invitee's login in the new org; the
+  credential + 2FA travel with the identity. Super-tenant and per-org-accounts are
+  rejected. Prod cutover stays Principal-gated.
+created_at: 2026-07-03T11:26:00Z
+citation: '[2026] VJS-COUNTY 11'
+assent_source: standing_bounded_assent

@@ -1,0 +1,54 @@
+id: SUBMISSION-2026-07-03-112457
+court_requested: county
+jurisdiction: default
+question: 'How should Boltrig add a second factor to the first-party login: what factor, where the secret lives, when a user enrolls and is challenged, how the org require_two_factor flag is enforced, and how recovery works?'
+facts: |
+  # Case: second-factor authentication on the first-party login
+
+  ## Facts (verified)
+  1. The first-party login ([2026] VJS-COUNTY 7) is now the console gate: argon2id
+     password, a Boltrig session, fail-closed resolver.
+  2. The organisation already carries a `require_two_factor` boolean (added in the
+     org/workspace model, [2026] VJS-COUNTY 8 phase 1) but NOTHING enforces it: there
+     is no enrollment, no challenge, no second-factor store. It is a dead flag.
+  3. Opbox's User (the template) carries mfaSecret (encrypted), mfaEnabled, and
+     hashed mfaBackupCodes - a TOTP + recovery-code model.
+  4. Boltrig has the sealed credential store (secrets never plaintext), the audit
+     chain, the RateLimiter, and the session machinery to build on. It ships no
+     email/SMS dependency (magic-link/email-OTP were deferred in COUNTY 7 as needing
+     an external dep the Principal must supply).
+  5. This is the one obvious hole in an otherwise-complete auth story, and a real
+     tenant admin will require it.
+
+  ## The question
+  How should Boltrig add a second factor to the first-party login: what factor,
+  where the secret lives, when a user enrolls, when they are challenged, how the
+  org `require_two_factor` flag is enforced, and how recovery works?
+
+  ## Options
+  A. TOTP (authenticator app) + hashed recovery codes. The user enrolls a TOTP
+     secret (stored sealed, encrypted, via the credential store, never plaintext or
+     audited); at login, after the password verifies, if the user has 2FA enabled OR
+     the org requires it, a TOTP challenge is required before the session issues; a
+     set of one-time hashed recovery codes is the fallback; enrollment is offered
+     after first login and FORCED before access when the org requires_two_factor.
+     Constant-time verify, rate-limited, audited keys-only, fail-closed (an enabled
+     factor that fails is denied, never bypassed). Strongest case: no external
+     dependency (TOTP is offline/RFC 6238), mirrors Opbox, reuses the sealed store +
+     session. Cost: a TOTP library dependency (surfaced) + an enrollment/challenge UI.
+  B. WebAuthn / passkeys. Phishing-resistant, modern. Cost: heavier, device-bound
+     recovery complexity; better as a later add-on than the first second factor.
+  C. Email / SMS OTP. Cost: REQUIRES an email/SMS dependency the Principal must
+     supply, and deliverability becomes login's availability - the same reason
+     magic-link was deferred.
+
+  ## Constraints
+  The second factor secret must be sealed (never plaintext/audited), the challenge
+  must be fail-closed + rate-limited + constant-time, recovery must not be a bypass,
+  the org require_two_factor flag must actually block access until enrolled, and any
+  new dependency (a TOTP lib) is surfaced. It composes with COUNTY 7 (factor two sits
+  between password-verify and session-issue) and COUNTY 8 (org-level enforcement).
+  The live prod cutover stays Principal-gated.
+requested_order: TBD
+private_boundary: local
+word_count: 454
