@@ -19,8 +19,14 @@ import {
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
-import { api, streamChat, streamRunEvents } from "../api/client";
-import type { ChatEvent, ChatMessage, ConversationSummary } from "../api/types";
+import { ApiError, api, streamChat, streamRunEvents } from "../api/client";
+import type {
+  ChatAttachment,
+  ChatEvent,
+  ChatMessage,
+  ChatRequest,
+  ConversationSummary,
+} from "../api/types";
 import { consumeComposerPrefill } from "../composerPrefill";
 import { useSlideActive } from "../deck/context";
 import { navigate, openRun } from "../router";
@@ -41,6 +47,82 @@ const EXAMPLE_PROMPTS: ReadonlyArray<string> = [
 
 // Faithful server reason (a denied chat shows the kernel's message, not a 403).
 const errText = apiReason;
+
+// Attachment caps mirror the fail-closed ChatConfig defaults on the kernel
+// ([2026] VJS-COUNTY 3): a count cap, a per-file decoded-bytes cap, and a total
+// decoded-bytes cap. They are enforced here so an over-cap turn is rejected
+// before it is sent; the backend re-checks and returns 413 attachment_rejected,
+// which the send path also surfaces (never a silent drop).
+const MAX_ATTACHMENTS = 8;
+const MAX_ATTACHMENT_BYTES = 256 * 1024;
+const MAX_TOTAL_ATTACHMENT_BYTES = 1024 * 1024;
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(n < 10 * 1024 ? 1 : 0)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function isTextAttachment(mediaType: string): boolean {
+  return (mediaType || "").toLowerCase().startsWith("text/");
+}
+
+// Base64-encode raw bytes in chunks: btoa over one huge binary string can blow
+// the call stack on a large file.
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+function decodeTextAttachment(data: string): string {
+  try {
+    const bin = atob(data);
+    const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+    return new TextDecoder().decode(bytes);
+  } catch {
+    return "";
+  }
+}
+
+// A single rendered attachment: name + media type (+ size when recorded). A
+// text/* attachment gets an expandable inline preview; every other type is a
+// record-only chip (the kernel never decodes it into the model input either).
+function AttachmentChip({ att }: { att: ChatAttachment }) {
+  const meta = `${att.media_type}${att.size ? ` - ${formatBytes(att.size)}` : ""}`;
+  if (isTextAttachment(att.media_type)) {
+    const text = decodeTextAttachment(att.data);
+    return (
+      <details className="chat-att chat-att--text">
+        <summary className="chat-att__head">
+          <span className="chat-att__name">{att.name}</span>
+          <span className="chat-att__meta muted">{meta}</span>
+        </summary>
+        <pre className="chat-att__preview">{text.slice(0, 4000)}</pre>
+      </details>
+    );
+  }
+  return (
+    <span className="chat-att">
+      <span className="chat-att__name">{att.name}</span>
+      <span className="chat-att__meta muted">{meta}</span>
+    </span>
+  );
+}
+
+function AttachmentList({ attachments }: { attachments?: ChatAttachment[] }) {
+  if (!attachments || attachments.length === 0) return null;
+  return (
+    <div className="chat-atts">
+      {attachments.map((a, i) => (
+        <AttachmentChip key={`${a.name}-${i}`} att={a} />
+      ))}
+    </div>
+  );
+}
 
 async function copyText(text: string): Promise<boolean> {
   try {
@@ -277,40 +359,80 @@ function MessageBubble({
   message,
   resolvedHitls,
   onResolve,
+  canRegenerate,
+  regenerating,
+  onRegenerate,
 }: {
   message: ChatMessage;
   resolvedHitls: Record<string, string>;
   onResolve: (id: string, status: string) => void;
+  canRegenerate: boolean;
+  regenerating: boolean;
+  onRegenerate: () => void;
 }) {
   const turn = useMemo(() => normalizeEvents(message.events ?? []), [message.events]);
   const isAssistant = message.role === "assistant";
   const roleLabel = isAssistant ? "orchestrator" : message.role === "user" ? "you" : message.role;
+  const superseded = Boolean(message.superseded_by);
+
+  const body = (
+    <>
+      {isAssistant && (
+        <TurnExtras
+          turn={turn}
+          resolvedHitls={resolvedHitls}
+          onResolve={onResolve}
+          onOpenRun={openRun}
+        />
+      )}
+      {message.content && <MarkdownText value={message.content} />}
+      <AttachmentList attachments={message.attachments} />
+      <div className="chat-msg__meta">
+        <span title={message.created_at}>{whenText(message.created_at)}</span>
+        {message.content && <CopyButton text={message.content} />}
+        {message.run_id && (
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            onClick={() => openRun(message.run_id as string)}
+          >
+            View run
+          </button>
+        )}
+        {canRegenerate && (
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            disabled={regenerating}
+            onClick={onRegenerate}
+          >
+            {regenerating ? "Regenerating..." : "Regenerate"}
+          </button>
+        )}
+      </div>
+    </>
+  );
+
   return (
-    <div className={`chat-msg chat-msg--${isAssistant ? "assistant" : message.role}`}>
+    <div
+      className={`chat-msg chat-msg--${isAssistant ? "assistant" : message.role}${
+        superseded ? " chat-msg--superseded" : ""
+      }`}
+    >
       <div className="chat-msg__role">{roleLabel}</div>
       <div className="chat-msg__bubble">
-        {isAssistant && (
-          <TurnExtras
-            turn={turn}
-            resolvedHitls={resolvedHitls}
-            onResolve={onResolve}
-            onOpenRun={openRun}
-          />
+        {superseded ? (
+          // A regenerated reply is frozen, not deleted: keep it on the record,
+          // collapsed and dimmed, behind a disclosure (US: append-plus-supersede).
+          <details className="chat-msg__superseded">
+            <summary className="chat-msg__supersededhead muted">
+              Superseded reply (regenerated) - click to view
+            </summary>
+            {body}
+          </details>
+        ) : (
+          body
         )}
-        {message.content && <MarkdownText value={message.content} />}
-        <div className="chat-msg__meta">
-          <span title={message.created_at}>{whenText(message.created_at)}</span>
-          {message.content && <CopyButton text={message.content} />}
-          {message.run_id && (
-            <button
-              type="button"
-              className="btn btn--ghost btn--sm"
-              onClick={() => openRun(message.run_id as string)}
-            >
-              View run
-            </button>
-          )}
-        </div>
       </div>
     </div>
   );
@@ -340,6 +462,16 @@ export function ChatPanel() {
   const [resolvedHitls, setResolvedHitls] = useState<Record<string, string>>({});
   const [showJump, setShowJump] = useState(false);
 
+  // Composer attachments awaiting send, the copy shown on the optimistic user
+  // bubble while a turn streams, and any client-side cap rejection.
+  const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
+  const [pendingAttachments, setPendingAttachments] = useState<ChatAttachment[]>([]);
+  const [attachError, setAttachError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // The message id currently being regenerated (its button shows a busy state).
+  const [regenerating, setRegenerating] = useState<string | null>(null);
+
   // The conversation_id is unknown until the first message_start of a new
   // conversation; we hold it in a ref so the stream callback can stash it
   // without churning React state mid-stream.
@@ -360,6 +492,16 @@ export function ChatPanel() {
   }, []);
 
   const live = useMemo(() => normalizeEvents(liveEvents), [liveEvents]);
+
+  // Regenerate is offered on the LAST live (non-superseded) assistant reply only
+  // (the backend rejects any earlier target with 409 regenerate_not_eligible).
+  const lastAssistantId = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (m.role === "assistant" && !m.superseded_by) return m.id;
+    }
+    return null;
+  }, [messages]);
 
   useEffect(() => {
     if (!slideActive) return;
@@ -415,6 +557,53 @@ export function ChatPanel() {
     setResolvedHitls((prev) => ({ ...prev, [id]: status }));
   }
 
+  // Read the chosen files, base64-encode them, and enforce the caps client-side
+  // (count, per-file, total). A rejected file is reported, never silently dropped.
+  async function addFiles(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    setAttachError(null);
+    const next = [...attachments];
+    for (const file of Array.from(files)) {
+      if (next.length >= MAX_ATTACHMENTS) {
+        setAttachError(`Too many attachments (max ${MAX_ATTACHMENTS}).`);
+        break;
+      }
+      if (file.size > MAX_ATTACHMENT_BYTES) {
+        setAttachError(
+          `${file.name} is ${formatBytes(file.size)} (max ` +
+            `${formatBytes(MAX_ATTACHMENT_BYTES)} per file).`,
+        );
+        continue;
+      }
+      const total = next.reduce((s, a) => s + (a.size ?? 0), 0) + file.size;
+      if (total > MAX_TOTAL_ATTACHMENT_BYTES) {
+        setAttachError(
+          `Attachments exceed the ${formatBytes(MAX_TOTAL_ATTACHMENT_BYTES)} total cap.`,
+        );
+        break;
+      }
+      try {
+        const buf = await file.arrayBuffer();
+        if (!alive.current) return;
+        next.push({
+          name: file.name || "attachment",
+          media_type: file.type || "application/octet-stream",
+          data: bytesToBase64(new Uint8Array(buf)),
+          size: file.size,
+        });
+      } catch {
+        setAttachError(`Could not read ${file.name}.`);
+      }
+    }
+    setAttachments(next);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  function removeAttachment(index: number) {
+    setAttachments((prev) => prev.filter((_, i) => i !== index));
+    setAttachError(null);
+  }
+
   async function loadConversation(id: string) {
     setMsgsLoading(true);
     setMsgsError(null);
@@ -436,6 +625,7 @@ export function ChatPanel() {
     setStopped(false);
     setStreamError(null);
     setPendingUser(null);
+    setPendingAttachments([]);
     setLiveEvents([]);
     setActiveId(id);
     void loadConversation(id);
@@ -447,6 +637,9 @@ export function ChatPanel() {
     setStopped(false);
     setStreamError(null);
     setPendingUser(null);
+    setPendingAttachments([]);
+    setAttachments([]);
+    setAttachError(null);
     setLiveEvents([]);
     setActiveId(null);
     setMessages([]);
@@ -454,27 +647,39 @@ export function ChatPanel() {
 
   async function send() {
     const text = input.trim();
-    if (!text || streaming) return;
+    const atts = attachments;
+    if ((!text && atts.length === 0) || streaming) return;
 
     setInput("");
     setStreamError(null);
+    setAttachError(null);
     setStopped(false);
     setPendingUser(text);
+    setPendingAttachments(atts);
+    setAttachments([]);
     setLiveEvents([]);
     setStreaming(true);
     pendingConvId.current = activeId;
+
+    const req: ChatRequest = activeId
+      ? { conversation_id: activeId, message: text }
+      : { message: text };
+    if (atts.length > 0) req.attachments = atts;
 
     const ctrl = new AbortController();
     abortRef.current = ctrl;
 
     try {
       await streamChat(
-        activeId ? { conversation_id: activeId, message: text } : { message: text },
+        req,
         (ev) => {
           if (ctrl.signal.aborted || !alive.current) return;
           if (ev.type === "message_start" && ev.conversation_id) {
             pendingConvId.current = ev.conversation_id;
           }
+          // A server-side cancel ends the stream: mark the turn stopped so the
+          // banner shows once the (partial) reply settles.
+          if (ev.type === "cancelled") setStopped(true);
           setLiveEvents((prev) => [...prev, ev]);
         },
         ctrl.signal,
@@ -492,11 +697,18 @@ export function ChatPanel() {
         convs.reload();
       }
       setPendingUser(null);
+      setPendingAttachments([]);
       setLiveEvents([]);
     } catch (err) {
       if (!alive.current) return;
       setStreaming(false);
       if (ctrl.signal.aborted) return; // user switched/cancelled; not an error
+      // The kernel rejects an over-cap turn with 413 before it streams; restore
+      // the attachments to the composer so the user can trim and retry.
+      if (err instanceof ApiError && err.status === 413) {
+        setAttachments(atts);
+        setAttachError(errText(err));
+      }
       // US-CONV-07: keep the partial turn on screen and offer a reconnect.
       setStreamError(errText(err));
     } finally {
@@ -516,6 +728,7 @@ export function ChatPanel() {
       convs.reload();
     }
     setPendingUser(null);
+    setPendingAttachments([]);
     setLiveEvents([]);
     setStopped(false);
   }
@@ -527,10 +740,56 @@ export function ChatPanel() {
     }
   }
 
-  function stopWatching() {
-    abortRef.current?.abort();
-    setStreaming(false);
+  // Stop the active turn: cancel it server-side (owner-only, cooperative) so the
+  // stream emits a terminal `cancelled` event and closes cleanly. Before the
+  // first message_start there is no run id yet, so fall back to a local abort;
+  // likewise if the cancel could not be recorded (e.g. not yet a work item).
+  async function stopTurn() {
+    const runId = live.runId;
     setStopped(true);
+    if (!runId) {
+      abortRef.current?.abort();
+      setStreaming(false);
+      return;
+    }
+    try {
+      const res = await api.cancelRun(runId);
+      if (!alive.current) return;
+      if (res.status !== "ok") {
+        abortRef.current?.abort();
+        setStreaming(false);
+      }
+      // On success the backend closes the stream via the `cancelled` event; the
+      // send() loop then settles on its own (no local abort needed).
+    } catch {
+      if (!alive.current) return;
+      abortRef.current?.abort();
+      setStreaming(false);
+    }
+  }
+
+  // Regenerate the last assistant reply (owner-only, append-plus-supersede). The
+  // route drives the whole turn server-side and returns the new message, so we
+  // reload the transcript to show the fresh reply and the now-dimmed prior one.
+  async function regenerate(messageId: string) {
+    if (!activeId || streaming || regenerating) return;
+    setRegenerating(messageId);
+    setStreamError(null);
+    setMsgsError(null);
+    try {
+      const res = await api.regenerateMessage(activeId, messageId);
+      if (!alive.current) return;
+      if (res.status !== "ok") {
+        setMsgsError(res.reason ?? `Regenerate failed: ${res.status}`);
+      }
+      await loadConversation(activeId);
+      if (!alive.current) return;
+      convs.reload();
+    } catch (err) {
+      if (alive.current) setMsgsError(errText(err));
+    } finally {
+      if (alive.current) setRegenerating(null);
+    }
   }
 
   async function watchAgain() {
@@ -685,6 +944,11 @@ export function ChatPanel() {
                 message={m}
                 resolvedHitls={resolvedHitls}
                 onResolve={resolveHitl}
+                canRegenerate={
+                  m.id === lastAssistantId && !streaming && pendingUser === null
+                }
+                regenerating={regenerating === m.id}
+                onRegenerate={() => void regenerate(m.id)}
               />
             ))}
 
@@ -692,10 +956,11 @@ export function ChatPanel() {
               <div className="chat-msg chat-msg--user">
                 <div className="chat-msg__role">you</div>
                 <div className="chat-msg__bubble">
-                  <MarkdownText value={pendingUser} />
+                  {pendingUser && <MarkdownText value={pendingUser} />}
+                  <AttachmentList attachments={pendingAttachments} />
                   <div className="chat-msg__meta">
                     <span>sending</span>
-                    <CopyButton text={pendingUser} />
+                    {pendingUser && <CopyButton text={pendingUser} />}
                   </div>
                 </div>
               </div>
@@ -772,6 +1037,26 @@ export function ChatPanel() {
 
           <div className={`chat__composer ${streaming ? "chat__composer--thinking" : ""}`}>
             <div className="chat__inputwrap">
+              {attachments.length > 0 && (
+                <div className="chat-atts chat-atts--pending">
+                  {attachments.map((a, i) => (
+                    <span className="chat-att chat-att--pending" key={`${a.name}-${i}`}>
+                      <span className="chat-att__name">{a.name}</span>
+                      <span className="chat-att__meta muted">
+                        {formatBytes(a.size ?? 0)}
+                      </span>
+                      <button
+                        type="button"
+                        className="chat-att__remove"
+                        aria-label={`Remove ${a.name}`}
+                        onClick={() => removeAttachment(i)}
+                      >
+                        x
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
               <textarea
                 ref={inputRef}
                 className="chat__input"
@@ -782,15 +1067,39 @@ export function ChatPanel() {
                 onKeyDown={onComposerKey}
               />
               <div className="chat__hint">Shift+Enter for a new line.</div>
+              {attachError && (
+                <p className="error" role="alert">
+                  {attachError}
+                </p>
+              )}
             </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="chat__fileinput"
+              style={{ display: "none" }}
+              onChange={(e) => void addFiles(e.target.files)}
+            />
+            <button
+              type="button"
+              className="btn btn--ghost"
+              disabled={streaming || attachments.length >= MAX_ATTACHMENTS}
+              onClick={() => fileInputRef.current?.click()}
+              title={`Attach files (max ${MAX_ATTACHMENTS}, ${formatBytes(
+                MAX_ATTACHMENT_BYTES,
+              )} each)`}
+            >
+              Attach
+            </button>
             {streaming ? (
-              <button className="btn" onClick={stopWatching}>
+              <button className="btn" onClick={() => void stopTurn()}>
                 Stop
               </button>
             ) : (
               <button
                 className="btn btn--primary"
-                disabled={input.trim().length === 0}
+                disabled={input.trim().length === 0 && attachments.length === 0}
                 onClick={() => void send()}
               >
                 Send

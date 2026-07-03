@@ -145,9 +145,23 @@ export interface ConversationsResponse {
 
 export type ChatRole = "user" | "assistant" | "system" | string;
 
+// An inline, size-capped chat attachment ([2026] VJS-COUNTY 3). The send body
+// carries {name, media_type, data} (data is base64 of the raw file bytes); the
+// GET transcript view additionally carries the server-recorded decoded `size`.
+// The caps (count / per-file / total decoded bytes) are enforced fail-closed at
+// intake against ChatConfig, and mirrored client-side so an over-cap turn is
+// rejected before it is sent.
+export interface ChatAttachment {
+  name: string;
+  media_type: string;
+  data: string;
+  size?: number;
+}
+
 // A persisted message. `events` carries the structured turn (tool calls,
 // sub-agents, HITL) so a re-opened conversation re-renders the same cards as
-// the live stream did.
+// the live stream did. `attachments` are the turn's recorded inputs and
+// `superseded_by` names the newer message that froze this one (regenerate).
 export interface ChatMessage {
   id: string;
   role: ChatRole;
@@ -155,6 +169,8 @@ export interface ChatMessage {
   run_id?: string | null;
   hitl_request_id?: string | null;
   events?: ChatEvent[];
+  attachments?: ChatAttachment[];
+  superseded_by?: string | null;
   created_at: string;
 }
 
@@ -166,6 +182,30 @@ export interface ChatRequest {
   // omit to start a new conversation; the first message_start returns the id
   conversation_id?: string;
   message: string;
+  // inline, size-capped attachments ({name, media_type, data:base64}); omitted
+  // when the turn carries none.
+  attachments?: ChatAttachment[];
+}
+
+// POST /v1/me/conversations/{cid}/messages/{mid}/regenerate: re-runs the last
+// user turn on a new run id and appends a fresh assistant reply, freezing the
+// prior one (superseded_by). Owner-only; 409 regenerate_not_eligible when the
+// target is not the last assistant message.
+export interface RegenerateResponse {
+  status: string;
+  conversation_id?: string;
+  message_id?: string;
+  superseded?: string;
+  run_id?: string;
+  reason?: string;
+}
+
+// POST /v1/runs/{run_id}/cancel: owner-only cooperative cancel. On success the
+// run's SSE stream emits a terminal `cancelled` event and closes.
+export interface CancelRunResponse {
+  status: string;
+  run_id?: string;
+  reason?: string;
 }
 
 // --- The streamed event union (one JSON object per SSE data line) -----------
@@ -212,6 +252,12 @@ export interface ChatMessageEnd {
   type: "message_end";
   run_id: string;
 }
+// A run's SSE stream emits this terminal notice when the turn was cancelled
+// server-side (POST /v1/runs/{run_id}/cancel). It ends the stream cleanly.
+export interface ChatCancelled {
+  type: "cancelled";
+  run_id: string;
+}
 // Emitted by the interpreter per step as it walks the workflow (the live canvas
 // lights each node by matching step_id to a graph node id). Delivered on a run's
 // event stream alongside the step's underlying tool_call / tool_result.
@@ -231,6 +277,7 @@ export type ChatEvent =
   | ChatSubagent
   | ChatHitlEvent
   | ChatMessageEnd
+  | ChatCancelled
   | ChatWorkflowStep;
 
 // ===========================================================================

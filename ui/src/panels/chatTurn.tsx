@@ -50,6 +50,7 @@ export interface NormalizedTurn {
   hitls: HitlEntry[];
   steps: StepEntry[];
   ended: boolean;
+  cancelled: boolean;
 }
 
 export function normalizeEvents(events: ChatEvent[]): NormalizedTurn {
@@ -58,6 +59,7 @@ export function normalizeEvents(events: ChatEvent[]): NormalizedTurn {
   let text = "";
   let reasoning = "";
   let ended = false;
+  let cancelled = false;
   const tools: ToolEntry[] = [];
   const subagents: SubagentEntry[] = [];
   const hitls: HitlEntry[] = [];
@@ -127,10 +129,20 @@ export function normalizeEvents(events: ChatEvent[]): NormalizedTurn {
         ended = true;
         runId = ev.run_id ?? runId;
         break;
+      case "cancelled":
+        // A server-side cancel closes the turn: mark it ended AND cancelled so
+        // the surface can badge the (possibly partial) reply as stopped.
+        ended = true;
+        cancelled = true;
+        runId = ev.run_id ?? runId;
+        break;
     }
   });
 
-  return { runId, conversationId, text, reasoning, tools, subagents, hitls, steps, ended };
+  return {
+    runId, conversationId, text, reasoning, tools, subagents, hitls, steps,
+    ended, cancelled,
+  };
 }
 
 function asPretty(value: unknown): string {
