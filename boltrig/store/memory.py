@@ -69,6 +69,13 @@ from boltrig.models.errors import SchemaValidationError
 from boltrig.models.work import RunCheckpoint
 
 
+def _norm_email_key(value) -> str:
+    """Normalise an identity key (the email == user_id in the first-party flow) so
+    the global email -> orgs index is case/space-insensitive, matching the login
+    normalisation ([2026] VJS-COUNTY 11)."""
+    return value.strip().lower() if isinstance(value, str) else ""
+
+
 class InMemoryStore(ChannelStoreMem):
     """In-memory Store (offline + test). Domain methods live in partial mixins
     (e.g. ``ChannelStoreMem``), composed here for one public method surface."""
@@ -147,6 +154,12 @@ class InMemoryStore(ChannelStoreMem):
         self._workspaces: dict[tuple[str, str], Workspace] = {}
         self._org_members: dict[tuple[str, str], OrgMember] = {}
         self._workspace_members: dict[tuple[str, str], WorkspaceMember] = {}
+        # [2026] VJS-COUNTY 11, D1: the global email -> orgs membership INDEX. Keyed by
+        # the normalised email (NOT tenant-fenced): email -> {tenant_id: role}. It is
+        # the pre-tenant lookup login reads to enumerate an email's orgs; kept in
+        # lockstep with _org_members by add/remove_org_member. Holds only membership
+        # pointers, never a secret or business data.
+        self._identity_orgs: dict[str, dict[str, str]] = {}
         # [2026] VJS-COUNTY 8, D5: per-org/workspace/user AI keys. Keyed
         # (tenant, level, scope_id); each value carries a credential_ref, never a raw
         # key. Tenant stays the isolation key.
@@ -922,9 +935,32 @@ class InMemoryStore(ChannelStoreMem):
 
     async def add_org_member(self, member):
         self._org_members[(member.tenant_id, member.user_id)] = member
+        # Keep the global email -> orgs INDEX in lockstep ([2026] VJS-COUNTY 11, D1):
+        # the email (== user_id in the first-party flow) is now a member of this org.
+        email = _norm_email_key(member.user_id)
+        self._identity_orgs.setdefault(email, {})[member.tenant_id] = member.role
 
     async def remove_org_member(self, tenant_id, user_id):
         self._org_members.pop((tenant_id, user_id), None)
+        # Drop the index pointer too so a revoked membership is no longer a switch
+        # candidate (the resolver also fail-closes on the org_members re-check).
+        email = _norm_email_key(user_id)
+        orgs = self._identity_orgs.get(email)
+        if orgs is not None:
+            orgs.pop(tenant_id, None)
+            if not orgs:
+                self._identity_orgs.pop(email, None)
+
+    async def get_org_member(self, tenant_id, user_id):
+        # Tenant-scoped single-membership re-auth ([2026] VJS-COUNTY 11, D2): only the
+        # bound tenant's row, None otherwise (fail-closed).
+        return self._org_members.get((tenant_id, user_id))
+
+    async def list_orgs_for_email(self, email):
+        # The pre-tenant email -> orgs index (D1): the tenant_ids the email is a member
+        # of. Cross-tenant BY KEY (the normalised email), like get_pat_by_hash - never
+        # inside a tenant fence. Deterministic order so a default pick is stable.
+        return sorted(self._identity_orgs.get(_norm_email_key(email), {}).keys())
 
     async def list_org_members(self, tenant_id):
         return [

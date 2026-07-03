@@ -42,6 +42,13 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 --    channels table is EXCLUDED for the same reason (decision 0003): the inbound
 --    path resolves the tenant from the unguessable channel id before any tenant
 --    is bound. channel_bindings + channel_pairings ARE scoped (below).
+--
+--    identity_orgs is EXCLUDED for the same reason ([2026] VJS-COUNTY 11, D1): it
+--    is the pre-tenant email -> orgs index login resolves by the normalised email
+--    (identity) BEFORE any tenant is bound, so it cannot sit inside a tenant fence.
+--    It holds no secret + no business data (only membership pointers) and is never
+--    the authority - every access decision re-checks the RLS-fenced org_members row
+--    for the bound tenant, so excluding it opens no cross-tenant data path.
 DO $$
 DECLARE
   t text;

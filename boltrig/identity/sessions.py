@@ -140,6 +140,69 @@ def pick_default_workspace(workspaces) -> str | None:
     return ordered[0].id
 
 
+def pick_default_org(orgs) -> str | None:
+    """Pick the DETERMINISTIC default active org from an email's memberships.
+
+    Used on login to seed the session's active org ([2026] VJS-COUNTY 11, D2). The
+    store returns the org tenant_ids already sorted, so the smallest id is the stable
+    default regardless of iteration order. Returns None when the email is a member of
+    no org yet (a legacy / single-org identity - the resolver then falls back to the
+    session's own tenant, backward-compatible)."""
+    if not orgs:
+        return None
+    return sorted(orgs)[0]
+
+
+async def resolve_active_org(
+    store, realm_tenant_id: str, session, email: str
+) -> str | None:
+    """Resolve + RE-AUTHORIZE the session's ACTIVE org against CURRENT membership
+    ([2026] VJS-COUNTY 11, D2/D3). Returns the ONE tenant the request must be bound to.
+
+    The rules, fail-closed and never trusting the client:
+
+      - A LEGACY / single-org identity (no rows in the global email -> orgs index)
+        resolves to the session's OWN tenant (``realm_tenant_id``), exactly as before
+        this change - so an existing single-tenant console is behaviourally unchanged.
+      - Otherwise the email belongs to the membership model. The session's persisted
+        ``active_org_id`` is only a HINT: it is honoured ONLY if the email is STILL a
+        member of it (re-checked against the RLS-fenced ``org_members`` row for that
+        org, binding the tenant before the read). If the hint is absent or its
+        membership was revoked, a DETERMINISTIC in-membership org is chosen instead
+        (again re-authorized). If NO membership survives, this returns None
+        (fail-closed) and the caller drops the session.
+
+    The global index only ENUMERATES candidate orgs; ``org_members`` is the authority
+    for every accept. This is what guarantees a request is bound to exactly ONE org
+    the caller is provably a member of - a client-supplied active org is never trusted.
+    """
+    from boltrig.store.postgres import set_current_tenant
+
+    orgs = await store.list_orgs_for_email(email)
+    if not orgs:
+        # No membership pointers. Distinguish a genuinely LEGACY session (single-org /
+        # pre-COUNTY-11: login never seeded an active org, so active_org_id is None)
+        # from a MEMBERSHIP-MODEL session whose every org was revoked (active_org_id was
+        # seeded, so it is not None). The former falls back to the session's own tenant
+        # (backward-compatible); the latter must FAIL CLOSED - it must never silently
+        # inherit realm access after losing every membership.
+        return realm_tenant_id if session.active_org_id is None else None
+
+    async def _is_member(tid: str) -> bool:
+        # Bind the candidate tenant BEFORE the RLS-scoped org_members read (SEC-65), so
+        # the re-auth is correct under DB-enforced RLS, then confirm the membership row.
+        set_current_tenant(tid)
+        return await store.get_org_member(tid, email) is not None
+
+    candidate = session.active_org_id
+    if candidate and candidate in orgs and await _is_member(candidate):
+        return candidate
+    for tid in sorted(orgs):
+        if await _is_member(tid):
+            return tid
+    return None
+
+
 async def resolve_active_workspace(
     store, tenant_id: str, user_id: str, active_workspace_id: str | None
 ) -> str | None:
@@ -204,9 +267,27 @@ def build_session_resolver(tenant_id: str) -> PrincipalResolver:
         session = await resolve_session(store, tenant_id, secret)
         if session is None:
             raise HTTPException(status_code=401, detail="invalid or expired session")
-        user = await store.get_user(session.tenant_id, session.user_id)
+
+        # Active ORG ([2026] VJS-COUNTY 11, D2/D3): resolve the ONE tenant this request
+        # is bound to. The session lives at the identity realm (``tenant_id``); the
+        # email may belong to several orgs, so re-authorize the session's active org
+        # against CURRENT membership and REBIND the RLS tenant to it for the rest of the
+        # request. Never trust a client-supplied active org - the switch route is the
+        # only place it changes, and it is membership-checked. A legacy / single-org
+        # identity resolves to the realm (backward-compatible). A session whose every
+        # membership was revoked drops fail-closed.
+        active_org_id = await resolve_active_org(
+            store, tenant_id, session, session.user_id
+        )
+        if active_org_id is None:
+            raise HTTPException(status_code=401, detail="invalid or expired session")
+        # Bind the active org BEFORE the per-org identity read (SEC-65): the user's
+        # role/scope/status is the PER-ORG User row for the active tenant (D1).
+        set_current_tenant(active_org_id)
+        user = await store.get_user(active_org_id, session.user_id)
         if user is None or user.status != "active":
-            # Deactivated / de-provisioned -> the session is dead (fail-closed, D3).
+            # Deactivated / de-provisioned in the active org -> the session is dead for
+            # it (fail-closed, D3). One active tenant, provably a member + active.
             raise HTTPException(status_code=401, detail="invalid or expired session")
 
         # CSRF (D6): a browser attaches the cookie automatically, so a mutating
@@ -226,10 +307,15 @@ def build_session_resolver(tenant_id: str) -> PrincipalResolver:
         # refused with a distinct 403 the UI routes to the enrollment screen. This is
         # fail-closed and covers a mid-session policy flip, not just fresh logins. The
         # totp read is skipped entirely unless the org requires 2FA (backward-compat:
-        # no org / no requirement -> unchanged today's behaviour).
-        org = await store.get_org(session.tenant_id)
+        # no org / no requirement -> unchanged today's behaviour). The 2FA REQUIREMENT
+        # is the ACTIVE org's policy; the FACTOR travels with the identity, so it is
+        # read at the identity realm (tenant_id), rebinding the RLS tenant around that
+        # one realm-scoped read then restoring the active org ([2026] VJS-COUNTY 11, D5).
+        org = await store.get_org(active_org_id)
         if org is not None and org.require_two_factor:
-            totp = await store.get_user_totp(session.tenant_id, user.id)
+            set_current_tenant(tenant_id)
+            totp = await store.get_user_totp(tenant_id, user.id)
+            set_current_tenant(active_org_id)
             if not (totp and totp.enrolled) and (
                 request.url.path not in _ENROLLMENT_ONLY_ALLOWED
             ):
@@ -238,11 +324,12 @@ def build_session_resolver(tenant_id: str) -> PrincipalResolver:
                 )
 
         # Active workspace ([2026] VJS-COUNTY 8, D4): RE-AUTHORIZE the session's
-        # persisted active workspace against CURRENT membership every request. A
-        # revoked membership (or a deleted workspace) drops to None here, fail-
-        # closed, so the kernel never carries a stale workspace scope.
+        # persisted active workspace against CURRENT membership every request, WITHIN
+        # the active org (D3). A revoked membership (or a deleted workspace, or a
+        # workspace in a different org than the active one) drops to None here, fail-
+        # closed, so the kernel never carries a stale or cross-org workspace scope.
         active_workspace_id = await resolve_active_workspace(
-            store, session.tenant_id, user.id, session.active_workspace_id
+            store, active_org_id, user.id, session.active_workspace_id
         )
 
         # Grant resolution ([2026] VJS-COUNTY 8, D11): the caller's org/user grants,
@@ -253,9 +340,14 @@ def build_session_resolver(tenant_id: str) -> PrincipalResolver:
         # enforces these effective grants unchanged (no workspace logic in the routes).
         grants = await effective_grants_for_request(store, user, active_workspace_id)
 
+        # Leave the RLS tenant bound to the ACTIVE org for the rest of the request
+        # (D3: exactly ONE active tenant). The Principal's tenant_id IS the active org,
+        # so every downstream store read/write + the GrantChecker chokepoint are scoped
+        # to it - a cross-org read is impossible.
+        set_current_tenant(active_org_id)
         request.state.boltrig_session = session
         return Principal(
-            tenant_id=session.tenant_id,
+            tenant_id=active_org_id,
             subject=user.id,
             grants=grants,
             role=user.role,

@@ -738,6 +738,7 @@ CREATE TABLE IF NOT EXISTS user_sessions (
     expires_at    TIMESTAMPTZ,                      -- bounded session lifetime
     csrf_token    TEXT,                             -- session-bound double-submit CSRF token
     active_workspace_id TEXT,                       -- active workspace hint ([2026] VJS-COUNTY 8, D4); re-authorized every request
+    active_org_id TEXT,                             -- active ORG hint ([2026] VJS-COUNTY 11, D2); the ONE active tenant, re-authorized against org_members every request
     PRIMARY KEY (tenant_id, id)
 );
 CREATE INDEX IF NOT EXISTS sessions_user_idx ON user_sessions (tenant_id, user_id);
@@ -853,6 +854,30 @@ CREATE INDEX IF NOT EXISTS workspace_members_user_idx
     ON workspace_members (tenant_id, user_id);
 CREATE INDEX IF NOT EXISTS workspace_members_ws_idx
     ON workspace_members (tenant_id, workspace_id);
+
+-- ===========================================================================
+-- Cross-tenant identity ([2026] VJS-COUNTY 11). Identity is anchored on the
+-- normalised EMAIL: the shared credential + 2FA are held ONCE at the identity
+-- realm (the session/console tenant, keyed by email) and this table is the
+-- global email -> orgs membership index login reads to learn which orgs an email
+-- belongs to BEFORE any tenant is bound.
+--
+-- DELIBERATELY RLS-EXCLUDED (like personal_access_tokens + channels): it is the
+-- pre-tenant lookup, resolved by the normalised email (identity), so it cannot
+-- live inside a tenant fence. It holds NO secret and NO business data - only
+-- (email, tenant_id, role) membership POINTERS. It is NOT an authority: every
+-- access decision still re-checks the RLS-fenced org_members row for the bound
+-- tenant (this index only ENUMERATES candidate orgs). Kept in lockstep with
+-- org_members by add_org_member / remove_org_member so it never drifts. A leak of
+-- this table would reveal only which orgs an email is in, never any org's data.
+CREATE TABLE IF NOT EXISTS identity_orgs (
+    email       TEXT NOT NULL,          -- normalised identity email (the shared anchor)
+    tenant_id   TEXT NOT NULL,          -- an org the email is a member of (== organisations.id)
+    role        TEXT NOT NULL DEFAULT 'member',
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (email, tenant_id)
+);
+CREATE INDEX IF NOT EXISTS identity_orgs_email_idx ON identity_orgs (email);
 
 -- D5: per-org / workspace / user AI keys. ONE unified table keyed by
 -- (tenant_id, level, scope_id). level is org | workspace | user; scope_id is the

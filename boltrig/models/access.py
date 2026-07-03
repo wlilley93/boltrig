@@ -111,6 +111,15 @@ class UserSession:
     # None if the user is no longer a member (fail-closed), so a stale row can never
     # grant workspace access.
     active_workspace_id: WorkspaceId | None = None
+    # The session's ACTIVE ORG ([2026] VJS-COUNTY 11, D2/D3). One email can belong to
+    # several orgs (tenants); this is the ONE the session is currently bound to - the
+    # single active tenant every request is scoped to. Like active_workspace_id it is a
+    # HINT persisted on the session, NEVER trusted on its own: the resolver
+    # RE-AUTHORIZES it against org_members every request and rebinds the RLS tenant to
+    # it, and an org SWITCH (POST /v1/me/active-org) is the only way it changes. None on
+    # a legacy / single-org session, where the resolver falls back to the session's own
+    # tenant (backward-compatible).
+    active_org_id: TenantId | None = None
 
 
 # --- TOTP two-factor ([2026] VJS-COUNTY 10) ----------------------------------

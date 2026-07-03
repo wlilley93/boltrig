@@ -1027,3 +1027,23 @@ invariants:
     description: The challenge is rate-limited, constant-time / non-enumerating, and audited - an unknown challenge and a valid challenge with a wrong code return the byte-identical generic failure and status, a failed challenge is audited keys-only and raises a two_factor_challenge_failed SecurityEvent signal (enroll begin/activate are audited too), and the per-identity bound (5/min) trips the 6th wrong attempt with 429 while a miss does not consume the challenge.
     tests:
       - tests/security/test_two_factor.py::test_challenge_is_rate_limited_constant_time_and_audited
+
+
+  # --- Cross-tenant identity ([2026] VJS-COUNTY 11) --------------------------
+  SEC-131:
+    description: The session resolver binds each request to exactly ONE active org (tenant) and rebinds the RLS tenant to it every request (D2/D3) - the principal's tenant IS the session's re-authorized active org (not the identity realm the session lives at) and its role/scope is the PER-ORG User row for that org, the active org is resolved from the global email->orgs index + confirmed against org_members (a stale client hint is never trusted, a revoked membership is dropped from the index and never resolved to), pick_default_org is deterministic, and a LEGACY single-org identity (no index rows, no seeded active org) resolves to the session's own tenant unchanged (backward-compatible).
+    tests:
+      - tests/security/test_cross_tenant_identity.py::test_resolver_binds_the_request_to_the_session_active_org
+      - tests/security/test_cross_tenant_identity.py::test_active_org_resolution_and_index_helpers
+  SEC-132:
+    description: An org SWITCH (POST /v1/me/active-org) is membership-RE-AUTHORIZED against org_members and fail-closed - an unknown org is 404 and a non-member org (that exists) is 403, both with NO write, a missing org_id is 400, and a client-supplied active org the caller is not a member of is NEVER trusted; a member switch persists and rebinds EVERY subsequent read to the new org so a request reads exactly one tenant and can never read another org's data (no cross-org read), and a mid-session membership revocation drops the request DOWN to a remaining membership (never keeping the revoked org) then dies fail-closed once no membership survives.
+    tests:
+      - tests/security/test_cross_tenant_identity.py::test_org_switch_is_reauthorized_and_no_cross_org_read
+  SEC-133:
+    description: A provisioned-org invitee (accept-invite for a provision_org invite) gets a USABLE login in the newly provisioned org (D4) - accept materialises a per-org User row (superadmin of their own org) + the org membership + the email->orgs index pointer, associated with the shared credential held once at the identity realm, so the invitee can actually log in and the console binds them to the new org as its owner (before this fix accept created only an OrgMember with no usable login).
+    tests:
+      - tests/security/test_cross_tenant_identity.py::test_provisioned_org_invitee_gets_a_usable_login
+  SEC-134:
+    description: The shared credential + 2FA travel with the IDENTITY (the normalised email), held ONCE and sealed (D1/D5) - the password credential lives once at the identity realm keyed by the email and is NOT duplicated into any per-org row, the global email->orgs index holds only membership pointers (never a secret or business data), the one shared credential authenticates the identity regardless of the active org, and 2FA enrolment travels with the identity (stored at the realm keyed by the email, never on a per-org row) with the TOTP secret SEALED via the credential store (a ref on the row, the value in the sealed store) rather than a plaintext column.
+    tests:
+      - tests/security/test_cross_tenant_identity.py::test_shared_credential_and_2fa_travel_with_the_identity

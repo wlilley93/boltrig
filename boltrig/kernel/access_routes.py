@@ -447,9 +447,23 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
         }
 
     # === Security & Sessions (SET-70) ===
+    def _session_realm(request, p) -> str:
+        """The tenant a session ROW lives at ([2026] VJS-COUNTY 11): the identity realm
+        (session.tenant_id), which differs from the ACTIVE org (p.tenant_id) for a
+        multi-org identity. Session-management reads/writes must target the realm, not
+        the active org. Falls back to p.tenant_id when there is no session (unreachable
+        for a session-authed caller; a PAT caller has no sessions here anyway)."""
+        session = getattr(request.state, "boltrig_session", None)
+        return session.tenant_id if session is not None else p.tenant_id
+
     @app.get("/v1/me/sessions")
-    async def list_my_sessions(k=K, p=P) -> dict:
-        sessions = await k.store.list_sessions(p.tenant_id, p.subject)
+    async def list_my_sessions(request: Request, k=K, p=P) -> dict:
+        from boltrig.store.postgres import set_current_tenant
+
+        realm = _session_realm(request, p)
+        set_current_tenant(realm)  # sessions live at the realm; bind it for the read
+        sessions = await k.store.list_sessions(realm, p.subject)
+        set_current_tenant(p.tenant_id)  # restore the active tenant
         return {"sessions": [
             {"id": s.id, "client": s.client, "revoked": s.revoked,
              "created_at": s.created_at.isoformat() if s.created_at else None,
@@ -458,12 +472,18 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
         ]}
 
     @app.delete("/v1/me/sessions/{session_id}")
-    async def revoke_my_session(session_id: str, k=K, p=P) -> JSONResponse:
-        s = await k.store.get_session(p.tenant_id, session_id)
+    async def revoke_my_session(session_id: str, request: Request, k=K, p=P) -> JSONResponse:
+        from boltrig.store.postgres import set_current_tenant
+
+        realm = _session_realm(request, p)
+        set_current_tenant(realm)  # sessions live at the realm; bind it for the read/write
+        s = await k.store.get_session(realm, session_id)
         if s is None or s.user_id != p.subject:
+            set_current_tenant(p.tenant_id)
             return JSONResponse({"status": "error", "reason": "not_found"}, status_code=404)
         s.revoked = True
         await k.store.update_session(s)
+        set_current_tenant(p.tenant_id)  # restore the active tenant for the audit
         await _audit(k, p, "session.revoke", {"id": session_id})
         return JSONResponse({"status": "ok", "id": session_id})
 
@@ -499,11 +519,68 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
             return JSONResponse({"status": "denied", "reason": "not a member of that workspace"},
                                 status_code=403)
         # Persist the new active workspace on the session (the resolver re-authorizes
-        # it again on every subsequent request). Keys-only audit: the workspace id.
+        # it again on every subsequent request). The session lives at the identity realm
+        # ([2026] VJS-COUNTY 11), so bind that realm for the RLS-scoped session write,
+        # then restore the active tenant for the audit. Keys-only audit: the workspace id.
+        from boltrig.store.postgres import set_current_tenant
+
         session.active_workspace_id = workspace_id
+        set_current_tenant(session.tenant_id)
         await k.store.update_session(session)
+        set_current_tenant(p.tenant_id)
         await _audit(k, p, "session.active_context.switch", {"workspace_id": workspace_id})
         return JSONResponse({"status": "ok", "workspace_id": workspace_id})
+
+    # === Active ORG (tenant) context ([2026] VJS-COUNTY 11, D2/D3) ===
+    @app.post("/v1/me/active-org")
+    async def switch_active_org(body: dict, request: Request, k=K, p=P) -> JSONResponse:
+        # Switch the session's ACTIVE ORG (the ONE active tenant). One email can belong
+        # to several orgs; this is the only place the active org changes, and it is
+        # RE-AUTHORIZED against org_members, fail-closed: an unknown org is 404, an org
+        # the caller is NOT a member of is 403 with NO write - so a client-supplied
+        # active org is NEVER trusted. The resolver then rebinds the RLS tenant to the
+        # new active org on every subsequent request. The CSRF check on this mutating
+        # cookie request is already enforced by the resolver. Mirrors the workspace
+        # switch above.
+        from boltrig.store.postgres import set_current_tenant
+
+        session = getattr(request.state, "boltrig_session", None)
+        if session is None:
+            # No first-party session (e.g. a PAT/bearer principal): nothing to carry an
+            # active org. Fail closed.
+            return JSONResponse(
+                {"status": "error", "reason": "active org requires a session login"},
+                status_code=400,
+            )
+        org_id = body.get("org_id")
+        if not isinstance(org_id, str) or not org_id:
+            return JSONResponse({"status": "error", "reason": "org_id is required"},
+                                status_code=400)
+        # Bind the TARGET org before its RLS-scoped reads (SEC-65). Existence first: an
+        # unknown org is 404, NO write. Then RE-AUTHORIZE membership against org_members
+        # (the authority, not any client hint): a non-member is 403, NO write.
+        set_current_tenant(org_id)
+        org = await k.store.get_org(org_id)
+        if org is None:
+            set_current_tenant(p.tenant_id)  # restore the caller's active tenant
+            return JSONResponse({"status": "error", "reason": "not_found"}, status_code=404)
+        member = await k.store.get_org_member(org_id, p.subject)
+        if member is None:
+            set_current_tenant(p.tenant_id)
+            return JSONResponse(
+                {"status": "denied", "reason": "not a member of that org"},
+                status_code=403,
+            )
+        # Persist the new active org on the session (the resolver re-authorizes it again
+        # on every subsequent request). The session lives at the identity realm, so bind
+        # that realm for the session write, then restore the caller's current active
+        # tenant for the audit. Keys-only audit: the org id.
+        session.active_org_id = org_id
+        set_current_tenant(session.tenant_id)
+        await k.store.update_session(session)
+        set_current_tenant(p.tenant_id)
+        await _audit(k, p, "session.active_org.switch", {"org_id": org_id})
+        return JSONResponse({"status": "ok", "org_id": org_id})
 
     # === Per-org / workspace / user AI keys ([2026] VJS-COUNTY 8, D5) ===
     async def _authz_ai_key(k, p, level: str, scope_id: str):

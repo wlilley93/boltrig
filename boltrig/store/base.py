@@ -438,6 +438,23 @@ class Store(Protocol):
     async def remove_org_member(self, tenant_id: str, user_id: str) -> None: ...
     async def list_org_members(self, tenant_id: str) -> list[OrgMember]: ...
     async def list_orgs_for_user(self, tenant_id: str, user_id: str) -> list[Organisation]: ...
+    # Cross-tenant identity ([2026] VJS-COUNTY 11, D2): the single-membership lookup
+    # the resolver + the org SWITCH use to RE-AUTHORIZE the caller against org_members
+    # for the (candidate) active org. Tenant-scoped (SEC-08): only ever returns a row
+    # inside the bound tenant (None otherwise, fail-closed), so a switch can never
+    # trust a client-supplied org the caller is not actually a member of.
+    async def get_org_member(
+        self, tenant_id: str, user_id: str
+    ) -> OrgMember | None: ...
+    # D1: the global email -> orgs membership INDEX. Keyed by the NORMALISED EMAIL
+    # (identity), NOT tenant-fenced, because it is the PRE-TENANT lookup login uses to
+    # learn which orgs an email belongs to before any tenant is bound - guarded exactly
+    # like personal_access_tokens / channels (resolved by an identity key, not inside a
+    # tenant). It holds no secret + no business data (only membership pointers) and is
+    # never the authority: get_org_member re-checks the RLS-fenced org_members row for
+    # each candidate. Kept in lockstep with org_members by add/remove_org_member, so it
+    # never drifts. Returns the tenant_ids of the orgs the email is a member of.
+    async def list_orgs_for_email(self, email: str) -> list[str]: ...
     async def add_workspace_member(self, member: WorkspaceMember) -> None: ...
     async def remove_workspace_member(
         self, tenant_id: str, workspace_id: str, user_id: str

@@ -25,6 +25,7 @@ from boltrig.identity import (
     SESSION_COOKIE,
     hash_password,
     new_session,
+    pick_default_org,
     pick_default_workspace,
     rotate_session,
     validate_password_strength,
@@ -132,6 +133,7 @@ async def _seat_invitee(k, inv, email: str) -> dict:
         WORKSPACE_ROLES,
         OrgMember,
         Organisation,
+        User,
         Workspace,
         WorkspaceMember,
     )
@@ -164,6 +166,22 @@ async def _seat_invitee(k, inv, email: str) -> dict:
                 id=new_tid, name=inv.provision_org_name,
                 slug=f"{new_tid[:8]}-org",
             ))
+            # A USABLE login in the provisioned org ([2026] VJS-COUNTY 11, D4): the
+            # invitee needs a per-org User row here (their identity + role/scope in the
+            # new org) AND the org membership, so they can actually log in / switch into
+            # it. The shared credential is already held once at the identity realm (set
+            # in accept-invite), so no per-org credential is created - it is ASSOCIATED
+            # via the email that keys both. Without this User row the resolver would
+            # read no per-org identity for the new org and fail closed; before this fix
+            # accept created only the OrgMember (no usable login). Owner of their own
+            # provisioned org -> superadmin, all-authority scope (mirrors `initiate`).
+            await k.store.upsert_user(User(
+                id=email, tenant_id=new_tid, email=email, role="superadmin",
+                scope={"all": True}, status="active", source="invitation",
+                last_seen_at=utcnow(),
+            ))
+            # add_org_member also records the email -> orgs index pointer (D1), so login
+            # discovers the new org and the switch can re-authorize it against org_members.
             await k.store.add_org_member(OrgMember(
                 user_id=email, tenant_id=new_tid, role="superadmin",
             ))
@@ -201,10 +219,28 @@ async def _mint_web_session(k, tenant: str, user: User):
     factor (or its absence) has been satisfied. Returns ``(secret, csrf)`` for the
     caller to cookie; only the hash is persisted (D2/D6).
     """
+    from boltrig.store.postgres import set_current_tenant
+
     session, secret, csrf = new_session(tenant, user.id, client="web")
-    # Seed the deterministic default active workspace from membership ([2026] VJS-
-    # COUNTY 8, D4); the resolver re-authorizes it every request (fail-closed).
-    workspaces = await k.store.list_workspaces_for_user(tenant, user.id)
+    # Seed the deterministic default ACTIVE ORG from the global email -> orgs index
+    # ([2026] VJS-COUNTY 11, D2). None for a legacy / single-org identity (no index
+    # rows), where the resolver falls back to the session's own tenant. The resolver
+    # RE-AUTHORIZES this every request against org_members (fail-closed), so it is only
+    # a hint. The default active WORKSPACE is then seeded from membership WITHIN that
+    # active org (or the session's own tenant when there is no distinct active org).
+    orgs = await k.store.list_orgs_for_email(user.id)
+    session.active_org_id = pick_default_org(orgs)
+    ws_tenant = session.active_org_id or tenant
+    # The workspace read must be scoped to the ACTIVE org, not the identity realm: for
+    # a cross-org login (active org != realm) reading it under the realm GUC would,
+    # under live RLS, intersect to zero rows and seed no default workspace. Bind the
+    # active-org tenant for the read, then restore the realm for the session write
+    # (the session lives at the identity realm).
+    if ws_tenant != tenant:
+        set_current_tenant(ws_tenant)
+    workspaces = await k.store.list_workspaces_for_user(ws_tenant, user.id)
+    if ws_tenant != tenant:
+        set_current_tenant(tenant)
     session.active_workspace_id = pick_default_workspace(workspaces)
     await k.store.add_session(session)
     return session, secret, csrf
@@ -321,9 +357,14 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
             created_at=existing.created_at if existing else utcnow(),
         )
         await k.store.upsert_user(user)
-        # Store ONLY the argon2id hash, apart from the identity row (D4).
+        # Store ONLY the argon2id hash, apart from the identity row (D4). The SHARED
+        # credential is held ONCE at the identity realm (``tenant`` == _console_tenant(),
+        # the login realm), keyed by the normalised email - never duplicated per org
+        # ([2026] VJS-COUNTY 11, D1/D5). Every org this identity belongs to authenticates
+        # against this one credential; the invite's own tenant is the realm here
+        # (invites are consumed at the login realm), so this is the identity home.
         await k.store.set_password_credential(
-            inv.tenant_id, email, hash_password(password)
+            tenant, email, hash_password(password)
         )
         # Org/workspace-scoped seating + provisioning ([2026] VJS-COUNTY 8, D6). Each
         # arm runs only when its intent is present on the invite (a legacy invite
@@ -438,11 +479,19 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
         # D2: a logout revokes the session in the store (it stops resolving at
         # once). Requires an authenticated session; the CSRF check on this mutating
         # request is enforced by the session resolver.
+        from boltrig.store.postgres import set_current_tenant
+
         session = getattr(request.state, "boltrig_session", None)
         resp = JSONResponse({"status": "ok"})
         if session is not None:
             session.revoked = True
+            # A session lives at the identity realm (session.tenant_id), which differs
+            # from the ACTIVE org (p.tenant_id) for a multi-org identity ([2026] VJS-
+            # COUNTY 11). Bind the realm for the RLS-scoped session write so the revoke
+            # lands, then restore the active tenant for the audit.
+            set_current_tenant(session.tenant_id)
             await k.store.update_session(session)
+            set_current_tenant(p.tenant_id)
             await _audit(k, p.tenant_id, p.subject, "auth.logout",
                          {"session_id": session.id})
         resp.delete_cookie(SESSION_COOKIE, path="/")
@@ -454,6 +503,8 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
         # D6: rotate the session secret + CSRF token and extend the bounded expiry.
         # The OLD cookie stops resolving. Requires an authenticated session; CSRF is
         # enforced by the resolver on this mutating request.
+        from boltrig.store.postgres import set_current_tenant
+
         session = getattr(request.state, "boltrig_session", None)
         if session is None:
             return JSONResponse({"status": "error", "reason": "no session"},
@@ -461,15 +512,24 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
         try:
             session, secret, csrf = rotate_session(session)
         except ValueError:
-            # Past the absolute lifetime cap: revoke and force re-authentication.
+            # Past the absolute lifetime cap: revoke and force re-authentication. The
+            # session lives at the identity realm, so bind it for the RLS-scoped write
+            # ([2026] VJS-COUNTY 11), then restore the active tenant.
             session.revoked = True
+            set_current_tenant(session.tenant_id)
             await k.store.update_session(session)
+            set_current_tenant(p.tenant_id)
             resp = JSONResponse({"status": "error", "reason": "session expired"},
                                 status_code=401)
             resp.delete_cookie(SESSION_COOKIE, path="/")
             resp.delete_cookie(CSRF_COOKIE, path="/")
             return resp
+        # Bind the identity realm for the RLS-scoped session write, then restore the
+        # active tenant for the audit (the session lives at the realm, not the active
+        # org, for a multi-org identity).
+        set_current_tenant(session.tenant_id)
         await k.store.update_session(session)
+        set_current_tenant(p.tenant_id)
         await _audit(k, p.tenant_id, p.subject, "auth.session.rotate",
                      {"session_id": session.id})
         resp = JSONResponse({"status": "ok", "csrf_token": csrf})
@@ -489,7 +549,12 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
 
         from boltrig.store.postgres import set_current_tenant
 
-        tenant = p.tenant_id
+        # 2FA travels with the IDENTITY, not the per-org row ([2026] VJS-COUNTY 11, D5):
+        # the enrolment + sealed secret + recovery codes live at the identity realm (the
+        # login realm), keyed by the email (p.subject), so the ONE factor is checked once
+        # at login regardless of which org is active. p.tenant_id is the ACTIVE org, so it
+        # must NOT be used for 2FA storage.
+        tenant = _console_tenant()
         set_current_tenant(tenant)
         # Rate-limit the begin (like verify-enroll/challenge/disable): each call mints
         # + seals a fresh secret and rotates the recovery codes, so an unrated begin
@@ -551,7 +616,9 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
         # session becomes fully privileged (the resolver re-derives on the next req).
         from boltrig.store.postgres import set_current_tenant
 
-        tenant = p.tenant_id
+        # 2FA travels with the IDENTITY (the login realm), keyed by the email - never
+        # the ACTIVE org (p.tenant_id) ([2026] VJS-COUNTY 11, D5).
+        tenant = _console_tenant()
         set_current_tenant(tenant)
         code = body.get("code")
         code = code if isinstance(code, str) else ""
@@ -701,7 +768,9 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
         # cannot escape the requirement; they simply reset).
         from boltrig.store.postgres import set_current_tenant
 
-        tenant = p.tenant_id
+        # 2FA travels with the IDENTITY (the login realm), keyed by the email - never
+        # the ACTIVE org (p.tenant_id) ([2026] VJS-COUNTY 11, D5).
+        tenant = _console_tenant()
         set_current_tenant(tenant)
         code = body.get("code")
         code = code if isinstance(code, str) else ""

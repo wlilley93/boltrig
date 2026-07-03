@@ -1545,11 +1545,11 @@ class PostgresStore(ChannelStorePG):
         await self._pool.execute(
             """INSERT INTO user_sessions (id, tenant_id, user_id, client, created_at,
                                           last_seen_at, revoked, token_hash, expires_at,
-                                          csrf_token, active_workspace_id)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+                                          csrf_token, active_workspace_id, active_org_id)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
                ON CONFLICT (tenant_id, id) DO NOTHING""",
             s.id, s.tenant_id, s.user_id, s.client, s.created_at, s.last_seen_at, s.revoked,
-            s.token_hash, s.expires_at, s.csrf_token, s.active_workspace_id,
+            s.token_hash, s.expires_at, s.csrf_token, s.active_workspace_id, s.active_org_id,
         )
 
     async def list_sessions(self, tenant_id, user_id):
@@ -1581,10 +1581,10 @@ class PostgresStore(ChannelStorePG):
         await self._pool.execute(
             """UPDATE user_sessions SET client=$3, last_seen_at=$4, revoked=$5,
                                         token_hash=$6, expires_at=$7, csrf_token=$8,
-                                        active_workspace_id=$9
+                                        active_workspace_id=$9, active_org_id=$10
                WHERE tenant_id=$1 AND id=$2""",
             s.tenant_id, s.id, s.client, s.last_seen_at, s.revoked,
-            s.token_hash, s.expires_at, s.csrf_token, s.active_workspace_id,
+            s.token_hash, s.expires_at, s.csrf_token, s.active_workspace_id, s.active_org_id,
         )
 
     # --- Org -> workspace tenancy ([2026] VJS-COUNTY 8) ----------------------
@@ -1664,12 +1664,44 @@ class PostgresStore(ChannelStorePG):
                ON CONFLICT (tenant_id, user_id) DO UPDATE SET role=EXCLUDED.role""",
             member.tenant_id, member.user_id, member.role, member.created_at,
         )
+        # Keep the global email -> orgs INDEX in lockstep ([2026] VJS-COUNTY 11, D1).
+        # identity_orgs is RLS-EXCLUDED (the pre-tenant lookup, keyed by the normalised
+        # email), so this write does not need the bound tenant and is safe under RLS.
+        await self._pool.execute(
+            """INSERT INTO identity_orgs (email, tenant_id, role, created_at)
+               VALUES (lower($1),$2,$3,$4)
+               ON CONFLICT (email, tenant_id) DO UPDATE SET role=EXCLUDED.role""",
+            member.user_id, member.tenant_id, member.role, member.created_at,
+        )
 
     async def remove_org_member(self, tenant_id, user_id):
         await self._pool.execute(
             "DELETE FROM org_members WHERE tenant_id=$1 AND user_id=$2",
             tenant_id, user_id,
         )
+        # Drop the index pointer too so a revoked membership is no longer a switch
+        # candidate (the resolver also fail-closes on the org_members re-check).
+        await self._pool.execute(
+            "DELETE FROM identity_orgs WHERE email=lower($1) AND tenant_id=$2",
+            user_id, tenant_id,
+        )
+
+    async def get_org_member(self, tenant_id, user_id):
+        # Tenant-scoped single-membership re-auth ([2026] VJS-COUNTY 11, D2).
+        row = await self._pool.fetchrow(
+            "SELECT * FROM org_members WHERE tenant_id=$1 AND user_id=$2",
+            tenant_id, user_id,
+        )
+        return _org_member(row)
+
+    async def list_orgs_for_email(self, email):
+        # The pre-tenant email -> orgs index (D1): the tenant_ids an email is a member
+        # of. Resolved by the normalised email key (RLS-EXCLUDED), like get_pat_by_hash.
+        rows = await self._pool.fetch(
+            "SELECT tenant_id FROM identity_orgs WHERE email=lower($1) ORDER BY tenant_id",
+            email,
+        )
+        return [r["tenant_id"] for r in rows]
 
     async def list_org_members(self, tenant_id):
         rows = await self._pool.fetch(
@@ -2153,6 +2185,9 @@ def _session(r):
         csrf_token=(r["csrf_token"] if "csrf_token" in r.keys() else None),
         active_workspace_id=(
             r["active_workspace_id"] if "active_workspace_id" in r.keys() else None
+        ),
+        active_org_id=(
+            r["active_org_id"] if "active_org_id" in r.keys() else None
         ),
     )
 
