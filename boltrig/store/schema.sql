@@ -266,16 +266,11 @@ CREATE TABLE IF NOT EXISTS hitl_responses (
 -- ---------------------------------------------------------------------------
 -- 6.5 Identity, audit, cost
 -- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS users (
-    id           TEXT NOT NULL,
-    tenant_id    TEXT NOT NULL,
-    email        TEXT,
-    display_name TEXT,
-    groups       JSONB,
-    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-    PRIMARY KEY (tenant_id, id)
-);
+-- NOTE: the authoritative `users` table (with role/scope/status/source, the Round
+-- Four identity columns) is defined in section 6.x below. A stale minimal
+-- duplicate used to sit here and, under CREATE TABLE IF NOT EXISTS, shadowed the
+-- real one on a FRESH boot (schema.sql loads top-to-bottom), so a clean box got a
+-- users table with no `role` column and the owner seed failed. Removed.
 
 CREATE TABLE IF NOT EXISTS role_mappings (
     tenant_id   TEXT NOT NULL,
