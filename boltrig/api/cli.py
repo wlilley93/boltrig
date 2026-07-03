@@ -3,6 +3,7 @@
     boltrig serve [--host H --port P]   start the kernel API
     boltrig worker                      start a fleet worker
     boltrig initiate --email E [...]    seat the founding OWNER (invite-only, VJS-COUNTY 7)
+    boltrig set-password --email E      set/reset an EXISTING user's password (SSO -> session)
     boltrig smoke                       run the offline in-process smoke test
     boltrig check-invariants            run the invariant-binding gate (K-29/K-30)
     boltrig version                     print the version
@@ -53,6 +54,17 @@ def main(argv: list[str] | None = None) -> int:
         help="the founding workspace's display name (default: the org name)",
     )
 
+    p_setpw = sub.add_parser(
+        "set-password",
+        help="set/reset an EXISTING user's first-party password (SSO -> session bridge)",
+    )
+    p_setpw.add_argument("--email", required=True, help="the existing user's email")
+    p_setpw.add_argument(
+        "--password", default=None,
+        help="new password (else BOLTRIG_INIT_PASSWORD, else an interactive prompt)",
+    )
+    p_setpw.add_argument("--tenant", default=None, help="tenant (default: session tenant)")
+
     sub.add_parser("smoke", help="offline in-process smoke test")
     sub.add_parser("check-invariants", help="run the invariant-binding gate")
     sub.add_parser("version", help="print version")
@@ -82,6 +94,13 @@ def main(argv: list[str] | None = None) -> int:
             args.email, password=args.password, tenant=tenant,
             org_name=args.org_name, workspace_name=args.workspace_name,
         )
+    if args.cmd == "set-password":
+        from boltrig.config import load_settings
+
+        from .initiate import set_password
+
+        tenant = args.tenant or load_settings().session_tenant or "default"
+        return set_password(args.email, password=args.password, tenant=tenant)
     if args.cmd in ("smoke", "check-invariants"):
         script = _repo_script("smoke.py" if args.cmd == "smoke" else "check_invariants.py")
         if not script:

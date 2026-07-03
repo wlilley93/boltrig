@@ -157,3 +157,66 @@ def initiate(
     return asyncio.run(
         _run(email, secret, tenant, org_name=org_name, workspace_name=workspace_name)
     )
+
+
+async def _run_set_password(email: str, password: str, tenant: str) -> int:
+    """Set (or reset) the first-party password of an EXISTING user.
+
+    The bridge from an SSO / Cloudflare-Access identity to session auth ([2026]
+    VJS-COUNTY 7): the user must already exist (this is not a signup - it never
+    creates an identity or a grant), and its argon2id hash is stored apart from the
+    identity row, never logged. Box-level operation (running it needs shell on the
+    host), audited keys-only. Idempotent: re-running rotates the password.
+    """
+    email = email.strip().lower()
+    if not email or "@" not in email:
+        print("set-password: a valid --email is required", file=sys.stderr)
+        return 2
+    try:
+        validate_password_strength(password)
+    except WeakPassword as exc:
+        print(f"set-password: {exc}", file=sys.stderr)
+        return 2
+
+    from boltrig.api.bootstrap import build_store
+    from boltrig.kernel.audit import AuditWriter
+    from boltrig.store.postgres import set_current_tenant
+
+    store = await build_store()
+    try:
+        set_current_tenant(tenant)
+        user = await store.get_user(tenant, email)
+        if user is None:
+            print(f"set-password: no user '{email}' in tenant '{tenant}'; this sets a "
+                  "password for an EXISTING identity, it does not create one.",
+                  file=sys.stderr)
+            return 3
+        await store.set_password_credential(tenant, email, hash_password(password))
+        await AuditWriter(store).write(
+            AuditEvent(
+                tenant_id=tenant, ts=utcnow(), actor=email, actor_tier="human",
+                action_type=ActionType.TOOL_CALL, verb="auth.set_password", status="ok",
+                detail={"email": email},
+            )
+        )
+        print(f"set-password: password set for '{email}' in tenant '{tenant}'. They can "
+              "now log in with BOLTRIG_AUTH_MODE=session.")
+        return 0
+    finally:
+        close = getattr(store, "close", None)
+        if close is not None:
+            result = close()
+            if inspect.isawaitable(result):
+                await result
+
+
+def set_password(email: str, *, password: str | None, tenant: str) -> int:
+    """Synchronous entrypoint: resolve the password (flag / env / prompt) then run."""
+    secret = password or os.environ.get("BOLTRIG_INIT_PASSWORD")
+    if not secret:
+        secret = getpass.getpass("New password: ")
+        confirm = getpass.getpass("Confirm password: ")
+        if secret != confirm:
+            print("set-password: passwords did not match", file=sys.stderr)
+            return 2
+    return asyncio.run(_run_set_password(email, secret, tenant))
