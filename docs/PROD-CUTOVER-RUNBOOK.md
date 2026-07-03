@@ -75,3 +75,42 @@ External audit anchoring (RFC3161 TSA + KMS) needs a credential only the Princip
 supplies (`BOLTRIG_AUDIT_TSA_URL` / `BOLTRIG_AUDIT_KMS_KEY_ID`); until set, anchors
 are `is_dev_fallback=true` (still tamper-evident internally). Not required for any
 cutover path.
+
+---
+
+## ACTUAL EXECUTION (2026-07-03) - what happened
+
+Prod was found EMPTY (0 users / conversations / audit rows) on an OLD buggy schema
+(users had no `role` column - the duplicate-users bug from the old commit), so the
+cutover became a clean fresh deploy, not a data migration.
+
+DONE:
+- Backed up the (empty) DB: `~/Backups/nankle-precutover-*.sql.gz` on prod.
+- Transferred HEAD, built the 4 images on prod, reset the schema (DROP SCHEMA public
+  CASCADE + load the new schema.sql), brought up with `docker compose -f
+  docker-compose.yml up -d` (prod uses ONLY docker-compose.yml, NOT the secure
+  overlay - the overlay adds a compose Caddy on :80/:443 that conflicts with the host
+  Caddy + CF tunnel).
+- Set `BOLTRIG_AUTH_MODE=session`; seeded will as owner + org "Boltrig" + workspace
+  "Main" with a strong password; set the org `require_two_factor=true` (2FA mandatory).
+- Verified on loopback: healthz 200, login ok/superadmin, wrong-password 401.
+- Prod DB is named `nankle` (predates the rename); DATABASE_URL points at it - fine.
+
+GOTCHAS hit:
+- The new docker-compose.yml prepends `127.0.0.1:` only for the HATCHET ports; prod's
+  .env had them in the old full `127.0.0.1:PORT` format -> "invalid IP 127.0.0.1:
+  127.0.0.1". Fixed: HATCHET_GRPC_PORT=7077, HATCHET_API_PORT=8888 (bare). KERNEL_PORT
+  / UI_PORT stay full `127.0.0.1:8628` / `:8620` (the compose uses `${KERNEL_PORT}:8000`).
+
+BLOCKED on a valid Cloudflare API token (the one in opbox-prod/.cloudflare.env returns
+"Invalid API Token" - rotated/expired):
+- Removing CF Access from app.boltrig.io (so the boltrig login + 2FA is the sole gate).
+  Needs Access:Apps:Edit. Until then prod is belt-and-suspenders: CF Access at the edge
+  + the boltrig login behind it.
+- dev.boltrig.io -> the beelink dev stack. Needs a cloudflared tunnel ON THE BEELINK
+  (the prod tunnel can't reach the beelink's localhost) + DNS/ingress = Tunnel:Edit +
+  DNS:Edit. boltrig.io -> marketing is ALREADY live (host Caddy serves /srv/boltrig-
+  marketing; apex returns 200 with <title>Boltrig</title>).
+
+FOLLOW-UP HARDENING (non-blocking): set BOLTRIG_ALLOWED_HOSTS=app.boltrig.io + 
+BOLTRIG_CORS_ORIGINS=https://app.boltrig.io (currently default permissive).
