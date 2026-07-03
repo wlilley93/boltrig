@@ -48,11 +48,19 @@ class WorkflowLibrary:
     async def match(
         self, tenant: str, intent_tags: list[str]
     ) -> WorkflowDefinition | None:
-        """Best workflow by intent-tag overlap (US-WFL-01).
+        """Best workflow by intent-tag overlap, promotion-aware (US-WFL-01/08).
 
         Picks the definition sharing the most ``intent_tags`` with the request.
-        Ties break deterministically on workflow id. Returns ``None`` when no
-        workflow overlaps at all (a generated workflow is the fallback path).
+        Intent overlap stays the PRIMARY key (a promoted workflow can never be
+        surfaced for an intent it does not match); among equally-matching
+        workflows the eval-gated reuse weight is the tiebreak, so a PROMOTED
+        workflow is preferred and a DEMOTED one deferred; workflow id is the final,
+        deterministic tiebreak. Returns ``None`` when no workflow overlaps at all
+        (a generated workflow is the fallback path).
+
+        The reuse weight is RANKING only ([2026] VJS-COUNTY 5): it changes which
+        equally-relevant workflow is reused, never what any workflow may do. With
+        no promotion records every weight is 0, so behaviour is unchanged.
 
         The learning-loop retrieval half, wired by the engine plan Phase 3
         (``learn_from_success`` + ``match``); a reserved API.
@@ -60,16 +68,41 @@ class WorkflowLibrary:
         wanted = set(intent_tags or [])
         if not wanted:
             return None
-        best: WorkflowDefinition | None = None
-        best_score = 0
-        for wf in await self._store.list_workflows(tenant):
-            score = len(wanted & set(wf.intent_tags))
-            if score > best_score or (
-                score == best_score and best is not None and wf.id < best.id
-            ):
-                if score > 0:
-                    best, best_score = wf, score
-        return best
+        weights = await self._reuse_weights(tenant)
+        candidates = [
+            wf for wf in await self._store.list_workflows(tenant)
+            if wanted & set(wf.intent_tags)
+        ]
+        if not candidates:
+            return None
+        # Deterministic order: highest overlap, then highest reuse weight, then the
+        # smallest id. The negations make ``min`` prefer larger overlap/weight while
+        # ascending id still breaks the final tie.
+        return min(
+            candidates,
+            key=lambda wf: (
+                -len(wanted & set(wf.intent_tags)),
+                -weights.get(wf.id, 0.0),
+                wf.id,
+            ),
+        )
+
+    async def _reuse_weights(self, tenant: str) -> dict[str, float]:
+        """Map workflow id -> bounded reuse weight (ranking only); {} on any gap.
+
+        Best-effort: a store without the promotion methods (or a read failure) is
+        treated as no promotions - the matcher then behaves exactly as before (P9).
+        """
+        from .promotion import reuse_weight  # local import: avoid a load cycle
+
+        lister = getattr(self._store, "list_workflow_promotions", None)
+        if lister is None:
+            return {}
+        try:
+            promotions = await lister(tenant)
+        except Exception:  # a promotion-read failure never breaks selection (P9)
+            return {}
+        return {p.workflow_id: reuse_weight(p) for p in promotions}
 
     async def trigger(
         self, tenant: str, wf_id: str, inputs: dict[str, Any]

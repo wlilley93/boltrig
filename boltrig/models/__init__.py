@@ -78,8 +78,10 @@ from .libraries import (
     AgentCapability,
     Budget,
     ModelEndpoint,
+    PromotionState,
     Skill,
     WorkflowDefinition,
+    WorkflowPromotion,
     WorkflowSource,
 )
 from .registry import Consequence, Noun, RateLimit, TargetType, Verb, VerbBinding
@@ -155,8 +157,10 @@ __all__ = [
     "AgentCapability",
     "Budget",
     "ModelEndpoint",
+    "PromotionState",
     "Skill",
     "WorkflowDefinition",
+    "WorkflowPromotion",
     "WorkflowSource",
     "Consequence",
     "Noun",

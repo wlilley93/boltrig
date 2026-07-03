@@ -135,6 +135,21 @@ invariants:
     description: Post-run reflection is governed and best-effort - a bounded, deterministic lesson is stored through the kernel chokepoint (memory verb, with run-id provenance and the secret/injection screen), and a reflection failure never fails the run.
     tests:
       - tests/integration/test_learning_loop.py::test_reflection_is_governed_and_best_effort
+  US-WFL-08:
+    description: Reuse promotion is eval-gated and competence-only ([2026] VJS-COUNTY 5) - a generated/learned workflow is preferred for reuse only after it passes its eval cases run through the kernel chokepoint under the initiator ceiling (SEC-29), a later failing eval demotes it, and the promotion record (WorkflowPromotion) carries no authority-bearing field, so promotion changes RANKING only, never grants/scope/tier or the executable content.
+    tests:
+      - tests/security/test_self_improvement_competence.py::test_promotion_record_carries_no_authority_field
+      - tests/security/test_self_improvement_competence.py::test_promotion_is_eval_gated_and_changes_ranking_only
+  US-WFL-09:
+    description: Harvested free signals reweight reuse, never authority ([2026] VJS-COUNTY 5) - a regenerate-supersede or HITL verdict feeds the reuse weighting through memory.improve (reweight-only, no scope/grant argument) and a bounded promotion score in [-1, 1] that never changes the eval-gated state, and every harvest is best-effort so it can never fail the run that produced it (P9).
+    tests:
+      - tests/security/test_self_improvement_competence.py::test_harvested_signal_reweights_reuse_only
+      - tests/security/test_self_improvement_competence.py::test_harvest_reuse_signal_is_reweight_only_and_best_effort
+  US-WFL-10:
+    description: Post-run reflection is opt-in and rides the chokepoint ([2026] VJS-COUNTY 5) - with reflection enabled a terminal item stores exactly one lesson through kernel.invoke (audited memory.remember) and with it disabled stores none, and build_org wires the pump the kernel (not a bare store) so the memory verb is reachable but stays off by default.
+    tests:
+      - tests/security/test_self_improvement_competence.py::test_reflection_is_opt_in_through_the_chokepoint
+      - tests/security/test_self_improvement_competence.py::test_build_org_wires_the_kernel_so_reflection_is_reachable
   US-ADP-01:
     description: An adapter is generated from an OpenAPI spec, deriving its verbs.
     tests:

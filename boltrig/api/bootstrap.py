@@ -240,8 +240,42 @@ def wire_hitl_resume(kernel: Kernel, *, executor=None, pump=None) -> None:
                 await pump.requeue(request.tenant_id, request.work_item_id)
             except Exception:
                 log.warning("HITL work-item requeue failed", exc_info=True)
+        await _harvest_hitl_signal(kernel, request)
 
     kernel.hitl.set_resume_notifier(_on_answer)
+
+
+async def _harvest_hitl_signal(kernel: Kernel, request) -> None:
+    """Turn a HITL verdict into a reuse signal ([2026] VJS-COUNTY 5), best-effort.
+
+    An approval is an ENDORSEMENT, a rejection a BLOCK signal for the run/item the
+    request paused. It reweights memory through ``memory.improve`` (reweight-only)
+    under a governed system context, so it runs through the chokepoint but can only
+    change reuse likelihood - never a grant, scope, or tier. Any failure is
+    swallowed: the recorded answer is the truth, a harvest fault never voids it (P9).
+    """
+    from boltrig.kernel.hitl import _APPROVING
+    from boltrig.models import InvocationContext
+    from boltrig.workflows import harvest_reuse_signal
+
+    try:
+        resp = await kernel.store.get_hitl_response(request.tenant_id, request.id)
+        if resp is None:
+            return
+        approving = resp.decision.strip().lower() in _APPROVING
+        perms = await kernel.store.get_tenant_permissions(request.tenant_id)
+        ctx = InvocationContext(
+            tenant_id=request.tenant_id, run_id=request.run_id,
+            grants=perms.grants, actor="hitl-harvest", actor_tier="tier1",
+        )
+        await harvest_reuse_signal(
+            kernel, ctx,
+            target=request.work_item_id or request.run_id,
+            polarity="endorsement" if approving else "block",
+            kind="hitl_verdict",
+        )
+    except Exception:  # the answer stands; a harvest fault never voids it (P9)
+        log.debug("HITL reuse-signal harvest failed; continuing", exc_info=True)
 
 
 async def build_kernel_async() -> Kernel:
@@ -434,7 +468,7 @@ def build_app():
         from boltrig.config.admin import AdminConfig
         from boltrig.fleet import register_workers
         from boltrig.fleet.eval import EvalRunner
-        from boltrig.workflows import WorkflowLibrary
+        from boltrig.workflows import WorkflowLibrary, WorkflowPromoter
 
         manifest_path = _find_manifest()
         tenant = _DEFAULT_TENANT
@@ -471,13 +505,18 @@ def build_app():
         control = kernel.loader.peek(tenant, "control")
         if control is not None and hasattr(control, "set_admin"):
             control.set_admin(admin)
+        eval_runner = EvalRunner(kernel, spawner)
         return {
             "admin": admin,
-            "eval": EvalRunner(kernel, spawner),
+            "eval": eval_runner,
             "spawner": spawner,
             "workflows": WorkflowLibrary(
                 kernel.store, executor=executor, kernel=kernel
             ),
+            # Eval-gated promotion ([2026] VJS-COUNTY 5): shares the ONE EvalRunner
+            # so a candidate is proven through the same chokepoint under the
+            # initiator ceiling (SEC-29) before it is preferred for reuse.
+            "promoter": WorkflowPromoter(kernel.store, eval_runner),
         }
 
     return create_app(

@@ -55,11 +55,13 @@ from boltrig.models import (
     RateLimit,
     Skill,
     TargetType,
+    PromotionState,
     TenantPermissions,
     Urgency,
     Verb,
     VerbBinding,
     WorkflowDefinition,
+    WorkflowPromotion,
     WorkflowSource,
     WorkItem,
     WorkStatus,
@@ -369,6 +371,30 @@ class PostgresStore(ChannelStorePG):
             "SELECT * FROM workflow_definitions WHERE tenant_id=$1", tenant_id
         )
         return [_workflow(r) for r in rows]
+
+    async def upsert_workflow_promotion(self, p: WorkflowPromotion):
+        await self._pool.execute(
+            """INSERT INTO workflow_promotions (workflow_id, tenant_id, state, score,
+                                                eval_run_id, updated_at)
+               VALUES ($1,$2,$3,$4,$5,now())
+               ON CONFLICT (tenant_id, workflow_id) DO UPDATE SET
+                 state=EXCLUDED.state, score=EXCLUDED.score,
+                 eval_run_id=EXCLUDED.eval_run_id, updated_at=now()""",
+            p.workflow_id, p.tenant_id, p.state.value, p.score, p.eval_run_id,
+        )
+
+    async def get_workflow_promotion(self, tenant_id, workflow_id):
+        row = await self._pool.fetchrow(
+            "SELECT * FROM workflow_promotions WHERE tenant_id=$1 AND workflow_id=$2",
+            tenant_id, workflow_id,
+        )
+        return _workflow_promotion(row)
+
+    async def list_workflow_promotions(self, tenant_id):
+        rows = await self._pool.fetch(
+            "SELECT * FROM workflow_promotions WHERE tenant_id=$1", tenant_id
+        )
+        return [_workflow_promotion(r) for r in rows]
 
     async def upsert_model_endpoint(self, e: ModelEndpoint):
         await self._pool.execute(
@@ -1311,6 +1337,16 @@ def _workflow(r):
         id=r["id"], tenant_id=r["tenant_id"], version=r["version"],
         source=WorkflowSource(r["source"]), definition=r["definition"],
         intent_tags=list(r["intent_tags"] or []), origin_task=r["origin_task"],
+    )
+
+
+def _workflow_promotion(r):
+    if r is None:
+        return None
+    return WorkflowPromotion(
+        workflow_id=r["workflow_id"], tenant_id=r["tenant_id"],
+        state=PromotionState(r["state"]), score=float(r["score"]),
+        eval_run_id=r["eval_run_id"], updated_at=r["updated_at"],
     )
 
 

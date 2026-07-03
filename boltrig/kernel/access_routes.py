@@ -195,6 +195,16 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
         await _audit(k, p, "data.conversation.message.supersede",
                      {"conversation_id": conversation_id, "superseded": superseded_id,
                       "superseded_by": new_message.id, "run_id": new_message.run_id})
+        # Harvest the free signal ([2026] VJS-COUNTY 5): a regenerate superseding a
+        # reply is a NEGATIVE reuse signal for whatever produced it. Reweight-only,
+        # under the caller's own ceiling, best-effort - it never fails the request
+        # (P9) and can only change reuse likelihood, never grants/scope/tier.
+        from boltrig.workflows import harvest_reuse_signal
+
+        await harvest_reuse_signal(
+            k, p.context(run_id=new_message.run_id),
+            target=superseded_id, polarity="regression", kind="regenerate_superseded",
+        )
         return JSONResponse({"status": "ok", "conversation_id": conversation_id,
                              "message_id": new_message.id, "superseded": superseded_id,
                              "run_id": new_message.run_id})

@@ -152,6 +152,19 @@ and `FR*` ids are Boltrig-local (drawn from the SRS) and never restate a `K-*`.
 | --- | --- | --- |
 | **SEC-64** | The first-party app containers are hardened (INF-01) - read-only rootfs, all caps dropped, no-new-privileges, resource-capped, non-root images - enforced in the deploy manifests. | `tests/security/test_round_seventeen.py::test_app_containers_are_hardened`, `::test_app_images_run_non_root` |
 
+### Self-improvement competence ([2026] VJS-COUNTY 5)
+
+The self-improvement loop may raise COMPETENCE (reuse ranking / likelihood) but
+never AUTHORITY (grants, scope, tier, or the HITL gate). SEC-84 pins that
+provenance carries no authority; these pin the newer legs that only ever move
+ranking, always through the one dispatch chokepoint under the caller ceiling.
+
+| Invariant | Meaning | Bound test(s) |
+| --- | --- | --- |
+| **US-WFL-08** | Reuse promotion is eval-gated and competence-only - a generated/learned workflow is preferred only after it passes its eval cases (run through the chokepoint under the initiator ceiling, SEC-29); a later fail demotes it; the `WorkflowPromotion` record carries no authority field, so promotion changes ranking, never grants/scope/tier or the executable content. | `tests/security/test_self_improvement_competence.py::test_promotion_record_carries_no_authority_field`, `::test_promotion_is_eval_gated_and_changes_ranking_only` |
+| **US-WFL-09** | Harvested free signals (regenerate-supersede, HITL verdict) reweight reuse via `memory.improve` (reweight-only, no scope/grant argument) and a bounded promotion score in [-1, 1] that never moves the eval-gated state; every harvest is best-effort so it can never fail the run that produced it (P9). | `tests/security/test_self_improvement_competence.py::test_harvested_signal_reweights_reuse_only`, `::test_harvest_reuse_signal_is_reweight_only_and_best_effort` |
+| **US-WFL-10** | Post-run reflection is opt-in and rides the chokepoint - enabled, a terminal item stores exactly one lesson through `kernel.invoke` (audited `memory.remember`); disabled, none; `build_org` wires the pump the kernel so the memory verb is reachable but stays off by default. | `tests/security/test_self_improvement_competence.py::test_reflection_is_opt_in_through_the_chokepoint`, `::test_build_org_wires_the_kernel_so_reflection_is_reachable` |
+
 ## How a new invariant is added
 
 1. Write the test and mark it: `@pytest.mark.invariant("NEW-ID")`.

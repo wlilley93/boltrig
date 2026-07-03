@@ -48,6 +48,7 @@ from boltrig.models import (
     Verb,
     VerbBinding,
     WorkflowDefinition,
+    WorkflowPromotion,
     WorkItem,
     WorkStatus,
     utcnow,
@@ -69,6 +70,7 @@ class InMemoryStore(ChannelStoreMem):
         self._skills: dict[tuple[str, str], Skill] = {}
         self._caps: dict[tuple[str, str], AgentCapability] = {}
         self._workflows: dict[tuple[str, str], WorkflowDefinition] = {}
+        self._workflow_promotions: dict[tuple[str, str], WorkflowPromotion] = {}
         self._endpoints: dict[tuple[str, str], ModelEndpoint] = {}
         self._work: dict[tuple[str, str], WorkItem] = {}
         self._hitl: dict[tuple[str, str], HITLRequest] = {}
@@ -172,6 +174,15 @@ class InMemoryStore(ChannelStoreMem):
 
     async def list_workflows(self, tenant_id):
         return [w for (t, _), w in self._workflows.items() if t == tenant_id]
+
+    async def upsert_workflow_promotion(self, promotion):
+        self._workflow_promotions[(promotion.tenant_id, promotion.workflow_id)] = promotion
+
+    async def get_workflow_promotion(self, tenant_id, workflow_id):
+        return self._workflow_promotions.get((tenant_id, workflow_id))
+
+    async def list_workflow_promotions(self, tenant_id):
+        return [p for (t, _), p in self._workflow_promotions.items() if t == tenant_id]
 
     async def upsert_model_endpoint(self, ep):
         self._endpoints[(ep.tenant_id, ep.id)] = ep

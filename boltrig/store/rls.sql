@@ -47,7 +47,7 @@ DECLARE
   t text;
   scoped text[] := ARRAY[
     'nouns','verbs','verb_bindings','adapters','skills','agent_capabilities',
-    'workflow_definitions','model_endpoints','work_items','hitl_requests',
+    'workflow_definitions','workflow_promotions','model_endpoints','work_items','hitl_requests',
     'hitl_responses','users','role_mappings','audit_log','idempotency_keys',
     'budgets','credential_refs','tenant_permissions','conversations',
     'config_revisions','eval_cases','eval_runs','notification_prefs',
