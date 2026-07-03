@@ -147,12 +147,22 @@ export function CommandPalette() {
           }}
           onKeyDown={onKeyDown}
           aria-label="Command palette search"
+          role="combobox"
+          aria-expanded={true}
+          aria-controls="cmdk-listbox"
+          aria-autocomplete="list"
+          aria-activedescendant={
+            filtered.length > 0 ? `cmdk-opt-${sel}` : undefined
+          }
         />
-        <ul className="cmdk__list">
+        <ul className="cmdk__list" id="cmdk-listbox" role="listbox" aria-label="Results">
           {filtered.length === 0 && <li className="cmdk__empty">No matches.</li>}
           {filtered.map((c, i) => (
-            <li key={c.id}>
+            <li key={c.id} role="presentation">
               <button
+                id={`cmdk-opt-${i}`}
+                role="option"
+                aria-selected={i === sel}
                 className={`cmdk__item ${i === sel ? "cmdk__item--sel" : ""}`}
                 onMouseEnter={() => setSel(i)}
                 onClick={() => choose(c)}

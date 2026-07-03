@@ -12,12 +12,17 @@
 :root {
   color-scheme: dark light;
 
-  /* primitives (raw - never referenced directly by components) */
+  /* primitives (raw - never referenced directly by components).
+     Ink scale runs darkest (900) to lightest (050); the 250 step was added for
+     the muted-text token so it clears WCAG AA (4.5:1) on the dark surfaces -
+     the older #4E637E (ink-300) only reached ~3.3:1 on the base background.
+     c-indigo-550 is a slightly deeper indigo tuned so white button labels on
+     the primary accent clear AA; the lighter c-indigo-500 stays for node accents. */
   --c-ink-900:#04060D; --c-ink-800:#080D18; --c-ink-700:#0C1422; --c-ink-600:#111C30;
-  --c-ink-500:#1E2E46; --c-ink-400:#2E4060; --c-ink-300:#4E637E; --c-ink-200:#7E95B0;
+  --c-ink-500:#1E2E46; --c-ink-400:#2E4060; --c-ink-300:#4E637E; --c-ink-250:#6A8099; --c-ink-200:#7E95B0;
   --c-ink-100:#B8C8DA; --c-ink-050:#E4EDF6; --c-white:#F2F7FC;
   --c-cyan-600:#1FB6D6; --c-cyan-500:#3DD3F0; --c-cyan-400:#6FE3F7;
-  --c-indigo-600:#5E6CF0; --c-indigo-500:#7C8BFF;
+  --c-indigo-600:#5E6CF0; --c-indigo-550:#5E69DD; --c-indigo-500:#7C8BFF;
   --c-green-500:#3FB984; --c-amber-500:#E8B339; --c-red-500:#F0654A;
   --c-orange-500:#FF7A45; --c-slate-500:#5A6477;
 
@@ -31,12 +36,12 @@
   --color-border-strong:var(--c-ink-400);
   --color-text-primary:var(--c-ink-050);
   --color-text-secondary:var(--c-ink-200);
-  --color-text-muted:var(--c-ink-300);
+  --color-text-muted:var(--c-ink-250); /* AA-tuned: ~4.6:1 on card, ~5:1 on base */
   --color-text-oncolor:var(--c-ink-900);
   --color-accent:var(--c-cyan-500);
   --color-accent-hover:var(--c-cyan-400);
   --color-accent-press:var(--c-cyan-600);
-  --color-accent-2:var(--c-indigo-500);
+  --color-accent-2:var(--c-indigo-550); /* AA-tuned so white labels on the primary accent clear 4.5:1 */
   --color-ok:var(--c-green-500); --color-warn:var(--c-amber-500);
   --color-down:var(--c-red-500); --color-unknown:var(--c-slate-500);
   --color-consequence-low:var(--c-slate-500); --color-consequence-high:var(--c-orange-500);
@@ -2834,6 +2839,12 @@ select:focus {
   outline: none;
   border-bottom-color: rgba(61, 211, 240, 0.5);
 }
+/* the class-level :focus above out-specifies the global input:focus-visible
+   ring, so restore a keyboard-only ring here (inset so it reads inside the bar). */
+.cmdk__input:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
 .cmdk__list {
   list-style: none;
   margin: 0;
@@ -2959,6 +2970,12 @@ select:focus {
 .chat__input:focus {
   outline: none;
   border-color: rgba(61, 211, 240, 0.45);
+}
+/* the class-level :focus above out-specifies the global input:focus-visible
+   ring; restore a keyboard-only ring so the composer shows clear focus. */
+.chat__input:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
 }
 /* thinking: the blob brightens + speeds up, the bar pulses electric-blue */
 .chat__composer--thinking .chat__inputwrap::before {
