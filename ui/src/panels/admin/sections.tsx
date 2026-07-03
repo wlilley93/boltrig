@@ -19,6 +19,12 @@
 // (fail-closed via onValidity), and fromFormValue unwraps it back to the array.
 
 import { schemaDefaults } from "../uxForm";
+import {
+  NotificationDefaultsList,
+  PriceList,
+  RoleMappingList,
+  SkillsByRoleList,
+} from "./editors";
 
 export interface AdminSection {
   key: string;
@@ -69,6 +75,59 @@ export function stableKey(value: unknown): string {
 
 const RESIDENCY = ["eu", "us", "global"];
 const CHANNELS = ["teams", "email", "slack"];
+const COST_TIER = ["cheap", "standard", "premium"];
+const BUDGET_WINDOW = ["daily", "weekly", "monthly"];
+const ENDPOINT_KIND = ["anthropic", "vllm", "openai"];
+const DATA_CLASS = ["standard", "sensitive"];
+const ADAPTER_RUNTIME = ["http", "sql", "script"];
+const CREDENTIAL_KIND = ["oauth", "api_key", "basic"];
+const RETRIEVAL_MODE = ["similarity", "graph_completion"];
+const EVAL_TARGET_KIND = ["skill", "agent", "workflow"];
+
+// The reusable budget sub-schema (a tier's spend cap): SchemaFormV2 renders it as
+// a nested inset group wherever it appears (tier1 and each tier2 row).
+const BUDGET_SCHEMA = {
+  type: "object",
+  description: "This tier's spend cap.",
+  properties: {
+    cost_limit_micros: {
+      type: "integer",
+      minimum: 0,
+      maximum: 1000000000,
+      description: "The spend ceiling in micros for the window.",
+    },
+    hard_stop: {
+      type: "boolean",
+      description: "When on, work halts at the cap; when off, it only alerts.",
+    },
+    window: {
+      type: "string",
+      enum: BUDGET_WINDOW,
+      description: "The rolling window the cap applies over.",
+    },
+  },
+};
+
+// The agent-node shape shared by tier1 and each tier2 department head.
+const AGENT_NODE_PROPERTIES = {
+  name: { type: "string", description: "The agent's stable name." },
+  department: { type: "string", description: "The department this agent heads (tier 2)." },
+  runtime: { type: "string", description: "The runtime engine (e.g. hermes)." },
+  model_endpoint: { type: "string", description: "The model endpoint id from Models." },
+  max_depth: {
+    type: "integer",
+    minimum: 1,
+    maximum: 10,
+    description: "How deep this agent may spawn children.",
+  },
+  cost_tier: { type: "string", enum: COST_TIER, description: "The default cost tier." },
+  supported_skills: {
+    type: "array",
+    items: { type: "string" },
+    description: "Skill patterns this agent may run ('*' for all).",
+  },
+  budget: BUDGET_SCHEMA,
+};
 
 export const ADMIN_SECTIONS: ReadonlyArray<AdminSection> = [
   {
@@ -89,14 +148,9 @@ export const ADMIN_SECTIONS: ReadonlyArray<AdminSection> = [
           type: "array",
           description:
             "Each entry maps an IdP group to a role and a permission scope (all / departments / nouns / verbs). This is the RBAC source of truth.",
-          items: {
-            type: "object",
-            properties: {
-              idp_group: { type: "string" },
-              role: { type: "string" },
-              scope: { type: "object" },
-            },
-          },
+          // Dedicated typed editor: IdP-group field + role select + a structured
+          // scope sub-editor (the generic array path cannot express the scope union).
+          editor: RoleMappingList,
         },
       },
     },
@@ -111,26 +165,13 @@ export const ADMIN_SECTIONS: ReadonlyArray<AdminSection> = [
         tier1: {
           type: "object",
           description: "The single top-tier agent (chief of staff).",
-          properties: {
-            name: { type: "string" },
-            runtime: { type: "string" },
-            model_endpoint: { type: "string" },
-            department: { type: "string" },
-            max_depth: { type: "integer", minimum: 1, maximum: 10 },
-            cost_tier: { type: "string", enum: ["cheap", "standard", "premium"] },
-            supported_skills: { type: "array", items: { type: "string" } },
-            budget: {
-              type: "object",
-              description:
-                "cost_limit_micros, hard_stop and window for this tier's spend cap.",
-            },
-          },
+          properties: AGENT_NODE_PROPERTIES,
         },
         tier2: {
           type: "array",
           description:
             "The department heads under tier 1, each with its own runtime, skills and budget.",
-          items: { type: "object" },
+          items: { type: "object", properties: AGENT_NODE_PROPERTIES },
         },
       },
     },
@@ -147,7 +188,38 @@ export const ADMIN_SECTIONS: ReadonlyArray<AdminSection> = [
           type: "array",
           description:
             "Each rule matches intent tags to a capability, a skill set and a max depth.",
-          items: { type: "object" },
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string", description: "The rule's stable name." },
+              match: {
+                type: "object",
+                description: "The match predicate for inbound tasks.",
+                properties: {
+                  intent_tags: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "Intent tags a task must carry for this rule to fire.",
+                  },
+                },
+              },
+              capability: {
+                type: "string",
+                description: "The ephemeral runtime (capability) this rule spawns.",
+              },
+              skills: {
+                type: "array",
+                items: { type: "string" },
+                description: "The skills the spawned worker starts with.",
+              },
+              max_depth: {
+                type: "integer",
+                minimum: 1,
+                maximum: 10,
+                description: "The max spawn depth for this rule.",
+              },
+            },
+          },
         },
       },
       required: ["items"],
@@ -165,7 +237,38 @@ export const ADMIN_SECTIONS: ReadonlyArray<AdminSection> = [
           type: "array",
           description:
             "Each adapter names its id, runtime and (by reference) its credential. Secret values are never edited here.",
-          items: { type: "object" },
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string", description: "The adapter id (builtin id or project id)." },
+              runtime: {
+                type: "string",
+                enum: ADAPTER_RUNTIME,
+                description: "How the adapter is invoked.",
+              },
+              module_ref: {
+                type: "string",
+                description: "For a project adapter: the importable module:build ref.",
+              },
+              credential: {
+                type: "object",
+                description: "A credential REFERENCE (never the secret value).",
+                properties: {
+                  id: { type: "string", description: "The credential env-var reference id." },
+                  store: {
+                    type: "string",
+                    enum: ["env"],
+                    description: "Where the secret is held (env).",
+                  },
+                  kind: {
+                    type: "string",
+                    enum: CREDENTIAL_KIND,
+                    description: "The credential kind.",
+                  },
+                },
+              },
+            },
+          },
         },
       },
       required: ["items"],
@@ -183,7 +286,33 @@ export const ADMIN_SECTIONS: ReadonlyArray<AdminSection> = [
           type: "array",
           description:
             "Each runtime pins a runtime engine, a model endpoint, its skills, a max depth and a cost tier.",
-          items: { type: "object" },
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string", description: "The runtime's stable name." },
+              runtime: { type: "string", description: "The runtime engine (hermes, pi)." },
+              model_endpoint: {
+                type: "string",
+                description: "The model endpoint id from Models.",
+              },
+              supported_skills: {
+                type: "array",
+                items: { type: "string" },
+                description: "Skill patterns this runtime may run ('*' for all).",
+              },
+              max_depth: {
+                type: "integer",
+                minimum: 1,
+                maximum: 10,
+                description: "How deep this runtime may spawn children.",
+              },
+              cost_tier: {
+                type: "string",
+                enum: COST_TIER,
+                description: "The default cost tier.",
+              },
+            },
+          },
         },
       },
       required: ["items"],
@@ -200,11 +329,52 @@ export const ADMIN_SECTIONS: ReadonlyArray<AdminSection> = [
           type: "object",
           description:
             "The sandboxed Pi reasoning runtime: enabled, model endpoint, step cap and sandbox policy.",
+          properties: {
+            enabled: { type: "boolean", description: "Whether the Pi sidecar runtime is active." },
+            sidecar_url: { type: "string", description: "The Pi sidecar base URL." },
+            model_endpoint: {
+              type: "string",
+              description: "The model endpoint id Pi reasons with.",
+            },
+            max_steps: {
+              type: "integer",
+              minimum: 1,
+              maximum: 100,
+              description: "Per-run reasoning/tool-call cap.",
+            },
+            sandbox: {
+              type: "object",
+              description: "The Pi sandbox policy.",
+              properties: {
+                network_allow: {
+                  type: "array",
+                  items: { type: "string" },
+                  description: "Network targets Pi may reach (kernel_mcp, model_endpoint).",
+                },
+                native_tools: {
+                  type: "boolean",
+                  description: "Whether Pi's own filesystem/bash/network tools are enabled.",
+                },
+              },
+            },
+          },
         },
         gateway: {
           type: "object",
           description:
             "The model gateway for standard (non-sensitive) traffic: base_url and cache TTL. Empty base_url = off.",
+          properties: {
+            base_url: {
+              type: "string",
+              description: "The gateway base URL (blank = off).",
+            },
+            cache_ttl_seconds: {
+              type: "integer",
+              minimum: 0,
+              maximum: 86400,
+              description: "Prompt-cache TTL; sync to the gateway's own cache TTL.",
+            },
+          },
         },
       },
     },
@@ -221,12 +391,28 @@ export const ADMIN_SECTIONS: ReadonlyArray<AdminSection> = [
         server: {
           type: "object",
           description: "Whether granted verbs are exposed as MCP tools.",
+          properties: {
+            enabled: {
+              type: "boolean",
+              description: "Expose this tenant's granted verbs as MCP tools.",
+            },
+          },
         },
         consume: {
           type: "array",
           description:
             "External MCP servers this tenant consumes (each registers inert until reviewed).",
-          items: { type: "object" },
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string", description: "The consumed server id." },
+              url: { type: "string", description: "The server URL." },
+              credential: {
+                type: "string",
+                description: "A credential reference (env-interpolated, held kernel-side).",
+              },
+            },
+          },
         },
       },
     },
@@ -249,12 +435,34 @@ export const ADMIN_SECTIONS: ReadonlyArray<AdminSection> = [
         endpoints: {
           type: "array",
           description: "Each endpoint's id, kind, model, base_url and data class.",
-          items: { type: "object" },
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string", description: "The endpoint id (referenced elsewhere)." },
+              kind: {
+                type: "string",
+                enum: ENDPOINT_KIND,
+                description: "The back-end kind.",
+              },
+              model: { type: "string", description: "The model name served." },
+              base_url: {
+                type: "string",
+                description: "The API base URL (for self-hosted back ends).",
+              },
+              data_class: {
+                type: "string",
+                enum: DATA_CLASS,
+                description: "sensitive endpoints never egress.",
+              },
+            },
+          },
         },
         prices: {
           type: "object",
           additionalProperties: true,
           description: "Per-model micros-per-token price table for budgets and cost true-up.",
+          // Open key/value map (model -> micros): a typed key/value editor, not JSON.
+          editor: PriceList,
         },
       },
     },
@@ -394,10 +602,47 @@ export const ADMIN_SECTIONS: ReadonlyArray<AdminSection> = [
         ingest: {
           type: "object",
           description: "Ingestion policy: on_session_end, incremental, screen_content, schedule.",
+          properties: {
+            on_session_end: {
+              type: "boolean",
+              description: "Cognify a conversation when it closes.",
+            },
+            incremental: {
+              type: "boolean",
+              description: "Process only new/changed content.",
+            },
+            screen_content: {
+              type: "boolean",
+              description: "Run the anti-poisoning screen on ingested content.",
+            },
+            schedule: {
+              type: "string",
+              description: "Optional tz-aware cron for document corpora (blank = none).",
+            },
+          },
         },
         retrieval: {
           type: "object",
           description: "Retrieval policy: default_mode, max_hops, max_results.",
+          properties: {
+            default_mode: {
+              type: "string",
+              enum: RETRIEVAL_MODE,
+              description: "similarity or graph_completion (multi-hop).",
+            },
+            max_hops: {
+              type: "integer",
+              minimum: 1,
+              maximum: 10,
+              description: "Max graph hops for multi-hop retrieval.",
+            },
+            max_results: {
+              type: "integer",
+              minimum: 1,
+              maximum: 100,
+              description: "Max results returned per retrieval.",
+            },
+          },
         },
       },
     },
@@ -436,6 +681,8 @@ export const ADMIN_SECTIONS: ReadonlyArray<AdminSection> = [
           additionalProperties: true,
           description:
             "Per-role skill sets a bare chat turn spawns with (intersected with the caller's grants, so it can only reduce authority).",
+          // Open key/value map (role -> skills): a typed key/value editor, not JSON.
+          editor: SkillsByRoleList,
         },
       },
     },
@@ -451,7 +698,21 @@ export const ADMIN_SECTIONS: ReadonlyArray<AdminSection> = [
         suites: {
           type: "array",
           description: "Each suite's id, target kind and target ref.",
-          items: { type: "object" },
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string", description: "The suite id." },
+              target_kind: {
+                type: "string",
+                enum: EVAL_TARGET_KIND,
+                description: "What the suite evaluates.",
+              },
+              target_ref: {
+                type: "string",
+                description: "The target ref/pattern (e.g. ops/*).",
+              },
+            },
+          },
         },
       },
     },
@@ -467,6 +728,8 @@ export const ADMIN_SECTIONS: ReadonlyArray<AdminSection> = [
           type: "object",
           additionalProperties: true,
           description: "Per-event default channel routing (approval, escalation, budget_alert).",
+          // Open key/value map (event -> {channel}): a typed key/value editor, not JSON.
+          editor: NotificationDefaultsList,
         },
       },
     },

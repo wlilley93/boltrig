@@ -1155,7 +1155,7 @@ export function OrderedPicker({
 // Validation timing/copy is the caller's (P13): pass field errors keyed by
 // path ("k" or "k.sub"); onValidity reports the per-field JSON parse state
 // (amendment 9: callers block save/navigation while false).
-interface PropSpec {
+export interface PropSpec {
   type?: string;
   description?: string;
   enum?: string[];
@@ -1167,7 +1167,35 @@ interface PropSpec {
   properties?: Record<string, PropSpec>;
   required?: string[];
   additionalProperties?: unknown;
+  // Optional per-property custom control (the admin section flagships). When set,
+  // SchemaFormV2 renders this component INSTEAD of deriving a control from the
+  // type, so a shape the generic engine cannot express typedly (a role-mapping
+  // row, a key/value map) still renders as structured controls rather than a JSON
+  // blob. Rendered as a component (JSX element) so it may hold its own row-draft
+  // state. The schema stays a client-side descriptor; schemaDefaults ignores this.
+  editor?: (props: FieldEditorProps) => ReactNode;
 }
+
+// The contract a custom section editor (ui/src/panels/admin/editors/*) is handed
+// by SchemaFormV2: the current value + a commit fn (undefined clears the key),
+// plus the field framing (label, required, error) so the editor can wrap itself
+// in a Field / inset consistently with the generic controls around it.
+export interface FieldEditorProps {
+  value: unknown;
+  onChange: (v: unknown) => void;
+  spec: PropSpec;
+  path: string;
+  label: string;
+  required: boolean;
+  error?: string;
+}
+
+// How deep the typed inset-group / row-card recursion goes before a nested object
+// falls back to the per-field JSON escape hatch. One top-level group plus three
+// more levels covers every shipped admin section (e.g. tier2[] -> budget, or
+// runtimes.pi -> sandbox) without risking an unbounded recurse on a pathological
+// schema.
+const MAX_INSET_DEPTH = 4;
 
 function specOf(schema: unknown): { props: Record<string, PropSpec>; required: Set<string> } {
   const s = (schema ?? {}) as { properties?: Record<string, PropSpec>; required?: string[] };
@@ -1273,6 +1301,107 @@ export function SchemaFormV2({
     );
   }
 
+  // Array-of-objects: a labelled block of removable inset row-cards, each an
+  // inset sub-form built from items.properties (recursing through control so a
+  // row's own nested groups render too), plus an Add button that appends a
+  // defaults-seeded row. Reuses the inset + button classes; no bare inputs.
+  function objectArray(
+    path: string,
+    key: string,
+    spec: PropSpec,
+    items: PropSpec,
+    rows: unknown[],
+    commit: (v: unknown) => void,
+    isReq: boolean,
+    depth: number,
+  ): ReactNode {
+    const itemProps = items.properties ?? {};
+    const itemReq = new Set(items.required ?? []);
+    const itemKeys = Object.keys(itemProps);
+    const orderedItem = [
+      ...itemKeys.filter((k) => itemReq.has(k)),
+      ...itemKeys.filter((k) => !itemReq.has(k)),
+    ];
+    const singular = key.replace(/s$/, "");
+    const seedRow = (): Record<string, unknown> => {
+      const o: Record<string, unknown> = {};
+      for (const [k, s] of Object.entries(itemProps)) {
+        o[k] = s.default !== undefined ? s.default : skeletonFor(s);
+      }
+      return o;
+    };
+    const setRow = (i: number, next: Record<string, unknown>) => {
+      const arr = rows.slice();
+      arr[i] = next;
+      commit(arr);
+    };
+    const removeRow = (i: number) => {
+      const arr = rows.slice();
+      arr.splice(i, 1);
+      commit(arr);
+    };
+    return (
+      <div key={path} className="ux-inset ux-field--wide">
+        <span className="ux-inset__label">
+          {key}
+          {isReq && (
+            <em className="ux-field__req" title="required">
+              {" "}
+              *
+            </em>
+          )}
+        </span>
+        {spec.description && <span className="ux-field__hint">{spec.description}</span>}
+        {rows.length === 0 && <span className="ux-field__hint">None yet. Add one below.</span>}
+        <div className="stack">
+          {rows.map((row, i) => {
+            const obj = (
+              row && typeof row === "object" && !Array.isArray(row) ? row : {}
+            ) as Record<string, unknown>;
+            return (
+              <div key={i} className="ux-inset">
+                <span
+                  className="ux-inset__label"
+                  style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
+                >
+                  <span>
+                    {singular} {i + 1}
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn--sm btn--ghost"
+                    aria-label={`Remove ${singular} ${i + 1}`}
+                    onClick={() => removeRow(i)}
+                  >
+                    Remove
+                  </button>
+                </span>
+                <div className="ux-inset__grid">
+                  {orderedItem.map((sub) =>
+                    control(
+                      `${path}.${i}.${sub}`,
+                      sub,
+                      itemProps[sub],
+                      obj[sub],
+                      (nv) => setRow(i, { ...obj, [sub]: nv }),
+                      itemReq.has(sub),
+                      depth + 1,
+                    ),
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div>
+          <button type="button" className="btn btn--sm" onClick={() => commit([...rows, seedRow()])}>
+            Add {singular}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   function control(
     path: string,
     key: string,
@@ -1289,6 +1418,25 @@ export function SchemaFormV2({
         {ctl}
       </Field>
     );
+
+    // A section descriptor may pin a dedicated editor for a flagship shape the
+    // generic engine cannot express typedly (identity.role_mappings, the models /
+    // notifications / chat key-value maps). It renders itself, framing included.
+    if (spec.editor) {
+      const Editor = spec.editor;
+      return (
+        <Editor
+          key={path}
+          value={shown}
+          onChange={commit}
+          spec={spec}
+          path={path}
+          label={key}
+          required={isReq}
+          error={err}
+        />
+      );
+    }
 
     if (spec.enum && spec.enum.length > 0) {
       const v = shown == null ? "" : String(shown);
@@ -1359,6 +1507,13 @@ export function SchemaFormV2({
         // array of scalars: free-entry chips, not a JSON punt (P9)
         return wrap(<ChipPicker value={arr} onChange={commit} allowFree ariaLabel={key} />, true);
       }
+      // array of objects: a list of removable inset row-cards, each an inset
+      // sub-form from items.properties, with an Add button (P9). The JSON escape
+      // hatch stays only for a truly shapeless item (no properties).
+      const itemProps = items?.properties ?? {};
+      if (Object.keys(itemProps).length > 0) {
+        return objectArray(path, key, spec, items!, Array.isArray(shown) ? shown : [], commit, isReq, depth);
+      }
       return jsonField(path, key, spec, shown, commit, isReq);
     }
     const objectish = spec.type === "object" || (spec.type === undefined && spec.properties != null);
@@ -1366,7 +1521,11 @@ export function SchemaFormV2({
       const subProps = spec.properties ?? {};
       const subKeys = Object.keys(subProps);
       const openMap = spec.additionalProperties !== undefined && spec.additionalProperties !== false;
-      if (depth === 0 && subKeys.length > 0 && !openMap) {
+      // A closed object with named properties renders as a labelled inset group,
+      // recursing so nested groups (budget, sandbox, retrieval) render too, not
+      // just the top level. Only a genuinely open map (additionalProperties, no
+      // named shape) or a pathologically deep schema keeps the JSON escape hatch.
+      if (subKeys.length > 0 && !openMap && depth < MAX_INSET_DEPTH) {
         const obj = (
           shown && typeof shown === "object" && !Array.isArray(shown) ? shown : {}
         ) as Record<string, unknown>;
