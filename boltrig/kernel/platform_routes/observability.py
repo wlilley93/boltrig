@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from ._shared import can_author_route, dept_run_ids, scope_depts  # noqa: F401
@@ -100,11 +102,30 @@ def register(app, P, K) -> None:
         depts = scope_depts(p)
         allowed = await dept_run_ids(k, p.tenant_id, depts)
 
+        # Parse the date bounds ONCE into datetimes and compare by value, not by
+        # lexicographic string (a date-only until="2026-07-03" must include that
+        # whole day, so it is treated as inclusive end-of-day; a naive string
+        # compare "2026-07-03T06.." > "2026-07-03" wrongly excluded the day).
+        def _parse_bound(raw: str | None, *, end_of_day: bool):
+            if not raw:
+                return None
+            try:
+                dt = datetime.fromisoformat(raw)
+            except ValueError:
+                return None
+            if end_of_day and len(raw) == 10:  # a bare YYYY-MM-DD upper bound
+                dt = dt.replace(hour=23, minute=59, second=59, microsecond=999999)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=UTC)
+            return dt
+
+        since_dt = _parse_bound(since, end_of_day=False)
+        until_dt = _parse_bound(until, end_of_day=True)
+
         def _in_range(ts) -> bool:
-            iso = ts.isoformat()
-            if since and iso < since:
+            if since_dt and ts < since_dt:
                 return False
-            if until and iso > until:
+            if until_dt and ts > until_dt:
                 return False
             return True
 
