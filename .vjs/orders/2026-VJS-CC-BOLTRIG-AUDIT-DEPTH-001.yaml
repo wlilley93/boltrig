@@ -1,0 +1,77 @@
+id: 2026-VJS-CC-BOLTRIG-AUDIT-DEPTH-001
+court: county
+jurisdiction: default
+repo_code: null
+status: binding
+issue: audit_depth_opbox_parity
+holding: |
+  Option A is adopted. Boltrig DEEPENS its existing tamper-evident hash-chained audit
+  to Opbox parity, additively, never replacing the chain. Add ip_address, user_agent,
+  resource, resource_id and workspace_id to the audit row (all nullable, backfilled
+  null so the chain and its tests stay green). Every MCP-initiated row carries the MCP
+  caller's identity, org/workspace, and ip/ua at the SAME depth as a human action (the
+  chokepoint already audits MCP; enrich it). Add a distinct SecurityEvent stream (its
+  own tamper-evident table) for security signals: login failures, rate-limit trips,
+  permission denials, MCP auth failures. Add a periodic per-org/workspace ROLLUP ANCHOR
+  (a rollup_root_hash over a chain segment) with a LOCAL dev-fallback now
+  (is_dev_fallback), and the real RFC3161 TSA + KMS signature behind a surfaced
+  Principal dependency, so the mechanism ships now and hardens when the external
+  credential arrives. Extend the audit browser to filter by user/resource/date/
+  security-event and to VERIFY the chain + anchor. Secrets are never in a row (K-20);
+  org/workspace-scoped reads are fail-closed; the audit is append-only + tamper-evident
+  (never edit/delete). Option B (replace the chain with an external SIEM) and Option C
+  (defer anchoring) are rejected. Composes with COUNTY 8 (org/workspace scope); the
+  prod cutover + the external RFC3161/KMS wiring stay Principal-gated.
+directives:
+- id: D1
+  actor: lexby
+  must: add_ip_address_user_agent_resource_resource_id_and_workspace_id_to_the_audit_row_additive_nullable_backfilled_null_migration_mirrored
+  when: null
+- id: D2
+  actor: lexby
+  must: enrich_every_mcp_initiated_audit_row_with_the_mcp_callers_identity_org_workspace_and_ip_ua_at_the_same_depth_as_a_human_action
+  when: null
+- id: D3
+  actor: lexby
+  must: add_a_distinct_security_event_stream_its_own_tamper_evident_table_for_login_failures_rate_limit_trips_permission_denials_and_mcp_auth_failures_queryable
+  when: null
+- id: D4
+  actor: lexby
+  must: add_a_periodic_per_org_workspace_rollup_anchor_rollup_root_hash_over_a_chain_segment_with_a_local_dev_fallback_now_and_real_rfc3161_tsa_plus_kms_signature_behind_a_surfaced_principal_dependency
+  when: null
+- id: D5
+  actor: lexby
+  must: extend_the_audit_browser_to_filter_by_user_resource_date_security_event_and_to_verify_the_chain_and_anchor
+  when: null
+- id: D6
+  actor: lexby
+  must: keep_secrets_out_of_every_audit_and_security_event_row_k20_scope_reads_by_org_workspace_fail_closed_and_keep_the_log_append_only_tamper_evident_never_edited
+  when: null
+- id: D7
+  actor: lexby
+  must: pin_invariants_richer_fields_and_mcp_depth_security_event_stream_anchor_with_dev_fallback_no_secret_in_a_row_scoped_reads_append_only_and_keep_the_existing_chain_and_tests_green_debt_zero
+  when: null
+- id: D8
+  actor: lexby
+  must: surface_the_external_rfc3161_kms_anchor_as_a_principal_dependency_and_keep_the_prod_cutover_gated
+  when: at_prod_cutover
+forbidden:
+- replacing_or_weakening_the_existing_hash_chained_audit_or_moving_the_core_path_to_an_external_service
+- putting_a_secret_key_password_or_session_token_in_an_audit_or_security_event_row
+- editing_or_deleting_an_audit_row_the_log_is_append_only_and_verified_not_mutated
+- a_cross_org_or_cross_workspace_audit_read_or_a_scoped_read_that_bypasses_membership
+- auditing_an_mcp_initiated_action_at_less_depth_than_a_human_action
+- blocking_the_whole_anchor_mechanism_on_the_external_rfc3161_kms_dependency_instead_of_shipping_the_dev_fallback
+exceptions: null
+supersedes: []
+source_opinion: null
+runtime_summary: |
+  Boltrig deepens its hash-chained audit to Opbox parity additively: ip/ua/resource/
+  workspace_id on the row, MCP rows enriched to human depth, a distinct SecurityEvent
+  stream, and a periodic per-org/workspace rollup anchor with a dev-fallback now and
+  RFC3161+KMS behind a Principal dep. The browser gains filters + chain/anchor verify.
+  Secrets never in a row, scoped reads fail-closed, append-only + tamper-evident. The
+  existing chain is never replaced; external anchoring + prod cutover stay gated.
+created_at: 2026-07-03T08:36:20Z
+citation: '[2026] VJS-COUNTY 9'
+assent_source: standing_bounded_assent

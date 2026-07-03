@@ -1,0 +1,56 @@
+id: SUBMISSION-2026-07-03-083609
+court_requested: county
+jurisdiction: default
+question: 'What audit depth should Boltrig add to reach Opbox parity including MCP users: which fields, a SecurityEvent stream, and what anchoring given RFC3161/KMS are external dependencies?'
+facts: |
+  # Case: Opbox-depth audit (incl MCP users) on the org/workspace tenancy
+
+  ## Facts (verified)
+  1. Boltrig already has a tamper-evident, HASH-CHAINED audit (AuditEvent with
+     prev_hash/hash, SEC-16/K-19): tenant_id, actor, actor_tier, action_type, verb,
+     status, run_id, on_behalf_of, detail, ts. MCP calls ARE already audited - the MCP
+     face routes every call through the same dispatch chokepoint that writes the row.
+     There is a browser: /v1/audit/search + /v1/audit/export + /v1/audit/tree/{run_id}.
+  2. The Principal wants the depth + capability of Opbox's audit, incl for MCP users.
+     Opbox (schema.prisma) adds, over boltrig: AuditLog carries ip_address, user_agent,
+     resource + resource_id (the object acted on), scoped to workspace; a distinct
+     SecurityEvent stream (type, ip, ua, detail) for security signals; and
+     OrganizationAuditAnchor / WorkspaceAuditAnchor - periodic rollup_root_hash
+     anchored with an RFC3161 timestamp token + a KMS signature (with an is_dev_fallback
+     flag), so the chain is externally verifiable, not just internally chained.
+  3. COUNTY 8 (just built) gives org/workspace + the active-workspace context, so audit
+     rows can now be workspace-scoped and the caller's org/workspace is on the context.
+  4. RFC3161 (a trusted TSA) + KMS are EXTERNAL dependencies the Principal must supply;
+     Opbox itself ships a dev-fallback anchor for when they are absent.
+
+  ## The question
+  What audit depth should Boltrig add to reach Opbox parity (incl MCP users): which
+  fields, a SecurityEvent stream, and what anchoring, given RFC3161/KMS are external?
+
+  ## Options
+  A. Deepen the existing chain (do NOT replace it): add ip_address + user_agent +
+     resource/resource_id + workspace_id to AuditEvent (all additive, backfilled null);
+     ensure every MCP-initiated row carries the MCP caller's identity + org/workspace +
+     ip/ua (the chokepoint already audits MCP; enrich it). Add a distinct SecurityEvent
+     stream (login failures, rate-limit trips, permission denials, MCP auth failures) as
+     its own tamper-evident table, queryable. Add a periodic per-org/workspace ROLLUP
+     ANCHOR (rollup_root_hash over the chain segment) with a LOCAL dev-fallback anchor
+     now (is_dev_fallback), and the real RFC3161 TSA + KMS signature behind the external
+     credential when supplied. Extend the audit browser to filter by user/resource/date/
+     security-event and to VERIFY the chain + anchor. Strongest case: reuses the proven
+     hash chain, is fully buildable now (external anchoring degrades to dev-fallback),
+     and org/workspace scoping rides COUNTY 8. Cost: a migration + enrich every audit
+     call site with the new fields.
+  B. Replace the chain with an external audit service/SIEM. Rejected: throws away the
+     in-DB tamper-evident chain and adds an external dependency for the core path.
+  C. Defer anchoring entirely. Rejected: the Principal asked for Opbox DEPTH.
+
+  ## Constraints
+  Additive (the existing chain + its tests stay green); MCP users audited at the same
+  depth as humans; keys-only for secrets (K-20, never a key/password/session secret in a
+  row); org/workspace-scoped reads fail-closed; the external RFC3161/KMS anchor is a
+  surfaced Principal dependency with a dev-fallback so the mechanism ships now; the audit
+  is read-only + tamper-evident (append + verify, never edit). Prod cutover stays gated.
+requested_order: TBD
+private_boundary: local
+word_count: 497
