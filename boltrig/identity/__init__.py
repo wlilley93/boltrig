@@ -33,6 +33,7 @@ from .sessions import (
     new_session,
     rotate_session,
 )
+from .tenancy import default_org_for, default_org_slug, ensure_default_org
 
 __all__ = [
     "OidcVerifier",
@@ -62,4 +63,8 @@ __all__ = [
     "SESSION_COOKIE",
     "CSRF_COOKIE",
     "CSRF_HEADER",
+    # Org -> workspace tenancy ([2026] VJS-COUNTY 8).
+    "default_org_for",
+    "default_org_slug",
+    "ensure_default_org",
 ]

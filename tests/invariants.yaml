@@ -836,3 +836,25 @@ invariants:
       - tests/security/test_privilege_ceiling.py::test_admin_cannot_grant_a_role_above_its_own
       - tests/security/test_privilege_ceiling.py::test_only_owner_may_grant_all_authority_scope
       - tests/security/test_privilege_ceiling.py::test_granting_an_equal_or_lower_role_is_allowed
+
+  # --- Org -> workspace tenancy ([2026] VJS-COUNTY 8) ------------------------
+  FR-ORG-01:
+    description: A workspace always belongs to an org (D1/D2) - an organisation row's id IS the tenant_id (one org per tenant_id) and every workspace carries that org as its tenant_id, so a workspace is never an orphan; get/list_workspace reads are tenant-scoped to the owning org.
+    tests:
+      - tests/store/test_tenancy.py::test_workspace_always_belongs_to_an_org
+  FR-ORG-02:
+    description: The organisation id IS the tenant_id and the default-org backfill is idempotent (D1) - ensure_default_org creates at most one org per tenant_id (id == tenant_id) and a repeat call never creates a second, so existing single-tenant deploys get exactly one implicit org.
+    tests:
+      - tests/store/test_tenancy.py::test_ensure_default_org_is_idempotent_and_id_is_tenant_id
+  SEC-103:
+    description: Org/workspace tenancy reads are tenant-scoped and never cross tenants (SEC-08) - get/list of org, workspace and both memberships, plus the switching-seam membership queries (list_orgs_for_user / list_workspaces_for_user), only ever return rows inside the bound tenant, and a remove under the wrong tenant is a no-op that cannot reach another tenant's row.
+    tests:
+      - tests/security/test_tenancy_isolation.py::test_tenancy_reads_are_tenant_scoped_never_cross_tenant
+  SEC-104:
+    description: A per-workspace role is always one of the allowed WorkspaceRole set (owner/admin/member/viewer/agent, D3) - add_workspace_member refuses an out-of-set role (SchemaValidationError) so it can never be persisted, while every allowed role is accepted.
+    tests:
+      - tests/security/test_tenancy_isolation.py::test_workspace_role_must_be_in_the_allowed_set
+  SEC-105:
+    description: The four org/workspace tenancy tables are RLS-fenced (SEC-08) - workspaces, org_members and workspace_members are in the rls.sql generic tenant_id-scoped set, and organisations is fenced by its own id-keyed tenant_isolation policy (its id IS the tenant_id), with all four defined in schema.sql.
+    tests:
+      - tests/security/test_tenancy_isolation.py::test_the_four_tenancy_tables_are_rls_scoped

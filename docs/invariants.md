@@ -197,6 +197,24 @@ that do not opt in.
 | **SEC-95** | Superseded turns never surface as a live search match ([2026] VJS-COUNTY 4) - search only considers messages with `superseded_by IS NULL`, so a regenerated-away reply's term yields no hit while the same term in the live replacement does. | `tests/security/test_conversation_search.py::test_superseded_message_is_not_a_live_search_hit` |
 | **SEC-96** | Conversation search has no SQL/wildcard injection surface - the query is a bound parameter (never string-interpolated) with LIKE metacharacters escaped (`\` `%` `_`) and an ESCAPE clause, so a caller-supplied `%`/`_` is matched literally as a substring, never as a wildcard. | `tests/security/test_conversation_search.py::test_like_metacharacters_are_escaped_not_wildcards` |
 
+### Org -> workspace tenancy foundation ([2026] VJS-COUNTY 8)
+
+The foundation phase of org/workspace tenancy: the data model + membership, added
+ON TOP of the existing `tenant_id` isolation key without rewiring any existing read.
+The ORGANISATION is the tenant boundary - an org row's id IS the `tenant_id` (one
+org per tenant_id) - so RLS stays keyed on `tenant_id`. A workspace belongs to an
+org; `org_members` and `workspace_members` are the memberships. Later phases thread
+a workspace scope through the InvocationContext, switching, per-org AI keys, and
+workflow scoping.
+
+| Invariant | Meaning | Bound test(s) |
+| --- | --- | --- |
+| **FR-ORG-01** | A workspace always belongs to an org (D1/D2) - an organisation row's id IS the `tenant_id` (one org per tenant_id) and every workspace carries that org as its `tenant_id`, so a workspace is never an orphan; get/list workspace reads are tenant-scoped to the owning org. | `tests/store/test_tenancy.py::test_workspace_always_belongs_to_an_org` |
+| **FR-ORG-02** | The organisation id IS the `tenant_id` and the default-org backfill is idempotent (D1) - `ensure_default_org` creates at most one org per tenant_id (id == tenant_id) and a repeat call never creates a second, so existing single-tenant deploys get exactly one implicit org. | `tests/store/test_tenancy.py::test_ensure_default_org_is_idempotent_and_id_is_tenant_id` |
+| **SEC-103** | Org/workspace tenancy reads are tenant-scoped and never cross tenants (SEC-08) - get/list of org, workspace and both memberships, plus the switching-seam queries (`list_orgs_for_user` / `list_workspaces_for_user`), only ever return rows inside the bound tenant, and a remove under the wrong tenant is a no-op. | `tests/security/test_tenancy_isolation.py::test_tenancy_reads_are_tenant_scoped_never_cross_tenant` |
+| **SEC-104** | A per-workspace role is always one of the allowed set (owner/admin/member/viewer/agent, D3) - `add_workspace_member` refuses an out-of-set role (`SchemaValidationError`) so it can never be persisted, while every allowed role is accepted. | `tests/security/test_tenancy_isolation.py::test_workspace_role_must_be_in_the_allowed_set` |
+| **SEC-105** | The four tenancy tables are RLS-fenced (SEC-08) - `workspaces`, `org_members` and `workspace_members` are in the `rls.sql` generic `tenant_id`-scoped set, and `organisations` is fenced by its own id-keyed policy (its id IS the tenant_id), all four defined in `schema.sql`. | `tests/security/test_tenancy_isolation.py::test_the_four_tenancy_tables_are_rls_scoped` |
+
 ## How a new invariant is added
 
 1. Write the test and mark it: `@pytest.mark.invariant("NEW-ID")`.

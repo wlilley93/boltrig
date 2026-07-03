@@ -669,6 +669,70 @@ CREATE UNIQUE INDEX IF NOT EXISTS sessions_token_hash_idx
     ON user_sessions (token_hash) WHERE token_hash IS NOT NULL;
 
 -- ===========================================================================
+-- Org -> workspace tenancy ([2026] VJS-COUNTY 8). The ORGANISATION is the tenant
+-- boundary (D1): an organisation row's id IS the tenant_id (one org per tenant_id),
+-- so RLS stays keyed on tenant_id and existing reads are unchanged. A WORKSPACE
+-- belongs to an org (D2); org_members + workspace_members are the memberships (D3).
+-- ADDITIVE: no existing resource table gains a workspace_id this phase.
+-- ===========================================================================
+
+-- D1: the organisation - id IS the tenant_id. slug is a unique url-safe handle.
+CREATE TABLE IF NOT EXISTS organisations (
+    id                 TEXT NOT NULL,   -- == tenant_id (one org per tenant_id)
+    name               TEXT NOT NULL,
+    slug               TEXT NOT NULL,
+    settings           JSONB NOT NULL DEFAULT '{}'::jsonb,
+    allow_own_ai_keys  BOOLEAN NOT NULL DEFAULT false,
+    require_two_factor  BOOLEAN NOT NULL DEFAULT false,
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (id)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS organisations_slug_idx ON organisations (slug);
+
+-- D2: a workspace belonging to an org (tenant_id). Tenant-scoped (RLS). No
+-- workspace_id is added to any existing resource table this phase.
+CREATE TABLE IF NOT EXISTS workspaces (
+    id          TEXT NOT NULL,
+    tenant_id   TEXT NOT NULL,          -- the owning organisation (== organisations.id)
+    name        TEXT NOT NULL,
+    slug        TEXT NOT NULL,
+    settings    JSONB NOT NULL DEFAULT '{}'::jsonb,
+    status      TEXT NOT NULL DEFAULT 'active',   -- active | archived
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, id)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS workspaces_slug_idx ON workspaces (slug);
+
+-- D3: organisation membership. One row per user per org; role is drawn from the
+-- existing platform role vocabulary. Tenant-scoped (RLS).
+CREATE TABLE IF NOT EXISTS org_members (
+    tenant_id   TEXT NOT NULL,
+    user_id     TEXT NOT NULL,
+    role        TEXT NOT NULL DEFAULT 'member',
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, user_id)
+);
+
+-- D3: per-workspace membership. role is one of owner/admin/member/viewer/agent
+-- (enforced in the store); permissions carries optional fine-grained overrides.
+-- Tenant-scoped (RLS).
+CREATE TABLE IF NOT EXISTS workspace_members (
+    workspace_id  TEXT NOT NULL,
+    user_id       TEXT NOT NULL,
+    tenant_id     TEXT NOT NULL,        -- the owning org (workspaces.tenant_id)
+    role          TEXT NOT NULL DEFAULT 'member',
+    permissions   JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (workspace_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS workspace_members_user_idx
+    ON workspace_members (tenant_id, user_id);
+CREATE INDEX IF NOT EXISTS workspace_members_ws_idx
+    ON workspace_members (tenant_id, workspace_id);
+
+-- ===========================================================================
 -- Round Five: structured memory governance + provenance control plane (Epic MEM).
 -- The swappable Memory Engine owns the graph/vector store; Boltrig governs scope,
 -- provenance, ingestion runs and the erasure ledger. owner_scope is the RBAC

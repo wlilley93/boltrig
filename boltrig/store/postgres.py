@@ -53,6 +53,8 @@ from boltrig.models import (
     HITLType,
     ModelEndpoint,
     Noun,
+    Organisation,
+    OrgMember,
     RateLimit,
     Skill,
     TargetType,
@@ -61,12 +63,16 @@ from boltrig.models import (
     Urgency,
     Verb,
     VerbBinding,
+    WORKSPACE_ROLES,
+    Workspace,
+    WorkspaceMember,
     WorkflowDefinition,
     WorkflowPromotion,
     WorkflowSource,
     WorkItem,
     WorkStatus,
 )
+from boltrig.models.errors import SchemaValidationError
 from boltrig.models.work import RunCheckpoint
 
 _SCHEMA = Path(__file__).with_name("schema.sql")
@@ -1408,6 +1414,155 @@ class PostgresStore(ChannelStorePG):
             s.token_hash, s.expires_at, s.csrf_token,
         )
 
+    # --- Org -> workspace tenancy ([2026] VJS-COUNTY 8) ----------------------
+    async def create_org(self, org: Organisation):
+        # Idempotent create (D1): ON CONFLICT DO NOTHING so ensure_default_org is a
+        # safe no-op for a tenant that already has its org. The org id IS the
+        # tenant_id.
+        await self._pool.execute(
+            """INSERT INTO organisations
+               (id, name, slug, settings, allow_own_ai_keys, require_two_factor,
+                created_at, updated_at)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+               ON CONFLICT (id) DO NOTHING""",
+            org.id, org.name, org.slug, org.settings,
+            org.allow_own_ai_keys, org.require_two_factor, org.created_at, org.updated_at,
+        )
+
+    async def get_org(self, tenant_id):
+        row = await self._pool.fetchrow(
+            "SELECT * FROM organisations WHERE id=$1", tenant_id
+        )
+        return _org(row)
+
+    async def list_orgs(self):
+        rows = await self._pool.fetch(
+            "SELECT * FROM organisations ORDER BY created_at DESC"
+        )
+        return [_org(r) for r in rows]
+
+    async def update_org(self, org: Organisation):
+        await self._pool.execute(
+            """UPDATE organisations SET name=$2, slug=$3, settings=$4,
+                   allow_own_ai_keys=$5, require_two_factor=$6, updated_at=now()
+               WHERE id=$1""",
+            org.id, org.name, org.slug, org.settings,
+            org.allow_own_ai_keys, org.require_two_factor,
+        )
+
+    async def create_workspace(self, workspace: Workspace):
+        await self._pool.execute(
+            """INSERT INTO workspaces
+               (id, tenant_id, name, slug, settings, status, created_at, updated_at)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+               ON CONFLICT (tenant_id, id) DO NOTHING""",
+            workspace.id, workspace.tenant_id, workspace.name, workspace.slug,
+            workspace.settings, workspace.status,
+            workspace.created_at, workspace.updated_at,
+        )
+
+    async def get_workspace(self, tenant_id, workspace_id):
+        row = await self._pool.fetchrow(
+            "SELECT * FROM workspaces WHERE tenant_id=$1 AND id=$2",
+            tenant_id, workspace_id,
+        )
+        return _workspace(row)
+
+    async def list_workspaces(self, tenant_id):
+        rows = await self._pool.fetch(
+            "SELECT * FROM workspaces WHERE tenant_id=$1 ORDER BY created_at DESC",
+            tenant_id,
+        )
+        return [_workspace(r) for r in rows]
+
+    async def update_workspace(self, workspace: Workspace):
+        await self._pool.execute(
+            """UPDATE workspaces SET name=$3, slug=$4, settings=$5, status=$6,
+                   updated_at=now()
+               WHERE tenant_id=$1 AND id=$2""",
+            workspace.tenant_id, workspace.id, workspace.name, workspace.slug,
+            workspace.settings, workspace.status,
+        )
+
+    async def add_org_member(self, member: OrgMember):
+        await self._pool.execute(
+            """INSERT INTO org_members (tenant_id, user_id, role, created_at)
+               VALUES ($1,$2,$3,$4)
+               ON CONFLICT (tenant_id, user_id) DO UPDATE SET role=EXCLUDED.role""",
+            member.tenant_id, member.user_id, member.role, member.created_at,
+        )
+
+    async def remove_org_member(self, tenant_id, user_id):
+        await self._pool.execute(
+            "DELETE FROM org_members WHERE tenant_id=$1 AND user_id=$2",
+            tenant_id, user_id,
+        )
+
+    async def list_org_members(self, tenant_id):
+        rows = await self._pool.fetch(
+            "SELECT * FROM org_members WHERE tenant_id=$1 ORDER BY created_at",
+            tenant_id,
+        )
+        return [_org_member(r) for r in rows]
+
+    async def list_orgs_for_user(self, tenant_id, user_id):
+        # Tenant-scoped membership query (switching seam): only the bound tenant's
+        # org, never another tenant's, joined through org_members.
+        rows = await self._pool.fetch(
+            """SELECT o.* FROM organisations o
+               JOIN org_members m ON m.tenant_id = o.id
+               WHERE m.tenant_id=$1 AND m.user_id=$2
+               ORDER BY o.created_at DESC""",
+            tenant_id, user_id,
+        )
+        return [_org(r) for r in rows]
+
+    async def add_workspace_member(self, member: WorkspaceMember):
+        # A per-workspace role must be one of the allowed set (D3): reject an
+        # out-of-set role before it can be persisted.
+        if member.role not in WORKSPACE_ROLES:
+            raise SchemaValidationError(
+                f"invalid workspace role: {member.role!r}",
+                errors=[f"role must be one of {sorted(WORKSPACE_ROLES)}"],
+            )
+        await self._pool.execute(
+            """INSERT INTO workspace_members
+               (workspace_id, user_id, tenant_id, role, permissions, created_at)
+               VALUES ($1,$2,$3,$4,$5,$6)
+               ON CONFLICT (workspace_id, user_id) DO UPDATE SET
+                 role=EXCLUDED.role, permissions=EXCLUDED.permissions""",
+            member.workspace_id, member.user_id, member.tenant_id, member.role,
+            member.permissions, member.created_at,
+        )
+
+    async def remove_workspace_member(self, tenant_id, workspace_id, user_id):
+        await self._pool.execute(
+            """DELETE FROM workspace_members
+               WHERE tenant_id=$1 AND workspace_id=$2 AND user_id=$3""",
+            tenant_id, workspace_id, user_id,
+        )
+
+    async def list_workspace_members(self, tenant_id, workspace_id):
+        rows = await self._pool.fetch(
+            """SELECT * FROM workspace_members
+               WHERE tenant_id=$1 AND workspace_id=$2 ORDER BY created_at""",
+            tenant_id, workspace_id,
+        )
+        return [_workspace_member(r) for r in rows]
+
+    async def list_workspaces_for_user(self, tenant_id, user_id):
+        # Tenant-scoped membership query (switching seam): only workspaces inside
+        # the bound tenant the user belongs to.
+        rows = await self._pool.fetch(
+            """SELECT w.* FROM workspaces w
+               JOIN workspace_members m
+                 ON m.tenant_id = w.tenant_id AND m.workspace_id = w.id
+               WHERE m.tenant_id=$1 AND m.user_id=$2
+               ORDER BY w.created_at DESC""",
+            tenant_id, user_id,
+        )
+        return [_workspace(r) for r in rows]
+
 
 # --- row -> dataclass mappers (None-safe) ---------------------------------
 def _noun(r):
@@ -1734,6 +1889,46 @@ def _session(r):
         token_hash=(r["token_hash"] if "token_hash" in r.keys() else None),
         expires_at=(r["expires_at"] if "expires_at" in r.keys() else None),
         csrf_token=(r["csrf_token"] if "csrf_token" in r.keys() else None),
+    )
+
+
+def _org(r):
+    if r is None:
+        return None
+    return Organisation(
+        id=r["id"], name=r["name"], slug=r["slug"], settings=r["settings"] or {},
+        allow_own_ai_keys=r["allow_own_ai_keys"],
+        require_two_factor=r["require_two_factor"],
+        created_at=r["created_at"], updated_at=r["updated_at"],
+    )
+
+
+def _workspace(r):
+    if r is None:
+        return None
+    return Workspace(
+        id=r["id"], tenant_id=r["tenant_id"], name=r["name"], slug=r["slug"],
+        settings=r["settings"] or {}, status=r["status"],
+        created_at=r["created_at"], updated_at=r["updated_at"],
+    )
+
+
+def _org_member(r):
+    if r is None:
+        return None
+    return OrgMember(
+        user_id=r["user_id"], tenant_id=r["tenant_id"], role=r["role"],
+        created_at=r["created_at"],
+    )
+
+
+def _workspace_member(r):
+    if r is None:
+        return None
+    return WorkspaceMember(
+        user_id=r["user_id"], workspace_id=r["workspace_id"],
+        tenant_id=r["tenant_id"], role=r["role"],
+        permissions=r["permissions"] or {}, created_at=r["created_at"],
     )
 
 

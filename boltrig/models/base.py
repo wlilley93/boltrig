@@ -21,6 +21,11 @@ RunId = str
 WorkItemId = str
 UserId = str
 HITLId = str
+# Org -> workspace tenancy ([2026] VJS-COUNTY 8). The ORGANISATION is the tenant
+# boundary: an organisation row's id IS the tenant_id (one org per tenant_id), so
+# OrgId is an alias of TenantId. A workspace has its own id inside an org.
+OrgId = str
+WorkspaceId = str
 
 
 def utcnow() -> datetime:

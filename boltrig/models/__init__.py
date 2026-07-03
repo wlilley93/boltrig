@@ -12,6 +12,7 @@ from .base import (
     CapabilityName,
     HITLId,
     NounId,
+    OrgId,
     RunId,
     SkillId,
     TenantId,
@@ -19,6 +20,7 @@ from .base import (
     VerbId,
     WorkflowId,
     WorkItemId,
+    WorkspaceId,
     utcnow,
 )
 from .channels import (
@@ -86,6 +88,13 @@ from .libraries import (
     WorkflowSource,
 )
 from .registry import Consequence, Noun, RateLimit, TargetType, Verb, VerbBinding
+from .tenancy import (
+    WORKSPACE_ROLES,
+    OrgMember,
+    Organisation,
+    Workspace,
+    WorkspaceMember,
+)
 from .work import RunCheckpoint, WorkItem, WorkStatus
 
 __all__ = [
@@ -95,6 +104,7 @@ __all__ = [
     "CapabilityName",
     "HITLId",
     "NounId",
+    "OrgId",
     "RunId",
     "SkillId",
     "TenantId",
@@ -102,6 +112,7 @@ __all__ = [
     "VerbId",
     "WorkflowId",
     "WorkItemId",
+    "WorkspaceId",
     "utcnow",
     "InvocationContext",
     "Channel",
@@ -170,6 +181,11 @@ __all__ = [
     "TargetType",
     "Verb",
     "VerbBinding",
+    "WORKSPACE_ROLES",
+    "Organisation",
+    "Workspace",
+    "OrgMember",
+    "WorkspaceMember",
     "RunCheckpoint",
     "WorkItem",
     "WorkStatus",

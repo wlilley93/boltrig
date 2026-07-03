@@ -56,7 +56,11 @@ DECLARE
     'user_invitations','user_credentials','user_settings','user_sessions','memory_facts',
     'memory_ingestions','memory_erasures','memory_vectors','memory_vector_edges',
     'channel_bindings','channel_pairings','run_checkpoints','fanout_counters',
-    'run_cancel_requests'
+    'run_cancel_requests',
+    -- Org -> workspace tenancy ([2026] VJS-COUNTY 8). These three carry a real
+    -- tenant_id column, so the generic tenant_id policy binds them. organisations
+    -- is handled separately below (its isolation column is id, which IS tenant_id).
+    'workspaces','org_members','workspace_members'
   ];
 BEGIN
   FOREACH t IN ARRAY scoped LOOP
@@ -75,5 +79,26 @@ BEGIN
       );
     END IF;
   END LOOP;
+END
+$$;
+
+-- 3. organisations ([2026] VJS-COUNTY 8, D1): the org row's id IS the tenant_id
+--    (one org per tenant_id), so its isolation column is `id`, not `tenant_id`.
+--    Same fail-closed FORCE-RLS shape as the generic loop, keyed on id. A null GUC
+--    yields zero rows. Kept separate because the generic policy predicate names
+--    tenant_id, a column organisations deliberately does not have.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'organisations'
+  ) THEN
+    ALTER TABLE organisations ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE organisations FORCE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS tenant_isolation ON organisations;
+    CREATE POLICY tenant_isolation ON organisations
+      USING (id = current_setting('app.tenant_id', true))
+      WITH CHECK (id = current_setting('app.tenant_id', true));
+  END IF;
 END
 $$;

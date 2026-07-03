@@ -31,12 +31,16 @@ from boltrig.models import (
     MemoryIngestion,
     MemoryItem,
     NotificationPref,
+    Organisation,
+    OrgMember,
     PersonalAccessToken,
     PersonalAgent,
     HITLResponse,
     ModelEndpoint,
     Noun,
     Skill,
+    Workspace,
+    WorkspaceMember,
     TenantPermissions,
     User,
     UserInvitation,
@@ -346,6 +350,49 @@ class Store(Protocol):
         self, tenant_id: str, token_hash: str
     ) -> UserSession | None: ...
     async def update_session(self, session: UserSession) -> None: ...
+
+    # --- Org -> workspace tenancy ([2026] VJS-COUNTY 8) ----------------------
+    # D1: the ORGANISATION is the tenant boundary - an org's id IS the tenant_id
+    # (one org per tenant_id). create_org inserts idempotently (a repeat is a
+    # no-op); get/list/update are tenant-scoped like every other read. RLS stays
+    # keyed on tenant_id (unchanged). ``ensure_default_org`` (the module helper in
+    # boltrig.identity.tenancy) sits on top of these for the backfill.
+    async def create_org(self, org: Organisation) -> None: ...
+    async def get_org(self, tenant_id: str) -> Organisation | None: ...
+    async def list_orgs(self) -> list[Organisation]: ...
+    async def update_org(self, org: Organisation) -> None: ...
+
+    # D2 (schema only this phase): a WORKSPACE belongs to an org (tenant_id) and is
+    # tenant-scoped. create/get/update are keyed on (tenant_id, workspace id);
+    # list_workspaces enumerates the org's workspaces. No workspace_id is added to
+    # any existing resource table yet.
+    async def create_workspace(self, workspace: Workspace) -> None: ...
+    async def get_workspace(
+        self, tenant_id: str, workspace_id: str
+    ) -> Workspace | None: ...
+    async def list_workspaces(self, tenant_id: str) -> list[Workspace]: ...
+    async def update_workspace(self, workspace: Workspace) -> None: ...
+
+    # D3: org + workspace membership. Both are tenant-scoped (SEC-08). A workspace
+    # member's ``role`` MUST be one of models.tenancy.WORKSPACE_ROLES - the store
+    # rejects an out-of-set role (SchemaValidationError) so an invalid per-workspace
+    # role can never be persisted. The ``*_for_user`` reads are the membership
+    # queries switching will later use (they still only ever return rows inside the
+    # bound tenant).
+    async def add_org_member(self, member: OrgMember) -> None: ...
+    async def remove_org_member(self, tenant_id: str, user_id: str) -> None: ...
+    async def list_org_members(self, tenant_id: str) -> list[OrgMember]: ...
+    async def list_orgs_for_user(self, tenant_id: str, user_id: str) -> list[Organisation]: ...
+    async def add_workspace_member(self, member: WorkspaceMember) -> None: ...
+    async def remove_workspace_member(
+        self, tenant_id: str, workspace_id: str, user_id: str
+    ) -> None: ...
+    async def list_workspace_members(
+        self, tenant_id: str, workspace_id: str
+    ) -> list[WorkspaceMember]: ...
+    async def list_workspaces_for_user(
+        self, tenant_id: str, user_id: str
+    ) -> list[Workspace]: ...
 
     # --- conversations (Round Two, SEC-25 tenant + owner scoped) ---
     async def create_conversation(self, conv: Conversation) -> None: ...
