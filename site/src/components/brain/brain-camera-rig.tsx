@@ -7,9 +7,12 @@ import { Vector3 } from "three";
 import { makeStorySample, sampleStory } from "./story/story-keyframes";
 import { useStory } from "./story/use-story";
 
-// Damping rate — higher = the camera catches up to the scroll target faster.
+// Damping rate: higher = the camera catches up to the scroll target faster.
 // Frame-rate independent (see `MathUtils.damp`), so it feels identical at any FPS.
-const DAMP = 3.2;
+// Raised from 3.2 for motion comfort: at 3.2 the camera kept drifting through the
+// orbit for a beat after the scroll stopped (motion decoupled from input, which
+// reads as seasick). Tighter tracking couples the flythrough to the actual scroll.
+const DAMP = 6.5;
 
 const prefersReducedMotion = () =>
   typeof window !== "undefined" &&

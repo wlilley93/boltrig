@@ -34,8 +34,17 @@ function ScrollController() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     window.scrollTo(0, 0);
+    // Motion comfort: the default Lenis lerp (0.1) keeps the page gliding with
+    // momentum well after the wheel/trackpad stops, which reads as seasick "slide".
+    // A higher lerp tracks the input far more tightly (near 1:1) while keeping a
+    // light smoothing. Users who ask the OS for reduced motion get native scroll
+    // (no smoothing at all); the brain camera already freezes for them too.
+    const reduce =
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const lenis = new Lenis({
-      smoothWheel: true,
+      smoothWheel: !reduce,
+      lerp: reduce ? 1 : 0.22,
+      wheelMultiplier: 0.9,
       // syncTouch: true,
     });
     (window as typeof window & { lenis: Lenis }).lenis = lenis;
