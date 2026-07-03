@@ -60,6 +60,18 @@ class UserInvitation:
     # and never stored; accept-invite hashes the presented token and matches it
     # here. None for a legacy SSO-only invitation that carries no token.
     token_hash: str | None = None
+    # Org/workspace-scoped invites + provisioning ([2026] VJS-COUNTY 8, D6). All
+    # three are nullable and additive; a legacy invite leaves them None and behaves
+    # exactly as before. ``workspace_id`` targets an EXISTING workspace: on accept
+    # the invitee is seated into it as a workspace member with the invited role
+    # (bounded by the SEC-102 privilege ceiling). ``provision_workspace_name`` asks
+    # accept to CREATE that workspace and seat the invitee as its owner.
+    # ``provision_org_name`` asks accept to provision a brand-new organisation owned
+    # by the invitee - it is SUPERADMIN-ONLY at invite creation (a lesser admin may
+    # never set it). The inviter must be able to manage a targeted ``workspace_id``.
+    workspace_id: WorkspaceId | None = None
+    provision_workspace_name: str | None = None
+    provision_org_name: str | None = None
 
 
 # --- per-user settings/preferences (SET-*) -----------------------------------

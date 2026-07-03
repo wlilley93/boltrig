@@ -938,3 +938,21 @@ invariants:
       - tests/security/test_workflow_workspace_scope.py::test_get_is_fail_closed_across_a_workspace_boundary
       - tests/security/test_workflow_workspace_scope.py::test_trigger_and_execute_cannot_reach_another_workspace
       - tests/security/test_workflow_workspace_scope.py::test_scoping_never_widens_authority_it_only_hides_rows
+
+  # --- Org/workspace management routes + invite provisioning ([2026] VJS-COUNTY 8, D6) -
+  FR-ORG-04:
+    description: The org/workspace management surface is role-scoped + audited (D6) - a caller lists their OWN workspaces (their memberships), an org-admin/owner creates a workspace (and is seated as its owner), a workspace owner/admin or org-admin renames it and adds/removes members, and GET/PATCH /v1/orgs/current expose + update the org handle + policy flags; every management write is audited keys-only.
+    tests:
+      - tests/security/test_tenancy_management.py::test_workspace_and_org_management_surface
+  SEC-117:
+    description: Workspace management is membership/role fail-closed (D6) - PATCH /v1/workspaces/{id} and the add/remove-member routes refuse a caller who is neither an org-admin nor an owner/admin of THAT workspace with 403 and NO write (a plain member or a non-member cannot rename it or change its roster, and a non-member cannot even read the roster), while an unknown workspace is 404, an out-of-set workspace role is 400 and an unknown target user is 404 - all with no write; the workspace owner (or org-admin) may manage it.
+    tests:
+      - tests/security/test_tenancy_management.py::test_workspace_management_is_membership_role_fail_closed
+  SEC-118:
+    description: An org/workspace-scoped invite seats the invitee into exactly that workspace on accept with the invited role bounded by the SEC-102 ceiling (D6) - a workspace_id invite adds the invitee as a workspace member of that workspace with the invited role on accept; a provision_workspace_name invite CREATES the workspace and seats the invitee as its OWNER; provision_org_name is SUPERADMIN-ONLY (a lesser admin is refused 403 with NO invitation written) and on accept provisions a brand-new org owned by the invitee; a workspace-targeted invite is authorised against the workspace before the invitation is written (an unknown workspace is 404 with NO invitation left behind, and the inviter must be able to manage it - 403 otherwise), and the single-use/hashed/expiring token machinery is reused unchanged.
+    tests:
+      - tests/security/test_tenancy_management.py::test_scoped_invite_seats_and_provisions
+  SEC-119:
+    description: Org management is org-admin fail-closed (D6) - PATCH /v1/orgs/current refuses a non-admin with 403 and NO write (the name + allow_own_ai_keys + require_two_factor are unchanged), while an org-admin may rename the org and toggle both policy flags; the GET view exposes the handle + settings + policy flags but never any secret/credential material.
+    tests:
+      - tests/security/test_tenancy_management.py::test_org_management_is_admin_fail_closed

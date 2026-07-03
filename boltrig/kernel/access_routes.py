@@ -21,6 +21,7 @@ from fastapi.responses import JSONResponse
 
 from boltrig.models import (
     AI_CONFIG_LEVELS,
+    WORKSPACE_ROLES,
     ActionType,
     AiConfig,
     AuditEvent,
@@ -29,6 +30,8 @@ from boltrig.models import (
     NotificationPref,
     UserInvitation,
     UserSetting,
+    Workspace,
+    WorkspaceMember,
     utcnow,
 )
 
@@ -101,6 +104,73 @@ def _ai_config_view(c) -> dict:
         "model": c.model, "has_key": bool(c.credential_ref),
         "updated_at": c.updated_at.isoformat() if c.updated_at else None,
     }
+
+
+def _workspace_view(w) -> dict:
+    return {
+        "id": w.id, "name": w.name, "slug": w.slug, "status": w.status,
+        "settings": w.settings,
+        "created_at": w.created_at.isoformat() if w.created_at else None,
+        "updated_at": w.updated_at.isoformat() if w.updated_at else None,
+    }
+
+
+def _workspace_member_view(m) -> dict:
+    return {
+        "user_id": m.user_id, "workspace_id": m.workspace_id, "role": m.role,
+        "permissions": m.permissions,
+        "created_at": m.created_at.isoformat() if m.created_at else None,
+    }
+
+
+def _org_view(o) -> dict:
+    """An organisation for the management surface: the policy flags + handle, NEVER
+    any secret (AI keys live in the sealed credential store, not here)."""
+    return {
+        "id": o.id, "name": o.name, "slug": o.slug, "settings": o.settings,
+        "allow_own_ai_keys": bool(o.allow_own_ai_keys),
+        "require_two_factor": bool(o.require_two_factor),
+        "created_at": o.created_at.isoformat() if o.created_at else None,
+        "updated_at": o.updated_at.isoformat() if o.updated_at else None,
+    }
+
+
+def _org_member_view(m) -> dict:
+    return {
+        "user_id": m.user_id, "role": m.role,
+        "created_at": m.created_at.isoformat() if m.created_at else None,
+    }
+
+
+def _workspace_slug(name: str) -> str:
+    """A globally-unique url-safe slug for a new workspace (the workspaces_slug_idx
+    is unique across tenants), derived from the name plus a short random suffix so
+    two workspaces with the same name never collide."""
+    from boltrig.identity.tenancy import default_org_slug
+
+    base = default_org_slug(name) or "workspace"
+    return f"{base}-{uuid.uuid4().hex[:6]}"
+
+
+async def _authz_manage_workspace(k, p, workspace_id: str):
+    """Authorize managing a workspace (rename/settings + membership). Fail-closed:
+    returns ``(workspace, None)`` when the caller may manage it, else
+    ``(workspace_or_None, JSONResponse)`` - a 404 when the workspace does not exist
+    in the tenant, a 403 with NO write when the caller is neither an org-admin nor a
+    workspace owner/admin of it. A caller may only manage a workspace they own/admin,
+    or (org-admin) any workspace in their org."""
+    ws = await k.store.get_workspace(p.tenant_id, workspace_id)
+    if ws is None:
+        return None, JSONResponse({"status": "error", "reason": "not_found"}, status_code=404)
+    if p.role in _ADMIN_ROLES:  # org-admin/owner may manage any workspace in the org
+        return ws, None
+    member = await k.store.get_workspace_member(p.tenant_id, workspace_id, p.subject)
+    if member is None or member.role not in _WORKSPACE_ADMIN_ROLES:
+        return ws, JSONResponse(
+            {"status": "denied", "reason": "must be a workspace owner/admin to manage it"},
+            status_code=403,
+        )
+    return ws, None
 
 
 def register_access_routes(app, *, principal_dep, get_kernel) -> None:
@@ -627,6 +697,9 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
             {"id": i.id, "email": i.email, "intended_role": i.intended_role,
              "intended_scope": i.intended_scope, "status": i.status,
              "invited_by": i.invited_by,
+             "workspace_id": i.workspace_id,
+             "provision_workspace_name": i.provision_workspace_name,
+             "provision_org_name": i.provision_org_name,
              "expires_at": i.expires_at.isoformat() if i.expires_at else None}
             for i in invites
         ]})
@@ -642,6 +715,28 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
         if not email:
             return JSONResponse({"status": "error", "reason": "email is required"},
                                 status_code=400)
+        # Org/workspace-scoped invite + provisioning ([2026] VJS-COUNTY 8, D6). All
+        # three are optional and each is authorized BEFORE anything is written, so a
+        # denial leaves no invitation behind (fail-closed):
+        #   - workspace_id (target an EXISTING workspace): the inviter must be able to
+        #     manage that workspace (org-admin or its owner/admin), 403 with NO write
+        #     otherwise. On accept the invitee is seated into it with the invited role.
+        #   - provision_workspace_name (CREATE a workspace on accept): org-admin/owner,
+        #     already required by _require_admin above.
+        #   - provision_org_name (provision a new org on accept): SUPERADMIN-ONLY - a
+        #     lesser admin is refused 403 with NO write.
+        workspace_id = (body.get("workspace_id") or "").strip() or None
+        provision_workspace_name = (body.get("provision_workspace_name") or "").strip() or None
+        provision_org_name = (body.get("provision_org_name") or "").strip() or None
+        if provision_org_name is not None and p.role != "superadmin":
+            return JSONResponse(
+                {"status": "denied", "reason": "org provisioning is owner-only"},
+                status_code=403,
+            )
+        if workspace_id is not None:
+            _ws, denied = await _authz_manage_workspace(k, p, workspace_id)
+            if denied is not None:
+                return denied
         # Mint a single-use invite-token secret for first-party invite-only login
         # ([2026] VJS-COUNTY 7, D1): store ONLY its hash; return the secret ONCE so
         # the admin can hand the invitee an accept-invite link. Mirrors the SEC-34
@@ -655,11 +750,19 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
             invited_by=p.subject,
             expires_at=bounded_expiry(utcnow(), body.get("ttl_days", 14)),
             token_hash=hash_invite_token(invite_secret),
+            workspace_id=workspace_id,
+            provision_workspace_name=provision_workspace_name,
+            provision_org_name=provision_org_name,
         )
         await k.store.add_invitation(inv)
-        # Keys-only audit: email + role, never the invite secret (D8).
-        await _audit(k, p, "admin.invite.create",
-                     {"email": email, "role": inv.intended_role})
+        # Keys-only audit: email + role + the (non-secret) scope keys, never the
+        # invite secret (D8).
+        await _audit(k, p, "admin.invite.create", {
+            "email": email, "role": inv.intended_role,
+            "workspace_id": workspace_id,
+            "provision_workspace": provision_workspace_name is not None,
+            "provision_org": provision_org_name is not None,
+        })
         return JSONResponse({"status": "ok", "id": inv.id, "email": email,
                              "invite_token": invite_secret})
 
@@ -673,3 +776,164 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
         await k.store.update_invitation(inv)
         await _audit(k, p, "admin.invite.revoke", {"id": invite_id})
         return JSONResponse({"status": "ok", "id": invite_id})
+
+    # === Organisation (the active tenant) management ([2026] VJS-COUNTY 8, D6) ===
+    @app.get("/v1/orgs/current")
+    async def get_current_org(k=K, p=P) -> JSONResponse:
+        # The active org = the caller's tenant (the org id IS the tenant_id, D1).
+        # Readable by any authenticated caller in the tenant: it is their own org's
+        # handle + policy flags, never a secret. A pre-COUNTY-8 tenant with no org
+        # row yet is shown its implicit default (not persisted here - a read).
+        from boltrig.identity.tenancy import default_org_for
+
+        org = await k.store.get_org(p.tenant_id)
+        if org is None:
+            org = default_org_for(p.tenant_id)
+        return JSONResponse({"organisation": _org_view(org)})
+
+    @app.patch("/v1/orgs/current")
+    async def update_current_org(body: dict, k=K, p=P) -> JSONResponse:
+        # Org-admin only, fail-closed + audited: rename / settings / toggle the
+        # allow_own_ai_keys + require_two_factor policy flags. A non-admin is refused
+        # 403 with NO write by _require_admin (it raises GrantMissing -> 403).
+        from boltrig.identity.tenancy import ensure_default_org
+
+        _require_admin(p)
+        # Ensure a row exists to update (idempotent backfill for a pre-COUNTY-8 tenant).
+        org = await ensure_default_org(k.store, p.tenant_id)
+        if "name" in body and isinstance(body["name"], str) and body["name"].strip():
+            org.name = body["name"].strip()
+        if "slug" in body and isinstance(body["slug"], str) and body["slug"].strip():
+            org.slug = body["slug"].strip()
+        if "settings" in body and isinstance(body["settings"], dict):
+            org.settings = body["settings"]
+        if "allow_own_ai_keys" in body:
+            org.allow_own_ai_keys = bool(body["allow_own_ai_keys"])
+        if "require_two_factor" in body:
+            org.require_two_factor = bool(body["require_two_factor"])
+        await k.store.update_org(org)
+        await _audit(k, p, "org.update", {
+            "allow_own_ai_keys": org.allow_own_ai_keys,
+            "require_two_factor": org.require_two_factor,
+        })
+        return JSONResponse({"status": "ok", "organisation": _org_view(org)})
+
+    @app.get("/v1/orgs/current/members")
+    async def list_current_org_members(k=K, p=P) -> JSONResponse:
+        # The org's membership roster (tenant-scoped by the store). Available to any
+        # authenticated caller in the tenant so a workspace owner can populate an
+        # add-member picker; it is their own org, never crosses a tenant boundary.
+        members = await k.store.list_org_members(p.tenant_id)
+        return JSONResponse({"members": [_org_member_view(m) for m in members]})
+
+    # === Workspace management ([2026] VJS-COUNTY 8, D6) ===
+    @app.get("/v1/workspaces")
+    async def list_my_workspaces(k=K, p=P) -> JSONResponse:
+        # The caller's OWN workspaces (their memberships), tenant-scoped. Never lists
+        # a workspace the caller is not a member of.
+        workspaces = await k.store.list_workspaces_for_user(p.tenant_id, p.subject)
+        return JSONResponse({"workspaces": [_workspace_view(w) for w in workspaces]})
+
+    @app.post("/v1/workspaces")
+    async def create_workspace(body: dict, k=K, p=P) -> JSONResponse:
+        # Create a workspace in the caller's org. Org-admin / owner only (creating a
+        # workspace is an org-level act); a non-admin is refused 403 with NO write.
+        # The creator is seated as the workspace OWNER so they can manage it at once.
+        _require_admin(p)
+        name = (body.get("name") or "").strip()
+        if not name:
+            return JSONResponse({"status": "error", "reason": "name is required"},
+                                status_code=400)
+        ws = Workspace(
+            id=uuid.uuid4().hex, tenant_id=p.tenant_id, name=name,
+            slug=_workspace_slug(name),
+            settings=body.get("settings") if isinstance(body.get("settings"), dict) else {},
+        )
+        await k.store.create_workspace(ws)
+        await k.store.add_workspace_member(WorkspaceMember(
+            user_id=p.subject, workspace_id=ws.id, tenant_id=p.tenant_id, role="owner",
+        ))
+        await _audit(k, p, "workspace.create", {"workspace_id": ws.id, "slug": ws.slug})
+        return JSONResponse({"status": "ok", "workspace": _workspace_view(ws)})
+
+    @app.patch("/v1/workspaces/{workspace_id}")
+    async def update_workspace(workspace_id: str, body: dict, k=K, p=P) -> JSONResponse:
+        # Rename / settings / archive. Fail-closed: a caller who is neither an
+        # org-admin nor an owner/admin of THIS workspace is refused (404 unknown, 403
+        # non-manager) with NO write.
+        ws, denied = await _authz_manage_workspace(k, p, workspace_id)
+        if denied is not None:
+            return denied
+        if "name" in body and isinstance(body["name"], str) and body["name"].strip():
+            ws.name = body["name"].strip()
+        if "settings" in body and isinstance(body["settings"], dict):
+            ws.settings = body["settings"]
+        if "status" in body and body["status"] in ("active", "archived"):
+            ws.status = body["status"]
+        await k.store.update_workspace(ws)
+        await _audit(k, p, "workspace.update",
+                     {"workspace_id": ws.id, "status": ws.status})
+        return JSONResponse({"status": "ok", "workspace": _workspace_view(ws)})
+
+    @app.get("/v1/workspaces/{workspace_id}/members")
+    async def list_workspace_members(workspace_id: str, k=K, p=P) -> JSONResponse:
+        # The workspace roster. Readable by an org-admin or a member of the workspace;
+        # a non-member non-admin is refused 403 (fail-closed) with nothing disclosed.
+        ws = await k.store.get_workspace(p.tenant_id, workspace_id)
+        if ws is None:
+            return JSONResponse({"status": "error", "reason": "not_found"}, status_code=404)
+        if p.role not in _ADMIN_ROLES:
+            member = await k.store.get_workspace_member(p.tenant_id, workspace_id, p.subject)
+            if member is None:
+                return JSONResponse(
+                    {"status": "denied", "reason": "not a member of that workspace"},
+                    status_code=403,
+                )
+        members = await k.store.list_workspace_members(p.tenant_id, workspace_id)
+        return JSONResponse({"members": [_workspace_member_view(m) for m in members]})
+
+    @app.post("/v1/workspaces/{workspace_id}/members")
+    async def add_workspace_member(workspace_id: str, body: dict, k=K, p=P) -> JSONResponse:
+        # Add an EXISTING org user to the workspace with a per-workspace role. Manage
+        # rights required (org-admin or workspace owner/admin) - fail-closed 403 with
+        # NO write otherwise. The role must be one of WORKSPACE_ROLES (400 otherwise);
+        # the target user must exist in the org (404 otherwise).
+        ws, denied = await _authz_manage_workspace(k, p, workspace_id)
+        if denied is not None:
+            return denied
+        user_id = (body.get("user_id") or "").strip()
+        role = (body.get("role") or "member").strip()
+        if not user_id:
+            return JSONResponse({"status": "error", "reason": "user_id is required"},
+                                status_code=400)
+        if role not in WORKSPACE_ROLES:
+            return JSONResponse(
+                {"status": "error", "reason": f"role must be one of {sorted(WORKSPACE_ROLES)}"},
+                status_code=400,
+            )
+        target = await k.store.get_user(p.tenant_id, user_id)
+        if target is None:
+            return JSONResponse({"status": "error", "reason": "unknown user"},
+                                status_code=404)
+        member = WorkspaceMember(
+            user_id=user_id, workspace_id=workspace_id, tenant_id=p.tenant_id, role=role,
+            permissions=body.get("permissions") if isinstance(body.get("permissions"), dict) else {},
+        )
+        await k.store.add_workspace_member(member)
+        await _audit(k, p, "workspace.member.add",
+                     {"workspace_id": workspace_id, "user": user_id, "role": role})
+        return JSONResponse({"status": "ok", "member": _workspace_member_view(member)})
+
+    @app.delete("/v1/workspaces/{workspace_id}/members/{user_id}")
+    async def remove_workspace_member(
+        workspace_id: str, user_id: str, k=K, p=P
+    ) -> JSONResponse:
+        # Remove a member. Manage rights required - fail-closed 403 with NO write
+        # otherwise (404 for an unknown workspace).
+        ws, denied = await _authz_manage_workspace(k, p, workspace_id)
+        if denied is not None:
+            return denied
+        await k.store.remove_workspace_member(p.tenant_id, workspace_id, user_id)
+        await _audit(k, p, "workspace.member.remove",
+                     {"workspace_id": workspace_id, "user": user_id})
+        return JSONResponse({"status": "ok", "workspace_id": workspace_id, "user": user_id})

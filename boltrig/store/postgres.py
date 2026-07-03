@@ -1282,11 +1282,13 @@ class PostgresStore(ChannelStorePG):
         await self._pool.execute(
             """INSERT INTO user_invitations
                (id, tenant_id, email, intended_role, intended_scope, invited_by,
-                created_at, expires_at, status, token_hash)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+                created_at, expires_at, status, token_hash,
+                workspace_id, provision_workspace_name, provision_org_name)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
                ON CONFLICT (tenant_id, id) DO NOTHING""",
             inv.id, inv.tenant_id, inv.email, inv.intended_role, inv.intended_scope,
             inv.invited_by, inv.created_at, inv.expires_at, inv.status, inv.token_hash,
+            inv.workspace_id, inv.provision_workspace_name, inv.provision_org_name,
         )
 
     async def find_invitation_by_token_hash(self, tenant_id, token_hash):
@@ -1928,6 +1930,13 @@ def _invitation(r):
         invited_by=r["invited_by"], created_at=r["created_at"], expires_at=r["expires_at"],
         status=r["status"],
         token_hash=(r["token_hash"] if "token_hash" in r.keys() else None),
+        workspace_id=(r["workspace_id"] if "workspace_id" in r.keys() else None),
+        provision_workspace_name=(
+            r["provision_workspace_name"] if "provision_workspace_name" in r.keys() else None
+        ),
+        provision_org_name=(
+            r["provision_org_name"] if "provision_org_name" in r.keys() else None
+        ),
     )
 
 

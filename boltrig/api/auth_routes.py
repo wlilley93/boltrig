@@ -72,6 +72,77 @@ async def _audit(kernel, tenant_id, actor, verb, detail, status="ok") -> None:
     )
 
 
+def _ws_slug(name: str) -> str:
+    """A globally-unique url-safe slug for a provisioned workspace."""
+    import uuid
+
+    from boltrig.identity.tenancy import default_org_slug
+
+    return f"{default_org_slug(name) or 'workspace'}-{uuid.uuid4().hex[:6]}"
+
+
+async def _seat_invitee(k, inv, email: str) -> dict:
+    """Materialise an org/workspace-scoped invite's provisioning on accept ([2026]
+    VJS-COUNTY 8, D6). Returns a small keys-only summary for the audit row. Each arm
+    fires only when its intent is present; the authority was bounded at invite
+    CREATION, so nothing here is a fresh grant decision.
+
+      - workspace_id       : seat the invitee into an EXISTING workspace as a member
+                             with the invited role (coerced into WORKSPACE_ROLES,
+                             defaulting to 'member' when the platform role is not a
+                             workspace role - never above the ceiling).
+      - provision_workspace: CREATE that workspace and seat the invitee as its OWNER.
+      - provision_org      : provision a brand-new org (a fresh tenant_id) and seat
+                             the invitee as its owner. RLS is bound to the new tenant
+                             around those writes, then the console tenant is restored.
+    """
+    import uuid
+
+    from boltrig.models import (
+        WORKSPACE_ROLES,
+        OrgMember,
+        Organisation,
+        Workspace,
+        WorkspaceMember,
+    )
+    from boltrig.store.postgres import set_current_tenant
+
+    summary: dict = {}
+    if inv.workspace_id:
+        role = inv.intended_role if inv.intended_role in WORKSPACE_ROLES else "member"
+        await k.store.add_workspace_member(WorkspaceMember(
+            user_id=email, workspace_id=inv.workspace_id, tenant_id=inv.tenant_id, role=role,
+        ))
+        summary["seated_workspace"] = inv.workspace_id
+    if inv.provision_workspace_name:
+        ws = Workspace(
+            id=uuid.uuid4().hex, tenant_id=inv.tenant_id,
+            name=inv.provision_workspace_name, slug=_ws_slug(inv.provision_workspace_name),
+        )
+        await k.store.create_workspace(ws)
+        await k.store.add_workspace_member(WorkspaceMember(
+            user_id=email, workspace_id=ws.id, tenant_id=inv.tenant_id, role="owner",
+        ))
+        summary["provisioned_workspace"] = ws.id
+    if inv.provision_org_name:
+        # A fresh org == a fresh tenant_id (the org id IS the tenant boundary, D1).
+        # Bind RLS to the new tenant for its writes, then restore the console tenant.
+        new_tid = uuid.uuid4().hex
+        set_current_tenant(new_tid)
+        try:
+            await k.store.create_org(Organisation(
+                id=new_tid, name=inv.provision_org_name,
+                slug=f"{new_tid[:8]}-org",
+            ))
+            await k.store.add_org_member(OrgMember(
+                user_id=email, tenant_id=new_tid, role="superadmin",
+            ))
+        finally:
+            set_current_tenant(inv.tenant_id)
+        summary["provisioned_org"] = new_tid
+    return summary
+
+
 def _set_session_cookies(resp: JSONResponse, secret: str, csrf: str) -> None:
     """Set the httpOnly+Secure+SameSite session cookie and the readable CSRF cookie.
 
@@ -149,9 +220,16 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
         await k.store.set_password_credential(
             inv.tenant_id, email, hash_password(password)
         )
+        # Org/workspace-scoped seating + provisioning ([2026] VJS-COUNTY 8, D6). Each
+        # arm runs only when its intent is present on the invite (a legacy invite
+        # carries none and behaves exactly as before). The invite's authority was
+        # already bounded at CREATION (the create-invite route re-checked the inviter
+        # could manage a targeted workspace and gated org provisioning to superadmin),
+        # so accept just materialises what was authorised.
+        seated = await _seat_invitee(k, inv, email)
         # Keys-only audit: the invitation id + email (identity), never the password.
         await _audit(k, inv.tenant_id, email, "auth.invite.accept",
-                     {"invitation_id": inv.id, "email": email})
+                     {"invitation_id": inv.id, "email": email, **seated})
         return JSONResponse({"status": "ok", "email": email})
 
     @app.post("/v1/auth/login")

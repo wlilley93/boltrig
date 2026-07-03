@@ -629,6 +629,14 @@ CREATE TABLE IF NOT EXISTS user_invitations (
     expires_at     TIMESTAMPTZ,
     status         TEXT NOT NULL DEFAULT 'pending',  -- pending | accepted | revoked | expired
     token_hash     TEXT,                             -- sha256 of a single-use invite token
+    -- Org/workspace-scoped invites + provisioning ([2026] VJS-COUNTY 8, D6). All
+    -- nullable + additive: a legacy invite leaves them NULL. workspace_id targets an
+    -- EXISTING workspace (accept seats the invitee into it); provision_workspace_name
+    -- asks accept to CREATE that workspace and seat the invitee as owner;
+    -- provision_org_name (superadmin-only at creation) asks accept to provision a new org.
+    workspace_id             TEXT,
+    provision_workspace_name TEXT,
+    provision_org_name       TEXT,
     PRIMARY KEY (tenant_id, id)
 );
 CREATE INDEX IF NOT EXISTS invitations_email_idx ON user_invitations (tenant_id, email);
