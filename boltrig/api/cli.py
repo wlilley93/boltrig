@@ -44,6 +44,14 @@ def main(argv: list[str] | None = None) -> int:
         "--tenant", default=None,
         help="tenant to seat the owner in (default: BOLTRIG_SESSION_TENANT or 'default')",
     )
+    p_init.add_argument(
+        "--org-name", default=None,
+        help="the founding organisation's display name (default: 'Boltrig')",
+    )
+    p_init.add_argument(
+        "--workspace-name", default=None,
+        help="the founding workspace's display name (default: the org name)",
+    )
 
     sub.add_parser("smoke", help="offline in-process smoke test")
     sub.add_parser("check-invariants", help="run the invariant-binding gate")
@@ -70,7 +78,10 @@ def main(argv: list[str] | None = None) -> int:
         from .initiate import initiate
 
         tenant = args.tenant or load_settings().session_tenant or "default"
-        return initiate(args.email, password=args.password, tenant=tenant)
+        return initiate(
+            args.email, password=args.password, tenant=tenant,
+            org_name=args.org_name, workspace_name=args.workspace_name,
+        )
     if args.cmd in ("smoke", "check-invariants"):
         script = _repo_script("smoke.py" if args.cmd == "smoke" else "check_invariants.py")
         if not script:

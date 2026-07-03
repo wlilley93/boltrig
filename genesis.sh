@@ -127,13 +127,13 @@ fi
 echo "==> Phase 4: found the superadmin (VJS-COUNTY 7 invite-only seed)"
 # Idempotent: `boltrig initiate` refuses to run twice (one owner per tenant).
 if compose exec -T kernel boltrig initiate \
-      --email "$SUPERADMIN_EMAIL" --password "$SUPERADMIN_PASSWORD" 2>&1 | tee /dev/stderr | grep -qiE 'seated|already'; then
-  echo "  superadmin seated: $SUPERADMIN_EMAIL"
+      --email "$SUPERADMIN_EMAIL" --password "$SUPERADMIN_PASSWORD" \
+      --org-name "$ORG_NAME" --workspace-name "$WS_NAME" 2>&1 | tee /dev/stderr | grep -qiE 'seated|already'; then
+  echo "  superadmin seated: $SUPERADMIN_EMAIL  (org '$ORG_NAME' / workspace '$WS_NAME')"
 fi
-# NOTE: org/workspace seeding (rename the default org to '$ORG_NAME', create the
-# default workspace '$WS_NAME', add the OWNER org/workspace membership) is added
-# to this phase when VJS-COUNTY 8 (org/workspace tenancy) lands. Until then a fresh
-# box has a single default org/tenant with the superadmin seated above.
+# `boltrig initiate` now also seeds the default org (renamed to '$ORG_NAME'), the
+# default workspace '$WS_NAME', and the OWNER's org + workspace memberships
+# (VJS-COUNTY 8, D7). Idempotent: a re-run refuses once an owner exists.
 
 # ---------------------------------------------------------------- Phase 5: verify
 echo "==> Phase 5: verify (kernel health + a real login round-trip)"

@@ -21,7 +21,15 @@ import sys
 
 from boltrig.identity import hash_password, validate_password_strength
 from boltrig.identity.passwords import WeakPassword
-from boltrig.models import ActionType, AuditEvent, User, utcnow
+from boltrig.models import (
+    ActionType,
+    AuditEvent,
+    OrgMember,
+    User,
+    Workspace,
+    WorkspaceMember,
+    utcnow,
+)
 
 # The owner tier. superadmin is the console's owner role (reserved for roster
 # management); org-admin is the equivalent under the IdP-role vocabulary.
@@ -29,7 +37,22 @@ _OWNER_ROLE = "superadmin"
 _OWNER_TIERS = frozenset({"superadmin", "org-admin", "admin"})
 
 
-async def _run(email: str, password: str, tenant: str) -> int:
+def _slugify(name: str) -> str:
+    """A url-safe handle from a display name (lowercase, hyphenated, ascii-ish)."""
+    out = "".join(c if c.isalnum() else "-" for c in name.lower()).strip("-")
+    while "--" in out:
+        out = out.replace("--", "-")
+    return out or "default"
+
+
+async def _run(
+    email: str,
+    password: str,
+    tenant: str,
+    *,
+    org_name: str | None = None,
+    workspace_name: str | None = None,
+) -> int:
     from boltrig.api.bootstrap import build_store
     from boltrig.kernel.audit import AuditWriter
     from boltrig.store.postgres import set_current_tenant
@@ -66,16 +89,46 @@ async def _run(email: str, password: str, tenant: str) -> int:
         )
         await store.upsert_user(user)
         await store.set_password_credential(tenant, email, hash_password(password))
+
+        # Seed the default org + workspace + OWNER memberships ([2026] VJS-COUNTY 8,
+        # D7): invite-only tenancy needs a founding org/workspace and the owner seated
+        # into both. Idempotent - ensure_default_org is a no-op if the org exists, and
+        # the member/workspace creates are ON CONFLICT DO NOTHING.
+        from boltrig.identity.tenancy import ensure_default_org
+
+        org = await ensure_default_org(store, tenant, name=org_name)
+        await store.add_org_member(
+            OrgMember(user_id=email, tenant_id=tenant, role=_OWNER_ROLE, created_at=now)
+        )
+        ws_name = workspace_name or org.name
+        # A deterministic default workspace id so a re-run seats into the same one.
+        ws_id = f"ws_{_slugify(ws_name)}"
+        existing_ws = await store.get_workspace(tenant, ws_id)
+        if existing_ws is None:
+            await store.create_workspace(
+                Workspace(
+                    id=ws_id, tenant_id=tenant, name=ws_name,
+                    slug=f"{_slugify(ws_name)}-{tenant[:6]}", created_at=now, updated_at=now,
+                )
+            )
+        await store.add_workspace_member(
+            WorkspaceMember(
+                user_id=email, workspace_id=ws_id, tenant_id=tenant,
+                role="owner", created_at=now,
+            )
+        )
+
         # Audit the owner seed keys-only (D8): the email, never the password.
         await AuditWriter(store).write(
             AuditEvent(
                 tenant_id=tenant, ts=now, actor=email, actor_tier="human",
                 action_type=ActionType.TOOL_CALL, verb="auth.initiate", status="ok",
-                detail={"email": email, "role": _OWNER_ROLE},
+                detail={"email": email, "role": _OWNER_ROLE,
+                        "org": org.name, "workspace": ws_name},
             )
         )
         print(f"initiate: seated founding OWNER '{email}' (role {_OWNER_ROLE}) "
-              f"in tenant '{tenant}'.")
+              f"in org '{org.name}' / workspace '{ws_name}' (tenant '{tenant}').")
         return 0
     finally:
         close = getattr(store, "close", None)
@@ -85,7 +138,14 @@ async def _run(email: str, password: str, tenant: str) -> int:
                 await result
 
 
-def initiate(email: str, *, password: str | None, tenant: str) -> int:
+def initiate(
+    email: str,
+    *,
+    password: str | None,
+    tenant: str,
+    org_name: str | None = None,
+    workspace_name: str | None = None,
+) -> int:
     """Synchronous entrypoint for the CLI. Resolves the password then runs once."""
     secret = password or os.environ.get("BOLTRIG_INIT_PASSWORD")
     if not secret:
@@ -94,4 +154,6 @@ def initiate(email: str, *, password: str | None, tenant: str) -> int:
         if secret != confirm:
             print("initiate: passwords did not match", file=sys.stderr)
             return 2
-    return asyncio.run(_run(email, secret, tenant))
+    return asyncio.run(
+        _run(email, secret, tenant, org_name=org_name, workspace_name=workspace_name)
+    )
