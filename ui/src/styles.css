@@ -2589,6 +2589,25 @@ select:focus {
   max-width: 72ch;
   line-height: 1.5;
 }
+.page-intro__more {
+  max-width: 72ch;
+}
+.page-intro__moretoggle {
+  color: var(--color-text-muted);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  width: fit-content;
+  list-style: none;
+}
+.page-intro__moretoggle::-webkit-details-marker {
+  display: none;
+}
+.page-intro__moretoggle::before {
+  content: "ⓘ ";
+}
+.page-intro__more[open] .page-intro__moretoggle {
+  margin-bottom: 4px;
+}
 .page-intro__actions {
   display: flex;
   align-items: center;
@@ -3395,7 +3414,11 @@ body {
   }
 }
 
-/* --- Minimap: bottom-right, active row expands into its column dots ------- */
+/* --- Minimap: a transient position aid shown ONLY while the deck is moving.
+   At rest the sidebar rail (zone rows + slide sublist) and the "N of M"
+   breadcrumb already convey position, so the map is not painted over live
+   content (the chat composer, Agents cards). The Deck mounts it only during a
+   transition; it fades in bottom-right, clear of any composer / save bar. --- */
 .deck__map {
   position: absolute;
   right: 16px;
@@ -3409,6 +3432,16 @@ body {
   border: 1px solid var(--color-border-subtle);
   border-radius: 3px;
   padding: 6px 8px;
+  pointer-events: none; /* transient wayfinding only; the rail drives navigation */
+  animation: deck-map-in var(--dur-fast) var(--ease);
+}
+@keyframes deck-map-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 .deck-map__row {
   display: flex;

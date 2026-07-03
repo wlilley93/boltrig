@@ -45,6 +45,7 @@ export function StudioPanel() {
       <PageIntro
         title="Studio"
         lead="Where you compose what agents can do: skills, capability (nouns, verbs and what runs them), adapters, and workflows."
+        howToggle
         how="Everything you build here is data, not code. Skills give agents instructions + permissions; Router wires a verb to an adapter or agent; Adapters turn an external service into governed verbs; Workflows chain verbs into a flow."
       />
 

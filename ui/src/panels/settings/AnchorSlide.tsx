@@ -18,7 +18,7 @@ const SECTION_BLURB: Record<string, string> = {
   agent: "The assistant that runs as you.",
   privacy: "Export your data; manage your conversations.",
   security: "Active sessions, tokens, your own activity.",
-  organisation: "The user directory and invitations.",
+  organisation: "Members, invitations and workspaces - opens in Admin.",
 };
 
 export function SettingsAnchorSlide() {
@@ -32,8 +32,12 @@ export function SettingsAnchorSlide() {
       <PageIntro
         title="Settings"
         lead="Your account, security, and how Boltrig looks and reaches you."
-        how="Pick a section to open it. Org-admins also manage the directory and invitations here."
-        actions={<span className="muted">{visible.length} sections</span>}
+        how="Pick a section to open it. Org-admins also reach organisation administration from here."
+        actions={
+          // The deck counts this overview as slide 1 of the zone; match its
+          // "1 of N" breadcrumb (anchor + the sections listed below).
+          <span className="muted">Section 1 of {visible.length + 1}</span>
+        }
       />
 
       <div className="wfpick">

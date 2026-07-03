@@ -152,6 +152,7 @@ export function AgentsSlide() {
       <PageIntro
         title="Agents"
         lead="A structured view of the durable org and the worker profiles it can convene."
+        howToggle
         how="Open a card to inspect skills, callable verbs, budget context and work ownership. Capability changes use the governed control plane."
         actions={
           <>

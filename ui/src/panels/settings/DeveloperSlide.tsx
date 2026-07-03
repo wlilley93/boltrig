@@ -8,7 +8,14 @@ import { api } from "../../api/client";
 import type { MintTokenResponse } from "../../api/types";
 import { useFetch } from "../../useFetch";
 import { csvToList, errText } from "../shared";
-import { FetchError, PageIntro } from "../ux";
+import {
+  Field,
+  FetchError,
+  PageIntro,
+  Select,
+  TTL_OPTIONS,
+  ttlDaysFromSelection,
+} from "../ux";
 import { SecretOnce, Skeleton } from "../uxFlow";
 import { TokenList } from "./shared";
 
@@ -37,7 +44,7 @@ function DeveloperConnections() {
 
   const [name, setName] = useState("");
   const [scope, setScope] = useState("");
-  const [ttl, setTtl] = useState("");
+  const [ttl, setTtl] = useState("30");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [minted, setMinted] = useState<MintTokenResponse | null>(null);
@@ -52,22 +59,16 @@ function DeveloperConnections() {
     setError(null);
     setMinted(null);
     try {
-      const ttlDays = ttl.trim() ? Number(ttl.trim()) : undefined;
-      if (ttlDays !== undefined && Number.isNaN(ttlDays)) {
-        setError("ttl_days must be a number.");
-        setBusy(false);
-        return;
-      }
       const res = await api.mintToken({
         name: name.trim(),
         scope: scope.trim() ? csvToList(scope) : undefined,
-        ttl_days: ttlDays,
+        ttl_days: ttlDaysFromSelection(ttl),
       });
       if (res.status === "ok") {
         setMinted(res);
         setName("");
         setScope("");
-        setTtl("");
+        setTtl("30");
         setBump((n) => n + 1); // force the token list to reload
       } else {
         setError(res.reason ?? "mint rejected");
@@ -91,26 +92,28 @@ function DeveloperConnections() {
             every use, so it can never escalate (SEC-34).
           </p>
           <div className="form__grid">
-            <label className="field">
-              <span>name</span>
+            <Field label="Name" required example="ci-bot">
               <input value={name} onChange={(e) => setName(e.target.value)} />
-            </label>
-            <label className="field">
-              <span>scope (comma list, optional)</span>
+            </Field>
+            <Field
+              label="Scope"
+              hint="Comma-separated grants (optional). Defaults to your own grants."
+              example="ticket.read, ticket.comment"
+            >
               <input
                 value={scope}
                 placeholder="ticket.read, ticket.comment"
                 onChange={(e) => setScope(e.target.value)}
               />
-            </label>
-            <label className="field">
-              <span>ttl_days (optional)</span>
-              <input
+            </Field>
+            <Field label="Expires in (days)" hint="How long this token stays valid.">
+              <Select
                 value={ttl}
-                placeholder="30"
-                onChange={(e) => setTtl(e.target.value)}
+                ariaLabel="Token expiry"
+                onChange={setTtl}
+                options={TTL_OPTIONS}
               />
-            </label>
+            </Field>
           </div>
           <div className="form__actions">
             <button

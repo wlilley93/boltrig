@@ -546,7 +546,12 @@ export function Deck(props: DeckProps): JSX.Element {
 
       {chevrons}
 
-      <div className="deck__map" role="group" aria-label="Deck map">
+      {/* The minimap is a transient position aid: mounted ONLY while a move is
+          in flight, so it never sits over the chat composer or Agents cards at
+          rest (the sidebar rail + breadcrumb convey position there). It is
+          non-interactive (pointer-events:none); the rail drives navigation. */}
+      {moving && (
+      <div className="deck__map" role="presentation" aria-hidden="true">
         {rows.map((row) => {
           const isRow = row.id === active.rowId;
           const anchor = row.cols[0];
@@ -583,6 +588,7 @@ export function Deck(props: DeckProps): JSX.Element {
           );
         })}
       </div>
+      )}
 
       {/* outside the plane so a transform never re-roots it; announces settles */}
       <div className="deck__announcer" aria-live="polite">

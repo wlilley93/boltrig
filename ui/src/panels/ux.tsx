@@ -13,12 +13,16 @@ export function PageIntro({
   title,
   lead,
   how,
+  howToggle,
   actions,
   children,
 }: {
   title: ReactNode;
   lead?: ReactNode; // one sentence: what this page is for
   how?: ReactNode; // optional: how it works, in a calm aside
+  // when set, the how paragraph is tucked behind a small "How this works"
+  // info affordance instead of stacked under the lead (keeps busy panels calm)
+  howToggle?: boolean;
   actions?: ReactNode;
   children?: ReactNode;
 }) {
@@ -27,7 +31,15 @@ export function PageIntro({
       <div className="page-intro__text">
         <h2>{title}</h2>
         {lead && <p className="page-intro__lead">{lead}</p>}
-        {how && <p className="page-intro__how">{how}</p>}
+        {how &&
+          (howToggle ? (
+            <details className="page-intro__more">
+              <summary className="page-intro__moretoggle">How this works</summary>
+              <p className="page-intro__how">{how}</p>
+            </details>
+          ) : (
+            <p className="page-intro__how">{how}</p>
+          ))}
         {children}
       </div>
       {actions && <div className="page-intro__actions">{actions}</div>}
@@ -368,3 +380,18 @@ export const ROLE_OPTIONS: Option[] = [
 // The bare role ids (one source of truth shared by the identity, admin and
 // invite selects so they can never drift).
 export const ROLE_VALUES: ReadonlyArray<string> = ROLE_OPTIONS.map((o) => o.value);
+
+// Token / invitation lifetime choices (one source of truth for the invite and
+// mint-token forms). "never" resolves to no expiry (ttl_days omitted).
+export const TTL_OPTIONS: Option[] = [
+  { value: "7", label: "7 days" },
+  { value: "14", label: "14 days" },
+  { value: "30", label: "30 days" },
+  { value: "90", label: "90 days" },
+  { value: "never", label: "Never expires" },
+];
+
+// Resolve a TTL_OPTIONS selection to an API ttl_days (undefined = no expiry).
+export function ttlDaysFromSelection(v: string): number | undefined {
+  return v === "never" ? undefined : Number(v);
+}

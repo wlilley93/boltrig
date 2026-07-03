@@ -7,9 +7,62 @@ import { useEffect, useState } from "react";
 import { api } from "../../api/client";
 import { useFetch } from "../../useFetch";
 import { errText } from "../shared";
-import { FetchError, PageIntro } from "../ux";
+import { Field, FetchError, PageIntro, Select } from "../ux";
+import type { Option } from "../ux";
 import { Skeleton } from "../uxFlow";
 import { scopeReadable } from "./shared";
+
+// Sensible defaults from the browser so locale / timezone are never blank
+// free-text (SET-10). The Select always includes the detected value + any value
+// the server already holds, so nothing the user has set is ever lost.
+const BROWSER_TZ =
+  Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+const BROWSER_LOCALE =
+  (typeof navigator !== "undefined" && navigator.language) || "en-US";
+
+const COMMON_TIMEZONES: ReadonlyArray<string> = [
+  "UTC",
+  "Europe/London",
+  "Europe/Paris",
+  "Europe/Berlin",
+  "America/New_York",
+  "America/Chicago",
+  "America/Denver",
+  "America/Los_Angeles",
+  "Asia/Kolkata",
+  "Asia/Singapore",
+  "Asia/Tokyo",
+  "Australia/Sydney",
+];
+
+const COMMON_LOCALES: ReadonlyArray<string> = [
+  "en-GB",
+  "en-US",
+  "fr-FR",
+  "de-DE",
+  "es-ES",
+  "it-IT",
+  "pt-BR",
+  "nl-NL",
+  "ja-JP",
+  "zh-CN",
+];
+
+// Build Select options from a common list, guaranteeing the detected + current
+// values are present and first (a stored value outside the list is never lost).
+function withPreferred(
+  list: ReadonlyArray<string>,
+  ...preferred: string[]
+): Option[] {
+  const seen = new Set<string>();
+  const out: Option[] = [];
+  for (const v of [...preferred, ...list]) {
+    if (!v || seen.has(v)) continue;
+    seen.add(v);
+    out.push({ value: v, label: v });
+  }
+  return out;
+}
 
 function AccountProfile() {
   const settings = useFetch(() => api.meSettings(), []);
@@ -29,11 +82,15 @@ function AccountProfile() {
       setDisplayName(
         String(s["display_name"] ?? settings.data.profile.display_name ?? ""),
       );
-      setLocale(String(s["locale"] ?? ""));
-      setTimezone(String(s["timezone"] ?? ""));
+      // Default locale / timezone from the browser when the server holds none.
+      setLocale(String(s["locale"] ?? "") || BROWSER_LOCALE);
+      setTimezone(String(s["timezone"] ?? "") || BROWSER_TZ);
       setSeeded(true);
     }
   }, [settings.data, seeded]);
+
+  const localeOptions = withPreferred(COMMON_LOCALES, BROWSER_LOCALE, locale);
+  const timezoneOptions = withPreferred(COMMON_TIMEZONES, BROWSER_TZ, timezone);
 
   async function save() {
     setBusy(true);
@@ -123,30 +180,29 @@ function AccountProfile() {
           A preferred display name and your locale / timezone. These are your own
           per-user settings (SET-10).
         </p>
-        <label className="field">
-          <span>display name</span>
+        <Field label="Display name" hint="A preferred name shown in the app.">
           <input
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
           />
-        </label>
+        </Field>
         <div className="form__grid">
-          <label className="field">
-            <span>locale</span>
-            <input
+          <Field label="Locale" hint="Defaults from your browser.">
+            <Select
               value={locale}
-              placeholder="en-GB"
-              onChange={(e) => setLocale(e.target.value)}
+              ariaLabel="Locale"
+              onChange={setLocale}
+              options={localeOptions}
             />
-          </label>
-          <label className="field">
-            <span>timezone</span>
-            <input
+          </Field>
+          <Field label="Timezone" hint="Defaults from your browser.">
+            <Select
               value={timezone}
-              placeholder="Europe/London"
-              onChange={(e) => setTimezone(e.target.value)}
+              ariaLabel="Timezone"
+              onChange={setTimezone}
+              options={timezoneOptions}
             />
-          </label>
+          </Field>
         </div>
         <div className="form__actions">
           <button className="btn btn--primary" disabled={busy} onClick={save}>

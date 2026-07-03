@@ -1,7 +1,8 @@
-// The tenancy-management surface of the admin console (COUNTY 8): organisation
-// policy, workspaces + their members, and per-org/workspace/user AI keys. It
-// lives inside AdminPanel (a view toggle) rather than as a parallel settings
-// system - the admin console is the one home for org-level administration.
+// The tenancy-management surface of the admin console (COUNTY 8): the SINGLE
+// home for organisation administration - the member directory + their scope,
+// invitations, org policy, workspaces + their members, and per-org/workspace/
+// user AI keys. It lives inside AdminPanel (a view toggle) rather than as a
+// parallel settings system; Settings > Organisation is now only a signpost here.
 //
 // Every call goes through the governed REST surface (boltrig/kernel/access_
 // routes.py) with tolerateStatus, so a server denial (403) renders faithfully
@@ -13,18 +14,33 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { api } from "../../api/client";
 import type {
+  AdminInvitation,
   AiKeyLevel,
+  DirectoryUser,
   OrgMemberView,
+  PatchUserRequest,
+  VerbInfo,
   WorkspaceMemberView,
   WorkspaceView,
 } from "../../api/types";
 import { useIdentity } from "../../identity";
 import { useFetch } from "../../useFetch";
 import { errText } from "../shared";
-import { EmptyState, Field, FetchError, InfoCallout, Select } from "../ux";
+import {
+  EmptyState,
+  Field,
+  FetchError,
+  InfoCallout,
+  ROLE_OPTIONS,
+  Select,
+  TTL_OPTIONS,
+  ttlDaysFromSelection,
+} from "../ux";
 import type { Option } from "../ux";
-import { Switch } from "../uxForm";
+import { ChipPicker, ScopeBuilder, Switch } from "../uxForm";
+import type { ScopeVerb } from "../uxForm";
 import { ArmConfirm, SaveBar, Skeleton } from "../uxFlow";
+import { scopeReadable } from "../settings/shared";
 
 // The per-workspace roles (boltrig/models/tenancy.py WORKSPACE_ROLES). owner
 // administers, admin configures, member operates, viewer reads, agent is a
@@ -42,6 +58,422 @@ const AI_LEVEL_OPTIONS: Option[] = [
   { value: "workspace", label: "Workspace", hint: "A key scoped to one workspace." },
   { value: "user", label: "User", hint: "Your own personal key." },
 ];
+
+// A closed set of known providers (was free-text). The server accepts any, but a
+// Select keeps the common ones honest and one-click.
+const AI_PROVIDER_OPTIONS: Option[] = [
+  { value: "anthropic", label: "Anthropic" },
+  { value: "openai", label: "OpenAI" },
+  { value: "hermes", label: "Hermes" },
+  { value: "vllm", label: "vLLM" },
+  { value: "ollama", label: "Ollama" },
+];
+
+// Per-provider example models: seed the model field with a sensible default and
+// offer one-click suggestions, while still allowing a custom (self-hosted) id.
+const AI_MODEL_SUGGESTIONS: Record<string, string[]> = {
+  anthropic: ["claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-4"],
+  openai: ["gpt-4o", "gpt-4o-mini", "o3-mini"],
+  hermes: ["glm-5-turbo", "glm-5"],
+  vllm: ["meta-llama/Llama-3.1-70B-Instruct", "Qwen/Qwen2.5-72B-Instruct"],
+  ollama: ["llama3.1", "qwen2.5", "mistral"],
+};
+
+// --- Member directory + scope (Epic USR) ------------------------------------
+
+// A user's permission scope (manifest role-mapping shape): an all-access flag,
+// visible departments, and the verb dimension expressed as noun/verb grants.
+// ScopeBuilder owns the verb dimension as a flat pattern list; these helpers
+// translate the dict <-> patterns while preserving departments and any keys the
+// UI does not surface (fail-safe: an unknown scope key is never dropped).
+const SCOPE_VERB_KEYS: ReadonlySet<string> = new Set(["all", "nouns", "verbs"]);
+
+function asStringList(v: unknown): string[] {
+  return Array.isArray(v) ? v.map((x) => String(x)) : [];
+}
+
+function scopeToPatterns(scope: Record<string, unknown>): string[] {
+  if (scope.all) return ["*"];
+  const nouns = asStringList(scope.nouns).map((n) => `${n}.*`);
+  return [...nouns, ...asStringList(scope.verbs)];
+}
+
+// The verb-dimension part of a scope dict, derived from the pattern list.
+function patternsToScopeVerbPart(patterns: string[]): Record<string, unknown> {
+  if (patterns.includes("*")) return { all: true };
+  const nouns: string[] = [];
+  const verbs: string[] = [];
+  for (const p of patterns) {
+    if (p === "*") continue;
+    if (p.endsWith(".*")) nouns.push(p.slice(0, -2));
+    else if (p.endsWith("*")) nouns.push(p.slice(0, -1));
+    else verbs.push(p);
+  }
+  const part: Record<string, unknown> = {};
+  if (nouns.length > 0) part.nouns = nouns;
+  if (verbs.length > 0) part.verbs = verbs;
+  return part;
+}
+
+// VerbInfo registry -> ScopeBuilder's verb shape (id + noun + consequence).
+function toScopeVerbs(verbs: VerbInfo[]): ScopeVerb[] {
+  return verbs.map((v) => ({
+    id: v.id,
+    noun: v.noun,
+    consequence: typeof v.consequence === "string" ? v.consequence : undefined,
+  }));
+}
+
+function UserRow({
+  user,
+  verbs,
+  onChanged,
+}: {
+  user: DirectoryUser;
+  verbs: ScopeVerb[];
+  onChanged: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const original = user.scope ?? {};
+  const [patterns, setPatterns] = useState<string[]>(() =>
+    scopeToPatterns(original),
+  );
+  const [departments, setDepartments] = useState<string[]>(() =>
+    asStringList(original.departments),
+  );
+
+  async function patch(body: PatchUserRequest) {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await api.patchUser(user.id, body);
+      if (res.status === "ok") onChanged();
+      else setError(res.reason ?? "update rejected");
+    } catch (err) {
+      setError(errText(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function saveScope() {
+    // Preserve any scope keys the editor does not surface (never drop them), and
+    // rewrite only the verb dimension + departments from the controls.
+    const scope: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(original)) {
+      if (k === "departments" || SCOPE_VERB_KEYS.has(k)) continue;
+      scope[k] = v;
+    }
+    if (departments.length > 0) scope.departments = departments;
+    Object.assign(scope, patternsToScopeVerbPart(patterns));
+    void patch({ scope });
+  }
+
+  const deactivated = user.status === "deactivated";
+
+  return (
+    <div className="dir-row">
+      <div className="row-line dir-row__top">
+        <div>
+          <code>{user.email ?? user.id}</code>{" "}
+          <span className="muted">{user.display_name ?? ""}</span>
+          <div className="muted">
+            {user.source ?? "idp"}
+            {user.source_group ? ` / ${user.source_group}` : ""} - scope:{" "}
+            {scopeReadable(user.scope)}
+          </div>
+          {error && <div className="error">{error}</div>}
+        </div>
+        <div className="kv">
+          <Select
+            value={user.role}
+            disabled={busy}
+            ariaLabel={`Role for ${user.email ?? user.id}`}
+            onChange={(v) => void patch({ role: v })}
+            options={ROLE_OPTIONS}
+          />
+          <span
+            className={`badge ${deactivated ? "badge--down" : "badge--ok"}`}
+          >
+            {user.status}
+          </span>
+          {deactivated ? (
+            // Restorative and low-blast: a plain button, no arm step.
+            <button
+              className="btn"
+              disabled={busy}
+              onClick={() => void patch({ status: "active" })}
+            >
+              Activate
+            </button>
+          ) : (
+            <ArmConfirm
+              label="Deactivate"
+              armLabel={
+                <>
+                  Deactivate <code>{user.email ?? user.id}</code>? Their access
+                  stops immediately and their tokens stop resolving.
+                </>
+              }
+              confirmLabel="Confirm deactivate"
+              tone="danger"
+              busyLabel="Deactivating..."
+              disabled={busy}
+              onConfirm={async () => {
+                const res = await api.patchUser(user.id, {
+                  status: "deactivated",
+                });
+                if (res.status !== "ok") {
+                  throw new Error(res.reason ?? "update rejected");
+                }
+                onChanged();
+              }}
+            />
+          )}
+        </div>
+      </div>
+      <details className="dir-row__scope">
+        <summary>Edit scope</summary>
+        <Field
+          label="Departments visible"
+          hint="Scope this user to one or more departments."
+        >
+          <ChipPicker
+            value={departments}
+            onChange={setDepartments}
+            allowFree
+            ariaLabel={`Departments for ${user.email ?? user.id}`}
+            emptyHint="No departments. Add one to scope this user to a department."
+          />
+        </Field>
+        <Field
+          label="Verb grants"
+          hint="What this user may call."
+        >
+          <ScopeBuilder
+            value={patterns}
+            onChange={setPatterns}
+            verbs={verbs}
+            presets={[
+              { label: "All (org-wide)", value: ["*"] },
+              { label: "Clear", value: [] },
+            ]}
+          />
+        </Field>
+        <button className="btn" disabled={busy} onClick={saveScope}>
+          {busy ? "..." : "Save scope"}
+        </button>
+      </details>
+    </div>
+  );
+}
+
+function UserDirectoryCard() {
+  const users = useFetch(() => api.adminUsers(), []);
+  // The caller-scoped verb registry powers the ScopeBuilder live preview; for an
+  // org-admin this is the full registry. A read failure just yields an empty
+  // list, so the scope editor still functions (patterns still edit cleanly).
+  const caps = useFetch(() => api.capabilities(), []);
+  const scopeVerbs = toScopeVerbs(caps.data?.verbs ?? []);
+
+  // The server returns {status:"denied", reason} (no users key) when the caller
+  // is not an org-admin.
+  const usersDenied =
+    users.data && users.data.users === undefined
+      ? users.data.reason ?? "organisation administration not permitted"
+      : null;
+  const userList = users.data?.users ?? [];
+
+  return (
+    <div className="list-card">
+      <div className="list-card__head">
+        <h3>Member directory</h3>
+        <button className="btn" onClick={() => users.reload()}>
+          Refresh
+        </button>
+      </div>
+      <div className="list-card__body">
+        <p className="ux-hint">
+          Everyone in the organisation, their role and scope. Deactivating a user
+          revokes their access immediately (US-USR-03).
+        </p>
+        {users.loading && !users.data && <Skeleton variant="rows" />}
+        <FetchError
+          error={users.error}
+          status={users.errorStatus}
+          onRetry={users.reload}
+        />
+        {usersDenied && <p className="notice warn">denied: {usersDenied}</p>}
+        {!usersDenied && users.data && userList.length === 0 && (
+          <EmptyState title="No users" />
+        )}
+        {userList.map((u) => (
+          <UserRow
+            key={u.id}
+            user={u}
+            verbs={scopeVerbs}
+            onChanged={() => users.reload()}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// --- Invitations (Epic USR) -------------------------------------------------
+
+function InvitationsCard() {
+  const invites = useFetch(() => api.adminInvitations(), []);
+
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState("agent");
+  const [ttl, setTtl] = useState("14");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  async function createInvite() {
+    if (!email.trim()) {
+      setError("An email is required.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setMsg(null);
+    try {
+      const res = await api.createInvitation({
+        email: email.trim(),
+        role,
+        ttl_days: ttlDaysFromSelection(ttl),
+      });
+      if (res.status === "ok") {
+        setMsg(`Invited ${res.email ?? email}.`);
+        setEmail("");
+        invites.reload();
+      } else {
+        setError(res.reason ?? "invite rejected");
+      }
+    } catch (err) {
+      setError(errText(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Throws on a rejected revoke so the row's ArmConfirm renders the reason.
+  async function revokeInvite(id: string) {
+    const res = await api.revokeInvitation(id);
+    if (res.status !== "ok") {
+      throw new Error(res.reason ?? "revoke rejected");
+    }
+    invites.reload();
+  }
+
+  const invitesDenied =
+    invites.data && invites.data.invitations === undefined
+      ? invites.data.reason ?? "organisation administration not permitted"
+      : null;
+  const inviteList = invites.data?.invitations ?? [];
+
+  return (
+    <div className="list-card">
+      <div className="list-card__head">
+        <h3>Invitations</h3>
+        <button className="btn" onClick={() => invites.reload()}>
+          Refresh
+        </button>
+      </div>
+      <div className="list-card__body">
+        <p className="ux-hint">
+          An invitation pre-stages a role for an SSO identity. It creates no
+          password and grants nothing until the invitee signs in through your IdP
+          (SEC-35).
+        </p>
+        <div className="form__grid">
+          <Field label="Email" required example="ada@example.com">
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </Field>
+          <Field label="Role">
+            <Select
+              value={role}
+              ariaLabel="Invited role"
+              onChange={setRole}
+              options={ROLE_OPTIONS}
+            />
+          </Field>
+          <Field
+            label="Expires in (days)"
+            hint="How long the invitation stays open."
+          >
+            <Select
+              value={ttl}
+              ariaLabel="Invitation expiry"
+              onChange={setTtl}
+              options={TTL_OPTIONS}
+            />
+          </Field>
+        </div>
+        <div className="form__actions">
+          <button
+            className="btn btn--primary"
+            disabled={busy}
+            onClick={() => void createInvite()}
+          >
+            {busy ? "..." : "Send invitation"}
+          </button>
+          {msg && <span className="ok">{msg}</span>}
+          {error && <span className="error">{error}</span>}
+        </div>
+
+        {invites.loading && !invites.data && <Skeleton variant="rows" />}
+        <FetchError
+          error={invites.error}
+          status={invites.errorStatus}
+          onRetry={invites.reload}
+        />
+        {invitesDenied && <p className="notice warn">denied: {invitesDenied}</p>}
+        {!invitesDenied && invites.data && inviteList.length === 0 && (
+          <EmptyState
+            title="No invitations"
+            body="Invite someone above; they get access the first time they sign in through your IdP."
+          />
+        )}
+        {inviteList.map((inv: AdminInvitation) => (
+          <div className="row-line" key={inv.id}>
+            <div>
+              <code>{inv.email}</code>{" "}
+              <span className="muted">as {inv.intended_role}</span>
+              <div className="muted">
+                {inv.status} - invited by {inv.invited_by} - expires{" "}
+                {inv.expires_at ?? "-"}
+              </div>
+            </div>
+            {inv.status === "pending" && (
+              <ArmConfirm
+                label="Revoke"
+                armLabel={
+                  <>
+                    Revoke the invitation for <code>{inv.email}</code>? They will
+                    not be pre-staged when they sign in.
+                  </>
+                }
+                confirmLabel="Confirm revoke"
+                tone="danger"
+                busyLabel="Revoking..."
+                onConfirm={() => revokeInvite(inv.id)}
+              />
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 // --- Organisation policy ----------------------------------------------------
 
@@ -107,7 +539,7 @@ function OrgSettingsCard() {
 
   return (
     <div className="form">
-      <div className="form__title">Organisation</div>
+      <div className="form__title">Organisation policy</div>
       <p className="ux-hint">
         Your organisation's display name and its org-wide policy flags. Only an
         org-admin may change these; a non-admin save is refused by the server.
@@ -429,13 +861,19 @@ function WorkspacesCard() {
 function AiKeysCard() {
   const identity = useIdentity();
   const keys = useFetch(() => api.aiKeys(), []);
+  // The workspace list feeds the scope picker (never a raw id box) - the same
+  // source WorkspacesCard reads.
+  const workspaces = useFetch(() => api.workspaces(), []);
+  const wsList = workspaces.data?.workspaces ?? [];
+  const wsOptions: Option[] = wsList.map((w) => ({ value: w.id, label: w.name }));
+
   const allowOwn = keys.data?.allow_own_ai_keys ?? false;
   const rows = keys.data?.ai_keys ?? [];
 
   const [level, setLevel] = useState<AiKeyLevel>("org");
   const [scopeId, setScopeId] = useState("");
-  const [provider, setProvider] = useState("");
-  const [model, setModel] = useState("");
+  const [provider, setProvider] = useState("anthropic");
+  const [model, setModel] = useState(AI_MODEL_SUGGESTIONS.anthropic[0]);
   const [apiKey, setApiKey] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -450,11 +888,17 @@ function AiKeysCard() {
   }, [level, identity.tenant, identity.subject]);
 
   const needsExplicitScope = level === "workspace";
+  // For a workspace key: the chosen workspace, falling back to the first one so a
+  // one-click save still resolves. org/user keys take the server default.
+  const effectiveScope = needsExplicitScope
+    ? scopeId || wsOptions[0]?.value || ""
+    : "";
+  const modelSuggestions = AI_MODEL_SUGGESTIONS[provider] ?? [];
   const canSubmit =
     !!provider.trim() &&
     !!model.trim() &&
     !!apiKey.trim() &&
-    (!needsExplicitScope || !!scopeId.trim()) &&
+    (!needsExplicitScope || !!effectiveScope) &&
     !busy;
 
   async function save() {
@@ -465,7 +909,7 @@ function AiKeysCard() {
     try {
       const res = await api.setAiKey({
         level,
-        scope_id: scopeId.trim() || undefined,
+        scope_id: needsExplicitScope ? effectiveScope : undefined,
         provider: provider.trim(),
         model: model.trim(),
         api_key: apiKey,
@@ -537,7 +981,7 @@ function AiKeysCard() {
       {!allowOwn && (
         <InfoCallout tone="info">
           The organisation does not allow member-owned AI keys, so only an org
-          key is honoured. An org-admin can change this in Organisation above.
+          key is honoured. An org-admin can change this in Organisation policy.
         </InfoCallout>
       )}
 
@@ -550,27 +994,66 @@ function AiKeysCard() {
             options={AI_LEVEL_OPTIONS}
           />
         </Field>
-        <Field
-          label="Scope id"
-          hint={
-            needsExplicitScope
-              ? "The workspace id this key applies to."
-              : "Optional - defaults are shown."
-          }
-          example={scopePlaceholder}
-        >
-          <input
-            value={scopeId}
-            placeholder={scopePlaceholder}
-            onChange={(e) => setScopeId(e.target.value)}
+        {needsExplicitScope ? (
+          <Field label="Workspace" hint="The workspace this key applies to.">
+            {wsOptions.length > 0 ? (
+              <Select
+                value={effectiveScope}
+                ariaLabel="Workspace for this key"
+                onChange={setScopeId}
+                options={wsOptions}
+              />
+            ) : (
+              <span className="muted">
+                No workspaces yet. Create one under Workspaces, then set a
+                workspace key.
+              </span>
+            )}
+          </Field>
+        ) : (
+          <Field
+            label="Applies to"
+            hint={level === "org" ? "The whole organisation." : "You (your own user)."}
+          >
+            <span className="muted">
+              <code>{scopePlaceholder}</code>
+            </span>
+          </Field>
+        )}
+        <Field label="Provider">
+          <Select
+            value={provider}
+            ariaLabel="AI provider"
+            onChange={(v) => {
+              setProvider(v);
+              setModel(AI_MODEL_SUGGESTIONS[v]?.[0] ?? "");
+            }}
+            options={AI_PROVIDER_OPTIONS}
           />
         </Field>
-        <Field label="Provider" example="openai">
-          <input value={provider} onChange={(e) => setProvider(e.target.value)} />
-        </Field>
-        <Field label="Model" example="gpt-4o">
+        <Field
+          label="Model"
+          example={modelSuggestions[0] ?? "model id"}
+          hint="Pick a suggestion or type a custom model id."
+        >
           <input value={model} onChange={(e) => setModel(e.target.value)} />
         </Field>
+        {modelSuggestions.length > 0 && (
+          <div className="kv">
+            <span className="ux-hint">Suggestions:</span>
+            {modelSuggestions.map((m) => (
+              <button
+                key={m}
+                type="button"
+                className="tag tag--accent"
+                style={{ cursor: "pointer" }}
+                onClick={() => setModel(m)}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
+        )}
         <Field label="API key" hint="Entered once; stored sealed and never shown again.">
           <input
             type="password"
@@ -599,13 +1082,16 @@ export function TenancyAdmin() {
   return (
     <div className="stack">
       <p className="notice">
-        Organisation policy, workspaces and their members, and AI keys. These are
-        governed server-side: an action you are not permitted to take is refused
-        with a reason, never silently.
+        The one home for organisation administration: members and their scope,
+        invitations, org policy, workspaces, and AI keys. Every action is governed
+        server-side - one you are not permitted to take is refused with a reason,
+        never silently.
       </p>
+      <UserDirectoryCard />
       <div className="cols">
         <div className="stack">
           <OrgSettingsCard />
+          <InvitationsCard />
           <AiKeysCard />
         </div>
         <WorkspacesCard />

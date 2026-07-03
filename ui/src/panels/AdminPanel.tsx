@@ -22,6 +22,7 @@ import type {
   InvokeResult,
 } from "../api/types";
 import { useIdentity } from "../identity";
+import { useRoute } from "../router";
 import {
   ADMIN_SECTIONS,
   ADMIN_SECTION_OPTIONS,
@@ -65,8 +66,15 @@ export function AdminPanel() {
   const isAdmin = ADMIN_ROLES.has(identity.role);
 
   // Which admin view is showing: the manifest config editor or the org/workspace
-  // administration surface (both server-gated to org-admin).
-  const [view, setView] = useState<string>("config");
+  // administration surface (both server-gated to org-admin). The route can deep
+  // link straight into the org view (#/admin/organisation) - e.g. the Settings >
+  // Organisation signpost - so we seed and re-sync the view from it.
+  const route = useRoute();
+  const routeView = route.segs[1] === "organisation" ? "organisation" : "config";
+  const [view, setView] = useState<string>(routeView);
+  useEffect(() => {
+    setView(routeView);
+  }, [routeView]);
 
   const [sectionKey, setSectionKey] = useState<string>(ADMIN_SECTIONS[0].key);
   const section: AdminSection = useMemo(
@@ -236,8 +244,9 @@ export function AdminPanel() {
     <section className="panel">
       <PageIntro
         title="Admin"
-        lead="Edit your organisation's configuration through typed, governed controls."
-        how="Pick a section and change its settings. Saving requests a governed change - a high-consequence config amendment pauses for a human approval, then records a revision you can roll back to. Secrets are never shown, only referenced."
+        lead="Configuration and organisation administration, through typed, governed controls."
+        howToggle
+        how="Configuration edits a manifest section and requests a governed change - a high-consequence amendment pauses for a human approval, then records a revision you can roll back to. Organisation administers members, invitations, workspaces and AI keys. Secrets are never shown, only referenced."
         actions={
           view === "config" ? (
             <>
