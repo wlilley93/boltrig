@@ -28,8 +28,8 @@ export interface StorySectionData {
   readouts?: { label: string; value: string }[];
   /** Copy alignment. Defaults to the alternating side; `"center"` for the finale. */
   align?: "left" | "right" | "center";
-  /** Optional call-to-action button (finale). Clicking it scrolls back to the top. */
-  cta?: { label: string };
+  /** Optional call-to-action button (finale). `href` overrides the default console link. */
+  cta?: { label: string; href?: string };
 }
 
 export const STORY_SECTIONS: StorySectionData[] = [
@@ -37,12 +37,13 @@ export const STORY_SECTIONS: StorySectionData[] = [
     id: "arrival",
     kind: "brain",
     eyebrow: "Boltrig",
-    title: "Autonomy you can put your name to.",
+    title: "Run AI agents in production. Prove every move they make.",
     body:
-      "Boltrig is the governed operating system for AI agents. A standing workforce of agents does real work on your behalf, and a control plane checks every move they make. Run agents in production. Keep the receipts. Stay in charge.",
+      "Boltrig runs a standing workforce of AI agents and routes every action they take through one audited, permissioned gate. Autonomous work on your own infrastructure, with a tamper-evident record of everything they did and were allowed to do.",
     readouts: [
       { label: "workforce", value: "STANDING" },
       { label: "actions", value: "GOVERNED" },
+      { label: "deploy", value: "SELF-HOSTED" },
     ],
   },
   {
@@ -51,7 +52,7 @@ export const STORY_SECTIONS: StorySectionData[] = [
     eyebrow: "The Checkpoint",
     title: "One gate. Every action.",
     body:
-      "Chat, webhook, or schedule: every agent action passes one audited checkpoint. Identity, grants, consequence, human approval, rate limits, safe retries, in that order. Budgets stop runaway spend. Agents never see a credential. There is no side door.",
+      "Chat, webhook, or schedule: every agent action passes one audited checkpoint before anything happens. Identity, grants, consequence, human approval when it counts, rate limits, and safe retries, in that fixed order. Credentials resolve inside the gate and never reach the agent, and there is no side door.",
     readouts: [
       { label: "gates", value: "ORDERED" },
       { label: "side doors", value: "NONE" },
@@ -63,7 +64,7 @@ export const STORY_SECTIONS: StorySectionData[] = [
     eyebrow: "In Flight",
     title: "Checked before anything happens.",
     body:
-      "Step inside the traffic. Each request is an intent in transit: identified, weighed against its grants and its consequences, rate-limited and de-duplicated before a single side effect lands. Every action leaves exactly one tamper-evident record. Denied means denied, and denials are on the record too.",
+      "Step inside the traffic. Every request is an intent in transit: identified, weighed against its grants and its consequences, rate-limited and de-duplicated before a single side effect lands. Every action writes exactly one tamper-evident record, and denials are on the record too.",
     readouts: [
       { label: "checked", value: "PRE-EXECUTE" },
       { label: "default", value: "DENY" },
@@ -75,7 +76,7 @@ export const STORY_SECTIONS: StorySectionData[] = [
     eyebrow: "The Workforce",
     title: "A workforce, not a chatbot.",
     body:
-      "A Chief of Staff routes each request to the right department head. Heads spawn short-lived workers carrying exactly the skills the job needs. Every task runs on the cheapest model that can do it well, and sensitive work never leaves your infrastructure.",
+      "A Chief of Staff routes each request to the right department head, and heads spawn short-lived workers carrying exactly the skills the job needs. Every task runs on the cheapest model that can do it well, and work marked sensitive never leaves your infrastructure. Budgets are reserved before the work starts, not reconciled after the bill lands.",
     readouts: [
       { label: "org chart", value: "STANDING" },
       { label: "sensitive data", value: "STAYS LOCAL" },
@@ -87,7 +88,7 @@ export const STORY_SECTIONS: StorySectionData[] = [
     eyebrow: "The Operation",
     title: "Every job on one board.",
     body:
-      "Draw workflows on a canvas, run them on a schedule or on events. Watch agent and human work move across one board, and open any run to see every step it took. File work from the channels you already use. The fleet remembers what it learns, with provenance on every fact.",
+      "Draw workflows on a canvas and run them on a schedule or on events. Watch agent and human work move across one board, and open any run to walk every step it took. New facts the fleet learns carry provenance, so you can trace where every answer came from.",
     readouts: [
       { label: "workflows", value: "DURABLE" },
       { label: "runs", value: "INSPECTABLE" },
@@ -111,13 +112,13 @@ export const STORY_SECTIONS: StorySectionData[] = [
     eyebrow: "In Production",
     title: "Provably governed. Yours to run.",
     body:
-      "One self-hosted deploy: kernel, database, console. Enterprise SSO maps your people to roles, the audit record proves what happened, and every governance guarantee is pinned to a machine-checked test in CI. Put agents to work where it counts.",
+      "One self-hosted deploy: kernel, database, and console, on your own infrastructure. Enterprise SSO maps your people to roles, or run first-party invite-only access as the only door. The audit record proves what happened, and every governance guarantee is pinned to a machine-checked test in CI. Not trust the agent. Check the runtime.",
     readouts: [
       { label: "deploy", value: "SELF-HOSTED" },
       { label: "guarantees", value: "CI-PINNED" },
     ],
     align: "center",
-    cta: { label: "Open the console" },
+    cta: { label: "Request access", href: "mailto:access@boltrig.io?subject=Boltrig%20access%20request" },
   },
 ];
 

@@ -86,7 +86,7 @@ export const BRAIN_VERTEX = /* glsl */ `
     vHemi = step(0.0, p.x);
     // Region highlight: 1 at the active anchor, fading out over uHighlightRadius.
     vHighlight = (1.0 - smoothstep(0.0, uHighlightRadius, distance(position, uHighlightPos))) * uHighlightStrength;
-    // vFar: 0 on the side facing the active region, 1 on the opposite side —
+    // vFar: 0 on the side facing the active region, 1 on the opposite side,
     // used to fade the far half of the brain to accent the focus.
     vec3 focalDir = normalize(uHighlightPos + vec3(1e-5));
     float align = dot(normalize(position + vec3(1e-5)), focalDir);
@@ -96,7 +96,7 @@ export const BRAIN_VERTEX = /* glsl */ `
     p += rad * breathe;
     // Continuous looped flow: each particle traces a full closed circle within
     // its surface tangent plane, so it orbits *around* on the brain's shape
-    // (never leaving it) — alive, but the silhouette stays readable.
+    // (never leaving it), alive, but the silhouette stays readable.
     vec3 nrm = normalize(aNormal + vec3(1e-5));
     vec3 ref = abs(nrm.y) < 0.95 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
     vec3 tA = normalize(cross(nrm, ref));
@@ -195,7 +195,7 @@ export const BRAIN_FRAGMENT = /* glsl */ `
     col *= focusDim;
     alphaOut *= focusDim;
     // Cursor halo: gently lift particles under the pointer (additive, so even dim
-    // particles register where you point — kept subtle).
+    // particles register where you point, kept subtle).
     col += uCursorColor * vCursor * 0.8 * uCursorStrength;
     alphaOut += vCursor * core * 0.32 * uCursorStrength;
     // Finale: the brain blows up and thins out as it disperses.

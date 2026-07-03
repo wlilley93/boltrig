@@ -23,7 +23,7 @@ const CATEGORIES: Category[] = [
   {
     key: "necessary",
     title: "Strictly necessary",
-    body: "Required for the site to work — sign-in, security, page navigation. These can't be turned off.",
+    body: "Required for the site to work: sign-in, security, page navigation. These can't be turned off.",
     required: true,
   },
   {

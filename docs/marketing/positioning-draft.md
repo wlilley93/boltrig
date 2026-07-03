@@ -1,13 +1,23 @@
-# Boltrig positioning and landing-page rewrite (DRAFT for review)
+# Boltrig positioning and landing-page copy (hardened, ship-ready)
 
-Status: DRAFT. Nothing here is published. This document applies the agents-final
-growth-marketing frameworks (audience-and-positioning, competitor-and-differentiation,
-brand-strategy-architect, brand-story-writer, landing-page-match-writer, hook-writer)
-to Boltrig as it actually exists in this repository. Every capability claim is
-grounded in `README.md`, `docs/ARCHITECTURE.md`, `docs/invariants.md`, the site
-`features.ts`, and `docs/first-party-login.md`. Where a claim would need real
-customer data, a benchmark, or a logo, it is marked `[needs real data]` rather
-than invented.
+**Final hero headline:** Run AI agents in production. Prove every move they make.
+
+**Final positioning statement:** For engineering and security leaders who need to
+run autonomous AI agents on real production systems and data, Boltrig is a
+self-hosted, governed agent-orchestration platform that routes every agent action
+through one audited, permissioned checkpoint the agents cannot bypass, and keeps a
+tamper-evident record of all of it. Unlike DIY agent frameworks, which leave
+governance as hand-built homework, and unlike closed AI platforms, which run your
+agents and your data on someone else's cloud, Boltrig is governed by construction
+and runs entirely on your own infrastructure, with every guarantee pinned to a
+machine-checked test.
+
+This document is the shipped source of truth for the boltrig.io copy. Every
+capability claim is grounded in `README.md`, `docs/ARCHITECTURE.md`,
+`docs/invariants.md`, the site `features.ts`, and `docs/first-party-login.md`. No
+customer names, logos, testimonials, counts, benchmarks, or third-party
+attestations appear here, because none exist yet. Nothing is invented to fill a
+gap; where there is no verifiable fact, there is no claim.
 
 Style rule honoured throughout: no em dashes or en dashes anywhere. Spaced
 hyphens, commas, colons, and parentheses only.
@@ -51,7 +61,8 @@ Be honest about the seams (do not market these as live): a running Hatchet engin
 a live IdP pointed at real Azure AD / Okta / Google, live third-party adapter
 credentials, and an on-box inference model are integration legs that need their
 service or credentials to exercise. The governance core that would use them is
-implemented and tested.
+implemented and tested. The copy describes those legs as "runs on your IdP / your
+model / your systems," never as pre-wired for the reader out of the box.
 
 **One-sentence honest summary:** Boltrig lets a team run a real workforce of AI
 agents in production while every single action those agents take is checked,
@@ -129,12 +140,12 @@ does not depend on the agent choosing to behave.
 
 ### The competitive map
 
-- **Axis 1: ungoverned <-> governed-by-construction.** DIY frameworks sit at the
+- **Axis 1: ungoverned to governed-by-construction.** DIY frameworks sit at the
   ungoverned end (you add governance yourself). Boltrig sits at the far governed
   end (one chokepoint, nothing routes around it).
-- **Axis 2: their cloud <-> your infrastructure.** Closed platforms sit at "their
+- **Axis 2: their cloud to your infrastructure.** Closed platforms sit at "their
   cloud." Boltrig sits at "your infrastructure, one self-hosted image."
-- **Axis 3: trust the agent <-> prove the runtime.** Everyone else asks you to
+- **Axis 3: trust the agent to prove the runtime.** Everyone else asks you to
   trust the agent's behaviour. Boltrig moves the proof to the runtime and pins it
   to CI.
 
@@ -153,10 +164,10 @@ hand-building a safety layer they can never fully prove.
 hand-building a safety layer." Closed platforms cannot claim "without moving your
 data off-site." It is falsifiable and specific.)
 
-### Proof points
+### Proof points (all "read the repo" verifiable)
 
 1. One dispatch chokepoint in code (`kernel/dispatch.py`), one ordered path, no
-   side door. Verifiable by reading the repo.
+   side door.
 2. Every action writes one append-only hash-chained audit row, denials included.
 3. Deny-by-default grants intersecting a tenant ceiling, fail-closed, re-checked
    per call.
@@ -169,17 +180,10 @@ data off-site." It is falsifiable and specific.)
 8. Self-hosted as one image (kernel, database, console); one image, many tenants,
    config-as-data.
 
-### Risks and gaps (be honest internally)
-
-- The strongest proofs are "read the code" proofs, not customer proofs. Until
-  there are named deployments, benchmarks, or a third-party audit, the marketing
-  proof section is `[needs real data]` for logos, metrics, and testimonials.
-- Some outer legs are seams (live Hatchet, live IdP, live third-party adapters,
-  on-box model). Copy must describe the governance core as done and describe those
-  as "runs on your IdP / your model / your systems," not imply they are shipped and
-  wired for the reader out of the box.
-- "Governed operating system for AI agents" is a strong line but abstract on its
-  own. It needs the buyer problem next to it to land (see the critique in section 6).
+The strongest proofs today are code proofs, not customer proofs. That is a
+strength for this buyer: they can inspect and self-host rather than take a vendor's
+word. Until there are named deployments or a third-party audit, no logo strip,
+metric, or testimonial appears on the site.
 
 ---
 
@@ -261,226 +265,94 @@ Alternate one-liners (all true, pick per surface):
   policy-as-data (one manifest per tenant); binding-invariant gate at debt 0 in CI.
 - Cross-cutting: MCP in and out; visual workflow canvas; the work board and run
   inspector; new integrations as data, not core edits.
-- `[needs real data]`: customer names, deployment counts, throughput/latency
-  numbers, a third-party security attestation. Do not fabricate any of these.
 
 ---
 
-## 5. Landing-page rewrite
+## 5. Landing-page copy (as shipped)
 
 This preserves the existing scroll experience: the fixed WebGL particle brain
-behind animated story chapters, then the static features catalogue. The rewrite
-sharpens the hero and the section flow so a first-time visitor learns, within the
-first screen, what Boltrig is, who it is for, why not the alternatives, and what to
-do next. The particle brain stays as the hero visual and carries the "living
-workforce under one gate" idea: the brain is the standing fleet, the pre-execute
-scan/takeover chapter is the checkpoint. Do not throw the visual away; it is the
-brand's strongest asset.
+behind animated story chapters, then the static features catalogue. The hero leads
+with the buyer's outcome, a problem-and-alternatives beat is folded into the
+narrative, and the CTA is honest for an invite-only, self-hosted product. The
+particle brain stays as the hero visual and carries the "living workforce under one
+gate" idea: the brain is the standing fleet, the pre-execute scan/takeover chapter
+is the checkpoint.
 
-### 5a. Hero headline options (pick one)
+### 5a. Hero headline
 
-1. **Run AI agents in production. Prove every move they make.**
-   (Direct value + the buyer's real fear in one line. Recommended.)
-2. **Autonomy you can put your name to.**
-   (The current line. Evocative and on-brand, but abstract on its own. Keep as the
-   poetic secondary, not the primary, or pair it with subhead option 1.)
-3. **A workforce of AI agents, and one gate they cannot go around.**
-   (Names the two pillars. Strong for a visitor who already knows the category.)
+**Run AI agents in production. Prove every move they make.**
 
-Recommendation: lead with (1) as the H1 for a cold visitor, and let the existing
-"Autonomy you can put your name to." live on as the arrival-chapter kicker inside
-the scroll. That keeps the poetry without asking the headline to do the explaining.
+(Direct value plus the buyer's real fear in one line. The old poetic line,
+"Autonomy you can put your name to," is retained only as an alternate one-liner in
+section 4, not as the H1, so the headline does the explaining for a cold visitor.)
 
-### 5b. Hero subhead options (pick one)
+### 5b. Hero subhead (as shipped in the arrival panel body)
 
-1. **Boltrig is a self-hosted platform that runs a standing workforce of AI agents
-   and routes every action they take through one audited, permissioned checkpoint.
-   Autonomous work, on your infrastructure, with the receipts.**
-2. **A governed operating system for AI agents: one gate for every action, a
-   workforce that does real work, and a tamper-evident record of all of it. Runs
-   on your own infrastructure.**
-3. **Put agents to work on the jobs that matter. Every action is identified,
-   permissioned, approved when it counts, and recorded, through one gate the agents
-   cannot bypass.**
-
-Recommendation: subhead (1). It states category, mechanism, and the two proof
-words ("your infrastructure", "the receipts") in one read.
+Boltrig runs a standing workforce of AI agents and routes every action they take
+through one audited, permissioned gate. Autonomous work on your own infrastructure,
+with a tamper-evident record of everything they did and were allowed to do.
 
 ### 5c. Primary and secondary CTA
 
 The product is invite-only with no self-signup, and self-hosted. The CTA must not
-promise a one-click free trial that does not exist.
+promise a one-click free trial that does not exist, and must not send a cold
+visitor with no login straight at the console wall.
 
-- **Primary CTA: `Request access`** (or `Book a walkthrough`). Honest for an
-  invite-only product and appropriate for a considered, security-led purchase.
-- **Secondary CTA: `Read the architecture`** linking to the public architecture /
-  invariants docs. This buyer converts on inspectability, so let them inspect.
-- Keep `Open the console` (linking to `app.boltrig.io`) only for the returning /
-  already-provisioned visitor, for example in the top nav, not as the primary hero
-  CTA for a cold visitor who has no login.
+- **Primary CTA: `Request access`.** Honest for an invite-only product and
+  appropriate for a considered, security-led purchase. It opens a pre-addressed
+  email to the access inbox rather than a fake self-signup form.
+- **Secondary CTA: `Open the console`** linking to `https://app.boltrig.io`.
+  Reserved for the returning, already-provisioned visitor (top nav and the finale),
+  never the primary path for a cold visitor.
 
-### 5d. Section flow and copy
+### 5d. Section flow (the seven scroll panels, as shipped)
 
-The scroll narrative maps almost one-to-one onto the classic hero -> problem ->
-how -> differentiators -> proof -> CTA flow. Here is the flow with copy.
+The scroll narrative keeps its seven panels and their fixed ids/kind/order (the
+camera keyframes are index-aligned to them). Copy per panel:
 
-**Section 1 - Hero (the arrival chapter, brain at rest)**
-- Kicker: `> Boltrig`
-- H1: Run AI agents in production. Prove every move they make.
-- Subhead: Boltrig is a self-hosted platform that runs a standing workforce of AI
-  agents and routes every action they take through one audited, permissioned
-  checkpoint. Autonomous work, on your infrastructure, with the receipts.
-- Readouts (keep the format): `workforce: STANDING` / `actions: GOVERNED` /
-  `deploy: SELF-HOSTED`
-- CTA: [ Request access ]   secondary: Read the architecture
+1. **arrival (hero, brain at rest)** - kicker `> Boltrig`; H1 "Run AI agents in
+   production. Prove every move they make."; the subhead above; readouts
+   `workforce: STANDING` / `actions: GOVERNED` / `deploy: SELF-HOSTED`. The
+   persistent header carries `Request access` (primary) and `Open console`
+   (secondary) above the fold.
+2. **cortex (the checkpoint, brain)** - "One gate. Every action." Every action
+   passes one audited checkpoint before anything happens, in a fixed order, with
+   credentials resolved inside the gate and no side door.
+3. **signals (in-flight, takeover)** - "Checked before anything happens." Each
+   request is an intent in transit, weighed against its grants and consequences
+   before a single side effect lands; every action, denials included, leaves one
+   tamper-evident record.
+4. **network (the workforce, brain lit up)** - "A workforce, not a chatbot." Chief
+   of Staff routes to department heads that spawn short-lived workers on the
+   cheapest capable model; sensitive work stays local; budgets are reserved first.
+5. **vision (the operation, brain)** - "Every job on one board." Draw workflows on
+   a canvas, run them on a schedule or events, watch all agent and human work on
+   one board, and open any run to walk every step, with provenance on every fact.
+6. **balance (the fabric, brain)** - "It governs agents you did not build." Expose
+   granted capabilities as MCP tools with the full checkpoint, plug external tool
+   servers in inert until reviewed; integrations are data, not code.
+7. **whole (in production, finale)** - "Provably governed. Yours to run." One
+   self-hosted deploy; enterprise SSO or first-party invite-only access; the audit
+   record proves what happened; every guarantee pinned to a machine-checked test in
+   CI. Finale CTA: `Request access`.
 
-**Section 2 - Problem (new or reframed chapter, before the checkpoint)**
-- Kicker: `> The Problem`
-- Title: Agents are ready for real work. Your safety layer is not.
-- Body: Handing an AI agent access to production systems, customer data, or money
-  means one of two bad bets today. Wire up your own framework and you are
-  hand-building auth, secrets, approvals, budgets, and logging you can never fully
-  prove. Hand it to a closed platform and your data runs on someone else's cloud,
-  behind governance you cannot see or self-host. Neither one survives a security
-  review with a straight face.
-- Readouts: `DIY: unprovable` / `closed cloud: off-site`
+### 5e. Meta description (as shipped)
 
-**Section 3 - How it works (the checkpoint chapter, the pre-execute takeover)**
-- Kicker: `> The Checkpoint`
-- Title: One gate. Every action.
-- Body: Chat, webhook, or schedule: every agent action passes one audited
-  checkpoint before anything happens. Identity, grants, consequence, human
-  approval when it counts, rate limits, and safe retries, in that fixed order.
-  Credentials resolve inside the gate and never reach the agent. Budgets stop
-  runaway spend. Every action, and every denial, leaves exactly one tamper-evident
-  record. There is no side door.
-- Readouts (keep): `gates: ORDERED` / `default: DENY` / `side doors: NONE`
-
-**Section 4 - The workforce (the network chapter, brain lit up)**
-- Kicker: `> The Workforce`
-- Title: A workforce, not a chatbot.
-- Body: A Chief of Staff routes each request to the right department head. Heads
-  spawn short-lived workers carrying exactly the skills the job needs. Every task
-  runs on the cheapest model that can do it well, and work marked sensitive never
-  leaves your infrastructure. Budgets are reserved before the work starts, not
-  reconciled after the bill lands.
-- Readouts (keep): `org chart: STANDING` / `sensitive data: STAYS LOCAL`
-
-**Section 5 - Differentiators (the operation + fabric chapters)**
-- Kicker: `> Why Boltrig`
-- Title: Governed by construction. Open at every edge.
-- Body: See every piece of agent and human work on one board, open any run and
-  walk every step it took, and draw workflows on a canvas that run through the same
-  gate as everything else. Expose granted capabilities to outside agents as MCP
-  tools with the full checkpoint applied, and plug external tool servers in as new
-  capabilities, inert until you review and activate them. New integrations are
-  data, not code changes.
-- Readouts (keep): `mcp: IN / OUT` / `new tools: OFF BY DEFAULT` /
-  `runs: INSPECTABLE`
-
-**Section 6 - Proof (the finale chapter, brain resolves)**
-- Kicker: `> Provably Governed`
-- Title: Provably governed. Yours to run.
-- Body: One self-hosted deploy: kernel, database, console, on your own
-  infrastructure. Enterprise SSO maps your people to roles, or run first-party
-  invite-only access as the only door. The audit record proves what happened, and
-  every governance guarantee is pinned to a machine-checked test in CI. Not "trust
-  the agent." Check the runtime.
-- Readouts (keep): `deploy: SELF-HOSTED` / `guarantees: CI-PINNED`
-- `[needs real data]`: if/when there are named customers, a deployment count, or a
-  third-party attestation, this is where a single honest proof line or logo strip
-  belongs. Do not add one until it is real.
-
-**Section 7 - Features catalogue (unchanged structure, keep as is)**
-- The existing six-group catalogue (`features.ts`) is accurate, concrete, and
-  well-written. Keep it verbatim. Only swap the closing button.
-- Closing CTA: primary `[ Request access ]`, secondary `Read the architecture`.
-  Reserve `Open the console` for returning users.
-
-### 5e. Meta description rewrite
-
-- Current: "The governed operating system for AI agents: one audited checkpoint
-  for every action, a standing agent workforce, self-hosted on your infrastructure."
-- Proposed: "Run a workforce of AI agents in production and prove every move they
-  make. Boltrig routes every agent action through one audited, permissioned gate,
-  self-hosted on your own infrastructure." (Leads with the outcome and the buyer's
-  fear; keeps the mechanism and the self-hosted proof.)
+"Run a workforce of AI agents in production and prove every move they make. Boltrig
+routes every agent action through one audited, permissioned gate, self-hosted on
+your own infrastructure."
 
 ---
 
-## 6. Honest critique of the current site copy
-
-The current site is genuinely good: the writing is disciplined, concrete, and free
-of hype, the visual is distinctive, and the features catalogue is accurate. The
-issues are about sharpness and sequence, not quality.
-
-1. **The hero leads with poetry, not the buyer's problem.**
-   - Before (arrival): "Autonomy you can put your name to." + "Boltrig is the
-     governed operating system for AI agents. A standing workforce of agents does
-     real work on your behalf, and a control plane checks every move they make."
-   - Issue: beautiful, but a cold visitor does not yet know what problem this
-     solves or that it is for them. "Governed operating system for AI agents" is a
-     category assertion before the visitor feels the pain.
-   - After: keep "Autonomy you can put your name to." as the arrival kicker, and
-     make the H1 do the explaining: "Run AI agents in production. Prove every move
-     they make." Then the standing-workforce sentence.
-
-2. **There is no explicit "why not the alternatives" anywhere.**
-   - Issue: the site says what Boltrig is, never what it is instead of. The buyer
-     is actively comparing it to DIY frameworks and closed platforms and the page
-     never addresses that choice.
-   - After: add the Problem chapter (section 2 above) that names the two bad bets
-     (unprovable DIY, off-site closed cloud). This is the single most important
-     missing block.
-
-3. **The CTA assumes access the cold visitor does not have.**
-   - Before: "Open the console" / "[ Open_The_Console ]" linking to
-     `app.boltrig.io`.
-   - Issue: the product is invite-only with no self-signup. A first-time visitor
-     clicking "Open the console" hits a wall. The page never offers the actual
-     next step.
-   - After: primary CTA "Request access" (or "Book a walkthrough"); secondary
-     "Read the architecture"; reserve "Open the console" for returning users in the
-     nav.
-
-4. **"Provable" is the strongest differentiator and it is buried in the last
-   chapter.**
-   - Issue: "every governance guarantee is pinned to a machine-checked test in CI"
-     is the line closed competitors cannot match and DIY cannot claim. It appears
-     only in the finale.
-   - After: promote "prove every move" into the H1 and the meta description, and
-     let the finale pay it off. Make provability a through-line, not a footnote.
-
-5. **The two audiences appear once, late, and only in the features header.**
-   - Before (features header): "Built for engineering, platform and security
-     leaders who want autonomous agents in production without losing control."
-   - Issue: this is the sharpest audience callout on the whole site and it is 90%
-     of the way down. Move a version of it near the top so the right visitor
-     self-identifies early.
-
-6. **Minor: the readout chips are great, keep them, and add one deploy chip to the
-   hero** (`deploy: SELF-HOSTED`) so the "your infrastructure" proof is visible
-   above the fold, not only in the finale.
-
-### Net: the single biggest change
-
-Add an explicit problem/alternatives beat and lead the hero with the buyer's
-outcome ("Run AI agents in production. Prove every move they make."), instead of
-opening on the abstract category line. The site currently tells a beautiful story
-about what Boltrig is; it does not yet tell the visitor what goes wrong without it,
-why the two obvious alternatives fail them, or what to do next. Fixing those three
-things (problem beat, outcome-led hero, honest CTA) is the highest-leverage rewrite
-and requires no change to the visual or the accurate features catalogue.
-
----
-
-## 7. What is deliberately NOT claimed (honesty ledger)
+## 6. What is deliberately NOT claimed (honesty ledger)
 
 - No customer names, logos, testimonials, user counts, or revenue.
 - No performance, latency, throughput, or cost-savings numbers.
-- No third-party security certification or audit (SOC 2, ISO, pen-test) unless and
-  until one exists.
+- No third-party security certification or audit (SOC 2, ISO, pen-test), because
+  none exists yet.
 - The outer integration legs (live Hatchet run-resume at scale, a live IdP against
   a specific provider, live third-party adapter credentials, an on-box inference
   model) are described as "runs on yours," never as pre-wired for the reader.
-- Every item above is a `[needs real data]` slot: fill only with verifiable fact.
+- When any of the above becomes a verifiable fact, it may be added as a single
+  honest line. Until then, the site stands on "read the code, self-host it, check
+  the runtime," which is the proof this buyer actually values.

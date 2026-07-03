@@ -19,9 +19,9 @@ export interface StorySectionProps {
 
 /**
  * One narrative chapter framing the live brain. Copy sits to one side (or centred,
- * for the finale). Chrome is styled like a console terminal — a `>` command prompt
+ * for the finale). Chrome is styled like a console terminal: a `>` command prompt
  * with a blinking `_` cursor, `SCREAMING_SNAKE` kickers, wide letter-spacing, a
- * `▸ KEY  VALUE` data row, and a `[ BRACKETED ]` CTA — in the scene's blue palette.
+ * `▸ KEY  VALUE` data row, and a `[ BRACKETED ]` CTA, in the scene's blue palette.
  * Title/body reveal in place with the text engine; the column fades up with
  * `<Inview>`. Pointer-transparent except the CTA.
  */
@@ -68,7 +68,7 @@ export const StorySection = ({ data, side }: StorySectionProps) => {
           <TerminalCursor />
         </p>
 
-        {/* Title — clean headline, line-clipped reveal */}
+        {/* Title: clean headline, line-clipped reveal */}
         <TextEngine
           tag="h2"
           mode="always"
@@ -102,7 +102,7 @@ export const StorySection = ({ data, side }: StorySectionProps) => {
           {data.body}
         </TextEngine>
 
-        {/* Readouts — terminal key/value rows */}
+        {/* Readouts: terminal key/value rows */}
         {data.readouts && data.readouts.length > 0 && (
           <dl
             className={`mt-9 flex flex-wrap gap-x-9 gap-y-3 border-t border-brain-sky/15 pt-6 ${
@@ -125,10 +125,10 @@ export const StorySection = ({ data, side }: StorySectionProps) => {
           </dl>
         )}
 
-        {/* CTA — bracketed terminal link to the governed console */}
+        {/* CTA: bracketed terminal link; `href` defaults to the governed console */}
         {data.cta && (
           <a
-            href="https://app.boltrig.io"
+            href={data.cta.href ?? "https://app.boltrig.io"}
             className="pointer-events-auto mt-10 inline-flex items-center gap-2.5 border border-brain-sky/50 bg-brain-sky/10 px-7 py-3.5 text-xs font-semibold uppercase tracking-[0.28em] text-brain-sky backdrop-blur-md transition-colors hover:border-brain-sky hover:bg-brain-sky/20 hover:text-white"
           >
             <span aria-hidden>&#9656;</span>

@@ -74,15 +74,21 @@ export const FeaturesSection = () => {
           ))}
         </div>
 
-        <p className="mt-16 flex justify-center md:mt-20">
+        <div className="mt-16 flex flex-wrap items-center justify-center gap-4 md:mt-20">
           <a
-            href="https://app.boltrig.io"
+            href="mailto:access@boltrig.io?subject=Boltrig%20access%20request"
             className="inline-flex items-center gap-2.5 border border-brain-sky/50 bg-brain-sky/10 px-7 py-3.5 text-xs font-semibold uppercase tracking-[0.28em] text-brain-sky backdrop-blur-md hover:border-brain-sky hover:bg-brain-sky/20 hover:text-white"
           >
             <span aria-hidden>&#9656;</span>
-            <span>[ Open_The_Console ]</span>
+            <span>[ Request_Access ]</span>
           </a>
-        </p>
+          <a
+            href="https://app.boltrig.io"
+            className="inline-flex items-center gap-2.5 border border-brain-sky/25 px-7 py-3.5 text-xs font-semibold uppercase tracking-[0.28em] text-brain-sky/80 backdrop-blur-md hover:border-brain-sky/60 hover:text-white"
+          >
+            <span>Open the console</span>
+          </a>
+        </div>
       </div>
     </section>
   );
