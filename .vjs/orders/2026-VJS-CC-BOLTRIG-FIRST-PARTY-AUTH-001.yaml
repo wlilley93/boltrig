@@ -1,0 +1,83 @@
+id: 2026-VJS-CC-BOLTRIG-FIRST-PARTY-AUTH-001
+court: county
+jurisdiction: default
+repo_code: null
+status: binding
+issue: first_party_invite_only_login
+holding: |
+  Option A is adopted. Boltrig gains a first-party, invite-only password login that
+  replaces the Cloudflare Access edge IdP, reusing the existing users / invitations /
+  sessions / RBAC plumbing. An admin invites an email; the invitee accepts via a
+  single-use, hashed, expiring invite token and sets a password; login verifies
+  email + password and issues a Boltrig-signed session, and a new session resolver
+  replaces the CF Access resolver, selected by bootstrap. The founding OWNER is
+  seeded out-of-band by a `boltrig initiate` bootstrap, because invite-only needs a
+  first inviter. This becomes the sole internet-facing gate, so it is subject to a
+  binding SECURITY FLOOR (directives D4..D9). Option B (magic-link) is deferred: it
+  needs an email dependency the Principal must supply; it may be added later behind
+  that dependency. Option C (passkeys) is a permitted later add-on, not the v1 gate.
+  Option D (keep CF Access) is rejected per the Principal's instruction. The live
+  prod cutover that REMOVES CF Access is an irreversible outward-facing action and
+  is gated on the Principal's explicit go (D10); building and testing the login is
+  not gated.
+directives:
+- id: D1
+  actor: lexby
+  must: add_an_accept_invite_flow_that_consumes_a_single_use_hashed_expiring_invite_token_and_sets_the_users_password_reusing_the_existing_user_invitation_model
+  when: null
+- id: D2
+  actor: lexby
+  must: add_a_login_endpoint_that_verifies_email_and_password_and_issues_a_boltrig_signed_session_stored_via_the_existing_session_store_plus_a_logout_that_revokes_it
+  when: null
+- id: D3
+  actor: lexby
+  must: add_a_session_principal_resolver_that_verifies_the_boltrig_session_and_resolves_the_principal_selected_by_bootstrap_in_place_of_the_cf_access_resolver
+  when: null
+- id: D4
+  actor: lexby
+  must: hash_passwords_with_argon2id_or_bcrypt_never_plaintext_or_reversible_and_store_only_the_hash
+  when: null
+- id: D5
+  actor: lexby
+  must: rate_limit_login_via_the_existing_ratelimiter_use_constant_time_verification_and_return_a_generic_failure_that_does_not_enumerate_users
+  when: null
+- id: D6
+  actor: lexby
+  must: issue_the_session_as_an_httponly_secure_samesite_cookie_bounded_lifetime_rotating_and_revocable_via_the_session_store_with_csrf_protection_for_cookie_auth
+  when: null
+- id: D7
+  actor: lexby
+  must: seed_the_founding_owner_via_a_boltrig_initiate_bootstrap_and_keep_the_whole_flow_invite_only_no_open_self_signup
+  when: null
+- id: D8
+  actor: lexby
+  must: route_every_auth_action_through_the_one_chokepoint_fail_closed_and_audit_login_logout_invite_accept_and_session_revocation_keys_only
+  when: null
+- id: D9
+  actor: lexby
+  must: pin_invariants_invite_only_no_self_signup_password_hashed_not_reversible_login_rate_limited_and_non_enumerating_session_httponly_bounded_revocable_resolver_fail_closed_debt_stays_zero
+  when: null
+- id: D10
+  actor: lexby
+  must: treat_removing_cf_access_in_prod_as_principal_gated_do_not_cut_over_the_live_console_without_the_principals_explicit_go
+  when: at_prod_cutover
+forbidden:
+- storing_a_plaintext_or_reversibly_encrypted_password_or_logging_a_password_or_session_secret
+- an_unbounded_non_revocable_or_non_httponly_session_or_a_login_error_that_enumerates_which_emails_exist
+- any_open_self_signup_a_login_path_that_bypasses_the_ratelimiter_or_the_audit_chain_or_a_resolver_that_fails_open
+- adding_an_email_or_sms_dependency_without_surfacing_it_to_the_principal
+- removing_cloudflare_access_on_the_live_prod_console_without_the_principals_explicit_go
+exceptions: null
+supersedes: []
+source_opinion: null
+runtime_summary: |
+  Boltrig gets a first-party invite-only password login (the Opbox shape) that
+  replaces CF Access: accept-invite sets a password (argon2id), login issues a
+  Boltrig-signed httpOnly+Secure+SameSite session verified by a new bootstrap-
+  selected resolver, the founding owner is seeded by `boltrig initiate`, login is
+  rate-limited + constant-time + non-enumerating, everything is fail-closed,
+  audited, and invite-only (no self-signup). Magic-link and passkeys are deferred
+  add-ons. Removing CF Access on the live console is Principal-gated.
+created_at: 2026-07-03T06:31:20Z
+citation: '[2026] VJS-COUNTY 7'
+assent_source: standing_bounded_assent

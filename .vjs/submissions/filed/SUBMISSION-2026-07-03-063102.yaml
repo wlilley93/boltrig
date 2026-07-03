@@ -1,0 +1,56 @@
+id: SUBMISSION-2026-07-03-063102
+court_requested: county
+jurisdiction: default
+question: 'How should Boltrig build a first-party invite-only login replacing the Cloudflare Access edge IdP: credential model, session mechanism, edge/security posture, and founding-owner seeding?'
+facts: |
+  # Case: a first-party invite-only login, replacing the Cloudflare Access IdP
+
+  ## Facts (verified)
+  1. The prod console (app.boltrig.io) is gated by Cloudflare Access: CF is the edge
+     IdP and the kernel verifies the Cf-Access-Jwt-Assertion. The Principal wants to
+     drop this external dependency for a first-party invite-only login, like Opbox.
+  2. Boltrig already has the account plumbing (SEC-34..39): users, role_mappings,
+     user_invitations, user_sessions (add/list/get/update), personal_access_tokens,
+     the /v1/me/sessions + /v1/admin/users + /v1/admin/invitations routes, and RBAC
+     tiers (superadmin / admin / member).
+  3. What is MISSING is the authentication STEP: every resolver delegates auth to an
+     external IdP. An invitation "creates no password and grants no access until the
+     invitee authenticates through the IdP (SEC-35)." There is no first-party
+     credential, no login endpoint, no Boltrig-issued session verifier, no in-app
+     login page (the app only ever sits behind CF Access).
+  4. Present to build on: a RateLimiter, the audit hash chain, the sealed credential
+     store, the chokepoint, and the SEC-34 PAT pattern (secret hashed, bounded expiry,
+     revocable).
+  5. Dropping CF Access makes Boltrig's own login the SOLE internet-facing gate, so it
+     must be hardened to carry that weight.
+
+  ## The question
+  What credential model, session mechanism, edge/security posture, and founding-owner
+  seeding should a first-party invite-only login use to replace CF Access?
+
+  ## Options
+  A. First-party password login (the Opbox shape). Admin invites an email; the
+     invitee accepts via a single-use expiring token and sets a password; login
+     verifies email+password and issues a Boltrig-signed session (httpOnly+Secure+
+     SameSite cookie, bounded, rotating, revocable via the session store); a new
+     session resolver replaces CF Access; the founding OWNER is seeded out-of-band
+     (a `boltrig initiate` bootstrap). Floor: argon2/bcrypt, rate-limited +
+     constant-time login, no user enumeration, CSRF on the cookie, session
+     expiry/rotation/revocation, invite tokens single-use+hashed+expiring,
+     fail-closed. Reuses the existing invitation/session/RBAC plumbing.
+  B. Magic-link / email-OTP (passwordless). No stored passwords, but REQUIRES an
+     email-sending dependency the Principal must supply, and email becomes login's
+     availability.
+  C. Passkeys / WebAuthn. Phishing-resistant but heavier, device-bound recovery;
+     better as a later add-on than the v1 gate.
+  D. Keep CF Access. Rejected by the Principal's instruction.
+
+  ## Constraints
+  Invite-only, fail-closed, audited, through the one chokepoint, reusing the existing
+  users/invitations/sessions/RBAC, meeting a stated security floor before it becomes
+  the sole internet-facing gate. Any new dependency is surfaced. The live prod cutover
+  (removing CF Access) is an irreversible outward-facing action gated on the
+  Principal's explicit go.
+requested_order: TBD
+private_boundary: local
+word_count: 411

@@ -1,0 +1,53 @@
+id: SUBMISSION-2026-07-03-065556
+court_requested: county
+jurisdiction: default
+question: 'How should Boltrig adopt an org to workspace tenancy: what maps to tenant_id, and how are membership, switching, scoping, AI keys, workflow location, and the founding superadmin seed modelled safely?'
+facts: |
+  # Case: an org -> workspace tenancy model (the Opbox shape) for Boltrig
+
+  ## Facts (verified)
+  1. Boltrig has SINGLE-level tenancy: tenant_id on every table, RLS + a WHERE
+     tenant_id filter. A user carries one tenant; no org/workspace hierarchy, no
+     cross-tenant membership, no switching.
+  2. The Principal wants the Opbox model (read from its schema.prisma): Organization
+     (slug, settings, allowOwnAiKeys, requireTwoFactor, its own AI config) -> Workspace
+     (orgId, its own AI + agent config), users as many-to-many members via
+     OrganizationMember and WorkspaceMember (roles OWNER/ADMIN/MEMBER/VIEWER/AGENT),
+     InviteToken (org- or workspace-scoped, can provision a new org/workspace), and AI
+     keys at org/workspace/user levels. Opbox's User is a 200-relation legal platform;
+     only the auth/tenancy CORE is the template.
+  3. This composes with the in-flight login ([2026] VJS-COUNTY 7): login authenticates;
+     org/workspace is the authorization context selected after login and switchable.
+  4. The Principal wants will.lilley93@gmail.com seeded superadmin with password
+     'admin' - trivially guessable for the sole gate on an internet-facing console.
+
+  ## The question
+  How should Boltrig adopt an org -> workspace tenancy: what maps to tenant_id, and how
+  are membership, switching, scoping, AI keys, workflow location, and the founding
+  superadmin seed modelled safely?
+
+  ## Options
+  A. tenant_id BECOMES the Organisation boundary (RLS unchanged, org = tenant). Add a
+     Workspace entity (belongs to an org) and a workspace_id sub-scope on workspace-owned
+     resources (workflows, conversations). Decouple users into org_members +
+     workspace_members with a global user role plus a per-workspace role. The session
+     carries the ACTIVE org+workspace; switching changes it and is re-authorized every
+     request. AI keys at org/workspace/user levels via config rows gated by an org
+     allow_own_ai_keys, stored through the sealed credential store. Invites are org- or
+     workspace-scoped, may provision a new org/workspace, reusing COUNTY 7 accept-invite.
+     Founding superadmin seeded by `boltrig initiate` into a default org+workspace.
+     Strongest case: reuses the RLS fence (org=tenant) so isolation is unchanged, adds
+     workspace as a clean sub-scope, faithful to Opbox. Cost: a real migration plus every
+     "current tenant" read resolving via membership.
+  B. Workspace = the existing tenant, no org level. Rejected: the Principal wants both.
+  C. Copy Opbox's full schema. Rejected: it is a legal platform; copy the core only.
+
+  ## Constraints
+  Fail-closed isolation (no cross-org/workspace read), every scoped read via membership
+  through the one chokepoint, switching re-authorized not trusted, AI keys via the sealed
+  credential store, invite-only stands, and the superadmin seed must not leave a weak
+  password as the live prod gate (force rotation before prod). The prod cutover stays
+  Principal-gated.
+requested_order: TBD
+private_boundary: local
+word_count: 434

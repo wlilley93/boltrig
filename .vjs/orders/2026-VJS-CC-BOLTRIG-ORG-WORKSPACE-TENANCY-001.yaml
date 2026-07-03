@@ -1,0 +1,92 @@
+id: 2026-VJS-CC-BOLTRIG-ORG-WORKSPACE-TENANCY-001
+court: county
+jurisdiction: default
+repo_code: null
+status: binding
+issue: org_workspace_tenancy
+holding: |
+  Option A is adopted. Boltrig gains an Organisation -> Workspace tenancy in the
+  Opbox shape, mapped onto the existing fence: tenant_id BECOMES the Organisation
+  boundary, so RLS and the WHERE tenant_id filter are unchanged and org-level
+  isolation is inherited, not rebuilt. A Workspace is a new entity belonging to an
+  org, and a workspace_id sub-scope is added to workspace-owned resources. Users
+  decouple from a single tenant into org_members and workspace_members (a global
+  user role plus a per-workspace role: owner/admin/member/viewer/agent). The session
+  carries the ACTIVE org + workspace; a switch is re-authorized against membership on
+  every request, never trusted from the client. AI keys live at org / workspace /
+  user levels as config rows gated by an org allow_own_ai_keys, stored only through
+  the sealed credential store. Invites (COUNTY 7 accept-invite) are org- or
+  workspace-scoped and may provision a new org/workspace; the flow stays invite-only.
+  The founding superadmin is seeded by `boltrig initiate` into a default org +
+  workspace. Only the auth/tenancy CORE of Opbox is copied, never its domain models.
+  Option B (workspace = tenant, no org) and Option C (copy the full Opbox schema) are
+  rejected. This composes with COUNTY 7 (login authenticates; org/workspace is the
+  authorization context) and is delivered in phases; the live prod cutover stays
+  Principal-gated (COUNTY 7 D10).
+directives:
+- id: D1
+  actor: lexby
+  must: model_the_organisation_as_the_tenant_id_boundary_an_organisations_row_keyed_by_tenant_id_rls_and_the_where_tenant_id_filter_unchanged
+  when: null
+- id: D2
+  actor: lexby
+  must: add_a_workspace_entity_belonging_to_an_org_and_a_workspace_id_sub_scope_on_workspace_owned_resources_workflows_conversations_and_kin_fail_closed
+  when: null
+- id: D3
+  actor: lexby
+  must: decouple_users_into_org_members_and_workspace_members_many_to_many_with_a_global_user_role_plus_a_per_workspace_role_owner_admin_member_viewer_agent
+  when: null
+- id: D4
+  actor: lexby
+  must: carry_the_active_org_and_workspace_in_the_session_and_re_authorize_a_switch_against_membership_every_request_never_trusting_a_client_supplied_context
+  when: null
+- id: D5
+  actor: lexby
+  must: store_ai_keys_at_org_workspace_user_levels_as_config_rows_gated_by_an_org_allow_own_ai_keys_only_through_the_sealed_credential_store_never_plaintext
+  when: null
+- id: D6
+  actor: lexby
+  must: make_invites_org_or_workspace_scoped_able_to_provision_a_new_org_or_workspace_reusing_the_county_7_accept_invite_keeping_the_flow_invite_only
+  when: null
+- id: D7
+  actor: lexby
+  must: seed_the_founding_superadmin_via_boltrig_initiate_into_a_default_org_plus_workspace_and_force_a_password_rotation_before_prod_exposure_so_a_weak_seed_admin_is_never_the_live_prod_gate
+  when: null
+- id: D8
+  actor: lexby
+  must: pin_invariants_no_cross_org_or_workspace_read_switching_re_authorized_via_membership_ai_keys_sealed_scoped_reads_resolve_through_membership_seed_forces_rotation_debt_stays_zero
+  when: null
+- id: D9
+  actor: lexby
+  must: copy_only_the_opbox_auth_tenancy_core_never_its_domain_models_and_deliver_in_phases_reconciling_with_county_7
+  when: null
+- id: D10
+  actor: lexby
+  must: keep_the_live_prod_cutover_principal_gated_do_not_expose_the_new_model_on_the_live_console_without_the_principals_explicit_go
+  when: at_prod_cutover
+- id: D11
+  actor: lexby
+  must: thread_the_active_org_and_workspace_through_the_invocationcontext_and_resolve_grants_credentials_ai_key_and_model_gateway_routing_and_workflow_scope_at_the_one_chokepoint_from_membership_and_roles_never_from_client_input_this_is_the_kernel_leg_of_the_change
+  when: null
+forbidden:
+- a_cross_org_or_cross_workspace_read_or_a_scoped_read_that_bypasses_membership
+- trusting_a_client_supplied_active_org_or_workspace_without_re_authorizing_against_membership
+- storing_an_ai_key_in_plaintext_or_outside_the_sealed_credential_store
+- leaving_a_weak_seed_password_as_the_live_prod_gate_without_a_forced_rotation
+- copying_opbox_non_auth_domain_models_or_rebuilding_the_rls_tenant_fence_instead_of_reusing_it
+- exposing_the_new_tenancy_on_the_live_prod_console_without_the_principals_explicit_go
+exceptions: null
+supersedes: []
+source_opinion: null
+runtime_summary: |
+  Boltrig adopts an Organisation -> Workspace tenancy in the Opbox shape: tenant_id
+  becomes the org boundary (RLS unchanged), a workspace is a sub-scope, users join
+  orgs + workspaces as members with roles, the session carries an active org+workspace
+  re-authorized on every switch, AI keys sit at org/workspace/user levels through the
+  sealed store gated by allow_own_ai_keys, invites are org/workspace-scoped and
+  invite-only, and `boltrig initiate` seeds the founding superadmin with a forced
+  password rotation before prod. Only the auth/tenancy core of Opbox is copied,
+  delivered in phases, composing with COUNTY 7; the prod cutover is Principal-gated.
+created_at: 2026-07-03T06:56:10Z
+citation: '[2026] VJS-COUNTY 8'
+assent_source: standing_bounded_assent
