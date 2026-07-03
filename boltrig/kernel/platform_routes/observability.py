@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
-from ._shared import can_author_route, dept_run_ids, scope_depts  # noqa: F401
+from ._shared import audit_authoring, can_author_route, dept_run_ids, scope_depts  # noqa: F401
 
 
 def register(app, P, K) -> None:
@@ -211,6 +211,10 @@ def register(app, P, K) -> None:
         if not can_author_route(p):
             return JSONResponse({"error": "forbidden"}, status_code=403)
         events = await k.store.audit_query(p.tenant_id, limit=100_000)
+        # Exporting the audit log is itself a compliance-relevant access to sensitive
+        # records; audit the export (who exported, how many rows) so the chain records
+        # its own disclosure. Keys-only, never the exported content.
+        await audit_authoring(k, p, "audit.export", {"count": len(events)})
         return JSONResponse({"format": "boltrig-audit-v1", "count": len(events),
                              "events": [{"seq": e.seq, "ts": e.ts.isoformat(), "actor": e.actor,
                                          "verb": e.verb, "status": e.status, "run_id": e.run_id,

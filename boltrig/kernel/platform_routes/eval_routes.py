@@ -6,7 +6,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 import uuid
 from boltrig.models import EvalCase
-from ._shared import platform_state, require_author
+from ._shared import audit_authoring, platform_state, require_author
 
 
 def register(app, P, K) -> None:
@@ -18,6 +18,10 @@ def register(app, P, K) -> None:
                         input=body.get("input", {}), assertions=body.get("assertions", {}),
                         labels=body.get("labels", []))
         await k.store.upsert_eval_case(case)
+        # Audit the authoring mutation like every sibling authoring route (eval cases
+        # gate workflow promotion, so creating/editing one is governance-relevant).
+        await audit_authoring(k, p, "eval.case.upsert",
+                              {"id": case.id, "target": case.target_ref})
         return JSONResponse({"status": "ok", "id": case.id})
 
     @app.post("/v1/eval/run")
@@ -29,6 +33,11 @@ def register(app, P, K) -> None:
         if case is None:
             return JSONResponse({"error": "no_such_case"}, status_code=404)
         run = await runner.run_case(case, grants=p.grants, actor=p.subject)  # under caller grants
+        # The eval's sub-verbs are audited at the chokepoint; also record the run
+        # initiation itself (who ran which case, and the verdict) as one authoring row.
+        await audit_authoring(k, p, "eval.run",
+                              {"case_id": body["case_id"], "run_id": run.run_id,
+                               "passed": run.passed})
         return JSONResponse({"id": run.id, "passed": run.passed, "score": run.score,
                              "run_id": run.run_id, "detail": run.detail})
 
