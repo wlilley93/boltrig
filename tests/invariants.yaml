@@ -996,3 +996,11 @@ invariants:
     tests:
       - tests/kernel/test_audit_opbox_depth.py::test_new_fields_are_additive_old_rows_unchanged
       - tests/store/test_store_parity.py::test_audit_enrichment_and_security_stream_roundtrip_on_both_stores
+  SEC-125:
+    description: The periodic audit-anchor janitor seals each tenant's latest un-anchored audit-chain segment on its sweep and is a no-op when a tenant has no new rows (D4) - a sweep enumerates tenants via list_orgs, anchors each tenant's whole-chain tail (workspace_id NULL, complete coverage) so an anchor the JOB writes agrees with a recompute over the segment (verify_latest, reusing SEC-122), the next sweep advances only over the un-anchored tail and writes nothing when there is nothing new, a tenant whose anchor fails is logged and skipped so one fault never stops the sweep (P9), the mechanism degrades cleanly when Hatchet is absent (the non-durable local executor is selected and the sweep still writes a dev-fallback anchor, no boot crash), the run_anchor_forever loop cancels cleanly, and the interval knob (BOLTRIG_AUDIT_ANCHOR_INTERVAL) defaults to daily / falls back to daily on a malformed value / is honoured as disabled at <= 0.
+    tests:
+      - tests/fleet/test_audit_anchor_job.py::test_sweep_seals_each_tenant_and_is_a_noop_without_new_rows
+      - tests/fleet/test_audit_anchor_job.py::test_anchor_degrades_cleanly_when_hatchet_absent
+      - tests/fleet/test_audit_anchor_job.py::test_sweep_continues_past_a_failing_tenant
+      - tests/fleet/test_audit_anchor_job.py::test_forever_loop_seals_then_cancels_cleanly
+      - tests/fleet/test_audit_anchor_job.py::test_anchor_interval_knob

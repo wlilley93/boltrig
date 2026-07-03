@@ -12,6 +12,11 @@ stays unaware of the fleet and receives the reasoning-verb invoker via
 
 from __future__ import annotations
 
+from .anchor import (
+    anchor_interval_from_env,
+    run_anchor_forever,
+    run_anchor_sweep,
+)
 from .chief_of_staff import ChiefOfStaff, Department
 from .department_head import DepartmentHead
 from .pump import WorkPump, build_org
@@ -58,4 +63,8 @@ __all__ = [
     "register_workers",
     "LocalDurableExecutor",
     "HatchetExecutor",
+    # periodic audit-rollup anchoring (COUNTY 9 D4)
+    "run_anchor_sweep",
+    "run_anchor_forever",
+    "anchor_interval_from_env",
 ]

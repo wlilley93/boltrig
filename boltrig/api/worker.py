@@ -13,7 +13,13 @@ import asyncio
 import logging
 
 from boltrig.config import load_manifest
-from boltrig.fleet import build_org, build_spawner, register_workers
+from boltrig.fleet import (
+    anchor_interval_from_env,
+    build_org,
+    build_spawner,
+    register_workers,
+    run_anchor_forever,
+)
 
 from .bootstrap import _DEFAULT_TENANT, _find_manifest, build_kernel_async
 
@@ -46,7 +52,27 @@ async def _run() -> None:
         "delegation pump live (tenant=%s, departments=%s)",
         tenant, sorted(pump.heads),
     )
-    await pump.run_forever(tenant, interval=_POLL_SECONDS)
+    # The periodic audit-rollup anchor janitor (COUNTY 9 D4): on an interval it
+    # seals every tenant's un-anchored audit-chain tail so a verifier can prove a
+    # segment was not rewritten. A worker-side loop (the codebase has no native
+    # Hatchet cron seam), independent of the durable engine so it runs the same on
+    # Hatchet or the local fallback - it never crashes boot (P9). Off when the
+    # interval knob (BOLTRIG_AUDIT_ANCHOR_INTERVAL) is <= 0; conservative daily
+    # default. Held in a name so the task is not garbage-collected mid-flight.
+    anchor_interval = anchor_interval_from_env()
+    anchor_task: asyncio.Task | None = None
+    if anchor_interval > 0:
+        anchor_task = asyncio.create_task(
+            run_anchor_forever(kernel.store, kernel.anchorer, interval=anchor_interval)
+        )
+        log.info("audit-anchor janitor live (interval=%ss)", anchor_interval)
+    else:
+        log.info("audit-anchor janitor disabled (interval<=0)")
+    try:
+        await pump.run_forever(tenant, interval=_POLL_SECONDS)
+    finally:
+        if anchor_task is not None:
+            anchor_task.cancel()
 
 
 def main() -> None:
