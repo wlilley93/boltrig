@@ -744,6 +744,52 @@ CREATE INDEX IF NOT EXISTS sessions_user_idx ON user_sessions (tenant_id, user_i
 CREATE UNIQUE INDEX IF NOT EXISTS sessions_token_hash_idx
     ON user_sessions (token_hash) WHERE token_hash IS NOT NULL;
 
+-- TOTP two-factor ([2026] VJS-COUNTY 10). Kept in their OWN tables, apart from the
+-- users identity row (like user_credentials), so no 2FA secret rides in a user
+-- view/export. Tenant-isolated + RLS-scoped (see rls.sql).
+--
+-- D1: the TOTP enrolment row. The base32 shared secret is NOT stored here: it is
+-- SEALED in credential_refs and referenced by secret_ref (the same sealed seam the
+-- channel signing secret + per-org AI keys use). Only the ref + the enrolled flag
+-- live here. enrolled is false for a begun-but-unconfirmed enrolment, true only
+-- after a verify-enroll code confirms the authenticator (D3).
+CREATE TABLE IF NOT EXISTS user_totp (
+    tenant_id   TEXT NOT NULL,
+    user_id     TEXT NOT NULL,
+    secret_ref  TEXT NOT NULL,          -- id into credential_refs (the SEALED secret); NEVER the secret
+    enrolled    BOOLEAN NOT NULL DEFAULT false,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, user_id)
+);
+
+-- D2: one-time recovery codes, stored ONLY as sha256 hashes (never plaintext). Each
+-- is single-use (used_at flips once, atomically) and is a FALLBACK for a lost
+-- authenticator, never a bypass of the factor.
+CREATE TABLE IF NOT EXISTS user_recovery_codes (
+    tenant_id   TEXT NOT NULL,
+    user_id     TEXT NOT NULL,
+    code_hash   TEXT NOT NULL,          -- sha256 of a recovery code; NEVER the code
+    used_at     TIMESTAMPTZ,            -- single-use: set once when redeemed
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, user_id, code_hash)
+);
+
+-- D3: the pending pre-session login challenge. Minted after the password verifies
+-- when 2FA is due; carries NO access on its own (no session issued) - only a follow-
+-- up TOTP/recovery-code verify against it issues the session. Only the sha256 of the
+-- token is stored; it is short-lived (expires_at) and single-use (deleted on use).
+CREATE TABLE IF NOT EXISTS two_factor_challenges (
+    tenant_id   TEXT NOT NULL,
+    token_hash  TEXT NOT NULL,          -- sha256 of the challenge token; NEVER the token
+    user_id     TEXT NOT NULL,
+    expires_at  TIMESTAMPTZ NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, token_hash)
+);
+CREATE INDEX IF NOT EXISTS tfa_challenges_user_idx
+    ON two_factor_challenges (tenant_id, user_id);
+
 -- ===========================================================================
 -- Org -> workspace tenancy ([2026] VJS-COUNTY 8). The ORGANISATION is the tenant
 -- boundary (D1): an organisation row's id IS the tenant_id (one org per tenant_id),

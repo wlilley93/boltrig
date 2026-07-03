@@ -42,6 +42,17 @@ SESSION_TTL_HOURS = 12
 SESSION_ABSOLUTE_MAX_HOURS = 24 * 7
 _MUTATING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
+# Two-factor enrollment-only clamp ([2026] VJS-COUNTY 10, D4). When the org requires
+# 2FA and the caller has NOT activated a factor, the resolver clamps their session to
+# the enrollment surface ONLY: every authenticated route is refused EXCEPT these. This
+# also covers the edge case where an admin flips require_two_factor ON while the user
+# already holds a full session - they are clamped on their very next request.
+_ENROLLMENT_ONLY_ALLOWED = frozenset({
+    "/v1/auth/2fa/enroll",
+    "/v1/auth/2fa/verify-enroll",
+    "/v1/auth/logout",
+})
+
 
 def _prefix() -> str:
     return "boltrig_sess_"
@@ -208,6 +219,23 @@ def build_session_resolver(tenant_id: str) -> PrincipalResolver:
                 presented, session.csrf_token
             ):
                 raise HTTPException(status_code=403, detail="csrf token missing or invalid")
+
+        # Two-factor enrollment-only clamp ([2026] VJS-COUNTY 10, D4). If the org
+        # requires 2FA and this user has NOT activated a factor, the ONLY surfaces they
+        # may reach are enrollment (+ logout); every other authenticated route is
+        # refused with a distinct 403 the UI routes to the enrollment screen. This is
+        # fail-closed and covers a mid-session policy flip, not just fresh logins. The
+        # totp read is skipped entirely unless the org requires 2FA (backward-compat:
+        # no org / no requirement -> unchanged today's behaviour).
+        org = await store.get_org(session.tenant_id)
+        if org is not None and org.require_two_factor:
+            totp = await store.get_user_totp(session.tenant_id, user.id)
+            if not (totp and totp.enrolled) and (
+                request.url.path not in _ENROLLMENT_ONLY_ALLOWED
+            ):
+                raise HTTPException(
+                    status_code=403, detail="two_factor_enrollment_required"
+                )
 
         # Active workspace ([2026] VJS-COUNTY 8, D4): RE-AUTHORIZE the session's
         # persisted active workspace against CURRENT membership every request. A

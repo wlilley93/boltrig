@@ -5547,6 +5547,37 @@ body {
   font-size: 12px;
   text-align: center;
 }
+/* Two-factor setup ([2026] VJS-COUNTY 10): the once-only secret + recovery codes. */
+.auth-2fa__setup {
+  margin: 4px 0 8px;
+}
+.auth-2fa__secret {
+  display: block;
+  margin: 8px 0 4px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--color-surface-2, rgba(127, 127, 127, 0.12));
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 15px;
+  letter-spacing: 2px;
+  word-break: break-all;
+  user-select: all;
+}
+.auth-2fa__recovery {
+  margin-top: 12px;
+}
+.auth-2fa__codes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 12px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.auth-2fa__codes li code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+}
 .auth-splash {
   display: flex;
   align-items: center;

@@ -1004,3 +1004,26 @@ invariants:
       - tests/fleet/test_audit_anchor_job.py::test_sweep_continues_past_a_failing_tenant
       - tests/fleet/test_audit_anchor_job.py::test_forever_loop_seals_then_cancels_cleanly
       - tests/fleet/test_audit_anchor_job.py::test_anchor_interval_knob
+
+
+  # --- TOTP two-factor authentication ([2026] VJS-COUNTY 10) -----------------
+  SEC-126:
+    description: The TOTP shared secret is SEALED via the credential store and never exposed - it is stored only in the RLS-fenced credential_refs seam referenced by secret_ref on the user_totp row (never a plaintext column on the identity row), never enters the audit chain, and is returned to the client exactly once at enroll-begin (re-enrolling an already-enabled user is refused, so it is never re-revealed).
+    tests:
+      - tests/security/test_two_factor.py::test_totp_secret_is_sealed_never_plaintext_or_audited
+  SEC-127:
+    description: One-time recovery codes are stored ONLY as sha256 hashes and are single-use fallbacks, never a bypass - the plaintext codes are shown once at enrollment and never persisted (only their hashes are), a recovery code passes the login challenge exactly once then the same code is rejected (the active count decrements), it never bypasses the challenge (a fresh login still returns 2fa_required first), and no recovery code enters the audit chain.
+    tests:
+      - tests/security/test_two_factor.py::test_recovery_codes_are_hashed_and_single_use
+  SEC-128:
+    description: The second factor is challenged BETWEEN password-verify and session-issue, fail-closed - an enrolled user's correct-password login returns a 2fa_required challenge and NO session (the session cookie is not set and an authenticated route is 401), a wrong code issues no session, the correct TOTP code issues the session, the challenge is single-use (cannot be replayed for a second session), and an unknown/expired challenge is a generic fail-closed rejection.
+    tests:
+      - tests/security/test_two_factor.py::test_challenge_is_fail_closed_between_password_and_session
+  SEC-129:
+    description: An org that requires two-factor FORCES enrollment before console access - a required-but-unenrolled user's login returns 2fa_enrollment_required and the session it carries is clamped by the resolver to the enrollment surface ONLY (every non-enroll authenticated route is refused 403 two_factor_enrollment_required while the enroll routes are open), completing enrollment lifts the clamp on the same session, and a mid-session policy flip clamps an already-logged-in unenrolled user on their next request.
+    tests:
+      - tests/security/test_two_factor.py::test_org_required_two_factor_forces_enrollment_only
+  SEC-130:
+    description: The challenge is rate-limited, constant-time / non-enumerating, and audited - an unknown challenge and a valid challenge with a wrong code return the byte-identical generic failure and status, a failed challenge is audited keys-only and raises a two_factor_challenge_failed SecurityEvent signal (enroll begin/activate are audited too), and the per-identity bound (5/min) trips the 6th wrong attempt with 429 while a miss does not consume the challenge.
+    tests:
+      - tests/security/test_two_factor.py::test_challenge_is_rate_limited_constant_time_and_audited

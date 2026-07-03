@@ -63,9 +63,32 @@ Instead of first-party sessions a deployment can front the box with Cloudflare A
 
 Every action is hash-chained per tenant and verifiable; security signals are on a separate chained stream; a rollup anchor covers segments. See `04-audit-and-compliance.md`. External anchoring (RFC3161 TSA + KMS signature) is a Principal-gated seam - not live until credentials are wired.
 
-## Two-factor authentication - NOT YET WIRED
+## Two-factor authentication - TOTP ([2026] VJS-COUNTY 10)
 
-`require_two_factor` exists as an org-wide policy flag: it is stored, returned by `GET /v1/orgs/current`, and togglable via `PATCH /v1/orgs/current`. **There is currently no TOTP/MFA enrolment or verification enforcement wired to it in the first-party login path** - setting the flag does not yet challenge for a second factor. Multi-factor today is available only by fronting the box with an edge IdP (Cloudflare Access / OIDC) that performs MFA at login. Treat the flag as a forward-looking policy record, not an enforced control, until the enforcement path lands.
+Boltrig enforces TOTP (authenticator-app) second-factor auth on the first-party
+login, with hashed single-use recovery codes as the fallback. No external
+dependency (TOTP verifies offline).
+
+- **Enroll**: `POST /v1/auth/2fa/enroll` mints a secret (returned once for the
+  authenticator, alongside the recovery codes) and `POST /v1/auth/2fa/verify-enroll`
+  confirms a code to activate. The secret is stored SEALED in the credential store
+  (never a plaintext column, never returned again, never audited); recovery codes
+  are stored only as hashes (130-bit each, single-use).
+- **Challenge**: after the password verifies, if the user has 2FA enabled the login
+  returns `2fa_required` with a short-lived single-use challenge token and issues NO
+  session; `POST /v1/auth/2fa/challenge` verifies the TOTP (or a recovery code) and
+  only then issues the session. Fail-closed, rate-limited, constant-time,
+  non-enumerating, audited keys-only.
+- **Org enforcement**: when `require_two_factor` is set, a user who has not enrolled
+  is clamped to the enrollment surface only (the resolver refuses every other route
+  with `403 two_factor_enrollment_required`, including a mid-session flip of the
+  flag), so the org policy is an enforced control, not just a record.
+- **Recovery + disable**: recovery codes are a single-use fallback, never a bypass;
+  `POST /v1/auth/2fa/disable` requires a fresh factor.
+
+WebAuthn/passkeys are a permitted later add-on; email/SMS OTP was rejected (an
+external dependency). Edge-IdP MFA (Cloudflare Access / OIDC) also remains an option
+when fronting the box.
 
 ## Deployment hardening knobs (set for production)
 

@@ -111,3 +111,42 @@ class UserSession:
     # None if the user is no longer a member (fail-closed), so a stale row can never
     # grant workspace access.
     active_workspace_id: WorkspaceId | None = None
+
+
+# --- TOTP two-factor ([2026] VJS-COUNTY 10) ----------------------------------
+@dataclass
+class UserTotp:
+    """A user's TOTP second-factor enrolment state, kept in its OWN table apart
+    from the identity row (like the password credential).
+
+    ``secret_ref`` is the id of a SEALED credential in ``credential_refs`` holding
+    the base32 TOTP shared secret (D1) - NEVER a plaintext secret column here.
+    ``enrolled`` is False for a begun-but-unconfirmed enrolment (the secret exists
+    but no session-issuing factor challenge accepts it yet) and True only after a
+    verify-enroll code confirms the authenticator (D3). One row per (tenant, user).
+    """
+
+    tenant_id: TenantId
+    user_id: UserId
+    secret_ref: str  # id into credential_refs (the SEALED base32 secret); never the secret
+    enrolled: bool = False
+    created_at: datetime = field(default_factory=utcnow)
+    updated_at: datetime = field(default_factory=utcnow)
+
+
+@dataclass
+class TwoFactorChallenge:
+    """A pending login second-factor challenge ([2026] VJS-COUNTY 10, D3).
+
+    Minted after the password verifies when 2FA is due; it carries NO access on its
+    own (no session is issued) - it only lets a follow-up TOTP/recovery-code verify
+    issue the session. Only the sha256 of the challenge token is persisted
+    (``token_hash``, mirroring the session/PAT pattern); the token itself lives only
+    in the login response. Short-lived (``expires_at``) and single-use (consumed on
+    a successful factor)."""
+
+    tenant_id: TenantId
+    token_hash: str  # sha256 of the challenge token; never the token
+    user_id: UserId
+    expires_at: datetime
+    created_at: datetime = field(default_factory=utcnow)

@@ -1261,11 +1261,50 @@ export interface LoginRequest {
 
 // The login body is {status:"ok", csrf_token, user} on success, or a GENERIC
 // {status:"error", reason} on 401 (never enumerates emails) / 429 (throttled).
+// When two-factor is due ([2026] VJS-COUNTY 10) the status is instead
+// "2fa_required" (a challenge_token is returned and NO session is issued) or
+// "2fa_enrollment_required" (an org requires 2FA and the enrollment-only session
+// cookie is set - only the enroll surface is reachable).
 export interface LoginResponse {
   status: string;
   csrf_token?: string;
   user?: AuthUser;
   reason?: string;
+  challenge_token?: string;
+}
+
+// The follow-up second-factor verification that issues the session withheld by
+// login ([2026] VJS-COUNTY 10, D3). The code is a 6-digit TOTP or a recovery code.
+export interface TwoFactorChallengeRequest {
+  challenge_token: string;
+  code: string;
+}
+export interface TwoFactorChallengeResponse {
+  status: string;
+  csrf_token?: string;
+  user?: AuthUser;
+  reason?: string;
+}
+
+// Enroll-begin returns the otpauth URI + secret (for the QR) and the one-time
+// recovery codes EXACTLY ONCE; verify-enroll confirms a code to activate.
+export interface TwoFactorEnrollBeginResponse {
+  status: string;
+  otpauth_uri?: string;
+  secret?: string;
+  recovery_codes?: string[];
+  reason?: string;
+}
+export interface TwoFactorVerifyEnrollRequest {
+  code: string;
+}
+export interface TwoFactorVerifyEnrollResponse {
+  status: string;
+  recovery_codes_remaining?: number;
+  reason?: string;
+}
+export interface TwoFactorDisableRequest {
+  code: string;
 }
 
 export interface AcceptInviteRequest {

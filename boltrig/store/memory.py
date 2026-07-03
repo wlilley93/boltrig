@@ -48,10 +48,12 @@ from boltrig.models import (
     SecurityEvent,
     Skill,
     TenantPermissions,
+    TwoFactorChallenge,
     User,
     UserInvitation,
     UserSession,
     UserSetting,
+    UserTotp,
     Verb,
     VerbBinding,
     WORKSPACE_ROLES,
@@ -119,6 +121,13 @@ class InMemoryStore(ChannelStoreMem):
         # First-party password credentials ([2026] VJS-COUNTY 7, D4): kept apart
         # from the user identity row so the hash never rides in a User view/export.
         self._password_creds: dict[tuple[str, str], str] = {}
+        # TOTP two-factor ([2026] VJS-COUNTY 10): the enrolment row (secret_ref +
+        # enrolled), the one-time recovery-code hashes (hash -> used flag, per user),
+        # and the pending pre-session login challenges (by token hash). The base32
+        # secret itself lives SEALED in self._creds (credential_refs), never here.
+        self._totp: dict[tuple[str, str], UserTotp] = {}
+        self._recovery: dict[tuple[str, str], dict[str, bool]] = {}
+        self._tfa_challenges: dict[tuple[str, str], TwoFactorChallenge] = {}
         # Channels (decision 0003): channels keyed by id (cross-tenant lookup on
         # the inbound path), bindings + pairings keyed per-tenant.
         self._channels: dict[str, Channel] = {}
@@ -797,6 +806,49 @@ class InMemoryStore(ChannelStoreMem):
 
     async def get_password_credential(self, tenant_id, user_id):
         return self._password_creds.get((tenant_id, user_id))
+
+    # --- TOTP two-factor ([2026] VJS-COUNTY 10) ---
+    async def set_user_totp(self, totp: UserTotp) -> None:
+        self._totp[(totp.tenant_id, totp.user_id)] = totp
+
+    async def get_user_totp(self, tenant_id, user_id):
+        return self._totp.get((tenant_id, user_id))
+
+    async def delete_user_totp(self, tenant_id, user_id) -> None:
+        self._totp.pop((tenant_id, user_id), None)
+
+    async def set_recovery_codes(self, tenant_id, user_id, code_hashes) -> None:
+        # Replace the whole set; each hash starts unused (False).
+        self._recovery[(tenant_id, user_id)] = {h: False for h in code_hashes}
+
+    async def consume_recovery_code(self, tenant_id, user_id, code_hash) -> bool:
+        # Atomic single-use (mirrors consume_invitation): only an unused matching
+        # hash flips to used (True) and returns True. A missing or already-used hash
+        # returns False (fail-closed). The read-modify-write does not await, so it is
+        # atomic on the single-threaded event loop.
+        codes = self._recovery.get((tenant_id, user_id))
+        if not codes or codes.get(code_hash) is not False:
+            return False
+        codes[code_hash] = True
+        return True
+
+    async def count_active_recovery_codes(self, tenant_id, user_id) -> int:
+        codes = self._recovery.get((tenant_id, user_id)) or {}
+        return sum(1 for used in codes.values() if not used)
+
+    async def clear_recovery_codes(self, tenant_id, user_id) -> None:
+        self._recovery.pop((tenant_id, user_id), None)
+
+    async def add_two_factor_challenge(self, challenge: TwoFactorChallenge) -> None:
+        self._tfa_challenges[(challenge.tenant_id, challenge.token_hash)] = challenge
+
+    async def get_two_factor_challenge(self, tenant_id, token_hash):
+        return self._tfa_challenges.get((tenant_id, token_hash))
+
+    async def consume_two_factor_challenge(self, tenant_id, token_hash) -> bool:
+        # Atomic single-use: delete-if-present, True only for the winner (the pop is
+        # a single non-awaiting op, atomic on the single-threaded event loop).
+        return self._tfa_challenges.pop((tenant_id, token_hash), None) is not None
 
     # --- per-user settings (SET-*) ---
     async def upsert_user_setting(self, setting):

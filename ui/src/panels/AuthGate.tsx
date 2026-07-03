@@ -13,7 +13,7 @@ import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
 import { api } from "../api/client";
-import { markAuthenticated, probeSession, useAuth } from "../auth";
+import { markAuthenticated, markEnrollRequired, probeSession, useAuth } from "../auth";
 import { navigate, useRoute } from "../router";
 
 const MIN_PASSWORD_LENGTH = 12; // mirrors boltrig/identity/passwords.py
@@ -60,11 +60,80 @@ function hashParam(name: string): string {
   return new URLSearchParams(q).get(name) ?? "";
 }
 
+// The six-digit / recovery-code step shown AFTER the password when the login
+// response is 2fa_required ([2026] VJS-COUNTY 10, D3). It holds the opaque
+// challenge_token (no session exists yet) and posts it with the code; on success
+// the session is issued and the gate opens. This never renders on the no-2FA path
+// (only a real 2fa_required response mounts it).
+function ChallengeStep({ challengeToken }: { challengeToken: string }) {
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (busy || !code.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await api.twoFactorChallenge({
+        challenge_token: challengeToken,
+        code: code.trim(),
+      });
+      if (res.status === "ok") {
+        markAuthenticated(res.user ?? null);
+        return;
+      }
+      setError(res.reason ?? "That code was not accepted. Try again.");
+    } catch {
+      setError("Could not reach the server. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <AuthShell
+      title="Two-factor verification"
+      lead="Enter the 6-digit code from your authenticator app, or a recovery code."
+    >
+      <form className="auth-form" onSubmit={submit}>
+        <label className="field">
+          <span>Authentication code</span>
+          <input
+            type="text"
+            inputMode="text"
+            autoComplete="one-time-code"
+            autoFocus
+            value={code}
+            onChange={(ev) => setCode(ev.target.value)}
+          />
+        </label>
+        {error && (
+          <p className="error" role="alert">
+            {error}
+          </p>
+        )}
+        <button
+          type="submit"
+          className="btn btn--primary auth-form__submit"
+          disabled={busy || !code.trim()}
+        >
+          {busy ? "Verifying..." : "Verify and sign in"}
+        </button>
+      </form>
+    </AuthShell>
+  );
+}
+
 function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Set only when the backend answers 2fa_required; while set, the challenge step
+  // replaces the password form. Null on the ordinary (no-2FA) path.
+  const [challengeToken, setChallengeToken] = useState<string | null>(null);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -79,6 +148,18 @@ function LoginPage() {
         markAuthenticated(res.user ?? null);
         return;
       }
+      if (res.status === "2fa_required" && res.challenge_token) {
+        // D3: the password verified but NO session was issued. Move to the second
+        // factor step; the session is issued only when the code verifies.
+        setChallengeToken(res.challenge_token);
+        return;
+      }
+      if (res.status === "2fa_enrollment_required") {
+        // D4: the org requires 2FA and the user has not enrolled. The enrollment-
+        // only session cookie is set; route to the enrollment screen.
+        markEnrollRequired();
+        return;
+      }
       // A generic failure by design: the backend never reveals whether an email
       // exists. 429 carries its own throttle reason.
       setError(res.reason ?? "Incorrect email or password.");
@@ -88,6 +169,8 @@ function LoginPage() {
       setBusy(false);
     }
   }
+
+  if (challengeToken) return <ChallengeStep challengeToken={challengeToken} />;
 
   return (
     <AuthShell title="Sign in" lead="Sign in to your Boltrig console.">
@@ -259,6 +342,153 @@ function AcceptInvitePage() {
   );
 }
 
+// The forced-enrollment screen ([2026] VJS-COUNTY 10, D4). Shown when the org
+// requires two-factor and the user has not enrolled: the enrollment-only session
+// is live but the resolver clamps every other surface, so this is the ONLY thing
+// they can reach. Begins enrollment on mount (secret + recovery codes shown ONCE),
+// then confirms a code to activate; on success the same session becomes fully
+// privileged and the gate opens.
+function EnrollFlow() {
+  const [begin, setBegin] = useState<{
+    secret: string;
+    otpauthUri: string;
+    recoveryCodes: string[];
+  } | null>(null);
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await api.twoFactorEnrollBegin();
+        if (cancelled) return;
+        if (res.status === "ok" && res.secret && res.otpauth_uri) {
+          setBegin({
+            secret: res.secret,
+            otpauthUri: res.otpauth_uri,
+            recoveryCodes: res.recovery_codes ?? [],
+          });
+        } else {
+          setLoadError(res.reason ?? "Could not start two-factor setup.");
+        }
+      } catch {
+        if (!cancelled) setLoadError("Could not reach the server. Please try again.");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function confirm(e: React.FormEvent) {
+    e.preventDefault();
+    if (busy || !code.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await api.twoFactorVerifyEnroll({ code: code.trim() });
+      if (res.status === "ok") {
+        // The clamp lifts: the same session is now fully privileged. Enter the app.
+        markAuthenticated(null);
+        return;
+      }
+      setError(res.reason ?? "That code was not accepted. Try again.");
+    } catch {
+      setError("Could not reach the server. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (loadError) {
+    return (
+      <AuthShell title="Two-factor setup" lead="Your organisation requires two-factor authentication.">
+        <p className="error" role="alert">
+          {loadError}
+        </p>
+        <button
+          type="button"
+          className="btn auth-form__submit"
+          onClick={() => api.logout().finally(() => navigate("/"))}
+        >
+          Back to sign in
+        </button>
+      </AuthShell>
+    );
+  }
+
+  if (!begin) {
+    return (
+      <AuthShell title="Two-factor setup" lead="Preparing your authenticator setup...">
+        <div className="auth-splash" role="status" aria-live="polite">
+          <span className="auth-splash__spinner" aria-hidden="true" />
+          <span className="auth-splash__text">Loading...</span>
+        </div>
+      </AuthShell>
+    );
+  }
+
+  return (
+    <AuthShell
+      title="Set up two-factor"
+      lead="Your organisation requires two-factor authentication. Add this account to an authenticator app, then confirm a code."
+    >
+      <div className="auth-2fa__setup">
+        <p className="ux-hint">
+          Enter this secret key into your authenticator app (Google Authenticator,
+          1Password, Authy, ...). Keep it private - it is shown only once.
+        </p>
+        <code className="auth-2fa__secret" aria-label="Two-factor secret key">
+          {begin.secret}
+        </code>
+        {begin.recoveryCodes.length > 0 && (
+          <div className="auth-2fa__recovery">
+            <p className="ux-hint">
+              Save these one-time recovery codes somewhere safe. Each works once if
+              you lose your authenticator. They are shown only now.
+            </p>
+            <ul className="auth-2fa__codes">
+              {begin.recoveryCodes.map((rc) => (
+                <li key={rc}>
+                  <code>{rc}</code>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+      <form className="auth-form" onSubmit={confirm}>
+        <label className="field">
+          <span>Enter a 6-digit code to confirm</span>
+          <input
+            type="text"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            autoFocus
+            value={code}
+            onChange={(ev) => setCode(ev.target.value)}
+          />
+        </label>
+        {error && (
+          <p className="error" role="alert">
+            {error}
+          </p>
+        )}
+        <button
+          type="submit"
+          className="btn btn--primary auth-form__submit"
+          disabled={busy || !code.trim()}
+        >
+          {busy ? "Confirming..." : "Confirm and continue"}
+        </button>
+      </form>
+    </AuthShell>
+  );
+}
+
 // Wrap the app. Renders the public accept-invite page for its route, the login
 // gate when session auth is active and unauthenticated, or the console.
 export function AuthGate({ children }: { children: ReactNode }) {
@@ -286,5 +516,6 @@ export function AuthGate({ children }: { children: ReactNode }) {
     );
   }
   if (status === "unauthenticated") return <LoginPage />;
+  if (status === "enroll_required") return <EnrollFlow />;
   return <>{children}</>;
 }

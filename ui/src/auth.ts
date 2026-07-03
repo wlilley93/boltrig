@@ -16,7 +16,14 @@ import { useSyncExternalStore } from "react";
 import { ApiError, api } from "./api/client";
 import type { AuthUser } from "./api/types";
 
-export type AuthStatus = "checking" | "authenticated" | "unauthenticated";
+// "enroll_required" ([2026] VJS-COUNTY 10, D4): the session is live but the org
+// requires two-factor and the user has not enrolled, so the resolver clamps them to
+// the enrollment surface only. The gate renders the enrollment screen.
+export type AuthStatus =
+  | "checking"
+  | "authenticated"
+  | "unauthenticated"
+  | "enroll_required";
 
 interface AuthState {
   status: AuthStatus;
@@ -78,10 +85,36 @@ export async function probeSession(): Promise<void> {
       set({ status: "unauthenticated", user: null });
       return;
     }
+    // A live-but-clamped session ([2026] VJS-COUNTY 10, D4): the org requires 2FA
+    // and this user has not enrolled, so every non-enroll route is refused with the
+    // distinct marker. Route to the enrollment screen (never strand them).
+    if (
+      err instanceof ApiError &&
+      err.status === 403 &&
+      isEnrollmentRequired(err.body)
+    ) {
+      set({ status: "enroll_required" });
+      return;
+    }
     // 200 already returned above; a network/5xx failure must not strand the user
     // on a login gate they cannot pass in dev/e2e - enter the app.
     set({ status: "authenticated" });
   }
+}
+
+// The resolver's enrollment clamp answers 403 with {detail:"two_factor_enrollment_required"}.
+function isEnrollmentRequired(body: unknown): boolean {
+  return (
+    typeof body === "object" &&
+    body !== null &&
+    (body as { detail?: string }).detail === "two_factor_enrollment_required"
+  );
+}
+
+// Called when the gate needs to force enrollment (login returned
+// 2fa_enrollment_required, or the probe was clamped). Renders the enroll screen.
+export function markEnrollRequired(): void {
+  set({ status: "enroll_required" });
 }
 
 // Called by the login page on a successful /v1/auth/login. The session + CSRF

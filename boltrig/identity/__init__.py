@@ -36,6 +36,16 @@ from .sessions import (
     rotate_session,
 )
 from .tenancy import default_org_for, default_org_slug, ensure_default_org
+from .totp import (
+    generate_challenge_token,
+    generate_recovery_codes,
+    generate_totp_secret,
+    hash_challenge_token,
+    hash_recovery_code,
+    normalize_recovery_code,
+    totp_provisioning_uri,
+    verify_totp,
+)
 from .ai_keys import (
     AiKeyResolution,
     load_ai_key_material,
@@ -80,4 +90,13 @@ __all__ = [
     "AiKeyResolution",
     "resolve_ai_key",
     "load_ai_key_material",
+    # TOTP two-factor ([2026] VJS-COUNTY 10).
+    "generate_totp_secret",
+    "totp_provisioning_uri",
+    "verify_totp",
+    "generate_recovery_codes",
+    "hash_recovery_code",
+    "normalize_recovery_code",
+    "generate_challenge_token",
+    "hash_challenge_token",
 ]

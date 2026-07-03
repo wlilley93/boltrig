@@ -124,6 +124,12 @@ import type {
   LoginResponse,
   OrgMembersResponse,
   SetAiKeyRequest,
+  TwoFactorChallengeRequest,
+  TwoFactorChallengeResponse,
+  TwoFactorDisableRequest,
+  TwoFactorEnrollBeginResponse,
+  TwoFactorVerifyEnrollRequest,
+  TwoFactorVerifyEnrollResponse,
   SetAiKeyResponse,
   SwitchContextResponse,
   UpdateOrgRequest,
@@ -931,6 +937,43 @@ export const api = {
   logout(): Promise<StatusAck> {
     return request<StatusAck>("/v1/auth/logout", {
       method: "POST",
+      tolerateStatus: true,
+    });
+  },
+
+  // === Two-factor (COUNTY 10): challenge / enroll / disable ===
+  // challenge is public (the challenge token is the bearer); it issues the session
+  // login withheld. enroll/verify/disable require the (possibly enrollment-only)
+  // session. All tolerateStatus so a generic 401/429/400 renders as a message.
+  twoFactorChallenge(body: TwoFactorChallengeRequest): Promise<TwoFactorChallengeResponse> {
+    return request<TwoFactorChallengeResponse>("/v1/auth/2fa/challenge", {
+      method: "POST",
+      body,
+      tolerateStatus: true,
+    });
+  },
+
+  twoFactorEnrollBegin(): Promise<TwoFactorEnrollBeginResponse> {
+    return request<TwoFactorEnrollBeginResponse>("/v1/auth/2fa/enroll", {
+      method: "POST",
+      tolerateStatus: true,
+    });
+  },
+
+  twoFactorVerifyEnroll(
+    body: TwoFactorVerifyEnrollRequest,
+  ): Promise<TwoFactorVerifyEnrollResponse> {
+    return request<TwoFactorVerifyEnrollResponse>("/v1/auth/2fa/verify-enroll", {
+      method: "POST",
+      body,
+      tolerateStatus: true,
+    });
+  },
+
+  twoFactorDisable(body: TwoFactorDisableRequest): Promise<StatusAck> {
+    return request<StatusAck>("/v1/auth/2fa/disable", {
+      method: "POST",
+      body,
       tolerateStatus: true,
     });
   },

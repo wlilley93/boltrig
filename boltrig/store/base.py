@@ -45,10 +45,12 @@ from boltrig.models import (
     Workspace,
     WorkspaceMember,
     TenantPermissions,
+    TwoFactorChallenge,
     User,
     UserInvitation,
     UserSession,
     UserSetting,
+    UserTotp,
     Verb,
     VerbBinding,
     WorkflowDefinition,
@@ -369,6 +371,40 @@ class Store(Protocol):
         self, tenant_id: str, token_hash: str
     ) -> UserSession | None: ...
     async def update_session(self, session: UserSession) -> None: ...
+
+    # --- TOTP two-factor ([2026] VJS-COUNTY 10) ------------------------------
+    # D1/D3: a user's TOTP enrolment row, kept APART from the identity row (like the
+    # password credential). The base32 secret itself is NOT here - it is SEALED in
+    # credential_refs and referenced by ``secret_ref``; this row only carries the ref
+    # + the ``enrolled`` flag. Tenant-scoped (SEC-08). set is an upsert (begin-enroll
+    # then verify-enroll flip); delete is the disable path.
+    async def set_user_totp(self, totp: UserTotp) -> None: ...
+    async def get_user_totp(self, tenant_id: str, user_id: str) -> UserTotp | None: ...
+    async def delete_user_totp(self, tenant_id: str, user_id: str) -> None: ...
+    # D2: one-time recovery-code HASHES (never the plaintext). set_recovery_codes
+    # REPLACES the whole set (enrol / regenerate); consume_recovery_code is an atomic
+    # single-use CAS (flip an unused hash to used, returning True only for the winner)
+    # so a code is redeemable exactly once; count_active_recovery_codes is the unused
+    # count; clear removes them (disable). All tenant-scoped.
+    async def set_recovery_codes(
+        self, tenant_id: str, user_id: str, code_hashes: list[str]
+    ) -> None: ...
+    async def consume_recovery_code(
+        self, tenant_id: str, user_id: str, code_hash: str
+    ) -> bool: ...
+    async def count_active_recovery_codes(self, tenant_id: str, user_id: str) -> int: ...
+    async def clear_recovery_codes(self, tenant_id: str, user_id: str) -> None: ...
+    # D3: the pending login second-factor challenge. Stored by the sha256 of its
+    # token; get resolves it (tenant-scoped), consume is an atomic single-use CAS
+    # (delete-if-present, True only for the winner) so a challenge issues exactly one
+    # session. No access rides on the challenge itself.
+    async def add_two_factor_challenge(self, challenge: TwoFactorChallenge) -> None: ...
+    async def get_two_factor_challenge(
+        self, tenant_id: str, token_hash: str
+    ) -> TwoFactorChallenge | None: ...
+    async def consume_two_factor_challenge(
+        self, tenant_id: str, token_hash: str
+    ) -> bool: ...
 
     # --- Org -> workspace tenancy ([2026] VJS-COUNTY 8) ----------------------
     # D1: the ORGANISATION is the tenant boundary - an org's id IS the tenant_id

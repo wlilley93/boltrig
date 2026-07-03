@@ -58,6 +58,10 @@ DECLARE
     'personal_agents','memory_items','mcp_servers','conversation_messages',
     'conversation_summaries',
     'user_invitations','user_credentials','user_settings','user_sessions','memory_facts',
+    -- TOTP two-factor ([2026] VJS-COUNTY 10): all three carry a tenant_id column, so
+    -- the generic tenant_id policy binds them (the sealed secret lives in the already-
+    -- scoped credential_refs table, not here).
+    'user_totp','user_recovery_codes','two_factor_challenges',
     'memory_ingestions','memory_erasures','memory_vectors','memory_vector_edges',
     'channel_bindings','channel_pairings','run_checkpoints','fanout_counters',
     'run_cancel_requests',

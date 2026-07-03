@@ -34,12 +34,25 @@ from boltrig.identity import (
 from boltrig.identity.invites import hash_invite_token
 from boltrig.identity.passwords import WeakPassword
 from boltrig.identity.sessions import SESSION_TTL_HOURS
+from boltrig.identity.totp import (
+    CHALLENGE_TTL,
+    generate_challenge_token,
+    generate_recovery_codes,
+    generate_totp_secret,
+    hash_challenge_token,
+    hash_recovery_code,
+    totp_provisioning_uri,
+    verify_totp,
+    verify_totp_dummy,
+)
 from boltrig.models import (
     ActionType,
     AuditEvent,
     RateLimited,
     SecurityEventType,
+    TwoFactorChallenge,
     User,
+    UserTotp,
     utcnow,
 )
 from boltrig.models.registry import RateLimit
@@ -55,6 +68,16 @@ _LOGIN_RL_IP = RateLimit(per="minute", max=30, scope="verb")
 # unknown email, and a deactivated user, so the response body never enumerates
 # which emails exist (D5).
 _GENERIC_LOGIN_FAILURE = {"status": "error", "reason": "invalid email or password"}
+
+# Second-factor challenge rate limits ([2026] VJS-COUNTY 10, D5), same shape as the
+# login bounds: a tight per-identity bound (a targeted code-guess) and a broad per-IP
+# bound (spraying). Both are fixed-window, keyed by a distinct verb id.
+_TFA_RL_IDENTITY = RateLimit(per="minute", max=5, scope="verb")
+_TFA_RL_IP = RateLimit(per="minute", max=30, scope="verb")
+
+# The one generic second-factor failure (byte-identical for a wrong code, an unknown
+# or expired challenge, and a used/absent recovery code) so nothing enumerates state.
+_GENERIC_2FA_FAILURE = {"status": "error", "reason": "invalid or expired code"}
 
 
 def _console_tenant() -> str:
@@ -168,6 +191,81 @@ def _set_session_cookies(resp: JSONResponse, secret: str, csrf: str) -> None:
         CSRF_COOKIE, csrf, max_age=max_age, httponly=False, secure=secure,
         samesite="strict", path="/",
     )
+
+
+async def _mint_web_session(k, tenant: str, user: User):
+    """Mint + persist a fresh web session for ``user`` and seed its active workspace.
+
+    Shared by the plain login path, the org-required enrollment path, and the 2FA
+    challenge-pass path so the session is issued identically wherever the second
+    factor (or its absence) has been satisfied. Returns ``(secret, csrf)`` for the
+    caller to cookie; only the hash is persisted (D2/D6).
+    """
+    session, secret, csrf = new_session(tenant, user.id, client="web")
+    # Seed the deterministic default active workspace from membership ([2026] VJS-
+    # COUNTY 8, D4); the resolver re-authorizes it every request (fail-closed).
+    workspaces = await k.store.list_workspaces_for_user(tenant, user.id)
+    session.active_workspace_id = pick_default_workspace(workspaces)
+    await k.store.add_session(session)
+    return session, secret, csrf
+
+
+def _session_response(secret: str, csrf: str, user: User, *, status: str = "ok",
+                      extra: dict | None = None) -> JSONResponse:
+    """The login/challenge success envelope + the session cookies. ``status`` is
+    "ok" for a fully-authenticated session or "2fa_enrollment_required" for an org-
+    required enrollment-only session (the resolver clamps the latter to enrollment)."""
+    body = {
+        "status": status,
+        "csrf_token": csrf,
+        "user": {"id": user.id, "email": user.email, "role": user.role},
+    }
+    if extra:
+        body.update(extra)
+    resp = JSONResponse(body)
+    _set_session_cookies(resp, secret, csrf)
+    return resp
+
+
+async def _load_totp_secret(k, tenant: str, secret_ref: str | None) -> str | None:
+    """Load the SEALED base32 TOTP secret for a ref, kernel-side, at verify time.
+
+    Reads the RLS-fenced ``credential_refs`` seam (the same sealed store the channel
+    signing secret + per-org AI keys use). The secret is never logged, returned, or
+    written to audit - it is handed straight to :func:`verify_totp`."""
+    if not secret_ref:
+        return None
+    ref = await k.store.get_credential_ref(tenant, secret_ref)
+    return (ref or {}).get("secret") if ref else None
+
+
+async def _verify_second_factor(
+    k, tenant: str, user_id: str, secret: str | None, code: str
+) -> tuple[str | None, bool]:
+    """Verify a presented second factor: a TOTP code first, else a one-time recovery
+    code (D2 fallback, single-use). Returns ``(method, ok)`` where method is 'totp' /
+    'recovery' / None. Constant-time: a TOTP verify is ALWAYS spent before the
+    recovery fallback, so timing carries no oracle (D5). The recovery code is consumed
+    ATOMICALLY (single-use) - a used or absent code fails."""
+    if verify_totp(secret, code):
+        return ("totp", True)
+    if await k.store.consume_recovery_code(tenant, user_id, hash_recovery_code(code)):
+        return ("recovery", True)
+    return (None, False)
+
+
+async def _two_factor_state(k, tenant: str, user: User) -> tuple[bool, bool]:
+    """Return ``(second_factor_due, enrolled)`` for ``user`` after a password verify.
+
+    ``second_factor_due`` is True when the user has 2FA enrolled OR the org requires
+    it (D3). ``enrolled`` is True only when the user has an ACTIVATED TOTP factor. The
+    two together drive the login fork: enrolled -> challenge (no session); due but not
+    enrolled -> forced enrollment (D4); neither -> a plain session (unchanged)."""
+    totp = await k.store.get_user_totp(tenant, user.id)
+    enrolled = bool(totp and totp.enrolled)
+    org = await k.store.get_org(tenant)
+    org_requires = bool(org and org.require_two_factor)
+    return (enrolled or org_requires, enrolled)
 
 
 def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
@@ -302,24 +400,38 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
             )
             return JSONResponse(_GENERIC_LOGIN_FAILURE, status_code=401)
 
-        session, secret, csrf = new_session(tenant, user.id, client="web")
-        # Seed the session's default active workspace from membership ([2026] VJS-
-        # COUNTY 8, D4): a deterministic pick of the user's workspaces, or None when
-        # they belong to none yet. This is only a hint - the resolver re-authorizes
-        # it against membership on every subsequent request (fail-closed).
-        workspaces = await k.store.list_workspaces_for_user(tenant, user.id)
-        session.active_workspace_id = pick_default_workspace(workspaces)
-        await k.store.add_session(session)
+        # Second-factor fork ([2026] VJS-COUNTY 10, D3/D4). The password verified;
+        # decide whether a session may issue now.
+        second_factor_due, enrolled = await _two_factor_state(k, tenant, user)
+        if enrolled:
+            # D3, FAIL-CLOSED: DO NOT issue a session. Mint a short-lived, single-use
+            # challenge (the password is proven; the second factor is not) and return
+            # a 2fa_required state. The follow-up /v1/auth/2fa/challenge issues the
+            # session only once a TOTP or recovery code verifies against this.
+            challenge = generate_challenge_token()
+            await k.store.add_two_factor_challenge(TwoFactorChallenge(
+                tenant_id=tenant, token_hash=hash_challenge_token(challenge),
+                user_id=user.id, expires_at=utcnow() + CHALLENGE_TTL,
+            ))
+            # Keys-only audit: the fact of the challenge, never the challenge token.
+            await _audit(k, tenant, user.id, "auth.2fa.challenge",
+                         {"outcome": "challenge_issued"})
+            return JSONResponse({"status": "2fa_required", "challenge_token": challenge})
+        if second_factor_due:
+            # D4: the org requires 2FA but the user has not enrolled. Issue an
+            # ENROLLMENT-ONLY session (the resolver clamps it to the enroll surface
+            # only) so the ONLY thing they can reach is enrollment. No console access.
+            _, secret, csrf = await _mint_web_session(k, tenant, user)
+            await _audit(k, tenant, user.id, "auth.login",
+                         {"outcome": "2fa_enrollment_required"})
+            return _session_response(secret, csrf, user, status="2fa_enrollment_required")
+
+        # No second factor due: a plain session, exactly as before (backward-compat).
+        session, secret, csrf = await _mint_web_session(k, tenant, user)
         # Keys-only audit: the session id, never the secret / csrf / password (D8).
         await _audit(k, tenant, user.id, "auth.login",
                      {"session_id": session.id, "outcome": "ok"})
-        resp = JSONResponse({
-            "status": "ok",
-            "csrf_token": csrf,
-            "user": {"id": user.id, "email": user.email, "role": user.role},
-        })
-        _set_session_cookies(resp, secret, csrf)
-        return resp
+        return _session_response(secret, csrf, user)
 
     @app.post("/v1/auth/logout")
     async def logout(request: Request, k=K, p=P) -> JSONResponse:
@@ -363,3 +475,277 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
         resp = JSONResponse({"status": "ok", "csrf_token": csrf})
         _set_session_cookies(resp, secret, csrf)
         return resp
+
+    # === TOTP two-factor ([2026] VJS-COUNTY 10) ==============================
+    @app.post("/v1/auth/2fa/enroll")
+    async def two_factor_enroll(request: Request, k=K, p=P) -> JSONResponse:
+        # D1: begin enrollment. Mint a fresh TOTP secret, SEAL it in the credential
+        # store (never a plaintext column), and return the otpauth URI + secret + the
+        # one-time recovery codes EXACTLY ONCE (for the QR + the user to save). The
+        # factor is not active until verify-enroll confirms a code (enrolled stays
+        # false). Reachable by an enrollment-only session (it is on the resolver's
+        # allowlist), so an org-required user can complete forced enrollment (D4).
+        import uuid
+
+        from boltrig.store.postgres import set_current_tenant
+
+        tenant = p.tenant_id
+        set_current_tenant(tenant)
+        # Rate-limit the begin (like verify-enroll/challenge/disable): each call mints
+        # + seals a fresh secret and rotates the recovery codes, so an unrated begin
+        # lets an authenticated user spam sealed-secret rows and silently invalidate
+        # previously-shown codes. Bound per-identity + per-IP (CF-Connecting-IP, never
+        # the spoofable XFF).
+        client_ip = (
+            request.headers.get("cf-connecting-ip")
+            or (request.client.host if request.client else "unknown")
+        )
+        try:
+            await k.rate_limiter.enforce(
+                tenant, f"auth.2fa.enroll-begin.ip:{client_ip}", _TFA_RL_IP
+            )
+            await k.rate_limiter.enforce(
+                tenant, f"auth.2fa.enroll-begin.id:{p.subject}", _TFA_RL_IDENTITY
+            )
+        except RateLimited:
+            return JSONResponse({"status": "error", "reason": "too many attempts"},
+                                status_code=429)
+        existing = await k.store.get_user_totp(tenant, p.subject)
+        if existing is not None and existing.enrolled:
+            # Already enabled: re-enrolling would silently drop a working factor
+            # without a fresh factor (a bypass). Require disable-then-enroll instead.
+            return JSONResponse(
+                {"status": "error", "reason": "two-factor is already enabled"},
+                status_code=400,
+            )
+        secret = generate_totp_secret()
+        secret_ref = f"cred_totp_{uuid.uuid4().hex[:16]}"
+        # SEALED at rest (D1): the base32 secret lives only in the RLS-fenced
+        # credential_refs seam, referenced by secret_ref on the user_totp row.
+        await k.store.set_credential_ref(tenant, secret_ref, {"secret": secret})
+        await k.store.set_user_totp(UserTotp(
+            tenant_id=tenant, user_id=p.subject, secret_ref=secret_ref, enrolled=False,
+        ))
+        codes = generate_recovery_codes()
+        # D2: persist ONLY the hashes; the plaintext codes leave in this response once.
+        await k.store.set_recovery_codes(
+            tenant, p.subject, [hash_recovery_code(c) for c in codes]
+        )
+        user = await k.store.get_user(tenant, p.subject)
+        account = (user.email if user and user.email else p.subject)
+        uri = totp_provisioning_uri(secret, account)
+        # Keys-only audit (D5): the fact of enrollment-begin, NEVER the secret / URI /
+        # recovery codes.
+        await _audit(k, tenant, p.subject, "auth.2fa.enroll", {"outcome": "begin"})
+        return JSONResponse({
+            "status": "ok",
+            "otpauth_uri": uri,
+            "secret": secret,
+            "recovery_codes": codes,
+        })
+
+    @app.post("/v1/auth/2fa/verify-enroll")
+    async def two_factor_verify_enroll(body: dict, request: Request, k=K, p=P) -> JSONResponse:
+        # D3: confirm a code to ACTIVATE the pending enrollment (enrolled -> true).
+        # Rate-limited + constant-time + audited (D5). Once active, an enrollment-only
+        # session becomes fully privileged (the resolver re-derives on the next req).
+        from boltrig.store.postgres import set_current_tenant
+
+        tenant = p.tenant_id
+        set_current_tenant(tenant)
+        code = body.get("code")
+        code = code if isinstance(code, str) else ""
+        client_ip = (
+            request.headers.get("cf-connecting-ip")
+            or (request.client.host if request.client else "unknown")
+        )
+        user_agent = request.headers.get("user-agent") or None
+        try:
+            await k.rate_limiter.enforce(tenant, f"auth.2fa.enroll.ip:{client_ip}", _TFA_RL_IP)
+            await k.rate_limiter.enforce(
+                tenant, f"auth.2fa.enroll.id:{p.subject}", _TFA_RL_IDENTITY
+            )
+        except RateLimited:
+            await k.security.record(
+                tenant, SecurityEventType.RATE_LIMIT_TRIP, "two_factor_rate_limited",
+                actor=p.subject, actor_tier="human",
+                ip_address=client_ip, user_agent=user_agent, resource="auth.2fa.verify_enroll",
+            )
+            return JSONResponse({"status": "error", "reason": "too many attempts"},
+                                status_code=429)
+
+        totp = await k.store.get_user_totp(tenant, p.subject)
+        secret = await _load_totp_secret(k, tenant, totp.secret_ref if totp else None)
+        if not totp or not secret:
+            # Nothing pending: still spend a verify so timing carries no state oracle.
+            verify_totp_dummy(code)
+            return JSONResponse(_GENERIC_2FA_FAILURE, status_code=400)
+        # Only a TOTP code activates enrollment (a recovery code cannot bootstrap it).
+        if verify_totp(secret, code):
+            totp.enrolled = True
+            await k.store.set_user_totp(totp)
+            await _audit(k, tenant, p.subject, "auth.2fa.verify_enroll",
+                         {"outcome": "activated"})
+            remaining = await k.store.count_active_recovery_codes(tenant, p.subject)
+            return JSONResponse({"status": "ok", "recovery_codes_remaining": remaining})
+        await _audit(k, tenant, p.subject, "auth.2fa.verify_enroll",
+                     {"outcome": "rejected"}, status="denied")
+        await k.security.record(
+            tenant, SecurityEventType.LOGIN_FAILURE, "two_factor_verify_failed",
+            actor=p.subject, actor_tier="human",
+            ip_address=client_ip, user_agent=user_agent, resource="auth.2fa.verify_enroll",
+        )
+        return JSONResponse(_GENERIC_2FA_FAILURE, status_code=401)
+
+    @app.post("/v1/auth/2fa/challenge")
+    async def two_factor_challenge(body: dict, request: Request, k=K) -> JSONResponse:
+        # D3, the login second-factor gate. PUBLIC (the challenge token IS the bearer,
+        # like accept-invite): a valid challenge_token + a valid TOTP-or-recovery code
+        # issues the session that /v1/auth/login withheld. Rate-limited + constant-time
+        # + non-enumerating + fail-closed (an unknown/expired challenge or a bad code
+        # returns one generic failure). The challenge is single-use (consumed on pass).
+        from boltrig.store.postgres import set_current_tenant
+
+        tenant = _console_tenant()
+        set_current_tenant(tenant)
+        token = body.get("challenge_token")
+        token = token if isinstance(token, str) else ""
+        code = body.get("code")
+        code = code if isinstance(code, str) else ""
+        client_ip = (
+            request.headers.get("cf-connecting-ip")
+            or (request.client.host if request.client else "unknown")
+        )
+        user_agent = request.headers.get("user-agent") or None
+
+        # D5: the broad per-IP bound first, before any store/crypto work.
+        try:
+            await k.rate_limiter.enforce(tenant, f"auth.2fa.challenge.ip:{client_ip}", _TFA_RL_IP)
+        except RateLimited:
+            await k.security.record(
+                tenant, SecurityEventType.RATE_LIMIT_TRIP, "two_factor_rate_limited",
+                actor="unknown", actor_tier="human",
+                ip_address=client_ip, user_agent=user_agent, resource="auth.2fa.challenge",
+            )
+            return JSONResponse({"status": "error", "reason": "too many attempts"},
+                                status_code=429)
+
+        challenge = await k.store.get_two_factor_challenge(
+            tenant, hash_challenge_token(token)
+        ) if token else None
+        expired = (
+            challenge is not None and challenge.expires_at is not None
+            and challenge.expires_at <= utcnow()
+        )
+        if challenge is None or expired:
+            # Fail-closed + constant-time: spend a verify against the decoy so an
+            # invalid/expired challenge is indistinguishable from a wrong code.
+            verify_totp_dummy(code)
+            return JSONResponse(_GENERIC_2FA_FAILURE, status_code=401)
+
+        # The tight per-identity bound, now that the challenge names the user.
+        try:
+            await k.rate_limiter.enforce(
+                tenant, f"auth.2fa.challenge.id:{challenge.user_id}", _TFA_RL_IDENTITY
+            )
+        except RateLimited:
+            await k.security.record(
+                tenant, SecurityEventType.RATE_LIMIT_TRIP, "two_factor_rate_limited",
+                actor=challenge.user_id, actor_tier="human",
+                ip_address=client_ip, user_agent=user_agent, resource="auth.2fa.challenge",
+            )
+            return JSONResponse({"status": "error", "reason": "too many attempts"},
+                                status_code=429)
+
+        user = await k.store.get_user(tenant, challenge.user_id)
+        totp = await k.store.get_user_totp(tenant, challenge.user_id)
+        secret = await _load_totp_secret(k, tenant, totp.secret_ref if totp else None)
+        # Fail-closed if the user is gone/deactivated or the factor is not active.
+        if user is None or user.status != "active" or not totp or not totp.enrolled or not secret:
+            verify_totp_dummy(code)
+            return JSONResponse(_GENERIC_2FA_FAILURE, status_code=401)
+
+        method, ok = await _verify_second_factor(k, tenant, challenge.user_id, secret, code)
+        if not ok:
+            # DO NOT consume the challenge on a miss (retry allowed within TTL + the
+            # rate-limit budget). Audit + security-signal, keys-only.
+            await _audit(k, tenant, challenge.user_id, "auth.2fa.challenge",
+                         {"outcome": "rejected"}, status="denied")
+            await k.security.record(
+                tenant, SecurityEventType.LOGIN_FAILURE, "two_factor_challenge_failed",
+                actor=challenge.user_id, actor_tier="human",
+                ip_address=client_ip, user_agent=user_agent, resource="auth.2fa.challenge",
+            )
+            return JSONResponse(_GENERIC_2FA_FAILURE, status_code=401)
+
+        # Single-use: consume the challenge; a lost race (already consumed) fails.
+        if not await k.store.consume_two_factor_challenge(tenant, challenge.token_hash):
+            return JSONResponse(_GENERIC_2FA_FAILURE, status_code=401)
+        session, secret_cookie, csrf = await _mint_web_session(k, tenant, user)
+        await _audit(k, tenant, user.id, "auth.2fa.challenge",
+                     {"session_id": session.id, "outcome": "ok", "method": method})
+        if method == "recovery":
+            # A recovery code was spent (single-use). Audit the USE keys-only so the
+            # burn-down is visible; never the code.
+            remaining = await k.store.count_active_recovery_codes(tenant, user.id)
+            await _audit(k, tenant, user.id, "auth.2fa.recovery_used",
+                         {"outcome": "consumed", "recovery_codes_remaining": remaining})
+        return _session_response(secret_cookie, csrf, user)
+
+    @app.post("/v1/auth/2fa/disable")
+    async def two_factor_disable(body: dict, request: Request, k=K, p=P) -> JSONResponse:
+        # Self-disable, requires a FRESH factor (a current TOTP or a recovery code) -
+        # never a bypass. Removes the enrollment, the sealed secret, and the recovery
+        # codes. Rate-limited + constant-time + audited (D5). If the org still requires
+        # 2FA, the resolver re-clamps the caller to enrollment-only next request (they
+        # cannot escape the requirement; they simply reset).
+        from boltrig.store.postgres import set_current_tenant
+
+        tenant = p.tenant_id
+        set_current_tenant(tenant)
+        code = body.get("code")
+        code = code if isinstance(code, str) else ""
+        client_ip = (
+            request.headers.get("cf-connecting-ip")
+            or (request.client.host if request.client else "unknown")
+        )
+        user_agent = request.headers.get("user-agent") or None
+        try:
+            await k.rate_limiter.enforce(tenant, f"auth.2fa.disable.ip:{client_ip}", _TFA_RL_IP)
+            await k.rate_limiter.enforce(
+                tenant, f"auth.2fa.disable.id:{p.subject}", _TFA_RL_IDENTITY
+            )
+        except RateLimited:
+            await k.security.record(
+                tenant, SecurityEventType.RATE_LIMIT_TRIP, "two_factor_rate_limited",
+                actor=p.subject, actor_tier="human",
+                ip_address=client_ip, user_agent=user_agent, resource="auth.2fa.disable",
+            )
+            return JSONResponse({"status": "error", "reason": "too many attempts"},
+                                status_code=429)
+
+        totp = await k.store.get_user_totp(tenant, p.subject)
+        secret = await _load_totp_secret(k, tenant, totp.secret_ref if totp else None)
+        if not totp or not totp.enrolled or not secret:
+            verify_totp_dummy(code)
+            return JSONResponse(
+                {"status": "error", "reason": "two-factor is not enabled"}, status_code=400
+            )
+        method, ok = await _verify_second_factor(k, tenant, p.subject, secret, code)
+        if not ok:
+            await _audit(k, tenant, p.subject, "auth.2fa.disable",
+                         {"outcome": "rejected"}, status="denied")
+            await k.security.record(
+                tenant, SecurityEventType.LOGIN_FAILURE, "two_factor_disable_failed",
+                actor=p.subject, actor_tier="human",
+                ip_address=client_ip, user_agent=user_agent, resource="auth.2fa.disable",
+            )
+            return JSONResponse(_GENERIC_2FA_FAILURE, status_code=401)
+        # Tear down the factor: drop the enrollment, clear the recovery codes, and
+        # overwrite the sealed secret material (so nothing reusable is left at rest).
+        await k.store.delete_user_totp(tenant, p.subject)
+        await k.store.clear_recovery_codes(tenant, p.subject)
+        await k.store.set_credential_ref(tenant, totp.secret_ref, {})
+        await _audit(k, tenant, p.subject, "auth.2fa.disable",
+                     {"outcome": "disabled", "method": method})
+        return JSONResponse({"status": "ok"})

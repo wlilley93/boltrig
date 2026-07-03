@@ -42,10 +42,12 @@ from boltrig.models import (
     NotificationPref,
     PersonalAccessToken,
     PersonalAgent,
+    TwoFactorChallenge,
     User,
     UserInvitation,
     UserSession,
     UserSetting,
+    UserTotp,
     EMPTY_GRANTS,
     GrantSet,
     HITLRequest,
@@ -1406,6 +1408,93 @@ class PostgresStore(ChannelStorePG):
         )
         return None if row is None else row["password_hash"]
 
+    # --- TOTP two-factor ([2026] VJS-COUNTY 10) ---
+    async def set_user_totp(self, totp: UserTotp) -> None:
+        await self._pool.execute(
+            """INSERT INTO user_totp (tenant_id, user_id, secret_ref, enrolled, created_at, updated_at)
+               VALUES ($1,$2,$3,$4,$5, now())
+               ON CONFLICT (tenant_id, user_id) DO UPDATE SET
+                 secret_ref=EXCLUDED.secret_ref, enrolled=EXCLUDED.enrolled, updated_at=now()""",
+            totp.tenant_id, totp.user_id, totp.secret_ref, totp.enrolled, totp.created_at,
+        )
+
+    async def get_user_totp(self, tenant_id, user_id):
+        row = await self._pool.fetchrow(
+            "SELECT * FROM user_totp WHERE tenant_id=$1 AND user_id=$2", tenant_id, user_id
+        )
+        return _user_totp(row)
+
+    async def delete_user_totp(self, tenant_id, user_id) -> None:
+        await self._pool.execute(
+            "DELETE FROM user_totp WHERE tenant_id=$1 AND user_id=$2", tenant_id, user_id
+        )
+
+    async def set_recovery_codes(self, tenant_id, user_id, code_hashes) -> None:
+        # Replace the whole set atomically: clear then insert the fresh hashes.
+        async with self._pool.acquire() as conn:
+            async with conn.transaction():
+                await conn.execute(
+                    "DELETE FROM user_recovery_codes WHERE tenant_id=$1 AND user_id=$2",
+                    tenant_id, user_id,
+                )
+                for h in code_hashes:
+                    await conn.execute(
+                        """INSERT INTO user_recovery_codes (tenant_id, user_id, code_hash)
+                           VALUES ($1,$2,$3)
+                           ON CONFLICT (tenant_id, user_id, code_hash) DO NOTHING""",
+                        tenant_id, user_id, h,
+                    )
+
+    async def consume_recovery_code(self, tenant_id, user_id, code_hash) -> bool:
+        # Atomic single-use CAS: flip an unused hash to used, True only for the
+        # winner (RETURNING makes it observable across concurrent redeemers).
+        row = await self._pool.fetchrow(
+            """UPDATE user_recovery_codes SET used_at=now()
+               WHERE tenant_id=$1 AND user_id=$2 AND code_hash=$3 AND used_at IS NULL
+               RETURNING code_hash""",
+            tenant_id, user_id, code_hash,
+        )
+        return row is not None
+
+    async def count_active_recovery_codes(self, tenant_id, user_id) -> int:
+        row = await self._pool.fetchrow(
+            """SELECT count(*) AS n FROM user_recovery_codes
+               WHERE tenant_id=$1 AND user_id=$2 AND used_at IS NULL""",
+            tenant_id, user_id,
+        )
+        return int(row["n"]) if row is not None else 0
+
+    async def clear_recovery_codes(self, tenant_id, user_id) -> None:
+        await self._pool.execute(
+            "DELETE FROM user_recovery_codes WHERE tenant_id=$1 AND user_id=$2",
+            tenant_id, user_id,
+        )
+
+    async def add_two_factor_challenge(self, challenge: TwoFactorChallenge) -> None:
+        await self._pool.execute(
+            """INSERT INTO two_factor_challenges (tenant_id, token_hash, user_id, expires_at, created_at)
+               VALUES ($1,$2,$3,$4,$5)
+               ON CONFLICT (tenant_id, token_hash) DO NOTHING""",
+            challenge.tenant_id, challenge.token_hash, challenge.user_id,
+            challenge.expires_at, challenge.created_at,
+        )
+
+    async def get_two_factor_challenge(self, tenant_id, token_hash):
+        row = await self._pool.fetchrow(
+            "SELECT * FROM two_factor_challenges WHERE tenant_id=$1 AND token_hash=$2",
+            tenant_id, token_hash,
+        )
+        return _tfa_challenge(row)
+
+    async def consume_two_factor_challenge(self, tenant_id, token_hash) -> bool:
+        # Atomic single-use: delete-if-present, True only for the winner.
+        row = await self._pool.fetchrow(
+            """DELETE FROM two_factor_challenges
+               WHERE tenant_id=$1 AND token_hash=$2 RETURNING token_hash""",
+            tenant_id, token_hash,
+        )
+        return row is not None
+
     async def get_invitation(self, tenant_id, inv_id):
         row = await self._pool.fetchrow(
             "SELECT * FROM user_invitations WHERE tenant_id=$1 AND id=$2", tenant_id, inv_id
@@ -2065,6 +2154,24 @@ def _session(r):
         active_workspace_id=(
             r["active_workspace_id"] if "active_workspace_id" in r.keys() else None
         ),
+    )
+
+
+def _user_totp(r):
+    if r is None:
+        return None
+    return UserTotp(
+        tenant_id=r["tenant_id"], user_id=r["user_id"], secret_ref=r["secret_ref"],
+        enrolled=r["enrolled"], created_at=r["created_at"], updated_at=r["updated_at"],
+    )
+
+
+def _tfa_challenge(r):
+    if r is None:
+        return None
+    return TwoFactorChallenge(
+        tenant_id=r["tenant_id"], token_hash=r["token_hash"], user_id=r["user_id"],
+        expires_at=r["expires_at"], created_at=r["created_at"],
     )
 
 

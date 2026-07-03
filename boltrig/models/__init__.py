@@ -73,9 +73,11 @@ from .errors import (
 )
 from .access import (
     PersonalAccessToken,
+    TwoFactorChallenge,
     UserInvitation,
     UserSession,
     UserSetting,
+    UserTotp,
 )
 from .grants import EMPTY_GRANTS, GrantSet, TenantPermissions
 from .hitl import HITLRequest, HITLResponse, HITLStatus, HITLType, Urgency
@@ -176,6 +178,8 @@ __all__ = [
     "UserInvitation",
     "UserSession",
     "UserSetting",
+    "UserTotp",
+    "TwoFactorChallenge",
     "AdapterHealth",
     "AdapterRecord",
     "AgentCapability",

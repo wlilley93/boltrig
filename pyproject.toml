@@ -17,6 +17,10 @@ dependencies = [
     "authlib>=1.3",
     "python-multipart>=0.0.12",
     "argon2-cffi>=23.1",
+    # TOTP two-factor authentication ([2026] VJS-COUNTY 10, D6). RFC 6238 code
+    # generation/verification for the console second factor. Core (not optional):
+    # the session console's 2FA gate depends on it whenever an org requires it.
+    "pyotp>=2.9",
 ]
 
 [project.optional-dependencies]
