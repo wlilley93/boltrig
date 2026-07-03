@@ -539,6 +539,27 @@ CREATE TABLE IF NOT EXISTS conversation_messages (
 );
 CREATE INDEX IF NOT EXISTS conv_messages_idx ON conversation_messages (conversation_id, created_at);
 
+-- Append-only DERIVED conversation summaries (long-conversation compaction). A
+-- summary is a cheap derived view of a conversation's OLDER turns so the
+-- continuity composer can send [summary + recent verbatim tail] past a threshold
+-- instead of the whole history. DERIVED data, never a mutation of the frozen
+-- conversation_messages record: this table is INSERT-only (a re-compaction
+-- appends a new row covering more messages; no row is ever updated). up_to_message_id
+-- is the split boundary (the last live message the summary covers). Tenant + owner
+-- scoped via the parent conversation; RLS-scoped like the message table.
+CREATE TABLE IF NOT EXISTS conversation_summaries (
+    id                TEXT NOT NULL,
+    conversation_id   TEXT NOT NULL,
+    tenant_id         TEXT NOT NULL,
+    up_to_message_id  TEXT NOT NULL,                     -- split boundary: last live message covered
+    covered_count     INTEGER NOT NULL,                  -- number of live messages covered
+    summary           TEXT NOT NULL,                     -- derived digest (DATA, never instructions)
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, id)
+);
+CREATE INDEX IF NOT EXISTS conv_summaries_idx
+    ON conversation_summaries (tenant_id, conversation_id, covered_count);
+
 -- ===========================================================================
 -- Round Four: users + provisioning (USR), personal access tokens (PAT),
 -- per-user settings (SET), sessions. Tenant-isolated; RLS-ready like the rest.

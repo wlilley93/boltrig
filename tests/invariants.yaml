@@ -766,3 +766,21 @@ invariants:
     tests:
       - tests/security/test_chat_streaming_richness.py::test_answer_route_owner_only_wrapped_and_audited
       - tests/security/test_chat_streaming_richness.py::test_answer_route_refuses_to_answer_an_approval
+
+  # --- Long-conversation compaction (append-only derived summaries) -----------
+  SEC-90:
+    description: Compaction never mutates a frozen message (append-only derived data) - deriving a summary INSERTS a conversation_summaries row and touches no conversation_messages row; the append-only message history (content/events/superseded_by) is left byte-for-byte intact, so the summary is DERIVED data over the frozen record ([2026] VJS-COUNTY 4), never an edit of it.
+    tests:
+      - tests/security/test_conversation_compaction.py::test_compaction_never_mutates_a_frozen_message
+  SEC-91:
+    description: The compacted composition preserves prefix-stability across turns until the next compaction - with a fixed summary the composed task is render_summary_block(summary) + render_transcript(tail), the summary block is byte-stable and the tail only grows by appending, so turn N's task is a byte-prefix of turn N+1's and the gateway prompt cache keeps hitting (SEC-46).
+    tests:
+      - tests/security/test_conversation_compaction.py::test_compacted_composition_is_prefix_stable_until_next_compaction
+  SEC-92:
+    description: Superseded turns stay excluded after compaction - both the summarised older set and the verbatim tail are drawn from the superseded-filtered live set, so a regenerated-away reply is neither summarised into the derived summary nor present in the composed tail ([2026] VJS-COUNTY 4 exclusion survives compaction).
+    tests:
+      - tests/security/test_conversation_compaction.py::test_superseded_turns_stay_excluded_after_compaction
+  SEC-93:
+    description: Below the threshold the composition is unchanged - with fewer than compaction_threshold live messages (or compaction disabled) compose_turn_task renders the full verbatim history byte-identical to the pre-compaction continuity render, even when a summary row exists, so short conversations are never altered.
+    tests:
+      - tests/security/test_conversation_compaction.py::test_below_threshold_composition_is_unchanged

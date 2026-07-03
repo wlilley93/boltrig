@@ -36,6 +36,7 @@ from .conversation import (
     Conversation,
     ConversationMessage,
     ConversationStatus,
+    ConversationSummary,
     MessageRole,
 )
 from .platform import (
@@ -114,6 +115,7 @@ __all__ = [
     "Conversation",
     "ConversationMessage",
     "ConversationStatus",
+    "ConversationSummary",
     "MessageRole",
     "ConfigRevision",
     "EvalCase",

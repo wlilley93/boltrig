@@ -195,6 +195,19 @@ DEFAULT_MAX_TOTAL_ATTACHMENT_BYTES = 1024 * 1024  # 1 MiB total per turn (decode
 # event. 0 (or below) disables the keepalive entirely.
 DEFAULT_HEARTBEAT_SECONDS = 15.0
 
+# Long-conversation compaction (append-only derived summaries). Past
+# ``compaction_threshold`` LIVE (non-superseded) messages the continuity composer
+# sends [summary of older turns] + [the most recent ``compaction_keep_recent``
+# verbatim turns] instead of the whole history, so a long thread stays cheap while
+# a stable summary + a growing tail keep the gateway prompt-cache warm (prefix
+# stability holds between compactions). Conservative NON-ZERO defaults: on by
+# default, but 40 messages is well clear of a short thread, so ordinary
+# conversations are never compacted. ``compaction_threshold = 0`` (or a keep-recent
+# not strictly below the threshold) disables compaction entirely and restores the
+# full-verbatim continuity behaviour exactly.
+DEFAULT_COMPACTION_THRESHOLD = 40
+DEFAULT_COMPACTION_KEEP_RECENT = 12
+
 
 @dataclass(frozen=True)
 class ChatConfig:
@@ -217,6 +230,13 @@ class ChatConfig:
     # SSE keepalive interval in seconds (US-CHAT-11). Data, not a call-site
     # constant; a manifest may retune it. 0 or below disables the heartbeat.
     heartbeat_seconds: float = DEFAULT_HEARTBEAT_SECONDS
+    # Long-conversation compaction knobs (append-only derived summaries). Config
+    # -as-data (P7): the composer compacts past ``compaction_threshold`` live
+    # messages, keeping ``compaction_keep_recent`` recent turns verbatim. 0 (or a
+    # keep-recent not below the threshold) disables it, restoring full-verbatim
+    # continuity exactly.
+    compaction_threshold: int = DEFAULT_COMPACTION_THRESHOLD
+    compaction_keep_recent: int = DEFAULT_COMPACTION_KEEP_RECENT
 
 
 @dataclass(frozen=True)
@@ -500,6 +520,7 @@ def _parse_chat(raw: Mapping[str, Any]) -> ChatConfig:
         for role, skills in (raw.get("skills_by_role") or {}).items()
     }
     caps = raw.get("attachments") or {}
+    compaction = raw.get("compaction") or {}
     return ChatConfig(
         skills_by_role=skills_by_role,
         default_skills=_as_tuple(raw.get("default_skills")),
@@ -511,6 +532,16 @@ def _parse_chat(raw: Mapping[str, Any]) -> ChatConfig:
             DEFAULT_MAX_TOTAL_ATTACHMENT_BYTES, caps.get("max_total_bytes")
         ),
         heartbeat_seconds=_parse_heartbeat(raw.get("heartbeat_seconds")),
+        # Compaction is tighten-only ([2026] VJS-COUNTY 3 caps model): a manifest may
+        # only LOWER the threshold (compact sooner - cheaper) or keep FEWER recent
+        # turns verbatim, never grow the verbatim window past the code ceiling. 0
+        # disables that knob.
+        compaction_threshold=_tighten_cap(
+            DEFAULT_COMPACTION_THRESHOLD, compaction.get("threshold")
+        ),
+        compaction_keep_recent=_tighten_cap(
+            DEFAULT_COMPACTION_KEEP_RECENT, compaction.get("keep_recent")
+        ),
     )
 
 

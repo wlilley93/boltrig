@@ -24,6 +24,7 @@ from boltrig.models import (
     Conversation,
     ConversationMessage,
     ConversationStatus,
+    ConversationSummary,
     EMPTY_GRANTS,
     EvalCase,
     EvalRun,
@@ -81,6 +82,8 @@ class InMemoryStore(ChannelStoreMem):
         self._creds: dict[tuple[str, str], dict] = {}
         self._convs: dict[tuple[str, str], Conversation] = {}
         self._messages: dict[str, list[ConversationMessage]] = {}
+        # Append-only derived compaction summaries, keyed by conversation id.
+        self._summaries: dict[str, list[ConversationSummary]] = {}
         self._revisions: list[ConfigRevision] = []
         self._rev_seq = 0
         self._eval_cases: dict[tuple[str, str], EvalCase] = {}
@@ -462,9 +465,26 @@ class InMemoryStore(ChannelStoreMem):
                     m.superseded_by = superseded_by
                     return
 
+    async def add_conversation_summary(self, summary):
+        # Append-only ([2026] VJS-COUNTY 4 keeps message content frozen): a summary
+        # is derived data, INSERTED here and never mutating any message row.
+        self._summaries.setdefault(summary.conversation_id, []).append(summary)
+
+    async def get_latest_conversation_summary(self, tenant_id, conversation_id):
+        rows = [
+            s for s in self._summaries.get(conversation_id, [])
+            if s.tenant_id == tenant_id
+        ]
+        if not rows:
+            return None
+        # The latest summary covers the most messages (widest boundary); break ties
+        # by created_at so a re-compaction's fresh row wins.
+        return max(rows, key=lambda s: (s.covered_count, s.created_at))
+
     async def purge_closed_conversations(self, tenant_id, older_than):
         # M11 / SEC-74: hard-erase CLOSED conversations past the cutoff plus their
-        # messages; audit rows are elsewhere and never touched. Tenant-scoped.
+        # messages AND their derived summaries; audit rows are elsewhere and never
+        # touched. Tenant-scoped.
         doomed = [
             c for (t, _), c in self._convs.items()
             if t == tenant_id
@@ -474,6 +494,7 @@ class InMemoryStore(ChannelStoreMem):
         for conv in doomed:
             self._convs.pop((conv.tenant_id, conv.id), None)
             self._messages.pop(conv.id, None)
+            self._summaries.pop(conv.id, None)
         return len(doomed)
 
     # --- Round Three: config revisions ---

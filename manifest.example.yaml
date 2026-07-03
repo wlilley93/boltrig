@@ -262,6 +262,19 @@ chat:
     max_count: 8            # <= code default 8
     max_bytes: 262144       # <= code default 256 KiB per attachment (decoded)
     max_total_bytes: 1048576  # <= code default 1 MiB total per turn (decoded)
+  # SSE keepalive (US-CHAT-11): a live chat stream emits a heartbeat frame every
+  # this many seconds, so a slow-but-alive turn never trips a client idle guard.
+  # 0 or below disables it.
+  heartbeat_seconds: 15
+  # Long-conversation compaction (append-only derived summaries). Past `threshold`
+  # live (non-superseded) messages the continuity composer sends [summary of older
+  # turns] + [the most recent `keep_recent` verbatim turns], preserving prompt-cache
+  # prefix-stability (the summary + prefix stay byte-stable between compactions). A
+  # manifest may only TIGHTEN these (a lower threshold, fewer recent turns), never
+  # grow the verbatim window. `threshold: 0` disables compaction (full verbatim).
+  compaction:
+    threshold: 40           # <= code default 40 live messages
+    keep_recent: 12         # <= code default 12 verbatim recent turns
 
 # === Round Three additions (S10) - the manifest stays the source of truth (C1)
 # --- evaluation harness (Epic EVAL) -----------------------------------------

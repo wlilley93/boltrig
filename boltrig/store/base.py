@@ -22,6 +22,7 @@ from boltrig.models import (
     ConfigRevision,
     Conversation,
     ConversationMessage,
+    ConversationSummary,
     EvalCase,
     EvalRun,
     HITLRequest,
@@ -336,6 +337,16 @@ class Store(Protocol):
     async def mark_message_superseded(
         self, tenant_id: str, message_id: str, superseded_by: str
     ) -> None: ...
+    # Append-only DERIVED conversation summaries (long-conversation compaction).
+    # ``add_conversation_summary`` is INSERT-only - it NEVER mutates a frozen
+    # message; a re-compaction appends a fresh row covering more messages.
+    # ``get_latest_conversation_summary`` returns the summary covering the most
+    # messages (the widest boundary), or None when the conversation has never been
+    # compacted. Tenant-scoped (SEC-08).
+    async def add_conversation_summary(self, summary: "ConversationSummary") -> None: ...
+    async def get_latest_conversation_summary(
+        self, tenant_id: str, conversation_id: str
+    ) -> "ConversationSummary | None": ...
     # Right-to-erasure (M11 / SEC-74): HARD-DELETE every CLOSED conversation whose
     # close/update timestamp is at or before ``older_than``, together with its
     # conversation_messages, and return how many conversations were purged. The

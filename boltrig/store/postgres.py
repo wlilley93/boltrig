@@ -30,6 +30,7 @@ from boltrig.models import (
     Conversation,
     ConversationMessage,
     ConversationStatus,
+    ConversationSummary,
     EvalCase,
     EvalRun,
     MemoryItem,
@@ -874,13 +875,40 @@ class PostgresStore(ChannelStorePG):
             tenant_id, message_id, superseded_by,
         )
 
+    async def add_conversation_summary(self, s: ConversationSummary):
+        # Append-only ([2026] VJS-COUNTY 4 keeps message content frozen): a summary
+        # is DERIVED data INSERTED here; it never mutates a conversation_messages
+        # row. A re-compaction appends a new row, so ON CONFLICT DO NOTHING keeps
+        # the insert idempotent without ever overwriting.
+        await self._pool.execute(
+            """INSERT INTO conversation_summaries
+               (id, conversation_id, tenant_id, up_to_message_id, covered_count,
+                summary, created_at)
+               VALUES ($1,$2,$3,$4,$5,$6,$7)
+               ON CONFLICT (tenant_id, id) DO NOTHING""",
+            s.id, s.conversation_id, s.tenant_id, s.up_to_message_id,
+            s.covered_count, s.summary, s.created_at,
+        )
+
+    async def get_latest_conversation_summary(self, tenant_id, conversation_id):
+        # The latest summary covers the most messages (widest boundary); break ties
+        # by created_at so a re-compaction's fresh row wins.
+        row = await self._pool.fetchrow(
+            """SELECT * FROM conversation_summaries
+               WHERE tenant_id=$1 AND conversation_id=$2
+               ORDER BY covered_count DESC, created_at DESC
+               LIMIT 1""",
+            tenant_id, conversation_id,
+        )
+        return _summary(row)
+
     async def purge_closed_conversations(self, tenant_id, older_than):
         # M11 / SEC-74 right-to-erasure: HARD-DELETE CLOSED conversations past the
         # cutoff (updated_at is the close timestamp - the soft-close stamps it) and
-        # their conversation_messages. conversation_messages carries no FK to
-        # conversations, so the child rows are deleted explicitly first. The audit
-        # log is EXEMPT and never touched here (erasing the SEC-16 hash chain would
-        # break tamper-evidence). Tenant-scoped (SEC-08).
+        # their conversation_messages + derived conversation_summaries. Neither
+        # child table carries an FK to conversations, so the child rows are deleted
+        # explicitly first. The audit log is EXEMPT and never touched here (erasing
+        # the SEC-16 hash chain would break tamper-evidence). Tenant-scoped (SEC-08).
         rows = await self._pool.fetch(
             """SELECT id FROM conversations
                WHERE tenant_id=$1 AND status=$2 AND updated_at <= $3""",
@@ -891,6 +919,11 @@ class PostgresStore(ChannelStorePG):
             return 0
         await self._pool.execute(
             """DELETE FROM conversation_messages
+               WHERE tenant_id=$1 AND conversation_id = ANY($2::text[])""",
+            tenant_id, conv_ids,
+        )
+        await self._pool.execute(
+            """DELETE FROM conversation_summaries
                WHERE tenant_id=$1 AND conversation_id = ANY($2::text[])""",
             tenant_id, conv_ids,
         )
@@ -1436,6 +1469,16 @@ def _message(r):
         hitl_request_id=r["hitl_request_id"], events=list(r["events"] or []),
         attachments=list(r["attachments"] or []), superseded_by=r["superseded_by"],
         created_at=r["created_at"],
+    )
+
+
+def _summary(r):
+    if r is None:
+        return None
+    return ConversationSummary(
+        id=r["id"], conversation_id=r["conversation_id"], tenant_id=r["tenant_id"],
+        up_to_message_id=r["up_to_message_id"], covered_count=r["covered_count"],
+        summary=r["summary"], created_at=r["created_at"],
     )
 
 

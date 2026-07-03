@@ -60,3 +60,31 @@ class ConversationMessage:
     # filtered out of continuity - it is never presented as live.
     superseded_by: str | None = None
     created_at: datetime = field(default_factory=utcnow)
+
+
+@dataclass
+class ConversationSummary:
+    """A DERIVED, append-only compaction record over a conversation's older turns.
+
+    Long conversations get expensive to compose verbatim every turn. A summary is
+    a cheap derived view of the OLDER turns so the continuity composer can send
+    ``[summary of older turns] + [recent verbatim tail]`` instead of the full
+    history past a threshold (config-as-data on ``ChatConfig``).
+
+    It is DERIVED data, never a mutation of the frozen message record: the
+    append-only message history ([2026] VJS-COUNTY 4 froze message content) is
+    left completely intact. A summary row is only ever INSERTED (never updated);
+    a re-compaction appends a NEW row covering more messages, it does not edit an
+    old one. ``up_to_message_id`` is the id of the LAST live message the summary
+    covers - the split boundary the composer uses to divide older-vs-tail - and
+    ``covered_count`` is how many live messages that boundary spans (used to pick
+    the latest summary and to gate re-compaction). Tenant-isolated (SEC-08).
+    """
+
+    id: str
+    conversation_id: str
+    tenant_id: TenantId
+    up_to_message_id: str  # split boundary: the last live message this summary covers
+    covered_count: int  # number of live messages covered (latest-selection + re-compaction gate)
+    summary: str  # the derived digest of the covered older turns (DATA, never instructions)
+    created_at: datetime = field(default_factory=utcnow)

@@ -26,6 +26,7 @@ from boltrig.models import (
     Conversation,
     ConversationMessage,
     ConversationStatus,
+    ConversationSummary,
     GrantSet,
     InvocationContext,
     MessageRole,
@@ -35,7 +36,13 @@ from boltrig.models import (
     utcnow,
 )
 
-from .continuity import compose_turn_task, continuity_enabled
+from .continuity import (
+    compaction_enabled,
+    compose_turn_task,
+    continuity_enabled,
+    plan_compaction,
+    summarize_messages,
+)
 from .prompt_stack import wrap_untrusted
 from .pump import persist_new_work_items
 
@@ -44,6 +51,14 @@ from .pump import persist_new_work_items
 # relay.publish(run_id, ...) during the run; ChatService closes the relay stream
 # when it returns.
 TurnExecutor = Callable[..., Awaitable[Any]]
+
+# summariser(older_messages) -> awaitable[str]. An OPTIONAL model summariser for
+# conversation compaction. If wired it MUST run through the ONE kernel chokepoint
+# (its output re-enters the task, so the caller owns that governance); it may raise
+# or return empty, in which case the deterministic offline summariser stands in.
+# Absent one entirely, compaction uses the deterministic summariser only, so the
+# whole feature is testable with no model.
+Summariser = Callable[[list[ConversationMessage]], Awaitable[str]]
 
 _SCOPED_ROLES = {"org-admin", "compliance"}  # may read others' threads (SEC-25)
 
@@ -201,6 +216,7 @@ class ChatService:
         *,
         turn_executor: TurnExecutor | None = None,
         chat_config: ChatConfig | None = None,
+        summariser: Summariser | None = None,
     ) -> None:
         self._store = store
         self._relay = relay
@@ -208,6 +224,8 @@ class ChatService:
         # The attachment caps live on ChatConfig ([2026] VJS-COUNTY 3); absent a
         # manifest the fail-closed defaults (conservative, non-zero) apply.
         self._cfg = chat_config if chat_config is not None else ChatConfig()
+        # Optional model summariser for compaction; None => deterministic only.
+        self._summariser = summariser
 
     async def list_conversations(self, tenant_id: str, user_id: str) -> list[Conversation]:
         return await self._store.list_conversations(tenant_id, user_id)
@@ -286,6 +304,62 @@ class ChatService:
         )
         conv.updated_at = utcnow()
         await self._store.update_conversation(conv)
+        # Derive an append-only compaction summary AFTER the turn is fully
+        # persisted, so the NEXT turn's continuity read can compose the cheaper
+        # [summary + tail] form. Never mutates a message (P-append-only); a no-op
+        # until the thread crosses the threshold.
+        await self._maybe_compact(tenant_id, conv.id)
+
+    async def _summarise(self, older: list[ConversationMessage]) -> str:
+        """Derive summary text for the older turns. Try the optional model
+        summariser (its output re-enters the task, so wiring it through the ONE
+        chokepoint is the caller's contract); on any failure or empty result fall
+        back to the DETERMINISTIC offline summariser, so compaction always produces
+        a stable summary with no model (P9, mirroring the department head)."""
+        if self._summariser is not None:
+            try:
+                text = await self._summariser(older)
+                if text:
+                    return text
+            except Exception:  # a summariser failure degrades, never crashes (P9)
+                pass
+        return summarize_messages(older)
+
+    async def _maybe_compact(self, tenant_id: str, conversation_id: str) -> None:
+        """Append a fresh derived summary when the conversation has grown past the
+        threshold and the verbatim tail has regrown since the last summary.
+
+        DERIVED + append-only: it reads the (superseded-filtered) live messages,
+        computes the older set to cover, and INSERTS one ConversationSummary row.
+        It never touches a message (the frozen record stays intact) and it re-reads
+        only this conversation's own scoped messages (no new authority, SEC-49)."""
+        if not compaction_enabled(self._cfg):
+            return
+        messages = await self._store.list_messages(tenant_id, conversation_id)
+        live = [m for m in messages if m.superseded_by is None]
+        older = plan_compaction(live, self._cfg)
+        if not older:
+            return
+        # Re-compaction gate: only append a NEW summary when it would cover strictly
+        # MORE messages than the latest one (the tail has regrown past the previous
+        # boundary). This keeps the summary - and therefore the composed prefix -
+        # byte-stable across the turns between compactions (prefix stability).
+        latest = await self._store.get_latest_conversation_summary(
+            tenant_id, conversation_id
+        )
+        if latest is not None and len(older) <= latest.covered_count:
+            return
+        summary_text = await self._summarise(older)
+        await self._store.add_conversation_summary(
+            ConversationSummary(
+                id=uuid.uuid4().hex,
+                conversation_id=conversation_id,
+                tenant_id=tenant_id,
+                up_to_message_id=older[-1].id,
+                covered_count=len(older),
+                summary=summary_text,
+            )
+        )
 
     async def _drive(
         self, tenant_id, user_id, conv_id, run_id, message, role, grants,
@@ -411,6 +485,9 @@ class ChatService:
         if conv is not None:
             conv.updated_at = utcnow()
             await self._store.update_conversation(conv)
+        # A regenerate appends a reply too, so let compaction re-evaluate. The
+        # superseded old reply is filtered out of the covered set (SEC exclusion).
+        await self._maybe_compact(tenant_id, conversation_id)
         return new_message, last_assistant.id
 
     async def cancel(self, run_id: str) -> None:
@@ -499,7 +576,21 @@ def build_turn_executor(
             # compose_turn_task FILTERS superseded messages ([2026] VJS-COUNTY 4,
             # D4), so a regenerated-away reply never re-enters continuity.
             history = await kernel.store.list_messages(tenant_id, conversation_id)
-            task = compose_turn_task(history, message)
+            # Long-conversation compaction: past the threshold the composer sends
+            # [derived summary + recent verbatim tail] instead of the full history.
+            # The summary is read only when compaction is enabled; below the
+            # threshold (or with no summary) compose_turn_task renders the full
+            # verbatim history exactly as before. The summary + prefix stay
+            # byte-stable across turns until the next compaction, so the gateway
+            # prompt cache keeps hitting (SEC-46).
+            summary = None
+            if compaction_enabled(chat_cfg):
+                summary = await kernel.store.get_latest_conversation_summary(
+                    tenant_id, conversation_id
+                )
+            task = compose_turn_task(
+                history, message, summary=summary, config=chat_cfg
+            )
         # Attachments reach the model only as data ([2026] VJS-COUNTY 3, D4): text
         # attachments are enveloped via wrap_untrusted(kind=attachment) and appended;
         # every non-text attachment is skipped here, never decoded into the task.
