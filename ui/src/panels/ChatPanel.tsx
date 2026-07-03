@@ -9,6 +9,7 @@
 import {
   Children,
   isValidElement,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -25,12 +26,11 @@ import type {
   ChatEvent,
   ChatMessage,
   ChatRequest,
-  ConversationSummary,
+  ConversationSearchResult,
 } from "../api/types";
 import { consumeComposerPrefill } from "../composerPrefill";
 import { useSlideActive } from "../deck/context";
 import { navigate, openRun } from "../router";
-import { useFetch } from "../useFetch";
 import {
   loadReadAloud,
   saveReadAloud,
@@ -40,8 +40,8 @@ import {
 } from "../voice";
 import { TurnExtras, normalizeEvents } from "./chatTurn";
 import { apiReason } from "./shared";
-import { EmptyState, PageIntro } from "./ux";
-import { ArmConfirm } from "./uxFlow";
+import { EmptyState, FetchError, PageIntro } from "./ux";
+import { ArmConfirm, Skeleton } from "./uxFlow";
 import { Switch } from "./uxForm";
 
 // The turn normaliser and renderer (tool / sub-agent / inline-HITL cards) live
@@ -55,6 +55,205 @@ const EXAMPLE_PROMPTS: ReadonlyArray<string> = [
 
 // Faithful server reason (a denied chat shows the kernel's message, not a 403).
 const errText = apiReason;
+
+// Conversation-rail pagination + search (US-CONV-09 / US-CONV-10). The rail
+// loads one bounded page at a time and follows next_offset until it is null; the
+// default page size mirrors the kernel's conservative default (it is re-clamped
+// under the config ceiling server-side either way). Typing in the search box is
+// debounced so a term is not queried on every keystroke; clearing it restores
+// the paginated list immediately.
+const PAGE_SIZE = 25;
+const SEARCH_DEBOUNCE_MS = 300;
+
+type RailMode = "list" | "search";
+
+interface RailState {
+  mode: RailMode;
+  // In list mode snippet is always null; in search mode it carries the matched
+  // message preview (or null when the match was on the title alone).
+  items: ConversationSearchResult[];
+  // The offset to request for the next page, or null when the list/results are
+  // exhausted (no more pages to load).
+  nextOffset: number | null;
+  loading: boolean; // first-page load (drives the Skeleton)
+  loadingMore: boolean; // a "Load more" / scroll-triggered append in flight
+  error: string | null;
+  errorStatus: number | null;
+}
+
+function errStatus(err: unknown): number | null {
+  return err instanceof ApiError ? err.status : null;
+}
+
+// Split `text` on every case-insensitive occurrence of `term` and wrap the
+// matches in <mark>, so a search result shows WHY it matched. An empty term (or
+// no match) returns the text untouched. Regex specials in the term are escaped
+// so a user typing "a.b" matches the literal string, never a wildcard.
+function Highlight({ text, term }: { text: string; term: string }) {
+  const needle = term.trim();
+  if (!needle) return <>{text}</>;
+  const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const parts = text.split(new RegExp(`(${escaped})`, "ig"));
+  const lower = needle.toLowerCase();
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.toLowerCase() === lower ? (
+          <mark key={i} className="conv-item__hl">
+            {part}
+          </mark>
+        ) : (
+          <span key={i}>{part}</span>
+        ),
+      )}
+    </>
+  );
+}
+
+// The conversation rail's data engine: it owns the paginated list, the debounced
+// search, and the next_offset cursor, and exposes reload() (refetch the first
+// page in place, e.g. after a send / delete / rename) and loadMore() (append the
+// next page). A monotonic request id drops stale in-flight responses so a fast
+// switch between the list and a search term never renders the wrong page.
+function useConversationRail(query: string) {
+  const trimmed = query.trim();
+  const [debounced, setDebounced] = useState("");
+  useEffect(() => {
+    // Clearing the box restores the list immediately (0ms); typing a term waits
+    // out the debounce so we do not query on every keystroke.
+    const delay = trimmed ? SEARCH_DEBOUNCE_MS : 0;
+    const timer = window.setTimeout(() => setDebounced(trimmed), delay);
+    return () => window.clearTimeout(timer);
+  }, [trimmed]);
+
+  const [state, setState] = useState<RailState>({
+    mode: "list",
+    items: [],
+    nextOffset: null,
+    loading: true,
+    loadingMore: false,
+    error: null,
+    errorStatus: null,
+  });
+  // Mirror the latest state so loadMore can read the live cursor without being a
+  // dependency of its own callback (which would rebuild it every render).
+  const stateRef = useRef(state);
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
+  const seq = useRef(0);
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
+
+  // Load the first page for the current query. `background` (a reload) leaves the
+  // existing rows in place instead of flashing the Skeleton.
+  const fetchFirst = useCallback(
+    async (background: boolean) => {
+      const mine = ++seq.current;
+      const q = debounced;
+      const mode: RailMode = q ? "search" : "list";
+      if (!background) {
+        setState((s) => ({
+          ...s,
+          loading: true,
+          loadingMore: false,
+          error: null,
+          errorStatus: null,
+        }));
+      }
+      try {
+        let items: ConversationSearchResult[];
+        let nextOffset: number | null;
+        if (mode === "list") {
+          const res = await api.listConversations(PAGE_SIZE, 0);
+          items = res.conversations.map((c) => ({ ...c, snippet: null }));
+          nextOffset = res.next_offset ?? null;
+        } else {
+          const res = await api.searchConversations(q, PAGE_SIZE, 0);
+          items = res.results;
+          nextOffset = res.next_offset ?? null;
+        }
+        if (!alive.current || mine !== seq.current) return;
+        setState({
+          mode,
+          items,
+          nextOffset,
+          loading: false,
+          loadingMore: false,
+          error: null,
+          errorStatus: null,
+        });
+      } catch (err) {
+        if (!alive.current || mine !== seq.current) return;
+        setState((s) => ({
+          ...s,
+          loading: false,
+          loadingMore: false,
+          error: apiReason(err),
+          errorStatus: errStatus(err),
+        }));
+      }
+    },
+    [debounced],
+  );
+
+  useEffect(() => {
+    void fetchFirst(false);
+  }, [fetchFirst]);
+
+  // Append the next page (following next_offset). Tied to the first-page request
+  // id: if the query changes while a page is in flight, its response is dropped.
+  const loadMore = useCallback(async () => {
+    const cur = stateRef.current;
+    if (cur.nextOffset === null || cur.loading || cur.loadingMore) return;
+    const offset = cur.nextOffset;
+    const mine = seq.current;
+    const q = debounced;
+    const mode: RailMode = q ? "search" : "list";
+    setState((s) => ({ ...s, loadingMore: true }));
+    try {
+      let more: ConversationSearchResult[];
+      let nextOffset: number | null;
+      if (mode === "list") {
+        const res = await api.listConversations(PAGE_SIZE, offset);
+        more = res.conversations.map((c) => ({ ...c, snippet: null }));
+        nextOffset = res.next_offset ?? null;
+      } else {
+        const res = await api.searchConversations(q, PAGE_SIZE, offset);
+        more = res.results;
+        nextOffset = res.next_offset ?? null;
+      }
+      if (!alive.current || mine !== seq.current) return;
+      setState((s) => {
+        // Dedupe by id so a row already on screen is never doubled (e.g. a new
+        // conversation shifting the offsets between pages).
+        const seen = new Set(s.items.map((i) => i.id));
+        return {
+          ...s,
+          items: [...s.items, ...more.filter((m) => !seen.has(m.id))],
+          nextOffset,
+          loadingMore: false,
+        };
+      });
+    } catch (err) {
+      if (!alive.current || mine !== seq.current) return;
+      setState((s) => ({
+        ...s,
+        loadingMore: false,
+        error: apiReason(err),
+        errorStatus: errStatus(err),
+      }));
+    }
+  }, [debounced]);
+
+  return { state, reload: () => void fetchFirst(true), loadMore };
+}
 
 // Attachment caps mirror the fail-closed ChatConfig defaults on the kernel
 // ([2026] VJS-COUNTY 3): a count cap, a per-file decoded-bytes cap, and a total
@@ -258,17 +457,21 @@ function MarkdownText({ value }: { value: string }) {
 function ConversationRow({
   conversation,
   active,
+  highlight = "",
   onSelect,
   onDeleted,
   onRenamed,
 }: {
-  conversation: ConversationSummary;
+  conversation: ConversationSearchResult;
   active: boolean;
+  // the search term to highlight in the title + snippet ("" in list mode)
+  highlight?: string;
   onSelect: () => void;
   onDeleted: () => void;
   onRenamed: () => void;
 }) {
   const title = conversation.title || "(untitled)";
+  const snippet = conversation.snippet;
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState("");
   const [renameError, setRenameError] = useState<string | null>(null);
@@ -331,7 +534,14 @@ function ConversationRow({
           className={`conv-item ${active ? "conv-item--active" : ""}`}
           onClick={onSelect}
         >
-          <span className="conv-item__title">{title}</span>
+          <span className="conv-item__title">
+            <Highlight text={title} term={highlight} />
+          </span>
+          {snippet && (
+            <span className="conv-item__snippet">
+              <Highlight text={snippet} term={highlight} />
+            </span>
+          )}
           <span className="conv-item__meta">
             <span className="muted" title={conversation.updated_at}>
               {whenText(conversation.updated_at)}
@@ -476,7 +686,6 @@ export function ChatPanel() {
   // quiet ("off") while the slide is not active so it never talks over the
   // panel the user is actually on.
   const slideActive = useSlideActive();
-  const convs = useFetch(() => api.conversations(), []);
 
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -484,6 +693,8 @@ export function ChatPanel() {
   const [msgsError, setMsgsError] = useState<string | null>(null);
 
   const [query, setQuery] = useState("");
+  // The conversation rail: paginated list + debounced search over the same rail.
+  const rail = useConversationRail(query);
   const [input, setInput] = useState("");
   const [pendingUser, setPendingUser] = useState<string | null>(null);
   const [liveEvents, setLiveEvents] = useState<ChatEvent[]>([]);
@@ -780,7 +991,7 @@ export function ChatPanel() {
         if (!activeId) setActiveId(convId);
         await loadConversation(convId);
         if (!alive.current) return;
-        convs.reload();
+        rail.reload();
       }
       setPendingUser(null);
       setPendingAttachments([]);
@@ -811,7 +1022,7 @@ export function ChatPanel() {
       if (!activeId) setActiveId(convId);
       await loadConversation(convId);
       if (!alive.current) return;
-      convs.reload();
+      rail.reload();
     }
     setPendingUser(null);
     setPendingAttachments([]);
@@ -874,7 +1085,7 @@ export function ChatPanel() {
       }
       await loadConversation(activeId);
       if (!alive.current) return;
-      convs.reload();
+      rail.reload();
     } catch (err) {
       if (alive.current) setMsgsError(errText(err));
     } finally {
@@ -917,7 +1128,7 @@ export function ChatPanel() {
         if (!activeId) setActiveId(convId);
         await loadConversation(convId);
         if (!alive.current) return;
-        convs.reload();
+        rail.reload();
       }
       setPendingUser(null);
       setLiveEvents([]);
@@ -931,13 +1142,16 @@ export function ChatPanel() {
     }
   }
 
-  const conversations = convs.data?.conversations ?? [];
-  const filteredConversations = conversations.filter((c) => {
-    if (c.status.toLowerCase() === "closed") return false;
-    const q = query.trim().toLowerCase();
-    if (!q) return true;
-    return (c.title || "(untitled)").toLowerCase().includes(q);
-  });
+  // The rail rows to render. In list mode, hide any closed conversation (the
+  // former client behaviour); search results come pre-scoped from the server, so
+  // they are shown as-is. next_offset pagination is independent of this display
+  // filter (it follows the server's cursor, not the rendered count).
+  const searching = rail.state.mode === "search";
+  const railItems = searching
+    ? rail.state.items
+    : rail.state.items.filter((c) => c.status.toLowerCase() !== "closed");
+  const railTerm = searching ? query.trim() : "";
+  const railFirstLoad = rail.state.loading && rail.state.items.length === 0;
   const showLive = streaming || liveEvents.length > 0 || streamError !== null;
   const isEmpty =
     !msgsLoading &&
@@ -954,7 +1168,7 @@ export function ChatPanel() {
         how="Everything it does shows here as a live transcript - its reasoning, each tool call, and any approval it needs."
         actions={
           <>
-            <span className="muted">{conversations.length} conversation(s)</span>
+            <span className="muted">{railItems.length} loaded</span>
             {speech.supported && (
               <Switch
                 checked={readAloud}
@@ -973,39 +1187,83 @@ export function ChatPanel() {
       <div className="chat__layout">
         <aside className="chat__rail" aria-label="Conversations">
           <div className="chat__railhead">
-            <span className="chat__railtitle">Conversations</span>
-            <span className="muted">{filteredConversations.length}</span>
+            <span className="chat__railtitle">
+              {searching ? "Search results" : "Conversations"}
+            </span>
+            <span className="muted">{railItems.length}</span>
           </div>
           <input
             className="chat__search"
-            aria-label="Filter conversations"
-            placeholder="Filter conversations"
+            type="search"
+            aria-label="Search conversations"
+            placeholder="Search conversations"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
-          {convs.loading && !convs.data && <p className="muted">Loading...</p>}
-          {convs.error && <p className="error">Failed to load: {convs.error}</p>}
-          {!convs.loading && conversations.length === 0 && (
-            <p className="muted">No conversations yet - start one below.</p>
+          {railFirstLoad && <Skeleton variant="rows" count={6} />}
+          {!railFirstLoad && rail.state.error && (
+            <FetchError
+              error={rail.state.error}
+              status={rail.state.errorStatus}
+              onRetry={rail.reload}
+            />
           )}
-          {!convs.loading && conversations.length > 0 && filteredConversations.length === 0 && (
-            <p className="muted">No matches.</p>
+          {!railFirstLoad && !rail.state.error && railItems.length === 0 && (
+            searching ? (
+              <EmptyState
+                title="No matches"
+                body={
+                  <>
+                    Nothing matched <strong>{query.trim()}</strong>. Try a
+                    different word, or clear the box to see all conversations.
+                  </>
+                }
+              />
+            ) : (
+              <p className="muted">No conversations yet - start one below.</p>
+            )
           )}
-          <ul className="conv-list">
-            {filteredConversations.map((c) => (
+          <ul
+            className="conv-list"
+            onScroll={(e) => {
+              // Scroll-to-bottom auto-loads the next page when the rail list is a
+              // scroll container; the Load more button below is the always-present
+              // fallback. Both follow the same next_offset cursor.
+              const el = e.currentTarget;
+              if (
+                rail.state.nextOffset !== null &&
+                !rail.state.loadingMore &&
+                el.scrollHeight - el.scrollTop - el.clientHeight < 48
+              ) {
+                void rail.loadMore();
+              }
+            }}
+          >
+            {railItems.map((c) => (
               <ConversationRow
                 key={c.id}
                 conversation={c}
                 active={c.id === activeId}
+                highlight={railTerm}
                 onSelect={() => selectConversation(c.id)}
                 onDeleted={() => {
                   if (c.id === activeId) newConversation();
-                  convs.reload();
+                  rail.reload();
                 }}
-                onRenamed={() => convs.reload()}
+                onRenamed={() => rail.reload()}
               />
             ))}
           </ul>
+          {rail.state.nextOffset !== null && (
+            <button
+              type="button"
+              className="btn btn--ghost chat__loadmore"
+              disabled={rail.state.loadingMore}
+              onClick={() => void rail.loadMore()}
+            >
+              {rail.state.loadingMore ? "Loading..." : "Load more"}
+            </button>
+          )}
         </aside>
 
         <div className="chat__main">

@@ -38,6 +38,8 @@ import type {
   ConnectionsResponse,
   ConversationResponse,
   ConversationsResponse,
+  ConversationsPageResponse,
+  ConversationSearchResponse,
   BudgetsResponse,
   CostResponse,
   CreateEvalCaseRequest,
@@ -255,6 +257,40 @@ export const api = {
   // server-side, so re-opening a conversation always shows the completed turn.
   conversations(): Promise<ConversationsResponse> {
     return request<ConversationsResponse>("/v1/conversations");
+  },
+
+  // One bounded page of the owner-scoped conversation list (US-CONV-09). Passing
+  // a limit + offset opts into pagination: the response carries next_offset (the
+  // offset for the next page, or null when the list is exhausted). The bare
+  // conversations() above stays the unpaginated legacy call.
+  listConversations(
+    limit: number,
+    offset: number,
+  ): Promise<ConversationsPageResponse> {
+    const q = new URLSearchParams({
+      limit: String(limit),
+      offset: String(offset),
+    });
+    return request<ConversationsPageResponse>(`/v1/conversations?${q}`);
+  },
+
+  // Owner-scoped conversation search (US-CONV-10), paginated the same way. The
+  // caller must pass a non-empty term (an empty q is a 400 server-side); the UI
+  // never sends one. Each result carries an optional snippet of the matched
+  // message body.
+  searchConversations(
+    q: string,
+    limit: number,
+    offset: number,
+  ): Promise<ConversationSearchResponse> {
+    const params = new URLSearchParams({
+      q,
+      limit: String(limit),
+      offset: String(offset),
+    });
+    return request<ConversationSearchResponse>(
+      `/v1/conversations/search?${params}`,
+    );
   },
 
   conversation(id: string): Promise<ConversationResponse> {

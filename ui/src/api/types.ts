@@ -143,6 +143,31 @@ export interface ConversationsResponse {
   conversations: ConversationSummary[];
 }
 
+// One page of the owner-scoped conversation list (US-CONV-09). Asking for a
+// page (a limit and/or a non-zero offset) returns this shape: the page's rows
+// plus next_offset, the offset to request for the following page (null once the
+// list is exhausted). A bare GET /v1/conversations (no params) still returns the
+// unpaginated ConversationsResponse above, so that legacy path is untouched.
+export interface ConversationsPageResponse {
+  conversations: ConversationSummary[];
+  next_offset: number | null;
+}
+
+// One search hit (US-CONV-10): a conversation summary plus a bounded snippet of
+// the matched message body when the match was on content (null when the match
+// was on the title alone, or when no preview was recorded).
+export interface ConversationSearchResult extends ConversationSummary {
+  snippet: string | null;
+}
+
+// One page of owner-scoped conversation search results. Same next_offset
+// pagination contract as the list; an empty query is rejected 400 server-side
+// and is never sent from the client.
+export interface ConversationSearchResponse {
+  results: ConversationSearchResult[];
+  next_offset: number | null;
+}
+
 export type ChatRole = "user" | "assistant" | "system" | string;
 
 // An inline, size-capped chat attachment ([2026] VJS-COUNTY 3). The send body
