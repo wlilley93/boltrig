@@ -9,13 +9,16 @@ import pytest
 
 from boltrig.fleet import build_spawner
 from boltrig.fleet.model_router import select_model_endpoint
+from boltrig.fleet.spawn import Spawner
 from boltrig.kernel import Kernel
 from boltrig.kernel.audit import AuditWriter
 from boltrig.models import (
     AgentCapability,
+    AiConfig,
     GrantSet,
     InvocationContext,
     ModelEndpoint,
+    Organisation,
     SensitiveDataMisrouted,
     Skill,
     TenantPermissions,
@@ -93,3 +96,44 @@ async def test_spawn_blocks_sensitive_on_hosted_capability():
     )
     with pytest.raises(SensitiveDataMisrouted):
         await spawner.spawn(T, "handle sensitive record", ["analysis/x"], {}, ctx)
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-12")
+async def test_sensitive_ignores_external_ai_config_and_routes_local():
+    # An AI config ([2026] VJS-COUNTY 8, D5) that names an EXTERNAL provider must NOT
+    # move sensitive data off the local endpoint: for a sensitive call the config's
+    # provider/model/base_url are ignored and the local sensitive endpoint wins
+    # (SEC-12 residency composes with COUNTY 5 - a config narrows/redirects a standard
+    # route, never widens a sensitive one). The SAME config DOES route a NON-sensitive
+    # call, proving the guard is what suppresses it, not a broken config.
+    s = await _store_with_endpoints()
+    s.set_tenant_permissions(TenantPermissions(T, GrantSet.of(["*"])))
+    await s.create_org(
+        Organisation(id=T, name="Acme", slug="acme", allow_own_ai_keys=True)
+    )
+    await s.set_credential_ref(T, "cred-user", {"secret": "sk-user"})
+    await s.set_ai_config(AiConfig(
+        tenant_id=T, level="user", scope_id="u1",
+        provider="claude", model="claude-remote", credential_ref="cred-user",
+        base_url="http://external/v1",
+    ))
+    # The capability's own endpoint is the LOCAL sensitive one (an openai-shaped vllm).
+    cap = AgentCapability("worker", T, "openai", ["*"], 2, True, "standard",
+                          model_endpoint="local")
+    spawner = Spawner(Kernel(s))
+
+    # SENSITIVE: the config is ignored - runtime stays the capability default and the
+    # endpoint stays the local sensitive model, never the external claude route.
+    sens_ctx = InvocationContext(tenant_id=T, actor="worker", on_behalf_of="u1",
+                                 extra={"data_class": "sensitive"})
+    rt = await spawner._runtime_for(T, cap, sens_ctx)
+    assert rt.runtime == "openai"                 # NOT 'claude-api' from the config
+    assert rt.endpoint.model == "local-llm"       # NOT 'claude-remote' from the config
+    assert rt.endpoint.data_class == "sensitive"  # the local residency endpoint
+
+    # NON-sensitive: the very same config now DOES route (provider + model applied),
+    # so the suppression above is the residency guard, not an inert config.
+    std_ctx = InvocationContext(tenant_id=T, actor="worker", on_behalf_of="u1")
+    rt2 = await spawner._runtime_for(T, cap, std_ctx)
+    assert rt2.runtime == "claude-api" and rt2.endpoint.model == "claude-remote"

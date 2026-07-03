@@ -1669,13 +1669,14 @@ class PostgresStore(ChannelStorePG):
         await self._pool.execute(
             """INSERT INTO ai_configs
                (tenant_id, level, scope_id, provider, model, credential_ref,
-                created_at, updated_at)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,now())
+                base_url, created_at, updated_at)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,now())
                ON CONFLICT (tenant_id, level, scope_id) DO UPDATE SET
                  provider=EXCLUDED.provider, model=EXCLUDED.model,
-                 credential_ref=EXCLUDED.credential_ref, updated_at=now()""",
+                 credential_ref=EXCLUDED.credential_ref,
+                 base_url=EXCLUDED.base_url, updated_at=now()""",
             config.tenant_id, config.level, config.scope_id, config.provider,
-            config.model, config.credential_ref, config.created_at,
+            config.model, config.credential_ref, config.base_url, config.created_at,
         )
 
     async def get_ai_config(self, tenant_id, level, scope_id):
@@ -2113,6 +2114,7 @@ def _ai_config(r):
     return AiConfig(
         tenant_id=r["tenant_id"], level=r["level"], scope_id=r["scope_id"],
         provider=r["provider"], model=r["model"], credential_ref=r["credential_ref"],
+        base_url=r["base_url"],
         created_at=r["created_at"], updated_at=r["updated_at"],
     )
 

@@ -65,12 +65,16 @@ async def test_ai_config_row_holds_a_credential_ref_never_a_raw_key(store):
     assert got is not None
     assert got.provider == "anthropic" and got.model == "claude"
     assert got.credential_ref == "cred-1"
-    # A repeat set at the same key REPLACES (upsert), never duplicates.
+    assert got.base_url is None  # optional routing host defaults to NULL (backward-compat)
+    # A repeat set at the same key REPLACES (upsert), never duplicates - and the
+    # optional base_url routing host round-trips on both stores when named (D5).
     await store.set_ai_config(AiConfig(
         tenant_id=T, level="org", scope_id=T,
         provider="openai", model="gpt", credential_ref="cred-2",
+        base_url="http://byo/v1",
     ))
-    assert (await store.get_ai_config(T, "org", T)).credential_ref == "cred-2"
+    replaced = await store.get_ai_config(T, "org", T)
+    assert replaced.credential_ref == "cred-2" and replaced.base_url == "http://byo/v1"
     assert len(await store.list_ai_configs(T)) == 1
 
 

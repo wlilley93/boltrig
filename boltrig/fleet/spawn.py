@@ -44,9 +44,10 @@ from boltrig.kernel.cost import price_micros
 from .model_gateway import ModelGateway, apply_gateway, gateway_config
 from .model_router import select_model_endpoint
 from .result import AgentResult
-from .runtime import build_runtime
+from .runtime import build_runtime, runtime_for_provider
 
 if TYPE_CHECKING:  # type-only: keeps fleet import independent of fastapi/kernel
+    from boltrig.identity.ai_keys import AiKeyResolution
     from boltrig.kernel import Kernel
     from boltrig.kernel.app import Principal, SpawnBody
     from boltrig.kernel.dispatch import AgentInvoker
@@ -182,6 +183,38 @@ def _estimate(task: str, prompt: str, skills: list[str], cost_tier: str) -> tupl
     tokens = max(16, chars // 4)
     micros = price_micros(tokens, cost_tier)
     return tokens, micros
+
+
+def _routed_endpoint(
+    tenant_id: str, base: ModelEndpoint | None, resolution: AiKeyResolution
+) -> ModelEndpoint:
+    """The endpoint an ai_config selects for model/provider ROUTING (D5).
+
+    Layers the config's ``model`` and (when it names one) ``base_url`` OVER the
+    resolved endpoint, preserving that endpoint's ``id`` / ``data_class`` / ``fallback``
+    so nothing else about the route changes. When the capability names NO endpoint the
+    config synthesises a standard-class one from its own provider/model/base_url.
+
+    Only ever called for a NON-sensitive call (the caller gates on ``sensitive``), so
+    this can never manufacture a route for sensitive data - the sensitive->local
+    endpoint is chosen upstream and is never passed here (SEC-12 residency holds).
+    """
+    from dataclasses import replace
+
+    from boltrig.models import ModelEndpoint
+
+    model = resolution.model or (base.model if base is not None else "")
+    base_url = resolution.base_url or (base.base_url if base is not None else None)
+    if base is not None:
+        return replace(base, model=model, base_url=base_url)
+    return ModelEndpoint(
+        id="ai-config",
+        tenant_id=tenant_id,
+        kind=(resolution.provider or "openai"),
+        model=model,
+        base_url=base_url,
+        data_class="standard",
+    )
 
 
 class Spawner:
@@ -425,6 +458,28 @@ class Spawner:
             actor=capability.name,
         )
 
+        # Resolve the per-org/workspace/user AI config once ([2026] VJS-COUNTY 8, D5),
+        # precedence user -> workspace -> org -> env/manifest default, honouring the
+        # org allow_own_ai_keys gate. Returns BOTH the sealed key material (loaded
+        # kernel-side, at call time, handed straight to the runtime - never returned to
+        # an agent or audited) AND the provider/model/base_url selection. (None, None)
+        # => no config: the runtime falls back to the env-configured provider + key
+        # exactly as before (backward-compat for a tenant with no config).
+        api_key, resolution = await self._resolve_ai_key(tenant_id, context)
+
+        # Model/provider ROUTING (D5). When a config resolves (non-default) and the
+        # call is NOT sensitive, its provider selects the runtime and its model /
+        # base_url override the endpoint. SENSITIVE data is EXEMPT: the sensitive->local
+        # endpoint chosen above wins regardless of any external config, so residency
+        # holds and a config can only NARROW/redirect a standard route, never widen a
+        # sensitive one (SEC-12, COUNTY 5). An UNKNOWN provider maps to None and
+        # degrades to the env-default runtime (P9) rather than crashing the run.
+        runtime_override: str | None = None
+        if resolution is not None and not resolution.is_default and not sensitive:
+            runtime_override = runtime_for_provider(resolution.provider)
+            if runtime_override is not None:
+                endpoint = _routed_endpoint(tenant_id, endpoint, resolution)
+
         # Route standard (non-sensitive) conversation traffic through the model
         # gateway, pinned to the conversation's bound model so its prompt cache
         # stays warm across turns (gap 3.2). Inert when no gateway is configured;
@@ -443,13 +498,10 @@ class Spawner:
                 return endpoint
             return None
 
-        # Resolve the per-org/workspace/user AI key ([2026] VJS-COUNTY 8, D5),
-        # precedence user -> workspace -> org -> env/manifest default, honouring the
-        # org allow_own_ai_keys gate. The key is loaded from the SEALED credential
-        # store kernel-side, at call time, and handed straight to the runtime; it is
-        # never returned to an agent or audited. None => the runtime falls back to the
-        # env-configured provider key (backward-compat for a tenant with no config).
-        api_key = await self._resolve_ai_key(tenant_id, context)
+        # A routed call passes the selected endpoint explicitly (its id may no longer
+        # match capability.model_endpoint); an unrouted call keeps the lookup seam so
+        # dispatch is byte-for-byte as before.
+        endpoint_override = endpoint if runtime_override is not None else None
 
         if capability.runtime == "pi":
             pi_config: dict[str, Any] = {
@@ -462,22 +514,30 @@ class Spawner:
             if context is not None and context.run_id:
                 run_id = context.run_id  # bind for the relay sink
                 pi_config["event_sink"] = lambda ev: self._kernel.events.publish(run_id, ev)
-            return build_runtime(capability, lookup, pi_config=pi_config, api_key=api_key)
-        return build_runtime(capability, lookup, api_key=api_key)
+            return build_runtime(
+                capability, lookup, pi_config=pi_config, api_key=api_key,
+                runtime_override=runtime_override, endpoint_override=endpoint_override,
+            )
+        return build_runtime(
+            capability, lookup, api_key=api_key,
+            runtime_override=runtime_override, endpoint_override=endpoint_override,
+        )
 
     async def _resolve_ai_key(
         self, tenant_id: str, context: InvocationContext | None
-    ) -> str | None:
-        """Resolve + load the AI key for this run's model call ([2026] VJS-COUNTY 8, D5).
+    ) -> tuple[str | None, AiKeyResolution | None]:
+        """Resolve the AI config for this run's model call ([2026] VJS-COUNTY 8, D5).
 
-        The workspace scope is the caller's ALREADY-authorized active workspace
+        Returns ``(api_key, resolution)``: the sealed key material AND the
+        provider/model/base_url selection (metadata only, no secret material). The
+        workspace scope is the caller's ALREADY-authorized active workspace
         (``context.workspace_id``, re-checked against membership every request) and
         the user is the delegated human (``context.on_behalf_of``), so this can never
-        surface another org's or another workspace's key. Returns the sealed key
-        material, or None to fall back to the env/manifest key. A resolution failure
-        degrades to the env key (None) rather than crashing the run (P9)."""
+        surface another org's or another workspace's config. A resolution or load
+        failure degrades to ``(None, None)`` - the env/manifest provider + key -
+        rather than crashing the run (P9)."""
         if context is None:
-            return None
+            return None, None
         from boltrig.identity import load_ai_key_material, resolve_ai_key
 
         try:
@@ -487,11 +547,12 @@ class Spawner:
                 workspace_id=context.workspace_id,
                 user_id=context.on_behalf_of,
             )
-            return await load_ai_key_material(
+            material = await load_ai_key_material(
                 self._kernel.store, tenant_id, resolution
             )
+            return material, resolution
         except Exception:  # never let key resolution crash a run - fall back to env
-            return None
+            return None, None
 
     def _compose_prompt(self, merged_prompt: str, task: str) -> str:
         """Compose the skills' prompt fragments with the concrete task.

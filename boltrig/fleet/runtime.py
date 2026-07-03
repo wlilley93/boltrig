@@ -33,6 +33,35 @@ EndpointLookup = Callable[[str], "ModelEndpoint | None"]
 _MICROS_PER_TOKEN: dict[str, int] = {"cheap": 1, "standard": 5, "expensive": 25}
 
 
+# Map an ai_config PROVIDER selection ([2026] VJS-COUNTY 8, D5) to the runtime kind
+# that serves it. This is the model/provider-routing seam: with a resolved config the
+# spawner selects the runtime by provider, not by the capability's env default. Local
+# OpenAI-compatible servers (ollama / vllm) are served by the OpenAI runtime; the
+# Anthropic provider names map to the Claude API runtime. A provider OUTSIDE this set
+# is UNKNOWN and must degrade to the env default runtime, never crash a run (P9).
+_PROVIDER_RUNTIME: dict[str, str] = {
+    "hermes": "hermes",
+    "openai": "openai",
+    "ollama": "openai",
+    "vllm": "openai",
+    "anthropic": "claude-api",
+    "claude": "claude-api",
+    "claude-api": "claude-api",
+}
+
+
+def runtime_for_provider(provider: str | None) -> str | None:
+    """The runtime kind serving an ai_config PROVIDER selection, or None if unknown.
+
+    None is the fail-safe signal (D5): an unknown / empty provider must degrade to the
+    capability's env-default runtime rather than crash a run (P9). Case-insensitive so
+    a config's ``provider`` is matched the way ``ModelEndpoint.kind`` values are named.
+    """
+    if not provider:
+        return None
+    return _PROVIDER_RUNTIME.get(provider.strip().lower())
+
+
 def _first_env(names: tuple[str, ...]) -> str | None:
     """The first non-empty environment value among ``names`` (empty is falsy)."""
     for env in names:
@@ -348,6 +377,8 @@ def build_runtime(
     *,
     pi_config: dict[str, Any] | None = None,
     api_key: str | None = None,
+    runtime_override: str | None = None,
+    endpoint_override: "ModelEndpoint | None" = None,
 ) -> Runtime:
     """Select the runtime implementation for a capability (P4, US-FLT-04, US-RUN-01).
 
@@ -362,12 +393,20 @@ def build_runtime(
     None (no org/workspace/user config, or a keyless local endpoint) the runtime
     falls back to the env key exactly as before - so an existing single-tenant deploy
     is unchanged.
+
+    ``runtime_override`` / ``endpoint_override`` carry the model/provider ROUTING an
+    ai_config selects (D5): when a resolved config names a known provider, the spawner
+    passes the mapped runtime kind and the endpoint (model / base_url) it selected, and
+    they win over ``capability.runtime`` and the looked-up endpoint. Both default to
+    None so a call with no config dispatches EXACTLY as before (backward-compat). The
+    spawner only ever passes a KNOWN ``runtime_override`` (an unknown provider degrades
+    to None upstream), and it never routes sensitive data this way (SEC-12).
     """
-    endpoint: ModelEndpoint | None = None
-    if capability.model_endpoint and endpoint_lookup is not None:
+    endpoint: ModelEndpoint | None = endpoint_override
+    if endpoint is None and capability.model_endpoint and endpoint_lookup is not None:
         endpoint = endpoint_lookup(capability.model_endpoint)
 
-    kind = capability.runtime
+    kind = runtime_override or capability.runtime
     if kind == "hermes":
         return HermesRuntime(
             endpoint=endpoint, cost_tier=capability.cost_tier, api_key=api_key

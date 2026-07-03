@@ -138,5 +138,11 @@ class AiConfig:
     provider: str  # 'anthropic' | 'openai' | 'hermes' | ... (selection, not a secret)
     model: str  # pinned model/version
     credential_ref: str  # id into credential_refs (the SEALED key); never the raw key
+    # An OPTIONAL endpoint URL the config names (the provider's API base). When set it
+    # overrides the routed endpoint's base_url so a config can point at its own
+    # provider host; when None (the default, every existing row) the routed endpoint's
+    # own base_url is used - so an existing deploy is byte-for-byte unchanged. Never a
+    # secret: this is a routing selection, not a credential.
+    base_url: str | None = None
     created_at: datetime = field(default_factory=utcnow)
     updated_at: datetime = field(default_factory=utcnow)

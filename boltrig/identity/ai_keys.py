@@ -35,14 +35,19 @@ class AiKeyResolution:
     ``org`` for a configured key, or ``default`` when no config applies and the
     caller should fall back to the manifest/env-configured provider key.
     ``credential_ref`` is the id of the SEALED credential to load (None for the
-    default level). ``provider`` / ``model`` are the configured selection (None at
-    the default level).
+    default level). ``provider`` / ``model`` are the configured selection, and
+    ``base_url`` is the optional endpoint URL the config names (None at the default
+    level, and None when the config leaves it unset). These three drive model/provider
+    ROUTING (D5): with a non-default resolution the spawner selects the runtime by
+    ``provider`` and pins the endpoint's ``model`` / ``base_url`` - EXCEPT for
+    sensitive-classified data, where the local endpoint wins regardless (SEC-12).
     """
 
     level: str
     credential_ref: str | None = None
     provider: str | None = None
     model: str | None = None
+    base_url: str | None = None
 
     @property
     def is_default(self) -> bool:
@@ -56,6 +61,7 @@ def _from_config(level: str, config) -> AiKeyResolution:
         credential_ref=config.credential_ref,
         provider=config.provider,
         model=config.model,
+        base_url=getattr(config, "base_url", None),
     )
 
 

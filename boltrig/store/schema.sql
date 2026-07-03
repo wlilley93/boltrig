@@ -823,6 +823,7 @@ CREATE TABLE IF NOT EXISTS ai_configs (
     provider       TEXT NOT NULL,          -- 'anthropic' | 'openai' | 'hermes' | ... (selection)
     model          TEXT NOT NULL,          -- pinned model/version
     credential_ref TEXT NOT NULL,          -- id into credential_refs (the SEALED key); NEVER the raw key
+    base_url       TEXT,                   -- OPTIONAL provider host the config routes to (NULL => use the endpoint's own); routing metadata, never a secret
     created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (tenant_id, level, scope_id)

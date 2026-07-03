@@ -208,11 +208,12 @@ invariants:
       - tests/integration/test_durable_resume.py::test_task_body_cannot_bypass_governance
       - tests/integration/test_durable_resume.py::test_task_payload_tenant_must_match_the_envelope
   SEC-12:
-    description: Sensitive data routes only to local endpoints - a misroute is blocked and audited.
+    description: Sensitive data routes only to local endpoints - a misroute is blocked and audited, and an external AI config (D5) can never move sensitive data off the local endpoint (the config's provider/model/base_url are ignored for a sensitive call, while the same config still routes a non-sensitive one).
     tests:
       - tests/security/test_sensitive_routing.py::test_sensitive_data_blocked_from_hosted_and_audited
       - tests/security/test_sensitive_routing.py::test_sensitive_data_routes_to_local_endpoint
       - tests/security/test_sensitive_routing.py::test_spawn_blocks_sensitive_on_hosted_capability
+      - tests/security/test_sensitive_routing.py::test_sensitive_ignores_external_ai_config_and_routes_local
   SEC-15:
     description: Idempotent replay - a repeated idempotency key never re-executes a side-effecting verb.
     tests:
@@ -906,6 +907,13 @@ invariants:
       - tests/security/test_ai_keys.py::test_resolve_precedence_user_workspace_org_default
       - tests/security/test_ai_keys.py::test_no_config_tenant_falls_back_to_env_key
       - tests/security/test_ai_keys.py::test_spawner_wires_resolved_sealed_key_into_the_runtime
+  FR-AIKEY-03:
+    description: A resolved (non-default) ai_config drives model/provider ROUTING (D5) - its provider selects the RUNTIME (via runtime_for_provider) and its model / optional base_url override the endpoint the runtime pins to, so a config routes the call and not merely the key; a tenant with NO config dispatches the capability's env-default runtime + endpoint model byte-for-byte as before (backward-compat), a config that omits base_url keeps the endpoint's own host, and an UNKNOWN provider degrades to the env default runtime (runtime_for_provider -> None) without crashing the run while the sealed key still resolves (the key seam is independent of the routing degrade). Sensitive data is EXEMPT (the local endpoint wins regardless - see SEC-12).
+    tests:
+      - tests/security/test_model_routing.py::test_no_config_dispatches_the_env_default_runtime_and_model
+      - tests/security/test_model_routing.py::test_ai_config_provider_and_model_select_runtime_and_endpoint
+      - tests/security/test_model_routing.py::test_config_without_base_url_keeps_the_endpoint_host
+      - tests/security/test_model_routing.py::test_unknown_provider_degrades_to_the_env_default_without_crashing
   SEC-112:
     description: allow_own_ai_keys=False makes a workspace/user AI key IGNORED at resolution (D5) - when the org forbids member-owned keys, resolve_ai_key skips any workspace/user row and uses only the org key (or the env default when the org has none), so a workspace or a user can never bring their own key unless the org opts in; flipping the org to allow own keys immediately restores the user-key precedence.
     tests:

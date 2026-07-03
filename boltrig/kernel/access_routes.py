@@ -101,7 +101,7 @@ def _ai_config_view(c) -> dict:
     key itself (the secret lives only in the sealed credential store)."""
     return {
         "level": c.level, "scope_id": c.scope_id, "provider": c.provider,
-        "model": c.model, "has_key": bool(c.credential_ref),
+        "model": c.model, "base_url": c.base_url, "has_key": bool(c.credential_ref),
         "updated_at": c.updated_at.isoformat() if c.updated_at else None,
     }
 
@@ -589,6 +589,10 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
         provider = str(body.get("provider") or "").strip()
         model = str(body.get("model") or "").strip()
         api_key = str(body.get("api_key") or "").strip()
+        # OPTIONAL routing host: when the config names a base_url the selected model
+        # routes to it; empty => the endpoint's own base_url is used. Routing metadata,
+        # never a secret.
+        base_url = str(body.get("base_url") or "").strip() or None
         if not provider or not model or not api_key:
             return JSONResponse(
                 {"status": "error", "reason": "provider, model and api_key are required"},
@@ -604,15 +608,17 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
         await k.store.set_ai_config(AiConfig(
             tenant_id=p.tenant_id, level=level, scope_id=scope_id,
             provider=provider, model=model, credential_ref=credential_ref,
+            base_url=base_url,
         ))
-        # Keys-only audit: level/scope/provider/model + the credential REF id, NEVER
-        # the api_key itself (SEC-05, K-20).
+        # Keys-only audit: level/scope/provider/model/base_url + the credential REF id,
+        # NEVER the api_key itself (SEC-05, K-20).
         await _audit(k, p, "ai_key.set", {
             "level": level, "scope_id": scope_id, "provider": provider,
-            "model": model, "credential_ref": credential_ref,
+            "model": model, "base_url": base_url, "credential_ref": credential_ref,
         })
         return JSONResponse({"status": "ok", "level": level, "scope_id": scope_id,
-                             "provider": provider, "model": model})
+                             "provider": provider, "model": model,
+                             "base_url": base_url})
 
     @app.delete("/v1/ai-keys/{level}/{scope_id}")
     async def delete_ai_key(level: str, scope_id: str, k=K, p=P) -> JSONResponse:
