@@ -1240,3 +1240,193 @@ export interface MemoryIngestionRow {
 export interface MemoryIngestionsResponse {
   ingestions: MemoryIngestionRow[];
 }
+
+// === First-party auth + org/workspace tenancy (COUNTY 7 / 8) ===
+// The session login surface (boltrig/api/auth_routes.py) and the org/workspace
+// management surface (boltrig/kernel/access_routes.py). Every write below is a
+// mutating cookie request, so the client echoes the readable boltrig_csrf cookie
+// in the x-boltrig-csrf header (double-submit, see api/client.ts).
+
+// The authenticated user summary the login route returns (never a secret).
+export interface AuthUser {
+  id: string;
+  email: string;
+  role: string;
+}
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+// The login body is {status:"ok", csrf_token, user} on success, or a GENERIC
+// {status:"error", reason} on 401 (never enumerates emails) / 429 (throttled).
+export interface LoginResponse {
+  status: string;
+  csrf_token?: string;
+  user?: AuthUser;
+  reason?: string;
+}
+
+export interface AcceptInviteRequest {
+  token: string;
+  password: string;
+}
+
+// Success is {status:"ok", email}; a bad/expired token or a weak password is a
+// faithful {status:"error", reason} 400.
+export interface AcceptInviteResponse {
+  status: string;
+  email?: string;
+  reason?: string;
+}
+
+// The session's active workspace switch (re-authorized server-side each call).
+export interface SwitchContextResponse {
+  status: string;
+  workspace_id?: string;
+  reason?: string;
+}
+
+export interface WorkspaceView {
+  id: string;
+  name: string;
+  slug: string;
+  status: string;
+  settings: Record<string, unknown>;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface WorkspacesResponse {
+  workspaces: WorkspaceView[];
+}
+
+export interface CreateWorkspaceRequest {
+  name: string;
+  settings?: Record<string, unknown>;
+}
+
+export interface WorkspaceMutationResponse {
+  status: string;
+  workspace?: WorkspaceView;
+  reason?: string;
+}
+
+export interface UpdateWorkspaceRequest {
+  name?: string;
+  settings?: Record<string, unknown>;
+  status?: "active" | "archived";
+}
+
+export interface WorkspaceMemberView {
+  user_id: string;
+  workspace_id: string;
+  role: string;
+  permissions: Record<string, unknown>;
+  created_at?: string | null;
+}
+
+// The roster read is {members:[...]}; a non-member/non-admin caller is refused
+// with {status:"denied"/"error", reason} (403/404), no members key.
+export interface WorkspaceMembersResponse {
+  members?: WorkspaceMemberView[];
+  status?: string;
+  reason?: string;
+}
+
+export interface AddWorkspaceMemberRequest {
+  user_id: string;
+  role: string;
+  permissions?: Record<string, unknown>;
+}
+
+export interface AddWorkspaceMemberResponse {
+  status: string;
+  member?: WorkspaceMemberView;
+  reason?: string;
+}
+
+export interface OrganisationView {
+  id: string;
+  name: string;
+  slug: string;
+  settings: Record<string, unknown>;
+  allow_own_ai_keys: boolean;
+  require_two_factor: boolean;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface CurrentOrgResponse {
+  organisation: OrganisationView;
+}
+
+export interface UpdateOrgRequest {
+  name?: string;
+  slug?: string;
+  settings?: Record<string, unknown>;
+  allow_own_ai_keys?: boolean;
+  require_two_factor?: boolean;
+}
+
+// The PATCH echoes the updated org on success; a non-admin is refused
+// {status:"denied", reason} (403) via the central error envelope.
+export interface UpdateOrgResponse {
+  status?: string;
+  organisation?: OrganisationView;
+  reason?: string;
+}
+
+export interface OrgMemberView {
+  user_id: string;
+  role: string;
+  created_at?: string | null;
+}
+
+export interface OrgMembersResponse {
+  members: OrgMemberView[];
+}
+
+export type AiKeyLevel = "org" | "workspace" | "user";
+
+// An AI-config row for listing: provider/model + WHETHER a key is set, NEVER the
+// key itself (the secret lives only in the sealed credential store).
+export interface AiKeyView {
+  level: AiKeyLevel;
+  scope_id: string;
+  provider: string;
+  model: string;
+  has_key: boolean;
+  updated_at?: string | null;
+}
+
+export interface AiKeysResponse {
+  allow_own_ai_keys: boolean;
+  ai_keys: AiKeyView[];
+}
+
+// The api_key is accepted ONCE and sealed server-side; it is never echoed back.
+export interface SetAiKeyRequest {
+  level: AiKeyLevel;
+  scope_id?: string;
+  provider: string;
+  model: string;
+  api_key: string;
+}
+
+export interface SetAiKeyResponse {
+  status: string;
+  level?: string;
+  scope_id?: string;
+  provider?: string;
+  model?: string;
+  reason?: string;
+}
+
+export interface DeleteAiKeyResponse {
+  status: string;
+  level?: string;
+  scope_id?: string;
+  reason?: string;
+}

@@ -31,7 +31,7 @@ import {
 } from "./admin/sections";
 import type { AdminSection } from "./admin/sections";
 import { apiReason, CodeBlock, errText } from "./shared";
-import { SchemaFormV2 } from "./uxForm";
+import { SchemaFormV2, SegmentedV2 } from "./uxForm";
 import {
   ArmConfirm,
   DiffView,
@@ -40,6 +40,16 @@ import {
   SaveBar,
 } from "./uxFlow";
 import { InfoCallout, PageIntro, Select } from "./ux";
+import { TenancyAdmin } from "./admin/TenancyAdmin";
+
+// The admin console has two views: the manifest CONFIGURATION editor (governed
+// through control.config.upsert) and ORGANISATION administration (org policy,
+// workspaces, members, AI keys, over the REST tenancy surface). One console, two
+// views - not a parallel settings system.
+const ADMIN_VIEWS = [
+  { value: "config", label: "Configuration" },
+  { value: "organisation", label: "Organisation & workspaces" },
+];
 
 const ADMIN_ROLES: ReadonlySet<string> = new Set(["org-admin"]);
 
@@ -53,6 +63,10 @@ function resultReason(result: InvokeResult): string | null {
 export function AdminPanel() {
   const identity = useIdentity();
   const isAdmin = ADMIN_ROLES.has(identity.role);
+
+  // Which admin view is showing: the manifest config editor or the org/workspace
+  // administration surface (both server-gated to org-admin).
+  const [view, setView] = useState<string>("config");
 
   const [sectionKey, setSectionKey] = useState<string>(ADMIN_SECTIONS[0].key);
   const section: AdminSection = useMemo(
@@ -225,21 +239,32 @@ export function AdminPanel() {
         lead="Edit your organisation's configuration through typed, governed controls."
         how="Pick a section and change its settings. Saving requests a governed change - a high-consequence config amendment pauses for a human approval, then records a revision you can roll back to. Secrets are never shown, only referenced."
         actions={
-          <>
-            <div style={{ minWidth: 200 }}>
-              <Select
-                value={sectionKey}
-                ariaLabel="Manifest section"
-                onChange={setSectionKey}
-                options={ADMIN_SECTION_OPTIONS}
-              />
-            </div>
-            <button className="btn" onClick={() => void loadSection(section)}>
-              Reload
-            </button>
-          </>
+          view === "config" ? (
+            <>
+              <div style={{ minWidth: 200 }}>
+                <Select
+                  value={sectionKey}
+                  ariaLabel="Manifest section"
+                  onChange={setSectionKey}
+                  options={ADMIN_SECTION_OPTIONS}
+                />
+              </div>
+              <button className="btn" onClick={() => void loadSection(section)}>
+                Reload
+              </button>
+            </>
+          ) : undefined
         }
       />
+
+      <div className="admin__viewtoggle">
+        <SegmentedV2
+          value={view}
+          onChange={setView}
+          options={ADMIN_VIEWS}
+          ariaLabel="Admin console view"
+        />
+      </div>
 
       {!isAdmin && (
         <p className="notice warn">
@@ -248,6 +273,9 @@ export function AdminPanel() {
         </p>
       )}
 
+      {view === "organisation" && <TenancyAdmin />}
+
+      {view === "config" && (
       <div className="cols">
         <div className="stack">
           <div className="form">
@@ -408,6 +436,7 @@ export function AdminPanel() {
           </div>
         </div>
       </div>
+      )}
     </section>
   );
 }

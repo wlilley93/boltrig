@@ -112,6 +112,26 @@ import type {
   WorkflowRunRecord,
   WorkflowRunsResponse,
   WorkflowsResponse,
+  AcceptInviteRequest,
+  AcceptInviteResponse,
+  AddWorkspaceMemberRequest,
+  AddWorkspaceMemberResponse,
+  AiKeysResponse,
+  CreateWorkspaceRequest,
+  CurrentOrgResponse,
+  DeleteAiKeyResponse,
+  LoginRequest,
+  LoginResponse,
+  OrgMembersResponse,
+  SetAiKeyRequest,
+  SetAiKeyResponse,
+  SwitchContextResponse,
+  UpdateOrgRequest,
+  UpdateOrgResponse,
+  UpdateWorkspaceRequest,
+  WorkspaceMembersResponse,
+  WorkspaceMutationResponse,
+  WorkspacesResponse,
 } from "./types";
 
 // Optional base prefix (e.g. when the UI is mounted under a sub-path).
@@ -140,6 +160,35 @@ function identityHeaders(): Record<string, string> {
   };
 }
 
+// The mutating HTTP methods that a first-party session gates with CSRF. The
+// session cookie (boltrig_session) is httpOnly, so a browser attaches it
+// automatically; the double-submit defence is to ALSO echo the readable
+// boltrig_csrf cookie in the x-boltrig-csrf header (a value a cross-site form
+// cannot set). Safe reads never need it. See boltrig/identity/sessions.py.
+const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+const CSRF_COOKIE = "boltrig_csrf";
+const CSRF_HEADER = "x-boltrig-csrf";
+
+// Read the readable CSRF cookie the login route set. Absent under the dev
+// header-auth resolver (no session cookie), so the header is simply omitted -
+// dev/e2e requests are unaffected; only a real session carries the cookie.
+function readCsrfCookie(): string | null {
+  if (typeof document === "undefined" || !document.cookie) return null;
+  for (const part of document.cookie.split(";")) {
+    const [name, ...rest] = part.trim().split("=");
+    if (name === CSRF_COOKIE) return decodeURIComponent(rest.join("="));
+  }
+  return null;
+}
+
+// The x-boltrig-csrf header for a mutating request, or {} when there is no CSRF
+// cookie (header-auth dev / logged-out). Never throws.
+function csrfHeaders(method: string): Record<string, string> {
+  if (!MUTATING_METHODS.has(method.toUpperCase())) return {};
+  const token = readCsrfCookie();
+  return token ? { [CSRF_HEADER]: token } : {};
+}
+
 async function parseBody(res: Response): Promise<unknown> {
   const text = await res.text();
   if (!text) return null;
@@ -159,7 +208,10 @@ interface RequestOptions {
 
 async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   const { method = "GET", body, tolerateStatus = false } = opts;
-  const headers: Record<string, string> = { ...identityHeaders() };
+  const headers: Record<string, string> = {
+    ...identityHeaders(),
+    ...csrfHeaders(method),
+  };
   if (body !== undefined) headers["content-type"] = "application/json";
 
   let res: Response;
@@ -853,6 +905,137 @@ export const api = {
       { method: "DELETE", tolerateStatus: true },
     );
   },
+
+  // === First-party auth (COUNTY 7): session login, invite accept, logout ===
+  // These are the internet-facing gate when auth_mode=session. login/accept are
+  // public (no principal); logout requires the session. All carry tolerateStatus
+  // so a 401 (generic), 429 (throttled) or 400 (bad token / weak password)
+  // renders faithfully instead of throwing.
+
+  login(body: LoginRequest): Promise<LoginResponse> {
+    return request<LoginResponse>("/v1/auth/login", {
+      method: "POST",
+      body,
+      tolerateStatus: true,
+    });
+  },
+
+  acceptInvite(body: AcceptInviteRequest): Promise<AcceptInviteResponse> {
+    return request<AcceptInviteResponse>("/v1/auth/accept-invite", {
+      method: "POST",
+      body,
+      tolerateStatus: true,
+    });
+  },
+
+  logout(): Promise<StatusAck> {
+    return request<StatusAck>("/v1/auth/logout", {
+      method: "POST",
+      tolerateStatus: true,
+    });
+  },
+
+  // === Active context (COUNTY 8): switch the session's active workspace ===
+  // The switch is re-authorized against membership server-side (404 unknown, 403
+  // non-member, no write); tolerateStatus so those render as a message.
+  switchActiveContext(workspaceId: string): Promise<SwitchContextResponse> {
+    return request<SwitchContextResponse>("/v1/me/active-context", {
+      method: "POST",
+      body: { workspace_id: workspaceId },
+      tolerateStatus: true,
+    });
+  },
+
+  // === Workspaces (COUNTY 8): the caller's own workspaces + management ===
+
+  workspaces(): Promise<WorkspacesResponse> {
+    return request<WorkspacesResponse>("/v1/workspaces");
+  },
+
+  createWorkspace(
+    body: CreateWorkspaceRequest,
+  ): Promise<WorkspaceMutationResponse> {
+    return request<WorkspaceMutationResponse>("/v1/workspaces", {
+      method: "POST",
+      body,
+      tolerateStatus: true,
+    });
+  },
+
+  updateWorkspace(
+    id: string,
+    body: UpdateWorkspaceRequest,
+  ): Promise<WorkspaceMutationResponse> {
+    return request<WorkspaceMutationResponse>(
+      `/v1/workspaces/${encodeURIComponent(id)}`,
+      { method: "PATCH", body, tolerateStatus: true },
+    );
+  },
+
+  workspaceMembers(id: string): Promise<WorkspaceMembersResponse> {
+    return request<WorkspaceMembersResponse>(
+      `/v1/workspaces/${encodeURIComponent(id)}/members`,
+      { tolerateStatus: true },
+    );
+  },
+
+  addWorkspaceMember(
+    id: string,
+    body: AddWorkspaceMemberRequest,
+  ): Promise<AddWorkspaceMemberResponse> {
+    return request<AddWorkspaceMemberResponse>(
+      `/v1/workspaces/${encodeURIComponent(id)}/members`,
+      { method: "POST", body, tolerateStatus: true },
+    );
+  },
+
+  removeWorkspaceMember(id: string, userId: string): Promise<DeleteAck> {
+    return request<DeleteAck>(
+      `/v1/workspaces/${encodeURIComponent(id)}/members/${encodeURIComponent(userId)}`,
+      { method: "DELETE", tolerateStatus: true },
+    );
+  },
+
+  // === Organisation (COUNTY 8): the caller's org handle + policy flags ===
+
+  currentOrg(): Promise<CurrentOrgResponse> {
+    return request<CurrentOrgResponse>("/v1/orgs/current");
+  },
+
+  updateCurrentOrg(body: UpdateOrgRequest): Promise<UpdateOrgResponse> {
+    return request<UpdateOrgResponse>("/v1/orgs/current", {
+      method: "PATCH",
+      body,
+      tolerateStatus: true,
+    });
+  },
+
+  orgMembers(): Promise<OrgMembersResponse> {
+    return request<OrgMembersResponse>("/v1/orgs/current/members");
+  },
+
+  // === AI keys (COUNTY 8): per-org / workspace / user, sealed once ===
+  // GET returns has_key only (never the key). PUT accepts the key once (sealed
+  // server-side). DELETE drops the row + sealed credential.
+
+  aiKeys(): Promise<AiKeysResponse> {
+    return request<AiKeysResponse>("/v1/ai-keys");
+  },
+
+  setAiKey(body: SetAiKeyRequest): Promise<SetAiKeyResponse> {
+    return request<SetAiKeyResponse>("/v1/ai-keys", {
+      method: "PUT",
+      body,
+      tolerateStatus: true,
+    });
+  },
+
+  deleteAiKey(level: string, scopeId: string): Promise<DeleteAiKeyResponse> {
+    return request<DeleteAiKeyResponse>(
+      `/v1/ai-keys/${encodeURIComponent(level)}/${encodeURIComponent(scopeId)}`,
+      { method: "DELETE", tolerateStatus: true },
+    );
+  },
 };
 
 // Raised when an SSE stream goes silent past the idle window: no frame, no
@@ -953,6 +1136,7 @@ export async function streamChat(
 ): Promise<void> {
   const headers: Record<string, string> = {
     ...identityHeaders(),
+    ...csrfHeaders("POST"),
     "content-type": "application/json",
     accept: "text/event-stream",
   };

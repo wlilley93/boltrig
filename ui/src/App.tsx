@@ -37,6 +37,7 @@ import { OrganisationSlide } from "./panels/settings/OrganisationSlide";
 import { StepSlide } from "./panels/StepSlide";
 import { RunView } from "./panels/RunView";
 import { CommandPalette } from "./panels/CommandPalette";
+import { SessionControls } from "./panels/SessionControls";
 
 // The role gates live with the deck row model now; App re-exports them so the
 // existing `import { AUTHOR_ROLES } from "../App"` call sites keep working.
@@ -584,6 +585,7 @@ export function App() {
 
         <div className="side__foot">
           <HealthDot />
+          <SessionControls />
           <IdentityChip
             expanded={identityOpen}
             onToggle={() => setIdentityOpen((v) => !v)}
