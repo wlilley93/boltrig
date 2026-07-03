@@ -2944,6 +2944,25 @@ select:focus {
   box-shadow: 0 0 0 1px rgba(61, 211, 240, 0.5), 0 0 16px rgba(61, 211, 240, 0.4);
 }
 
+/* --- voice v1: dictation mic + listening indicator ------------------------ */
+/* The mic button lights electric-blue and pulses while transcribing so the
+   listening state is unmistakable. reduce-motion drops the pulse for a calm
+   static glow (matching the composer's thinking treatment above). */
+.chat__mic--on {
+  border-color: rgba(61, 211, 240, 0.6);
+  color: var(--color-text-primary);
+  box-shadow: 0 0 0 1px rgba(61, 211, 240, 0.4), 0 0 12px rgba(61, 211, 240, 0.3);
+  animation: chat-bar-pulse 1.6s ease-in-out infinite;
+}
+:root.reduce-motion .chat__mic--on {
+  animation: none;
+}
+.chat__listening {
+  margin-left: 8px;
+  color: #6fe3f7;
+  font-weight: 600;
+}
+
 /* --- Workflow node: denser layout + a high-consequence marker ------------- */
 .wf-node {
   position: relative;

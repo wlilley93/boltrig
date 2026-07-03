@@ -31,10 +31,18 @@ import { consumeComposerPrefill } from "../composerPrefill";
 import { useSlideActive } from "../deck/context";
 import { navigate, openRun } from "../router";
 import { useFetch } from "../useFetch";
+import {
+  loadReadAloud,
+  saveReadAloud,
+  useDictation,
+  useSpeech,
+  type Speech,
+} from "../voice";
 import { TurnExtras, normalizeEvents } from "./chatTurn";
 import { apiReason } from "./shared";
 import { EmptyState, PageIntro } from "./ux";
 import { ArmConfirm } from "./uxFlow";
+import { Switch } from "./uxForm";
 
 // The turn normaliser and renderer (tool / sub-agent / inline-HITL cards) live
 // in chatTurn.tsx so the Run drawer reuses the exact same rendering.
@@ -355,6 +363,24 @@ function ConversationRow({
   );
 }
 
+// A per-message "read aloud" control (only for assistant text, and only when
+// the browser supports speechSynthesis). Speaks that message on demand and
+// toggles to Stop while it is the one being spoken.
+function SpeakButton({ speech, msgKey, text }: { speech: Speech; msgKey: string; text: string }) {
+  if (!speech.supported || !text.trim()) return null;
+  const speaking = speech.speakingKey === msgKey;
+  return (
+    <button
+      type="button"
+      className="btn btn--ghost btn--sm"
+      aria-pressed={speaking}
+      onClick={() => (speaking ? speech.cancel() : speech.speak(msgKey, text))}
+    >
+      {speaking ? "Stop" : "Read aloud"}
+    </button>
+  );
+}
+
 function MessageBubble({
   message,
   resolvedHitls,
@@ -362,6 +388,7 @@ function MessageBubble({
   canRegenerate,
   regenerating,
   onRegenerate,
+  speech,
 }: {
   message: ChatMessage;
   resolvedHitls: Record<string, string>;
@@ -369,6 +396,7 @@ function MessageBubble({
   canRegenerate: boolean;
   regenerating: boolean;
   onRegenerate: () => void;
+  speech: Speech;
 }) {
   const turn = useMemo(() => normalizeEvents(message.events ?? []), [message.events]);
   const isAssistant = message.role === "assistant";
@@ -390,6 +418,9 @@ function MessageBubble({
       <div className="chat-msg__meta">
         <span title={message.created_at}>{whenText(message.created_at)}</span>
         {message.content && <CopyButton text={message.content} />}
+        {isAssistant && message.content && (
+          <SpeakButton speech={speech} msgKey={message.id} text={message.content} />
+        )}
         {message.run_id && (
           <button
             type="button"
@@ -471,6 +502,38 @@ export function ChatPanel() {
 
   // The message id currently being regenerated (its button shows a busy state).
   const [regenerating, setRegenerating] = useState<string | null>(null);
+
+  // Browser-native voice (Web Speech API). Both are feature-detected inside the
+  // hooks and are inert when the browser lacks support, so the controls simply
+  // do not render and nothing throws.
+  const speech = useSpeech();
+  const [readAloud, setReadAloud] = useState<boolean>(() => loadReadAloud());
+  // The composer text captured when dictation starts: transcribed words are
+  // appended to it so the user can dictate mid-message and still edit.
+  const dictationBaseRef = useRef("");
+  // While sending we stop dictation but must not let its trailing final result
+  // repopulate the just-cleared composer; this suppresses that last callback.
+  const suppressDictationRef = useRef(false);
+  const dictation = useDictation((transcript, done) => {
+    if (suppressDictationRef.current) {
+      if (done) suppressDictationRef.current = false;
+      return;
+    }
+    const base = dictationBaseRef.current;
+    const joined = base ? `${base.replace(/\s+$/, "")} ${transcript}` : transcript;
+    setInput(done ? joined.trimEnd() : joined);
+  });
+  // The assistant text accumulated across a streaming turn (text deltas only,
+  // never tool callouts or heartbeats), plus whether the turn was cancelled, so
+  // a completed turn can be read aloud when the preference is on.
+  const turnTextRef = useRef("");
+  const turnCancelledRef = useRef(false);
+
+  function setReadAloudPref(on: boolean) {
+    setReadAloud(on);
+    saveReadAloud(on);
+    if (!on) speech.cancel();
+  }
 
   // The conversation_id is unknown until the first message_start of a new
   // conversation; we hold it in a ref so the stream callback can stash it
@@ -620,6 +683,7 @@ export function ChatPanel() {
 
   function selectConversation(id: string) {
     if (id === activeId) return;
+    speech.cancel();
     abortRef.current?.abort();
     setStreaming(false);
     setStopped(false);
@@ -632,6 +696,7 @@ export function ChatPanel() {
   }
 
   function newConversation() {
+    speech.cancel();
     abortRef.current?.abort();
     setStreaming(false);
     setStopped(false);
@@ -649,6 +714,16 @@ export function ChatPanel() {
     const text = input.trim();
     const atts = attachments;
     if ((!text && atts.length === 0) || streaming) return;
+
+    // Stop dictation (its trailing final result is suppressed) and silence any
+    // reply still being read aloud before a new turn begins.
+    if (dictation.listening) {
+      suppressDictationRef.current = true;
+      dictation.stop();
+    }
+    speech.cancel();
+    turnTextRef.current = "";
+    turnCancelledRef.current = false;
 
     setInput("");
     setStreamError(null);
@@ -677,9 +752,15 @@ export function ChatPanel() {
           if (ev.type === "message_start" && ev.conversation_id) {
             pendingConvId.current = ev.conversation_id;
           }
+          // Accumulate only the assistant's own text for read-aloud (tool cards
+          // and heartbeats are never spoken).
+          if (ev.type === "text_delta") turnTextRef.current += ev.delta;
           // A server-side cancel ends the stream: mark the turn stopped so the
-          // banner shows once the (partial) reply settles.
-          if (ev.type === "cancelled") setStopped(true);
+          // banner shows once the (partial) reply settles (and do not speak it).
+          if (ev.type === "cancelled") {
+            setStopped(true);
+            turnCancelledRef.current = true;
+          }
           setLiveEvents((prev) => [...prev, ev]);
         },
         ctrl.signal,
@@ -689,6 +770,11 @@ export function ChatPanel() {
       // Stream finished cleanly. The transcript persists kernel-side, so reload
       // it (and the conversation list) and drop the local live/optimistic state.
       setStreaming(false);
+      // Read the completed reply aloud when the preference is on (never a
+      // cancelled turn, and only the assistant text collected above).
+      if (readAloud && !turnCancelledRef.current) {
+        speech.speak(`auto:${pendingConvId.current ?? "live"}`, turnTextRef.current);
+      }
       const convId = pendingConvId.current;
       if (convId) {
         if (!activeId) setActiveId(convId);
@@ -746,6 +832,10 @@ export function ChatPanel() {
   // likewise if the cancel could not be recorded (e.g. not yet a work item).
   async function stopTurn() {
     const runId = live.runId;
+    // The user is stopping: mark the turn cancelled so it is not read aloud, and
+    // silence anything already speaking.
+    turnCancelledRef.current = true;
+    speech.cancel();
     setStopped(true);
     if (!runId) {
       abortRef.current?.abort();
@@ -797,6 +887,9 @@ export function ChatPanel() {
       await reconnect();
       return;
     }
+    speech.cancel();
+    turnTextRef.current = "";
+    turnCancelledRef.current = false;
     setStopped(false);
     setStreamError(null);
     setStreaming(true);
@@ -808,12 +901,17 @@ export function ChatPanel() {
         live.runId,
         (ev) => {
           if (ctrl.signal.aborted || !alive.current) return;
+          if (ev.type === "text_delta") turnTextRef.current += ev.delta;
+          if (ev.type === "cancelled") turnCancelledRef.current = true;
           setLiveEvents((prev) => [...prev, ev]);
         },
         { signal: ctrl.signal, follow: true },
       );
       if (!alive.current) return;
       setStreaming(false);
+      if (readAloud && !turnCancelledRef.current) {
+        speech.speak(`auto:${activeId ?? pendingConvId.current ?? "live"}`, turnTextRef.current);
+      }
       const convId = activeId ?? pendingConvId.current ?? live.conversationId;
       if (convId) {
         if (!activeId) setActiveId(convId);
@@ -857,6 +955,14 @@ export function ChatPanel() {
         actions={
           <>
             <span className="muted">{conversations.length} conversation(s)</span>
+            {speech.supported && (
+              <Switch
+                checked={readAloud}
+                onChange={setReadAloudPref}
+                label="Read aloud"
+                hint="Speak replies as they finish."
+              />
+            )}
             <button className="btn" onClick={newConversation}>
               New conversation
             </button>
@@ -949,6 +1055,7 @@ export function ChatPanel() {
                 }
                 regenerating={regenerating === m.id}
                 onRegenerate={() => void regenerate(m.id)}
+                speech={speech}
               />
             ))}
 
@@ -994,6 +1101,9 @@ export function ChatPanel() {
                         </button>
                       )}
                       <CopyButton text={live.text} />
+                      {!streaming && (
+                        <SpeakButton speech={speech} msgKey="auto:live" text={live.text} />
+                      )}
                     </div>
                   )}
                 </div>
@@ -1066,10 +1176,22 @@ export function ChatPanel() {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={onComposerKey}
               />
-              <div className="chat__hint">Shift+Enter for a new line.</div>
+              <div className="chat__hint">
+                Shift+Enter for a new line.
+                {dictation.listening && (
+                  <span className="chat__listening" role="status">
+                    Listening... speak now.
+                  </span>
+                )}
+              </div>
               {attachError && (
                 <p className="error" role="alert">
                   {attachError}
+                </p>
+              )}
+              {dictation.error && (
+                <p className="error" role="alert">
+                  {dictation.error}
                 </p>
               )}
             </div>
@@ -1092,6 +1214,31 @@ export function ChatPanel() {
             >
               Attach
             </button>
+            {dictation.supported && (
+              <button
+                type="button"
+                className={`btn btn--ghost chat__mic ${
+                  dictation.listening ? "chat__mic--on" : ""
+                }`}
+                aria-pressed={dictation.listening}
+                disabled={streaming}
+                onClick={() => {
+                  if (dictation.listening) {
+                    dictation.stop();
+                    return;
+                  }
+                  dictationBaseRef.current = input;
+                  dictation.start();
+                }}
+                title={
+                  dictation.listening
+                    ? "Stop dictation"
+                    : "Dictate your message (speech to text)"
+                }
+              >
+                {dictation.listening ? "Listening" : "Speak"}
+              </button>
+            )}
             {streaming ? (
               <button className="btn" onClick={() => void stopTurn()}>
                 Stop
