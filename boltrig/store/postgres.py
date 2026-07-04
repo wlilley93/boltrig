@@ -428,6 +428,12 @@ class PostgresStore(ChannelStorePG):
         )
         return _endpoint(row)
 
+    async def list_model_endpoints(self, tenant_id):
+        rows = await self._pool.fetch(
+            "SELECT * FROM model_endpoints WHERE tenant_id=$1 ORDER BY id", tenant_id
+        )
+        return [_endpoint(r) for r in rows]
+
     # --- work items -------------------------------------------------------
     async def create_work_item(self, w: WorkItem):
         await self._pool.execute(

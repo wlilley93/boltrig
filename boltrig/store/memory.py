@@ -244,6 +244,9 @@ class InMemoryStore(ChannelStoreMem):
     async def get_model_endpoint(self, tenant_id, ep_id):
         return self._endpoints.get((tenant_id, ep_id))
 
+    async def list_model_endpoints(self, tenant_id):
+        return [ep for (t, _), ep in self._endpoints.items() if t == tenant_id]
+
     # --- work items ---
     async def create_work_item(self, item):
         self._work[(item.tenant_id, item.id)] = item

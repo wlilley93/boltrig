@@ -333,6 +333,8 @@ class FleetManifest:
 
 # --- ${ENV} interpolation ---------------------------------------------------
 _VAR = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}")
+_TRUE_VALUES = {"1", "true", "yes", "on", "y", "t"}
+_FALSE_VALUES = {"0", "false", "no", "off", "n", "f"}
 
 
 def _interpolate(obj: Any, env: Mapping[str, str]) -> Any:
@@ -358,6 +360,21 @@ def _as_tuple(value: Any) -> tuple[str, ...]:
     if isinstance(value, (list, tuple)):
         return tuple(str(v) for v in value)
     return (str(value),)
+
+
+def _as_bool(value: Any, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return value != 0
+    lowered = str(value).strip().lower()
+    if lowered in _TRUE_VALUES:
+        return True
+    if lowered in _FALSE_VALUES:
+        return False
+    return default
 
 
 def _parse_credential(raw: Any) -> CredentialRef | None:
@@ -515,7 +532,7 @@ def _parse_hitl(raw: Mapping[str, Any]) -> HitlConfig:
 
 def _parse_network(raw: Mapping[str, Any]) -> NetworkConfig:
     return NetworkConfig(
-        air_gapped=bool(raw.get("air_gapped", False)),
+        air_gapped=_as_bool(raw.get("air_gapped", False)),
         https_proxy=raw.get("https_proxy"),
         ca_bundle=raw.get("ca_bundle"),
         allowed_domains=_as_tuple(raw.get("allowed_domains")),
@@ -525,7 +542,7 @@ def _parse_network(raw: Mapping[str, Any]) -> NetworkConfig:
 
 def _parse_privacy(raw: Mapping[str, Any]) -> PrivacyConfig:
     return PrivacyConfig(
-        pii_redaction=bool(raw.get("pii_redaction", False)),
+        pii_redaction=_as_bool(raw.get("pii_redaction", False)),
         data_residency=raw.get("data_residency"),
         retention_days=raw.get("retention_days"),
         redact_fields=_as_tuple(raw.get("redact_fields")),

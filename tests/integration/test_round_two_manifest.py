@@ -15,6 +15,11 @@ def test_manifest_still_loads_with_round_two_sections():
     assert any(rt.name == "pi-worker" and rt.runtime == "pi" for rt in m.ephemeral_runtimes)
 
 
+def test_manifest_interpolated_false_is_false():
+    m = load_manifest(_MANIFEST, env={"AIR_GAPPED": "false"})
+    assert m.network.air_gapped is False
+
+
 @pytest.mark.security
 @pytest.mark.invariant("SEC-24")
 def test_pi_sidecar_sandbox_is_declared_restrictive():

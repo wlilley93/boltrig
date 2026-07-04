@@ -631,6 +631,19 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
             )
         return None
 
+    @app.get("/v1/model-endpoints")
+    async def list_model_endpoints(k=K, p=P) -> dict:
+        # The tenant's configured model endpoints (manifest-seeded). Exposes the
+        # id/kind/model/data_class only - NEVER base_url or fallback, so internal
+        # infra is not leaked to the client. Used by the composer model picker.
+        eps = await k.store.list_model_endpoints(p.tenant_id)
+        return {
+            "endpoints": [
+                {"id": e.id, "kind": e.kind, "model": e.model, "data_class": e.data_class}
+                for e in eps
+            ]
+        }
+
     @app.get("/v1/ai-keys")
     async def list_ai_keys(k=K, p=P) -> dict:
         # The tenant's AI-config rows, provider/model + has_key only - NEVER the key.

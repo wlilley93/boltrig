@@ -13,7 +13,7 @@ BACKUP_DIR ?= ./backups
 BACKUP ?= $(BACKUP_DIR)/boltrig.dump
 
 .DEFAULT_GOAL := help
-.PHONY: help up down logs test lint typecheck smoke invariants migrate secure-up backup backup-schedule restore
+.PHONY: help up down logs test lint typecheck smoke invariants doctor migrate secure-up backup backup-schedule restore
 
 help: ## List the available targets
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -47,6 +47,9 @@ smoke: ## Offline, in-process smoke test of the kernel guarantees (no docker)
 
 invariants: ## The K-29/K-30 binding gate: every claimed invariant must have a test
 	$(PY) scripts/check_invariants.py
+
+doctor: ## Static readiness checks (ARGS="--production" for deploy-blocking posture)
+	$(PY) -m boltrig.api.cli doctor --env-file .env --manifest manifest.yaml $(ARGS)
 
 migrate: ## Apply database migrations (alembic). schema.sql is the source of truth.
 	$(PY) -m alembic upgrade head

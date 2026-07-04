@@ -37,6 +37,17 @@ export interface CapabilitiesResponse {
   nouns?: unknown;
 }
 
+export interface ModelEndpointInfo {
+  id: string;
+  kind: string;
+  model: string;
+  data_class: string;
+}
+
+export interface ModelEndpointsResponse {
+  endpoints: ModelEndpointInfo[];
+}
+
 export type WorkStatus =
   | "pending"
   | "in_flight"

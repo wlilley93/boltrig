@@ -6,6 +6,7 @@
     boltrig set-password --email E      set/reset an EXISTING user's password (SSO -> session)
     boltrig smoke                       run the offline in-process smoke test
     boltrig check-invariants            run the invariant-binding gate (K-29/K-30)
+    boltrig doctor                      static production-readiness checks
     boltrig version                     print the version
 """
 
@@ -67,6 +68,25 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("smoke", help="offline in-process smoke test")
     sub.add_parser("check-invariants", help="run the invariant-binding gate")
+
+    p_doctor = sub.add_parser("doctor", help="static production-readiness checks")
+    p_doctor.add_argument(
+        "--env-file",
+        default=None,
+        help="dotenv file to merge over the process environment (for example .env)",
+    )
+    p_doctor.add_argument(
+        "--manifest",
+        default="manifest.yaml",
+        help="fleet manifest to inspect (default: manifest.yaml)",
+    )
+    p_doctor.add_argument(
+        "--production",
+        action="store_true",
+        help="treat warnings that are deploy blockers as production failures",
+    )
+    p_doctor.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+
     sub.add_parser("version", help="print version")
 
     args = parser.parse_args(argv)
@@ -108,6 +128,19 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         runpy.run_path(script, run_name="__main__")
         return 0
+    if args.cmd == "doctor":
+        from .doctor import format_report, load_env_file, run_doctor
+
+        env = dict(os.environ)
+        if args.env_file:
+            env = load_env_file(args.env_file, base=env)
+        report = run_doctor(
+            env=env,
+            manifest_path=args.manifest,
+            production=bool(args.production),
+        )
+        print(report.to_json() if args.json else format_report(report))
+        return report.exit_code
     return 1
 
 

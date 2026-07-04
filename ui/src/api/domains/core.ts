@@ -16,6 +16,7 @@ import type {
   HITLListResponse,
   InvokeRequest,
   InvokeResult,
+  ModelEndpointsResponse,
   RegenerateResponse,
   RespondResult,
   SpawnRequest,
@@ -31,6 +32,10 @@ export const coreApi = {
   capabilities(noun?: string): Promise<CapabilitiesResponse> {
     const q = noun ? `?noun=${encodeURIComponent(noun)}` : "";
     return request<CapabilitiesResponse>(`/v1/capabilities${q}`);
+  },
+
+  modelEndpoints(): Promise<ModelEndpointsResponse> {
+    return request<ModelEndpointsResponse>("/v1/model-endpoints");
   },
 
   capabilityChangelog(): Promise<CapabilityChangelogResponse> {
