@@ -35,6 +35,16 @@ function ActivityNodeRow({
 }: ActivityNodeRowProps): ReactNode {
   const hasChildren = Boolean(node.children?.length);
   const isExpanded = expanded[node.key] ?? depth < 1;
+  const showLine = node.hasLine !== false && (index < total - 1 || (hasChildren && isExpanded));
+
+  const dotStyle: CSSProperties = {
+    width: node.dotSize ?? 10,
+    height: node.dotSize ?? 10,
+  };
+  if (node.dotColor) dotStyle.background = node.dotColor;
+  if (node.dotExtra) dotStyle.border = node.dotExtra;
+
+  const avatarSize = node.avatarSize ?? 20;
 
   return (
     <Fragment key={node.key}>
@@ -49,17 +59,40 @@ function ActivityNodeRow({
         }}
       >
         <span className="activity-row__rail">
-          <span />
-          {(index < total - 1 || (hasChildren && isExpanded)) && <i />}
+          <span style={dotStyle} />
+          {showLine && <i />}
         </span>
         <span className="activity-row__body">
           <strong>
+            {node.hasAvatar && (
+              <span
+                className="activity-row__avatar"
+                style={
+                  {
+                    "--activity-color": node.avatarColor ?? node.tone,
+                    width: avatarSize,
+                    height: avatarSize,
+                  } as CSSProperties
+                }
+              >
+                {node.avatarInitials ?? "?"}
+              </span>
+            )}
             {hasChildren && <Icon name={isExpanded ? "chevDown" : "chevRight"} size={12} />}
-            {node.label}
+            <span className="activity-row__label" style={{ fontWeight: node.labelWeight, color: node.labelColor }}>
+              {node.label}
+            </span>
           </strong>
           <small>{node.detail}</small>
         </span>
-        {node.badge && <span className="activity-row__badge">{node.badge}</span>}
+        {node.badge && (
+          <span
+            className="activity-row__badge"
+            style={{ color: node.badgeColor, borderColor: node.badgeBorder }}
+          >
+            {node.badge}
+          </span>
+        )}
         <time className="activity-row__time">{node.time}</time>
       </button>
       {hasChildren && isExpanded && (

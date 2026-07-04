@@ -313,6 +313,13 @@ export interface ChatSubagent {
   child_run_id: string;
   task: string;
   skills?: string[];
+  // Optional identity so delegation cards (brief sec 6.4) can render the real
+  // sub-agent name/role/color and a real step count. Backward compatible: older
+  // streams omit these and the UI falls back to the palette + derived initials.
+  name?: string;
+  role?: string;
+  color?: string;
+  step_count?: number;
 }
 export interface ChatHitlEvent {
   type: "hitl";

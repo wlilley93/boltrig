@@ -6,6 +6,11 @@ import type { CSSProperties } from "react";
 import type { SubagentEntry } from "@/panels/chatTurnTypes";
 import { cleanTaskText } from "@/panels/shared";
 
+function initialsOf(name: string): string {
+  const letter = name.trim().charAt(0).toUpperCase();
+  return letter || "?";
+}
+
 export function SubagentCard({
   sub,
   color,
@@ -15,7 +20,14 @@ export function SubagentCard({
   color?: string;
   onOpenRun?: (runId: string) => void;
 }) {
-  const agentColor = color ?? "#5E69DD";
+  // Resolve identity from the entry, falling back to the palette colour passed
+  // by the parent (SUBAGENT_COLORS by index) and a derived name/initials so no
+  // row shows the old hardcoded "Worker"/"W" (brief sec 6.4).
+  const agentColor = sub.color ?? color ?? "#5E69DD";
+  const name = sub.name ?? "Sub-agent";
+  const role = sub.role ?? "ephemeral";
+  const initials = sub.initials ?? initialsOf(name);
+  const stepCount = sub.stepCount ?? sub.skills.length;
   return (
     <div
       className="subagent-card"
@@ -23,14 +35,16 @@ export function SubagentCard({
     >
       <div className="subagent-card__head">
         <span className="subagent-card__avatar" style={{ background: agentColor }}>
-          W
+          {initials}
         </span>
         <span className="subagent-card__meta">
-          <span className="subagent-card__name">Worker</span>
-          <span className="subagent-card__role">ephemeral</span>
+          <span className="subagent-card__name" style={{ color: agentColor }}>
+            {name}
+          </span>
+          <span className="subagent-card__role">{role}</span>
         </span>
         <span className="subagent-card__task">{cleanTaskText(sub.task) || "(no task)"}</span>
-        <span className="subagent-card__steps">0</span>
+        <span className="subagent-card__steps">{stepCount}</span>
         <span className="subagent-card__chevron" aria-hidden="true">
           &#9656;
         </span>

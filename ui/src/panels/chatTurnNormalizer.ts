@@ -174,6 +174,10 @@ function handleSubagent(ev: ChatSubagent, index: number, acc: Accumulator) {
     childRunId: ev.child_run_id,
     task: ev.task,
     skills: ev.skills ?? [],
+    name: ev.name,
+    role: ev.role,
+    color: ev.color,
+    stepCount: ev.step_count,
   });
 }
 

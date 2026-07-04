@@ -12,6 +12,18 @@ export function toolTone(status: string): string {
   return "#F0654A";
 }
 
+// Per-event-type constants (brief sec 13.1, lines 354-363).
+const CYAN = "#3DD3F0";
+const MUTED = "#7E95B0"; // --text-muted
+const DELEGATION_COLOR = "#5E69DD"; // tier-2 handoff accent (accent-2)
+const DOT_BORDER_AGENT = "2px solid #04060D"; // punches the dot off the avatar
+const DOT_BORDER_EPHEMERAL = `2px solid ${MUTED}`;
+
+function initialsOf(name: string): string {
+  const letter = name.trim().charAt(0).toUpperCase();
+  return letter || "?";
+}
+
 interface BuildTimelineInput {
   messages: ChatMessage[];
   live: NormalizedTurn;
@@ -27,49 +39,94 @@ function buildSessionNode(name: string, color: string): ActivityNode {
     time: "now",
     tone: color,
     badge: "session",
+    dotSize: 8,
+    dotColor: CYAN,
+    hasAvatar: false,
+    hasLine: true,
+    labelWeight: 500,
   };
 }
 
-function buildSubagentChildren(messageId: string, subKey: string, skills: string[], createdAt: string): ActivityNode[] {
-  return skills.map((skill, i) => ({
-    key: `${messageId}-${subKey}-skill-${i}`,
-    label: "Skill loaded",
-    detail: skill,
-    time: whenText(createdAt),
-    tone: "#7E95B0",
-    badge: "ephemeral",
-  }));
+function buildToolNode(prefix: string, toolKey: string, verb: string, status: string, callId: string | undefined, time: string): ActivityNode {
+  return {
+    key: `${prefix}-${toolKey}`,
+    label: toolLabel(verb),
+    detail: callId ?? toolKey, // receipt id
+    time,
+    tone: toolTone(status),
+    badge: "tool",
+    dotSize: 7,
+    dotColor: toolTone(status),
+    hasAvatar: false,
+    hasLine: true,
+    labelWeight: 400,
+  };
 }
 
-function buildAssistantNode(message: ChatMessage, color: string): ActivityNode {
+function buildStepNode(prefix: string, stepId: string, action: string, status: string, time: string): ActivityNode {
+  return {
+    key: `${prefix}-${stepId}`,
+    label: action,
+    detail: status,
+    time,
+    tone: toolTone(status),
+    badge: "step",
+    dotSize: 7,
+    dotColor: toolTone(status),
+    hasAvatar: false,
+    hasLine: true,
+    labelWeight: 400,
+  };
+}
+
+function buildEphemeralNode(key: string, detail: string, time: string): ActivityNode {
+  return {
+    key,
+    label: "Skill loaded",
+    detail,
+    time,
+    tone: MUTED,
+    badge: "ephemeral",
+    dotSize: 9,
+    dotColor: MUTED,
+    dotExtra: DOT_BORDER_EPHEMERAL,
+    hasAvatar: true,
+    avatarColor: MUTED,
+    avatarInitials: initialsOf(detail),
+    avatarSize: 16,
+    hasLine: true,
+    labelWeight: 500,
+    badgeBorder: MUTED,
+  };
+}
+
+function buildDelegationNode(prefix: string, sub: NormalizedTurn["subagents"][number], time: string, skillTime: string): ActivityNode {
+  return {
+    key: `${prefix}-${sub.key}`,
+    label: "Delegation",
+    detail: cleanTaskText(sub.task),
+    time,
+    tone: DELEGATION_COLOR,
+    runId: sub.childRunId,
+    badge: "delegation",
+    dotSize: 12,
+    dotColor: DELEGATION_COLOR,
+    hasAvatar: false,
+    hasLine: true,
+    labelWeight: 600,
+    labelColor: DELEGATION_COLOR,
+    badgeColor: DELEGATION_COLOR,
+    badgeBorder: DELEGATION_COLOR,
+    children: sub.skills.map((skill, i) => buildEphemeralNode(`${prefix}-${sub.key}-skill-${i}`, skill, skillTime)),
+  };
+}
+
+function buildAssistantNode(message: ChatMessage, color: string, name: string): ActivityNode {
   const turn = normalizeEvents(message.events ?? []);
   const children: ActivityNode[] = [
-    ...turn.tools.map((tool) => ({
-      key: `${message.id}-${tool.key}`,
-      label: toolLabel(tool.verb),
-      detail: `${tool.verb} - ${tool.status}`,
-      time: whenText(message.created_at),
-      tone: toolTone(tool.status),
-      badge: "tool",
-    })),
-    ...turn.steps.map((step) => ({
-      key: `${message.id}-${step.stepId}`,
-      label: step.action,
-      detail: step.status,
-      time: whenText(message.created_at),
-      tone: toolTone(step.status),
-      badge: "step",
-    })),
-    ...turn.subagents.map((sub) => ({
-      key: `${message.id}-${sub.key}`,
-      label: "Delegation",
-      detail: cleanTaskText(sub.task),
-      time: whenText(message.created_at),
-      tone: "#5E69DD",
-      runId: sub.childRunId,
-      badge: "handoff",
-      children: buildSubagentChildren(message.id, sub.key, sub.skills, message.created_at),
-    })),
+    ...turn.tools.map((tool) => buildToolNode(message.id, tool.key, tool.verb, tool.status, tool.callId, whenText(message.created_at))),
+    ...turn.steps.map((step) => buildStepNode(message.id, step.stepId, step.action, step.status, whenText(message.created_at))),
+    ...turn.subagents.map((sub) => buildDelegationNode(message.id, sub, whenText(message.created_at), whenText(message.created_at))),
   ];
   return {
     key: message.id,
@@ -80,10 +137,20 @@ function buildAssistantNode(message: ChatMessage, color: string): ActivityNode {
     runId: message.run_id ?? turn.runId,
     badge: "agent",
     children,
+    dotSize: 12,
+    dotColor: color,
+    dotExtra: DOT_BORDER_AGENT,
+    hasAvatar: true,
+    avatarColor: color,
+    avatarInitials: initialsOf(name),
+    avatarSize: 20,
+    hasLine: true,
+    labelWeight: 600,
+    labelColor: color,
   };
 }
 
-function buildLiveNode(live: NormalizedTurn, color: string): ActivityNode {
+function buildLiveNode(live: NormalizedTurn, color: string, name: string): ActivityNode {
   return {
     key: "live",
     label: live.ended ? "Run complete" : "Agent action",
@@ -92,32 +159,19 @@ function buildLiveNode(live: NormalizedTurn, color: string): ActivityNode {
     tone: color,
     runId: live.runId,
     badge: live.ended ? "complete" : "agent",
+    dotSize: 12,
+    dotColor: color,
+    dotExtra: DOT_BORDER_AGENT,
+    hasAvatar: true,
+    avatarColor: color,
+    avatarInitials: initialsOf(name),
+    avatarSize: 20,
+    hasLine: true,
+    labelWeight: 600,
+    labelColor: color,
     children: [
-      ...live.tools.map((tool) => ({
-        key: `live-${tool.key}`,
-        label: toolLabel(tool.verb),
-        detail: `${tool.verb} - ${tool.status}`,
-        time: "live",
-        tone: toolTone(tool.status),
-        badge: "tool",
-      })),
-      ...live.subagents.map((sub) => ({
-        key: `live-${sub.key}`,
-        label: "Delegation",
-        detail: cleanTaskText(sub.task),
-        time: "live",
-        tone: "#5E69DD",
-        runId: sub.childRunId,
-        badge: "handoff",
-        children: sub.skills.map((skill, i) => ({
-          key: `live-${sub.key}-skill-${i}`,
-          label: "Skill loaded",
-          detail: skill,
-          time: "live",
-          tone: "#7E95B0",
-          badge: "ephemeral",
-        })),
-      })),
+      ...live.tools.map((tool) => buildToolNode("live", tool.key, tool.verb, tool.status, tool.callId, "live")),
+      ...live.subagents.map((sub) => buildDelegationNode("live", sub, "live", "live")),
     ],
   };
 }
@@ -128,8 +182,13 @@ function buildPendingNode(): ActivityNode {
     label: "Waiting for first instruction",
     detail: "Activity appears here as the agent plans, delegates and calls tools.",
     time: "pending",
-    tone: "#3DD3F0",
+    tone: CYAN,
     badge: "pending",
+    dotSize: 8,
+    dotColor: CYAN,
+    hasAvatar: false,
+    hasLine: false, // brief 13.1: pending has no bottom connecting line
+    labelColor: MUTED,
   };
 }
 
@@ -139,12 +198,12 @@ export function buildTimelineNodes(input: BuildTimelineInput): ActivityNode[] {
 
   messages.forEach((message) => {
     if (message.role === "assistant") {
-      nodes.push(buildAssistantNode(message, activeAgentColor));
+      nodes.push(buildAssistantNode(message, activeAgentColor, activeAgentName));
     }
   });
 
   if (live.runId || live.tools.length > 0 || live.subagents.length > 0) {
-    nodes.push(buildLiveNode(live, activeAgentColor));
+    nodes.push(buildLiveNode(live, activeAgentColor, activeAgentName));
   }
 
   if (nodes.length === 1) {

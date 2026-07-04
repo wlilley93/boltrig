@@ -1,7 +1,8 @@
-import { useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 
 import type { ChatAgent } from "@/panels/chat/constants";
 import { Icon } from "@/panels/chat/icons";
+import { onFleetFocusRequest, requestComposerFocus } from "@/panels/chat/fleetFocus";
 import type { NormalizedTurn } from "@/panels/chatTurn";
 
 interface FleetBarProps {
@@ -95,7 +96,19 @@ function FleetRow({ row, absoluteIndex, focusIdx, setFocusIdx, onOpenRun }: Flee
 export function FleetBar({ live, activeAgent, onOpenRun }: FleetBarProps): JSX.Element | null {
   const [offset, setOffset] = useState(0);
   const [focusIdx, setFocusIdx] = useState(0);
+  const rootRef = useRef<HTMLDivElement>(null);
   const rows = buildFleetRows(live, activeAgent);
+
+  // Honour the empty-composer ArrowDown shortcut (sec 18): when the composer
+  // asks the fleet to take focus, reset the focus index to the first row and
+  // focus the bar so its own Up/Down/Enter/Escape handling takes over.
+  useEffect(() => {
+    return onFleetFocusRequest(() => {
+      setFocusIdx(0);
+      setOffset(0);
+      rootRef.current?.focus();
+    });
+  }, []);
 
   if (!live.runId && live.tools.length === 0 && live.subagents.length === 0) return null;
 
@@ -115,6 +128,7 @@ export function FleetBar({ live, activeAgent, onOpenRun }: FleetBarProps): JSX.E
       className="fleet-bar"
       aria-label="Live fleet"
       tabIndex={0}
+      ref={rootRef}
       onKeyDown={(e) => {
         if (e.key === "ArrowDown") {
           e.preventDefault();
@@ -127,7 +141,10 @@ export function FleetBar({ live, activeAgent, onOpenRun }: FleetBarProps): JSX.E
           const row = rows[focusIdx];
           if (row?.id) onOpenRun(row.id);
         } else if (e.key === "Escape") {
+          // sec 18: Escape in the fleet returns focus to the composer.
+          e.preventDefault();
           (e.currentTarget as HTMLDivElement).blur();
+          requestComposerFocus();
         }
       }}
     >

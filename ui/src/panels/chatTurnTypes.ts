@@ -34,6 +34,14 @@ export interface SubagentEntry {
   childRunId: string;
   task: string;
   skills: string[];
+  // Identity carried up from the subagent event when the backend provides it
+  // (brief sec 6.4). All optional; renderers fall back to the palette + a
+  // derived name/initials when the stream omits them.
+  name?: string;
+  role?: string;
+  initials?: string;
+  color?: string;
+  stepCount?: number;
 }
 
 export interface HitlEntry {

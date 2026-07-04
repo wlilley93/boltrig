@@ -8113,3 +8113,106 @@ body {
    zeroes transition durations, so the drawer/backdrop snap rather than slide
    while still showing/hiding on toggle. No transform overrides are needed; the
    base transform rules keep the open/closed positions correct. */
+
+/* === Composer fleet shortcut + files sections + plus menu (sec 18, 13.2, 5) === */
+
+/* "View all" link in the files footer: muted at rest, cyan on hover (sec 13.2).
+   Appended so the earlier, broader .files-panel__foot button rule is overridden
+   only for this named link without touching the existing rule. */
+.files-panel__view-all {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  color: var(--chat-muted);
+  font-size: 11px;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+.files-panel__view-all:hover {
+  color: var(--chat-accent);
+}
+
+/* Recent rows render dimmer than session/pinned rows (sec 13.2: #B8C8DA instead
+   of the default text color). The row-level .file-row--dim sets the base color;
+   this additionally dims the metadata line, which has its own muted color. */
+.file-row--dim .file-row__copy strong,
+.file-row--dim .file-row__copy small {
+  color: #B8C8DA;
+}
+
+/* === Activity timeline per-type dots/avatars + delegation names (sec 13.1, 6.4) === */
+
+/* Per-type DOT SIZING is applied inline from node.dotSize (brief data shape,
+   sec 13.1 lines 374-380); the global `* { box-sizing: border-box }` keeps the
+   2px-border dots (agent-action 12px, ephemeral 9px) inside their nominal size
+   so the dotExtra border never distorts the marker. dotColor/dotExtra likewise
+   ride inline. The rules below cover the genuinely new structural elements:
+   the per-type avatar circles, the delegation/ephemeral badges, and the
+   delegation card typographic scale. */
+
+/* Agent-action (20px) and ephemeral-spawn (16px) avatar circles that sit inside
+   the timeline row body, left of the label. Colored by the node's avatarColor
+   (--activity-color), white initials, soft agent-coloured glow. */
+.activity-row__avatar {
+  flex: 0 0 auto;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: 9px;
+  line-height: 1;
+  background: var(--activity-color, var(--chat-accent));
+  box-shadow: 0 0 10px color-mix(in srgb, var(--activity-color, var(--chat-accent)) 30%, transparent);
+}
+
+/* Delegation badge: agent-coloured border + text (sec 13.1 line 359). The base
+   .activity-row__badge supplies layout; this refines the colour. The renderer
+   also sets color/borderColor inline from node.badgeColor/badgeBorder. */
+.activity-row__badge--delegation {
+  color: var(--activity-color, var(--chat-accent));
+  border-color: var(--activity-color, var(--chat-accent));
+}
+
+/* Ephemeral badge: muted border (sec 13.1 line 361-362). */
+.activity-row__badge--ephemeral {
+  color: var(--chat-muted);
+  border-color: var(--chat-muted);
+}
+
+/* Delegation card typographic scale (sec 6.4, lines 246-253): sub-agent avatar
+   22px, name in agent colour at 11.5px/500, role 9.5px muted, task 11px, step
+   count mono. These are additive .chat-v3-scoped rules; they do not alter the
+   existing base .subagent-card rules. */
+.chat-v3 .subagent-card__avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: 10px;
+  line-height: 1;
+}
+.chat-v3 .subagent-card__name {
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+.chat-v3 .subagent-card__role {
+  font-size: 9.5px;
+  color: var(--chat-muted);
+}
+.chat-v3 .subagent-card__task {
+  font-size: 11px;
+  color: var(--chat-secondary);
+}
+.chat-v3 .subagent-card__steps {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10.5px;
+  color: var(--chat-muted);
+}
+.chat-v3 .subagent-card__chevron {
+  color: var(--chat-muted);
+}
