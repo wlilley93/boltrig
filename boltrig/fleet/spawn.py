@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import uuid
 from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
@@ -52,6 +53,31 @@ if TYPE_CHECKING:  # type-only: keeps fleet import independent of fastapi/kernel
     from boltrig.kernel.app import Principal, SpawnBody
     from boltrig.kernel.dispatch import AgentInvoker
     from boltrig.models import ModelEndpoint
+
+
+def _display_task(task: str) -> str:
+    """Return a human-readable task for observability events.
+
+    The model prompt may wrap conversation data in ``<untrusted>`` envelopes
+    (M1 / SEC-72). Those structural wrappers are not part of the user's message,
+    so they are stripped from the event the UI renders, while the actual prompt
+    sent to the runtime stays untouched.
+    """
+    s = task
+    # Unwrap typed envelopes.
+    s = re.sub(
+        r'<untrusted\b[^>]*>(.*?)</untrusted>',
+        r'\1',
+        s,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
+    # Drop any remaining angle-bracket tags (e.g., escaped inner delimiters).
+    s = re.sub(r'<[^>]+>', '', s)
+    # Drop provenance lines added by the engine.
+    s = re.sub(r'^\s*run:\s*[0-9a-f]+\s*$', '', s, flags=re.MULTILINE | re.IGNORECASE)
+    # Drop transcript role prefixes.
+    s = re.sub(r'^\s*(user|assistant|system):\s*', '', s, flags=re.MULTILINE | re.IGNORECASE)
+    return s.strip()
 
 
 # --- local error types (created here, not in the frozen models layer) ---------
@@ -355,7 +381,7 @@ class Spawner:
         if context.run_id:
             try:
                 kernel.events.publish(context.run_id, {
-                    "type": "subagent", "task": task,
+                    "type": "subagent", "task": _display_task(task),
                     "skills": list(skills), "child_run_id": run_id,
                     "capability": capability.name,
                 })

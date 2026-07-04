@@ -214,6 +214,7 @@ function toolStatusClass(status: string): string {
     case "pending":
       return "tool-card--running";
     case "degraded":
+      return "tool-card--degraded";
     case "error":
       return "tool-card--denied";
     default:
@@ -228,6 +229,7 @@ function toolStatusColor(status: string): string {
     case "pending":
       return "#3DD3F0";
     case "degraded":
+      return "#F5A623";
     case "error":
       return "#F0654A";
     default:
@@ -293,6 +295,9 @@ function ToolCard({ tool }: { tool: ToolEntry }) {
         policy <span>policies approved</span>
       </div>
       <div>{tool.status}</div>
+      {tool.output !== undefined && (
+        <pre className="tool-card__output">{typeof tool.output === "string" ? tool.output : JSON.stringify(tool.output, null, 2)}</pre>
+      )}
     </div>
   );
 

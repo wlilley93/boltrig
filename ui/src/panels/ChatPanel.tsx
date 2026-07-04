@@ -159,7 +159,7 @@ const GREETINGS = {
     "Afternoon",
     "Still with you",
     "What needs attention",
-    "What should Bolt pick up",
+    "What should we pick up",
     "Next move",
   ],
   evening: [
@@ -195,6 +195,7 @@ function Icon({
     | "file"
     | "phone"
     | "moon"
+    | "sun"
     | "mic"
     | "send"
     | "wave"
@@ -226,6 +227,7 @@ function Icon({
   if (name === "file") return <svg {...common}><path d="M7 3h7l4 4v14H7z" /><path d="M14 3v5h5" /></svg>;
   if (name === "phone") return <svg {...common}><path d="M6.6 4.8 9 4l2.1 4-1.5 1.1c1.1 2.2 2.9 4 5.1 5.1l1.1-1.5 4 2.1-.8 2.4c-.4 1.2-1.6 1.9-2.8 1.6C10.8 17.7 6.3 13.2 5.2 7.8 4.9 6.6 5.5 5.2 6.6 4.8Z" /></svg>;
   if (name === "moon") return <svg {...common}><path d="M20 15.5A8 8 0 0 1 8.5 4 7 7 0 1 0 20 15.5Z" /></svg>;
+  if (name === "sun") return <svg {...common}><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" /></svg>;
   if (name === "mic") return <svg {...common}><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>;
   if (name === "send") return <svg {...common}><path d="M12 19V5M6 11l6-6 6 6" /></svg>;
   if (name === "wave") return <svg {...common}><path d="M6 14v-4M10 17V7M14 15V9M18 13v-2" /></svg>;
@@ -415,6 +417,7 @@ function ChatAgentSidebar({
   onDeleted,
   onRenamed,
   loadMore,
+  onRailTerm,
 }: {
   open: boolean;
   agents: ChatAgent[];
@@ -428,15 +431,23 @@ function ChatAgentSidebar({
   onDeleted: (id: string) => void;
   onRenamed: () => void;
   loadMore: () => void;
+  onRailTerm: (term: string) => void;
 }) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [searchOpen, setSearchOpen] = useState(false);
   if (!open) return null;
   return (
     <aside className="chat-agent-rail" aria-label="Chat agents">
       <div className="chat-agent-rail__head">
         <strong>Chat</strong>
         <div className="chat-agent-rail__tools">
-          <button className="icon-btn" title="Search conversations" type="button">
+          <button
+            className={`icon-btn ${searchOpen ? "icon-btn--active" : ""}`}
+            title="Search conversations"
+            type="button"
+            aria-pressed={searchOpen}
+            onClick={() => setSearchOpen((v) => !v)}
+          >
             <Icon name="search" size={15} />
           </button>
           <button className="icon-btn" title="New chat" type="button" onClick={onNew}>
@@ -444,6 +455,17 @@ function ChatAgentSidebar({
           </button>
         </div>
       </div>
+      {searchOpen && (
+        <div className="chat-agent-rail__search">
+          <input
+            type="text"
+            value={railTerm}
+            placeholder="Search conversations..."
+            aria-label="Search conversations"
+            onChange={(e) => onRailTerm(e.target.value)}
+          />
+        </div>
+      )}
       <div className="chat-agent-rail__filters" role="tablist" aria-label="Chat filters">
         <button className="chat-agent-rail__filter chat-agent-rail__filter--active" type="button">
           All
@@ -564,7 +586,7 @@ function EmptyChatStart({
             <Icon name="chevLeft" size={18} />
           </button>
           <div className={`agent-switcher__profile ${anim}`}>
-            <strong>{activeAgent.name}</strong>
+            <strong style={{ color: activeAgent.color }}>{activeAgent.name}</strong>
             <span>{activeAgent.role}</span>
           </div>
           <button className="agent-switcher__arrow" type="button" onClick={onNext} aria-label="Next agent">
@@ -607,23 +629,8 @@ function FilesPanel({
       })),
     ),
   ];
-  const rows = sessionFiles.length
-    ? sessionFiles
-    : [
-        { name: "release-plan.md", size: 12 * 1024, meta: "12 KB - Bolt - 8m ago", type: "text/markdown" },
-        { name: "deploy-check.diff", size: 4 * 1024, meta: "4 KB - Release Manager - 12m ago", type: "text/x-diff" },
-        { name: "workflow.yaml", size: 3 * 1024, meta: "3 KB - pinned", type: "application/yaml" },
-      ];
-  const pinnedFiles = [
-    { name: "governance-notes.md", size: 18 * 1024, meta: "18 KB - pinned", type: "text/markdown" },
-  ];
-  const recentFiles = [
-    { name: "console.log", size: 4 * 1024, meta: "4 KB - 2h ago", type: "text/plain" },
-    { name: "metrics.json", size: 2 * 1024, meta: "2 KB - 4h ago", type: "application/json" },
-    { name: "notes.txt", size: 1 * 1024, meta: "1 KB - yesterday", type: "text/plain" },
-  ];
-  const allFiles = [...rows, ...pinnedFiles, ...recentFiles];
-  const totalSize = allFiles.reduce((sum, f) => sum + f.size, 0);
+  const rows = sessionFiles;
+  const totalSize = rows.reduce((sum, f) => sum + f.size, 0);
   const FileRow = ({
     file,
     dim,
@@ -661,17 +668,13 @@ function FilesPanel({
       <input className="files-panel__search" placeholder="Search files" aria-label="Search files" />
       <div className="files-panel__body">
         <span className="files-panel__section">This session</span>
+        {rows.length === 0 && (
+          <p className="files-panel__empty">No files attached to this conversation.</p>
+        )}
         {rows.map((file) => <FileRow file={file} key={`${file.name}-${file.meta}`} />)}
-        <span className="files-panel__section">Pinned</span>
-        {pinnedFiles.map((file) => <FileRow file={file} key={`${file.name}-${file.meta}`} dim />)}
-        <span className="files-panel__section">Recent</span>
-        {recentFiles.map((file) => (
-          <FileRow file={file} key={`${file.name}-${file.meta}`} dim downloadable={false} />
-        ))}
       </div>
       <footer className="files-panel__foot">
-        <span>{allFiles.length} files · {formatBytes(totalSize)}</span>
-        <button type="button">View all</button>
+        <span>{rows.length} files · {formatBytes(totalSize)}</span>
       </footer>
     </aside>
   );
@@ -862,7 +865,7 @@ function ActivityTimeline({
     nodes.push({
       key: "pending",
       label: "Waiting for first instruction",
-      detail: "Activity appears here as Bolt plans, delegates and calls tools.",
+      detail: "Activity appears here as the agent plans, delegates and calls tools.",
       time: "pending",
       tone: "#3DD3F0",
       badge: "pending",
@@ -898,7 +901,7 @@ function ActivityTimeline({
             <small>{node.detail}</small>
           </span>
           {node.badge && <span className="activity-row__badge">{node.badge}</span>}
-          <time>{node.time}</time>
+          <time className="activity-row__time">{node.time}</time>
         </button>
         {hasChildren && isExpanded && (
           <div className="activity-row__children">
@@ -1068,11 +1071,11 @@ function SubRunPanel({
   onFull: () => void;
   onCollapse: () => void;
 }) {
-  if (!runId) return null;
   const [events, setEvents] = useState<ChatEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
+    if (!runId) return;
     let alive = true;
     const ctrl = new AbortController();
     setEvents([]);
@@ -1100,6 +1103,7 @@ function SubRunPanel({
       ctrl.abort();
     };
   }, [runId]);
+  if (!runId) return null;
   return (
     <aside className={full ? "subrun-panel subrun-panel--full" : "subrun-panel"} aria-label="Sub-run">
       <header className="subrun-panel__head">
@@ -1113,11 +1117,7 @@ function SubRunPanel({
         </span>
         <span
           className={`subrun-panel__status subrun-panel__status--${agent.status}`}
-          style={{
-            color: statusColor(agent.status),
-            fontFamily: "var(--font-mono, monospace)",
-            textTransform: "uppercase",
-          }}
+          style={{ color: statusColor(agent.status) }}
         >
           {agent.status}
         </span>
@@ -1764,8 +1764,12 @@ function MessageBubble({
       )}
       {message.content && <MarkdownText value={message.content} />}
       <AttachmentList attachments={message.attachments} />
+      {!isAssistant && (
+        <span className="chat-msg__time chat-msg__time--bubble" title={message.created_at}>
+          {whenText(message.created_at)}
+        </span>
+      )}
       <div className="chat-msg__meta">
-        <span title={message.created_at}>{whenText(message.created_at)}</span>
         {message.content && (
           <CopyButton text={message.content} label="Copy" className="chat-msg__action" iconOnly />
         )}
@@ -1834,7 +1838,8 @@ export function ChatPanel() {
   const [msgsError, setMsgsError] = useState<string | null>(null);
 
   // The conversation rail: paginated list + debounced search over the same rail.
-  const rail = useConversationRail("");
+  const [railTerm, setRailTerm] = useState("");
+  const rail = useConversationRail(railTerm);
   const [input, setInput] = useState("");
   const [pendingUser, setPendingUser] = useState<string | null>(null);
   const [liveEvents, setLiveEvents] = useState<ChatEvent[]>([]);
@@ -1845,6 +1850,8 @@ export function ChatPanel() {
   const [showJump, setShowJump] = useState(false);
   const [chatSidebarOpen, setChatSidebarOpen] = useState(false);
   const [chatSearchOpen, setChatSearchOpen] = useState(false);
+  const [chatSearchTerm, setChatSearchTerm] = useState("");
+  const [theme, setTheme] = useState(loadAppearance().theme);
   const [selectedAgentId, setSelectedAgentId] = useState("bolt");
   const [chatTab, setChatTab] = useState<ChatTab>("chat");
   const [rightPanel, setRightPanel] = useState<"files" | null>(null);
@@ -1908,6 +1915,7 @@ export function ChatPanel() {
     const current = loadAppearance();
     const nextTheme = current.theme === "dark" ? "light" : current.theme === "light" ? "system" : "dark";
     saveAppearanceLocal({ ...current, theme: nextTheme });
+    setTheme(nextTheme);
   }
 
   // The conversation_id is unknown until the first message_start of a new
@@ -1997,7 +2005,7 @@ export function ChatPanel() {
     if (pinnedRef.current) {
       el.scrollTop = el.scrollHeight;
       setShowJump(false);
-    } else if (streaming || liveEvents.length > 0) {
+    } else {
       setShowJump(true);
     }
   }, [messages.length, pendingUser, live.text, liveEvents.length, streaming]);
@@ -2396,7 +2404,6 @@ export function ChatPanel() {
   const railItems = searching
     ? rail.state.items
     : rail.state.items.filter((c) => c.status.toLowerCase() !== "closed");
-  const railTerm = "";
   const showLive = streaming || liveEvents.length > 0 || streamError !== null;
   const isEmpty =
     !msgsLoading &&
@@ -2405,7 +2412,12 @@ export function ChatPanel() {
     pendingUser === null &&
     !showLive;
   const compactedCount = compacted && messages.length > 4 ? messages.length - 4 : 0;
-  const visibleMessages = compactedCount > 0 ? messages.slice(-4) : messages;
+  const displayedMessages = compactedCount > 0 ? messages.slice(-4) : messages;
+  const visibleMessages = chatSearchTerm.trim()
+    ? displayedMessages.filter((m) =>
+        (m.content ?? "").toLowerCase().includes(chatSearchTerm.toLowerCase())
+      )
+    : displayedMessages;
   const firstVisibleIndex = compactedCount > 0 ? compactedCount : 0;
   const slashOpen = input.trim().startsWith("/");
   const contextRemaining = Math.max(
@@ -2436,6 +2448,7 @@ export function ChatPanel() {
         railItems={railItems}
         railTerm={railTerm}
         railState={rail.state}
+        onRailTerm={setRailTerm}
         onNew={newConversation}
         onSelectAgent={(agent) => {
           setSelectedAgentId(agent.id);
@@ -2495,7 +2508,7 @@ export function ChatPanel() {
           </nav>
           <div className="chat-header__spacer" />
           <button
-            className="icon-btn chat-header__tool"
+            className="icon-btn chat-header__action"
             type="button"
             title="Files"
             aria-pressed={rightPanel === "files"}
@@ -2504,7 +2517,7 @@ export function ChatPanel() {
             <Icon name="file" size={16} />
           </button>
           <button
-            className="icon-btn chat-header__tool"
+            className="icon-btn chat-header__action"
             type="button"
             title="Voice call"
             onClick={() => {
@@ -2515,20 +2528,25 @@ export function ChatPanel() {
             <Icon name="phone" size={16} />
           </button>
           <button
-            className="icon-btn chat-header__tool"
+            className="icon-btn chat-header__action"
             type="button"
             title="Search"
-            onClick={() => setChatSearchOpen((open) => !open)}
+            onClick={() => {
+              setChatSearchOpen((open) => {
+                if (open) setChatSearchTerm("");
+                return !open;
+              });
+            }}
           >
             <Icon name="search" size={16} />
           </button>
           <button
-            className="icon-btn chat-header__tool"
+            className="icon-btn chat-header__action"
             type="button"
             title="Theme"
             onClick={toggleTheme}
           >
-            <Icon name="moon" size={16} />
+            <Icon name={theme === "light" ? "sun" : "moon"} size={16} />
           </button>
         </header>
 
@@ -2546,6 +2564,8 @@ export function ChatPanel() {
               type="search"
               placeholder="Search this conversation..."
               aria-label="Search this conversation"
+              value={chatSearchTerm}
+              onChange={(e) => setChatSearchTerm(e.target.value)}
             />
           </div>
         )}
@@ -2642,6 +2662,9 @@ export function ChatPanel() {
                 </Fragment>
               );
             })}
+            {chatSearchTerm.trim() && visibleMessages.length === 0 && !msgsLoading && (
+              <p className="muted chat-statusline">No matching messages.</p>
+            )}
 
             {pendingUser !== null && (
               <div className="chat-msg chat-msg--user">
@@ -2749,7 +2772,7 @@ export function ChatPanel() {
             </div>
           )}
           <div
-            className={`chat__composer ${streaming ? "chat__composer--thinking" : ""}`}
+            className={`chat__composer ${streaming ? "chat__composer--thinking" : ""} ${!activeId ? "chat__composer--empty" : ""}`}
             style={{ borderRadius: 22, boxShadow: "0 4px 20px rgba(0,0,0,0.35)", padding: "7px 7px 7px 10px" }}
           >
             <button

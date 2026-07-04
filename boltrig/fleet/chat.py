@@ -636,7 +636,14 @@ def build_turn_executor(
                     summary = f"(degraded) {summary}"
                 relay.publish(run_id, {"type": "text_delta", "delta": summary, "degraded": True})
             else:
-                relay.publish(run_id, {"type": "text_delta", "delta": summary})
+                # Streaming runtimes (Pi, etc.) already emit the reply as
+                # text_delta events. Don't append the final summary again, or
+                # the UI sees duplicated text (e.g. "today?today?").
+                already_text = any(
+                    e.get("type") == "text_delta" for e in relay.snapshot(run_id)
+                )
+                if not already_text:
+                    relay.publish(run_id, {"type": "text_delta", "delta": summary})
             # Two-lane hand-off (D5/D7): the turn itself rode the direct-spawn
             # fast lane; its discovered follow-on work is filed as PENDING
             # children (owner/department unset) so the org lane pumps it onward.
