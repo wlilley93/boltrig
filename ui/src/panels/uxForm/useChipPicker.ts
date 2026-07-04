@@ -4,6 +4,12 @@ import type { Dispatch, KeyboardEvent, SetStateAction } from "react";
 import type { ChipOption } from "./ChipPickerChips";
 import { useChipPickerKeyboard } from "./useChipPickerKeyboard";
 
+function matchesChipOption(o: ChipOption, value: string[], q: string): boolean {
+  if (value.includes(o.value)) return false;
+  if (!q) return true;
+  return o.value.toLowerCase().includes(q) || (o.label ?? "").toLowerCase().includes(q);
+}
+
 export interface UseChipPickerArgs {
   value: string[];
   onChange: (v: string[]) => void;
@@ -17,7 +23,6 @@ export interface UseChipPickerArgs {
 export interface UseChipPickerResult {
   query: string;
   setQuery: Dispatch<SetStateAction<string>>;
-  active: number;
   setActive: Dispatch<SetStateAction<number>>;
   freeError: string | null;
   setFreeError: Dispatch<SetStateAction<string | null>>;
@@ -46,15 +51,7 @@ export function useChipPicker({
   const listId = useId();
 
   const q = query.trim().toLowerCase();
-  const cands = useMemo(
-    () =>
-      options.filter(
-        (o) =>
-          !value.includes(o.value) &&
-          (!q || o.value.toLowerCase().includes(q) || (o.label ?? "").toLowerCase().includes(q)),
-      ),
-    [options, value, q],
-  );
+  const cands = useMemo(() => options.filter((o) => matchesChipOption(o, value, q)), [options, value, q]);
   const enabled = useMemo(() => cands.map((c, i) => (c.disabled ? -1 : i)).filter((i) => i >= 0), [cands]);
   const act = active >= 0 && active < cands.length && !cands[active].disabled ? active : -1;
 
@@ -98,7 +95,6 @@ export function useChipPicker({
   return {
     query,
     setQuery,
-    active,
     setActive,
     freeError,
     setFreeError,

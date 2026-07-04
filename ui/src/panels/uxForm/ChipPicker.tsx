@@ -1,8 +1,7 @@
 import type { ReactNode } from "react";
 
-import { ChipPickerCandidates } from "./ChipPickerCandidates";
 import { ChipPickerChips, type ChipOption } from "./ChipPickerChips";
-import { ChipPickerInput } from "./ChipPickerInput";
+import { ChipPickerSearch } from "./ChipPickerSearch";
 import { useChipPicker } from "./useChipPicker";
 
 // --- N3 ChipPicker: multi-select from a known set (P5). ---------------------
@@ -38,21 +37,7 @@ export function ChipPicker({
   ariaLabel?: string;
   emptyHint?: ReactNode;
 }) {
-  const {
-    query,
-    setQuery,
-    setActive,
-    freeError,
-    setFreeError,
-    listId,
-    cands,
-    act,
-    addValue,
-    addFree,
-    onKey,
-    showFreeRow,
-    showInput,
-  } = useChipPicker({ value, onChange, options, allowFree, validate, disabled, searchable });
+  const hook = useChipPicker({ value, onChange, options, allowFree, validate, disabled, searchable });
 
   return (
     <div className={`ux-chips ${mono ? "ux-chips--mono" : ""}`} role="group" aria-label={ariaLabel}>
@@ -64,37 +49,7 @@ export function ChipPicker({
         emptyHint={emptyHint}
         onChange={onChange}
       />
-      <ChipPickerInput
-        query={query}
-        setQuery={setQuery}
-        setActive={setActive}
-        setFreeError={setFreeError}
-        listId={listId}
-        act={act}
-        cands={cands}
-        showInput={showInput}
-        showFreeRow={showFreeRow}
-        placeholder={placeholder}
-        ariaLabel={ariaLabel}
-        disabled={disabled}
-        onKey={onKey}
-      />
-      {freeError && (
-        <span className="ux-chips__err" role="alert">
-          {freeError}
-        </span>
-      )}
-      {showInput && (cands.length > 0 || showFreeRow) && (
-        <ChipPickerCandidates
-          cands={cands}
-          act={act}
-          listId={listId}
-          query={query}
-          allowFree={allowFree}
-          addValue={addValue}
-          addFree={addFree}
-        />
-      )}
+      <ChipPickerSearch {...hook} placeholder={placeholder} ariaLabel={ariaLabel} disabled={disabled} allowFree={allowFree} />
     </div>
   );
 }
