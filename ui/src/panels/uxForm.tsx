@@ -12,13 +12,12 @@
  * in one step, Backspace-on-empty removes the last chip). */
 
 import { useEffect, useState } from "react";
-import type { KeyboardEvent, ReactNode } from "react";
+import type { ReactNode } from "react";
 
 import { prettyJson } from "./shared";
 import { Field, Select } from "./ux";
 import { SegmentedV2 } from "@/panels/uxForm/SegmentedV2";
 import { ChipPicker } from "@/panels/uxForm/ChipPicker";
-import type { ChipOption } from "@/panels/uxForm/ChipPicker";
 import { Stepper } from "@/panels/uxForm/Stepper";
 import { JsonDisclosure } from "@/panels/uxForm/JsonDisclosure";
 
@@ -38,141 +37,7 @@ export { Stepper } from "@/panels/uxForm/Stepper";
 
 export { JsonDisclosure } from "@/panels/uxForm/JsonDisclosure";
 
-// --- N17 OrderedPicker: an ordered list where position is the value. --------
-// Numbered rows with up/down buttons; Alt+ArrowUp/Down moves the focused row;
-// every move is announced via a polite live region. Candidates not yet in the
-// list render as add affordances (amendment 12 disabled-with-reason honoured).
-export function OrderedPicker({
-  value,
-  onChange,
-  options = [],
-  mono = true,
-  ariaLabel,
-  disabled = false,
-  emptyHint = "Nothing here yet. Add from the options below; the order is applied top to bottom.",
-}: {
-  value: string[];
-  onChange: (v: string[]) => void;
-  options?: ChipOption[];
-  mono?: boolean;
-  ariaLabel?: string;
-  disabled?: boolean;
-  emptyHint?: ReactNode;
-}) {
-  const [announce, setAnnounce] = useState("");
-  const labelOf = (v: string) => options.find((o) => o.value === v)?.label ?? v;
-
-  function move(i: number, delta: number) {
-    const j = i + delta;
-    if (j < 0 || j >= value.length) return;
-    const next = [...value];
-    const [row] = next.splice(i, 1);
-    next.splice(j, 0, row);
-    onChange(next);
-    setAnnounce(`${labelOf(row)} moved to position ${j + 1} of ${next.length}`);
-  }
-
-  function remove(i: number) {
-    const row = value[i];
-    onChange(value.filter((_, x) => x !== i));
-    setAnnounce(`${labelOf(row)} removed`);
-  }
-
-  function addRow(v: string) {
-    onChange([...value, v]);
-    setAnnounce(`${labelOf(v)} added at position ${value.length + 1}`);
-  }
-
-  const remaining = options.filter((o) => !value.includes(o.value));
-
-  return (
-    <div className="ux-ordered" role="group" aria-label={ariaLabel}>
-      <div className="ux-vh" aria-live="polite">
-        {announce}
-      </div>
-      {value.length === 0 ? (
-        <span className="ux-hint">{emptyHint}</span>
-      ) : (
-        <ol className="ux-ordered__list">
-          {value.map((v, i) => (
-            <li
-              key={v}
-              className="ux-ordered__row"
-              tabIndex={0}
-              onKeyDown={(e: KeyboardEvent<HTMLLIElement>) => {
-                if (disabled || !e.altKey) return;
-                if (e.key === "ArrowUp") {
-                  e.preventDefault();
-                  move(i, -1);
-                } else if (e.key === "ArrowDown") {
-                  e.preventDefault();
-                  move(i, 1);
-                }
-              }}
-            >
-              <span className="ux-ordered__num" aria-hidden="true">
-                {i + 1}
-              </span>
-              <span className="ux-ordered__label">
-                {mono ? <code>{labelOf(v)}</code> : labelOf(v)}
-              </span>
-              <span className="ux-ordered__acts">
-                <button
-                  type="button"
-                  className="btn btn--sm btn--ghost ux-ordered__btn"
-                  aria-label={`Move ${labelOf(v)} up`}
-                  disabled={disabled || i === 0}
-                  onClick={() => move(i, -1)}
-                >
-                  ↑
-                </button>
-                <button
-                  type="button"
-                  className="btn btn--sm btn--ghost ux-ordered__btn"
-                  aria-label={`Move ${labelOf(v)} down`}
-                  disabled={disabled || i === value.length - 1}
-                  onClick={() => move(i, 1)}
-                >
-                  ↓
-                </button>
-                <button
-                  type="button"
-                  className="btn btn--sm btn--ghost ux-ordered__btn"
-                  aria-label={`Remove ${labelOf(v)}`}
-                  disabled={disabled}
-                  onClick={() => remove(i)}
-                >
-                  ×
-                </button>
-              </span>
-            </li>
-          ))}
-        </ol>
-      )}
-      {remaining.length > 0 && !disabled && (
-        <div className="ux-ordered__add">
-          {remaining.map((o) =>
-            o.disabled ? (
-              <span key={o.value} className="ux-chips__cand ux-chips__cand--off">
-                <span>{o.label ?? o.value}</span>
-                {o.disabledReason && <span className="ux-chips__cand-why">{o.disabledReason}</span>}
-              </span>
-            ) : (
-              <button
-                key={o.value}
-                type="button"
-                className="ux-chips__addbtn"
-                onClick={() => addRow(o.value)}
-              >
-                + {o.label ?? o.value}
-              </button>
-            ),
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
+export { OrderedPicker } from "@/panels/uxForm/OrderedPicker";
 
 // --- P9 SchemaFormV2: typed controls from a JSON schema. ---------------------
 // The parity engine (L2): renders exactly the input_schema the orchestrator
