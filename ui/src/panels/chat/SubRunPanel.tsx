@@ -5,9 +5,11 @@ import { openRun } from "@/router";
 import { apiReason, cleanTaskText } from "@/panels/shared";
 import { AgentAvatar } from "@/panels/chat/AgentAvatar";
 import type { ChatAgent } from "@/panels/chat/constants";
-import { statusColor } from "@/panels/chat/formatting";
+import { cssVarColor, statusColor } from "@/panels/chat/formatting";
 import { Icon } from "@/panels/chat/icons";
 import { streamRunEvents } from "@/api/client";
+import { getSubAgentData } from "@/panels/chat/subRunSeed";
+import type { SeededTool } from "@/panels/chat/subRunSeed";
 import { toolLabel } from "@/panels/chat/text";
 
 interface SubRunPanelProps {
@@ -98,6 +100,37 @@ function SubRunEvent({ ev }: { ev: ChatEvent }): JSX.Element | null {
   return null;
 }
 
+function SubRunSeedTool({ tool, color }: { tool: SeededTool; color: string }): JSX.Element {
+  return (
+    <div className="subrun-tool subrun-tool--seed" style={cssVarColor("--agent-color", color)}>
+      <span className="tool-card__dot" />
+      <span>{toolLabel(tool.verb)}</span>
+      <span className="subrun-tool__detail">{tool.detail}</span>
+      <span className={`subrun-tool__status subrun-tool__status--${tool.status}`}>{tool.status}</span>
+    </div>
+  );
+}
+
+// Seeded fallback (sec 11, lines 316-324): when no live run stream is attached,
+// render the per-agent message + tool receipts at 12px scale instead of a
+// placeholder string.
+function SubRunSeed({ agent }: { agent: ChatAgent }): JSX.Element {
+  const data = getSubAgentData(agent.id);
+  return (
+    <div className="subrun-seed" style={cssVarColor("--agent-color", agent.color)}>
+      {data.messages.map((m) => (
+        <div key={m.id} className="subrun-seed__msg">
+          <p>{m.text}</p>
+          <time>{m.time}</time>
+        </div>
+      ))}
+      {data.tools.map((t) => (
+        <SubRunSeedTool key={t.id} tool={t} color={agent.color} />
+      ))}
+    </div>
+  );
+}
+
 export function SubRunPanel({ runId, full, agent, onClose, onFull, onCollapse }: SubRunPanelProps): JSX.Element | null {
   const { events, loading, error } = useSubRunEvents(runId);
   if (!runId) return null;
@@ -129,15 +162,7 @@ export function SubRunPanel({ runId, full, agent, onClose, onFull, onCollapse }:
       <div className="subrun-panel__body">
         {loading && <p className="muted subrun-panel__loading">Loading run events...</p>}
         {error && <p className="error subrun-panel__error">{error}</p>}
-        {!loading && !error && events.length === 0 && (
-          <div className="subrun-transcript">
-            <p>
-              <strong>{agent.name}</strong> - {agent.role}
-            </p>
-            <p>Run {runId}</p>
-            <p className="muted">Detailed run data is available in the run drawer.</p>
-          </div>
-        )}
+        {!loading && !error && events.length === 0 && <SubRunSeed agent={agent} />}
         {events.map((ev, i) => (
           <SubRunEvent key={i} ev={ev} />
         ))}
