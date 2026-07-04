@@ -1,7 +1,7 @@
 import { Object3D, Vector3 } from "three";
 
 /**
- * Geometry helpers for the particle brain — flatten a loaded model's meshes
+ * Geometry helpers for the particle brain - flatten a loaded model's meshes
  * into a triangle soup, then uniformly sample points across that surface.
  * Ported verbatim (in behaviour) from `scenes/brain-particles.html`.
  */
@@ -69,7 +69,7 @@ export function gatherTriangles(root: Object3D): Float32Array {
 /**
  * Sample `count` points across the triangle soup, weighted by triangle area.
  * Returns the point positions and the geometric surface normal at each point
- * (the source triangle's normal) — used to keep the live "flow" motion tangent
+ * (the source triangle's normal) - used to keep the live "flow" motion tangent
  * to the brain's surface.
  */
 export function sampleSurface(
@@ -214,21 +214,66 @@ export function makeSeeds(count: number): Float32Array {
  * Bake a per-particle cavity-occlusion value (0 = exposed ridge, 1 = deep in a
  * fold) by measuring local point density via a spatial hash. Folds (sulci) pack
  * opposing walls close together, so points there have far more neighbours than
- * points on exposed gyri — that density difference is what reads as depth.
- * Runs once at load; O(n · neighbours).
+ * points on exposed gyri - that density difference is what reads as depth.
+ * Runs once at load; O(n * neighbours).
  */
+
+// Spatial-hash cell key for an integer lattice cell. Pure.
+function hashCell(ix: number, iy: number, iz: number): number {
+  return (ix * 73856093) ^ (iy * 19349663) ^ (iz * 83492791);
+}
+
+// The 27 offsets around a cell, computed once at module load (no per-frame
+// allocation) so the neighbour scan is a single flat loop instead of 3 deep.
+const NEIGHBOUR_OFFSETS: ReadonlyArray<readonly [number, number, number]> = (() => {
+  const out: Array<[number, number, number]> = [];
+  for (let dx = -1; dx <= 1; dx++) {
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dz = -1; dz <= 1; dz++) out.push([dx, dy, dz]);
+    }
+  }
+  return out;
+})();
+
+// Count points within `r2` of (px,py,pz), scanning the 27 cells around the
+// point's own cell. Pure: allocates nothing.
+function countNeighboursWithin(
+  grid: Map<number, number[]>,
+  positions: Float32Array,
+  px: number,
+  py: number,
+  pz: number,
+  inv: number,
+  r2: number,
+): number {
+  const cx = Math.floor(px * inv);
+  const cy = Math.floor(py * inv);
+  const cz = Math.floor(pz * inv);
+  let count = 0;
+  for (const [dx, dy, dz] of NEIGHBOUR_OFFSETS) {
+    const bucket = grid.get(hashCell(cx + dx, cy + dy, cz + dz));
+    if (!bucket) continue;
+    for (let b = 0; b < bucket.length; b++) {
+      const j = bucket[b];
+      const ex = positions[j * 3] - px;
+      const ey = positions[j * 3 + 1] - py;
+      const ez = positions[j * 3 + 2] - pz;
+      if (ex * ex + ey * ey + ez * ez <= r2) count++;
+    }
+  }
+  return count;
+}
+
 export function computeOcclusion(positions: Float32Array, radius: number): Float32Array {
   const n = positions.length / 3;
   const cell = radius;
   const inv = 1 / cell;
   const r2 = radius * radius;
-  const hash = (ix: number, iy: number, iz: number) =>
-    (ix * 73856093) ^ (iy * 19349663) ^ (iz * 83492791);
 
   // Bucket point indices by grid cell.
   const grid = new Map<number, number[]>();
   for (let i = 0; i < n; i++) {
-    const key = hash(
+    const key = hashCell(
       Math.floor(positions[i * 3] * inv),
       Math.floor(positions[i * 3 + 1] * inv),
       Math.floor(positions[i * 3 + 2] * inv),
@@ -242,34 +287,21 @@ export function computeOcclusion(positions: Float32Array, radius: number): Float
   const counts = new Float32Array(n);
   let mean = 0;
   for (let i = 0; i < n; i++) {
-    const px = positions[i * 3];
-    const py = positions[i * 3 + 1];
-    const pz = positions[i * 3 + 2];
-    const cx = Math.floor(px * inv);
-    const cy = Math.floor(py * inv);
-    const cz = Math.floor(pz * inv);
-    let count = 0;
-    for (let dx = -1; dx <= 1; dx++) {
-      for (let dy = -1; dy <= 1; dy++) {
-        for (let dz = -1; dz <= 1; dz++) {
-          const bucket = grid.get(hash(cx + dx, cy + dy, cz + dz));
-          if (!bucket) continue;
-          for (let b = 0; b < bucket.length; b++) {
-            const j = bucket[b];
-            const ex = positions[j * 3] - px;
-            const ey = positions[j * 3 + 1] - py;
-            const ez = positions[j * 3 + 2] - pz;
-            if (ex * ex + ey * ey + ez * ez <= r2) count++;
-          }
-        }
-      }
-    }
+    const count = countNeighboursWithin(
+      grid,
+      positions,
+      positions[i * 3],
+      positions[i * 3 + 1],
+      positions[i * 3 + 2],
+      inv,
+      r2,
+    );
     counts[i] = count;
     mean += count;
   }
   mean /= Math.max(1, n);
 
-  // Normalise relative to the mean: ridges (≈ mean) → 0, folds (≳ 2× mean) → 1.
+  // Normalise relative to the mean: ridges (~ mean) -> 0, folds (>= 2x mean) -> 1.
   const lo = mean * 0.75;
   const span = Math.max(1, mean * 1.4);
   const out = new Float32Array(n);
