@@ -2,7 +2,9 @@
 // point is a thin orchestrator; the rendering, state and data hooks live in the
 // chat/ sub-module so every file stays under the structural floor.
 
-import { useChatPanel } from "@/panels/chat/useChatPanel";
+import type { CSSProperties } from "react";
+
+import { useChatPanel, type ChatPanelState } from "@/panels/chat/useChatPanel";
 import { ChatAgentSidebar } from "@/panels/chat/ChatAgentSidebar";
 import { ChatHeader } from "@/panels/chat/ChatHeader";
 import { ChatMessages } from "@/panels/chat/ChatMessages";
@@ -10,11 +12,9 @@ import { ChatComposer } from "@/panels/chat/ChatComposer";
 import { FilesPanel } from "@/panels/chat/FilesPanel";
 import { VoiceOverlay } from "@/panels/chat/VoiceOverlay";
 import { SubRunPanel } from "@/panels/chat/SubRunPanel";
-import { CHAT_AGENTS } from "@/panels/chat/constants";
-import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES } from "@/panels/chat/constants";
+import { CHAT_AGENTS, MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES } from "@/panels/chat/constants";
 import { formatBytes } from "@/panels/chat/attachmentUtils";
 import { Icon } from "@/panels/chat/icons";
-import type { CSSProperties } from "react";
 
 export function ChatPanel(): JSX.Element {
   const chat = useChatPanel();
@@ -35,175 +35,203 @@ export function ChatPanel(): JSX.Element {
         void chat.addFiles(e.dataTransfer.files);
       }}
     >
-      <ChatAgentSidebar
-        open={chat.chatSidebarOpen}
-        agents={CHAT_AGENTS}
-        activeAgent={chat.selectedAgent}
-        railItems={chat.railItems}
-        railTerm={chat.railTerm}
-        railState={chat.rail.state}
-        onRailTerm={chat.setRailTerm}
-        onNew={chat.newConversation}
-        onSelectAgent={(agent) => {
-          chat.setSelectedAgentId(agent.id);
-          chat.setChatTab("chat");
-        }}
-        onSelectConversation={chat.selectConversation}
-        onDeleted={(id) => {
-          if (id === chat.activeId) chat.newConversation();
-          chat.rail.reload();
-        }}
-        onRenamed={() => chat.rail.reload()}
-        loadMore={() => void chat.rail.loadMore()}
-      />
+      <ChatPanelSidebar chat={chat} />
 
       <main className="chat-stage">
-        <ChatHeader
-          selectedAgent={chat.selectedAgent}
-          chatTab={chat.chatTab}
-          setChatTab={chat.setChatTab}
-          chatSidebarOpen={chat.chatSidebarOpen}
-          setChatSidebarOpen={chat.setChatSidebarOpen}
-          newConversation={chat.newConversation}
-          rightPanel={chat.rightPanel}
-          setRightPanel={chat.setRightPanel}
-          setInCall={chat.setInCall}
-          setCallSeconds={(setter) => chat.setCallSeconds(setter)}
-          chatSearchOpen={chat.chatSearchOpen}
-          setChatSearchOpen={chat.setChatSearchOpen}
-          setChatSearchTerm={chat.setChatSearchTerm}
-          theme={chat.theme}
-          toggleTheme={chat.toggleTheme}
-        />
-
-        {chat.chatSearchOpen && (
-          <div
-            className="chat-header-search"
-            style={{
-              padding: "6px 20px",
-              background: "rgba(8,14,26,0.92)",
-              borderBottom: "1px solid rgba(255,255,255,0.04)",
-            } as CSSProperties}
-          >
-            <input
-              className="chat-header-search__input"
-              type="search"
-              placeholder="Search this conversation..."
-              aria-label="Search this conversation"
-              value={chat.chatSearchTerm}
-              onChange={(e) => chat.setChatSearchTerm(e.target.value)}
-            />
-          </div>
-        )}
-
-        {chat.rightPanel === "files" && (
-          <FilesPanel attachments={chat.attachments} messages={chat.messages} onClose={() => chat.setRightPanel(null)} />
-        )}
-        <SubRunPanel
-          runId={chat.subRunId}
-          full={chat.subRunFull}
-          agent={chat.selectedAgent}
-          onClose={() => {
-            chat.setSubRunId(null);
-            chat.setSubRunFull(false);
-          }}
-          onFull={() => chat.setSubRunFull(true)}
-          onCollapse={() => chat.setSubRunFull(false)}
-        />
-        {chat.inCall && (
-          <VoiceOverlay
-            agent={chat.selectedAgent}
-            seconds={chat.callSeconds}
-            muted={chat.callMuted}
-            speaker={chat.callSpeaker}
-            onMute={() => chat.setCallMuted((m) => !m)}
-            onSpeaker={() => chat.setCallSpeaker((s) => !s)}
-            onEnd={() => chat.setInCall(false)}
-          />
-        )}
-        {chat.dragOver && (
-          <div className="chat-drop" role="status">
-            <Icon name="paperclip" size={40} />
-            <strong>Drop files to attach</strong>
-            <span>Up to {MAX_ATTACHMENTS} files, {formatBytes(MAX_ATTACHMENT_BYTES)} each</span>
-          </div>
-        )}
-
-        <ChatMessages
-          chatTab={chat.chatTab}
-          slideActive={chat.slideActive}
-          streaming={chat.streaming}
-          messages={chat.messages}
-          visibleMessages={chat.visibleMessages}
-          firstVisibleIndex={chat.firstVisibleIndex}
-          msgsLoading={chat.msgsLoading}
-          msgsError={chat.msgsError}
-          isEmpty={chat.isEmpty}
-          activeAgent={chat.selectedAgent}
-          userName={chat.userName}
-          switchDir={chat.switchDir}
-          switchCount={chat.switchCount}
-          compactedCount={chat.compactedCount}
-          compacted={chat.compacted}
-          setCompacted={chat.setCompacted}
-          clearIndex={chat.clearIndex}
-          chatSearchTerm={chat.chatSearchTerm}
-          pendingUser={chat.pendingUser}
-          pendingAttachments={chat.pendingAttachments}
-          showLive={chat.showLive}
-          live={chat.live}
-          selectedAgent={chat.selectedAgent}
-          resolvedHitls={chat.resolvedHitls}
-          onResolve={chat.resolveHitl}
-          lastAssistantId={chat.lastAssistantId}
-          regenerating={chat.regenerating}
-          onRegenerate={chat.regenerate}
-          onOpenRun={(runId) => chat.setSubRunId(runId)}
-          speech={chat.speech}
-          stopped={chat.stopped}
-          streamError={chat.streamError}
-          onWatchAgain={chat.watchAgain}
-          onReconnect={chat.reconnect}
-          showJump={chat.showJump}
-          onJumpToLatest={chat.jumpToLatest}
-          onMessagesScroll={chat.onMessagesScroll}
-          onCycleAgent={chat.cycleAgent}
-          messagesRef={chat.messagesRef}
-        />
-
-        <ChatComposer
-          input={chat.input}
-          setInput={chat.setInput}
-          inputRef={chat.inputRef}
-          attachments={chat.attachments}
-          removeAttachment={chat.removeAttachment}
-          onComposerKey={chat.onComposerKey}
-          fileInputRef={chat.fileInputRef}
-          addFiles={chat.addFiles}
-          streaming={chat.streaming}
-          activeId={chat.activeId}
-          send={chat.send}
-          stopTurn={chat.stopTurn}
-          setInCall={chat.setInCall}
-          setCallSeconds={(setter) => chat.setCallSeconds(setter)}
-          plusOpen={chat.plusOpen}
-          setPlusOpen={chat.setPlusOpen}
-          slashOpen={chat.slashOpen}
-          slashIdx={chat.slashIdx}
-          setSlashIdx={(setter) => chat.setSlashIdx(setter)}
-          executeSlash={chat.executeSlash}
-          readAloud={chat.readAloud}
-          setReadAloud={chat.setReadAloudPref}
-          dictation={chat.dictation}
-          dictationBaseRef={chat.dictationBaseRef}
-          attachError={chat.attachError}
-          contextRemaining={chat.contextRemaining}
-          live={chat.live}
-          selectedAgent={chat.selectedAgent}
-          onOpenRun={(runId) => chat.setSubRunId(runId)}
-        />
+        <ChatPanelHeader chat={chat} />
+        <ChatPanelOverlays chat={chat} />
+        <ChatPanelBody chat={chat} />
       </main>
     </section>
+  );
+}
+
+function ChatPanelSidebar({ chat }: { chat: ChatPanelState }): JSX.Element {
+  return (
+    <ChatAgentSidebar
+      open={chat.chatSidebarOpen}
+      agents={CHAT_AGENTS}
+      activeAgent={chat.selectedAgent}
+      railItems={chat.railItems}
+      railTerm={chat.railTerm}
+      railState={chat.rail.state}
+      onRailTerm={chat.setRailTerm}
+      onNew={chat.newConversation}
+      onSelectAgent={(agent) => {
+        chat.setSelectedAgentId(agent.id);
+        chat.setChatTab("chat");
+      }}
+      onSelectConversation={chat.selectConversation}
+      onDeleted={(id) => {
+        if (id === chat.activeId) chat.newConversation();
+        chat.rail.reload();
+      }}
+      onRenamed={() => chat.rail.reload()}
+      loadMore={() => void chat.rail.loadMore()}
+    />
+  );
+}
+
+function ChatPanelHeader({ chat }: { chat: ChatPanelState }): JSX.Element {
+  return (
+    <>
+      <ChatHeader
+        selectedAgent={chat.selectedAgent}
+        chatTab={chat.chatTab}
+        setChatTab={chat.setChatTab}
+        chatSidebarOpen={chat.chatSidebarOpen}
+        setChatSidebarOpen={chat.setChatSidebarOpen}
+        newConversation={chat.newConversation}
+        rightPanel={chat.rightPanel}
+        setRightPanel={chat.setRightPanel}
+        setInCall={chat.setInCall}
+        setCallSeconds={chat.setCallSeconds}
+        chatSearchOpen={chat.chatSearchOpen}
+        setChatSearchOpen={chat.setChatSearchOpen}
+        setChatSearchTerm={chat.setChatSearchTerm}
+        theme={chat.theme}
+        toggleTheme={chat.toggleTheme}
+      />
+
+      {chat.chatSearchOpen && (
+        <div
+          className="chat-header-search"
+          style={{
+            padding: "6px 20px",
+            background: "rgba(8,14,26,0.92)",
+            borderBottom: "1px solid rgba(255,255,255,0.04)",
+          } as CSSProperties}
+        >
+          <input
+            className="chat-header-search__input"
+            type="search"
+            placeholder="Search this conversation..."
+            aria-label="Search this conversation"
+            value={chat.chatSearchTerm}
+            onChange={(e) => chat.setChatSearchTerm(e.target.value)}
+          />
+        </div>
+      )}
+    </>
+  );
+}
+
+function ChatPanelOverlays({ chat }: { chat: ChatPanelState }): JSX.Element {
+  return (
+    <>
+      {chat.rightPanel === "files" && (
+        <FilesPanel attachments={chat.attachments} messages={chat.messages} onClose={() => chat.setRightPanel(null)} />
+      )}
+      <SubRunPanel
+        runId={chat.subRunId}
+        full={chat.subRunFull}
+        agent={chat.selectedAgent}
+        onClose={() => {
+          chat.setSubRunId(null);
+          chat.setSubRunFull(false);
+        }}
+        onFull={() => chat.setSubRunFull(true)}
+        onCollapse={() => chat.setSubRunFull(false)}
+      />
+      {chat.inCall && (
+        <VoiceOverlay
+          agent={chat.selectedAgent}
+          seconds={chat.callSeconds}
+          muted={chat.callMuted}
+          speaker={chat.callSpeaker}
+          onMute={() => chat.setCallMuted((m) => !m)}
+          onSpeaker={() => chat.setCallSpeaker((s) => !s)}
+          onEnd={() => chat.setInCall(false)}
+        />
+      )}
+      {chat.dragOver && (
+        <div className="chat-drop" role="status">
+          <Icon name="paperclip" size={40} />
+          <strong>Drop files to attach</strong>
+          <span>Up to {MAX_ATTACHMENTS} files, {formatBytes(MAX_ATTACHMENT_BYTES)} each</span>
+        </div>
+      )}
+    </>
+  );
+}
+
+function ChatPanelBody({ chat }: { chat: ChatPanelState }): JSX.Element {
+  return (
+    <>
+      <ChatMessages
+        chatTab={chat.chatTab}
+        slideActive={chat.slideActive}
+        streaming={chat.streaming}
+        messages={chat.messages}
+        visibleMessages={chat.visibleMessages}
+        firstVisibleIndex={chat.firstVisibleIndex}
+        msgsLoading={chat.msgsLoading}
+        msgsError={chat.msgsError}
+        isEmpty={chat.isEmpty}
+        activeAgent={chat.selectedAgent}
+        userName={chat.userName}
+        switchDir={chat.switchDir}
+        switchCount={chat.switchCount}
+        compactedCount={chat.compactedCount}
+        compacted={chat.compacted}
+        setCompacted={chat.setCompacted}
+        clearIndex={chat.clearIndex}
+        chatSearchTerm={chat.chatSearchTerm}
+        pendingUser={chat.pendingUser}
+        pendingAttachments={chat.pendingAttachments}
+        showLive={chat.showLive}
+        live={chat.live}
+        selectedAgent={chat.selectedAgent}
+        resolvedHitls={chat.resolvedHitls}
+        onResolve={chat.resolveHitl}
+        lastAssistantId={chat.lastAssistantId}
+        regenerating={chat.regenerating}
+        onRegenerate={chat.regenerate}
+        onOpenRun={(runId) => chat.setSubRunId(runId)}
+        speech={chat.speech}
+        stopped={chat.stopped}
+        streamError={chat.streamError}
+        onWatchAgain={chat.watchAgain}
+        onReconnect={chat.reconnect}
+        showJump={chat.showJump}
+        onJumpToLatest={chat.jumpToLatest}
+        onMessagesScroll={chat.onMessagesScroll}
+        onCycleAgent={chat.cycleAgent}
+        messagesRef={chat.messagesRef}
+      />
+
+      <ChatComposer
+        input={chat.input}
+        setInput={chat.setInput}
+        inputRef={chat.inputRef}
+        attachments={chat.attachments}
+        removeAttachment={chat.removeAttachment}
+        onComposerKey={chat.onComposerKey}
+        fileInputRef={chat.fileInputRef}
+        addFiles={chat.addFiles}
+        streaming={chat.streaming}
+        activeId={chat.activeId}
+        send={chat.send}
+        stopTurn={chat.stopTurn}
+        setInCall={chat.setInCall}
+        setCallSeconds={chat.setCallSeconds}
+        plusOpen={chat.plusOpen}
+        setPlusOpen={chat.setPlusOpen}
+        slashOpen={chat.slashOpen}
+        slashIdx={chat.slashIdx}
+        setSlashIdx={chat.setSlashIdx}
+        executeSlash={chat.executeSlash}
+        readAloud={chat.readAloud}
+        setReadAloud={chat.setReadAloudPref}
+        dictation={chat.dictation}
+        dictationBaseRef={chat.dictationBaseRef}
+        attachError={chat.attachError}
+        contextRemaining={chat.contextRemaining}
+        live={chat.live}
+        selectedAgent={chat.selectedAgent}
+        onOpenRun={(runId) => chat.setSubRunId(runId)}
+      />
+    </>
   );
 }
 

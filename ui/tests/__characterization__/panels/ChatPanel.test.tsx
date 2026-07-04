@@ -1,6 +1,7 @@
 import { afterEach, describe, it, expect } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { ChatPanel } from "@/panels/ChatPanel";
+import ChatPanelDefault from "@/panels/ChatPanel";
 import { clearApiMocks, mockApi } from "../helpers";
 
 describe("ChatPanel", () => {
@@ -54,5 +55,10 @@ describe("ChatPanel", () => {
 
     // The sidebar label and empty list copy
     await waitFor(() => expect(screen.getByText("No conversations yet.")).toBeTruthy());
+  });
+
+  it("preserves the public named and default export", () => {
+    expect(typeof ChatPanel).toBe("function");
+    expect(ChatPanelDefault).toBe(ChatPanel);
   });
 });
