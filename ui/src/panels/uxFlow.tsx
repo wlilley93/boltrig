@@ -25,18 +25,7 @@ import { useSlideActive } from "../deck/context";
 import { navigate } from "../router";
 import { apiReason, CodeBlock } from "./shared";
 import { AUDIT_STATUS, Hint, InfoCallout, StatusBadge } from "./ux";
-
-// Clipboard writes need a secure context and permission; callers fall back to
-// selection when this reports failure.
-async function copyText(text: string): Promise<boolean> {
-  try {
-    if (!navigator.clipboard) return false;
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    return false;
-  }
-}
+import { copyText } from "./uxFlow/copyText";
 
 // --- ArmConfirm (N14, P27): two-step arm-confirm, in place ------------------
 
