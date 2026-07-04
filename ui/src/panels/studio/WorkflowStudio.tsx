@@ -3,7 +3,6 @@ import { useState } from "react";
 import { api } from "../../api/client";
 import type {
   CapabilitiesResponse,
-  VerbInfo,
   WorkflowSummary,
   WorkflowsResponse,
 } from "../../api/types";
@@ -11,6 +10,7 @@ import { useFetch, type FetchState } from "../../useFetch";
 import { listToCsv } from "../shared";
 import { WorkflowCanvas } from "../WorkflowCanvas";
 import { ExecuteForm } from "./workflow/forms/ExecuteForm";
+import { VerbPalette } from "./workflow/sidebar/VerbPalette";
 import { RunsForm } from "./workflow/forms/RunsForm";
 import { ScheduleForm } from "./workflow/forms/ScheduleForm";
 import { TriggerForm } from "./workflow/forms/TriggerForm";
@@ -23,69 +23,6 @@ type WorkflowView = "form" | "canvas";
 // A ready-made {value,label} for the shared Select. The four action forms all
 // pick from the same list of workflow ids, so the parent computes it once.
 type WorkflowOption = { value: string; label: string };
-
-// The scoped verb registry powers the palette: each id can be pasted as a step
-// "action" in the definition JSON.
-function VerbPalette({ caps }: { caps: FetchState<CapabilitiesResponse> }) {
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-  const verbs: VerbInfo[] = caps.data?.verbs ?? [];
-
-  async function copyVerb(verbId: string) {
-    try {
-      await navigator.clipboard.writeText(verbId);
-      setCopiedId(verbId);
-    } catch {
-      // Clipboard may be unavailable (insecure context); fail quietly.
-    }
-  }
-
-  return (
-    <div className="list-card">
-      <div className="list-card__head">
-        <h3>Verb palette</h3>
-        <button className="btn" onClick={() => caps.reload()}>
-          Refresh
-        </button>
-      </div>
-      <div className="list-card__body">
-        <p className="muted">
-          Scoped to this identity. Click a verb to copy its id, then paste it
-          as a step <code>action</code> in the definition JSON.
-        </p>
-        {caps.loading && !caps.data && <p className="muted">Loading...</p>}
-        {caps.error && (
-          <p className="error">Failed to load: {caps.error}</p>
-        )}
-        {!caps.loading && !caps.error && verbs.length === 0 && (
-          <p className="muted">No verbs visible for this identity.</p>
-        )}
-        {verbs.map((v) => (
-          <button
-            className="row-line palette-row"
-            key={v.id}
-            onClick={() => copyVerb(v.id)}
-            title="Copy verb id"
-          >
-            <div>
-              <code>{v.id}</code>{" "}
-              {v.consequence && (
-                <span className="muted">({v.consequence})</span>
-              )}
-            </div>
-            <div className="kv">
-              {v.binding && (
-                <span className="badge">{v.binding.target_type}</span>
-              )}
-              <span className="muted">
-                {copiedId === v.id ? "copied" : "copy"}
-              </span>
-            </div>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 // The right rail: the workflows list card, with the verb palette nested inside
 // it (the original markup nests the palette within the workflows list-card).
