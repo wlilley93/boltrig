@@ -89,9 +89,14 @@ export function allKinds(): NodeKindMeta[] {
   return CATEGORIES.flatMap((c) => c.items);
 }
 
-// The scaffolded action + seed params a freshly dropped node of this kind
-// carries. These verbs are NOT yet in the kernel registry; they let the canvas
-// render and persist a node until a real adapter registers a matching verb.
+// The action + seed params a freshly dropped node of this kind carries.
+// Control nouns (trigger/flow/code) are resolved LOCALLY by the workflow
+// interpreter (boltrig/workflows/control_flow.py): trigger.start/flow.end are
+// no-ops, flow.branch is a real conditional with branch-gated children,
+// flow.loop records its item count, code.run is recognised-but-disabled (no
+// sandbox). The capability nouns (agent/knowledge/http/database/tool/notify/
+// template) dispatch through kernel.invoke and need a registered adapter verb;
+// until one is bound they record as a soft skip rather than crashing the run.
 export function defaultActionForKind(kind: NodeVisualKind): {
   action: string;
   params: Record<string, unknown>;

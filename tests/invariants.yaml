@@ -523,6 +523,14 @@ invariants:
     tests:
       - tests/integration/test_round_seven.py::test_interpreter_runs_steps_in_dependency_order_each_durable
       - tests/integration/test_round_seven.py::test_interpreter_skips_descendants_of_a_failed_step
+  FR-CTL-03:
+    description: The interpreter resolves control-plane node kinds locally (trigger.start/flow.end no-ops, flow.branch conditional with branch-gated children, flow.loop item count, code.run recognised-but-disabled) instead of failing on an unbound action.
+    tests:
+      - tests/integration/test_control_flow.py::test_trigger_and_end_are_no_ops_that_complete
+      - tests/integration/test_control_flow.py::test_branch_runs_only_the_matching_arm
+      - tests/integration/test_control_flow.py::test_branch_false_arm_runs_when_predicate_is_false
+      - tests/integration/test_control_flow.py::test_loop_records_item_count_without_crashing
+      - tests/integration/test_control_flow.py::test_code_run_is_recognised_but_not_executed
   SEC-50:
     description: Every workflow step is dispatched through the kernel chokepoint under the caller's own grants - a step can neither escalate nor bypass governance.
     tests:

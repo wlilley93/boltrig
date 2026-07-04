@@ -44,6 +44,7 @@ from dataclasses import replace
 from typing import Any
 
 from boltrig.models import InvocationContext, BoltrigError
+from . import control_flow
 
 
 def _topological_order(steps: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -134,6 +135,10 @@ async def run_workflow_definition(
     ordered, unrunnable = _topological_order(steps)
     results: dict[str, dict[str, Any]] = {}
     failed_or_skipped: set[str] = {s["id"] for s in unrunnable}
+    # Genuine failures (errored / unrunnable) that fail the run's overall status.
+    # Conditional skips (branch_mismatch) and propagation skips (parent_failed) do
+    # NOT count: a branch that omits an arm is a normal completed run.
+    failed: set[str] = set(failed_or_skipped)
     for s in unrunnable:
         results[s["id"]] = {"action": s.get("action"), "status": "skipped",
                             "reason": "missing_parent_or_cycle"}
@@ -160,10 +165,40 @@ async def run_workflow_definition(
             _emit_step({"step_id": step_id, "action": step.get("action"),
                         "status": "skipped", "reason": "parent_failed"})
             continue
+        # A branched step only runs when its declared branch matches every
+        # parent that produced a branch label (conditional execution).
+        branch_ok, branch_reason = control_flow.branch_matches(step, results)
+        if not branch_ok:
+            results[step_id] = {"action": step.get("action"), "status": "skipped",
+                                "reason": branch_reason}
+            failed_or_skipped.add(step_id)
+            _emit_step({"step_id": step_id, "action": step.get("action"),
+                        "status": "skipped", "reason": branch_reason})
+            continue
 
         action = step.get("action", "")
         noun, verb = _split_action(action)
         params = step.get("params") or step.get("with") or {}
+
+        # Control-plane steps (trigger/flow/code) are resolved locally by the
+        # interpreter, NOT dispatched through kernel.invoke: they are internal
+        # routing, not external capabilities (the one-chokepoint doctrine governs
+        # capability dispatch, not control routing).
+        if control_flow.is_control_step(action):
+            _emit_step({"step_id": step_id, "action": action, "status": "running"})
+            coutcome = control_flow.run_control_step(action, params, results, inputs)
+            results[step_id] = {"action": action, "status": coutcome["status"],
+                                "output": coutcome.get("output")}
+            if coutcome["status"] != "ok":
+                failed_or_skipped.add(step_id)
+            elif checkpointing:
+                await store.upsert_checkpoint(
+                    wf.tenant_id, rid, step_id, "ok", output=coutcome.get("output")
+                )
+            _emit_step({"step_id": step_id, "action": action,
+                        "status": coutcome["status"]})
+            continue
+
         _emit_step({"step_id": step_id, "action": action, "status": "running"})
 
         # A resumed paused step re-invokes with its approval id: the kernel's
@@ -197,6 +232,7 @@ async def run_workflow_definition(
                 paused = True
             else:
                 failed_or_skipped.add(step_id)
+                failed.add(step_id)
             results[step_id] = {"action": action, "status": status, "reason": reason}
             if hitl_id:
                 results[step_id]["hitl_request_id"] = hitl_id
@@ -211,6 +247,7 @@ async def run_workflow_definition(
                 break
         except Exception as exc:  # an adapter bug must not crash the fleet (P9)
             failed_or_skipped.add(step_id)
+            failed.add(step_id)
             results[step_id] = {"action": action, "status": "error",
                                 "reason": type(exc).__name__}
             _emit_step({"step_id": step_id, "action": action, "status": "error",
@@ -218,7 +255,7 @@ async def run_workflow_definition(
 
     if paused:
         overall = "paused"
-    elif failed_or_skipped:
+    elif failed:
         overall = "failed"
     else:
         overall = "completed"
