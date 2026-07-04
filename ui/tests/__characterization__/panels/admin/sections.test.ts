@@ -7,6 +7,11 @@ import {
   toFormValue,
   type AdminSection,
 } from "@/panels/admin/sections";
+import { governanceSections } from "@/panels/admin/admin-sections/governanceSections";
+import { integrationSections } from "@/panels/admin/admin-sections/integrationSections";
+import { orgSections } from "@/panels/admin/admin-sections/orgSections";
+import { runtimeSections } from "@/panels/admin/admin-sections/runtimeSections";
+import { surfaceSections } from "@/panels/admin/admin-sections/surfaceSections";
 
 describe("admin/sections", () => {
   it("round-trips a simple object section through form value", () => {
@@ -44,5 +49,18 @@ describe("admin/sections", () => {
   it("exposes non-empty admin sections and options", () => {
     expect(ADMIN_SECTIONS.length).toBeGreaterThan(0);
     expect(ADMIN_SECTION_OPTIONS.length).toBe(ADMIN_SECTIONS.length);
+  });
+
+  it("composes the full registry from extracted groups in order", () => {
+    const groups = [
+      orgSections,
+      integrationSections,
+      runtimeSections,
+      governanceSections,
+      surfaceSections,
+    ];
+    expect(groups.reduce((sum, g) => sum + g.length, 0)).toBe(ADMIN_SECTIONS.length);
+    expect(ADMIN_SECTIONS[0]?.key).toBe("identity");
+    expect(ADMIN_SECTIONS[ADMIN_SECTIONS.length - 1]?.key).toBe("personal_agents");
   });
 });
