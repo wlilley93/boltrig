@@ -2,9 +2,9 @@
 // live in the workflowCanvas/ submodule; this file composes the v3 canvas view
 // (design brief sec 22.2-22.10) and re-exports the public API.
 //
-// Wave 1 scope: the canvas interior only. The home cards (22.1) and the editor
-// header bar are handled in a separate wave, so MetaForm (Save/Run/name) is kept
-// as-is for functional Save/Run access until the header lands.
+// Wave 2 adds the editor header (sec 22.2: back / name / version / undo-redo /
+// step count / high-consequence / Save / Run) in place of the old MetaForm, and
+// an optional onBack so AutomationsSlide can drop its own back bar.
 
 import {
   Background,
@@ -16,7 +16,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import { useState } from "react";
 import { WorkflowRunCanvas } from "@/panels/WorkflowRunCanvas";
-import { MetaForm } from "./workflowCanvas/MetaForm";
+import { EditorHeader } from "./workflowCanvas/EditorHeader";
 import { useWorkflowCanvas } from "./workflowCanvas/useWorkflowCanvas";
 import { nodeTypes } from "./workflowCanvas/nodes";
 import { edgeTypes } from "./workflowCanvas/edges";
@@ -39,7 +39,13 @@ export type {
 export { deriveKind, extractSteps, stepsToGraph } from "./workflowCanvas/graph";
 export { nodeTypes } from "./workflowCanvas/nodes";
 
-export function WorkflowCanvas({ routeWfId }: { routeWfId?: string }) {
+export function WorkflowCanvas({
+  routeWfId,
+  onBack,
+}: {
+  routeWfId?: string;
+  onBack?: () => void;
+}) {
   const ctx = useWorkflowCanvas(routeWfId);
 
   if (ctx.meta.runView) {
@@ -54,10 +60,15 @@ export function WorkflowCanvas({ routeWfId }: { routeWfId?: string }) {
 
   return (
     <div className="wf-studio wf-studio--v3">
-      <MetaForm
+      <EditorHeader
         meta={ctx.meta}
+        graph={ctx.graph}
         api={ctx.apiActions}
-        clearCanvas={ctx.graph.clearCanvas}
+        onBack={onBack}
+        canUndo={ctx.graph.canUndo}
+        canRedo={ctx.graph.canRedo}
+        onUndo={ctx.graph.undo}
+        onRedo={ctx.graph.redo}
       />
       <ReactFlowProvider>
         <CanvasSurface ctx={ctx} />
