@@ -3791,6 +3791,204 @@ body {
   margin-bottom: 12px;
 }
 
+/* === Automations home cards + editor header (sec 22.1-22.2) === */
+.wfhome {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+.wfhome__card {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-bg-card);
+  border-radius: var(--radius-md);
+  padding: 0;
+  font: inherit;
+  font-family: var(--font-ui);
+  color: var(--color-text-secondary);
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+}
+.wfhome__card:hover {
+  border-color: var(--color-accent);
+  transform: translateY(-1px);
+}
+.wfhome__accent {
+  width: 4px;
+  flex: 0 0 4px;
+  align-self: stretch;
+  background: var(--wf-accent, var(--color-accent));
+}
+.wfhome__body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px 12px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.wfhome__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+}
+.wfhome__name {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wfhome__status {
+  flex: 0 0 auto;
+  font-size: 8.5px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  border: 1px solid currentColor;
+  background: transparent;
+}
+.wfhome__desc {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--color-text-muted);
+  line-height: 1.35;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.wfhome__spark { display: block; margin-top: 2px; }
+.wfhome__stats {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-text-muted);
+}
+.wfhome__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-text-muted);
+}
+.wfhome__owner { color: var(--color-text-secondary); }
+.wfhome__trigger { text-transform: capitalize; }
+
+/* --- editor header (sec 22.2) --- */
+.wf3-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-bg-raised);
+  border-radius: var(--radius-md);
+  margin-bottom: 8px;
+}
+.wf3-header__left,
+.wf3-header__right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.wf3-header__name {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  background: var(--color-bg-inset);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  min-width: 160px;
+  max-width: 320px;
+}
+.wf3-header__name:focus { outline: none; border-color: var(--color-accent); }
+.wf3-header__version {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+.wf3-header__group { display: flex; align-items: center; gap: 4px; }
+.wf3-header__iconbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-bg-inset);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.wf3-header__iconbtn:hover:not(:disabled) {
+  border-color: var(--color-accent);
+  color: var(--color-text-primary);
+}
+.wf3-header__iconbtn:disabled { opacity: 0.4; cursor: not-allowed; }
+.wf3-header__count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-muted);
+  padding: 2px 6px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-pill);
+}
+.wf3-header__conseq {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: rgba(232, 179, 57, 0.12);
+  border: 1px solid rgba(232, 179, 57, 0.5);
+  color: var(--color-warn);
+  font-size: 10px;
+  font-weight: 600;
+}
+.wf3-header__conseq-text { white-space: nowrap; }
+.wf3-header__action { display: inline-flex; align-items: center; gap: 6px; }
+.wf3-header__spinner {
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-top-color: currentColor;
+  animation: wf3-spin 0.7s linear infinite;
+}
+@keyframes wf3-spin { to { transform: rotate(360deg); } }
+.wf3-header__notes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  width: 100%;
+  font-size: 11px;
+}
+.wf3-header__ok { color: var(--color-ok); }
+.wf3-header__err { color: var(--color-down); }
+
+
 /* ==========================================================================
    Form primitive register (uxForm.tsx seat): N1 Switch + saved wisp,
    N2 CardSelect, N3 ChipPicker, N4 EntityPicker, N5 ScopeBuilder, N6 Stepper,

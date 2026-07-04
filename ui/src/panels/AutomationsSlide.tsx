@@ -5,13 +5,14 @@
 // Step columns (one slide per workflow step) land in Beat 3; this beat reuses
 // the canvas as-is via its routeWfId seed (see the WorkflowCanvas patch).
 
-import { Suspense, lazy, useMemo, useState } from "react";
+import { Suspense, lazy, useMemo, useState, type CSSProperties } from "react";
 
 import { api } from "../api/client";
-import type { WorkflowDetail } from "../api/types";
+import type { WorkflowDetail, WorkflowSummary } from "../api/types";
 import type { DeckCol } from "../deck/Deck";
 import { navigate, useRoute } from "../router";
 import { useFetch } from "../useFetch";
+import { deriveCardMeta, type HomeCardMeta } from "./automations/cardMeta";
 import { useWorkflowDraft } from "./automations/draft";
 import { EmptyState, FetchError, PageIntro } from "./ux";
 
@@ -63,13 +64,19 @@ function WorkflowPicker() {
     <section className="panel">
       <PageIntro
         title="Automations"
-        lead="Every stored workflow, one card each - open one to see its canvas."
+        lead="Every stored workflow, one card each. Open one to see its canvas."
         how="A workflow is a graph of governed steps. Opening a card shows the graph; authoring new workflows lives in the Studio."
         actions={
           <>
             <span className="muted">{list.length} workflow(s)</span>
             <button className="btn" onClick={() => workflows.reload()}>
               Refresh
+            </button>
+            <button
+              className="btn btn--primary"
+              onClick={() => navigate("/studio")}
+            >
+              New workflow
             </button>
           </>
         }
@@ -95,31 +102,9 @@ function WorkflowPicker() {
       )}
 
       {list.length > 0 && (
-        <div className="wfpick">
+        <div className="wfhome">
           {list.map((w) => (
-            <button
-              key={`${w.id}@${w.version}`}
-              className="wfpick__card"
-              title={`Open ${w.id} on the canvas`}
-              onClick={() => navigate(`/automations/${encodeURIComponent(w.id)}`)}
-            >
-              <span className="wfpick__id">
-                <code>{w.id}</code>
-              </span>
-              <span className="wfpick__meta">
-                <span className="badge">{w.source}</span>
-                <span className="muted">v{w.version}</span>
-              </span>
-              {w.intent_tags.length > 0 && (
-                <span className="wfpick__tags">
-                  {w.intent_tags.map((t) => (
-                    <code className="tag" key={t}>
-                      {t}
-                    </code>
-                  ))}
-                </span>
-              )}
-            </button>
+            <WorkflowCard key={`${w.id}@${w.version}`} wf={w} />
           ))}
         </div>
       )}
@@ -127,18 +112,94 @@ function WorkflowPicker() {
   );
 }
 
+function WorkflowCard({ wf }: { wf: WorkflowSummary }) {
+  const meta: HomeCardMeta = useMemo(
+    () => deriveCardMeta(wf.id, wf.source, wf.intent_tags),
+    [wf.id, wf.source, wf.intent_tags],
+  );
+  return (
+    <button
+      type="button"
+      className="wfhome__card"
+      style={{ "--wf-accent": meta.accent } as CSSProperties}
+      title={`Open ${wf.id} on the canvas`}
+      onClick={() => navigate(`/automations/${encodeURIComponent(wf.id)}`)}
+    >
+      <span className="wfhome__accent" />
+      <span className="wfhome__body">
+        <span className="wfhome__head">
+          <code className="wfhome__name">{wf.id}</code>
+          <span
+            className="wfhome__status"
+            style={{ color: meta.status.color, borderColor: meta.status.color }}
+          >
+            {meta.status.label}
+          </span>
+        </span>
+        <p className="wfhome__desc">{meta.description}</p>
+        <Sparkline values={meta.spark} />
+        <span className="wfhome__stats">
+          <span>{meta.runCount} runs</span>
+          <span>{meta.successRate}% ok</span>
+          <span>{meta.lastRun}</span>
+        </span>
+        <span className="wfhome__foot">
+          <span className="wfhome__owner">{meta.owner}</span>
+          <span className="wfhome__trigger">{meta.trigger}</span>
+        </span>
+      </span>
+    </button>
+  );
+}
+
+function Sparkline({
+  values,
+}: {
+  values: { ok: boolean; color: string; level: number }[];
+}) {
+  const w = 76;
+  const h = 22;
+  const gap = 4;
+  const bw = (w - gap * (values.length - 1)) / values.length;
+  return (
+    <svg
+      className="wfhome__spark"
+      width={w}
+      height={h}
+      viewBox={`0 0 ${w} ${h}`}
+      aria-hidden="true"
+    >
+      {values.map((v, i) => {
+        const barH = Math.max(3, h * v.level);
+        const x = i * (bw + gap);
+        const y = h - barH;
+        return (
+          <rect
+            key={i}
+            x={x}
+            y={y}
+            width={bw}
+            height={barH}
+            rx={1}
+            fill={v.color}
+          />
+        );
+      })}
+    </svg>
+  );
+}
+
 function CanvasHost({ wfid }: { wfid: string }) {
   return (
     <section className="panel">
-      <div className="auto-canvas__bar">
-        <button className="btn btn--ghost" onClick={() => navigate("/automations")}>
-          Back to automations
-        </button>
-        <code className="mono">{wfid}</code>
-      </div>
       <Suspense fallback={<p className="muted">Loading canvas...</p>}>
-        {/* key resets the canvas per workflow so switching never bleeds state */}
-        <WorkflowCanvas key={wfid} routeWfId={wfid} />
+        {/* key resets the canvas per workflow so switching never bleeds state;
+            the back button now lives in the editor header (sec 22.2). */}
+        <WorkflowCanvas
+          key={wfid}
+          routeWfId={wfid}
+          onBack={() => navigate("/automations")}
+        />
       </Suspense>
     </section>
   );

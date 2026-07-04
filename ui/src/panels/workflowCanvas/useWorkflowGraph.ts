@@ -1,10 +1,7 @@
 import { useMemo, useRef, useState, type Dispatch, type SetStateAction, type MutableRefObject } from "react";
 import {
   addEdge,
-  useEdgesState,
-  useNodesState,
   type Connection,
-  type Edge,
   type XYPosition,
 } from "@xyflow/react";
 import type { VerbInfo } from "@/api/types";
@@ -15,32 +12,32 @@ import {
   kindFromVisual,
   type NodeVisualKind,
 } from "./nodeTaxonomy";
+import { useGraphHistory, type GraphHistory } from "./useGraphHistory";
 import type { CanvasNode, StepNode, TriggerKind, WorkflowStep } from "./types";
 
 export function useWorkflowGraph(verbsById: Map<string, VerbInfo>) {
-  const [nodes, setNodes, onNodesChange] = useNodesState<CanvasNode>([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+  const hist = useGraphHistory<CanvasNode>();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [paletteFilter, setPaletteFilter] = useState("");
   const [loadText, setLoadText] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
   const counter = useRef(0);
 
-  const selectedNode = nodes.find(
+  const selectedNode = hist.nodes.find(
     (n): n is StepNode => n.id === selectedId && isStepNode(n),
   );
   const previewSteps = useMemo(
-    () => graphToSteps(nodes, edges),
-    [nodes, edges],
+    () => graphToSteps(hist.nodes, hist.edges),
+    [hist.nodes, hist.edges],
   );
 
   return {
-    nodes,
-    setNodes,
-    onNodesChange,
-    edges,
-    setEdges,
-    onEdgesChange,
+    nodes: hist.nodes,
+    setNodes: hist.setNodes,
+    onNodesChange: hist.onNodesChange,
+    edges: hist.edges,
+    setEdges: hist.setEdges,
+    onEdgesChange: hist.onEdgesChange,
     selectedId,
     setSelectedId,
     selectedNode,
@@ -53,24 +50,34 @@ export function useWorkflowGraph(verbsById: Map<string, VerbInfo>) {
     counter,
     previewSteps,
     addVerbNode: (verb: VerbInfo) =>
-      addVerbNode(verb, nodes, setNodes, setSelectedId, counter),
+      addVerbNode(verb, hist.nodes, hist.setNodes, setSelectedId, counter),
     addNodeKind: (kind: NodeVisualKind, position?: { x: number; y: number }) =>
-      addNodeKindNode(kind, nodes, setNodes, setSelectedId, counter, position),
+      addNodeKindNode(kind, hist.nodes, hist.setNodes, setSelectedId, counter, position),
     addTrigger: (triggerType: TriggerKind) =>
-      addTriggerNode(triggerType, nodes, setNodes, counter),
+      addTriggerNode(triggerType, hist.nodes, hist.setNodes, counter),
     onConnect: (connection: Connection) =>
-      setEdges((es) => addEdge({ ...connection, type: "workflow" }, es)),
+      hist.setEdges((es) => addEdge({ ...connection, type: "workflow" }, es)),
     deleteSelected: () =>
-      deleteSelectedNode(selectedId, setNodes, setEdges, setSelectedId),
-    clearCanvas: () => clearGraph(setNodes, setEdges, setSelectedId),
+      deleteSelectedNode(selectedId, hist.replace, setSelectedId),
+    clearCanvas: () => clearGraph(hist.replace, setSelectedId),
     loadGraph: (steps: WorkflowStep[]) =>
-      loadSteps(steps, verbsById, setNodes, setEdges, setSelectedId),
+      loadSteps(steps, verbsById, hist.reset, setSelectedId),
     loadFromJson: () =>
       loadFromJsonText(loadText, setLoadError, (steps) =>
-        loadSteps(steps, verbsById, setNodes, setEdges, setSelectedId),
+        loadSteps(steps, verbsById, hist.reset, setSelectedId),
       ),
+    // History surface for the editor header (sec 22.2).
+    replace: hist.replace,
+    resetHistory: hist.reset,
+    canUndo: hist.canUndo,
+    canRedo: hist.canRedo,
+    undo: hist.undo,
+    redo: hist.redo,
   };
 }
+
+export type WorkflowGraph = ReturnType<typeof useWorkflowGraph>;
+export type { GraphHistory };
 
 function addVerbNode(
   verb: VerbInfo,
@@ -169,38 +176,33 @@ function addTriggerNode(
 
 function deleteSelectedNode(
   selectedId: string | null,
-  setNodes: Dispatch<SetStateAction<CanvasNode[]>>,
-  setEdges: Dispatch<SetStateAction<Edge[]>>,
+  replace: GraphHistory<CanvasNode>["replace"],
   setSelectedId: (id: string | null) => void,
 ) {
   if (!selectedId) return;
-  setNodes((ns) => ns.filter((n) => n.id !== selectedId));
-  setEdges((es) =>
-    es.filter((e) => e.source !== selectedId && e.target !== selectedId),
-  );
+  replace((p) => ({
+    nodes: p.nodes.filter((n) => n.id !== selectedId),
+    edges: p.edges.filter((e) => e.source !== selectedId && e.target !== selectedId),
+  }));
   setSelectedId(null);
 }
 
 function clearGraph(
-  setNodes: Dispatch<SetStateAction<CanvasNode[]>>,
-  setEdges: Dispatch<SetStateAction<Edge[]>>,
+  replace: GraphHistory<CanvasNode>["replace"],
   setSelectedId: (id: string | null) => void,
 ) {
-  setNodes([]);
-  setEdges([]);
+  replace({ nodes: [], edges: [] });
   setSelectedId(null);
 }
 
 function loadSteps(
   steps: WorkflowStep[],
   verbsById: Map<string, VerbInfo>,
-  setNodes: Dispatch<SetStateAction<CanvasNode[]>>,
-  setEdges: Dispatch<SetStateAction<Edge[]>>,
+  reset: GraphHistory<CanvasNode>["reset"],
   setSelectedId: (id: string | null) => void,
 ) {
   const graph = stepsToGraph(steps, verbsById);
-  setNodes(graph.nodes);
-  setEdges(graph.edges);
+  reset({ nodes: graph.nodes, edges: graph.edges });
   setSelectedId(null);
 }
 
