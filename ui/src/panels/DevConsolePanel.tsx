@@ -6,12 +6,12 @@
 // the kernel returned it (the AdminPanel pattern). The role gate on the tab is
 // cosmetic; the chokepoint is the real gate (a 403 returns a denial body).
 
-import { api } from "../api/client";
-import { useFetch } from "../useFetch";
-import { PageIntro } from "./ux";
-import { AdapterSourceSection } from "./devConsole/AdapterSourceSection";
-import { InvokeSection } from "./devConsole/InvokeSection";
-import { SpawnSection } from "./devConsole/SpawnSection";
+import { api } from "@/api/client";
+import { useFetch } from "@/useFetch";
+import { PageIntro } from "@/panels/ux";
+import { AdapterSourceSection } from "@/panels/devConsole/AdapterSourceSection";
+import { InvokeSection } from "@/panels/devConsole/InvokeSection";
+import { SpawnSection } from "@/panels/devConsole/SpawnSection";
 
 export function DevConsolePanel() {
   // The scoped verb registry powers the invoke picker; the adapter inventory
