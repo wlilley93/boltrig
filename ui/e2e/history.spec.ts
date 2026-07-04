@@ -30,6 +30,7 @@ test("conversation search filters the rail and clearing restores the list", asyn
   ).toBeVisible();
 
   // Searching flips the rail to results and matches the seeded conversation.
+  await rail.getByRole("button", { name: "Search conversations" }).click();
   const search = page.getByPlaceholder("Search conversations");
   await search.fill("apricot");
   await expect(

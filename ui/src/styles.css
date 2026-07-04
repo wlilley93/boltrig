@@ -5754,6 +5754,17 @@ body {
   color: var(--chat-muted);
   font-size: 10.5px;
 }
+.chat-header__agent strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.chat-header__status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  box-shadow: 0 0 5px currentColor;
+}
 .chat-header__agent:hover .agent-card {
   opacity: 1;
   transform: translateY(0);

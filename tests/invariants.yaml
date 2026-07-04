@@ -483,7 +483,7 @@ invariants:
       - tests/security/test_round_six.py::test_gateway_binds_per_conversation_not_run
       - tests/security/test_round_six.py::test_gateway_never_reroutes_sensitive_and_is_inert_when_unset
   FR-GW-01:
-    description: The model gateway (Bifrost) is wired into the stack - a profile-gated bifrost service on :8080 and the documented gateway URL matches it - so activation is one env line plus provider keys.
+    description: The model gateway (Bifrost) is wired into the stack - a profile-gated bifrost service on sandbox, genesis/dev starts the gateway profile, and the documented /v1 gateway URL matches it - so activation is provider keys, not architecture work.
     tests:
       - tests/security/test_round_six.py::test_bifrost_is_wired_into_the_stack
   FR-SKILL-01:
@@ -758,6 +758,15 @@ invariants:
     tests:
       - tests/security/test_chat_streaming_richness.py::test_ask_user_pauses_via_hitl_and_emits_question
       - tests/security/test_chat_streaming_richness.py::test_ask_user_is_grant_ceilinged_like_any_verb
+  US-CHAT-13:
+    description: Subagent observability events never leak prompt-level <untrusted> wrappers to the client - the structural envelope that wraps conversation data in the model prompt is stripped from the task field of the published subagent event, while the prompt sent to the runtime remains untouched.
+    tests:
+      - tests/security/test_chat_streaming_richness.py::test_subagent_event_task_is_cleaned_for_display
+      - tests/security/test_chat_streaming_richness.py::test_display_task_strips_untrusted_but_preserves_content
+  US-CHAT-14:
+    description: Streaming chat runs do not duplicate the final reply - a runtime that already produced the answer as text_delta events does not receive an extra summary text_delta at turn end, so the UI never shows repeated text.
+    tests:
+      - tests/security/test_chat_streaming_richness.py::test_streaming_runtime_does_not_duplicate_summary
   SEC-88:
     description: Chat tool events never leak verb values (K-20 bounded observability on the user-facing surface) - a secret/untrusted value passed to a verb appears nowhere on the chat stream nor in the persisted turn events (only key names + counts do), while the full payload still exists on the run relay for the canvas + durable audit.
     tests:

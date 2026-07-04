@@ -433,7 +433,7 @@ function ChatAgentSidebar({
   loadMore: () => void;
   onRailTerm: (term: string) => void;
 }) {
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({ bolt: true });
   const [searchOpen, setSearchOpen] = useState(false);
   if (!open) return null;
   return (
@@ -2476,7 +2476,14 @@ export function ChatPanel() {
           </button>
           <div className="chat-header__agent">
             <div>
-              <strong>{selectedAgent.name}</strong>
+              <strong>
+                {selectedAgent.name}
+                <span
+                  className="chat-header__status-dot"
+                  style={{ background: statusColor(selectedAgent.status) }}
+                  aria-label={`Status: ${selectedAgent.status}`}
+                />
+              </strong>
               <span>{selectedAgent.role}</span>
             </div>
             <AgentHoverCard agent={selectedAgent} />

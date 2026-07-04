@@ -44,9 +44,18 @@ from boltrig.models import (
     WorkStatus,
 )
 from boltrig.store import InMemoryStore
+from boltrig.fleet.spawn import _display_task
 from tests.conftest import _build_kernel
 
 T = "acme"
+
+
+def _stub_executor(events):
+    async def executor(*, run_id, relay, **kw):
+        for ev in events:
+            relay.publish(run_id, ev)
+
+    return executor
 
 
 async def _collect(gen):
@@ -299,3 +308,66 @@ def test_answer_route_refuses_to_answer_an_approval():
     assert r.status_code == 409 and r.json()["reason"] == "not_a_question"
     assert asyncio.run(store.get_hitl_response(T, "a1")) is None
     assert fired == []
+
+
+# --------------------------------------------------------------------------- #
+# US-CHAT-13  subagent observability events do not leak <untrusted> wrappers
+# --------------------------------------------------------------------------- #
+@pytest.mark.invariant("US-CHAT-13")
+def test_display_task_strips_untrusted_but_preserves_content():
+    raw = '<untrusted kind="transcript">Hello world</untrusted>'
+    assert _display_task(raw) == "Hello world"
+
+    # nested / escaped tags inside the envelope are also removed
+    messy = '<untrusted>plan: <b>deploy</b> now</untrusted>'
+    assert _display_task(messy) == "plan: deploy now"
+
+    # provenance and transcript prefixes are removed
+    provenance = "run: abc123\nuser: what is 2+2\nassistant: 4"
+    assert _display_task(provenance) == "what is 2+2\n4"
+
+
+@pytest.mark.invariant("US-CHAT-13")
+async def test_subagent_event_task_is_cleaned_for_display():
+    store, relay = InMemoryStore(), EventRelay()
+    wrapped = '<untrusted kind="transcript">file a ticket</untrusted>'
+    events = [
+        {"type": "subagent", "child_run_id": "c1", "task": _display_task(wrapped), "skills": ["a"]},
+        {"type": "text_delta", "delta": "done"},
+    ]
+    chat = ChatService(store, relay, turn_executor=_stub_executor(events))
+    out = await _collect(
+        chat.handle_turn(tenant_id=T, user_id="alice", role="engineer", message="delegate")
+    )
+
+    subagent_events = [e for e in out if e["type"] == "subagent"]
+    assert subagent_events
+    assert "<untrusted>" not in json.dumps(subagent_events)
+    assert "file a ticket" in subagent_events[0]["task"]
+
+
+# --------------------------------------------------------------------------- #
+# US-CHAT-14  streaming runtimes do not duplicate the final summary
+# --------------------------------------------------------------------------- #
+@pytest.mark.invariant("US-CHAT-14")
+async def test_streaming_runtime_does_not_duplicate_summary():
+    store, relay = InMemoryStore(), EventRelay()
+
+    async def streaming_executor(*, run_id, relay, **kw):
+        # a streaming runtime emits the reply incrementally
+        relay.publish(run_id, {"type": "text_delta", "delta": "Hello "})
+        relay.publish(run_id, {"type": "text_delta", "delta": "world"})
+
+    chat = ChatService(store, relay, turn_executor=streaming_executor)
+    out = await _collect(
+        chat.handle_turn(tenant_id=T, user_id="alice", role="engineer", message="hi")
+    )
+
+    text_deltas = [e for e in out if e["type"] == "text_delta"]
+    # the two streamed deltas, plus NO extra summary delta at turn end
+    assert [e["delta"] for e in text_deltas] == ["Hello ", "world"]
+
+    # the persisted message is not duplicated
+    convs = await store.list_conversations(T, "alice")
+    msgs = await store.list_messages(T, convs[0].id)
+    assert msgs[1].content == "Hello world"
