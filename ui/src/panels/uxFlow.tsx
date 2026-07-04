@@ -22,7 +22,7 @@ import { setComposerPrefill } from "@/composerPrefill";
 import { useSlideActive } from "@/deck/context";
 import { navigate } from "@/router";
 import { apiReason, CodeBlock } from "@/panels/shared";
-import { AUDIT_STATUS, Hint, InfoCallout, StatusBadge } from "@/panels/ux";
+import { AUDIT_STATUS, Hint, StatusBadge } from "@/panels/ux";
 import { copyText } from "@/panels/uxFlow/copyText";
 
 import { ArmConfirm, useArmConfirm } from "@/panels/uxFlow/armConfirm";
@@ -132,39 +132,7 @@ export { Disclosure };
 
 export { Skeleton } from "@/panels/uxFlow/skeleton";
 
-// --- CoachMark (N12, P21 rung 5): one-time, persisted, never re-shown -------
-
-export function CoachMark({ id, children }: { id: string; children: ReactNode }) {
-  const storageKey = `boltrig.coach.${id}`;
-  const [dismissed, setDismissed] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem(storageKey) !== null;
-    } catch {
-      return false; // storage unavailable: session-only dismissal below
-    }
-  });
-  if (dismissed) return null;
-  const dismiss = () => {
-    try {
-      localStorage.setItem(storageKey, "1");
-    } catch {
-      // storage unavailable: the state below still hides it for this session
-    }
-    setDismissed(true);
-  };
-  return (
-    <div className="ux-coach">
-      <InfoCallout tone="info">
-        <div>{children}</div>
-        <span className="ux-coach__actions">
-          <button type="button" className="btn btn--sm btn--ghost" onClick={dismiss}>
-            Got it
-          </button>
-        </span>
-      </InfoCallout>
-    </div>
-  );
-}
+export { CoachMark } from "@/panels/uxFlow/coachMark";
 
 // --- GrantList: mono chips for grant/scope patterns, expandable beyond 8 ----
 // Supersedes the fixed renderer in shared.tsx for long lists (PAT scopes,
