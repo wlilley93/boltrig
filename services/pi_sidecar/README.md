@@ -78,6 +78,28 @@ ceiling, SEC-23), so the loop sees and can call only its own tools.
   endpoint and the model endpoint (see the `Dockerfile` header). The container
   holds no secrets and exposes only port 8090.
 
+## Authentication tokens (PI-001)
+
+There are two distinct tokens in play. Do not confuse them.
+
+1. **Static shared sidecar token (`PI_SIDECAR_TOKEN`)** — authenticates the
+   *kernel* to the *sidecar*. It is a deployment secret, configured identically
+   in both the kernel environment and the sidecar environment. It proves that a
+   `POST /run` request came from the trusted kernel, not from an arbitrary
+   caller. It is **not** scoped to a run; it is long-lived and must be rotated
+   via the deployment's secrets manager (e.g., rotate the env var and restart both
+   services). In production, prefer mTLS or a short-lived signed token instead of
+   a shared static secret.
+
+2. **Per-run MCP token (`mcp.token` in the request body)** — scopes the
+   sidecar's MCP connection to a single run and skill-grant intersection
+   (SEC-23). It is minted by the kernel per request and is the only token the
+   sidecar forwards to the kernel's MCP face. It is short-lived and carries no
+   cross-run authority.
+
+The sidecar validates `PI_SIDECAR_TOKEN` on every incoming `/run` request
+before it ever touches the per-run MCP token.
+
 ## Run it
 
 ```bash
