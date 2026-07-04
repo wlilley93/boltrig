@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeEvents, type NormalizedTurn } from "@/panels/chatTurn";
+import { normalizeEvents, type NormalizedTurn, TurnExtras } from "@/panels/chatTurn";
 
 describe("chatTurn (normalizeEvents)", () => {
   it("folds a stream of chat events into a normalized turn", () => {
@@ -22,5 +22,12 @@ describe("chatTurn (normalizeEvents)", () => {
     expect(turn.tools[0].status).toBe("ok");
     expect(turn.steps).toHaveLength(1);
     expect(turn.steps[0].status).toBe("ok");
+  });
+});
+
+describe("chatTurn public API", () => {
+  it("preserves the barrel exports", () => {
+    expect(typeof normalizeEvents).toBe("function");
+    expect(typeof TurnExtras).toBe("function");
   });
 });
