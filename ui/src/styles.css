@@ -87,6 +87,25 @@
   --radius:8px;
   --gap:12px;
   --font-scale:1;
+
+  /* Canonical design-brief section-16 names. These alias the semantic --color-*
+     tokens so any rule authored against the brief's exact variable names
+     (--bg-base, --text-primary, --border-subtle, ...) resolves to the real
+     palette and follows theme / contrast variants. Existing --color-* and
+     legacy names are unaffected. */
+  --bg-base:var(--color-bg-base);
+  --bg-raised:var(--color-bg-raised);
+  --bg-card:var(--color-bg-card);
+  --bg-inset:var(--color-bg-inset);
+  --bg-overlay:var(--color-bg-overlay);
+  --border-subtle:var(--color-border-subtle);
+  --border-medium:var(--color-border-medium);
+  --border-strong:var(--color-border-strong);
+  --text-primary:var(--color-text-primary);
+  --text-secondary:var(--color-text-secondary);
+  --text-muted:var(--color-text-muted);
+  --text-faint:var(--color-text-faint);
+  --accent-bg:var(--color-accent-bg);
 }
 
 /* === Appearance: theme / density / contrast (driven by data-* on <html>, set

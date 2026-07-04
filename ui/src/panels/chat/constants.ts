@@ -12,6 +12,9 @@ export interface ChatAgent {
   status: "active" | "idle" | "offline";
   snippet: string;
   time: string;
+  group?: string;
+  parent?: string | null;
+  children?: string[];
   tier: 1 | 2;
   unread?: number;
   history: Array<{ id: string; title: string; time: string }>;
@@ -28,6 +31,9 @@ export const CHAT_AGENTS: ChatAgent[] = [
     status: "active",
     snippet: "All departments green. 3 runs today.",
     time: "now",
+    group: "Org-wide",
+    parent: null,
+    children: ["head-eng", "head-sre", "head-support"],
     tier: 1,
     history: [
       { id: "h-release", title: "Push the 2.14 release", time: "now" },
@@ -45,6 +51,8 @@ export const CHAT_AGENTS: ChatAgent[] = [
     status: "active",
     snippet: "Release 2.14 in progress",
     time: "12m",
+    group: "Engineering",
+    parent: "bolt",
     tier: 2,
     history: [
       { id: "h-deps", title: "Dependency risk review", time: "2h ago" },
@@ -61,6 +69,8 @@ export const CHAT_AGENTS: ChatAgent[] = [
     status: "idle",
     snippet: "Monitoring nominal, 1 alert cleared",
     time: "31m",
+    group: "Site Reliability",
+    parent: "bolt",
     tier: 2,
     history: [
       { id: "h-latency", title: "Latency budget check", time: "4h ago" },
@@ -77,6 +87,8 @@ export const CHAT_AGENTS: ChatAgent[] = [
     status: "idle",
     snippet: "Ticket queue clear",
     time: "44m",
+    group: "Support",
+    parent: "bolt",
     tier: 2,
     unread: 1,
     history: [
