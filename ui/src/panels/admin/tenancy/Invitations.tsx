@@ -65,52 +65,30 @@ function useInviteForm(onCreated: () => void) {
   };
 }
 
-function InviteForm({
-  email,
-  setEmail,
-  role,
-  setRole,
-  ttl,
-  setTtl,
-  busy,
-  error,
-  msg,
-  onCreate,
-}: {
-  email: string;
-  setEmail: (v: string) => void;
-  role: string;
-  setRole: (v: string) => void;
-  ttl: string;
-  setTtl: (v: string) => void;
-  busy: boolean;
-  error: string | null;
-  msg: string | null;
-  onCreate: () => void;
-}) {
+function InviteForm({ form }: { form: ReturnType<typeof useInviteForm> }) {
   return (
     <>
       <div className="form__grid">
         <Field label="Email" required example="ada@example.com">
           <input
             type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            value={form.email}
+            onChange={(e) => form.setEmail(e.target.value)}
           />
         </Field>
         <Field label="Role">
           <Select
-            value={role}
+            value={form.role}
             ariaLabel="Invited role"
-            onChange={setRole}
+            onChange={form.setRole}
             options={ROLE_OPTIONS}
           />
         </Field>
         <Field label="Expires in (days)" hint="How long the invitation stays open.">
           <Select
-            value={ttl}
+            value={form.ttl}
             ariaLabel="Invitation expiry"
-            onChange={setTtl}
+            onChange={form.setTtl}
             options={TTL_OPTIONS}
           />
         </Field>
@@ -118,13 +96,13 @@ function InviteForm({
       <div className="form__actions">
         <button
           className="btn btn--primary"
-          disabled={busy}
-          onClick={() => void onCreate()}
+          disabled={form.busy}
+          onClick={() => void form.createInvite()}
         >
-          {busy ? "..." : "Send invitation"}
+          {form.busy ? "..." : "Send invitation"}
         </button>
-        {msg && <span className="ok">{msg}</span>}
-        {error && <span className="error">{error}</span>}
+        {form.msg && <span className="ok">{form.msg}</span>}
+        {form.error && <span className="error">{form.error}</span>}
       </div>
     </>
   );
@@ -198,18 +176,7 @@ export function InvitationsCard() {
           password and grants nothing until the invitee signs in through your IdP
           (SEC-35).
         </p>
-        <InviteForm
-          email={form.email}
-          setEmail={form.setEmail}
-          role={form.role}
-          setRole={form.setRole}
-          ttl={form.ttl}
-          setTtl={form.setTtl}
-          busy={form.busy}
-          error={form.error}
-          msg={form.msg}
-          onCreate={form.createInvite}
-        />
+        <InviteForm form={form} />
         {invites.loading && !invites.data && <Skeleton variant="rows" />}
         <FetchError
           error={invites.error}
