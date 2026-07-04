@@ -10,6 +10,10 @@ import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_TOTAL_ATTACHMENT_BYTES } fro
 import type { ChatDerivedState } from "@/panels/chat/useChatDerived";
 import type { ChatPanelState } from "@/panels/chat/useChatState";
 import { useChatStreamActions, type ChatStreamActions } from "@/panels/chat/useChatStreamActions";
+import {
+  requestFleetFocus,
+  shouldEnterFleetNavigation,
+} from "@/panels/chat/fleetFocus";
 
 export interface ChatActions extends ChatStreamActions {
   loadConversation: (id: string) => void;
@@ -110,6 +114,7 @@ function useCycleAgent(state: ChatPanelState): (dir: "left" | "right") => void {
 function useComposerActions(
   state: ChatPanelState,
   send: () => void,
+  fleetActive: boolean,
 ): Pick<ChatActions, "onComposerKey" | "executeSlash"> {
   const executeSlash = useCallback(
     (kind: "clear" | "compact") => {
@@ -151,12 +156,28 @@ function useComposerActions(
           return;
         }
       }
+      // Empty-composer ArrowDown hands focus to the live fleet bar (sec 18),
+      // so its existing Up/Down/Enter/Escape handling takes over. Only fires
+      // when a run is live; the slash menu above still owns ArrowDown when the
+      // input starts with "/".
+      if (
+        shouldEnterFleetNavigation({
+          key: e.key,
+          input: state.input,
+          streaming: state.streaming,
+          fleetActive,
+        })
+      ) {
+        e.preventDefault();
+        requestFleetFocus();
+        return;
+      }
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         void send();
       }
     },
-    [state, executeSlash, send],
+    [state, executeSlash, send, fleetActive],
   );
 
   return { onComposerKey, executeSlash };
@@ -262,7 +283,15 @@ export function useChatActions(state: ChatPanelState, derived: ChatDerivedState)
   const conversationActions = useConversationSelectionActions(state, loadConversation);
   const cycleAgent = useCycleAgent(state);
   const stream = useChatStreamActions(state, derived, loadConversation);
-  const composerActions = useComposerActions(state, stream.send);
+  // The fleet bar is "active" only when a run is live AND it would actually
+  // render rows (has a run id, tools, or subagents). This gates the
+  // empty-composer ArrowDown shortcut in onComposerKey (sec 18).
+  const fleetActive =
+    derived.showLive &&
+    (!!derived.live.runId ||
+      derived.live.tools.length > 0 ||
+      derived.live.subagents.length > 0);
+  const composerActions = useComposerActions(state, stream.send, fleetActive);
   const attachmentActions = useAttachmentActions(state);
   const uiActions = useUiActions(state);
 
