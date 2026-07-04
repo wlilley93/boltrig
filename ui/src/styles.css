@@ -6542,6 +6542,14 @@ body {
   pointer-events: none;
 }
 @keyframes chat-spin { to { transform: rotate(360deg); } }
+/* reduced-motion: drop the spinning conic mask and use a calm static border in
+   the site accent (cyan/indigo). Design decision #46: cyan/indigo, NEVER green. */
+:root.reduce-motion .chat-v3 .chat__composer--thinking {
+  border-color: rgba(61, 211, 240, 0.55);
+}
+:root.reduce-motion .chat-v3 .chat__composer--thinking::before {
+  content: none;
+}
 .composer-plus,
 .composer-mic,
 .composer-send,
