@@ -12,7 +12,7 @@ test("chat turn renders the deterministic '(no runtime configured)' reply", asyn
 }) => {
   await page.goto("/#/chat");
 
-  const composer = page.getByPlaceholder("Message the orchestrator...");
+  const composer = page.getByPlaceholder("Type a message");
   await expect(composer).toBeVisible();
 
   await composer.fill("hello from the e2e smoke");

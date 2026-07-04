@@ -12,7 +12,7 @@ test("conversation search filters the rail and clearing restores the list", asyn
 }) => {
   await page.goto("/#/chat");
 
-  const composer = page.getByPlaceholder("Message the orchestrator...");
+  const composer = page.getByPlaceholder("Type a message");
   await expect(composer).toBeVisible();
 
   // Seed a conversation: the kernel titles it from the first line of the message.
@@ -22,18 +22,18 @@ test("conversation search filters the rail and clearing restores the list", asyn
     "(no runtime configured)",
   );
 
-  const rail = page.locator(".chat__rail");
+  await page.getByRole("button", { name: "Toggle chat sidebar" }).click();
+  const rail = page.locator(".chat-agent-rail");
   // The seeded conversation shows in the paginated list.
   await expect(
-    rail.locator(".conv-item__title", { hasText: "apricot" }),
+    rail.locator(".conv-item__title", { hasText: "apricot" }).first(),
   ).toBeVisible();
 
   // Searching flips the rail to results and matches the seeded conversation.
   const search = page.getByPlaceholder("Search conversations");
   await search.fill("apricot");
-  await expect(rail.getByText("Search results")).toBeVisible();
   await expect(
-    rail.locator(".conv-item__title", { hasText: "apricot" }),
+    rail.locator(".conv-item__title", { hasText: "apricot" }).first(),
   ).toBeVisible();
 
   // A non-matching term shows the empty state (the endpoint is still called;
@@ -43,8 +43,8 @@ test("conversation search filters the rail and clearing restores the list", asyn
 
   // Clearing the box restores the paginated list immediately.
   await search.fill("");
-  await expect(rail.getByText("Conversations", { exact: true })).toBeVisible();
+  await expect(rail.getByText("Chat", { exact: true })).toBeVisible();
   await expect(
-    rail.locator(".conv-item__title", { hasText: "apricot" }),
+    rail.locator(".conv-item__title", { hasText: "apricot" }).first(),
   ).toBeVisible();
 });

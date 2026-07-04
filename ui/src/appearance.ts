@@ -24,7 +24,7 @@ export const APPEARANCE_KEYS = {
 } as const;
 
 export const DEFAULT_APPEARANCE: Appearance = {
-  theme: "system",
+  theme: "dark",
   density: "comfortable",
   fontScale: "1",
   reducedMotion: false,

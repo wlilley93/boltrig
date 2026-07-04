@@ -49,10 +49,6 @@ const StudioPanel = lazy(() =>
   import("./panels/StudioPanel").then((m) => ({ default: m.StudioPanel })),
 );
 
-const SIDEBAR_MIN = 200;
-const SIDEBAR_MAX = 420;
-const SIDEBAR_DEFAULT = 236;
-
 // One-line purpose per nav id (zone rows + ops columns), surfaced as title
 // hints. Ids match the deck row / column keys from deckMap.
 const HINT: Record<string, string> = {
@@ -73,60 +69,60 @@ const HINT: Record<string, string> = {
   me: "Personal agent, prefs and memory",
 };
 
-// Compact line icons for the sidebar rail (kept dependency-free: small inline
-// SVGs, stroke = currentColor, so they inherit the nav item's colour + glow).
+// Filled geometric icons for the sidebar rail (kept dependency-free: small inline
+// SVGs, fill = currentColor, so they inherit the nav item's colour + glow).
 const ICON: Record<string, JSX.Element> = {
   home: (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 11.5 12 5l8 6.5" /><path d="M6 10.5V19h12v-8.5" /></svg>
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" opacity="0.85"><path d="M12 3L4 9.5V21h6v-6h4v6h6V9.5L12 3z" /></svg>
   ),
   router: (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="6" cy="12" r="2" /><circle cx="18" cy="6" r="2" /><circle cx="18" cy="18" r="2" /><path d="M8 12h3M11 12V6.5h5M11 12v5.5h5" /></svg>
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" opacity="0.85"><circle cx="6" cy="12" r="3" /><circle cx="18" cy="6" r="2.5" /><circle cx="18" cy="18" r="2.5" /><path d="M9 12h2.5M11.5 12V6.5H15.5M11.5 12v5.5H15.5" fill="none" stroke="currentColor" strokeWidth="1.5" /></svg>
   ),
   studio: (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="9.5" width="5" height="5" /><rect x="16" y="4" width="5" height="5" /><rect x="16" y="15" width="5" height="5" /><path d="M8 12h3.5M11.5 12V6.5H16M11.5 12v5.5H16" /></svg>
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" opacity="0.85"><rect x="3" y="14" width="5" height="5" rx="1" /><rect x="16" y="4" width="5" height="5" rx="1" /><rect x="16" y="15" width="5" height="5" rx="1" /><path d="M8 16.5h3.5M11.5 16.5V7H16" fill="none" stroke="currentColor" strokeWidth="1.5" /></svg>
   ),
   dev: (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="5" width="16" height="14" rx="1" /><path d="m8 10 2.5 2L8 14M13.5 14H16" /></svg>
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" opacity="0.85"><rect x="4" y="5" width="16" height="14" rx="1.5" /><path d="M8 10l2.5 2L8 14M13.5 14H16" fill="none" stroke="#04060D" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
   ),
   chat: (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 5h14v10H9l-4 4V5Z" /></svg>
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" opacity="0.85"><path d="M5 3h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-4 4V5a2 2 0 0 1 2-2z" /></svg>
   ),
   agents: (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="5.5" r="2.5" /><circle cx="6" cy="18" r="2.5" /><circle cx="18" cy="18" r="2.5" /><path d="M12 8v3.5M12 11.5l-4.5 4M12 11.5l4.5 4" /></svg>
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" opacity="0.85"><circle cx="12" cy="5" r="3" /><circle cx="5" cy="18" r="2.5" /><circle cx="19" cy="18" r="2.5" /><path d="M12 8v4M8 16l4-4 4 4" fill="none" stroke="currentColor" strokeWidth="1.5" /></svg>
   ),
   automations: (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" /><path d="M7 12h3M14 12h3" /></svg>
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" opacity="0.85"><circle cx="5" cy="12" r="2.5" /><circle cx="12" cy="12" r="2.5" /><circle cx="19" cy="12" r="2.5" /><rect x="7" y="11" width="3" height="2" rx="1" /><rect x="14" y="11" width="3" height="2" rx="1" /></svg>
   ),
   kanban: (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="4" height="16" /><rect x="10" y="4" width="4" height="11" /><rect x="16" y="4" width="4" height="8" /></svg>
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" opacity="0.85"><rect x="3" y="3" width="5" height="18" rx="1.5" /><rect x="10" y="3" width="5" height="13" rx="1.5" /><rect x="17" y="3" width="5" height="9" rx="1.5" /></svg>
   ),
   approvals: (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3 5 6v6c0 4 3 6.5 7 9 4-2.5 7-5 7-9V6l-7-3Z" /><path d="m9 12 2 2 4-4" /></svg>
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" opacity="0.85"><path d="M12 2L4 6v6c0 5.5 3.4 8.5 8 11 4.6-2.5 8-5.5 8-11V6l-8-4z" /><path d="M9 12l2 2 4-4" fill="none" stroke="#04060D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
   ),
   insight: (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4v16h16" /><rect x="7" y="12" width="3" height="5" /><rect x="12" y="8" width="3" height="9" /><rect x="17" y="14" width="3" height="3" /></svg>
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" opacity="0.85"><rect x="6" y="12" width="4" height="8" rx="1" /><rect x="12" y="7" width="4" height="13" rx="1" /><rect x="18" y="14" width="4" height="6" rx="1" /><path d="M2 20h22" fill="none" stroke="currentColor" strokeWidth="1.5" /></svg>
   ),
   eval: (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="4" width="14" height="16" rx="1" /><path d="m8 10 2 2 3-4" /><path d="M8 15h7" /></svg>
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" opacity="0.85"><rect x="5" y="3" width="14" height="18" rx="1.5" /><path d="M9 10l2 2 4-4" fill="none" stroke="#04060D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
   ),
   memory: (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><ellipse cx="12" cy="6" rx="7" ry="3" /><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6" /><path d="M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6" /></svg>
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" opacity="0.85"><ellipse cx="12" cy="6" rx="8" ry="4" /><path d="M4 6v5c0 2.2 3.6 4 8 4s8-1.8 8-4V6" fill="none" stroke="currentColor" strokeWidth="1.5" /><path d="M4 11v5c0 2.2 3.6 4 8 4s8-1.8 8-4v-5" fill="none" stroke="currentColor" strokeWidth="1.5" /></svg>
   ),
   admin: (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 8h16M4 16h16" /><circle cx="9" cy="8" r="2" /><circle cx="15" cy="16" r="2" /></svg>
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" opacity="0.85"><circle cx="9" cy="8" r="2.5" /><circle cx="15" cy="16" r="2.5" /><path d="M4 8h4.5M13.5 16H20M9 10.5v7M15 6.5v7" fill="none" stroke="currentColor" strokeWidth="1.5" /></svg>
   ),
   me: (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="3.5" /><path d="M5 20c0-3.9 3.1-7 7-7s7 3.1 7 7" /></svg>
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" opacity="0.85"><circle cx="12" cy="8" r="3.5" /><path d="M5 20c0-3.9 3.1-7 7-7s7 3.1 7 7" /></svg>
   ),
   settings: (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1" /></svg>
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" opacity="0.85"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.26.6.77 1.02 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
   ),
 };
 
 // The Boltrig mark: a lightning bolt between two "rig" bracket uprights.
 function BoltMark() {
   return (
-    <svg className="side__mark" viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true">
+    <svg className="side__mark" viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true">
       <path d="M7.5 3.5H4.5V20.5H7.5" stroke="currentColor" strokeWidth="2" strokeLinecap="square" />
       <path d="M16.5 3.5H19.5V20.5H16.5" stroke="currentColor" strokeWidth="2" strokeLinecap="square" />
       <path d="M13.2 4.5L8.5 12.6H12L10.8 19.5L15.5 11.4H12L13.2 4.5Z" fill="currentColor" />
@@ -267,25 +263,6 @@ function IdentityBar() {
   );
 }
 
-function HealthDot() {
-  const health = useFetch(() => api.health(), [], 15000);
-  let cls = "dot dot--unknown";
-  let text = "kernel: unknown";
-  if (health.error) {
-    cls = "dot dot--down";
-    text = "kernel: unreachable";
-  } else if (health.data) {
-    cls = "dot dot--ok";
-    text = `kernel: ${health.data.status}`;
-  }
-  return (
-    <span className="health-dot" title={text}>
-      <span className={cls} aria-hidden="true" />
-      <span className="health-dot__text">{text}</span>
-    </span>
-  );
-}
-
 // The deck cell -> panel mapping. Module-level so its identity stays stable
 // across renders. Unknown cells render null (the deck only asks for cells the
 // row model names, so this is a type-level backstop).
@@ -423,78 +400,8 @@ export function App() {
   // reveals the editable identity bar (the dev auth mechanism).
   const [identityOpen, setIdentityOpen] = useState(false);
 
-  // The expandable sidebar (Opbox pattern): collapsed state persists in
-  // localStorage, and drives a single CSS variable on :root that BOTH the sidebar
-  // and the main content offset consume, so they move in lockstep.
-  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem("boltrig:sidebar-collapsed") === "true";
-    } catch {
-      return false;
-    }
-  });
-  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
-    try {
-      const w = parseInt(localStorage.getItem("boltrig:sidebar-width") || "", 10);
-      return !Number.isNaN(w) && w >= SIDEBAR_MIN && w <= SIDEBAR_MAX ? w : SIDEBAR_DEFAULT;
-    } catch {
-      return SIDEBAR_DEFAULT;
-    }
-  });
-  const [resizing, setResizing] = useState(false);
-
-  useEffect(() => {
-    document.documentElement.style.setProperty(
-      "--app-sidebar-width",
-      sidebarCollapsed ? "64px" : `${sidebarWidth}px`,
-    );
-    try {
-      localStorage.setItem("boltrig:sidebar-collapsed", sidebarCollapsed ? "true" : "false");
-      localStorage.setItem("boltrig:sidebar-width", String(sidebarWidth));
-    } catch {
-      /* storage may be unavailable; the in-memory state still drives the layout */
-    }
-  }, [sidebarCollapsed, sidebarWidth]);
-
-  const clampWidth = (w: number) => Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, w));
-
-  // drag-to-resize the sidebar from its right edge (no-op while collapsed).
-  // During the drag we drive the CSS variable IMPERATIVELY so the layout tracks
-  // the pointer without a React re-render (and a localStorage write) on every
-  // frame; we commit the final width to state once on pointerup, which persists.
-  function startResize(e: React.PointerEvent) {
-    if (sidebarCollapsed) return;
-    e.preventDefault();
-    setResizing(true);
-    let latest = sidebarWidth;
-    const move = (ev: PointerEvent) => {
-      latest = clampWidth(ev.clientX);
-      document.documentElement.style.setProperty("--app-sidebar-width", `${latest}px`);
-    };
-    const up = () => {
-      setResizing(false);
-      setSidebarWidth(latest); // single state update -> single persist
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
-  }
-
-  // Keyboard-operable resizer (WAI-ARIA separator): arrows nudge, Home/End jump.
-  function onResizerKey(e: React.KeyboardEvent) {
-    if (sidebarCollapsed) return;
-    const step = e.shiftKey ? 32 : 8;
-    let next: number | null = null;
-    if (e.key === "ArrowLeft") next = sidebarWidth - step;
-    else if (e.key === "ArrowRight") next = sidebarWidth + step;
-    else if (e.key === "Home") next = SIDEBAR_MIN;
-    else if (e.key === "End") next = SIDEBAR_MAX;
-    if (next !== null) {
-      e.preventDefault();
-      setSidebarWidth(clampWidth(next));
-    }
-  }
+  // The sidebar is a fixed 56px icon rail per the chat design brief; no expand /
+  // collapse, resizer, or localStorage width state.
 
   // Apply the persisted appearance (theme / density / contrast / font scale /
   // reduced motion) to the document root on first load, before any panel paints,
@@ -508,40 +415,12 @@ export function App() {
     <div className="app app--shell">
       <aside
         className="side"
-        data-collapsed={sidebarCollapsed ? "true" : undefined}
+        data-collapsed="true"
         aria-label="Primary navigation"
       >
         <div className="side__brand">
           <BoltMark />
-          <strong className="side__word">boltrig</strong>
-          <button
-            className="side__collapse"
-            aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            onClick={() => setSidebarCollapsed((v) => !v)}
-          >
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              {sidebarCollapsed ? (
-                <path d="m9 6 6 6-6 6" />
-              ) : (
-                <path d="m15 6-6 6 6 6" />
-              )}
-            </svg>
-          </button>
         </div>
-
-        <button
-          className="side-search"
-          title="Search and run anything (Cmd/Ctrl-K)"
-          onClick={() => window.dispatchEvent(new Event("boltrig:open-palette"))}
-        >
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
-            <circle cx="11" cy="11" r="7" />
-            <path d="m20 20-3.5-3.5" />
-          </svg>
-          <span className="side-search__label">Search</span>
-          <kbd className="side-search__kbd">⌘K</kbd>
-        </button>
 
         <nav className="side__nav" aria-label="Panels">
           <div className="side-group" role="group" aria-label="Zones">
@@ -584,28 +463,24 @@ export function App() {
         </nav>
 
         <div className="side__foot">
-          <HealthDot />
           <SessionControls />
+          <button
+            className="side__settings"
+            title="Settings"
+            aria-label="Settings"
+            onClick={() => navigate("/settings")}
+          >
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" opacity="0.85">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.26.6.77 1.02 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
+          </button>
           <IdentityChip
             expanded={identityOpen}
             onToggle={() => setIdentityOpen((v) => !v)}
           />
         </div>
 
-        {!sidebarCollapsed && (
-          <div
-            className={`side__resizer ${resizing ? "side__resizer--on" : ""}`}
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Resize sidebar"
-            aria-valuenow={sidebarWidth}
-            aria-valuemin={SIDEBAR_MIN}
-            aria-valuemax={SIDEBAR_MAX}
-            tabIndex={0}
-            onPointerDown={startResize}
-            onKeyDown={onResizerKey}
-          />
-        )}
       </aside>
 
       <div className="app__body">
