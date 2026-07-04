@@ -11,7 +11,6 @@ import { useState } from "react";
 
 import { api } from "../api/client";
 import type {
-  MemoryFactView,
   MemoryIngestResponse,
   MemoryIngestionRow,
   MemoryRememberResponse,
@@ -19,7 +18,6 @@ import type {
 import { useFetch } from "../useFetch";
 import { errText } from "./shared";
 import {
-  FetchError,
   Field,
   Hint,
   InfoCallout,
@@ -29,135 +27,13 @@ import {
 import {
   denialText,
   isDenied,
-  KIND_FILTER_OPTIONS,
   KIND_OPTIONS,
   MEMORY_TABS,
   SOURCE_KIND_OPTIONS,
   type MemoryTab,
 } from "./memoryPanel/helpers";
-import { FactCard } from "./memoryPanel/FactCard";
 import { RecallTab } from "./memoryPanel/RecallTab";
-
-// --- Browse -----------------------------------------------------------------
-
-function BrowseTab() {
-  const [kind, setKind] = useState("");
-  const facts = useFetch(
-    () => api.memoryFacts({ kind: kind.trim() || undefined }),
-    [kind],
-  );
-
-  // forget state, keyed by fact id so each row's button is independent.
-  const [forgetting, setForgetting] = useState<string | null>(null);
-  const [forgetError, setForgetError] = useState<string | null>(null);
-  const [forgetMsg, setForgetMsg] = useState<string | null>(null);
-
-  async function forget(id: string) {
-    if (!window.confirm(`Forget fact ${id}? This erases it and its edges.`)) {
-      return;
-    }
-    setForgetting(id);
-    setForgetError(null);
-    setForgetMsg(null);
-    try {
-      const res = await api.memoryForget({ target: id });
-      if (isDenied(res)) {
-        setForgetError(denialText(res.reason));
-        return;
-      }
-      setForgetMsg(
-        `Forgot ${id}: ${res.facts_removed ?? 0} fact(s) removed.`,
-      );
-      facts.reload();
-    } catch (err) {
-      setForgetError(errText(err));
-    } finally {
-      setForgetting(null);
-    }
-  }
-
-  const list: MemoryFactView[] = facts.data?.facts ?? [];
-  const scopes = facts.data?.scopes ?? [];
-
-  return (
-    <div className="stack">
-      <div className="form">
-        <div className="form__title">Browse facts</div>
-        <p className="muted">
-          The facts you may see, with provenance. Scope-filtered server-side, so
-          another user's or department's memory never appears here.
-        </p>
-        <div className="form__actions">
-          <Field label="Show only" hint="Filter to one type of fact.">
-            <Select
-              value={kind}
-              ariaLabel="Filter by type"
-              onChange={setKind}
-              options={KIND_FILTER_OPTIONS}
-            />
-          </Field>
-          <button className="btn" onClick={() => facts.reload()}>
-            Refresh
-          </button>
-        </div>
-        {scopes.length > 0 && (
-          <p className="muted">
-            scopes:{" "}
-            {scopes.map((s) => (
-              <code className="tag" key={s}>
-                {s}
-              </code>
-            ))}
-          </p>
-        )}
-        {forgetMsg && <p className="ok">{forgetMsg}</p>}
-        {forgetError && <p className="error">{forgetError}</p>}
-      </div>
-
-      <div className="list-card">
-        <div className="list-card__head">
-          <h3>Facts</h3>
-          <span className="muted">{list.length}</span>
-        </div>
-        <div className="list-card__body">
-          {facts.loading && !facts.data && <p className="muted">Loading...</p>}
-          {facts.error &&
-            (/binding_not_found/.test(facts.error) ? (
-              <InfoCallout tone="warn">Memory is not enabled for your org.</InfoCallout>
-            ) : (
-              <FetchError error={facts.error} status={facts.errorStatus} onRetry={facts.reload} />
-            ))}
-          {!facts.loading && !facts.error && list.length === 0 && (
-            <p className="muted">
-              No facts in your scope yet. Add one in the Remember tab, or load a
-              source in Ingest.
-            </p>
-          )}
-          {list.length > 0 && (
-            <div className="mem-facts">
-              {list.map((f) => (
-                <FactCard
-                  fact={f}
-                  key={f.id}
-                  footer={
-                    <button
-                      className="btn btn--danger"
-                      disabled={forgetting === f.id}
-                      title="Erase this fact and its links - permanent."
-                      onClick={() => forget(f.id)}
-                    >
-                      {forgetting === f.id ? "Forgetting..." : "Forget"}
-                    </button>
-                  }
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
+import { BrowseTab } from "./memoryPanel/BrowseTab";
 
 // --- Remember ---------------------------------------------------------------
 
