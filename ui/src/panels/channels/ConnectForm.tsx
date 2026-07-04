@@ -65,6 +65,14 @@ export function useConnectForm(onConnected: () => void) {
   };
 }
 
+function InboundUrlNotice({ url }: { url: string }) {
+  return (
+    <p className="notice">
+      Channel connected. Point the platform's webhook at <code>{url}</code>.
+    </p>
+  );
+}
+
 export function ConnectForm({ onConnected }: { onConnected: () => void }) {
   const {
     platform,
@@ -141,12 +149,7 @@ export function ConnectForm({ onConnected }: { onConnected: () => void }) {
         </button>
         {error && <span className="error">{error}</span>}
       </div>
-      {inboundUrl && (
-        <p className="notice">
-          Channel connected. Point the platform's webhook at{" "}
-          <code>{inboundUrl}</code>.
-        </p>
-      )}
+      {inboundUrl && <InboundUrlNotice url={inboundUrl} />}
     </div>
   );
 }
