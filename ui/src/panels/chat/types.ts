@@ -27,4 +27,19 @@ export interface ActivityNode {
   runId?: string;
   badge?: string;
   children?: ActivityNode[];
+  // Per-event-type visual treatment (brief sec 13.1, lines 374-380). All
+  // optional so existing callers keep working; the timeline renders them when
+  // present and falls back to the uniform treatment otherwise.
+  dotSize?: number; // 8 session, 12 agent/delegation, 7 tool, 9 ephemeral, 8 pending
+  dotColor?: string; // overrides the tone-driven dot background when set
+  dotExtra?: string; // CSS border string, e.g. "2px solid #04060D" for agent dots
+  hasLine?: boolean; // bottom connecting line; false suppresses it (pending)
+  hasAvatar?: boolean;
+  avatarColor?: string;
+  avatarInitials?: string;
+  avatarSize?: number; // 20 agent-action, 16 ephemeral
+  labelWeight?: number; // 500 session, 600 agent/delegation, 400 tool, 500 ephemeral
+  labelColor?: string;
+  badgeColor?: string;
+  badgeBorder?: string;
 }
