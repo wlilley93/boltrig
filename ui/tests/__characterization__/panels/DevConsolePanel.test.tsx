@@ -3,6 +3,7 @@ import { render } from "@testing-library/react";
 import { DevConsolePanel } from "@/panels/DevConsolePanel";
 import { InvokeSection } from "@/panels/devConsole/InvokeSection";
 import { SpawnSection } from "@/panels/devConsole/SpawnSection";
+import { AdapterSourceSection } from "@/panels/devConsole/AdapterSourceSection";
 import { clearApiMocks, mockApi } from "../helpers";
 
 describe("DevConsolePanel", () => {
@@ -21,5 +22,10 @@ describe("DevConsolePanel", () => {
   it("renders SpawnSection", () => {
     mockApi();
     render(<SpawnSection skillsList={{ data: null, error: null, errorStatus: null, loading: false, reload: () => {} }} />);
+  });
+
+  it("renders AdapterSourceSection", () => {
+    mockApi();
+    render(<AdapterSourceSection adapters={{ data: null, error: null, errorStatus: null, loading: false, reload: () => {} }} />);
   });
 });
