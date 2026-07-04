@@ -26,7 +26,7 @@ function buildSendRequest(
   return req;
 }
 
-function handleStreamEvent(
+function createSendEventHandler(
   state: ChatPanelState,
   ctrl: AbortController,
 ): (ev: ChatEvent) => void {
@@ -66,6 +66,47 @@ async function finalizeSend(
   state.setLiveEvents([]);
 }
 
+function prepareSend(
+  state: ChatPanelState,
+  text: string,
+  atts: ChatAttachment[],
+): { message: string; conversation_id?: string; attachments?: ChatAttachment[] } {
+  state.speech.cancel();
+  state.turnTextRef.current = "";
+  state.turnCancelledRef.current = false;
+  state.setInput("");
+  state.setStreamError(null);
+  state.setAttachError(null);
+  state.setStopped(false);
+  state.setPendingUser(text);
+  state.setPendingAttachments(atts);
+  state.setAttachments([]);
+  state.setLiveEvents([]);
+  state.setStreaming(true);
+  state.pendingConvId.current = state.activeId;
+  return buildSendRequest(text, state.activeId, atts);
+}
+
+function handleSendError(
+  state: ChatPanelState,
+  ctrl: AbortController,
+  err: unknown,
+  atts: ChatAttachment[],
+): void {
+  if (!state.alive.current) return;
+  state.setStreaming(false);
+  if (ctrl.signal.aborted) return;
+  if (err instanceof ApiError && err.status === 413) {
+    state.setAttachments(atts);
+    state.setAttachError(apiReason(err));
+  }
+  state.setStreamError(apiReason(err));
+}
+
+function cleanupAbort(state: ChatPanelState, ctrl: AbortController): void {
+  if (state.abortRef.current === ctrl) state.abortRef.current = null;
+}
+
 function useSendAction(
   state: ChatPanelState,
   loadConversation: (id: string) => void,
@@ -81,39 +122,18 @@ function useSendAction(
       state.suppressDictationRef.current = true;
       state.dictation.stop();
     }
-    state.speech.cancel();
-    state.turnTextRef.current = "";
-    state.turnCancelledRef.current = false;
 
-    state.setInput("");
-    state.setStreamError(null);
-    state.setAttachError(null);
-    state.setStopped(false);
-    state.setPendingUser(text);
-    state.setPendingAttachments(atts);
-    state.setAttachments([]);
-    state.setLiveEvents([]);
-    state.setStreaming(true);
-    state.pendingConvId.current = state.activeId;
-
-    const req = buildSendRequest(text, state.activeId, atts);
+    const req = prepareSend(state, text, atts);
     const ctrl = new AbortController();
     state.abortRef.current = ctrl;
 
     try {
-      await streamChat(req, handleStreamEvent(state, ctrl), ctrl.signal);
+      await streamChat(req, createSendEventHandler(state, ctrl), ctrl.signal);
       await finalizeSend(state, rail, loadConversation);
     } catch (err) {
-      if (!state.alive.current) return;
-      state.setStreaming(false);
-      if (ctrl.signal.aborted) return;
-      if (err instanceof ApiError && err.status === 413) {
-        state.setAttachments(atts);
-        state.setAttachError(apiReason(err));
-      }
-      state.setStreamError(apiReason(err));
+      handleSendError(state, ctrl, err, atts);
     } finally {
-      if (state.abortRef.current === ctrl) state.abortRef.current = null;
+      cleanupAbort(state, ctrl);
     }
   }, [state, rail, loadConversation]);
 }
@@ -199,6 +219,61 @@ function useRegenerateAction(
   );
 }
 
+function prepareWatchAgain(state: ChatPanelState): void {
+  state.speech.cancel();
+  state.turnTextRef.current = "";
+  state.turnCancelledRef.current = false;
+  state.setStopped(false);
+  state.setStreamError(null);
+  state.setStreaming(true);
+  state.setLiveEvents([]);
+}
+
+function createWatchAgainEventHandler(
+  state: ChatPanelState,
+  ctrl: AbortController,
+): (ev: ChatEvent) => void {
+  return (ev) => {
+    if (ctrl.signal.aborted || !state.alive.current) return;
+    if (ev.type === "text_delta") state.turnTextRef.current += ev.delta;
+    if (ev.type === "cancelled") state.turnCancelledRef.current = true;
+    state.setLiveEvents((prev) => [...prev, ev]);
+  };
+}
+
+async function finalizeWatchAgain(
+  state: ChatPanelState,
+  derived: ChatDerivedState,
+  loadConversation: (id: string) => void,
+  rail: ReturnType<typeof useConversationRail>,
+): Promise<void> {
+  if (!state.alive.current) return;
+  state.setStreaming(false);
+  if (state.readAloud && !state.turnCancelledRef.current) {
+    state.speech.speak(`auto:${state.activeId ?? state.pendingConvId.current ?? "live"}`, state.turnTextRef.current);
+  }
+  const convId = state.activeId ?? state.pendingConvId.current ?? derived.live.conversationId;
+  if (convId) {
+    if (!state.activeId) state.setActiveId(convId);
+    await loadConversation(convId);
+    if (!state.alive.current) return;
+    rail.reload();
+  }
+  state.setPendingUser(null);
+  state.setLiveEvents([]);
+}
+
+function handleWatchAgainError(
+  state: ChatPanelState,
+  ctrl: AbortController,
+  err: unknown,
+): void {
+  if (!state.alive.current) return;
+  state.setStreaming(false);
+  if (ctrl.signal.aborted) return;
+  state.setStreamError(apiReason(err));
+}
+
 function useWatchAgainAction(
   state: ChatPanelState,
   derived: ChatDerivedState,
@@ -213,49 +288,23 @@ function useWatchAgainAction(
       await reconnect();
       return;
     }
-    state.speech.cancel();
-    state.turnTextRef.current = "";
-    state.turnCancelledRef.current = false;
-    state.setStopped(false);
-    state.setStreamError(null);
-    state.setStreaming(true);
-    state.setLiveEvents([]);
+    prepareWatchAgain(state);
     const ctrl = new AbortController();
     state.abortRef.current = ctrl;
     try {
       await streamRunEvents(
         live.runId,
-        (ev) => {
-          if (ctrl.signal.aborted || !state.alive.current) return;
-          if (ev.type === "text_delta") state.turnTextRef.current += ev.delta;
-          if (ev.type === "cancelled") state.turnCancelledRef.current = true;
-          state.setLiveEvents((prev) => [...prev, ev]);
-        },
+        createWatchAgainEventHandler(state, ctrl),
         { signal: ctrl.signal, follow: true },
       );
       if (!state.alive.current) return;
-      state.setStreaming(false);
-      if (state.readAloud && !state.turnCancelledRef.current) {
-        state.speech.speak(`auto:${state.activeId ?? state.pendingConvId.current ?? "live"}`, state.turnTextRef.current);
-      }
-      const convId = state.activeId ?? state.pendingConvId.current ?? live.conversationId;
-      if (convId) {
-        if (!state.activeId) state.setActiveId(convId);
-        await loadConversation(convId);
-        if (!state.alive.current) return;
-        rail.reload();
-      }
-      state.setPendingUser(null);
-      state.setLiveEvents([]);
+      await finalizeWatchAgain(state, derived, loadConversation, rail);
     } catch (err) {
-      if (!state.alive.current) return;
-      state.setStreaming(false);
-      if (ctrl.signal.aborted) return;
-      state.setStreamError(apiReason(err));
+      handleWatchAgainError(state, ctrl, err);
     } finally {
-      if (state.abortRef.current === ctrl) state.abortRef.current = null;
+      cleanupAbort(state, ctrl);
     }
-  }, [state, live, rail, loadConversation, reconnect]);
+  }, [state, live, rail, derived, loadConversation, reconnect]);
 }
 
 export function useChatStreamActions(
