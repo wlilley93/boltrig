@@ -1,6 +1,5 @@
 import type {
   CapabilitiesResponse,
-  WorkflowSummary,
   WorkflowsResponse,
 } from "@/api/types";
 import type { FetchState } from "@/useFetch";

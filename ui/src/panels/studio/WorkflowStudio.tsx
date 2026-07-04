@@ -3,11 +3,9 @@ import { useState } from "react";
 import { api } from "../../api/client";
 import type {
   CapabilitiesResponse,
-  StatusAck,
   VerbInfo,
   WorkflowRunDescriptor,
   WorkflowRunRecord,
-  WorkflowSourceValue,
   WorkflowSummary,
   WorkflowsResponse,
 } from "../../api/types";
@@ -15,7 +13,6 @@ import { useFetch, type FetchState } from "../../useFetch";
 import {
   CodeBlock,
   RunLink,
-  csvToList,
   errText,
   listToCsv,
   parseJson,
@@ -24,7 +21,7 @@ import {
 } from "../shared";
 import { Field, Select } from "../ux";
 import { WorkflowCanvas } from "../WorkflowCanvas";
-import { AckLine } from "./AckLine";
+import { UpsertWorkflowForm } from "./workflow/forms/UpsertWorkflowForm";
 
 // View toggle inside the Workflow Studio: the existing form flow or the new
 // React Flow canvas. Both round-trip the same definition.steps shape.
@@ -52,104 +49,6 @@ const CRON_PRESETS: ReadonlyArray<{ label: string; value: string }> = [
   { label: "Weekdays 9am", value: "0 9 * * 1-5" },
   { label: "Mondays 9am", value: "0 9 * * 1" },
 ];
-
-function UpsertWorkflowForm({ onSaved }: { onSaved: () => void }) {
-  const [id, setId] = useState("");
-  const [version, setVersion] = useState("1.0.0");
-  const [source, setSource] = useState<WorkflowSourceValue>("precreated");
-  const [definition, setDefinition] = useState("{}");
-  const [tags, setTags] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [ack, setAck] = useState<StatusAck | null>(null);
-
-  async function upsert() {
-    if (!id.trim()) {
-      setError("Workflow id is required.");
-      return;
-    }
-    let def: Record<string, unknown>;
-    try {
-      def = parseJson<Record<string, unknown>>(definition, {});
-    } catch (err) {
-      setError(`definition: ${errText(err)}`);
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    setAck(null);
-    try {
-      const res = await api.upsertWorkflow({
-        id: id.trim(),
-        version: version.trim() || "1.0.0",
-        source,
-        definition: def,
-        intent_tags: csvToList(tags),
-      });
-      setAck(res);
-      if (res.status === "ok") onSaved();
-    } catch (err) {
-      setError(errText(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="form">
-      <div className="form__title">Upsert workflow</div>
-      <div className="form__grid">
-        <label className="field">
-          <span>id</span>
-          <input value={id} onChange={(e) => setId(e.target.value)} />
-        </label>
-        <label className="field">
-          <span>version</span>
-          <input
-            value={version}
-            onChange={(e) => setVersion(e.target.value)}
-          />
-        </label>
-        <label className="field">
-          <span>source</span>
-          <select
-            value={source}
-            onChange={(e) =>
-              setSource(e.target.value as WorkflowSourceValue)
-            }
-          >
-            <option value="precreated">precreated</option>
-            <option value="generated">generated</option>
-            <option value="learned">learned</option>
-          </select>
-        </label>
-      </div>
-      <label className="field">
-        <span>definition / steps (JSON)</span>
-        <textarea
-          className="code"
-          value={definition}
-          onChange={(e) => setDefinition(e.target.value)}
-        />
-      </label>
-      <label className="field">
-        <span>intent_tags (comma list)</span>
-        <input value={tags} onChange={(e) => setTags(e.target.value)} />
-      </label>
-      <div className="form__actions">
-        <button
-          className="btn btn--primary"
-          disabled={busy}
-          onClick={upsert}
-        >
-          {busy ? "..." : "Save workflow"}
-        </button>
-        <AckLine ack={ack} />
-        {error && <span className="error">{error}</span>}
-      </div>
-    </div>
-  );
-}
 
 function ScheduleForm({ wfOptions }: { wfOptions: WorkflowOption[] }) {
   const [schedId, setSchedId] = useState("");
