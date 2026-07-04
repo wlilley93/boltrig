@@ -4,6 +4,7 @@ import { DeckSlide } from "@/deck/DeckSlide";
 import { useDeckAnnounce } from "@/deck/hooks/useDeckAnnounce";
 import { useDeckMountPolicy } from "@/deck/hooks/useDeckMountPolicy";
 import { useDeckNavigation } from "@/deck/hooks/useDeckNavigation";
+import { useDeckSwipe } from "@/deck/hooks/useDeckSwipe";
 import { useDeckRefs } from "@/deck/hooks/useDeckRefs";
 import { useDeckTransition } from "@/deck/hooks/useDeckTransition";
 import { cellKey, findCell, type DeckProps } from "@/deck/types";
@@ -27,8 +28,8 @@ export function Deck(props: DeckProps): JSX.Element {
     deckRef,
     frames,
   });
-  const { onPointerDown, onPointerMove, onPointerUp, onPointerCancel } =
-    useDeckNavigation(rows, activeKey, bump);
+  const { tryMove } = useDeckNavigation(rows, activeKey, bump);
+  const { onPointerDown, onPointerMove, onPointerUp, onPointerCancel } = useDeckSwipe(tryMove);
   const { mountedKeys, neighbourKeys } = useDeckMountPolicy(
     rows,
     activeKey,
