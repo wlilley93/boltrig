@@ -319,7 +319,9 @@ services:
     # and an off-box copy via rclone when BACKUP_REMOTE is set (skipped cleanly,
     # with a warning, when it is unset - so it is safe to enable in dev too).
     profiles: ["backup"]
-    image: postgres:16
+    build:
+      context: .
+      dockerfile: deploy/backup.Dockerfile
     restart: unless-stopped
     environment:
       PGHOST: postgres
@@ -332,25 +334,14 @@ services:
       BACKUP_REMOTE: ${BACKUP_REMOTE:-}
       BACKUP_PASSPHRASE: ${BACKUP_PASSPHRASE:-}
     volumes:
+      # The script is also baked into the image, but mounting it keeps the dev
+      # loop editable without rebuilding. (IAC-003: rclone is built in, not
+      # installed at runtime.)
       - ./scripts/backup.sh:/usr/local/bin/backup.sh:ro
       - ${BACKUP_DIR:-./backups}:/backups
       # rclone config for the off-box leg (remotes, tokens). Only read when
       # BACKUP_REMOTE is set; mount your own configured rclone.conf here.
       - ${RCLONE_CONFIG_DIR:-./deploy/rclone}:/root/.config/rclone:ro
-    entrypoint: ["/bin/bash", "-c"]
-    command:
-      - |
-        set -euo pipefail
-        # rclone is only needed for the off-box copy; install it once if a remote
-        # is configured (the dump-only path needs nothing beyond pg_dump).
-        if [ -n "${BACKUP_REMOTE:-}" ] && ! command -v rclone >/dev/null 2>&1; then
-          apt-get update && apt-get install -y --no-install-recommends rclone \
-            && rm -rf /var/lib/apt/lists/*
-        fi
-        while true; do
-          /usr/local/bin/backup.sh || echo "backup: run failed (retrying next interval)" >&2
-          sleep "${BACKUP_INTERVAL:-86400}"
-        done
     depends_on:
       postgres:
         condition: service_healthy
