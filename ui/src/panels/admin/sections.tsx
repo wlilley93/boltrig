@@ -25,19 +25,9 @@ import {
   RoleMappingList,
   SkillsByRoleList,
 } from "./editors";
+import type { AdminSection } from "@/panels/admin/admin-sections/types";
 
-export interface AdminSection {
-  key: string;
-  label: string;
-  blurb: string;
-  // SchemaFormV2 schema (the JSON-schema subset it renders). Only these keys are
-  // editable; everything else in the loaded section value is preserved.
-  schema: Record<string, unknown>;
-  // true when the section value is a top-level array (wrapped under `items`).
-  list?: boolean;
-  // a one-line note about operator-only keys intentionally kept out of the form.
-  preserves?: string;
-}
+export type { AdminSection };
 
 function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
