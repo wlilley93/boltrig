@@ -20,6 +20,7 @@ import { SegmentedV2 } from "@/panels/uxForm/SegmentedV2";
 import { ChipPicker } from "@/panels/uxForm/ChipPicker";
 import type { ChipOption } from "@/panels/uxForm/ChipPicker";
 import { Stepper } from "@/panels/uxForm/Stepper";
+import { JsonDisclosure } from "@/panels/uxForm/JsonDisclosure";
 
 export { nextEnabled } from "@/panels/uxForm/nextEnabled";
 export { Switch, useSavedWisp } from "@/panels/uxForm/Switch";
@@ -35,63 +36,7 @@ export { grantMatches, scopeMatches } from "@/panels/uxForm/scopeMatches";
 
 export { Stepper } from "@/panels/uxForm/Stepper";
 
-// --- N9 JsonDisclosure: the collapsed JSON escape hatch (P10). ---------------
-// Never the primary control (L1). The CALLER owns the two-way sync and the
-// validity (amendment 9: an unparseable escape hatch blocks Save and slide
-// navigation on every surface); pass the parse failure via error so the
-// collapsed summary stays honest. summaryNote carries quiet facts like
-// preserved unknown keys.
-export function JsonDisclosure({
-  value,
-  onChange,
-  error,
-  summaryNote,
-  label = "Advanced: edit as JSON",
-  rows = 8,
-  defaultOpen = false,
-  disabled = false,
-}: {
-  value: string;
-  onChange: (text: string) => void;
-  error?: ReactNode;
-  summaryNote?: ReactNode;
-  label?: string;
-  rows?: number;
-  defaultOpen?: boolean;
-  disabled?: boolean;
-}) {
-  return (
-    <details className={`ux-jsond ${error ? "ux-jsond--invalid" : ""}`} open={defaultOpen}>
-      <summary className="ux-jsond__summary">
-        <span>{label}</span>
-        {error ? (
-          <span className="ux-jsond__flag" role="status">
-            invalid JSON
-          </span>
-        ) : (
-          summaryNote != null && <span className="ux-jsond__note">{summaryNote}</span>
-        )}
-      </summary>
-      <div className="ux-jsond__body">
-        <textarea
-          className="ux-jsond__text"
-          rows={rows}
-          spellCheck={false}
-          value={value}
-          disabled={disabled}
-          aria-invalid={error ? true : undefined}
-          aria-label={label}
-          onChange={(e) => onChange(e.target.value)}
-        />
-        {error != null && (
-          <span className="ux-jsond__err" role="alert">
-            {error}
-          </span>
-        )}
-      </div>
-    </details>
-  );
-}
+export { JsonDisclosure } from "@/panels/uxForm/JsonDisclosure";
 
 // --- N17 OrderedPicker: an ordered list where position is the value. --------
 // Numbered rows with up/down buttons; Alt+ArrowUp/Down moves the focused row;
