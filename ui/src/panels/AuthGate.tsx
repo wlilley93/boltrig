@@ -16,6 +16,7 @@ import { api } from "../api/client";
 import { markAuthenticated, markEnrollRequired, probeSession, useAuth } from "../auth";
 import { navigate, useRoute } from "../router";
 import { AuthShell } from "@/panels/AuthGate/AuthShell";
+import { ChallengeStep } from "@/panels/AuthGate/ChallengeStep";
 
 const MIN_PASSWORD_LENGTH = 12; // mirrors boltrig/identity/passwords.py
 
@@ -24,72 +25,6 @@ const MIN_PASSWORD_LENGTH = 12; // mirrors boltrig/identity/passwords.py
 function hashParam(name: string): string {
   const q = window.location.hash.split("?")[1] ?? "";
   return new URLSearchParams(q).get(name) ?? "";
-}
-
-// The six-digit / recovery-code step shown AFTER the password when the login
-// response is 2fa_required ([2026] VJS-COUNTY 10, D3). It holds the opaque
-// challenge_token (no session exists yet) and posts it with the code; on success
-// the session is issued and the gate opens. This never renders on the no-2FA path
-// (only a real 2fa_required response mounts it).
-function ChallengeStep({ challengeToken }: { challengeToken: string }) {
-  const [code, setCode] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (busy || !code.trim()) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await api.twoFactorChallenge({
-        challenge_token: challengeToken,
-        code: code.trim(),
-      });
-      if (res.status === "ok") {
-        markAuthenticated(res.user ?? null);
-        return;
-      }
-      setError(res.reason ?? "That code was not accepted. Try again.");
-    } catch {
-      setError("Could not reach the server. Please try again.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <AuthShell
-      title="Two-factor verification"
-      lead="Enter the 6-digit code from your authenticator app, or a recovery code."
-    >
-      <form className="auth-form" onSubmit={submit}>
-        <label className="field">
-          <span>Authentication code</span>
-          <input
-            type="text"
-            inputMode="text"
-            autoComplete="one-time-code"
-            autoFocus
-            value={code}
-            onChange={(ev) => setCode(ev.target.value)}
-          />
-        </label>
-        {error && (
-          <p className="error" role="alert">
-            {error}
-          </p>
-        )}
-        <button
-          type="submit"
-          className="btn btn--primary auth-form__submit"
-          disabled={busy || !code.trim()}
-        >
-          {busy ? "Verifying..." : "Verify and sign in"}
-        </button>
-      </form>
-    </AuthShell>
-  );
 }
 
 function LoginPage() {
