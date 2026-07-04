@@ -36,6 +36,25 @@ T = "acme"
 _REPO = Path(__file__).resolve().parents[2]
 
 
+class _ComposeLoader(yaml.SafeLoader):
+    """PyYAML loader that understands Docker Compose merge-control tags."""
+
+
+def _construct_compose_override(loader: yaml.Loader, node: yaml.Node):
+    if isinstance(node, yaml.SequenceNode):
+        return loader.construct_sequence(node)
+    if isinstance(node, yaml.MappingNode):
+        return loader.construct_mapping(node)
+    return loader.construct_scalar(node)
+
+
+_ComposeLoader.add_constructor("!override", _construct_compose_override)
+
+
+def _compose_yaml(path: Path) -> dict:
+    return yaml.load(path.read_text(), Loader=_ComposeLoader)
+
+
 def _msg(role: MessageRole, content: str) -> ConversationMessage:
     return ConversationMessage(id=content, conversation_id="c", tenant_id=T, role=role, content=content)
 
@@ -95,17 +114,22 @@ def test_gateway_binds_per_conversation_not_run():
 @pytest.mark.invariant("FR-GW-01")
 def test_bifrost_is_wired_into_the_stack():
     # The model gateway (Bifrost) is declared in the stack so activation is one
-    # env line + provider keys, and the documented URL matches the service. Pins
-    # the deploy wiring so the seam's target cannot silently drift.
-    compose = yaml.safe_load((_REPO / "docker-compose.yml").read_text())
+    # genesis/dev bring-up + provider keys, and the documented URL matches the
+    # service. Pins the deploy wiring so the seam's target cannot silently drift.
+    compose = _compose_yaml(_REPO / "docker-compose.yml")
     bifrost = compose["services"].get("bifrost")
     assert bifrost is not None, "no bifrost service in docker-compose.yml"
-    # OpenAI-compatible on :8080; our seam points base_url here and the runtimes
-    # call {base_url}/v1/chat/completions.
-    assert any(str(p).endswith(":8080") for p in bifrost.get("ports", []))
+    # OpenAI-compatible inside compose on :8080; host admin/API defaults to 8081
+    # so it does not collide with the console. Pi calls {base_url}/chat/completions,
+    # so the documented gateway URL includes /v1.
+    assert "127.0.0.1:${BIFROST_PORT:-8081}:8080" in bifrost.get("ports", [])
     assert "gateway" in (bifrost.get("profiles") or [])  # opt-in, default stack lean
+    assert {"default", "sandbox"} <= set(bifrost.get("networks") or [])
     env = (_REPO / ".env.example").read_text()
-    assert "http://bifrost:8080" in env  # the documented gateway URL matches
+    assert "BOLTRIG_MODEL_GATEWAY_URL=http://bifrost:8080/v1" in env
+    assert "PI_SIDECAR_EGRESS_ALLOW=kernel,bifrost,local-model" in env
+    assert "--profile gateway" in (_REPO / "genesis.sh").read_text()
+    assert "--profile gateway" in (_REPO / "scripts" / "dev-up.sh").read_text()
 
 
 @pytest.mark.security
@@ -131,24 +155,30 @@ def test_gateway_never_reroutes_sensitive_and_is_inert_when_unset():
 @pytest.mark.security
 @pytest.mark.invariant("SEC-48")
 def test_pi_sidecar_egress_is_enforced_in_manifests():
-    base = yaml.safe_load((_REPO / "docker-compose.yml").read_text())
+    base = _compose_yaml(_REPO / "docker-compose.yml")
     services = base["services"]
     sidecar_nets = set(services["pi-sidecar"].get("networks") or [])
 
     # The sidecar sits on the sandbox network ONLY - not the default app network,
-    # so it cannot reach postgres/redis/the rest, only the kernel MCP face.
+    # so it cannot reach postgres/redis/the rest, only the kernel MCP face and
+    # sandbox model peers/proxies.
     assert sidecar_nets == {"sandbox"}, sidecar_nets
     # postgres is NOT on sandbox -> the sidecar has no path to the database.
     pg_nets = set(services["postgres"].get("networks") or ["default"])
     assert "sandbox" not in pg_nets
     # the kernel bridges both so MCP is reachable from the sandbox.
     assert "sandbox" in set(services["kernel"].get("networks") or [])
+    # model endpoints/proxies that Pi may call are explicit sandbox peers.
+    assert "sandbox" in set(services["bifrost"].get("networks") or [])
+    assert "sandbox" in set(services["local-model"].get("networks") or [])
     # the sandbox network is actually declared at the top level (a real network).
     assert "sandbox" in base["networks"]
 
     # The secure overlay makes the sandbox internal: true => no arbitrary egress.
-    secure = yaml.safe_load((_REPO / "deploy" / "compose.secure.yml").read_text())
+    secure = _compose_yaml(_REPO / "deploy" / "compose.secure.yml")
     assert secure["networks"]["sandbox"]["internal"] is True
+    for service in ("kernel", "ui", "hatchet-engine", "hatchet-dashboard", "bifrost"):
+        assert secure["services"][service].get("ports") == []
 
 
 # --------------------------------------------------------------------------- #

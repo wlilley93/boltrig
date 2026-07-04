@@ -21,6 +21,22 @@ from pathlib import Path
 import pytest
 import yaml
 
+
+# Docker Compose supports !override / !reset merge tags (compose v2.24+). PyYAML
+# does not know them by default, so register a passthrough constructor for our
+# offline lint so that `ports: !override []` parses as an empty list.
+def _compose_tag_constructor(loader, node):
+    if isinstance(node, yaml.SequenceNode):
+        return loader.construct_sequence(node)
+    if isinstance(node, yaml.MappingNode):
+        return loader.construct_mapping(node)
+    return loader.construct_scalar(node)
+
+
+yaml.SafeLoader.add_constructor("!override", _compose_tag_constructor)
+yaml.SafeLoader.add_constructor("!reset", _compose_tag_constructor)
+
+
 _REPO = Path(__file__).resolve().parents[2]
 _BASE = _REPO / "docker-compose.yml"
 _SECURE = _REPO / "deploy" / "compose.secure.yml"

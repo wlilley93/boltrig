@@ -218,7 +218,7 @@ runtimes:
   # here - it goes to its local endpoint directly (residency, SEC-43). Maps to
   # BOLTRIG_MODEL_GATEWAY_URL / BOLTRIG_MODEL_GATEWAY_TTL. Unset => inert.
   gateway:
-    base_url:                                # e.g. http://bifrost:9000 (empty = off)
+    base_url:                                # e.g. http://bifrost:8080/v1 (empty = off)
     cache_ttl_seconds: 900                   # sync to the gateway's own cache TTL
 
 # --- expose the kernel as an MCP server, and optionally consume external ones

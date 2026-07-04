@@ -34,7 +34,7 @@ services:
   kernel:
     # reachable only through Caddy now (no direct host port). Internal
     # service-to-service traffic stays on the compose network.
-    ports: []
+    ports: !override []
     volumes:
       - ./manifest.yaml:/app/manifest.yaml:ro
       - ./libraries:/app/libraries:ro
@@ -48,7 +48,7 @@ services:
       - ${CA_BUNDLE_FILE:-./deploy/ca-bundle.crt}:/certs/ca.pem:ro
 
   ui:
-    ports: []
+    ports: !override []
 
   # M8 (SEC-69): drop the Hatchet host ports entirely in the secure posture. The
   # engine (plaintext gRPC + API) and the unauthenticated dashboard become
@@ -56,10 +56,16 @@ services:
   # engine by service name), never from any host interface - matching how this
   # overlay already strips kernel/ui.
   hatchet-engine:
-    ports: []
+    ports: !override []
 
   hatchet-dashboard:
-    ports: []
+    ports: !override []
+
+  bifrost:
+    # Bifrost's admin/API surface stores provider routing and keys. In the secure
+    # posture it remains compose-internal only; use an SSH tunnel or a governed
+    # admin surface rather than publishing it directly.
+    ports: !override []
 
   postgres:
     # Encrypted-at-rest (SEC-11): point the data dir at an encrypted device/path

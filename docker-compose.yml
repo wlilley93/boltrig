@@ -5,7 +5,8 @@
 #
 #   cp .env.example .env                 # then edit secrets
 #   cp manifest.example.yaml manifest.yaml
-#   docker compose up -d                 # add: --profile local for on-box inference
+#   docker compose up -d                 # add: --profile gateway for Bifrost,
+#                                        #      --profile local for on-box inference
 #
 # Services:
 #   postgres          durable state (SRS S6 / boltrig/store/schema.sql)
@@ -15,6 +16,7 @@
 #   hatchet-engine    optional durable execution engine (US-FLT-06, seam)
 #   hatchet-dashboard optional Hatchet web console (seam)
 #   ui                the React console: Router, Kanban, Approvals (Epic L)
+#   bifrost           optional model cost/cache gateway (profile: gateway)
 #   local-model       optional on-box inference for sensitive data (profile: local)
 
 # Container runtime hardening (INF-01): our first-party app containers run
@@ -213,15 +215,20 @@ services:
     #
     # Profile-gated like local-model: bring it up with
     #   docker compose --profile gateway up -d
-    # then set BOLTRIG_MODEL_GATEWAY_URL=http://bifrost:8080 in .env and configure
-    # provider keys in the Bifrost web UI at http://localhost:${BIFROST_PORT:-8080}
+    # then set BOLTRIG_MODEL_GATEWAY_URL=http://bifrost:8080/v1 in .env and configure
+    # provider keys in the Bifrost web UI at http://localhost:${BIFROST_PORT:-8081}
     # (keys + running it are operator-supplied; the seam is inert until the URL is
     # set, so the default stack is unaffected).
     profiles: ["gateway"]
     image: maximhq/bifrost:latest
     restart: unless-stopped
+    networks:
+      - default
+      - sandbox
     ports:
-      - "${BIFROST_PORT:-8080}:8080"
+      # Loopback-only: provider keys/routing live behind this admin/API surface.
+      # Pi reaches the service over the sandbox network at bifrost:8080.
+      - "127.0.0.1:${BIFROST_PORT:-8081}:8080"
     volumes:
       # Bifrost persists its config (providers, routing, cache) here; no config
       # file is required - it is configured via the web UI / API.
@@ -234,6 +241,9 @@ services:
     profiles: ["local"]
     image: vllm/vllm-openai:latest
     restart: unless-stopped
+    networks:
+      - default
+      - sandbox
     command:
       - "--model"
       - "${LOCAL_MODEL:-Qwen/Qwen2.5-7B-Instruct}"
@@ -278,7 +288,7 @@ services:
       # under a production signal). The fleet-worker (env_file: .env) must carry
       # the SAME PI_SIDECAR_TOKEN so PiRuntime presents it. See .env.example.
       PI_SIDECAR_TOKEN: ${PI_SIDECAR_TOKEN:-}
-      PI_SIDECAR_EGRESS_ALLOW: ${PI_SIDECAR_EGRESS_ALLOW:-}
+      PI_SIDECAR_EGRESS_ALLOW: ${PI_SIDECAR_EGRESS_ALLOW:-kernel,bifrost,local-model}
       # Pass the prod signals the sidecar's fail-closed auth checks (it reads
       # these directly, mirroring the kernel), so an unset token fails closed
       # in prod but stays open in dev.
@@ -350,9 +360,10 @@ networks:
   default:
     driver: bridge
   # The Pi sidecar's isolation network (SEC-48). Only the sidecar and the kernel
-  # MCP face sit here. In the base (dev) stack it is a normal bridge so an
-  # external model endpoint is reachable; the secure overlay flips it to
-  # internal: true to enforce no arbitrary egress.
+  # MCP face plus model endpoints/proxies (bifrost/local-model) sit here. In the
+  # base stack it is a normal bridge so a direct external model endpoint is
+  # reachable; the secure overlay flips it to internal: true to enforce no
+  # arbitrary egress, so Pi must use a sandbox peer for model traffic.
   sandbox:
     driver: bridge
 

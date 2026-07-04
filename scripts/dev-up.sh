@@ -11,8 +11,10 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-echo "== bringing up the core stack (kernel/fleet/ui/pi-sidecar + pg/redis) =="
-docker compose up -d --build kernel fleet-worker ui pi-sidecar
+COMPOSE=(docker compose --profile gateway -f docker-compose.yml -f deploy/compose.dev.yml)
+
+echo "== bringing up the core stack (kernel/fleet/ui/pi-sidecar/bifrost/caddy + pg/redis) =="
+"${COMPOSE[@]}" up -d --build kernel fleet-worker ui pi-sidecar bifrost caddy
 
 echo "== waiting for the kernel to be healthy =="
 for i in $(seq 1 30); do
@@ -29,4 +31,4 @@ tailscale serve --bg --https=10000 --set-path=/ http://127.0.0.1:8080 >/dev/null
 URL="https://$(tailscale status --json 2>/dev/null | grep -oE '"DNSName": "[^"]+' | head -1 | cut -d'"' -f4 | sed 's/\.$//'):10000"
 echo
 echo "Boltrig is up:  ${URL}"
-echo "(tailnet-only; tenant 'default'; live agent chat on the GLM coding endpoint)"
+echo "(tailnet-only; tenant 'default'; live agent chat on the GLM coding endpoint via Bifrost when configured)"

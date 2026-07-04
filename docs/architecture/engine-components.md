@@ -395,7 +395,7 @@ The dispatcher also publishes paired `tool_call`/`tool_result` (and `hitl`) even
 
 **Plain language.** An optional switchboard between workers and model providers that can cache and meter calls. Boltrig's part is the plug: it pins each conversation to one model for its whole life (so caching works and answers stay consistent) and re-points the endpoint's base URL at the gateway, but only for standard data; sensitive traffic is never re-routed (residency preserved). With no gateway URL set, the seam does nothing at all.
 
-**Key files.** `boltrig/fleet/model_gateway.py` (`ModelGateway`, `apply_gateway`, env `BOLTRIG_MODEL_GATEWAY_URL`); the `bifrost` compose service (profile-gated, port 8080).
+**Key files.** `boltrig/fleet/model_gateway.py` (`ModelGateway`, `apply_gateway`, env `BOLTRIG_MODEL_GATEWAY_URL`); the `bifrost` compose service (profile-gated, internal port 8080, default loopback admin port 8081).
 
 **Public surface.** None of its own; Bifrost is an external service to point at.
 

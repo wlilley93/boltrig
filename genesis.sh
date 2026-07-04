@@ -25,10 +25,11 @@ case "$TARGET" in
   base)   COMPOSE_FILES=(-f docker-compose.yml) ;;
   *) echo "unknown target '$TARGET' (dev|secure|base)" >&2; exit 2 ;;
 esac
+COMPOSE_PROFILES=(--profile gateway)
 # The hatchet-lite built-in default tenant id (stable across fresh boots).
 HATCHET_TENANT="${HATCHET_TENANT_ID:-707d0855-80ab-4e1f-a156-f1c4546cbf52}"
 
-compose() { docker compose "${COMPOSE_FILES[@]}" --env-file "$ENVF" "$@"; }
+compose() { docker compose "${COMPOSE_FILES[@]}" "${COMPOSE_PROFILES[@]}" --env-file "$ENVF" "$@"; }
 
 prompt_default() {  # prompt_default VAR "label" "default"  (env wins; then prompt; then default)
   local var="$1" label="$2" def="$3" cur="${!1:-}"
@@ -51,6 +52,19 @@ PY
   fi
 }
 secret_of() { grep -E "^$1=" "$ENVF" 2>/dev/null | head -1 | cut -d= -f2- || true; }
+ensure_csv_env() {  # ensure_csv_env KEY item [item...]
+  local k="$1" cur item
+  shift
+  cur="$(secret_of "$k")"
+  for item in "$@"; do
+    if [ -z "$cur" ]; then
+      cur="$item"
+    elif ! printf ',%s,' "$cur" | grep -q ",${item},"; then
+      cur="${cur},${item}"
+    fi
+  done
+  set_env "$k" "$cur"
+}
 gen_secret() {  # fill a blank/absent secret only (idempotent)
   local k="$1"
   [ -n "$(secret_of "$k")" ] && return 0
@@ -89,6 +103,14 @@ set_env DATABASE_URL "postgresql+asyncpg://${PGUSER}:${PGPW}@postgres:5432/${PGD
 set_env BOLTRIG_AUTH_MODE session
 set_env BOLTRIG_DEV_AUTH 0
 set_env HATCHET_CLIENT_TLS_STRATEGY none
+# Bifrost is the standard-data model gateway in the genesis stack. It is
+# profile-gated in raw compose, but genesis starts the gateway profile and wires
+# Pi to the internal /v1 route Bifrost exposes.
+[ -n "$(secret_of BIFROST_PORT)" ] || set_env BIFROST_PORT 8081
+[ -n "$(secret_of BOLTRIG_MODEL_GATEWAY_URL)" ] || set_env BOLTRIG_MODEL_GATEWAY_URL http://bifrost:8080/v1
+[ -n "$(secret_of BOLTRIG_MODEL_GATEWAY_TTL)" ] || set_env BOLTRIG_MODEL_GATEWAY_TTL 900
+ensure_csv_env NO_PROXY pi-sidecar bifrost local-model
+ensure_csv_env PI_SIDECAR_EGRESS_ALLOW kernel bifrost local-model
 
 # ---------------------------------------------------------------- Phase 1: datastores + Hatchet db
 echo "==> Phase 1: datastores up + Hatchet database"
