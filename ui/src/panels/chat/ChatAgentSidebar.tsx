@@ -24,6 +24,105 @@ interface ChatAgentSidebarProps {
   onRailTerm: (term: string) => void;
 }
 
+interface ChatAgentSidebarHeaderProps {
+  onNew: () => void;
+  searchOpen: boolean;
+  setSearchOpen: React.Dispatch<React.SetStateAction<boolean>>;
+}
+
+function ChatAgentSidebarHeader({ onNew, searchOpen, setSearchOpen }: ChatAgentSidebarHeaderProps): JSX.Element {
+  return (
+    <div className="chat-agent-rail__head">
+      <strong>Chat</strong>
+      <div className="chat-agent-rail__tools">
+        <button
+          className={`icon-btn ${searchOpen ? "icon-btn--active" : ""}`}
+          title="Search conversations"
+          type="button"
+          aria-pressed={searchOpen}
+          onClick={() => setSearchOpen((v) => !v)}
+        >
+          <Icon name="search" size={15} />
+        </button>
+        <button className="icon-btn" title="New chat" type="button" onClick={onNew}>
+          <Icon name="plus" size={15} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+interface ChatAgentSidebarSearchProps {
+  railTerm: string;
+  onRailTerm: (term: string) => void;
+}
+
+function ChatAgentSidebarSearch({ railTerm, onRailTerm }: ChatAgentSidebarSearchProps): JSX.Element {
+  return (
+    <div className="chat-agent-rail__search">
+      <input
+        type="text"
+        value={railTerm}
+        placeholder="Search conversations..."
+        aria-label="Search conversations"
+        onChange={(e) => onRailTerm(e.target.value)}
+      />
+    </div>
+  );
+}
+
+function ChatAgentSidebarFilters(): JSX.Element {
+  return (
+    <div className="chat-agent-rail__filters" role="tablist" aria-label="Chat filters">
+      <button className="chat-agent-rail__filter chat-agent-rail__filter--active" type="button">
+        All
+      </button>
+      <button className="chat-agent-rail__filter" type="button">
+        Unread
+      </button>
+    </div>
+  );
+}
+
+function ChatAgentSidebarGroups({
+  agents,
+  activeAgent,
+  expanded,
+  setExpanded,
+  railState,
+  railItems,
+  railTerm,
+  onNew,
+  onSelectAgent,
+  onSelectConversation,
+  onDeleted,
+  onRenamed,
+  loadMore,
+}: AgentGroupListProps): JSX.Element {
+  return (
+    <div className="chat-agent-list">
+      {agents.map((agent) => (
+        <AgentGroup
+          key={agent.id}
+          agent={agent}
+          activeAgent={activeAgent}
+          expanded={expanded}
+          setExpanded={setExpanded}
+          railState={railState}
+          railItems={railItems}
+          railTerm={railTerm}
+          onNew={onNew}
+          onSelectAgent={onSelectAgent}
+          onSelectConversation={onSelectConversation}
+          onDeleted={onDeleted}
+          onRenamed={onRenamed}
+          loadMore={loadMore}
+        />
+      ))}
+    </div>
+  );
+}
+
 export function ChatAgentSidebar({
   open,
   agents,
@@ -45,68 +144,46 @@ export function ChatAgentSidebar({
 
   return (
     <aside className="chat-agent-rail" aria-label="Chat agents">
-      <div className="chat-agent-rail__head">
-        <strong>Chat</strong>
-        <div className="chat-agent-rail__tools">
-          <button
-            className={`icon-btn ${searchOpen ? "icon-btn--active" : ""}`}
-            title="Search conversations"
-            type="button"
-            aria-pressed={searchOpen}
-            onClick={() => setSearchOpen((v) => !v)}
-          >
-            <Icon name="search" size={15} />
-          </button>
-          <button className="icon-btn" title="New chat" type="button" onClick={onNew}>
-            <Icon name="plus" size={15} />
-          </button>
-        </div>
-      </div>
-      {searchOpen && (
-        <div className="chat-agent-rail__search">
-          <input
-            type="text"
-            value={railTerm}
-            placeholder="Search conversations..."
-            aria-label="Search conversations"
-            onChange={(e) => onRailTerm(e.target.value)}
-          />
-        </div>
-      )}
-      <div className="chat-agent-rail__filters" role="tablist" aria-label="Chat filters">
-        <button className="chat-agent-rail__filter chat-agent-rail__filter--active" type="button">
-          All
-        </button>
-        <button className="chat-agent-rail__filter" type="button">
-          Unread
-        </button>
-      </div>
-      <div className="chat-agent-list">
-        {agents.map((agent) => (
-          <AgentGroup
-            key={agent.id}
-            agent={agent}
-            activeAgent={activeAgent}
-            expanded={expanded}
-            setExpanded={setExpanded}
-            railState={railState}
-            railItems={railItems}
-            railTerm={railTerm}
-            onNew={onNew}
-            onSelectAgent={onSelectAgent}
-            onSelectConversation={onSelectConversation}
-            onDeleted={onDeleted}
-            onRenamed={onRenamed}
-            loadMore={loadMore}
-          />
-        ))}
-      </div>
+      <ChatAgentSidebarHeader onNew={onNew} searchOpen={searchOpen} setSearchOpen={setSearchOpen} />
+      {searchOpen && <ChatAgentSidebarSearch railTerm={railTerm} onRailTerm={onRailTerm} />}
+      <ChatAgentSidebarFilters />
+      <ChatAgentSidebarGroups
+        agents={agents}
+        activeAgent={activeAgent}
+        expanded={expanded}
+        setExpanded={setExpanded}
+        railState={railState}
+        railItems={railItems}
+        railTerm={railTerm}
+        onNew={onNew}
+        onSelectAgent={onSelectAgent}
+        onSelectConversation={onSelectConversation}
+        onDeleted={onDeleted}
+        onRenamed={onRenamed}
+        loadMore={loadMore}
+      />
     </aside>
   );
 }
 
 interface AgentGroupProps {
   agent: ChatAgent;
+  activeAgent: ChatAgent;
+  expanded: Record<string, boolean>;
+  setExpanded: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+  railState: RailState;
+  railItems: ConversationSearchResult[];
+  railTerm: string;
+  onNew: () => void;
+  onSelectAgent: (agent: ChatAgent) => void;
+  onSelectConversation: (id: string) => void;
+  onDeleted: (id: string) => void;
+  onRenamed: () => void;
+  loadMore: () => void;
+}
+
+interface AgentGroupListProps {
+  agents: ChatAgent[];
   activeAgent: ChatAgent;
   expanded: Record<string, boolean>;
   setExpanded: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
