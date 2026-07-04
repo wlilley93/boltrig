@@ -10,6 +10,7 @@ import { deriveKind, deriveNodeKind, extractSteps, graphToSteps, isStepNode, ste
 import {
   defaultActionForKind,
   kindFromVisual,
+  resolveVerbForKind,
   type NodeVisualKind,
 } from "./nodeTaxonomy";
 import { useGraphHistory, type GraphHistory } from "./useGraphHistory";
@@ -52,7 +53,7 @@ export function useWorkflowGraph(verbsById: Map<string, VerbInfo>) {
     addVerbNode: (verb: VerbInfo) =>
       addVerbNode(verb, hist.nodes, hist.setNodes, setSelectedId, counter),
     addNodeKind: (kind: NodeVisualKind, position?: { x: number; y: number }) =>
-      addNodeKindNode(kind, hist.nodes, hist.setNodes, setSelectedId, counter, position),
+      addNodeKindNode(kind, verbsById, hist.nodes, hist.setNodes, setSelectedId, counter, position),
     addTrigger: (triggerType: TriggerKind) =>
       addTriggerNode(triggerType, hist.nodes, hist.setNodes, counter),
     onConnect: (connection: Connection) =>
@@ -125,13 +126,19 @@ function uniqueStepId(
 
 function addNodeKindNode(
   kind: NodeVisualKind,
+  verbsById: Map<string, VerbInfo>,
   nodes: CanvasNode[],
   setNodes: Dispatch<SetStateAction<CanvasNode[]>>,
   setSelectedId: (id: string | null) => void,
   counter: MutableRefObject<number>,
   position?: XYPosition,
 ) {
-  const { action, params } = defaultActionForKind(kind);
+  // Prefer a real registered verb for capability kinds; fall back to the
+  // synthetic default when the catalogue lacks a match (or for control kinds).
+  const resolved = resolveVerbForKind(kind, verbsById);
+  const fallback = defaultActionForKind(kind);
+  const action = resolved?.action ?? fallback.action;
+  const params = resolved?.params ?? fallback.params;
   const base = (action.split(".").pop() || "node").replace(/[^a-zA-Z0-9_]/g, "_");
   const taken = new Set(nodes.map((n) => n.id));
   let candidate = base;

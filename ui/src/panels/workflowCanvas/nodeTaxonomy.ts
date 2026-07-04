@@ -147,3 +147,33 @@ export function kindFromVisual(kind: NodeVisualKind | undefined): "agent" | "ser
       return "kernel-run";
   }
 }
+
+import type { VerbInfo } from "@/api/types";
+
+// Preferred REAL verb for each CAPABILITY kind. Control kinds (trigger/flow/code)
+// are resolved locally by the interpreter, so they are not listed here. When the
+// canvas verb catalogue (api.capabilities()) contains the preferred verb, a
+// dropped node binds to it so the workflow actually executes; otherwise it falls
+// back to the synthetic default. Tuned to the default adapter set (ms-graph,
+// jira, channel-send, web-fetch, memory, control-plane).
+export const PREFERRED_VERB_FOR_KIND: Partial<Record<NodeVisualKind, string>> = {
+  "agent-call": "chat.ask_user",
+  notify: "channel.send",
+  http: "web.fetch",
+  knowledge: "memory.recall",
+  database: "ticket.search",
+  tool: "web.fetch",
+};
+
+export function resolveVerbForKind(
+  kind: NodeVisualKind,
+  verbsById: Map<string, VerbInfo>,
+): { action: string; params: Record<string, unknown> } | undefined {
+  const preferred = PREFERRED_VERB_FOR_KIND[kind];
+  if (preferred && verbsById.has(preferred)) {
+    const params: Record<string, unknown> =
+      kind === "agent-call" ? { agent: BOLT_AGENT_ID } : {};
+    return { action: preferred, params };
+  }
+  return undefined;
+}
