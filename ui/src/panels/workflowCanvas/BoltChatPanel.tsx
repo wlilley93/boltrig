@@ -1,8 +1,10 @@
 // Floating Bolt chat panel (design brief sec 22.9). A 300x360 bottom-right
 // window toggled by a cyan chat-bubble button. Collapses to a 36px cyan circle.
-// Pure UI for now: sending echoes the text into the body.
+// Sends through the real chat stream (/v1/chat), accumulating the reply.
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { streamChat } from "@/api/sse";
+import type { ChatEvent } from "@/api/types";
 
 const SUGGESTIONS = ["Add a retry loop", "Explain this branch", "Connect to Bolt"];
 
@@ -21,15 +23,45 @@ export function BoltChatPanel({ open, onToggle }: BoltChatPanelProps) {
     { from: "bot", text: "Describe a change and I will wire it up." },
   ]);
   const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const ctrlRef = useRef<AbortController | null>(null);
 
-  const send = () => {
+  // Cancel any in-flight stream when the panel unmounts or collapses.
+  useEffect(() => {
+    return () => ctrlRef.current?.abort();
+  }, []);
+  useEffect(() => {
+    if (!open) ctrlRef.current?.abort();
+  }, [open]);
+
+  const send = async () => {
     const text = draft.trim();
-    if (!text) return;
-    setMessages((m) => [...m, { from: "me", text }]);
+    if (!text || busy) return;
     setDraft("");
-    window.setTimeout(() => {
-      setMessages((m) => [...m, { from: "bot", text: `Got it: ${text}` }]);
-    }, 120);
+    setBusy(true);
+    setMessages((m) => [...m, { from: "me", text }]);
+    const botIdx = messages.length + 1; // index the bot reply will land at
+    setMessages((m) => [...m, { from: "bot", text: "" }]);
+    const ctrl = new AbortController();
+    ctrlRef.current = ctrl;
+    let acc = "";
+    const patch = (t: string) =>
+      setMessages((m) => m.map((msg, i) => (i === botIdx ? { ...msg, text: t } : msg)));
+    try {
+      await streamChat({ message: text }, (ev: ChatEvent) => {
+        if (ev.type === "text_delta" && ev.delta) {
+          acc += ev.delta;
+          patch(acc);
+        }
+      }, ctrl.signal);
+      if (!acc) patch("(no reply)");
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : "request failed";
+      patch(`(error: ${reason})`);
+    } finally {
+      setBusy(false);
+      ctrlRef.current = null;
+    }
   };
 
   if (!open) {
@@ -93,7 +125,7 @@ export function BoltChatPanel({ open, onToggle }: BoltChatPanelProps) {
             if (e.key === "Enter") send();
           }}
         />
-        <button type="button" className="wf3-bolt__send" onClick={send} aria-label="Send">
+        <button type="button" className="wf3-bolt__send" onClick={send} disabled={busy} aria-label="Send">
           <SendGlyph />
         </button>
       </footer>
