@@ -1,8 +1,7 @@
 import type { Dispatch, SetStateAction } from "react";
 
-import { CONSEQUENCE, StatusBadge } from "../ux";
-
-import { grantMatches, type ScopeVerb } from "./scopeMatches";
+import type { ScopeVerb } from "./scopeMatches";
+import { ScopeBuilderVerbList } from "./ScopeBuilderVerbList";
 
 export interface ScopeBuilderNounProps {
   noun: string;
@@ -74,32 +73,7 @@ export function ScopeBuilderNoun({
           Add {list.length} individually
         </button>
       </div>
-      {open && (
-        <div className="ux-scope__verbs">
-          {shown.map((v) => {
-            const covered = value.some((p) => grantMatches(p, v.id));
-            return (
-              <div key={v.id} className="ux-scope__row">
-                <span className="ux-scope__verbid">{v.id}</span>
-                {v.consequence === "high" && <StatusBadge value="high" glossary={CONSEQUENCE} />}
-                {covered ? (
-                  <span className="ux-scope__covered">covered</span>
-                ) : (
-                  <button
-                    type="button"
-                    className="btn btn--sm btn--ghost"
-                    disabled={disabled}
-                    aria-label={`Add ${v.id}`}
-                    onClick={() => add(v.id)}
-                  >
-                    Add
-                  </button>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
+      {open && <ScopeBuilderVerbList shown={shown} value={value} disabled={disabled} add={add} />}
     </div>
   );
 }

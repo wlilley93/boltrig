@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { Dispatch, KeyboardEvent, MutableRefObject, SetStateAction } from "react";
 
 import type { EntityGroup, EntityItem } from "./EntityPicker";
+import { useEntityPickerKeyboard } from "./useEntityPickerKeyboard";
 
 export interface UseEntityPickerArgs {
   value: string | null;
@@ -73,23 +74,7 @@ export function useEntityPicker({ value, onChange, groups }: UseEntityPickerArgs
     triggerRef.current?.focus();
   };
 
-  const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setActive((a) => Math.min(a + 1, rows.length - 1));
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setActive((a) => Math.max(a - 1, 0));
-    } else if (e.key === "Enter") {
-      e.preventDefault();
-      const row = rows[active];
-      if (row) choose(row.item.id);
-    } else if (e.key === "Escape") {
-      e.preventDefault();
-      setOpen(false);
-      triggerRef.current?.focus();
-    }
-  };
+  const onKey = useEntityPickerKeyboard({ rows, active, setActive, setOpen, choose, triggerRef });
 
   return {
     open,
