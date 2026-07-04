@@ -126,6 +126,75 @@ export interface Dictation {
   stop: () => void;
 }
 
+// Recognition setup + onresult/onerror/onend wiring, extracted from the hook so
+// useDictation stays under the function floor. Reads/writes the hook's refs and
+// state setters; creates the SpeechRecognition instance and starts it.
+interface StartDictationArgs {
+  supported: boolean;
+  recRef: { current: SpeechRecognitionLike | null };
+  finalRef: { current: string };
+  onChangeRef: { current: (transcript: string, done: boolean) => void };
+  setError: (e: string | null) => void;
+  setListening: (b: boolean) => void;
+}
+
+function startDictation(a: StartDictationArgs): void {
+  if (!a.supported) return;
+  const Ctor = recognitionCtor();
+  if (!Ctor) return;
+  // Tear down any prior instance before starting a fresh session.
+  if (a.recRef.current) {
+    try {
+      a.recRef.current.abort();
+    } catch {
+      /* ignore */
+    }
+    a.recRef.current = null;
+  }
+  let rec: SpeechRecognitionLike;
+  try {
+    rec = new Ctor();
+  } catch {
+    a.setError("Dictation could not start.");
+    return;
+  }
+  rec.lang = typeof navigator !== "undefined" ? navigator.language || "en-US" : "en-US";
+  rec.continuous = true;
+  rec.interimResults = true;
+  rec.maxAlternatives = 1;
+  a.finalRef.current = "";
+  a.setError(null);
+
+  rec.onresult = (ev) => {
+    let interim = "";
+    for (let i = ev.resultIndex; i < ev.results.length; i++) {
+      const res = ev.results[i];
+      const alt = res[0];
+      if (!alt) continue;
+      if (res.isFinal) a.finalRef.current += alt.transcript;
+      else interim += alt.transcript;
+    }
+    a.onChangeRef.current((a.finalRef.current + interim).trimStart(), false);
+  };
+  rec.onerror = (ev) => {
+    const text = dictationErrorText(ev.error);
+    if (text) a.setError(text);
+  };
+  rec.onend = () => {
+    a.setListening(false);
+    a.onChangeRef.current(a.finalRef.current.trim(), true);
+  };
+
+  try {
+    rec.start();
+    a.recRef.current = rec;
+    a.setListening(true);
+  } catch {
+    // start() throws if invoked while already active; surface nothing fatal.
+    a.setError("Dictation could not start.");
+  }
+}
+
 export function useDictation(onChange: (transcript: string, done: boolean) => void): Dictation {
   const [supported] = useState<boolean>(() => dictationSupported());
   const [listening, setListening] = useState(false);
@@ -147,62 +216,10 @@ export function useDictation(onChange: (transcript: string, done: boolean) => vo
     }
   }, []);
 
-  const start = useCallback(() => {
-    if (!supported) return;
-    const Ctor = recognitionCtor();
-    if (!Ctor) return;
-    // Tear down any prior instance before starting a fresh session.
-    if (recRef.current) {
-      try {
-        recRef.current.abort();
-      } catch {
-        /* ignore */
-      }
-      recRef.current = null;
-    }
-    let rec: SpeechRecognitionLike;
-    try {
-      rec = new Ctor();
-    } catch {
-      setError("Dictation could not start.");
-      return;
-    }
-    rec.lang = typeof navigator !== "undefined" ? navigator.language || "en-US" : "en-US";
-    rec.continuous = true;
-    rec.interimResults = true;
-    rec.maxAlternatives = 1;
-    finalRef.current = "";
-    setError(null);
-
-    rec.onresult = (ev) => {
-      let interim = "";
-      for (let i = ev.resultIndex; i < ev.results.length; i++) {
-        const res = ev.results[i];
-        const alt = res[0];
-        if (!alt) continue;
-        if (res.isFinal) finalRef.current += alt.transcript;
-        else interim += alt.transcript;
-      }
-      onChangeRef.current((finalRef.current + interim).trimStart(), false);
-    };
-    rec.onerror = (ev) => {
-      const text = dictationErrorText(ev.error);
-      if (text) setError(text);
-    };
-    rec.onend = () => {
-      setListening(false);
-      onChangeRef.current(finalRef.current.trim(), true);
-    };
-
-    try {
-      rec.start();
-      recRef.current = rec;
-      setListening(true);
-    } catch {
-      // start() throws if invoked while already active; surface nothing fatal.
-      setError("Dictation could not start.");
-    }
-  }, [supported]);
+  const start = useCallback(
+    () => startDictation({ supported, recRef, finalRef, onChangeRef, setError, setListening }),
+    [supported],
+  );
 
   // Stop and release the microphone on unmount.
   useEffect(() => {
