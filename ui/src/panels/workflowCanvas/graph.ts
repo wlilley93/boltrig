@@ -9,6 +9,7 @@ import {
   type StepNode,
   type WorkflowStep,
 } from "./types";
+import { DEFAULT_NODE_KIND, type NodeVisualKind } from "./nodeTaxonomy";
 
 export function deriveKind(verb: VerbInfo | undefined): NodeKind {
   const target = verb?.binding?.target_type;
@@ -16,6 +17,18 @@ export function deriveKind(verb: VerbInfo | undefined): NodeKind {
   if (target === "adapter") return "service";
   return "kernel-run";
 }
+
+// Derive the visual node kind (sec 22.3 taxonomy) from a registry verb.
+// Agent-targeting verbs become "agent-call" (decision #51); anything else falls
+// back to the canvas default so a node always has an icon + colour.
+export function deriveNodeKind(verb: VerbInfo | undefined): NodeVisualKind {
+  if (verb?.binding?.target_type === "agent") return "agent-call";
+  return DEFAULT_NODE_KIND;
+}
+
+// The key under which the visual kind is persisted inside step params so it
+// survives save/load round-trips without changing the WorkflowStep contract.
+export const NODE_KIND_PARAM = "__nodeKind";
 
 export function isStepNode(n: CanvasNode): n is StepNode {
   return n.type === "step";
@@ -64,7 +77,16 @@ export function graphToSteps(nodes: CanvasNode[], edges: Edge[]): WorkflowStep[]
   }
 
   return topoOrder(stepNodes, parentsById).map((n) => {
-    const params = n.data.params ?? {};
+    const baseParams = n.data.params ?? {};
+    const nodeKind = n.data.nodeKind;
+    // Only persist the visual kind when it differs from the re-derivable
+    // default, so steps that never set one keep their clean serialised shape.
+    const params: Record<string, unknown> = { ...baseParams };
+    if (nodeKind && nodeKind !== DEFAULT_NODE_KIND) {
+      params[NODE_KIND_PARAM] = nodeKind;
+    } else {
+      delete params[NODE_KIND_PARAM];
+    }
     const step: WorkflowStep = {
       id: n.id,
       parents: parentsById.get(n.id) ?? [],
@@ -103,14 +125,21 @@ export function stepsToGraph(
     const level = depthOf(s.id, new Set());
     const row = perLevel.get(level) ?? 0;
     perLevel.set(level, row + 1);
+    const params = s.params ?? {};
+    const persisted = params[NODE_KIND_PARAM];
+    const nodeKind: NodeVisualKind =
+      typeof persisted === "string"
+        ? (persisted as NodeVisualKind)
+        : deriveNodeKind(verbsById.get(s.action));
     return {
       id: s.id,
       type: "step",
       position: { x: 40 + level * 240, y: 40 + row * 120 },
       data: {
         action: s.action,
-        params: s.params ?? {},
+        params,
         kind: deriveKind(verbsById.get(s.action)),
+        nodeKind,
         label: s.id,
         consequence: verbsById.get(s.action)?.consequence,
         ...(s.description ? { description: s.description } : {}),
@@ -122,7 +151,12 @@ export function stepsToGraph(
   for (const s of steps) {
     for (const parent of s.parents ?? []) {
       if (byId.has(parent)) {
-        edges.push({ id: `${parent}__${s.id}`, source: parent, target: s.id });
+        edges.push({
+          id: `${parent}__${s.id}`,
+          source: parent,
+          target: s.id,
+          type: "workflow",
+        });
       }
     }
   }

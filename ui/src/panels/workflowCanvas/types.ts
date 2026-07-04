@@ -2,6 +2,7 @@
 // These are pure types with no rendering or fetching logic.
 
 import type { Node } from "@xyflow/react";
+import type { NodeVisualKind } from "./nodeTaxonomy";
 
 export type NodeKind = "agent" | "service" | "kernel-run";
 export type TriggerKind = "chat" | "cron" | "webhook";
@@ -18,6 +19,8 @@ export type StepNodeData = {
   action: string;
   params: Record<string, unknown>;
   kind: NodeKind;
+  // Visual category for the v3 canvas (sec 22.3). Persists as params.__nodeKind.
+  nodeKind?: NodeVisualKind;
   label: string;
   description?: string;
   consequence?: string;

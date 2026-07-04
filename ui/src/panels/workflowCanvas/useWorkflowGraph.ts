@@ -5,10 +5,16 @@ import {
   useNodesState,
   type Connection,
   type Edge,
+  type XYPosition,
 } from "@xyflow/react";
 import type { VerbInfo } from "@/api/types";
 import { parseJson, errText } from "@/panels/shared";
-import { deriveKind, extractSteps, graphToSteps, isStepNode, stepsToGraph } from "./graph";
+import { deriveKind, deriveNodeKind, extractSteps, graphToSteps, isStepNode, stepsToGraph } from "./graph";
+import {
+  defaultActionForKind,
+  kindFromVisual,
+  type NodeVisualKind,
+} from "./nodeTaxonomy";
 import type { CanvasNode, StepNode, TriggerKind, WorkflowStep } from "./types";
 
 export function useWorkflowGraph(verbsById: Map<string, VerbInfo>) {
@@ -48,10 +54,12 @@ export function useWorkflowGraph(verbsById: Map<string, VerbInfo>) {
     previewSteps,
     addVerbNode: (verb: VerbInfo) =>
       addVerbNode(verb, nodes, setNodes, setSelectedId, counter),
+    addNodeKind: (kind: NodeVisualKind, position?: { x: number; y: number }) =>
+      addNodeKindNode(kind, nodes, setNodes, setSelectedId, counter, position),
     addTrigger: (triggerType: TriggerKind) =>
       addTriggerNode(triggerType, nodes, setNodes, counter),
     onConnect: (connection: Connection) =>
-      setEdges((es) => addEdge(connection, es)),
+      setEdges((es) => addEdge({ ...connection, type: "workflow" }, es)),
     deleteSelected: () =>
       deleteSelectedNode(selectedId, setNodes, setEdges, setSelectedId),
     clearCanvas: () => clearGraph(setNodes, setEdges, setSelectedId),
@@ -81,6 +89,7 @@ function addVerbNode(
       action: verb.id,
       params: {},
       kind: deriveKind(verb),
+      nodeKind: deriveNodeKind(verb),
       label: id,
       consequence: verb.consequence,
     },
@@ -105,6 +114,39 @@ function uniqueStepId(
     candidate = `${base}_${counter.current}`;
   }
   return candidate;
+}
+
+function addNodeKindNode(
+  kind: NodeVisualKind,
+  nodes: CanvasNode[],
+  setNodes: Dispatch<SetStateAction<CanvasNode[]>>,
+  setSelectedId: (id: string | null) => void,
+  counter: MutableRefObject<number>,
+  position?: XYPosition,
+) {
+  const { action, params } = defaultActionForKind(kind);
+  const base = (action.split(".").pop() || "node").replace(/[^a-zA-Z0-9_]/g, "_");
+  const taken = new Set(nodes.map((n) => n.id));
+  let candidate = base;
+  while (taken.has(candidate)) {
+    counter.current += 1;
+    candidate = `${base}_${counter.current}`;
+  }
+  const index = nodes.filter(isStepNode).length;
+  const node: StepNode = {
+    id: candidate,
+    type: "step",
+    position: position ?? { x: 80 + (index % 3) * 80, y: 80 + index * 90 },
+    data: {
+      action,
+      params: { ...params, __nodeKind: kind },
+      kind: kindFromVisual(kind),
+      nodeKind: kind,
+      label: candidate,
+    },
+  };
+  setNodes((ns) => [...ns, node]);
+  setSelectedId(candidate);
 }
 
 function addTriggerNode(
