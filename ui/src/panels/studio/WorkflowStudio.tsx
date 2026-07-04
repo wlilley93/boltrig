@@ -21,6 +21,7 @@ import {
 } from "../shared";
 import { Field, Select } from "../ux";
 import { WorkflowCanvas } from "../WorkflowCanvas";
+import { ScheduleForm } from "./workflow/forms/ScheduleForm";
 import { UpsertWorkflowForm } from "./workflow/forms/UpsertWorkflowForm";
 
 // View toggle inside the Workflow Studio: the existing form flow or the new
@@ -30,95 +31,6 @@ type WorkflowView = "form" | "canvas";
 // A ready-made {value,label} for the shared Select. The four action forms all
 // pick from the same list of workflow ids, so the parent computes it once.
 type WorkflowOption = { value: string; label: string };
-
-const TZ_OPTIONS = [
-  "UTC",
-  "Europe/London",
-  "Europe/Paris",
-  "America/New_York",
-  "America/Chicago",
-  "America/Los_Angeles",
-  "Asia/Singapore",
-  "Asia/Tokyo",
-  "Australia/Sydney",
-].map((z) => ({ value: z, label: z }));
-
-const CRON_PRESETS: ReadonlyArray<{ label: string; value: string }> = [
-  { label: "Hourly", value: "0 * * * *" },
-  { label: "Daily 9am", value: "0 9 * * *" },
-  { label: "Weekdays 9am", value: "0 9 * * 1-5" },
-  { label: "Mondays 9am", value: "0 9 * * 1" },
-];
-
-function ScheduleForm({ wfOptions }: { wfOptions: WorkflowOption[] }) {
-  const [schedId, setSchedId] = useState("");
-  const [cron, setCron] = useState("");
-  const [tz, setTz] = useState("UTC");
-  const [schedBusy, setSchedBusy] = useState(false);
-  const [schedError, setSchedError] = useState<string | null>(null);
-  const [schedResult, setSchedResult] = useState<unknown>(null);
-
-  async function schedule() {
-    if (!schedId.trim() || !cron.trim()) {
-      setSchedError("workflow id and cron are required.");
-      return;
-    }
-    setSchedBusy(true);
-    setSchedError(null);
-    setSchedResult(null);
-    try {
-      const res = await api.scheduleWorkflow(schedId.trim(), {
-        cron: cron.trim(),
-        timezone: tz.trim() || "UTC",
-      });
-      if (res.status === "ok") setSchedResult(res.schedule);
-      else setSchedError(res.reason ?? "schedule rejected");
-    } catch (err) {
-      setSchedError(errText(err));
-    } finally {
-      setSchedBusy(false);
-    }
-  }
-
-  return (
-    <div className="form">
-      <div className="form__title">Schedule (cron)</div>
-      <div className="form__grid">
-        <Field label="Workflow" hint="The workflow to run on a schedule.">
-          <Select value={schedId} ariaLabel="Workflow" onChange={setSchedId} options={wfOptions} />
-        </Field>
-        <Field label="When (cron)" hint="A 5-field cron expression, or pick a preset below." example="0 9 * * 1">
-          <input value={cron} placeholder="0 9 * * 1" onChange={(e) => setCron(e.target.value)} />
-        </Field>
-        <Field label="Timezone" hint="The timezone the schedule runs in.">
-          <Select value={tz} ariaLabel="Timezone" onChange={setTz} options={TZ_OPTIONS} />
-        </Field>
-      </div>
-      <div className="kv">
-        <span className="ux-hint">Presets:</span>
-        {CRON_PRESETS.map((p) => (
-          <button
-            key={p.value}
-            type="button"
-            className="tag tag--accent"
-            style={{ cursor: "pointer" }}
-            title={p.value}
-            onClick={() => setCron(p.value)}
-          >
-            {p.label}
-          </button>
-        ))}
-      </div>
-      <div className="form__actions">
-        <button className="btn" disabled={schedBusy} onClick={schedule}>
-          {schedBusy ? "..." : "Schedule"}
-        </button>
-        {schedError && <span className="error">{schedError}</span>}
-      </div>
-      {schedResult !== null && <CodeBlock value={schedResult} />}
-    </div>
-  );
-}
 
 function TriggerForm({ wfOptions }: { wfOptions: WorkflowOption[] }) {
   const [trigId, setTrigId] = useState("");
