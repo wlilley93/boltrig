@@ -19,11 +19,16 @@ export type IconName =
   | "refresh"
   | "download"
   | "paperclip"
-  | "speaker";
+  | "speaker"
+  | "pin";
 
 interface IconProps {
   name: IconName;
   size?: number;
+  // When true the glyph is drawn with fill=currentColor (e.g. a pinned pin)
+  // instead of the default hollow stroke. Only meaningful for icons that have a
+  // distinct solid form (currently "pin").
+  filled?: boolean;
 }
 
 function svgProps(size: number): {
@@ -139,9 +144,15 @@ const ICON_PATHS: Record<IconName, ReactNode> = {
       <path d="M19.5 4.5a10 10 0 0 1 0 15" />
     </>
   ),
+  pin: (
+    <>
+      <path d="M9.5 3.5h5l-.7 4.6 2.4 2.4a.8.8 0 0 1-.6 1.4H8.4a.8.8 0 0 1-.6-1.4l2.4-2.4Z" />
+      <path d="M12 12.5V20" />
+    </>
+  ),
 };
 
-export function Icon({ name, size = 18 }: IconProps): JSX.Element {
+export function Icon({ name, size = 18, filled = false }: IconProps): JSX.Element {
   const props = svgProps(size);
   const paths = ICON_PATHS[name] ?? (
     <>
@@ -150,7 +161,11 @@ export function Icon({ name, size = 18 }: IconProps): JSX.Element {
       <path d="M5 20h14" />
     </>
   );
-  return <svg {...props}>{paths}</svg>;
+  return (
+    <svg {...props} fill={filled ? "currentColor" : "none"}>
+      {paths}
+    </svg>
+  );
 }
 
 export { type IconProps };
