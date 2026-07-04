@@ -65,9 +65,49 @@ def test_security_headers_host_and_body_cap():
     big = c.post("/echo", content=b"x" * 200, headers={"content-type": "application/json"})
     assert big.status_code == 413
 
+    # chunked upload without Content-Length is also capped
+    def _chunks():
+        yield b"x" * 60
+        yield b"x" * 60
+
+    chunked = c.post(
+        "/echo",
+        content=_chunks(),
+        headers={"content-type": "application/json", "transfer-encoding": "chunked"},
+    )
+    assert chunked.status_code == 413
+
+    # small chunked body is allowed
+    def _small():
+        yield b'{"ok":1}'
+
+    ok_chunked = c.post(
+        "/echo",
+        content=_small(),
+        headers={"content-type": "application/json", "transfer-encoding": "chunked"},
+    )
+    assert ok_chunked.status_code == 200
+
     # Host validation (WEB-06): an unlisted Host is refused
     bad = c.get("/ping", headers={"host": "evil.example"})
     assert bad.status_code == 400
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-58")
+def test_wildcard_hosts_refused_in_production():
+    app = FastAPI()
+
+    @app.get("/ping")
+    def ping():
+        return {"ok": True}
+
+    # Wildcard is allowed in dev (no production signal).
+    install_security(app, env={"BOLTRIG_ALLOWED_HOSTS": "*"})
+
+    # A production signal with wildcard hosts is a fatal boot error.
+    with pytest.raises(RuntimeError):
+        install_security(app, env={"BOLTRIG_PRODUCTION": "1", "BOLTRIG_ALLOWED_HOSTS": "*"})
 
 
 # --------------------------------------------------------------------------- #

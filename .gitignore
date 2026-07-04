@@ -6,6 +6,10 @@ manifest.yaml
 deploy/ca-bundle.crt
 .models/
 
+# --- agent working directories ---
+.claude/
+.skillops/
+
 # --- python ---
 __pycache__/
 *.py[cod]

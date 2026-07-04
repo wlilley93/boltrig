@@ -7,6 +7,7 @@ import {
 import { getSiteStructuredData } from "@/utils/seo/structured-data";
 
 import { LazyCookie } from "@/components/common/Cookie";
+import { SafeJsonLd } from "@/components/common/SafeJsonLd";
 import { AdaptiveGrid } from "@/components/common/grid";
 import { ReducedMotion } from "@/components/common/reduced-motion";
 import { SiteHeader } from "@/components/common/site-header";
@@ -36,12 +37,7 @@ export default function RootLayout({
         />
       </head>
       <body className="antialiased">
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{
-            __html: JSON.stringify(getSiteStructuredData()),
-          }}
-        />
+        <SafeJsonLd data={getSiteStructuredData()} />
         <SiteHeader />
         <ScrollLayout>
           <AdaptiveGrid />
