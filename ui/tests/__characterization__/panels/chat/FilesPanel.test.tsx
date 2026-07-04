@@ -1,11 +1,15 @@
-import { afterEach, describe, it, expect } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, it, expect } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { FilesPanel } from "@/panels/chat/FilesPanel";
 import type { ChatAttachment, ChatMessage } from "@/api/types";
 
 describe("FilesPanel", () => {
   afterEach(() => {
     cleanup();
+  });
+  beforeEach(() => {
+    // trackRecent writes to localStorage on mount; keep tests isolated.
+    window.localStorage.clear();
   });
 
   it("renders all three sections: This session, Pinned, and Recent", () => {
@@ -40,7 +44,26 @@ describe("FilesPanel", () => {
     expect(screen.getByRole("button", { name: "View all" })).toBeTruthy();
   });
 
-  it("renders Recent rows dimmer and without a download icon", () => {
+  it("shows honest empty hints when nothing is pinned or recent", () => {
+    render(
+      <FilesPanel
+        attachments={[] as ChatAttachment[]}
+        messages={[] as ChatMessage[]}
+        onClose={() => undefined}
+      />,
+    );
+    expect(screen.getByText("No pinned files yet")).toBeTruthy();
+    expect(screen.getByText("No recent files")).toBeTruthy();
+  });
+
+  it("renders a tracked Recent row dimmer and without a download icon", () => {
+    // Seed a real recent entry (from a previous session) directly in storage.
+    window.localStorage.setItem(
+      "boltrig:recent-files",
+      JSON.stringify([
+        { id: "release-notes.md#11264", name: "release-notes.md", size: 11264, agent: "Bolt", seenAt: Date.now() },
+      ]),
+    );
     render(
       <FilesPanel
         attachments={[] as ChatAttachment[]}
@@ -49,16 +72,23 @@ describe("FilesPanel", () => {
       />,
     );
 
-    // A known Recent placeholder row should be dimmed.
     const recentName = screen.getByText("release-notes.md");
     const recentRow = recentName.closest(".file-row");
     expect(recentRow).toBeTruthy();
     expect(recentRow?.classList.contains("file-row--dim")).toBe(true);
-    // No download button on Recent rows.
+    // No download button, and no pin toggle, on Recent rows.
     expect(recentRow?.querySelector('button[aria-label^="Download "]')).toBeNull();
+    expect(recentRow?.querySelector('button[aria-label^="Unpin "]')).toBeNull();
+    expect(recentRow?.querySelector('button[aria-label^="Pin "]')).toBeNull();
   });
 
   it("keeps the download icon on This session and Pinned rows", () => {
+    window.localStorage.setItem(
+      "boltrig:pinned-files",
+      JSON.stringify([
+        { id: "architecture.md#18432", name: "architecture.md", size: 18432, agent: "pinned", pinnedAt: Date.now() },
+      ]),
+    );
     const attachment: ChatAttachment = {
       name: "plan.md",
       size: 1024,
@@ -82,5 +112,52 @@ describe("FilesPanel", () => {
     const pinnedRow = pinnedName.closest(".file-row");
     expect(pinnedRow?.querySelector('button[aria-label="Download architecture.md"]')).toBeTruthy();
     expect(pinnedRow?.classList.contains("file-row--dim")).toBe(false);
+  });
+
+  it("pins a session file into the Pinned section and persists it", () => {
+    const attachment: ChatAttachment = {
+      name: "plan.md",
+      size: 1024,
+      media_type: "text/markdown",
+    } as ChatAttachment;
+    render(
+      <FilesPanel
+        attachments={[attachment]}
+        messages={[] as ChatMessage[]}
+        onClose={() => undefined}
+      />,
+    );
+
+    expect(screen.getByText("No pinned files yet")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Pin plan.md" }));
+
+    // The empty hint is gone; the session toggle and the new Pinned row both
+    // offer Unpin, and the entry round-tripped into localStorage.
+    expect(screen.queryByText("No pinned files yet")).toBeNull();
+    expect(screen.getAllByRole("button", { name: "Unpin plan.md" }).length).toBe(2);
+    const stored = JSON.parse(window.localStorage.getItem("boltrig:pinned-files") ?? "[]");
+    expect(stored.length).toBe(1);
+    expect(stored[0].name).toBe("plan.md");
+  });
+
+  it("excludes a current-session file from the Recent display", () => {
+    const attachment: ChatAttachment = {
+      name: "plan.md",
+      size: 1024,
+      media_type: "text/markdown",
+    } as ChatAttachment;
+    render(
+      <FilesPanel
+        attachments={[attachment]}
+        messages={[] as ChatMessage[]}
+        onClose={() => undefined}
+      />,
+    );
+
+    // plan.md is tracked into the recent store on mount, but the Recent section
+    // drops live-session files so it is not listed twice.
+    expect(screen.getByText("No recent files")).toBeTruthy();
+    const stored = JSON.parse(window.localStorage.getItem("boltrig:recent-files") ?? "[]");
+    expect(stored.some((r: { name: string }) => r.name === "plan.md")).toBe(true);
   });
 });

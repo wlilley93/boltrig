@@ -8326,3 +8326,20 @@ body {
   border-color: rgba(94, 105, 221, 0.45);
   animation-delay: 1.2s;
 }
+
+/* === Files panel pinned/recent persistence (sec 13.2) === */
+/* A row that carries a pin toggle gets a 4th grid track for the pin button,
+   sitting between the copy and the download button. */
+.file-row--pinnable {
+  grid-template-columns: 24px minmax(0, 1fr) 24px 28px;
+}
+/* The pin toggle reads as muted when idle and accent (cyan) when pinned or
+   hovered. Appended after the broad .icon-btn rules so source order wins. */
+.file-row__pin {
+  color: var(--chat-muted);
+}
+.file-row__pin:hover,
+.file-row__pin[aria-pressed="true"] {
+  color: var(--chat-accent);
+  background: rgba(255, 255, 255, 0.045);
+}
