@@ -39,7 +39,8 @@ services:
     # pgvector/pgvector:pg16 = stock Postgres 16 + the `vector` extension, so the
     # native vector Memory Engine keeps its store in this one Postgres (no separate
     # vector DB). Drop-in for postgres:16; same data dir, same env.
-    image: pgvector/pgvector:pg16
+    # IAC-002: pinned to tag + digest to prevent supply-chain drift.
+    image: pgvector/pgvector:pg16@sha256:131dcf7ff6a900545df8e7e092c270aa8c6db2f2c818e408cb45ec21316b74e6
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-boltrig}
@@ -63,7 +64,8 @@ services:
       start_period: 10s
 
   redis:
-    image: redis:7
+    # IAC-002: pinned to tag + digest.
+    image: redis:7@sha256:b2b95679e3b46fb51864949ed25ea976fc3a6bcc00a40a1bc00d568cb2822e50
     restart: unless-stopped
     command: ["redis-server", "--save", "", "--appendonly", "no"]
     healthcheck:
@@ -143,7 +145,8 @@ services:
     # Optional durable execution (US-FLT-06). The kernel and fleet run WITHOUT
     # it (P9 degrade); enable it to get durable resume of paused/long runs.
     # hatchet-lite bundles the engine, API and gRPC. Pin a digest for air-gap.
-    image: ghcr.io/hatchet-dev/hatchet/hatchet-lite:latest
+    # IAC-002: pinned to digest; the :latest tag is mutable.
+    image: ghcr.io/hatchet-dev/hatchet/hatchet-lite@sha256:30ff826bdc65efc15a46df61e6d16dcc52f76cf2cf2693e848c6789e2b48718f
     restart: unless-stopped
     environment:
       # M9 (SEC-69): interpolate the DB credential instead of a literal boltrig:boltrig.
@@ -174,7 +177,8 @@ services:
 
   hatchet-dashboard:
     # Optional Hatchet web console (seam). Proxies to the engine API.
-    image: ghcr.io/hatchet-dev/hatchet/hatchet-dashboard:latest
+    # IAC-002: pinned to digest; the :latest tag is mutable.
+    image: ghcr.io/hatchet-dev/hatchet/hatchet-dashboard@sha256:326774d08b1ce9123482cdb0ff24a4c0eb54b112d27207789dffb6f82d2667e9
     restart: unless-stopped
     environment:
       SERVER_URL: http://hatchet-engine:8888
@@ -220,7 +224,8 @@ services:
     # (keys + running it are operator-supplied; the seam is inert until the URL is
     # set, so the default stack is unaffected).
     profiles: ["gateway"]
-    image: maximhq/bifrost:latest
+    # IAC-002: pinned to digest; the :latest tag is mutable.
+    image: maximhq/bifrost@sha256:c4de3a1d6bd2f9b8b0b8f508deaaf0337a793603d2b84b61138cdb35f94a4318
     restart: unless-stopped
     networks:
       - default
@@ -239,7 +244,8 @@ services:
     # (SEC-12, the manifest sensitive_endpoint). OpenAI-compatible on :8000.
     # Enable with: docker compose --profile local up -d
     profiles: ["local"]
-    image: vllm/vllm-openai:latest
+    # IAC-002: pinned to a stable tag + digest. The default :latest tag is mutable.
+    image: vllm/vllm-openai:v0.24.0-ubuntu2404@sha256:bfdefe75b5c3fb83f4f0fcaae8f39fac87941cbadb05cd2203f44a1689236c71
     restart: unless-stopped
     networks:
       - default
@@ -350,11 +356,13 @@ networks:
   # The app network: every service joins this by default.
   default:
     driver: bridge
-  # The Pi sidecar's isolation network (SEC-48). Only the sidecar and the kernel
-  # MCP face plus model endpoints/proxies (bifrost/local-model) sit here. In the
-  # base stack it is a normal bridge so a direct external model endpoint is
-  # reachable; the secure overlay flips it to internal: true to enforce no
-  # arbitrary egress, so Pi must use a sandbox peer for model traffic.
+  # The Pi sidecar's isolation network (SEC-48 / FIND-IAC-001). Only the sidecar
+  # and the kernel MCP face plus model endpoints/proxies (bifrost/local-model) sit
+  # here. WARNING: the base docker-compose.yml is a dev stack. It leaves the
+  # sandbox as a normal bridge so an external model endpoint is reachable without
+  # a local gateway. For production, ALWAYS use the secure overlay
+  # `deploy/compose.secure.yml`, which sets `internal: true` on this network and
+  # forces Pi to route model traffic through the sandbox peers (bifrost/local-model).
   sandbox:
     driver: bridge
 

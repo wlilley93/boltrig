@@ -9,7 +9,8 @@
 # Corporate CA:    drop your PEM at deploy/ca-bundle.crt before building; it is
 #                  installed into the trust store automatically (else skipped).
 
-FROM python:3.12-slim AS base
+# IAC-002: pinned to a stable tag + digest.
+FROM python:3.12.11-slim-bookworm@sha256:519591d6871b7bc437060736b9f7456b8731f1499a57e22e6c285135ae657bf7 AS base
 
 # Build-time egress proxy (harmless when empty). pip honours these env vars.
 ARG HTTP_PROXY=""
@@ -39,11 +40,14 @@ RUN if [ -s /app/deploy/ca-bundle.crt ]; then \
 ENV REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt \
     SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
 
-# Install the project from pyproject (kernel needs only the base dependencies).
-# Copy metadata + package first so the layer caches across source-only edits.
-COPY pyproject.toml /app/pyproject.toml
+# DEP-001: install from a frozen, hash-verified lockfile instead of mutable
+# ranges. The lockfile is generated from pyproject.toml with `uv pip compile`.
+COPY pyproject.toml requirements-lock.txt /app/
+RUN pip install --require-hashes -r /app/requirements-lock.txt
+
+# Install the local package without re-resolving its dependencies.
 COPY boltrig/ /app/boltrig/
-RUN pip install .
+RUN pip install --no-deps .
 
 # Run as an unprivileged user (INF-01 defence in depth). The app reads /app + the
 # read-only mounts and writes nothing to disk (logs go to stdout); the compose

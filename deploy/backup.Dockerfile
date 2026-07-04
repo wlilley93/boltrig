@@ -7,7 +7,8 @@
 # Pin the base image to a specific PostgreSQL minor. For digest pinning, replace
 # the tag with a sha256 reference after pulling the desired image.
 
-FROM postgres:16.4-bookworm AS base
+# IAC-002: pinned to a stable tag + digest.
+FROM postgres:16.4-bookworm@sha256:e62fbf9d3e2b49816a32c400ed2dba83e3b361e6833e624024309c35d334b412 AS base
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     DEBIAN_FRONTEND=noninteractive \

@@ -4,7 +4,8 @@
 # extras so the worker can talk to Hatchet (durable execution) and to inference
 # back ends. Honours the same optional corporate proxy + CA bundle (US-DEP-04).
 
-FROM python:3.12-slim AS base
+# IAC-002: pinned to a stable tag + digest.
+FROM python:3.12.11-slim-bookworm@sha256:519591d6871b7bc437060736b9f7456b8731f1499a57e22e6c285135ae657bf7 AS base
 
 ARG HTTP_PROXY=""
 ARG HTTPS_PROXY=""
@@ -30,10 +31,14 @@ RUN if [ -s /app/deploy/ca-bundle.crt ]; then \
 ENV REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt \
     SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
 
-# Install the project plus the durable-execution and inference extras.
-COPY pyproject.toml /app/pyproject.toml
+# DEP-001: install from a frozen, hash-verified lockfile instead of mutable
+# ranges. The lockfile is generated from pyproject.toml with `uv pip compile`.
+COPY pyproject.toml requirements-lock.txt /app/
+RUN pip install --require-hashes -r /app/requirements-lock.txt
+
+# Install the local package without re-resolving its dependencies.
 COPY boltrig/ /app/boltrig/
-RUN pip install ".[durable,inference]"
+RUN pip install --no-deps .
 
 # Run as an unprivileged user (INF-01). Writes nothing to disk; compose runs it
 # read-only with a tmpfs for /tmp.

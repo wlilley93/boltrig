@@ -13,7 +13,8 @@
 # (for example an internal compose network plus an allow-list proxy); the image
 # itself holds no secrets and opens no inbound ports beyond 8090.
 
-FROM python:3.12-slim AS base
+# IAC-002: pinned to a stable tag + digest.
+FROM python:3.12.11-slim-bookworm@sha256:519591d6871b7bc437060736b9f7456b8731f1499a57e22e6c285135ae657bf7 AS base
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1 \
