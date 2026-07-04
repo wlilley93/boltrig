@@ -17,7 +17,7 @@ import { StoryOverlay } from "@/components/story";
 export const HomeView = () => {
   return (
     <main className="relative w-full bg-black text-white">
-      <h1 className="sr-only">Boltrig - the governed operating system for AI agents</h1>
+      <h1 className="sr-only">Boltrig - AI agents that finish operational work under control</h1>
 
       <div className="fixed inset-0 z-0">
         <BrainCanvas />

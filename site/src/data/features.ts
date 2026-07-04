@@ -24,186 +24,183 @@ export interface FeatureGroup {
 
 export const FEATURE_GROUPS: FeatureGroup[] = [
   {
-    id: "kernel",
-    title: "The governed kernel",
-    hook: "Every agent action passes one audited, permissioned checkpoint. No exceptions, no side doors.",
+    id: "outcomes",
+    title: "Finish more operational work",
+    hook: "Move recurring requests out of chat threads and into tracked agent runs.",
     items: [
       {
-        name: "Ordered pre-execution gates",
+        name: "One place to delegate",
         outcome:
-          "Identity, grants, consequence, human approval, rate limits and idempotency run in order before anything executes.",
+          "Ask Bolt to handle support triage, release prep, renewals, reporting or internal chores from one console.",
       },
       {
-        name: "Tamper-evident audit trail",
+        name: "Specialist workers",
         outcome:
-          "Every action writes exactly one hash-chained record, so the history proves itself under audit.",
+          "Department agents spin up focused workers with only the skills and tools each task requires.",
       },
       {
-        name: "Deny-by-default grants",
+        name: "Durable workflows",
         outcome:
-          "Agents hold the least privilege the job needs, and authority is re-checked on every call.",
+          "Schedule or trigger repeatable workflows so routine work runs without another meeting or reminder.",
       },
       {
-        name: "Hard budget stops",
-        outcome: "Per-run budgets halt an agent before it can overspend.",
+        name: "Work board",
+        outcome: "Track agent and human work together, with nested tasks, status and ownership in one view.",
       },
       {
-        name: "Kernel-held credentials",
+        name: "Reusable skills",
         outcome:
-          "Secrets are resolved inside the checkpoint at the moment of use; agents never see a key.",
+          "Package the procedures your team repeats, then let agents pull them only when the job matches.",
       },
     ],
   },
   {
-    id: "workforce",
-    title: "The agent workforce",
-    hook: "A standing org of agents that does real work, not a single chatbot.",
+    id: "control",
+    title: "Control what agents can change",
+    hook: "Give agents useful access without turning them into unbounded service accounts.",
     items: [
       {
-        name: "Chief of Staff routing",
+        name: "Scoped permissions",
         outcome:
-          "One front door routes each request to the right department head, which spawns short-lived workers for the task.",
+          "Every tool call is checked against the tenant, user and run grants before it executes.",
       },
       {
-        name: "Skills as data",
+        name: "Human approvals",
         outcome:
-          "Agents pull from a shared skill library when the job matches, so new abilities ship without new code.",
+          "High-impact actions pause for a human decision instead of relying on a prompt to be careful.",
       },
       {
-        name: "Cheapest-capable model routing",
-        outcome: "Each task runs on the least expensive model that can do it well.",
+        name: "Secrets stay server-side",
+        outcome: "Credentials are resolved inside Boltrig for one call and are never handed to the agent.",
       },
       {
-        name: "Sensitive data stays local",
-        outcome:
-          "Work marked sensitive is routed to local models; misroutes are refused and audited.",
+        name: "Cost boundaries",
+        outcome: "Per-run budgets stop runaway work before it turns into surprise spend.",
       },
       {
-        name: "No-escalation evals",
+        name: "Sensitive routing",
         outcome:
-          "Test agents in a harness that cannot escalate, before you trust them with real work.",
+          "Sensitive work can be routed to local models and blocked from unsuitable endpoints.",
       },
     ],
   },
   {
-    id: "command",
-    title: "Command and memory",
-    hook: "One conversation to run the whole fleet, with memory you can trust.",
+    id: "evidence",
+    title: "Show the evidence",
+    hook: "Replace vague AI output with a run record your operators and auditors can inspect.",
     items: [
       {
-        name: "One streaming chat",
+        name: "Live execution stream",
         outcome:
-          "Command every agent from a single conversation, with live reasoning, tool calls and approvals as they happen.",
+          "Watch reasoning, tool calls, approvals and handoffs as they happen, then reattach if a client drops.",
       },
       {
-        name: "Fleet memory",
-        outcome:
-          "The fleet remembers, recalls, improves and forgets, with provenance on every fact.",
+        name: "Run inspector",
+        outcome: "Open any run and walk through the steps, workers and tool receipts behind the result.",
       },
       {
-        name: "Screened ingest",
-        outcome: "Secrets and prompt injection are caught before they can enter memory.",
+        name: "Audit trail",
+        outcome:
+          "Every action produces a durable record of who asked, what ran, what changed and whether it was allowed.",
+      },
+      {
+        name: "Memory with provenance",
+        outcome: "Facts the fleet remembers carry source context, so teams can trace where an answer came from.",
+      },
+      {
+        name: "Role-scoped reporting",
+        outcome: "Cost, activity and audit views are filtered to what each person is allowed to see.",
+      },
+    ],
+  },
+  {
+    id: "experience",
+    title: "Meet teams where they work",
+    hook: "Use Boltrig's console, your own frontend, or external agent clients.",
+    items: [
+      {
+        name: "Console chat",
+        outcome:
+          "Command the fleet from a live conversation with files, approvals, tool receipts and run recovery.",
+      },
+      {
+        name: "Headless engine",
+        outcome:
+          "Build your own UI over Boltrig's HTTP, SSE and MCP surfaces without forking the engine.",
+      },
+      {
+        name: "MCP in and out",
+        outcome: "Expose governed capabilities to external agents and consume reviewed MCP tool servers as new verbs.",
       },
       {
         name: "Channel intake",
         outcome:
-          "File work from Slack, Discord, Telegram, WhatsApp or signed webhooks; every sender pairs to a real identity and every message inherits governance.",
+          "Route work from chat platforms or signed webhooks while keeping identity, approvals and audit intact.",
       },
       {
         name: "Governed outbound",
-        outcome: "Messages the fleet sends out are approval-gated and audited.",
+        outcome: "Let agents send updates while high-risk messages stay approval-gated and traceable.",
       },
     ],
   },
   {
-    id: "workflows",
-    title: "Workflows and the work board",
-    hook: "See every piece of agent and human work, and exactly how it ran.",
+    id: "extension",
+    title: "Bring your domain",
+    hook: "Package the nouns, verbs, workflows and rules that make your business specific.",
     items: [
       {
-        name: "Visual workflow canvas",
-        outcome: "Drag, connect and ship durable workflows without writing code.",
+        name: "Plugin bundles",
+        outcome: "Ship project adapters, skills and workflows as an adopted bundle loaded by Boltrig at deploy time.",
       },
       {
-        name: "Scheduled and event triggers",
+        name: "Runtime authoring",
         outcome:
-          "Automations fire on a clock or on events, through the same checkpoint as everything else.",
+          "Author nouns, verbs, bindings, skills and workflows as data from the console or API.",
       },
       {
-        name: "Self-improving library",
+        name: "External systems",
         outcome:
-          "Workflows that succeed are saved and preferred the next time the same job appears.",
+          "Connect SQL, HTTP, messaging and file-backed systems through the same governed verb model.",
       },
       {
-        name: "The work board",
+        name: "Client hard gates",
         outcome:
-          "One board of all agent and human work, with nested work items and an audit tree on every card.",
+          "Model customer-specific go/no-go checks as governed capabilities rather than hidden application logic.",
       },
       {
-        name: "Run inspector",
-        outcome: "Open any run and walk the full nested execution behind it.",
-      },
-    ],
-  },
-  {
-    id: "interop",
-    title: "Open interoperability",
-    hook: "Open at every edge, governed at every edge.",
-    items: [
-      {
-        name: "Capabilities as MCP tools",
-        outcome:
-          "Expose granted capabilities to any external AI agent, with full governance applied to every call.",
-      },
-      {
-        name: "Bring your own tools",
-        outcome:
-          "Plug external MCP tool servers in as new capabilities, inert until reviewed and activated.",
-      },
-      {
-        name: "Integrations as data",
-        outcome:
-          "Adapters declare their verbs, schemas and rate limits; adding one changes no core code.",
-      },
-      {
-        name: "The studio",
-        outcome: "Generate adapters and author verbs and skills from the console.",
-      },
-      {
-        name: "Policy as data",
-        outcome:
-          "Stand up a new tenant by editing one manifest; config changes are themselves governed actions with history and rollback.",
+        name: "No core fork",
+        outcome: "Keep Boltrig's engine standard while each product brings its own domain package.",
       },
     ],
   },
   {
     id: "deployment",
-    title: "Identity and deployment",
-    hook: "Enterprise identity in, one image out, every guarantee tested.",
+    title: "Run it where the data lives",
+    hook: "Self-host the engine and keep enterprise identity, data and credentials under your control.",
     items: [
       {
-        name: "Enterprise SSO",
+        name: "Self-hosted stack",
         outcome:
-          "OIDC sign-in with role and visibility mapping, delegation on behalf of others, and admin-run invitations.",
+          "Run the kernel, database, console and agent runtime on your own infrastructure.",
       },
       {
-        name: "Personal agents",
+        name: "Enterprise access",
         outcome:
-          "Each person gets their own agent, with its own memory, activity log, data export and API tokens.",
+          "Use SSO or first-party invite-only access, with roles mapped to what people may see and do.",
       },
       {
-        name: "Single-image deploy",
+        name: "Private credentials",
         outcome:
-          "Self-host the kernel, database and console as one image on your own infrastructure.",
+          "Store model and integration keys server-side, never in browser code or agent prompts.",
       },
       {
-        name: "Cost and insight reporting",
-        outcome: "Spend and activity reporting, scoped to what each role is allowed to see.",
+        name: "Production deploys",
+        outcome: "Build repeatable Docker deployments with Postgres, Redis, Hatchet and the Pi sidecar.",
       },
       {
-        name: "Provably governed",
+        name: "Tested guarantees",
         outcome:
-          "Every governance guarantee is pinned to a machine-checked test in CI.",
+          "Security and governance claims are pinned to automated tests before they are treated as product guarantees.",
       },
     ],
   },

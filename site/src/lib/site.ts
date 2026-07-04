@@ -9,7 +9,7 @@ import { publicEnv } from "@/env";
 export const siteConfig = {
   name: "Boltrig",
   description:
-    "Run a workforce of AI agents in production and prove every move they make. Boltrig routes every agent action through one audited, permissioned gate, self-hosted on your own infrastructure.",
+    "Boltrig lets teams delegate operational work to AI agents while keeping approvals, permissions, credentials and audit evidence under control.",
   /**
    * Public origin, no trailing slash. Drives canonical URLs, OG tags, the
    * sitemap, and JSON-LD. Set `NEXT_PUBLIC_SITE_URL` in production.

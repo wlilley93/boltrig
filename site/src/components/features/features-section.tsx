@@ -30,17 +30,19 @@ export const FeaturesSection = () => {
             <span aria-hidden className="text-brain-sky/45">
               &gt;
             </span>
-            The_Full_System
+            What_You_Get
           </p>
           <h2
             id="features-title"
             className="text-[2rem] font-semibold leading-[1.16] tracking-tight text-white md:text-[2.6rem]"
           >
-            Everything the checkpoint governs.
+            AI agents that finish work, with controls your team can defend.
           </h2>
           <p className="mt-6 text-lg leading-relaxed text-white/90">
-            Built for engineering, platform and security leaders who want autonomous agents in
-            production without losing control. Six systems, one gate, one record.
+            Boltrig is for teams that want agents doing real operational work:
+            triage, updates, renewals, checks, workflows and handoffs. The
+            architecture is there, but the value is simpler: faster work, less
+            manual coordination and a clear record of what changed.
           </p>
         </Inview>
 
