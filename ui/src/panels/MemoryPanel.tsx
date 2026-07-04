@@ -11,15 +11,15 @@ import { useState } from "react";
 
 import {
   PageIntro,
-} from "./ux";
+} from "@/panels/ux";
 import {
   MEMORY_TABS,
   type MemoryTab,
-} from "./memoryPanel/helpers";
-import { RecallTab } from "./memoryPanel/RecallTab";
-import { BrowseTab } from "./memoryPanel/BrowseTab";
-import { RememberTab } from "./memoryPanel/RememberTab";
-import { IngestTab } from "./memoryPanel/IngestTab";
+} from "@/panels/memoryPanel/helpers";
+import { RecallTab } from "@/panels/memoryPanel/RecallTab";
+import { BrowseTab } from "@/panels/memoryPanel/BrowseTab";
+import { RememberTab } from "@/panels/memoryPanel/RememberTab";
+import { IngestTab } from "@/panels/memoryPanel/IngestTab";
 
 // --- the panel --------------------------------------------------------------
 

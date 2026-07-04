@@ -1,11 +1,11 @@
 import { useState } from "react";
 
-import { api } from "../../api/client";
-import type { MemoryFactView, RecallMode } from "../../api/types";
-import { errText } from "../shared";
-import { EmptyState, Field, Select } from "../ux";
-import { denialText, isDenied, RECALL_MODE_OPTIONS } from "./helpers";
-import { FactCard } from "./FactCard";
+import { api } from "@/api/client";
+import type { MemoryFactView, RecallMode } from "@/api/types";
+import { errText } from "@/panels/shared";
+import { EmptyState, Field, Select } from "@/panels/ux";
+import { denialText, isDenied, RECALL_MODE_OPTIONS } from "@/panels/memoryPanel/helpers";
+import { FactCard } from "@/panels/memoryPanel/FactCard";
 
 type RecallFormFieldsProps = {
   query: string;

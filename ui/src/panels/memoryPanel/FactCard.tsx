@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
-import type { MemoryFactView, MemoryProvenance } from "../../api/types";
-import { CodeBlock } from "../shared";
+import type { MemoryFactView, MemoryProvenance } from "@/api/types";
+import { CodeBlock } from "@/panels/shared";
 
 type FactCardProps = {
   fact: MemoryFactView;

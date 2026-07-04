@@ -1,11 +1,11 @@
 import { useState } from "react";
 
-import { api } from "../../api/client";
-import type { MemoryIngestResponse, MemoryIngestionRow } from "../../api/types";
-import { useFetch } from "../../useFetch";
-import { errText } from "../shared";
-import { Field, Hint, Select } from "../ux";
-import { denialText, isDenied, SOURCE_KIND_OPTIONS } from "./helpers";
+import { api } from "@/api/client";
+import type { MemoryIngestResponse, MemoryIngestionRow } from "@/api/types";
+import { useFetch } from "@/useFetch";
+import { errText } from "@/panels/shared";
+import { Field, Hint, Select } from "@/panels/ux";
+import { denialText, isDenied, SOURCE_KIND_OPTIONS } from "@/panels/memoryPanel/helpers";
 
 type IngestFormProps = {
   sourceKind: string;

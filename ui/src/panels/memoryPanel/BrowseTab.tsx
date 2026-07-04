@@ -1,12 +1,12 @@
 import { useState } from "react";
 
-import { api } from "../../api/client";
-import type { MemoryFactView } from "../../api/types";
-import { useFetch } from "../../useFetch";
-import { errText } from "../shared";
-import { FetchError, Field, InfoCallout, Select } from "../ux";
-import { denialText, isDenied, KIND_FILTER_OPTIONS } from "./helpers";
-import { FactCard } from "./FactCard";
+import { api } from "@/api/client";
+import type { MemoryFactView } from "@/api/types";
+import { useFetch } from "@/useFetch";
+import { errText } from "@/panels/shared";
+import { FetchError, Field, InfoCallout, Select } from "@/panels/ux";
+import { denialText, isDenied, KIND_FILTER_OPTIONS } from "@/panels/memoryPanel/helpers";
+import { FactCard } from "@/panels/memoryPanel/FactCard";
 
 type BrowseFilterProps = {
   kind: string;

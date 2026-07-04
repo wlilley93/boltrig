@@ -1,10 +1,10 @@
 import { useState } from "react";
 
-import { api } from "../../api/client";
-import type { MemoryRememberResponse } from "../../api/types";
-import { errText } from "../shared";
-import { Field, InfoCallout, Select } from "../ux";
-import { denialText, isDenied, KIND_OPTIONS } from "./helpers";
+import { api } from "@/api/client";
+import type { MemoryRememberResponse } from "@/api/types";
+import { errText } from "@/panels/shared";
+import { Field, InfoCallout, Select } from "@/panels/ux";
+import { denialText, isDenied, KIND_OPTIONS } from "@/panels/memoryPanel/helpers";
 
 type RememberFormProps = {
   content: string;

@@ -1,4 +1,4 @@
-import type { Option } from "../ux";
+import type { Option } from "@/panels/ux";
 
 export type MemoryTab = "recall" | "browse" | "remember" | "ingest";
 
