@@ -5,9 +5,8 @@
 // never appears and the children render straight through - see auth.ts for the
 // deliberate 401-only guard.
 //
-// Two public pages live here (neither needs a session): the login form, and the
-// accept-invite page reached by an invite link carrying a single-use token
-// (#/accept-invite?token=...). Everything else is gated behind a live session.
+// The public pages (login, accept-invite, two-factor enrollment) live in the
+// AuthGate/ folder; this file is the thin wrapper that decides which one to show.
 
 import { useEffect } from "react";
 import type { ReactNode } from "react";
