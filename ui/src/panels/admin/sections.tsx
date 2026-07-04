@@ -18,7 +18,6 @@
 // object-shaped SchemaFormV2 can render it as one labelled, validated field
 // (fail-closed via onValidity), and fromFormValue unwraps it back to the array.
 
-import { schemaDefaults } from "../uxForm";
 import {
   NotificationDefaultsList,
   PriceList,
@@ -26,42 +25,14 @@ import {
   SkillsByRoleList,
 } from "./editors";
 import type { AdminSection } from "@/panels/admin/admin-sections/types";
+import {
+  fromFormValue,
+  stableKey,
+  toFormValue,
+} from "@/panels/admin/admin-sections/formValue";
 
 export type { AdminSection };
-
-function isObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
-
-// Section value (as the server stores it) -> the object SchemaFormV2 edits.
-// List sections wrap the array; object sections seed defaults under the loaded
-// value so no known field opens blank while unknown keys are preserved.
-export function toFormValue(
-  section: AdminSection,
-  loaded: unknown,
-): Record<string, unknown> {
-  if (section.list) {
-    return { items: Array.isArray(loaded) ? loaded : [] };
-  }
-  return { ...schemaDefaults(section.schema), ...(isObject(loaded) ? loaded : {}) };
-}
-
-// The SchemaFormV2 object -> the section value the server persists. List
-// sections unwrap back to the bare array; object sections send the whole object
-// (preserved unknown keys included).
-export function fromFormValue(section: AdminSection, form: Record<string, unknown>): unknown {
-  if (section.list) {
-    const items = form.items;
-    return Array.isArray(items) ? items : [];
-  }
-  return form;
-}
-
-// A stable structural compare for the dirty check (key order independent enough
-// for a form whose keys come from a fixed schema + a preserved loaded object).
-export function stableKey(value: unknown): string {
-  return JSON.stringify(value);
-}
+export { fromFormValue, stableKey, toFormValue };
 
 const RESIDENCY = ["eu", "us", "global"];
 const CHANNELS = ["teams", "email", "slack"];
