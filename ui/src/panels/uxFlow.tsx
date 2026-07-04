@@ -18,7 +18,6 @@ import {
 } from "react";
 import { api } from "@/api/client";
 import type { InvokeResult } from "@/api/types";
-import { setComposerPrefill } from "@/composerPrefill";
 import { useSlideActive } from "@/deck/context";
 import { navigate } from "@/router";
 import { apiReason, CodeBlock } from "@/panels/shared";
@@ -426,25 +425,7 @@ export function PendingHumanCard({
   );
 }
 
-// --- ByChat (N16, P32): the parity law made visible --------------------------
-// Always-visible label per AMENDMENTS item 7. Prefills the chat composer with
-// the phrase (one-shot module store) and moves the deck; never auto-sends.
-
-export function ByChat({ phrase }: { phrase: string }) {
-  return (
-    <button
-      type="button"
-      className="btn btn--ghost btn--sm ux-bychat"
-      title={phrase}
-      onClick={() => {
-        setComposerPrefill(phrase);
-        navigate("/chat");
-      }}
-    >
-      Do this in chat
-    </button>
-  );
-}
+export { ByChat } from "@/panels/uxFlow/byChat";
 
 // --- SecretOnce (N18, settings spec 1.5/3): show-once secret material -------
 // Warn tone, never amber: no kernel governance is in play (L4).
