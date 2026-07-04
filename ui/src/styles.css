@@ -8113,3 +8113,29 @@ body {
    zeroes transition durations, so the drawer/backdrop snap rather than slide
    while still showing/hiding on toggle. No transform overrides are needed; the
    base transform rules keep the open/closed positions correct. */
+
+/* === Composer fleet shortcut + files sections + plus menu (sec 18, 13.2, 5) === */
+
+/* "View all" link in the files footer: muted at rest, cyan on hover (sec 13.2).
+   Appended so the earlier, broader .files-panel__foot button rule is overridden
+   only for this named link without touching the existing rule. */
+.files-panel__view-all {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  color: var(--chat-muted);
+  font-size: 11px;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+.files-panel__view-all:hover {
+  color: var(--chat-accent);
+}
+
+/* Recent rows render dimmer than session/pinned rows (sec 13.2: #B8C8DA instead
+   of the default text color). The row-level .file-row--dim sets the base color;
+   this additionally dims the metadata line, which has its own muted color. */
+.file-row--dim .file-row__copy strong,
+.file-row--dim .file-row__copy small {
+  color: #B8C8DA;
+}
