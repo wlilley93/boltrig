@@ -25,7 +25,8 @@ import { NodeDrawer, DRAWER_DRAG_KIND } from "./workflowCanvas/NodeDrawer";
 import { NodeDetailModal } from "./workflowCanvas/NodeDetailModal";
 import { ExecutionConsole } from "./workflowCanvas/ExecutionConsole";
 import { BoltChatPanel } from "./workflowCanvas/BoltChatPanel";
-import { StickyNotes, type StickyNote } from "./workflowCanvas/StickyNotes";
+import { StickyNotes } from "./workflowCanvas/StickyNotes";
+import { useStickyNotes } from "./workflowCanvas/useStickyNotes";
 import type { NodeVisualKind } from "./workflowCanvas/nodeTaxonomy";
 import type { XYPosition } from "@xyflow/react";
 
@@ -85,7 +86,7 @@ function CanvasSurface({ ctx }: { ctx: Ctx }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [consoleOpen, setConsoleOpen] = useState(false);
   const [boltOpen, setBoltOpen] = useState(false);
-  const [notes, setNotes] = useState<StickyNote[]>([]);
+  const [notes, setNotes] = useStickyNotes(meta.wfId);
 
   const addAtCentre = (kind: NodeVisualKind) => {
     const centre = rf.screenToFlowPosition({
