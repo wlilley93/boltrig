@@ -32,6 +32,22 @@ export function prettyJson(value: unknown): string {
   }
 }
 
+// The kernel wraps delegated conversation turns in a safety envelope before they
+// reach a sub-agent, e.g. `User: <untrusted kind="conversation_turn"
+// source="user">Hello</untrusted>\nrun: bf97e4e4...`. That raw form must never
+// reach the DOM. This unwraps the inner text the user actually sent and drops
+// the role prefix, provenance line and any other angle-bracket tags, so a
+// displayed task / label reads as plain text again.
+export function cleanTaskText(raw: string | undefined | null): string {
+  if (!raw) return "";
+  let s = String(raw);
+  s = s.replace(/<untrusted\b[^>]*>([\s\S]*?)<\/untrusted>/gi, "$1");
+  s = s.replace(/<\/?[a-z_][\w:-]*\b[^>]*>/gi, "");
+  s = s.replace(/^\s*run:\s*[0-9a-f]{6,}\s*$/gim, "");
+  s = s.replace(/^\s*(user|assistant|system):\s*/gim, "");
+  return s.trim();
+}
+
 // Parse JSON from a textarea, returning the fallback for empty input and
 // throwing a friendly "invalid JSON" so a form can surface it rather than crash.
 export function parseJson<T>(text: string, fallback: T): T {

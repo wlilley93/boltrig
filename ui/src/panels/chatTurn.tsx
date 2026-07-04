@@ -7,10 +7,11 @@
 // inline-HITL parts.
 
 import { useState } from "react";
+import type { CSSProperties } from "react";
 
 import { api } from "../api/client";
 import type { ChatEvent, HITLKind } from "../api/types";
-import { apiReason, errText } from "./shared";
+import { apiReason, cleanTaskText, errText } from "./shared";
 import { StatusBadge, TOOL_STATUS } from "./ux";
 
 interface ToolEntry {
@@ -201,12 +202,36 @@ export function normalizeEvents(events: ChatEvent[]): NormalizedTurn {
   };
 }
 
-function asPretty(value: unknown): string {
-  if (typeof value === "string") return value;
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
+function toolLabel(verb: string): string {
+  const clean = verb.replace(/^control\./, "").replace(/\./g, " ");
+  return clean.charAt(0).toUpperCase() + clean.slice(1);
+}
+
+function toolStatusClass(status: string): string {
+  switch (status) {
+    case "ok":
+      return "tool-card--ok";
+    case "pending":
+      return "tool-card--running";
+    case "degraded":
+    case "error":
+      return "tool-card--denied";
+    default:
+      return "tool-card--denied";
+  }
+}
+
+function toolStatusColor(status: string): string {
+  switch (status) {
+    case "ok":
+      return "#3FB984";
+    case "pending":
+      return "#3DD3F0";
+    case "degraded":
+    case "error":
+      return "#F0654A";
+    default:
+      return "#F0654A";
   }
 }
 
@@ -231,27 +256,49 @@ function ToolKeys({ label, keys }: { label: string; keys: string[] }) {
 }
 
 function ToolCard({ tool }: { tool: ToolEntry }) {
-  const argKeys = tool.argKeys ?? [];
   const resultKeys = tool.resultKeys ?? [];
   // Only the run relay carries the raw input/output; when present, the card is
   // expandable to show them. On the chat stream it is a flat, keys-only callout.
   const hasIo = tool.input !== undefined || tool.output !== undefined;
+  const statusClass = toolStatusClass(tool.status);
+  const statusColor = toolStatusColor(tool.status);
 
   const head = (
     <>
-      <code className="badge badge--verb">{tool.verb}</code>
-      <StatusBadge value={tool.status} glossary={TOOL_STATUS} />
-      {argKeys.length > 0 ? (
-        <ToolKeys label="args" keys={argKeys} />
-      ) : (
-        <span className="muted tool-card__keys">no args</span>
+      <span
+        className="tool-card__dot"
+        style={{ color: statusColor, background: statusColor, boxShadow: "0 0 5px currentColor" }}
+        aria-hidden="true"
+      />
+      <span className="tool-card__label">{toolLabel(tool.verb)}</span>
+      <StatusBadge value={tool.status} glossary={TOOL_STATUS} compact />
+      <span className="tool-card__time">{tool.status}</span>
+      {hasIo && (
+        <span className="tool-card__chevron" aria-hidden="true">
+          &#9656;
+        </span>
       )}
     </>
   );
 
+  const detail = (
+    <div className="tool-card__detail">
+      <div>
+        verb <span>{tool.verb}</span>
+      </div>
+      <div>
+        receipt <span>{tool.callId ?? tool.key}</span>
+      </div>
+      <div>
+        policy <span>policies approved</span>
+      </div>
+      <div>{tool.status}</div>
+    </div>
+  );
+
   if (!hasIo) {
     return (
-      <div className="tool-card tool-card--flat">
+      <div className={`tool-card tool-card--flat ${statusClass}`}>
         <div className="tool-card__head">{head}</div>
         {resultKeys.length > 0 && (
           <div className="tool-card__body">
@@ -263,22 +310,11 @@ function ToolCard({ tool }: { tool: ToolEntry }) {
   }
 
   return (
-    <details className="tool-card">
+    <details className={`tool-card ${statusClass}`}>
       <summary className="tool-card__head">{head}</summary>
       <div className="tool-card__body">
         {resultKeys.length > 0 && <ToolKeys label="result" keys={resultKeys} />}
-        {tool.input !== undefined && (
-          <div className="tool-card__io">
-            <span className="muted">input</span>
-            <pre>{asPretty(tool.input)}</pre>
-          </div>
-        )}
-        {tool.output !== undefined && (
-          <div className="tool-card__io">
-            <span className="muted">output</span>
-            <pre>{asPretty(tool.output)}</pre>
-          </div>
-        )}
+        {detail}
       </div>
     </details>
   );
@@ -311,18 +347,36 @@ function StepsCard({ steps }: { steps: StepEntry[] }) {
 // When onOpenRun is provided the child run id becomes a handle that raises the
 // Run drawer keyed by it, so a viewer can descend the run tree the backbone
 // nests (the consumer-side run nesting).
+const SUBAGENT_COLORS = ["#5E69DD", "#FF7A45", "#7C8BFF", "#3FB984", "#3DD3F0"];
+
 function SubagentCard({
   sub,
+  color,
   onOpenRun,
 }: {
   sub: SubagentEntry;
+  color?: string;
   onOpenRun?: (runId: string) => void;
 }) {
+  const agentColor = color ?? "#5E69DD";
   return (
-    <div className="subagent-card">
+    <div
+      className="subagent-card"
+      style={{ "--agent-color": agentColor } as CSSProperties}
+    >
       <div className="subagent-card__head">
-        <span className="badge">sub-agent</span>
-        <span className="subagent-card__task">{sub.task || "(no task)"}</span>
+        <span className="subagent-card__avatar" style={{ background: agentColor }}>
+          W
+        </span>
+        <span className="subagent-card__meta">
+          <span className="subagent-card__name">Worker</span>
+          <span className="subagent-card__role">ephemeral</span>
+        </span>
+        <span className="subagent-card__task">{cleanTaskText(sub.task) || "(no task)"}</span>
+        <span className="subagent-card__steps">0</span>
+        <span className="subagent-card__chevron" aria-hidden="true">
+          &#9656;
+        </span>
       </div>
       {sub.skills.length > 0 && (
         <div className="subagent-card__skills">
@@ -335,11 +389,15 @@ function SubagentCard({
       )}
       {onOpenRun ? (
         <button
-          className="run-handle"
+          className="subagent-card__open-run"
           title="Open this sub-agent's run"
           onClick={() => onOpenRun(sub.childRunId)}
         >
-          run: <code>{sub.childRunId}</code>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="4" width="18" height="16" rx="1.5" />
+            <path d="M15 4v16" />
+          </svg>
+          Open run
         </button>
       ) : (
         <code className="muted">{sub.childRunId}</code>
@@ -570,8 +628,13 @@ export function TurnExtras({
       {turn.tools.map((t) => (
         <ToolCard key={t.key} tool={t} />
       ))}
-      {turn.subagents.map((s) => (
-        <SubagentCard key={s.key} sub={s} onOpenRun={onOpenRun} />
+      {turn.subagents.map((s, i) => (
+        <SubagentCard
+          key={s.key}
+          sub={s}
+          color={SUBAGENT_COLORS[i % SUBAGENT_COLORS.length]}
+          onOpenRun={onOpenRun}
+        />
       ))}
       {turn.hitls.map((h) => (
         <ChatHitlCard

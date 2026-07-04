@@ -321,19 +321,24 @@ export function StatusBadge({
   value,
   glossary,
   fallbackLabel,
+  compact,
 }: {
   value: string | undefined | null;
   glossary: Record<string, Term>;
   fallbackLabel?: string;
+  compact?: boolean;
 }) {
   const key = (value ?? "").toString();
   const term = glossary[key];
+  const label = term ? term.label : (fallbackLabel ?? key ?? "-");
+  const display = compact ? label.toLowerCase() : label;
+  const baseCls = compact ? "badge badge--compact" : "badge";
   if (!term) {
-    return <span className="badge" title={key}>{fallbackLabel ?? key ?? "-"}</span>;
+    return <span className={baseCls} title={key}>{display}</span>;
   }
   return (
-    <span className={`badge ${term.cls}`} title={term.tip}>
-      {term.label}
+    <span className={`${baseCls} ${term.cls}`} title={term.tip}>
+      {display}
     </span>
   );
 }
