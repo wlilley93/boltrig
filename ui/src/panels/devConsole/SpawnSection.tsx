@@ -66,6 +66,50 @@ export function useSpawn(skillsList: FetchState<SkillsResponse>) {
   };
 }
 
+function SkillChips({
+  availableSkills,
+  addSkill,
+}: {
+  availableSkills: { id: string }[];
+  addSkill: (id: string) => void;
+}) {
+  if (availableSkills.length === 0) return null;
+  return (
+    <div className="kv">
+      <span className="ux-hint">Add a skill:</span>
+      {availableSkills.map((s) => (
+        <button
+          key={s.id}
+          type="button"
+          className="tag tag--accent"
+          style={{ cursor: "pointer" }}
+          title={`Add ${s.id}`}
+          onClick={() => addSkill(s.id)}
+        >
+          {s.id}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function SpawnResultView({ result }: { result: SpawnResult }) {
+  return (
+    <div className="stack">
+      <div className="row-line">
+        <span className="badge">{result.status ?? "?"}</span>
+        {result.run_id && <RunLink runId={result.run_id} />}
+      </div>
+      {result.reason && <p className="error">{result.reason}</p>}
+      <div className="row-line">
+        <span className="muted">Permissions the agent got</span>
+        <GrantList grants={result.effective_grants} />
+      </div>
+      <CodeBlock value={result} />
+    </div>
+  );
+}
+
 export function SpawnSection({ skillsList }: { skillsList: FetchState<SkillsResponse> }) {
   const {
     availableSkills,
@@ -107,23 +151,7 @@ export function SpawnSection({ skillsList }: { skillsList: FetchState<SkillsResp
       >
         <input value={skills} onChange={(e) => setSkills(e.target.value)} />
       </Field>
-      {availableSkills.length > 0 && (
-        <div className="kv">
-          <span className="ux-hint">Add a skill:</span>
-          {availableSkills.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              className="tag tag--accent"
-              style={{ cursor: "pointer" }}
-              title={`Add ${s.id}`}
-              onClick={() => addSkill(s.id)}
-            >
-              {s.id}
-            </button>
-          ))}
-        </div>
-      )}
+      <SkillChips availableSkills={availableSkills} addSkill={addSkill} />
       <details>
         <summary className="ux-hint" style={{ cursor: "pointer" }}>
           Advanced: routing preferences
@@ -150,22 +178,7 @@ export function SpawnSection({ skillsList }: { skillsList: FetchState<SkillsResp
         </button>
         {spawnError && <span className="error">{spawnError}</span>}
       </div>
-      {spawnResult ? (
-        <div className="stack">
-          <div className="row-line">
-            <span className="badge">{spawnResult.status ?? "?"}</span>
-            {spawnResult.run_id && <RunLink runId={spawnResult.run_id} />}
-          </div>
-          {spawnResult.reason && <p className="error">{spawnResult.reason}</p>}
-          <div className="row-line">
-            <span className="muted">Permissions the agent got</span>
-            <GrantList grants={spawnResult.effective_grants} />
-          </div>
-          <CodeBlock value={spawnResult} />
-        </div>
-      ) : (
-        <Hint>Run a spawn to see the agent's permissions and result here.</Hint>
-      )}
+      {spawnResult ? <SpawnResultView result={spawnResult} /> : <Hint>Run a spawn to see the agent's permissions and result here.</Hint>}
     </div>
   );
 }

@@ -16,6 +16,32 @@ import {
 import { SchemaFormV2 } from "@/panels/uxForm";
 import { runIdOf, safeObj, schemaKeys, skeletonFromSchema } from "./pure";
 
+function parseInvokeBody(
+  noun: string,
+  verb: string,
+  params: string,
+  invContext: string,
+  invRun: string,
+): { ok: true; req: InvokeRequest } | { ok: false; error: string } {
+  let p: Record<string, unknown>;
+  try {
+    p = parseJson<Record<string, unknown>>(params, {});
+  } catch (err) {
+    return { ok: false, error: `params: ${errText(err)}` };
+  }
+  let ctx: Record<string, unknown>;
+  try {
+    ctx = parseJson<Record<string, unknown>>(invContext, {});
+  } catch (err) {
+    return { ok: false, error: `context: ${errText(err)}` };
+  }
+  const rid = invRun.trim();
+  if (rid) ctx = { ...ctx, run_id: rid };
+  const req: InvokeRequest = { noun: noun.trim(), verb: verb.trim(), params: p };
+  if (Object.keys(ctx).length > 0) req.context = ctx;
+  return { ok: true, req };
+}
+
 export function useInvoke(caps: FetchState<CapabilitiesResponse>) {
   const verbs = caps.data?.verbs ?? [];
 
@@ -49,29 +75,16 @@ export function useInvoke(caps: FetchState<CapabilitiesResponse>) {
       setInvError("Pick a verb first.");
       return;
     }
-    let p: Record<string, unknown>;
-    let ctx: Record<string, unknown>;
-    try {
-      p = parseJson<Record<string, unknown>>(params, {});
-    } catch (err) {
-      setInvError(`params: ${errText(err)}`);
+    const built = parseInvokeBody(noun, verb, params, invContext, invRun);
+    if (!built.ok) {
+      setInvError(built.error);
       return;
     }
-    try {
-      ctx = parseJson<Record<string, unknown>>(invContext, {});
-    } catch (err) {
-      setInvError(`context: ${errText(err)}`);
-      return;
-    }
-    const rid = invRun.trim();
-    if (rid) ctx = { ...ctx, run_id: rid };
     setInvBusy(true);
     setInvError(null);
     setInvResult(null);
     try {
-      const req: InvokeRequest = { noun: noun.trim(), verb: verb.trim(), params: p };
-      if (Object.keys(ctx).length > 0) req.context = ctx;
-      const res = await api.invoke(req);
+      const res = await api.invoke(built.req);
       setInvResult(res);
     } catch (err) {
       setInvError(errText(err));
@@ -81,7 +94,6 @@ export function useInvoke(caps: FetchState<CapabilitiesResponse>) {
   }
 
   return {
-    caps,
     verbs,
     noun,
     setNoun,
@@ -134,6 +146,176 @@ function InvokeResultView({ result }: { result: InvokeResult }) {
   );
 }
 
+interface InvokeArgumentsProps {
+  selectedVerb: ReturnType<typeof useInvoke>["selectedVerb"];
+  keys: ReturnType<typeof useInvoke>["keys"];
+  params: string;
+  setParams: (v: string) => void;
+}
+
+function InvokeArguments({ selectedVerb, keys, params, setParams }: InvokeArgumentsProps) {
+  if (!selectedVerb || (!keys.required.length && !keys.optional.length)) {
+    return (
+      <Field
+        label="Arguments"
+        hint={
+          selectedVerb
+            ? "This verb takes no arguments."
+            : "Pick a verb to see the arguments it expects. Arguments are JSON the kernel passes to the verb - they are data, never executed."
+        }
+      >
+        <textarea
+          className="code"
+          value={params}
+          onChange={(e) => setParams(e.target.value)}
+        />
+      </Field>
+    );
+  }
+  return (
+    <>
+      <div className="form__title" style={{ fontSize: "var(--fs-sm)" }}>
+        Arguments
+      </div>
+      <Hint>The values this verb expects. They are data the kernel passes in, never executed.</Hint>
+      <SchemaFormV2
+        schema={selectedVerb.input_schema}
+        value={safeObj(params)}
+        onChange={(o) => setParams(JSON.stringify(o, null, 2))}
+      />
+      <details>
+        <summary className="ux-hint" style={{ cursor: "pointer" }}>
+          Edit as JSON / show schema
+        </summary>
+        <textarea
+          className="code"
+          value={params}
+          onChange={(e) => setParams(e.target.value)}
+        />
+        <CodeBlock value={selectedVerb.input_schema} />
+      </details>
+    </>
+  );
+}
+
+interface InvokeAdvancedProps {
+  manual: boolean;
+  setManual: (open: boolean) => void;
+  invRun: string;
+  setInvRun: (v: string) => void;
+  noun: string;
+  setNoun: (v: string) => void;
+  verb: string;
+  setVerb: (v: string) => void;
+  invContext: string;
+  setInvContext: (v: string) => void;
+}
+
+function InvokeAdvanced(props: InvokeAdvancedProps) {
+  const {
+    manual,
+    setManual,
+    invRun,
+    setInvRun,
+    noun,
+    setNoun,
+    verb,
+    setVerb,
+    invContext,
+    setInvContext,
+  } = props;
+  return (
+    <details open={manual} onToggle={(e) => setManual((e.target as HTMLDetailsElement).open)}>
+      <summary className="ux-hint" style={{ cursor: "pointer" }}>
+        Advanced: run id, context, manual verb entry
+      </summary>
+      <div className="form__grid" style={{ marginTop: 10 }}>
+        <Field
+          label="Run id"
+          hint="Attach this call to an existing run for audit threading. Leave blank to start fresh."
+        >
+          <input value={invRun} onChange={(e) => setInvRun(e.target.value)} />
+        </Field>
+        <Field label="Noun" hint="Set automatically from the verb you pick.">
+          <input value={noun} onChange={(e) => setNoun(e.target.value)} />
+        </Field>
+        <Field label="Verb id" hint="Set automatically from the picker.">
+          <input value={verb} onChange={(e) => setVerb(e.target.value)} />
+        </Field>
+      </div>
+      <Field
+        label="Extra context (JSON)"
+        hint="Extra execution context for the kernel. Most calls leave this empty."
+        example='{"idempotency_key": "..."}'
+      >
+        <textarea
+          className="code"
+          value={invContext}
+          onChange={(e) => setInvContext(e.target.value)}
+        />
+      </Field>
+    </details>
+  );
+}
+
+interface VerbPickerProps {
+  verbOptions: { value: string; label: string }[];
+  pickVerb: (id: string) => void;
+  selectedVerb: ReturnType<typeof useInvoke>["selectedVerb"];
+  verb: string;
+  noun: string;
+}
+
+function VerbPicker({ verbOptions, pickVerb, selectedVerb, verb, noun }: VerbPickerProps) {
+  return (
+    <>
+      <Field
+        label="Verb"
+        hint="Choose an action from the capabilities you are allowed to call."
+      >
+        <Select value="" ariaLabel="Pick a verb" onChange={pickVerb} options={verbOptions} />
+      </Field>
+
+      {selectedVerb && (
+        <div className="row-line" style={{ borderBottom: "none", paddingBottom: 0 }}>
+          <span className="ux-hint">
+            Selected: <code className="mono">{verb}</code> on{" "}
+            <code className="mono">{noun}</code>
+          </span>
+          <StatusBadge value={selectedVerb.consequence} glossary={CONSEQUENCE} />
+        </div>
+      )}
+      {selectedVerb?.consequence === "high" && (
+        <InfoCallout tone="consequence" title="High-consequence verb">
+          This performs a real, possibly irreversible action (it changes state,
+          sends, or spends). It may pause for human approval before running.
+        </InfoCallout>
+      )}
+    </>
+  );
+}
+
+function InvokeActions({
+  invBusy,
+  verb,
+  invoke,
+  invError,
+}: {
+  invBusy: boolean;
+  verb: string;
+  invoke: () => Promise<void>;
+  invError: string | null;
+}) {
+  return (
+    <div className="form__actions">
+      <button className="btn btn--primary" disabled={invBusy || !verb} onClick={invoke}>
+        {invBusy ? "Running..." : "Run verb"}
+      </button>
+      {invError && <span className="error">{invError}</span>}
+    </div>
+  );
+}
+
 export function InvokeSection({ caps }: { caps: FetchState<CapabilitiesResponse> }) {
   const {
     verbs,
@@ -176,110 +358,35 @@ export function InvokeSection({ caps }: { caps: FetchState<CapabilitiesResponse>
         />
       ) : null}
 
-      <Field
-        label="Verb"
-        hint="Choose an action from the capabilities you are allowed to call."
-      >
-        <Select value="" ariaLabel="Pick a verb" onChange={pickVerb} options={verbOptions} />
-      </Field>
+      <VerbPicker
+        verbOptions={verbOptions}
+        pickVerb={pickVerb}
+        selectedVerb={selectedVerb}
+        verb={verb}
+        noun={noun}
+      />
 
-      {selectedVerb && (
-        <div className="row-line" style={{ borderBottom: "none", paddingBottom: 0 }}>
-          <span className="ux-hint">
-            Selected: <code className="mono">{verb}</code> on{" "}
-            <code className="mono">{noun}</code>
-          </span>
-          <StatusBadge value={selectedVerb.consequence} glossary={CONSEQUENCE} />
-        </div>
-      )}
-      {selectedVerb?.consequence === "high" && (
-        <InfoCallout tone="consequence" title="High-consequence verb">
-          This performs a real, possibly irreversible action (it changes state,
-          sends, or spends). It may pause for human approval before running.
-        </InfoCallout>
-      )}
+      <InvokeArguments
+        selectedVerb={selectedVerb}
+        keys={keys}
+        params={params}
+        setParams={setParams}
+      />
 
-      {selectedVerb && (keys.required.length || keys.optional.length) ? (
-        <>
-          <div className="form__title" style={{ fontSize: "var(--fs-sm)" }}>
-            Arguments
-          </div>
-          <Hint>The values this verb expects. They are data the kernel passes in, never executed.</Hint>
-          <SchemaFormV2
-            schema={selectedVerb.input_schema}
-            value={safeObj(params)}
-            onChange={(o) => setParams(JSON.stringify(o, null, 2))}
-          />
-          <details>
-            <summary className="ux-hint" style={{ cursor: "pointer" }}>
-              Edit as JSON / show schema
-            </summary>
-            <textarea
-              className="code"
-              value={params}
-              onChange={(e) => setParams(e.target.value)}
-            />
-            <CodeBlock value={selectedVerb.input_schema} />
-          </details>
-        </>
-      ) : (
-        <Field
-          label="Arguments"
-          hint={
-            selectedVerb
-              ? "This verb takes no arguments."
-              : "Pick a verb to see the arguments it expects. Arguments are JSON the kernel passes to the verb - they are data, never executed."
-          }
-        >
-          <textarea
-            className="code"
-            value={params}
-            onChange={(e) => setParams(e.target.value)}
-          />
-        </Field>
-      )}
+      <InvokeAdvanced
+        manual={manual}
+        setManual={setManual}
+        invRun={invRun}
+        setInvRun={setInvRun}
+        noun={noun}
+        setNoun={setNoun}
+        verb={verb}
+        setVerb={setVerb}
+        invContext={invContext}
+        setInvContext={setInvContext}
+      />
 
-      <details open={manual} onToggle={(e) => setManual((e.target as HTMLDetailsElement).open)}>
-        <summary className="ux-hint" style={{ cursor: "pointer" }}>
-          Advanced: run id, context, manual verb entry
-        </summary>
-        <div className="form__grid" style={{ marginTop: 10 }}>
-          <Field
-            label="Run id"
-            hint="Attach this call to an existing run for audit threading. Leave blank to start fresh."
-          >
-            <input value={invRun} onChange={(e) => setInvRun(e.target.value)} />
-          </Field>
-          <Field label="Noun" hint="Set automatically from the verb you pick.">
-            <input value={noun} onChange={(e) => setNoun(e.target.value)} />
-          </Field>
-          <Field label="Verb id" hint="Set automatically from the picker.">
-            <input value={verb} onChange={(e) => setVerb(e.target.value)} />
-          </Field>
-        </div>
-        <Field
-          label="Extra context (JSON)"
-          hint="Extra execution context for the kernel. Most calls leave this empty."
-          example='{"idempotency_key": "..."}'
-        >
-          <textarea
-            className="code"
-            value={invContext}
-            onChange={(e) => setInvContext(e.target.value)}
-          />
-        </Field>
-      </details>
-
-      <div className="form__actions">
-        <button
-          className="btn btn--primary"
-          disabled={invBusy || !verb}
-          onClick={invoke}
-        >
-          {invBusy ? "Running..." : "Run verb"}
-        </button>
-        {invError && <span className="error">{invError}</span>}
-      </div>
+      <InvokeActions invBusy={invBusy} verb={verb} invoke={invoke} invError={invError} />
       {invResult && <InvokeResultView result={invResult} />}
     </div>
   );
