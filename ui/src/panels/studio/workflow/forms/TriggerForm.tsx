@@ -6,6 +6,28 @@ import { CodeBlock, RunLink, errText, parseJson } from "@/panels/shared";
 import { Field, Select } from "@/panels/ux";
 import type { WfFormProps } from "@/panels/studio/workflow/types";
 
+interface TriggerResultProps {
+  result: WorkflowRunDescriptor;
+}
+
+function TriggerResult({ result }: TriggerResultProps) {
+  return (
+    <div className="stack">
+      <div className="kv">
+        <span className="badge">engine: {result.engine}</span>
+        <span
+          className={`badge ${result.durable ? "badge--activated" : "badge--inert"}`}
+        >
+          {result.durable ? "durable" : "in-process"}
+        </span>
+        {result.status && <span className="badge">{result.status}</span>}
+        {result.run_id && <RunLink runId={result.run_id} />}
+      </div>
+      <CodeBlock value={result} />
+    </div>
+  );
+}
+
 export function TriggerForm({ wfOptions }: WfFormProps) {
   const [trigId, setTrigId] = useState("");
   const [inputs, setInputs] = useState("{}");
@@ -62,23 +84,7 @@ export function TriggerForm({ wfOptions }: WfFormProps) {
         </button>
         {trigError && <span className="error">{trigError}</span>}
       </div>
-      {trigResult && (
-        <div className="stack">
-          <div className="kv">
-            <span className="badge">engine: {trigResult.engine}</span>
-            <span
-              className={`badge ${trigResult.durable ? "badge--activated" : "badge--inert"}`}
-            >
-              {trigResult.durable ? "durable" : "in-process"}
-            </span>
-            {trigResult.status && (
-              <span className="badge">{trigResult.status}</span>
-            )}
-            {trigResult.run_id && <RunLink runId={trigResult.run_id} />}
-          </div>
-          <CodeBlock value={trigResult} />
-        </div>
-      )}
+      {trigResult && <TriggerResult result={trigResult} />}
     </div>
   );
 }
