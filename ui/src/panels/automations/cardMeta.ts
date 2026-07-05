@@ -5,6 +5,7 @@
 // stable hash + PRNG. The structure is faithful to the brief and degrades to
 // placeholder data; swap deriveCardMeta for real API fields when they exist.
 
+import type { WorkflowRunStat } from "@/api/types";
 import type { TriggerKind } from "../workflowCanvas/types";
 
 const ACCENTS = ["#3DD3F0", "#5E69DD", "#FF7A45", "#3FB984", "#7C8BFF", "#E8B339"];
@@ -119,5 +120,48 @@ export function deriveCardMeta(
     lastRun,
     owner: "Bolt",
     trigger,
+  };
+}
+
+// Merge REAL run stats (design brief 22.1) onto a deterministically-derived
+// card meta. Where a stat exists for the workflow it OVERRIDES the placeholder
+// (runCount, successRate as a rounded whole-percent, lastRun as a relative
+// label); the deterministic accent / status / description / spark / owner /
+// trigger are preserved (they are not in the stats). A workflow with no stat
+// row keeps its placeholder untouched. Pure function so it is trivial to test.
+const RELATIVE_UNITS: { unit: Intl.RelativeTimeFormatUnit; s: number }[] = [
+  { unit: "year", s: 31536000 },
+  { unit: "month", s: 2592000 },
+  { unit: "day", s: 86400 },
+  { unit: "hour", s: 3600 },
+  { unit: "minute", s: 60 },
+];
+const _rtf = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+
+export function formatLastRun(lastRunAt: string | null): string {
+  if (!lastRunAt) return "never";
+  const then = Date.parse(lastRunAt);
+  if (Number.isNaN(then)) return "never";
+  // Elapsed seconds since the run (Date.now() - then so a PAST run is positive);
+  // floored at 0 so a clock-skewed future stamp renders as "just now".
+  const diffSec = Math.max(0, (Date.now() - then) / 1000);
+  if (diffSec < 60) return "just now";
+  for (const { unit, s } of RELATIVE_UNITS) {
+    if (diffSec >= s) return _rtf.format(-Math.round(diffSec / s), unit);
+  }
+  return "just now";
+}
+
+export function mergeCardStats(
+  meta: HomeCardMeta,
+  stat: WorkflowRunStat | undefined,
+): HomeCardMeta {
+  if (!stat || stat.run_count === 0) return meta;
+  const successRate = Math.round((stat.success_count / stat.run_count) * 100);
+  return {
+    ...meta,
+    runCount: stat.run_count,
+    successRate,
+    lastRun: formatLastRun(stat.last_run_at),
   };
 }

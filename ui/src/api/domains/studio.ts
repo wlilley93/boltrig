@@ -27,6 +27,7 @@ import type {
   WorkflowRunDescriptor,
   WorkflowRunRecord,
   WorkflowRunsResponse,
+  WorkflowStatsResponse,
   WorkflowsResponse,
 } from "@/api/types";
 
@@ -167,5 +168,12 @@ export const studioApi = {
     return request<WorkflowRunsResponse>(
       `/v1/workflows/${encodeURIComponent(wfId)}/runs`,
     );
+  },
+
+  // Aggregated run stats per workflow (design brief 22.1): the REAL run_count /
+  // success_rate / last_run_at the automations home cards merge over their
+  // deterministic placeholders. Tenant-scoped server-side.
+  workflowStats(): Promise<WorkflowStatsResponse> {
+    return request<WorkflowStatsResponse>("/v1/workflow-stats");
   },
 };

@@ -984,3 +984,19 @@ CREATE TABLE IF NOT EXISTS memory_vector_edges (
     dst       TEXT NOT NULL,
     PRIMARY KEY (tenant_id, src, dst)
 );
+
+-- Workflow run records (design brief 22.1): one row per workflow execution,
+-- recorded after a successful execute. Feeds the automations home cards with
+-- REAL run stats (run_count, success_count, last_run_at) per workflow. This is
+-- observability-only: a write failure is swallowed by the route so it can NEVER
+-- break workflow execution. Tenant-scoped (SEC-08); RLS-listed in rls.sql.
+CREATE TABLE IF NOT EXISTS workflow_run_records (
+    tenant_id  TEXT NOT NULL,
+    workflow_id TEXT NOT NULL,
+    run_id     TEXT NOT NULL,
+    status     TEXT NOT NULL,                       -- completed | failed | paused | ...
+    started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, run_id)
+);
+CREATE INDEX IF NOT EXISTS workflow_run_records_wf_idx
+    ON workflow_run_records (tenant_id, workflow_id);

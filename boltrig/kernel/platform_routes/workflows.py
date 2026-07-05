@@ -93,9 +93,27 @@ def register(app, P, K) -> None:
             record = await lib.execute(p.tenant_id, wf_id, body.get("inputs", {}), ctx)
             await audit_authoring(k, p, "workflow.execute",
                          {"id": wf_id, "run_id": record.get("run_id"), "status": record.get("status")})
+            # Record the run for the automations home-card stats (design brief
+            # 22.1). Observability-only: a recording failure is swallowed so it
+            # NEVER breaks workflow execution - the run already succeeded.
+            run_id = record.get("run_id")
+            if run_id:
+                try:
+                    await k.store.record_workflow_run(
+                        p.tenant_id, wf_id, run_id, record.get("status", "")
+                    )
+                except Exception:
+                    pass
             return JSONResponse(record)
         except LookupError:
             return JSONResponse({"error": "unknown_workflow"}, status_code=404)
+
+    @app.get("/v1/workflow-stats")
+    async def workflow_stats(k=K, p=P) -> dict:
+        # Aggregated run stats per workflow (design brief 22.1): feeds the
+        # automations home cards with REAL run_count / success_rate / last_run_at
+        # instead of deterministic placeholders. Tenant-scoped (SEC-08).
+        return {"stats": await k.store.workflow_run_stats(p.tenant_id)}
 
     @app.get("/v1/workflows/{wf_id}/runs")
     async def workflow_runs(wf_id: str, k=K, p=P) -> dict:
