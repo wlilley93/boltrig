@@ -595,6 +595,20 @@ export interface WorkflowRunsResponse {
   runs: string[];
 }
 
+// GET /v1/workflow-stats (design brief 22.1): aggregated run stats per workflow,
+// the real numbers that override the deterministic placeholders on the
+// automations home cards. last_run_at is null when a workflow has no runs yet.
+export interface WorkflowRunStat {
+  workflow_id: string;
+  run_count: number;
+  success_count: number;
+  last_run_at: string | null;
+}
+
+export interface WorkflowStatsResponse {
+  stats: WorkflowRunStat[];
+}
+
 // --- Round Seven: workflow interpreter ("execute") --------------------------
 // POST /v1/workflows/{id}/execute actually RUNS the stored workflow's steps
 // through the kernel chokepoint (each step is a governed verb call), unlike

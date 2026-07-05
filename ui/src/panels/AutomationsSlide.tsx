@@ -8,11 +8,19 @@
 import { Suspense, lazy, useMemo, useState, type CSSProperties } from "react";
 
 import { api } from "../api/client";
-import type { WorkflowDetail, WorkflowSummary } from "../api/types";
+import type {
+  WorkflowDetail,
+  WorkflowRunStat,
+  WorkflowSummary,
+} from "../api/types";
 import type { DeckCol } from "../deck/Deck";
 import { navigate, useRoute } from "../router";
 import { useFetch } from "../useFetch";
-import { deriveCardMeta, type HomeCardMeta } from "./automations/cardMeta";
+import {
+  deriveCardMeta,
+  mergeCardStats,
+  type HomeCardMeta,
+} from "./automations/cardMeta";
 import { useWorkflowDraft } from "./automations/draft";
 import { EmptyState, FetchError, PageIntro } from "./ux";
 
@@ -57,6 +65,16 @@ export function useAutomationDeckCols(): DeckCol[] {
 
 function WorkflowPicker() {
   const workflows = useFetch(() => api.workflows(), []);
+  // Design brief 22.1: the REAL run stats merged onto the cards. Fetched once
+  // alongside the workflow list; a failure leaves the deterministic placeholder
+  // (the cards render off workflows alone), so stats are best-effort, never a
+  // hard dependency.
+  const stats = useFetch(() => api.workflowStats(), []);
+  const statsById = useMemo(() => {
+    const m = new Map<string, WorkflowRunStat>();
+    for (const s of stats.data?.stats ?? []) m.set(s.workflow_id, s);
+    return m;
+  }, [stats.data]);
   const list = workflows.data?.workflows ?? [];
   const empty = !workflows.loading && !workflows.error && list.length === 0;
 
@@ -104,7 +122,11 @@ function WorkflowPicker() {
       {list.length > 0 && (
         <div className="wfhome">
           {list.map((w) => (
-            <WorkflowCard key={`${w.id}@${w.version}`} wf={w} />
+            <WorkflowCard
+              key={`${w.id}@${w.version}`}
+              wf={w}
+              stat={statsById.get(w.id)}
+            />
           ))}
         </div>
       )}
@@ -112,10 +134,16 @@ function WorkflowPicker() {
   );
 }
 
-function WorkflowCard({ wf }: { wf: WorkflowSummary }) {
+function WorkflowCard({
+  wf,
+  stat,
+}: {
+  wf: WorkflowSummary;
+  stat?: WorkflowRunStat;
+}) {
   const meta: HomeCardMeta = useMemo(
-    () => deriveCardMeta(wf.id, wf.source, wf.intent_tags),
-    [wf.id, wf.source, wf.intent_tags],
+    () => mergeCardStats(deriveCardMeta(wf.id, wf.source, wf.intent_tags), stat),
+    [wf.id, wf.source, wf.intent_tags, stat],
   );
   return (
     <button
