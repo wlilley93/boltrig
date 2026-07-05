@@ -78,7 +78,10 @@ DECLARE
     'workspaces','org_members','workspace_members',
     -- D5: per-org/workspace/user AI keys - tenant_id-scoped like the rest (the raw
     -- key is not here; it lives in the RLS-fenced credential_refs table).
-    'ai_configs'
+    'ai_configs',
+    -- Workflow run records (design brief 22.1): tenant-scoped observability rows
+    -- fed by execute_workflow. Same generic tenant_id policy binds them.
+    'workflow_run_records'
   ];
 BEGIN
   FOREACH t IN ARRAY scoped LOOP

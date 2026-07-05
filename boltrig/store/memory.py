@@ -8,7 +8,7 @@ is enforced on every method (keys are ``(tenant_id, id)`` tuples).
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from .base import clamp_work_page
 from .channels import ChannelStoreMem
@@ -91,6 +91,10 @@ class InMemoryStore(ChannelStoreMem):
         self._caps: dict[tuple[str, str], AgentCapability] = {}
         self._workflows: dict[tuple[str, str], WorkflowDefinition] = {}
         self._workflow_promotions: dict[tuple[str, str], WorkflowPromotion] = {}
+        # Design brief 22.1: workflow run records (observability-only). Keyed by
+        # (tenant_id, run_id) - one row per execute. Read aggregated by
+        # workflow_run_stats to feed the automations home cards with REAL stats.
+        self._workflow_runs: dict[tuple[str, str], tuple[str, str, datetime]] = {}
         self._endpoints: dict[tuple[str, str], ModelEndpoint] = {}
         self._work: dict[tuple[str, str], WorkItem] = {}
         self._hitl: dict[tuple[str, str], HITLRequest] = {}
@@ -237,6 +241,36 @@ class InMemoryStore(ChannelStoreMem):
 
     async def list_workflow_promotions(self, tenant_id):
         return [p for (t, _), p in self._workflow_promotions.items() if t == tenant_id]
+
+    # --- workflow run records (design brief 22.1, observability-only) -------
+    async def record_workflow_run(self, tenant_id, workflow_id, run_id, status):
+        # Insert/replace on the run_id PK. ``started_at`` stamps on first insert
+        # and is preserved on a replace (a re-record of the same run_id keeps its
+        # original start time), matching the postgres ON CONFLICT DO NOTHING shape.
+        key = (tenant_id, run_id)
+        existing = self._workflow_runs.get(key)
+        started = existing[2] if existing is not None else utcnow()
+        self._workflow_runs[key] = (workflow_id, status, started)
+
+    async def workflow_run_stats(self, tenant_id):
+        # Aggregate per workflow_id: run_count, success_count (status == completed),
+        # last_run_at (max started_at). Ordered by workflow_id, matching postgres.
+        buckets: dict[str, dict] = {}
+        for (t, _run_id), (wf_id, status, started) in self._workflow_runs.items():
+            if t != tenant_id:
+                continue
+            b = buckets.setdefault(wf_id, {"run_count": 0, "success_count": 0,
+                                          "last_run_at": None})
+            b["run_count"] += 1
+            if status == "completed":
+                b["success_count"] += 1
+            if b["last_run_at"] is None or started > b["last_run_at"]:
+                b["last_run_at"] = started
+        return [
+            {"workflow_id": wf_id, "run_count": b["run_count"],
+             "success_count": b["success_count"], "last_run_at": b["last_run_at"]}
+            for wf_id, b in sorted(buckets.items())
+        ]
 
     async def upsert_model_endpoint(self, ep):
         self._endpoints[(ep.tenant_id, ep.id)] = ep

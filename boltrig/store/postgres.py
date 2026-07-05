@@ -412,6 +412,37 @@ class PostgresStore(ChannelStorePG):
         )
         return [_workflow_promotion(r) for r in rows]
 
+    # --- workflow run records (design brief 22.1, observability-only) -------
+    async def record_workflow_run(self, tenant_id, workflow_id, run_id, status):
+        # Insert/replace on the (tenant_id, run_id) PK. ON CONFLICT DO NOTHING
+        # preserves the original started_at for a re-recorded run_id (idempotent
+        # re-recording of the same run never bumps its start time forward).
+        await self._pool.execute(
+            """INSERT INTO workflow_run_records (tenant_id, workflow_id, run_id, status)
+               VALUES ($1,$2,$3,$4)
+               ON CONFLICT (tenant_id, run_id) DO NOTHING""",
+            tenant_id, workflow_id, run_id, status,
+        )
+
+    async def workflow_run_stats(self, tenant_id):
+        rows = await self._pool.fetch(
+            """SELECT workflow_id,
+                      COUNT(*) AS run_count,
+                      COUNT(*) FILTER (WHERE status='completed') AS success_count,
+                      MAX(started_at) AS last_run_at
+               FROM workflow_run_records
+               WHERE tenant_id=$1
+               GROUP BY workflow_id
+               ORDER BY workflow_id""",
+            tenant_id,
+        )
+        return [
+            {"workflow_id": r["workflow_id"], "run_count": int(r["run_count"]),
+             "success_count": int(r["success_count"]),
+             "last_run_at": r["last_run_at"]}
+            for r in rows
+        ]
+
     async def upsert_model_endpoint(self, e: ModelEndpoint):
         await self._pool.execute(
             """INSERT INTO model_endpoints (id, tenant_id, kind, base_url, model, fallback, data_class)
