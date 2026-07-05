@@ -1,12 +1,14 @@
 import { useState } from "react";
 
 import { api } from "../../api/client";
-import type { StatusAck, TargetTypeValue } from "../../api/types";
-import { useFetch } from "../../useFetch";
+import type { StatusAck } from "../../api/types";
 import { errText, parseJson } from "../shared";
-import { Field, Hint, Select } from "../ux";
-import { SegmentedV2 } from "../uxForm";
+import { Hint } from "../ux";
 import { AckLine } from "./AckLine";
+import { BindingTargetFields } from "./routerStudio/BindingTargetFields";
+import { useBindingForm } from "./routerStudio/useBindingForm";
+import { useVerbForm } from "./routerStudio/useVerbForm";
+import { VerbSchemaFields } from "./routerStudio/VerbSchemaFields";
 
 function NounForm() {
   const [id, setId] = useState("");
@@ -82,48 +84,7 @@ function NounForm() {
 }
 
 function VerbForm() {
-  const [id, setId] = useState("");
-  const [nounId, setNounId] = useState("");
-  const [inputSchema, setInputSchema] = useState("{}");
-  const [outputSchema, setOutputSchema] = useState("{}");
-  const [consequence, setConsequence] = useState<"low" | "high">("low");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [ack, setAck] = useState<StatusAck | null>(null);
-
-  async function submit() {
-    if (!id.trim() || !nounId.trim()) {
-      setError("Verb id and noun_id are required.");
-      return;
-    }
-    let inSchema: Record<string, unknown>;
-    let outSchema: Record<string, unknown>;
-    try {
-      inSchema = parseJson<Record<string, unknown>>(inputSchema, {});
-      outSchema = parseJson<Record<string, unknown>>(outputSchema, {});
-    } catch (err) {
-      setError(`schema: ${errText(err)}`);
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    setAck(null);
-    try {
-      setAck(
-        await api.upsertVerb({
-          id: id.trim(),
-          noun_id: nounId.trim(),
-          input_schema: inSchema,
-          output_schema: outSchema,
-          consequence,
-        }),
-      );
-    } catch (err) {
-      setError(errText(err));
-    } finally {
-      setBusy(false);
-    }
-  }
+  const s = useVerbForm();
 
   return (
     <div className="form">
@@ -131,18 +92,18 @@ function VerbForm() {
       <div className="form__grid">
         <label className="field">
           <span>id</span>
-          <input value={id} onChange={(e) => setId(e.target.value)} />
+          <input value={s.id} onChange={(e) => s.setId(e.target.value)} />
         </label>
         <label className="field">
           <span>noun_id</span>
-          <input value={nounId} onChange={(e) => setNounId(e.target.value)} />
+          <input value={s.nounId} onChange={(e) => s.setNounId(e.target.value)} />
         </label>
         <label className="field">
           <span>consequence</span>
           <select
-            value={consequence}
+            value={s.consequence}
             onChange={(e) =>
-              setConsequence(e.target.value === "high" ? "high" : "low")
+              s.setConsequence(e.target.value === "high" ? "high" : "low")
             }
           >
             <option value="low">low</option>
@@ -150,117 +111,32 @@ function VerbForm() {
           </select>
         </label>
       </div>
-      <label className="field">
-        <span>input_schema (JSON)</span>
-        <textarea
-          className="code"
-          value={inputSchema}
-          onChange={(e) => setInputSchema(e.target.value)}
-        />
-      </label>
-      <label className="field">
-        <span>output_schema (JSON)</span>
-        <textarea
-          className="code"
-          value={outputSchema}
-          onChange={(e) => setOutputSchema(e.target.value)}
-        />
-      </label>
+      <VerbSchemaFields s={s} />
       <div className="form__actions">
-        <button className="btn btn--primary" disabled={busy} onClick={submit}>
-          {busy ? "..." : "Save verb"}
+        <button className="btn btn--primary" disabled={s.busy} onClick={s.submit}>
+          {s.busy ? "..." : "Save verb"}
         </button>
-        <AckLine ack={ack} />
-        {error && <span className="error">{error}</span>}
+        <AckLine ack={s.ack} />
+        {s.error && <span className="error">{s.error}</span>}
       </div>
     </div>
   );
 }
 
 function BindingForm() {
-  const caps = useFetch(() => api.capabilities(), []);
-  const adapters = useFetch(() => api.adapters(), []);
-  const [verbId, setVerbId] = useState("");
-  const [targetType, setTargetType] = useState<TargetTypeValue>("adapter");
-  const [targetRef, setTargetRef] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [ack, setAck] = useState<StatusAck | null>(null);
-
-  async function submit() {
-    if (!verbId.trim() || !targetRef.trim()) {
-      setError("Pick a verb and what should run it.");
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    setAck(null);
-    try {
-      setAck(
-        await api.setBinding(verbId.trim(), {
-          target_type: targetType,
-          target_ref: targetRef.trim(),
-        }),
-      );
-    } catch (err) {
-      setError(errText(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const verbOptions = [
-    { value: "", label: "Choose a verb..." },
-    ...(caps.data?.verbs ?? []).map((v) => ({ value: v.id, label: v.id })),
-  ];
-  const adapterOptions = [
-    { value: "", label: "Choose an adapter..." },
-    ...(adapters.data?.adapters ?? []).map((a) => ({ value: a.id, label: a.id })),
-  ];
+  const s = useBindingForm();
 
   return (
     <div className="form">
       <div className="form__title">Set binding</div>
       <Hint>Wire a verb to what actually runs it - an adapter, or an agent.</Hint>
-      <div className="form__grid">
-        <Field label="Verb" hint="The action to wire up.">
-          <Select value={verbId} ariaLabel="Verb" onChange={setVerbId} options={verbOptions} />
-        </Field>
-        <Field label="Runs via" hint="An adapter (a service) or an agent (a reasoning model).">
-          <SegmentedV2
-            value={targetType}
-            ariaLabel="Target type"
-            onChange={(v) => {
-              setTargetType(v === "agent" ? "agent" : "adapter");
-              setTargetRef("");
-            }}
-            options={[
-              { value: "adapter", label: "An adapter" },
-              { value: "agent", label: "An agent" },
-            ]}
-          />
-        </Field>
-        <Field
-          label={targetType === "adapter" ? "Which adapter" : "Which agent"}
-          hint={
-            targetType === "adapter"
-              ? "The registered adapter that fulfils this verb."
-              : "The agent id that fulfils this verb."
-          }
-        >
-          {targetType === "adapter" ? (
-            <Select value={targetRef} ariaLabel="Adapter" onChange={setTargetRef} options={adapterOptions} />
-          ) : (
-            <input value={targetRef} onChange={(e) => setTargetRef(e.target.value)} />
-          )}
-        </Field>
-      </div>
+      <BindingTargetFields s={s} />
       <div className="form__actions">
-        <button className="btn btn--primary" disabled={busy} onClick={submit}>
-          {busy ? "Saving..." : "Set binding"}
+        <button className="btn btn--primary" disabled={s.busy} onClick={s.submit}>
+          {s.busy ? "Saving..." : "Set binding"}
         </button>
-        <AckLine ack={ack} />
-        {error && <span className="error">{error}</span>}
+        <AckLine ack={s.ack} />
+        {s.error && <span className="error">{s.error}</span>}
       </div>
     </div>
   );
