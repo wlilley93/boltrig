@@ -531,6 +531,8 @@ invariants:
       - tests/integration/test_control_flow.py::test_branch_runs_only_the_matching_arm
       - tests/integration/test_control_flow.py::test_branch_false_arm_runs_when_predicate_is_false
       - tests/integration/test_control_flow.py::test_loop_records_item_count_without_crashing
+      - tests/integration/test_control_flow.py::test_loop_iterates_body_once_per_item
+      - tests/integration/test_control_flow.py::test_loop_with_dynamic_items_from_parent_output
       - tests/integration/test_control_flow.py::test_code_run_is_recognised_but_not_executed
   SEC-50:
     description: Every workflow step is dispatched through the kernel chokepoint under the caller's own grants - a step can neither escalate nor bypass governance.

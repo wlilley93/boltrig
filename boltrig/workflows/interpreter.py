@@ -146,7 +146,10 @@ async def run_workflow_definition(
                     "status": "skipped", "reason": "missing_parent_or_cycle"})
 
     paused = False
-    for step in ordered:
+    expanded: list[tuple[list[str], int]] = []  # (body_ids, item_count) per loop
+    idx = 0
+    while idx < len(ordered):
+        step = ordered[idx]
         step_id = step["id"]
         done = prior.get(step_id)
         if done is not None and done.status == "ok":
@@ -156,6 +159,7 @@ async def run_workflow_definition(
                                 "output": done.output, "replayed": True}
             _emit_step({"step_id": step_id, "action": step.get("action"),
                         "status": "ok", "replayed": True})
+            idx += 1
             continue
         # A step whose parent failed/was skipped cannot run (fail-closed).
         if any(p in failed_or_skipped for p in step.get("parents", []) or []):
@@ -164,6 +168,7 @@ async def run_workflow_definition(
             failed_or_skipped.add(step_id)
             _emit_step({"step_id": step_id, "action": step.get("action"),
                         "status": "skipped", "reason": "parent_failed"})
+            idx += 1
             continue
         # A branched step only runs when its declared branch matches every
         # parent that produced a branch label (conditional execution).
@@ -174,6 +179,7 @@ async def run_workflow_definition(
             failed_or_skipped.add(step_id)
             _emit_step({"step_id": step_id, "action": step.get("action"),
                         "status": "skipped", "reason": branch_reason})
+            idx += 1
             continue
 
         action = step.get("action", "")
@@ -197,6 +203,15 @@ async def run_workflow_definition(
                 )
             _emit_step({"step_id": step_id, "action": action,
                         "status": coutcome["status"]})
+            # Loop body iteration: a flow.loop with a non-empty items list
+            # expands its body into the walk so each item runs the body once.
+            # The body is the loop's self-contained descendant sub-graph.
+            loop_items = coutcome.get("_items") if coutcome["status"] == "ok" else None
+            if loop_items:
+                ordered, body_ids = control_flow.expand_loop(ordered, step_id, loop_items)
+                if body_ids:
+                    expanded.append((body_ids, len(loop_items)))
+            idx += 1
             continue
 
         _emit_step({"step_id": step_id, "action": action, "status": "running"})
@@ -252,6 +267,12 @@ async def run_workflow_definition(
                                 "reason": type(exc).__name__}
             _emit_step({"step_id": step_id, "action": action, "status": "error",
                         "reason": type(exc).__name__})
+        idx += 1
+
+    # Collapse per-item loop-clone results back onto each original body step so
+    # the run record (keyed by original step id) reflects the iteration.
+    for body_ids, item_count in expanded:
+        control_flow.aggregate_loop_results(results, body_ids, item_count)
 
     if paused:
         overall = "paused"

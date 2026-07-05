@@ -122,7 +122,7 @@ def eval_predicate(params: dict[str, Any], results: dict[str, dict[str, Any]]) -
     return _compare(left, op, right)
 
 
-def _resolve_items(params: dict[str, Any], results: dict[str, dict[str, Any]]) -> list[Any]:
+def resolve_items(params: dict[str, Any], results: dict[str, dict[str, Any]]) -> list[Any]:
     """Resolve the iteration source for a loop: a literal list or a $ref."""
     items = params.get("items", _MISSING)
     if items is _MISSING:
@@ -156,10 +156,11 @@ def run_control_step(
         outcome = "true" if eval_predicate(params, results) else "false"
         return {"status": "ok", "output": {"branch": outcome}}
     if noun == "flow" and verb == "loop":
-        items = _resolve_items(params, results)
+        items = resolve_items(params, results)
         return {
             "status": "ok",
             "output": {"items": len(items), "count": len(items)},
+            "_items": items,
         }
     if noun == "code" and verb == "run":
         # Arbitrary script execution is unsafe without a sandbox; record intent.
@@ -194,3 +195,103 @@ def branch_matches(
         if produced is not None and produced != declared:
             return False, "branch_mismatch"
     return True, None
+
+
+# --- Loop body iteration (flow.loop) -----------------------------------------
+# A flow.loop step with a resolved items list iterates its body: the maximal
+# descendant sub-graph whose every step has ALL its parents inside {loop} u body.
+# The body is cloned once per item; clones carry __loop_item/__loop_index and
+# parents rewired to the same iteration's clones. A step that mixes a body parent
+# with an external parent falls outside the body (it would be ambiguous to
+# iterate) and is skipped with a clear reason. Self-contained bodies iterate
+# fully; this covers the common map/for-each pattern.
+
+
+def loop_body_ids(steps: list[dict[str, Any]], loop_id: str) -> list[str]:
+    """The iterable body of ``loop_id``: descendant step ids (topo order) whose
+    parents are all inside {loop_id} u the body itself."""
+    by_id = {s["id"]: s for s in steps}
+    if loop_id not in by_id:
+        return []
+    children: dict[str, list[str]] = {sid: [] for sid in by_id}
+    for s in steps:
+        for p in s.get("parents", []) or []:
+            if p in children:
+                children[p].append(s["id"])
+    body: list[str] = []
+    frontier = list(children.get(loop_id, []))
+    while frontier:
+        sid = frontier.pop(0)
+        if sid in body:
+            continue
+        parents = by_id[sid].get("parents", []) or []
+        if all(p == loop_id or p in body for p in parents):
+            body.append(sid)
+            frontier.extend(children.get(sid, []))
+    return body
+
+
+def expand_loop(
+    ordered: list[dict[str, Any]], loop_id: str, items: list[Any]
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Return ``(new_ordered, body_ids)`` with ``loop_id``'s body cloned once per
+    item. Body originals are removed and replaced by per-item clones placed right
+    after the loop step. When items is empty or there is no body, returns the
+    list unchanged with an empty body.
+    """
+    body = loop_body_ids(ordered, loop_id)
+    if not body or not items:
+        return ordered, []
+    by_id = {s["id"]: s for s in ordered}
+    clones: list[dict[str, Any]] = []
+    for k, item in enumerate(items):
+        for sid in body:
+            orig = by_id[sid]
+            parents = [
+                p if (p == loop_id or p not in body) else f"{p}__{k}"
+                for p in (orig.get("parents") or [])
+            ]
+            clone = dict(orig)
+            clone["id"] = f"{sid}__{k}"
+            clone["parents"] = parents
+            params = dict(orig.get("params") or {})
+            params["__loop_item"] = item
+            params["__loop_index"] = k
+            clone["params"] = params
+            clones.append(clone)
+    new_ordered: list[dict[str, Any]] = []
+    for s in ordered:
+        if s["id"] == loop_id:
+            new_ordered.append(s)
+            new_ordered.extend(clones)
+        elif s["id"] in body:
+            continue
+        else:
+            new_ordered.append(s)
+    return new_ordered, body
+
+
+def aggregate_loop_results(
+    results: dict[str, dict[str, Any]],
+    body_ids: list[str],
+    item_count: int,
+) -> None:
+    """Collapse per-item clone results back onto each original body step id so the
+    run record (keyed by original step id) reflects the iteration. Sets
+    ``results[id] = {status, output: {iterations, count}}`` from its clones."""
+    for sid in body_ids:
+        iterations: list[Any] = []
+        all_ok = True
+        for k in range(item_count):
+            clone = results.pop(f"{sid}__{k}", None)
+            if clone is None:
+                all_ok = False
+                continue
+            if clone.get("status") != "ok":
+                all_ok = False
+            iterations.append(clone.get("output"))
+        results[sid] = {
+            "status": "ok" if all_ok else "failed",
+            "output": {"iterations": iterations, "count": item_count},
+        }
+

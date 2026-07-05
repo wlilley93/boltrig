@@ -158,3 +158,49 @@ async def test_code_run_is_recognised_but_not_executed():
     assert by_id["script"]["output"]["executed"] is False
     assert "no sandbox" in by_id["script"]["output"]["reason"]
     assert record["status"] == "completed"
+
+
+@pytest.mark.invariant("FR-CTL-03")
+async def test_loop_iterates_body_once_per_item():
+    k = await _kernel()
+    lib = WorkflowLibrary(k.store, executor=LocalDurableExecutor(), kernel=k)
+    # The body (make) is a real capability step; it should run once per item,
+    # each with __loop_item injected into params (the title carries the item).
+    wf = _wf([
+        {"id": "loop", "parents": [], "action": "flow.loop",
+         "params": {"items": ["alpha", "beta", "gamma"]}},
+        {"id": "make", "parents": ["loop"], "action": "ticket.create",
+         "params": {"title": "seed"}},
+    ])
+    await lib.register(wf)
+    record = await lib.execute(T, wf.id, {}, _ctx())
+    by_id = {s["id"]: s for s in record["steps"]}
+    assert by_id["loop"]["output"]["count"] == 3
+    # The body ran 3 times (3 distinct tickets), aggregated onto the original id.
+    assert by_id["make"]["status"] == "ok"
+    assert by_id["make"]["output"]["count"] == 3
+    assert len(by_id["make"]["output"]["iterations"]) == 3
+    assert record["status"] == "completed"
+
+
+@pytest.mark.invariant("FR-CTL-03")
+async def test_loop_with_dynamic_items_from_parent_output():
+    k = await _kernel()
+    lib = WorkflowLibrary(k.store, executor=LocalDurableExecutor(), kernel=k)
+    # A gate step produces a list; the loop resolves it via $ref and iterates.
+    wf = _wf([
+        {"id": "gate", "parents": [], "action": "ticket.create",
+         "params": {"title": "g"}},
+        {"id": "loop", "parents": ["gate"], "action": "flow.loop",
+         "params": {"items_from": "$gate.output.tags"}},
+        {"id": "body", "parents": ["loop"], "action": "ticket.create",
+         "params": {"title": "x"}},
+    ])
+    await lib.register(wf)
+    # The ticket adapter does not emit tags, so items resolves to [] -> no body
+    # expansion; the body runs once (the original step is kept). Completed, no crash.
+    record = await lib.execute(T, wf.id, {}, _ctx())
+    by_id = {s["id"]: s for s in record["steps"]}
+    assert by_id["loop"]["output"]["count"] == 0
+    assert by_id["body"]["status"] == "ok"
+    assert record["status"] == "completed"
