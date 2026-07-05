@@ -311,9 +311,10 @@ invariants:
     tests:
       - tests/security/test_pi_runtime.py::test_sidecar_request_carries_no_tool_credentials
   SEC-28:
-    description: Severability - the kernel and models import nothing from Pi or the sidecar.
+    description: Severability - the kernel and models import nothing from Pi or the sidecar, and the standalone Pi sidecar imports no boltrig package code; the boundary is HTTP/MCP only.
     tests:
       - tests/security/test_severability.py::test_kernel_and_models_have_no_pi_or_sidecar_coupling
+      - tests/security/test_severability.py::test_pi_sidecar_imports_no_boltrig_package_code
   FR-CONV-04:
     description: Inline HITL and run events stream into a chat turn and are recorded.
     tests:

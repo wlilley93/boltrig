@@ -13,7 +13,9 @@ import re
 
 import pytest
 
-_ROOT = pathlib.Path(__file__).resolve().parents[2] / "boltrig"
+_REPO = pathlib.Path(__file__).resolve().parents[2]
+_ROOT = _REPO / "boltrig"
+_PI_SIDECAR = _REPO / "services" / "pi_sidecar"
 _SCOPED = [_ROOT / "kernel", _ROOT / "models"]
 
 # import tokens that would indicate coupling to a sibling estate kernel
@@ -61,6 +63,21 @@ def test_kernel_and_models_have_no_pi_or_sidecar_coupling():
     offenders = _scan(_FORBIDDEN_PI)
     assert not offenders, "Pi/sidecar coupling in kernel/models (SEC-28):\n" + "\n".join(
         offenders
+    )
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-28")
+def test_pi_sidecar_imports_no_boltrig_package_code():
+    offenders: list[str] = []
+    pattern = re.compile(r"^\s*(?:from|import)\s+boltrig(?:\.|\b)")
+    for path in _PI_SIDECAR.rglob("*.py"):
+        for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if pattern.match(line):
+                offenders.append(f"{path}:{n}: {line.strip()}")
+    assert not offenders, (
+        "Pi sidecar must stay package-severed and communicate over HTTP/MCP only "
+        "(SEC-28):\n" + "\n".join(offenders)
     )
 
 
