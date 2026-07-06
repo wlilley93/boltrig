@@ -8,6 +8,7 @@
 // input + results list each render through their own sub-component.
 
 import { useFocusTrap } from "../useFocusTrap";
+import { MeshCanvas } from "./chat/MeshCanvas";
 import { CommandResultsList } from "./commandPalette/CommandResultsList";
 import { PaletteInput } from "./commandPalette/PaletteInput";
 import { useCommandPalette } from "./commandPalette/useCommandPalette";
@@ -20,6 +21,7 @@ export function CommandPalette() {
 
   return (
     <div className="cmdk-overlay" onClick={() => p.setOpen(false)}>
+      <MeshCanvas active />
       <div
         className="cmdk"
         role="dialog"

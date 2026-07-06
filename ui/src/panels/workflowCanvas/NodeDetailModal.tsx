@@ -6,6 +6,7 @@
 import type { VerbInfo } from "@/api/types";
 import { Select } from "@/panels/ux";
 import { SchemaFormV2 } from "@/panels/uxForm";
+import { MeshCanvas } from "../chat/MeshCanvas";
 import { findKind } from "./nodeTaxonomy";
 import { NodeIcon } from "./nodeIcons";
 import type { RunNodeStatus, StepNode } from "./types";
@@ -71,6 +72,7 @@ export function NodeDetailModal({
 
   return (
     <div className="wf3-modal-backdrop" onClick={onClose}>
+      <MeshCanvas active />
       <div
         className="wf3-modal"
         role="dialog"

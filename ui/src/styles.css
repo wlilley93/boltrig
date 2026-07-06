@@ -2789,6 +2789,7 @@ select:focus {
   align-items: flex-start;
   padding-top: 12vh;
   z-index: 80; /* stacking scale: sidebar 10/12 < drawer 70 < palette 80 */
+  overflow: hidden;
 }
 
 /* The Run drawer scrim must sit ABOVE the sidebar (z-index 10/12) so the modal
@@ -2837,11 +2838,14 @@ select:focus {
   width: min(600px, 92vw);
   background: rgba(8, 14, 26, 0.97);
   border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
   box-shadow: var(--elev-2);
   backdrop-filter: blur(24px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  position: relative;
+  z-index: 1;
 }
 .cmdk__input {
   border: none;
@@ -7765,18 +7769,21 @@ body {
   align-items: center;
   justify-content: center;
   z-index: 30;
+  overflow: hidden;
 }
 .wf3-modal {
-  width: 340px;
+  width: min(480px, calc(100% - 32px));
   max-width: calc(100% - 32px);
-  background: var(--bg-overlay);
+  background: rgba(12, 18, 32, 0.94);
   border: 1px solid var(--border-medium);
-  border-radius: 10px;
+  border-radius: 14px;
   box-shadow: var(--shadow-lg);
-  padding: 16px;
+  padding: 20px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
+  position: relative;
+  z-index: 1;
 }
 .wf3-modal__head {
   display: flex;
@@ -7816,17 +7823,23 @@ body {
 .wf3-modal__field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
   font-size: 10px;
   color: var(--text-muted);
 }
 .wf3-modal__field input {
+  width: 100%;
+  box-sizing: border-box;
   background: var(--bg-inset);
   border: 1px solid var(--border-medium);
   border-radius: 6px;
   color: var(--text-primary);
-  padding: 6px 8px;
+  padding: 8px 10px;
   font-size: 12px;
+}
+.wf3-modal__field input:focus {
+  outline: none;
+  border-color: rgba(61, 211, 240, 0.5);
 }
 .wf3-modal__code {
   width: 100%;
