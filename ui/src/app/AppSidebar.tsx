@@ -10,23 +10,46 @@ interface AppSidebarProps {
   rows: DeckRow[];
   active: { rowId: string; colKey: string };
   identityOpen: boolean;
+  collapsed: boolean;
+  onToggleSidebar: () => void;
   onToggleIdentity: () => void;
 }
 
-// The fixed 56px icon rail: brand, zone/ops groups, session controls, settings
-// and the dev identity chip. The rail is always collapsed; no expand/collapse
-// or resizer state lives here.
-export function AppSidebar({ rows, active, identityOpen, onToggleIdentity }: AppSidebarProps) {
+// The icon rail (collapsed) or labelled rail (expanded). Collapse state is owned
+// by App so it survives re-renders; the toggle lives in the brand row.
+export function AppSidebar({
+  rows,
+  active,
+  identityOpen,
+  collapsed,
+  onToggleSidebar,
+  onToggleIdentity,
+}: AppSidebarProps) {
   const zoneRows = rows.filter((r) => r.id !== "ops");
   const opsCols = rows.find((r) => r.id === "ops")?.cols ?? [];
   return (
     <aside
       className="side"
-      data-collapsed="true"
+      data-collapsed={collapsed ? "true" : "false"}
       aria-label="Primary navigation"
     >
       <div className="side__brand">
         <BoltMark />
+        <span className="side__word">boltrig</span>
+        <button
+          className="side__collapse"
+          onClick={onToggleSidebar}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            {collapsed ? (
+              <path d="M9 6l6 6-6 6" />
+            ) : (
+              <path d="M15 6l-6 6 6 6" />
+            )}
+          </svg>
+        </button>
       </div>
 
       <nav className="side__nav" aria-label="Panels">

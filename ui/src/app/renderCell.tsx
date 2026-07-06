@@ -50,7 +50,7 @@ const OPS_PANELS: Record<string, PanelFactory> = {
   me: () => <MePanel />,
 };
 
-const SETTINGS_PANELS: Record<string, PanelFactory> = {
+export const SETTINGS_PANELS: Record<string, PanelFactory> = {
   settings: () => <SettingsAnchorSlide />,
   account: () => <AccountSlide />,
   appearance: () => <AppearanceSlide />,

@@ -5,7 +5,7 @@ import { ErrorBoundary } from "@/ErrorBoundary";
 import type { SlideProps } from "@/deck/types";
 
 export function DeckSlide(props: SlideProps) {
-  const { x, y, row, col, active, neighbour, parked, outgoingHold, frameRef, children } = props;
+  const { row, col, active, neighbour, parked, outgoingHold, frameRef, children } = props;
   const ref = useRef<HTMLDivElement>(null);
   const inertOn = parked || (!active && !outgoingHold);
   useEffect(() => {
@@ -19,7 +19,6 @@ export function DeckSlide(props: SlideProps) {
     <div
       ref={ref}
       className={`deck__slide${active ? " deck__slide--active" : ""}${parked ? " deck__slide--parked" : ""}`}
-      style={{ left: `calc(${x} * 100%)`, top: `calc(${y} * 100%)` }}
       aria-hidden={inertOn ? true : undefined}
     >
       {m > 1 && (

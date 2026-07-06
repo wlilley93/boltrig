@@ -9,6 +9,7 @@ import { useAgentDeckCols } from "@/panels/AgentsSlide";
 import { useAutomationDeckCols } from "@/panels/AutomationsSlide";
 import { CommandPalette } from "@/panels/CommandPalette";
 import { RunView } from "@/panels/RunView";
+import { SettingsPage } from "@/panels/SettingsPage";
 import { AppSidebar } from "@/app/AppSidebar";
 import { IdentityBar } from "@/app/IdentityBar";
 import { renderCell } from "@/app/renderCell";
@@ -36,10 +37,14 @@ export function App() {
     [identity.role, agentCols, automationCols],
   );
   const active = routeToCell(route, rows);
+  const settingsActive = route.tab === "settings";
 
   // The dev sign-in is collapsed behind the identity chip by default; expanding it
   // reveals the editable identity bar (the dev auth mechanism).
   const [identityOpen, setIdentityOpen] = useState(false);
+  // The sidebar starts as the compact icon rail; the user can expand it to show
+  // labels. Persisted in component state (survives re-renders).
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
 
   // Apply the persisted appearance (theme / density / contrast / font scale /
   // reduced motion) to the document root on first load, before any panel paints,
@@ -55,18 +60,26 @@ export function App() {
         rows={rows}
         active={active}
         identityOpen={identityOpen}
+        collapsed={sidebarCollapsed}
+        onToggleSidebar={() => setSidebarCollapsed((v) => !v)}
         onToggleIdentity={() => setIdentityOpen((v) => !v)}
       />
 
       <div className="app__body">
         {identityOpen && <IdentityBar />}
         <main className="app__main app__main--deck">
-          <Deck
-            rows={rows}
-            active={active}
-            render={renderCell}
-            keepAlive={KEEP_ALIVE}
-          />
+          {/* The Deck stays mounted (so keep-alive chat state survives) but is
+              hidden when Settings is the active page - settings renders as its
+              own full-width page outside the deck. */}
+          <div className={settingsActive ? "app__deck app__deck--hidden" : "app__deck"}>
+            <Deck
+              rows={rows}
+              active={active}
+              render={renderCell}
+              keepAlive={KEEP_ALIVE}
+            />
+          </div>
+          {settingsActive && <SettingsPage />}
         </main>
       </div>
 
