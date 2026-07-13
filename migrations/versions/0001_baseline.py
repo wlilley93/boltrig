@@ -1,8 +1,9 @@
-"""baseline: the full Boltrig schema (FR-OPS-01).
+"""baseline: the immutable Round Three Boltrig schema (FR-OPS-01).
 
-This revision applies store/schema.sql verbatim so the Alembic head equals the
-hand-maintained schema. ``alembic upgrade head`` on a fresh database produces
-exactly the bootstrap schema (kernel core + Round Two + Round Three tables).
+This revision applies the schema as it existed when the migration chain began.
+Later revisions own every subsequent change. Keeping the baseline immutable is
+what makes an Alembic replay meaningful; a parity test compares the resulting
+head with the convenience bootstrap schema.
 
 Revision ID: 0001_baseline
 Revises:
@@ -19,8 +20,9 @@ down_revision = None
 branch_labels = None
 depends_on = None
 
-# store/schema.sql is the source of truth (P1); the baseline replays it.
-_SCHEMA = Path(__file__).resolve().parents[2] / "boltrig" / "store" / "schema.sql"
+# Frozen at revision creation. Never point this back at the mutable bootstrap
+# schema: doing so makes old revisions silently change under deployed databases.
+_SCHEMA = Path(__file__).resolve().parents[1] / "baseline.sql"
 
 
 def upgrade() -> None:

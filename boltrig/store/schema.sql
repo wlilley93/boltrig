@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS verbs (
     output_schema JSONB NOT NULL,
     consequence   TEXT NOT NULL DEFAULT 'low',        -- low | high (high -> may require HITL)
     identity_mode TEXT NOT NULL DEFAULT 'service-principal', -- service-principal | delegated
+    idempotency_mode TEXT NOT NULL DEFAULT 'cacheable', -- cacheable | disabled
     degraded_mode JSONB,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -181,6 +182,7 @@ CREATE TABLE IF NOT EXISTS work_items (
 );
 CREATE INDEX IF NOT EXISTS work_items_status_idx ON work_items (tenant_id, status);
 CREATE INDEX IF NOT EXISTS work_items_parent_idx ON work_items (parent_id);
+CREATE INDEX IF NOT EXISTS work_items_hatchet_run_idx ON work_items (tenant_id, hatchet_run_id);
 -- Idempotent column adds for DBs created before Beat 3 durable delegation landed
 -- (before the lease index, which references lease_expires_at).
 ALTER TABLE work_items ADD COLUMN IF NOT EXISTS lease_owner TEXT;
@@ -244,6 +246,8 @@ CREATE TABLE IF NOT EXISTS hitl_requests (
     timeout_at   TIMESTAMPTZ,
     verb         TEXT,                                  -- SEC-14: the verb this approval gates
     requested_by TEXT,                                  -- SEC-14: who raised it (anti-self-approval)
+    requested_on_behalf_of TEXT,                        -- SEC-14: delegated initiator identity
+    request_fingerprint TEXT,                           -- SEC-14: exact canonical request binding
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (tenant_id, id)
@@ -251,6 +255,8 @@ CREATE TABLE IF NOT EXISTS hitl_requests (
 -- Idempotent column adds for DBs created before SEC-14 verb-binding landed.
 ALTER TABLE hitl_requests ADD COLUMN IF NOT EXISTS verb TEXT;
 ALTER TABLE hitl_requests ADD COLUMN IF NOT EXISTS requested_by TEXT;
+ALTER TABLE hitl_requests ADD COLUMN IF NOT EXISTS requested_on_behalf_of TEXT;
+ALTER TABLE hitl_requests ADD COLUMN IF NOT EXISTS request_fingerprint TEXT;
 
 CREATE TABLE IF NOT EXISTS hitl_responses (
     id           TEXT NOT NULL,
@@ -376,10 +382,22 @@ CREATE INDEX IF NOT EXISTS audit_anchor_scope_idx
 
 -- Idempotency keys for side-effecting verbs (NFR-REL-02, SEC-15).
 CREATE TABLE IF NOT EXISTS idempotency_keys (
-    tenant_id  TEXT NOT NULL,
-    key        TEXT NOT NULL,
-    result     JSONB,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    tenant_id       TEXT NOT NULL,
+    key             TEXT NOT NULL,
+    actor           TEXT NOT NULL,
+    on_behalf_of    TEXT,
+    workspace_id    TEXT,
+    noun            TEXT NOT NULL,
+    verb            TEXT NOT NULL,
+    request_hash    TEXT NOT NULL,
+    status          TEXT NOT NULL CHECK (
+        status IN ('claimed', 'executing', 'completed', 'uncertain', 'uncacheable')
+    ),
+    owner_token     TEXT,
+    lease_expires_at TIMESTAMPTZ,
+    result          JSONB,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (tenant_id, key)
 );
 
@@ -697,6 +715,8 @@ CREATE TABLE IF NOT EXISTS user_invitations (
     PRIMARY KEY (tenant_id, id)
 );
 CREATE INDEX IF NOT EXISTS invitations_email_idx ON user_invitations (tenant_id, email);
+CREATE UNIQUE INDEX IF NOT EXISTS invitations_one_pending_email_idx
+    ON user_invitations (tenant_id, lower(email)) WHERE status = 'pending';
 CREATE UNIQUE INDEX IF NOT EXISTS invitations_token_hash_idx
     ON user_invitations (token_hash) WHERE token_hash IS NOT NULL;
 
@@ -952,6 +972,26 @@ CREATE TABLE IF NOT EXISTS memory_erasures (
     completed_at       TIMESTAMPTZ,
     PRIMARY KEY (tenant_id, id)
 );
+
+CREATE TABLE IF NOT EXISTS memory_projection_statuses (
+    id             TEXT NOT NULL,
+    tenant_id      TEXT NOT NULL,
+    projection_id  TEXT NOT NULL,
+    operation      TEXT NOT NULL CHECK (operation IN ('remember', 'forget')),
+    status         TEXT NOT NULL CHECK (
+        (operation = 'remember' AND status IN ('pending', 'written', 'failed'))
+        OR (operation = 'forget' AND status IN ('pending', 'deleted', 'delete_failed'))
+    ),
+    fact_id        TEXT,
+    target         TEXT,
+    projection_ref TEXT,
+    error          TEXT,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, id)
+);
+CREATE INDEX IF NOT EXISTS memory_projection_statuses_fact_idx
+    ON memory_projection_statuses (tenant_id, fact_id, projection_id);
 
 -- ---------------------------------------------------------------------------
 -- Native vector Memory Engine store (PgVectorMemoryEngine, MEM-ENG-02).

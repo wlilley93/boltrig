@@ -69,7 +69,8 @@ DECLARE
     -- the generic tenant_id policy binds them (the sealed secret lives in the already-
     -- scoped credential_refs table, not here).
     'user_totp','user_recovery_codes','two_factor_challenges',
-    'memory_ingestions','memory_erasures','memory_vectors','memory_vector_edges',
+    'memory_ingestions','memory_erasures','memory_projection_statuses',
+    'memory_vectors','memory_vector_edges',
     'channel_bindings','channel_pairings','run_checkpoints','fanout_counters',
     'run_cancel_requests',
     -- Org -> workspace tenancy ([2026] VJS-COUNTY 8). These three carry a real

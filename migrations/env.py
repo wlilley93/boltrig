@@ -1,13 +1,14 @@
 """Alembic environment (FR-OPS-01).
 
-The baseline (0001) applies store/schema.sql verbatim, so the Alembic head and
-the hand-maintained schema.sql stay in lock-step: a fresh database brought up
-with ``alembic upgrade head`` is byte-identical to one bootstrapped from
-schema.sql. Subsequent schema changes are added as ordered revisions.
+Revision 0001 applies an immutable snapshot and subsequent schema changes are
+ordered migrations. ``store/schema.sql`` remains the fast first-boot bootstrap;
+the migration-parity test compares PostgreSQL catalogues produced by both paths
+so the bootstrap cannot drift from Alembic head.
 
 The connection URL is taken from the environment (DATABASE_URL), never
-hard-coded. Alembic needs a *sync* driver, so an ``+asyncpg`` URL is rewritten
-to the default sync driver here.
+hard-coded. Online migrations use the hash-locked psycopg driver because the
+baseline contains a deliberate multi-statement bootstrap that asyncpg prepared
+statements cannot execute as one operation.
 """
 
 from __future__ import annotations
@@ -19,15 +20,25 @@ from alembic import context
 config = context.config
 
 
-def _sync_url() -> str:
-    url = (
+def _database_url() -> str:
+    return (
         os.environ.get("DATABASE_URL")
         or os.environ.get("BOLTRIG_DATABASE_URL")
         or os.environ.get("BOLTRIG_TEST_DATABASE_URL")
         or "postgresql://localhost/boltrig"
     )
-    # asyncpg is the app's runtime driver; Alembic runs synchronously.
-    return url.replace("+asyncpg", "")
+
+
+def _sync_url() -> str:
+    url = _database_url()
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url.removeprefix("postgres://")
+    if url.startswith("postgresql+"):
+        _scheme, rest = url.split("://", 1)
+        return f"postgresql+psycopg://{rest}"
+    if url.startswith("postgresql://"):
+        return "postgresql+psycopg://" + url.removeprefix("postgresql://")
+    return url
 
 
 def run_migrations_offline() -> None:
@@ -44,11 +55,13 @@ def run_migrations_online() -> None:
     from sqlalchemy import create_engine
 
     engine = create_engine(_sync_url(), future=True)
-    with engine.connect() as connection:
-        context.configure(connection=connection)
-        with context.begin_transaction():
-            context.run_migrations()
-    engine.dispose()
+    try:
+        with engine.connect() as connection:
+            context.configure(connection=connection)
+            with context.begin_transaction():
+                context.run_migrations()
+    finally:
+        engine.dispose()
 
 
 if context.is_offline_mode():
