@@ -1,11 +1,20 @@
 """Idempotency replay: a repeated key returns the stored result, no re-execution
 (NFR-REL-02 / SEC-15). A side-effecting verb must not fire twice on retry."""
 
+import asyncio
+
 import pytest
 
 from boltrig.adapters.base import Result, VerbSpec
 from boltrig.kernel import Kernel
-from boltrig.models import GrantSet, InvocationContext, TenantPermissions
+from boltrig.models import (
+    GrantSet,
+    IdempotencyConflict,
+    InvocationContext,
+    PendingHuman,
+    RateLimited,
+    TenantPermissions,
+)
 from boltrig.store import InMemoryStore
 
 T = "acme"
@@ -19,8 +28,15 @@ class CountingAdapter:
     version = "1.0.0"
     runtime = "script"
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        consequence: str = "low",
+        rate_limit: dict | None = None,
+    ) -> None:
         self.calls = 0
+        self.consequence = consequence
+        self.rate_limit = rate_limit
 
     def describe(self):
         return [
@@ -29,7 +45,8 @@ class CountingAdapter:
                 noun_id="counter",
                 input_schema={"type": "object"},
                 output_schema={"type": "object", "properties": {"n": {"type": "integer"}}},
-                consequence="low",
+                consequence=self.consequence,
+                rate_limit=self.rate_limit,
             )
         ]
 
@@ -41,15 +58,24 @@ class CountingAdapter:
         return "ok"
 
 
-def _ctx():
-    return InvocationContext(tenant_id=T, grants=GrantSet.of(["counter.*"]), actor="t")
+def _ctx(*, actor: str = "t", on_behalf_of: str | None = None):
+    return InvocationContext(
+        tenant_id=T,
+        grants=GrantSet.of(["counter.*"]),
+        actor=actor,
+        on_behalf_of=on_behalf_of,
+    )
 
 
-async def _kernel():
+async def _kernel(
+    *,
+    consequence: str = "low",
+    rate_limit: dict | None = None,
+):
     store = InMemoryStore()
     store.set_tenant_permissions(TenantPermissions(T, GrantSet.of(["*"])))
     k = Kernel(store)
-    adapter = CountingAdapter()
+    adapter = CountingAdapter(consequence=consequence, rate_limit=rate_limit)
     await k.register_adapter(T, adapter)
     return k, adapter
 
@@ -71,3 +97,130 @@ async def test_distinct_key_executes_again():
     await k.invoke("counter", "counter.do", {}, _ctx(), idempotency_key="k1")
     await k.invoke("counter", "counter.do", {}, _ctx(), idempotency_key="k2")
     assert adapter.calls == 2  # a different key is a different action
+
+
+@pytest.mark.kernel
+@pytest.mark.invariant("SEC-15")
+async def test_key_is_bound_to_canonical_request_and_authenticated_identity():
+    k, adapter = await _kernel()
+    first = await k.invoke(
+        "counter", "counter.do", {"b": 2, "a": 1}, _ctx(), idempotency_key="bound"
+    )
+    replay = await k.invoke(
+        "counter", "counter.do", {"a": 1, "b": 2}, _ctx(), idempotency_key="bound"
+    )
+    assert first == replay == {"n": 1}
+
+    for params, context in [
+        ({"a": 2, "b": 2}, _ctx()),
+        ({"a": 1, "b": 2}, _ctx(actor="other")),
+        ({"a": 1, "b": 2}, _ctx(on_behalf_of="alice")),
+    ]:
+        with pytest.raises(IdempotencyConflict):
+            await k.invoke("counter", "counter.do", params, context, idempotency_key="bound")
+    assert adapter.calls == 1
+
+
+class BlockingAdapter(CountingAdapter):
+    def __init__(self) -> None:
+        super().__init__()
+        self.started = asyncio.Event()
+        self.release = asyncio.Event()
+
+    async def execute(self, verb, params, credential, context):
+        self.calls += 1
+        self.started.set()
+        await self.release.wait()
+        return Result.success({"n": self.calls})
+
+
+@pytest.mark.kernel
+@pytest.mark.invariant("SEC-15")
+async def test_concurrent_same_key_has_one_execution_owner():
+    store = InMemoryStore()
+    store.set_tenant_permissions(TenantPermissions(T, GrantSet.of(["*"])))
+    k = Kernel(store)
+    adapter = BlockingAdapter()
+    await k.register_adapter(T, adapter)
+
+    first = asyncio.create_task(
+        k.invoke("counter", "counter.do", {}, _ctx(), idempotency_key="concurrent")
+    )
+    await adapter.started.wait()
+    with pytest.raises(IdempotencyConflict):
+        await k.invoke("counter", "counter.do", {}, _ctx(), idempotency_key="concurrent")
+    adapter.release.set()
+    assert await first == {"n": 1}
+    assert adapter.calls == 1
+
+
+class SecretResultAdapter(CountingAdapter):
+    async def execute(self, verb, params, credential, context):
+        self.calls += 1
+        return Result.success({"nested": {"accessToken": "sk-super-secret"}})
+
+
+@pytest.mark.kernel
+@pytest.mark.invariant("SEC-15")
+async def test_secret_shaped_success_is_completed_uncacheable_not_persisted():
+    store = InMemoryStore()
+    store.set_tenant_permissions(TenantPermissions(T, GrantSet.of(["*"])))
+    k = Kernel(store)
+    adapter = SecretResultAdapter()
+    await k.register_adapter(T, adapter)
+
+    output = await k.invoke("counter", "counter.do", {}, _ctx(), idempotency_key="secret-result")
+    assert output["nested"]["accessToken"] == "sk-super-secret"
+    record = store._idem[(T, "secret-result")]
+    assert record["status"] == "uncacheable" and record["result"] is None
+    assert "sk-super-secret" not in repr(record)
+    with pytest.raises(IdempotencyConflict):
+        await k.invoke("counter", "counter.do", {}, _ctx(), idempotency_key="secret-result")
+    assert adapter.calls == 1
+
+
+@pytest.mark.kernel
+@pytest.mark.invariant("SEC-15")
+async def test_replay_precedes_spent_approval_gate():
+    k, adapter = await _kernel(consequence="high")
+
+    with pytest.raises(PendingHuman) as exc:
+        await k.invoke("counter", "counter.do", {}, _ctx(), idempotency_key="k-high")
+
+    req_id = exc.value.hitl_request_id
+    await k.hitl.answer(T, req_id, "approve", "human")
+    out = await k.invoke(
+        "counter",
+        "counter.do",
+        {},
+        _ctx(),
+        idempotency_key="k-high",
+        approval_id=req_id,
+    )
+
+    retry = await k.invoke(
+        "counter",
+        "counter.do",
+        {},
+        _ctx(),
+        idempotency_key="k-high",
+        approval_id=req_id,
+    )
+    assert out == retry == {"n": 1}
+    assert adapter.calls == 1
+
+
+@pytest.mark.kernel
+@pytest.mark.invariant("SEC-15")
+async def test_replay_precedes_rate_limit():
+    k, adapter = await _kernel(rate_limit={"per": "minute", "max": 1, "scope": "tenant"})
+
+    out = await k.invoke("counter", "counter.do", {}, _ctx(), idempotency_key="k-rate")
+    for _ in range(3):
+        assert (
+            await k.invoke("counter", "counter.do", {}, _ctx(), idempotency_key="k-rate")
+        ) == out
+
+    with pytest.raises(RateLimited):
+        await k.invoke("counter", "counter.do", {}, _ctx(), idempotency_key="k-new")
+    assert adapter.calls == 1

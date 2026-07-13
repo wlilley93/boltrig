@@ -9,6 +9,7 @@ the request body.
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import json
 from contextlib import asynccontextmanager
@@ -23,13 +24,13 @@ from boltrig.models import (
     BoltrigError,
     DegradedMode,
     GrantSet,
-    HITLType,
     InvocationContext,
     PendingHuman,
 )
 from boltrig.store.base import DEFAULT_WORK_PAGE, MAX_WORK_PAGE, clamp_work_page
 
 from . import Kernel
+from .hitl_response_auth import authorize_approval_response
 
 
 @dataclass
@@ -56,6 +57,11 @@ class Principal:
     user_agent: str | None = None
 
     def context(self, *, run_id=None, parent_run_id=None, depth=0, skills=(), extra=None):
+        trusted_extra = {
+            **dict(extra or {}),
+            "principal_role": self.role,
+            "principal_scope": dict(self.scope),
+        }
         return InvocationContext(
             tenant_id=self.tenant_id,
             run_id=run_id,
@@ -66,7 +72,7 @@ class Principal:
             actor=self.subject,
             actor_tier=self.actor_tier,
             skills_loaded=tuple(skills),
-            extra=dict(extra or {}),
+            extra=trusted_extra,
             workspace_id=self.active_workspace_id,
             ip_address=self.ip_address,
             user_agent=self.user_agent,
@@ -82,9 +88,8 @@ def _client_ip(request: Request) -> str | None:
     strips any client-supplied copy); fall back to the TCP peer off-tunnel.
     X-Forwarded-For is deliberately NOT trusted (spoofable unless behind a known
     trusted proxy)."""
-    return (
-        request.headers.get("cf-connecting-ip")
-        or (request.client.host if request.client else None)
+    return request.headers.get("cf-connecting-ip") or (
+        request.client.host if request.client else None
     )
 
 
@@ -105,9 +110,14 @@ async def _dev_principal(request: Request) -> Principal:
     departments = [d for d in h.get("x-boltrig-departments", "").split(",") if d]
     grants_hdr = [g for g in h.get("x-boltrig-grants", "").split(",") if g]
     verbs = [v for v in h.get("x-boltrig-verbs", "").split(",") if v]
-    scope: dict[str, Any] = {"all": True} if role == "org-admin" else {
-        "departments": departments, "verbs": verbs,
-    }
+    scope: dict[str, Any] = (
+        {"all": True}
+        if role == "org-admin"
+        else {
+            "departments": departments,
+            "verbs": verbs,
+        }
+    )
     # Grants priority: an explicit grants header (simulate an ephemeral) wins;
     # otherwise derive from role/scope so dev discovery is not empty (US-KER-05).
     if grants_hdr:
@@ -174,7 +184,9 @@ def _get_kernel(request: Request) -> Kernel:
 # paginated list, and search so all three surfaces agree field-for-field).
 def _conversation_view(c) -> dict:
     return {
-        "id": c.id, "title": c.title, "status": c.status.value,
+        "id": c.id,
+        "title": c.title,
+        "status": c.status.value,
         "updated_at": c.updated_at.isoformat(),
     }
 
@@ -257,6 +269,7 @@ def create_app(
                     await result
 
     app = FastAPI(title="Boltrig Kernel", version="0.1.0", lifespan=lifespan)
+    readiness_service_lock = asyncio.Lock()
     # Edge/web hardening (Batch 1 WEB-02/03/05/06, RES-01): security headers, CORS
     # allowlist, Host validation, request-body cap. Additive middleware; no route
     # or kernel change.
@@ -303,7 +316,7 @@ def create_app(
         # client header when present (CF strips any client-supplied copy), else the
         # TCP peer. X-Forwarded-For is deliberately NOT trusted (spoofable).
         p.ip_address = _client_ip(request)
-        p.user_agent = (request.headers.get("user-agent") or None)
+        p.user_agent = request.headers.get("user-agent") or None
         # RLS-live: bind this request's tenant so the _RlsPool scopes every DB call
         # (a no-op for the in-memory store and when RLS is off).
         set_current_tenant(p.tenant_id)
@@ -313,6 +326,30 @@ def create_app(
     async def healthz(k: Kernel = Depends(_get_kernel)) -> dict:
         health = await k.loader.refresh_health()
         return {"status": "ok", "adapters": {f"{t}/{a}": h for (t, a), h in health.items()}}
+
+    @app.get("/readyz")
+    async def readyz(request: Request, k: Kernel = Depends(_get_kernel)) -> JSONResponse:
+        """Deep deployment readiness; fail closed without requiring user auth."""
+        from boltrig.api.readiness import ReadinessService
+
+        service = getattr(request.app.state, "readiness_service", None)
+        if service is None:
+            async with readiness_service_lock:
+                service = getattr(request.app.state, "readiness_service", None)
+                if service is None:
+                    platform_state = getattr(request.app.state, "platform", {}) or {}
+                    service = platform_state.get("readiness")
+                    if service is None:
+                        service = ReadinessService(
+                            k,
+                            status_provider=platform_state.get("status"),
+                        )
+                    request.app.state.readiness_service = service
+        report = await service.check()
+        return JSONResponse(
+            report,
+            status_code=200 if report.get("status") == "ready" else 503,
+        )
 
     @app.post("/v1/invoke")
     async def invoke(
@@ -328,8 +365,12 @@ def create_app(
         )
         try:
             output = await k.invoke(
-                body.noun, body.verb, body.params, ctx,
-                idempotency_key=body.idempotency_key, approval_id=body.approval_id,
+                body.noun,
+                body.verb,
+                body.params,
+                ctx,
+                idempotency_key=body.idempotency_key,
+                approval_id=body.approval_id,
             )
             return JSONResponse({"status": "ok", "output": output})
         except PendingHuman as e:
@@ -342,9 +383,7 @@ def create_app(
         # any other BoltrigError -> the central exception handler (canonical envelope)
 
     @app.post("/v1/mcp")
-    async def mcp(
-        body: dict, request: Request, k: Kernel = Depends(_get_kernel)
-    ) -> JSONResponse:
+    async def mcp(body: dict, request: Request, k: Kernel = Depends(_get_kernel)) -> JSONResponse:
         # Two ways in, both run the same chokepoint:
         #  - a run-scoped token (the fleet/sidecar path, Round Two): scopes to a run.
         #  - a user bearer / PAT (US-HEAD-02): scopes to the user's effective grants.
@@ -359,28 +398,26 @@ def create_app(
         # at the SAME depth as a human action.
         ip, ua = _client_ip(request), (request.headers.get("user-agent") or None)
         if run_token is not None:
-            return JSONResponse(
-                await k.mcp.handle(run_token, body, ip_address=ip, user_agent=ua)
-            )
+            return JSONResponse(await k.mcp.handle(run_token, body, ip_address=ip, user_agent=ua))
         # user-authenticated MCP: resolve the caller (PAT or configured resolver)
         # and advertise/scope tools to their effective grants (no weak path, SEC-37).
         p = await principal(request)
-        return JSONResponse(
-            await k.mcp.handle_user(p, body, ip_address=ip, user_agent=ua)
-        )
+        return JSONResponse(await k.mcp.handle_user(p, body, ip_address=ip, user_agent=ua))
 
     @app.post("/v1/chat")
-    async def chat(
-        body: ChatBody, request: Request, p: Principal = Depends(principal)
-    ):
+    async def chat(body: ChatBody, request: Request, p: Principal = Depends(principal)):
         chat_svc = getattr(request.app.state, "chat", None)
         if chat_svc is None:
             return JSONResponse({"error": "chat_unavailable"}, status_code=503)
         # The caller's role-resolved grants ride along as the ceiling every chat
         # spawn intersects ([2026] VJS-COUNTY 1) - same resolution as any verb call.
         gen = chat_svc.handle_turn(
-            tenant_id=p.tenant_id, user_id=p.subject, role=p.role, grants=p.grants,
-            message=body.message, conversation_id=body.conversation_id,
+            tenant_id=p.tenant_id,
+            user_id=p.subject,
+            role=p.role,
+            grants=p.grants,
+            message=body.message,
+            conversation_id=body.conversation_id,
             attachments=body.attachments,
         )
         # RBAC / access errors happen before the first event and propagate to the
@@ -441,15 +478,13 @@ def create_app(
             return {"results": [], "next_offset": None}
         query = q.strip()
         if not query:
-            return JSONResponse({"status": "error", "reason": "q is required"},
-                                status_code=400)
+            return JSONResponse({"status": "error", "reason": "q is required"}, status_code=400)
         pairs, next_offset = await chat_svc.search_conversations(
             p.tenant_id, p.subject, query, limit=limit, offset=offset
         )
         return {
             "results": [
-                {**_conversation_view(c), "snippet": _snippet(snippet)}
-                for c, snippet in pairs
+                {**_conversation_view(c), "snippet": _snippet(snippet)} for c, snippet in pairs
             ],
             "next_offset": next_offset,
         }
@@ -462,17 +497,19 @@ def create_app(
         if chat_svc is None:
             return JSONResponse({"error": "chat_unavailable"}, status_code=503)
         # ConversationForbidden (403, SEC-25) propagates to the central handler.
-        messages = await chat_svc.get_messages(
-            p.tenant_id, p.subject, p.role, conversation_id
-        )
+        messages = await chat_svc.get_messages(p.tenant_id, p.subject, p.role, conversation_id)
         if messages is None:
             return JSONResponse({"error": "not_found"}, status_code=404)
         return {
             "messages": [
                 {
-                    "id": m.id, "role": m.role.value, "content": m.content,
-                    "run_id": m.run_id, "hitl_request_id": m.hitl_request_id,
-                    "events": m.events, "attachments": m.attachments,
+                    "id": m.id,
+                    "role": m.role.value,
+                    "content": m.content,
+                    "run_id": m.run_id,
+                    "hitl_request_id": m.hitl_request_id,
+                    "events": m.events,
+                    "attachments": m.attachments,
                     "superseded_by": m.superseded_by,
                     "created_at": m.created_at.isoformat(),
                 }
@@ -507,9 +544,14 @@ def create_app(
         return {
             "requests": [
                 {
-                    "id": r.id, "type": r.type.value, "urgency": r.urgency.value,
-                    "question": r.question, "context": r.context, "options": r.options,
-                    "work_item_id": r.work_item_id, "status": r.status.value,
+                    "id": r.id,
+                    "type": r.type.value,
+                    "urgency": r.urgency.value,
+                    "question": r.question,
+                    "context": r.context,
+                    "options": r.options,
+                    "work_item_id": r.work_item_id,
+                    "status": r.status.value,
                 }
                 for r in pending
             ]
@@ -525,17 +567,8 @@ def create_app(
         req = await k.hitl.get(p.tenant_id, request_id)
         if req is None:
             raise HTTPException(status_code=404, detail="unknown request")
-        # SEC-14: an approval is a human decision and never self-approvable. An
-        # agent (non-human tier) cannot answer one, and the requester cannot
-        # approve their own request.
-        if req.type == HITLType.APPROVAL:
-            if p.actor_tier != "human":
-                raise HTTPException(status_code=403, detail="only a human may approve")
-            if req.requested_by and req.requested_by == p.subject:
-                raise HTTPException(status_code=403, detail="cannot approve your own request")
-        resp = await k.hitl.answer(
-            p.tenant_id, request_id, body.decision, p.subject, body.notes
-        )
+        await authorize_approval_response(k, p, req)
+        resp = await k.hitl.answer(p.tenant_id, request_id, body.decision, p.subject, body.notes)
         return {"status": "answered", "response_id": resp.id}
 
     @app.get("/v1/work")
@@ -564,10 +597,15 @@ def create_app(
         return {
             "items": [
                 {
-                    "id": w.id, "intent": w.intent, "status": w.status.value,
-                    "confidence": w.confidence, "convergent": w.convergent,
-                    "owner_member": w.owner_member, "source": w.source,
-                    "parent_id": w.parent_id, "hatchet_run_id": w.hatchet_run_id,
+                    "id": w.id,
+                    "intent": w.intent,
+                    "status": w.status.value,
+                    "confidence": w.confidence,
+                    "convergent": w.convergent,
+                    "owner_member": w.owner_member,
+                    "source": w.source,
+                    "parent_id": w.parent_id,
+                    "hatchet_run_id": w.hatchet_run_id,
                 }
                 for w in items
             ],
@@ -603,30 +641,38 @@ def create_app(
 
         def _wd(w) -> dict:
             return {
-                "id": w.id, "intent": w.intent, "status": w.status.value,
-                "confidence": w.confidence, "convergent": w.convergent,
-                "owner_member": w.owner_member, "source": w.source,
-                "parent_id": w.parent_id, "hatchet_run_id": w.hatchet_run_id,
+                "id": w.id,
+                "intent": w.intent,
+                "status": w.status.value,
+                "confidence": w.confidence,
+                "convergent": w.convergent,
+                "owner_member": w.owner_member,
+                "source": w.source,
+                "parent_id": w.parent_id,
+                "hatchet_run_id": w.hatchet_run_id,
                 "on_behalf_of": w.on_behalf_of,
             }
 
         # children queried directly by parent_id, still department-scoped and
         # bounded to a page (US-IAM-02 preserved; M7 / SEC-69 bounding).
         child_items = await k.store.list_work_items(
-            p.tenant_id, parent_id=item_id, departments=departments,
+            p.tenant_id,
+            parent_id=item_id,
+            departments=departments,
             limit=MAX_WORK_PAGE,
         )
         children = [_wd(w) for w in child_items]
         trail: list = []
         if item.hatchet_run_id:
-            events = await k.store.audit_query(
-                p.tenant_id, run_id=item.hatchet_run_id, limit=200
-            )
+            events = await k.store.audit_query(p.tenant_id, run_id=item.hatchet_run_id, limit=200)
             trail = [
                 {
                     "ts": e.ts.isoformat() if hasattr(e.ts, "isoformat") else str(e.ts),
-                    "actor": e.actor, "actor_tier": e.actor_tier,
-                    "verb": e.verb, "noun": e.noun, "status": e.status,
+                    "actor": e.actor,
+                    "actor_tier": e.actor_tier,
+                    "verb": e.verb,
+                    "noun": e.noun,
+                    "status": e.status,
                     "detail": e.detail,
                 }
                 for e in events
@@ -643,14 +689,20 @@ def create_app(
 
     @app.get("/v1/runs/{run_id}/events")
     async def run_events(
-        run_id: str, request: Request, follow: int = 0,
-        k: Kernel = Depends(_get_kernel), p: Principal = Depends(principal),
+        run_id: str,
+        request: Request,
+        follow: int = 0,
+        k: Kernel = Depends(_get_kernel),
+        p: Principal = Depends(principal),
     ):
         # Subscribe to a run's live event stream (Round Eleven, the Run drawer).
-        # Tenant-scoped (SEC-56): a run is streamable only if it produced audited
-        # activity in the caller's tenant - you cannot read another tenant's run.
-        rows = await k.store.audit_query(p.tenant_id, run_id=run_id, limit=1)
-        if not rows:
+        # Scope check (SEC-56): run events contain raw tool args/results for the
+        # canvas, so a same-tenant caller must still pass the ordinary visibility
+        # fences before the stream is exposed.
+        from .run_access import visible_run_events
+
+        rows = await visible_run_events(k.store, p, run_id)
+        if rows is None:
             return JSONResponse({"error": "unknown_run"}, status_code=404)
 
         if not follow:

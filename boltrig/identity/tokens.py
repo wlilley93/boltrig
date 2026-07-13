@@ -14,6 +14,7 @@ import hashlib
 import secrets
 import uuid
 from datetime import datetime, timedelta
+from typing import Any
 
 from boltrig.kernel.app import Principal
 from boltrig.models import GrantSet, PersonalAccessToken, utcnow
@@ -47,7 +48,7 @@ def bounded_expiry(now: datetime, ttl_days: int | None) -> datetime:
 
 
 async def mint_pat(
-    store,
+    store: Any,
     *,
     tenant_id: str,
     user_id: str,
@@ -82,7 +83,7 @@ async def mint_pat(
     return pat, secret
 
 
-async def resolve_pat_principal(store, secret: str) -> Principal | None:
+async def resolve_pat_principal(store: Any, secret: str) -> Principal | None:
     """Resolve a PAT secret to a ``Principal``, or ``None`` if it is not usable.
 
     Fail-closed on: unknown / revoked / expired token, or a missing / deactivated

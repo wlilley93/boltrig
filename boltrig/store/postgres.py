@@ -3,8 +3,8 @@
 Mirrors ``InMemoryStore`` method for method so the kernel cannot tell which store
 it runs on; the only difference is durability. Every query is scoped by
 ``tenant_id`` (SEC-08). JSONB columns round-trip as Python dict/list via a codec.
-Schema is ``schema.sql`` (the single source of truth); the DDL is idempotent so
-``connect(apply_schema=True)`` is safe to run on every boot.
+Alembic is authoritative for production upgrades; ``schema.sql`` is an explicit
+fresh-database/test bootstrap used only when ``apply_schema=True``.
 """
 
 from __future__ import annotations
@@ -18,6 +18,8 @@ import asyncpg
 
 from .base import clamp_work_page
 from .channels import ChannelStorePG
+from .guarded_writes import GuardedWritesPG
+from .idempotency import IdempotencyStorePG
 from boltrig.models import (
     AdapterHealth,
     AdapterRecord,
@@ -38,6 +40,7 @@ from boltrig.models import (
     MemoryErasure,
     MemoryFact,
     MemoryIngestion,
+    MemoryProjectionStatus,
     MessageRole,
     NotificationPref,
     PersonalAccessToken,
@@ -54,6 +57,7 @@ from boltrig.models import (
     HITLResponse,
     HITLStatus,
     HITLType,
+    IdempotencyMode,
     ModelEndpoint,
     Noun,
     AI_CONFIG_LEVELS,
@@ -160,7 +164,7 @@ async def _init_conn(conn: asyncpg.Connection) -> None:
     )
 
 
-class PostgresStore(ChannelStorePG):
+class PostgresStore(IdempotencyStorePG, GuardedWritesPG, ChannelStorePG):
     """asyncpg-backed Store. Domain methods live in partial mixins
     (e.g. ``ChannelStorePG``) to keep this file under the structural floor;
     composed here so the public method surface is one class."""
@@ -173,6 +177,12 @@ class PostgresStore(ChannelStorePG):
     async def connect(
         cls, dsn: str, *, apply_schema: bool = True, rls: bool = False
     ) -> "PostgresStore":
+        """Open the durable store.
+
+        ``apply_schema`` is an explicit bootstrap/test convenience. Production
+        application wiring always passes ``False`` and relies on Alembic, so a
+        process restart can never mutate or silently advance the catalogue.
+        """
         pool = await asyncpg.create_pool(
             normalize_dsn(dsn), init=_init_conn, min_size=1, max_size=10
         )
@@ -189,6 +199,20 @@ class PostgresStore(ChannelStorePG):
 
     async def close(self) -> None:
         await self._pool.close()
+
+    async def readiness_snapshot(self) -> tuple[bool, tuple[str, ...]]:
+        """Probe connectivity and return the exact applied Alembic heads.
+
+        This deployment-level probe intentionally bypasses tenant RLS: both
+        ``SELECT 1`` and ``alembic_version`` are global catalogue facts and carry
+        no tenant data. The caller applies a short timeout and redacts exceptions.
+        """
+        async with self._pool.acquire() as conn:
+            alive = await conn.fetchval("SELECT 1") == 1
+            rows = await conn.fetch(
+                "SELECT version_num FROM alembic_version ORDER BY version_num"
+            )
+        return alive, tuple(str(row["version_num"]) for row in rows)
 
     async def apply_rls(self) -> None:
         """Apply the opt-in RLS overlay (boltrig/store/rls.sql): the tenant-isolation
@@ -253,15 +277,18 @@ class PostgresStore(ChannelStorePG):
     async def upsert_verb(self, verb: Verb):
         await self._pool.execute(
             """INSERT INTO verbs (id, tenant_id, noun_id, description, input_schema,
-                                  output_schema, consequence, identity_mode, degraded_mode)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+                                  output_schema, consequence, identity_mode, degraded_mode,
+                                  idempotency_mode)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
                ON CONFLICT (tenant_id, id) DO UPDATE SET
                  noun_id=EXCLUDED.noun_id, description=EXCLUDED.description,
                  input_schema=EXCLUDED.input_schema, output_schema=EXCLUDED.output_schema,
                  consequence=EXCLUDED.consequence, identity_mode=EXCLUDED.identity_mode,
-                 degraded_mode=EXCLUDED.degraded_mode, updated_at=now()""",
+                 degraded_mode=EXCLUDED.degraded_mode,
+                 idempotency_mode=EXCLUDED.idempotency_mode, updated_at=now()""",
             verb.id, verb.tenant_id, verb.noun_id, verb.description, verb.input_schema,
             verb.output_schema, verb.consequence.value, verb.identity_mode, verb.degraded_mode,
+            verb.idempotency_mode.value,
         )
 
     async def upsert_binding(self, b: VerbBinding):
@@ -495,6 +522,16 @@ class PostgresStore(ChannelStorePG):
         )
         return _work(row)
 
+    async def get_work_item_by_run_id(self, tenant_id, run_id):
+        row = await self._pool.fetchrow(
+            """SELECT * FROM work_items
+               WHERE tenant_id=$1 AND (id=$2 OR hatchet_run_id=$2)
+               ORDER BY CASE WHEN id=$2 THEN 0 ELSE 1 END
+               LIMIT 1""",
+            tenant_id, run_id,
+        )
+        return _work(row)
+
     async def update_work_item(self, item: WorkItem):
         await self.create_work_item(item)  # upsert
 
@@ -613,13 +650,13 @@ class PostgresStore(ChannelStorePG):
         await self._pool.execute(
             """INSERT INTO hitl_requests (id, tenant_id, run_id, work_item_id, type, urgency,
                                           context, question, options, assignee, status, timeout_at,
-                                          verb, requested_by)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+                                          verb, requested_by, requested_on_behalf_of, request_fingerprint)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
                ON CONFLICT (tenant_id, id) DO UPDATE SET
                  status=EXCLUDED.status, updated_at=now()""",
             r.id, r.tenant_id, r.run_id, r.work_item_id, r.type.value, r.urgency.value,
             r.context, r.question, r.options, r.assignee, r.status.value, r.timeout_at,
-            r.verb, r.requested_by,
+            r.verb, r.requested_by, r.requested_on_behalf_of, r.request_fingerprint,
         )
 
     async def consume_hitl(self, tenant_id, request_id):
@@ -648,6 +685,14 @@ class PostgresStore(ChannelStorePG):
         async with self._pool.acquire() as conn:
             async with conn.transaction():
                 await _apply_guc(conn)  # RLS-live: scope this explicit transaction
+                row = await conn.fetchrow(
+                    """UPDATE hitl_requests SET status=$3, updated_at=now()
+                       WHERE tenant_id=$1 AND id=$2 AND status=$4 RETURNING *""",
+                    resp.tenant_id, resp.request_id, HITLStatus.ANSWERED.value,
+                    HITLStatus.PENDING.value,
+                )
+                if row is None:
+                    return None
                 await conn.execute(
                     """INSERT INTO hitl_responses (id, request_id, tenant_id, decision, notes,
                                                    respondent, responded_at)
@@ -655,11 +700,6 @@ class PostgresStore(ChannelStorePG):
                        ON CONFLICT (tenant_id, id) DO NOTHING""",
                     resp.id, resp.request_id, resp.tenant_id, resp.decision, resp.notes,
                     resp.respondent, resp.responded_at,
-                )
-                row = await conn.fetchrow(
-                    """UPDATE hitl_requests SET status=$3, updated_at=now()
-                       WHERE tenant_id=$1 AND id=$2 RETURNING *""",
-                    resp.tenant_id, resp.request_id, HITLStatus.ANSWERED.value,
                 )
         return _hitl_req(row)
 
@@ -907,20 +947,6 @@ class PostgresStore(ChannelStorePG):
                         tenant_id, scope_id, new_tokens, new_micros,
                     )
                 return True
-
-    # --- idempotency ------------------------------------------------------
-    async def idempotency_get(self, tenant_id, key):
-        row = await self._pool.fetchrow(
-            "SELECT result FROM idempotency_keys WHERE tenant_id=$1 AND key=$2", tenant_id, key
-        )
-        return row["result"] if row else None
-
-    async def idempotency_put(self, tenant_id, key, result):
-        await self._pool.execute(
-            """INSERT INTO idempotency_keys (tenant_id, key, result) VALUES ($1,$2,$3)
-               ON CONFLICT (tenant_id, key) DO NOTHING""",
-            tenant_id, key, result,
-        )
 
     # --- credential references -------------------------------------------
     async def get_credential_ref(self, tenant_id, cred_id):
@@ -1325,6 +1351,35 @@ class PostgresStore(ChannelStorePG):
             tenant_id, limit,
         )
         return [_mem_erasure(r) for r in rows]
+
+    async def upsert_memory_projection_status(self, s: MemoryProjectionStatus):
+        await self._pool.execute(
+            """INSERT INTO memory_projection_statuses
+               (id, tenant_id, projection_id, operation, status, fact_id, target,
+                projection_ref, error, created_at, updated_at)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+               ON CONFLICT (tenant_id, id) DO UPDATE SET
+                 status=EXCLUDED.status, projection_ref=EXCLUDED.projection_ref,
+                 error=EXCLUDED.error, updated_at=EXCLUDED.updated_at""",
+            s.id, s.tenant_id, s.projection_id, s.operation, s.status, s.fact_id,
+            s.target, s.projection_ref, s.error, s.created_at, s.updated_at,
+        )
+
+    async def list_memory_projection_statuses(self, tenant_id, fact_id=None, limit=50):
+        if fact_id is None:
+            rows = await self._pool.fetch(
+                """SELECT * FROM memory_projection_statuses WHERE tenant_id=$1
+                   ORDER BY updated_at DESC LIMIT $2""",
+                tenant_id, limit,
+            )
+        else:
+            rows = await self._pool.fetch(
+                """SELECT * FROM memory_projection_statuses
+                   WHERE tenant_id=$1 AND fact_id=$2
+                   ORDER BY updated_at DESC LIMIT $3""",
+                tenant_id, fact_id, limit,
+            )
+        return [_mem_projection(r) for r in rows]
 
     # --- Round Four: users + provisioning (USR) ---
     async def upsert_user(self, u: User):
@@ -1877,6 +1932,7 @@ def _verb(r):
         input_schema=r["input_schema"], output_schema=r["output_schema"],
         description=r["description"] or "", consequence=Consequence(r["consequence"]),
         degraded_mode=r["degraded_mode"], identity_mode=r["identity_mode"],
+        idempotency_mode=IdempotencyMode(r["idempotency_mode"]),
     )
 
 
@@ -1986,8 +2042,8 @@ def _hitl_req(r):
         status=HITLStatus(r["status"]), work_item_id=r["work_item_id"],
         options=list(r["options"] or []), assignee=r["assignee"], timeout_at=r["timeout_at"],
         verb=r["verb"], requested_by=r["requested_by"],
+        requested_on_behalf_of=r["requested_on_behalf_of"], request_fingerprint=r["request_fingerprint"],
     )
-
 
 def _hitl_resp(r):
     if r is None:
@@ -2158,6 +2214,17 @@ def _mem_erasure(r):
         target=r["target"], scope=r["scope"], engine_confirmed=r["engine_confirmed"],
         transcript_handled=r["transcript_handled"], facts_removed=r["facts_removed"],
         created_at=r["created_at"], completed_at=r["completed_at"],
+    )
+
+
+def _mem_projection(r):
+    if r is None:
+        return None
+    return MemoryProjectionStatus(
+        id=r["id"], tenant_id=r["tenant_id"], projection_id=r["projection_id"],
+        operation=r["operation"], status=r["status"], fact_id=r["fact_id"],
+        target=r["target"], projection_ref=r["projection_ref"], error=r["error"],
+        created_at=r["created_at"], updated_at=r["updated_at"],
     )
 
 

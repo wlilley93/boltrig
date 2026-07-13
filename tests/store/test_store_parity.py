@@ -22,12 +22,15 @@ from boltrig.models import (
     ActionType,
     AuditEvent,
     HITLRequest,
+    HITLResponse,
     HITLStatus,
     HITLType,
     MemoryFact,
+    MemoryProjectionStatus,
     Urgency,
     utcnow,
 )
+from boltrig.store.idempotency_contract import IdempotencyClaimStatus
 
 DSN = os.environ.get("BOLTRIG_TEST_DATABASE_URL")
 T = "acme"
@@ -35,6 +38,7 @@ _TABLES = (
     "nouns,verbs,verb_bindings,adapters,skills,agent_capabilities,workflow_definitions,"
     "model_endpoints,work_items,hitl_requests,hitl_responses,audit_log,budgets,"
     "idempotency_keys,credential_refs,tenant_permissions,memory_facts,"
+    "memory_projection_statuses,"
     "security_log,audit_rollup_anchors"
 )
 
@@ -73,12 +77,52 @@ async def store(request):
 # --- idempotency (SEC-15 / NFR-REL-02) -------------------------------------
 @pytest.mark.store
 @pytest.mark.invariant("SEC-15")
-async def test_idempotency_put_then_get_roundtrips(store):
-    assert await store.idempotency_get(T, "missing") is None
-    await store.idempotency_put(T, "k1", {"id": "x", "n": 1})
-    assert await store.idempotency_get(T, "k1") == {"id": "x", "n": 1}
-    # tenant-scoped: another tenant's key space is separate
-    assert await store.idempotency_get("other", "k1") is None
+async def test_idempotency_claim_is_bound_single_owner_and_replayable(store):
+    args = dict(
+        actor="agent",
+        on_behalf_of="alice",
+        workspace_id="w1",
+        noun="ticket",
+        verb="ticket.create",
+        request_hash="sha256-request",
+        lease_seconds=60,
+    )
+    first = await store.idempotency_claim(T, "k1", owner_token="owner-1", **args)
+    concurrent = await store.idempotency_claim(T, "k1", owner_token="owner-2", **args)
+    mismatch = await store.idempotency_claim(
+        T, "k1", owner_token="owner-3", **{**args, "actor": "other"}
+    )
+    assert first.status == IdempotencyClaimStatus.ACQUIRED
+    assert concurrent.status == IdempotencyClaimStatus.IN_PROGRESS
+    assert mismatch.status == IdempotencyClaimStatus.MISMATCH
+    assert await store.idempotency_start(T, "k1", "owner-1", 60)
+    assert await store.idempotency_complete(T, "k1", "owner-1", {"id": "x"})
+    replay = await store.idempotency_claim(T, "k1", owner_token="owner-4", **args)
+    assert replay.status == IdempotencyClaimStatus.COMPLETED
+    assert replay.result == {"id": "x"}
+    other = await store.idempotency_claim("other", "k1", owner_token="owner", **args)
+    assert other.status == IdempotencyClaimStatus.ACQUIRED
+
+
+@pytest.mark.store
+@pytest.mark.invariant("SEC-15")
+async def test_idempotency_expiry_reclaims_only_before_execution(store):
+    args = dict(
+        actor="agent",
+        on_behalf_of=None,
+        workspace_id=None,
+        noun="workflow",
+        verb="workflow.trigger",
+        request_hash="request",
+        lease_seconds=0,
+    )
+    first = await store.idempotency_claim(T, "lease", owner_token="owner-1", **args)
+    reclaimed = await store.idempotency_claim(T, "lease", owner_token="owner-2", **args)
+    assert first.status == reclaimed.status == IdempotencyClaimStatus.ACQUIRED
+    assert await store.idempotency_start(T, "lease", "owner-2", 0)
+    expired = await store.idempotency_claim(T, "lease", owner_token="owner-3", **args)
+    assert expired.status == IdempotencyClaimStatus.UNCERTAIN
+    assert not await store.idempotency_start(T, "lease", "owner-3", 60)
 
 
 # --- audit chain (SEC-16) ---------------------------------------------------
@@ -141,9 +185,15 @@ async def test_audit_enrichment_and_security_stream_roundtrip_on_both_stores(sto
     # D3: the security stream head/append/query chain round-trips on both stores.
     assert await store.security_head(T) == (0, None)
     s1 = SecurityEvent(
-        tenant_id=T, ts=utcnow(), event_type=SecurityEventType.LOGIN_FAILURE,
-        reason="invalid_email_or_password", actor="eve", ip_address="1.2.3.4",
-        seq=1, prev_hash=None, hash="s1",
+        tenant_id=T,
+        ts=utcnow(),
+        event_type=SecurityEventType.LOGIN_FAILURE,
+        reason="invalid_email_or_password",
+        actor="eve",
+        ip_address="1.2.3.4",
+        seq=1,
+        prev_hash=None,
+        hash="s1",
     )
     await store.security_append(s1)
     assert await store.security_head(T) == (1, "s1")
@@ -153,8 +203,14 @@ async def test_audit_enrichment_and_security_stream_roundtrip_on_both_stores(sto
 
     # D4: an anchor round-trips, and latest_audit_anchor keys on (tenant, workspace).
     a = AuditRollupAnchor(
-        id="anch-1", tenant_id=T, workspace_id=None, seq_start=1, seq_end=2,
-        rollup_root_hash="root-abc", anchored_at=utcnow(), is_dev_fallback=True,
+        id="anch-1",
+        tenant_id=T,
+        workspace_id=None,
+        seq_start=1,
+        seq_end=2,
+        rollup_root_hash="root-abc",
+        anchored_at=utcnow(),
+        is_dev_fallback=True,
     )
     await store.add_audit_anchor(a)
     latest = await store.latest_audit_anchor(T)
@@ -178,6 +234,25 @@ def _answered_hitl(req_id: str) -> HITLRequest:
         options=["approve", "reject"],
         verb="ticket.delete",
         requested_by="alice",
+        requested_on_behalf_of="owner",
+        request_fingerprint="delete-fingerprint",
+    )
+
+
+def _pending_hitl(req_id: str) -> HITLRequest:
+    req = _answered_hitl(req_id)
+    req.status = HITLStatus.PENDING
+    return req
+
+
+def _response(req_id: str, resp_id: str = "resp1") -> HITLResponse:
+    return HITLResponse(
+        id=resp_id,
+        request_id=req_id,
+        tenant_id=T,
+        decision="approve",
+        respondent="lead@acme",
+        responded_at=utcnow(),
     )
 
 
@@ -191,6 +266,29 @@ async def test_consume_hitl_is_single_use(store):
     assert await store.consume_hitl(T, "req1") is False
     # an unknown request never consumes
     assert await store.consume_hitl(T, "nope") is False
+
+
+@pytest.mark.store
+@pytest.mark.invariant("SEC-14")
+async def test_hitl_request_binding_round_trips(store):
+    expected = _pending_hitl("req-bound")
+    await store.create_hitl_request(expected)
+    actual = await store.get_hitl_request(T, expected.id)
+    assert actual.requested_on_behalf_of == "owner"
+    assert actual.request_fingerprint == "delete-fingerprint"
+
+
+@pytest.mark.store
+@pytest.mark.invariant("SEC-14")
+async def test_answer_hitl_only_transitions_pending_requests(store):
+    await store.create_hitl_request(_pending_hitl("req-answer"))
+    assert await store.answer_hitl(_response("req-answer")) is not None
+    # Once answered, a second answer is refused and does not create a new response.
+    assert await store.answer_hitl(_response("req-answer", "resp2")) is None
+    assert await store.consume_hitl(T, "req-answer") is True
+    # Once consumed, it still cannot be answered back into an authorizing state.
+    assert await store.answer_hitl(_response("req-answer", "resp3")) is None
+    assert await store.consume_hitl(T, "req-answer") is False
 
 
 # --- newest-first list ordering (OBS) --------------------------------------
@@ -221,6 +319,44 @@ async def test_list_memory_facts_is_newest_first(store):
     assert [r.id for r in rows] == ["c", "b", "a"]  # newest first on both stores
 
 
+@pytest.mark.store
+async def test_memory_projection_status_upserts_and_filters_on_both_stores(store):
+    base = utcnow()
+    row = MemoryProjectionStatus(
+        id="mem0:remember:f1",
+        tenant_id=T,
+        projection_id="mem0",
+        operation="remember",
+        status="pending",
+        fact_id="f1",
+        created_at=base,
+        updated_at=base,
+    )
+    await store.upsert_memory_projection_status(row)
+    await store.upsert_memory_projection_status(
+        MemoryProjectionStatus(**{**row.__dict__, "status": "written", "projection_ref": "mem0:f1"})
+    )
+    await store.upsert_memory_projection_status(
+        MemoryProjectionStatus(
+            id="cognee:remember:f2",
+            tenant_id=T,
+            projection_id="cognee",
+            operation="remember",
+            status="failed",
+            fact_id="f2",
+            error="down",
+            created_at=base,
+            updated_at=base + timedelta(seconds=1),
+        )
+    )
+
+    rows = await store.list_memory_projection_statuses(T, fact_id="f1")
+    assert [(r.projection_id, r.status, r.projection_ref) for r in rows] == [
+        ("mem0", "written", "mem0:f1")
+    ]
+    assert [r.fact_id for r in await store.list_memory_projection_statuses(T)] == ["f2", "f1"]
+
+
 # --- workflow workspace scope round-trip ([2026] VJS-COUNTY 8, D2) ----------
 @pytest.mark.store
 @pytest.mark.invariant("FR-WFL-11")
@@ -229,9 +365,14 @@ async def test_workflow_workspace_id_roundtrips_on_both_stores(store):
 
     def _wf(id: str, workspace_id: str | None) -> WorkflowDefinition:
         return WorkflowDefinition(
-            id=id, tenant_id=T, version="1.0.0", source=WorkflowSource.LEARNED,
-            definition={"name": id, "steps": []}, intent_tags=["billing"],
-            origin_task="x", workspace_id=workspace_id,
+            id=id,
+            tenant_id=T,
+            version="1.0.0",
+            source=WorkflowSource.LEARNED,
+            definition={"name": id, "steps": []},
+            intent_tags=["billing"],
+            origin_task="x",
+            workspace_id=workspace_id,
         )
 
     # A SET workspace and a NULL (org-wide) workflow both round-trip identically on

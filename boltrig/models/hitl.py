@@ -58,6 +58,11 @@ class HITLRequest:
     # approve their own request.
     verb: str | None = None
     requested_by: UserId | None = None
+    requested_on_behalf_of: UserId | None = None
+    # SHA-256 over the canonical action, validated params, authenticated caller
+    # context and optional mutable-resource state.  A response is useful only for
+    # an invocation that recomputes this exact fingerprint.
+    request_fingerprint: str | None = None
 
 
 @dataclass

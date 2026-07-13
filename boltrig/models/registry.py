@@ -28,6 +28,13 @@ class TargetType(str, Enum):
     AGENT = "agent"
 
 
+class IdempotencyMode(str, Enum):
+    """Whether successful output may be persisted and replayed by the kernel."""
+
+    CACHEABLE = "cacheable"
+    DISABLED = "disabled"
+
+
 @dataclass(frozen=True)
 class Noun:
     """A stable concept agents reason about (e.g. ``ticket``)."""
@@ -53,6 +60,7 @@ class Verb:
     degraded_mode: dict[str, Any] | None = None
     # service-principal | delegated (US-IAM-03). delegated => OAuth on-behalf-of.
     identity_mode: str = "service-principal"
+    idempotency_mode: IdempotencyMode = IdempotencyMode.CACHEABLE
 
 
 @dataclass(frozen=True)

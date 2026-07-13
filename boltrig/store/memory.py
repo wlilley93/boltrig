@@ -12,6 +12,8 @@ from datetime import datetime, timedelta
 
 from .base import clamp_work_page
 from .channels import ChannelStoreMem
+from .guarded_writes import GuardedWritesMem
+from .idempotency import IdempotencyStoreMem
 from boltrig.models import (
     AdapterRecord,
     AgentCapability,
@@ -39,6 +41,7 @@ from boltrig.models import (
     MemoryErasure,
     MemoryFact,
     MemoryIngestion,
+    MemoryProjectionStatus,
     ModelEndpoint,
     Noun,
     AI_CONFIG_LEVELS,
@@ -76,9 +79,10 @@ def _norm_email_key(value) -> str:
     return value.strip().lower() if isinstance(value, str) else ""
 
 
-class InMemoryStore(ChannelStoreMem):
+class InMemoryStore(IdempotencyStoreMem, GuardedWritesMem, ChannelStoreMem):
     """In-memory Store (offline + test). Domain methods live in partial mixins
     (e.g. ``ChannelStoreMem``), composed here for one public method surface."""
+
     """A complete, async, dict-backed Store. Satisfies ``store.base.Store``."""
 
     def __init__(self) -> None:
@@ -123,6 +127,7 @@ class InMemoryStore(ChannelStoreMem):
         self._mem_facts: dict[tuple[str, str], MemoryFact] = {}
         self._mem_ingest: dict[tuple[str, str], MemoryIngestion] = {}
         self._mem_erase: list[MemoryErasure] = []
+        self._mem_projection: dict[tuple[str, str], MemoryProjectionStatus] = {}
         # Round Four: users, tokens, invitations, settings, sessions.
         self._users: dict[tuple[str, str], User] = {}
         self._pats: dict[tuple[str, str], PersonalAccessToken] = {}
@@ -259,16 +264,19 @@ class InMemoryStore(ChannelStoreMem):
         for (t, _run_id), (wf_id, status, started) in self._workflow_runs.items():
             if t != tenant_id:
                 continue
-            b = buckets.setdefault(wf_id, {"run_count": 0, "success_count": 0,
-                                          "last_run_at": None})
+            b = buckets.setdefault(wf_id, {"run_count": 0, "success_count": 0, "last_run_at": None})
             b["run_count"] += 1
             if status == "completed":
                 b["success_count"] += 1
             if b["last_run_at"] is None or started > b["last_run_at"]:
                 b["last_run_at"] = started
         return [
-            {"workflow_id": wf_id, "run_count": b["run_count"],
-             "success_count": b["success_count"], "last_run_at": b["last_run_at"]}
+            {
+                "workflow_id": wf_id,
+                "run_count": b["run_count"],
+                "success_count": b["success_count"],
+                "last_run_at": b["last_run_at"],
+            }
             for wf_id, b in sorted(buckets.items())
         ]
 
@@ -288,12 +296,26 @@ class InMemoryStore(ChannelStoreMem):
     async def get_work_item(self, tenant_id, item_id):
         return self._work.get((tenant_id, item_id))
 
+    async def get_work_item_by_run_id(self, tenant_id, run_id):
+        direct = self._work.get((tenant_id, run_id))
+        if direct is not None:
+            return direct
+        for (t, _), item in self._work.items():
+            if t == tenant_id and item.hatchet_run_id == run_id:
+                return item
+        return None
+
     async def update_work_item(self, item):
         self._work[(item.tenant_id, item.id)] = item
 
     async def list_work_items(
-        self, tenant_id, status=None, parent_id=None, departments=None,
-        limit=None, cursor=None,
+        self,
+        tenant_id,
+        status=None,
+        parent_id=None,
+        departments=None,
+        limit=None,
+        cursor=None,
     ):
         out = [w for (t, _), w in self._work.items() if t == tenant_id]
         if status is not None:
@@ -351,15 +373,17 @@ class InMemoryStore(ChannelStoreMem):
         self, tenant_id, run_id, step, status, output=None, hitl_request_id=None
     ):
         self._checkpoints[(tenant_id, run_id, step)] = RunCheckpoint(
-            tenant_id=tenant_id, run_id=run_id, step=step, status=status,
-            output=output, hitl_request_id=hitl_request_id, updated_at=utcnow(),
+            tenant_id=tenant_id,
+            run_id=run_id,
+            step=step,
+            status=status,
+            output=output,
+            hitl_request_id=hitl_request_id,
+            updated_at=utcnow(),
         )
 
     async def list_checkpoints(self, tenant_id, run_id):
-        out = [
-            c for (t, r, _), c in self._checkpoints.items()
-            if t == tenant_id and r == run_id
-        ]
+        out = [c for (t, r, _), c in self._checkpoints.items() if t == tenant_id and r == run_id]
         # oldest-first with a step tiebreak, matching the Postgres ORDER BY.
         return sorted(out, key=lambda c: (c.updated_at, c.step))
 
@@ -388,10 +412,10 @@ class InMemoryStore(ChannelStoreMem):
         ]
 
     async def answer_hitl(self, resp):
-        self._hitl_resp[(resp.tenant_id, resp.id)] = resp
         req = self._hitl.get((resp.tenant_id, resp.request_id))
-        if req is None:
+        if req is None or req.status != HITLStatus.PENDING:
             return None
+        self._hitl_resp[(resp.tenant_id, resp.id)] = resp
         req.status = HITLStatus.ANSWERED
         return req
 
@@ -449,15 +473,13 @@ class InMemoryStore(ChannelStoreMem):
         self._anchors.setdefault(anchor.tenant_id, []).append(anchor)
 
     async def latest_audit_anchor(self, tenant_id, workspace_id=None):
-        rows = [
-            a for a in self._anchors.get(tenant_id, [])
-            if a.workspace_id == workspace_id
-        ]
+        rows = [a for a in self._anchors.get(tenant_id, []) if a.workspace_id == workspace_id]
         return rows[-1] if rows else None
 
     async def list_audit_anchors(self, tenant_id, workspace_id=None, limit=200):
         rows = [
-            a for a in self._anchors.get(tenant_id, [])
+            a
+            for a in self._anchors.get(tenant_id, [])
             if workspace_id is None or a.workspace_id == workspace_id
         ]
         return rows[-limit:]
@@ -542,13 +564,6 @@ class InMemoryStore(ChannelStoreMem):
             )
         return True
 
-    # --- idempotency ---
-    async def idempotency_get(self, tenant_id, key):
-        return self._idem.get((tenant_id, key))
-
-    async def idempotency_put(self, tenant_id, key, result):
-        self._idem.setdefault((tenant_id, key), result)
-
     # --- credential references ---
     async def get_credential_ref(self, tenant_id, cred_id):
         return self._creds.get((tenant_id, cred_id))
@@ -570,10 +585,7 @@ class InMemoryStore(ChannelStoreMem):
         # Owner scope (SEC-25) + stable ordering: updated_at DESC with an id ASC
         # tiebreak. Python's sort is stable, so sorting by id first then by
         # updated_at (reverse) leaves ties ordered by ascending id deterministically.
-        out = [
-            c for (t, _), c in self._convs.items()
-            if t == tenant_id and c.user_id == user_id
-        ]
+        out = [c for (t, _), c in self._convs.items() if t == tenant_id and c.user_id == user_id]
         out.sort(key=lambda c: c.id)
         out.sort(key=lambda c: c.updated_at, reverse=True)
         return out
@@ -583,7 +595,7 @@ class InMemoryStore(ChannelStoreMem):
         # A stable window over an already-ordered list: the slice plus the next
         # offset (None once the list is exhausted). Mirrors the postgres LIMIT/OFFSET.
         start = max(0, offset)
-        window = rows[start:start + limit]
+        window = rows[start : start + limit]
         nxt = start + limit if start + limit < len(rows) else None
         return window, nxt
 
@@ -640,10 +652,7 @@ class InMemoryStore(ChannelStoreMem):
         self._summaries.setdefault(summary.conversation_id, []).append(summary)
 
     async def get_latest_conversation_summary(self, tenant_id, conversation_id):
-        rows = [
-            s for s in self._summaries.get(conversation_id, [])
-            if s.tenant_id == tenant_id
-        ]
+        rows = [s for s in self._summaries.get(conversation_id, []) if s.tenant_id == tenant_id]
         if not rows:
             return None
         # The latest summary covers the most messages (widest boundary); break ties
@@ -655,7 +664,8 @@ class InMemoryStore(ChannelStoreMem):
         # messages AND their derived summaries; audit rows are elsewhere and never
         # touched. Tenant-scoped.
         doomed = [
-            c for (t, _), c in self._convs.items()
+            c
+            for (t, _), c in self._convs.items()
             if t == tenant_id
             and c.status == ConversationStatus.CLOSED
             and c.updated_at <= older_than
@@ -675,7 +685,8 @@ class InMemoryStore(ChannelStoreMem):
 
     async def list_config_revisions(self, tenant_id, kind, ref):
         return [
-            r for r in self._revisions
+            r
+            for r in self._revisions
             if r.tenant_id == tenant_id and r.kind == kind and r.ref == ref
         ]
 
@@ -724,8 +735,10 @@ class InMemoryStore(ChannelStoreMem):
     async def query_memory(self, tenant_id, owner_scopes, kind=None, limit=20):
         scopes = set(owner_scopes)
         out = [
-            m for m in self._memory
-            if m.tenant_id == tenant_id and m.owner_scope in scopes
+            m
+            for m in self._memory
+            if m.tenant_id == tenant_id
+            and m.owner_scope in scopes
             and (kind is None or m.kind == kind)
         ]
         # newest-first, matching the Postgres ORDER BY created_at DESC contract.
@@ -741,9 +754,9 @@ class InMemoryStore(ChannelStoreMem):
     async def list_memory_facts(self, tenant_id, owner_scopes, kind=None, limit=50):
         scopes = set(owner_scopes)
         out = [
-            f for (t, _), f in self._mem_facts.items()
-            if t == tenant_id and f.owner_scope in scopes
-            and (kind is None or f.kind == kind)
+            f
+            for (t, _), f in self._mem_facts.items()
+            if t == tenant_id and f.owner_scope in scopes and (kind is None or f.kind == kind)
         ]
         return sorted(out, key=lambda f: f.created_at, reverse=True)[:limit]
 
@@ -766,6 +779,17 @@ class InMemoryStore(ChannelStoreMem):
     async def list_memory_erasures(self, tenant_id, limit=50):
         out = [e for e in self._mem_erase if e.tenant_id == tenant_id]
         return sorted(out, key=lambda e: e.created_at, reverse=True)[:limit]
+
+    async def upsert_memory_projection_status(self, status):
+        self._mem_projection[(status.tenant_id, status.id)] = status
+
+    async def list_memory_projection_statuses(self, tenant_id, fact_id=None, limit=50):
+        out = [
+            s
+            for (t, _), s in self._mem_projection.items()
+            if t == tenant_id and (fact_id is None or s.fact_id == fact_id)
+        ]
+        return sorted(out, key=lambda s: s.updated_at, reverse=True)[:limit]
 
     # --- Round Four: users + provisioning (USR) ---
     async def upsert_user(self, user):
@@ -796,10 +820,7 @@ class InMemoryStore(ChannelStoreMem):
         return None
 
     async def list_pats(self, tenant_id, user_id):
-        return [
-            p for (t, _), p in self._pats.items()
-            if t == tenant_id and p.user_id == user_id
-        ]
+        return [p for (t, _), p in self._pats.items() if t == tenant_id and p.user_id == user_id]
 
     async def update_pat(self, pat):
         self._pats[(pat.tenant_id, pat.id)] = pat
@@ -905,10 +926,7 @@ class InMemoryStore(ChannelStoreMem):
         self._settings[(setting.tenant_id, setting.user_id, setting.key)] = setting
 
     async def list_user_settings(self, tenant_id, user_id):
-        return [
-            s for (t, u, _), s in self._settings.items()
-            if t == tenant_id and u == user_id
-        ]
+        return [s for (t, u, _), s in self._settings.items() if t == tenant_id and u == user_id]
 
     # --- sessions (SET-70) ---
     async def add_session(self, session):
@@ -916,8 +934,7 @@ class InMemoryStore(ChannelStoreMem):
 
     async def list_sessions(self, tenant_id, user_id):
         return [
-            s for (t, _), s in self._sessions.items()
-            if t == tenant_id and s.user_id == user_id
+            s for (t, _), s in self._sessions.items() if t == tenant_id and s.user_id == user_id
         ]
 
     async def get_session(self, tenant_id, session_id):
@@ -962,9 +979,7 @@ class InMemoryStore(ChannelStoreMem):
         return self._workspaces.get((tenant_id, workspace_id))
 
     async def list_workspaces(self, tenant_id):
-        return [
-            w for (t, _), w in self._workspaces.items() if t == tenant_id
-        ]
+        return [w for (t, _), w in self._workspaces.items() if t == tenant_id]
 
     async def update_workspace(self, workspace):
         workspace.updated_at = utcnow()
@@ -1000,9 +1015,7 @@ class InMemoryStore(ChannelStoreMem):
         return sorted(self._identity_orgs.get(_norm_email_key(email), {}).keys())
 
     async def list_org_members(self, tenant_id):
-        return [
-            m for (t, _), m in self._org_members.items() if t == tenant_id
-        ]
+        return [m for (t, _), m in self._org_members.items() if t == tenant_id]
 
     async def list_orgs_for_user(self, tenant_id, user_id):
         # The membership query switching will later use. Still tenant-scoped: it
@@ -1032,7 +1045,8 @@ class InMemoryStore(ChannelStoreMem):
 
     async def list_workspace_members(self, tenant_id, workspace_id):
         return [
-            m for (w, _), m in self._workspace_members.items()
+            m
+            for (w, _), m in self._workspace_members.items()
             if w == workspace_id and m.tenant_id == tenant_id
         ]
 

@@ -62,3 +62,26 @@ class MemoryErasure:
     facts_removed: int = 0
     created_at: datetime = field(default_factory=utcnow)
     completed_at: datetime | None = None
+
+
+@dataclass
+class MemoryProjectionStatus:
+    """Per-backend projection state for kernel-led memory fanout.
+
+    The canonical memory fact/erasure is owned by Boltrig. Mem0, Cognee, or any
+    other backend is a projection with its own write/delete state and external
+    reference. This row is the operator-visible answer to "did the projection
+    catch up?" without making the projection authoritative.
+    """
+
+    id: str
+    tenant_id: TenantId
+    projection_id: str
+    operation: str  # remember | forget
+    status: str  # pending | written | failed | deleted | delete_failed
+    fact_id: str | None = None
+    target: str | None = None
+    projection_ref: str | None = None
+    error: str | None = None
+    created_at: datetime = field(default_factory=utcnow)
+    updated_at: datetime = field(default_factory=utcnow)

@@ -80,6 +80,10 @@ class VerbSpec:
     description: str = ""
     rate_limit: dict[str, Any] | None = None
     degraded_mode: dict[str, Any] | None = None
+    # ``disabled`` is for one-time/bearer-secret results that must never be
+    # persisted for replay (for example an invitation token).  It is declarative
+    # adapter data, not a kernel hard-coded verb list.
+    idempotency_mode: str = "cacheable"
 
 
 @runtime_checkable
@@ -93,7 +97,10 @@ class Adapter(Protocol):
         ...
 
     async def execute(
-        self, verb: str, params: dict[str, Any], credential: Credential | None,
+        self,
+        verb: str,
+        params: dict[str, Any],
+        credential: Credential | None,
         context: InvocationContext,
     ) -> Result:
         """Perform the action. Implements retry/backoff, pagination, rate-limit

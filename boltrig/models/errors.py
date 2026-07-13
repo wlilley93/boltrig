@@ -37,11 +37,34 @@ class BindingNotFound(BoltrigError):
     reason = "binding_not_found"
 
 
+class AdapterFailure(BoltrigError):
+    """An adapter rejected a call using the shared adapter error taxonomy."""
+
+    def __init__(self, message: str, *, status_code: int, reason: str) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.reason = reason
+
+
 class GrantMissing(BoltrigError):
     """The caller's grants do not authorise this verb (P8, SEC-07, K-2)."""
 
     status_code = 403
     reason = "grant_missing"
+
+
+class HITLStateConflict(BoltrigError):
+    """A human-in-the-loop request is no longer answerable in its current state."""
+
+    status_code = 409
+    reason = "hitl_state_conflict"
+
+
+class IdempotencyConflict(BoltrigError):
+    """An idempotency key is bound, in flight, or unsafe to replay."""
+
+    status_code = 409
+    reason = "idempotency_conflict"
 
 
 class TenantIsolation(BoltrigError):

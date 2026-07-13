@@ -93,11 +93,13 @@ def test_member_can_operate_but_not_author():
     )
     assert authoring.status_code == 403  # member cannot author
 
-    # a superadmin CAN author the same route
+    # A superadmin reaches the governed authoring path; the mutation is held for
+    # a second human rather than bypassing control-plane HITL.
     admin_authoring = c.post(
         "/v1/nouns", headers={HDR: "good.boss@acme.test"}, json={"id": "x"}
     )
-    assert admin_authoring.status_code in (200, 201)
+    assert admin_authoring.status_code == 202
+    assert admin_authoring.json()["status"] == "pending_human"
 
 
 @pytest.mark.security
