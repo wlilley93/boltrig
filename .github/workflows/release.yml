@@ -1,0 +1,329 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: boltrig-release
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: Prepare draft release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: release
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ github.ref_name }}
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+    outputs:
+      release-commit: ${{ steps.verify.outputs.release-commit }}
+    steps:
+      - name: Checkout release commit with full ancestry
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Require a new semantic tag reachable from the default branch
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "release tag must be vMAJOR.MINOR.PATCH with an optional prerelease" >&2
+            exit 1
+          fi
+          release_commit="$(git rev-list -n 1 "$RELEASE_TAG")"
+          git merge-base --is-ancestor "$release_commit" "origin/$DEFAULT_BRANCH"
+          echo "release-commit=$release_commit" >> "$GITHUB_OUTPUT"
+
+      - name: Refuse to replace an existing release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "release $RELEASE_TAG already exists; release evidence is immutable" >&2
+            exit 1
+          fi
+
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >-
+          gh release create "$RELEASE_TAG"
+          --repo "$GITHUB_REPOSITORY"
+          --draft --verify-tag --generate-notes
+          --title "$RELEASE_TAG"
+
+  candidates:
+    name: Verify candidate ${{ matrix.image }}
+    needs: [preflight]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    environment: release
+    permissions:
+      contents: write
+      id-token: write
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: kernel
+            dockerfile: deploy/kernel.Dockerfile
+            context: .
+          - image: fleet
+            dockerfile: deploy/fleet.Dockerfile
+            context: .
+          - image: ui
+            dockerfile: ui/Dockerfile
+            context: ui
+          - image: pi-sidecar
+            dockerfile: services/pi_sidecar/Dockerfile
+            context: services/pi_sidecar
+          - image: backup
+            dockerfile: deploy/backup.Dockerfile
+            context: .
+    env:
+      IMAGE: ${{ matrix.image }}
+      LOCAL_IMAGE: boltrig-release-${{ matrix.image }}:${{ github.run_id }}-${{ github.run_attempt }}
+      CANDIDATE_TAG: candidate-${{ github.run_id }}-${{ github.run_attempt }}
+      RELEASE_TAG: ${{ github.ref_name }}
+      RELEASE_COMMIT: ${{ needs.preflight.outputs.release-commit }}
+      SBOM_FILE: sbom-${{ matrix.image }}.cdx.json
+      IMAGE_REF_FILE: image-ref-${{ matrix.image }}.txt
+    steps:
+      - name: Checkout the tagged source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install pinned Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.0.6
+
+      - name: Build release candidate locally
+        env:
+          BUILD_CONTEXT: ${{ matrix.context }}
+          DOCKERFILE: ${{ matrix.dockerfile }}
+        run: >-
+          docker build --pull
+          --file "$DOCKERFILE"
+          --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY"
+          --label "org.opencontainers.image.revision=$RELEASE_COMMIT"
+          --label "org.opencontainers.image.version=$RELEASE_TAG"
+          --tag "$LOCAL_IMAGE"
+          "$BUILD_CONTEXT"
+
+      - name: Block fixable high or critical vulnerabilities before publication
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.72.0
+          scan-type: image
+          image-ref: ${{ env.LOCAL_IMAGE }}
+          scanners: vuln
+          ignore-unfixed: true
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          timeout: 10m
+
+      - name: Generate CycloneDX SBOM from the scanned image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          skip-setup-trivy: true
+          scan-type: image
+          image-ref: ${{ env.LOCAL_IMAGE }}
+          scanners: vuln
+          format: cyclonedx
+          output: ${{ env.SBOM_FILE }}
+
+      - name: Log in to GitHub Container Registry
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+
+      - name: Push only a run-scoped candidate and record its digest
+        shell: bash
+        run: |
+          set -euo pipefail
+          image_name="$(printf 'ghcr.io/%s-%s' "$GITHUB_REPOSITORY" "$IMAGE" | tr '[:upper:]' '[:lower:]')"
+          candidate_ref="$image_name:$CANDIDATE_TAG"
+          docker tag "$LOCAL_IMAGE" "$candidate_ref"
+          docker push "$candidate_ref"
+          digest="$(docker buildx imagetools inspect "$candidate_ref" --format '{{json .Manifest.Digest}}' | tr -d '"')"
+          if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "registry did not return an immutable sha256 digest" >&2
+            exit 1
+          fi
+          image_ref="$image_name@$digest"
+          echo "IMAGE_REF=$image_ref" >> "$GITHUB_ENV"
+          printf '%s\n' "$image_ref" > "$IMAGE_REF_FILE"
+
+      - name: Sign candidate digest and attest its SBOM with GitHub OIDC
+        run: |
+          cosign sign --yes "$IMAGE_REF"
+          cosign attest --yes --type cyclonedx --predicate "$SBOM_FILE" "$IMAGE_REF"
+
+      - name: Verify candidate signature and SBOM attestation
+        env:
+          CERTIFICATE_IDENTITY: https://github.com/${{ github.workflow_ref }}
+          CERTIFICATE_ISSUER: https://token.actions.githubusercontent.com
+        run: |
+          cosign verify \
+            --certificate-identity "$CERTIFICATE_IDENTITY" \
+            --certificate-oidc-issuer "$CERTIFICATE_ISSUER" \
+            "$IMAGE_REF" >/dev/null
+          cosign verify-attestation \
+            --type cyclonedx \
+            --certificate-identity "$CERTIFICATE_IDENTITY" \
+            --certificate-oidc-issuer "$CERTIFICATE_ISSUER" \
+            "$IMAGE_REF" >/dev/null
+
+      - name: Retain candidate evidence in Actions
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-${{ matrix.image }}-${{ github.ref_name }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ env.SBOM_FILE }}
+            ${{ env.IMAGE_REF_FILE }}
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Attach immutable evidence to the draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >-
+          gh release upload "$RELEASE_TAG"
+          "$SBOM_FILE" "$IMAGE_REF_FILE"
+          --repo "$GITHUB_REPOSITORY"
+
+  publish:
+    name: Promote verified release
+    needs: [preflight, candidates]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: release
+    permissions:
+      contents: write
+      packages: write
+    env:
+      RELEASE_TAG: ${{ github.ref_name }}
+      COMMIT_TAG: sha-${{ needs.preflight.outputs.release-commit }}
+      CERTIFICATE_IDENTITY: https://github.com/${{ github.workflow_ref }}
+      CERTIFICATE_ISSUER: https://token.actions.githubusercontent.com
+    steps:
+      - name: Install pinned Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.0.6
+
+      - name: Log in to GitHub Container Registry
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+
+      - name: Download and validate all draft release evidence
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir release-evidence
+          gh release download "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern 'image-ref-*.txt' \
+            --pattern 'sbom-*.cdx.json' \
+            --dir release-evidence
+          test "$(find release-evidence -name 'image-ref-*.txt' -type f | wc -l)" -eq 5
+          test "$(find release-evidence -name 'sbom-*.cdx.json' -type f | wc -l)" -eq 5
+          for image in kernel fleet ui pi-sidecar backup; do
+            image_name="$(printf 'ghcr.io/%s-%s' "$GITHUB_REPOSITORY" "$image" | tr '[:upper:]' '[:lower:]')"
+            image_ref="$(tr -d '\r\n' < "release-evidence/image-ref-$image.txt")"
+            digest="${image_ref##*@}"
+            test "${image_ref%@*}" = "$image_name"
+            [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+            jq -e . "release-evidence/sbom-$image.cdx.json" >/dev/null
+          done
+
+      - name: Refuse to move an existing public image tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          for image in kernel fleet ui pi-sidecar backup; do
+            image_name="$(printf 'ghcr.io/%s-%s' "$GITHUB_REPOSITORY" "$image" | tr '[:upper:]' '[:lower:]')"
+            for tag in "$RELEASE_TAG" "$COMMIT_TAG"; do
+              if docker buildx imagetools inspect "$image_name:$tag" >/dev/null 2>&1; then
+                echo "$image_name:$tag already exists; release tags are immutable" >&2
+                exit 1
+              fi
+            done
+          done
+
+      - name: Reverify every signed digest before promotion
+        shell: bash
+        run: |
+          set -euo pipefail
+          for image in kernel fleet ui pi-sidecar backup; do
+            image_ref="$(tr -d '\r\n' < "release-evidence/image-ref-$image.txt")"
+            cosign verify \
+              --certificate-identity "$CERTIFICATE_IDENTITY" \
+              --certificate-oidc-issuer "$CERTIFICATE_ISSUER" \
+              "$image_ref" >/dev/null
+            cosign verify-attestation \
+              --type cyclonedx \
+              --certificate-identity "$CERTIFICATE_IDENTITY" \
+              --certificate-oidc-issuer "$CERTIFICATE_ISSUER" \
+              "$image_ref" >/dev/null
+          done
+
+      - name: Promote verified digests to immutable public tags
+        shell: bash
+        run: |
+          set -euo pipefail
+          for image in kernel fleet ui pi-sidecar backup; do
+            image_ref="$(tr -d '\r\n' < "release-evidence/image-ref-$image.txt")"
+            image_name="${image_ref%@*}"
+            digest="${image_ref##*@}"
+            docker buildx imagetools create \
+              --tag "$image_name:$RELEASE_TAG" \
+              --tag "$image_name:$COMMIT_TAG" \
+              "$image_ref"
+            for tag in "$RELEASE_TAG" "$COMMIT_TAG"; do
+              promoted_digest="$(docker buildx imagetools inspect "$image_name:$tag" --format '{{json .Manifest.Digest}}' | tr -d '"')"
+              test "$promoted_digest" = "$digest"
+            done
+          done
+
+      - name: Publish the fully verified GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >-
+          gh release edit "$RELEASE_TAG"
+          --repo "$GITHUB_REPOSITORY"
+          --draft=false
+
+  release:
+    name: Release gate
+    if: ${{ always() }}
+    needs: [preflight, candidates, publish]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Require a fully published signed release
+        env:
+          PREFLIGHT_RESULT: ${{ needs.preflight.result }}
+          CANDIDATES_RESULT: ${{ needs.candidates.result }}
+          PUBLISH_RESULT: ${{ needs.publish.result }}
+        run: |
+          test "$PREFLIGHT_RESULT" = success
+          test "$CANDIDATES_RESULT" = success
+          test "$PUBLISH_RESULT" = success
