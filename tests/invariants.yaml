@@ -1342,6 +1342,10 @@ invariants:
       - tests/unit/test_stack_tool_health.py::test_heartbeat_budget_cannot_outlive_its_previous_receipt
       - tests/integration/test_migration_parity.py::test_packaged_readiness_head_matches_alembic_head
       - tests/integration/test_migration_parity.py::test_data_bearing_rls_database_upgrades_from_previous_head
+  FR-OPS-04:
+    description: Operator backups are restorable - a real pg_dump drill through the pinned PostgreSQL client image restores the live schema and data into a fresh database and the restored rows read back intact.
+    tests:
+      - tests/integration/test_backup_restore.py::test_backup_restores_into_a_fresh_database
   NFR-MNT-01:
     description: Python structural debt is an enforced expiring ratchet - every boltrig source file is at most 400 physical lines and every decorator-inclusive function or method at most 80 source-span lines unless its file has an explicit owner, reason, expiry, exact current file and largest-function baselines, and an exact record for every over-limit function; the gate rejects new or sibling debt, growth, stale-high or missing-file entries, malformed metadata, duplicate JSON keys, and expired exemptions.
     tests:

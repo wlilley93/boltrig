@@ -86,7 +86,12 @@ services:
     restart: unless-stopped
     <<: *app-hardening
     command: ["uvicorn", "boltrig.api.asgi:app", "--host", "0.0.0.0", "--port", "8000"]
-    env_file: .env
+    # Local/operator runs keep the conventional .env default. Validation and CI
+    # can point at the checked non-secret fixture without creating an ignored
+    # file in a clean checkout.
+    env_file: ${BOLTRIG_ENV_FILE:-.env}
+    environment:
+      BOLTRIG_HERDR_HOME: ${BOLTRIG_HERDR_HOME:-/var/lib/boltrig/herdr}
     # On both the app network and the sandbox, so the Pi sidecar can reach the
     # MCP face (sandbox) while the kernel keeps its normal connectivity (default).
     networks:
@@ -97,6 +102,8 @@ services:
     volumes:
       - ./manifest.yaml:/app/manifest.yaml:ro
       - ./libraries:/app/libraries:ro
+      # Stack-owned Herdr state only; never bind a developer user's ~/.config/herdr.
+      - herdr_data:/var/lib/boltrig/herdr
     depends_on:
       postgres:
         condition: service_healthy
@@ -123,10 +130,18 @@ services:
     restart: unless-stopped
     <<: *app-hardening
     command: ["python", "-m", "boltrig.api.worker"]
-    env_file: .env
+    env_file: ${BOLTRIG_ENV_FILE:-.env}
+    environment:
+      BOLTRIG_OPENCODE_HOME: ${BOLTRIG_OPENCODE_HOME:-/var/lib/boltrig/opencode}
+      BOLTRIG_BROWSER_CLI_HOME: ${BOLTRIG_BROWSER_CLI_HOME:-/var/lib/boltrig/browser-cli}
+      BOLTRIG_BROWSER_CLI_BIN: ${BOLTRIG_BROWSER_CLI_BIN:-/usr/local/bin/browser-use}
     volumes:
       - ./manifest.yaml:/app/manifest.yaml:ro
       - ./libraries:/app/libraries:ro
+      # Stack-owned OpenCode state only; never bind a developer user's ~/.config/opencode.
+      - opencode_data:/var/lib/boltrig/opencode
+      # Stack-owned Browser Use CLI state only; never bind a developer browser profile.
+      - browser_cli_data:/var/lib/boltrig/browser-cli
     depends_on:
       postgres:
         condition: service_healthy
@@ -369,3 +384,6 @@ networks:
 volumes:
   pgdata:
   bifrost_data:
+  herdr_data:
+  opencode_data:
+  browser_cli_data:

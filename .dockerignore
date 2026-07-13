@@ -17,6 +17,8 @@ htmlcov
 .env.*
 manifest.yaml
 .models
+deploy/rclone/
+**/rclone.conf
 
 # The UI builds from its own context (./ui); exclude its node_modules here.
 ui/node_modules

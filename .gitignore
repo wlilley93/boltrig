@@ -4,6 +4,8 @@
 !.env.example
 manifest.yaml
 deploy/ca-bundle.crt
+deploy/rclone/
+**/rclone.conf
 .models/
 
 # --- agent working directories ---
@@ -30,6 +32,8 @@ venv/
 .coverage.*
 htmlcov/
 coverage.xml
+ui/coverage/
+site/coverage/
 
 # --- node / ui ---
 node_modules/
