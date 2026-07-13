@@ -866,6 +866,7 @@ invariants:
     tests:
       - tests/store/test_retention_purge.py::test_closed_conversation_body_is_hard_purged_after_retention
       - tests/store/test_retention_purge.py::test_retention_purge_is_tenant_scoped
+      - tests/store/test_retention_purge.py::test_purge_runs_select_and_deletes_in_one_transaction
   # --- Beat 3.5: control-plane verb parity (appended as one block) -----------
   SEC-75:
     description: Every supported console mutation is implemented once as a governed control.* verb and compatibility routes invoke that same chokepoint. The complete surface covers skills, nouns, verbs, bindings, adapters, MCP registration, workflows, config rollback, users, invitations, and notification routing; high-blast operations are HITL-held, low-blast inert/personal operations still receive schema/grant/rate/audit enforcement, workspace scope is preserved, durable triggers carry the authenticated context, and one-time invitation tokens are redacted from run events.
@@ -1196,6 +1197,10 @@ invariants:
     description: The live Hatchet Ultracode parent workflow fans out phase agents through the registered child task seam and persists child/phase checkpoints.
     tests:
       - tests/integration/test_hatchet_live.py::test_live_ultracode_run_fans_out_agent_child_tasks
+  FR-WFL-18:
+    description: list_workflows returns exactly one current definition (the latest version) per workflow id, identically on the in-memory and Postgres stores - the durable store collapses versioned rows the same way list_skills/get_skill do, so callers matching a workflow by id never see duplicate or stale versions.
+    tests:
+      - tests/store/test_store_parity.py::test_list_workflows_returns_latest_version_per_id_on_both_stores
   SEC-116:
     description: Workspace scoping only NARROWS which workflows a workspace sees, never widens authority (COUNTY 5, D2) - a workflow scoped to another workspace is fail-closed UNKNOWN on the get / trigger / execute paths (get returns None, trigger and execute raise LookupError) so it can never be resolved or run cross-workspace, while the visibility filter never mutates the record (a visible workflow is byte-for-byte what was stored, adding no grant/scope) and workspace_id is the sole scoping field, carrying no execution authority.
     tests:
