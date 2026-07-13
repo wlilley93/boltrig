@@ -12,6 +12,7 @@ new org, model, capability, or integration.
 from __future__ import annotations
 
 import importlib
+import json
 import os
 import re
 from dataclasses import dataclass, field
@@ -35,6 +36,9 @@ _BUILTIN_MODULES: dict[str, str] = {
     "jira": "boltrig.adapters.builtin.jira",
     "crm-sql": "boltrig.adapters.builtin.crm_sql",
     "memory-tickets": "boltrig.adapters.builtin.memory_tickets",
+    "herdr": "boltrig.adapters.builtin.herdr",
+    "runpod": "boltrig.adapters.builtin.runpod",
+    "browser-cli": "boltrig.adapters.builtin.browser_cli",
 }
 
 
@@ -94,6 +98,8 @@ class HierarchyTier:
     """A durable agent in the org chart (tier1 chief-of-staff / tier2 head)."""
 
     name: str
+    # Compatibility default. Boltrig v2 target runtime selection is expressed in
+    # raw stack/mastra/rivet_agentos sections until those adapters are bound.
     runtime: str = "hermes"
     model_endpoint: str | None = None
     max_depth: int = 3
@@ -116,6 +122,8 @@ class EphemeralRuntime:
     """A way to run a short-lived child agent (a runtime profile / capability)."""
 
     name: str
+    # Compatibility default for old manifests; v2 should name explicit runtime
+    # profiles such as opencode or future rivet_agentos workers.
     runtime: str = "hermes"
     supported_skills: tuple[str, ...] = ("*",)
     max_depth: int = 2
@@ -644,9 +652,62 @@ def load_manifest(path: str, *, env: Mapping[str, str] | None = None) -> FleetMa
         network=_parse_network(doc.get("network") or {}),
         privacy=_parse_privacy(doc.get("privacy") or {}),
         chat=_parse_chat(doc.get("chat") or {}),
-        extra={k: doc[k] for k in ("evaluation", "notifications", "personal_agents",
-                                   "memory", "runtimes", "mcp", "chat") if k in doc},
+        extra={k: doc[k] for k in (
+            "evaluation", "notifications", "personal_agents", "memory",
+            "runtimes", "mcp", "chat", "stack", "mastra", "rivet_agentos",
+            "browser_cli", "langfuse",
+        ) if k in doc},
     )
+
+
+def export_runtime_environment(
+    manifest: FleetManifest, env: dict[str, str] | None = None
+) -> None:
+    """Expose manifest runtime seams to env-reading runtimes without secrets.
+
+    Explicit process environment wins. This helper only exports config-only model
+    gateway/profile and browser policy data from the manifest so runtime resolvers
+    can stay decoupled from the manifest object. Secret material stays in the
+    deployment environment / credential store.
+    """
+    target = env if env is not None else os.environ
+    runtimes = manifest.section("runtimes")
+    gateway = runtimes.get("gateway") if isinstance(runtimes.get("gateway"), dict) else {}
+    if not isinstance(gateway, dict):
+        return
+    base_url = str(gateway.get("base_url") or "").strip()
+    if base_url and "BOLTRIG_MODEL_GATEWAY_URL" not in target:
+        target["BOLTRIG_MODEL_GATEWAY_URL"] = base_url
+    ttl = gateway.get("cache_ttl_seconds")
+    if ttl not in (None, "") and "BOLTRIG_MODEL_GATEWAY_TTL" not in target:
+        try:
+            target["BOLTRIG_MODEL_GATEWAY_TTL"] = str(int(ttl))
+        except (TypeError, ValueError):
+            pass
+    health = gateway.get("health") if isinstance(gateway.get("health"), dict) else {}
+    if isinstance(health, dict):
+        enabled = health.get("enabled")
+        if enabled not in (None, "") and "BOLTRIG_MODEL_GATEWAY_HEALTH" not in target:
+            target["BOLTRIG_MODEL_GATEWAY_HEALTH"] = (
+                "1" if str(enabled).strip().lower() in {"1", "true", "yes", "on"} else "0"
+            )
+        path = str(health.get("path") or "").strip()
+        if path and "BOLTRIG_MODEL_GATEWAY_HEALTH_PATH" not in target:
+            target["BOLTRIG_MODEL_GATEWAY_HEALTH_PATH"] = path
+        timeout = health.get("timeout")
+        if timeout not in (None, "") and "BOLTRIG_MODEL_GATEWAY_HEALTH_TIMEOUT" not in target:
+            target["BOLTRIG_MODEL_GATEWAY_HEALTH_TIMEOUT"] = str(timeout)
+    profiles = gateway.get("model_profiles")
+    if (
+        isinstance(profiles, dict)
+        and profiles
+        and "BOLTRIG_MODEL_PROFILES" not in target
+    ):
+        target["BOLTRIG_MODEL_PROFILES"] = json.dumps(profiles, sort_keys=True)
+    browser = manifest.section("browser_cli")
+    policy = str(browser.get("cloud_policy") or "").strip().lower()
+    if policy and "BOLTRIG_BROWSER_CLOUD_POLICY" not in target:
+        target["BOLTRIG_BROWSER_CLOUD_POLICY"] = policy
 
 
 # --- applying the manifest to the store -------------------------------------
@@ -718,6 +779,7 @@ async def apply_manifest(
     (and adapter bindings), then optionally imports + registers the builtin
     adapters named in the manifest. Unknown adapter ids are skipped gracefully.
     """
+    export_runtime_environment(manifest)
     tenant = manifest.tenant_id
     store = kernel.store
 

@@ -16,9 +16,12 @@ routes local) is proven in tests/security/test_sensitive_routing.py.
 from __future__ import annotations
 
 import asyncio
+import json
+import os
 
 import pytest
 
+from boltrig.config import apply_manifest, load_manifest
 from boltrig.fleet.runtime import runtime_for_provider
 from boltrig.fleet.spawn import Spawner
 from boltrig.identity import resolve_ai_key
@@ -140,6 +143,10 @@ def test_unknown_provider_degrades_to_the_env_default_without_crashing():
         # The mapping itself is the fail-safe: known providers map, unknown -> None
         # (the degrade signal), and it is case-insensitive.
         assert runtime_for_provider("OpenAI") == "openai"
+        assert runtime_for_provider("bifrost") == "openai"
+        assert runtime_for_provider("cerebras") == "openai"
+        assert runtime_for_provider("fireworks") == "openai"
+        assert runtime_for_provider("runpod") == "openai"
         assert runtime_for_provider("anthropic") == "claude-api"
         assert runtime_for_provider("hermes") == "hermes"
         assert runtime_for_provider("frobnicator") is None
@@ -149,5 +156,131 @@ def test_unknown_provider_degrades_to_the_env_default_without_crashing():
         r = await resolve_ai_key(store, T, workspace_id=None, user_id="u1")
         assert r.provider == "frobnicator" and r.model == "whatever"
         assert r.base_url == "http://x"
+
+    _run(go())
+
+
+@pytest.mark.invariant("FR-GW-02")
+def test_model_profile_selects_provider_model_and_route(monkeypatch):
+    async def go():
+        store = await _store()
+        cap = await _capability(store, runtime="claude-api")
+        profiles = {
+            "code": {
+                "provider": "bifrost",
+                "model": "kimi-k2.7",
+                "base_url": "http://bifrost:8080/v1",
+            }
+        }
+        monkeypatch.setenv("BOLTRIG_MODEL_PROFILES", json.dumps(profiles))
+        ctx = _ctx(model_profile="code")
+
+        rt = await Spawner(Kernel(store))._runtime_for(T, cap, ctx)
+
+        assert rt.runtime == "openai"
+        assert rt.endpoint.model == "kimi-k2.7"
+        assert rt.endpoint.base_url == "http://bifrost:8080/v1"
+        assert rt.model_route == {
+            "profile": "code",
+            "provider": "bifrost",
+            "model": "kimi-k2.7",
+            "runtime": "openai",
+            "base_url": "http://bifrost:8080/v1",
+        }
+
+    _run(go())
+
+
+@pytest.mark.invariant("FR-GW-02")
+@pytest.mark.invariant("SEC-12")
+def test_model_profile_is_ignored_for_sensitive_data(monkeypatch):
+    async def go():
+        store = await _store()
+        await store.upsert_model_endpoint(
+            ModelEndpoint(
+                id="local",
+                tenant_id=T,
+                kind="vllm",
+                model="local-sensitive",
+                base_url="http://local/v1",
+                data_class="sensitive",
+            )
+        )
+        cap = AgentCapability(
+            "w", T, "openai", ["*"], 2, True, "standard", model_endpoint="local"
+        )
+        profiles = {
+            "deep": {
+                "provider": "anthropic",
+                "model": "claude-remote",
+                "base_url": "http://external/v1",
+            }
+        }
+        monkeypatch.setenv("BOLTRIG_MODEL_PROFILES", json.dumps(profiles))
+        ctx = _ctx(model_profile="deep", data_class="sensitive")
+
+        rt = await Spawner(Kernel(store))._runtime_for(T, cap, ctx)
+
+        assert rt.runtime == "openai"
+        assert rt.endpoint.model == "local-sensitive"
+        assert rt.endpoint.base_url == "http://local/v1"
+        assert not hasattr(rt, "model_route")
+
+    _run(go())
+
+
+@pytest.mark.invariant("FR-GW-02")
+@pytest.mark.invariant("FR-GW-04")
+def test_manifest_model_profiles_feed_runtime_resolver(monkeypatch, tmp_path):
+    async def go():
+        monkeypatch.delenv("BOLTRIG_MODEL_PROFILES", raising=False)
+        monkeypatch.delenv("BOLTRIG_MODEL_GATEWAY_URL", raising=False)
+        monkeypatch.delenv("BOLTRIG_MODEL_GATEWAY_HEALTH", raising=False)
+        monkeypatch.delenv("BOLTRIG_MODEL_GATEWAY_HEALTH_PATH", raising=False)
+        monkeypatch.delenv("BOLTRIG_MODEL_GATEWAY_HEALTH_TIMEOUT", raising=False)
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text(
+            """
+organisation: Acme
+tenant_id: acme
+models:
+  endpoints:
+    - id: standard
+      kind: anthropic
+      model: claude
+      data_class: standard
+runtimes:
+  gateway:
+    base_url: http://bifrost:8080/v1
+    cache_ttl_seconds: 900
+    health:
+      enabled: true
+      path: /health
+      timeout: 0.25
+    model_profiles:
+      code:
+        provider: bifrost
+        model: kimi-k2.7
+        base_url: http://bifrost:8080/v1
+""",
+            encoding="utf-8",
+        )
+        kernel = Kernel(InMemoryStore())
+        await apply_manifest(kernel, load_manifest(str(manifest_path)),
+                             load_builtin_adapters=False)
+        cap = AgentCapability(
+            "w", T, "claude-api", ["*"], 2, True, "standard",
+            model_endpoint="standard",
+        )
+
+        rt = await Spawner(kernel)._runtime_for(T, cap, _ctx(model_profile="code"))
+
+        assert rt.runtime == "openai"
+        assert rt.endpoint.model == "kimi-k2.7"
+        assert rt.endpoint.base_url == "http://bifrost:8080/v1"
+        assert rt.model_route["profile"] == "code"
+        assert os.environ["BOLTRIG_MODEL_GATEWAY_HEALTH"] == "1"
+        assert os.environ["BOLTRIG_MODEL_GATEWAY_HEALTH_PATH"] == "/health"
+        assert os.environ["BOLTRIG_MODEL_GATEWAY_HEALTH_TIMEOUT"] == "0.25"
 
     _run(go())

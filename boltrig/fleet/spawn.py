@@ -1,31 +1,14 @@
-"""Spawn logic behind ``POST /v1/spawn`` (US-FLT-03/04, FR-EXE-03, FR-COST-02, S7.5).
-
-A spawn turns a task plus a set of skills into one running ephemeral agent:
-
-    load skills (+ ``extends`` inheritance)      -> merged prompt / grants / reqs
-    validate the spawn context against the reqs  -> ContextRequirementsUnmet (400)
-    pick the cheapest capable runtime            -> by supported_skills + cost tier
-    enforce recursion depth                      -> DepthExceeded (429)
-    reserve budget BEFORE running                -> BudgetExceeded (429 / partial)
-    audit the spawn (AGENT_SPAWN)                -> kernel.audit.write
-    run the selected runtime                     -> AgentResult
-
-The spawner owns policy *composition* only; the kernel still owns the dispatch
-chokepoint for any verb the child invokes (P2). Everything here is offline-safe:
-with no SDK / keys, runtimes degrade rather than crash (P9).
-"""
+"""Spawn logic behind ``POST /v1/spawn``."""
 
 from __future__ import annotations
 
 import json
-import os
-import re
+import time
 import uuid
 from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
-from jsonschema import Draft202012Validator
-
 from boltrig.adapters.base import AdapterError, ErrorClass, Result
+from boltrig.kernel.cost import price_micros
 from boltrig.models import (
     ActionType,
     AgentCapability,
@@ -35,233 +18,55 @@ from boltrig.models import (
     DepthExceeded,
     GrantSet,
     InvocationContext,
-    BoltrigError,
-    Skill,
     utcnow,
 )
+from boltrig.observability.langfuse_sink import build_observability_sink
 
-from boltrig.kernel.cost import price_micros
-
-from .model_gateway import ModelGateway, apply_gateway, gateway_config
-from .model_router import select_model_endpoint
 from .result import AgentResult
-from .runtime import build_runtime, runtime_for_provider
+from .runtime_resolver import RuntimeResolver
+from .spawn_skills import (
+    NoCapableRuntime as NoCapableRuntime,
+    SkillNotFound as SkillNotFound,
+    context_payload,
+    display_task as _display_task,
+    missing_requirements,
+    resolve_skills,
+    select_capability,
+)
 
-if TYPE_CHECKING:  # type-only: keeps fleet import independent of fastapi/kernel
-    from boltrig.identity.ai_keys import AiKeyResolution
+if TYPE_CHECKING:
     from boltrig.kernel import Kernel
     from boltrig.kernel.app import Principal, SpawnBody
     from boltrig.kernel.dispatch import AgentInvoker
-    from boltrig.models import ModelEndpoint
 
-
-def _display_task(task: str) -> str:
-    """Return a human-readable task for observability events.
-
-    The model prompt may wrap conversation data in ``<untrusted>`` envelopes
-    (M1 / SEC-72). Those structural wrappers are not part of the user's message,
-    so they are stripped from the event the UI renders, while the actual prompt
-    sent to the runtime stays untouched.
-    """
-    s = task
-    # Unwrap typed envelopes.
-    s = re.sub(
-        r'<untrusted\b[^>]*>(.*?)</untrusted>',
-        r'\1',
-        s,
-        flags=re.DOTALL | re.IGNORECASE,
-    )
-    # Drop any remaining angle-bracket tags (e.g., escaped inner delimiters).
-    s = re.sub(r'<[^>]+>', '', s)
-    # Drop provenance lines added by the engine.
-    s = re.sub(r'^\s*run:\s*[0-9a-f]+\s*$', '', s, flags=re.MULTILINE | re.IGNORECASE)
-    # Drop transcript role prefixes.
-    s = re.sub(r'^\s*(user|assistant|system):\s*', '', s, flags=re.MULTILINE | re.IGNORECASE)
-    return s.strip()
-
-
-# --- local error types (created here, not in the frozen models layer) ---------
-class SkillNotFound(BoltrigError):
-    """A referenced skill (or an ``extends`` parent) does not exist (fail-closed)."""
-
-    status_code = 404
-    reason = "skill_not_found"
-
-
-class NoCapableRuntime(BoltrigError):
-    """No agent capability supports all of the requested skills (US-FLT-04)."""
-
-    status_code = 404
-    reason = "no_capable_runtime"
-
-
-# --- cost-tier ordering (cheapest first) --------------------------------------
-_COST_ORDER: dict[str, int] = {"cheap": 0, "standard": 1, "expensive": 2}
-
-
-# --- skill pattern matching (terminal "/*" wildcard + bare "*") ---------------
-def _pattern_covers(pattern: str, skill_id: str) -> bool:
-    """Whether a ``supported_skills`` pattern covers one skill id.
-
-    Supports the bare ``"*"`` (everything) and terminal-wildcard patterns like
-    ``"writing/*"`` (covers ``writing`` and ``writing/anything``) but not a
-    bare prefix - mirrors the kernel grant rule (K-9) on the skill namespace.
-    """
-    if pattern == "*":
-        return True
-    if pattern == skill_id:
-        return True
-    if pattern.endswith("/*"):
-        prefix = pattern[:-2]
-        return skill_id == prefix or skill_id.startswith(prefix + "/")
-    return False
-
-
-def _supports(cap: AgentCapability, skills: list[str]) -> bool:
-    """True iff the capability's patterns cover EVERY requested skill."""
-    return all(
-        any(_pattern_covers(p, s) for p in cap.supported_skills) for s in skills
-    )
-
-
-# --- merged skill view --------------------------------------------------------
-class _MergedSkills:
-    """The composed prompt / grants / context-requirements of a skill set."""
-
-    def __init__(self) -> None:
-        self.prompt_fragments: list[str] = []
-        self.tool_grants: list[str] = []
-        self.context_requirements: dict[str, Any] = {
-            "type": "object",
-            "properties": {},
-            "required": [],
-        }
-
-    def add_grant(self, grant: str) -> None:
-        if grant not in self.tool_grants:
-            self.tool_grants.append(grant)
-
-    def merge_requirements(self, schema: dict[str, Any]) -> None:
-        """Shallow-merge a skill's JSON-Schema requirements: union properties and
-        required keys. Conservative and deterministic (full schema algebra is
-        out of scope; required-key coverage is what spawn validation needs)."""
-        if not schema:
-            return
-        props = schema.get("properties")
-        if isinstance(props, dict):
-            self.context_requirements["properties"].update(props)
-        required = schema.get("required")
-        if isinstance(required, (list, tuple)):
-            for key in required:
-                if key not in self.context_requirements["required"]:
-                    self.context_requirements["required"].append(key)
-
-
-async def _resolve_skill_chain(
-    store: Any, tenant_id: str, skill_id: str, merged: _MergedSkills, seen: set[str]
-) -> None:
-    """Load a skill and its ``extends`` ancestors, parent-first, into ``merged``.
-
-    Parent fragments/grants/requirements are applied before the child so the
-    child augments (never silently loses) the parent (skill inheritance, S6.2).
-    """
-    if skill_id in seen:  # defend against a cyclic ``extends`` chain
-        return
-    seen.add(skill_id)
-    skill: Skill | None = await store.get_skill(tenant_id, skill_id)
-    if skill is None:
-        raise SkillNotFound(f"unknown skill '{skill_id}'")
-    if skill.extends:  # parent first
-        await _resolve_skill_chain(store, tenant_id, skill.extends, merged, seen)
-    if skill.prompt_fragment:
-        merged.prompt_fragments.append(skill.prompt_fragment)
-    for grant in skill.tool_grants:
-        merged.add_grant(grant)
-    merged.merge_requirements(skill.context_requirements)
-
-
-def _missing_requirements(
-    schema: dict[str, Any], instance: dict[str, Any]
-) -> tuple[list[str], list[str]]:
-    """Validate ``instance`` against the merged schema via jsonschema.
-
-    Returns ``(missing_required_keys, all_error_messages)``. Missing required
-    keys are the headline of ``ContextRequirementsUnmet``; any other validation
-    errors (e.g. type mismatch) are carried along in the message.
-    """
-    properties = schema.get("properties") or {}
-    required = schema.get("required") or []
-    # An empty merged schema (no properties and no required) imposes nothing.
-    if not properties and not required:
-        return [], []
-    errors = [e.message for e in Draft202012Validator(schema).iter_errors(instance)]
-    missing = [key for key in required if key not in instance]
-    return missing, errors
+_PUBLIC_ROUTE_KEYS = {"profile", "provider", "model", "runtime", "tier"}
 
 
 def _estimate(task: str, prompt: str, skills: list[str], cost_tier: str) -> tuple[int, int]:
-    """A deterministic pre-run (tokens, micros) estimate for budget reservation.
-
-    Priced at the cost-tier default (no model yet at reservation time); the real
-    per-model price and actual token count are applied post-run by the true-up
-    (FR-COST-03), so a drift here is corrected, never carried."""
-    chars = len(task) + len(prompt) + sum(len(s) for s in skills)
+    """Deterministic pre-run token/cost estimate for budget reservation."""
+    chars = len(task) + len(prompt) + sum(len(skill) for skill in skills)
     tokens = max(16, chars // 4)
-    micros = price_micros(tokens, cost_tier)
-    return tokens, micros
+    return tokens, price_micros(tokens, cost_tier)
 
 
-def _routed_endpoint(
-    tenant_id: str, base: ModelEndpoint | None, resolution: AiKeyResolution
-) -> ModelEndpoint:
-    """The endpoint an ai_config selects for model/provider ROUTING (D5).
-
-    Layers the config's ``model`` and (when it names one) ``base_url`` OVER the
-    resolved endpoint, preserving that endpoint's ``id`` / ``data_class`` / ``fallback``
-    so nothing else about the route changes. When the capability names NO endpoint the
-    config synthesises a standard-class one from its own provider/model/base_url.
-
-    Only ever called for a NON-sensitive call (the caller gates on ``sensitive``), so
-    this can never manufacture a route for sensitive data - the sensitive->local
-    endpoint is chosen upstream and is never passed here (SEC-12 residency holds).
-    """
-    from dataclasses import replace
-
-    from boltrig.models import ModelEndpoint
-
-    model = resolution.model or (base.model if base is not None else "")
-    base_url = resolution.base_url or (base.base_url if base is not None else None)
-    if base is not None:
-        return replace(base, model=model, base_url=base_url)
-    return ModelEndpoint(
-        id="ai-config",
-        tenant_id=tenant_id,
-        kind=(resolution.provider or "openai"),
-        model=model,
-        base_url=base_url,
-        data_class="standard",
-    )
+def _public_model_route(route: dict[str, Any] | None) -> dict[str, str]:
+    if not isinstance(route, dict):
+        return {}
+    return {
+        key: str(value)[:160]
+        for key, value in route.items()
+        if key in _PUBLIC_ROUTE_KEYS and value
+    }
 
 
 class Spawner:
-    """Composes and runs ephemeral agents on top of the kernel (S7.5)."""
+    """Composes and runs ephemeral agents on top of the kernel."""
 
     def __init__(self, kernel: Kernel, *, sensitive_endpoint_id: str | None = None) -> None:
         self._kernel = kernel
-        # the tenant's local endpoint for sensitive data (manifest sensitive_endpoint)
         self._sensitive_endpoint_id = sensitive_endpoint_id
-        # Pi sidecar wiring (manifest runtimes.pi maps to these env vars). Absent a
-        # sidecar url, a pi capability resolves to a PiRuntime that degrades (P9).
-        self._pi = {
-            "sidecar_url": os.environ.get("BOLTRIG_PI_SIDECAR_URL") or None,
-            "mcp_url": os.environ.get("BOLTRIG_PI_MCP_URL", "http://kernel:8000/v1/mcp"),
-            "max_steps": int(os.environ.get("BOLTRIG_PI_MAX_STEPS", "12")),
-        }
-        # Conversation-scoped model-gateway binding (Round Six gap 3.2). Inert
-        # unless BOLTRIG_MODEL_GATEWAY_URL is set; bindings live on this spawner
-        # instance, which the chat path constructs once and reuses across turns.
-        self._gateway = gateway_config()
-        self._bindings = ModelGateway(ttl_seconds=int(self._gateway["ttl_seconds"]))
+        self._runtime_resolver = RuntimeResolver(kernel, sensitive_endpoint_id=sensitive_endpoint_id)
+        self._observability = build_observability_sink()
 
     async def spawn(
         self,
@@ -274,43 +79,21 @@ class Spawner:
         partial_on_budget: bool = True,
         grant_ceiling: GrantSet | None = None,
     ) -> dict[str, Any]:
-        """Spawn one ephemeral agent for ``task`` with ``skills`` (US-FLT-03/04).
-
-        ``partial_on_budget`` keeps a deep tree alive: when ``True`` (the default
-        for in-fleet spawns) a budget hard-stop returns a partial result instead
-        of raising (FR-COST-02). The app-facing adapter sets it ``False`` so the
-        HTTP caller gets a ``429 budget_exceeded`` (kernel error taxonomy).
-
-        ``grant_ceiling`` caps the child's grants to those the initiator also
-        holds - used by Skill Studio test-spawns, eval runs, and personal agents
-        so a test/eval/personal turn can never call a verb the initiator lacks
-        (no escalation, SEC-29/SEC-30).
-        """
+        """Spawn one ephemeral agent for ``task`` with ``skills``."""
         kernel = self._kernel
         prefer = prefer or {}
         skills = list(skills or [])
 
-        # 1. Load skills with ``extends`` inheritance and merge them.
-        merged = _MergedSkills()
-        for skill_id in skills:
-            await _resolve_skill_chain(kernel.store, tenant_id, skill_id, merged, set())
-
-        # 2. Validate the spawn context against the merged requirements. A key
-        #    present but ``None`` reads as absent, so a required-but-unset field
-        #    surfaces in ``missing`` by name rather than as a type error.
+        merged = await resolve_skills(kernel.store, tenant_id, skills)
         instance = {k: v for k, v in context_payload(context).items() if v is not None}
-        missing, errors = _missing_requirements(merged.context_requirements, instance)
+        missing, errors = missing_requirements(merged.context_requirements, instance)
         if missing or errors:
             detail = "; ".join(errors) if errors else "missing required context"
             raise ContextRequirementsUnmet(
-                f"spawn context unmet: {detail}",
-                missing=missing or errors,
+                f"spawn context unmet: {detail}", missing=missing or errors
             )
 
-        # 3. Select the cheapest capable runtime (honouring prefer.cost_tier).
         capability = await self._select_capability(tenant_id, skills, prefer)
-
-        # 4. Enforce recursion depth (FR-EXE-03).
         child_depth = context.depth + 1
         if child_depth > capability.max_depth:
             raise DepthExceeded(
@@ -318,16 +101,10 @@ class Spawner:
                 f"for capability '{capability.name}'"
             )
 
-        # 5. Reserve budget BEFORE running (FR-COST-02).
         merged_prompt = "\n\n".join(merged.prompt_fragments)
         run_id = uuid.uuid4().hex
-        tokens_est, micros_est = _estimate(
-            task, merged_prompt, skills, capability.cost_tier
-        )
-        scope_ids = ["tenant"]
-        department = prefer.get("department")
-        if department:
-            scope_ids.append(str(department))
+        tokens_est, micros_est = _estimate(task, merged_prompt, skills, capability.cost_tier)
+        scope_ids = ["tenant", *([str(prefer["department"])] if prefer.get("department") else [])]
         try:
             await kernel.cost.reserve(
                 tenant_id, scope_ids=scope_ids, tokens=tokens_est, micros=micros_est
@@ -339,98 +116,40 @@ class Spawner:
             )
             if not partial_on_budget:
                 raise
-            return {
-                "run_id": run_id,
-                "agent_type": capability.name,
-                "status": "partial",
-                "degraded": False,
-                "reason": "budget_exceeded",
-                "summary": "spawn skipped: budget hard-stop reached",
-                "output": {},
-                "tokens_used": 0,
-                "cost_micros": 0,
-                "new_work_items": [],
-            }
+            return self._budget_partial(run_id, capability)
 
-        # 6. Build the child context (depth+1, skill grants, skills loaded). When a
-        #    grant ceiling is given (test-spawn / eval / personal agent), the child
-        #    gets only grants the initiator also holds - no escalation (SEC-29/30).
         child_grants = GrantSet.of(allow=list(merged.tool_grants))
         if grant_ceiling is not None:
             child_grants = child_grants.intersect(grant_ceiling)
-        child_ctx = InvocationContext(
-            tenant_id=tenant_id,
-            run_id=run_id,
-            parent_run_id=context.run_id,
-            depth=child_depth,
-            on_behalf_of=context.on_behalf_of,
-            grants=child_grants,
-            actor=capability.name,
-            actor_tier="ephemeral",
-            skills_loaded=tuple(skills),
-            extra=dict(context.extra),  # propagate data_class etc to the child
+        child_ctx = self._child_context(
+            tenant_id, run_id, child_depth, context, capability, skills, child_grants
         )
 
-        # 7. Run the selected runtime (degrades, never crashes, offline). The
-        #    data classification on the context gates sensitive->local routing.
         runtime = await self._runtime_for(tenant_id, capability, context)
-        prompt = self._compose_prompt(merged_prompt, task)
-        # Live run event (Round Ten): announce the sub-agent on the PARENT's run
-        # stream so the chat / run-canvas shows the spawn as it happens. Fail-safe
-        # observability side-channel - never affects the spawn (P9).
+        model_route = getattr(runtime, "model_route", None)
         if context.run_id:
-            try:
-                kernel.events.publish(context.run_id, {
-                    "type": "subagent", "task": _display_task(task),
-                    "skills": list(skills), "child_run_id": run_id,
-                    "capability": capability.name,
-                })
-            except Exception:
-                pass
-        result: AgentResult = await runtime.run(
-            prompt, child_ctx, tools=list(merged.tool_grants)
+            self._publish_subagent_event(context, task, skills, run_id, capability)
+        started = time.monotonic()
+        result = await runtime.run(
+            self._compose_prompt(merged_prompt, task), child_ctx, tools=list(merged.tool_grants)
         )
+        latency_ms = int((time.monotonic() - started) * 1000)
+        if model_route and isinstance(result.output, dict):
+            result.output.setdefault("model_route", _public_model_route(model_route))
 
-        # 7b. Cost true-up (FR-COST-03, audit M14). The reserve at step 5 debited an
-        #     ESTIMATE. Now that the run reported real usage, reconcile every reserved
-        #     scope by the signed delta (actual - estimate) so the ledger reflects
-        #     real spend, not the guess. The actual cost is priced from the real
-        #     per-model price table (FR-COST-04), falling back to the same tier rate
-        #     the estimate used when no price is configured (so an unconfigured
-        #     deployment simply corrects the token-count drift). A degraded /
-        #     zero-usage run reports tokens_used == 0, so the actual is 0 and the
-        #     delta fully refunds the reserved estimate.
-        actual_tokens = int(result.tokens_used or 0)
-        # Resolve the model name for pricing only when a price table is configured;
-        # otherwise the tier fallback needs no model and we skip the extra read.
-        priced_model: str | None = None
-        if capability.model_endpoint and kernel.cost.has_prices:
-            ep = await kernel.store.get_model_endpoint(
-                tenant_id, capability.model_endpoint
-            )
-            priced_model = ep.model if ep is not None else None
-        actual_micros = kernel.cost.price(
-            actual_tokens, capability.cost_tier, model=priced_model
-        )
-        await kernel.cost.reconcile(
-            tenant_id,
-            scope_ids=scope_ids,
-            delta_tokens=actual_tokens - tokens_est,
-            delta_micros=actual_micros - micros_est,
-        )
-
-        # 8. Audit the spawn (AGENT_SPAWN) with real accounting. A degraded run
-        #    audits as "degraded", never "ok" (US-FLT-07).
-        if result.degraded:
-            audit_status = "degraded"
-        else:
-            audit_status = "ok" if result.ok else "error"
+        await self._true_up_cost(tenant_id, scope_ids, capability, tokens_est, micros_est, result)
         await self._audit_spawn(
-            tenant_id, context, capability, skills, run_id,
-            status=audit_status,
-            tokens=result.tokens_used, cost=result.cost_micros,
+            tenant_id,
+            context,
+            capability,
+            skills,
+            run_id,
+            status=("degraded" if result.degraded else "ok" if result.ok else "error"),
+            tokens=result.tokens_used,
+            cost=result.cost_micros,
+            model_route=model_route,
+            latency_ms=latency_ms,
         )
-
         return {
             "run_id": run_id,
             "agent_type": capability.name,
@@ -441,156 +160,97 @@ class Spawner:
             "tokens_used": result.tokens_used,
             "cost_micros": result.cost_micros,
             "new_work_items": list(result.new_work_items),
-            # the child's effective grants after the ceiling intersection: a
-            # test-spawn/eval/personal turn can never exceed the initiator (SEC-29).
             "effective_grants": list(child_grants.allow),
         }
 
-    # --- internals ------------------------------------------------------------
     async def _select_capability(
         self, tenant_id: str, skills: list[str], prefer: dict[str, Any]
     ) -> AgentCapability:
-        """Cheapest capable capability; honour ``prefer.cost_tier`` (US-FLT-04)."""
-        caps = await self._kernel.store.list_capabilities(tenant_id)
-        capable = [c for c in caps if _supports(c, skills)]
-        if not capable:
-            raise NoCapableRuntime(
-                f"no capability supports skills {skills} for tenant '{tenant_id}'"
-            )
-        preferred_tier = prefer.get("cost_tier")
-        if preferred_tier:
-            tier_matches = [c for c in capable if c.cost_tier == preferred_tier]
-            if tier_matches:  # fall back to overall-cheapest if the tier has none
-                capable = tier_matches
-        return min(
-            capable, key=lambda c: (_COST_ORDER.get(c.cost_tier, 99), c.name)
-        )
+        return await select_capability(self._kernel.store, tenant_id, skills, prefer)
 
     async def _runtime_for(
-        self, tenant_id: str, capability: AgentCapability, context: InvocationContext | None = None
+        self,
+        tenant_id: str,
+        capability: AgentCapability,
+        context: InvocationContext | None = None,
     ):
-        """Resolve the model endpoint (with the sensitive->local guard) and build
-        the runtime. Sensitive-classified data (``context.extra['data_class'] ==
-        'sensitive'``) may only resolve to a local endpoint, else the guard raises
-        ``SensitiveDataMisrouted`` and audits it (SEC-12, US-PRIV-01)."""
-        sensitive = bool(context is not None and context.extra.get("data_class") == "sensitive")
-        endpoint = await select_model_endpoint(
-            self._kernel.store,
-            tenant_id,
-            capability.model_endpoint,
-            sensitive=sensitive,
-            sensitive_endpoint_id=self._sensitive_endpoint_id,
-            audit=self._kernel.audit,
+        return await self._runtime_resolver.runtime_for(tenant_id, capability, context)
+
+    def _child_context(
+        self,
+        tenant_id: str,
+        run_id: str,
+        child_depth: int,
+        parent: InvocationContext,
+        capability: AgentCapability,
+        skills: list[str],
+        grants: GrantSet,
+    ) -> InvocationContext:
+        return InvocationContext(
+            tenant_id=tenant_id,
+            run_id=run_id,
+            parent_run_id=parent.run_id,
+            depth=child_depth,
+            on_behalf_of=parent.on_behalf_of,
+            workspace_id=parent.workspace_id,
+            ip_address=parent.ip_address,
+            user_agent=parent.user_agent,
+            grants=grants,
             actor=capability.name,
+            actor_tier="ephemeral",
+            skills_loaded=tuple(skills),
+            extra=dict(parent.extra),
         )
 
-        # Resolve the per-org/workspace/user AI config once ([2026] VJS-COUNTY 8, D5),
-        # precedence user -> workspace -> org -> env/manifest default, honouring the
-        # org allow_own_ai_keys gate. Returns BOTH the sealed key material (loaded
-        # kernel-side, at call time, handed straight to the runtime - never returned to
-        # an agent or audited) AND the provider/model/base_url selection. (None, None)
-        # => no config: the runtime falls back to the env-configured provider + key
-        # exactly as before (backward-compat for a tenant with no config).
-        api_key, resolution = await self._resolve_ai_key(tenant_id, context)
-
-        # Model/provider ROUTING (D5). When a config resolves (non-default) and the
-        # call is NOT sensitive, its provider selects the runtime and its model /
-        # base_url override the endpoint. SENSITIVE data is EXEMPT: the sensitive->local
-        # endpoint chosen above wins regardless of any external config, so residency
-        # holds and a config can only NARROW/redirect a standard route, never widen a
-        # sensitive one (SEC-12, COUNTY 5). An UNKNOWN provider maps to None and
-        # degrades to the env-default runtime (P9) rather than crashing the run.
-        runtime_override: str | None = None
-        if resolution is not None and not resolution.is_default and not sensitive:
-            runtime_override = runtime_for_provider(resolution.provider)
-            if runtime_override is not None:
-                endpoint = _routed_endpoint(tenant_id, endpoint, resolution)
-
-        # Route standard (non-sensitive) conversation traffic through the model
-        # gateway, pinned to the conversation's bound model so its prompt cache
-        # stays warm across turns (gap 3.2). Inert when no gateway is configured;
-        # sensitive data is never re-routed (residency, SEC-47).
-        conversation_id = context.extra.get("conversation_id") if context is not None else None
-        endpoint = apply_gateway(
-            endpoint,
-            gateway_url=self._gateway["base_url"],
-            binding=self._bindings,
-            conversation_id=conversation_id,
-            sensitive=sensitive,
-        )
-
-        def lookup(endpoint_id: str) -> ModelEndpoint | None:
-            if endpoint is not None and endpoint.id == endpoint_id:
-                return endpoint
-            return None
-
-        # A routed call passes the selected endpoint explicitly (its id may no longer
-        # match capability.model_endpoint); an unrouted call keeps the lookup seam so
-        # dispatch is byte-for-byte as before.
-        endpoint_override = endpoint if runtime_override is not None else None
-
-        if capability.runtime == "pi":
-            pi_config: dict[str, Any] = {
-                "sidecar_url": self._pi["sidecar_url"],
-                "mcp_url": self._pi["mcp_url"],
-                "max_steps": self._pi["max_steps"],
-                "issue_token": self._kernel.mcp.issue_run_token,
-                "revoke_token": self._kernel.mcp.revoke,
-            }
-            if context is not None and context.run_id:
-                run_id = context.run_id  # bind for the relay sink
-                pi_config["event_sink"] = lambda ev: self._kernel.events.publish(run_id, ev)
-            return build_runtime(
-                capability, lookup, pi_config=pi_config, api_key=api_key,
-                runtime_override=runtime_override, endpoint_override=endpoint_override,
-            )
-        return build_runtime(
-            capability, lookup, api_key=api_key,
-            runtime_override=runtime_override, endpoint_override=endpoint_override,
-        )
-
-    async def _resolve_ai_key(
-        self, tenant_id: str, context: InvocationContext | None
-    ) -> tuple[str | None, AiKeyResolution | None]:
-        """Resolve the AI config for this run's model call ([2026] VJS-COUNTY 8, D5).
-
-        Returns ``(api_key, resolution)``: the sealed key material AND the
-        provider/model/base_url selection (metadata only, no secret material). The
-        workspace scope is the caller's ALREADY-authorized active workspace
-        (``context.workspace_id``, re-checked against membership every request) and
-        the user is the delegated human (``context.on_behalf_of``), so this can never
-        surface another org's or another workspace's config. A resolution or load
-        failure degrades to ``(None, None)`` - the env/manifest provider + key -
-        rather than crashing the run (P9)."""
-        if context is None:
-            return None, None
-        from boltrig.identity import load_ai_key_material, resolve_ai_key
-
+    def _publish_subagent_event(
+        self,
+        context: InvocationContext,
+        task: str,
+        skills: list[str],
+        run_id: str,
+        capability: AgentCapability,
+    ) -> None:
         try:
-            resolution = await resolve_ai_key(
-                self._kernel.store,
-                tenant_id,
-                workspace_id=context.workspace_id,
-                user_id=context.on_behalf_of,
+            self._kernel.events.publish(
+                context.run_id,
+                {
+                    "type": "subagent",
+                    "task": _display_task(task),
+                    "skills": list(skills),
+                    "child_run_id": run_id,
+                    "capability": capability.name,
+                },
             )
-            material = await load_ai_key_material(
-                self._kernel.store, tenant_id, resolution
+        except Exception:
+            pass
+
+    async def _true_up_cost(
+        self,
+        tenant_id: str,
+        scope_ids: list[str],
+        capability: AgentCapability,
+        tokens_est: int,
+        micros_est: int,
+        result: AgentResult,
+    ) -> None:
+        actual_tokens = int(result.tokens_used or 0)
+        priced_model: str | None = None
+        if capability.model_endpoint and self._kernel.cost.has_prices:
+            ep = await self._kernel.store.get_model_endpoint(
+                tenant_id, capability.model_endpoint
             )
-            return material, resolution
-        except Exception:  # never let key resolution crash a run - fall back to env
-            return None, None
+            priced_model = ep.model if ep is not None else None
+        actual_micros = self._kernel.cost.price(
+            actual_tokens, capability.cost_tier, model=priced_model
+        )
+        await self._kernel.cost.reconcile(
+            tenant_id,
+            scope_ids=scope_ids,
+            delta_tokens=actual_tokens - tokens_est,
+            delta_micros=actual_micros - micros_est,
+        )
 
     def _compose_prompt(self, merged_prompt: str, task: str) -> str:
-        """Compose the skills' prompt fragments with the concrete task.
-
-        M1 / SEC-72 boundary note: the only inputs here are ``merged_prompt`` (the
-        skills' authored ``prompt_fragment`` bodies, which are trusted admin-curated
-        content) and ``task``. The spawner composes no untrusted recall / tool
-        context of its own - untrusted spans are enveloped at their source (the chat
-        transcript via continuity, the inbound message via chat, tool results in the
-        Pi sidecar). ``task`` therefore arrives already enveloped on the chat path,
-        or is the initiating principal's own instruction on the direct-spawn path, so
-        it is NOT re-wrapped here (a second wrap would defang the inner envelopes)."""
         if merged_prompt:
             return f"{merged_prompt}\n\nTask:\n{task}"
         return f"Task:\n{task}"
@@ -606,73 +266,75 @@ class Spawner:
         status: str,
         tokens: int,
         cost: int,
+        model_route: dict[str, str] | None = None,
+        latency_ms: int | None = None,
     ) -> None:
-        """Write the AGENT_SPAWN audit row (SEC-16); actor is the chosen capability."""
-        await self._kernel.audit.write(
-            AuditEvent(
-                tenant_id=tenant_id,
-                ts=utcnow(),
-                run_id=run_id,
-                parent_run_id=parent.run_id,
-                actor=capability.name,
-                actor_tier="ephemeral",
-                depth=parent.depth + 1,
-                action_type=ActionType.AGENT_SPAWN,
-                status=status,
-                tokens_used=tokens or None,
-                cost_micros=cost or None,
-                on_behalf_of=parent.on_behalf_of,
-                skills_loaded=list(skills),
-                detail={"capability": capability.name, "runtime": capability.runtime},
-            )
+        detail = {"capability": capability.name, "runtime": capability.runtime}
+        if model_route:
+            detail["model_route"] = _public_model_route(model_route)
+        event = AuditEvent(
+            tenant_id=tenant_id,
+            ts=utcnow(),
+            run_id=run_id,
+            parent_run_id=parent.run_id,
+            actor=capability.name,
+            actor_tier="ephemeral",
+            depth=parent.depth + 1,
+            action_type=ActionType.AGENT_SPAWN,
+            status=status,
+            latency_ms=latency_ms,
+            tokens_used=tokens or None,
+            cost_micros=cost or None,
+            on_behalf_of=parent.on_behalf_of,
+            skills_loaded=list(skills),
+            detail=detail,
         )
+        await self._kernel.audit.write(event)
+        try:
+            await self._observability.record_spawn(
+                tenant_id=tenant_id,
+                parent=parent,
+                capability=capability,
+                skills=list(skills),
+                run_id=run_id,
+                status=status,
+                tokens=tokens,
+                cost_micros=cost,
+                model_route=model_route,
+                latency_ms=latency_ms,
+            )
+        except Exception:
+            pass
 
-
-def context_payload(context: InvocationContext) -> dict[str, Any]:
-    """The data a skill's ``context_requirements`` schema validates against.
-
-    The invocation context's own envelope fields (tenant, run, depth, grants)
-    plus the delegated human are exposed by name so a skill can require, e.g.,
-    ``on_behalf_of`` to be present before it runs.
-    """
-    return {
-        # arbitrary skill-context (epic_id, team_context, ...) provided at spawn,
-        # overlaid by the envelope fields which are authoritative (S7.5).
-        **dict(context.extra),
-        "tenant_id": context.tenant_id,
-        "run_id": context.run_id,
-        "parent_run_id": context.parent_run_id,
-        "depth": context.depth,
-        "on_behalf_of": context.on_behalf_of,
-        "actor": context.actor,
-        "actor_tier": context.actor_tier,
-        "skills_loaded": list(context.skills_loaded),
-    }
+    def _budget_partial(self, run_id: str, capability: AgentCapability) -> dict[str, Any]:
+        return {
+            "run_id": run_id,
+            "agent_type": capability.name,
+            "status": "partial",
+            "degraded": False,
+            "reason": "budget_exceeded",
+            "summary": "spawn skipped: budget hard-stop reached",
+            "output": {},
+            "tokens_used": 0,
+            "cost_micros": 0,
+            "new_work_items": [],
+        }
 
 
 def build_spawner(kernel: Kernel) -> Spawner:
-    """Construct the fleet ``Spawner`` for a kernel (app bootstrap seam)."""
+    """Construct the fleet ``Spawner`` for a kernel."""
     return Spawner(kernel)
 
 
 def make_app_spawner(
     kernel: Kernel,
 ) -> Callable[[Principal, SpawnBody], Awaitable[dict[str, Any]]]:
-    """Adapt ``Spawner.spawn`` to the ``POST /v1/spawn`` (Principal, SpawnBody) seam.
-
-    Errors are *not* converted: ContextRequirementsUnmet (400),
-    DepthExceeded / BudgetExceeded (429), SkillNotFound / NoCapableRuntime (404)
-    propagate so ``create_app``'s BoltrigError handler maps them to status codes.
-    Budget here propagates (``partial_on_budget=False``) so an HTTP caller gets a
-    429 rather than a silent partial.
-    """
+    """Adapt ``Spawner.spawn`` to the ``POST /v1/spawn`` seam."""
     spawner = build_spawner(kernel)
-
-    _envelope = {"run_id", "parent_run_id", "depth", "skills_loaded"}
+    envelope = {"run_id", "parent_run_id", "depth", "skills_loaded"}
 
     async def app_spawner(principal: Principal, body: SpawnBody) -> dict[str, Any]:
-        # everything in body.context that is not an envelope field is skill-context
-        extra = {k: v for k, v in body.context.items() if k not in _envelope}
+        extra = {key: value for key, value in body.context.items() if key not in envelope}
         ctx = principal.context(
             run_id=body.context.get("run_id"),
             parent_run_id=body.context.get("parent_run_id"),
@@ -693,14 +355,7 @@ def make_app_spawner(
 
 
 def make_agent_invoker(kernel: Kernel) -> AgentInvoker:
-    """Build the reasoning-verb invoker the kernel attaches (US-KER-02).
-
-    For an agent-BOUND verb the dispatcher calls this with
-    ``(verb, params, context, agent_capability)``. We run an appropriate
-    ephemeral and return an adapter ``Result`` whose output is the run's
-    ``AgentResult.output``. ScriptRuntime is the offline-safe fallback, and any
-    runtime failure degrades to it so a verb call never crashes the kernel (P9).
-    """
+    """Build the reasoning-verb invoker the kernel attaches."""
     spawner = build_spawner(kernel)
 
     async def agent_invoker(
@@ -716,22 +371,21 @@ def make_agent_invoker(kernel: Kernel) -> AgentInvoker:
             f"Params: {json.dumps(params, default=str, sort_keys=True)}"
         )
         caps = await kernel.store.list_capabilities(context.tenant_id)
-        cap = next((c for c in caps if c.name == agent_capability), None)
+        cap = next((item for item in caps if item.name == agent_capability), None)
         try:
-            if cap is None:
-                runtime = ScriptRuntime()
-            else:
-                runtime = await spawner._runtime_for(context.tenant_id, cap, context)
-            result = await runtime.run(
-                prompt, context, tools=list(context.grants.allow)
+            runtime = (
+                await spawner._runtime_for(context.tenant_id, cap, context)
+                if cap is not None
+                else ScriptRuntime()
             )
-        except Exception:  # any backend failure -> deterministic offline fallback
+            result = await runtime.run(prompt, context, tools=list(context.grants.allow))
+        except Exception:
             result = await ScriptRuntime().run(
                 prompt, context, tools=list(context.grants.allow)
             )
         if result.ok:
             output = dict(result.output)
-            if result.degraded:  # the flag survives the adapter seam (US-FLT-07)
+            if result.degraded:
                 output.setdefault("_degraded", {"reason": "degraded"})
             return Result.success(output)
         return Result.failure(

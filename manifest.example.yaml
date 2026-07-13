@@ -15,6 +15,23 @@ tenant_id: acme
 locale_default: en
 timezone_default: Europe/London
 
+# --- Boltrig v2 chosen stack ------------------------------------------------
+# This is the target architecture map. Some entries are config homes for adapters
+# that are not executable yet; legacy Pi/Hermes-compatible runtimes below stay in
+# the example so the current test/offline boot path remains green.
+stack:
+  cockpit: herdr
+  orchestration: mastra
+  durability: hatchet
+  runtime_sandbox: rivet_agentos
+  coding_agent: opencode
+  browser_automation: browser_cli
+  memory_primary: mem0
+  memory_projection: cognee
+  model_routing: bifrost
+  observability: langfuse
+  tool_protocol: mcp_kernel
+
 # --- identity: OIDC + IdP-group -> role/scope mappings (US-IAM-01/02) --------
 identity:
   provider: oidc
@@ -51,6 +68,16 @@ models:
       base_url: http://local-model:8000/v1
       model: ${LOCAL_MODEL:-Qwen/Qwen2.5-7B-Instruct}
       data_class: sensitive
+    - id: opencode-ornith
+      kind: opencode
+      # Optional warm `opencode serve` URL. Leave unset to let OpenCode start its
+      # own local server, or set to http://127.0.0.1:4096 for attach mode.
+      # In compose, OpenCode state/config is rooted at BOLTRIG_OPENCODE_HOME so
+      # the shipped stack never reads a developer user's ~/.config/opencode.
+      base_url: ${OPENCODE_ATTACH_URL:-}
+      # OpenCode expects provider/model here, not merely the upstream HF id.
+      model: ${OPENCODE_MODEL:-ornith/deepreinforce-ai/Ornith-1.0-35B}
+      data_class: standard
   default: standard
   # Sensitive-classified data is routed to the on-box endpoint (never egresses).
   sensitive_endpoint: local-sensitive
@@ -61,7 +88,10 @@ models:
   prices:
     claude-sonnet-4-6: 9
 
-# --- hierarchy: the durable agent org chart (one tier1 over many tier2) ------
+# --- hierarchy: durable agent org chart -------------------------------------
+# Current runnable compatibility path: these tier runtimes still use Hermes-
+# compatible names. Boltrig v2 orchestration should be introduced through the
+# `mastra` -> Hatchet -> Rivet/OpenCode seams above, not by expanding Hermes.
 hierarchy:
   tier1:
     name: chief-of-staff
@@ -95,6 +125,8 @@ hierarchy:
       cost_tier: standard
 
 # --- ephemeral runtimes: short-lived child agents the fleet spawns -----------
+# `pi-worker` remains a compatibility sandbox path until the Rivet AgentOS
+# adapter is bound. New v2 non-coding/tool agents should target Rivet AgentOS.
 ephemeral_runtimes:
   - name: worker-cheap
     runtime: hermes
@@ -112,6 +144,21 @@ ephemeral_runtimes:
   - name: pi-worker
     runtime: pi
     model_endpoint: standard
+    supported_skills: ["*"]
+    max_depth: 2
+    cost_tier: standard
+  # Boltrig v2: Rivet AgentOS as the sandboxed non-coding/tool-agent runtime.
+  - name: rivet-worker
+    runtime: rivet_agentos
+    model_endpoint: standard
+    supported_skills: ["analysis/*", "integration/*", "browser/*"]
+    max_depth: 2
+    cost_tier: standard
+  # Boltrig v2: OpenCode as the coding-agent runtime. The endpoint's model is
+  # the OpenCode provider/model id and base_url is an optional opencode serve URL.
+  - name: opencode-worker
+    runtime: opencode
+    model_endpoint: opencode-ornith
     supported_skills: ["*"]
     max_depth: 2
     cost_tier: standard
@@ -166,6 +213,24 @@ adapters:
       kind: basic
   - id: memory-tickets
     runtime: script
+  # Boltrig v2 host-control seam: Herdr is governed through verbs, not a
+  # privileged console side door. Mutating verbs still need grants/HITL policy.
+  # In compose, Herdr state/config is rooted at BOLTRIG_HERDR_HOME rather than
+  # a developer user's ~/.config/herdr.
+  - id: herdr
+    runtime: script
+  # Boltrig v2 GPU-control seam. The API key is a credential ref and is never
+  # returned to agents or status endpoints.
+  - id: runpod
+    runtime: http
+    credential:
+      id: RUNPOD_API
+      store: env
+      kind: api_key
+  # Boltrig v2 browser automation seam. The Browser Use CLI owns its own browser
+  # auth/session; Boltrig only exposes governed, narrow browser verbs.
+  - id: browser-cli
+    runtime: script
 
 # --- HITL: routing + the verbs that ALWAYS require human approval (P5) -------
 hitl:
@@ -198,9 +263,9 @@ privacy:
     - email
     - phone
 
-# === Round Two additions (S9) ===============================================
+# === Round Two compatibility additions (S9) =================================
 
-# --- runtime sidecars: Pi as a sandboxed reasoning runtime (Epic RUN) -------
+# --- runtime sidecars: Pi compatibility sandbox path (Epic RUN) --------------
 runtimes:
   pi:
     enabled: true
@@ -220,6 +285,33 @@ runtimes:
   gateway:
     base_url:                                # e.g. http://bifrost:8080/v1 (empty = off)
     cache_ttl_seconds: 900                   # sync to the gateway's own cache TTL
+    health:
+      enabled: false                         # exports BOLTRIG_MODEL_GATEWAY_HEALTH
+      path: /health                          # derives from base_url; no secrets here
+    # Optional config-only model profiles. apply_manifest exports this object as
+    # BOLTRIG_MODEL_PROFILES unless the process env already overrides it.
+    # Workflows select one with context/defaults/agent model_profile: code/deep/etc.
+    model_profiles:
+      fast:
+        provider: bifrost
+        model: ${BOLTRIG_FAST_MODEL:-qwen-3-coder}
+        base_url: ${BOLTRIG_MODEL_GATEWAY_URL:-http://bifrost:8080/v1}
+      code:
+        provider: bifrost
+        model: ${BOLTRIG_CODE_MODEL:-kimi-k2.7}
+        base_url: ${BOLTRIG_MODEL_GATEWAY_URL:-http://bifrost:8080/v1}
+      deep:
+        provider: bifrost
+        model: ${BOLTRIG_DEEP_MODEL:-kimi-k2.7}
+        base_url: ${BOLTRIG_MODEL_GATEWAY_URL:-http://bifrost:8080/v1}
+      cheap:
+        provider: bifrost
+        model: ${BOLTRIG_CHEAP_MODEL:-gpt-5-mini}
+        base_url: ${BOLTRIG_MODEL_GATEWAY_URL:-http://bifrost:8080/v1}
+      local:
+        provider: vllm
+        model: ${LOCAL_MODEL:-Qwen/Qwen2.5-7B-Instruct}
+        base_url: http://local-model:8000/v1
 
 # --- expose the kernel as an MCP server, and optionally consume external ones
 mcp:
@@ -276,6 +368,32 @@ chat:
     threshold: 40           # <= code default 40 live messages
     keep_recent: 12         # <= code default 12 verbatim recent turns
 
+# --- v2 orchestration/runtime/observability homes (inert until adapters bind) -
+mastra:
+  enabled: false
+  role: orchestration_contract
+  plan_contract: boltrig.mastra.v1
+  compile_to: hatchet
+
+rivet_agentos:
+  enabled: true
+  role: sandbox_runtime
+  network_allow: [kernel_mcp, model_endpoint]
+  native_tools: false
+
+browser_cli:
+  enabled: true
+  role: browser_automation
+  runtime: rivet_agentos
+  cloud_policy: disabled
+
+langfuse:
+  enabled: false
+  role: observability_sink
+  endpoint: ${LANGFUSE_HOST:-}
+  public_key: ${LANGFUSE_PUBLIC_KEY:-}
+  secret_key_ref: LANGFUSE_SECRET_KEY
+
 # === Round Three additions (S10) - the manifest stays the source of truth (C1)
 # --- evaluation harness (Epic EVAL) -----------------------------------------
 evaluation:
@@ -291,31 +409,50 @@ notifications:
     budget_alert: { channel: email }
 
 # --- personal agents (Epic PA) - delegated-only -----------------------------
+# Current default uses the Pi compatibility worker. The v2 target is a delegated
+# Rivet AgentOS worker once that adapter is live.
 personal_agents:
   enabled: true
   default_runtime: pi-worker
   default_skills: ["writing/*", "analysis/*"]
 
-# --- memory & knowledge (Epic MEM, Round Five) - kernel-governed, opt-in -----
-# The engine is ADOPTED, not built: `local` is the dev/offline reference, `cognee`
-# is the production engine (validate per MEM-ENG-04 before enabling). The kernel,
-# not the engine, is the isolation boundary at ingestion AND retrieval (SEC-40).
+# --- memory & knowledge - kernel-governed, opt-in ---------------------------
+# Boltrig v2 uses kernel-led fanout: the Boltrig memory ledger is authoritative,
+# Mem0 is the primary operational recall projection, and Cognee is the optional
+# graph/corpus enrichment projection. `engine: local` plus disabled projections
+# remains the executable offline default; enable Mem0/Cognee per deployment.
 memory:
   enabled: true                        # opt-in per installation
-  engine: local                        # local (dev reference) | cognee (production)
+  engine: local                        # executable kernel engine: local | vector | pgvector | cognee
   store: postgres                      # reuse the existing Postgres instance
+  authority: kernel_ledger             # backends are projections, not authority
+  primary_projection: mem0             # v2 target for ordinary recall
+  projections:
+    - id: mem0
+      role: primary_recall
+      enabled: false                   # set true with mem0ai installed + MEM0_API_KEY
+      status: available_adapter
+    - id: cognee
+      role: graph_enrichment
+      enabled: false                   # set true with cognee installed + LLM/embedding config
+      status: optional_projection
+  fanout:
+    mode: ledger_then_projection       # commit once, then write projections
+    execution: inline                  # inline | queued; queued uses Hatchet/local executor tasks
+    retry_failed: true
+    record_projection_status: true
   embedding_endpoint: local-sensitive  # sensitive-safe default (SEC-43)
   extraction_endpoint: local-sensitive # entity/relationship extraction model
   local_endpoints: [local-sensitive]   # endpoints treated as on-box for residency
   default_owner_scope: user            # user | department | org
   cross_scope_edges: forbidden         # forbidden | governed
   ingest:
-    on_session_end: true               # cognify a conversation when it closes
+    on_session_end: true               # distil a conversation when it closes
     incremental: true                  # process only new/changed content
     schedule: null                     # optional tz-aware cron for document corpora
     screen_content: true               # anti-poisoning screen (SEC-42)
   retrieval:
-    default_mode: graph_completion     # similarity | graph_completion (multi-hop)
+    default_mode: primary              # primary | similarity | graph_completion
     max_hops: 4
     max_results: 20
   retention_days: 365

@@ -588,7 +588,7 @@ def build_turn_executor(
         ctx = InvocationContext(
             tenant_id=tenant_id, grants=perms.grants, actor="chief-of-staff",
             actor_tier="tier1", run_id=run_id, on_behalf_of=user_id,
-            extra={"conversation_id": conversation_id},
+            extra={"conversation_id": conversation_id, "principal_role": role},
         )
         # The inbound turn text is untrusted user/channel input, so it is enveloped
         # before it reaches the model (M1 / SEC-72). On the continuity path the

@@ -44,6 +44,14 @@ _PROVIDER_RUNTIME: dict[str, str] = {
     "openai": "openai",
     "ollama": "openai",
     "vllm": "openai",
+    "bifrost": "openai",
+    "cerebras": "openai",
+    "fireworks": "openai",
+    "runpod": "openai",
+    "opencode": "opencode",
+    "rivet": "rivet_agentos",
+    "rivet_agentos": "rivet_agentos",
+    "rivet-agentos": "rivet_agentos",
     "anthropic": "claude-api",
     "claude": "claude-api",
     "claude-api": "claude-api",
@@ -376,6 +384,8 @@ def build_runtime(
     endpoint_lookup: EndpointLookup | None = None,
     *,
     pi_config: dict[str, Any] | None = None,
+    opencode_config: dict[str, Any] | None = None,
+    rivet_config: dict[str, Any] | None = None,
     api_key: str | None = None,
     runtime_override: str | None = None,
     endpoint_override: "ModelEndpoint | None" = None,
@@ -385,8 +395,8 @@ def build_runtime(
     Dispatch is by ``capability.runtime``. The model endpoint (if any) is
     resolved through ``endpoint_lookup`` so the chosen model is pinned by data,
     not code. ``pi_config`` supplies the Pi sidecar wiring (sidecar_url, mcp_url,
-    issue_token, ...); absent it, a ``pi`` capability still resolves to a
-    PiRuntime that degrades offline. Unknown runtimes fall back to ScriptRuntime.
+    issue_token, ...); ``opencode_config`` supplies the same kernel-issued scoped
+    MCP token callbacks for OpenCode. Unknown runtimes fall back to ScriptRuntime.
 
     ``api_key`` is the resolved per-org/workspace/user AI key ([2026] VJS-COUNTY 8,
     D5): a network runtime uses it instead of the env-configured provider key. When
@@ -425,6 +435,21 @@ def build_runtime(
         cfg = dict(pi_config or {})
         cfg.setdefault("sidecar_url", None)  # no config -> degrades offline (FR-RUN-05)
         return PiRuntime(
+            endpoint=endpoint, cost_tier=capability.cost_tier or "standard", **cfg
+        )
+    if kind == "opencode":
+        from .opencode_runtime import OpenCodeRuntime
+
+        cfg = dict(opencode_config or {})
+        return OpenCodeRuntime(
+            endpoint=endpoint, cost_tier=capability.cost_tier or "standard", **cfg
+        )
+    if kind in {"rivet", "rivet_agentos", "rivet-agentos"}:
+        from .rivet_runtime import RivetAgentOSRuntime
+
+        cfg = dict(rivet_config or {})
+        cfg.setdefault("agentos_url", None)
+        return RivetAgentOSRuntime(
             endpoint=endpoint, cost_tier=capability.cost_tier or "standard", **cfg
         )
     # 'script' / 'python-script' / 'go-binary' / anything unknown -> deterministic.

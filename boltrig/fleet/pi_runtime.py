@@ -97,6 +97,9 @@ class PiRuntime:
         token = self._issue(
             context.tenant_id, context.grants, run_id=context.run_id,
             actor=context.actor, skills=context.skills_loaded,
+            workspace_id=context.workspace_id,
+            on_behalf_of=context.on_behalf_of,
+            extra=dict(context.extra),
         )
         body = self.build_request(prompt, context, token)
         final: dict | None = None
