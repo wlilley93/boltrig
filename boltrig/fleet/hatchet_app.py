@@ -1,6 +1,6 @@
 """The registered durable tasks: pure-data inputs, governed bodies (Beat 5).
 
-Three tasks replace the P1-1 demos (ping / hitl_demo) as the production
+Four tasks replace the P1-1 demos (ping / hitl_demo) as the production
 durability backbone:
 
   * ``boltrig-invoke`` - one governed verb call as a durable unit. The input is
@@ -16,6 +16,13 @@ durability backbone:
     re-enters the interpreter, which replays checkpointed steps and hands the
     paused step its approval id, so the kernel CAS executes the gated verb
     exactly once (NFR-REL-03, SEC-14).
+  * ``boltrig-ultracode-run`` / ``boltrig-ultracode-agent`` - a phased Boltrig
+    v2/OpenCode workflow from pure data. The parent validates the workflow
+    contract and fans out phase-agent bodies through a separate task seam; each
+    agent still runs through the fleet spawner so cost, audit, and degraded
+    honesty stay on the standard runtime path.
+  * ``boltrig-memory-projection`` - one Mem0/Cognee projection catch-up write or
+    delete after the canonical ledger has already committed.
 
 Correlation of an approval to a run is by SCOPE (the run id), not by baking the
 id into the event key - that is how Hatchet routes a user event to one durable
@@ -39,7 +46,37 @@ from pydantic import BaseModel, Field
 
 from boltrig.models import GrantSet, InvocationContext, TenantIsolation
 
+from .hatchet_memory import (
+    TASK_MEMORY_PROJECTION,
+    register_hatchet_memory_projection_task,
+    register_local_memory_projection_task,
+)
+from .hatchet_ultracode import (
+    TASK_ULTRACODE_AGENT,
+    TASK_ULTRACODE_RUN,
+    register_hatchet_ultracode_tasks,
+    register_local_ultracode_tasks,
+)
+
 log = logging.getLogger("boltrig.fleet.hatchet_app")
+
+__all__ = [
+    "APPROVAL_EVENT_KEY",
+    "TASK_INVOKE",
+    "TASK_WORK_ITEM",
+    "TASK_WORKFLOW_RUN",
+    "TASK_ULTRACODE_RUN",
+    "TASK_ULTRACODE_AGENT",
+    "TASK_MEMORY_PROJECTION",
+    "approve",
+    "build_hatchet_app",
+    "context_from_envelope",
+    "context_to_envelope",
+    "invoke_task_body",
+    "register_boltrig_tasks",
+    "run_workflow_body",
+    "work_item_task_body",
+]
 
 # The HITL approval event key. Correlation to a specific run is by SCOPE
 # (the run id), not by baking the id into the event name.
@@ -76,6 +113,7 @@ class WorkflowRunInput(BaseModel):
 
     tenant: str
     workflow_id: str
+    workflow_snapshot: dict[str, Any]
     inputs: dict[str, Any] = Field(default_factory=dict)
     ctx_envelope: dict[str, Any]
     run_id: str
@@ -98,6 +136,9 @@ def context_to_envelope(ctx: InvocationContext) -> dict[str, Any]:
         "parent_run_id": ctx.parent_run_id,
         "depth": ctx.depth,
         "on_behalf_of": ctx.on_behalf_of,
+        "workspace_id": ctx.workspace_id,
+        "ip_address": ctx.ip_address,
+        "user_agent": ctx.user_agent,
         "grants": {"allow": list(ctx.grants.allow), "deny": list(ctx.grants.deny)},
         "actor": ctx.actor,
         "actor_tier": ctx.actor_tier,
@@ -117,6 +158,9 @@ def context_from_envelope(env: dict[str, Any]) -> InvocationContext:
         parent_run_id=env.get("parent_run_id"),
         depth=int(env.get("depth", 0)),
         on_behalf_of=env.get("on_behalf_of"),
+        workspace_id=env.get("workspace_id"),
+        ip_address=env.get("ip_address"),
+        user_agent=env.get("user_agent"),
         grants=GrantSet.of(list(grants.get("allow") or []), list(grants.get("deny") or [])),
         actor=env.get("actor", "unknown"),
         actor_tier=env.get("actor_tier", "ephemeral"),
@@ -155,28 +199,31 @@ async def run_workflow_body(kernel: Any, payload: dict[str, Any]) -> dict[str, A
     checkpointed with its request id, and a resume re-invokes the paused step
     with that approval id (the CAS makes execution exactly-once, NFR-REL-03)."""
     from boltrig.workflows.interpreter import run_workflow_definition
+    from boltrig.workflows.snapshot import workflow_from_snapshot
 
     ctx = context_from_envelope(payload["ctx_envelope"])
     tenant = payload["tenant"]
     _fence(tenant, ctx)
-    wf = next(
-        (w for w in await kernel.store.list_workflows(tenant) if w.id == payload["workflow_id"]),
-        None,
+    wf = workflow_from_snapshot(
+        payload.get("workflow_snapshot"),
+        tenant_id=tenant,
+        workflow_id=payload["workflow_id"],
+        workspace_id=ctx.workspace_id,
     )
-    if wf is None:  # fail-closed (K-13)
-        raise LookupError(f"unknown workflow '{payload['workflow_id']}' for tenant '{tenant}'")
     return await run_workflow_definition(
-        kernel, wf, dict(payload.get("inputs") or {}), ctx,
-        run_id=payload.get("run_id"), store=kernel.store,
+        kernel,
+        wf,
+        dict(payload.get("inputs") or {}),
+        ctx,
+        run_id=payload.get("run_id"),
+        store=kernel.store,
     )
 
 
 async def work_item_task_body(pump: Any, payload: dict[str, Any]) -> dict[str, Any]:
     """Run the pump's one claimed-item body by id (US-FLT-06). The pump path
     itself dispatches through the chokepoint, so governance holds (FR-EXE-06)."""
-    await pump._run_item_payload(
-        {"tenant_id": payload["tenant_id"], "item_id": payload["item_id"]}
-    )
+    await pump._run_item_payload({"tenant_id": payload["tenant_id"], "item_id": payload["item_id"]})
     return {"handled": True, "item_id": payload["item_id"]}
 
 
@@ -197,7 +244,10 @@ def register_boltrig_tasks(executor: Any, kernel: Any, pump: Any | None = None) 
 
     register(TASK_INVOKE, _invoke)
     register(TASK_WORKFLOW_RUN, _workflow_run)
+    register_local_memory_projection_task(executor, kernel)
+    register_local_ultracode_tasks(executor, kernel)
     if pump is not None:
+
         async def _work_item(payload: dict[str, Any]) -> dict[str, Any]:
             return await work_item_task_body(pump, payload)
 
@@ -298,10 +348,15 @@ def build_hatchet_app(
             record = await run_workflow_body(res["kernel"], inp.model_dump())
         return record
 
+    memory_workflows = register_hatchet_memory_projection_task(hatchet, _resources)
+    ultracode_workflows = register_hatchet_ultracode_tasks(hatchet, _resources)
+
     return hatchet, {
         TASK_INVOKE: invoke,
         TASK_WORK_ITEM: work_item,
         TASK_WORKFLOW_RUN: workflow_run,
+        **memory_workflows,
+        **ultracode_workflows,
     }
 
 
