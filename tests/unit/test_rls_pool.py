@@ -11,7 +11,7 @@ import asyncio
 
 import pytest
 
-from boltrig.store.postgres import _RlsPool, set_current_tenant
+from boltrig.store.postgres import PostgresStore, _RlsPool, set_current_tenant
 
 
 class _FakeConn:
@@ -80,4 +80,24 @@ def test_rls_pool_is_fail_closed_when_no_tenant_bound():
     asyncio.run(rls.execute("UPDATE x SET y=1"))
     # an unbound tenant becomes '' so the RLS predicate is never true (no rows)
     assert pool.log[0][2][0] == ""
+    set_current_tenant(None)  # leave the context clean for other tests
+
+
+@pytest.mark.invariant("SEC-65")
+def test_set_recovery_codes_applies_tenant_guc_before_writing():
+    # The explicit-transaction 2FA path must scope RLS before its DELETE/INSERT,
+    # exactly like its budget/HITL siblings (answer_hitl, consume_budget). Without
+    # the GUC, under BOLTRIG_RLS=1 the generic user_recovery_codes policy sees no
+    # bound tenant, deletes zero rows and errors on INSERT WITH CHECK.
+    pool = _FakePool()
+    store = PostgresStore(pool)
+    set_current_tenant("acme")
+    asyncio.run(store.set_recovery_codes("acme", "u1", ["h1", "h2"]))
+    # the FIRST statement inside the explicit transaction is the GUC set
+    op, query, args = pool.log[0]
+    assert op == "execute"
+    assert "set_config('app.tenant_id'" in query
+    assert args[0] == "acme"
+    # only AFTER the GUC does the first data statement (the DELETE) run
+    assert "DELETE FROM user_recovery_codes" in pool.log[1][1]
     set_current_tenant(None)  # leave the context clean for other tests

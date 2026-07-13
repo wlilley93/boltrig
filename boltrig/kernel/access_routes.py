@@ -862,8 +862,11 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
         inv = await k.store.get_invitation(p.tenant_id, invite_id)
         if inv is None:
             return JSONResponse({"status": "error", "reason": "not_found"}, status_code=404)
-        inv.status = "revoked"
-        await k.store.update_invitation(inv)
+        _, pending = await dispatch_control_route(
+            k, p, "control.invitation.revoke", {"invite_id": invite_id}
+        )
+        if pending is not None:
+            return pending
         await _audit(k, p, "admin.invite.revoke", {"id": invite_id})
         return JSONResponse({"status": "ok", "id": invite_id})
 

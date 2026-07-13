@@ -2,8 +2,9 @@
 
 import pytest
 
-from boltrig.fleet import build_spawner
+from boltrig.fleet import build_spawner, make_agent_invoker
 from boltrig.fleet.chat import ChatService, build_turn_executor
+from boltrig.fleet.spawn import Spawner
 from boltrig.kernel import Kernel
 from boltrig.kernel.events import EventRelay
 from boltrig.models import (
@@ -78,3 +79,34 @@ async def test_chat_turn_surfaces_a_degraded_spawn():
     rows = await kernel.store.audit_query(T)
     spawn_rows = [r for r in rows if r.action_type == ActionType.AGENT_SPAWN]
     assert spawn_rows and spawn_rows[-1].status == "degraded"
+
+
+@pytest.mark.invariant("US-FLT-07")
+async def test_agent_invoker_runtime_failure_is_marked_degraded_not_echoed(monkeypatch):
+    # A resolved runtime that RAISES must not be papered over with a plain
+    # ScriptRuntime echo (ok=True / degraded=False); the invoker must surface a
+    # degrade-marked result with an audit-visible reason (US-FLT-07).
+    kernel = _kernel_hermes_only()
+    await _add_hermes_cap(kernel)
+
+    class _Boom:
+        runtime = "hermes"
+        cost_tier = "standard"
+
+        async def run(self, prompt, context, *, tools):
+            raise RuntimeError("gateway exploded")
+
+    async def _boom_runtime_for(self, tenant_id, capability, context=None):
+        return _Boom()
+
+    monkeypatch.setattr(Spawner, "_runtime_for", _boom_runtime_for)
+
+    invoker = make_agent_invoker(kernel)
+    result = await invoker("demo.verb", {"x": 1}, _ctx(), "hermes-worker")
+    # ok stays True so the tree keeps running (P9), but the crash is NEVER an
+    # unmarked success: the _degraded marker with an audit-visible reason is set.
+    assert result.ok is True
+    assert "_degraded" in result.output
+    assert result.output["_degraded"]["reason"] == "RuntimeError"
+    # regression guard: the old echo left no marker and no runtime kind.
+    assert result.output["_degraded"]["runtime"] == "hermes"

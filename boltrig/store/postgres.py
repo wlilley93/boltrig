@@ -410,8 +410,13 @@ class PostgresStore(IdempotencyStorePG, GuardedWritesPG, ChannelStorePG):
         )
 
     async def list_workflows(self, tenant_id):
+        # Latest version per workflow id (the shelf), mirroring list_skills and
+        # the in-memory store, so callers matching a workflow by id never see
+        # duplicate or stale versions.
         rows = await self._pool.fetch(
-            "SELECT * FROM workflow_definitions WHERE tenant_id=$1", tenant_id
+            """SELECT DISTINCT ON (id) * FROM workflow_definitions WHERE tenant_id=$1
+               ORDER BY id, version DESC""",
+            tenant_id,
         )
         return [_workflow(r) for r in rows]
 
@@ -1117,29 +1122,34 @@ class PostgresStore(IdempotencyStorePG, GuardedWritesPG, ChannelStorePG):
         # child table carries an FK to conversations, so the child rows are deleted
         # explicitly first. The audit log is EXEMPT and never touched here (erasing
         # the SEC-16 hash chain would break tamper-evidence). Tenant-scoped (SEC-08).
-        rows = await self._pool.fetch(
-            """SELECT id FROM conversations
-               WHERE tenant_id=$1 AND status=$2 AND updated_at <= $3""",
-            tenant_id, ConversationStatus.CLOSED.value, older_than,
-        )
-        conv_ids = [r["id"] for r in rows]
-        if not conv_ids:
-            return 0
-        await self._pool.execute(
-            """DELETE FROM conversation_messages
-               WHERE tenant_id=$1 AND conversation_id = ANY($2::text[])""",
-            tenant_id, conv_ids,
-        )
-        await self._pool.execute(
-            """DELETE FROM conversation_summaries
-               WHERE tenant_id=$1 AND conversation_id = ANY($2::text[])""",
-            tenant_id, conv_ids,
-        )
-        await self._pool.execute(
-            """DELETE FROM conversations WHERE tenant_id=$1 AND id = ANY($2::text[])""",
-            tenant_id, conv_ids,
-        )
-        return len(conv_ids)
+        # One atomic transaction: a crash mid-purge cannot strand a conversation
+        # whose messages/summaries are already erased.
+        async with self._pool.acquire() as conn:
+            async with conn.transaction():
+                await _apply_guc(conn)  # RLS-live: scope this explicit transaction
+                rows = await conn.fetch(
+                    """SELECT id FROM conversations
+                       WHERE tenant_id=$1 AND status=$2 AND updated_at <= $3""",
+                    tenant_id, ConversationStatus.CLOSED.value, older_than,
+                )
+                conv_ids = [r["id"] for r in rows]
+                if not conv_ids:
+                    return 0
+                await conn.execute(
+                    """DELETE FROM conversation_messages
+                       WHERE tenant_id=$1 AND conversation_id = ANY($2::text[])""",
+                    tenant_id, conv_ids,
+                )
+                await conn.execute(
+                    """DELETE FROM conversation_summaries
+                       WHERE tenant_id=$1 AND conversation_id = ANY($2::text[])""",
+                    tenant_id, conv_ids,
+                )
+                await conn.execute(
+                    """DELETE FROM conversations WHERE tenant_id=$1 AND id = ANY($2::text[])""",
+                    tenant_id, conv_ids,
+                )
+                return len(conv_ids)
 
     # --- Round Three: config revisions ---
     async def add_config_revision(self, rev: ConfigRevision) -> ConfigRevision:
@@ -1525,6 +1535,7 @@ class PostgresStore(IdempotencyStorePG, GuardedWritesPG, ChannelStorePG):
         # Replace the whole set atomically: clear then insert the fresh hashes.
         async with self._pool.acquire() as conn:
             async with conn.transaction():
+                await _apply_guc(conn)  # RLS-live: scope this explicit transaction
                 await conn.execute(
                     "DELETE FROM user_recovery_codes WHERE tenant_id=$1 AND user_id=$2",
                     tenant_id, user_id,

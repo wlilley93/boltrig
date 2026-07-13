@@ -27,6 +27,7 @@ REQUIRED_CONTROL_VERBS = frozenset(
         "control.user.update",
         "control.user.deactivate",
         "control.invitation.create",
+        "control.invitation.revoke",
         "control.notification.route",
     }
 )

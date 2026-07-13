@@ -341,6 +341,20 @@ async def create_invitation_record(
     return invitation, secret
 
 
+async def revoke_invitation_record(
+    store: Any, tenant_id: str, invite_id: str, *, context: Any
+) -> Any:
+    _principal_role(context)
+    invitation = await store.get_invitation(tenant_id, invite_id)
+    if invitation is None:
+        raise LookupError("invitation not found")
+    if invitation.status == "revoked":
+        return invitation
+    invitation.status = "revoked"
+    await store.update_invitation(invitation)
+    return invitation
+
+
 async def route_notification_record(
     store: Any, tenant_id: str, params: dict[str, Any], *, context: Any
 ) -> NotificationPref:

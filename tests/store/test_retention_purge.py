@@ -120,3 +120,71 @@ async def test_retention_purge_is_tenant_scoped(store):
     assert await store.get_conversation(T, "mine") is None
     assert await store.get_conversation("other", "theirs") is not None
     assert await store.list_messages("other", "theirs") != []
+
+
+@pytest.mark.invariant("SEC-74")
+def test_purge_runs_select_and_deletes_in_one_transaction():
+    # The hard-purge SELECT + three DELETEs must share ONE transaction, so a crash
+    # mid-purge cannot strand a conversation whose messages are already erased.
+    import asyncio
+
+    from boltrig.store.postgres import PostgresStore, set_current_tenant
+
+    log: list = []
+
+    class _Conn:
+        def __init__(self) -> None:
+            self._in_txn = False
+
+        def transaction(self):
+            conn = self
+
+            class _T:
+                async def __aenter__(self_inner):
+                    conn._in_txn = True
+                    return None
+
+                async def __aexit__(self_inner, *a):
+                    conn._in_txn = False
+                    return False
+
+            return _T()
+
+        async def fetch(self, q, *a):
+            log.append(("fetch", q, self._in_txn))
+            return [{"id": "c1"}]
+
+        async def execute(self, q, *a):
+            log.append(("execute", q, self._in_txn))
+            return "DELETE 1"
+
+    class _Acquire:
+        def __init__(self, conn):
+            self.conn = conn
+
+        async def __aenter__(self):
+            return self.conn
+
+        async def __aexit__(self, *a):
+            return False
+
+    class _Pool:
+        def __init__(self):
+            self.conn = _Conn()
+
+        def acquire(self):
+            return _Acquire(self.conn)
+
+    store = PostgresStore(_Pool())
+    set_current_tenant("acme")
+    try:
+        n = asyncio.run(store.purge_closed_conversations("acme", "2020-01-01"))
+    finally:
+        set_current_tenant(None)
+    assert n == 1
+    # the GUC set is the first statement, then the SELECT + 3 DELETEs, and every
+    # data statement executed inside the single transaction (in_txn is True).
+    assert log[0][0] == "execute" and "set_config('app.tenant_id'" in log[0][1]
+    data_ops = [entry for entry in log if "set_config" not in entry[1]]
+    assert len(data_ops) == 4  # 1 select + 3 deletes
+    assert all(in_txn for _, _, in_txn in data_ops)

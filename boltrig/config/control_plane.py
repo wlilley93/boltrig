@@ -19,6 +19,7 @@ from .control_operations import (
     deactivate_user_record,
     generate_adapter_record,
     register_mcp_consumer,
+    revoke_invitation_record,
     route_notification_record,
     safe_consequence,
     schedule_workflow_record,
@@ -320,6 +321,13 @@ class ControlPlaneAdapter:
             return Result.success(
                 {"id": invitation.id, "email": invitation.email, "invite_token": secret}
             )
+        if verb == "control.invitation.revoke":
+            invitation = await revoke_invitation_record(
+                self._store, tenant, params["invite_id"], context=context
+            )
+            # Return id only: the compat route wraps this as {status: ok, **out},
+            # so an extra "status" key here would clobber the route's ok status.
+            return Result.success({"id": invitation.id})
         if verb == "control.notification.route":
             preference = await route_notification_record(
                 self._store, tenant, params, context=context
