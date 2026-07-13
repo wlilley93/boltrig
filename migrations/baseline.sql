@@ -378,7 +378,7 @@ CREATE TABLE IF NOT EXISTS memory_items (
 );
 CREATE INDEX IF NOT EXISTS memory_scope_idx ON memory_items (tenant_id, owner_scope, kind);
 
--- Round Two (optional): external MCP servers Nankle consumes as adapters
+-- Round Two (optional): external MCP servers Boltrig consumes as adapters
 -- (US-MCP-03). Inert (pending_review) until activated through the review gate.
 CREATE TABLE IF NOT EXISTS mcp_servers (
     id          TEXT NOT NULL,
