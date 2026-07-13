@@ -1,5 +1,6 @@
 import type { VerbInfo } from "@/api/types";
 import { Hint } from "@/panels/ux";
+import { PendingHumanCard } from "@/panels/uxFlow";
 
 import { AckLine } from "../AckLine";
 import { SkillContextFields } from "./SkillContextFields";
@@ -25,8 +26,23 @@ export function SkillUpsertForm({
       <SkillIdentityFields s={s} />
       <SkillPermissionsFields s={s} verbs={verbs} />
       <SkillContextFields s={s} />
+      {s.mutation.pending && (
+        <PendingHumanCard
+          hitlRequestId={s.mutation.pending.id}
+          noun="control"
+          verb="control.skill.upsert"
+          sentParams={s.mutation.pending.params}
+          onApplied={s.mutation.onPendingApplied}
+          onDenied={s.mutation.onPendingDenied}
+          onReset={s.mutation.resetPending}
+        />
+      )}
       <div className="form__actions">
-        <button className="btn btn--primary" disabled={s.busy} onClick={s.upsert}>
+        <button
+          className="btn btn--primary"
+          disabled={s.busy || s.mutation.pending !== null}
+          onClick={s.upsert}
+        >
           {s.busy ? "..." : "Save skill"}
         </button>
         <AckLine ack={s.ack} />

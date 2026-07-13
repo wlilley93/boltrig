@@ -3,7 +3,7 @@
 // does not apply the change. This card polls the pending list and, when the id
 // leaves it, re-invokes the SAME verb + params with approval_id (consumed
 // single-use and verb-bound, hitl.py:131-154) and renders THAT result union.
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/api/client";
 import type { InvokeResult } from "@/api/types";
 import { useSlideActive } from "@/deck/context";
@@ -14,8 +14,8 @@ import { copyText } from "@/panels/uxFlow/copyText";
 import { Disclosure } from "@/panels/uxFlow/disclosure";
 
 const HITL_POLL_MS = 8000;
-// Fresh key per re-invoke (amendment 1): the apply is a new execution, and the
-// idempotency check sits AFTER the gate (dispatch.py steps 4 then 6).
+// Fresh key per approval request (amendment 1): applying is a new execution,
+// but transport retries must reuse its key in case the first response was lost.
 function freshIdempotencyKey(): string {
   return `phc-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
@@ -69,7 +69,11 @@ function usePendingHumanApply({
   onAppliedRef: React.MutableRefObject<(result: InvokeResult) => void>;
   onDeniedRef: React.MutableRefObject<((reason: string) => void) | undefined>;
 }) {
-  const invokedRef = useRef(false);
+  const invokedRef = useRef({ requestId: hitlRequestId, active: false });
+  if (invokedRef.current.requestId !== hitlRequestId) {
+    invokedRef.current = { requestId: hitlRequestId, active: false };
+  }
+  const idempotencyKey = useMemo(freshIdempotencyKey, [hitlRequestId]);
   return useCallback(() => {
     if (sentParams === null) {
       // Amendment 1 + A3: only a re-invoke applies the change; without the
@@ -78,8 +82,8 @@ function usePendingHumanApply({
       setState({ phase: "approved_unapplied" });
       return;
     }
-    if (invokedRef.current) return;
-    invokedRef.current = true;
+    if (invokedRef.current.active) return;
+    invokedRef.current.active = true;
     setState({ phase: "applying" });
     void (async () => {
       let result: InvokeResult;
@@ -89,11 +93,11 @@ function usePendingHumanApply({
           verb,
           params: sentParams,
           approval_id: hitlRequestId,
-          idempotency_key: freshIdempotencyKey(),
+          idempotency_key: idempotencyKey,
         });
       } catch (err) {
         // transport failure: the gate may not have been reached; retry is offered
-        invokedRef.current = false;
+        invokedRef.current.active = false;
         setState({ phase: "failed", reason: apiReason(err), retryable: true });
         return;
       }
@@ -111,6 +115,7 @@ function usePendingHumanApply({
           // the gate consumed the approval before execution failed; a retry
           // would only raise a fresh approval, so none is offered
           setState({ phase: "failed", reason: result.reason, retryable: false });
+          onDeniedRef.current?.(result.reason);
           break;
         case "pending_human":
           // Disappearance from the pending list is ambiguous between approve
@@ -119,10 +124,11 @@ function usePendingHumanApply({
           // (hitl.py:131-154) and dispatch then raises a FRESH pause, so a
           // second pending_human here means the request was not approved.
           setState({ phase: "not_approved", freshHitlId: result.hitl_request_id });
+          onDeniedRef.current?.("The request was not approved.");
           break;
       }
     })();
-  }, [noun, verb, sentParams, hitlRequestId, setState]);
+  }, [noun, verb, sentParams, hitlRequestId, idempotencyKey, setState]);
 }
 function usePendingHumanState({
   hitlRequestId,
@@ -145,6 +151,10 @@ function usePendingHumanState({
   // callbacks live in refs so a per-render parent lambda never restarts the poll
   const onAppliedRef = useRef(onApplied);
   const onDeniedRef = useRef(onDenied);
+  useEffect(() => {
+    setState({ phase: "waiting" });
+    setPollNote(null);
+  }, [hitlRequestId]);
   useEffect(() => {
     onAppliedRef.current = onApplied;
     onDeniedRef.current = onDenied;
@@ -257,10 +267,12 @@ function PendingHumanFailed({
   reason,
   retryable,
   onRetry,
+  onReset,
 }: {
   reason: string;
   retryable: boolean;
   onRetry: () => void;
+  onReset?: () => void;
 }) {
   return (
     <>
@@ -272,15 +284,34 @@ function PendingHumanFailed({
           </button>
         </span>
       ) : (
-        <Hint>
-          Running this again needs a fresh approval - start again from the form.
-        </Hint>
+        <PendingHumanRestart onReset={onReset} />
       )}
     </>
   );
 }
 
-function PendingHumanNotApproved({ freshHitlId }: { freshHitlId: string }) {
+function PendingHumanRestart({ onReset }: { onReset?: () => void }) {
+  if (onReset === undefined) {
+    return (
+      <Hint>
+        Running this again needs a fresh approval - start again from the form.
+      </Hint>
+    );
+  }
+  return (
+    <button type="button" className="btn btn--sm" onClick={onReset}>
+      Start again
+    </button>
+  );
+}
+
+function PendingHumanNotApproved({
+  freshHitlId,
+  onReset,
+}: {
+  freshHitlId: string;
+  onReset?: () => void;
+}) {
   return (
     <>
       <p className="ux-pending__down">
@@ -289,6 +320,7 @@ function PendingHumanNotApproved({ freshHitlId }: { freshHitlId: string }) {
       <p className="ux-hint">
         The re-invoke raised a new approval request: <code>{freshHitlId}</code>
       </p>
+      <PendingHumanRestart onReset={onReset} />
     </>
   );
 }
@@ -315,10 +347,12 @@ function PendingHumanBottom({
   state,
   pollNote,
   onRetry,
+  onReset,
 }: {
   state: PendingPhase;
   pollNote: string | null;
   onRetry: () => void;
+  onReset?: () => void;
 }) {
   switch (state.phase) {
     case "waiting":
@@ -328,17 +362,28 @@ function PendingHumanBottom({
     case "applied":
       return <PendingHumanApplied result={state.result} />;
     case "denied":
-      return <p className="ux-pending__down">Denied: {state.reason}</p>;
+      return (
+        <>
+          <p className="ux-pending__down">Denied: {state.reason}</p>
+          <PendingHumanRestart onReset={onReset} />
+        </>
+      );
     case "failed":
       return (
         <PendingHumanFailed
           reason={state.reason}
           retryable={state.retryable}
           onRetry={onRetry}
+          onReset={onReset}
         />
       );
     case "not_approved":
-      return <PendingHumanNotApproved freshHitlId={state.freshHitlId} />;
+      return (
+        <PendingHumanNotApproved
+          freshHitlId={state.freshHitlId}
+          onReset={onReset}
+        />
+      );
     case "approved_unapplied":
       return <PendingHumanApprovedUnapplied />;
   }
@@ -350,6 +395,7 @@ export function PendingHumanCard({
   sentParams,
   onApplied,
   onDenied,
+  onReset,
 }: {
   hitlRequestId: string;
   verb: string; // the full verb id, e.g. control.workflow.upsert
@@ -359,6 +405,9 @@ export function PendingHumanCard({
   sentParams: Record<string, unknown> | null;
   onApplied: (result: InvokeResult) => void;
   onDenied?: (reason: string) => void;
+  // A terminal denial/error needs a new approval. Callers that lock their form
+  // while pending provide this to deliberately return to an editable state.
+  onReset?: () => void;
 }) {
   const { state, pollNote, applyApproved } = usePendingHumanState({
     hitlRequestId,
@@ -385,7 +434,12 @@ export function PendingHumanCard({
         <span className="ux-pending__idlabel">Request</span>
         <IdCopy id={hitlRequestId} />
       </div>
-      <PendingHumanBottom state={state} pollNote={pollNote} onRetry={applyApproved} />
+      <PendingHumanBottom
+        state={state}
+        pollNote={pollNote}
+        onRetry={applyApproved}
+        onReset={onReset}
+      />
       <footer className="ux-pending__foot">
         <button
           type="button"

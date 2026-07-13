@@ -7,6 +7,7 @@ import type {
   CreateInvitationRequest,
   CreateInvitationResponse,
   DeleteAck,
+  GovernedRouteResponse,
   PatchUserRequest,
   PatchUserResponse,
 } from "@/api/types";
@@ -18,8 +19,11 @@ export const adminUsersApi = {
     });
   },
 
-  patchUser(id: string, body: PatchUserRequest): Promise<PatchUserResponse> {
-    return request<PatchUserResponse>(
+  patchUser(
+    id: string,
+    body: PatchUserRequest,
+  ): Promise<GovernedRouteResponse<PatchUserResponse>> {
+    return request<GovernedRouteResponse<PatchUserResponse>>(
       `/v1/admin/users/${encodeURIComponent(id)}`,
       { method: "PATCH", body, tolerateStatus: true },
     );

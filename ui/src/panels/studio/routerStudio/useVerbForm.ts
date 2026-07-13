@@ -1,8 +1,12 @@
 import { useState } from "react";
 
-import { api } from "@/api/client";
 import type { StatusAck } from "@/api/types";
 import { errText, parseJson } from "@/panels/shared";
+import {
+  outputRecord,
+  useControlMutation,
+  type ControlMutationState,
+} from "@/panels/uxFlow";
 
 export interface VerbFormState {
   id: string;
@@ -18,6 +22,7 @@ export interface VerbFormState {
   busy: boolean;
   error: string | null;
   ack: StatusAck | null;
+  mutation: ControlMutationState;
   submit: () => Promise<void>;
 }
 
@@ -27,13 +32,17 @@ export function useVerbForm(): VerbFormState {
   const [inputSchema, setInputSchema] = useState("{}");
   const [outputSchema, setOutputSchema] = useState("{}");
   const [consequence, setConsequence] = useState<"low" | "high">("low");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const [ack, setAck] = useState<StatusAck | null>(null);
+  const mutation = useControlMutation({
+    verb: "control.verb.define",
+    onApplied: (output) =>
+      setAck({ ...outputRecord(output), status: "ok" }),
+  });
 
   async function submit() {
     if (!id.trim() || !nounId.trim()) {
-      setError("Verb id and noun_id are required.");
+      setValidationError("Verb id and noun_id are required.");
       return;
     }
     let inSchema: Record<string, unknown>;
@@ -42,31 +51,23 @@ export function useVerbForm(): VerbFormState {
       inSchema = parseJson<Record<string, unknown>>(inputSchema, {});
       outSchema = parseJson<Record<string, unknown>>(outputSchema, {});
     } catch (err) {
-      setError(`schema: ${errText(err)}`);
+      setValidationError(`schema: ${errText(err)}`);
       return;
     }
-    setBusy(true);
-    setError(null);
+    setValidationError(null);
     setAck(null);
-    try {
-      setAck(
-        await api.upsertVerb({
-          id: id.trim(),
-          noun_id: nounId.trim(),
-          input_schema: inSchema,
-          output_schema: outSchema,
-          consequence,
-        }),
-      );
-    } catch (err) {
-      setError(errText(err));
-    } finally {
-      setBusy(false);
-    }
+    await mutation.invoke({
+      id: id.trim(),
+      noun_id: nounId.trim(),
+      input_schema: inSchema,
+      output_schema: outSchema,
+      consequence,
+    });
   }
 
   return {
     id, setId, nounId, setNounId, inputSchema, setInputSchema, outputSchema,
-    setOutputSchema, consequence, setConsequence, busy, error, ack, submit,
+    setOutputSchema, consequence, setConsequence, busy: mutation.busy,
+    error: validationError ?? mutation.error, ack, mutation, submit,
   };
 }

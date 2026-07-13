@@ -1,8 +1,12 @@
 import { useState } from "react";
 
-import { api } from "@/api/client";
-import { CodeBlock, errText } from "@/panels/shared";
+import { CodeBlock } from "@/panels/shared";
 import { Field, Select } from "@/panels/ux";
+import {
+  outputRecord,
+  PendingHumanCard,
+  useControlMutation,
+} from "@/panels/uxFlow";
 import { CRON_PRESETS, TZ_OPTIONS } from "@/panels/studio/workflow/constants";
 import type { WfFormProps } from "@/panels/studio/workflow/types";
 
@@ -10,30 +14,25 @@ export function ScheduleForm({ wfOptions }: WfFormProps) {
   const [schedId, setSchedId] = useState("");
   const [cron, setCron] = useState("");
   const [tz, setTz] = useState("UTC");
-  const [schedBusy, setSchedBusy] = useState(false);
-  const [schedError, setSchedError] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const [schedResult, setSchedResult] = useState<unknown>(null);
+  const mutation = useControlMutation({
+    verb: "control.workflow.schedule",
+    onApplied: (output) => setSchedResult(outputRecord(output).schedule),
+  });
 
   async function schedule() {
     if (!schedId.trim() || !cron.trim()) {
-      setSchedError("workflow id and cron are required.");
+      setValidationError("workflow id and cron are required.");
       return;
     }
-    setSchedBusy(true);
-    setSchedError(null);
+    setValidationError(null);
     setSchedResult(null);
-    try {
-      const res = await api.scheduleWorkflow(schedId.trim(), {
-        cron: cron.trim(),
-        timezone: tz.trim() || "UTC",
-      });
-      if (res.status === "ok") setSchedResult(res.schedule);
-      else setSchedError(res.reason ?? "schedule rejected");
-    } catch (err) {
-      setSchedError(errText(err));
-    } finally {
-      setSchedBusy(false);
-    }
+    await mutation.invoke({
+      workflow_id: schedId.trim(),
+      cron: cron.trim(),
+      timezone: tz.trim() || "UTC",
+    });
   }
 
   return (
@@ -65,11 +64,28 @@ export function ScheduleForm({ wfOptions }: WfFormProps) {
           </button>
         ))}
       </div>
+      {mutation.pending && (
+        <PendingHumanCard
+          hitlRequestId={mutation.pending.id}
+          noun="control"
+          verb="control.workflow.schedule"
+          sentParams={mutation.pending.params}
+          onApplied={mutation.onPendingApplied}
+          onDenied={mutation.onPendingDenied}
+          onReset={mutation.resetPending}
+        />
+      )}
       <div className="form__actions">
-        <button className="btn" disabled={schedBusy} onClick={schedule}>
-          {schedBusy ? "..." : "Schedule"}
+        <button
+          className="btn"
+          disabled={mutation.busy || mutation.pending !== null}
+          onClick={schedule}
+        >
+          {mutation.busy ? "..." : "Schedule"}
         </button>
-        {schedError && <span className="error">{schedError}</span>}
+        {(validationError ?? mutation.error) && (
+          <span className="error">{validationError ?? mutation.error}</span>
+        )}
       </div>
       {schedResult !== null && <CodeBlock value={schedResult} />}
     </div>

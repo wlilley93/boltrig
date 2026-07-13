@@ -9,6 +9,7 @@ import type {
 } from "../../api/types";
 import { useFetch, type FetchState } from "../../useFetch";
 import { CodeBlock, errText, parseJson } from "../shared";
+import { outputRecord, PendingHumanCard, useControlMutation } from "../uxFlow";
 import { AckLine } from "./AckLine";
 
 // Generate an adapter from an OpenAPI spec. It lands inert (activated: false)
@@ -106,63 +107,64 @@ function GenerateAdapterForm({ onGenerated }: { onGenerated: () => void }) {
   );
 }
 
-// Activate an inert adapter, binding its verbs. Reviewer is optional.
+// Activate an inert adapter, binding its verbs. The authenticated approval
+// respondent is the reviewer; caller-supplied reviewer text is never trusted.
 function ActivateAdapterForm({ onActivated }: { onActivated: () => void }) {
   const [actId, setActId] = useState("");
-  const [reviewer, setReviewer] = useState("");
-  const [actBusy, setActBusy] = useState(false);
-  const [actError, setActError] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const [actResult, setActResult] = useState<string[] | null>(null);
+  const mutation = useControlMutation({
+    verb: "control.adapter.activate",
+    onApplied: (output) => {
+      const verbs = outputRecord(output).verbs;
+      setActResult(
+        Array.isArray(verbs)
+          ? verbs.filter((verb): verb is string => typeof verb === "string")
+          : [],
+      );
+      onActivated();
+    },
+  });
 
   async function activate() {
     if (!actId.trim()) {
-      setActError("adapter id is required.");
+      setValidationError("adapter id is required.");
       return;
     }
-    setActBusy(true);
-    setActError(null);
+    setValidationError(null);
     setActResult(null);
-    try {
-      const res = await api.activateAdapter(actId.trim(), {
-        reviewer: reviewer.trim() || undefined,
-      });
-      if (res.error || res.reason) {
-        setActError(res.error ?? res.reason ?? "activation failed");
-      } else {
-        setActResult(res.verbs ?? []);
-        onActivated();
-      }
-    } catch (err) {
-      setActError(errText(err));
-    } finally {
-      setActBusy(false);
-    }
+    await mutation.invoke({ adapter_id: actId.trim() });
   }
 
   return (
     <div className="form">
       <div className="form__title">Activate adapter</div>
-      <div className="form__grid">
-        <label className="field">
-          <span>adapter id</span>
-          <input
-            value={actId}
-            onChange={(e) => setActId(e.target.value)}
-          />
-        </label>
-        <label className="field">
-          <span>reviewer</span>
-          <input
-            value={reviewer}
-            onChange={(e) => setReviewer(e.target.value)}
-          />
-        </label>
-      </div>
+      <label className="field">
+        <span>adapter id</span>
+        <input value={actId} onChange={(e) => setActId(e.target.value)} />
+      </label>
+      {mutation.pending && (
+        <PendingHumanCard
+          hitlRequestId={mutation.pending.id}
+          noun="control"
+          verb="control.adapter.activate"
+          sentParams={mutation.pending.params}
+          onApplied={mutation.onPendingApplied}
+          onDenied={mutation.onPendingDenied}
+          onReset={mutation.resetPending}
+        />
+      )}
       <div className="form__actions">
-        <button className="btn" disabled={actBusy} onClick={activate}>
-          {actBusy ? "..." : "Activate"}
+        <button
+          className="btn"
+          disabled={mutation.busy || mutation.pending !== null}
+          onClick={activate}
+        >
+          {mutation.busy ? "..." : "Activate"}
         </button>
-        {actError && <span className="error">{actError}</span>}
+        {(validationError ?? mutation.error) && (
+          <span className="error">{validationError ?? mutation.error}</span>
+        )}
       </div>
       {actResult && (
         <p className="ok">

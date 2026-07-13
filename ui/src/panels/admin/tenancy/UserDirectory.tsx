@@ -3,55 +3,63 @@ import { useState } from "react";
 import { api } from "@/api/client";
 import type { DirectoryUser, PatchUserRequest } from "@/api/types";
 import { useFetch } from "@/useFetch";
-import { errText } from "@/panels/shared";
 import { EmptyState, FetchError, Field, ROLE_OPTIONS, Select } from "@/panels/ux";
 import { ChipPicker, ScopeBuilder } from "@/panels/uxForm";
 import type { ScopeVerb } from "@/panels/uxForm";
-import { ArmConfirm, Skeleton } from "@/panels/uxFlow";
+import {
+  ArmConfirm,
+  PendingHumanCard,
+  Skeleton,
+  useControlMutation,
+} from "@/panels/uxFlow";
 import { scopeReadable } from "@/panels/settings/shared";
 
 import { asStringList, buildScopePatch, scopeToPatterns, toScopeVerbs } from "./scope";
 
 function usePatchUser(user: DirectoryUser, onChanged: () => void) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const update = useControlMutation({
+    verb: "control.user.update",
+    onApplied: onChanged,
+  });
+  const deactivate = useControlMutation({
+    verb: "control.user.deactivate",
+    onApplied: onChanged,
+  });
 
   async function patch(body: PatchUserRequest) {
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await api.patchUser(user.id, body);
-      if (res.status === "ok") onChanged();
-      else setError(res.reason ?? "update rejected");
-    } catch (err) {
-      setError(errText(err));
-    } finally {
-      setBusy(false);
-    }
+    await update.invoke({ user_id: user.id, ...body });
   }
 
-  return { busy, error, patch };
+  async function deactivateUser() {
+    await deactivate.invoke({ user_id: user.id });
+  }
+
+  return {
+    busy:
+      update.busy ||
+      deactivate.busy ||
+      update.pending !== null ||
+      deactivate.pending !== null,
+    error: update.error ?? deactivate.error,
+    update,
+    deactivate,
+    patch,
+    deactivateUser,
+  };
 }
 
 function UserRoleControls({
   user,
   busy,
   onPatch,
-  onChanged,
+  onDeactivate,
 }: {
   user: DirectoryUser;
   busy: boolean;
-  onPatch: (body: PatchUserRequest) => void;
-  onChanged: () => void;
+  onPatch: (body: PatchUserRequest) => Promise<void>;
+  onDeactivate: () => Promise<void>;
 }) {
   const deactivated = user.status === "deactivated";
-  async function deactivate() {
-    const res = await api.patchUser(user.id, { status: "deactivated" });
-    if (res.status !== "ok") {
-      throw new Error(res.reason ?? "update rejected");
-    }
-    onChanged();
-  }
 
   return (
     <div className="kv">
@@ -86,7 +94,7 @@ function UserRoleControls({
           tone="danger"
           busyLabel="Deactivating..."
           disabled={busy}
-          onConfirm={deactivate}
+          onConfirm={onDeactivate}
         />
       )}
     </div>
@@ -102,7 +110,7 @@ function UserScopeEditor({
   user: DirectoryUser;
   busy: boolean;
   verbs: ScopeVerb[];
-  onPatch: (body: PatchUserRequest) => void;
+  onPatch: (body: PatchUserRequest) => Promise<void>;
 }) {
   const original = user.scope ?? {};
   const [patterns, setPatterns] = useState<string[]>(() => scopeToPatterns(original));
@@ -153,7 +161,8 @@ export function UserRow({
   verbs: ScopeVerb[];
   onChanged: () => void;
 }) {
-  const { busy, error, patch } = usePatchUser(user, onChanged);
+  const { busy, error, update, deactivate, patch, deactivateUser } =
+    usePatchUser(user, onChanged);
 
   return (
     <div className="dir-row">
@@ -172,10 +181,32 @@ export function UserRow({
           user={user}
           busy={busy}
           onPatch={patch}
-          onChanged={onChanged}
+          onDeactivate={deactivateUser}
         />
       </div>
       <UserScopeEditor user={user} busy={busy} verbs={verbs} onPatch={patch} />
+      {update.pending && (
+        <PendingHumanCard
+          hitlRequestId={update.pending.id}
+          noun="control"
+          verb="control.user.update"
+          sentParams={update.pending.params}
+          onApplied={update.onPendingApplied}
+          onDenied={update.onPendingDenied}
+          onReset={update.resetPending}
+        />
+      )}
+      {deactivate.pending && (
+        <PendingHumanCard
+          hitlRequestId={deactivate.pending.id}
+          noun="control"
+          verb="control.user.deactivate"
+          sentParams={deactivate.pending.params}
+          onApplied={deactivate.onPendingApplied}
+          onDenied={deactivate.onPendingDenied}
+          onReset={deactivate.resetPending}
+        />
+      )}
     </div>
   );
 }

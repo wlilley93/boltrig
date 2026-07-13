@@ -21,6 +21,12 @@ export { DiffView } from "@/panels/uxFlow/diffView";
 export { Disclosure } from "@/panels/uxFlow/disclosure";
 export { GrantList } from "@/panels/uxFlow/grantList";
 export { PendingHumanCard } from "@/panels/uxFlow/pendingHumanCard";
+export {
+  outputRecord,
+  useControlMutation,
+  type ControlMutationState,
+  type PendingControlMutation,
+} from "@/panels/uxFlow/useControlMutation";
 export { SaveBar } from "@/panels/uxFlow/saveBar";
 export { SecretOnce } from "@/panels/uxFlow/secretOnce";
 export { Skeleton } from "@/panels/uxFlow/skeleton";

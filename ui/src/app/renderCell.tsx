@@ -7,7 +7,6 @@ import { AgentsSlide } from "@/panels/AgentsSlide";
 import { ApprovalsPanel } from "@/panels/ApprovalsPanel";
 import { AutomationsSlide } from "@/panels/AutomationsSlide";
 import { ChannelsPanel } from "@/panels/ChannelsPanel";
-import { ChatPanel } from "@/panels/ChatPanel";
 import { DevConsolePanel } from "@/panels/DevConsolePanel";
 import { EvalPanel } from "@/panels/EvalPanel";
 import { HomePanel } from "@/panels/HomePanel";
@@ -31,6 +30,12 @@ import { SettingsAnchorSlide } from "@/panels/settings/AnchorSlide";
 // only downloads when the user opens the authoring hub (code-split, Fix 5).
 const StudioPanel = lazy(() =>
   import("@/panels/StudioPanel").then((m) => ({ default: m.StudioPanel })),
+);
+
+// Chat pulls in the unified/remark Markdown parser stack. Keep it out of the
+// initial shell and load it only when the deck first mounts the Chat row.
+const ChatPanel = lazy(() =>
+  import("@/panels/ChatPanel").then((m) => ({ default: m.ChatPanel })),
 );
 
 type PanelFactory = () => ReactNode;

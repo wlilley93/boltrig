@@ -1,9 +1,13 @@
 import { useState } from "react";
 
-import { api } from "@/api/client";
 import type { WorkflowRunDescriptor } from "@/api/types";
 import { CodeBlock, RunLink, errText, parseJson } from "@/panels/shared";
 import { Field, Select } from "@/panels/ux";
+import {
+  outputRecord,
+  PendingHumanCard,
+  useControlMutation,
+} from "@/panels/uxFlow";
 import type { WfFormProps } from "@/panels/studio/workflow/types";
 
 interface TriggerResultProps {
@@ -31,38 +35,31 @@ function TriggerResult({ result }: TriggerResultProps) {
 export function TriggerForm({ wfOptions }: WfFormProps) {
   const [trigId, setTrigId] = useState("");
   const [inputs, setInputs] = useState("{}");
-  const [trigBusy, setTrigBusy] = useState(false);
-  const [trigError, setTrigError] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const [trigResult, setTrigResult] = useState<WorkflowRunDescriptor | null>(
     null,
   );
+  const mutation = useControlMutation({
+    verb: "control.workflow.trigger",
+    onApplied: (output) =>
+      setTrigResult(outputRecord(output) as WorkflowRunDescriptor),
+  });
 
   async function trigger() {
     if (!trigId.trim()) {
-      setTrigError("workflow id is required.");
+      setValidationError("workflow id is required.");
       return;
     }
     let parsedInputs: Record<string, unknown>;
     try {
       parsedInputs = parseJson<Record<string, unknown>>(inputs, {});
     } catch (err) {
-      setTrigError(`inputs: ${errText(err)}`);
+      setValidationError(`inputs: ${errText(err)}`);
       return;
     }
-    setTrigBusy(true);
-    setTrigError(null);
+    setValidationError(null);
     setTrigResult(null);
-    try {
-      const res = await api.triggerWorkflow(trigId.trim(), {
-        inputs: parsedInputs,
-      });
-      if (res.error) setTrigError(res.error);
-      else setTrigResult(res);
-    } catch (err) {
-      setTrigError(errText(err));
-    } finally {
-      setTrigBusy(false);
-    }
+    await mutation.invoke({ workflow_id: trigId.trim(), inputs: parsedInputs });
   }
 
   return (
@@ -78,11 +75,28 @@ export function TriggerForm({ wfOptions }: WfFormProps) {
           onChange={(e) => setInputs(e.target.value)}
         />
       </Field>
+      {mutation.pending && (
+        <PendingHumanCard
+          hitlRequestId={mutation.pending.id}
+          noun="control"
+          verb="control.workflow.trigger"
+          sentParams={mutation.pending.params}
+          onApplied={mutation.onPendingApplied}
+          onDenied={mutation.onPendingDenied}
+          onReset={mutation.resetPending}
+        />
+      )}
       <div className="form__actions">
-        <button className="btn" disabled={trigBusy} onClick={trigger}>
-          {trigBusy ? "..." : "Trigger"}
+        <button
+          className="btn"
+          disabled={mutation.busy || mutation.pending !== null}
+          onClick={trigger}
+        >
+          {mutation.busy ? "..." : "Trigger"}
         </button>
-        {trigError && <span className="error">{trigError}</span>}
+        {(validationError ?? mutation.error) && (
+          <span className="error">{validationError ?? mutation.error}</span>
+        )}
       </div>
       {trigResult && <TriggerResult result={trigResult} />}
     </div>

@@ -7,9 +7,8 @@
 // The signal is deliberate: we PROBE one authenticated endpoint. Under session
 // auth with no cookie the kernel answers 401 -> show the login gate. Under the
 // dev header resolver (and in the e2e harness) that same probe resolves to the
-// dev principal -> 200 -> enter the app, so the gate never appears there. Only a
-// DEFINITE 401 gates; a 200, a network blip or a 5xx all enter the app (we never
-// block the console on a transient), so the deterministic smoke path is safe.
+// dev principal -> 200 -> enter the app, so the gate never appears there. Probe
+// errors fail closed to the login gate instead of treating an outage as auth.
 
 import { useSyncExternalStore } from "react";
 
@@ -74,8 +73,8 @@ export function useAuth(): AuthState {
   return useSyncExternalStore(subscribe, getAuthState, getAuthState);
 }
 
-// Probe an authenticated endpoint to decide the gate. A 401 means session auth
-// is active and we are logged out; anything else enters the app.
+// Probe an authenticated endpoint to decide the gate. A 200 enters the app; 401
+// means session auth is active and logged out; probe failures fail closed.
 export async function probeSession(): Promise<void> {
   try {
     await api.meSettings();
@@ -96,9 +95,7 @@ export async function probeSession(): Promise<void> {
       set({ status: "enroll_required" });
       return;
     }
-    // 200 already returned above; a network/5xx failure must not strand the user
-    // on a login gate they cannot pass in dev/e2e - enter the app.
-    set({ status: "authenticated" });
+    set({ status: "unauthenticated", user: null });
   }
 }
 
