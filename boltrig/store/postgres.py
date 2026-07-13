@@ -1525,6 +1525,7 @@ class PostgresStore(IdempotencyStorePG, GuardedWritesPG, ChannelStorePG):
         # Replace the whole set atomically: clear then insert the fresh hashes.
         async with self._pool.acquire() as conn:
             async with conn.transaction():
+                await _apply_guc(conn)  # RLS-live: scope this explicit transaction
                 await conn.execute(
                     "DELETE FROM user_recovery_codes WHERE tenant_id=$1 AND user_id=$2",
                     tenant_id, user_id,

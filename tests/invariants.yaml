@@ -520,6 +520,7 @@ invariants:
       - tests/integration/test_rls.py::test_rls_enforces_tenant_isolation_and_fails_closed
       - tests/unit/test_rls_pool.py::test_rls_pool_sets_tenant_guc_before_each_statement
       - tests/unit/test_rls_pool.py::test_rls_pool_is_fail_closed_when_no_tenant_bound
+      - tests/unit/test_rls_pool.py::test_set_recovery_codes_applies_tenant_guc_before_writing
       - tests/security/test_rls_auth_binding.py::test_pat_resolution_binds_tenant_before_the_owner_read
       - tests/security/test_rls_auth_binding.py::test_provision_user_binds_tenant_before_the_first_read
       - tests/integration/test_migration_parity.py::test_data_bearing_rls_database_upgrades_from_previous_head
