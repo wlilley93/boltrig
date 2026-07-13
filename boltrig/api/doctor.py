@@ -16,6 +16,7 @@ from typing import Mapping
 from urllib.parse import parse_qs, urlsplit
 
 from boltrig.config.manifest import FleetManifest, load_manifest
+from boltrig.api.doctor_stack_state import stack_state_checks
 
 _TRUE = {"1", "true", "yes", "on", "y", "t"}
 _PROD_NAMES = {"prod", "production", "staging"}
@@ -119,6 +120,7 @@ def run_doctor(
     manifest = _check_manifest(e, prod, manifest_path, checks)
     _check_runtime(e, prod, checks, manifest)
     if manifest is not None:
+        _check_stack_tool_state(e, prod, manifest, checks)
         _check_model_posture(e, prod, manifest, checks)
         _check_memory_posture(prod, manifest, checks)
     _check_backups(e, prod, checks)
@@ -429,6 +431,16 @@ def _check_manifest(
     return manifest
 
 
+def _check_stack_tool_state(
+    env: Mapping[str, str],
+    prod: bool,
+    manifest: FleetManifest,
+    checks: list[DoctorCheck],
+) -> None:
+    for check in stack_state_checks(env, production=prod, manifest=manifest):
+        _add(checks, check.status, check.name, check.message, check.hint)
+
+
 def _check_model_posture(
     env: Mapping[str, str],
     prod: bool,
@@ -520,7 +532,13 @@ def _check_memory_posture(prod: bool, manifest: FleetManifest, checks: list[Doct
         _add(checks, "ok", "memory_residency", "Memory endpoints are local-sensitive.")
 
     if prod and str(memory.get("engine", "")).lower() == "local":
-        _add(checks, "warn", "memory_engine", "memory.engine=local; production usually wants cognee.")
+        _add(
+            checks,
+            "warn",
+            "memory_engine",
+            "memory.engine=local; Boltrig v2 production usually wants Mem0 primary"
+            " with Cognee as an optional projection.",
+        )
     if not _bool(str((memory.get("ingest") or {}).get("screen_content", False))):
         _add(checks, "warn", "memory_screening", "Memory ingest content screening is disabled.")
 
