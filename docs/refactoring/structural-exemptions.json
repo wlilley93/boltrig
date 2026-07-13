@@ -127,7 +127,7 @@
       "expires": "2026-12-31"
     },
     "boltrig/fleet/spawn.py": {
-      "max_file_lines": 395,
+      "max_file_lines": 400,
       "max_function_lines": 94,
       "over_limit_functions": [
         {"name": "Spawner.spawn", "line": 71, "lines": 94}
@@ -248,7 +248,7 @@
       "expires": "2026-12-31"
     },
     "boltrig/store/postgres.py": {
-      "max_file_lines": 2386,
+      "max_file_lines": 2397,
       "max_function_lines": 53,
       "over_limit_functions": [],
       "owner": "store-maintainers",

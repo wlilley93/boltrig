@@ -382,3 +382,30 @@ async def test_workflow_workspace_id_roundtrips_on_both_stores(store):
     await store.upsert_workflow(_wf("orgwide", None))
     got = {w.id: w.workspace_id for w in await store.list_workflows(T)}
     assert got == {"scoped": "ws-1", "orgwide": None}
+
+
+@pytest.mark.store
+@pytest.mark.invariant("FR-WFL-18")
+async def test_list_workflows_returns_latest_version_per_id_on_both_stores(store):
+    from boltrig.models import WorkflowDefinition, WorkflowSource
+
+    def _wf(version: str, name: str) -> WorkflowDefinition:
+        return WorkflowDefinition(
+            id="wf-versioned",
+            tenant_id=T,
+            version=version,
+            source=WorkflowSource.LEARNED,
+            definition={"name": name, "steps": []},
+            intent_tags=["billing"],
+            origin_task="x",
+        )
+
+    # Two versions of ONE workflow id. list_workflows returns exactly one row for
+    # that id (the latest version), identically on the durable and in-memory stores,
+    # so a caller matching a workflow by id never sees a duplicate or stale version.
+    await store.upsert_workflow(_wf("1.0.0", "v1"))
+    await store.upsert_workflow(_wf("2.0.0", "v2"))
+    rows = [w for w in await store.list_workflows(T) if w.id == "wf-versioned"]
+    assert len(rows) == 1
+    assert rows[0].version == "2.0.0"
+    assert rows[0].definition["name"] == "v2"

@@ -180,3 +180,21 @@ def test_audit_and_runs_are_scope_filtered():
     admin = c.get("/v1/audit/search", headers=_hdr("org-admin"))
     admin_runs = {r["run_id"] for r in admin.json()["results"]}
     assert {"run-eng", "run-mkt"} <= admin_runs
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-139")
+async def test_v1_spawn_caps_child_to_caller_grants():
+    from boltrig.fleet.spawn import make_app_spawner
+    from boltrig.kernel.app import Principal, SpawnBody
+
+    k = await _kernel()
+    app_spawner = make_app_spawner(k)
+    # a caller with NO ticket.create grant spawns the risky skill directly
+    scoped = Principal(tenant_id=T, subject="u", grants=GrantSet.of([]))
+    res = await app_spawner(scoped, SpawnBody(task="x", skills=["risky"]))
+    assert "ticket.create" not in res.get("effective_grants", [])  # capped to caller
+    # contrast: an admin (grants *) does get it through the same seam
+    admin = Principal(tenant_id=T, subject="u", grants=GrantSet.of(["*"]))
+    res_a = await app_spawner(admin, SpawnBody(task="x", skills=["risky"]))
+    assert "ticket.create" in res_a.get("effective_grants", [])
