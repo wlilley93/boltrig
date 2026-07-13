@@ -379,9 +379,15 @@ def make_agent_invoker(kernel: Kernel) -> AgentInvoker:
                 else ScriptRuntime()
             )
             result = await runtime.run(prompt, context, tools=list(context.grants.allow))
-        except Exception:
-            result = await ScriptRuntime().run(
-                prompt, context, tools=list(context.grants.allow)
+        except Exception as exc:
+            # A runtime that RAISED (rather than degrading itself) must never be
+            # papered over with an ok=True / degraded=False ScriptRuntime echo
+            # (US-FLT-07). Return a degrade-marked result carrying an audit-visible
+            # reason, exactly like a normally-degrading runtime.
+            result = AgentResult.degrade(
+                runtime=cap.runtime if cap is not None else "script",
+                reason=type(exc).__name__,
+                prompt=prompt,
             )
         if result.ok:
             output = dict(result.output)
