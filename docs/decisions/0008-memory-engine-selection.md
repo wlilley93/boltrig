@@ -1,9 +1,15 @@
 # 0008 - Memory Engine Selection (MEM-ENG-04)
 
-Status: ACCEPTED
+Status: SUPERSEDED FOR BOLTRIG V2
 Epic: MEM (Memory Engine)
 Date: 2026-07-03
 Gate: comparative validation + selection, before committing to any external semantic-memory engine
+
+Superseded-by: 0011 for Boltrig v2 deployment defaults. This decision remains
+the historical basis for the native/Cognee memory engines and kernel-side memory
+invariants. Boltrig v2 now uses Mem0 as the primary operational memory
+projection and Cognee as an optional graph/corpus projection behind the same
+kernel ledger.
 
 ## 1. What this decides
 
