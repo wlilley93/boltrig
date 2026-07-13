@@ -39,7 +39,7 @@ export const SiteHeader = () => {
 
       <nav className="pointer-events-auto flex items-center gap-2 md:gap-3">
         <a
-          href="https://app.boltrig.io"
+          href="/console"
           className="hidden items-center gap-2 border border-brain-sky/25 px-4 py-2 text-[0.62rem] font-semibold uppercase tracking-[0.24em] text-brain-sky/80 backdrop-blur-md transition-colors hover:border-brain-sky/60 hover:text-white max-md:min-h-11 sm:inline-flex md:px-5"
         >
           Open console

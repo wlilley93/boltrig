@@ -103,10 +103,20 @@ export interface InvokeRequest {
   approval_id?: string;
 }
 
+export interface PendingHumanResponse {
+  status: "pending_human";
+  hitl_request_id: string;
+}
+
+// Compatibility author/admin routes use the same HITL gate as /v1/invoke, so
+// every high-consequence route may honestly return a 202 pause instead of its
+// ordinary success body.
+export type GovernedRouteResponse<T> = T | PendingHumanResponse;
+
 // The kernel returns different bodies per status code; this is the union.
 export type InvokeResult =
   | { status: "ok"; output: unknown }
-  | { status: "pending_human"; hitl_request_id: string }
+  | PendingHumanResponse
   | { status: "denied"; reason: string }
   | { status: "degraded"; output: unknown }
   | { status: "error"; reason: string };

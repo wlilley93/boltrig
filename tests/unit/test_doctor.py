@@ -2,12 +2,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from boltrig.api.doctor import load_env_file, run_doctor
 
 
 MANIFEST = """
 organisation: Acme
 tenant_id: acme
+stack:
+  cockpit: herdr
+  coding_agent: opencode
 identity:
   provider: oidc
 models:
@@ -45,8 +50,35 @@ def _manifest(tmp_path: Path) -> Path:
     return path
 
 
-def _secure_env() -> dict[str, str]:
-    return {
+def _browser_manifest(tmp_path: Path) -> Path:
+    path = tmp_path / "manifest-browser.yaml"
+    text = MANIFEST.replace(
+        "  coding_agent: opencode\n",
+        "  coding_agent: opencode\n  browser_automation: browser_cli\n",
+    )
+    path.write_text(
+        text
+        + """
+adapters:
+  - id: browser-cli
+    runtime: script
+browser_cli:
+  enabled: true
+""",
+        encoding="utf-8",
+    )
+    return path
+
+
+def _fake_tool(tmp_path: Path, name: str) -> str:
+    path = tmp_path / name
+    path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    path.chmod(0o755)
+    return str(path)
+
+
+def _secure_env(tmp_path: Path | None = None) -> dict[str, str]:
+    env = {
         "DATABASE_URL": "postgresql+asyncpg://boltrig:secret@db.internal:5432/boltrig?sslmode=require",
         "POSTGRES_PASSWORD": "x" * 36,
         "REDIS_URL": "redis://redis:6379/0",
@@ -62,14 +94,21 @@ def _secure_env() -> dict[str, str]:
         "BOLTRIG_PI_MCP_URL": "http://kernel:8000/v1/mcp",
         "PI_SIDECAR_TOKEN": "p" * 40,
         "PI_SIDECAR_EGRESS_ALLOW": "kernel,bifrost,local-model",
+        "BOLTRIG_HERDR_HOME": "/var/lib/boltrig/herdr",
+        "BOLTRIG_OPENCODE_HOME": "/var/lib/boltrig/opencode",
         "BACKUP_REMOTE": "s3:acme/boltrig",
         "BACKUP_PASSPHRASE": "b" * 32,
         "HATCHET_CLIENT_TOKEN": "h" * 24,
     }
+    if tmp_path is not None:
+        env["PATH"] = ""
+        env["HERDR_BIN"] = _fake_tool(tmp_path, "herdr")
+        env["BOLTRIG_OPENCODE_BIN"] = _fake_tool(tmp_path, "opencode")
+    return env
 
 
 def test_production_doctor_has_no_failures_for_secure_posture(tmp_path):
-    report = run_doctor(env=_secure_env(), manifest_path=_manifest(tmp_path), production=True)
+    report = run_doctor(env=_secure_env(tmp_path), manifest_path=_manifest(tmp_path), production=True)
 
     assert not report.failed
     assert all(check.status != "fail" for check in report.checks)
@@ -77,6 +116,7 @@ def test_production_doctor_has_no_failures_for_secure_posture(tmp_path):
 
 def test_production_doctor_flags_deploy_blockers(tmp_path):
     env = {
+        "PATH": "",
         "DATABASE_URL": "postgresql+asyncpg://boltrig:CHANGE_ME@postgres:5432/boltrig",
         "POSTGRES_PASSWORD": "",
         "BOLTRIG_DEV_AUTH": "1",
@@ -97,8 +137,102 @@ def test_production_doctor_flags_deploy_blockers(tmp_path):
         "auth_mode",
         "allowed_hosts",
         "pi_egress_allow",
+        "herdr_stack_home",
+        "herdr_stack_cli",
+        "opencode_stack_home",
+        "opencode_stack_cli",
         "backup_remote",
     }.issubset(failures)
+
+
+@pytest.mark.invariant("FR-HOST-09")
+@pytest.mark.invariant("FR-RUN-17")
+@pytest.mark.parametrize(
+    ("herdr_home", "opencode_home", "expected"),
+    [
+        ("/home/will/.config/herdr", "/var/lib/boltrig/opencode", {"herdr_stack_home"}),
+        ("/var/lib/boltrig/herdr", "/Users/will/.opencode", {"opencode_stack_home"}),
+        ("$HOME/.config/herdr", "/var/lib/boltrig/opencode", {"herdr_stack_home"}),
+        ("/root/.local/share/herdr", "/var/lib/boltrig/opencode", {"herdr_stack_home"}),
+        ("/home/dev/herdr", "/var/lib/boltrig/opencode", {"herdr_stack_home"}),
+        ("/var/lib/boltrig/herdr", ".opencode", {"opencode_stack_home"}),
+        (
+            "/var/lib/boltrig/agent-state",
+            "/var/lib/boltrig/agent-state",
+            {"stack_tool_home_collision"},
+        ),
+    ],
+)
+def test_production_doctor_rejects_personal_herdr_opencode_state(
+    tmp_path, herdr_home, opencode_home, expected
+):
+    env = {
+        **_secure_env(tmp_path),
+        "BOLTRIG_HERDR_HOME": herdr_home,
+        "BOLTRIG_OPENCODE_HOME": opencode_home,
+    }
+
+    report = run_doctor(env=env, manifest_path=_manifest(tmp_path), production=True)
+    failures = {check.name for check in report.checks if check.status == "fail"}
+
+    assert expected.issubset(failures)
+
+
+@pytest.mark.invariant("FR-HOST-10")
+@pytest.mark.invariant("FR-RUN-18")
+@pytest.mark.parametrize(
+    ("herdr_bin", "opencode_bin", "expected"),
+    [
+        ("/home/will/.local/bin/herdr", None, {"herdr_stack_cli"}),
+        (None, "/Users/will/.opencode/bin/opencode", {"opencode_stack_cli"}),
+        ("/does/not/exist/herdr", None, {"herdr_stack_cli"}),
+        (None, "not-on-path-opencode", {"opencode_stack_cli"}),
+        ("relative/herdr", None, {"herdr_stack_cli"}),
+    ],
+)
+def test_production_doctor_rejects_missing_or_personal_herdr_opencode_bins(
+    tmp_path, herdr_bin, opencode_bin, expected
+):
+    env = _secure_env(tmp_path)
+    if herdr_bin is not None:
+        env["HERDR_BIN"] = herdr_bin
+    if opencode_bin is not None:
+        env["BOLTRIG_OPENCODE_BIN"] = opencode_bin
+
+    report = run_doctor(env=env, manifest_path=_manifest(tmp_path), production=True)
+    failures = {check.name for check in report.checks if check.status == "fail"}
+
+    assert expected.issubset(failures)
+
+
+@pytest.mark.invariant("FR-HOST-11")
+@pytest.mark.parametrize(
+    ("browser_home", "browser_bin", "expected"),
+    [
+        ("/home/will/.config/browser-use", None, {"browser_cli_stack_home"}),
+        ("$HOME/.local/share/browser-use", None, {"browser_cli_stack_home"}),
+        ("browser-cli-state", None, {"browser_cli_stack_home"}),
+        (
+            "/var/lib/boltrig/browser-cli",
+            "/home/will/.local/bin/browser-use",
+            {"browser_cli_stack_cli"},
+        ),
+        ("/var/lib/boltrig/browser-cli", "missing-browser-use", {"browser_cli_stack_cli"}),
+    ],
+)
+def test_production_doctor_rejects_personal_or_missing_browser_cli(
+    tmp_path, browser_home, browser_bin, expected
+):
+    env = {
+        **_secure_env(tmp_path),
+        "BOLTRIG_BROWSER_CLI_HOME": browser_home,
+        "BOLTRIG_BROWSER_CLI_BIN": browser_bin or _fake_tool(tmp_path, "browser-use"),
+    }
+
+    report = run_doctor(env=env, manifest_path=_browser_manifest(tmp_path), production=True)
+    failures = {check.name for check in report.checks if check.status == "fail"}
+
+    assert expected.issubset(failures)
 
 
 def test_load_env_file_merges_simple_dotenv(tmp_path):

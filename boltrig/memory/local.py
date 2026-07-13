@@ -34,7 +34,14 @@ class LocalMemoryEngine:
         return ids
 
     async def recall(
-        self, tenant_id, query, *, scopes, mode="graph_completion", limit=20, max_hops=4
+        self,
+        tenant_id: str,
+        query: str,
+        *,
+        scopes: list[str],
+        mode: str = "graph_completion",
+        limit: int = 20,
+        max_hops: int = 4,
     ) -> list[RecallHit]:
         store = self._tenant(tenant_id)
         allowed = set(scopes)
@@ -51,7 +58,8 @@ class LocalMemoryEngine:
         # seeds: in-scope facts that match the query (or all in-scope if no query)
         seeds = sorted(
             (f for f in store.values() if _in_scope(f) and (not q or q & _tokens(f.content))),
-            key=_score, reverse=True,
+            key=_score,
+            reverse=True,
         )
         if mode == "similarity":
             return [RecallHit(fact=f, score=_score(f), hops=0, path=[f.id]) for f in seeds[:limit]]
@@ -83,7 +91,14 @@ class LocalMemoryEngine:
             return 1
         return 0
 
-    async def forget(self, tenant_id, *, fact_ids=None, source_ref=None, scopes=None) -> list[str]:
+    async def forget(
+        self,
+        tenant_id: str,
+        *,
+        fact_ids: list[str] | None = None,
+        source_ref: str | None = None,
+        scopes: list[str] | None = None,
+    ) -> list[str]:
         store = self._tenant(tenant_id)
         allowed = set(scopes) if scopes is not None else None
 
@@ -105,7 +120,11 @@ class LocalMemoryEngine:
         # derived edges/facts: drop relationship nodes that referenced a removed
         # node, and prune dangling edges everywhere (complete erasure, SEC-44).
         for f in list(store.values()):
-            if f.kind == "relationship" and any(r in removed for r in f.relates_to) and _erasable(f):
+            if (
+                f.kind == "relationship"
+                and any(r in removed for r in f.relates_to)
+                and _erasable(f)
+            ):
                 store.pop(f.id, None)
                 removed.add(f.id)
             else:

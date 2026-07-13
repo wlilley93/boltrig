@@ -37,6 +37,7 @@ pytestmark = pytest.mark.skipif(
     reason="set HATCHET_CLIENT_TOKEN (+ a reachable Hatchet engine) for the live test",
 )
 
+
 def _worker_tenant() -> str:
     """The tenant the worker will seed: derived exactly as the worker derives
     it (first manifest found wins; a box-local manifest.yaml outranks the repo
@@ -62,8 +63,11 @@ def _envelope(run_id: str) -> dict:
 
     return context_to_envelope(
         InvocationContext(
-            tenant_id=_TENANT, run_id=run_id, grants=GrantSet.of(["*"]),
-            actor="live-test", actor_tier="human",
+            tenant_id=_TENANT,
+            run_id=run_id,
+            grants=GrantSet.of(["*"]),
+            actor="live-test",
+            actor_tier="human",
         )
     )
 
@@ -123,8 +127,11 @@ async def test_live_invoke_reenters_the_chokepoint():
         result = await asyncio.wait_for(
             workflows[TASK_INVOKE].aio_run(
                 InvokeInput(
-                    tenant=_TENANT, noun="skill", verb="skill.search",
-                    params={"query": "anything"}, ctx_envelope=_envelope(rid),
+                    tenant=_TENANT,
+                    noun="skill",
+                    verb="skill.search",
+                    params={"query": "anything"},
+                    ctx_envelope=_envelope(rid),
                     run_id=rid,
                 )
             ),
@@ -156,14 +163,25 @@ async def test_live_workflow_run_pauses_on_gated_step():
 
     store = await PostgresStore.connect(os.environ["DATABASE_URL"])
     wf_id = f"live-gated-{uuid.uuid4().hex[:8]}"
-    await store.upsert_workflow(
-        WorkflowDefinition(
-            id=wf_id, tenant_id=_TENANT, version="1", source=WorkflowSource.PRECREATED,
-            # channel.send is consequence=high: the gate holds it (SEC-14)
-            definition={"steps": [{"id": "s1", "action": "channel.send",
-                                   "params": {"channel_id": "none", "text": "x"}}]},
-        )
+    workflow = WorkflowDefinition(
+        id=wf_id,
+        tenant_id=_TENANT,
+        version="1",
+        source=WorkflowSource.PRECREATED,
+        # channel.send is consequence=high: the gate holds it (SEC-14)
+        definition={
+            "steps": [
+                {
+                    "id": "s1",
+                    "action": "channel.send",
+                    "params": {"channel_id": "none", "text": "x"},
+                }
+            ]
+        },
     )
+    await store.upsert_workflow(workflow)
+    from boltrig.workflows.snapshot import build_workflow_snapshot
+
     hatchet, workflows = build_hatchet_app()
     worker = _start_worker()
     try:
@@ -171,14 +189,19 @@ async def test_live_workflow_run_pauses_on_gated_step():
         rid = uuid.uuid4().hex
         ref = await workflows[TASK_WORKFLOW_RUN].aio_run_no_wait(
             WorkflowRunInput(
-                tenant=_TENANT, workflow_id=wf_id, inputs={},
-                ctx_envelope=_envelope(rid), run_id=rid,
+                tenant=_TENANT,
+                workflow_id=wf_id,
+                workflow_snapshot=build_workflow_snapshot(workflow),
+                inputs={},
+                ctx_envelope=_envelope(rid),
+                run_id=rid,
             )
         )
         # Poll the shared store until the gated step's PAUSED checkpoint lands
         # (dispatch latency can be 45-75s, so a fixed short timeout is flaky).
         by_step = await _poll_checkpoints(
-            store, rid,
+            store,
+            rid,
             lambda c: c.get("s1") is not None and c["s1"].status == "paused",
             budget=150,
         )
@@ -187,6 +210,96 @@ async def test_live_workflow_run_pauses_on_gated_step():
         # approval wait (NFR-REL-01), so the result stays unresolved.
         with pytest.raises(asyncio.TimeoutError):
             await asyncio.wait_for(ref.aio_result(), timeout=5)
+    finally:
+        _kill_worker(worker)
+
+
+@pytest.mark.invariant("FR-WFL-17")
+async def test_live_ultracode_run_fans_out_agent_child_tasks():
+    """Live v2 gate: Ultracode parent dispatches child phase-agent tasks."""
+    if not os.environ.get("DATABASE_URL"):
+        pytest.skip("set DATABASE_URL (shared store) for the live Ultracode test")
+    from boltrig.fleet.hatchet_app import TASK_ULTRACODE_RUN, build_hatchet_app
+    from boltrig.fleet.hatchet_ultracode import UltracodeRunInput
+    from boltrig.models import ActionType, AgentCapability, GrantSet, TenantPermissions
+    from boltrig.store import PostgresStore
+
+    store = await PostgresStore.connect(os.environ["DATABASE_URL"])
+    capability = f"live-script-{uuid.uuid4().hex[:8]}"
+    seed = store.set_tenant_permissions(TenantPermissions(_TENANT, GrantSet.of(["*"])))
+    if hasattr(seed, "__await__"):
+        await seed
+    await store.upsert_capability(
+        AgentCapability(capability, _TENANT, "python-script", ["*"], 2, True, "cheap")
+    )
+    hatchet, workflows = build_hatchet_app()
+    worker = _start_worker()
+    try:
+        await asyncio.sleep(9)
+        rid = uuid.uuid4().hex
+        workflow = {
+            "workflow_name": "live-ultracode",
+            "defaults": {"capability": capability, "max_total_agents": 2},
+            "phases": [
+                {
+                    "id": "phase-01",
+                    "concurrency": 2,
+                    "agents": [
+                        {"id": "map", "prompt": "Map the repo."},
+                        {"id": "risk", "prompt": "Find risks."},
+                    ],
+                }
+            ],
+        }
+        result = await asyncio.wait_for(
+            workflows[TASK_ULTRACODE_RUN].aio_run(
+                UltracodeRunInput(
+                    tenant=_TENANT,
+                    workflow=workflow,
+                    ctx_envelope=_envelope(rid),
+                    run_id=rid,
+                    goal="prove live Ultracode fanout",
+                )
+            ),
+            timeout=240,
+        )
+        record = (
+            result
+            if "status" in result
+            else next(
+                (v for v in result.values() if isinstance(v, dict) and "status" in v),
+                {},
+            )
+        )
+        assert record["status"] == "completed"
+        by_step = await _poll_checkpoints(
+            store,
+            rid,
+            lambda c: (
+                {
+                    "ultracode:phase-01:map",
+                    "ultracode:phase-01:risk",
+                    "ultracode:phase-01",
+                }
+                <= set(c)
+                and all(cp.status == "completed" for cp in c.values())
+            ),
+            budget=150,
+        )
+        phase = by_step["ultracode:phase-01"].output
+        assert phase["status"] == "completed"
+        assert {a["result"]["agent_type"] for a in phase["agents"]} == {capability}
+        assert {a["result"]["output"]["runtime"] for a in phase["agents"]} == {"python-script"}
+        events = await store.audit_query(_TENANT, limit=1000)
+        spawns = [
+            e
+            for e in events
+            if e.parent_run_id == rid
+            and e.action_type == ActionType.AGENT_SPAWN
+            and e.detail.get("capability") == capability
+        ]
+        assert len(spawns) == 2
+        assert {e.actor for e in spawns} == {capability}
     finally:
         _kill_worker(worker)
 
@@ -221,23 +334,42 @@ async def test_live_kill_restart_approve_resume():
     # letting the run finish instead of failing on an unknown channel.
     ch_id = f"live-ch-{uuid.uuid4().hex[:8]}"
     await store.upsert_channel(
-        Channel(id=ch_id, tenant_id=_TENANT, platform="webhook",
-                name="live kill/restart", transport="webhook")
-    )
-    wf_id = f"live-crash-{uuid.uuid4().hex[:8]}"
-    await store.upsert_workflow(
-        WorkflowDefinition(
-            id=wf_id, tenant_id=_TENANT, version="1", source=WorkflowSource.PRECREATED,
-            definition={"steps": [
-                {"id": "s1", "action": "skill.search", "params": {"query": "s1"}},
-                # consequence=high: the gate holds it until approved (SEC-14)
-                {"id": "s2", "action": "channel.send",
-                 "params": {"channel_id": ch_id, "text": "x"}, "parents": ["s1"]},
-                {"id": "s3", "action": "skill.search", "params": {"query": "s3"},
-                 "parents": ["s2"]},
-            ]},
+        Channel(
+            id=ch_id,
+            tenant_id=_TENANT,
+            platform="webhook",
+            name="live kill/restart",
+            transport="webhook",
         )
     )
+    wf_id = f"live-crash-{uuid.uuid4().hex[:8]}"
+    workflow = WorkflowDefinition(
+        id=wf_id,
+        tenant_id=_TENANT,
+        version="1",
+        source=WorkflowSource.PRECREATED,
+        definition={
+            "steps": [
+                {"id": "s1", "action": "skill.search", "params": {"query": "s1"}},
+                # consequence=high: the gate holds it until approved (SEC-14)
+                {
+                    "id": "s2",
+                    "action": "channel.send",
+                    "params": {"channel_id": ch_id, "text": "x"},
+                    "parents": ["s1"],
+                },
+                {
+                    "id": "s3",
+                    "action": "skill.search",
+                    "params": {"query": "s3"},
+                    "parents": ["s2"],
+                },
+            ]
+        },
+    )
+    await store.upsert_workflow(workflow)
+    from boltrig.workflows.snapshot import build_workflow_snapshot
+
     hatchet, workflows = build_hatchet_app()
     rid = uuid.uuid4().hex
     worker_a = _start_worker()
@@ -247,17 +379,24 @@ async def test_live_kill_restart_approve_resume():
         await asyncio.sleep(9)  # let worker A register with the engine
         ref = await workflows[TASK_WORKFLOW_RUN].aio_run_no_wait(
             WorkflowRunInput(
-                tenant=_TENANT, workflow_id=wf_id, inputs={},
-                ctx_envelope=_envelope(rid), run_id=rid,
+                tenant=_TENANT,
+                workflow_id=wf_id,
+                workflow_snapshot=build_workflow_snapshot(workflow),
+                inputs={},
+                ctx_envelope=_envelope(rid),
+                run_id=rid,
             )
         )
         # Phase 1: s1 done, s2 paused with its approval id (dispatch can take
         # 45-75s on this engine, so the budget is generous).
         by_step = await _poll_checkpoints(
-            store, rid,
+            store,
+            rid,
             lambda c: (
-                c.get("s1") is not None and c["s1"].status == "ok"
-                and c.get("s2") is not None and c["s2"].status == "paused"
+                c.get("s1") is not None
+                and c["s1"].status == "ok"
+                and c.get("s2") is not None
+                and c["s2"].status == "paused"
                 and bool(c["s2"].hitl_request_id)
             ),
             budget=180,
@@ -290,7 +429,9 @@ async def test_live_kill_restart_approve_resume():
         while True:
             try:
                 by_step = await _poll_checkpoints(
-                    store, rid, done,
+                    store,
+                    rid,
+                    done,
                     budget=max(5.0, min(90.0, deadline - time.monotonic())),
                 )
                 break
@@ -317,8 +458,10 @@ async def test_live_kill_restart_approve_resume():
         except Exception:
             result = None
         if isinstance(result, dict):
-            record = result if "status" in result else next(
-                (v for v in result.values() if isinstance(v, dict) and "status" in v), {}
+            record = (
+                result
+                if "status" in result
+                else next((v for v in result.values() if isinstance(v, dict) and "status" in v), {})
             )
             assert record.get("status") == "completed", result
     finally:

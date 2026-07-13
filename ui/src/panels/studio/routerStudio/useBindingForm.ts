@@ -1,8 +1,12 @@
 import { useState } from "react";
 
-import { api } from "@/api/client";
 import type { StatusAck, TargetTypeValue } from "@/api/types";
-import { errText } from "@/panels/shared";
+import { api } from "@/api/client";
+import {
+  outputRecord,
+  useControlMutation,
+  type ControlMutationState,
+} from "@/panels/uxFlow";
 import { useFetch } from "@/useFetch";
 
 export interface BindingFormState {
@@ -15,6 +19,7 @@ export interface BindingFormState {
   busy: boolean;
   error: string | null;
   ack: StatusAck | null;
+  mutation: ControlMutationState;
   verbOptions: { value: string; label: string }[];
   adapterOptions: { value: string; label: string }[];
   submit: () => Promise<void>;
@@ -26,9 +31,13 @@ export function useBindingForm(): BindingFormState {
   const [verbId, setVerbId] = useState("");
   const [targetType, setTargetType] = useState<TargetTypeValue>("adapter");
   const [targetRef, setTargetRef] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const [ack, setAck] = useState<StatusAck | null>(null);
+  const mutation = useControlMutation({
+    verb: "control.binding.set",
+    onApplied: (output) =>
+      setAck({ ...outputRecord(output), status: "ok" }),
+  });
 
   function changeTargetType(v: string) {
     setTargetType(v === "agent" ? "agent" : "adapter");
@@ -37,24 +46,16 @@ export function useBindingForm(): BindingFormState {
 
   async function submit() {
     if (!verbId.trim() || !targetRef.trim()) {
-      setError("Pick a verb and what should run it.");
+      setValidationError("Pick a verb and what should run it.");
       return;
     }
-    setBusy(true);
-    setError(null);
+    setValidationError(null);
     setAck(null);
-    try {
-      setAck(
-        await api.setBinding(verbId.trim(), {
-          target_type: targetType,
-          target_ref: targetRef.trim(),
-        }),
-      );
-    } catch (err) {
-      setError(errText(err));
-    } finally {
-      setBusy(false);
-    }
+    await mutation.invoke({
+      verb_id: verbId.trim(),
+      target_type: targetType,
+      target_ref: targetRef.trim(),
+    });
   }
 
   const verbOptions = [
@@ -68,6 +69,7 @@ export function useBindingForm(): BindingFormState {
 
   return {
     verbId, setVerbId, targetType, targetRef, setTargetRef, changeTargetType,
-    busy, error, ack, verbOptions, adapterOptions, submit,
+    busy: mutation.busy, error: validationError ?? mutation.error, ack, mutation,
+    verbOptions, adapterOptions, submit,
   };
 }

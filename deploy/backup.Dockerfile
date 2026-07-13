@@ -8,12 +8,12 @@
 # replace the tag with a sha256 reference after pulling the desired image.
 
 # IAC-002: pinned to a stable tag + digest.
-FROM postgres:16.4-bookworm@sha256:e62fbf9d3e2b49816a32c400ed2dba83e3b361e6833e624024309c35d334b412 AS base
+FROM postgres:16.14-bookworm@sha256:da788743d2060767375896de4d646f7576f5911461444b372616f19ea61db2ec AS base
 
 # IAC-002: rclone copied from an official, pinned image instead of installing
 # from the network at build time (which would also be acceptable, but the upstream
 # apt key URL has been unstable, so the copy path is more reliable).
-FROM rclone/rclone:1.74.3@sha256:623378ad0ff3ebd5cebf77720843c0e02edfe46e2d5b5ac6bed54c6371780dfb AS rclone-src
+FROM rclone/rclone:1.74.4@sha256:c61954aaa32328a5486715dd063a81c7879f5195ad3505cd362deddd509dc4a1 AS rclone-src
 
 FROM base
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -21,6 +21,11 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PGDATABASE=boltrig
 
 USER root
+
+# The upstream Postgres entrypoint uses gosu, but this image replaces that
+# entrypoint with the backup loop. Remove the otherwise-unused static helper so
+# its embedded Go toolchain is not part of the production attack surface.
+RUN rm -f /usr/local/bin/gosu
 
 # openssl is needed for optional passphrase encryption. pg_dump is already
 # present in the postgres image; rclone is copied from the pinned rclone image.

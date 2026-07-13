@@ -1,0 +1,359 @@
+"""Shared mutation helpers behind the governed ``control.*`` adapter."""
+
+from __future__ import annotations
+
+import uuid
+from dataclasses import replace
+from typing import Any, cast
+
+from boltrig.models import (
+    AdapterHealth,
+    AdapterRecord,
+    Consequence,
+    IdempotencyMode,
+    NotificationPref,
+    Noun,
+    Skill,
+    TargetType,
+    UserInvitation,
+    Verb,
+    VerbBinding,
+    WorkflowDefinition,
+    WorkflowSource,
+    utcnow,
+)
+from .control_safety import (
+    ControlConflict,
+    ensure_activation_safe,
+    ensure_adapter_id_available,
+)
+
+_ADMIN_ROLES = frozenset({"org-admin", "superadmin", "admin"})
+
+
+def safe_consequence(verb_id: str, explicit: Any) -> str:
+    """Use a high consequence for mutation-shaped names when none is supplied."""
+    destructive = frozenset(
+        {
+            "delete",
+            "remove",
+            "destroy",
+            "drop",
+            "purge",
+            "wipe",
+            "erase",
+            "send",
+            "email",
+            "post",
+            "pay",
+            "transfer",
+            "charge",
+            "refund",
+            "deactivate",
+            "revoke",
+            "cancel",
+            "terminate",
+            "approve",
+            "publish",
+        }
+    )
+    if explicit in ("low", "high"):
+        return str(explicit)
+    tail = verb_id.rsplit(".", 1)[-1].lower()
+    return "high" if any(token in tail for token in destructive) else "low"
+
+
+async def upsert_skill_record(store: Any, tenant_id: str, params: dict[str, Any]) -> Skill:
+    skill = Skill(
+        id=params["id"],
+        tenant_id=tenant_id,
+        version=params.get("version", "1.0.0"),
+        prompt_fragment=params.get("prompt_fragment", ""),
+        tool_grants=params.get("tool_grants", []),
+        context_requirements=params.get("context_requirements", {}),
+        extends=params.get("extends"),
+        locale=params.get("locale", "en"),
+    )
+    await store.upsert_skill(skill)
+    return skill
+
+
+async def upsert_noun_record(store: Any, tenant_id: str, params: dict[str, Any]) -> Noun:
+    noun = Noun(
+        id=params["id"],
+        tenant_id=tenant_id,
+        description=params.get("description", ""),
+        schema=params.get("schema", {}),
+    )
+    await store.upsert_noun(noun)
+    return noun
+
+
+async def upsert_verb_record(store: Any, tenant_id: str, params: dict[str, Any]) -> Verb:
+    consequence = safe_consequence(params["id"], params.get("consequence"))
+    verb = Verb(
+        id=params["id"],
+        tenant_id=tenant_id,
+        noun_id=params["noun_id"],
+        input_schema=params.get("input_schema", {}),
+        output_schema=params.get("output_schema", {}),
+        description=params.get("description", ""),
+        consequence=Consequence(consequence),
+        idempotency_mode=IdempotencyMode(params.get("idempotency_mode", "cacheable")),
+    )
+    await store.upsert_verb(verb)
+    return verb
+
+
+async def set_binding_record(
+    store: Any, tenant_id: str, verb_id: str, params: dict[str, Any]
+) -> VerbBinding:
+    binding = VerbBinding(
+        verb_id=verb_id,
+        tenant_id=tenant_id,
+        target_type=TargetType(params["target_type"]),
+        target_ref=params["target_ref"],
+    )
+    await store.upsert_binding(binding)
+    return binding
+
+
+def build_mcp_consumer(params: dict[str, Any]) -> Any:
+    from boltrig.adapters.mcp_consumer import McpConsumerAdapter
+
+    return McpConsumerAdapter(params["id"], url=params.get("url"), token=params.get("token"))
+
+
+async def record_inert_adapter(
+    store: Any, tenant_id: str, adapter: Any, *, created_by: str | None
+) -> None:
+    created = await store.create_adapter_if_absent(
+        AdapterRecord(
+            id=adapter.id,
+            tenant_id=tenant_id,
+            version=getattr(adapter, "version", "0"),
+            runtime=getattr(adapter, "runtime", "script"),
+            source=getattr(adapter, "source", "generated"),
+            module_ref=type(adapter).__module__,
+            health=AdapterHealth.UNKNOWN,
+            created_by=created_by,
+            activated=False,
+        )
+    )
+    if not created:
+        raise ControlConflict("adapter id already exists")
+
+
+async def generate_adapter_record(
+    store: Any,
+    loader: Any,
+    tenant_id: str,
+    params: dict[str, Any],
+    *,
+    actor: str,
+) -> Any:
+    from boltrig.adapters.generator import generate_adapter_from_spec
+
+    await ensure_adapter_id_available(store, loader, tenant_id, params["adapter_id"])
+    adapter = generate_adapter_from_spec(params["spec"], adapter_id=params["adapter_id"])
+    await record_inert_adapter(store, tenant_id, adapter, created_by=actor)
+    if loader.peek(tenant_id, adapter.id) is not None:
+        raise ControlConflict("adapter id became live during registration")
+    loader.register(tenant_id, adapter)
+    return adapter
+
+
+async def register_mcp_consumer(
+    store: Any,
+    loader: Any,
+    tenant_id: str,
+    params: dict[str, Any],
+    *,
+    actor: str,
+) -> Any:
+    await ensure_adapter_id_available(store, loader, tenant_id, params["id"])
+    consumer = build_mcp_consumer(params)
+    await record_inert_adapter(store, tenant_id, consumer, created_by=actor)
+    if loader.peek(tenant_id, consumer.id) is not None:
+        raise ControlConflict("adapter id became live during registration")
+    loader.register(tenant_id, consumer)
+    return consumer
+
+
+async def activate_adapter_record(
+    store: Any,
+    loader: Any,
+    registry: Any,
+    tenant_id: str,
+    adapter_id: str,
+    *,
+    reviewer: str,
+) -> list[str]:
+    adapter = await loader.get(tenant_id, adapter_id)
+    if adapter is None:
+        raise LookupError("adapter not found")
+    await ensure_activation_safe(store, tenant_id, adapter_id, adapter)
+    activate = getattr(adapter, "review_and_activate", None)
+    if activate is not None:
+        activate(reviewer)
+    verbs = await registry.register_adapter_verbs(tenant_id, adapter)
+    record = await store.get_adapter(tenant_id, adapter_id)
+    if record is None:
+        record = AdapterRecord(
+            id=adapter.id,
+            tenant_id=tenant_id,
+            version=getattr(adapter, "version", "0"),
+            runtime=getattr(adapter, "runtime", "script"),
+            source=getattr(adapter, "source", "generated"),
+            module_ref=type(adapter).__module__,
+        )
+    record.activated = True
+    await store.upsert_adapter(record)
+    return cast(list[str], verbs)
+
+
+async def upsert_workflow_record(
+    store: Any,
+    tenant_id: str,
+    params: dict[str, Any],
+    *,
+    workspace_id: str | None,
+) -> WorkflowDefinition:
+    workflow = WorkflowDefinition(
+        id=params["id"],
+        tenant_id=tenant_id,
+        version=params.get("version", "1.0.0"),
+        source=WorkflowSource(params.get("source", "precreated")),
+        definition=params.get("definition", {}),
+        intent_tags=params.get("intent_tags", []),
+        workspace_id=workspace_id,
+    )
+    await store.upsert_workflow(workflow)
+    return workflow
+
+
+async def schedule_workflow_record(
+    store: Any,
+    tenant_id: str,
+    params: dict[str, Any],
+    *,
+    workspace_id: str | None,
+) -> dict[str, Any]:
+    from boltrig.workflows.generator import schedule_spec
+
+    workflow = next(
+        (
+            item
+            for item in await store.list_workflows(tenant_id)
+            if item.id == params["workflow_id"]
+            and (item.workspace_id is None or item.workspace_id == workspace_id)
+        ),
+        None,
+    )
+    if workflow is None:
+        raise LookupError("workflow not found")
+    schedule = schedule_spec(params["cron"], params.get("timezone", "UTC"))
+    definition = dict(workflow.definition)
+    definition["schedule"] = schedule
+    await store.upsert_workflow(replace(workflow, definition=definition))
+    return schedule
+
+
+def _principal_role(context: Any) -> str:
+    role = str((context.extra or {}).get("principal_role") or "")
+    if role not in _ADMIN_ROLES:
+        raise PermissionError("organisation administration requires an authenticated admin")
+    return role
+
+
+def _reject_escalation(role: str, target_role: Any, scope: Any) -> None:
+    from boltrig.identity.rbac import _role_rank
+
+    if target_role is not None and _role_rank(str(target_role)) < _role_rank(role):
+        raise PermissionError("cannot grant a role ranked above the caller")
+    if isinstance(scope, dict) and scope.get("all") and role != "superadmin":
+        raise PermissionError("only the owner may grant all-authority scope")
+
+
+async def update_user_record(
+    store: Any, tenant_id: str, params: dict[str, Any], *, context: Any
+) -> Any:
+    role = _principal_role(context)
+    _reject_escalation(role, params.get("role"), params.get("scope"))
+    user = await store.get_user(tenant_id, params["user_id"])
+    if user is None:
+        raise LookupError("user not found")
+    if "role" in params:
+        user.role = params["role"]
+    if isinstance(params.get("scope"), dict):
+        user.scope = params["scope"]
+    if params.get("status") in {"active", "deactivated"}:
+        user.status = params["status"]
+    await store.upsert_user(user)
+    return user
+
+
+async def deactivate_user_record(store: Any, tenant_id: str, user_id: str, *, context: Any) -> Any:
+    _principal_role(context)
+    user = await store.get_user(tenant_id, user_id)
+    if user is None:
+        raise LookupError("user not found")
+    user.status = "deactivated"
+    await store.upsert_user(user)
+    return user
+
+
+async def create_invitation_record(
+    store: Any, tenant_id: str, params: dict[str, Any], *, context: Any
+) -> tuple[UserInvitation, str]:
+    from boltrig.identity.invites import generate_invite_token, hash_invite_token
+    from boltrig.identity.tokens import bounded_expiry
+
+    role = _principal_role(context)
+    _reject_escalation(role, params.get("role"), params.get("scope"))
+    email = str(params.get("email") or "").strip()
+    if not email:
+        raise ValueError("email is required")
+    provision_org = str(params.get("provision_org_name") or "").strip() or None
+    if provision_org is not None and role != "superadmin":
+        raise PermissionError("only the owner may provision an organisation")
+    workspace_id = str(params.get("workspace_id") or "").strip() or None
+    if workspace_id is not None and await store.get_workspace(tenant_id, workspace_id) is None:
+        raise LookupError("workspace not found")
+    secret = generate_invite_token()
+    invitation = UserInvitation(
+        id=uuid.uuid4().hex,
+        tenant_id=tenant_id,
+        email=email,
+        intended_role=params.get("role", "agent"),
+        intended_scope=params.get("scope", {}),
+        invited_by=context.on_behalf_of or context.actor,
+        expires_at=bounded_expiry(utcnow(), params.get("ttl_days", 14)),
+        token_hash=hash_invite_token(secret),
+        workspace_id=workspace_id,
+        provision_workspace_name=(
+            str(params.get("provision_workspace_name") or "").strip() or None
+        ),
+        provision_org_name=provision_org,
+    )
+    if not await store.add_invitation_if_no_pending(invitation):
+        raise ControlConflict("a pending invitation already exists for this email")
+    return invitation, secret
+
+
+async def route_notification_record(
+    store: Any, tenant_id: str, params: dict[str, Any], *, context: Any
+) -> NotificationPref:
+    subject = context.on_behalf_of or context.actor
+    preference = NotificationPref(
+        id=params.get("id") or uuid.uuid4().hex,
+        tenant_id=tenant_id,
+        scope_kind="user",
+        scope_ref=subject,
+        event_type=params["event_type"],
+        channel=params["channel"],
+        target=params.get("target"),
+        enabled=params.get("enabled", True),
+    )
+    await store.upsert_notification_pref(preference)
+    return preference

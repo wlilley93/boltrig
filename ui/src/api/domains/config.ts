@@ -8,6 +8,7 @@ import type {
   ConfigRollbackResponse,
   ConfigSectionResponse,
   CredentialsResponse,
+  GovernedRouteResponse,
   PutConfigRequest,
   PutConfigResponse,
 } from "@/api/types";
@@ -23,8 +24,8 @@ export const configApi = {
   putConfig(
     section: string,
     body: PutConfigRequest,
-  ): Promise<PutConfigResponse> {
-    return request<PutConfigResponse>(
+  ): Promise<GovernedRouteResponse<PutConfigResponse>> {
+    return request<GovernedRouteResponse<PutConfigResponse>>(
       `/v1/admin/config/${encodeURIComponent(section)}`,
       { method: "PUT", body, tolerateStatus: true },
     );
@@ -40,8 +41,8 @@ export const configApi = {
   configRollback(
     section: string,
     body: ConfigRollbackRequest,
-  ): Promise<ConfigRollbackResponse> {
-    return request<ConfigRollbackResponse>(
+  ): Promise<GovernedRouteResponse<ConfigRollbackResponse>> {
+    return request<GovernedRouteResponse<ConfigRollbackResponse>>(
       `/v1/admin/config/${encodeURIComponent(section)}/rollback`,
       { method: "POST", body, tolerateStatus: true },
     );

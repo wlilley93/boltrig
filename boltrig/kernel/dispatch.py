@@ -6,9 +6,9 @@ and audited at the end regardless of outcome:
     resolve verb + binding   (BindingNotFound, fail-closed)
     validate params          (SchemaValidationError, SEC-21)
     grant check              (GrantMissing, SEC-07)
+    idempotency replay       (SEC-15)
     consequence/HITL gate    (PendingHuman, SEC-14 - cannot be bypassed)
     rate limit               (RateLimited, FR-KER-05)
-    idempotency replay       (SEC-15)
     resolve credential       (inside kernel only, SEC-05)
     execute adapter | agent  (degrade on UNAVAILABLE, P9)
     validate output          (SchemaValidationError)
@@ -47,10 +47,18 @@ from boltrig.models import (
 from boltrig.store import Store
 
 from .audit import AuditWriter
+from .adapter_errors import adapter_failure
 from .cost import CostAccountant
 from .credentials import CredentialResolver
 from .grants import GrantChecker
+from .approval_gate import enforce_approval
 from .hitl import HITLManager
+from .idempotency import (
+    IdempotencyCoordinator,
+    IdempotencyReplay,
+    IdempotencyRun,
+    sensitive_key,
+)
 from .questions import QUESTIONS_VERB
 from .ratelimit import RateLimiter
 
@@ -81,6 +89,25 @@ def _summarise_output(output: Any) -> dict[str, Any]:
     if isinstance(output, dict):
         return {"keys": sorted(str(k) for k in output)}
     return {"keys": []}
+
+
+def _event_safe(value: Any) -> Any:
+    """Redact secret-shaped values before the internal run-event relay.
+
+    The caller still receives the real adapter result. Durable/run-canvas event
+    records do not need bearer material and must never become a second secret
+    store (notably for one-time invitation tokens).
+    """
+    if isinstance(value, dict):
+        safe: dict[str, Any] = {}
+        for key, item in value.items():
+            safe[str(key)] = "[redacted]" if sensitive_key(key) else _event_safe(item)
+        return safe
+    if isinstance(value, list):
+        return [_event_safe(item) for item in value]
+    if isinstance(value, tuple):
+        return [_event_safe(item) for item in value]
+    return value
 
 
 # Param keys that plausibly name the acted-on object's id (best-effort, D1). Only
@@ -124,6 +151,7 @@ class Dispatcher:
         security: Any | None = None,
     ) -> None:
         self._store = store
+        self._idempotency = IdempotencyCoordinator(store)
         self._grants = grants
         self._rate = rate_limiter
         self._creds = credentials
@@ -229,11 +257,11 @@ class Dispatcher:
         call_id = uuid.uuid4().hex
         # Live run event: the agent is calling a tool. Keyed by the run so the chat
         # / run-canvas subscribed to it sees the call as it happens (Round Ten). The
-        # full input rides for the run canvas + the durable record (FR-EVT-01); the
+        # redacted input rides for the run canvas + durable record (FR-EVT-01); the
         # chat stream forwards only the bounded ``tool``/``call_id``/``args_summary``
         # keys (K-20), never the raw input (see fleet/chat._project_chat_event).
         self._emit(context.run_id, {"type": "tool_call", "verb": verb, "noun": noun,
-                                    "input": params, "run_id": context.run_id,
+                                    "input": _event_safe(params), "run_id": context.run_id,
                                     "tool": verb, "call_id": call_id,
                                     "args_summary": _summarise_params(params)})
         try:
@@ -276,15 +304,15 @@ class Dispatcher:
             detail = {"message": type(e).__name__}
             raise
         finally:
-            # Paired result event (success -> output; failure -> status only, no
-            # leak). pending_human already emitted its own event above. The full
+            # Paired result event (success -> redacted output; failure -> status
+            # only). pending_human already emitted its own event above. The safe
             # output rides for the run canvas + the durable record (FR-EVT-01); the
             # chat stream forwards only the bounded ``call_id``/``status``/
             # ``result_summary`` keys (K-20), never the raw output.
             if status != "pending_human":
                 self._emit(context.run_id, {
                     "type": "tool_result", "verb": verb, "status": status,
-                    "output": output if status == "ok" else None,
+                    "output": _event_safe(output) if status == "ok" else None,
                     "run_id": context.run_id, "call_id": call_id,
                     "result_summary": (
                         _summarise_output(output) if status == "ok"
@@ -331,7 +359,7 @@ class Dispatcher:
         context: InvocationContext,
         idempotency_key: str | None,
         approval_id: str | None,
-        meta: dict[str, Any] | None = None,
+        meta: dict[str, Any],
     ) -> dict[str, Any]:
         tenant = context.tenant_id
 
@@ -343,8 +371,7 @@ class Dispatcher:
         if binding is None:
             raise BindingNotFound(f"verb '{verb}' has no binding")
         # record which adapter/agent services this call so the audit can attribute it.
-        if meta is not None:
-            meta["target_adapter"] = binding.target_ref
+        meta["target_adapter"] = binding.target_ref
 
         # 2. validate params (SEC-21)
         errors = _validate(verb_def.input_schema, params)
@@ -355,36 +382,29 @@ class Dispatcher:
         perms = await self._store.get_tenant_permissions(tenant)
         self._grants.check(context, verb, perms)
 
-        # 4. consequence / HITL gate (SEC-14) - cannot be bypassed by an agent
+        # 4. atomically bind/claim the key after authorization. Completed results
+        # replay before execution-side approval/rate-limit gates (SEC-15).
+        idempotency = await self._idempotency.claim(
+            idempotency_key, noun, verb, params, context, verb_def.idempotency_mode
+        )
+        if isinstance(idempotency, IdempotencyReplay):
+            return idempotency.result
+        run = idempotency if isinstance(idempotency, IdempotencyRun) else None
+
+        # 5. consequence / HITL gate (SEC-14) - cannot be bypassed by an agent
         gated = verb_def.consequence == Consequence.HIGH or verb in self._blocking_verbs
-        if gated:
-            # SEC-14: the approval must have been raised FOR THIS VERB and is spent
-            # single-use, so it cannot be reused across verbs or replayed.
-            approved = bool(
-                approval_id
-                and await self._hitl.consume_if_approved(tenant, approval_id, verb)
-            )
-            if not approved:
-                req = await self._hitl.create(
-                    tenant_id=tenant,
-                    run_id=context.run_id or "",
-                    type=HITLType.APPROVAL,
-                    question=f"Approve {verb} ?",
-                    context=f"{context.actor} requests {verb}",
-                    options=["approve", "reject"],
-                    verb=verb,
-                    requested_by=context.actor,
+        try:
+            if gated:
+                context = await enforce_approval(
+                    self._hitl, self._adapter_provider, binding,
+                    noun, verb, params, context, approval_id,
                 )
-                raise PendingHuman(req.id)
+            await self._rate.enforce(tenant, verb, binding.rate_limit)
+        except Exception:
+            await self._idempotency.release(run)
+            raise
 
-        # 5. rate limit (FR-KER-05)
-        await self._rate.enforce(tenant, verb, binding.rate_limit)
-
-        # 6. idempotency replay (SEC-15)
-        if idempotency_key:
-            prior = await self._store.idempotency_get(tenant, idempotency_key)
-            if prior is not None:
-                return prior
+        await self._idempotency.start(run)
 
         # 6b. Governed built-in: the "ask the user a question" verb (US-CHAT-12).
         # It reached here only after passing schema validation + the grant check +
@@ -408,9 +428,8 @@ class Dispatcher:
         if out_errors:
             raise SchemaValidationError(f"invalid output for '{verb}'", out_errors)
 
-        # 9. record idempotent result
-        if idempotency_key:
-            await self._store.idempotency_put(tenant, idempotency_key, output)
+        # 9. complete atomically; secret-shaped output becomes uncacheable.
+        await self._idempotency.complete(run, output)
         return output
 
     async def _execute_adapter(
@@ -434,7 +453,7 @@ class Dispatcher:
             raise RateLimited(err.message, err.retry_after_seconds)
         if err and err.error_class == ErrorClass.UNAVAILABLE:
             return self._degrade_or_fail(verb_def, reason="backend_unavailable")
-        raise BoltrigError(err.message if err else "adapter error")
+        raise adapter_failure(err)
 
     async def _execute_agent(
         self,

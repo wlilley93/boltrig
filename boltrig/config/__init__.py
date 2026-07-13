@@ -23,6 +23,7 @@ from .manifest import (
     PrivacyConfig,
     SpawnRule,
     apply_manifest,
+    export_runtime_environment,
     load_manifest,
 )
 from .settings import Settings, load_settings
@@ -32,6 +33,7 @@ __all__ = [
     "load_settings",
     "load_manifest",
     "apply_manifest",
+    "export_runtime_environment",
     "FleetManifest",
     "IdentityConfig",
     "ModelsConfig",

@@ -97,6 +97,7 @@ class MemoryAdapter:
         cross_scope_edges: str = "forbidden",
         max_hops: int = 4,
         max_results: int = 20,
+        projections=None,
     ) -> None:
         self._engine = engine
         self._store = store
@@ -106,6 +107,7 @@ class MemoryAdapter:
         self._cross_scope_edges = cross_scope_edges
         self._max_hops = max_hops
         self._max_results = max_results
+        self._projections = projections
 
     def describe(self) -> list[VerbSpec]:
         return [
@@ -219,13 +221,34 @@ class MemoryAdapter:
             data_class=data_class, source_kind=params.get("source_kind", "verb_result"),
             source_ref=params.get("source_ref"), relates_to=relates,
         )
-        await self._engine.remember(tenant, [ef])
-        await self._store.add_memory_fact(MemoryFact(
-            id=fid, tenant_id=tenant, owner_scope=owner_scope, engine_ref=fid, kind=ef.kind,
-            source_kind=ef.source_kind, source_ref=ef.source_ref, data_class=data_class,
-            content=content[:200],
-        ))
-        return Result.success({"fact_ids": [fid], "owner_scope": owner_scope})
+        try:
+            await self._store.add_memory_fact(MemoryFact(
+                id=fid, tenant_id=tenant, owner_scope=owner_scope, engine_ref=fid, kind=ef.kind,
+                source_kind=ef.source_kind, source_ref=ef.source_ref, data_class=data_class,
+                content=content[:200],
+            ))
+        except Exception as exc:
+            return Result.failure(AdapterError(
+                ErrorClass.INTERNAL,
+                f"memory ledger write failed: {type(exc).__name__}",
+            ))
+        try:
+            await self._engine.remember(tenant, [ef])
+        except Exception as exc:
+            await self._store.delete_memory_fact(tenant, fid)
+            return Result.failure(AdapterError(
+                ErrorClass.UNAVAILABLE,
+                f"memory engine write failed: {type(exc).__name__}",
+                retryable=True,
+            ))
+        projections = []
+        if self._projections is not None:
+            projections = await self._projections.remember(tenant, ef, context)
+        return Result.success({
+            "fact_ids": [fid],
+            "owner_scope": owner_scope,
+            "projections": projections,
+        })
 
     # --- memory.recall (retrieval boundary: scope-filter + least-priv audit) ---
     async def _recall(self, params, context, scopes) -> Result:
@@ -233,8 +256,20 @@ class MemoryAdapter:
         query = params.get("query", "")
         mode = params.get("mode", "graph_completion")
         limit = min(int(params.get("limit", self._max_results)), self._max_results)
-        hits = await self._engine.recall(
-            tenant, query, scopes=scopes, mode=mode, limit=limit, max_hops=self._max_hops)
+        source = "engine"
+        projection_refs: dict[str, str | None] = {}
+        projected = None
+        if self._projections is not None:
+            projected = await self._projections.recall(
+                tenant, query, scopes=scopes, mode=mode, limit=limit,
+                max_hops=self._max_hops, context=context)
+        if projected is not None:
+            hits = projected.hits
+            source = projected.projection_id
+            projection_refs = projected.projection_refs
+        else:
+            hits = await self._engine.recall(
+                tenant, query, scopes=scopes, mode=mode, limit=limit, max_hops=self._max_hops)
         # SEC-40 defence-in-depth: re-filter to permitted scopes even if the engine
         # returned anything broader.
         allowed = set(scopes)
@@ -244,13 +279,15 @@ class MemoryAdapter:
                 "content": h.fact.content, "data_class": h.fact.data_class,
                 "provenance": {"source_kind": h.fact.source_kind, "source_ref": h.fact.source_ref,
                                "hops": h.hops, "path": h.path},
+                "projection": {"source": source, "ref": projection_refs.get(h.fact.id),
+                               "authority": "kernel_ledger"},
             }
             for h in hits if h.fact.owner_scope in allowed
         ]
         # SEC-45: audit the query/scope/count, never the contents.
         await self._write_audit(context, "memory.recall",
                                 {"query": query, "mode": mode, "scopes": scopes, "count": len(facts)})
-        return Result.success({"facts": facts, "count": len(facts)})
+        return Result.success({"facts": facts, "count": len(facts), "projection_source": source})
 
     # --- memory.improve (reweight; cannot change scope or grant authority) ---
     async def _improve(self, params, context) -> Result:
@@ -277,13 +314,19 @@ class MemoryAdapter:
         await self._write_audit(context, "memory.forget",
                                 {"target": erasure.target, "facts_removed": len(removed),
                                  "engine_confirmed": True})
+        projections = []
+        if self._projections is not None and removed:
+            projections = await self._projections.forget(tenant, removed, context)
         return Result.success({
             "erasure_id": erasure.id, "removed": removed, "facts_removed": len(removed),
             "engine_confirmed": True, "transcript_handled": erasure.transcript_handled,
+            "projections": projections,
         })
 
 
-def build_memory_adapter(engine, store, *, audit=None, config: dict | None = None) -> MemoryAdapter:
+def build_memory_adapter(
+    engine, store, *, audit=None, config: dict | None = None, projections=None
+) -> MemoryAdapter:
     """Construct a MemoryAdapter from a manifest ``memory`` config block."""
     cfg = config or {}
     sensitive = cfg.get("embedding_endpoint", "local-sensitive")
@@ -294,4 +337,5 @@ def build_memory_adapter(engine, store, *, audit=None, config: dict | None = Non
         cross_scope_edges=cfg.get("cross_scope_edges", "forbidden"),
         max_hops=int(retrieval.get("max_hops", 4)),
         max_results=int(retrieval.get("max_results", 20)),
+        projections=projections,
     )

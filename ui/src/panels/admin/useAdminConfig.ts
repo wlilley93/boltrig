@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../../api/client";
 import type { ConfigRevisionSummary, InvokeResult } from "../../api/types";
 import { apiReason, errText } from "../shared";
+import { outputRecord } from "../uxFlow";
 import {
   ADMIN_SECTIONS,
   fromFormValue,
@@ -12,10 +13,17 @@ import {
 import type { AdminSection } from "./sections";
 import { resultReason } from "./adminConstants";
 
-export interface AdminPending {
-  id: string;
-  params: { section: string; value: unknown };
-}
+export type AdminPending =
+  | {
+      id: string;
+      verb: "control.config.upsert";
+      params: { section: string; value: unknown };
+    }
+  | {
+      id: string;
+      verb: "control.config.rollback";
+      params: { section: string; revision_id: number };
+    };
 
 export interface AdminConfigState {
   sectionKey: string;
@@ -44,6 +52,7 @@ export interface AdminConfigState {
   onValidity: (valid: boolean) => void;
   onPendingApplied: (result: InvokeResult) => void;
   onPendingDenied: (reason: string) => void;
+  onPendingReset: () => void;
 }
 
 export function useAdminConfig(): AdminConfigState {
@@ -121,7 +130,7 @@ export function useAdminConfig(): AdminConfigState {
   }, [section, loadSection]);
 
   async function save() {
-    if (!dirty || !formValid) return;
+    if (!dirty || !formValid || pending !== null) return;
     const params = { section: section.key, value: fromFormValue(section, form) };
     setSaving(true);
     setSaveError(null);
@@ -133,7 +142,11 @@ export function useAdminConfig(): AdminConfigState {
         params,
       });
       if (result.status === "pending_human") {
-        setPending({ id: result.hitl_request_id, params });
+        setPending({
+          id: result.hitl_request_id,
+          verb: "control.config.upsert",
+          params,
+        });
         return;
       }
       const reason = resultReason(result);
@@ -158,13 +171,36 @@ export function useAdminConfig(): AdminConfigState {
   }
 
   async function rollback(revId: number) {
+    if (pending !== null) return;
     setSaveError(null);
     setSaveMsg(null);
-    const res = await api.configRollback(section.key, { revision_id: revId });
-    if (res.status !== "ok") {
-      throw new Error(res.reason ?? "rollback rejected");
+    const params = { section: section.key, revision_id: revId };
+    let result: InvokeResult;
+    try {
+      result = await api.invoke({
+        noun: "control",
+        verb: "control.config.rollback",
+        params,
+      });
+    } catch (err) {
+      throw new Error(apiReason(err));
     }
-    const value = res.value ?? (section.list ? [] : {});
+    if (result.status === "pending_human") {
+      setPending({
+        id: result.hitl_request_id,
+        verb: "control.config.rollback",
+        params,
+      });
+      return;
+    }
+    const reason = resultReason(result);
+    if (reason) {
+      throw new Error(reason);
+    }
+    if (result.status !== "ok" && result.status !== "degraded") {
+      throw new Error("rollback rejected");
+    }
+    const value = outputRecord(result.output).value ?? (section.list ? [] : {});
     setLoaded(value);
     setForm(toFormValue(section, value));
     setSaveMsg(`Rolled back to revision ${revId}.`);
@@ -180,8 +216,18 @@ export function useAdminConfig(): AdminConfigState {
       setSaveError(reason);
       return;
     }
-    setLoaded(pending.params.value);
-    setSaveMsg("Approved and applied.");
+    if (result.status !== "ok" && result.status !== "degraded") return;
+    if (pending.verb === "control.config.upsert") {
+      setLoaded(pending.params.value);
+      setSaveMsg("Approved and applied.");
+    } else {
+      const value = outputRecord(result.output).value ?? (section.list ? [] : {});
+      setLoaded(value);
+      setForm(toFormValue(section, value));
+      setSaveMsg(
+        `Approved and rolled back to revision ${pending.params.revision_id}.`,
+      );
+    }
     setPending(null);
     void loadHistory(section.key);
   }
@@ -190,10 +236,15 @@ export function useAdminConfig(): AdminConfigState {
     setSaveError(reason);
   }
 
+  function onPendingReset() {
+    setPending(null);
+  }
+
   return {
     sectionKey, setSectionKey, section, loaded, form, setForm, formValid,
     loading, loadError, denied, saving, saveError, saveMsg, pending,
     history, historyError, baseline, dirty, loadHistory, loadSection,
     save, discard, rollback, onValidity, onPendingApplied, onPendingDenied,
+    onPendingReset,
   };
 }

@@ -16,11 +16,11 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  /* Boltrig typefaces (loaded from Google Fonts in layout.tsx): IBM Plex Sans
+  /* Boltrig typefaces (loaded through next/font in layout.tsx): IBM Plex Sans
      for copy, JetBrains Mono for the terminal-style chrome/telemetry - matching
      the product console. */
-  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-sans: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --color-brain-void: var(--brain-void);
   --color-brain-deep: var(--brain-deep);

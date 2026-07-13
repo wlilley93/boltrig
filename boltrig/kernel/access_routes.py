@@ -27,13 +27,12 @@ from boltrig.models import (
     AuditEvent,
     ConversationStatus,
     GrantMissing,
-    NotificationPref,
-    UserInvitation,
     UserSetting,
     Workspace,
     WorkspaceMember,
     utcnow,
 )
+from boltrig.kernel.control_routes import dispatch_control_route
 
 # Per-workspace roles that may administer a workspace's AI key (D3 vocabulary).
 _WORKSPACE_ADMIN_ROLES = frozenset({"owner", "admin"})
@@ -739,17 +738,15 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
         return {"prefs": mine}
 
     @app.put("/v1/me/notifications")
-    async def put_my_notifications(body: dict, k=K, p=P) -> JSONResponse:
-        pref = NotificationPref(
-            id=body.get("id") or uuid.uuid4().hex, tenant_id=p.tenant_id,
-            scope_kind="user", scope_ref=p.subject,
-            event_type=body["event_type"], channel=body["channel"],
-            target=body.get("target"), enabled=body.get("enabled", True),
+    async def put_my_notifications(
+        body: dict, request: Request, k=K, p=P
+    ) -> JSONResponse:
+        output, pending = await dispatch_control_route(
+            k, p, "control.notification.route", body, request=request
         )
-        await k.store.upsert_notification_pref(pref)
-        await _audit(k, p, "settings.notifications.update",
-                     {"event_type": pref.event_type, "channel": pref.channel})
-        return JSONResponse({"status": "ok", "id": pref.id})
+        if pending is not None:
+            return pending
+        return JSONResponse({"status": "ok", **(output or {})})
 
     # === Personal agent (GET; configure POST lives in the platform routes) ===
     @app.get("/v1/me/agent")
@@ -768,22 +765,31 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
         return JSONResponse({"users": [_user_view(u) for u in users]})
 
     @app.patch("/v1/admin/users/{user_id}")
-    async def update_user(user_id: str, body: dict, k=K, p=P) -> JSONResponse:
+    async def update_user(
+        user_id: str, body: dict, request: Request, k=K, p=P
+    ) -> JSONResponse:
         _require_admin(p)
         _reject_escalation(p, body.get("role"), body.get("scope"))
         user = await k.store.get_user(p.tenant_id, user_id)
         if user is None:
             return JSONResponse({"status": "error", "reason": "not_found"}, status_code=404)
-        if "role" in body:
-            user.role = body["role"]
-        if "scope" in body and isinstance(body["scope"], dict):
-            user.scope = body["scope"]
-        if "status" in body and body["status"] in ("active", "deactivated"):
-            user.status = body["status"]  # deactivate => immediate revoke (US-USR-03)
-        await k.store.upsert_user(user)
-        await _audit(k, p, "admin.user.update",
-                     {"user": user_id, "role": user.role, "status": user.status})
-        return JSONResponse({"status": "ok", "user": _user_view(user)})
+        deactivation_only = body.get("status") == "deactivated" and not (
+            {"role", "scope"} & body.keys()
+        )
+        verb = "control.user.deactivate" if deactivation_only else "control.user.update"
+        params = {"user_id": user_id, **body}
+        if deactivation_only:
+            params.pop("status", None)
+        output, pending = await dispatch_control_route(
+            k,
+            p,
+            verb,
+            params,
+            request=request,
+        )
+        if pending is not None:
+            return pending
+        return JSONResponse({"status": "ok", **(output or {})})
 
     @app.get("/v1/admin/invitations")
     async def list_invites(k=K, p=P) -> JSONResponse:
@@ -801,10 +807,9 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
         ]})
 
     @app.post("/v1/admin/invitations")
-    async def create_invite(body: dict, k=K, p=P) -> JSONResponse:
-        from boltrig.identity.invites import generate_invite_token, hash_invite_token
-        from boltrig.identity.tokens import bounded_expiry
-
+    async def create_invite(
+        body: dict, request: Request, k=K, p=P
+    ) -> JSONResponse:
         _require_admin(p)
         _reject_escalation(p, body.get("role"), body.get("scope"))
         email = (body.get("email") or "").strip()
@@ -833,34 +838,23 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
             _ws, denied = await _authz_manage_workspace(k, p, workspace_id)
             if denied is not None:
                 return denied
-        # Mint a single-use invite-token secret for first-party invite-only login
-        # ([2026] VJS-COUNTY 7, D1): store ONLY its hash; return the secret ONCE so
-        # the admin can hand the invitee an accept-invite link. Mirrors the SEC-34
-        # PAT pattern (hashed at rest, bounded by the invitation's own expiry,
-        # revocable via the revoke route). SSO-only deployments simply ignore it.
-        invite_secret = generate_invite_token()
-        inv = UserInvitation(
-            id=uuid.uuid4().hex, tenant_id=p.tenant_id, email=email,
-            intended_role=body.get("role", "agent"),
-            intended_scope=body.get("scope", {}),
-            invited_by=p.subject,
-            expires_at=bounded_expiry(utcnow(), body.get("ttl_days", 14)),
-            token_hash=hash_invite_token(invite_secret),
-            workspace_id=workspace_id,
-            provision_workspace_name=provision_workspace_name,
-            provision_org_name=provision_org_name,
+        invite_params = {**body, "email": email}
+        if workspace_id is not None:
+            invite_params["workspace_id"] = workspace_id
+        if provision_workspace_name is not None:
+            invite_params["provision_workspace_name"] = provision_workspace_name
+        if provision_org_name is not None:
+            invite_params["provision_org_name"] = provision_org_name
+        output, pending = await dispatch_control_route(
+            k,
+            p,
+            "control.invitation.create",
+            invite_params,
+            request=request,
         )
-        await k.store.add_invitation(inv)
-        # Keys-only audit: email + role + the (non-secret) scope keys, never the
-        # invite secret (D8).
-        await _audit(k, p, "admin.invite.create", {
-            "email": email, "role": inv.intended_role,
-            "workspace_id": workspace_id,
-            "provision_workspace": provision_workspace_name is not None,
-            "provision_org": provision_org_name is not None,
-        })
-        return JSONResponse({"status": "ok", "id": inv.id, "email": email,
-                             "invite_token": invite_secret})
+        if pending is not None:
+            return pending
+        return JSONResponse({"status": "ok", **(output or {})})
 
     @app.delete("/v1/admin/invitations/{invite_id}")
     async def revoke_invite(invite_id: str, k=K, p=P) -> JSONResponse:

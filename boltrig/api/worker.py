@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 
 from boltrig.config import load_manifest
 from boltrig.fleet import (
@@ -35,7 +36,8 @@ async def _run() -> None:
     # Honest executor selection (US-EXE-05): the boot record states durability.
     log.info(
         "fleet worker started (%s, durable=%s)",
-        type(executor).__name__, executor.durable,
+        type(executor).__name__,
+        executor.durable,
     )
     # The org from the manifest hierarchy; a missing/broken manifest degrades to
     # the minimal default org (one CoS over one general head, P9).
@@ -50,8 +52,25 @@ async def _run() -> None:
     pump = build_org(kernel, build_spawner(kernel), manifest, executor=executor)
     log.info(
         "delegation pump live (tenant=%s, departments=%s)",
-        tenant, sorted(pump.heads),
+        tenant,
+        sorted(pump.heads),
     )
+    # Each execution owner proves only the tools present in its own image.  The
+    # fleet worker probes OpenCode, Browser Use, and loopback Chromium, then
+    # publishes a short-lived redacted receipt to shared Redis.  The kernel's
+    # /readyz combines it with a kernel-local Herdr probe; it never assumes a
+    # fleet hostname or executes fleet binaries in the wrong container.
+    from boltrig.fleet.stack_tool_health import run_fleet_tool_heartbeat
+
+    stack_health_task: asyncio.Task[None] | None = None
+    if str(os.environ.get("REDIS_URL") or "").strip():
+        stack_health_task = asyncio.create_task(
+            run_fleet_tool_heartbeat(tenant),
+            name="fleet-stack-tool-heartbeat",
+        )
+        log.info("fleet stack-tool heartbeat live (tenant=%s)", tenant)
+    else:
+        log.info("fleet stack-tool heartbeat disabled (REDIS_URL not configured)")
     # The periodic audit-rollup anchor janitor (COUNTY 9 D4): on an interval it
     # seals every tenant's un-anchored audit-chain tail so a verifier can prove a
     # segment was not rewritten. A worker-side loop (the codebase has no native
@@ -60,7 +79,7 @@ async def _run() -> None:
     # interval knob (BOLTRIG_AUDIT_ANCHOR_INTERVAL) is <= 0; conservative daily
     # default. Held in a name so the task is not garbage-collected mid-flight.
     anchor_interval = anchor_interval_from_env()
-    anchor_task: asyncio.Task | None = None
+    anchor_task: asyncio.Task[None] | None = None
     if anchor_interval > 0:
         anchor_task = asyncio.create_task(
             run_anchor_forever(kernel.store, kernel.anchorer, interval=anchor_interval)
@@ -73,6 +92,9 @@ async def _run() -> None:
     finally:
         if anchor_task is not None:
             anchor_task.cancel()
+        if stack_health_task is not None:
+            stack_health_task.cancel()
+            await asyncio.gather(stack_health_task, return_exceptions=True)
 
 
 def main() -> None:

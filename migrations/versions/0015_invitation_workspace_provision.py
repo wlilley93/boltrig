@@ -1,10 +1,9 @@
 """org/workspace-scoped invites + provisioning ([2026] VJS-COUNTY 8, D6).
 
 An ordered delta bringing an existing database up to carry the org/workspace scope
-and provisioning intent on invitations. A fresh database already gets the columns
-from the baseline replay of store/schema.sql; this migration is the in-place upgrade
-for a provisioned one. Idempotent (ADD COLUMN IF NOT EXISTS), matching schema.sql
-exactly.
+and provisioning intent on invitations. The change is idempotent (ADD COLUMN IF
+NOT EXISTS) and mirrored in the bootstrap schema. This revision also widens
+Alembic's own version column before recording this 35-character revision id.
 
 ADDITIVE + backward-compatible: the three new user_invitations columns are NULLABLE
 and every existing row is left NULL, so a legacy invite (no workspace scope, no
@@ -29,6 +28,10 @@ branch_labels = None
 depends_on = None
 
 _DDL = """
+-- Alembic creates version_num as VARCHAR(32). This revision id is 35 characters,
+-- so widen the metadata column before Alembic writes the new head after upgrade().
+-- Keep the wider type on downgrade: later revision ids may also need it.
+ALTER TABLE alembic_version ALTER COLUMN version_num TYPE VARCHAR(64);
 ALTER TABLE user_invitations ADD COLUMN IF NOT EXISTS workspace_id TEXT;
 ALTER TABLE user_invitations ADD COLUMN IF NOT EXISTS provision_workspace_name TEXT;
 ALTER TABLE user_invitations ADD COLUMN IF NOT EXISTS provision_org_name TEXT;

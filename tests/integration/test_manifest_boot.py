@@ -1,17 +1,17 @@
 """The full stack boots from the example manifest and serves the contract (DoD #1)."""
 
-import os
-
 import pytest
 from fastapi.testclient import TestClient
 
 from boltrig.api.bootstrap import build_app
 
 
-@pytest.fixture(scope="module")
-def client():
-    os.environ["BOLTRIG_MANIFEST"] = "manifest.example.yaml"
-    os.environ["BOLTRIG_DEV_AUTH"] = "1"  # select the dev resolver (no IdP in tests)
+@pytest.fixture()
+def client(monkeypatch):
+    for key in ("DATABASE_URL", "ENV", "BOLTRIG_ENV", "APP_ENV", "BOLTRIG_PRODUCTION"):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("BOLTRIG_MANIFEST", "manifest.example.yaml")
+    monkeypatch.setenv("BOLTRIG_DEV_AUTH", "1")  # select the dev resolver (no IdP in tests)
     # enter the context so the lifespan builds the kernel on the serving loop
     with TestClient(build_app()) as c:
         yield c
@@ -32,6 +32,10 @@ def test_capabilities_registered_from_manifest(client):
     verbs = {v["id"] for v in r.json()["verbs"]}
     # builtin adapters named in the manifest registered their verbs as data (P1)
     assert "ticket.create" in verbs
+    assert "memory.remember" in verbs
+    assert "memory.recall" in verbs
+    assert "browser.page.info" in verbs
+    assert "browser.tab.open" in verbs
     assert len(verbs) >= 5
 
 
@@ -53,3 +57,15 @@ def test_spawn_endpoint_is_wired(client):
         headers=_admin(),
     )
     assert r.status_code in (200, 400, 429)
+
+
+def test_example_manifest_memory_boots_without_live_projections(client):
+    r = client.post(
+        "/v1/memory/remember",
+        json={"content": "boot memory note"},
+        headers=_admin("memory.remember"),
+    )
+
+    assert r.status_code == 200
+    assert r.json()["status"] == "ok"
+    assert r.json()["projections"] == []

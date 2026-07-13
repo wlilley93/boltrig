@@ -19,23 +19,24 @@ dev principal resolver trusts these). The identity persists in `localStorage`.
 ## Develop
 
 ```bash
-npm install
-npm run dev        # http://localhost:5173, proxies /v1 and /healthz to the kernel
+corepack enable
+pnpm install
+pnpm run dev        # http://localhost:5173, proxies /v1 and /healthz to the kernel
 ```
 
 The dev server proxies `/v1` and `/healthz` to `http://localhost:8000`. Point it
 elsewhere with `BOLTRIG_KERNEL_URL`:
 
 ```bash
-BOLTRIG_KERNEL_URL=http://127.0.0.1:9000 npm run dev
+BOLTRIG_KERNEL_URL=http://127.0.0.1:9000 pnpm run dev
 ```
 
 ## Build and check
 
 ```bash
-npm run typecheck  # tsc --noEmit (strict)
-npm run build      # tsc && vite build -> dist/
-npm run preview    # serve the production build locally
+pnpm run typecheck  # tsc --noEmit (strict)
+pnpm run build      # tsc && vite build -> dist/
+pnpm run preview    # serve the production build locally
 ```
 
 ## Docker

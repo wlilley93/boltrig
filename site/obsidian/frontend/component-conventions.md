@@ -68,7 +68,7 @@ Tailwind classes go on `className` / `innerClassName`, never into spring `from`/
 
 ## Code quality
 
-- Run `yarn lint` before committing.
+- Run `pnpm run lint:strict` before committing.
 - Prefer early returns over nested conditionals.
 - Comments explain *why*, never narrate *what*. No `console.log` in committed code.
 - Conventional commits: `feat:`, `fix:`, `refactor:`, `chore:`.

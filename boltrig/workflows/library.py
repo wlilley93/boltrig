@@ -10,16 +10,16 @@ dict means the core stays offline-safe and engine-agnostic (P4, P9).
 from __future__ import annotations
 
 import uuid
-from typing import Any
+from dataclasses import replace
+from typing import Any, cast
 
 from boltrig.models import InvocationContext, WorkflowDefinition, utcnow
 
 from .interpreter import run_workflow_definition
+from .snapshot import build_workflow_snapshot
 
 
-def _visible_in_workspace(
-    wf: WorkflowDefinition, active_workspace_id: str | None
-) -> bool:
+def _visible_in_workspace(wf: WorkflowDefinition, active_workspace_id: str | None) -> bool:
     """Workspace visibility rule ([2026] VJS-COUNTY 8, D2).
 
     A workflow is visible to the caller when it is ORG-WIDE (``workspace_id`` is
@@ -44,7 +44,9 @@ class WorkflowLibrary:
     through the chokepoint. ``trigger`` stays the enqueue seam (in production the
     enqueued run's body calls ``execute``)."""
 
-    def __init__(self, store: Any, executor: Any | None = None, *, kernel: Any | None = None) -> None:
+    def __init__(
+        self, store: Any, executor: Any | None = None, *, kernel: Any | None = None
+    ) -> None:
         self._store = store
         self._executor = executor
         self._kernel = kernel
@@ -67,11 +69,14 @@ class WorkflowLibrary:
         """
         for wf in await self._store.list_workflows(tenant):
             if wf.id == id and _visible_in_workspace(wf, active_workspace_id):
-                return wf
+                return cast(WorkflowDefinition, wf)
         return None
 
     async def match(
-        self, tenant: str, intent_tags: list[str], *,
+        self,
+        tenant: str,
+        intent_tags: list[str],
+        *,
         active_workspace_id: str | None = None,
     ) -> WorkflowDefinition | None:
         """Best workflow by intent-tag overlap, promotion-aware (US-WFL-01/08).
@@ -104,21 +109,24 @@ class WorkflowLibrary:
             return None
         weights = await self._reuse_weights(tenant)
         candidates = [
-            wf for wf in await self._store.list_workflows(tenant)
-            if wanted & set(wf.intent_tags)
-            and _visible_in_workspace(wf, active_workspace_id)
+            wf
+            for wf in await self._store.list_workflows(tenant)
+            if wanted & set(wf.intent_tags) and _visible_in_workspace(wf, active_workspace_id)
         ]
         if not candidates:
             return None
         # Deterministic order: highest overlap, then highest reuse weight, then the
         # smallest id. The negations make ``min`` prefer larger overlap/weight while
         # ascending id still breaks the final tie.
-        return min(
-            candidates,
-            key=lambda wf: (
-                -len(wanted & set(wf.intent_tags)),
-                -weights.get(wf.id, 0.0),
-                wf.id,
+        return cast(
+            WorkflowDefinition,
+            min(
+                candidates,
+                key=lambda wf: (
+                    -len(wanted & set(wf.intent_tags)),
+                    -weights.get(wf.id, 0.0),
+                    wf.id,
+                ),
             ),
         )
 
@@ -140,8 +148,13 @@ class WorkflowLibrary:
         return {p.workflow_id: reuse_weight(p) for p in promotions}
 
     async def trigger(
-        self, tenant: str, wf_id: str, inputs: dict[str, Any],
-        *, active_workspace_id: str | None = None,
+        self,
+        tenant: str,
+        wf_id: str,
+        inputs: dict[str, Any],
+        *,
+        active_workspace_id: str | None = None,
+        context: InvocationContext | None = None,
     ) -> dict[str, Any]:
         """Start a workflow and return a run descriptor (Hatchet seam).
 
@@ -156,14 +169,14 @@ class WorkflowLibrary:
         if wf is None:
             raise LookupError(f"unknown workflow '{wf_id}' for tenant '{tenant}'")
         durable = bool(self._executor and getattr(self._executor, "durable", False))
-        run_id = (
-            self._executor.new_run_id() if self._executor is not None else uuid.uuid4().hex
-        )
+        run_id = self._executor.new_run_id() if self._executor is not None else uuid.uuid4().hex
+        snapshot = build_workflow_snapshot(wf)
         descriptor = {
             "run_id": run_id,
             "tenant_id": tenant,
             "workflow_id": wf.id,
             "version": wf.version,
+            "workflow_sha256": snapshot["sha256"],
             "source": wf.source.value,
             "engine": "hatchet" if durable else "local",
             "durable": durable,
@@ -171,15 +184,36 @@ class WorkflowLibrary:
             "inputs": dict(inputs or {}),
             "queued_at": utcnow().isoformat(),
         }
-        if self._executor is not None:
-            # enqueue through the backbone so the run boundary is recorded
-            # (durable under Hatchet; in-process under the local fallback).
-            async def _enqueue() -> dict[str, Any]:
+        if self._executor is not None and context is not None:
+            # The route/control path carries the authenticated context envelope
+            # into the registered workflow task. Hatchet therefore executes the
+            # definition durably; the local executor runs the exact same task body
+            # inline. A bare library caller without a context retains the legacy
+            # descriptor-only seam below rather than inventing authority.
+            from boltrig.fleet.hatchet_app import (
+                TASK_WORKFLOW_RUN,
+                context_to_envelope,
+            )
+
+            queued_context = replace(context, run_id=run_id)
+            engine_run_id = await self._executor.enqueue(
+                TASK_WORKFLOW_RUN,
+                {
+                    "tenant": tenant,
+                    "workflow_id": wf.id,
+                    "workflow_snapshot": snapshot,
+                    "inputs": dict(inputs or {}),
+                    "ctx_envelope": context_to_envelope(queued_context),
+                    "run_id": run_id,
+                },
+            )
+            descriptor["engine_run_id"] = engine_run_id
+        elif self._executor is not None:
+
+            async def _describe() -> dict[str, Any]:
                 return descriptor
 
-            await self._executor.run_step(
-                f"workflow:{wf.id}", _enqueue, run_id=run_id
-            )
+            await self._executor.run_step(f"workflow:{wf.id}", _describe, run_id=run_id)
         return descriptor
 
     async def execute(
@@ -198,9 +232,7 @@ class WorkflowLibrary:
         # Scope resolution to the caller's active workspace ([2026] VJS-COUNTY 8, D2):
         # the InvocationContext already carries it (re-authorized every request), so a
         # workflow scoped to a different workspace is unknown here (LookupError).
-        wf = await self.get(
-            tenant, wf_id, active_workspace_id=context.workspace_id
-        )
+        wf = await self.get(tenant, wf_id, active_workspace_id=context.workspace_id)
         if wf is None:
             raise LookupError(f"unknown workflow '{wf_id}' for tenant '{tenant}'")
         return await run_workflow_definition(

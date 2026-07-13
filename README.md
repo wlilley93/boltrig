@@ -8,8 +8,8 @@ permanent agent fleet that spawns ephemeral workers to get work done. Boltrig is
 a clean-room reference implementation of the "Hermes Fleet" SRS (the kernel
 doctrine: one dispatch chokepoint, stable nouns and verbs, everything-as-data).
 
-The kernel core is implemented and tested (74 passing tests + opt-in Postgres and
-live-adapter suites; a machine-checked binding-invariant gate at debt 0).
+The kernel core is implemented and tested with the Python suite, opt-in Postgres
+and live-adapter legs, and a machine-checked binding-invariant gate at debt 0.
 Persistence (Postgres), real OIDC auth, sensitive->local model routing, and
 durable HITL pauses are implemented and tested; the remaining external legs (a
 live Hatchet engine, a live IdP, third-party adapter credentials, an on-box
@@ -77,15 +77,20 @@ See `docs/DEFINITION-OF-DONE-round-two.md`.
 ```bash
 python -m venv .venv
 .venv/bin/pip install -e ".[durable,inference]"
-.venv/bin/pip install pytest pytest-asyncio aiosqlite ruff
+.venv/bin/pip install pytest pytest-asyncio aiosqlite ruff==0.15.20 \
+  mypy==2.1.0 types-jsonschema==4.26.0.20260518
 
-make test         # the 34 kernel + security tests
+make check        # invariants, ruff, scoped mypy, pytest
 make smoke        # offline, in-process demo of the kernel guarantees
-make invariants   # the binding-invariant gate (every claim must have a test)
+make live-check   # opt-in live legs; requires real services/credentials
 ```
 
 `make smoke` exercises the dispatch chokepoint end to end on an in-memory store:
 a granted call, a denied call, a gated pause-then-approve, and a degraded call.
+`make live-check` groups the tests that intentionally skip offline. Export the
+service-specific inputs first, for example `HATCHET_CLIENT_TOKEN`, `DATABASE_URL`,
+`BOLTRIG_TEST_DATABASE_URL`, `BOLTRIG_COGNEE_LIVE=1`, model credentials, and the
+adapter credential env vars documented in `tests/adapters/test_live_smoke.py`.
 
 ### Run the stack (docker)
 
@@ -109,8 +114,8 @@ run in every environment; only `.env` and `manifest.yaml` differ (P7).
    +---------+   HTTP    +-------------v----------------------------v----------+
    |   UI    |---------->|                    KERNEL                           |
    | Router  |  /v1/*    |  one dispatch chokepoint (P2), policy lives here:   |
-   | Kanban  |<----------|  resolve -> validate -> grant -> HITL -> rate-limit |
-   |Approvals|  202/403  |  -> idempotency -> resolve credential -> execute    |
+   | Kanban  |<----------|  resolve -> validate -> grant -> idempotency       |
+   |Approvals|  202/403  |  -> HITL -> rate-limit -> credential -> execute     |
    +---------+  503/200  |  -> validate output -> audit (always)               |
                          +---+----------------------+-----------------------+--+
                              | nouns/verbs/bindings | credential refs       |
@@ -153,7 +158,7 @@ through bindings, and dispatches them through the same chokepoint. No file under
 **Fully implemented and tested** (the load-bearing core):
 
 - The dispatch chokepoint and its fixed order (`boltrig/kernel/dispatch.py`):
-  resolve, schema-validate, grant-check, HITL gate, rate-limit, idempotency,
+  resolve, schema-validate, grant-check, idempotency replay, HITL gate, rate-limit,
   in-kernel credential resolution, execute, output-validate, audit.
 - Grant semantics (deny-dominant, fail-closed, wildcard rules), the tenant
   ceiling intersection, tenant isolation, the HITL approval gate, the
@@ -182,15 +187,15 @@ service or credentials to exercise):
 - **Live IdP.** OIDC verification is implemented and tested against minted tokens;
   pointing it at a real Azure AD / Okta / Google issuer is the remaining leg.
 - **Live MS Graph / Jira / CRM adapters.** The builtin adapters are real HTTP/SQL
-  clients but need credentials and reachable backends (opt-in `make smoke` with
-  `BOLTRIG_LIVE_SMOKE=1`). The `memory-tickets` adapter is fully self-contained.
+  clients but need credentials and reachable backends (opt-in `make live-check`).
+  The `memory-tickets` adapter is fully self-contained.
 - **On-box model (local inference).** The `local-model` compose profile runs a
   local OpenAI-compatible endpoint for sensitive data; it needs a model + (for
   vLLM) a GPU, or swap in Ollama for CPU. (The routing guard that *requires* it
   for sensitive data is done.)
-- **Alembic migrations.** `schema.sql` is the source of truth and applied
-  idempotently; an ordered alembic set (`make migrate`) is the remaining additive
-  step.
+- **Schema management.** `schema.sql` remains the idempotent first-boot schema for
+  fresh stacks; the ordered Alembic set under `migrations/versions/` carries
+  production upgrades through `make migrate`.
 
 ## Layout
 
@@ -198,9 +203,10 @@ service or credentials to exercise):
 boltrig/        kernel, models, store, adapters, fleet, skills, workflows,
                work, identity, config, observability
 ui/            React console (Router, Kanban, Approvals)
+site/          Next.js site + lightweight console overview
 libraries/     skills + workflows + prompts (data, not code)
 deploy/        kernel.Dockerfile, fleet.Dockerfile
 docs/          ARCHITECTURE, invariants, DEFINITION-OF-DONE, decisions/
 scripts/       smoke.py, check_invariants.py
-tests/         34 tests + invariants.yaml (the binding catalogue)
+tests/         pytest suite + invariants.yaml (the binding catalogue)
 ```

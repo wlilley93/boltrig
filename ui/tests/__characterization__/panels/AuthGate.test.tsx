@@ -6,8 +6,9 @@ import { LoginPage } from "@/panels/AuthGate/LoginPage";
 import { AcceptInvitePage } from "@/panels/AuthGate/AcceptInvitePage";
 import { EnrollFlow } from "@/panels/AuthGate/EnrollFlow";
 import { api } from "@/api/client";
+import { ApiError } from "@/api/transport";
 import { navigate } from "@/router";
-import { markEnrollRequired, markUnauthenticated } from "@/auth";
+import { getAuthState, markEnrollRequired, markUnauthenticated, probeSession } from "@/auth";
 
 beforeEach(() => {
   vi.restoreAllMocks();
@@ -54,6 +55,18 @@ describe("AuthGate", () => {
       </AuthGate>,
     );
     expect(await screen.findByRole("heading", { name: "Set up two-factor" })).toBeDefined();
+  });
+});
+
+describe("auth probe", () => {
+  it("fails closed on probe errors", async () => {
+    vi.spyOn(api, "meSettings").mockRejectedValue(
+      new ApiError(500, "GET /v1/me/settings -> 500", { status: "error" }),
+    );
+
+    await probeSession();
+
+    expect(getAuthState().status).toBe("unauthenticated");
   });
 });
 

@@ -1,0 +1,45 @@
+[extend]
+useDefault = true
+
+# These are deliberately fake values exercised by regression tests for the
+# application's own secret/PII detector. Each exception requires the specific
+# rule, path, and fixture value; no directory or rule is globally suppressed.
+[[allowlists]]
+description = "Unknown 2FA challenge fixture"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = ['''^tests/security/test_two_factor\.py$''']
+regexTarget = "line"
+regexes = ['''boltrig_2fa_nope''']
+
+[[allowlists]]
+description = "Memory-ingest OpenSSH rejection fixture"
+condition = "AND"
+targetRules = ["private-key"]
+paths = ['''^tests/security/test_round_five\.py$''']
+regexTarget = "match"
+regexes = ['''(?s)-----BEGIN OPENSSH PRIVATE KEY-----.*b3BlbnNzaC1rZXktdjEAAAAABG5vbmU.*-----END OPENSSH PRIVATE KEY-----''']
+
+[[allowlists]]
+description = "PII scanner PEM rejection fixtures"
+condition = "AND"
+targetRules = ["private-key"]
+paths = ['''^tests/security/test_budget_and_pii\.py$''']
+regexTarget = "match"
+regexes = ['''(?s)-----BEGIN (?:RSA |OPENSSH )?PRIVATE KEY-----.*-----END(?: RSA| OPENSSH)? PRIVATE KEY-----''']
+
+[[allowlists]]
+description = "PII scanner Stripe rejection fixtures"
+condition = "AND"
+targetRules = ["stripe-access-token"]
+paths = ['''^tests/security/test_budget_and_pii\.py$''']
+regexTarget = "line"
+regexes = ['''(?:sk|rk)_live_51H8xAbCdEfGhIjKlMnOpQrSt''']
+
+[[allowlists]]
+description = "Webhook signature verification fixture"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = ['''^tests/security/test_channel_governance\.py$''']
+regexTarget = "line"
+regexes = ['''whsec_gov_123''']

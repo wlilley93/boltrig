@@ -9,6 +9,7 @@ ungranted verb inside a task body fails closed and is audited.
 
 from __future__ import annotations
 
+import copy
 import uuid
 
 import pytest
@@ -39,6 +40,7 @@ from boltrig.models import (
     WorkStatus,
 )
 from boltrig.store import InMemoryStore
+from boltrig.workflows.snapshot import WorkflowSnapshotError, build_workflow_snapshot
 
 T = "acme"
 _OBJ = {"type": "object"}
@@ -60,12 +62,20 @@ class SpyAdapter:
     def describe(self) -> list[VerbSpec]:
         def spec(verb: str, consequence: str = "low") -> VerbSpec:
             return VerbSpec(
-                verb_id=verb, noun_id=verb.split(".")[0], input_schema=_OBJ,
-                output_schema=_OBJ, consequence=consequence, description=verb,
+                verb_id=verb,
+                noun_id=verb.split(".")[0],
+                input_schema=_OBJ,
+                output_schema=_OBJ,
+                consequence=consequence,
+                description=verb,
             )
 
-        return [spec("job.one"), spec("job.two"), spec("job.three"),
-                spec("danger.go", consequence="high")]
+        return [
+            spec("job.one"),
+            spec("job.two"),
+            spec("job.three"),
+            spec("danger.go", consequence="high"),
+        ]
 
     async def execute(self, verb_id, params, credential, context) -> Result:
         self.calls[verb_id] = self.calls.get(verb_id, 0) + 1
@@ -84,18 +94,30 @@ async def _build() -> tuple[Kernel, SpyAdapter]:
     return kernel, spy
 
 
-def _envelope(run_id: str, grants: list[str] | None = None) -> dict:
+def _envelope(
+    run_id: str,
+    grants: list[str] | None = None,
+    *,
+    workspace_id: str | None = None,
+) -> dict:
     return context_to_envelope(
         InvocationContext(
-            tenant_id=T, run_id=run_id, grants=GrantSet.of(grants or ["*"]),
-            actor="workflow-runner", actor_tier="tier1",
+            tenant_id=T,
+            run_id=run_id,
+            grants=GrantSet.of(grants or ["*"]),
+            actor="workflow-runner",
+            actor_tier="tier1",
+            workspace_id=workspace_id,
         )
     )
 
 
 def _workflow(wf_id: str, steps: list[dict]) -> WorkflowDefinition:
     return WorkflowDefinition(
-        id=wf_id, tenant_id=T, version="1", source=WorkflowSource.PRECREATED,
+        id=wf_id,
+        tenant_id=T,
+        version="1",
+        source=WorkflowSource.PRECREATED,
         definition={"steps": steps},
     )
 
@@ -105,16 +127,26 @@ def _workflow(wf_id: str, steps: list[dict]) -> WorkflowDefinition:
 async def test_interrupted_run_resumes_from_last_checkpoint():
     kernel, spy = await _build()
     spy.crash_once.add("job.three")  # the interruption: step 3 of 3 dies once
-    await kernel.store.upsert_workflow(_workflow("wf-crash", [
-        {"id": "s1", "action": "job.one", "params": {}},
-        {"id": "s2", "action": "job.two", "params": {}, "parents": ["s1"]},
-        {"id": "s3", "action": "job.three", "params": {}, "parents": ["s2"]},
-    ]))
+    workflow = _workflow(
+        "wf-crash",
+        [
+            {"id": "s1", "action": "job.one", "params": {}},
+            {"id": "s2", "action": "job.two", "params": {}, "parents": ["s1"]},
+            {"id": "s3", "action": "job.three", "params": {}, "parents": ["s2"]},
+        ],
+    )
+    await kernel.store.upsert_workflow(workflow)
     executor = LocalDurableExecutor()
     register_boltrig_tasks(executor, kernel)
     run_id = uuid.uuid4().hex
-    payload = {"tenant": T, "workflow_id": "wf-crash", "inputs": {},
-               "ctx_envelope": _envelope(run_id), "run_id": run_id}
+    payload = {
+        "tenant": T,
+        "workflow_id": "wf-crash",
+        "inputs": {},
+        "ctx_envelope": _envelope(run_id),
+        "run_id": run_id,
+        "workflow_snapshot": build_workflow_snapshot(workflow),
+    }
 
     # run 1 through the queue seam: the registered task body executes inline;
     # steps 1-2 complete and checkpoint, step 3 crashes.
@@ -135,19 +167,76 @@ async def test_interrupted_run_resumes_from_last_checkpoint():
     assert by_id["s3"]["status"] == "ok" and "replayed" not in by_id["s3"]
 
 
+@pytest.mark.invariant("SEC-138")
+async def test_queued_workflow_executes_the_approved_snapshot_not_latest_definition():
+    kernel, spy = await _build()
+    original = _workflow("wf-snapshot", [{"id": "approved", "action": "job.one", "params": {}}])
+    await kernel.store.upsert_workflow(original)
+    payload = {
+        "tenant": T,
+        "workflow_id": original.id,
+        "workflow_snapshot": build_workflow_snapshot(original),
+        "inputs": {},
+        "ctx_envelope": _envelope("run-snapshot"),
+        "run_id": "run-snapshot",
+    }
+    await kernel.store.upsert_workflow(
+        _workflow("wf-snapshot", [{"id": "changed", "action": "job.two", "params": {}}])
+    )
+
+    record = await run_workflow_body(kernel, payload)
+
+    assert record["status"] == "completed"
+    assert spy.calls == {"job.one": 1}
+
+
+@pytest.mark.invariant("SEC-138")
+async def test_workflow_snapshot_rejects_tampering_and_cross_workspace_replay():
+    kernel, _ = await _build()
+    workflow = _workflow("wf-scoped", [{"id": "approved", "action": "job.one", "params": {}}])
+    workflow.workspace_id = "workspace-a"
+    snapshot = build_workflow_snapshot(workflow)
+    payload = {
+        "tenant": T,
+        "workflow_id": workflow.id,
+        "workflow_snapshot": snapshot,
+        "inputs": {},
+        "ctx_envelope": _envelope("run-scoped", workspace_id="workspace-b"),
+        "run_id": "run-scoped",
+    }
+    with pytest.raises(WorkflowSnapshotError, match="outside the active workspace"):
+        await run_workflow_body(kernel, payload)
+
+    tampered = copy.deepcopy(payload)
+    tampered["ctx_envelope"] = _envelope("run-scoped", workspace_id="workspace-a")
+    tampered["workflow_snapshot"]["workflow"]["definition"] = {"steps": []}
+    with pytest.raises(WorkflowSnapshotError, match="digest mismatch"):
+        await run_workflow_body(kernel, tampered)
+
+
 # --- NFR-REL-03: a HITL answer resumes the paused run exactly once --------------
 @pytest.mark.invariant("NFR-REL-03")
 async def test_hitl_answer_resumes_paused_run_exactly_once():
     kernel, spy = await _build()
-    await kernel.store.upsert_workflow(_workflow("wf-gated", [
-        {"id": "g1", "action": "danger.go", "params": {}},
-    ]))
+    workflow = _workflow(
+        "wf-gated",
+        [
+            {"id": "g1", "action": "danger.go", "params": {}},
+        ],
+    )
+    await kernel.store.upsert_workflow(workflow)
     executor = LocalDurableExecutor()
     register_boltrig_tasks(executor, kernel)
     wire_hitl_resume(kernel, executor=executor)
     run_id = "run-gated"
-    payload = {"tenant": T, "workflow_id": "wf-gated", "inputs": {},
-               "ctx_envelope": _envelope(run_id), "run_id": run_id}
+    payload = {
+        "tenant": T,
+        "workflow_id": "wf-gated",
+        "inputs": {},
+        "ctx_envelope": _envelope(run_id),
+        "run_id": run_id,
+        "workflow_snapshot": build_workflow_snapshot(workflow),
+    }
 
     # the gated step pauses; the gate held the verb (SEC-14), nothing executed
     first = await run_workflow_body(kernel, dict(payload))
@@ -183,13 +272,22 @@ async def test_hitl_answer_requeues_the_parked_work_item():
     pump = build_org(kernel, build_spawner(kernel))
     wire_hitl_resume(kernel, pump=pump)
     item = WorkItem(
-        id=uuid.uuid4().hex, tenant_id=T, source="internal", intent="parked work",
-        confidence=0.9, convergent=False, status=WorkStatus.AWAITING_HUMAN, attempts=3,
+        id=uuid.uuid4().hex,
+        tenant_id=T,
+        source="internal",
+        intent="parked work",
+        confidence=0.9,
+        convergent=False,
+        status=WorkStatus.AWAITING_HUMAN,
+        attempts=3,
     )
     await kernel.store.create_work_item(item)
     req = await kernel.hitl.create(
-        tenant_id=T, run_id=item.id, type=HITLType.ESCALATION,
-        question="needs a human", work_item_id=item.id,
+        tenant_id=T,
+        run_id=item.id,
+        type=HITLType.ESCALATION,
+        question="needs a human",
+        work_item_id=item.id,
     )
     await kernel.hitl.answer(T, req.id, "approve", "will@acme")
     requeued = await kernel.store.get_work_item(T, item.id)
@@ -206,11 +304,19 @@ async def test_resume_notifier_failure_never_breaks_the_answer():
 
     kernel.hitl.set_resume_notifier(_boom)
     req = await kernel.hitl.create(
-        tenant_id=T, run_id="r", type=HITLType.APPROVAL, question="q", verb="danger.go",
+        tenant_id=T,
+        run_id="r",
+        type=HITLType.APPROVAL,
+        question="q",
+        verb="danger.go",
+        requested_by="workflow-runner",
+        request_fingerprint="danger-fingerprint",
     )
     resp = await kernel.hitl.answer(T, req.id, "approve", "will@acme")
     assert resp.decision == "approve"
-    assert await kernel.hitl.consume_if_approved(T, req.id, "danger.go") is True
+    assert (
+        await kernel.hitl.consume_if_approved(T, req.id, "danger.go", "danger-fingerprint") is True
+    )
 
 
 # --- FR-EXE-06: governance is not bypassable from inside a durable task ---------
@@ -222,10 +328,17 @@ async def test_task_body_cannot_bypass_governance():
     run_id = "run-denied"
     # the envelope grants job.one only; the task asks for job.two
     with pytest.raises(GrantMissing):
-        await executor.enqueue(TASK_INVOKE, {
-            "tenant": T, "noun": "job", "verb": "job.two", "params": {},
-            "ctx_envelope": _envelope(run_id, grants=["job.one"]), "run_id": run_id,
-        })
+        await executor.enqueue(
+            TASK_INVOKE,
+            {
+                "tenant": T,
+                "noun": "job",
+                "verb": "job.two",
+                "params": {},
+                "ctx_envelope": _envelope(run_id, grants=["job.one"]),
+                "run_id": run_id,
+            },
+        )
     assert spy.calls.get("job.two") is None  # fail-closed: never executed
     rows = await kernel.store.audit_query(T)
     denied = [r for r in rows if r.verb == "job.two" and r.status == "grant_missing"]
@@ -240,8 +353,15 @@ async def test_task_payload_tenant_must_match_the_envelope():
     executor = LocalDurableExecutor()
     register_boltrig_tasks(executor, kernel)
     with pytest.raises(TenantIsolation):
-        await executor.enqueue(TASK_INVOKE, {
-            "tenant": "other-tenant", "noun": "job", "verb": "job.one", "params": {},
-            "ctx_envelope": _envelope("run-x"), "run_id": "run-x",
-        })
+        await executor.enqueue(
+            TASK_INVOKE,
+            {
+                "tenant": "other-tenant",
+                "noun": "job",
+                "verb": "job.one",
+                "params": {},
+                "ctx_envelope": _envelope("run-x"),
+                "run_id": "run-x",
+            },
+        )
     assert spy.calls == {}

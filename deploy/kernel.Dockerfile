@@ -10,7 +10,7 @@
 #                  installed into the trust store automatically (else skipped).
 
 # IAC-002: pinned to a stable tag + digest.
-FROM python:3.12.11-slim-bookworm@sha256:519591d6871b7bc437060736b9f7456b8731f1499a57e22e6c285135ae657bf7 AS base
+FROM python:3.12.13-slim-bookworm@sha256:8a7e7cc04fd3e2bd787f7f24e22d5d119aa590d429b50c95dfe12b3abe52f48b AS base
 
 # Build-time egress proxy (harmless when empty). pip honours these env vars.
 ARG HTTP_PROXY=""
@@ -45,14 +45,39 @@ ENV REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt \
 COPY pyproject.toml requirements-lock.txt /app/
 RUN pip install --require-hashes -r /app/requirements-lock.txt
 
-# Install the local package without re-resolving its dependencies.
+# Run directly from the copied, read-only source tree. Installing the project
+# itself would invoke PEP 517 build isolation and download an unlocked hatchling
+# toolchain; /app is the workdir and therefore already on Python's import path.
 COPY boltrig/ /app/boltrig/
-RUN pip install --no-deps .
+
+# Boltrig v2 cockpit runtime: ship Herdr with the stack, not from a developer
+# workstation. Pinned release asset + sha256; override all three args together
+# when intentionally upgrading.
+ARG TARGETARCH
+ARG HERDR_VERSION=0.7.3
+ARG HERDR_LINUX_AMD64_SHA256=043ef43ecbabda28465dcff1eec3184518150d567b8b8f20cda9c6c88770641d
+ARG HERDR_LINUX_ARM64_SHA256=ea490094f2c7c39099870857d00c64c628ef7b5eba1967df4258033455ee2cb1
+RUN set -eux; \
+    case "${TARGETARCH:-amd64}" in \
+        amd64) asset="herdr-linux-x86_64"; sha="${HERDR_LINUX_AMD64_SHA256}" ;; \
+        arm64) asset="herdr-linux-aarch64"; sha="${HERDR_LINUX_ARM64_SHA256}" ;; \
+        *) echo "unsupported Herdr TARGETARCH=${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    url="https://github.com/ogulcancelik/herdr/releases/download/v${HERDR_VERSION}/${asset}"; \
+    python -c 'import hashlib, sys, urllib.request; url, expected, target = sys.argv[1:4]; data = urllib.request.urlopen(url, timeout=120).read(); actual = hashlib.sha256(data).hexdigest(); sys.exit(f"sha256 mismatch for {url}: {actual} != {expected}") if actual != expected else open(target, "wb").write(data)' "$url" "$sha" /usr/local/bin/herdr; \
+    chmod 0755 /usr/local/bin/herdr; \
+    herdr --version
 
 # Run as an unprivileged user (INF-01 defence in depth). The app reads /app + the
 # read-only mounts and writes nothing to disk (logs go to stdout); the compose
 # runs the container read-only with a tmpfs for /tmp.
-RUN useradd --create-home --uid 10001 boltrig
+RUN useradd --create-home --uid 10001 boltrig && \
+    install -d -o boltrig -g boltrig \
+        /var/lib/boltrig/herdr \
+        /var/lib/boltrig/herdr/home \
+        /var/lib/boltrig/herdr/config \
+        /var/lib/boltrig/herdr/data \
+        /var/lib/boltrig/herdr/state
 USER boltrig
 
 EXPOSE 8000

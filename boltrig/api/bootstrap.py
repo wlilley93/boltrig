@@ -20,6 +20,7 @@ from boltrig.store import InMemoryStore, Store
 log = logging.getLogger("boltrig.bootstrap")
 
 _DEFAULT_TENANT = "default"
+_TRUE_VALUES = {"1", "true", "yes", "on", "y", "t"}
 _MANIFEST_CANDIDATES = (
     "/app/manifest.yaml",
     "manifest.yaml",
@@ -42,6 +43,25 @@ def _find(paths) -> str | None:
     return None
 
 
+def _as_bool(value, default: bool = False) -> bool:
+    if value is None or value == "":
+        return default
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in _TRUE_VALUES
+
+
+def _wire_memory_projection_executor(kernel: Kernel, tenant_id: str, executor) -> None:
+    from boltrig.fleet.hatchet_memory import TASK_MEMORY_PROJECTION
+
+    adapter = kernel.loader.peek(tenant_id, "memory")
+    fanout = getattr(adapter, "_projections", None)
+    register = getattr(fanout, "register_executor", None)
+    if callable(register):
+        register(executor, task_name=TASK_MEMORY_PROJECTION)
+        log.info("memory projection fanout registered with workflow executor")
+
+
 async def build_store() -> Store:
     """The store factory (the §6 seam). Returns a durable PostgresStore when
     DATABASE_URL is set, else the in-memory store (so offline tests still run).
@@ -50,14 +70,15 @@ async def build_store() -> Store:
     if settings.database_url:
         from boltrig.store import PostgresStore
 
-        # RLS-live (opt-in): BOLTRIG_RLS=1 activates the DB-enforced tenant fence.
-        # It requires the schema + rls.sql already provisioned by an owner and the
-        # app to connect as the non-bypassing boltrig_app role, so apply_schema is
-        # off in that mode (an owner connection runs the DDL).
+        # Runtime boot never applies the mutable convenience bootstrap. Alembic is
+        # the authoritative upgrade path; schema.sql is reserved for an explicit
+        # first-boot bootstrap (for example Postgres' initdb mount). This is true
+        # with or without RLS, otherwise a non-RLS production process could bypass
+        # migration ordering merely by restarting.
         rls = os.environ.get("BOLTRIG_RLS", "").lower() in ("1", "true", "yes")
         log.info("DATABASE_URL set; using durable PostgresStore (rls=%s)", rls)
         return await PostgresStore.connect(
-            settings.database_url, apply_schema=not rls, rls=rls
+            settings.database_url, apply_schema=False, rls=rls
         )
     return InMemoryStore()
 
@@ -87,9 +108,10 @@ async def _register_memory(kernel: Kernel, tenant_id: str, memory_cfg) -> None:
     The engine is adopted, not built: ``local`` is the dev/offline reference,
     ``cognee`` is the production seam. memory.* verbs run the chokepoint via the
     MemoryAdapter, which is the kernel-side isolation boundary (SEC-40)."""
-    if not memory_cfg or not memory_cfg.get("enabled"):
+    if not memory_cfg or not _as_bool(memory_cfg.get("enabled")):
         return
     from boltrig.memory.adapter import build_memory_adapter
+    from boltrig.memory.projection_adapters import build_memory_projection_fanout
 
     engine_kind = memory_cfg.get("engine", "local")
     if engine_kind == "cognee":
@@ -116,21 +138,33 @@ async def _register_memory(kernel: Kernel, tenant_id: str, memory_cfg) -> None:
         from boltrig.memory import LocalMemoryEngine
 
         engine = LocalMemoryEngine()
-    adapter = build_memory_adapter(engine, kernel.store, audit=kernel.audit, config=memory_cfg)
+    projections = build_memory_projection_fanout(kernel.store, memory_cfg)
+    adapter = build_memory_adapter(
+        engine, kernel.store, audit=kernel.audit, config=memory_cfg, projections=projections
+    )
     await kernel.register_adapter(tenant_id, adapter)
-    log.info("memory subsystem enabled (engine=%s)", memory_cfg.get("engine", "local"))
+    log.info(
+        "memory subsystem enabled (engine=%s, projections=%s)",
+        memory_cfg.get("engine", "local"),
+        bool(projections),
+    )
 
 
 async def _register_control_plane(kernel: Kernel, tenant_id: str) -> None:
     """Register the control-plane adapter so config amendment flows through the
     chokepoint (Round Seven, 5.1): control.* verbs are grant-checked, audited and
-    HITL-gateable like any other action (SEC-51). The loader is injected so
-    control.mcp_server.register can park a consumer inert pending SEC-22 review;
-    the AdminConfig is late-bound by platform_factory (SEC-75)."""
+    HITL-gateable like any other action (SEC-51). Loader + registry are injected
+    for governed adapter generation/activation; AdminConfig and WorkflowLibrary
+    are late-bound by platform_factory once their runtime collaborators exist."""
     from boltrig.config.control_plane import build_control_plane_adapter
 
     await kernel.register_adapter(
-        tenant_id, build_control_plane_adapter(kernel.store, loader=kernel.loader)
+        tenant_id,
+        build_control_plane_adapter(
+            kernel.store,
+            loader=kernel.loader,
+            registry=kernel.registry,
+        ),
     )
     log.info("control-plane verbs registered (governed config amendment)")
 
@@ -476,9 +510,12 @@ def build_app():
 
     def platform_factory(kernel):
         # Round Three studios/admin/eval ride existing services (C2)
+        from boltrig.api.readiness import ReadinessService
         from boltrig.config.admin import AdminConfig
         from boltrig.fleet import register_workers
         from boltrig.fleet.eval import EvalRunner
+        from boltrig.fleet.model_gateway_status import ModelGatewayStatusProvider
+        from boltrig.fleet.stack_tool_status import StackToolStatusProvider
         from boltrig.workflows import WorkflowLibrary, WorkflowPromoter
 
         manifest_path = _find_manifest()
@@ -506,28 +543,37 @@ def build_app():
             from boltrig.fleet.hatchet_app import register_boltrig_tasks
 
             register_boltrig_tasks(executor, kernel)
+            _wire_memory_projection_executor(kernel, tenant, executor)
         except Exception:  # task registration must never break boot (P9)
             log.warning("boltrig task registration failed", exc_info=True)
         wire_hitl_resume(kernel, executor=executor)
         admin = AdminConfig(kernel.store, tenant_id=tenant, path=manifest_path)
-        # Share the ONE AdminConfig with the governed control.config.upsert verb
-        # so the PUT route and the verb mutate one config doc and record revisions
-        # through one path (SEC-75).
+        workflows = WorkflowLibrary(kernel.store, executor=executor, kernel=kernel)
+        # Share the ONE services with their governed control verbs so route and
+        # agent calls cannot drift into separate mutation paths (SEC-75).
         control = kernel.loader.peek(tenant, "control")
         if control is not None and hasattr(control, "set_admin"):
             control.set_admin(admin)
+        if control is not None and hasattr(control, "set_workflows"):
+            control.set_workflows(workflows)
         eval_runner = EvalRunner(kernel, spawner)
+        status = StackToolStatusProvider(ModelGatewayStatusProvider())
         return {
             "admin": admin,
             "eval": eval_runner,
             "spawner": spawner,
-            "workflows": WorkflowLibrary(
-                kernel.store, executor=executor, kernel=kernel
-            ),
+            "workflows": workflows,
             # Eval-gated promotion ([2026] VJS-COUNTY 5): shares the ONE EvalRunner
             # so a candidate is proven through the same chokepoint under the
             # initiator ceiling (SEC-29) before it is preferred for reuse.
             "promoter": WorkflowPromoter(kernel.store, eval_runner),
+            "status": status,
+            "readiness": ReadinessService(
+                kernel,
+                tenant_id=tenant,
+                executor=executor,
+                status_provider=status,
+            ),
         }
 
     return create_app(

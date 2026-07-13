@@ -202,7 +202,7 @@ hand off rendering. Each frame it runs **two** `EffectComposer`s:
   rule ([[animation-system]]) governs DOM motion only — see ADR-0013.
 - **Per-frame mutation goes through refs** (material refs, `useRef`), never by
   mutating a hook's memoised return — the `react-hooks` immutability lint rule
-  (the `yarn lint` gate) forbids the latter.
+  (the `pnpm run lint:strict` gate) forbids the latter.
 - **Tuning** the look: edit `BRAIN_CONFIG` (colours, counts, speeds, glow). The
   current palette is **deep blue** (navy/azure/sky) — particles + the warped
   background gradient (`cornerBlue`/`cornerOrange`). These are scene *content*,

@@ -395,13 +395,13 @@ The dispatcher also publishes paired `tool_call`/`tool_result` (and `hitl`) even
 
 **Plain language.** An optional switchboard between workers and model providers that can cache and meter calls. Boltrig's part is the plug: it pins each conversation to one model for its whole life (so caching works and answers stay consistent) and re-points the endpoint's base URL at the gateway, but only for standard data; sensitive traffic is never re-routed (residency preserved). With no gateway URL set, the seam does nothing at all.
 
-**Key files.** `boltrig/fleet/model_gateway.py` (`ModelGateway`, `apply_gateway`, env `BOLTRIG_MODEL_GATEWAY_URL`); the `bifrost` compose service (profile-gated, internal port 8080, default loopback admin port 8081).
+**Key files.** `boltrig/fleet/model_gateway.py` (`ModelGateway`, `apply_gateway`, env `BOLTRIG_MODEL_GATEWAY_URL`); `boltrig/fleet/model_gateway_status.py` (safe platform-status snapshot); the `bifrost` compose service (profile-gated, internal port 8080, default loopback admin port 8081).
 
-**Public surface.** None of its own; Bifrost is an external service to point at.
+**Public surface.** `GET /v1/platform/status` includes a redacted `bifrost` / `model-gateway` snapshot: configured or inert, cache TTL, profile count, and live-health posture. Optional live polling is internal-host-only and returns only coarse health/cache/provider counts. It never returns gateway URLs or credentials.
 
-**Governed by.** SEC-47 (binds per conversation, never re-routes sensitive, inert when unset), FR-GW-01 (wired into the stack so activation is one env line plus keys).
+**Governed by.** SEC-47 (binds per conversation, never re-routes sensitive, inert when unset), FR-GW-01 (wired into the stack so activation is one env line plus keys), FR-GW-03 (safe operator status), FR-GW-04 (bounded internal live health).
 
-**Maturity.** Wired-but-thin: fully inert by default, tested binding logic, the gateway itself is not in the image.
+**Maturity.** Wired-but-thin: fully inert by default, tested binding logic, safe status reporting exists, and optional live health polling is bounded. Rich cache/provider metrics still depend on the external gateway.
 
 ### 2.11 Eval harness
 

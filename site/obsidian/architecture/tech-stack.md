@@ -81,19 +81,19 @@ former `react-cookie-consent` package was removed. See [[components/common]].
 
 | Package | Role |
 |---------|------|
-| `eslint` `^9` + `eslint-config-next` | Linting — run `yarn lint` before commits |
+| `eslint` `^9` + `eslint-config-next` | Linting — run `pnpm run lint:strict` before commits |
 | `@types/*` | Type definitions for node/react |
 
 ## Scripts
 
 ```bash
-yarn dev      # next dev — local development
-yarn build    # next build — production build
-yarn start    # next start — serve production build
-yarn lint     # eslint
+pnpm run dev      # next dev — local development
+pnpm run build    # next build — production build
+pnpm run start    # next start — serve production build
+pnpm run lint:strict     # eslint
 ```
 
-Package manager: **Yarn** (`yarn.lock` is committed).
+Package manager: **pnpm 11.5.0** (`pnpm-lock.yaml` is committed).
 
 ## Not yet in the stack
 

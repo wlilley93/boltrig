@@ -56,6 +56,7 @@ from .platform import (
     PersonalAgent,
 )
 from .errors import (
+    AdapterFailure,
     BindingNotFound,
     BudgetExceeded,
     ContextRequirementsUnmet,
@@ -63,6 +64,8 @@ from .errors import (
     DegradedMode,
     DepthExceeded,
     GrantMissing,
+    HITLStateConflict,
+    IdempotencyConflict as IdempotencyConflict,
     BoltrigError,
     NetworkPolicyViolation,
     PendingHuman,
@@ -82,7 +85,7 @@ from .access import (
 from .grants import EMPTY_GRANTS, GrantSet, TenantPermissions
 from .hitl import HITLRequest, HITLResponse, HITLStatus, HITLType, Urgency
 from .identity import RoleMapping, User
-from .memory import MemoryErasure, MemoryFact, MemoryIngestion
+from .memory import MemoryErasure, MemoryFact, MemoryIngestion, MemoryProjectionStatus
 from .libraries import (
     AdapterHealth,
     AdapterRecord,
@@ -95,7 +98,15 @@ from .libraries import (
     WorkflowPromotion,
     WorkflowSource,
 )
-from .registry import Consequence, Noun, RateLimit, TargetType, Verb, VerbBinding
+from .registry import (
+    Consequence,
+    IdempotencyMode as IdempotencyMode,
+    Noun,
+    RateLimit,
+    TargetType,
+    Verb,
+    VerbBinding,
+)
 from .tenancy import (
     AI_CONFIG_LEVELS,
     WORKSPACE_ROLES,
@@ -148,12 +159,15 @@ __all__ = [
     "MemoryFact",
     "MemoryIngestion",
     "MemoryErasure",
+    "MemoryProjectionStatus",
     "NotificationPref",
     "PersonalAgent",
     "BoltrigError",
+    "AdapterFailure",
     "SchemaValidationError",
     "BindingNotFound",
     "GrantMissing",
+    "HITLStateConflict",
     "TenantIsolation",
     "RateLimited",
     "BudgetExceeded",

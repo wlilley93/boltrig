@@ -7,7 +7,7 @@ tags:
   - overrides
   - boltrig
 created: "2026-07-01"
-updated: "2026-07-01"
+updated: "2026-07-10"
 parent: refactoring
 ---
 # Boltrig refactoring overrides
@@ -21,7 +21,8 @@ overridden here.
 
 - **Name:** Boltrig
 - **Repo root:** `/home/jellytot/Projects/boltrig`
-- **Stack:** Python 3.14 / FastAPI / asyncpg (Postgres) / in-memory store / Cognee
+- **Stack:** Python 3.12 production/CI target (3.14 early-warning) / FastAPI /
+  asyncpg (Postgres) / in-memory store / pluggable memory projections
 - **Refactor docs root:** `docs/refactoring/`
 - **Architecture specs glob:** `docs/ARCHITECTURE*.md`, `docs/SYSTEM-OVERVIEW.md`, `docs/invariants.md`
 - **Engine doctrine (authoritative):** `AGENTS.md` (one chokepoint, policy-is-data, kernel imports nothing from fleet/sidecars, invariant gate)
@@ -32,16 +33,23 @@ overridden here.
 - **Test (per-module fast loop):** `.venv/bin/python -m pytest <path> -q`
 - **Invariant gate:** `.venv/bin/python scripts/check_invariants.py`
 - **Lint:** `.venv/bin/python -m ruff check .`
-- **Type check:** none (no mypy configured; ruff is the static check)
+- **Structural gate:** `.venv/bin/python scripts/check_structure.py` (also
+  `make structure`, and part of `make python-quality` / `make quality`)
+- **Type check:** `.venv/bin/python -m mypy` (strict, currently 49 source files;
+  widen module-by-module under the 10/10 plan)
 - **Schema validate:** `psql` apply against `boltrig/store/schema.sql` + `rls.sql` (service-gated; offline suite uses the in-memory store)
-- **Build:** no build step (interpreted); `pip install -e .` for the package
-- **Install:** `.venv/bin/pip install -e ".[dev]"`
+- **Build/release gate:** `make quality`; release images are built from the five
+  Dockerfiles and published only by `.github/workflows/release.yml`
+- **Install:** `.venv/bin/python -m pip install --require-hashes -r requirements-dev-lock.txt`
 
 ## Schema migration
 
-- **Local migration:** apply `boltrig/store/schema.sql` + `rls.sql` to a Postgres (service-gated)
-- **Prod migration:** out of scope for the arc (seam: ordered alembic set is scaffolded)
-- **Rollback path:** schema is additive (`CREATE TABLE IF NOT EXISTS`); rollback = revert + re-apply
+- **Local migration:** `make migrate` (Alembic); `schema.sql` is fresh-bootstrap
+  convenience only and `make migration-parity` checks catalogue parity
+- **Prod migration:** the ordered Alembic chain is authoritative and runtime boot
+  never replays the mutable bootstrap
+- **Rollback path:** revision `0022_schema_parity` is irreversible; restore the
+  verified pre-migration database snapshot and prior images together
 
 ## Preflight tools
 
@@ -54,12 +62,18 @@ overridden here.
 
 ## Structural floor (STRUCTURAL_SWEEP)
 
-Defaults apply except: Boltrig's `store/postgres.py` and `store/memory.py` are
-deliberately wide (one method per SQL row-op / in-memory op, grouped by domain).
-Splitting them across N tiny files trades readability for line-count and breaks the
-"one store Protocol, two co-located impls" symmetry. They are the arc's Tier-3 god
-files: decompose by DOMAIN SECTION (channels, memory, identity...) into a package
-of partials, NOT by chopping at 400 lines.
+Defaults apply. Boltrig's `store/postgres.py` and `store/memory.py` remain Tier-3
+debt, not permanent exemptions: decompose them in lockstep by DOMAIN SECTION
+(channels, memory, identity, and so on) into symmetric partials rather than
+chopping at arbitrary line boundaries. Any temporary over-floor exception must
+be explicit in `docs/refactoring/structural-exemptions.json` with its current
+file-line, largest-function, and individual over-limit-function baselines plus a
+reason, owner, and ISO expiry. The stdlib-only gate scans `boltrig/**/*.py`,
+rejects files over 400 physical lines or decorator-inclusive functions/methods
+over an 80-line source span, and fails on new, grown, stale, malformed,
+missing-file, or expired exemptions. Every recorded metric must exactly match
+the current source, so an improvement lowers its ratchet in the same change;
+raising one requires an explicit governance review.
 
 ## Drift detection
 
@@ -70,8 +84,9 @@ of partials, NOT by chopping at 400 lines.
 
 ## Deploy
 
-- **Deploy command:** out of scope (seam: Caddy + compose on the host)
-- **Smoke check:** `.venv/bin/python -m pytest -q` green + invariant gate PASS = the offline done-bar
+- **Deploy command:** `make secure-up` (or the equivalent externally terminated
+  TLS deployment) after production doctor, migration, and backup gates
+- **Smoke check:** `make quality`; opt-in credentials/services add `make live-check`
 
 ## Learnings
 

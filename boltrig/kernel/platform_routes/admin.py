@@ -5,7 +5,8 @@ from __future__ import annotations
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from boltrig.models import BoltrigError
-from ._shared import audit_authoring, can_author_route, platform_state, require_author
+from boltrig.kernel.control_routes import dispatch_control_route
+from ._shared import can_author_route, platform_state, require_author
 
 
 def register(app, P, K) -> None:
@@ -25,9 +26,16 @@ def register(app, P, K) -> None:
             return JSONResponse({"error": "admin_unavailable"}, status_code=503)
         try:
             require_author(p)
-            rev = await admin.update_section(section, body.get("value"), p.subject)
-            await audit_authoring(k, p, "config.update", {"section": section, "revision": rev.id})
-            return JSONResponse({"status": "ok", "section": section, "revision": rev.id})
+            output, pending = await dispatch_control_route(
+                k,
+                p,
+                "control.config.upsert",
+                {"section": section, **body},
+                request=request,
+            )
+            if pending is not None:
+                return pending
+            return JSONResponse({"status": "ok", **(output or {})})
         except (BoltrigError, ValueError) as e:
             code = getattr(e, "status_code", 400)
             return JSONResponse({"status": "error", "reason": str(e)}, status_code=code)
@@ -49,9 +57,16 @@ def register(app, P, K) -> None:
             return JSONResponse({"error": "admin_unavailable"}, status_code=503)
         try:
             require_author(p)
-            value = await admin.rollback(section, int(body["revision_id"]), p.subject)
-            await audit_authoring(k, p, "config.rollback", {"section": section, "to": body["revision_id"]})
-            return JSONResponse({"status": "ok", "section": section, "value": value})
+            output, pending = await dispatch_control_route(
+                k,
+                p,
+                "control.config.rollback",
+                {"section": section, **body},
+                request=request,
+            )
+            if pending is not None:
+                return pending
+            return JSONResponse({"status": "ok", **(output or {})})
         except (BoltrigError, ValueError) as e:
             code = getattr(e, "status_code", 400)
             return JSONResponse({"status": "error", "reason": str(e)}, status_code=code)

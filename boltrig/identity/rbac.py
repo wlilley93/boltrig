@@ -46,12 +46,10 @@ def _role_rank(role: str) -> int:
 
 def _scope_is_all(scope: dict[str, Any] | None) -> bool:
     """Whether a scope grants org-wide visibility (``{all: true}``)."""
-    return bool(scope) and scope.get("all") is True
+    return scope is not None and scope.get("all") is True
 
 
-def resolve_role(
-    groups: list[str], mappings: list[RoleMapping]
-) -> tuple[str, dict[str, Any]]:
+def resolve_role(groups: list[str], mappings: list[RoleMapping]) -> tuple[str, dict[str, Any]]:
     """Map a caller's IdP groups to (platform_role, merged_scope) (US-IAM-02).
 
     The role is the highest-privilege role among the matched mappings. The scope
@@ -173,8 +171,20 @@ WORKSPACE_ROLE_CEILINGS: dict[str, GrantSet] = {
 # writes, so a viewer cannot keep it: it collapses (fail-closed, never widen).
 READ_ACTIONS: frozenset[str] = frozenset(
     {
-        "read", "list", "get", "search", "describe", "view", "show",
-        "recall", "fetch", "peek", "export", "download", "stream", "query",
+        "read",
+        "list",
+        "get",
+        "search",
+        "describe",
+        "view",
+        "show",
+        "recall",
+        "fetch",
+        "peek",
+        "export",
+        "download",
+        "stream",
+        "query",
     }
 )
 

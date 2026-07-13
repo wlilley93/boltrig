@@ -108,9 +108,21 @@ def test_adapter_studio_review_gate():
     disco = c.get("/v1/capabilities", headers=_hdr("org-admin", grants="*")).json()
     assert not any(v["id"] == "pet.list" for v in disco["verbs"])  # not bound before review
 
-    # activate with a named reviewer -> verbs bound + discoverable (SEC-22)
-    act = c.post("/v1/adapters/petstore/activate", json={"reviewer": "alice@acme"},
-                 headers=_hdr("org-admin"))
+    # Activation is held until a different authenticated human approves it. A
+    # caller-supplied reviewer string is ignored; the review gate records the
+    # HITL respondent (SEC-22/SEC-14).
+    held = c.post("/v1/adapters/petstore/activate", json={"reviewer": "spoofed"},
+                  headers=_hdr("org-admin"))
+    assert held.status_code == 202
+    request_id = held.json()["hitl_request_id"]
+    asyncio.run(k.hitl.answer(T, request_id, "approve", "security@acme"))
+    act = c.post(
+        "/v1/adapters/petstore/activate",
+        json={"reviewer": "spoofed", "approval_id": request_id},
+        headers=_hdr("org-admin"),
+    )
     assert act.status_code == 200 and "pet.list" in act.json()["verbs"]
+    adapter = asyncio.run(k.loader.get(T, "petstore"))
+    assert adapter.review_gate.reviewer == "security@acme"
     disco2 = c.get("/v1/capabilities", headers=_hdr("org-admin", grants="*")).json()
     assert any(v["id"] == "pet.list" for v in disco2["verbs"])

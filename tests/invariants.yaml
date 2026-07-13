@@ -25,6 +25,13 @@ invariants:
     description: Backend unavailability degrades gracefully, never crashes (graceful degradation).
     tests:
       - tests/kernel/test_ratelimit_degraded.py::test_degraded_mode_when_backend_down
+  FR-OPS-01:
+    description: Alembic is the authoritative ordered schema chain - its immutable baseline plus head revisions produce the same PostgreSQL catalogue as schema.sql bootstrap.
+    tests:
+      - tests/integration/test_migration_parity.py::test_alembic_baseline_is_immutable
+      - tests/integration/test_migration_parity.py::test_alembic_head_matches_bootstrap_schema
+      - tests/integration/test_migration_parity.py::test_data_bearing_rls_database_upgrades_from_previous_head
+      - tests/unit/test_bootstrap_store.py::test_runtime_store_never_replays_mutable_bootstrap
   US-IAM-02:
     description: Row-level department isolation - an engineer cannot list another department's queue.
     tests:
@@ -35,9 +42,10 @@ invariants:
     tests:
       - tests/security/test_discovery_scope.py::test_scoped_caller_sees_only_scoped_verbs
   US-FLT-04:
-    description: Spawn selects the cheapest capable runtime for a child agent.
+    description: Spawn selects a preferred capable capability when requested, otherwise the cheapest capable runtime for a child agent.
     tests:
       - tests/integration/test_fleet_spawn.py::test_cheapest_capable_runtime_chosen
+      - tests/integration/test_fleet_spawn.py::test_preferred_capability_chosen_when_capable
   US-FLT-05:
     description: A pending work item is claimed exactly once across concurrent claimers and an expired lease is reclaimable (attempts increments per claim).
     tests:
@@ -98,6 +106,39 @@ invariants:
     description: The audit browser is scope-filtered (and search/run links preserved).
     tests:
       - tests/security/test_round_three.py::test_audit_and_runs_are_scope_filtered
+  FR-OBS-08:
+    description: Platform runtime status is authenticated, never public health.
+    tests:
+      - tests/security/test_platform_status.py::test_platform_status_requires_authentication
+  FR-OBS-09:
+    description: Platform runtime status is bounded and redacts URLs, keys, tokens, and credentials.
+    tests:
+      - tests/security/test_platform_status.py::test_platform_status_is_bounded_and_redacted
+  FR-OBS-10:
+    description: Platform runtime status is a snapshot endpoint and does not publish to run event streams.
+    tests:
+      - tests/security/test_platform_status.py::test_platform_status_does_not_publish_run_events
+  FR-OBS-11:
+    description: Model telemetry is authenticated, scope-filtered, bounded, aggregated from audit rows, and never exposes URLs, keys, or credentials.
+    tests:
+      - tests/security/test_platform_status.py::test_model_telemetry_requires_authentication
+      - tests/security/test_platform_status.py::test_model_telemetry_is_aggregated_scoped_and_redacted
+      - tests/integration/test_fleet_spawn.py::test_spawn_audit_records_latency_for_model_telemetry
+  FR-OBS-12:
+    description: Console overview is authenticated, bounded, workspace-scoped, and exposes only redacted platform/model/cost/budget/run/approval summaries.
+    tests:
+      - tests/security/test_console_overview.py::test_console_overview_requires_authentication
+      - tests/security/test_console_overview.py::test_console_overview_is_scoped_bounded_and_redacted
+  FR-OBS-13:
+    description: Langfuse is an optional best-effort observability mirror; it runs only after audit persistence, never blocks spawn completion, and emits only bounded metadata without prompts, outputs, URLs, keys, tokens, or identity.
+    tests:
+      - tests/security/test_langfuse_sink.py::test_langfuse_payload_is_bounded_and_redacts_route_connection_data
+      - tests/security/test_langfuse_sink.py::test_langfuse_sink_emits_event_and_flushes
+      - tests/security/test_langfuse_sink.py::test_langfuse_sink_failure_is_swallowed
+      - tests/security/test_langfuse_sink.py::test_langfuse_sink_timeout_is_swallowed
+      - tests/security/test_langfuse_sink.py::test_langfuse_builder_defaults_to_noop_without_keys
+      - tests/integration/test_fleet_spawn.py::test_spawn_audit_survives_observability_sink_failure
+      - tests/integration/test_fleet_spawn.py::test_observability_sink_runs_after_audit_persist
   FR-EVAL-02:
     description: An eval runs through the chokepoint under a defined scope, no escalation.
     tests:
@@ -163,6 +204,78 @@ invariants:
     description: An external MCP server is consumed as an adapter - its tools register as verbs.
     tests:
       - tests/integration/test_mcp_consumer.py::test_consume_external_mcp_server_as_verbs
+  FR-HOST-01:
+    description: Herdr host-control capabilities are declared as governed adapter verbs with read/mutate consequence levels.
+    tests:
+      - tests/adapters/test_herdr_adapter.py::test_herdr_adapter_declares_read_and_mutating_verbs
+  FR-HOST-02:
+    description: Herdr snapshot is read through the CLI/socket seam and returned as structured data.
+    tests:
+      - tests/adapters/test_herdr_adapter.py::test_herdr_snapshot_runs_cli_and_returns_structured_json
+  FR-HOST-03:
+    description: Herdr pane commands are executed with argv and never receive kernel credentials.
+    tests:
+      - tests/adapters/test_herdr_adapter.py::test_herdr_pane_run_uses_argv_not_shell_and_no_credentials
+  FR-HOST-04:
+    description: Herdr host-control failures map to retryable adapter failures, not crashes.
+    tests:
+      - tests/adapters/test_herdr_adapter.py::test_herdr_unavailable_maps_to_retryable_adapter_failure
+  FR-HOST-05:
+    description: Runpod pod controls are declared as governed adapter verbs with read/mutate consequence levels.
+    tests:
+      - tests/adapters/test_runpod_adapter.py::test_runpod_adapter_declares_read_and_mutating_verbs
+  FR-HOST-06:
+    description: Runpod pod listing uses bearer auth only in headers and redacts unsafe pod metadata from outputs.
+    tests:
+      - tests/adapters/test_runpod_adapter.py::test_runpod_list_uses_bearer_and_redacts_pod_payload
+  FR-HOST-07:
+    description: Runpod start, stop, and restart use the documented REST pod action paths.
+    tests:
+      - tests/adapters/test_runpod_adapter.py::test_runpod_start_stop_restart_paths_are_documented_rest_paths
+  FR-HOST-08:
+    description: Runpod control fails closed when no API credential is resolved.
+    tests:
+      - tests/adapters/test_runpod_adapter.py::test_runpod_missing_credential_fails_closed
+  FR-HOST-09:
+    description: Herdr host-control uses stack-owned home/config state in compose, the image prepares writable service-owned Herdr state roots for the unprivileged runtime user, and production doctor rejects developer-user Herdr state paths.
+    tests:
+      - tests/adapters/test_herdr_adapter.py::test_herdr_uses_stack_owned_home_when_configured
+      - tests/unit/test_doctor.py::test_production_doctor_rejects_personal_herdr_opencode_state
+      - tests/deploy/test_compose_hardening.py::test_herdr_opencode_state_is_stack_owned_in_compose
+      - tests/deploy/test_compose_hardening.py::test_herdr_opencode_state_roots_are_owned_by_service_user_in_images
+  FR-HOST-10:
+    description: The kernel image ships a pinned Herdr CLI binary inside the stack image, and production doctor rejects missing or developer-user Herdr binary paths, so host-control does not depend on a personal workstation install.
+    tests:
+      - tests/deploy/test_compose_hardening.py::test_herdr_opencode_clis_ship_inside_first_party_images
+      - tests/unit/test_doctor.py::test_production_doctor_rejects_missing_or_personal_herdr_opencode_bins
+  FR-HOST-11:
+    description: Browser CLI automation ships a pinned hash-locked Browser Use CLI tool venv, uses stack-owned home/config/data/cache state, compose mounts only stack Browser Use CLI state, production doctor rejects developer-user Browser CLI state or missing/personal browser-use binaries, and timed-out child processes are terminated.
+    tests:
+      - tests/adapters/test_browser_cli_adapter.py::test_browser_cli_uses_stack_owned_home_when_configured
+      - tests/adapters/test_browser_cli_adapter.py::test_browser_cli_timeout_terminates_child
+      - tests/unit/test_doctor.py::test_production_doctor_rejects_personal_or_missing_browser_cli
+      - tests/deploy/test_compose_hardening.py::test_herdr_opencode_state_is_stack_owned_in_compose
+      - tests/deploy/test_compose_hardening.py::test_browser_cli_state_roots_are_stack_owned
+      - tests/deploy/test_compose_hardening.py::test_browser_cli_never_relies_on_a_runtime_browser_download
+  FR-HOST-12:
+    description: Platform status reports Herdr, OpenCode, and Browser CLI as shipped stack tools with stack-owned state posture, and never exposes user profile paths, binary paths, browser auth/session state, tokens, or credentials.
+    tests:
+      - tests/security/test_platform_status.py::test_stack_tool_status_reports_shipped_tools_without_user_paths
+      - tests/security/test_platform_status.py::test_stack_tool_status_degrades_personal_state_without_leaking_it
+  FR-HOST-13:
+    description: Browser CLI child processes receive a minimal stack-owned environment; provider/user secrets and personal Browser Use profile variables are not inherited, and Browser Use cloud profile values flow only from explicit BOLTRIG_BROWSER_CLOUD_* stack handoff variables.
+    tests:
+      - tests/adapters/test_browser_cli_adapter.py::test_browser_cli_child_env_does_not_inherit_user_or_provider_secrets
+      - tests/adapters/test_browser_cli_adapter.py::test_browser_cli_cloud_profile_uses_only_stack_prefixed_handoff
+      - tests/integration/test_round_two_manifest.py::test_manifest_exports_browser_cloud_policy_without_secret_material
+      - tests/integration/test_round_two_manifest.py::test_manifest_export_does_not_override_browser_cloud_policy
+      - tests/deploy/test_compose_hardening.py::test_browser_cli_cloud_policy_is_stack_prefixed_in_deploy_config
+  FR-HOST-14:
+    description: Herdr and OpenCode child processes receive a minimal stack-owned environment; provider/user secrets, personal sockets, and deployment posture variables are not inherited unless a scoped runtime handoff explicitly adds them, and timed-out Herdr child processes are terminated.
+    tests:
+      - tests/adapters/test_herdr_adapter.py::test_herdr_child_env_does_not_inherit_user_or_provider_secrets
+      - tests/adapters/test_herdr_adapter.py::test_herdr_timeout_terminates_child
+      - tests/security/test_opencode_runtime.py::test_opencode_child_env_does_not_inherit_user_or_provider_secrets
   SEC-01:
     description: Real auth - an invalid/missing bearer is rejected 401; a valid token is scoped.
     tests:
@@ -202,6 +315,10 @@ invariants:
     tests:
       - tests/integration/test_durable_resume.py::test_hitl_answer_resumes_paused_run_exactly_once
       - tests/integration/test_durable_resume.py::test_hitl_answer_requeues_the_parked_work_item
+  NFR-REL-04:
+    description: Adapter-native failures preserve stable transport semantics instead of collapsing into opaque internal errors - not found, unauthorised, invalid, conflict, and internal failures map to 404, 403, 400, 409, and 502 respectively while the HTTP envelope exposes only the bounded reason code.
+    tests:
+      - tests/kernel/test_adapter_error_mapping.py::test_adapter_error_class_maps_to_safe_transport_error
   FR-EXE-06:
     description: Task bodies re-enter the chokepoint - governance is not bypassable from inside a durable task (an ungranted verb fails closed and the denial is audited; a payload/envelope tenant mismatch is refused).
     tests:
@@ -215,10 +332,17 @@ invariants:
       - tests/security/test_sensitive_routing.py::test_spawn_blocks_sensitive_on_hosted_capability
       - tests/security/test_sensitive_routing.py::test_sensitive_ignores_external_ai_config_and_routes_local
   SEC-15:
-    description: Idempotent replay - a repeated idempotency key never re-executes a side-effecting verb.
+    description: Idempotent replay is tenant-, authenticated actor/delegation-, noun/verb-, workspace-, and canonical-request-bound; one atomic owner executes while concurrent reuse fails closed, completed non-secret results replay before execution-side gates, expired pre-execution claims are reclaimable, expired executing claims become reconciliation-required uncertainty, and secret-shaped results are completed uncacheable without persisting bearer material.
     tests:
       - tests/kernel/test_idempotency.py::test_repeated_key_replays_without_reexecuting
       - tests/kernel/test_idempotency.py::test_distinct_key_executes_again
+      - tests/kernel/test_idempotency.py::test_replay_precedes_spent_approval_gate
+      - tests/kernel/test_idempotency.py::test_replay_precedes_rate_limit
+      - tests/kernel/test_idempotency.py::test_key_is_bound_to_canonical_request_and_authenticated_identity
+      - tests/kernel/test_idempotency.py::test_concurrent_same_key_has_one_execution_owner
+      - tests/kernel/test_idempotency.py::test_secret_shaped_success_is_completed_uncacheable_not_persisted
+      - tests/store/test_store_parity.py::test_idempotency_claim_is_bound_single_owner_and_replayable
+      - tests/store/test_store_parity.py::test_idempotency_expiry_reclaims_only_before_execution
   FR-EXE-03:
     description: Recursion depth is bounded - a spawn past the capability max depth is refused.
     tests:
@@ -302,14 +426,59 @@ invariants:
     description: OpenAiRuntime attempts a keyless local endpoint (vLLM/Ollama) rather than hard-degrading.
     tests:
       - tests/security/test_openai_runtime.py::test_openai_runtime_allows_keyless_local_endpoint
+  FR-RUN-10:
+    description: An 'opencode' capability resolves via build_runtime to OpenCodeRuntime.
+    tests:
+      - tests/security/test_opencode_runtime.py::test_build_runtime_resolves_opencode
+  FR-RUN-11:
+    description: OpenCodeRuntime degrades when no pinned OpenCode model endpoint is configured.
+    tests:
+      - tests/security/test_opencode_runtime.py::test_opencode_degrades_without_pinned_model
+  FR-RUN-12:
+    description: OpenCodeRuntime degrades when the OpenCode CLI is unavailable.
+    tests:
+      - tests/security/test_opencode_runtime.py::test_opencode_degrades_when_cli_missing
+  FR-RUN-13:
+    description: OpenCodeRuntime consumes JSON CLI events and reports usage without sending tool credentials.
+    tests:
+      - tests/security/test_opencode_runtime.py::test_opencode_runs_json_cli_and_keeps_tool_credentials_out
+  FR-RUN-14:
+    description: OpenCodeRuntime auto-approval is explicit opt-in, not the default.
+    tests:
+      - tests/security/test_opencode_runtime.py::test_opencode_auto_approval_is_opt_in
+  FR-RUN-15:
+    description: OpenCodeRuntime receives a run-scoped MCP connection through process env and revokes it after the run.
+    tests:
+      - tests/security/test_opencode_runtime.py::test_opencode_scopes_mcp_token_to_env_and_revokes
+      - tests/security/test_opencode_runtime.py::test_opencode_timeout_terminates_child_and_revokes
+      - tests/integration/test_fleet_spawn.py::test_opencode_spawn_preserves_workspace_for_scoped_mcp
+  FR-RUN-16:
+    description: The OpenCode project plugin consumes the scoped Boltrig MCP env handoff locally, without mutating global OpenCode config or embedding tokens.
+    tests:
+      - tests/security/test_opencode_plugin.py::test_opencode_plugin_installer_writes_project_local_env_consumer
+      - tests/security/test_opencode_plugin.py::test_cli_installs_opencode_plugin_without_changing_cwd
+  FR-RUN-17:
+    description: OpenCodeRuntime uses stack-owned home/config/state in compose, the image prepares writable service-owned OpenCode state roots for the unprivileged runtime user, and production doctor rejects developer-user OpenCode state paths.
+    tests:
+      - tests/security/test_opencode_runtime.py::test_opencode_uses_stack_owned_home_when_configured
+      - tests/unit/test_doctor.py::test_production_doctor_rejects_personal_herdr_opencode_state
+      - tests/deploy/test_compose_hardening.py::test_herdr_opencode_state_is_stack_owned_in_compose
+      - tests/deploy/test_compose_hardening.py::test_herdr_opencode_state_roots_are_owned_by_service_user_in_images
+  FR-RUN-18:
+    description: The fleet image ships a pinned OpenCode CLI binary inside the stack image, and production doctor rejects missing or developer-user OpenCode binary paths, so coding-agent execution does not depend on a personal workstation install.
+    tests:
+      - tests/deploy/test_compose_hardening.py::test_herdr_opencode_clis_ship_inside_first_party_images
+      - tests/unit/test_doctor.py::test_production_doctor_rejects_missing_or_personal_herdr_opencode_bins
   SEC-24:
     description: The Pi sidecar is sandboxed - no native tools, egress only to the kernel + model.
     tests:
       - tests/integration/test_round_two_manifest.py::test_pi_sidecar_sandbox_is_declared_restrictive
   SEC-27:
-    description: No tool credential is ever sent to Pi - only a model key and a run-scoped MCP token.
+    description: No tool credential is ever sent to Pi or OpenCode - only model access and run-scoped MCP tokens.
     tests:
       - tests/security/test_pi_runtime.py::test_sidecar_request_carries_no_tool_credentials
+      - tests/security/test_opencode_runtime.py::test_opencode_runs_json_cli_and_keeps_tool_credentials_out
+      - tests/security/test_opencode_runtime.py::test_opencode_scopes_mcp_token_to_env_and_revokes
   SEC-28:
     description: Severability - the kernel and models import nothing from Pi or the sidecar, and the standalone Pi sidecar imports no boltrig package code; the boundary is HTTP/MCP only.
     tests:
@@ -330,10 +499,14 @@ invariants:
       - tests/security/test_conversations.py::test_other_user_cannot_read_conversation
       - tests/security/test_conversations.py::test_other_user_cannot_continue_conversation
   SEC-07:
-    description: A verb is denied unless the caller holds the matching grant.
+    description: A verb is denied unless the caller holds the matching grant, and resolver-stamped principal role/scope remain authoritative across caller context, spawn, durable runtime, and MCP propagation.
     tests:
       - tests/security/test_grant_enforcement.py::test_ungranted_verb_is_denied
       - tests/security/test_grant_enforcement.py::test_grant_for_other_verb_does_not_authorise
+      - tests/security/test_principal_context_binding.py::test_principal_context_reserved_authority_is_resolver_owned
+      - tests/security/test_principal_context_binding.py::test_platform_invoke_cannot_spoof_principal_authority
+      - tests/security/test_principal_context_binding.py::test_skill_and_personal_routes_cannot_spoof_principal_authority
+      - tests/security/test_principal_context_binding.py::test_spawn_runtime_and_mcp_preserve_trusted_principal_metadata
   SEC-08:
     description: Tenant isolation - no cross-tenant discovery or dispatch (fail-closed), both stores.
     tests:
@@ -348,19 +521,26 @@ invariants:
       - tests/unit/test_rls_pool.py::test_rls_pool_is_fail_closed_when_no_tenant_bound
       - tests/security/test_rls_auth_binding.py::test_pat_resolution_binds_tenant_before_the_owner_read
       - tests/security/test_rls_auth_binding.py::test_provision_user_binds_tenant_before_the_first_read
+      - tests/integration/test_migration_parity.py::test_data_bearing_rls_database_upgrades_from_previous_head
   SEC-13:
     description: PII is detected and redacted before it leaves the boundary.
     tests:
       - tests/security/test_budget_and_pii.py::test_pii_redaction
   SEC-14:
-    description: High-consequence / blocking verbs pause for human approval and cannot be bypassed - the approval is verb-bound, single-use (no replay or cross-verb reuse), and a human decision the requester cannot self-approve.
+    description: High-consequence / blocking verbs pause for human approval and cannot be bypassed - an approval is single-use and bound to the exact tenant, verb, canonical params, authenticated/delegated initiator, and mutable resource snapshot; only an explicitly authorised assigned human independent of the direct/delegated requester may answer it.
     tests:
       - tests/security/test_hitl_gate.py::test_blocking_verb_pauses_for_approval
       - tests/security/test_hitl_gate.py::test_resumes_after_approval
       - tests/security/test_hitl_gate.py::test_approval_is_single_use
       - tests/security/test_hitl_gate.py::test_approval_is_verb_bound_and_single_use
       - tests/security/test_hitl_gate.py::test_respond_rejects_agent_and_self_approval
+      - tests/security/test_hitl_gate.py::test_respond_requires_verb_authority_assignee_and_delegation_separation
+      - tests/security/test_hitl_gate.py::test_legacy_unbound_approval_fails_closed
       - tests/security/test_hitl_gate.py::test_escalation_answer_cannot_clear_high_consequence_gate
+      - tests/security/test_hitl_gate.py::test_approval_is_bound_to_params_and_initiating_principal
+      - tests/security/test_hitl_gate.py::test_mutable_adapter_approval_context_is_recomputed
+      - tests/security/test_hitl_gate.py::test_approval_fingerprint_canonicalises_json_order_and_unicode
+      - tests/store/test_store_parity.py::test_hitl_request_binding_round_trips
   SEC-16:
     description: Every action (allowed or denied) is audited, hash-chained, append-only.
     tests:
@@ -487,6 +667,24 @@ invariants:
     description: The model gateway (Bifrost) is wired into the stack - a profile-gated bifrost service on sandbox, genesis/dev starts the gateway profile, and the documented /v1 gateway URL matches it - so activation is provider keys, not architecture work.
     tests:
       - tests/security/test_round_six.py::test_bifrost_is_wired_into_the_stack
+  FR-GW-02:
+    description: Bifrost/model profiles are config-only provider/model/base-url selections for standard data, while sensitive data ignores profiles and stays on the local residency endpoint.
+    tests:
+      - tests/security/test_model_routing.py::test_model_profile_selects_provider_model_and_route
+      - tests/security/test_model_routing.py::test_model_profile_is_ignored_for_sensitive_data
+      - tests/security/test_model_routing.py::test_manifest_model_profiles_feed_runtime_resolver
+  FR-GW-03:
+    description: The platform status surface reports the stack-owned model gateway as configured or inert, with cache/profile posture only, and never exposes gateway URLs, keys, tokens, or credentials.
+    tests:
+      - tests/security/test_platform_status.py::test_model_gateway_status_is_bounded_and_redacted
+      - tests/security/test_platform_status.py::test_model_gateway_status_reports_inert_when_unconfigured
+  FR-GW-04:
+    description: Optional model-gateway live health polling is internal-host-only, bounded, fail-safe, and exposes only coarse health/cache/provider counts without gateway URLs, keys, tokens, or credentials.
+    tests:
+      - tests/security/test_model_gateway_live_health.py::test_model_gateway_live_health_polls_internal_endpoint_and_redacts_payload
+      - tests/security/test_model_gateway_live_health.py::test_model_gateway_live_health_rejects_external_hosts_without_polling
+      - tests/security/test_model_gateway_live_health.py::test_model_gateway_live_health_probe_failure_degrades_not_crashes
+      - tests/security/test_model_routing.py::test_manifest_model_profiles_feed_runtime_resolver
   FR-SKILL-01:
     description: The skill shelf (skill.search) returns lightweight descriptions only - never the prompt_fragment body - and filters by query (progressive disclosure).
     tests:
@@ -574,9 +772,11 @@ invariants:
     tests:
       - tests/security/test_round_ten.py::test_events_are_run_keyed_and_credential_free
   SEC-56:
-    description: A run's event stream is tenant-scoped - the run-events endpoint streams only runs that produced audited activity in the caller's tenant; another tenant gets 404.
+    description: A run's event stream is tenant/scope-scoped - the run-events endpoint streams only runs that produced audited activity in the caller's tenant and remain visible under the caller's department/workspace scope; another tenant or same-tenant out-of-scope caller gets 404.
     tests:
       - tests/security/test_round_eleven.py::test_run_events_are_tenant_scoped
+      - tests/security/test_round_eleven.py::test_same_tenant_scoped_user_cannot_read_unowned_run_events
+      - tests/security/test_round_eleven.py::test_department_scoped_user_can_read_visible_work_run_events
   FR-EVT-03:
     description: The run-events endpoint returns the events a run emitted as SSE frames (snapshot), and an unknown run is a 404.
     tests:
@@ -666,15 +866,19 @@ invariants:
       - tests/store/test_retention_purge.py::test_retention_purge_is_tenant_scoped
   # --- Beat 3.5: control-plane verb parity (appended as one block) -----------
   SEC-75:
-    description: Every console authoring operation (skill / noun / verb / binding / MCP-server registration / config section) is dispatchable as a governed control.* verb through the one chokepoint - grant-checked, held by the HITL gate at high consequence, audited - and writes the SAME store state as the direct author-gated route via one shared write helper per noun, so the two paths cannot drift (Beat 3.5).
+    description: Every supported console mutation is implemented once as a governed control.* verb and compatibility routes invoke that same chokepoint. The complete surface covers skills, nouns, verbs, bindings, adapters, MCP registration, workflows, config rollback, users, invitations, and notification routing; high-blast operations are HITL-held, low-blast inert/personal operations still receive schema/grant/rate/audit enforcement, workspace scope is preserved, durable triggers carry the authenticated context, and one-time invitation tokens are redacted from run events.
     tests:
       - tests/security/test_control_plane_parity.py::test_control_verbs_write_the_same_state_as_the_direct_routes
-      - tests/security/test_control_plane_parity.py::test_every_control_verb_is_hitl_held_and_writes_nothing_while_pending
+      - tests/security/test_control_plane_parity.py::test_every_high_control_verb_is_hitl_held_and_writes_nothing_while_pending
+      - tests/security/test_control_plane_parity.py::test_expanded_control_plane_operations_are_functional_and_secret_safe
   SEC-76:
-    description: The control.* authoring verbs are denied to any caller whose grants lack them (discovery hides them too), and control.mcp_server.register leaves the consumer INERT pending the SEC-22 human review route (activation has no verb) and refuses a secret in verb params so a credential never transits the run event stream (Beat 3.5).
+    description: The control.* verbs are denied to callers whose grants lack them and hidden from discovery; low-consequence adapter generation/MCP registration reserve create-only non-reserved IDs and reject live, stored, or binding collisions; activation preflights every declared verb and rejects reserved/core or foreign-owned registry authority before publishing any binding; invitation creation is explicitly uncacheable, stores no one-time secret, and atomically permits one pending invite per tenant/email; activation still requires single-use HITL and records the authenticated respondent.
     tests:
       - tests/security/test_control_plane_parity.py::test_control_verbs_denied_to_a_caller_without_the_grant
       - tests/security/test_control_plane_parity.py::test_mcp_register_verb_is_inert_and_refuses_a_secret
+      - tests/security/test_control_plane_parity.py::test_low_consequence_adapter_creation_rejects_every_occupied_namespace
+      - tests/security/test_control_plane_parity.py::test_activation_rejects_reserved_or_owned_verbs_before_publication
+      - tests/security/test_control_plane_parity.py::test_invitation_is_uncacheable_and_concurrent_creation_is_single_winner
   SEC-77:
     description: The chat/agent lane preserves grant context end to end for authoring - a chat-style spawn carrying the shipped authoring skill hands control.* to the child (intersected with the caller ceiling and the tenant ceiling), the run-scoped MCP token reaches the control verbs through the unchanged chokepoint where the HITL gate holds them, and a non-author caller ceiling strips them (Beat 3.5).
     tests:
@@ -960,6 +1164,36 @@ invariants:
       - tests/security/test_workflow_workspace_scope.py::test_match_returns_org_wide_or_own_workspace_never_another
       - tests/security/test_workflow_workspace_scope.py::test_no_active_workspace_sees_exactly_the_org_wide_set_byte_for_byte
       - tests/store/test_store_parity.py::test_workflow_workspace_id_roundtrips_on_both_stores
+  FR-WFL-12:
+    description: Ultracode phased workflow specs are validated before execution.
+    tests:
+      - tests/integration/test_ultracode_run.py::test_ultracode_validation_rejects_missing_prompt
+      - tests/integration/test_ultracode_run.py::test_ultracode_validation_rejects_excessive_concurrency
+  FR-WFL-13:
+    description: Ultracode phase agents execute through the requested capable fleet runtime and checkpoint completed phases before later phases.
+    tests:
+      - tests/integration/test_ultracode_run.py::test_ultracode_run_executes_phases_through_preferred_capability
+  FR-WFL-14:
+    description: The Ultracode run body is registered on the durable executor task seam.
+    tests:
+      - tests/integration/test_ultracode_run.py::test_ultracode_run_registered_on_local_durable_executor
+  FR-WFL-15:
+    description: Ultracode phase-agent work is split onto a child task seam and replays completed phase or agent checkpoints instead of repeating work.
+    tests:
+      - tests/integration/test_ultracode_run.py::test_ultracode_replays_completed_phase_checkpoint
+      - tests/integration/test_ultracode_run.py::test_ultracode_replays_completed_agent_checkpoint
+      - tests/integration/test_ultracode_run.py::test_hatchet_child_runner_uses_registered_agent_task
+  FR-WFL-16:
+    description: Ultracode injects compact scoped memory through the governed memory.recall seam when granted, prefers the configured primary projection such as Mem0, keeps owner/provenance filters and untrusted prompt wrapping, and writes run summaries back through memory.remember when granted.
+    tests:
+      - tests/integration/test_ultracode_memory.py::test_ultracode_injects_only_scoped_memory_into_agent_prompt
+      - tests/integration/test_ultracode_memory.py::test_ultracode_recall_uses_mem0_projection_when_configured
+      - tests/integration/test_ultracode_memory.py::test_ultracode_memory_injection_requires_recall_grant
+      - tests/integration/test_ultracode_memory.py::test_ultracode_stores_run_summary_through_memory_adapter
+  FR-WFL-17:
+    description: The live Hatchet Ultracode parent workflow fans out phase agents through the registered child task seam and persists child/phase checkpoints.
+    tests:
+      - tests/integration/test_hatchet_live.py::test_live_ultracode_run_fans_out_agent_child_tasks
   SEC-116:
     description: Workspace scoping only NARROWS which workflows a workspace sees, never widens authority (COUNTY 5, D2) - a workflow scoped to another workspace is fail-closed UNKNOWN on the get / trigger / execute paths (get returns None, trigger and execute raise LookupError) so it can never be resolved or run cross-workspace, while the visibility filter never mutates the record (a visible workflow is byte-for-byte what was stored, adding no grant/scope) and workspace_id is the sole scoping field, carrying no execution authority.
     tests:
@@ -1067,3 +1301,59 @@ invariants:
     description: The shared credential + 2FA travel with the IDENTITY (the normalised email), held ONCE and sealed (D1/D5) - the password credential lives once at the identity realm keyed by the email and is NOT duplicated into any per-org row, the global email->orgs index holds only membership pointers (never a secret or business data), the one shared credential authenticates the identity regardless of the active org, and 2FA enrolment travels with the identity (stored at the realm keyed by the email, never on a per-org row) with the TOTP secret SEALED via the credential store (a ref on the row, the value in the sealed store) rather than a plaintext column.
     tests:
       - tests/security/test_cross_tenant_identity.py::test_shared_credential_and_2fa_travel_with_the_identity
+  SEC-135:
+    description: The standalone CLI server binds to loopback by default so an operator cannot accidentally expose an unauthenticated development deployment; an explicit --host remains available for governed container and reverse-proxy deployments.
+    tests:
+      - tests/unit/test_cli.py::test_serve_is_loopback_only_unless_host_is_explicit
+  SEC-136:
+    description: Operator backup credentials are excluded from both Git and every Docker build context, so a documented rclone.conf can never be committed or copied into an application image layer.
+    tests:
+      - tests/deploy/test_compose_hardening.py::test_backup_credentials_are_excluded_from_git_and_image_contexts
+  SEC-137:
+    description: A protected semantic tag uses the named release environment and a draft GitHub release, rebuilds all five first-party images from a commit reachable from the default branch, blocks fixable high/critical vulnerabilities, publishes only run-scoped candidates until every immutable digest is keylessly signed and its CycloneDX SBOM attestation is verified, refuses to move existing public tags or overwrite evidence, and publishes the release only after all exact digests are promoted and reverified; required reviewers and tag protection remain an explicit external repository-setting gate.
+    tests:
+      - tests/deploy/test_compose_hardening.py::test_release_publishes_only_scanned_signed_digest_images_with_sboms
+  IAC-002:
+    description: Production Python images consume hash-locked runtime dependencies without invoking an unlocked PEP 517 build environment; application source runs directly from the read-only image tree.
+    tests:
+      - tests/deploy/test_compose_hardening.py::test_python_images_do_not_invoke_unlocked_build_isolation
+  FR-OPS-02:
+    description: Compose validation is reproducible from a clean checkout by using the checked non-secret example environment and a validation-only database password; operator launches retain the conventional ignored .env default.
+    tests:
+      - tests/deploy/test_compose_hardening.py::test_compose_validation_is_clean_checkout_safe
+  FR-OPS-03:
+    description: /healthz remains liveness while unauthenticated /readyz is a bounded, redacted, fail-closed deep readiness gate - production requires reachable Postgres and Redis plus the exact packaged Alembic head, a live control adapter whose complete verb surface is persisted and bound back to that actual adapter with every required runtime collaborator wired, complete stack-tool posture, a kernel-local Herdr execution probe, and a fresh HMAC-authenticated deployment-scoped fleet receipt proving fleet-local OpenCode, Browser Use, and Chromium CDP health without assuming shared containers; concurrent calls are coalesced and briefly cached; optional Hatchet/model-gateway probes become required when enabled; failures return redacted 503 responses and the packaged head is graph-checked against Alembic.
+    tests:
+      - tests/unit/test_readiness.py::test_readyz_keeps_optional_dependencies_disabled_in_development
+      - tests/unit/test_readiness.py::test_readyz_requires_postgres_redis_and_migration_head_in_production
+      - tests/unit/test_readiness.py::test_readyz_probes_every_enabled_dependency
+      - tests/unit/test_readiness.py::test_readyz_requires_persisted_control_verbs_and_control_owned_bindings
+      - tests/unit/test_readiness.py::test_readyz_requires_control_runtime_collaborators
+      - tests/unit/test_readiness.py::test_readyz_rejects_untrustworthy_fleet_tool_receipts_in_production
+      - tests/unit/test_readiness.py::test_readyz_explicit_stack_tool_health_requires_kernel_owned_herdr
+      - tests/unit/test_readiness.py::test_readyz_coalesces_concurrent_unauthenticated_probes
+      - tests/unit/test_readiness.py::test_readyz_persists_the_fallback_service_across_requests
+      - tests/unit/test_readiness.py::test_readyz_route_returns_503_with_redacted_component_failures
+      - tests/unit/test_stack_tool_health.py::test_herdr_probe_executes_exact_argv_without_a_shell
+      - tests/unit/test_stack_tool_health.py::test_fleet_probe_requires_both_binaries_and_live_loopback_cdp
+      - tests/unit/test_stack_tool_health.py::test_browser_probe_accepts_only_a_chromium_cdp_response
+      - tests/unit/test_stack_tool_health.py::test_fleet_receipt_requires_schema_freshness_and_all_tools
+      - tests/unit/test_stack_tool_health.py::test_fleet_receipt_rejects_forged_or_cross_deployment_evidence
+      - tests/unit/test_stack_tool_health.py::test_heartbeat_budget_cannot_outlive_its_previous_receipt
+      - tests/integration/test_migration_parity.py::test_packaged_readiness_head_matches_alembic_head
+      - tests/integration/test_migration_parity.py::test_data_bearing_rls_database_upgrades_from_previous_head
+  FR-OPS-04:
+    description: Operator backups are restorable - a real pg_dump drill through the pinned PostgreSQL client image restores the live schema and data into a fresh database and the restored rows read back intact.
+    tests:
+      - tests/integration/test_backup_restore.py::test_backup_restores_into_a_fresh_database
+  NFR-MNT-01:
+    description: Python structural debt is an enforced expiring ratchet - every boltrig source file is at most 400 physical lines and every decorator-inclusive function or method at most 80 source-span lines unless its file has an explicit owner, reason, expiry, exact current file and largest-function baselines, and an exact record for every over-limit function; the gate rejects new or sibling debt, growth, stale-high or missing-file entries, malformed metadata, duplicate JSON keys, and expired exemptions.
+    tests:
+      - tests/unit/test_structure_gate.py::test_repository_structure_ratchet_is_clean
+  SEC-138:
+    description: A governed action executes only against the exact resource state that was approved - a queued workflow runs its digest-checked approved snapshot (tampering and cross-workspace replay are rejected), a missing mutable resource fails before any approval is created, and resource drift between the HITL gate and adapter execution fails closed while still consuming the single-use approval.
+    tests:
+      - tests/integration/test_durable_resume.py::test_queued_workflow_executes_the_approved_snapshot_not_latest_definition
+      - tests/integration/test_durable_resume.py::test_workflow_snapshot_rejects_tampering_and_cross_workspace_replay
+      - tests/security/test_control_approval_binding.py::test_missing_mutable_resource_fails_before_creating_approval
+      - tests/security/test_control_approval_binding.py::test_resource_change_between_gate_and_adapter_execute_fails_closed

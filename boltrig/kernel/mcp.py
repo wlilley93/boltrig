@@ -51,6 +51,8 @@ class RunToken:
     # an MCP-initiated audit row carries org/workspace at the SAME depth as a human
     # action. None = no active workspace. Additive with a None default.
     workspace_id: str | None = None
+    on_behalf_of: str | None = None
+    extra: dict = field(default_factory=dict)
 
 
 class McpFace:
@@ -61,12 +63,13 @@ class McpFace:
     # --- token lifecycle (issued by the fleet per run) ---
     def issue_run_token(
         self, tenant_id: str, grants: GrantSet, *, run_id=None, actor="ephemeral",
-        skills=(), workspace_id=None,
+        skills=(), workspace_id=None, on_behalf_of=None, extra=None,
     ) -> str:
         token = uuid.uuid4().hex
         self._tokens[token] = RunToken(
             token=token, tenant_id=tenant_id, grants=grants, run_id=run_id,
             actor=actor, skills=tuple(skills), workspace_id=workspace_id,
+            on_behalf_of=on_behalf_of, extra=dict(extra or {}),
         )
         return token
 
@@ -87,6 +90,7 @@ class McpFace:
             tenant_id=rt.tenant_id, grants=rt.grants, actor=rt.actor,
             actor_tier="ephemeral", run_id=rt.run_id, skills_loaded=rt.skills,
             workspace_id=rt.workspace_id, ip_address=ip_address, user_agent=user_agent,
+            on_behalf_of=rt.on_behalf_of, extra=dict(rt.extra),
         )
 
     # --- JSON-RPC dispatch ---
@@ -124,6 +128,11 @@ class McpFace:
             token="", tenant_id=principal.tenant_id, grants=principal.grants,
             run_id=None, actor=principal.subject, skills=(),
             workspace_id=getattr(principal, "active_workspace_id", None),
+            on_behalf_of=getattr(principal, "on_behalf_of", None),
+            extra={
+                "principal_role": getattr(principal, "role", ""),
+                "principal_scope": dict(getattr(principal, "scope", {}) or {}),
+            },
         )
         # Prefer explicit ip/ua from the route; fall back to what the door stamped
         # on the principal (the principal resolver sets these from the request).

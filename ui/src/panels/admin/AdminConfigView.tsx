@@ -28,6 +28,7 @@ function AdminConfigForm({
   onDiscard,
   onApplied,
   onDenied,
+  onReset,
 }: {
   section: AdminSection;
   loading: boolean;
@@ -47,6 +48,7 @@ function AdminConfigForm({
   onDiscard: () => void;
   onApplied: (result: InvokeResult) => void;
   onDenied: (reason: string) => void;
+  onReset: () => void;
 }): ReactNode {
   return (
     <div className="form">
@@ -86,15 +88,16 @@ function AdminConfigForm({
               <PendingHumanCard
                 hitlRequestId={pending.id}
                 noun="control"
-                verb="control.config.upsert"
+                verb={pending.verb}
                 sentParams={pending.params}
                 onApplied={onApplied}
                 onDenied={onDenied}
+                onReset={onReset}
               />
             )}
 
             <SaveBar
-              dirty={dirty}
+              dirty={dirty && pending === null}
               saving={saving}
               governed
               label={
@@ -189,12 +192,14 @@ function AdminRevisionHistory({
   section,
   onRefresh,
   onRollback,
+  pending,
 }: {
   history: ConfigRevisionSummary[];
   historyError: string | null;
   section: AdminSection;
   onRefresh: () => void;
   onRollback: (revId: number) => Promise<void>;
+  pending: boolean;
 }): ReactNode {
   return (
     <div className="list-card">
@@ -229,6 +234,7 @@ function AdminRevisionHistory({
               confirmLabel="Confirm rollback"
               tone="danger"
               busyLabel="Rolling back..."
+              disabled={pending}
               onConfirm={() => onRollback(r.id)}
             />
           </div>
@@ -261,6 +267,7 @@ export function AdminConfigView({ a }: { a: AdminPanelState }): ReactNode {
           onDiscard={a.discard}
           onApplied={a.onPendingApplied}
           onDenied={a.onPendingDenied}
+          onReset={a.onPendingReset}
         />
         <AdminManifestExport
           exported={a.exported}
@@ -279,6 +286,7 @@ export function AdminConfigView({ a }: { a: AdminPanelState }): ReactNode {
         section={a.section}
         onRefresh={() => void a.loadHistory(a.section.key)}
         onRollback={a.rollback}
+        pending={a.pending !== null}
       />
     </div>
   );

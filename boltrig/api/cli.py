@@ -31,7 +31,11 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     p_serve = sub.add_parser("serve", help="start the kernel API")
-    p_serve.add_argument("--host", default="0.0.0.0")
+    p_serve.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="bind address (default: 127.0.0.1; pass 0.0.0.0 explicitly for containers)",
+    )
     p_serve.add_argument("--port", type=int, default=8000)
 
     sub.add_parser("worker", help="start a fleet worker")
@@ -68,6 +72,17 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("smoke", help="offline in-process smoke test")
     sub.add_parser("check-invariants", help="run the invariant-binding gate")
+
+    p_opencode = sub.add_parser(
+        "opencode-plugin", help="install OpenCode project-local integration files"
+    )
+    opencode_sub = p_opencode.add_subparsers(dest="opencode_cmd", required=True)
+    p_oc_install = opencode_sub.add_parser(
+        "install", help="write the Boltrig MCP plugin into an OpenCode config dir"
+    )
+    p_oc_install.add_argument(
+        "--dir", default=".opencode", help="OpenCode config directory"
+    )
 
     p_doctor = sub.add_parser("doctor", help="static production-readiness checks")
     p_doctor.add_argument(
@@ -127,6 +142,12 @@ def main(argv: list[str] | None = None) -> int:
             print(f"script for '{args.cmd}' not found", file=sys.stderr)
             return 2
         runpy.run_path(script, run_name="__main__")
+        return 0
+    if args.cmd == "opencode-plugin":
+        from boltrig.fleet.opencode_plugin import install_opencode_plugin
+
+        path = install_opencode_plugin(args.dir)
+        print(path)
         return 0
     if args.cmd == "doctor":
         from .doctor import format_report, load_env_file, run_doctor

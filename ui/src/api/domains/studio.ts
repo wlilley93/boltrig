@@ -10,6 +10,7 @@ import type {
   AdapterSourceResponse,
   GenerateAdapterRequest,
   GenerateAdapterResponse,
+  GovernedRouteResponse,
   RegisterMcpRequest,
   ScheduleWorkflowRequest,
   ScheduleWorkflowResponse,
@@ -36,8 +37,10 @@ export const studioApi = {
     return request<SkillsResponse>("/v1/skills");
   },
 
-  upsertSkill(body: UpsertSkillRequest): Promise<StatusAck> {
-    return request<StatusAck>("/v1/skills", {
+  upsertSkill(
+    body: UpsertSkillRequest,
+  ): Promise<GovernedRouteResponse<StatusAck>> {
+    return request<GovernedRouteResponse<StatusAck>>("/v1/skills", {
       method: "POST",
       body,
       tolerateStatus: true,
@@ -53,24 +56,31 @@ export const studioApi = {
     );
   },
 
-  upsertNoun(body: UpsertNounRequest): Promise<StatusAck> {
-    return request<StatusAck>("/v1/nouns", {
+  upsertNoun(
+    body: UpsertNounRequest,
+  ): Promise<GovernedRouteResponse<StatusAck>> {
+    return request<GovernedRouteResponse<StatusAck>>("/v1/nouns", {
       method: "POST",
       body,
       tolerateStatus: true,
     });
   },
 
-  upsertVerb(body: UpsertVerbRequest): Promise<StatusAck> {
-    return request<StatusAck>("/v1/verbs", {
+  upsertVerb(
+    body: UpsertVerbRequest,
+  ): Promise<GovernedRouteResponse<StatusAck>> {
+    return request<GovernedRouteResponse<StatusAck>>("/v1/verbs", {
       method: "POST",
       body,
       tolerateStatus: true,
     });
   },
 
-  setBinding(verbId: string, body: SetBindingRequest): Promise<StatusAck> {
-    return request<StatusAck>(
+  setBinding(
+    verbId: string,
+    body: SetBindingRequest,
+  ): Promise<GovernedRouteResponse<StatusAck>> {
+    return request<GovernedRouteResponse<StatusAck>>(
       `/v1/verbs/${encodeURIComponent(verbId)}/binding`,
       { method: "POST", body, tolerateStatus: true },
     );
@@ -96,8 +106,8 @@ export const studioApi = {
   activateAdapter(
     adapterId: string,
     body: ActivateAdapterRequest,
-  ): Promise<ActivateAdapterResponse> {
-    return request<ActivateAdapterResponse>(
+  ): Promise<GovernedRouteResponse<ActivateAdapterResponse>> {
+    return request<GovernedRouteResponse<ActivateAdapterResponse>>(
       `/v1/adapters/${encodeURIComponent(adapterId)}/activate`,
       { method: "POST", body, tolerateStatus: true },
     );
@@ -134,8 +144,8 @@ export const studioApi = {
   scheduleWorkflow(
     wfId: string,
     body: ScheduleWorkflowRequest,
-  ): Promise<ScheduleWorkflowResponse> {
-    return request<ScheduleWorkflowResponse>(
+  ): Promise<GovernedRouteResponse<ScheduleWorkflowResponse>> {
+    return request<GovernedRouteResponse<ScheduleWorkflowResponse>>(
       `/v1/workflows/${encodeURIComponent(wfId)}/schedule`,
       { method: "POST", body, tolerateStatus: true },
     );
@@ -144,8 +154,8 @@ export const studioApi = {
   triggerWorkflow(
     wfId: string,
     body: TriggerWorkflowRequest,
-  ): Promise<WorkflowRunDescriptor> {
-    return request<WorkflowRunDescriptor>(
+  ): Promise<GovernedRouteResponse<WorkflowRunDescriptor>> {
+    return request<GovernedRouteResponse<WorkflowRunDescriptor>>(
       `/v1/workflows/${encodeURIComponent(wfId)}/trigger`,
       { method: "POST", body, tolerateStatus: true },
     );

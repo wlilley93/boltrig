@@ -21,8 +21,10 @@ explicit go (COUNTY 7-11 D10). This is ready to execute the moment a path is cho
 1. Removing CF Access makes the boltrig login + 2FA the SOLE gate on app.boltrig.io.
    A login/2FA fault locks the live console out until fixed on the box.
 2. Existing CF-Access users have no password; session-auth needs a seeding path.
-3. Prod DB holds real data; migrations 0010-0019 are additive (ADD COLUMN / CREATE
-   TABLE IF NOT EXISTS) so safe, but must be run.
+3. Prod DB holds real data. The current Alembic chain runs through
+   `0023_hitl_request_binding`; unlike the older 0010-0019-only plan, 0022 includes a
+   type conversion and column removal and has no automated downgrade. A verified
+   off-box snapshot and restore rehearsal are mandatory before applying it.
 4. Grant-narrowing (COUNTY 8) is backward-compatible: prod users have no
    org/workspace membership, so SEC-110 keeps their current grants unchanged.
 
@@ -31,11 +33,24 @@ explicit go (COUNTY 7-11 D10). This is ready to execute the moment a path is cho
    `cd ~/Projects/boltrig && git archive HEAD | ssh jellytot-prod 'cd ~/Projects/boltrig && tar -x'`
    (this updates the working tree only; running containers keep their image).
 2. Build the 4 images on prod from the transferred tree (same Dockerfiles as dev).
-3. Apply migrations to the prod DB (additive, safe):
-   `docker compose exec -T kernel boltrig ... ` OR `make migrate` (alembic upgrade
-   head, 0010 -> 0019). Verify with the fresh-boot identity test's column checks.
+3. Restore the pre-migration `pg_dump -Fc` into a disposable database, run
+   `make migrate`, and complete the migration-parity and application smoke tests.
+   Then stop production writers, take and verify a fresh off-box snapshot, apply
+   `alembic upgrade head`, and confirm `alembic current` reports
+   `0023_hitl_request_binding`. Rollback across 0022 means restoring that snapshot and
+   the prior images together; never run `alembic downgrade` across 0022 and never
+   roll back only the application image.
 4. Bump `User.sessionVersion` is N/A here; force-reload open tabs after the UI image
    swap by the usual cache-bust (new index-*.js hash from the rebuild).
+5. Set stack-owned Herdr/OpenCode/Browser CLI roots before any v2 agent-control profile is
+   enabled: `BOLTRIG_HERDR_HOME=/var/lib/boltrig/herdr` and
+   `BOLTRIG_OPENCODE_HOME=/var/lib/boltrig/opencode`, plus
+   `BOLTRIG_BROWSER_CLI_HOME=/var/lib/boltrig/browser-cli` when browser verbs are
+   enabled. Never bind prod to a human user's `~/.config/herdr`,
+   `~/.local/share/herdr`, `~/.config/opencode`, `.opencode`, or browser profile
+   state. Run `boltrig doctor --production` and treat `herdr_stack_home`,
+   `opencode_stack_home`, `browser_cli_stack_home`, and `browser_cli_stack_cli`
+   failures as blockers.
 
 ## Path A - ship code, KEEP Cloudflare Access (recommended, lowest blast)
 Do the common steps, then `docker compose up -d --build kernel fleet-worker ui`.

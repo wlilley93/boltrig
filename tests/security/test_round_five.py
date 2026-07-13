@@ -13,25 +13,73 @@ import asyncio
 import pytest
 from fastapi.testclient import TestClient
 
+from boltrig.adapters.base import ErrorClass
 from boltrig.adapters.builtin.memory_tickets import build as build_tickets
 from boltrig.kernel import Kernel
 from boltrig.kernel.app import create_app
 from boltrig.memory import EngineFact, LocalMemoryEngine
 from boltrig.memory.adapter import build_memory_adapter
-from boltrig.models import GrantSet, MemoryFact, TenantPermissions
+from boltrig.memory.projections import MemoryProjectionFanout, ProjectionRecallHit, ProjectionResult
+from boltrig.models import GrantSet, InvocationContext, MemoryFact, TenantPermissions
 from boltrig.store import InMemoryStore
 
 T = "acme"
 
 
+class _Projection:
+    def __init__(self, projection_id, *, fail_remember=False, fail_forget=False,
+                 remember_status=None):
+        self.id = projection_id
+        self.fail_remember = fail_remember
+        self.fail_forget = fail_forget
+        self.remember_status = remember_status
+        self.remembered = []
+        self.forgotten = []
+        self.facts = {}
+
+    async def remember(self, tenant_id, fact, context):
+        if self.fail_remember:
+            raise RuntimeError(f"{self.id} remember down")
+        self.remembered.append((tenant_id, fact.id, fact.owner_scope))
+        self.facts[(tenant_id, fact.id)] = fact
+        if self.remember_status:
+            return ProjectionResult(self.remember_status, f"{self.id}:{fact.id}")
+        return ProjectionResult.written(f"{self.id}:{fact.id}")
+
+    async def forget(self, tenant_id, *, fact_id, projection_ref, context):
+        if self.fail_forget:
+            raise RuntimeError(f"{self.id} forget down")
+        self.forgotten.append((tenant_id, fact_id, projection_ref))
+        return ProjectionResult.deleted(projection_ref)
+
+    async def recall(self, tenant_id, query, *, scopes, mode, limit, max_hops, context):
+        q = query.lower()
+        hits = []
+        for (t, fid), fact in self.facts.items():
+            if t == tenant_id and fact.owner_scope in set(scopes) and q in fact.content.lower():
+                hits.append(ProjectionRecallHit(
+                    fact_id=fid,
+                    content=f"projected:{fact.content}",
+                    projection_ref=f"{self.id}:{fid}",
+                ))
+        return hits[:limit]
+
+
+class _LedgerFailStore(InMemoryStore):
+    async def add_memory_fact(self, fact):
+        raise RuntimeError("ledger down")
+
+
 async def _kernel(*, sensitive_endpoint="local-sensitive", local_endpoints=("local-sensitive",),
-                  with_tickets=False):
+                  with_tickets=False, projections=None):
     store = InMemoryStore()
     store.set_tenant_permissions(TenantPermissions(T, GrantSet.of(["*"])))
     k = Kernel(store)
     engine = LocalMemoryEngine()
+    fanout = MemoryProjectionFanout(store, projections) if projections else None
     adapter = build_memory_adapter(engine, store, audit=k.audit, config={
-        "embedding_endpoint": sensitive_endpoint, "local_endpoints": list(local_endpoints)})
+        "embedding_endpoint": sensitive_endpoint, "local_endpoints": list(local_endpoints)},
+        projections=fanout)
     await k.register_adapter(T, adapter)
     if with_tickets:
         await k.register_adapter(T, build_tickets())
@@ -124,6 +172,110 @@ def test_sensitive_memory_stays_local():
     # a standard fact is unaffected
     assert c.post("/v1/memory/remember", json={"content": "ok note"},
                   headers=_h("alice")).status_code == 200
+
+
+def test_memory_projection_fanout_records_per_backend_status():
+    mem0 = _Projection("mem0")
+    cognee = _Projection("cognee", fail_remember=True)
+    k, store, engine = asyncio.run(_kernel(projections=[mem0, cognee]))
+    c = _client(k)
+
+    resp = c.post("/v1/memory/remember", json={"content": "customer likes blue"},
+                  headers=_h("alice"))
+
+    assert resp.status_code == 200
+    body = resp.json()
+    fid = body["fact_ids"][0]
+    assert asyncio.run(store.get_memory_fact(T, fid)) is not None
+    assert body["projections"] == [
+        {"projection_id": "mem0", "operation": "remember", "status": "written",
+         "fact_id": fid, "projection_ref": f"mem0:{fid}"},
+        {"projection_id": "cognee", "operation": "remember", "status": "failed",
+         "fact_id": fid, "error": "RuntimeError: cognee remember down"},
+    ]
+    rows = asyncio.run(store.list_memory_projection_statuses(T, fact_id=fid))
+    by_projection = {row.projection_id: row for row in rows if row.operation == "remember"}
+    assert by_projection["mem0"].status == "written"
+    assert by_projection["mem0"].projection_ref == f"mem0:{fid}"
+    assert by_projection["cognee"].status == "failed"
+    assert mem0.remembered == [(T, fid, "user:alice")]
+
+
+def test_memory_recall_defaults_to_primary_projection_and_labels_source():
+    mem0 = _Projection("mem0")
+    cognee = _Projection("cognee")
+    k, store, engine = asyncio.run(_kernel(projections=[mem0, cognee]))
+    c = _client(k)
+    created = c.post("/v1/memory/remember", json={"content": "customer likes blue"},
+                     headers=_h("alice")).json()
+    fid = created["fact_ids"][0]
+
+    out = c.post("/v1/memory/recall", json={"query": "customer"}, headers=_h("alice")).json()
+
+    assert out["projection_source"] == "mem0"
+    assert out["facts"][0]["id"] == fid
+    assert out["facts"][0]["content"] == "projected:customer likes blue"
+    assert out["facts"][0]["projection"] == {
+        "source": "mem0",
+        "ref": f"mem0:{fid}",
+        "authority": "kernel_ledger",
+    }
+
+
+def test_memory_projection_invalid_status_records_failure():
+    bad = _Projection("mem0", remember_status="queued")
+    k, store, engine = asyncio.run(_kernel(projections=[bad]))
+    c = _client(k)
+
+    body = c.post("/v1/memory/remember", json={"content": "invalid status note"},
+                  headers=_h("alice")).json()
+
+    assert body["projections"][0]["status"] == "failed"
+    assert "invalid projection status" in body["projections"][0]["error"]
+
+
+def test_memory_ledger_write_failure_does_not_touch_engine():
+    store = _LedgerFailStore()
+    engine = LocalMemoryEngine()
+    adapter = build_memory_adapter(engine, store, audit=None)
+    context = InvocationContext(tenant_id=T, actor="alice", grants=GrantSet.of(["*"]))
+
+    result = asyncio.run(adapter.execute(
+        "memory.remember", {"content": "orphan candidate"}, None, context))
+    hits = asyncio.run(engine.recall(
+        T, "orphan", scopes=["user:alice", "org"], mode="similarity", limit=10))
+
+    assert not result.ok
+    assert result.error is not None
+    assert result.error.error_class == ErrorClass.INTERNAL
+    assert hits == []
+
+
+def test_memory_forget_fans_out_delete_without_owning_erasure():
+    mem0 = _Projection("mem0")
+    cognee = _Projection("cognee", fail_forget=True)
+    k, store, engine = asyncio.run(_kernel(projections=[mem0, cognee]))
+    c = _client(k)
+    created = c.post("/v1/memory/remember", json={"content": "apollo note"},
+                     headers=_h("alice")).json()
+    fid = created["fact_ids"][0]
+
+    out = c.post("/v1/memory/forget", json={"target": fid}, headers=_h("alice")).json()
+
+    assert out["removed"] == [fid]
+    assert asyncio.run(store.get_memory_fact(T, fid)) is None
+    assert out["projections"] == [
+        {"projection_id": "mem0", "operation": "forget", "status": "deleted",
+         "fact_id": fid, "projection_ref": f"mem0:{fid}"},
+        {"projection_id": "cognee", "operation": "forget", "status": "delete_failed",
+         "fact_id": fid, "projection_ref": f"cognee:{fid}",
+         "error": "RuntimeError: cognee forget down"},
+    ]
+    rows = asyncio.run(store.list_memory_projection_statuses(T, fact_id=fid, limit=10))
+    deletes = {row.projection_id: row for row in rows if row.operation == "forget"}
+    assert deletes["mem0"].status == "deleted"
+    assert deletes["cognee"].status == "delete_failed"
+    assert mem0.forgotten == [(T, fid, f"mem0:{fid}")]
 
 
 # --- SEC-44: complete, audited erasure ---------------------------------------

@@ -38,7 +38,7 @@ consistent with it.
 4. **No hardcoded values** — design tokens for styles (see [[design-system]]),
    props/hooks for content (see [[component-conventions]]).
 5. **Routes delegate to views.** `app/**/page.tsx` imports only from `views/`.
-6. **No `any`.** Type everything. Run `yarn lint` before finishing.
+6. **No `any`.** Type everything. Run `pnpm run lint:strict` before finishing.
 7. **Server Components by default**; `"use client"` only at leaves.
 
 ## Where to look

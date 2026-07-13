@@ -1,0 +1,269 @@
+{
+  "version": 1,
+  "exemptions": {
+    "boltrig/adapters/builtin/jira.py": {
+      "max_file_lines": 284,
+      "max_function_lines": 109,
+      "over_limit_functions": [
+        {"name": "JiraAdapter.describe", "line": 68, "lines": 109}
+      ],
+      "owner": "adapter-maintainers",
+      "reason": "Split the legacy describe schema into composable operation groups without changing the public adapter contract.",
+      "expires": "2026-12-31"
+    },
+    "boltrig/adapters/builtin/ms_graph.py": {
+      "max_file_lines": 390,
+      "max_function_lines": 179,
+      "over_limit_functions": [
+        {"name": "MsGraphAdapter.describe", "line": 61, "lines": 179}
+      ],
+      "owner": "adapter-maintainers",
+      "reason": "Decompose the Microsoft Graph capability description by resource while preserving its existing verb schemas.",
+      "expires": "2026-12-31"
+    },
+    "boltrig/adapters/generator.py": {
+      "max_file_lines": 535,
+      "max_function_lines": 50,
+      "over_limit_functions": [],
+      "owner": "adapter-maintainers",
+      "reason": "Extract generated-adapter parsing, validation, and emission phases into focused modules.",
+      "expires": "2026-12-31"
+    },
+    "boltrig/adapters/http_base.py": {
+      "max_file_lines": 456,
+      "max_function_lines": 61,
+      "over_limit_functions": [],
+      "owner": "adapter-maintainers",
+      "reason": "Separate transport policy, SSRF validation, and response handling from the shared HTTP adapter base.",
+      "expires": "2026-12-31"
+    },
+    "boltrig/api/auth_routes.py": {
+      "max_file_lines": 820,
+      "max_function_lines": 514,
+      "over_limit_functions": [
+        {"name": "register_auth_routes", "line": 307, "lines": 514},
+        {"name": "register_auth_routes.login", "line": 382, "lines": 95},
+        {"name": "register_auth_routes.two_factor_challenge", "line": 668, "lines": 94}
+      ],
+      "owner": "identity-maintainers",
+      "reason": "Extract login, invitation, session, and two-factor route groups while retaining one authentication boundary.",
+      "expires": "2026-12-31"
+    },
+    "boltrig/api/bootstrap.py": {
+      "max_file_lines": 585,
+      "max_function_lines": 105,
+      "over_limit_functions": [
+        {"name": "build_app", "line": 481, "lines": 105}
+      ],
+      "owner": "platform-maintainers",
+      "reason": "Split dependency construction and runtime wiring into typed bootstrap stages without changing startup order.",
+      "expires": "2026-12-31"
+    },
+    "boltrig/api/cli.py": {
+      "max_file_lines": 169,
+      "max_function_lines": 137,
+      "over_limit_functions": [
+        {"name": "main", "line": 29, "lines": 137}
+      ],
+      "owner": "platform-maintainers",
+      "reason": "Decompose command parsing and command execution while preserving the existing CLI surface.",
+      "expires": "2026-12-31"
+    },
+    "boltrig/api/doctor.py": {
+      "max_file_lines": 579,
+      "max_function_lines": 66,
+      "over_limit_functions": [],
+      "owner": "operations-maintainers",
+      "reason": "Group production posture checks into focused modules while retaining stable check identifiers and output.",
+      "expires": "2026-12-31"
+    },
+    "boltrig/api/initiate.py": {
+      "max_file_lines": 222,
+      "max_function_lines": 91,
+      "over_limit_functions": [
+        {"name": "_run", "line": 48, "lines": 91}
+      ],
+      "owner": "platform-maintainers",
+      "reason": "Extract initiation orchestration phases without changing request validation or execution semantics.",
+      "expires": "2026-12-31"
+    },
+    "boltrig/config/manifest.py": {
+      "max_file_lines": 859,
+      "max_function_lines": 88,
+      "over_limit_functions": [
+        {"name": "apply_manifest", "line": 772, "lines": 88}
+      ],
+      "owner": "configuration-maintainers",
+      "reason": "Split manifest models, validation, and application into section-oriented modules with round-trip parity.",
+      "expires": "2026-12-31"
+    },
+    "boltrig/fleet/chat.py": {
+      "max_file_lines": 659,
+      "max_function_lines": 117,
+      "over_limit_functions": [
+        {"name": "build_turn_executor", "line": 543, "lines": 117},
+        {"name": "build_turn_executor.executor", "line": 566, "lines": 92}
+      ],
+      "owner": "fleet-maintainers",
+      "reason": "Separate conversation context, turn execution, and event persistence while preserving streaming behavior.",
+      "expires": "2026-12-31"
+    },
+    "boltrig/fleet/pump.py": {
+      "max_file_lines": 549,
+      "max_function_lines": 86,
+      "over_limit_functions": [
+        {"name": "WorkPump.handle_claimed_item", "line": 216, "lines": 86}
+      ],
+      "owner": "fleet-maintainers",
+      "reason": "Extract work-claim lifecycle phases while preserving durable retry and checkpoint semantics.",
+      "expires": "2026-12-31"
+    },
+    "boltrig/fleet/runtime.py": {
+      "max_file_lines": 456,
+      "max_function_lines": 75,
+      "over_limit_functions": [],
+      "owner": "fleet-maintainers",
+      "reason": "Complete runtime-family extraction so the legacy compatibility facade falls below the file floor.",
+      "expires": "2026-12-31"
+    },
+    "boltrig/fleet/spawn.py": {
+      "max_file_lines": 395,
+      "max_function_lines": 94,
+      "over_limit_functions": [
+        {"name": "Spawner.spawn", "line": 71, "lines": 94}
+      ],
+      "owner": "fleet-maintainers",
+      "reason": "Split spawn selection, token issuance, and execution while preserving delegated authority checks.",
+      "expires": "2026-12-31"
+    },
+    "boltrig/fleet/ultracode.py": {
+      "max_file_lines": 380,
+      "max_function_lines": 101,
+      "over_limit_functions": [
+        {"name": "run_ultracode_body", "line": 280, "lines": 101}
+      ],
+      "owner": "fleet-maintainers",
+      "reason": "Extract UltraCode task-body orchestration stages without changing runtime registration behavior.",
+      "expires": "2026-12-31"
+    },
+    "boltrig/identity/sessions.py": {
+      "max_file_lines": 359,
+      "max_function_lines": 113,
+      "over_limit_functions": [
+        {"name": "build_session_resolver", "line": 247, "lines": 113},
+        {"name": "build_session_resolver.resolver", "line": 258, "lines": 100}
+      ],
+      "owner": "identity-maintainers",
+      "reason": "Separate session resolution and cross-tenant membership rebinding while retaining fail-closed identity semantics.",
+      "expires": "2026-12-31"
+    },
+    "boltrig/kernel/access_routes.py": {
+      "max_file_lines": 1029,
+      "max_function_lines": 855,
+      "over_limit_functions": [
+        {"name": "register_access_routes", "line": 175, "lines": 855}
+      ],
+      "owner": "kernel-maintainers",
+      "reason": "Decompose access, user, invitation, and notification route registrars behind the governed control chokepoint.",
+      "expires": "2026-12-31"
+    },
+    "boltrig/kernel/app.py": {
+      "max_file_lines": 753,
+      "max_function_lines": 548,
+      "over_limit_functions": [
+        {"name": "create_app", "line": 206, "lines": 548}
+      ],
+      "owner": "kernel-maintainers",
+      "reason": "Extract application middleware and route-family wiring while preserving dependency ownership and ordering.",
+      "expires": "2026-12-31"
+    },
+    "boltrig/kernel/channel_routes.py": {
+      "max_file_lines": 415,
+      "max_function_lines": 294,
+      "over_limit_functions": [
+        {"name": "register_channel_routes", "line": 122, "lines": 294},
+        {"name": "register_channel_routes.channel_inbound", "line": 147, "lines": 99}
+      ],
+      "owner": "kernel-maintainers",
+      "reason": "Split channel administration and inbound gateway route registrars without weakening signature checks.",
+      "expires": "2026-12-31"
+    },
+    "boltrig/kernel/dispatch.py": {
+      "max_file_lines": 479,
+      "max_function_lines": 116,
+      "over_limit_functions": [
+        {"name": "Dispatcher.invoke", "line": 237, "lines": 116}
+      ],
+      "owner": "kernel-maintainers",
+      "reason": "Extract dispatch phases behind private typed helpers while retaining the single governed chokepoint.",
+      "expires": "2026-12-31"
+    },
+    "boltrig/kernel/memory_routes.py": {
+      "max_file_lines": 112,
+      "max_function_lines": 91,
+      "over_limit_functions": [
+        {"name": "register_memory_routes", "line": 22, "lines": 91}
+      ],
+      "owner": "kernel-maintainers",
+      "reason": "Flatten the memory route registrar while preserving scope enforcement at every endpoint.",
+      "expires": "2026-12-31"
+    },
+    "boltrig/kernel/platform_routes/observability.py": {
+      "max_file_lines": 343,
+      "max_function_lines": 256,
+      "over_limit_functions": [
+        {"name": "register", "line": 88, "lines": 256},
+        {"name": "register.audit_search", "line": 208, "lines": 81}
+      ],
+      "owner": "observability-maintainers",
+      "reason": "Split audit, metrics, capability changelog, and model telemetry route registration by surface.",
+      "expires": "2026-12-31"
+    },
+    "boltrig/memory/pgvector.py": {
+      "max_file_lines": 301,
+      "max_function_lines": 83,
+      "over_limit_functions": [
+        {"name": "PgVectorMemoryEngine.recall", "line": 127, "lines": 83}
+      ],
+      "owner": "memory-maintainers",
+      "reason": "Extract vector recall filtering and result mapping without changing tenant and scope isolation.",
+      "expires": "2026-12-31"
+    },
+    "boltrig/store/base.py": {
+      "max_file_lines": 540,
+      "max_function_lines": 18,
+      "over_limit_functions": [],
+      "owner": "store-maintainers",
+      "reason": "Split the store protocol into domain protocols while preserving one composed compatibility contract.",
+      "expires": "2026-12-31"
+    },
+    "boltrig/store/memory.py": {
+      "max_file_lines": 1093,
+      "max_function_lines": 88,
+      "over_limit_functions": [
+        {"name": "InMemoryStore.__init__", "line": 88, "lines": 88}
+      ],
+      "owner": "store-maintainers",
+      "reason": "Extract domain partials in lockstep with PostgreSQL while preserving complete store parity.",
+      "expires": "2026-12-31"
+    },
+    "boltrig/store/postgres.py": {
+      "max_file_lines": 2386,
+      "max_function_lines": 53,
+      "over_limit_functions": [],
+      "owner": "store-maintainers",
+      "reason": "Extract domain partials in lockstep with the in-memory store while preserving SQL and RLS parity.",
+      "expires": "2026-12-31"
+    },
+    "boltrig/workflows/interpreter.py": {
+      "max_file_lines": 294,
+      "max_function_lines": 207,
+      "over_limit_functions": [
+        {"name": "run_workflow_definition", "line": 88, "lines": 207}
+      ],
+      "owner": "workflow-maintainers",
+      "reason": "Decompose workflow execution by step type while preserving checkpoint, retry, and governance semantics.",
+      "expires": "2026-12-31"
+    }
+  }
+}

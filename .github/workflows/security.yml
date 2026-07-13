@@ -1,0 +1,173 @@
+name: security
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-security:
+    name: Source security
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+
+      - name: Install hash-locked security tools and project graph
+        run: python -m pip install --require-hashes -r requirements-dev-lock.txt
+
+      - name: Audit Python graphs and run SAST
+        run: make python-audit sast PY=python
+
+      - name: Scan complete Git history for secrets
+        run: make secret-scan
+
+      - name: Lint GitHub Actions workflows
+        run: make actionlint
+
+  codeql:
+    name: CodeQL (${{ matrix.language }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [actions, javascript-typescript, python]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          queries: security-extended
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
+        with:
+          category: /language:${{ matrix.language }}
+
+  containers:
+    name: Container (${{ matrix.image }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: kernel
+            dockerfile: deploy/kernel.Dockerfile
+            context: .
+          - image: fleet
+            dockerfile: deploy/fleet.Dockerfile
+            context: .
+          - image: ui
+            dockerfile: ui/Dockerfile
+            context: ui
+          - image: pi-sidecar
+            dockerfile: services/pi_sidecar/Dockerfile
+            context: services/pi_sidecar
+          - image: backup
+            dockerfile: deploy/backup.Dockerfile
+            context: .
+    env:
+      IMAGE_REF: boltrig-ci-${{ matrix.image }}:${{ github.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Build image
+        env:
+          BUILD_CONTEXT: ${{ matrix.context }}
+          DOCKERFILE: ${{ matrix.dockerfile }}
+        run: docker build --pull --file "$DOCKERFILE" --tag "$IMAGE_REF" "$BUILD_CONTEXT"
+
+      - name: Record complete high and critical vulnerability report
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.72.0
+          scan-type: image
+          image-ref: ${{ env.IMAGE_REF }}
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          format: json
+          output: vulnerabilities-${{ matrix.image }}.json
+          exit-code: "0"
+
+      - name: Generate CycloneDX SBOM
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          skip-setup-trivy: true
+          scan-type: image
+          image-ref: ${{ env.IMAGE_REF }}
+          scanners: vuln
+          format: cyclonedx
+          output: sbom-${{ matrix.image }}.cdx.json
+
+      - name: Upload scan evidence and SBOM
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: security-${{ matrix.image }}
+          path: |
+            vulnerabilities-${{ matrix.image }}.json
+            sbom-${{ matrix.image }}.cdx.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Fail on fixable high or critical vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          skip-setup-trivy: true
+          scan-type: image
+          image-ref: ${{ env.IMAGE_REF }}
+          scanners: vuln
+          ignore-unfixed: true
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          timeout: 10m
+
+  security:
+    name: Security gate
+    if: ${{ always() }}
+    needs: [source-security, codeql, containers]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Require every security component
+        env:
+          CODEQL_RESULT: ${{ needs.codeql.result }}
+          CONTAINER_RESULT: ${{ needs.containers.result }}
+          SOURCE_RESULT: ${{ needs.source-security.result }}
+        run: |
+          test "$SOURCE_RESULT" = success
+          test "$CODEQL_RESULT" = success
+          test "$CONTAINER_RESULT" = success

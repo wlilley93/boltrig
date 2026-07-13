@@ -1,15 +1,12 @@
 # Proposal: move idempotency replay ahead of the HITL gate and rate limit
 
-Status: DESIGN / not implemented. This documents a confirmed correctness bug in
-the dispatch chokepoint and a security-analysed fix. It is deliberately NOT
-patched in directly: `AGENTS.md` forbids casually touching the dispatch
-sequence, and re-ordering security-relevant steps is a first-impression
-governance decision. This artifact is what must be reviewed (and, once Boltrig
-is a VJS jurisdiction, routed to the court) before any code lands.
+Status: IMPLEMENTED. This documents the correctness bug that used to exist in
+the dispatch chokepoint and the security analysis for the fix now landed in
+`boltrig/kernel/dispatch.py`.
 
 ## The bug
 
-The 10-step chokepoint (`boltrig/kernel/dispatch.py`) runs, in order:
+The old 10-step chokepoint (`boltrig/kernel/dispatch.py`) ran, in order:
 
 ```
 3. grant check               (SEC-07)
@@ -46,7 +43,7 @@ incorrectly re-gated (re-prompted for human approval) and rate-limited, instead
 of replaying the stored result. This is the worst case precisely for the actions
 we most want to be idempotent.
 
-## The proposed fix
+## The implemented fix
 
 Move idempotency replay to immediately **after** the grant check (3) and
 **before** the HITL gate (4) and rate limit (5):
@@ -93,7 +90,7 @@ Move idempotency replay to immediately **after** the grant check (3) and
 - *"Key collision leaks data across callers."* Unchanged by this move - keys are
   tenant-scoped and authorization still precedes replay.
 
-## Test plan (to land with the change)
+## Regression coverage
 
 - `SEC-14` + `NFR-REL-02`: an idempotent retry of an approved+executed
   HIGH-consequence verb (same key, same spent approval) returns the stored
@@ -109,6 +106,7 @@ Move idempotency replay to immediately **after** the grant check (3) and
 
 ## Disposition
 
-Routed for review. Do not patch `dispatch.py` until ratified. The fix is small
-and the analysis above is the case for it; the bench (or the reviewer) owns the
-decision to re-order the chokepoint.
+Landed. Regression coverage is bound under `SEC-15`:
+
+- `tests/kernel/test_idempotency.py::test_replay_precedes_spent_approval_gate`
+- `tests/kernel/test_idempotency.py::test_replay_precedes_rate_limit`
