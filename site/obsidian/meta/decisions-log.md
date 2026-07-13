@@ -114,7 +114,7 @@ immersive loader and richer HUD. Two constraints shaped the design:
 
 1. Re-rendering the WebGL tree (or rebuilding the ~360k-point geometry / the
    three-composer pipeline) on every slider tick would stutter badly.
-2. The React-Compiler `react-hooks/immutability` lint rule (the `yarn lint`
+2. The React-Compiler `react-hooks/immutability` lint rule (the `pnpm run lint:strict`
    gate) forbids mutating a ref's value in `useFrame` if that same ref is also
    read in a `useEffect` — so the "subscribe in an effect, push into material
    uniforms" pattern is disallowed.
@@ -231,14 +231,14 @@ collided with this:
   transitions/keyframes were added.
 - Mutate three objects per-frame **through component/`useRef` refs**, never by
   mutating a hook's memoised return — the React-Compiler `react-hooks`
-  immutability rule (the `yarn lint` gate) forbids the latter.
+  immutability rule (the `pnpm run lint:strict` gate) forbids the latter.
 - Brain *config* (colours, counts, speeds) is a typed `BRAIN_CONFIG` object fed
   to shader uniforms — it is scene content, not CSS styling, so it does not go
   through `globals.css` design tokens (ADR-0004 unaffected).
 
 **Consequences.**
 
-- `yarn lint` — the project's enforced gate (hard rule #7) — stays green.
+- `pnpm run lint:strict` — the project's enforced gate (hard rule #7) — stays green.
 - **The animation engine was patched (with sign-off)** to make `next build`'s
   TypeScript pass — green for the first time in the repo:
   - A shared `DynamicTag` type (`src/types/springs.ts`, *not* protected)

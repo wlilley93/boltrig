@@ -7,9 +7,10 @@ the full project tree, minus installed dependencies and any local secrets.
 ## Run it as-is
 
 ```sh
-npm install
-npm run dev      # http://localhost:3000
-# production: npm run build && npm run start
+corepack enable
+pnpm install
+pnpm run dev      # http://localhost:3000
+# production: pnpm run build && pnpm run start
 ```
 
 > If the project needs environment variables (e.g. an API key), copy `.env.example` to

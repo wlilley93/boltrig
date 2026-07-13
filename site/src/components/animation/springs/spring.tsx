@@ -106,6 +106,7 @@ export const Spring = forwardRef<HTMLElement, SpringProps & { tag?: Tags }>(
       if (
         isMobileDisabled(
           springsConfig.disableOnMobile.spring || disableOnMobile,
+          width,
         )
       ) {
         return;
@@ -130,6 +131,7 @@ export const Spring = forwardRef<HTMLElement, SpringProps & { tag?: Tags }>(
       if (
         isMobileDisabled(
           springsConfig.disableOnMobile.spring || disableOnMobile,
+          width,
         )
       ) {
         return false;

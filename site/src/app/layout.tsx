@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { IBM_Plex_Sans, JetBrains_Mono } from "next/font/google";
 
 import {
   generateMetadata,
@@ -18,6 +19,18 @@ import "@/app/globals.css";
 export const metadata: Metadata = generateMetadata();
 export const viewport: Viewport = generateViewport();
 
+const plexSans = IBM_Plex_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-plex-sans",
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-jetbrains-mono",
+});
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -25,18 +38,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <head>
-        {/* Boltrig typefaces (Google Fonts): IBM Plex Sans for copy, JetBrains
-            Mono for terminal chrome - resolved via `--font-sans` / `--font-mono`
-            in globals.css. Matches the product console. */}
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
-          rel="stylesheet"
-        />
-      </head>
-      <body className="antialiased">
+      <body className={`${plexSans.variable} ${jetbrainsMono.variable} antialiased`}>
         <SafeJsonLd data={getSiteStructuredData()} />
         <SiteHeader />
         <ScrollLayout>

@@ -33,7 +33,7 @@ and hand it to an AI agent or follow it manually.
 10. **Semantic & accessible markup.** Follow [[html-semantics]] — one `<h1>`,
     proper landmarks, native elements, named controls, visible focus, `alt` text,
     semantic `tag` on animation components.
-11. **Quality.** `yarn lint`, components < ~150 lines, conventional commit.
+11. **Quality.** `pnpm run lint:strict`, components < ~150 lines, conventional commit.
 
 ## Deliverables
 

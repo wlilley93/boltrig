@@ -94,16 +94,17 @@ re-inject context on every turn. That bought-clean code costs tokens.
 
 4. **Install and run**
    ```bash
-   yarn install
-   yarn dev      # http://localhost:3000
+   corepack enable
+   pnpm install
+   pnpm run dev      # http://localhost:3000
    ```
 
 | Script | Purpose |
 |--------|---------|
-| `yarn dev` | Development server |
-| `yarn build` | Production build |
-| `yarn start` | Serve the production build |
-| `yarn lint` | ESLint |
+| `pnpm run dev` | Development server |
+| `pnpm run build` | Production build |
+| `pnpm run start` | Serve the production build |
+| `pnpm run lint:strict` | ESLint |
 
 ## 🚀 Deploy to Vercel
 

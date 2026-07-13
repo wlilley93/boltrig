@@ -104,6 +104,7 @@ export const Hover = forwardRef<HTMLElement, SpringProps & { tag?: Tags }>(
       if (
         isMobileDisabled(
           springsConfig.disableOnMobile.hover || disableOnMobile,
+          width,
         )
       ) {
         return;
@@ -132,7 +133,7 @@ export const Hover = forwardRef<HTMLElement, SpringProps & { tag?: Tags }>(
 
     const handleMouseEnter = () => {
       if (
-        isMobileDisabled(springsConfig.disableOnMobile.hover || disableOnMobile)
+        isMobileDisabled(springsConfig.disableOnMobile.hover || disableOnMobile, width)
       ) {
         return;
       }
@@ -144,7 +145,7 @@ export const Hover = forwardRef<HTMLElement, SpringProps & { tag?: Tags }>(
 
     const handleMouseLeave = () => {
       if (
-        isMobileDisabled(springsConfig.disableOnMobile.hover || disableOnMobile)
+        isMobileDisabled(springsConfig.disableOnMobile.hover || disableOnMobile, width)
       ) {
         return;
       }
@@ -158,6 +159,7 @@ export const Hover = forwardRef<HTMLElement, SpringProps & { tag?: Tags }>(
       if (
         isMobileDisabled(
           springsConfig.disableOnMobile.hover || disableOnMobile,
+          width,
         )
       ) {
         return false;
