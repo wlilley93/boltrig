@@ -158,10 +158,10 @@
       "expires": "2026-12-31"
     },
     "boltrig/kernel/access_routes.py": {
-      "max_file_lines": 1029,
-      "max_function_lines": 855,
+      "max_file_lines": 1032,
+      "max_function_lines": 858,
       "over_limit_functions": [
-        {"name": "register_access_routes", "line": 175, "lines": 855}
+        {"name": "register_access_routes", "line": 175, "lines": 858}
       ],
       "owner": "kernel-maintainers",
       "reason": "Decompose access, user, invitation, and notification route registrars behind the governed control chokepoint.",

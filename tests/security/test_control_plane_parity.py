@@ -751,3 +751,56 @@ async def test_bare_chat_turn_uses_manifest_skills_under_caller_ceiling():
         pass
     assert calls[-1]["skills"] == []
     assert calls[-1]["grant_ceiling"] == GrantSet.of([])
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-75")
+async def test_invitation_revoke_verb_and_route_write_identical_state():
+    """control.invitation.revoke (the governed verb) and DELETE
+    /v1/admin/invitations/{id} (the compat route) revoke the SAME invitation state
+    through the one chokepoint and return identical body/status. Low consequence:
+    no HITL hold, so the verb dispatches straight through."""
+    from datetime import datetime, timezone
+
+    from boltrig.models import UserInvitation
+
+    fixed = datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+    def _seed() -> UserInvitation:
+        # fixed timestamps so the two instances are field-for-field comparable
+        return UserInvitation(
+            id="inv-parity", tenant_id=T, email="pending@example.com",
+            intended_role="member", intended_scope={}, invited_by="admin@acme",
+            created_at=fixed, expires_at=fixed, status="pending",
+            token_hash="hash-parity",
+        )
+
+    kv = await _kernel()  # revoked via the governed verb
+    kr = await _kernel()  # revoked via the direct DELETE route
+    client = TestClient(
+        create_app(kr, platform={"admin": AdminConfig(InMemoryStore(), tenant_id=T, doc={})})
+    )
+    await kv.store.add_invitation(_seed())
+    await kr.store.add_invitation(_seed())
+
+    out = await kv.invoke(
+        "control", "control.invitation.revoke",
+        {"invite_id": "inv-parity"}, _ctx(["*"]),
+    )
+    assert out == {"id": "inv-parity"}
+
+    r = client.request("DELETE", "/v1/admin/invitations/inv-parity", headers=_hdr())
+    assert r.status_code == 200
+    # the route wraps the SAME verb output (identical body/status parity)
+    assert r.json() == {"status": "ok", **out}
+
+    iv = await kv.store.get_invitation(T, "inv-parity")
+    ir = await kr.store.get_invitation(T, "inv-parity")
+    assert iv.status == ir.status == "revoked"
+    assert iv == ir  # identical invitation state written by both paths
+
+    # the verb path was audited as a governed kernel verb (SEC-16)
+    events = await kv.store.audit_query(T, limit=50)
+    assert any(
+        e.verb == "control.invitation.revoke" and e.status == "ok" for e in events
+    )

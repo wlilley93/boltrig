@@ -1368,3 +1368,7 @@ invariants:
     description: The direct POST /v1/spawn seam caps the ephemeral child to the caller's own grants - no escalation beyond the spawner, aligning the seam with the SEC-29 test-spawn and eval capping that every other spawn entry point already applies.
     tests:
       - tests/security/test_round_three.py::test_v1_spawn_caps_child_to_caller_grants
+  SEC-140:
+    description: The control-plane HTTP routes hold the direct-write chokepoint - every k.store/kernel.store mutation in access_routes.py and channel_routes.py is a known sanctioned direct write (a caller's own-scope operation or the channel ingress/pairing seam), or is migrated debt that has moved onto a governed control.* verb; a new unsanctioned direct write, or a stale allowlist entry, fails the AST scan, so the debt is frozen and can only decrease.
+    tests:
+      - tests/security/test_control_write_chokepoint.py::test_control_plane_direct_writes_are_all_sanctioned
