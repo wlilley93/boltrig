@@ -6,6 +6,16 @@
 # ). The container targets use docker compose with .env + manifest.yaml.
 
 PY ?= .venv/bin/python
+# Absolute interpreter for the Playwright e2e webServer (it cds into ui/ first, so
+# a relative PY would break). A PY that contains a slash is a path: absolutise it
+# lexically so a venv symlink is preserved (never readlink -f, that would follow
+# the venv to the base interpreter and lose the boltrig install). A bare PY (CI
+# passes PY=python) is a PATH command: resolve it with command -v, already absolute.
+ifeq (,$(findstring /,$(PY)))
+E2E_PYTHON := $(shell command -v $(PY))
+else
+E2E_PYTHON := $(abspath $(PY))
+endif
 COVERAGE_MIN ?= 75
 PLAYWRIGHT_INSTALL_ARGS ?= chromium
 COMPOSE ?= docker compose
@@ -80,7 +90,7 @@ ui-e2e: ui-install ## Run Chromium Playwright against the built UI and real in-m
 	cd ui && pnpm exec playwright install $(PLAYWRIGHT_INSTALL_ARGS)
 	@set -- $$($(PY) -c 'import socket; sockets = [socket.socket() for _ in range(2)]; [item.bind(("127.0.0.1", 0)) for item in sockets]; print(*(item.getsockname()[1] for item in sockets))'); \
 		cd ui && \
-		BOLTRIG_E2E_PYTHON=$(abspath $(PY)) \
+		BOLTRIG_E2E_PYTHON=$(E2E_PYTHON) \
 		BOLTRIG_E2E_KERNEL_PORT=$$1 \
 		BOLTRIG_E2E_UI_PORT=$$2 \
 		pnpm exec playwright test
