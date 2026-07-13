@@ -241,6 +241,14 @@ def _administration_specs() -> list[VerbSpec]:
             idempotency_mode="disabled",
         ),
         _spec(
+            "control.invitation.revoke",
+            {"invite_id": _STRING},
+            ("invite_id",),
+            "Revoke a pending invitation before it is accepted",
+            consequence="low",
+            idempotency_mode="disabled",
+        ),
+        _spec(
             "control.notification.route",
             {
                 "id": _STRING,
