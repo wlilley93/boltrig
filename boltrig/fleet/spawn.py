@@ -349,6 +349,7 @@ def make_app_spawner(
             prefer=body.prefer,
             context=ctx,
             partial_on_budget=False,
+            grant_ceiling=principal.grants,  # SEC-139: cap the child to the caller
         )
 
     return app_spawner

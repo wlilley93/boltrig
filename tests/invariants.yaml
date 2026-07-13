@@ -1359,3 +1359,7 @@ invariants:
       - tests/integration/test_durable_resume.py::test_workflow_snapshot_rejects_tampering_and_cross_workspace_replay
       - tests/security/test_control_approval_binding.py::test_missing_mutable_resource_fails_before_creating_approval
       - tests/security/test_control_approval_binding.py::test_resource_change_between_gate_and_adapter_execute_fails_closed
+  SEC-139:
+    description: The direct POST /v1/spawn seam caps the ephemeral child to the caller's own grants - no escalation beyond the spawner, aligning the seam with the SEC-29 test-spawn and eval capping that every other spawn entry point already applies.
+    tests:
+      - tests/security/test_round_three.py::test_v1_spawn_caps_child_to_caller_grants
