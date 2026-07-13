@@ -15,7 +15,6 @@ from boltrig.models import AgentCapability, InvocationContext, ModelEndpoint
 
 from .control_operations import (
     activate_adapter_record,
-    ControlConflict,
     create_invitation_record,
     deactivate_user_record,
     generate_adapter_record,
@@ -30,6 +29,7 @@ from .control_operations import (
     upsert_verb_record,
     upsert_workflow_record,
 )
+from .control_safety import ControlConflict
 from .control_specs import control_specs
 
 __all__ = [

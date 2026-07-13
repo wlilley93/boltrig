@@ -57,8 +57,12 @@ async def control_plane_check(kernel: Kernel, tenant_id: str) -> dict[str, Any]:
         ):
             invalid_bindings += 1
     record = await kernel.store.get_adapter(tenant_id, "control")
+    # readiness_collaborators lives on the concrete ControlPlaneAdapter, not the
+    # base Adapter the loader hands back; probe defensively so a non-control
+    # adapter simply reports no collaborators rather than raising.
+    collaborators_probe = getattr(adapter, "readiness_collaborators", None)
     try:
-        collaborators = adapter.readiness_collaborators(kernel)
+        collaborators = collaborators_probe(kernel) if collaborators_probe else {}
     except Exception:
         collaborators = {}
     required_collaborators = {"store", "loader", "registry", "admin", "workflows"}
