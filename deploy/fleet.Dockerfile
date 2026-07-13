@@ -44,7 +44,7 @@ COPY boltrig/ /app/boltrig/
 # Boltrig v2 browser automation runtime: ship Browser Use CLI as an isolated
 # tool venv. Its dependency closure is hash-locked separately so it cannot
 # upgrade/downgrade the Boltrig app environment.
-ARG CHROMIUM_VERSION=150.0.7871.100-1~deb12u1
+ARG CHROMIUM_VERSION=150.0.7871.114-1~deb12u1
 ARG TINI_VERSION=0.19.0-1+b3
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
