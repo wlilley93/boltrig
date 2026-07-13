@@ -1,0 +1,5 @@
+# browser-use 0.13.3 pins vulnerable transitive releases. These patch-level
+# overrides are API-compatible and are exercised by the image smoke test. Drop
+# each line as soon as upstream adopts an equal or newer fixed version.
+aiohttp==3.14.1
+pypdf==6.13.3
