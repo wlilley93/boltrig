@@ -17,8 +17,19 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const PYTHON = process.env.BOLTRIG_E2E_PYTHON || "python3";
-const KERNEL_PORT = 8791;
-const UI_PORT = 4173;
+
+function portFromEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const port = Number(raw);
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+    throw new Error(`${name} must be an integer TCP port between 1 and 65535`);
+  }
+  return port;
+}
+
+const KERNEL_PORT = portFromEnv("BOLTRIG_E2E_KERNEL_PORT", 8791);
+const UI_PORT = portFromEnv("BOLTRIG_E2E_UI_PORT", 4173);
 
 export default defineConfig({
   testDir: "./e2e",
@@ -42,7 +53,7 @@ export default defineConfig({
     {
       // build then serve the BUILT UI (vite preview over dist), so the smoke
       // exercises the same artifact the nginx image ships.
-      command: "pnpm run build && pnpm run preview",
+      command: `pnpm run build && pnpm exec vite preview --host 127.0.0.1 --port ${UI_PORT} --strictPort`,
       url: `http://127.0.0.1:${UI_PORT}/`,
       reuseExistingServer: !process.env.CI,
       timeout: 180_000,

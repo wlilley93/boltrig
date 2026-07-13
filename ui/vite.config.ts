@@ -1,6 +1,21 @@
 import path from "node:path";
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
+
+import { MAX_JS_CHUNK_BYTES, oversizedChunks } from "./config/chunkBudget";
+
+function enforceChunkBudget(): Plugin {
+  return {
+    name: "boltrig-chunk-budget",
+    apply: "build",
+    generateBundle(_options, bundle) {
+      const oversized = oversizedChunks(bundle, MAX_JS_CHUNK_BYTES);
+      if (oversized.length === 0) return;
+      const detail = oversized.map(({ fileName, bytes }) => `${fileName} (${bytes} bytes)`).join(", ");
+      this.error(`JavaScript chunk budget exceeded (max ${MAX_JS_CHUNK_BYTES} bytes): ${detail}`);
+    },
+  };
+}
 
 // The dev server proxies the kernel HTTP surface so the SPA can use relative
 // paths in every environment. Override the kernel location with BOLTRIG_KERNEL_URL.
@@ -15,7 +30,7 @@ const KERNEL_PROXY = {
 };
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), enforceChunkBudget()],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
@@ -31,14 +46,13 @@ export default defineConfig({
     proxy: KERNEL_PROXY,
   },
   build: {
+    // Vite's warning and the hard Rollup gate above use the same decimal limit.
+    chunkSizeWarningLimit: MAX_JS_CHUNK_BYTES / 1000,
     rollupOptions: {
       output: {
-        // Split the heavy vendor code (React + the @xyflow/react canvas) into
-        // their own chunks so the initial app bundle stays small; the canvas
-        // chunk only loads when a canvas-using panel (Studio / Router tree) is
-        // lazy-mounted.
+        // Keep the heavy @xyflow/react canvas in its own chunk. It downloads
+        // only when a canvas-using panel (Studio / Router tree) is lazy-mounted.
         manualChunks: {
-          react: ["react", "react-dom"],
           reactflow: ["@xyflow/react"],
         },
       },

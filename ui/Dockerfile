@@ -1,7 +1,7 @@
 # Multi-stage: build the static SPA with node, then serve it with nginx.
 # nginx also reverse-proxies /v1 and /healthz to the kernel service.
 
-FROM node:22-alpine AS build
+FROM node:22.23.1-alpine3.24@sha256:16e22a550f3863206a3f701448c45f7912c6896a62de43add43bb9c86130c3e2 AS build
 WORKDIR /app
 RUN corepack enable
 
@@ -13,7 +13,9 @@ RUN pnpm install --frozen-lockfile --ignore-scripts && pnpm rebuild esbuild
 COPY . .
 RUN pnpm run build
 
-FROM nginx:1.27-alpine AS runtime
+FROM nginx:1.30.3-alpine@sha256:0d3b80406a13a767339fbe2f41406d6c7da727ab89cf8fae399e81f780f814d1 AS runtime
+# Security refreshes released after the immutable nginx image was built.
+RUN apk add --no-cache c-ares=1.34.8-r0 expat=2.8.2-r0 libexpat=2.8.2-r0
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
 EXPOSE 80
