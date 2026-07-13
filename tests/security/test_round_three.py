@@ -69,11 +69,21 @@ def test_authoring_requires_role_and_is_audited():
     # a viewer (not an author role) is denied
     denied = c.post("/v1/skills", json={"id": "s1"}, headers=_hdr("viewer"))
     assert denied.status_code == 403
-    # an org-admin may author, and it is audited
-    ok = c.post("/v1/skills", json={"id": "s1", "tool_grants": []}, headers=_hdr("org-admin"))
+    # An org-admin reaches the governed control path. A separate approver clears
+    # the high-consequence write, then the same request is applied and audited.
+    body = {"id": "s1", "tool_grants": []}
+    held = c.post("/v1/skills", json=body, headers=_hdr("org-admin"))
+    assert held.status_code == 202
+    request_id = held.json()["hitl_request_id"]
+    asyncio.run(k.hitl.answer(T, request_id, "approve", "security-admin"))
+    ok = c.post(
+        "/v1/skills",
+        json={**body, "approval_id": request_id},
+        headers=_hdr("org-admin"),
+    )
     assert ok.status_code == 200
     events = asyncio.run(k.store.audit_query(T))
-    assert any(e.verb == "authoring.skill.upsert" and e.actor == "u" for e in events)
+    assert any(e.verb == "control.skill.upsert" and e.actor == "u" for e in events)
 
 
 # --- SEC-29: a test-spawn cannot escalate beyond the author's grants ---------

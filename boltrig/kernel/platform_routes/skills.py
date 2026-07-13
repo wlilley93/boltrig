@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
-from boltrig.config.control_plane import upsert_skill_record
+from boltrig.kernel.control_routes import dispatch_control_route
 from ._shared import audit_authoring, platform_state, require_author
 
 
@@ -18,11 +18,16 @@ def register(app, P, K) -> None:
                             "tool_grants": s.tool_grants, "locale": s.locale} for s in skills]}
 
     @app.post("/v1/skills")
-    async def upsert_skill(body: dict, k=K, p=P) -> JSONResponse:
+    async def upsert_skill(
+        body: dict, request: Request, k=K, p=P
+    ) -> JSONResponse:
         require_author(p)
-        skill = await upsert_skill_record(k.store, p.tenant_id, body)
-        await audit_authoring(k, p, "skill.upsert", {"id": skill.id, "version": skill.version})
-        return JSONResponse({"status": "ok", "id": skill.id, "version": skill.version})
+        output, pending = await dispatch_control_route(
+            k, p, "control.skill.upsert", body, request=request
+        )
+        if pending is not None:
+            return pending
+        return JSONResponse({"status": "ok", **(output or {})})
 
     @app.post("/v1/skills/{skill_id}/test-spawn")
     async def test_spawn(skill_id: str, body: dict, request: Request, k=K, p=P) -> JSONResponse:

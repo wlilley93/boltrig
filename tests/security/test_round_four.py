@@ -66,9 +66,20 @@ def test_pat_never_escalates_and_dies_with_user():
     listed = c.get("/v1/me/tokens", headers=readonly).json()["tokens"]
     assert listed and all("secret" not in t for t in listed)
 
-    # deactivating the user (US-USR-03) makes the token stop working at once.
-    assert c.patch("/v1/admin/users/alice", json={"status": "deactivated"},
-                   headers=_hdr()).status_code == 200
+    # Deactivation is a governed, high-consequence control mutation. Once a
+    # different human approves and the caller reapplies it, the PAT dies at once.
+    held = c.patch(
+        "/v1/admin/users/alice", json={"status": "deactivated"}, headers=_hdr()
+    )
+    assert held.status_code == 202
+    request_id = held.json()["hitl_request_id"]
+    asyncio.run(k.hitl.answer(T, request_id, "approve", "security-admin"))
+    applied = c.patch(
+        "/v1/admin/users/alice",
+        json={"status": "deactivated", "approval_id": request_id},
+        headers=_hdr(),
+    )
+    assert applied.status_code == 200
     assert c.get("/v1/capabilities", headers=_bearer(secret)).status_code == 401
 
 
@@ -175,15 +186,30 @@ def test_no_unauthenticated_access_to_tokens():
 def test_authored_verbs_safe_by_default():
     k = asyncio.run(_kernel())
     c = _client(k)
+
+    def author(body: dict) -> dict:
+        held = c.post("/v1/verbs", json=body, headers=_hdr())
+        assert held.status_code == 202
+        request_id = held.json()["hitl_request_id"]
+        asyncio.run(k.hitl.answer(T, request_id, "approve", "security-admin"))
+        applied = c.post(
+            "/v1/verbs",
+            json={**body, "approval_id": request_id},
+            headers=_hdr(),
+        )
+        assert applied.status_code == 200
+        return applied.json()
+
     # a destructive verb authored with no explicit consequence defaults to high,
     # so the HITL gate engages (US-RTR-02/04).
-    dele = c.post("/v1/verbs", json={"id": "widget.delete", "noun_id": "widget"}, headers=_hdr())
-    assert dele.status_code == 200 and dele.json()["consequence"] == "high"
+    dele = author({"id": "widget.delete", "noun_id": "widget"})
+    assert dele["consequence"] == "high"
     stored = asyncio.run(k.store.get_verb(T, "widget.delete"))
     assert stored.consequence.value == "high"
     # a read verb stays low; an explicit choice is still honoured
-    fetch = c.post("/v1/verbs", json={"id": "widget.fetch", "noun_id": "widget"}, headers=_hdr())
-    assert fetch.json()["consequence"] == "low"
-    forced = c.post("/v1/verbs", json={"id": "widget.purge", "noun_id": "widget",
-                                       "consequence": "low"}, headers=_hdr())
-    assert forced.json()["consequence"] == "low"
+    fetch = author({"id": "widget.fetch", "noun_id": "widget"})
+    assert fetch["consequence"] == "low"
+    forced = author(
+        {"id": "widget.purge", "noun_id": "widget", "consequence": "low"}
+    )
+    assert forced["consequence"] == "low"

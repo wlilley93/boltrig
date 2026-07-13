@@ -20,6 +20,7 @@ def register_platform_routes(app, *, principal_dep, get_kernel) -> None:
     from . import (
         adapters,
         admin,
+        console,
         eval_routes,
         memory,
         observability,
@@ -32,6 +33,7 @@ def register_platform_routes(app, *, principal_dep, get_kernel) -> None:
     P = Depends(principal_dep)
     K = Depends(get_kernel)
     for module in (
-        skills, router, adapters, workflows, admin, observability, eval_routes, personal, memory,
+        skills, router, adapters, workflows, admin, observability, console,
+        eval_routes, personal, memory,
     ):
         module.register(app, P, K)
