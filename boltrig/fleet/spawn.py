@@ -349,6 +349,7 @@ def make_app_spawner(
             prefer=body.prefer,
             context=ctx,
             partial_on_budget=False,
+            grant_ceiling=principal.grants,  # SEC-139: cap the child to the caller
         )
 
     return app_spawner
@@ -379,9 +380,13 @@ def make_agent_invoker(kernel: Kernel) -> AgentInvoker:
                 else ScriptRuntime()
             )
             result = await runtime.run(prompt, context, tools=list(context.grants.allow))
-        except Exception:
-            result = await ScriptRuntime().run(
-                prompt, context, tools=list(context.grants.allow)
+        except Exception as exc:
+            # A raised runtime must never be papered over with an ok=True echo
+            # (US-FLT-07): return a degrade-marked result with an audit reason.
+            result = AgentResult.degrade(
+                runtime=cap.runtime if cap is not None else "script",
+                reason=type(exc).__name__,
+                prompt=prompt,
             )
         if result.ok:
             output = dict(result.output)

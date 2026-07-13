@@ -61,6 +61,7 @@ invariants:
     description: Degraded results are first-class - a degraded runtime result is marked degraded end to end (spawn result, audit row, chat reply, persisted work item) and is never presented as ordinary success; a convergent item whose aggregate is degraded parks for a human, never DONE.
     tests:
       - tests/integration/test_degraded_honesty.py::test_spawn_without_runtime_is_marked_degraded_and_audited
+      - tests/integration/test_degraded_honesty.py::test_agent_invoker_runtime_failure_is_marked_degraded_not_echoed
       - tests/integration/test_degraded_honesty.py::test_chat_turn_surfaces_a_degraded_spawn
       - tests/store/test_durable_delegation.py::test_work_item_degraded_result_attempts_roundtrip
       - tests/integration/test_delegation_pump.py::test_convergent_degraded_aggregate_parks_for_a_human_never_done
@@ -519,6 +520,7 @@ invariants:
       - tests/integration/test_rls.py::test_rls_enforces_tenant_isolation_and_fails_closed
       - tests/unit/test_rls_pool.py::test_rls_pool_sets_tenant_guc_before_each_statement
       - tests/unit/test_rls_pool.py::test_rls_pool_is_fail_closed_when_no_tenant_bound
+      - tests/unit/test_rls_pool.py::test_set_recovery_codes_applies_tenant_guc_before_writing
       - tests/security/test_rls_auth_binding.py::test_pat_resolution_binds_tenant_before_the_owner_read
       - tests/security/test_rls_auth_binding.py::test_provision_user_binds_tenant_before_the_first_read
       - tests/integration/test_migration_parity.py::test_data_bearing_rls_database_upgrades_from_previous_head
@@ -864,6 +866,7 @@ invariants:
     tests:
       - tests/store/test_retention_purge.py::test_closed_conversation_body_is_hard_purged_after_retention
       - tests/store/test_retention_purge.py::test_retention_purge_is_tenant_scoped
+      - tests/store/test_retention_purge.py::test_purge_runs_select_and_deletes_in_one_transaction
   # --- Beat 3.5: control-plane verb parity (appended as one block) -----------
   SEC-75:
     description: Every supported console mutation is implemented once as a governed control.* verb and compatibility routes invoke that same chokepoint. The complete surface covers skills, nouns, verbs, bindings, adapters, MCP registration, workflows, config rollback, users, invitations, and notification routing; high-blast operations are HITL-held, low-blast inert/personal operations still receive schema/grant/rate/audit enforcement, workspace scope is preserved, durable triggers carry the authenticated context, and one-time invitation tokens are redacted from run events.
@@ -1194,6 +1197,10 @@ invariants:
     description: The live Hatchet Ultracode parent workflow fans out phase agents through the registered child task seam and persists child/phase checkpoints.
     tests:
       - tests/integration/test_hatchet_live.py::test_live_ultracode_run_fans_out_agent_child_tasks
+  FR-WFL-18:
+    description: list_workflows returns exactly one current definition (the latest version) per workflow id, identically on the in-memory and Postgres stores - the durable store collapses versioned rows the same way list_skills/get_skill do, so callers matching a workflow by id never see duplicate or stale versions.
+    tests:
+      - tests/store/test_store_parity.py::test_list_workflows_returns_latest_version_per_id_on_both_stores
   SEC-116:
     description: Workspace scoping only NARROWS which workflows a workspace sees, never widens authority (COUNTY 5, D2) - a workflow scoped to another workspace is fail-closed UNKNOWN on the get / trigger / execute paths (get returns None, trigger and execute raise LookupError) so it can never be resolved or run cross-workspace, while the visibility filter never mutates the record (a visible workflow is byte-for-byte what was stored, adding no grant/scope) and workspace_id is the sole scoping field, carrying no execution authority.
     tests:
@@ -1357,3 +1364,7 @@ invariants:
       - tests/integration/test_durable_resume.py::test_workflow_snapshot_rejects_tampering_and_cross_workspace_replay
       - tests/security/test_control_approval_binding.py::test_missing_mutable_resource_fails_before_creating_approval
       - tests/security/test_control_approval_binding.py::test_resource_change_between_gate_and_adapter_execute_fails_closed
+  SEC-139:
+    description: The direct POST /v1/spawn seam caps the ephemeral child to the caller's own grants - no escalation beyond the spawner, aligning the seam with the SEC-29 test-spawn and eval capping that every other spawn entry point already applies.
+    tests:
+      - tests/security/test_round_three.py::test_v1_spawn_caps_child_to_caller_grants
