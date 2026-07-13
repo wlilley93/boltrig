@@ -65,6 +65,8 @@ from boltrig.models import (
     User,
     Verb,
     VerbBinding,
+    WorkflowDefinition,
+    WorkflowSource,
 )
 from boltrig.skills.loader import load_skills_dir
 from boltrig.store import InMemoryStore
@@ -295,6 +297,28 @@ async def test_control_verbs_write_the_same_state_as_the_direct_routes():
 async def test_every_high_control_verb_is_hitl_held_and_writes_nothing_while_pending():
     admin = AdminConfig(InMemoryStore(), tenant_id=T, doc={})
     k = await _kernel(admin=admin)
+    # SEC-138 makes a governed action fail closed with a 404 if the mutable
+    # resource it names does not exist, and that check runs before the HITL hold.
+    # Seed the two resources the high verbs reference (a workflow for
+    # schedule / trigger, an inert generated adapter for activate) so every high
+    # verb reaches the pending-human hold rather than short-circuiting on a
+    # missing resource. Neither seeded resource is one of the writes the
+    # fail-closed assertions below check for.
+    await k.store.upsert_workflow(
+        WorkflowDefinition(
+            id="wf-control",
+            tenant_id=T,
+            version="1",
+            source=WorkflowSource.PRECREATED,
+            definition={"steps": []},
+        )
+    )
+    await k.invoke(
+        "control",
+        "control.adapter.generate",
+        {"adapter_id": "generated", "spec": _OPENAPI_SPEC},
+        _ctx(["*"]),
+    )
     for verb, params in _HIGH_VERBS.items():
         with pytest.raises(PendingHuman):
             await k.invoke("control", verb, params, _ctx(["*"]))
