@@ -4,7 +4,8 @@
 // Items are draggable onto the canvas (cursor:grab) or click-to-add at centre.
 
 import { useMemo, useState } from "react";
-import { CATEGORIES, type NodeKindMeta, type NodeVisualKind } from "./nodeTaxonomy";
+import type { VerbInfo } from "@/api/types";
+import { categoriesForCatalogue, type NodeKindMeta, type NodeVisualKind } from "./nodeTaxonomy";
 import { NodeIcon } from "./nodeIcons";
 
 export const DRAWER_DRAG_KIND = "application/x-boltrig-node-kind";
@@ -13,21 +14,23 @@ interface NodeDrawerProps {
   open: boolean;
   onAdd: (kind: NodeVisualKind) => void;
   onClose: () => void;
+  verbsById: Map<string, VerbInfo>;
 }
 
-export function NodeDrawer({ open, onAdd, onClose }: NodeDrawerProps) {
+export function NodeDrawer({ open, onAdd, onClose, verbsById }: NodeDrawerProps) {
   const [query, setQuery] = useState("");
 
   const categories = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return CATEGORIES;
-    return CATEGORIES.map((c) => ({
+    const available = categoriesForCatalogue(verbsById);
+    if (!q) return available;
+    return available.map((c) => ({
       ...c,
       items: c.items.filter(
         (i) => i.name.toLowerCase().includes(q) || i.desc.toLowerCase().includes(q),
       ),
     })).filter((c) => c.items.length > 0);
-  }, [query]);
+  }, [query, verbsById]);
 
   return (
     <>
@@ -51,6 +54,9 @@ export function NodeDrawer({ open, onAdd, onClose }: NodeDrawerProps) {
           />
         </div>
         <div className="wf3-drawer__scroll">
+          <p className="wf3-drawer__empty muted">
+            Only safe control nodes and capabilities available to this identity are shown.
+          </p>
           {categories.length === 0 && <p className="wf3-drawer__empty muted">No matches.</p>}
           {categories.map((cat) => (
             <section className="wf3-drawer__cat" key={cat.id}>

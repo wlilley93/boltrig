@@ -136,8 +136,10 @@ async def test_opencode_spawn_preserves_workspace_for_scoped_mcp(monkeypatch, tm
         extra={"principal_role": "org-admin"},
     )
     res = await spawner.spawn(T, "decompose epic", ["analysis/decompose"], {}, parent)
+    events = await store.audit_query(T, run_id=res["run_id"])
 
     assert res["agent_type"] == "opencode-worker"
+    assert events[-1].workspace_id == "ws-1"
     assert issued
     assert issued[0]["kwargs"] == {
         "run_id": res["run_id"],

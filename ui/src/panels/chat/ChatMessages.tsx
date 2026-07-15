@@ -25,8 +25,6 @@ interface ChatMessagesProps {
   isEmpty: boolean;
   activeAgent: ChatAgent;
   userName: string;
-  switchDir: "left" | "right" | "";
-  switchCount: number;
   compactedCount: number;
   compacted: boolean;
   setCompacted: Setter<boolean>;
@@ -51,7 +49,6 @@ interface ChatMessagesProps {
   showJump: boolean;
   onJumpToLatest: () => void;
   onMessagesScroll: () => void;
-  onCycleAgent: (dir: "left" | "right") => void;
   messagesRef: React.RefObject<HTMLDivElement>;
 }
 
@@ -63,12 +60,9 @@ function ChatMessagesHeader(props: ChatMessagesProps): JSX.Element {
     isEmpty,
     activeAgent,
     userName,
-    switchDir,
-    switchCount,
     compactedCount,
     compacted,
     setCompacted,
-    onCycleAgent,
   } = props;
 
   return (
@@ -78,10 +72,6 @@ function ChatMessagesHeader(props: ChatMessagesProps): JSX.Element {
       {isEmpty && (
         <EmptyChatStart
           activeAgent={activeAgent}
-          onPrev={() => onCycleAgent("left")}
-          onNext={() => onCycleAgent("right")}
-          switchDir={switchDir}
-          switchCount={switchCount}
           userName={userName}
         />
       )}

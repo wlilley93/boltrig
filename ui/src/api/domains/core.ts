@@ -17,16 +17,22 @@ import type {
   InvokeRequest,
   InvokeResult,
   ModelEndpointsResponse,
+  ReadinessResponse,
   RegenerateResponse,
   RespondResult,
   SpawnRequest,
   WorkResponse,
+  WorkDetailResponse,
   WorkStatus,
 } from "@/api/types";
 
 export const coreApi = {
   health(): Promise<HealthResponse> {
     return request<HealthResponse>("/healthz");
+  },
+
+  readiness(): Promise<ReadinessResponse> {
+    return request<ReadinessResponse>("/readyz", { tolerateStatus: true });
   },
 
   capabilities(noun?: string): Promise<CapabilitiesResponse> {
@@ -63,6 +69,10 @@ export const coreApi = {
   work(status?: WorkStatus): Promise<WorkResponse> {
     const q = status ? `?status=${encodeURIComponent(status)}` : "";
     return request<WorkResponse>(`/v1/work${q}`);
+  },
+
+  workDetail(id: string): Promise<WorkDetailResponse> {
+    return request<WorkDetailResponse>(`/v1/work/${encodeURIComponent(id)}`);
   },
 
   hitl(): Promise<HITLListResponse> {

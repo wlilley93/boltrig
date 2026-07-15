@@ -17,8 +17,8 @@ export function HitlConfirmStep({
     <InfoCallout tone={arming.toLowerCase() === "reject" ? "warn" : "consequence"}>
       <div className="kv">
         <span>
-          Confirm: <strong>{arming}</strong> this action? It runs as soon as you
-          confirm.
+          Confirm: <strong>{arming}</strong>? The server records this choice and
+          re-evaluates the paused run after you confirm.
         </span>
       </div>
       <div className="kv" style={{ marginTop: 6 }}>

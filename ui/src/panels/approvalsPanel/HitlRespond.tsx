@@ -1,3 +1,5 @@
+import { useId } from "react";
+
 import { Field } from "@/panels/ux";
 import { HitlConfirmStep } from "./HitlConfirmStep";
 import { HitlOptionButtons } from "./HitlOptionButtons";
@@ -10,10 +12,13 @@ import type { HitlCardState } from "./useHitlCard";
 export function HitlRespond({
   options,
   h,
+  showNotes = true,
 }: {
   options: string[];
   h: HitlCardState;
+  showNotes?: boolean;
 }) {
+  const notesId = useId();
   if (h.done) return <p className="ok">{h.done}</p>;
 
   return (
@@ -38,15 +43,18 @@ export function HitlRespond({
         />
       )}
 
-      <Field label="Notes (optional)" hint="Your reasoning is recorded in the audit trail.">
-        <textarea
-          className="hitl-card__notes"
-          value={h.notes}
-          disabled={h.busy}
-          onChange={(e) => h.setNotes(e.target.value)}
-          rows={2}
-        />
-      </Field>
+      {showNotes && (
+        <Field label="Notes (optional)" htmlFor={notesId} hint="Your reasoning is recorded in the audit trail.">
+          <textarea
+            id={notesId}
+            className="hitl-card__notes"
+            value={h.notes}
+            disabled={h.busy}
+            onChange={(e) => h.setNotes(e.target.value)}
+            rows={2}
+          />
+        </Field>
+      )}
 
       {h.error && <p className="error">{h.error}</p>}
     </div>

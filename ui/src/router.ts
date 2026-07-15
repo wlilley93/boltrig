@@ -78,6 +78,10 @@ export function getRoute(): Route {
 // run-drawer helpers can toggle ?run while preserving where you are. Rebuilt
 // from ALL segments so deep routes (e.g. /automations/wf/step/s3) round-trip.
 function basePath(r: Route): string {
+  // A canonical /runs/<id> deep link uses its second segment as the drawer key,
+  // not as page state. Closing (or switching to a child run) must therefore
+  // return to the Runs explorer instead of reconstructing the same open link.
+  if (r.tab === "runs") return "/runs";
   const segs = r.segs.length > 0 ? r.segs : [r.tab];
   return `/${segs.map(encodeURIComponent).join("/")}`;
 }

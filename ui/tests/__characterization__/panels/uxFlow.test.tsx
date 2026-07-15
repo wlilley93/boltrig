@@ -96,6 +96,31 @@ describe("uxFlow public API", () => {
     expect(container.querySelector(".ux-pending")).toBeTruthy();
   });
 
+  it("redacts credentials from pending-approval disclosures", () => {
+    const { container } = render(
+      <DeckSlideContext.Provider value={{ active: false, neighbour: false }}>
+        <PendingHumanCard
+          hitlRequestId="hitl-secret"
+          verb="control.ai_key.set"
+          noun="control"
+          sentParams={{
+            provider: "example",
+            api_key: "never-render-this",
+            tokens_limit: 25000,
+            config: { signing_secret: "nor-this" },
+          }}
+          onApplied={() => {}}
+        />
+      </DeckSlideContext.Provider>,
+    );
+
+    expect(container.textContent).toContain("example");
+    expect(container.textContent).toContain("25000");
+    expect(container.textContent).toContain("[redacted]");
+    expect(container.textContent).not.toContain("never-render-this");
+    expect(container.textContent).not.toContain("nor-this");
+  });
+
   it("exposes useArmConfirm with the published contract", () => {
     let result: UseArmConfirm | undefined;
     const tone: ArmTone = "danger";

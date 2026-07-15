@@ -30,6 +30,8 @@ def _compose_tag_constructor(loader, node):
         return loader.construct_sequence(node)
     if isinstance(node, yaml.MappingNode):
         return loader.construct_mapping(node)
+    if node.value in {"", "null", "~"}:
+        return None
     return loader.construct_scalar(node)
 
 
@@ -40,6 +42,7 @@ yaml.SafeLoader.add_constructor("!reset", _compose_tag_constructor)
 _REPO = Path(__file__).resolve().parents[2]
 _BASE = _REPO / "docker-compose.yml"
 _SECURE = _REPO / "deploy" / "compose.secure.yml"
+_RELEASE = _REPO / "deploy" / "compose.release.yml"
 
 _HATCHET_SERVICES = ("hatchet-engine", "hatchet-dashboard")
 
@@ -54,6 +57,10 @@ def _text(path: str) -> str:
 
 def _secure() -> dict:
     return yaml.safe_load(_SECURE.read_text())
+
+
+def _release() -> dict:
+    return yaml.safe_load(_RELEASE.read_text())
 
 
 def _host_ports(service: dict) -> list[str]:
@@ -84,6 +91,15 @@ def test_secure_overlay_drops_hatchet_host_ports():
     for name in _HATCHET_SERVICES:
         assert name in services, f"secure overlay has no {name} override"
         assert services[name].get("ports") == [], f"{name} host ports not dropped in secure overlay"
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-70")
+def test_local_model_port_is_loopback_only_and_removed_from_secure_compose():
+    ports = _host_ports(_base()["services"]["local-model"])
+    assert ports
+    assert all(port.startswith("127.0.0.1:") for port in ports)
+    assert _secure()["services"]["local-model"].get("ports") == []
 
 
 @pytest.mark.security
@@ -127,6 +143,10 @@ def test_backup_sidecar_ships_profile_gated():
     script = _REPO / "scripts" / "backup.sh"
     assert script.exists(), "scripts/backup.sh missing"
     assert script.read_text().startswith("#!"), "backup.sh has no shebang"
+    dockerfile = _text("deploy/backup.Dockerfile")
+    assert 'CMD ["/usr/local/bin/backup-loop.sh"]' in dockerfile
+    assert "backup-healthcheck" in dockerfile
+    assert "run failed (retrying next interval)" not in dockerfile
 
 
 @pytest.mark.security
@@ -307,6 +327,15 @@ def test_release_publishes_only_scanned_signed_digest_images_with_sboms():
     assert 'cosign attest --yes --type cyclonedx --predicate "$SBOM_FILE"' in workflow
     assert "cosign verify-attestation" in workflow
     assert 'gh release upload "$RELEASE_TAG"' in workflow
+    assert "release-evidence/boltrig-images.env" in workflow
+    for variable in (
+        "BOLTRIG_KERNEL_IMAGE",
+        "BOLTRIG_FLEET_IMAGE",
+        "BOLTRIG_UI_IMAGE",
+        "BOLTRIG_PI_SIDECAR_IMAGE",
+        "BOLTRIG_BACKUP_IMAGE",
+    ):
+        assert variable in workflow
     assert "--clobber" not in workflow
     assert "docker buildx imagetools create" in workflow
     assert 'gh release edit "$RELEASE_TAG"' in workflow
@@ -318,3 +347,45 @@ def test_release_publishes_only_scanned_signed_digest_images_with_sboms():
         'gh release edit "$RELEASE_TAG"'
     )
     assert "sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6" in workflow
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-137")
+def test_release_requires_canonical_success_for_the_exact_commit():
+    workflow = _text(".github/workflows/release.yml")
+
+    gate = "Require canonical CI and security success for the exact release commit"
+    assert "actions: read" in workflow
+    assert gate in workflow
+    assert "X-GitHub-Api-Version: 2022-11-28" in workflow
+    assert 'actions/workflows/$workflow_file/runs' in workflow
+    assert '-f branch="$DEFAULT_BRANCH"' in workflow
+    assert '-f head_sha="$RELEASE_COMMIT"' in workflow
+    assert "require_successful_workflow ci.yml 'ci / quality'" in workflow
+    assert "require_successful_workflow security.yml 'security / Security gate'" in workflow
+    assert workflow.index(gate) < workflow.index('gh release create "$RELEASE_TAG"')
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-137")
+def test_release_compose_uses_only_required_digest_images_without_builds():
+    services = _release()["services"]
+    variables = {
+        "kernel": "BOLTRIG_KERNEL_IMAGE",
+        "fleet-worker": "BOLTRIG_FLEET_IMAGE",
+        "ui": "BOLTRIG_UI_IMAGE",
+        "pi-sidecar": "BOLTRIG_PI_SIDECAR_IMAGE",
+        "backup": "BOLTRIG_BACKUP_IMAGE",
+    }
+    for service, variable in variables.items():
+        config = services[service]
+        assert config.get("build") is None
+        assert config["image"].startswith(f"${{{variable}:?")
+        assert config["pull_policy"] == "always"
+
+    backup_mounts = " ".join(services["backup"]["volumes"])
+    assert "scripts/backup.sh" not in backup_mounts
+    makefile = _text("Makefile")
+    assert "scripts/validate_release_images.py" in makefile
+    assert "-f deploy/compose.release.yml" in makefile
+    assert "up -d --no-build" in makefile

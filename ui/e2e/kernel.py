@@ -20,10 +20,12 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
 import uvicorn
+from fastapi import Request
 
 from boltrig.api.bootstrap import build_kernel_async
 from boltrig.fleet.chat import ChatService
 from boltrig.kernel.app import create_app
+from boltrig.models import HITLType, Urgency
 
 
 def _chat_factory(kernel):
@@ -33,6 +35,25 @@ def _chat_factory(kernel):
 
 
 app = create_app(kernel_factory=build_kernel_async, chat_factory=_chat_factory)
+
+
+@app.post("/v1/_e2e/seed-hitl")
+async def seed_hitl(request: Request) -> dict[str, str]:
+    """Create one credential-free approval for the browser confirmation flow."""
+    req = await request.app.state.kernel.hitl.create(
+        tenant_id="default",
+        run_id="e2e-approval-run",
+        type=HITLType.APPROVAL,
+        urgency=Urgency.BLOCKING,
+        question="Approve the e2e outbound update?",
+        context="The e2e requester wants to perform ticket.update.",
+        options=["approve", "reject"],
+        assignee="dev",
+        verb="ticket.update",
+        requested_by="e2e-requester",
+        request_fingerprint="e2e-approval-fingerprint",
+    )
+    return {"id": req.id}
 
 
 if __name__ == "__main__":

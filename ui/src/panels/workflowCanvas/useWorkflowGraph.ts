@@ -9,6 +9,7 @@ import { parseJson, errText } from "@/panels/shared";
 import { deriveKind, deriveNodeKind, extractSteps, graphToSteps, isStepNode, stepsToGraph } from "./graph";
 import {
   defaultActionForKind,
+  CONTROL_NODE_KINDS,
   kindFromVisual,
   resolveVerbForKind,
   type NodeVisualKind,
@@ -133,9 +134,10 @@ function addNodeKindNode(
   counter: MutableRefObject<number>,
   position?: XYPosition,
 ) {
-  // Prefer a real registered verb for capability kinds; fall back to the
-  // synthetic default when the catalogue lacks a match (or for control kinds).
+  // Capability nodes bind only to a caller-scoped real verb. The only fallback
+  // actions are safe interpreter-owned control nodes.
   const resolved = resolveVerbForKind(kind, verbsById);
+  if (!resolved && !CONTROL_NODE_KINDS.has(kind)) return;
   const fallback = defaultActionForKind(kind);
   const action = resolved?.action ?? fallback.action;
   const params = resolved?.params ?? fallback.params;

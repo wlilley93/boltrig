@@ -10,7 +10,9 @@ from fastapi import Request
 from boltrig.models import AuditEvent, HITLRequest
 from boltrig.observability.model_telemetry import model_telemetry
 
-from ._shared import dept_run_ids, platform_state, scope_depts
+from boltrig.kernel.hitl_response_auth import hitl_request_visible
+
+from ._shared import RunScope, dept_run_ids, platform_state, scope_depts
 from .observability import _items, _read_status_provider
 
 
@@ -23,12 +25,13 @@ def _clamp_limit(value: int) -> int:
 
 def _ws_visible(p: Any, workspace_id: str | None) -> bool:
     active = getattr(p, "active_workspace_id", None)
-    return active is None or workspace_id is None or workspace_id == active
+    return workspace_id is None or workspace_id == active
 
 
-def _visible_event(e: AuditEvent, allowed: set[str] | None, p: Any) -> bool:
-    run_visible = allowed is None or e.run_id in allowed or e.parent_run_id in allowed
-    return run_visible and _ws_visible(p, e.workspace_id)
+def _visible_event(e: AuditEvent, run_scope: RunScope, p: Any) -> bool:
+    return run_scope.permits(e.run_id, e.parent_run_id) and _ws_visible(
+        p, e.workspace_id
+    )
 
 
 def _cost(events: list[AuditEvent]) -> dict[str, Any]:
@@ -77,18 +80,6 @@ def _run_row(event: AuditEvent) -> dict[str, Any]:
     }
 
 
-def _approval_visible(
-    req: HITLRequest,
-    *,
-    allowed: set[str] | None,
-    active_workspace: str | None,
-    visible_run_ids: set[str],
-) -> bool:
-    if allowed is not None and req.run_id not in allowed:
-        return False
-    return active_workspace is None or req.run_id in visible_run_ids
-
-
 def _approval_row(req: HITLRequest) -> dict[str, Any]:
     return {
         "id": req.id,
@@ -121,26 +112,18 @@ def register(app, P, K) -> None:
     async def console_overview(request: Request, limit: int = 50, k=K, p=P) -> dict:
         row_limit = _clamp_limit(limit)
         depts = scope_depts(p)
-        allowed = await dept_run_ids(k, p.tenant_id, depts)
+        run_scope = await dept_run_ids(k, p, depts)
         events = await k.store.audit_query(p.tenant_id, limit=10_000)
-        visible = [e for e in events if _visible_event(e, allowed, p)]
+        visible = [e for e in events if _visible_event(e, run_scope, p)]
         recent = sorted(visible, key=lambda e: e.ts, reverse=True)[:row_limit]
-        visible_run_ids = {
-            run_id for e in visible for run_id in (e.run_id, e.parent_run_id) if run_id
-        }
-
         pending = await k.hitl.list_pending(p.tenant_id)
         active_workspace = getattr(p, "active_workspace_id", None)
-        approvals = [
-            _approval_row(req)
-            for req in pending
-            if _approval_visible(
-                req,
-                allowed=allowed,
-                active_workspace=active_workspace,
-                visible_run_ids=visible_run_ids,
-            )
-        ][:row_limit]
+        approvals = []
+        for req in pending:
+            if await hitl_request_visible(k, p, req):
+                approvals.append(_approval_row(req))
+            if len(approvals) == row_limit:
+                break
         budgets = [
             _budget_row(b) for b in await k.store.list_budgets(p.tenant_id)
             if _scope_budget(b, depts)

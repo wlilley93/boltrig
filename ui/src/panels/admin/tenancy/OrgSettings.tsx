@@ -3,18 +3,24 @@ import { useEffect, useState } from "react";
 import { api } from "@/api/client";
 import type { OrganisationView } from "@/api/types";
 import { useFetch } from "@/useFetch";
-import { errText } from "@/panels/shared";
 import { FetchError, Field, InfoCallout } from "@/panels/ux";
 import { Switch } from "@/panels/uxForm";
 import { SaveBar, Skeleton } from "@/panels/uxFlow";
+import { PendingHumanCard } from "@/panels/uxFlow/pendingHumanCard";
+import { useControlMutation } from "@/panels/uxFlow/useControlMutation";
 
 function useOrgForm(org: OrganisationView | null, onSaved: () => void) {
   const [name, setName] = useState("");
   const [allowOwnKeys, setAllowOwnKeys] = useState(false);
   const [require2fa, setRequire2fa] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const mutation = useControlMutation({
+    verb: "control.org.update",
+    onApplied() {
+      setMsg("Saved.");
+      onSaved();
+    },
+  });
 
   useEffect(() => {
     if (org) {
@@ -31,27 +37,13 @@ function useOrgForm(org: OrganisationView | null, onSaved: () => void) {
       require2fa !== org.require_two_factor);
 
   async function save() {
-    if (!dirty || saving) return;
-    setSaving(true);
-    setError(null);
+    if (!dirty || mutation.busy || mutation.pending) return;
     setMsg(null);
-    try {
-      const res = await api.updateCurrentOrg({
-        name: name.trim(),
-        allow_own_ai_keys: allowOwnKeys,
-        require_two_factor: require2fa,
-      });
-      if (res.status === "ok" && res.organisation) {
-        setMsg("Saved.");
-        onSaved();
-      } else {
-        setError(res.reason ?? "Update rejected.");
-      }
-    } catch (err) {
-      setError(errText(err));
-    } finally {
-      setSaving(false);
-    }
+    await mutation.invoke({
+      name: name.trim(),
+      allow_own_ai_keys: allowOwnKeys,
+      require_two_factor: require2fa,
+    });
   }
 
   function discard() {
@@ -60,7 +52,7 @@ function useOrgForm(org: OrganisationView | null, onSaved: () => void) {
       setAllowOwnKeys(org.allow_own_ai_keys);
       setRequire2fa(org.require_two_factor);
     }
-    setError(null);
+    mutation.resetPending();
     setMsg(null);
   }
 
@@ -71,8 +63,7 @@ function useOrgForm(org: OrganisationView | null, onSaved: () => void) {
     setAllowOwnKeys,
     require2fa,
     setRequire2fa,
-    saving,
-    error,
+    mutation,
     msg,
     dirty,
     save,
@@ -112,10 +103,21 @@ export function OrgSettingsCard() {
             hint="Signals that every member must complete a second factor to sign in."
           />
           {form.msg && <p className="ok">{form.msg}</p>}
-          {form.error && <InfoCallout tone="warn">{form.error}</InfoCallout>}
+          {form.mutation.error && <InfoCallout tone="warn">{form.mutation.error}</InfoCallout>}
+          {form.mutation.pending && (
+            <PendingHumanCard
+              hitlRequestId={form.mutation.pending.id}
+              noun="control"
+              verb="control.org.update"
+              sentParams={form.mutation.pending.params}
+              onApplied={form.mutation.onPendingApplied}
+              onDenied={form.mutation.onPendingDenied}
+              onReset={form.mutation.resetPending}
+            />
+          )}
           <SaveBar
             dirty={form.dirty}
-            saving={form.saving}
+            saving={form.mutation.busy || form.mutation.pending !== null}
             label={<>Unsaved changes to your organisation</>}
             saveLabel="Save"
             onSave={() => void form.save()}

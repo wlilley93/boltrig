@@ -48,6 +48,7 @@ from boltrig.models import (
     UserSetting,
 )
 from boltrig.store import InMemoryStore
+from tests.approval import approved_request
 from boltrig.store.postgres import set_current_tenant
 
 # The identity realm (the login realm) is also the founding org "default". "zorg" is a
@@ -239,10 +240,15 @@ def test_provisioned_org_invitee_gets_a_usable_login(monkeypatch):
     _run(store.set_password_credential(REALM, OWNER, hash_password(OWNER_PW)))
     owner_c = TestClient(app)
     csrf = _login(owner_c, OWNER, OWNER_PW).json()["csrf_token"]
-    inv = owner_c.post(
+    invite_body = {"email": "founder@newco.io", "role": "member",
+                   "provision_org_name": "NewCo"}
+    inv = approved_request(
+        owner_c,
+        k,
+        REALM,
+        "POST",
         "/v1/admin/invitations",
-        json={"email": "founder@newco.io", "role": "member",
-              "provision_org_name": "NewCo"},
+        json=invite_body,
         headers={"x-boltrig-csrf": csrf},
     )
     assert inv.status_code == 200, inv.text

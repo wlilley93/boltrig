@@ -27,6 +27,7 @@ const KERNEL = process.env.BOLTRIG_KERNEL_URL || "http://localhost:8000";
 const KERNEL_PROXY = {
   "/v1": { target: KERNEL, changeOrigin: true },
   "/healthz": { target: KERNEL, changeOrigin: true },
+  "/readyz": { target: KERNEL, changeOrigin: true },
 };
 
 export default defineConfig({

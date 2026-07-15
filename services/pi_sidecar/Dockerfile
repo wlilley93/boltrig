@@ -23,9 +23,10 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
 
 WORKDIR /app
 
-# Install deps first so the layer caches across app-only edits.
+# Install the complete CPython 3.12 graph from its hash-locked generated file so
+# a compromised package index cannot substitute an unreviewed distribution.
 COPY requirements.txt /app/requirements.txt
-RUN pip install -r /app/requirements.txt
+RUN pip install --require-hashes -r /app/requirements.txt
 
 COPY app.py /app/app.py
 

@@ -125,12 +125,12 @@ def validate_workflow(spec: dict[str, Any]) -> dict[str, Any]:
     return dict(spec)
 
 
-def _emit(kernel: Any, run_id: str, event: dict[str, Any]) -> None:
+def _emit(kernel: Any, tenant_id: str, run_id: str, event: dict[str, Any]) -> None:
     relay = getattr(kernel, "events", None)
     if relay is None:
         return
     try:
-        relay.publish(run_id, {"type": "ultracode", **event})
+        relay.publish(tenant_id, run_id, {"type": "ultracode", **event})
     except Exception:
         pass
 
@@ -310,11 +310,11 @@ async def run_ultracode_body(
             phase_record = dict(replay[phase_step].output)
             phase_records.append(phase_record)
             prior.append(phase_record)
-            _emit(kernel, run_id, {"status": "phase_replayed", "phase_id": phase["id"]})
+            _emit(kernel, tenant, run_id, {"status": "phase_replayed", "phase_id": phase["id"]})
             if phase_record.get("status") == "failed":
                 break
             continue
-        _emit(kernel, run_id, {"status": "phase_started", "phase_id": phase["id"]})
+        _emit(kernel, tenant, run_id, {"status": "phase_started", "phase_id": phase["id"]})
         concurrency = max(1, min(int(phase.get("concurrency") or 1), _MAX_CONCURRENCY))
         semaphore = asyncio.Semaphore(concurrency)
 
@@ -322,10 +322,10 @@ async def run_ultracode_body(
             async with semaphore:
                 step = _agent_step(phase["id"], agent["id"])
                 if _is_replayable(replay.get(step)):
-                    _emit(kernel, run_id, {"status": "agent_replayed", "phase_id": phase["id"],
+                    _emit(kernel, tenant, run_id, {"status": "agent_replayed", "phase_id": phase["id"],
                                           "agent_id": agent["id"]})
                     return dict(replay[step].output)
-                _emit(kernel, run_id, {"status": "agent_started", "phase_id": phase["id"],
+                _emit(kernel, tenant, run_id, {"status": "agent_started", "phase_id": phase["id"],
                                       "agent_id": agent["id"]})
                 agent_payload = {
                     "tenant": tenant,
@@ -341,7 +341,7 @@ async def run_ultracode_body(
                 if run_agent is None:
                     run_agent = inline_agent_runner
                 record = await run_agent(agent_payload)
-                _emit(kernel, run_id, {"status": "agent_finished", "phase_id": phase["id"],
+                _emit(kernel, tenant, run_id, {"status": "agent_finished", "phase_id": phase["id"],
                                       "agent_id": agent["id"], "degraded": record["degraded"]})
                 return record
 
@@ -359,7 +359,7 @@ async def run_ultracode_body(
                 tenant, run_id, phase_step, phase_status, output=phase_record
             )
         replay[phase_step] = type("_Checkpoint", (), {"status": phase_status, "output": phase_record})()
-        _emit(kernel, run_id, {"status": "phase_finished", "phase_id": phase["id"],
+        _emit(kernel, tenant, run_id, {"status": "phase_finished", "phase_id": phase["id"],
                               "phase_status": phase_status})
         if phase_status == "failed":
             break

@@ -118,7 +118,7 @@ async def test_chat_tool_events_never_leak_verb_values():
     assert secret not in json.dumps(msgs[1].events)
     # the full payload still exists on the run relay for the canvas + audit (the
     # bounding is a chat-stream projection, not a loss of the durable record).
-    relay_blob = json.dumps(k.events.snapshot(msgs[1].run_id))
+    relay_blob = json.dumps(k.events.snapshot(T, msgs[1].run_id))
     assert secret in relay_blob
 
 
@@ -192,7 +192,7 @@ async def test_ask_user_pauses_via_hitl_and_emits_question():
     assert q.run_id == "run-Q" and q.work_item_id == "run-Q"
 
     # a rich question event surfaced on the run stream for the client to render
-    events = k.events.snapshot("run-Q")
+    events = k.events.snapshot(T, "run-Q")
     q_events = [e for e in events if e["type"] == "question"]
     assert q_events and q_events[0]["prompt"] == "Which region?"
     assert q_events[0]["choices"] == ["eu", "us"]
@@ -266,10 +266,13 @@ def test_answer_route_owner_only_wrapped_and_audited():
     store, k, fired = _seed_question_env()
     client = TestClient(create_app(k))
 
-    # a non-owner (even an org-admin) is refused fail-closed with no write
+    # A non-owner (even an org-admin) is indistinguishable from an unknown id.
     r = client.post("/v1/hitl/q1/answer", json={"answer": "eu"},
                     headers=_hdr("mallory", role="org-admin"))
-    assert r.status_code == 403 and r.json()["status"] == "denied"
+    unknown = client.post("/v1/hitl/unknown/answer", json={"answer": "eu"},
+                          headers=_hdr("mallory", role="org-admin"))
+    assert r.status_code == unknown.status_code == 404
+    assert r.json() == unknown.json() == {"status": "error", "reason": "not_found"}
     assert asyncio.run(store.get_hitl_response(T, "q1")) is None
     assert fired == []  # no resume fired on a denied answer
 

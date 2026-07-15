@@ -16,10 +16,11 @@ from pathlib import Path
 
 import asyncpg
 
-from .base import clamp_work_page
 from .channels import ChannelStorePG
+from .budget_policy import BudgetPolicyPG
 from .guarded_writes import GuardedWritesPG
 from .idempotency import IdempotencyStorePG
+from .work_items import WorkItemReadsPG, work_item_from_row
 from boltrig.models import (
     AdapterHealth,
     AdapterRecord,
@@ -81,7 +82,6 @@ from boltrig.models import (
     WorkflowPromotion,
     WorkflowSource,
     WorkItem,
-    WorkStatus,
 )
 from boltrig.models.errors import SchemaValidationError
 from boltrig.models.work import RunCheckpoint
@@ -164,7 +164,10 @@ async def _init_conn(conn: asyncpg.Connection) -> None:
     )
 
 
-class PostgresStore(IdempotencyStorePG, GuardedWritesPG, ChannelStorePG):
+class PostgresStore(
+    BudgetPolicyPG, WorkItemReadsPG, IdempotencyStorePG, GuardedWritesPG,
+    ChannelStorePG,
+):
     """asyncpg-backed Store. Domain methods live in partial mixins
     (e.g. ``ChannelStorePG``) to keep this file under the structural floor;
     composed here so the public method surface is one class."""
@@ -456,6 +459,17 @@ class PostgresStore(IdempotencyStorePG, GuardedWritesPG, ChannelStorePG):
             tenant_id, workflow_id, run_id, status,
         )
 
+    async def list_workflow_run_ids(self, tenant_id, workflow_id, limit=100):
+        rows = await self._pool.fetch(
+            """SELECT run_id FROM workflow_run_records
+               WHERE tenant_id=$1 AND workflow_id=$2
+               ORDER BY started_at DESC LIMIT $3""",
+            tenant_id,
+            workflow_id,
+            max(0, min(limit, 1000)),
+        )
+        return [row["run_id"] for row in rows]
+
     async def workflow_run_stats(self, tenant_id):
         rows = await self._pool.fetch(
             """SELECT workflow_id,
@@ -500,13 +514,13 @@ class PostgresStore(IdempotencyStorePG, GuardedWritesPG, ChannelStorePG):
     # --- work items -------------------------------------------------------
     async def create_work_item(self, w: WorkItem):
         await self._pool.execute(
-            """INSERT INTO work_items (id, tenant_id, source, source_id, intent, confidence,
+            """INSERT INTO work_items (id, tenant_id, workspace_id, source, source_id, intent, confidence,
                                        convergent, status, owner_member, parent_id, hatchet_run_id,
                                        depth, on_behalf_of, constraints, raw, attempts, degraded,
                                        result, lease_owner, lease_expires_at)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
                ON CONFLICT (tenant_id, id) DO UPDATE SET
-                 source=EXCLUDED.source, source_id=EXCLUDED.source_id, intent=EXCLUDED.intent,
+                 workspace_id=EXCLUDED.workspace_id, source=EXCLUDED.source, source_id=EXCLUDED.source_id, intent=EXCLUDED.intent,
                  confidence=EXCLUDED.confidence, convergent=EXCLUDED.convergent,
                  status=EXCLUDED.status, owner_member=EXCLUDED.owner_member,
                  parent_id=EXCLUDED.parent_id, hatchet_run_id=EXCLUDED.hatchet_run_id,
@@ -515,60 +529,14 @@ class PostgresStore(IdempotencyStorePG, GuardedWritesPG, ChannelStorePG):
                  attempts=EXCLUDED.attempts, degraded=EXCLUDED.degraded,
                  result=EXCLUDED.result, lease_owner=EXCLUDED.lease_owner,
                  lease_expires_at=EXCLUDED.lease_expires_at, updated_at=now()""",
-            w.id, w.tenant_id, w.source, w.source_id, w.intent, w.confidence, w.convergent,
+            w.id, w.tenant_id, w.workspace_id, w.source, w.source_id, w.intent, w.confidence, w.convergent,
             w.status.value, w.owner_member, w.parent_id, w.hatchet_run_id, w.depth,
             w.on_behalf_of, w.constraints, w.raw, w.attempts, w.degraded, w.result,
             w.lease_owner, w.lease_expires_at,
         )
 
-    async def get_work_item(self, tenant_id, item_id):
-        row = await self._pool.fetchrow(
-            "SELECT * FROM work_items WHERE tenant_id=$1 AND id=$2", tenant_id, item_id
-        )
-        return _work(row)
-
-    async def get_work_item_by_run_id(self, tenant_id, run_id):
-        row = await self._pool.fetchrow(
-            """SELECT * FROM work_items
-               WHERE tenant_id=$1 AND (id=$2 OR hatchet_run_id=$2)
-               ORDER BY CASE WHEN id=$2 THEN 0 ELSE 1 END
-               LIMIT 1""",
-            tenant_id, run_id,
-        )
-        return _work(row)
-
     async def update_work_item(self, item: WorkItem):
         await self.create_work_item(item)  # upsert
-
-    async def list_work_items(
-        self, tenant_id, status=None, parent_id=None, departments=None,
-        limit=None, cursor=None,
-    ):
-        clauses = ["tenant_id=$1"]
-        args: list = [tenant_id]
-        if status is not None:
-            args.append(status.value)
-            clauses.append(f"status=${len(args)}")
-        if parent_id is not None:
-            args.append(parent_id)
-            clauses.append(f"parent_id=${len(args)}")
-        if departments is not None:
-            # row-level department scope (US-IAM-02). owner_member encodes the dept.
-            args.append(list(departments))
-            clauses.append(f"owner_member = ANY(${len(args)}::text[])")
-        if cursor is not None:
-            # keyset on the stable PRIMARY KEY id (M7 / SEC-69): everything after
-            # the last id the caller saw.
-            args.append(cursor)
-            clauses.append(f"id > ${len(args)}")
-        # ORDER BY id makes the keyset overlap-free; the LIMIT (server-clamped)
-        # bounds the page. limit=None keeps the legacy full-slice contract.
-        sql = f"SELECT * FROM work_items WHERE {' AND '.join(clauses)} ORDER BY id"
-        if limit is not None:
-            args.append(clamp_work_page(limit))
-            sql += f" LIMIT ${len(args)}"
-        rows = await self._pool.fetch(sql, *args)
-        return [_work(r) for r in rows]
 
     async def claim_work_item(self, tenant_id, worker_id, lease_seconds):
         # atomic pending -> in_flight claim with a lease (US-FLT-05): one
@@ -589,7 +557,7 @@ class PostgresStore(IdempotencyStorePG, GuardedWritesPG, ChannelStorePG):
                RETURNING *""",
             tenant_id, worker_id, float(lease_seconds),
         )
-        return _work(row)
+        return work_item_from_row(row)
 
     async def try_increment_fanout(self, tenant_id, tree_id, counter, n, cap):
         # atomic capped increment (US-EXE-07): the conditional upsert applies
@@ -655,13 +623,13 @@ class PostgresStore(IdempotencyStorePG, GuardedWritesPG, ChannelStorePG):
         await self._pool.execute(
             """INSERT INTO hitl_requests (id, tenant_id, run_id, work_item_id, type, urgency,
                                           context, question, options, assignee, status, timeout_at,
-                                          verb, requested_by, requested_on_behalf_of, request_fingerprint)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+                                          verb, requested_by, requested_on_behalf_of, request_fingerprint, workspace_id, department_scope)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
                ON CONFLICT (tenant_id, id) DO UPDATE SET
                  status=EXCLUDED.status, updated_at=now()""",
             r.id, r.tenant_id, r.run_id, r.work_item_id, r.type.value, r.urgency.value,
             r.context, r.question, r.options, r.assignee, r.status.value, r.timeout_at,
-            r.verb, r.requested_by, r.requested_on_behalf_of, r.request_fingerprint,
+            r.verb, r.requested_by, r.requested_on_behalf_of, r.request_fingerprint, r.workspace_id, r.department_scope,
         )
 
     async def consume_hitl(self, tenant_id, request_id):
@@ -839,17 +807,8 @@ class PostgresStore(IdempotencyStorePG, GuardedWritesPG, ChannelStorePG):
         return [_budget(r) for r in rows]
 
     async def set_budget(self, b: Budget) -> None:
-        await self._pool.execute(
-            """INSERT INTO budgets (id, tenant_id, scope_type, token_limit, cost_limit_micros,
-                                    hard_stop, "window", spent_tokens, spent_micros)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-               ON CONFLICT (tenant_id, id) DO UPDATE SET
-                 scope_type=EXCLUDED.scope_type, token_limit=EXCLUDED.token_limit,
-                 cost_limit_micros=EXCLUDED.cost_limit_micros, hard_stop=EXCLUDED.hard_stop,
-                 "window"=EXCLUDED."window", updated_at=now()""",
-            b.id, b.tenant_id, b.scope_type, b.token_limit, b.cost_limit_micros,
-            b.hard_stop, b.window, b.spent_tokens, b.spent_micros,
-        )
+        """Compatibility alias; new callers use upsert_budget_policy."""
+        await self.upsert_budget_policy(b)
 
     async def consume_budget(self, tenant_id, scope_id, tokens, micros):
         async with self._pool.acquire() as conn:
@@ -2021,20 +1980,6 @@ def _endpoint(r):
     )
 
 
-def _work(r):
-    if r is None:
-        return None
-    return WorkItem(
-        id=r["id"], tenant_id=r["tenant_id"], source=r["source"], intent=r["intent"],
-        confidence=r["confidence"], convergent=r["convergent"], status=WorkStatus(r["status"]),
-        source_id=r["source_id"], owner_member=r["owner_member"], parent_id=r["parent_id"],
-        hatchet_run_id=r["hatchet_run_id"], depth=r["depth"], on_behalf_of=r["on_behalf_of"],
-        constraints=r["constraints"] or {}, raw=r["raw"] or {},
-        attempts=r["attempts"], degraded=r["degraded"], result=r["result"],
-        lease_owner=r["lease_owner"], lease_expires_at=r["lease_expires_at"],
-    )
-
-
 def _checkpoint(r):
     if r is None:
         return None
@@ -2053,7 +1998,7 @@ def _hitl_req(r):
         status=HITLStatus(r["status"]), work_item_id=r["work_item_id"],
         options=list(r["options"] or []), assignee=r["assignee"], timeout_at=r["timeout_at"],
         verb=r["verb"], requested_by=r["requested_by"],
-        requested_on_behalf_of=r["requested_on_behalf_of"], request_fingerprint=r["request_fingerprint"],
+        requested_on_behalf_of=r["requested_on_behalf_of"], request_fingerprint=r["request_fingerprint"], workspace_id=r["workspace_id"], department_scope=None if r["department_scope"] is None else list(r["department_scope"]),
     )
 
 def _hitl_resp(r):

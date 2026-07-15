@@ -35,9 +35,11 @@ class _RunScopeStore(InMemoryStore):
         self.work_list_calls += 1
         return await super().list_work_items(*args, **kwargs)
 
-    async def get_work_item_by_run_id(self, tenant_id, run_id):
+    async def get_work_item_by_run_id(self, tenant_id, run_id, *args, **kwargs):
         self.run_lookup_calls.append(run_id)
-        return await super().get_work_item_by_run_id(tenant_id, run_id)
+        return await super().get_work_item_by_run_id(
+            tenant_id, run_id, *args, **kwargs
+        )
 
 
 async def _kernel(store: InMemoryStore | None = None) -> Kernel:
@@ -131,7 +133,9 @@ async def test_department_scoped_user_can_read_visible_work_run_events():
     )
     assert scoped.status_code == 200
     assert any("tool_call" in f for f in _frames(scoped.text))
-    assert store.run_lookup_calls == ["run-eng"]
+    # First lookup distinguishes an audit-only run from a hidden WorkItem; the
+    # second applies the caller's workspace filter to that known WorkItem.
+    assert store.run_lookup_calls == ["run-eng", "run-eng"]
     assert store.work_list_calls == 0
 
 

@@ -1,6 +1,5 @@
 import { useState } from "react";
 
-import { api } from "@/api/client";
 import type { WorkflowRunRecord } from "@/api/types";
 import {
   CodeBlock,
@@ -11,6 +10,8 @@ import {
   stepBadgeClass,
 } from "@/panels/shared";
 import { Field, Select } from "@/panels/ux";
+import { PendingHumanCard } from "@/panels/uxFlow/pendingHumanCard";
+import { useControlMutation } from "@/panels/uxFlow/useControlMutation";
 import type { WfFormProps } from "@/panels/studio/workflow/types";
 
 interface ExecuteResultProps {
@@ -59,9 +60,14 @@ function ExecuteResult({ result }: ExecuteResultProps) {
 export function ExecuteForm({ wfOptions }: WfFormProps) {
   const [execId, setExecId] = useState("");
   const [execInputs, setExecInputs] = useState("{}");
-  const [execBusy, setExecBusy] = useState(false);
   const [execError, setExecError] = useState<string | null>(null);
   const [execResult, setExecResult] = useState<WorkflowRunRecord | null>(null);
+  const mutation = useControlMutation({
+    verb: "control.workflow.execute",
+    onApplied(output) {
+      setExecResult(output as WorkflowRunRecord);
+    },
+  });
 
   async function execute() {
     if (!execId.trim()) {
@@ -75,17 +81,9 @@ export function ExecuteForm({ wfOptions }: WfFormProps) {
       setExecError(`inputs: ${errText(err)}`);
       return;
     }
-    setExecBusy(true);
     setExecError(null);
     setExecResult(null);
-    try {
-      const res = await api.executeWorkflow(execId.trim(), parsedInputs);
-      setExecResult(res);
-    } catch (err) {
-      setExecError(errText(err));
-    } finally {
-      setExecBusy(false);
-    }
+    await mutation.invoke({ workflow_id: execId.trim(), inputs: parsedInputs });
   }
 
   return (
@@ -101,15 +99,28 @@ export function ExecuteForm({ wfOptions }: WfFormProps) {
           onChange={(e) => setExecInputs(e.target.value)}
         />
       </Field>
+      {mutation.pending && (
+        <PendingHumanCard
+          hitlRequestId={mutation.pending.id}
+          noun="control"
+          verb="control.workflow.execute"
+          sentParams={mutation.pending.params}
+          onApplied={mutation.onPendingApplied}
+          onDenied={mutation.onPendingDenied}
+          onReset={mutation.resetPending}
+        />
+      )}
       <div className="form__actions">
         <button
           className="btn btn--primary"
-          disabled={execBusy}
+          disabled={mutation.busy || mutation.pending !== null}
           onClick={execute}
         >
-          {execBusy ? "..." : "Execute"}
+          {mutation.busy ? "..." : "Execute"}
         </button>
-        {execError && <span className="error">{execError}</span>}
+        {(execError ?? mutation.error) && (
+          <span className="error">{execError ?? mutation.error}</span>
+        )}
       </div>
       {execResult && <ExecuteResult result={execResult} />}
     </div>

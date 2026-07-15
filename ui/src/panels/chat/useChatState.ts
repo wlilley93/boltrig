@@ -5,7 +5,6 @@ import { useSlideActive } from "@/deck/context";
 import { useDictation } from "@/voice";
 import { useChatAgentState, type ChatAgentState } from "@/panels/chat/useChatAgentState";
 import { useChatAudioState, type ChatAudioState } from "@/panels/chat/useChatAudioState";
-import { useChatCallState, type ChatCallState } from "@/panels/chat/useChatCallState";
 import { useChatInputState, type ChatInputState } from "@/panels/chat/useChatInputState";
 import { useChatLiveState, type ChatLiveState } from "@/panels/chat/useChatLiveState";
 import { useChatMessageState, type ChatMessageState } from "@/panels/chat/useChatMessageState";
@@ -16,7 +15,6 @@ import { useConversationRail } from "@/panels/chat/useConversationRail";
 export interface ChatPanelState
   extends ChatAgentState,
     ChatAudioState,
-    ChatCallState,
     ChatInputState,
     ChatLiveState,
     ChatMessageState,
@@ -38,7 +36,6 @@ export function useChatState(): ChatPanelState {
   const refs = useChatRefs();
   const agentState = useChatAgentState();
   const audioState = useChatAudioState();
-  const callState = useChatCallState();
   const inputState = useChatInputState();
   const liveState = useChatLiveState();
   const messageState = useChatMessageState();
@@ -60,7 +57,6 @@ export function useChatState(): ChatPanelState {
     ...refs,
     ...agentState,
     ...audioState,
-    ...callState,
     ...inputState,
     ...liveState,
     ...messageState,

@@ -65,6 +65,7 @@ from boltrig.models import (
     User,
     Verb,
     VerbBinding,
+    Workspace,
     WorkflowDefinition,
     WorkflowSource,
 )
@@ -127,21 +128,56 @@ _VERB_PARAMS: dict[str, dict] = {
     "control.user.update": {"user_id": "target", "role": "member"},
     "control.user.deactivate": {"user_id": "target"},
     "control.invitation.create": {"email": "new@example.com", "role": "member"},
+    "control.invitation.revoke": {"invite_id": "invite-1"},
     "control.notification.route": {"event_type": "approval", "channel": "email"},
+    "control.budget.upsert": {
+        "scope_type": "tenant",
+        "scope_id": T,
+        "token_limit": 1000,
+        "hard_stop": True,
+        "window": "monthly",
+    },
+    "control.budget.reset": {
+        "scope_type": "tenant",
+        "scope_id": T,
+        "reason": "new accounting period",
+    },
+    "control.ai_key.set": {
+        "level": "org",
+        "scope_id": T,
+        "provider": "openai",
+        "model": "test",
+        "api_key": "sk-test",
+    },
+    "control.ai_key.delete": {"level": "org", "scope_id": T},
+    "control.org.update": {"name": "Acme"},
+    "control.workspace.create": {"name": "Test"},
+    "control.workspace.update": {"workspace_id": "ws-1", "name": "Test"},
+    "control.workspace.member.add": {"workspace_id": "ws-1", "user_id": "member"},
+    "control.workspace.member.remove": {"workspace_id": "ws-1", "user_id": "member"},
+    "control.channel.connect": {"platform": "webhook", "name": "Ops"},
+    "control.channel.configure": {"channel_id": "channel-1", "name": "Ops"},
+    "control.channel.disconnect": {"channel_id": "channel-1"},
+    "control.channel.pair": {
+        "channel_id": "channel-1",
+        "external_user_id": "external",
+        "subject": "member",
+    },
+    "control.channel.bind": {
+        "channel_id": "channel-1",
+        "external_user_id": "external",
+        "subject": "member",
+    },
+    "control.channel.unbind": {"channel_id": "channel-1", "binding_id": "binding-1"},
+    "control.eval_case.upsert": {"target_kind": "skill", "target_ref": "risky"},
 }
 
-_HIGH_VERBS = {
-    verb: params
-    for verb, params in _VERB_PARAMS.items()
-    if verb
-    not in {
-        "control.workflow.execute",
-        "control.adapter.generate",
-        "control.mcp_server.register",
-        "control.invitation.create",
-        "control.notification.route",
-    }
+_LOW_VERBS = {
+    "control.adapter.generate",
+    "control.mcp_server.register",
 }
+
+_HIGH_VERBS = {verb: params for verb, params in _VERB_PARAMS.items() if verb not in _LOW_VERBS}
 
 
 async def _kernel(*, admin: AdminConfig | None = None) -> Kernel:
@@ -191,8 +227,8 @@ async def _approved_route(client, kernel, method: str, path: str, body: dict):
     return client.request(
         method,
         path,
-        json={**body, "approval_id": request_id},
-        headers=_hdr(),
+        json=body,
+        headers={**_hdr(), "x-boltrig-approval-id": request_id},
     )
 
 
@@ -319,6 +355,14 @@ async def test_every_high_control_verb_is_hitl_held_and_writes_nothing_while_pen
         {"adapter_id": "generated", "spec": _OPENAPI_SPEC},
         _ctx(["*"]),
     )
+    await k.store.create_workspace(
+        Workspace(
+            id="ws-1",
+            tenant_id=T,
+            name="Seed",
+            slug="seed",
+        )
+    )
     for verb, params in _HIGH_VERBS.items():
         with pytest.raises(PendingHuman):
             await k.invoke("control", verb, params, _ctx(["*"]))
@@ -370,11 +414,10 @@ async def test_expanded_control_plane_operations_are_functional_and_secret_safe(
         k, "control.workflow.trigger", {"workflow_id": "wf-control", "inputs": {}}
     )
     assert triggered["status"] == "queued" and triggered["run_id"]
-    executed = await k.invoke(
-        "control",
+    executed = await _approved(
+        k,
         "control.workflow.execute",
         {"workflow_id": "wf-control", "inputs": {}},
-        _ctx(["*"]),
     )
     assert executed["status"] == "completed"
 
@@ -399,14 +442,13 @@ async def test_expanded_control_plane_operations_are_functional_and_secret_safe(
     deactivated = await _approved(k, "control.user.deactivate", {"user_id": "target"})
     assert deactivated["user"]["status"] == "deactivated"
 
-    invitation = await k.invoke(
-        "control",
+    invitation = await _approved(
+        k,
         "control.invitation.create",
         {"email": "new@example.com", "role": "member"},
-        _ctx(["*"]),
     )
     assert invitation["invite_token"].startswith("boltrig_invite_")
-    events = k.events.snapshot("run-35")
+    events = k.events.snapshot(T, "run-35")
     assert invitation["invite_token"] not in repr(events)
     assert any(
         event.get("output", {}).get("invite_token") == "[redacted]"
@@ -414,11 +456,10 @@ async def test_expanded_control_plane_operations_are_functional_and_secret_safe(
         if event.get("type") == "tool_result"
     )
 
-    routed = await k.invoke(
-        "control",
+    routed = await _approved(
+        k,
         "control.notification.route",
         {"event_type": "approval", "channel": "email", "target": "new@example.com"},
-        _ctx(["*"]),
     )
     assert any(pref.id == routed["id"] for pref in await k.store.list_notification_prefs(T))
 
@@ -566,8 +607,24 @@ async def test_invitation_is_uncacheable_and_concurrent_creation_is_single_winne
         )
     assert await k.store.list_invitations(T) == []
 
+    request_ids = []
+    for _ in range(2):
+        with pytest.raises(PendingHuman) as held:
+            await k.invoke("control", "control.invitation.create", params, _ctx(["*"]))
+        request_ids.append(held.value.hitl_request_id)
+    for request_id in request_ids:
+        await k.hitl.answer(T, request_id, "approve", "admin@acme")
     results = await asyncio.gather(
-        *(k.invoke("control", "control.invitation.create", params, _ctx(["*"])) for _ in range(2)),
+        *(
+            k.invoke(
+                "control",
+                "control.invitation.create",
+                params,
+                _ctx(["*"]),
+                approval_id=request_id,
+            )
+            for request_id in request_ids
+        ),
         return_exceptions=True,
     )
     successes = [item for item in results if isinstance(item, dict)]
@@ -758,8 +815,7 @@ async def test_bare_chat_turn_uses_manifest_skills_under_caller_ceiling():
 async def test_invitation_revoke_verb_and_route_write_identical_state():
     """control.invitation.revoke (the governed verb) and DELETE
     /v1/admin/invitations/{id} (the compat route) revoke the SAME invitation state
-    through the one chokepoint and return identical body/status. Low consequence:
-    no HITL hold, so the verb dispatches straight through."""
+    through the one chokepoint and return identical body/status after approval."""
     from datetime import datetime, timezone
 
     from boltrig.models import UserInvitation
@@ -769,9 +825,15 @@ async def test_invitation_revoke_verb_and_route_write_identical_state():
     def _seed() -> UserInvitation:
         # fixed timestamps so the two instances are field-for-field comparable
         return UserInvitation(
-            id="inv-parity", tenant_id=T, email="pending@example.com",
-            intended_role="member", intended_scope={}, invited_by="admin@acme",
-            created_at=fixed, expires_at=fixed, status="pending",
+            id="inv-parity",
+            tenant_id=T,
+            email="pending@example.com",
+            intended_role="member",
+            intended_scope={},
+            invited_by="admin@acme",
+            created_at=fixed,
+            expires_at=fixed,
+            status="pending",
             token_hash="hash-parity",
         )
 
@@ -783,13 +845,20 @@ async def test_invitation_revoke_verb_and_route_write_identical_state():
     await kv.store.add_invitation(_seed())
     await kr.store.add_invitation(_seed())
 
-    out = await kv.invoke(
-        "control", "control.invitation.revoke",
-        {"invite_id": "inv-parity"}, _ctx(["*"]),
+    out = await _approved(
+        kv,
+        "control.invitation.revoke",
+        {"invite_id": "inv-parity"},
     )
     assert out == {"id": "inv-parity"}
 
-    r = client.request("DELETE", "/v1/admin/invitations/inv-parity", headers=_hdr())
+    r = await _approved_route(
+        client,
+        kr,
+        "DELETE",
+        "/v1/admin/invitations/inv-parity",
+        {},
+    )
     assert r.status_code == 200
     # the route wraps the SAME verb output (identical body/status parity)
     assert r.json() == {"status": "ok", **out}
@@ -801,6 +870,4 @@ async def test_invitation_revoke_verb_and_route_write_identical_state():
 
     # the verb path was audited as a governed kernel verb (SEC-16)
     events = await kv.store.audit_query(T, limit=50)
-    assert any(
-        e.verb == "control.invitation.revoke" and e.status == "ok" for e in events
-    )
+    assert any(e.verb == "control.invitation.revoke" and e.status == "ok" for e in events)

@@ -1,6 +1,4 @@
-import { AgentHoverCard } from "@/panels/chat/AgentHoverCard";
 import type { ChatAgent, ChatTab } from "@/panels/chat/constants";
-import { statusColor } from "@/panels/chat/formatting";
 import { Icon } from "@/panels/chat/icons";
 
 type Setter<T> = React.Dispatch<React.SetStateAction<T>>;
@@ -14,8 +12,6 @@ interface ChatHeaderProps {
   newConversation: () => void;
   rightPanel: "files" | null;
   setRightPanel: (panel: "files" | null) => void;
-  setInCall: (inCall: boolean) => void;
-  setCallSeconds: Setter<number>;
   chatSearchOpen: boolean;
   setChatSearchOpen: Setter<boolean>;
   setChatSearchTerm: Setter<string>;
@@ -62,8 +58,6 @@ function ChatHeaderTabs({ chatTab, setChatTab, newConversation }: ChatHeaderTabs
 interface ChatHeaderActionsProps {
   rightPanel: "files" | null;
   setRightPanel: (panel: "files" | null) => void;
-  setInCall: (inCall: boolean) => void;
-  setCallSeconds: Setter<number>;
   chatSearchOpen: boolean;
   setChatSearchOpen: Setter<boolean>;
   setChatSearchTerm: Setter<string>;
@@ -74,19 +68,12 @@ interface ChatHeaderActionsProps {
 function ChatHeaderActions({
   rightPanel,
   setRightPanel,
-  setInCall,
-  setCallSeconds,
   chatSearchOpen,
   setChatSearchOpen,
   setChatSearchTerm,
   theme,
   toggleTheme,
 }: ChatHeaderActionsProps): JSX.Element {
-  const startCall = () => {
-    setCallSeconds(() => 0);
-    setInCall(true);
-  };
-
   return (
     <>
       <div className="chat-header__spacer" />
@@ -98,14 +85,6 @@ function ChatHeaderActions({
         onClick={() => setRightPanel(rightPanel === "files" ? null : "files")}
       >
         <Icon name="file" size={16} />
-      </button>
-      <button
-        className="icon-btn chat-header__action"
-        type="button"
-        title="Voice call"
-        onClick={startCall}
-      >
-        <Icon name="phone" size={16} />
       </button>
       <button
         className="icon-btn chat-header__action"
@@ -143,8 +122,6 @@ export function ChatHeader(props: ChatHeaderProps): JSX.Element {
     newConversation,
     rightPanel,
     setRightPanel,
-    setInCall,
-    setCallSeconds,
     chatSearchOpen,
     setChatSearchOpen,
     setChatSearchTerm,
@@ -167,22 +144,14 @@ export function ChatHeader(props: ChatHeaderProps): JSX.Element {
         <div>
           <strong>
             {selectedAgent.name}
-            <span
-              className="chat-header__status-dot"
-              style={{ background: statusColor(selectedAgent.status) }}
-              aria-label={`Status: ${selectedAgent.status}`}
-            />
           </strong>
           <span>{selectedAgent.role}</span>
         </div>
-        <AgentHoverCard agent={selectedAgent} />
       </div>
       <ChatHeaderTabs chatTab={chatTab} setChatTab={setChatTab} newConversation={newConversation} />
       <ChatHeaderActions
         rightPanel={rightPanel}
         setRightPanel={setRightPanel}
-        setInCall={setInCall}
-        setCallSeconds={setCallSeconds}
         chatSearchOpen={chatSearchOpen}
         setChatSearchOpen={setChatSearchOpen}
         setChatSearchTerm={setChatSearchTerm}

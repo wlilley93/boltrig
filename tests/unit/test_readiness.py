@@ -156,7 +156,7 @@ async def test_readyz_probes_every_enabled_dependency() -> None:
     assert report["status"] == "ready"
     assert {item["status"] for item in report["checks"].values()} == {"ok"}
     assert report["checks"]["migration"]["current"] == EXPECTED_ALEMBIC_HEAD
-    assert report["checks"]["control_plane"]["registered"] == len(REQUIRED_CONTROL_VERBS) == 20
+    assert report["checks"]["control_plane"]["registered"] == len(REQUIRED_CONTROL_VERBS)
     assert report["checks"]["stack_tools"]["live_health"] == "ok"
     assert "postgresql://" not in repr(report)
     assert "redis://" not in repr(report)

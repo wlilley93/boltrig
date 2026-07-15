@@ -212,7 +212,7 @@ class Spawner:
     ) -> None:
         try:
             self._kernel.events.publish(
-                context.run_id,
+                context.tenant_id, context.run_id,
                 {
                     "type": "subagent",
                     "task": _display_task(task),
@@ -285,7 +285,7 @@ class Spawner:
             latency_ms=latency_ms,
             tokens_used=tokens or None,
             cost_micros=cost or None,
-            on_behalf_of=parent.on_behalf_of,
+            on_behalf_of=parent.on_behalf_of, workspace_id=parent.workspace_id,
             skills_loaded=list(skills),
             detail=detail,
         )

@@ -35,8 +35,8 @@ jobs:
       - name: Install hash-locked security tools and project graph
         run: python -m pip install --require-hashes -r requirements-dev-lock.txt
 
-      - name: Audit Python graphs and run SAST
-        run: make python-audit sast PY=python
+      - name: Audit Python graphs, run SAST, and scan IaC
+        run: make python-audit sast iac-scan PY=python
 
       - name: Scan complete Git history for secrets
         run: make secret-scan

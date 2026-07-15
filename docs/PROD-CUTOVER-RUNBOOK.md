@@ -3,7 +3,7 @@
 Prepared while proven on dev; HELD at the irreversible step pending the Principal's
 explicit go (COUNTY 7-11 D10). This is ready to execute the moment a path is chosen.
 
-## Current prod state (jellytot-prod, verified read-only)
+## Recorded prod state (2026-07-03 snapshot; re-verify before use)
 - Box: jellytot-prod-01. Repo `~/Projects/boltrig` at `83ac67f` (the old CF-Access
   commit); today's stack (HEAD `9eee84a`, ~28 commits ahead) is NOT there.
 - Runs `boltrig/kernel|fleet|ui|pi-sidecar:0.1.0` (locally-built tags), postgres,
@@ -22,27 +22,28 @@ explicit go (COUNTY 7-11 D10). This is ready to execute the moment a path is cho
    A login/2FA fault locks the live console out until fixed on the box.
 2. Existing CF-Access users have no password; session-auth needs a seeding path.
 3. Prod DB holds real data. The current Alembic chain runs through
-   `0023_hitl_request_binding`; unlike the older 0010-0019-only plan, 0022 includes a
+   `0025_hitl_access_scope`; unlike the older 0010-0019-only plan, 0022 includes a
    type conversion and column removal and has no automated downgrade. A verified
    off-box snapshot and restore rehearsal are mandatory before applying it.
 4. Grant-narrowing (COUNTY 8) is backward-compatible: prod users have no
    org/workspace membership, so SEC-110 keeps their current grants unchanged.
 
-## Common steps (all paths) - get the code + images + schema onto prod
-1. Transfer HEAD to prod (tar over ssh, not rsync - avoids the git-creds gap):
-   `cd ~/Projects/boltrig && git archive HEAD | ssh jellytot-prod 'cd ~/Projects/boltrig && tar -x'`
-   (this updates the working tree only; running containers keep their image).
-2. Build the 4 images on prod from the transferred tree (same Dockerfiles as dev).
+## Common steps (all paths) - get the signed release + schema onto prod
+1. Select a protected semantic release whose exact commit has successful
+   `ci / quality` and `security / Security gate` runs. Transfer that TAG to prod
+   (not a moving HEAD) so Compose and Alembic inputs match the signed images.
+2. Download the release's `boltrig-images.env`, then run
+   `make release-validate RELEASE_IMAGES_ENV=boltrig-images.env RELEASE_ENV=.env`.
+   This requires all five verified `@sha256` refs and proves the secure merged
+   Compose config contains no first-party builds. Do not rebuild on prod.
 3. Restore the pre-migration `pg_dump -Fc` into a disposable database, run
    `make migrate`, and complete the migration-parity and application smoke tests.
    Then stop production writers, take and verify a fresh off-box snapshot, apply
    `alembic upgrade head`, and confirm `alembic current` reports
-   `0023_hitl_request_binding`. Rollback across 0022 means restoring that snapshot and
+   `0025_hitl_access_scope`. Rollback across 0022 means restoring that snapshot and
    the prior images together; never run `alembic downgrade` across 0022 and never
    roll back only the application image.
-4. Bump `User.sessionVersion` is N/A here; force-reload open tabs after the UI image
-   swap by the usual cache-bust (new index-*.js hash from the rebuild).
-5. Set stack-owned Herdr/OpenCode/Browser CLI roots before any v2 agent-control profile is
+4. Set stack-owned Herdr/OpenCode/Browser CLI roots before any v2 agent-control profile is
    enabled: `BOLTRIG_HERDR_HOME=/var/lib/boltrig/herdr` and
    `BOLTRIG_OPENCODE_HOME=/var/lib/boltrig/opencode`, plus
    `BOLTRIG_BROWSER_CLI_HOME=/var/lib/boltrig/browser-cli` when browser verbs are
@@ -51,19 +52,25 @@ explicit go (COUNTY 7-11 D10). This is ready to execute the moment a path is cho
    state. Run `boltrig doctor --production` and treat `herdr_stack_home`,
    `opencode_stack_home`, `browser_cli_stack_home`, and `browser_cli_stack_cli`
    failures as blockers.
+5. Pull and start the recorded digests with
+   `make release-up RELEASE_IMAGES_ENV=boltrig-images.env RELEASE_ENV=.env`.
+6. Bump `User.sessionVersion` is N/A here; force-reload open tabs after the UI image
+   swap by the usual cache-bust (new index-*.js hash from the release build).
 
 ## Path A - ship code, KEEP Cloudflare Access (recommended, lowest blast)
-Do the common steps, then `docker compose up -d --build kernel fleet-worker ui`.
+Do the common steps, including the digest-pinned `make release-up` launch.
 Leave `BOLTRIG_AUTH_MODE` UNSET (CF Access resolver stays). Prod gains tenancy,
 audit depth, model routing, the UX overhaul, and 2FA-readiness, with the auth gate
 UNCHANGED (zero login risk). The login/2FA swap is a later deliberate step.
 Verify: healthz 200 through CF Access; a normal CF-Access login still works; the
-new /v1/audit/verify reports chain_intact. Rollback: re-`up -d` the prior image tag.
+new /v1/audit/verify reports chain_intact. Rollback: restore the prior image-digest
+environment and run the release launch again.
 
 ## Path B - belt-and-suspenders (session auth BEHIND CF Access)
-Common steps, then set `BOLTRIG_AUTH_MODE=session` + seed will's password
+Before common step 4, set `BOLTRIG_AUTH_MODE=session` + seed will's password
 (`boltrig initiate` refuses if an owner exists - instead add a one-off set-password
-path or invite+accept for the existing user), and `up -d --build`. KEEP CF Access at
+path or invite+accept for the existing user), then complete the common
+digest-pinned release launch. KEEP CF Access at
 the edge, so a visitor passes CF Access AND the boltrig login (double gate). Verify
 the boltrig login + 2FA enroll/challenge work end to end through CF Access. Only
 after that, Path C removes CF Access.

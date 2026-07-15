@@ -62,7 +62,7 @@ from boltrig.models import (
 from boltrig.models.work import RunCheckpoint
 from .guarded_writes import GuardedWritesContract
 from .idempotency_contract import IdempotencyStoreContract
-
+from .budget_policy import BudgetPolicyContract
 # --- resource-bounding ceilings (M7 / M9 DoS-bounding, SEC-69) --------------
 # A list read must never be able to return an unbounded slice: an ever-growing
 # tenant table would otherwise let one caller exhaust memory/latency. The store
@@ -89,7 +89,7 @@ def clamp_memory_list(limit: int) -> int:
 
 
 @runtime_checkable
-class Store(IdempotencyStoreContract, GuardedWritesContract, Protocol):
+class Store(BudgetPolicyContract, IdempotencyStoreContract, GuardedWritesContract, Protocol):
     # --- registry ---
     async def get_noun(self, tenant_id: str, noun_id: str) -> Noun | None: ...
     async def get_verb(self, tenant_id: str, verb_id: str) -> Verb | None: ...
@@ -123,19 +123,22 @@ class Store(IdempotencyStoreContract, GuardedWritesContract, Protocol):
     async def upsert_model_endpoint(self, ep: ModelEndpoint) -> None: ...
     async def get_model_endpoint(self, tenant_id: str, ep_id: str) -> ModelEndpoint | None: ...
     async def list_model_endpoints(self, tenant_id: str) -> list[ModelEndpoint]: ...
-    # Workflow run records (design brief 22.1): observability-only rows recorded
-    # after a successful execute. Feeds the automations home cards with REAL run
-    # stats (run_count, success_count, last_run_at) per workflow. A write failure
-    # is swallowed by the route so it can NEVER break workflow execution.
-    async def record_workflow_run(
-        self, tenant_id: str, workflow_id: str, run_id: str, status: str
-    ) -> None: ...
+    # Observability-only rows feed stats; write failure never voids execution.
+    async def record_workflow_run(self, tenant_id: str, workflow_id: str, run_id: str, status: str) -> None: ...
+    async def list_workflow_run_ids(self, tenant_id: str, workflow_id: str, limit: int = 100) -> list[str]: ...
     async def workflow_run_stats(self, tenant_id: str) -> list[dict[str, Any]]: ...
-
     # --- work items ---
     async def create_work_item(self, item: WorkItem) -> None: ...
-    async def get_work_item(self, tenant_id: str, item_id: str) -> WorkItem | None: ...
-    async def get_work_item_by_run_id(self, tenant_id: str, run_id: str) -> WorkItem | None: ...
+    async def get_work_item(
+        self, tenant_id: str, item_id: str,
+        workspace_id: str | None = None,
+        enforce_workspace: bool = False,
+    ) -> WorkItem | None: ...
+    async def get_work_item_by_run_id(
+        self, tenant_id: str, run_id: str,
+        workspace_id: str | None = None,
+        enforce_workspace: bool = False,
+    ) -> WorkItem | None: ...
     async def update_work_item(self, item: WorkItem) -> None: ...
     async def list_work_items(
         self,
@@ -145,15 +148,12 @@ class Store(IdempotencyStoreContract, GuardedWritesContract, Protocol):
         departments: list[str] | None = None,
         limit: int | None = None,
         cursor: str | None = None,
+        workspace_id: str | None = None,
+        enforce_workspace: bool = False,
     ) -> list[WorkItem]:
-        # M7 / SEC-69 DoS-bounding: an explicit ``limit`` (server-clamped to
-        # MAX_WORK_PAGE) plus a keyset ``cursor`` on the row id bounds the page.
-        # id is the table's stable PRIMARY KEY (tenant_id, id) and rides on every
-        # returned row, so the next cursor is simply the last item's id - no
-        # created_at is carried on the WorkItem, so an id keyset (not (created_at,
-        # id)) is the stable, overlap-free scheme. ``limit=None`` = full slice
-        # (legacy internal callers only). The tenant + status + department filters
-        # are unchanged. Rows come back ordered by id so paging never overlaps.
+        # M7 / SEC-69: keyset paging uses stable id ordering and a clamped limit.
+        # ``limit=None`` is the trusted full slice; workspace enforcement keeps an
+        # omitted filter distinct from an external org-wide-only ``None`` scope.
         ...
 
     # atomic pending -> in_flight claim with a lease: one winner per item across

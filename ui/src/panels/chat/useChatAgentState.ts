@@ -11,18 +11,11 @@ export interface ChatAgentState {
   chatTab: ChatTab;
   setChatTab: Setter<ChatTab>;
   selectedAgent: ChatAgent;
-  switchDir: "left" | "right" | "";
-  setSwitchDir: Setter<"left" | "right" | "">;
-  switchCount: number;
-  setSwitchCount: Setter<number>;
 }
 
 export function useChatAgentState(): ChatAgentState {
   const [selectedAgentId, setSelectedAgentId] = useState("bolt");
   const [chatTab, setChatTab] = useState<ChatTab>("chat");
-  const [switchDir, setSwitchDir] = useState<"left" | "right" | "">("");
-  const [switchCount, setSwitchCount] = useState(0);
-
   const selectedAgent = useMemo(
     () => CHAT_AGENTS.find((a) => a.id === selectedAgentId) ?? CHAT_AGENTS[0],
     [selectedAgentId],
@@ -34,9 +27,5 @@ export function useChatAgentState(): ChatAgentState {
     chatTab,
     setChatTab,
     selectedAgent,
-    switchDir,
-    setSwitchDir,
-    switchCount,
-    setSwitchCount,
   };
 }

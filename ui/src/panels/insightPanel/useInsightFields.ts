@@ -22,6 +22,18 @@ export interface InsightFields {
   setVerb: (v: string) => void;
   run: string;
   setRun: (v: string) => void;
+  resource: string;
+  setResource: (v: string) => void;
+  status: string;
+  setStatus: (v: string) => void;
+  since: string;
+  setSince: (v: string) => void;
+  until: string;
+  setUntil: (v: string) => void;
+  stream: "audit" | "security";
+  setStream: (v: "audit" | "security") => void;
+  eventType: string;
+  setEventType: (v: string) => void;
   searchBusy: boolean;
   setSearchBusy: (v: boolean) => void;
   searchError: string | null;
@@ -50,6 +62,12 @@ export function useInsightFields(): InsightFields {
   const [actor, setActor] = useState("");
   const [verb, setVerb] = useState("");
   const [run, setRun] = useState("");
+  const [resource, setResource] = useState("");
+  const [status, setStatus] = useState("");
+  const [since, setSince] = useState("");
+  const [until, setUntil] = useState("");
+  const [stream, setStream] = useState<"audit" | "security">("audit");
+  const [eventType, setEventType] = useState("");
   const [searchBusy, setSearchBusy] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [rows, setRows] = useState<AuditRow[] | null>(null);
@@ -76,6 +94,8 @@ export function useInsightFields(): InsightFields {
 
   return {
     cost, runs, caps, refresh, actor, setActor, verb, setVerb, run, setRun,
+    resource, setResource, status, setStatus, since, setSince, until, setUntil,
+    stream, setStream, eventType, setEventType,
     searchBusy, setSearchBusy, searchError, setSearchError, rows, setRows,
     searchScope, setSearchScope, exported, setExported, exportError,
     setExportError, exportBusy, setExportBusy, costData, runRows, actorOptions,

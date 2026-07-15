@@ -32,17 +32,12 @@ from .control_operations import (
 )
 from .control_safety import ControlConflict
 from .control_specs import control_specs
+from .control_compat import execute_compat_operation
+from .control_budget import execute_budget_operation
 
-__all__ = [
-    "ControlPlaneAdapter",
-    "build_control_plane_adapter",
-    "register_mcp_consumer",
-    "safe_consequence",
-    "set_binding_record",
-    "upsert_noun_record",
-    "upsert_skill_record",
-    "upsert_verb_record",
-]
+__all__ = ["ControlPlaneAdapter", "build_control_plane_adapter", "register_mcp_consumer",
+           "safe_consequence", "set_binding_record", "upsert_noun_record",
+           "upsert_skill_record", "upsert_verb_record"]
 
 ControlHandler = Callable[[str, dict[str, Any], InvocationContext], Awaitable[Result | None]]
 
@@ -335,6 +330,18 @@ class ControlPlaneAdapter:
             return Result.success({"id": preference.id})
         return None
 
+    async def _compatibility(
+        self, verb: str, params: dict[str, Any], context: InvocationContext
+    ) -> Result | None:
+        output = await execute_compat_operation(self._store, verb, params, context)
+        return None if output is None else Result.success(output)
+
+    async def _budgets(
+        self, verb: str, params: dict[str, Any], context: InvocationContext
+    ) -> Result | None:
+        output = await execute_budget_operation(self._store, verb, params, context)
+        return None if output is None else Result.success(output)
+
     async def execute(
         self,
         verb: str,
@@ -348,6 +355,8 @@ class ControlPlaneAdapter:
             self._registry_records,
             self._adapters,
             self._administration,
+            self._budgets,
+            self._compatibility,
         )
         try:
             for handler in handlers:

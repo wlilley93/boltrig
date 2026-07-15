@@ -11,6 +11,7 @@ import { CommandPalette } from "@/panels/CommandPalette";
 import { RunView } from "@/panels/RunView";
 import { SettingsPage } from "@/panels/SettingsPage";
 import { AppSidebar } from "@/app/AppSidebar";
+import { AppTopbar } from "@/app/AppTopbar";
 import { IdentityBar } from "@/app/IdentityBar";
 import { renderCell } from "@/app/renderCell";
 
@@ -42,9 +43,10 @@ export function App() {
   // The dev sign-in is collapsed behind the identity chip by default; expanding it
   // reveals the editable identity bar (the dev auth mechanism).
   const [identityOpen, setIdentityOpen] = useState(false);
-  // The sidebar starts as the compact icon rail; the user can expand it to show
-  // labels. Persisted in component state (survives re-renders).
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
+  // Labels are the discoverable desktop default. The responsive shell turns
+  // this into an icon rail on narrow screens, and the user can collapse it at
+  // any width without changing navigation state.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Apply the persisted appearance (theme / density / contrast / font scale /
   // reduced motion) to the document root on first load, before any panel paints,
@@ -57,8 +59,6 @@ export function App() {
   return (
     <div className="app app--shell">
       <AppSidebar
-        rows={rows}
-        active={active}
         identityOpen={identityOpen}
         collapsed={sidebarCollapsed}
         onToggleSidebar={() => setSidebarCollapsed((v) => !v)}
@@ -67,6 +67,7 @@ export function App() {
 
       <div className="app__body">
         {identityOpen && <IdentityBar />}
+        {route.tab !== "chat" && <AppTopbar />}
         <main className="app__main app__main--deck">
           {/* The Deck stays mounted (so keep-alive chat state survives) but is
               hidden when Settings is the active page - settings renders as its

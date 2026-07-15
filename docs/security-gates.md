@@ -6,10 +6,12 @@ and `security / Security gate`. Both must be successful before merge.
 The security workflow enforces:
 
 - hash-verified Python dependency audits for the application, Browser Use tool
-  environment, Pi sidecar, and CI tooling;
+  environment, the CPython-3.12-resolved Pi sidecar graph, and CI tooling;
 - Bandit medium/high-confidence SAST plus CodeQL extended queries for Python,
   JavaScript/TypeScript, and GitHub Actions;
 - full-history Gitleaks scanning and actionlint;
+- high/critical Trivy IaC checks from a digest-pinned image using its embedded
+  policy bundle, so the gate needs no credentials or mutable policy download;
 - builds of kernel, fleet, UI, Pi-sidecar, and backup images;
 - a CycloneDX SBOM and complete high/critical Trivy JSON report for every image;
 - a blocking container gate for every high/critical advisory with an available
@@ -31,11 +33,14 @@ Run the source gates locally with `make security-source`; `make quality` include
 them with the backend, frontend, browser, doctor, Compose, coverage, and migration
 gates.
 
-A protected semantic tag triggers `.github/workflows/release.yml`. The workflow
-first creates a draft GitHub release. For each of the kernel, fleet, UI,
-Pi-sidecar, and backup images it then:
+A protected semantic tag triggers `.github/workflows/release.yml`. Before it
+creates a draft GitHub release, the workflow proves the exact commit has canonical
+CI and security success. For each of the kernel, fleet, UI, Pi-sidecar, and backup
+images it then:
 
-1. requires the tagged commit to be reachable from the default branch;
+1. requires the tagged commit to be reachable from the default branch and the
+   latest `ci.yml` and `security.yml` workflow runs for that exact SHA to have
+   completed successfully;
 2. rebuilds locally and blocks fixable high/critical findings;
 3. pushes only a run-scoped candidate tag and records its immutable digest;
 4. signs that digest with Sigstore/Cosign and the workflow's GitHub OIDC identity;
@@ -49,6 +54,15 @@ their public tags, and publish the GitHub release. A failed run therefore never
 publishes an incomplete GitHub release or an unsigned official image. Evidence
 is never overwritten; if a run leaves a draft behind, investigate it and delete
 the draft explicitly before creating a replacement release.
+
+The published release also contains `boltrig-images.env`: exactly five
+`BOLTRIG_*_IMAGE` variables whose values are the verified `image@sha256` refs.
+`deploy/compose.release.yml` removes every first-party `build` key and requires
+those values, while `scripts/validate_release_images.py` rejects missing, extra,
+or mutable image references. Download the environment beside a production
+`.env`, run `make release-validate`, then `make release-up`; the latter layers the
+release overlay under the secure overlay, enables the backup profile, pulls the
+five signed images, and starts with `--no-build`.
 
 Configure the GitHub `release` environment with required reviewers, restrict who
 may create `vMAJOR.MINOR.PATCH` tags, and require the `ci / quality` and

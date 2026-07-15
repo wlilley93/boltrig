@@ -146,7 +146,7 @@ class RuntimeResolver:
         }
         if context is not None and context.run_id:
             run_id = context.run_id
-            cfg["event_sink"] = lambda ev: self._kernel.events.publish(run_id, ev)
+            cfg["event_sink"] = lambda ev: self._kernel.events.publish(context.tenant_id, run_id, ev)
         return cfg
 
     def _rivet_config(

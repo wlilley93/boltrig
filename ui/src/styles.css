@@ -7,8 +7,6 @@
    theme / contrast / density variants; new craft (glass, angular schematic nodes,
    glow, the expandable sidebar) is layered on the components further down. */
 
-@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap");
-
 :root {
   color-scheme: dark light;
 
@@ -3120,6 +3118,38 @@ select:focus {
   gap: 5px;
   padding: 8px 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+.budget-policy {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 14px;
+  border: 1px solid var(--color-border-medium);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-inset);
+}
+.budget-policy__head,
+.budget-row__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.budget-policy__head p {
+  margin: 3px 0 0;
+}
+.budget-policy__grid {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+.budget-policy__toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  color: var(--color-text-secondary);
+}
+.budget-row__metrics {
+  font-size: var(--fs-xs);
 }
 .budget-row:last-child {
   border-bottom: none;

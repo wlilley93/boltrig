@@ -37,6 +37,26 @@ from boltrig.store import Store
 _APPROVING = {"approve", "approved", "yes", "ok", "allow"}
 
 
+def hitl_department_scope(context: Any) -> list[str] | None:
+    """Extract the authenticated department scope carried by a principal context."""
+    scope = context.extra.get("principal_scope")
+    if not isinstance(scope, dict) or scope.get("all"):
+        return None
+    raw = scope.get("departments", [])
+    if not isinstance(raw, (list, tuple, set)):
+        return []
+    return sorted({str(value) for value in raw if str(value)})
+
+
+def hitl_scope_fields(context: Any) -> dict[str, Any]:
+    """Return the authenticated visibility fields for a new HITL request."""
+    return {
+        "requested_on_behalf_of": context.on_behalf_of,
+        "workspace_id": context.workspace_id,
+        "department_scope": hitl_department_scope(context),
+    }
+
+
 def _normalise_json(value: Any) -> Any:
     """Return a deterministic JSON value for approval request binding.
 
@@ -145,6 +165,8 @@ class HITLManager:
         requested_by: str | None = None,
         requested_on_behalf_of: str | None = None,
         request_fingerprint: str | None = None,
+        workspace_id: str | None = None,
+        department_scope: list[str] | None = None,
     ) -> HITLRequest:
         if type == HITLType.APPROVAL and not (
             verb and requested_by and request_fingerprint
@@ -165,6 +187,12 @@ class HITLManager:
             requested_by=requested_by,
             requested_on_behalf_of=requested_on_behalf_of,
             request_fingerprint=request_fingerprint,
+            workspace_id=workspace_id,
+            department_scope=(
+                None
+                if department_scope is None
+                else sorted({str(value) for value in department_scope if str(value)})
+            ),
             timeout_at=(
                 utcnow() + timedelta(seconds=timeout_seconds) if timeout_seconds else None
             ),

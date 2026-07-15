@@ -4,6 +4,30 @@ The same images run everywhere; security is configuration, not a rebuild (P7).
 This covers encryption in transit (SEC-10), encryption at rest (SEC-11), and the
 corporate proxy + internal CA wiring (US-DEP-04).
 
+## Deploy a signed release
+
+Production runs the exact first-party image digests verified by the release
+workflow; it does not rebuild mutable source on the target host. Check out or
+transfer the protected release tag so its Compose manifests and migration chain
+match the images, then download `boltrig-images.env` from that GitHub release.
+The file contains exactly the kernel, fleet, UI, Pi-sidecar, and backup
+`image@sha256` references.
+
+With the normal production configuration in `.env`:
+
+```bash
+make release-validate RELEASE_IMAGES_ENV=boltrig-images.env RELEASE_ENV=.env
+make release-up RELEASE_IMAGES_ENV=boltrig-images.env RELEASE_ENV=.env
+```
+
+The validator rejects missing, additional, or tag-based image values. The launch
+layers `deploy/compose.release.yml` and `deploy/compose.secure.yml` over the base
+manifest, enables the scheduled backup profile, pulls the recorded digests, and
+uses `--no-build`. The release overlay also removes the developer bind mount of
+`scripts/backup.sh`, so the signed backup image cannot be replaced by mutable
+host source. Set `RELEASE_PROFILES=` only when backup scheduling is provided and
+verified by an external operator mechanism.
+
 ## TLS in transit (SEC-10)
 
 Run the secure overlay, which puts a Caddy TLS terminator in front of the UI and
@@ -188,7 +212,10 @@ probes.
 
 ## Checklist
 
-- [ ] `make secure-up` (TLS terminator in front; kernel/UI ports closed)
+- [ ] Protected release selected; downloaded `boltrig-images.env` passes
+      `make release-validate` and contains five `@sha256` image refs
+- [ ] `make release-up` completed with the secure overlay (TLS terminator in
+      front; kernel/UI/local-model host ports closed; no first-party rebuilds)
 - [ ] `DATABASE_URL` has `sslmode=require`
 - [ ] `PGDATA_HOST` on an encrypted device; backups on encrypted media
 - [ ] `CA_BUNDLE` set and the bundle mounted; proxy env set if required

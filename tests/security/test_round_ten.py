@@ -24,7 +24,7 @@ T = "acme"
 
 def _drain(relay: EventRelay, run_id: str) -> list[dict]:
     """Snapshot the relay backlog for a run (publish records it synchronously)."""
-    return list(relay._backlog.get(run_id, []))
+    return relay.snapshot(T, run_id)
 
 
 def _ctx(run_id: str | None, grants=("ticket.*",)) -> InvocationContext:
@@ -124,6 +124,6 @@ async def test_events_are_run_keyed_and_credential_free():
     # the kernel and never reach params/output, so never reach the stream).
     import json
 
-    blob = json.dumps(k.events._backlog).lower()
+    blob = json.dumps(list(k.events._backlog.values())).lower()
     for marker in ("credential", "api_key", "secret", "password", "material", "token"):
         assert marker not in blob

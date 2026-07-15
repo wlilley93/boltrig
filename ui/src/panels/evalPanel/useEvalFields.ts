@@ -3,6 +3,7 @@ import { useState } from "react";
 import { api } from "@/api/client";
 import type {
   CapabilitiesResponse,
+  EvalCasesResponse,
   EvalRunResult,
   EvalRunsResponse,
   SkillsResponse,
@@ -39,6 +40,7 @@ export interface EvalFields {
   setRunResult: (v: EvalRunResult | null) => void;
   filterCase: string;
   setFilterCase: (v: string) => void;
+  cases: FetchState<EvalCasesResponse>;
   runs: FetchState<EvalRunsResponse>;
   skills: FetchState<SkillsResponse>;
   workflows: FetchState<WorkflowsResponse>;
@@ -63,6 +65,7 @@ export function useEvalFields(): EvalFields {
   const [runResult, setRunResult] = useState<EvalRunResult | null>(null);
   const [filterCase, setFilterCase] = useState("");
 
+  const cases = useFetch(() => api.evalCases(), []);
   const runs = useFetch(
     () => api.evalRuns(filterCase.trim() || undefined),
     [filterCase],
@@ -76,6 +79,6 @@ export function useEvalFields(): EvalFields {
     input, setInput, assertions, setAssertions, labels, setLabels, createBusy,
     setCreateBusy, createError, setCreateError, createMsg, setCreateMsg, runId,
     setRunId, runBusy, setRunBusy, runError, setRunError, runResult,
-    setRunResult, filterCase, setFilterCase, runs, skills, workflows, caps,
+    setRunResult, filterCase, setFilterCase, cases, runs, skills, workflows, caps,
   };
 }

@@ -12,6 +12,7 @@
 import { CreateCaseForm } from "./evalPanel/CreateCaseForm";
 import { RunCaseForm } from "./evalPanel/RunCaseForm";
 import { RunsListCard } from "./evalPanel/RunsListCard";
+import { SavedCasesCard } from "./evalPanel/SavedCasesCard";
 import { useEvalState } from "./evalPanel/useEvalState";
 import { InfoCallout, PageIntro } from "./ux";
 
@@ -31,7 +32,10 @@ export function EvalPanel() {
           <CreateCaseForm s={s} />
           <RunCaseForm s={s} />
         </div>
-        <RunsListCard s={s} />
+        <div className="stack">
+          <SavedCasesCard s={s} />
+          <RunsListCard s={s} />
+        </div>
       </div>
 
       <InfoCallout>

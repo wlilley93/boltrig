@@ -31,6 +31,7 @@ export const HITL_TYPE: Record<string, Term> = {
   approval: { label: "Approval", tip: "Needs your sign-off before it runs.", cls: "badge--type-approval" },
   clarification: { label: "Question", tip: "The system has a question for you.", cls: "badge--type-clarification" },
   escalation: { label: "Escalated", tip: "Raised to you because it is above someone else's authority.", cls: "badge--type-escalation" },
+  question: { label: "Question", tip: "A run owned by you is waiting for an answer.", cls: "badge--type-clarification" },
 };
 
 export const HITL_URGENCY: Record<string, Term> = {

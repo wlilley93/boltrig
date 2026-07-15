@@ -14,6 +14,22 @@ import { copyText } from "@/panels/uxFlow/copyText";
 import { Disclosure } from "@/panels/uxFlow/disclosure";
 
 const HITL_POLL_MS = 8000;
+const SENSITIVE_PARAM =
+  /(^|[_-])(api[_-]?key|secret|password|credential|private[_-]?key|passphrase)([_-]|$)|(^|[_-])((access|refresh|auth|bearer)[_-]?)?token$/i;
+
+function redactPendingParams(value: unknown, key = ""): unknown {
+  if (SENSITIVE_PARAM.test(key)) return "[redacted]";
+  if (Array.isArray(value)) return value.map((item) => redactPendingParams(item));
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([childKey, childValue]) => [
+        childKey,
+        redactPendingParams(childValue, childKey),
+      ]),
+    );
+  }
+  return value;
+}
 // Fresh key per approval request (amendment 1): applying is a new execution,
 // but transport retries must reuse its key in case the first response was lost.
 function freshIdempotencyKey(): string {
@@ -427,7 +443,7 @@ export function PendingHumanCard({
       </p>
       {sentParams !== null && (
         <Disclosure summary="Sent parameters">
-          <CodeBlock value={sentParams} />
+          <CodeBlock value={redactPendingParams(sentParams)} />
         </Disclosure>
       )}
       <div className="ux-pending__idrow">

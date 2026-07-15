@@ -5,6 +5,7 @@ import type { MemoryRememberResponse } from "@/api/types";
 import { errText } from "@/panels/shared";
 import { Field, InfoCallout, Select } from "@/panels/ux";
 import { denialText, isDenied, KIND_OPTIONS } from "@/panels/memoryPanel/helpers";
+import { ChipPicker } from "@/panels/uxForm";
 
 type RememberFormProps = {
   content: string;
@@ -13,6 +14,14 @@ type RememberFormProps = {
   setKind: (v: string) => void;
   dataClass: "standard" | "sensitive";
   setDataClass: (v: "standard" | "sensitive") => void;
+  ownerScope: string;
+  setOwnerScope: (v: string) => void;
+  sourceKind: string;
+  setSourceKind: (v: string) => void;
+  sourceRef: string;
+  setSourceRef: (v: string) => void;
+  relatesTo: string[];
+  setRelatesTo: (v: string[]) => void;
   busy: boolean;
   error: string | null;
   onSubmit: () => void;
@@ -26,6 +35,14 @@ function RememberForm(props: RememberFormProps) {
     setKind,
     dataClass,
     setDataClass,
+    ownerScope,
+    setOwnerScope,
+    sourceKind,
+    setSourceKind,
+    sourceRef,
+    setSourceRef,
+    relatesTo,
+    setRelatesTo,
     busy,
     error,
     onSubmit,
@@ -40,10 +57,12 @@ function RememberForm(props: RememberFormProps) {
       </p>
       <Field
         label="What should the assistant remember?"
+        htmlFor="memory-content"
         hint="A single fact, in plain language. It is screened before it is saved, and lands in your own scope."
         example="Priya is the account owner for Acme."
       >
         <textarea
+          id="memory-content"
           className="code"
           value={content}
           onChange={(e) => setContent(e.target.value)}
@@ -79,6 +98,46 @@ function RememberForm(props: RememberFormProps) {
           an external model.
         </InfoCallout>
       )}
+      <details className="form__advanced">
+        <summary>Scope and provenance</summary>
+        <p className="muted">
+          Optional trace fields make this fact explainable and allow exact source erasure later.
+          The server still enforces which owner scopes you may write.
+        </p>
+        <div className="form__grid">
+          <Field label="Owner scope" htmlFor="memory-owner-scope" hint="Leave empty for your default user scope." example="user:alice">
+            <input id="memory-owner-scope" value={ownerScope} onChange={(event) => setOwnerScope(event.target.value)} />
+          </Field>
+          <Field label="Source type" htmlFor="memory-source-kind" hint="Where this fact originated.">
+            <Select
+              id="memory-source-kind"
+              value={sourceKind}
+              ariaLabel="Source type"
+              onChange={setSourceKind}
+              options={[
+                { value: "verb_result", label: "Tool or verb result" },
+                { value: "conversation", label: "Conversation" },
+                { value: "document", label: "Document" },
+                { value: "feedback", label: "Feedback" },
+              ]}
+            />
+          </Field>
+          <Field label="Source reference" htmlFor="memory-source-ref" hint="An exact stable identifier used for provenance and source erasure." example="conversation:conv-42">
+            <input id="memory-source-ref" value={sourceRef} onChange={(event) => setSourceRef(event.target.value)} />
+          </Field>
+          <Field label="Related facts" hint="Existing fact IDs this fact may link to. Cross-scope links are dropped server-side.">
+            <ChipPicker
+              value={relatesTo}
+              onChange={setRelatesTo}
+              allowFree
+              mono
+              ariaLabel="Related fact IDs"
+              placeholder="Add a fact ID"
+              validate={(value) => value.trim() ? null : "Fact ID cannot be empty"}
+            />
+          </Field>
+        </div>
+      </details>
       <div className="form__actions">
         <button
           className="btn btn--primary"
@@ -123,6 +182,10 @@ export function RememberTab() {
   const [dataClass, setDataClass] = useState<"standard" | "sensitive">(
     "standard",
   );
+  const [ownerScope, setOwnerScope] = useState("");
+  const [sourceKind, setSourceKind] = useState("verb_result");
+  const [sourceRef, setSourceRef] = useState("");
+  const [relatesTo, setRelatesTo] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<MemoryRememberResponse | null>(null);
@@ -140,6 +203,10 @@ export function RememberTab() {
         content: content.trim(),
         kind: kind.trim() || undefined,
         data_class: dataClass,
+        owner_scope: ownerScope.trim() || undefined,
+        source_kind: sourceKind,
+        source_ref: sourceRef.trim() || undefined,
+        relates_to: relatesTo,
       });
       if (isDenied(res)) {
         setError(denialText(res.reason));
@@ -162,6 +229,14 @@ export function RememberTab() {
         setKind={setKind}
         dataClass={dataClass}
         setDataClass={setDataClass}
+        ownerScope={ownerScope}
+        setOwnerScope={setOwnerScope}
+        sourceKind={sourceKind}
+        setSourceKind={setSourceKind}
+        sourceRef={sourceRef}
+        setSourceRef={setSourceRef}
+        relatesTo={relatesTo}
+        setRelatesTo={setRelatesTo}
         busy={busy}
         error={error}
         onSubmit={remember}

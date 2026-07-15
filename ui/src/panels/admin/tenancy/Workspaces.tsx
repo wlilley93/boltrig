@@ -7,6 +7,8 @@ import { errText } from "@/panels/shared";
 import { EmptyState, FetchError, Field, Select } from "@/panels/ux";
 import type { Option } from "@/panels/ux";
 import { ArmConfirm, Skeleton } from "@/panels/uxFlow";
+import { PendingHumanCard } from "@/panels/uxFlow/pendingHumanCard";
+import { useControlMutation } from "@/panels/uxFlow/useControlMutation";
 
 import { WORKSPACE_ROLE_OPTIONS } from "./options";
 
@@ -47,45 +49,39 @@ function useWorkspaceMutations(
   loadMembers: () => Promise<void>,
   onChanged: () => void,
 ) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const addMutation = useControlMutation({
+    verb: "control.workspace.member.add",
+    onApplied() {
+      void loadMembers().then(onChanged);
+    },
+  });
+  const removeMutation = useControlMutation({
+    verb: "control.workspace.member.remove",
+    onApplied() {
+      void loadMembers().then(onChanged);
+    },
+  });
+  const archiveMutation = useControlMutation({
+    verb: "control.workspace.update",
+    onApplied() {
+      onChanged();
+    },
+  });
 
   async function add(userId: string, role: string) {
-    if (!userId || busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await api.addWorkspaceMember(workspace.id, { user_id: userId, role });
-      if (res.status === "ok") {
-        await loadMembers();
-        onChanged();
-      } else {
-        setError(res.reason ?? "Could not add member.");
-      }
-    } catch (err) {
-      setError(errText(err));
-    } finally {
-      setBusy(false);
-    }
+    if (!userId || addMutation.busy || addMutation.pending) return;
+    await addMutation.invoke({ workspace_id: workspace.id, user_id: userId, role });
   }
 
   async function remove(userId: string) {
-    const res = await api.removeWorkspaceMember(workspace.id, userId);
-    if (res.status !== "ok") {
-      throw new Error(res.reason ?? "Could not remove member.");
-    }
-    await loadMembers();
+    await removeMutation.invoke({ workspace_id: workspace.id, user_id: userId });
   }
 
   async function archive() {
-    const res = await api.updateWorkspace(workspace.id, { status: "archived" });
-    if (res.status !== "ok") {
-      throw new Error(res.reason ?? "Could not archive workspace.");
-    }
-    onChanged();
+    await archiveMutation.invoke({ workspace_id: workspace.id, status: "archived" });
   }
 
-  return { busy, error, add, remove, archive };
+  return { addMutation, removeMutation, archiveMutation, add, remove, archive };
 }
 
 function WorkspaceArchiveButton({
@@ -225,12 +221,12 @@ export function WorkspaceRow({
     workspace,
     open,
   );
-  const { busy, error: mutationError, add, remove, archive } = useWorkspaceMutations(
+  const mutations = useWorkspaceMutations(
     workspace,
     loadMembers,
     onChanged,
   );
-  const error = loadError ?? mutationError;
+  const error = loadError ?? mutations.addMutation.error ?? mutations.removeMutation.error ?? mutations.archiveMutation.error;
 
   return (
     <div className="dir-row">
@@ -250,8 +246,20 @@ export function WorkspaceRow({
             </button>
           </div>
         </div>
-        <WorkspaceArchiveButton workspace={workspace} onArchived={archive} />
+        <WorkspaceArchiveButton workspace={workspace} onArchived={mutations.archive} />
       </div>
+
+      {mutations.archiveMutation.pending && (
+        <PendingHumanCard
+          hitlRequestId={mutations.archiveMutation.pending.id}
+          noun="control"
+          verb="control.workspace.update"
+          sentParams={mutations.archiveMutation.pending.params}
+          onApplied={mutations.archiveMutation.onPendingApplied}
+          onDenied={mutations.archiveMutation.onPendingDenied}
+          onReset={mutations.archiveMutation.resetPending}
+        />
+      )}
 
       {open && (
         <div className="dir-row__scope">
@@ -263,15 +271,37 @@ export function WorkspaceRow({
               key={m.user_id}
               member={m}
               workspace={workspace}
-              onRemoved={remove}
+              onRemoved={mutations.remove}
             />
           ))}
           {members && (
             <WorkspaceAddMemberForm
               orgMembers={orgMembers}
               members={members}
-              busy={busy}
-              onAdd={add}
+              busy={mutations.addMutation.busy || mutations.addMutation.pending !== null}
+              onAdd={mutations.add}
+            />
+          )}
+          {mutations.addMutation.pending && (
+            <PendingHumanCard
+              hitlRequestId={mutations.addMutation.pending.id}
+              noun="control"
+              verb="control.workspace.member.add"
+              sentParams={mutations.addMutation.pending.params}
+              onApplied={mutations.addMutation.onPendingApplied}
+              onDenied={mutations.addMutation.onPendingDenied}
+              onReset={mutations.addMutation.resetPending}
+            />
+          )}
+          {mutations.removeMutation.pending && (
+            <PendingHumanCard
+              hitlRequestId={mutations.removeMutation.pending.id}
+              noun="control"
+              verb="control.workspace.member.remove"
+              sentParams={mutations.removeMutation.pending.params}
+              onApplied={mutations.removeMutation.onPendingApplied}
+              onDenied={mutations.removeMutation.onPendingDenied}
+              onReset={mutations.removeMutation.resetPending}
             />
           )}
           {error && <p className="error">{error}</p>}
@@ -283,29 +313,20 @@ export function WorkspaceRow({
 
 function useWorkspaceCreate(onCreated: () => void) {
   const [newName, setNewName] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const mutation = useControlMutation({
+    verb: "control.workspace.create",
+    onApplied() {
+      setNewName("");
+      onCreated();
+    },
+  });
 
   async function create() {
-    if (!newName.trim() || busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await api.createWorkspace({ name: newName.trim() });
-      if (res.status === "ok") {
-        setNewName("");
-        onCreated();
-      } else {
-        setError(res.reason ?? "Could not create workspace.");
-      }
-    } catch (err) {
-      setError(errText(err));
-    } finally {
-      setBusy(false);
-    }
+    if (!newName.trim() || mutation.busy || mutation.pending) return;
+    await mutation.invoke({ name: newName.trim() });
   }
 
-  return { newName, setNewName, busy, error, create };
+  return { newName, setNewName, mutation, create };
 }
 
 export function WorkspacesCard() {
@@ -357,14 +378,25 @@ export function WorkspacesCard() {
           <div className="form__actions">
             <button
               className="btn btn--primary"
-              disabled={form.busy || !form.newName.trim()}
+              disabled={form.mutation.busy || form.mutation.pending !== null || !form.newName.trim()}
               onClick={() => void form.create()}
             >
-              {form.busy ? "Creating..." : "Create workspace"}
+              {form.mutation.busy ? "Creating..." : "Create workspace"}
             </button>
           </div>
         </div>
-        {form.error && <p className="error">{form.error}</p>}
+        {form.mutation.error && <p className="error">{form.mutation.error}</p>}
+        {form.mutation.pending && (
+          <PendingHumanCard
+            hitlRequestId={form.mutation.pending.id}
+            noun="control"
+            verb="control.workspace.create"
+            sentParams={form.mutation.pending.params}
+            onApplied={form.mutation.onPendingApplied}
+            onDenied={form.mutation.onPendingDenied}
+            onReset={form.mutation.resetPending}
+          />
+        )}
       </div>
     </div>
   );

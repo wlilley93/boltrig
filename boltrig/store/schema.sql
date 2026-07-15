@@ -158,6 +158,7 @@ CREATE TABLE IF NOT EXISTS model_endpoints (
 CREATE TABLE IF NOT EXISTS work_items (
     id              TEXT NOT NULL,
     tenant_id       TEXT NOT NULL,
+    workspace_id    TEXT,                                -- originating active workspace (NULL = org-wide)
     source          TEXT NOT NULL,
     source_id       TEXT,
     intent          TEXT NOT NULL,
@@ -181,6 +182,7 @@ CREATE TABLE IF NOT EXISTS work_items (
     PRIMARY KEY (tenant_id, id)
 );
 CREATE INDEX IF NOT EXISTS work_items_status_idx ON work_items (tenant_id, status);
+CREATE INDEX IF NOT EXISTS work_items_workspace_idx ON work_items (tenant_id, workspace_id);
 CREATE INDEX IF NOT EXISTS work_items_parent_idx ON work_items (parent_id);
 CREATE INDEX IF NOT EXISTS work_items_hatchet_run_idx ON work_items (tenant_id, hatchet_run_id);
 -- Idempotent column adds for DBs created before Beat 3 durable delegation landed
@@ -190,6 +192,7 @@ ALTER TABLE work_items ADD COLUMN IF NOT EXISTS lease_expires_at TIMESTAMPTZ;
 ALTER TABLE work_items ADD COLUMN IF NOT EXISTS attempts INT NOT NULL DEFAULT 0;
 ALTER TABLE work_items ADD COLUMN IF NOT EXISTS degraded BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE work_items ADD COLUMN IF NOT EXISTS result JSONB;
+ALTER TABLE work_items ADD COLUMN IF NOT EXISTS workspace_id TEXT;
 CREATE INDEX IF NOT EXISTS work_items_lease_idx ON work_items (tenant_id, status, lease_expires_at);
 
 -- Beat 3: durable per-step run checkpoints (the resume seam for the pump).
@@ -236,7 +239,7 @@ CREATE TABLE IF NOT EXISTS hitl_requests (
     tenant_id    TEXT NOT NULL,
     run_id       TEXT NOT NULL,
     work_item_id TEXT,
-    type         TEXT NOT NULL,                         -- approval | clarification | escalation
+    type         TEXT NOT NULL,                         -- approval | clarification | escalation | question
     urgency      TEXT NOT NULL,                         -- blocking | async
     context      TEXT NOT NULL,
     question     TEXT NOT NULL,
@@ -248,6 +251,8 @@ CREATE TABLE IF NOT EXISTS hitl_requests (
     requested_by TEXT,                                  -- SEC-14: who raised it (anti-self-approval)
     requested_on_behalf_of TEXT,                        -- SEC-14: delegated initiator identity
     request_fingerprint TEXT,                           -- SEC-14: exact canonical request binding
+    workspace_id TEXT,                                  -- SEC-141: originating workspace (NULL = org-wide)
+    department_scope JSONB,                             -- SEC-141: originating department ids
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (tenant_id, id)
@@ -257,6 +262,8 @@ ALTER TABLE hitl_requests ADD COLUMN IF NOT EXISTS verb TEXT;
 ALTER TABLE hitl_requests ADD COLUMN IF NOT EXISTS requested_by TEXT;
 ALTER TABLE hitl_requests ADD COLUMN IF NOT EXISTS requested_on_behalf_of TEXT;
 ALTER TABLE hitl_requests ADD COLUMN IF NOT EXISTS request_fingerprint TEXT;
+ALTER TABLE hitl_requests ADD COLUMN IF NOT EXISTS workspace_id TEXT;
+ALTER TABLE hitl_requests ADD COLUMN IF NOT EXISTS department_scope JSONB;
 
 CREATE TABLE IF NOT EXISTS hitl_responses (
     id           TEXT NOT NULL,

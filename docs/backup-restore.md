@@ -36,15 +36,18 @@ It is profile-gated, so the default (dev) stack is unaffected. Enable it with:
 docker compose --profile backup up -d backup
 ```
 
-Each run does: `pg_dump -Fc` to a timestamped file under `BACKUP_DIR`, optional
-passphrase encryption, prune to the newest `BACKUP_KEEP` archives, and (when
-`BACKUP_REMOTE` is set) an off-box copy via rclone.
+Each run does: `pg_dump -Fc` to a temporary file under `BACKUP_DIR`, refuses the
+archive unless `pg_restore --list` can parse it, atomically promotes it, applies
+optional passphrase encryption, writes and rechecks a portable `.sha256` sidecar,
+prunes to the newest `BACKUP_KEEP` archive/checksum pairs, and (when
+`BACKUP_REMOTE` is set) copies both files off-box via rclone.
 
 Configure it in `.env` (see `.env.example`):
 
 | Var | Meaning | Default |
 | --- | --- | --- |
 | `BACKUP_INTERVAL` | seconds between runs | `86400` (24h) |
+| `BACKUP_HEALTH_GRACE` | extra age allowed before health is stale | `3600` (1h) |
 | `BACKUP_KEEP` | local archives to retain | `7` |
 | `BACKUP_DIR` | host dir for dumps (bind-mounted) | `./backups` |
 | `BACKUP_REMOTE` | rclone remote path (off-box) | unset (local-only) |
@@ -59,6 +62,13 @@ Off-box copy and encryption are OPTIONAL and fail loudly when misconfigured:
   so a broken remote can never pass silently. Point it at any rclone backend
   (S3, B2, GCS, SFTP, etc.), e.g. `BACKUP_REMOTE=s3:my-bucket/boltrig`, and mount
   your configured `rclone.conf` via `RCLONE_CONFIG_DIR`.
+
+The backup container becomes healthy only after the complete local and configured
+off-box run has updated its last-success marker. A missing, malformed, or older
+than `BACKUP_INTERVAL + BACKUP_HEALTH_GRACE` marker is unhealthy. Any dump,
+verification, encryption, checksum, or upload failure exits PID 1 non-zero; the
+Compose restart policy retries the container and the failure is visible as a
+restart instead of being hidden until the next interval.
 
 Set `BACKUP_PASSPHRASE` to encrypt each archive at rest before it is written or
 copied off-box; keep the passphrase in your secret store (without it a restore is
@@ -97,16 +107,22 @@ make restore                # restores ./backups/boltrig.dump into the postgres 
 docker compose exec -T postgres pg_restore -U boltrig -d boltrig --clean --if-exists < backups/boltrig.dump
 ```
 
-To restore a sidecar-produced archive, pick the timestamped file and (if it was
-encrypted with `BACKUP_PASSPHRASE`) decrypt it first:
+To restore a sidecar-produced archive, pick the timestamped file and verify its
+sidecar before decrypting or restoring it. The sidecar contains only the basename,
+so keep both files in the same directory:
 
 ```bash
+sha256sum --check boltrig-<ts>.dump.enc.sha256
 # encrypted archive (.dump.enc) -> plaintext custom-format dump
 openssl enc -d -aes-256-cbc -pbkdf2 -in boltrig-<ts>.dump.enc \
   -out boltrig-<ts>.dump -pass env:BACKUP_PASSPHRASE
+pg_restore --list boltrig-<ts>.dump >/dev/null
 docker compose exec -T postgres pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
   --clean --if-exists < boltrig-<ts>.dump
 ```
+
+For an unencrypted archive, check `boltrig-<ts>.dump.sha256` and run the same
+`pg_restore --list` validation directly against the `.dump` before restore.
 
 Restore order for a full rebuild:
 

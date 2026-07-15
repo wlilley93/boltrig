@@ -32,6 +32,9 @@ const OPS_COLS: ReadonlyArray<{
   gate?: (role: string) => boolean;
 }> = [
   { key: "home", label: "Home" },
+  { key: "runs", label: "Runs" },
+  { key: "build", label: "Build" },
+  { key: "operate", label: "Operate" },
   { key: "router", label: "Router" },
   { key: "studio", label: "Studio", gate: (r) => AUTHOR_ROLES.has(r) },
   { key: "dev", label: "Dev console", gate: (r) => AUTHOR_ROLES.has(r) },
@@ -40,6 +43,7 @@ const OPS_COLS: ReadonlyArray<{
   { key: "insight", label: "Insight" },
   { key: "eval", label: "Eval" },
   { key: "memory", label: "Memory" },
+  { key: "health", label: "Health" },
   { key: "admin", label: "Admin", gate: (r) => ADMIN_ROLES.has(r) },
   { key: "channels", label: "Channels", gate: (r) => ADMIN_ROLES.has(r) },
   { key: "me", label: "Me" },
@@ -137,7 +141,11 @@ export function routeToCell(
   rows: DeckRow[],
 ): { rowId: string; colKey: string } {
   const tab = route.tab;
-  if (tab !== "runs") {
+  if (tab === "runs") {
+    const ops = rows.find((row) => row.id === "ops");
+    const runs = ops?.cols.find((col) => col.key === "runs");
+    if (ops && runs) return { rowId: ops.id, colKey: runs.key };
+  } else {
     const row = rows.find((r) => r.id === tab);
     if (row && row.cols.length > 0) {
       const sub =

@@ -1,10 +1,11 @@
 """The run/conversation event stream relay (Round Two, US-CONV-03/07).
 
 Run events (text, reasoning, tool calls, sub-agents, HITL) are published to a
-stream keyed by conversation/run id; the conversational endpoint subscribes and
-forwards them to the client. A bounded per-stream backlog lets a dropped client
-re-attach and receive the events it missed plus subsequent ones; the run keeps
-producing regardless of whether anyone is listening (NFR-CONV-01, US-CONV-07).
+stream keyed by tenant plus conversation/run id; the conversational endpoint
+subscribes and forwards them to the client. A bounded per-stream backlog lets a
+dropped client re-attach and receive the events it missed plus subsequent ones;
+the run keeps producing regardless of whether anyone is listening
+(NFR-CONV-01, US-CONV-07).
 
 In-memory and single-process by design (thin). A multi-replica deployment swaps
 this for a Redis pub/sub behind the same interface.
@@ -23,50 +24,93 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 _SENTINEL = object()  # end-of-stream marker placed on subscriber queues
+_StreamKey = tuple[str, str]
+
+
+class TenantEventRelay:
+    """A tenant-bound relay view for trusted turn-executor integrations.
+
+    The legacy executor-facing shape stays ``publish(run_id, event)`` while the
+    tenant namespace is fixed at construction and cannot be selected from an
+    attacker-controlled run id.
+    """
+
+    def __init__(self, relay: EventRelay, tenant_id: str) -> None:
+        self._relay = relay
+        self._tenant_id = tenant_id
+
+    def publish(self, stream_id: str, event: dict[str, Any]) -> None:
+        self._relay.publish(self._tenant_id, stream_id, event)
+
+    def close(self, stream_id: str) -> None:
+        self._relay.close(self._tenant_id, stream_id)
+
+    def subscribe(self, stream_id: str, *, replay: bool = True) -> AsyncIterator[dict[str, Any]]:
+        return self._relay.subscribe(self._tenant_id, stream_id, replay=replay)
+
+    def forget(self, stream_id: str) -> None:
+        self._relay.forget(self._tenant_id, stream_id)
+
+    def snapshot(self, stream_id: str) -> list[dict[str, Any]]:
+        return self._relay.snapshot(self._tenant_id, stream_id)
 
 
 class EventRelay:
     def __init__(self, backlog: int = 500, max_closed: int = 256) -> None:
-        self._subs: dict[str, set[asyncio.Queue]] = {}
-        self._backlog: dict[str, list[dict[str, Any]]] = {}
+        self._subs: dict[_StreamKey, set[asyncio.Queue]] = {}
+        self._backlog: dict[_StreamKey, list[dict[str, Any]]] = {}
         # insertion-ordered so eviction drops the oldest-closed streams first
-        self._closed: dict[str, None] = {}
+        self._closed: dict[_StreamKey, None] = {}
         self._max = backlog
         self._max_closed = max_closed
 
-    def publish(self, stream_id: str, event: dict[str, Any]) -> None:
+    @staticmethod
+    def _key(tenant_id: str, stream_id: str) -> _StreamKey:
+        if not tenant_id or not stream_id:
+            raise ValueError("tenant_id and stream_id are required")
+        return tenant_id, stream_id
+
+    def for_tenant(self, tenant_id: str) -> TenantEventRelay:
+        """Return a relay view permanently bound to one non-empty tenant."""
+        self._key(tenant_id, "namespace-check")
+        return TenantEventRelay(self, tenant_id)
+
+    def publish(self, tenant_id: str, stream_id: str, event: dict[str, Any]) -> None:
         """Record an event and fan it out to current subscribers (non-blocking)."""
-        buf = self._backlog.setdefault(stream_id, [])
+        key = self._key(tenant_id, stream_id)
+        buf = self._backlog.setdefault(key, [])
         buf.append(event)
         if len(buf) > self._max:
             del buf[: len(buf) - self._max]
-        for q in list(self._subs.get(stream_id, ())):
+        for q in list(self._subs.get(key, ())):
             q.put_nowait(event)
 
-    def close(self, stream_id: str) -> None:
+    def close(self, tenant_id: str, stream_id: str) -> None:
         """Mark a stream complete; live subscribers end after draining.
 
         Retention (NFR-CONV-02): once more than ``max_closed`` streams are
         closed, the oldest closed ones are forgotten (backlog dropped).
         """
-        self._closed[stream_id] = None
-        for q in list(self._subs.get(stream_id, ())):
+        key = self._key(tenant_id, stream_id)
+        self._closed[key] = None
+        for q in list(self._subs.get(key, ())):
             q.put_nowait(_SENTINEL)
         while len(self._closed) > self._max_closed:
-            self.forget(next(iter(self._closed)))
+            self.forget(*next(iter(self._closed)))
 
     async def subscribe(
-        self, stream_id: str, *, replay: bool = True
+        self, tenant_id: str, stream_id: str, *, replay: bool = True
     ) -> AsyncIterator[dict[str, Any]]:
         """Yield events for a stream: the backlog first (re-attach), then live
         events until the stream is closed."""
+        key = self._key(tenant_id, stream_id)
         queue: asyncio.Queue = asyncio.Queue()
-        self._subs.setdefault(stream_id, set()).add(queue)
+        self._subs.setdefault(key, set()).add(queue)
         try:
             if replay:
-                for event in list(self._backlog.get(stream_id, [])):
+                for event in list(self._backlog.get(key, [])):
                     yield event
-            if stream_id in self._closed:
+            if key in self._closed:
                 return
             while True:
                 item = await queue.get()
@@ -74,18 +118,19 @@ class EventRelay:
                     return
                 yield item
         finally:
-            subs = self._subs.get(stream_id)
+            subs = self._subs.get(key)
             if subs is not None:
                 subs.discard(queue)
 
-    def forget(self, stream_id: str) -> None:
+    def forget(self, tenant_id: str, stream_id: str) -> None:
         """Drop a stream's backlog + state once it is fully consumed/persisted."""
-        self._backlog.pop(stream_id, None)
-        self._closed.pop(stream_id, None)
-        self._subs.pop(stream_id, None)
+        key = self._key(tenant_id, stream_id)
+        self._backlog.pop(key, None)
+        self._closed.pop(key, None)
+        self._subs.pop(key, None)
 
-    def snapshot(self, stream_id: str) -> list[dict[str, Any]]:
+    def snapshot(self, tenant_id: str, stream_id: str) -> list[dict[str, Any]]:
         """A copy of a stream's current backlog (a point-in-time read, no
         subscription). Used by the run-events endpoint for a non-following
         snapshot of what a run has emitted so far."""
-        return list(self._backlog.get(stream_id, []))
+        return list(self._backlog.get(self._key(tenant_id, stream_id), []))

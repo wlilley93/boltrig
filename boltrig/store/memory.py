@@ -10,10 +10,11 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import datetime, timedelta
 
-from .base import clamp_work_page
 from .channels import ChannelStoreMem
+from .budget_policy import BudgetPolicyMem
 from .guarded_writes import GuardedWritesMem
 from .idempotency import IdempotencyStoreMem
+from .work_items import WorkItemReadsMem
 from boltrig.models import (
     AdapterRecord,
     AgentCapability,
@@ -71,7 +72,6 @@ from boltrig.models import (
 from boltrig.models.errors import SchemaValidationError
 from boltrig.models.work import RunCheckpoint
 
-
 def _norm_email_key(value) -> str:
     """Normalise an identity key (the email == user_id in the first-party flow) so
     the global email -> orgs index is case/space-insensitive, matching the login
@@ -79,7 +79,8 @@ def _norm_email_key(value) -> str:
     return value.strip().lower() if isinstance(value, str) else ""
 
 
-class InMemoryStore(IdempotencyStoreMem, GuardedWritesMem, ChannelStoreMem):
+class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
+                    GuardedWritesMem, ChannelStoreMem):
     """In-memory Store (offline + test). Domain methods live in partial mixins
     (e.g. ``ChannelStoreMem``), composed here for one public method surface."""
 
@@ -257,6 +258,15 @@ class InMemoryStore(IdempotencyStoreMem, GuardedWritesMem, ChannelStoreMem):
         started = existing[2] if existing is not None else utcnow()
         self._workflow_runs[key] = (workflow_id, status, started)
 
+    async def list_workflow_run_ids(self, tenant_id, workflow_id, limit=100):
+        rows = [
+            (started, run_id)
+            for (tenant, run_id), (wf_id, _status, started) in self._workflow_runs.items()
+            if tenant == tenant_id and wf_id == workflow_id
+        ]
+        rows.sort(reverse=True)
+        return [run_id for _started, run_id in rows[: max(0, min(limit, 1000))]]
+
     async def workflow_run_stats(self, tenant_id):
         # Aggregate per workflow_id: run_count, success_count (status == completed),
         # last_run_at (max started_at). Ordered by workflow_id, matching postgres.
@@ -293,47 +303,8 @@ class InMemoryStore(IdempotencyStoreMem, GuardedWritesMem, ChannelStoreMem):
     async def create_work_item(self, item):
         self._work[(item.tenant_id, item.id)] = item
 
-    async def get_work_item(self, tenant_id, item_id):
-        return self._work.get((tenant_id, item_id))
-
-    async def get_work_item_by_run_id(self, tenant_id, run_id):
-        direct = self._work.get((tenant_id, run_id))
-        if direct is not None:
-            return direct
-        for (t, _), item in self._work.items():
-            if t == tenant_id and item.hatchet_run_id == run_id:
-                return item
-        return None
-
     async def update_work_item(self, item):
         self._work[(item.tenant_id, item.id)] = item
-
-    async def list_work_items(
-        self,
-        tenant_id,
-        status=None,
-        parent_id=None,
-        departments=None,
-        limit=None,
-        cursor=None,
-    ):
-        out = [w for (t, _), w in self._work.items() if t == tenant_id]
-        if status is not None:
-            out = [w for w in out if w.status == status]
-        if parent_id is not None:
-            out = [w for w in out if w.parent_id == parent_id]
-        if departments is not None:  # row-level department scope (US-IAM-02)
-            allowed = set(departments)
-            out = [w for w in out if w.owner_member in allowed]
-        # Keyset pagination on the stable id (M7 / SEC-69): order by id, drop
-        # everything up to and including the cursor, then take the clamped page.
-        # Mirrors the Postgres ORDER BY id / id > cursor / LIMIT contract.
-        out.sort(key=lambda w: w.id)
-        if cursor is not None:
-            out = [w for w in out if w.id > cursor]
-        if limit is not None:
-            out = out[: clamp_work_page(limit)]
-        return out
 
     async def claim_work_item(self, tenant_id, worker_id, lease_seconds):
         # atomic pending -> in_flight claim with a lease (US-FLT-05). No await
@@ -489,6 +460,7 @@ class InMemoryStore(IdempotencyStoreMem, GuardedWritesMem, ChannelStoreMem):
         return self._budgets.get((tenant_id, scope_id))
 
     def set_budget(self, budget: Budget) -> None:
+        """Legacy fixture/bootstrap setter; governed callers use the async policy API."""
         self._budgets[(budget.tenant_id, budget.id)] = budget
 
     async def list_budgets(self, tenant_id):

@@ -16,6 +16,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import { useState } from "react";
 import { WorkflowRunCanvas } from "@/panels/WorkflowRunCanvas";
+import { PendingHumanCard } from "@/panels/uxFlow/pendingHumanCard";
 import { EditorHeader } from "./workflowCanvas/EditorHeader";
 import { useWorkflowCanvas } from "./workflowCanvas/useWorkflowCanvas";
 import { nodeTypes } from "./workflowCanvas/nodes";
@@ -62,7 +63,11 @@ export function WorkflowCanvas({
   return (
     <div className="wf-studio wf-studio--v3">
       <EditorHeader
-        meta={ctx.meta}
+        meta={{
+          ...ctx.meta,
+          runBusy: ctx.apiActions.runMutation.busy,
+          runError: ctx.meta.runError ?? ctx.apiActions.runMutation.error,
+        }}
         graph={ctx.graph}
         api={ctx.apiActions}
         onBack={onBack}
@@ -71,6 +76,17 @@ export function WorkflowCanvas({
         onUndo={ctx.graph.undo}
         onRedo={ctx.graph.redo}
       />
+      {ctx.apiActions.runMutation.pending && (
+        <PendingHumanCard
+          hitlRequestId={ctx.apiActions.runMutation.pending.id}
+          noun="control"
+          verb="control.workflow.execute"
+          sentParams={ctx.apiActions.runMutation.pending.params}
+          onApplied={ctx.apiActions.runMutation.onPendingApplied}
+          onDenied={ctx.apiActions.runMutation.onPendingDenied}
+          onReset={ctx.apiActions.runMutation.resetPending}
+        />
+      )}
       <ReactFlowProvider>
         <CanvasSurface ctx={ctx} />
       </ReactFlowProvider>
@@ -137,6 +153,7 @@ function CanvasSurface({ ctx }: { ctx: Ctx }) {
         open={drawerOpen}
         onAdd={addAtCentre}
         onClose={() => setDrawerOpen(false)}
+        verbsById={data.verbsById}
       />
       <DockToolbar
         drawerOpen={drawerOpen}
@@ -159,7 +176,12 @@ function CanvasSurface({ ctx }: { ctx: Ctx }) {
         onClose={() => setConsoleOpen(false)}
         runResult={meta.runResult}
       />
-      <BoltChatPanel open={boltOpen} onToggle={() => setBoltOpen((v) => !v)} />
+      <BoltChatPanel
+        open={boltOpen}
+        onToggle={() => setBoltOpen((v) => !v)}
+        workflowId={meta.wfId}
+        steps={graph.previewSteps}
+      />
       <StickyNotes notes={notes} onChange={setNotes} />
     </div>
   );

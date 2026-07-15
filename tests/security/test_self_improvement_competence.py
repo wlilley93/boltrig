@@ -20,6 +20,7 @@ import uuid
 
 import pytest
 
+from boltrig.api.bootstrap import _harvest_hitl_signal
 from boltrig.fleet import (
     ChiefOfStaff,
     Department,
@@ -36,8 +37,10 @@ from boltrig.models import (
     AgentCapability,
     EvalCase,
     GrantSet,
+    HITLType,
     PromotionState,
     TenantPermissions,
+    Urgency,
     WorkflowDefinition,
     WorkflowPromotion,
     WorkflowSource,
@@ -218,6 +221,44 @@ async def test_harvest_reuse_signal_is_reweight_only_and_best_effort():
         target="run-9", polarity="block", kind="hitl_verdict",
     )  # must not raise
 
+
+@pytest.mark.security
+@pytest.mark.invariant("US-WFL-09")
+async def test_only_approval_verdicts_are_harvested_as_reuse_signals():
+    kernel = _kernel()
+    seen: list[dict] = []
+
+    async def record_invoke(noun, verb, params, context, **kwargs):
+        seen.append(params)
+        return {"adjusted": True}
+
+    kernel.invoke = record_invoke
+    clarification = await kernel.hitl.create(
+        tenant_id=T,
+        run_id="run-clarification",
+        type=HITLType.CLARIFICATION,
+        question="Which region?",
+        urgency=Urgency.BLOCKING,
+        requested_by="agent",
+    )
+    await kernel.hitl.answer(T, clarification.id, "continue", "reviewer")
+    await _harvest_hitl_signal(kernel, clarification)
+    assert seen == []
+
+    approval = await kernel.hitl.create(
+        tenant_id=T,
+        run_id="run-approval",
+        type=HITLType.APPROVAL,
+        question="Approve?",
+        verb="ticket.create",
+        requested_by="agent",
+        request_fingerprint="fingerprint",
+    )
+    await kernel.hitl.answer(T, approval.id, "approve", "reviewer")
+    await _harvest_hitl_signal(kernel, approval)
+    assert seen == [
+        {"signal": "hitl_verdict:endorsement", "target": "run-approval"}
+    ]
 
 # --- US-WFL-10: reflection is opt-in and rides the chokepoint ----------------
 @pytest.mark.security

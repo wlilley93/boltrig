@@ -28,6 +28,9 @@ export function identityHeaders(): Record<string, string> {
     "x-boltrig-grants": id.grants,
     "x-boltrig-role": id.role,
     "x-boltrig-departments": id.departments ?? "",
+    "x-boltrig-tier": id.actorTier ?? "human",
+    "x-boltrig-obo": id.onBehalfOf ?? "",
+    "x-boltrig-verbs": id.verbs ?? "",
   };
 }
 

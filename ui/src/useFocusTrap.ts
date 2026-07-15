@@ -17,6 +17,23 @@ function focusable(container: HTMLElement): HTMLElement[] {
   );
 }
 
+function isTopmostModal(container: HTMLElement): boolean {
+  const selector = '[role="dialog"][aria-modal="true"]';
+  const owner = container.matches(selector)
+    ? container
+    : container.closest<HTMLElement>(selector);
+  if (owner === null) return true;
+  const modals = Array.from(
+    document.querySelectorAll<HTMLElement>(selector),
+  ).filter(
+    (modal) =>
+      modal.isConnected &&
+      !modal.hidden &&
+      modal.getAttribute("aria-hidden") !== "true",
+  );
+  return modals[modals.length - 1] === owner;
+}
+
 export function useFocusTrap(
   ref: RefObject<HTMLElement>,
   active: boolean = true,
@@ -34,6 +51,9 @@ export function useFocusTrap(
 
     function onKeyDown(e: KeyboardEvent) {
       if (e.key !== "Tab") return;
+      // Only the front-most modal owns keyboard containment. Without this, a
+      // palette raised over the Run drawer lets both traps move focus.
+      if (!isTopmostModal(container as HTMLElement)) return;
       const items = focusable(container as HTMLElement);
       if (items.length === 0) {
         e.preventDefault(); // nothing to move to - stay put

@@ -15,9 +15,7 @@ Two kinds of route:
 from __future__ import annotations
 
 import hashlib
-import secrets
 import uuid
-from datetime import timedelta
 
 from fastapi import Depends, Request
 from fastapi.responses import JSONResponse
@@ -31,17 +29,15 @@ from boltrig.adapters.builtin.inbound_webhook import (
 from boltrig.models import (
     ActionType,
     AuditEvent,
-    Channel,
     ChannelBinding,
-    ChannelPairing,
     RateLimit,
     RateLimited,
     utcnow,
 )
-from boltrig.models.channels import transport_for
 from boltrig.work.normalise import normalise
 
 from .channel_gateway import CHANNEL_TIERS, resolve_channel_principal
+from .control_routes import dispatch_control_route
 
 # The pairing flow (decision 0003): one-time codes are short, human-transcribable,
 # hashed at rest (SEC-05), TTL-bounded, lockout-guarded. They bind an unknown
@@ -63,11 +59,6 @@ INBOUND_RL_PER_SENDER = RateLimit(per="minute", max=30, scope="verb")
 def _hash_code(code: str) -> str:
     """The at-rest representation of a pairing code: sha256, never plaintext."""
     return hashlib.sha256(code.encode("utf-8")).hexdigest()
-
-
-def _gen_pairing_code() -> str:
-    # 8 url-safe chars -> ~47 bits, fine for a short-lived, rate-limited, hashed code.
-    return secrets.token_urlsafe(6)[:8].upper()
 
 
 async def _audit(kernel, p, verb: str, detail: dict, status: str = "ok") -> None:
@@ -244,10 +235,8 @@ def register_channel_routes(app, *, principal_dep, get_kernel) -> None:
         return JSONResponse({"status": "ok", "work_item": item.id}, status_code=202)
 
     # === Governance verbs (decision 0003): admin-authored channel lifecycle. ===
-    # connect/configure/disconnect mutate the governed Channel noun; pair/bindings
-    # map verified external senders to internal identities. All admin-gated +
-    # audited. connect writes the signing secret kernel-side (SEC-04/05); the
-    # credential never crosses the boundary or reaches an agent.
+    # Lifecycle and sender bindings are admin-gated and audited; connection secrets
+    # stay kernel-side and never cross into an agent (SEC-04/05).
 
     def _admin(p) -> JSONResponse | None:
         from boltrig.identity.rbac import can_author
@@ -257,7 +246,7 @@ def register_channel_routes(app, *, principal_dep, get_kernel) -> None:
         )
 
     @app.post("/v1/channels")
-    async def channel_connect(body: dict, k=K, p=P) -> JSONResponse:
+    async def channel_connect(body: dict, request: Request, k=K, p=P) -> JSONResponse:
         denied = _admin(p)
         if denied:
             return denied
@@ -268,61 +257,58 @@ def register_channel_routes(app, *, principal_dep, get_kernel) -> None:
                 {"status": "error", "reason": "platform must be a webhook-class + name"},
                 status_code=400,
             )
-        channel_id = f"ch_{uuid.uuid4().hex[:16]}"
-        secret = str(body.get("signing_secret") or "").strip()
-        credential_ref = None
-        if secret:
-            credential_ref = f"cred_{uuid.uuid4().hex[:16]}"
-            await k.store.set_credential_ref(p.tenant_id, credential_ref, {"secret": secret})
-        channel = Channel(
-            id=channel_id, tenant_id=p.tenant_id, platform=platform, name=name,
-            transport=transport_for(platform), credential_ref=credential_ref,
-            config=body.get("config") or {}, enabled=bool(body.get("enabled", True)),
-            unpaired_behavior=str(body.get("unpaired_behavior") or "reject"),
-        )
-        await k.store.upsert_channel(channel)
+        output, pending = await dispatch_control_route(
+            k, p, "control.channel.connect", {**body, "platform": platform, "name": name},
+            request=request)
+        if pending is not None:
+            return pending
+        output = output or {}
+        channel_id = str(output.get("channel"))
         await _audit(k, p, "channel.connect",
-                     {"channel": channel_id, "platform": platform, "transport": channel.transport})
+                     {"channel": channel_id, "platform": platform,
+                      "transport": output.get("transport")})
         return JSONResponse(
             {"status": "ok", "channel": channel_id,
-             "inbound_url": f"/v1/channels/{channel_id}/inbound"},
+             "inbound_url": output.get("inbound_url")},
             status_code=201,
         )
 
     @app.patch("/v1/channels/{channel_id}")
-    async def channel_configure(channel_id: str, body: dict, k=K, p=P) -> JSONResponse:
+    async def channel_configure(channel_id: str, body: dict, request: Request,
+                                k=K, p=P) -> JSONResponse:
         denied = _admin(p)
         if denied:
             return denied
         ch = await k.store.get_channel(p.tenant_id, channel_id)
         if ch is None:
             return JSONResponse({"status": "error", "reason": "not_found"}, status_code=404)
-        if "name" in body:
-            ch.name = str(body["name"])
-        if "config" in body and isinstance(body["config"], dict):
-            ch.config = body["config"]
-        if "unpaired_behavior" in body:
-            ch.unpaired_behavior = str(body["unpaired_behavior"])
-        if "enabled" in body:
-            ch.enabled = bool(body["enabled"])
-        await k.store.upsert_channel(ch)
+        _, pending = await dispatch_control_route(
+            k, p, "control.channel.configure", {"channel_id": channel_id, **body},
+            request=request)
+        if pending is not None:
+            return pending
         await _audit(k, p, "channel.configure", {"channel": channel_id})
         return JSONResponse({"status": "ok"})
 
     @app.delete("/v1/channels/{channel_id}")
-    async def channel_disconnect(channel_id: str, k=K, p=P) -> JSONResponse:
+    async def channel_disconnect(channel_id: str, request: Request,
+                                 k=K, p=P) -> JSONResponse:
         denied = _admin(p)
         if denied:
             return denied
         ch = await k.store.get_channel(p.tenant_id, channel_id)
         if ch is None:
             return JSONResponse({"status": "error", "reason": "not_found"}, status_code=404)
-        await k.store.delete_channel(p.tenant_id, channel_id)
+        _, pending = await dispatch_control_route(
+            k, p, "control.channel.disconnect", {"channel_id": channel_id}, request=request)
+        if pending is not None:
+            return pending
         await _audit(k, p, "channel.disconnect", {"channel": channel_id}, status="ok")
         return JSONResponse({"status": "ok"})
 
     @app.post("/v1/channels/{channel_id}/pair")
-    async def channel_pair(channel_id: str, body: dict, k=K, p=P) -> JSONResponse:
+    async def channel_pair(channel_id: str, body: dict, request: Request,
+                           k=K, p=P) -> JSONResponse:
         # HITL-gated by being admin-only: an admin author issuing the code IS the
         # human authorising the bind (decision 0003). The code is shown ONCE.
         denied = _admin(p)
@@ -344,24 +330,23 @@ def register_channel_routes(app, *, principal_dep, get_kernel) -> None:
         except (TypeError, ValueError):
             ttl = PAIR_TTL_MINUTES
         ttl = max(1, min(ttl, PAIR_MAX_TTL_MINUTES))
-        code = _gen_pairing_code()
-        now = utcnow()
-        pairing = ChannelPairing(
-            id=f"cp_{uuid.uuid4().hex[:16]}", tenant_id=p.tenant_id, channel_id=channel_id,
-            code_hash=_hash_code(code), external_user_id=external_user_id,
-            subject=subject, role=role,
-            status="pending", attempts=0, expires_at=now + timedelta(minutes=ttl),
-            created_at=now,
-        )
-        await k.store.create_channel_pairing(pairing)
+        params = {"channel_id": channel_id, "external_user_id": external_user_id,
+                  "subject": subject, "role": role, "ttl_minutes": ttl}
+        output, pending = await dispatch_control_route(
+            k, p, "control.channel.pair", params, request=request)
+        if pending is not None:
+            return pending
+        output = output or {}
         await _audit(k, p, "channel.pair",
                      {"channel": channel_id, "external_user_id": external_user_id,
-                      "subject": subject, "role": role, "pairing": pairing.id})
-        return JSONResponse({"status": "ok", "pairing_id": pairing.id, "code": code},
+                      "subject": subject, "role": role,
+                      "pairing": output.get("pairing_id")})
+        return JSONResponse({"status": "ok", **output},
                             status_code=201)  # code returned ONCE, never again
 
     @app.post("/v1/channels/{channel_id}/bindings")
-    async def channel_bind(channel_id: str, body: dict, k=K, p=P) -> JSONResponse:
+    async def channel_bind(channel_id: str, body: dict, request: Request,
+                           k=K, p=P) -> JSONResponse:
         # Direct admin binding (skip the code) - the admin vouches for the mapping.
         denied = _admin(p)
         if denied:
@@ -377,16 +362,17 @@ def register_channel_routes(app, *, principal_dep, get_kernel) -> None:
                 {"status": "error", "reason": "external_user_id + subject + valid role required"},
                 status_code=400,
             )
-        binding = ChannelBinding(
-            id=f"cb_{uuid.uuid4().hex[:12]}", tenant_id=p.tenant_id, channel_id=channel_id,
-            platform=ch.platform, external_user_id=external_user_id,
-            subject=subject, role=role,
-        )
-        await k.store.upsert_channel_binding(binding)
+        params = {"channel_id": channel_id, "external_user_id": external_user_id,
+                  "subject": subject, "role": role}
+        output, pending = await dispatch_control_route(
+            k, p, "control.channel.bind", params, request=request)
+        if pending is not None:
+            return pending
+        binding_id = (output or {}).get("binding")
         await _audit(k, p, "channel.bind",
                      {"channel": channel_id, "external_user_id": external_user_id,
-                      "subject": subject, "role": role, "binding": binding.id})
-        return JSONResponse({"status": "ok", "binding": binding.id}, status_code=201)
+                      "subject": subject, "role": role, "binding": binding_id})
+        return JSONResponse({"status": "ok", "binding": binding_id}, status_code=201)
 
     @app.get("/v1/channels/{channel_id}/bindings")
     async def list_bindings(channel_id: str, k=K, p=P) -> JSONResponse:
@@ -401,7 +387,8 @@ def register_channel_routes(app, *, principal_dep, get_kernel) -> None:
         ]})
 
     @app.delete("/v1/channels/{channel_id}/bindings/{binding_id}")
-    async def delete_binding(channel_id: str, binding_id: str, k=K, p=P) -> JSONResponse:
+    async def delete_binding(channel_id: str, binding_id: str, request: Request,
+                             k=K, p=P) -> JSONResponse:
         denied = _admin(p)
         if denied:
             return denied
@@ -410,6 +397,10 @@ def register_channel_routes(app, *, principal_dep, get_kernel) -> None:
         rows = await k.store.list_channel_bindings(p.tenant_id, channel_id)
         if not any(b.id == binding_id for b in rows):
             return JSONResponse({"status": "error", "reason": "not_found"}, status_code=404)
-        await k.store.delete_channel_binding(p.tenant_id, binding_id)
+        _, pending = await dispatch_control_route(
+            k, p, "control.channel.unbind",
+            {"channel_id": channel_id, "binding_id": binding_id}, request=request)
+        if pending is not None:
+            return pending
         await _audit(k, p, "channel.unbind", {"channel": channel_id, "binding": binding_id})
         return JSONResponse({"status": "ok"})

@@ -14,6 +14,11 @@ export interface Identity {
   // uses it to scope-filter audit/cost/runs (SEC-33). Empty = unrestricted by
   // this header (the role/scope still governs server-side).
   departments: string;
+  // Development-only principal context fields. Production identity resolvers
+  // ignore these browser controls and derive the same values from auth.
+  actorTier: "human" | "tier1" | "tier2" | "ephemeral";
+  onBehalfOf: string;
+  verbs: string;
 }
 
 const STORAGE_KEY = "boltrig.identity";
@@ -24,6 +29,9 @@ const DEFAULT_IDENTITY: Identity = {
   grants: "*",
   role: "org-admin",
   departments: "",
+  actorTier: "human",
+  onBehalfOf: "",
+  verbs: "",
 };
 
 function load(): Identity {

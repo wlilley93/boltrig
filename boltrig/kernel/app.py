@@ -30,7 +30,8 @@ from boltrig.models import (
 from boltrig.store.base import DEFAULT_WORK_PAGE, MAX_WORK_PAGE, clamp_work_page
 
 from . import Kernel
-from .hitl_response_auth import authorize_approval_response
+from .hitl_http import list_visible_hitl, respond_to_hitl
+from .work_http import get_visible_work_item, list_visible_work_items, work_item_audit_trail
 
 
 @dataclass
@@ -416,6 +417,8 @@ def create_app(
             user_id=p.subject,
             role=p.role,
             grants=p.grants,
+            workspace_id=p.active_workspace_id,
+            scope=p.scope,
             message=body.message,
             conversation_id=body.conversation_id,
             attachments=body.attachments,
@@ -540,22 +543,7 @@ def create_app(
     async def list_hitl(
         k: Kernel = Depends(_get_kernel), p: Principal = Depends(principal)
     ) -> dict:
-        pending = await k.hitl.list_pending(p.tenant_id)
-        return {
-            "requests": [
-                {
-                    "id": r.id,
-                    "type": r.type.value,
-                    "urgency": r.urgency.value,
-                    "question": r.question,
-                    "context": r.context,
-                    "options": r.options,
-                    "work_item_id": r.work_item_id,
-                    "status": r.status.value,
-                }
-                for r in pending
-            ]
-        }
+        return {"requests": await list_visible_hitl(k, p)}
 
     @app.post("/v1/hitl/{request_id}/respond")
     async def respond(
@@ -564,12 +552,9 @@ def create_app(
         k: Kernel = Depends(_get_kernel),
         p: Principal = Depends(principal),
     ) -> dict:
-        req = await k.hitl.get(p.tenant_id, request_id)
-        if req is None:
-            raise HTTPException(status_code=404, detail="unknown request")
-        await authorize_approval_response(k, p, req)
-        resp = await k.hitl.answer(p.tenant_id, request_id, body.decision, p.subject, body.notes)
-        return {"status": "answered", "response_id": resp.id}
+        return await respond_to_hitl(
+            k, p, request_id, body.decision, body.notes
+        )
 
     @app.get("/v1/work")
     async def work(
@@ -590,8 +575,13 @@ def create_app(
         # caller can widen what it sees. The next cursor is the last item's id when
         # the page came back full (a short page means the end of the slice).
         page = clamp_work_page(limit)
-        items = await k.store.list_work_items(
-            p.tenant_id, st, departments=departments, limit=page, cursor=cursor
+        items = await list_visible_work_items(
+            k.store,
+            p,
+            st,
+            departments=departments,
+            limit=page,
+            cursor=cursor,
         )
         next_cursor = items[-1].id if len(items) == page else None
         return {
@@ -634,7 +624,7 @@ def create_app(
             # unrestricted (org-admin), else the owner_member must be in-scope.
             return departments is None or w.owner_member in set(departments)
 
-        item = await k.store.get_work_item(p.tenant_id, item_id)
+        item = await get_visible_work_item(k.store, p, item_id)
         if item is None or not _in_scope(item):
             # out-of-scope reads 404 (not 403) so the item's existence never leaks.
             return JSONResponse({"error": "not_found"}, status_code=404)
@@ -655,37 +645,29 @@ def create_app(
 
         # children queried directly by parent_id, still department-scoped and
         # bounded to a page (US-IAM-02 preserved; M7 / SEC-69 bounding).
-        child_items = await k.store.list_work_items(
-            p.tenant_id,
+        child_items = await list_visible_work_items(
+            k.store,
+            p,
             parent_id=item_id,
             departments=departments,
             limit=MAX_WORK_PAGE,
         )
         children = [_wd(w) for w in child_items]
-        trail: list = []
-        if item.hatchet_run_id:
-            events = await k.store.audit_query(p.tenant_id, run_id=item.hatchet_run_id, limit=200)
-            trail = [
-                {
-                    "ts": e.ts.isoformat() if hasattr(e.ts, "isoformat") else str(e.ts),
-                    "actor": e.actor,
-                    "actor_tier": e.actor_tier,
-                    "verb": e.verb,
-                    "noun": e.noun,
-                    "status": e.status,
-                    "detail": e.detail,
-                }
-                for e in events
-            ]
+        trail = await work_item_audit_trail(k.store, p, item)
         return {"item": _wd(item), "children": children, "audit": trail}
 
     @app.get("/v1/audit/tree/{run_id}")
     async def audit_tree(
         run_id: str, k: Kernel = Depends(_get_kernel), p: Principal = Depends(principal)
     ) -> dict:
-        from boltrig.observability.tree import build_tree
+        from boltrig.observability.tree import tree_from_events
 
-        return await build_tree(k.store, p.tenant_id, run_id)
+        from .run_access import visible_audit_tree_events
+
+        rows = await visible_audit_tree_events(k.store, p, run_id)
+        if rows is None:
+            return JSONResponse({"error": "unknown_run"}, status_code=404)
+        return tree_from_events(rows, run_id)
 
     @app.get("/v1/runs/{run_id}/events")
     async def run_events(
@@ -708,13 +690,13 @@ def create_app(
         if not follow:
             # Snapshot: the events emitted so far, then end (historical inspection).
             async def snapshot():
-                for event in k.events.snapshot(run_id):
+                for event in k.events.snapshot(p.tenant_id, run_id):
                     yield f"data: {json.dumps(event)}\n\n"
 
             return StreamingResponse(snapshot(), media_type="text/event-stream")
 
         async def live():  # backlog (re-attach) then live until the run closes
-            async for event in k.events.subscribe(run_id, replay=True):
+            async for event in k.events.subscribe(p.tenant_id, run_id, replay=True):
                 yield f"data: {json.dumps(event)}\n\n"
 
         return StreamingResponse(live(), media_type="text/event-stream")

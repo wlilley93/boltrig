@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
+import type { VerbInfo } from "@/api/types";
 import {
   CATEGORIES,
-  BOLT_AGENT_ID,
   allKinds,
+  categoriesForCatalogue,
   findKind,
   defaultActionForKind,
   DEFAULT_NODE_KIND,
@@ -18,11 +19,11 @@ describe("nodeTaxonomy", () => {
     }
   });
 
-  it("includes the Agent Call node (decision #51) under Common", () => {
+  it("labels the native question node by its real governed behavior", () => {
     const common = CATEGORIES.find((c) => c.id === "common")!;
     const agent = common.items.find((i) => i.kind === "agent-call");
     expect(agent).toBeDefined();
-    expect(agent!.name).toBe("Agent Call");
+    expect(agent!.name).toBe("Ask user");
     expect(agent!.color).toBe("#5E69DD");
   });
 
@@ -42,10 +43,10 @@ describe("nodeTaxonomy", () => {
     expect(DEFAULT_NODE_KIND).toBe("agent-call");
   });
 
-  it("the agent-call default action targets the Bolt agent", () => {
+  it("the question default uses the real native question contract", () => {
     const { action, params } = defaultActionForKind("agent-call");
-    expect(params.agent).toBe(BOLT_AGENT_ID);
-    expect(action).toBeTruthy();
+    expect(params).toEqual({ prompt: "" });
+    expect(action).toBe("chat.ask_user");
   });
 
   it("gives every kind a non-empty scaffolded action", () => {
@@ -54,5 +55,21 @@ describe("nodeTaxonomy", () => {
       const { action } = defaultActionForKind(kind);
       expect(action.length).toBeGreaterThan(0);
     }
+  });
+
+  it("shows only safe control nodes and caller-scoped real capabilities", () => {
+    const verbs = new Map<string, VerbInfo>([
+      ["channel.send", { id: "channel.send", noun: "channel" }],
+    ]);
+    const visible = categoriesForCatalogue(verbs).flatMap((category) => category.items);
+    expect(visible.map((item) => item.kind)).toEqual([
+      "trigger",
+      "end",
+      "conditional",
+      "loop",
+      "notify",
+    ]);
+    expect(visible.some((item) => item.kind === "code")).toBe(false);
+    expect(visible.some((item) => item.kind === "http")).toBe(false);
   });
 });

@@ -164,7 +164,7 @@ class MemoryAdapter:
             tenant_id=context.tenant_id, ts=utcnow(), actor=context.actor,
             actor_tier=context.actor_tier, action_type=ActionType.TOOL_CALL,
             verb=verb, status=status, on_behalf_of=context.on_behalf_of,
-            run_id=context.run_id, detail=detail,
+            run_id=context.run_id, workspace_id=context.workspace_id, detail=detail,
         ))
 
     async def _fact_in_scope(self, tenant_id, fact_id, scopes) -> bool:

@@ -133,6 +133,7 @@ async def _seed(kernel: Kernel) -> None:
             context="deployment",
             options=["approve", "deny"],
             requested_by="opencode-worker",
+            workspace_id="ws-1",
         ),
     )
     await kernel.store.create_hitl_request(
@@ -146,6 +147,7 @@ async def _seed(kernel: Kernel) -> None:
             context="deployment",
             options=["approve", "deny"],
             requested_by="opencode-worker",
+            workspace_id="ws-2",
         ),
     )
 

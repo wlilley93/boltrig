@@ -4,10 +4,11 @@ import { api } from "@/api/client";
 import type { AiKeyLevel, AiKeyView } from "@/api/types";
 import { useIdentity } from "@/identity";
 import { useFetch } from "@/useFetch";
-import { errText } from "@/panels/shared";
 import { EmptyState, FetchError, Field, InfoCallout, Select } from "@/panels/ux";
 import type { Option } from "@/panels/ux";
 import { ArmConfirm, Skeleton } from "@/panels/uxFlow";
+import { PendingHumanCard } from "@/panels/uxFlow/pendingHumanCard";
+import { outputRecord, useControlMutation } from "@/panels/uxFlow/useControlMutation";
 
 import { AI_LEVEL_OPTIONS, AI_MODEL_SUGGESTIONS, AI_PROVIDER_OPTIONS } from "./options";
 
@@ -21,9 +22,24 @@ function useAiKeyForm(
   const [provider, setProvider] = useState("anthropic");
   const [model, setModel] = useState(AI_MODEL_SUGGESTIONS.anthropic[0]);
   const [apiKey, setApiKey] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+
+  const saveMutation = useControlMutation({
+    verb: "control.ai_key.set",
+    onApplied(output) {
+      const saved = outputRecord(output);
+      setMsg(`Saved ${String(saved.level ?? level)} key for ${String(saved.scope_id ?? effectiveScope)}.`);
+      setApiKey(""); // the key is sealed server-side; never keep it in JS
+      onSaved();
+    },
+  });
+  const deleteMutation = useControlMutation({
+    verb: "control.ai_key.delete",
+    onApplied() {
+      setMsg("AI key deleted.");
+      onSaved();
+    },
+  });
 
   const scopePlaceholder = useMemo(() => {
     if (level === "org") return identity.tenant;
@@ -41,47 +57,30 @@ function useAiKeyForm(
     !!model.trim() &&
     !!apiKey.trim() &&
     (!needsExplicitScope || !!effectiveScope) &&
-    !busy;
+    !saveMutation.busy && saveMutation.pending === null;
 
   async function save() {
     if (!canSubmit) return;
-    setBusy(true);
-    setError(null);
     setMsg(null);
-    try {
-      const res = await api.setAiKey({
-        level,
-        scope_id: needsExplicitScope ? effectiveScope : undefined,
-        provider: provider.trim(),
-        model: model.trim(),
-        api_key: apiKey,
-      });
-      if (res.status === "ok") {
-        setMsg(`Saved ${res.level} key for ${res.scope_id}.`);
-        setApiKey(""); // the key is sealed server-side; never keep it in JS
-        onSaved();
-      } else {
-        setError(res.reason ?? "Could not save the key.");
-      }
-    } catch (err) {
-      setError(errText(err));
-    } finally {
-      setBusy(false);
-    }
+    await saveMutation.invoke({
+      level,
+      scope_id: effectiveScope || scopePlaceholder,
+      provider: provider.trim(),
+      model: model.trim(),
+      api_key: apiKey,
+    });
   }
 
   async function remove(l: string, s: string) {
-    const res = await api.deleteAiKey(l, s);
-    if (res.status !== "ok") {
-      throw new Error(res.reason ?? "Could not delete the key.");
-    }
-    onSaved();
+    setMsg(null);
+    await deleteMutation.invoke({ level: l, scope_id: s });
   }
 
   return {
     level, setLevel, scopeId, setScopeId, provider, setProvider, model, setModel,
-    apiKey, setApiKey, busy, error, msg, scopePlaceholder, needsExplicitScope,
-    effectiveScope, modelSuggestions, canSubmit, save, remove,
+    apiKey, setApiKey, msg, scopePlaceholder, needsExplicitScope,
+    effectiveScope, modelSuggestions, canSubmit, save, remove, saveMutation,
+    deleteMutation,
   };
 }
 
@@ -240,14 +239,25 @@ function AiKeyForm({
         </Field>
       </div>
       {form.msg && <p className="ok">{form.msg}</p>}
-      {form.error && <InfoCallout tone="warn">{form.error}</InfoCallout>}
+      {form.saveMutation.error && <InfoCallout tone="warn">{form.saveMutation.error}</InfoCallout>}
+      {form.saveMutation.pending && (
+        <PendingHumanCard
+          hitlRequestId={form.saveMutation.pending.id}
+          noun="control"
+          verb="control.ai_key.set"
+          sentParams={form.saveMutation.pending.params}
+          onApplied={form.saveMutation.onPendingApplied}
+          onDenied={form.saveMutation.onPendingDenied}
+          onReset={form.saveMutation.resetPending}
+        />
+      )}
       <div className="form__actions">
         <button
           className="btn btn--primary"
           disabled={!form.canSubmit}
           onClick={() => void form.save()}
         >
-          {form.busy ? "Saving..." : "Save key"}
+          {form.saveMutation.busy ? "Saving..." : "Save key"}
         </button>
       </div>
     </>
@@ -287,6 +297,20 @@ export function AiKeysCard() {
           onDelete={form.remove}
         />
       ))}
+      {form.deleteMutation.error && (
+        <InfoCallout tone="warn">{form.deleteMutation.error}</InfoCallout>
+      )}
+      {form.deleteMutation.pending && (
+        <PendingHumanCard
+          hitlRequestId={form.deleteMutation.pending.id}
+          noun="control"
+          verb="control.ai_key.delete"
+          sentParams={form.deleteMutation.pending.params}
+          onApplied={form.deleteMutation.onPendingApplied}
+          onDenied={form.deleteMutation.onPendingDenied}
+          onReset={form.deleteMutation.resetPending}
+        />
+      )}
 
       {!allowOwn && (
         <InfoCallout tone="info">

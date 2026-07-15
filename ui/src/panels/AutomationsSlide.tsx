@@ -65,10 +65,8 @@ export function useAutomationDeckCols(): DeckCol[] {
 
 function WorkflowPicker() {
   const workflows = useFetch(() => api.workflows(), []);
-  // Design brief 22.1: the REAL run stats merged onto the cards. Fetched once
-  // alongside the workflow list; a failure leaves the deterministic placeholder
-  // (the cards render off workflows alone), so stats are best-effort, never a
-  // hard dependency.
+  // Run stats are best-effort. When unavailable, cards say that no run history
+  // is available rather than filling the gap with generated metrics.
   const stats = useFetch(() => api.workflowStats(), []);
   const statsById = useMemo(() => {
     const m = new Map<string, WorkflowRunStat>();
@@ -165,55 +163,23 @@ function WorkflowCard({
           </span>
         </span>
         <p className="wfhome__desc">{meta.description}</p>
-        <Sparkline values={meta.spark} />
-        <span className="wfhome__stats">
-          <span>{meta.runCount} runs</span>
-          <span>{meta.successRate}% ok</span>
-          <span>{meta.lastRun}</span>
-        </span>
+        {meta.hasRunStats ? (
+          <span className="wfhome__stats">
+            <span>{meta.runCount} runs</span>
+            <span>{meta.successRate}% ok</span>
+            <span>{meta.lastRun}</span>
+          </span>
+        ) : (
+          <span className="wfhome__stats">
+            <span>No run history</span>
+          </span>
+        )}
         <span className="wfhome__foot">
-          <span className="wfhome__owner">{meta.owner}</span>
-          <span className="wfhome__trigger">{meta.trigger}</span>
+          <span>v{wf.version}</span>
+          <span>{wf.source}</span>
         </span>
       </span>
     </button>
-  );
-}
-
-function Sparkline({
-  values,
-}: {
-  values: { ok: boolean; color: string; level: number }[];
-}) {
-  const w = 76;
-  const h = 22;
-  const gap = 4;
-  const bw = (w - gap * (values.length - 1)) / values.length;
-  return (
-    <svg
-      className="wfhome__spark"
-      width={w}
-      height={h}
-      viewBox={`0 0 ${w} ${h}`}
-      aria-hidden="true"
-    >
-      {values.map((v, i) => {
-        const barH = Math.max(3, h * v.level);
-        const x = i * (bw + gap);
-        const y = h - barH;
-        return (
-          <rect
-            key={i}
-            x={x}
-            y={y}
-            width={bw}
-            height={barH}
-            rx={1}
-            fill={v.color}
-          />
-        );
-      })}
-    </svg>
   );
 }
 

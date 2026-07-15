@@ -1,8 +1,13 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { api } from "@/api/client";
 import type { CapabilitiesResponse, InvokeRequest, InvokeResult } from "@/api/types";
 import type { FetchState } from "@/useFetch";
+import {
+  consumeDevInvokePrefill,
+  onDevInvokePrefill,
+  peekDevInvokePrefill,
+} from "@/devInvokePrefill";
 import { CodeBlock, RunLink, errText, parseJson } from "@/panels/shared";
 import {
   CONSEQUENCE,
@@ -57,6 +62,25 @@ export function useInvoke(caps: FetchState<CapabilitiesResponse>) {
 
   const selectedVerb = verbs.find((v) => v.id === verb);
   const keys = schemaKeys(selectedVerb?.input_schema);
+
+  useEffect(() => {
+    function applyPrefill() {
+      const next = peekDevInvokePrefill();
+      if (!next) return;
+      const match = verbs.find((candidate) => candidate.id === next.verb && candidate.noun === next.noun);
+      if (!match) return;
+      setNoun(match.noun);
+      setVerb(match.id);
+      setParams((current) =>
+        current.trim() === "" || current.trim() === "{}"
+          ? skeletonFromSchema(match.input_schema)
+          : current,
+      );
+      consumeDevInvokePrefill(next);
+    }
+    applyPrefill();
+    return onDevInvokePrefill(applyPrefill);
+  }, [verbs]);
 
   function pickVerb(verbId: string) {
     const v = verbs.find((x) => x.id === verbId);

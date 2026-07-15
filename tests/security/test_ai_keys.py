@@ -37,6 +37,7 @@ from boltrig.models import (
     WorkspaceMember,
 )
 from boltrig.store import InMemoryStore
+from tests.approval import approved_request
 
 T = "acme"
 
@@ -196,9 +197,11 @@ def test_ai_key_is_sealed_never_returned_or_audited():
     k, app, store = _app()
     c = TestClient(app)
     secret = "sk-topsecretkeyvalue0987654321"
-    resp = c.put("/v1/ai-keys", headers=_hdr(),
-                 json={"level": "org", "provider": "openai", "model": "gpt",
-                       "api_key": secret})
+    key_body = {"level": "org", "provider": "openai", "model": "gpt",
+                "api_key": secret}
+    resp = approved_request(
+        c, k, T, "PUT", "/v1/ai-keys", headers=_hdr(), json=key_body
+    )
     assert resp.status_code == 200
     # The response NEVER echoes the key.
     assert secret not in resp.text
@@ -243,7 +246,12 @@ def test_set_key_route_is_role_scoped():
         body = {"level": level, "provider": "openai", "model": "gpt", "api_key": "sk-x"}
         if scope_id is not None:
             body["scope_id"] = scope_id
-        return c.put("/v1/ai-keys", headers=hdr, json=body)
+        response = c.put("/v1/ai-keys", headers=hdr, json=body)
+        if response.status_code != 202:
+            return response
+        return approved_request(
+            c, k, T, "PUT", "/v1/ai-keys", headers=hdr, json=body, held=response
+        )
 
     # org level: a plain member is denied; an org-admin succeeds.
     assert put("org", None, _hdr(role="member", subject="bob")).status_code == 403
