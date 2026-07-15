@@ -29,6 +29,7 @@ from boltrig.kernel.app import create_app
 from boltrig.models import (
     AgentCapability,
     AiConfig,
+    CredentialResolution,
     GrantSet,
     InvocationContext,
     ModelEndpoint,
@@ -144,6 +145,61 @@ def test_spawner_wires_resolved_sealed_key_into_the_runtime(monkeypatch):
         assert rt._api_key() == "sk-user-sealed"  # the sealed key, NOT the env key
 
     monkeypatch.setenv("OPENAI_API_KEY", "sk-env-default")
+    _run(go())
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-148")
+def test_production_runtime_refuses_ambient_ai_key_fallback(monkeypatch):
+    async def go():
+        store = await _store(allow_own=None)
+        kernel = Kernel(store)
+        await store.upsert_model_endpoint(
+            ModelEndpoint(
+                id="ep",
+                tenant_id=T,
+                kind="openai",
+                model="gpt",
+                base_url="https://models.example/v1",
+            )
+        )
+        capability = AgentCapability(
+            "w", T, "openai", ["*"], 2, True, "standard", model_endpoint="ep"
+        )
+        context = InvocationContext(tenant_id=T, actor="w", on_behalf_of="u1")
+
+        with pytest.raises(CredentialResolution, match="scoped credential"):
+            await Spawner(kernel)._runtime_for(T, capability, context)
+
+    monkeypatch.setenv("BOLTRIG_ENV", "production")
+    monkeypatch.setenv("OPENAI_API_KEY", "ambient-key-must-not-be-used")
+    _run(go())
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-148")
+def test_configured_missing_ai_key_never_falls_through_to_ambient(monkeypatch):
+    async def go():
+        store = await _store(allow_own=True)
+        await store.set_ai_config(
+            AiConfig(
+                tenant_id=T,
+                level="user",
+                scope_id="u1",
+                provider="openai",
+                model="gpt",
+                credential_ref="missing-ref",
+            )
+        )
+        kernel = Kernel(store)
+        capability = AgentCapability("w", T, "openai", ["*"], 2, True, "standard")
+        context = InvocationContext(tenant_id=T, actor="w", on_behalf_of="u1")
+
+        with pytest.raises(CredentialResolution, match="material is unavailable"):
+            await Spawner(kernel)._runtime_for(T, capability, context)
+
+    monkeypatch.delenv("BOLTRIG_ENV", raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "ambient-key-must-not-be-used")
     _run(go())
 
 

@@ -109,6 +109,7 @@ files = [
     "boltrig/config/control_operations.py",
     "boltrig/config/control_plane.py",
     "boltrig/config/control_specs.py",
+    "boltrig/config/environment.py",
     "boltrig/config/settings.py",
     "boltrig/fleet/model_gateway_status.py",
     "boltrig/fleet/model_profiles.py",

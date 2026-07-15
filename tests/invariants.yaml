@@ -44,6 +44,11 @@ invariants:
     description: Every legacy spawn path treats selected-skill tool grants as requirements and intersects them with the current parent context before exposing tools, even when no optional extra ceiling is supplied.
     tests:
       - tests/integration/test_fleet_spawn.py::test_every_spawn_caps_skill_requirements_to_parent_authority
+  SEC-148:
+    description: Production AI execution never falls through to ambient process credentials, and a configured but unavailable sealed credential fails closed in every environment instead of silently using an env key.
+    tests:
+      - tests/security/test_ai_keys.py::test_production_runtime_refuses_ambient_ai_key_fallback
+      - tests/security/test_ai_keys.py::test_configured_missing_ai_key_never_falls_through_to_ambient
   P9:
     description: Backend unavailability degrades gracefully, never crashes (graceful degradation).
     tests:
