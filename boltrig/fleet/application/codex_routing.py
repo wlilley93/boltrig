@@ -12,7 +12,7 @@ from boltrig.fleet.domain.codex_rollout import (
     CodexRolloutMode,
     CodexRolloutPolicy,
     EngineRoute,
-    ResultAuthority,
+    ExecutionResultSource,
     RootEngineDecision,
     RootRoutingFacts,
     RootWorkload,
@@ -41,7 +41,7 @@ def _decision(
     facts: RootRoutingFacts,
     *,
     route: EngineRoute,
-    authority: ResultAuthority,
+    result_source: ExecutionResultSource,
     reason: RoutingReason,
     canary_bucket: int | None = None,
 ) -> RootEngineDecision:
@@ -52,7 +52,7 @@ def _decision(
         policy_generation=policy.generation,
         policy_digest=policy.digest,
         route=route,
-        result_authority=authority,
+        execution_result_source=result_source,
         reason_code=reason,
         canary_bucket=canary_bucket,
     )
@@ -69,7 +69,7 @@ def _legacy(
         policy,
         facts,
         route=EngineRoute.LEGACY,
-        authority=ResultAuthority.LEGACY,
+        result_source=ExecutionResultSource.LEGACY,
         reason=reason,
         canary_bucket=canary_bucket,
     )
@@ -104,8 +104,8 @@ def _route_canary(
     return _decision(
         policy,
         facts,
-        route=EngineRoute.CODEX,
-        authority=ResultAuthority.CODEX,
+        route=EngineRoute.CODEX_APP_SERVER,
+        result_source=ExecutionResultSource.CODEX_APP_SERVER,
         reason=RoutingReason.CANARY_SELECTED,
         canary_bucket=bucket,
     )
@@ -127,7 +127,7 @@ def _route_new_root(
             policy,
             facts,
             route=EngineRoute.LEGACY_PRIMARY_CODEX_SHADOW,
-            authority=ResultAuthority.LEGACY,
+            result_source=ExecutionResultSource.LEGACY,
             reason=RoutingReason.READ_ONLY_SHADOW,
         )
     if policy.mode is CodexRolloutMode.CANARY:
@@ -136,8 +136,8 @@ def _route_new_root(
         return _decision(
             policy,
             facts,
-            route=EngineRoute.CODEX,
-            authority=ResultAuthority.CODEX,
+            route=EngineRoute.CODEX_APP_SERVER,
+            result_source=ExecutionResultSource.CODEX_APP_SERVER,
             reason=RoutingReason.DEFAULT_SELECTED,
         )
     raise CodexRoutingRejected("unknown rollout mode")

@@ -79,15 +79,15 @@ class EngineRoute(str, Enum):
     """The immutable runtime route selected when a root is created."""
 
     LEGACY = "legacy"
-    CODEX = "codex"
+    CODEX_APP_SERVER = "codex_app_server"
     LEGACY_PRIMARY_CODEX_SHADOW = "legacy_primary_codex_shadow"
 
 
-class ResultAuthority(str, Enum):
-    """Which engine may supply the authoritative outcome for the root."""
+class ExecutionResultSource(str, Enum):
+    """Execution path whose output Boltrig may validate and commit for the root."""
 
     LEGACY = "legacy"
-    CODEX = "codex"
+    CODEX_APP_SERVER = "codex_app_server"
 
 
 class RoutingReason(str, Enum):
@@ -244,10 +244,10 @@ class RootRoutingFacts:
             raise TypeError("compatibility must be an exact CodexCompatibility")
 
 
-_ROUTE_AUTHORITIES = {
-    EngineRoute.LEGACY: ResultAuthority.LEGACY,
-    EngineRoute.CODEX: ResultAuthority.CODEX,
-    EngineRoute.LEGACY_PRIMARY_CODEX_SHADOW: ResultAuthority.LEGACY,
+_ROUTE_RESULT_SOURCES = {
+    EngineRoute.LEGACY: ExecutionResultSource.LEGACY,
+    EngineRoute.CODEX_APP_SERVER: ExecutionResultSource.CODEX_APP_SERVER,
+    EngineRoute.LEGACY_PRIMARY_CODEX_SHADOW: ExecutionResultSource.LEGACY,
 }
 _REASON_ROUTES = {
     RoutingReason.ROLLOUT_OFF: EngineRoute.LEGACY,
@@ -256,8 +256,8 @@ _REASON_ROUTES = {
     RoutingReason.READ_ONLY_SHADOW: EngineRoute.LEGACY_PRIMARY_CODEX_SHADOW,
     RoutingReason.CANARY_SCOPE_NOT_ALLOWLISTED: EngineRoute.LEGACY,
     RoutingReason.CANARY_NOT_SELECTED: EngineRoute.LEGACY,
-    RoutingReason.CANARY_SELECTED: EngineRoute.CODEX,
-    RoutingReason.DEFAULT_SELECTED: EngineRoute.CODEX,
+    RoutingReason.CANARY_SELECTED: EngineRoute.CODEX_APP_SERVER,
+    RoutingReason.DEFAULT_SELECTED: EngineRoute.CODEX_APP_SERVER,
 }
 _CANARY_REASONS = {
     RoutingReason.CANARY_NOT_SELECTED,
@@ -275,7 +275,7 @@ class RootEngineDecision:
     policy_generation: int
     policy_digest: str
     route: EngineRoute
-    result_authority: ResultAuthority
+    execution_result_source: ExecutionResultSource
     reason_code: RoutingReason
     canary_bucket: int | None = None
 
@@ -295,12 +295,14 @@ class RootEngineDecision:
     def _validate_outcome(self) -> None:
         if type(self.route) is not EngineRoute:
             raise TypeError("route must be an exact EngineRoute")
-        if type(self.result_authority) is not ResultAuthority:
-            raise TypeError("result_authority must be an exact ResultAuthority")
+        if type(self.execution_result_source) is not ExecutionResultSource:
+            raise TypeError(
+                "execution_result_source must be an exact ExecutionResultSource"
+            )
         if type(self.reason_code) is not RoutingReason:
             raise TypeError("reason_code must be an exact RoutingReason")
-        if _ROUTE_AUTHORITIES[self.route] is not self.result_authority:
-            raise ValueError("route and result authority disagree")
+        if _ROUTE_RESULT_SOURCES[self.route] is not self.execution_result_source:
+            raise ValueError("route and execution result source disagree")
         if _REASON_ROUTES[self.reason_code] is not self.route:
             raise ValueError("reason code and route disagree")
         if self.route is EngineRoute.LEGACY_PRIMARY_CODEX_SHADOW and (
@@ -327,7 +329,7 @@ class RootEngineDecision:
                 "policy_digest": self.policy_digest,
                 "policy_generation": self.policy_generation,
                 "reason_code": self.reason_code.value,
-                "result_authority": self.result_authority.value,
+                "execution_result_source": self.execution_result_source.value,
                 "route": self.route.value,
                 "root_run_id": self.scope.root_run_id,
                 "tenant_id": self.scope.tenant_id,
@@ -344,7 +346,7 @@ __all__ = [
     "CodexRolloutMode",
     "CodexRolloutPolicy",
     "EngineRoute",
-    "ResultAuthority",
+    "ExecutionResultSource",
     "RootEngineDecision",
     "RootRouteScope",
     "RootRoutingFacts",

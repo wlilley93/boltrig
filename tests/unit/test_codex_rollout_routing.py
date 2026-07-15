@@ -17,7 +17,7 @@ from boltrig.fleet.domain.codex_rollout import (
     CodexRolloutMode,
     CodexRolloutPolicy,
     EngineRoute,
-    ResultAuthority,
+    ExecutionResultSource,
     RootEngineDecision,
     RootRouteScope,
     RootRoutingFacts,
@@ -79,7 +79,7 @@ def test_rollout_is_disabled_by_default_and_returns_a_persistable_reason() -> No
 
     assert policy.mode is CodexRolloutMode.OFF
     assert decision.route is EngineRoute.LEGACY
-    assert decision.result_authority is ResultAuthority.LEGACY
+    assert decision.execution_result_source is ExecutionResultSource.LEGACY
     assert decision.reason_code is RoutingReason.ROLLOUT_OFF
     assert decision.policy_generation == 1
     assert decision.policy_digest == policy.digest
@@ -94,7 +94,7 @@ def test_shadow_is_bounded_read_only_and_never_authoritative() -> None:
     decision = router.decide(_facts(2))
 
     assert decision.route is EngineRoute.LEGACY_PRIMARY_CODEX_SHADOW
-    assert decision.result_authority is ResultAuthority.LEGACY
+    assert decision.execution_result_source is ExecutionResultSource.LEGACY
     assert decision.reason_code is RoutingReason.READ_ONLY_SHADOW
     with pytest.raises(UnsafeShadowRouting, match="bounded read-only"):
         router.decide(_facts(2, "root-write", workload=RootWorkload.WRITE_CAPABLE))
@@ -136,7 +136,7 @@ def test_canary_allowlist_is_exactly_tenant_and_workspace_scoped() -> None:
         _facts(7, "root-003", workspace_id="workspace-secondary")
     )
 
-    assert selected.route is EngineRoute.CODEX
+    assert selected.route is EngineRoute.CODEX_APP_SERVER
     assert selected.reason_code is RoutingReason.CANARY_SELECTED
     for excluded in (wrong_tenant, wrong_workspace):
         assert excluded.route is EngineRoute.LEGACY
@@ -154,8 +154,11 @@ def test_default_routes_only_new_compatible_roots_to_codex() -> None:
         _facts(3, "root-ineligible", compatibility=CodexCompatibility.INELIGIBLE)
     )
 
-    assert eligible.route is EngineRoute.CODEX
-    assert eligible.result_authority is ResultAuthority.CODEX
+    assert eligible.route is EngineRoute.CODEX_APP_SERVER
+    assert (
+        eligible.execution_result_source
+        is ExecutionResultSource.CODEX_APP_SERVER
+    )
     assert eligible.reason_code is RoutingReason.DEFAULT_SELECTED
     assert ineligible.route is EngineRoute.LEGACY
     assert ineligible.reason_code is RoutingReason.ROOT_INELIGIBLE
@@ -178,7 +181,7 @@ def test_emergency_rollback_changes_new_roots_but_not_in_flight_roots() -> None:
     new_root = rollback_router.decide(_facts(12, "root-after-rollback"))
 
     assert pinned is original
-    assert pinned.route is EngineRoute.CODEX
+    assert pinned.route is EngineRoute.CODEX_APP_SERVER
     assert new_root.route is EngineRoute.LEGACY
     assert new_root.reason_code is RoutingReason.EMERGENCY_ROLLBACK
     with pytest.raises(RootDecisionConflict, match="cannot switch policy generation"):
@@ -301,20 +304,20 @@ def test_policy_and_decisions_are_immutable() -> None:
     with pytest.raises(FrozenInstanceError):
         policy.mode = CodexRolloutMode.DEFAULT  # type: ignore[misc]
     with pytest.raises(FrozenInstanceError):
-        decision.route = EngineRoute.CODEX  # type: ignore[misc]
+        decision.route = EngineRoute.CODEX_APP_SERVER  # type: ignore[misc]
 
 
-def test_persisted_decision_rejects_inconsistent_authority_and_reason() -> None:
+def test_persisted_decision_rejects_inconsistent_result_source_and_reason() -> None:
     policy = CodexRolloutPolicy(1)
-    with pytest.raises(ValueError, match="authority disagree"):
+    with pytest.raises(ValueError, match="result source disagree"):
         RootEngineDecision(
             scope=_scope(),
             workload=RootWorkload.BOUNDED_READ_ONLY,
             compatibility=CodexCompatibility.ELIGIBLE,
             policy_generation=1,
             policy_digest=policy.digest,
-            route=EngineRoute.CODEX,
-            result_authority=ResultAuthority.LEGACY,
+            route=EngineRoute.CODEX_APP_SERVER,
+            execution_result_source=ExecutionResultSource.LEGACY,
             reason_code=RoutingReason.DEFAULT_SELECTED,
         )
     with pytest.raises(ValueError, match="reason code and route disagree"):
@@ -324,7 +327,7 @@ def test_persisted_decision_rejects_inconsistent_authority_and_reason() -> None:
             compatibility=CodexCompatibility.ELIGIBLE,
             policy_generation=1,
             policy_digest=policy.digest,
-            route=EngineRoute.CODEX,
-            result_authority=ResultAuthority.CODEX,
+            route=EngineRoute.CODEX_APP_SERVER,
+            execution_result_source=ExecutionResultSource.CODEX_APP_SERVER,
             reason_code=RoutingReason.ROLLOUT_OFF,
         )
