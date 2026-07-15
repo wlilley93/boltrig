@@ -50,10 +50,10 @@
       "expires": "2026-12-31"
     },
     "boltrig/api/bootstrap.py": {
-      "max_file_lines": 584,
+      "max_file_lines": 564,
       "max_function_lines": 105,
       "over_limit_functions": [
-        {"name": "build_app", "line": 480, "lines": 105}
+        {"name": "build_app", "line": 460, "lines": 105}
       ],
       "owner": "platform-maintainers",
       "reason": "Split dependency construction and runtime wiring into typed bootstrap stages without changing startup order.",

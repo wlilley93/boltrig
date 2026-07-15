@@ -12,7 +12,7 @@ import asyncio
 import logging
 import os
 
-from boltrig.config import apply_manifest, load_manifest, load_settings
+from boltrig.config import apply_manifest, load_manifest, load_settings, production_signal
 from boltrig.fleet import make_agent_invoker, make_app_spawner
 from boltrig.kernel import Kernel
 from boltrig.store import InMemoryStore, Store
@@ -349,26 +349,6 @@ def _deny_all_resolver():
         raise HTTPException(status_code=401, detail="authentication is not configured")
 
     return resolver
-
-
-_PROD_SIGNALS = ("prod", "production", "staging")
-
-
-def production_signal(env: dict | None = None) -> str | None:
-    """Return a production signal if one is present, else None (IAM-09).
-
-    A signal is: ENV / BOLTRIG_ENV / APP_ENV set to prod/production/staging, or an
-    explicit BOLTRIG_PRODUCTION=1. Pure + env-injectable so it is unit-testable."""
-    import os
-
-    e = env if env is not None else os.environ
-    if (e.get("BOLTRIG_PRODUCTION") or "").strip().lower() in {"1", "true", "yes", "on"}:
-        return "BOLTRIG_PRODUCTION"
-    for key in ("ENV", "BOLTRIG_ENV", "APP_ENV"):
-        val = (e.get(key) or "").strip().lower()
-        if val in _PROD_SIGNALS:
-            return f"{key}={val}"
-    return None
 
 
 def refuse_dev_auth_in_prod(env: dict | None = None) -> None:
