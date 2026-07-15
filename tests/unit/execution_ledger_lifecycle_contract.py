@@ -28,7 +28,12 @@ from boltrig.models import (
 from .execution_ledger_fixtures import CLOCK_NOW, LedgerValues, NOW, digest
 
 
-async def seed_running_work(store: ExecutionLedgerStore, values: LedgerValues) -> None:
+async def seed_running_work(
+    store: ExecutionLedgerStore,
+    values: LedgerValues,
+    *,
+    include_assignment: bool = True,
+) -> None:
     root = values.root()
     await _applied(
         store,
@@ -97,10 +102,10 @@ async def seed_running_work(store: ExecutionLedgerStore, values: LedgerValues) -
         ),
     )
     identity = values.identity()
-    identity_status = (
-        await store.write_runtime_identity(identity, expected_generation=0)
-    ).status
+    identity_status = (await store.write_runtime_identity(identity, expected_generation=0)).status
     assert identity_status in {AppendStatus.INSERTED, AppendStatus.REPLAYED}
+    if not include_assignment:
+        return
     assignment = values.assignment()
     await _applied(
         store,
@@ -133,6 +138,35 @@ async def seed_running_work(store: ExecutionLedgerStore, values: LedgerValues) -
             LedgerCommandKind.TRANSITION_STATUS,
             expected_version=2,
             command_id=f"{values.run}-run-work",
+        ),
+    )
+
+
+async def assert_assignment_authority_matches_phase_policy(
+    store: ExecutionLedgerStore,
+) -> None:
+    values = LedgerValues()
+    await seed_running_work(store, values, include_assignment=False)
+    mismatch = values.assignment(authority_policy_generation=4)
+    rejected = await store.commit(
+        values.write(
+            mismatch,
+            LedgerCommandKind.ASSIGN_WORK,
+            expected_version=0,
+            command_id="reject-mismatched-authority-policy",
+        )
+    )
+
+    assert rejected.status is LedgerMutationStatus.REJECTED
+    assert await store.get_assignment(values.scope, mismatch.id) is None
+    valid = values.assignment()
+    await _applied(
+        store,
+        values.write(
+            valid,
+            LedgerCommandKind.ASSIGN_WORK,
+            expected_version=0,
+            command_id="accept-current-authority-policy",
         ),
     )
 
@@ -234,9 +268,7 @@ async def assert_hierarchy_lifecycle_and_atomic_outbox(
     )
     current_phase = await store.get_phase(values.scope, "phase-a")
     assert current_phase is not None
-    phase_verifying = replace(
-        current_phase, status=ExecutionPhaseStatus.VERIFYING, version=4
-    )
+    phase_verifying = replace(current_phase, status=ExecutionPhaseStatus.VERIFYING, version=4)
     await _applied(
         store,
         values.write(
@@ -312,9 +344,7 @@ async def assert_runtime_identity_and_binding_ownership(
         "missing-turn",
         NOW,
     )
-    assert (
-        await store.append_binding(missing_parent_turn)
-    ).status is AppendStatus.NOT_FOUND
+    assert (await store.append_binding(missing_parent_turn)).status is AppendStatus.NOT_FOUND
     item = CodexItemBinding(
         values.scope,
         turn,
@@ -375,6 +405,7 @@ async def _applied(store: ExecutionLedgerStore, write: object) -> None:
 
 
 __all__ = [
+    "assert_assignment_authority_matches_phase_policy",
     "assert_hierarchy_lifecycle_and_atomic_outbox",
     "assert_runtime_identity_and_binding_ownership",
     "seed_running_work",

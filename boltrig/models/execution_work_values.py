@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
+from .base import VerbId
 from .execution_scope import (
     OrganisationUserRef,
     _require_aware,
@@ -13,6 +14,7 @@ from .execution_scope import (
     _require_positive,
     _require_sha256,
 )
+from .grants import canonical_concrete_verbs
 
 
 @dataclass(frozen=True)
@@ -78,12 +80,18 @@ class AuthorityEvaluationRef:
     id: str
     digest: str
     policy_generation: int
+    permitted_verbs: tuple[VerbId, ...]
     evaluated_at: datetime
 
     def __post_init__(self) -> None:
         _require_identifier("authority evaluation id", self.id)
         _require_sha256("authority evaluation digest", self.digest)
         _require_positive("policy_generation", self.policy_generation)
+        object.__setattr__(
+            self,
+            "permitted_verbs",
+            canonical_concrete_verbs(self.permitted_verbs),
+        )
         _require_aware("evaluated_at", self.evaluated_at)
 
 

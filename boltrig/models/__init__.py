@@ -155,7 +155,14 @@ from .access import (
     UserSetting,
     UserTotp,
 )
-from .grants import EMPTY_GRANTS, GrantSet, TenantPermissions
+from .grants import (
+    EMPTY_GRANTS,
+    MAX_CONCRETE_VERBS,
+    MAX_VERB_ID_BYTES,
+    GrantSet,
+    TenantPermissions,
+    canonical_concrete_verbs,
+)
 from .hitl import HITLRequest, HITLResponse, HITLStatus, HITLType, Urgency
 from .identity import RoleMapping, User
 from .memory import MemoryErasure, MemoryFact, MemoryIngestion, MemoryProjectionStatus
@@ -319,7 +326,10 @@ __all__ = [
     "DegradedMode",
     "EMPTY_GRANTS",
     "GrantSet",
+    "MAX_CONCRETE_VERBS",
+    "MAX_VERB_ID_BYTES",
     "TenantPermissions",
+    "canonical_concrete_verbs",
     "HITLRequest",
     "HITLResponse",
     "HITLStatus",

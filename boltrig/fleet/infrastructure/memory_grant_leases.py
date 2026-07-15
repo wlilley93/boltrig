@@ -4,30 +4,53 @@ from __future__ import annotations
 
 import asyncio
 import hmac
-from collections.abc import Callable
 from datetime import datetime
 
 from boltrig.fleet.domain.grant_lease import (
-    ActiveGrantGenerationConflict,
+    GrantAuthoritySnapshot,
     GrantLeaseBinding,
+    GrantLeaseCandidate,
     GrantLeaseConflict,
     GrantLeaseStatus,
     GrantRootBinding,
+    LeaseGenerationExhausted,
     StaleGrantGeneration,
     StoredGrantLease,
     validate_revocation_reason,
 )
+from boltrig.fleet.infrastructure.memory_grant_authority import (
+    MemoryGrantAuthorityMixin,
+)
+from boltrig.fleet.infrastructure.memory_grant_lease_support import (
+    DEFAULT_MAX_GRANT_LEASE_BINDINGS,
+    DEFAULT_MAX_GRANT_LEASE_RECORDS,
+    HARD_MAX_GRANT_LEASE_STATE,
+    MAX_SIGNED_BIGINT,
+    GrantLeaseStoreCapacityExceeded,
+    IssueOperationKey,
+    active_for,
+    aware as _aware,
+    capacity as _capacity,
+    commit_revocations,
+    expire_records,
+    is_cancelled,
+    is_digest_candidate as _digest_candidate,
+    matches as _matches,
+    operation_key as _operation_key,
+    require_assignment_fence_capacity,
+    require_authority_snapshot as _authority_snapshot,
+    require_binding as _binding,
+    require_capacity,
+    require_root_fence_capacity,
+    revocation_plan,
+    revoke_record as _revoke_record,
+    root_binding as _root_binding,
+    root_binding_from_binding as _root_binding_from_binding,
+    state_fence_count,
+)
 
-DEFAULT_MAX_GRANT_LEASE_RECORDS = 4_096
-DEFAULT_MAX_GRANT_LEASE_BINDINGS = 2_048
-HARD_MAX_GRANT_LEASE_STATE = 100_000
 
-
-class GrantLeaseStoreCapacityExceeded(GrantLeaseConflict):
-    """The bounded local adapter cannot retain another security tombstone."""
-
-
-class MemoryGrantLeaseStore:
+class MemoryGrantLeaseStore(MemoryGrantAuthorityMixin):
     """Async-serializable local adapter retaining generation fences until reset.
 
     Terminal records are security tombstones: silently evicting them could permit a
@@ -38,7 +61,10 @@ class MemoryGrantLeaseStore:
     __slots__ = (
         "_cancelled_assignments",
         "_cancelled_roots",
-        "_highest_generation",
+        "_current_authority",
+        "_highest_authority_generation",
+        "_highest_lease_generation",
+        "_issue_operation_receipts",
         "_lock",
         "_max_bindings",
         "_max_records",
@@ -54,43 +80,73 @@ class MemoryGrantLeaseStore:
         self._max_records = _capacity("max_records", max_records)
         self._max_bindings = _capacity("max_bindings", max_bindings)
         self._records: dict[str, StoredGrantLease] = {}
-        self._highest_generation: dict[GrantLeaseBinding, int] = {}
+        self._highest_lease_generation: dict[GrantLeaseBinding, int] = {}
+        self._highest_authority_generation: dict[GrantLeaseBinding, int] = {}
+        self._current_authority: dict[GrantLeaseBinding, GrantAuthoritySnapshot] = {}
+        self._issue_operation_receipts: dict[IssueOperationKey, str] = {}
         self._cancelled_assignments: set[GrantLeaseBinding] = set()
         self._cancelled_roots: set[GrantRootBinding] = set()
         self._lock = asyncio.Lock()
 
-    async def insert_active(self, lease: StoredGrantLease, *, now: datetime) -> None:
-        """Atomically insert a fresh generation or reject without partial mutation."""
+    async def insert_active(
+        self,
+        candidate: GrantLeaseCandidate,
+        *,
+        expected_authority: GrantAuthoritySnapshot,
+        now: datetime,
+    ) -> StoredGrantLease:
+        """Idempotently compare-and-swap and allocate the next lease generation."""
 
-        if type(lease) is not StoredGrantLease:
-            raise TypeError("lease must be an exact StoredGrantLease")
-        _binding(lease.binding)
+        if type(candidate) is not GrantLeaseCandidate:
+            raise TypeError("candidate must be an exact GrantLeaseCandidate")
+        _authority_snapshot(expected_authority)
+        _binding(candidate.binding)
         current = _aware("now", now)
-        if (
-            lease.status is not GrantLeaseStatus.ACTIVE
-            or lease.issued_at > current
-            or not lease.is_active_at(
-                current, policy_generation=lease.policy_generation
-            )
-        ):
-            raise GrantLeaseConflict("lease is not active at insertion time")
         async with self._lock:
-            self._expire(current)
-            if self._is_cancelled(lease.binding):
+            expire_records(self._records, current)
+            receipt = self._operation_receipt(candidate)
+            if receipt is not None:
+                if receipt.is_projection_of(candidate):
+                    return receipt
+                raise GrantLeaseConflict("issue operation conflicts with durable receipt")
+            if candidate.issued_at > current or candidate.expires_at <= current:
+                raise GrantLeaseConflict("lease is not active at insertion time")
+            if is_cancelled(
+                candidate.binding,
+                self._cancelled_assignments,
+                self._cancelled_roots,
+            ):
                 raise StaleGrantGeneration("grant binding is terminally cancelled")
-            if self._credential_collision(lease):
+            self._require_current_authority(candidate, expected_authority)
+            if self._credential_collision(candidate):
                 raise GrantLeaseConflict("lease identifier or digest was already inserted")
-            highest = self._highest_generation.get(lease.binding)
-            active = self._active_for(lease.binding)
-            if any(item.policy_generation == lease.policy_generation for item in active):
-                raise ActiveGrantGenerationConflict(
-                    "generation already has an active lease"
-                )
-            if highest is not None and lease.policy_generation <= highest:
-                raise StaleGrantGeneration(
-                    "grant generation was already used or is older than durable history"
-                )
-            self._require_capacity(lease.binding, highest_generation=highest)
+            highest = self._highest_lease_generation.get(candidate.binding)
+            if candidate.expected_current_lease_generation != highest:
+                raise StaleGrantGeneration("lease generation compare-and-swap failed")
+            if highest == MAX_SIGNED_BIGINT:
+                raise LeaseGenerationExhausted("lease generation fence is exhausted")
+            require_capacity(
+                record_count=len(self._records),
+                max_records=self._max_records,
+                binding=candidate.binding,
+                highest_generations=self._highest_lease_generation,
+                highest_authority_generations=self._highest_authority_generation,
+                cancelled_assignments=self._cancelled_assignments,
+                cancelled_roots=self._cancelled_roots,
+                fence_count=state_fence_count(
+                    self._highest_lease_generation,
+                    self._highest_authority_generation,
+                    self._cancelled_assignments,
+                    self._cancelled_roots,
+                ),
+                max_bindings=self._max_bindings,
+            )
+            lease_generation = 1 if highest is None else highest + 1
+            stored = StoredGrantLease.from_candidate(
+                candidate,
+                lease_generation=lease_generation,
+            )
+            active = active_for(self._records, candidate.binding)
             superseded = tuple(
                 (
                     item.lease_id,
@@ -100,8 +156,28 @@ class MemoryGrantLeaseStore:
             )
             for lease_id, record in superseded:
                 self._records[lease_id] = record
-            self._records[lease.lease_id] = lease
-            self._highest_generation[lease.binding] = lease.policy_generation
+            self._records[stored.lease_id] = stored
+            self._highest_lease_generation[stored.binding] = stored.lease_generation
+            self._issue_operation_receipts[_operation_key(candidate)] = stored.lease_id
+            return stored
+
+    async def get_by_issue_operation_id(
+        self,
+        issue_operation_id: str,
+        binding: GrantLeaseBinding,
+    ) -> StoredGrantLease | None:
+        _binding(binding)
+        if type(issue_operation_id) is not str or not issue_operation_id:
+            return None
+        key = (binding.tenant_id, binding.workspace_id, issue_operation_id)
+        async with self._lock:
+            lease_id = self._issue_operation_receipts.get(key)
+            if lease_id is None:
+                return None
+            record = self._records.get(lease_id)
+            if record is None or record.binding != binding:
+                return None
+            return record
 
     async def find_active_by_digest(
         self,
@@ -109,21 +185,26 @@ class MemoryGrantLeaseStore:
         binding: GrantLeaseBinding,
         *,
         now: datetime,
-        policy_generation: int,
+        expected_authority: GrantAuthoritySnapshot,
     ) -> StoredGrantLease | None:
         """Compare every retained digest before applying exact scope and generation."""
 
         current = _aware("now", now)
         _binding(binding)
+        _authority_snapshot(expected_authority)
+        if expected_authority.binding != binding:
+            return None
         if not _digest_candidate(token_digest):
             return None
         async with self._lock:
-            self._expire(current)
+            expire_records(self._records, current)
             matched: StoredGrantLease | None = None
             for record in self._records.values():
                 if hmac.compare_digest(record.token_digest, token_digest):
                     matched = record
-            if _matches(matched, binding, current, policy_generation):
+            if self._current_authority.get(binding) != expected_authority:
+                return None
+            if _matches(matched, binding, current, expected_authority):
                 return matched
             return None
 
@@ -133,22 +214,25 @@ class MemoryGrantLeaseStore:
         binding: GrantLeaseBinding,
         *,
         now: datetime,
-        policy_generation: int,
+        expected_authority: GrantAuthoritySnapshot,
     ) -> StoredGrantLease | None:
         current = _aware("now", now)
         _binding(binding)
+        _authority_snapshot(expected_authority)
+        if expected_authority.binding != binding:
+            return None
         if not isinstance(lease_id, str):
             return None
         async with self._lock:
-            self._expire(current)
+            expire_records(self._records, current)
             record = self._records.get(lease_id)
-            if _matches(record, binding, current, policy_generation):
+            if self._current_authority.get(binding) != expected_authority:
+                return None
+            if _matches(record, binding, current, expected_authority):
                 return record
             return None
 
-    async def get_by_id(
-        self, lease_id: str, binding: GrantLeaseBinding
-    ) -> StoredGrantLease | None:
+    async def get_by_id(self, lease_id: str, binding: GrantLeaseBinding) -> StoredGrantLease | None:
         _binding(binding)
         if not isinstance(lease_id, str):
             return None
@@ -170,7 +254,7 @@ class MemoryGrantLeaseStore:
         _binding(binding)
         safe_reason = validate_revocation_reason(reason)
         async with self._lock:
-            self._expire(current)
+            expire_records(self._records, current)
             record = self._records.get(lease_id)
             if (
                 record is None
@@ -191,104 +275,110 @@ class MemoryGrantLeaseStore:
         async with self._lock:
             root = _root_binding_from_binding(binding)
             root_cancelled = root in self._cancelled_roots
-            self._require_assignment_fence_capacity(binding, root_cancelled)
-            self._expire(current)
-            replacements = self._revocation_plan(
+            require_assignment_fence_capacity(
+                binding,
+                root_cancelled=root_cancelled,
+                cancelled_assignments=self._cancelled_assignments,
+                highest_generations=self._highest_lease_generation,
+                highest_authority_generations=self._highest_authority_generation,
+                fence_count=state_fence_count(
+                    self._highest_lease_generation,
+                    self._highest_authority_generation,
+                    self._cancelled_assignments,
+                    self._cancelled_roots,
+                ),
+                max_bindings=self._max_bindings,
+            )
+            expire_records(self._records, current)
+            replacements = revocation_plan(
+                self._records,
                 lambda record: record.binding == binding,
                 now=current,
                 reason=safe_reason,
             )
-            self._commit_revocations(replacements)
+            commit_revocations(self._records, replacements)
             if not root_cancelled:
-                self._highest_generation.pop(binding, None)
+                self._highest_lease_generation.pop(binding, None)
+                self._highest_authority_generation.pop(binding, None)
+                self._current_authority.pop(binding, None)
                 self._cancelled_assignments.add(binding)
             return len(replacements)
 
-    async def revoke_root(
-        self, binding: GrantRootBinding, *, now: datetime, reason: str
-    ) -> int:
+    async def revoke_root(self, binding: GrantRootBinding, *, now: datetime, reason: str) -> int:
         current = _aware("now", now)
         if type(binding) is not GrantRootBinding:
             raise TypeError("binding must be an exact GrantRootBinding")
         safe_reason = validate_revocation_reason(reason)
         async with self._lock:
-            self._require_root_fence_capacity(binding)
-            self._expire(current)
-            replacements = self._revocation_plan(
+            require_root_fence_capacity(
+                binding,
+                cancelled_roots=self._cancelled_roots,
+                cancelled_assignments=self._cancelled_assignments,
+                highest_generations=self._highest_lease_generation,
+                highest_authority_generations=self._highest_authority_generation,
+                fence_count=state_fence_count(
+                    self._highest_lease_generation,
+                    self._highest_authority_generation,
+                    self._cancelled_assignments,
+                    self._cancelled_roots,
+                ),
+                max_bindings=self._max_bindings,
+            )
+            expire_records(self._records, current)
+            replacements = revocation_plan(
+                self._records,
                 lambda record: _root_binding(record) == binding,
                 now=current,
                 reason=safe_reason,
             )
-            self._commit_revocations(replacements)
+            commit_revocations(self._records, replacements)
             self._cancelled_roots.add(binding)
             self._collapse_root_fences(binding)
             return len(replacements)
 
-    def _expire(self, now: datetime) -> None:
-        for lease_id, record in tuple(self._records.items()):
-            if record.status is GrantLeaseStatus.ACTIVE and record.expires_at <= now:
-                self._records[lease_id] = record.expire()
-
-    def _active_for(self, binding: GrantLeaseBinding) -> tuple[StoredGrantLease, ...]:
-        return tuple(
-            record
-            for record in self._records.values()
-            if record.binding == binding and record.status is GrantLeaseStatus.ACTIVE
-        )
-
-    def _credential_collision(self, lease: StoredGrantLease) -> bool:
-        if lease.lease_id in self._records:
+    def _credential_collision(self, candidate: GrantLeaseCandidate) -> bool:
+        if candidate.lease_id in self._records:
             return True
         return any(
-            hmac.compare_digest(record.token_digest, lease.token_digest)
+            hmac.compare_digest(record.token_digest, candidate.token_digest)
             for record in self._records.values()
         )
 
-    def _require_capacity(
-        self, binding: GrantLeaseBinding, *, highest_generation: int | None
-    ) -> None:
-        if len(self._records) >= self._max_records:
-            raise GrantLeaseStoreCapacityExceeded("grant lease store capacity exceeded")
-        if highest_generation is None and self._fence_count() >= self._max_bindings:
-            raise GrantLeaseStoreCapacityExceeded("grant lease store capacity exceeded")
-
-    def _require_assignment_fence_capacity(
-        self, binding: GrantLeaseBinding, root_cancelled: bool
+    def _require_current_authority(
+        self,
+        candidate: GrantLeaseCandidate,
+        expected_authority: GrantAuthoritySnapshot,
     ) -> None:
         if (
-            not root_cancelled
-            and binding not in self._cancelled_assignments
-            and binding not in self._highest_generation
-            and self._fence_count() >= self._max_bindings
+            candidate.binding != expected_authority.binding
+            or not candidate.matches_authority_snapshot(expected_authority)
+            or self._current_authority.get(candidate.binding) != expected_authority
         ):
-            raise GrantLeaseStoreCapacityExceeded("grant lease store capacity exceeded")
+            raise GrantLeaseConflict("grant authority differs from the current durable snapshot")
 
-    def _require_root_fence_capacity(self, root: GrantRootBinding) -> None:
-        if root in self._cancelled_roots:
-            return
-        collapsed = sum(
-            _root_binding_from_binding(binding) == root
-            for binding in (*self._highest_generation, *self._cancelled_assignments)
-        )
-        if self._fence_count() - collapsed >= self._max_bindings:
-            raise GrantLeaseStoreCapacityExceeded("grant lease store capacity exceeded")
-
-    def _fence_count(self) -> int:
-        return (
-            len(self._highest_generation)
-            + len(self._cancelled_assignments)
-            + len(self._cancelled_roots)
-        )
-
-    def _is_cancelled(self, binding: GrantLeaseBinding) -> bool:
-        return binding in self._cancelled_assignments or (
-            _root_binding_from_binding(binding) in self._cancelled_roots
-        )
+    def _operation_receipt(self, candidate: GrantLeaseCandidate) -> StoredGrantLease | None:
+        lease_id = self._issue_operation_receipts.get(_operation_key(candidate))
+        if lease_id is None:
+            return None
+        record = self._records.get(lease_id)
+        if record is None:
+            raise GrantLeaseConflict("issue operation receipt is incomplete")
+        return record
 
     def _collapse_root_fences(self, root: GrantRootBinding) -> None:
-        self._highest_generation = {
+        self._highest_lease_generation = {
             binding: generation
-            for binding, generation in self._highest_generation.items()
+            for binding, generation in self._highest_lease_generation.items()
+            if _root_binding_from_binding(binding) != root
+        }
+        self._current_authority = {
+            binding: snapshot
+            for binding, snapshot in self._current_authority.items()
+            if _root_binding_from_binding(binding) != root
+        }
+        self._highest_authority_generation = {
+            binding: generation
+            for binding, generation in self._highest_authority_generation.items()
             if _root_binding_from_binding(binding) != root
         }
         self._cancelled_assignments = {
@@ -296,83 +386,6 @@ class MemoryGrantLeaseStore:
             for binding in self._cancelled_assignments
             if _root_binding_from_binding(binding) != root
         }
-
-    def _revocation_plan(
-        self,
-        predicate: Callable[[StoredGrantLease], bool],
-        *,
-        now: datetime,
-        reason: str,
-    ) -> tuple[tuple[str, StoredGrantLease], ...]:
-        return tuple(
-            (lease_id, _revoke_record(record, now=now, reason=reason))
-            for lease_id, record in self._records.items()
-            if predicate(record) and record.status is GrantLeaseStatus.ACTIVE
-        )
-
-    def _commit_revocations(
-        self, replacements: tuple[tuple[str, StoredGrantLease], ...]
-    ) -> None:
-        for lease_id, record in replacements:
-            self._records[lease_id] = record
-
-
-def _capacity(label: str, value: int) -> int:
-    if type(value) is not int or not 1 <= value <= HARD_MAX_GRANT_LEASE_STATE:
-        raise ValueError(
-            f"{label} must be between 1 and {HARD_MAX_GRANT_LEASE_STATE}"
-        )
-    return value
-
-
-def _aware(label: str, value: datetime) -> datetime:
-    if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
-        raise ValueError(f"{label} must be timezone-aware")
-    return value
-
-
-def _binding(value: GrantLeaseBinding) -> None:
-    if type(value) is not GrantLeaseBinding:
-        raise TypeError("binding must be an exact GrantLeaseBinding")
-
-
-def _digest_candidate(value: object) -> bool:
-    if not isinstance(value, str) or len(value) != 64 or value != value.lower():
-        return False
-    try:
-        bytes.fromhex(value)
-    except ValueError:
-        return False
-    return True
-
-
-def _matches(
-    record: StoredGrantLease | None,
-    binding: GrantLeaseBinding,
-    now: datetime,
-    policy_generation: int,
-) -> bool:
-    return bool(
-        record is not None
-        and record.binding == binding
-        and record.issued_at <= now
-        and record.is_active_at(now, policy_generation=policy_generation)
-    )
-
-
-def _root_binding(record: StoredGrantLease) -> GrantRootBinding:
-    return _root_binding_from_binding(record.binding)
-
-
-def _root_binding_from_binding(binding: GrantLeaseBinding) -> GrantRootBinding:
-    return GrantRootBinding(binding.tenant_id, binding.workspace_id, binding.root_run_id)
-
-
-def _revoke_record(
-    record: StoredGrantLease, *, now: datetime, reason: str
-) -> StoredGrantLease:
-    revoked_at = max(now, record.issued_at)
-    return record.revoke(at=revoked_at, reason=reason)
 
 
 __all__ = [

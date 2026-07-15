@@ -5,100 +5,24 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from enum import Enum
-import unicodedata
 
 from boltrig.models import RunId, TenantId, VerbId, WorkspaceId
-from boltrig.models.grants import is_safe_identifier, normalize_identifier
+from boltrig.models.execution_ledger import ExecutionAssignment
 
 from .execution import PhaseAssignmentRef, PhaseId
-
-MAX_IDENTIFIER_LENGTH = 160
-MAX_PERMITTED_VERBS = 256
-MAX_GRANT_TTL_SECONDS = 3600
-MAX_REVOCATION_REASON_LENGTH = 160
-MAX_SIGNED_BIGINT = 2**63 - 1
-
-
-def _contains_control_character(value: str) -> bool:
-    return any(
-        unicodedata.category(character) in {"Cc", "Cf", "Cs", "Zl", "Zp"} for character in value
-    )
-
-
-def _identifier(label: str, value: object) -> str:
-    if type(value) is not str:
-        raise TypeError(f"{label} must be an exact string")
-    text = value
-    if (
-        not text
-        or text != text.strip()
-        or len(text) > MAX_IDENTIFIER_LENGTH
-        or _contains_control_character(text)
-    ):
-        raise ValueError(f"{label} must be a bounded, control-free, trimmed identifier")
-    return text
-
-
-def _aware(label: str, value: object) -> datetime:
-    if type(value) is not datetime:
-        raise TypeError(f"{label} must be an exact datetime")
-    timestamp = value
-    if timestamp.tzinfo is None or timestamp.utcoffset() is None:
-        raise ValueError(f"{label} must be timezone-aware")
-    return timestamp
-
-
-def _concrete_verbs(values: tuple[VerbId, ...]) -> tuple[VerbId, ...]:
-    if type(values) is not tuple:
-        raise TypeError("permitted verbs must be an immutable tuple")
-    if len(values) > MAX_PERMITTED_VERBS:
-        raise ValueError(f"authority snapshots permit at most {MAX_PERMITTED_VERBS} verbs")
-    result: set[VerbId] = set()
-    for value in values:
-        if type(value) is not str:
-            raise TypeError("permitted verb must be an exact string")
-        canonical = normalize_identifier(_identifier("permitted verb", value))
-        if canonical != value or not is_safe_identifier(canonical) or "*" in canonical:
-            raise ValueError("permitted verbs must be safe concrete identifiers")
-        result.add(canonical)
-    return tuple(sorted(result))
-
-
-def _raw_sha256_digest(label: str, value: str) -> str:
-    _identifier(label, value)
-    if len(value) != 64 or value != value.lower():
-        raise ValueError(f"{label} must be a lowercase SHA-256 digest")
-    try:
-        bytes.fromhex(value)
-    except ValueError:
-        raise ValueError(f"{label} must be a lowercase SHA-256 digest") from None
-    return value
-
-
-def _prefixed_sha256_digest(label: str, value: str) -> str:
-    _identifier(label, value)
-    if not value.startswith("sha256:"):
-        raise ValueError(f"{label} must be a lowercase sha256 digest")
-    _raw_sha256_digest(label, value.removeprefix("sha256:"))
-    return value
-
-
-def validate_revocation_reason(value: str) -> str:
-    """Validate the canonical bounded reason shared with durable SQL storage."""
-
-    if (
-        type(value) is not str
-        or not value
-        or value != value.strip()
-        or len(value) > MAX_REVOCATION_REASON_LENGTH
-        or _contains_control_character(value)
-    ):
-        raise ValueError("revocation reason must be bounded, trimmed, and control-free")
-    try:
-        value.encode("utf-8")
-    except UnicodeEncodeError:
-        raise ValueError("revocation reason must be valid UTF-8") from None
-    return value
+from .grant_lease_values import (
+    MAX_GRANT_TTL_SECONDS,
+    MAX_PERMITTED_VERBS,
+    MAX_REVOCATION_REASON_LENGTH,
+    MAX_SIGNED_BIGINT,
+    aware as _aware,
+    concrete_verbs as _concrete_verbs,
+    identifier as _identifier,
+    positive_bigint as _positive_bigint,
+    prefixed_sha256_digest as _prefixed_sha256_digest,
+    raw_sha256_digest as _raw_sha256_digest,
+    validate_revocation_reason,
+)
 
 
 class GrantLeaseStatus(str, Enum):
@@ -119,6 +43,10 @@ class ActiveGrantGenerationConflict(GrantLeaseConflict):
 
 class StaleGrantGeneration(GrantLeaseConflict):
     """An issue attempt used a generation older than durable history."""
+
+
+class LeaseGenerationExhausted(GrantLeaseConflict):
+    """The store-owned signed-BIGINT lease fence cannot advance safely."""
 
 
 @dataclass(frozen=True, order=True)
@@ -151,6 +79,87 @@ class GrantLeaseBinding:
             assignment_id=assignment.assignment_id,
         )
 
+    @classmethod
+    def from_execution_assignment(cls, assignment: ExecutionAssignment) -> GrantLeaseBinding:
+        if type(assignment) is not ExecutionAssignment:
+            raise TypeError("assignment must be an exact ExecutionAssignment")
+        return cls(
+            tenant_id=assignment.scope.tenant_id,
+            workspace_id=assignment.scope.workspace_id,
+            root_run_id=assignment.scope.root_run_id,
+            phase_id=assignment.phase_id,
+            assignment_id=assignment.id,
+        )
+
+
+@dataclass(frozen=True, init=False)
+class GrantAuthoritySnapshot:
+    """Trusted current authority material resolved from Boltrig's durable ledger."""
+
+    binding: GrantLeaseBinding
+    authority_evaluation_id: str
+    authority_evaluation_digest: str
+    authority_policy_generation: int
+    permitted_verbs: tuple[VerbId, ...]
+
+    @classmethod
+    def from_execution_assignment(cls, assignment: ExecutionAssignment) -> GrantAuthoritySnapshot:
+        """Project authority only from the canonical immutable assignment record."""
+
+        if type(assignment) is not ExecutionAssignment:
+            raise TypeError("assignment must be an exact ExecutionAssignment")
+        authority = assignment.authority
+        snapshot = object.__new__(cls)
+        object.__setattr__(
+            snapshot,
+            "binding",
+            GrantLeaseBinding.from_execution_assignment(assignment),
+        )
+        object.__setattr__(snapshot, "authority_evaluation_id", authority.id)
+        object.__setattr__(snapshot, "authority_evaluation_digest", authority.digest)
+        object.__setattr__(
+            snapshot,
+            "authority_policy_generation",
+            authority.policy_generation,
+        )
+        object.__setattr__(snapshot, "permitted_verbs", authority.permitted_verbs)
+        snapshot.__post_init__()
+        return snapshot
+
+    def __post_init__(self) -> None:
+        if type(self.binding) is not GrantLeaseBinding:
+            raise TypeError("binding must be an exact GrantLeaseBinding")
+        _identifier("authority_evaluation_id", self.authority_evaluation_id)
+        object.__setattr__(
+            self,
+            "authority_evaluation_digest",
+            _prefixed_sha256_digest(
+                "authority evaluation digest", self.authority_evaluation_digest
+            ),
+        )
+        _positive_bigint("authority_policy_generation", self.authority_policy_generation)
+        object.__setattr__(self, "permitted_verbs", _concrete_verbs(self.permitted_verbs))
+
+
+@dataclass(frozen=True)
+class GrantRequestObservation:
+    """Server-parsed exact assignment and concrete verb for one MCP request."""
+
+    assignment: PhaseAssignmentRef
+    verb_id: VerbId
+
+    def __post_init__(self) -> None:
+        if type(self.assignment) is not PhaseAssignmentRef:
+            raise TypeError("assignment must be an exact PhaseAssignmentRef")
+        verbs = _concrete_verbs((self.verb_id,))
+        if len(verbs) != 1:
+            raise ValueError("request observation requires one concrete verb")
+        object.__setattr__(self, "verb_id", verbs[0])
+
+    @property
+    def binding(self) -> GrantLeaseBinding:
+        return GrantLeaseBinding.from_assignment(self.assignment)
+
 
 @dataclass(frozen=True, order=True)
 class GrantRootBinding:
@@ -172,39 +181,31 @@ class GrantRootBinding:
 
 
 @dataclass(frozen=True)
-class StoredGrantLease:
-    """Persistable authority snapshot with a digest instead of credential material."""
+class GrantLeaseCandidate:
+    """Validated issuance material before storage allocates its lease generation."""
 
     lease_id: str
+    issue_operation_id: str
     binding: GrantLeaseBinding
     token_digest: str
-    permitted_verbs: tuple[VerbId, ...]
-    authority_evaluation_id: str
-    authority_evaluation_digest: str
+    authority_snapshot: GrantAuthoritySnapshot
     issued_at: datetime
     expires_at: datetime
     max_ttl_seconds: int
-    policy_generation: int
-    status: GrantLeaseStatus = GrantLeaseStatus.ACTIVE
-    revoked_at: datetime | None = None
-    revocation_reason: str | None = None
+    expected_current_lease_generation: int | None
 
     def __post_init__(self) -> None:
         _identifier("lease_id", self.lease_id)
+        _identifier("issue_operation_id", self.issue_operation_id)
         if type(self.binding) is not GrantLeaseBinding:
             raise TypeError("binding must be an exact GrantLeaseBinding")
         object.__setattr__(
             self, "token_digest", _raw_sha256_digest("token digest", self.token_digest)
         )
-        object.__setattr__(self, "permitted_verbs", _concrete_verbs(self.permitted_verbs))
-        _identifier("authority_evaluation_id", self.authority_evaluation_id)
-        object.__setattr__(
-            self,
-            "authority_evaluation_digest",
-            _prefixed_sha256_digest(
-                "authority evaluation digest", self.authority_evaluation_digest
-            ),
-        )
+        if type(self.authority_snapshot) is not GrantAuthoritySnapshot:
+            raise TypeError("authority_snapshot must be an exact GrantAuthoritySnapshot")
+        if self.authority_snapshot.binding != self.binding:
+            raise ValueError("authority snapshot belongs to another grant binding")
         issued_at = _aware("issued_at", self.issued_at)
         expires_at = _aware("expires_at", self.expires_at)
         if (
@@ -212,15 +213,90 @@ class StoredGrantLease:
             or not 1 <= self.max_ttl_seconds <= MAX_GRANT_TTL_SECONDS
         ):
             raise ValueError(f"max_ttl_seconds must be between 1 and {MAX_GRANT_TTL_SECONDS}")
-        if (
-            type(self.policy_generation) is not int
-            or not 1 <= self.policy_generation <= MAX_SIGNED_BIGINT
-        ):
-            raise ValueError("policy_generation must be positive and fit a signed BIGINT")
+        if self.expected_current_lease_generation is not None:
+            _positive_bigint(
+                "expected_current_lease_generation",
+                self.expected_current_lease_generation,
+            )
         ttl = expires_at - issued_at
         if ttl <= timedelta(0) or ttl > timedelta(seconds=self.max_ttl_seconds):
             raise ValueError("lease lifetime must be positive and within its maximum TTL")
+
+    def matches_authority_snapshot(self, snapshot: GrantAuthoritySnapshot) -> bool:
+        return type(snapshot) is GrantAuthoritySnapshot and self.authority_snapshot == snapshot
+
+    @property
+    def permitted_verbs(self) -> tuple[VerbId, ...]:
+        return self.authority_snapshot.permitted_verbs
+
+    @property
+    def authority_evaluation_id(self) -> str:
+        return self.authority_snapshot.authority_evaluation_id
+
+    @property
+    def authority_evaluation_digest(self) -> str:
+        return self.authority_snapshot.authority_evaluation_digest
+
+    @property
+    def authority_policy_generation(self) -> int:
+        return self.authority_snapshot.authority_policy_generation
+
+
+@dataclass(frozen=True)
+class StoredGrantLease(GrantLeaseCandidate):
+    """Persisted authority snapshot plus its store-owned monotonic generation."""
+
+    lease_generation: int
+    status: GrantLeaseStatus = GrantLeaseStatus.ACTIVE
+    revoked_at: datetime | None = None
+    revocation_reason: str | None = None
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        _positive_bigint("lease_generation", self.lease_generation)
         self._validate_terminal_state()
+
+    @classmethod
+    def from_candidate(
+        cls,
+        candidate: GrantLeaseCandidate,
+        *,
+        lease_generation: int,
+    ) -> StoredGrantLease:
+        """Seal an exact candidate at the generation allocated by durable storage."""
+
+        if type(candidate) is not GrantLeaseCandidate:
+            raise TypeError("candidate must be an exact GrantLeaseCandidate")
+        return StoredGrantLease(
+            lease_id=candidate.lease_id,
+            issue_operation_id=candidate.issue_operation_id,
+            binding=candidate.binding,
+            token_digest=candidate.token_digest,
+            authority_snapshot=candidate.authority_snapshot,
+            issued_at=candidate.issued_at,
+            expires_at=candidate.expires_at,
+            max_ttl_seconds=candidate.max_ttl_seconds,
+            expected_current_lease_generation=(candidate.expected_current_lease_generation),
+            lease_generation=_positive_bigint("lease_generation", lease_generation),
+        )
+
+    def is_projection_of(self, candidate: GrantLeaseCandidate) -> bool:
+        """Return whether durable storage preserved every immutable issue input."""
+
+        if type(candidate) is not GrantLeaseCandidate:
+            return False
+        return (
+            self.lease_id == candidate.lease_id
+            and self.issue_operation_id == candidate.issue_operation_id
+            and self.binding == candidate.binding
+            and self.token_digest == candidate.token_digest
+            and self.authority_snapshot == candidate.authority_snapshot
+            and self.issued_at == candidate.issued_at
+            and self.expires_at == candidate.expires_at
+            and self.max_ttl_seconds == candidate.max_ttl_seconds
+            and self.expected_current_lease_generation
+            == candidate.expected_current_lease_generation
+        )
 
     def _validate_terminal_state(self) -> None:
         if type(self.status) is not GrantLeaseStatus:
@@ -254,25 +330,54 @@ class StoredGrantLease:
             return self
         return replace(self, status=GrantLeaseStatus.EXPIRED)
 
-    def is_active_at(self, at: datetime, *, policy_generation: int) -> bool:
+    def is_active_at(self, at: datetime, *, authority_policy_generation: int) -> bool:
         """Evaluate metadata only; bearer authentication still requires digest comparison."""
 
         now = _aware("at", at)
-        if type(policy_generation) is not int or not 1 <= policy_generation <= MAX_SIGNED_BIGINT:
+        if (
+            type(authority_policy_generation) is not int
+            or not 1 <= authority_policy_generation <= MAX_SIGNED_BIGINT
+        ):
             return False
         return (
             self.status is GrantLeaseStatus.ACTIVE
             and self.expires_at > now
-            and self.policy_generation == policy_generation
+            and self.authority_policy_generation == authority_policy_generation
+        )
+
+    def authorizes_request(
+        self,
+        binding: GrantLeaseBinding,
+        authority: GrantAuthoritySnapshot,
+        *,
+        at: datetime,
+        verb_id: VerbId,
+    ) -> bool:
+        """Evaluate the exact trusted request observation after digest lookup."""
+
+        return bool(
+            type(binding) is GrantLeaseBinding
+            and type(authority) is GrantAuthoritySnapshot
+            and self.binding == binding
+            and self.authority_snapshot == authority
+            and self.is_active_at(
+                at,
+                authority_policy_generation=authority.authority_policy_generation,
+            )
+            and verb_id in self.permitted_verbs
         )
 
 
 __all__ = [
     "ActiveGrantGenerationConflict",
+    "GrantAuthoritySnapshot",
+    "GrantLeaseCandidate",
     "GrantLeaseBinding",
     "GrantLeaseConflict",
     "GrantLeaseStatus",
     "GrantRootBinding",
+    "GrantRequestObservation",
+    "LeaseGenerationExhausted",
     "MAX_GRANT_TTL_SECONDS",
     "MAX_PERMITTED_VERBS",
     "MAX_REVOCATION_REASON_LENGTH",

@@ -150,7 +150,11 @@ def _validate_create(
 ) -> LedgerMutationStatus | None:
     record = write.record
     if type(record) is ExecutionRootRun:
-        return None if record.status is RootRunStatus.PENDING and record.version == 1 else LedgerMutationStatus.REJECTED
+        return (
+            None
+            if record.status is RootRunStatus.PENDING and record.version == 1
+            else LedgerMutationStatus.REJECTED
+        )
     root = root_for(state, record.scope)
     if root is None:
         return LedgerMutationStatus.NOT_FOUND
@@ -239,6 +243,8 @@ def _validate_new_assignment(
         ExecutionPhaseStatus.STARTING,
         ExecutionPhaseStatus.RUNNING,
     }:
+        return LedgerMutationStatus.REJECTED
+    if assignment.authority.policy_generation != phase.policy_generation:
         return LedgerMutationStatus.REJECTED
     if identity.status is not RuntimeIdentityStatus.ACTIVE:
         return LedgerMutationStatus.REJECTED

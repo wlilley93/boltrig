@@ -120,7 +120,13 @@ class LedgerValues:
             created_at=NOW,
         )
 
-    def assignment(self, *, attempt: int = 1, replaces: str | None = None) -> ExecutionAssignment:
+    def assignment(
+        self,
+        *,
+        attempt: int = 1,
+        replaces: str | None = None,
+        authority_policy_generation: int = 3,
+    ) -> ExecutionAssignment:
         return ExecutionAssignment(
             self.scope,
             f"assignment-{attempt}",
@@ -130,7 +136,13 @@ class LedgerValues:
             attempt,
             self.profile,
             self.skills,
-            AuthorityEvaluationRef("authority-a", digest("authority"), 3, NOW),
+            AuthorityEvaluationRef(
+                "authority-a",
+                digest("authority"),
+                authority_policy_generation,
+                ("document.read", "ticket.read"),
+                NOW,
+            ),
             replaces_assignment_id=replaces,
             created_at=NOW,
         )

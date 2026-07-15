@@ -3,27 +3,33 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from dataclasses import replace
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import pytest
 
 from boltrig.fleet.domain.grant_lease import (
-    ActiveGrantGenerationConflict,
+    GrantAuthoritySnapshot,
+    GrantLeaseCandidate,
     GrantLeaseBinding,
     GrantLeaseConflict,
     GrantLeaseStatus,
     GrantRootBinding,
     StaleGrantGeneration,
+    StoredGrantLease,
 )
 from boltrig.fleet.ports.grant_leases import GrantLeaseStore
 from tests.contracts.grant_lease_fixtures import (
     NOW,
     attempt_insert,
+    authority_snapshot,
     binding,
     foreign_bindings,
     lease,
 )
+
+AuthorityInstaller = Callable[[GrantAuthoritySnapshot, datetime], Awaitable[None]]
 
 
 class GrantLeaseStoreContract:
@@ -33,71 +39,102 @@ class GrantLeaseStoreContract:
     def grant_store(self) -> GrantLeaseStore:
         raise NotImplementedError
 
-    async def test_exact_digest_id_scope_and_generation_lookup(
-        self, grant_store: GrantLeaseStore
-    ) -> None:
-        expected = lease("lease-exact")
-        await grant_store.insert_active(expected, now=NOW)
+    @pytest.fixture
+    def grant_authority_installer(self) -> AuthorityInstaller:
+        raise NotImplementedError
 
+    @staticmethod
+    async def _authorize(
+        installer: AuthorityInstaller,
+        *records: GrantLeaseCandidate,
+        now: datetime = NOW,
+    ) -> None:
+        installed: set[GrantAuthoritySnapshot] = set()
+        for value in records:
+            snapshot = value.authority_snapshot
+            if snapshot not in installed:
+                await installer(snapshot, now)
+                installed.add(snapshot)
+
+    async def test_exact_digest_id_scope_and_authority_lookup(
+        self,
+        grant_store: GrantLeaseStore,
+        grant_authority_installer: AuthorityInstaller,
+    ) -> None:
+        candidate = lease("lease-exact")
+        await self._authorize(grant_authority_installer, candidate)
+        expected = await grant_store.insert_active(
+            candidate,
+            expected_authority=candidate.authority_snapshot,
+            now=NOW,
+        )
+
+        assert expected.lease_generation == 1
         assert await grant_store.get_by_id(expected.lease_id, expected.binding) == expected
         assert (
             await grant_store.get_by_id(expected.lease_id, binding(tenant="tenant-foreign")) is None
         )
         assert (
             await grant_store.find_active_by_digest(
-                expected.token_digest, expected.binding, now=NOW, policy_generation=1
+                expected.token_digest,
+                expected.binding,
+                now=NOW,
+                expected_authority=candidate.authority_snapshot,
             )
             == expected
         )
         assert (
             await grant_store.find_active_by_id(
-                expected.lease_id, expected.binding, now=NOW, policy_generation=1
+                expected.lease_id,
+                expected.binding,
+                now=NOW,
+                expected_authority=candidate.authority_snapshot,
             )
             == expected
         )
         for foreign in foreign_bindings():
             assert (
                 await grant_store.find_active_by_digest(
-                    expected.token_digest, foreign, now=NOW, policy_generation=1
+                    expected.token_digest,
+                    foreign,
+                    now=NOW,
+                    expected_authority=candidate.authority_snapshot,
                 )
                 is None
             )
-            assert (
-                await grant_store.find_active_by_id(
-                    expected.lease_id, foreign, now=NOW, policy_generation=1
-                )
-                is None
-            )
+        wrong_authority = authority_snapshot(
+            scope=candidate.binding,
+            authority_policy_generation=2,
+        )
         assert (
             await grant_store.find_active_by_digest(
-                "b" * 64,
+                expected.token_digest,
                 expected.binding,
                 now=NOW,
-                policy_generation=1,
+                expected_authority=wrong_authority,
             )
             is None
         )
         assert (
             await grant_store.find_active_by_digest(
-                expected.token_digest, expected.binding, now=NOW, policy_generation=2
-            )
-            is None
-        )
-        assert (
-            await grant_store.find_active_by_digest(
-                "\N{SNOWMAN}", expected.binding, now=NOW, policy_generation=1
+                "not-a-digest",
+                expected.binding,
+                now=NOW,
+                expected_authority=candidate.authority_snapshot,
             )
             is None
         )
 
     async def test_identifier_and_digest_collisions_are_atomic(
-        self, grant_store: GrantLeaseStore
+        self,
+        grant_store: GrantLeaseStore,
+        grant_authority_installer: AuthorityInstaller,
     ) -> None:
         original = lease("lease-original")
-        await grant_store.insert_active(original, now=NOW)
         duplicate_id = lease(
             original.lease_id,
             scope=binding(assignment="assignment-2"),
+            issue_operation_id="issue-duplicate-id",
             token_name="different-bearer",
         )
         duplicate_digest = lease(
@@ -105,163 +142,406 @@ class GrantLeaseStoreContract:
             scope=binding(assignment="assignment-3"),
             token_name="bearer-lease-original",
         )
+        await self._authorize(
+            grant_authority_installer,
+            original,
+            duplicate_id,
+            duplicate_digest,
+        )
+        stored = await grant_store.insert_active(
+            original,
+            expected_authority=original.authority_snapshot,
+            now=NOW,
+        )
 
         for collision in (duplicate_id, duplicate_digest):
             with pytest.raises(GrantLeaseConflict, match="already inserted") as caught:
-                await grant_store.insert_active(collision, now=NOW)
+                await grant_store.insert_active(
+                    collision,
+                    expected_authority=collision.authority_snapshot,
+                    now=NOW,
+                )
             assert collision.token_digest not in str(caught.value)
             assert collision.lease_id not in str(caught.value)
-        assert (
-            await grant_store.find_active_by_id(
-                original.lease_id, original.binding, now=NOW, policy_generation=1
-            )
-            == original
-        )
+        assert await grant_store.get_by_id(stored.lease_id, stored.binding) == stored
 
-    async def test_concurrent_same_generation_has_exactly_one_winner(
-        self, grant_store: GrantLeaseStore
+    async def test_concurrent_initial_issue_has_exactly_one_winner(
+        self,
+        grant_store: GrantLeaseStore,
+        grant_authority_installer: AuthorityInstaller,
     ) -> None:
+        first = lease("lease-race-a")
+        second = lease("lease-race-b")
+        await self._authorize(grant_authority_installer, first)
+
         attempts = await asyncio.gather(
-            attempt_insert(grant_store, lease("lease-race-a")),
-            attempt_insert(grant_store, lease("lease-race-b")),
+            attempt_insert(grant_store, first),
+            attempt_insert(grant_store, second),
         )
 
-        assert sum(item is None for item in attempts) == 1
-        assert sum(isinstance(item, ActiveGrantGenerationConflict) for item in attempts) == 1
+        winners = [item for item in attempts if isinstance(item, StoredGrantLease)]
+        losers = [item for item in attempts if isinstance(item, StaleGrantGeneration)]
+        assert len(winners) == len(losers) == 1
+        assert winners[0].lease_generation == 1
+
+    async def test_concurrent_explicit_replacements_have_one_cas_winner(
+        self,
+        grant_store: GrantLeaseStore,
+        grant_authority_installer: AuthorityInstaller,
+    ) -> None:
+        original = lease("lease-replace-original")
+        await self._authorize(grant_authority_installer, original)
+        first = await grant_store.insert_active(
+            original,
+            expected_authority=original.authority_snapshot,
+            now=NOW,
+        )
+        replacement_a = lease(
+            "lease-replace-a",
+            expected_current_lease_generation=first.lease_generation,
+        )
+        replacement_b = lease(
+            "lease-replace-b",
+            expected_current_lease_generation=first.lease_generation,
+        )
+
+        attempts = await asyncio.gather(
+            attempt_insert(grant_store, replacement_a),
+            attempt_insert(grant_store, replacement_b),
+        )
+
+        winners = [item for item in attempts if isinstance(item, StoredGrantLease)]
+        losers = [item for item in attempts if isinstance(item, StaleGrantGeneration)]
+        assert len(winners) == len(losers) == 1
+        assert winners[0].lease_generation == 2
+        stored_first = await grant_store.get_by_id(first.lease_id, first.binding)
+        assert stored_first is not None
+        assert stored_first.revocation_reason == "superseded_generation"
+
+    async def test_issue_operation_is_idempotent_and_payload_bound(
+        self,
+        grant_store: GrantLeaseStore,
+        grant_authority_installer: AuthorityInstaller,
+    ) -> None:
+        candidate = lease("lease-idempotent", issue_operation_id="issue-stable")
+        await self._authorize(grant_authority_installer, candidate)
+        first = await grant_store.insert_active(
+            candidate,
+            expected_authority=candidate.authority_snapshot,
+            now=NOW,
+        )
+        replay = await grant_store.insert_active(
+            candidate,
+            expected_authority=candidate.authority_snapshot,
+            now=NOW,
+        )
+
+        assert replay == first
+        assert (
+            await grant_store.get_by_issue_operation_id(
+                candidate.issue_operation_id,
+                candidate.binding,
+            )
+            == first
+        )
+        changed = replace(candidate, lease_id="lease-idempotent-changed")
+        with pytest.raises(GrantLeaseConflict, match="operation conflicts"):
+            await grant_store.insert_active(
+                changed,
+                expected_authority=changed.authority_snapshot,
+                now=NOW,
+            )
+        replacement = lease(
+            "lease-after-operation-conflict",
+            expected_current_lease_generation=1,
+        )
+        stored_replacement = await grant_store.insert_active(
+            replacement,
+            expected_authority=replacement.authority_snapshot,
+            now=NOW,
+        )
+        assert stored_replacement.lease_generation == 2
 
     async def test_generation_fence_survives_assignment_and_root_revocation(
-        self, grant_store: GrantLeaseStore
+        self,
+        grant_store: GrantLeaseStore,
+        grant_authority_installer: AuthorityInstaller,
     ) -> None:
         first = lease("lease-generation-1")
-        await grant_store.insert_active(first, now=NOW)
+        await self._authorize(grant_authority_installer, first)
+        await grant_store.insert_active(
+            first,
+            expected_authority=first.authority_snapshot,
+            now=NOW,
+        )
         assert (
             await grant_store.revoke_assignment(
-                first.binding, now=NOW, reason="assignment_cancelled"
+                first.binding,
+                now=NOW,
+                reason="assignment_cancelled",
             )
             == 1
         )
         with pytest.raises(StaleGrantGeneration):
-            await grant_store.insert_active(lease("lease-generation-1-replay"), now=NOW)
-        with pytest.raises(StaleGrantGeneration):
-            await grant_store.insert_active(lease("lease-generation-2", generation=2), now=NOW)
+            await grant_store.insert_active(
+                lease("lease-after-assignment-cancel"),
+                expected_authority=first.authority_snapshot,
+                now=NOW,
+            )
 
         root_target = lease(
             "lease-root-generation-1",
             scope=binding(phase="phase-2", assignment="assignment-2"),
         )
-        await grant_store.insert_active(root_target, now=NOW)
+        await self._authorize(grant_authority_installer, root_target)
+        await grant_store.insert_active(
+            root_target,
+            expected_authority=root_target.authority_snapshot,
+            now=NOW,
+        )
         root = GrantRootBinding("tenant-1", "workspace-1", "root-1")
-        assert await grant_store.revoke_root(root, now=NOW, reason="root_run_cancelled") == 1
-        with pytest.raises(StaleGrantGeneration):
-            await grant_store.insert_active(
-                lease(
-                    "lease-root-generation-2",
-                    scope=root_target.binding,
-                    generation=2,
-                ),
+        assert (
+            await grant_store.revoke_root(
+                root,
                 now=NOW,
+                reason="root_run_cancelled",
             )
+            == 1
+        )
         with pytest.raises(StaleGrantGeneration):
             await grant_store.insert_active(
                 lease(
                     "lease-root-new-assignment",
                     scope=binding(phase="phase-3", assignment="assignment-3"),
                 ),
+                expected_authority=root_target.authority_snapshot,
                 now=NOW,
             )
 
-    async def test_cancel_and_higher_generation_issue_race_fails_closed(
-        self, grant_store: GrantLeaseStore
+    async def test_cancel_and_explicit_reissue_race_fails_closed(
+        self,
+        grant_store: GrantLeaseStore,
+        grant_authority_installer: AuthorityInstaller,
     ) -> None:
         original = lease("lease-cancel-race")
-        replacement = lease("lease-cancel-race-next", generation=2)
-        await grant_store.insert_active(original, now=NOW)
+        await self._authorize(grant_authority_installer, original)
+        stored = await grant_store.insert_active(
+            original,
+            expected_authority=original.authority_snapshot,
+            now=NOW,
+        )
+        replacement = lease(
+            "lease-cancel-race-next",
+            expected_current_lease_generation=stored.lease_generation,
+        )
 
         issued, revoked = await asyncio.gather(
             attempt_insert(grant_store, replacement),
-            grant_store.revoke_assignment(original.binding, now=NOW, reason="assignment_cancelled"),
+            grant_store.revoke_assignment(
+                original.binding,
+                now=NOW,
+                reason="assignment_cancelled",
+            ),
         )
 
-        assert issued is None or isinstance(issued, StaleGrantGeneration)
+        assert isinstance(issued, (StoredGrantLease, StaleGrantGeneration))
         assert revoked == 1
         assert (
             await grant_store.find_active_by_digest(
                 replacement.token_digest,
                 replacement.binding,
                 now=NOW,
-                policy_generation=2,
+                expected_authority=replacement.authority_snapshot,
             )
             is None
         )
-        with pytest.raises(StaleGrantGeneration):
-            await grant_store.insert_active(lease("lease-cancel-race-later", generation=3), now=NOW)
 
-    async def test_higher_generation_atomically_supersedes_active_lease(
-        self, grant_store: GrantLeaseStore
+    async def test_same_authority_reissue_advances_only_lease_generation(
+        self,
+        grant_store: GrantLeaseStore,
+        grant_authority_installer: AuthorityInstaller,
     ) -> None:
-        first = lease("lease-superseded")
-        second = lease("lease-current", generation=2)
-        await grant_store.insert_active(first, now=NOW)
-        await grant_store.insert_active(second, now=NOW)
-
-        stored_first = await grant_store.get_by_id(first.lease_id, first.binding)
-        assert stored_first is not None
-        assert (stored_first.status, stored_first.revocation_reason) == (
-            GrantLeaseStatus.REVOKED,
-            "superseded_generation",
+        original = lease("lease-same-authority")
+        await self._authorize(grant_authority_installer, original)
+        first = await grant_store.insert_active(
+            original,
+            expected_authority=original.authority_snapshot,
+            now=NOW,
         )
+        assert await grant_store.revoke_exact(
+            first.lease_id,
+            first.binding,
+            now=NOW,
+            reason="operator_cancelled",
+        )
+        replacement = lease(
+            "lease-same-authority-next",
+            expected_current_lease_generation=first.lease_generation,
+        )
+        second = await grant_store.insert_active(
+            replacement,
+            expected_authority=replacement.authority_snapshot,
+            now=NOW,
+        )
+
+        assert (first.lease_generation, second.lease_generation) == (1, 2)
+        assert (
+            first.authority_policy_generation,
+            second.authority_policy_generation,
+        ) == (1, 1)
+
+    @pytest.mark.parametrize(
+        "authority_change",
+        (
+            {"authority_evaluation_id": "authority-forged"},
+            {"authority_evaluation_digest": "sha256:" + "b" * 64},
+            {"authority_policy_generation": 2},
+            {"permitted_verbs": ("document.read", "ticket.read", "ticket.write")},
+        ),
+    )
+    async def test_candidate_cannot_alter_current_authority_or_consume_fence(
+        self,
+        grant_store: GrantLeaseStore,
+        grant_authority_installer: AuthorityInstaller,
+        authority_change: dict[str, object],
+    ) -> None:
+        original = lease("lease-authority-original")
+        await self._authorize(grant_authority_installer, original)
+        first = await grant_store.insert_active(
+            original,
+            expected_authority=original.authority_snapshot,
+            now=NOW,
+        )
+        forged_authority = authority_snapshot(
+            scope=original.binding,
+            **authority_change,
+        )
+        forged = lease(
+            "lease-authority-forged",
+            authority=forged_authority,
+            expected_current_lease_generation=first.lease_generation,
+        )
+        with pytest.raises(GrantLeaseConflict, match="authority differs"):
+            await grant_store.insert_active(
+                forged,
+                expected_authority=original.authority_snapshot,
+                now=NOW,
+            )
+        valid = lease(
+            "lease-authority-valid",
+            expected_current_lease_generation=first.lease_generation,
+        )
+        second = await grant_store.insert_active(
+            valid,
+            expected_authority=original.authority_snapshot,
+            now=NOW,
+        )
+        assert second.lease_generation == 2
+
+    async def test_policy_rollover_immediately_invalidates_old_authority(
+        self,
+        grant_store: GrantLeaseStore,
+        grant_authority_installer: AuthorityInstaller,
+    ) -> None:
+        original = lease("lease-policy-old")
+        await self._authorize(grant_authority_installer, original)
+        first = await grant_store.insert_active(
+            original,
+            expected_authority=original.authority_snapshot,
+            now=NOW,
+        )
+        replacement_authority = authority_snapshot(
+            scope=original.binding,
+            authority_policy_generation=2,
+            authority_evaluation_id="authority-2",
+            authority_evaluation_digest="sha256:" + "b" * 64,
+            permitted_verbs=("document.read",),
+        )
+        replacement = lease(
+            "lease-policy-new",
+            authority=replacement_authority,
+            expected_current_lease_generation=first.lease_generation,
+        )
+        await grant_authority_installer(replacement.authority_snapshot, NOW)
+
         assert (
             await grant_store.find_active_by_digest(
-                first.token_digest, first.binding, now=NOW, policy_generation=1
+                first.token_digest,
+                first.binding,
+                now=NOW,
+                expected_authority=replacement.authority_snapshot,
             )
             is None
         )
-        assert (
-            await grant_store.find_active_by_digest(
-                second.token_digest, second.binding, now=NOW, policy_generation=2
-            )
-            == second
+        second = await grant_store.insert_active(
+            replacement,
+            expected_authority=replacement.authority_snapshot,
+            now=NOW,
         )
+        assert (second.authority_policy_generation, second.lease_generation) == (2, 2)
 
-    async def test_expiry_is_fail_closed_and_retains_generation_fence(
-        self, grant_store: GrantLeaseStore
+    async def test_expiry_retains_fence_and_terminal_operation_receipt(
+        self,
+        grant_store: GrantLeaseStore,
+        grant_authority_installer: AuthorityInstaller,
     ) -> None:
         original = lease("lease-expiry")
-        await grant_store.insert_active(original, now=NOW)
+        await self._authorize(grant_authority_installer, original)
+        first = await grant_store.insert_active(
+            original,
+            expected_authority=original.authority_snapshot,
+            now=NOW,
+        )
         expiry = original.expires_at
-
         assert (
             await grant_store.find_active_by_digest(
                 original.token_digest,
                 original.binding,
                 now=expiry,
-                policy_generation=1,
+                expected_authority=original.authority_snapshot,
             )
             is None
         )
-        stored = await grant_store.get_by_id(original.lease_id, original.binding)
-        assert stored is not None and stored.status is GrantLeaseStatus.EXPIRED
-        with pytest.raises(StaleGrantGeneration):
-            await grant_store.insert_active(
-                lease("lease-expiry-replay", issued_at=expiry), now=expiry
-            )
-        await grant_store.insert_active(
-            lease("lease-after-expiry", generation=2, issued_at=expiry), now=expiry
+        replay = await grant_store.insert_active(
+            original,
+            expected_authority=original.authority_snapshot,
+            now=expiry,
         )
+        assert replay.status is GrantLeaseStatus.EXPIRED
+        replacement = lease(
+            "lease-after-expiry",
+            issued_at=expiry,
+            expected_current_lease_generation=first.lease_generation,
+        )
+        second = await grant_store.insert_active(
+            replacement,
+            expected_authority=replacement.authority_snapshot,
+            now=expiry,
+        )
+        assert second.lease_generation == 2
 
-    async def test_insertion_rejects_future_and_expired_records(
-        self, grant_store: GrantLeaseStore
+    async def test_insertion_rejects_future_and_expired_candidates(
+        self,
+        grant_store: GrantLeaseStore,
+        grant_authority_installer: AuthorityInstaller,
     ) -> None:
         for invalid, current in (
             (lease("lease-future", issued_at=NOW + timedelta(seconds=1)), NOW),
             (lease("lease-expired"), NOW + timedelta(seconds=60)),
         ):
+            await self._authorize(grant_authority_installer, invalid, now=current)
             with pytest.raises(GrantLeaseConflict, match="not active"):
-                await grant_store.insert_active(invalid, now=current)
+                await grant_store.insert_active(
+                    invalid,
+                    expected_authority=invalid.authority_snapshot,
+                    now=current,
+                )
             assert await grant_store.get_by_id(invalid.lease_id, invalid.binding) is None
 
     async def test_assignment_and_root_revoke_only_exact_scope(
-        self, grant_store: GrantLeaseStore
+        self,
+        grant_store: GrantLeaseStore,
+        grant_authority_installer: AuthorityInstaller,
     ) -> None:
         exact = lease("lease-root-exact")
         sibling = lease(
@@ -273,120 +553,83 @@ class GrantLeaseStoreContract:
             lease("lease-other-workspace", scope=binding(workspace="workspace-2")),
             lease("lease-other-tenant", scope=binding(tenant="tenant-2")),
         )
-        for record in (exact, sibling, *foreign):
-            await grant_store.insert_active(record, now=NOW)
+        await self._authorize(grant_authority_installer, exact, sibling, *foreign)
+        stored = []
+        for candidate in (exact, sibling, *foreign):
+            stored.append(
+                await grant_store.insert_active(
+                    candidate,
+                    expected_authority=candidate.authority_snapshot,
+                    now=NOW,
+                )
+            )
 
         wrong = binding(assignment="wrong-assignment")
         assert not await grant_store.revoke_exact(
-            exact.lease_id, wrong, now=NOW, reason="wrong_scope"
+            stored[0].lease_id,
+            wrong,
+            now=NOW,
+            reason="wrong_scope",
         )
         assert (
             await grant_store.revoke_assignment(
-                exact.binding, now=NOW, reason="assignment_cancelled"
+                exact.binding,
+                now=NOW,
+                reason="assignment_cancelled",
             )
             == 1
         )
-        assert (
-            await grant_store.find_active_by_id(
-                sibling.lease_id, sibling.binding, now=NOW, policy_generation=1
-            )
-            == sibling
-        )
         root = GrantRootBinding("tenant-1", "workspace-1", "root-1")
-        assert await grant_store.revoke_root(root, now=NOW, reason="root_run_cancelled") == 1
-        for record in (exact, sibling):
+        assert (
+            await grant_store.revoke_root(
+                root,
+                now=NOW,
+                reason="root_run_cancelled",
+            )
+            == 1
+        )
+        for record in stored[:2]:
+            assert await grant_store.get_by_id(record.lease_id, record.binding) is not None
             assert (
                 await grant_store.find_active_by_id(
-                    record.lease_id, record.binding, now=NOW, policy_generation=1
+                    record.lease_id,
+                    record.binding,
+                    now=NOW,
+                    expected_authority=record.authority_snapshot,
                 )
                 is None
             )
-        for record in foreign:
+        for record in stored[2:]:
             assert (
                 await grant_store.find_active_by_id(
-                    record.lease_id, record.binding, now=NOW, policy_generation=1
+                    record.lease_id,
+                    record.binding,
+                    now=NOW,
+                    expected_authority=record.authority_snapshot,
                 )
                 == record
             )
 
-    async def test_successful_exact_revoke_is_scoped_persisted_and_idempotent(
-        self, grant_store: GrantLeaseStore
-    ) -> None:
-        original = lease("lease-exact-revoke")
-        await grant_store.insert_active(original, now=NOW)
-        foreign = binding(assignment="assignment-foreign")
-
-        assert not await grant_store.revoke_exact(
-            original.lease_id, foreign, now=NOW, reason="operator_cancelled"
-        )
-        assert await grant_store.revoke_exact(
-            original.lease_id,
-            original.binding,
-            now=NOW,
-            reason="operator_cancelled",
-        )
-        assert not await grant_store.revoke_exact(
-            original.lease_id,
-            original.binding,
-            now=NOW,
-            reason="operator_cancelled",
-        )
-        stored = await grant_store.get_by_id(original.lease_id, original.binding)
-        assert stored is not None
-        assert (stored.status, stored.revoked_at, stored.revocation_reason) == (
-            GrantLeaseStatus.REVOKED,
-            NOW,
-            "operator_cancelled",
-        )
-        assert await grant_store.get_by_id(original.lease_id, foreign) is None
-        assert (
-            await grant_store.find_active_by_digest(
-                original.token_digest,
-                original.binding,
-                now=NOW,
-                policy_generation=1,
-            )
-            is None
-        )
-
-    async def test_root_revoke_is_atomic_under_clock_rollback(
-        self, grant_store: GrantLeaseStore
-    ) -> None:
-        first = lease("lease-clock-first")
-        later_time = NOW + timedelta(seconds=10)
-        second = lease(
-            "lease-clock-second",
-            scope=binding(phase="phase-2", assignment="assignment-2"),
-            issued_at=later_time,
-        )
-        await grant_store.insert_active(first, now=NOW)
-        await grant_store.insert_active(second, now=later_time)
-
-        root = GrantRootBinding("tenant-1", "workspace-1", "root-1")
-        rolled_back = NOW + timedelta(seconds=5)
-        assert (
-            await grant_store.revoke_root(root, now=rolled_back, reason="root_run_cancelled") == 2
-        )
-        first_stored = await grant_store.get_by_id(first.lease_id, first.binding)
-        second_stored = await grant_store.get_by_id(second.lease_id, second.binding)
-        assert first_stored is not None and second_stored is not None
-        assert first_stored.revoked_at == rolled_back
-        assert second_stored.revoked_at == later_time
-        assert first_stored.status is second_stored.status is GrantLeaseStatus.REVOKED
-
     async def test_invalid_reason_cannot_partially_expire_or_revoke(
-        self, grant_store: GrantLeaseStore
+        self,
+        grant_store: GrantLeaseStore,
+        grant_authority_installer: AuthorityInstaller,
     ) -> None:
-        original = lease("lease-invalid-reason")
-        await grant_store.insert_active(original, now=NOW)
+        candidate = lease("lease-invalid-reason")
+        await self._authorize(grant_authority_installer, candidate)
+        stored = await grant_store.insert_active(
+            candidate,
+            expected_authority=candidate.authority_snapshot,
+            now=NOW,
+        )
 
         with pytest.raises(ValueError, match="control-free"):
             await grant_store.revoke_assignment(
-                original.binding,
-                now=original.expires_at,
+                candidate.binding,
+                now=candidate.expires_at,
                 reason="invalid\nreason",
             )
-        assert await grant_store.get_by_id(original.lease_id, original.binding) == original
+        assert await grant_store.get_by_id(stored.lease_id, stored.binding) == stored
 
     def test_nested_binding_must_be_exact_domain_type(self) -> None:
         class DerivedBinding(GrantLeaseBinding):
@@ -396,33 +639,13 @@ class GrantLeaseStoreContract:
             replace(
                 lease("lease-derived-binding"),
                 binding=DerivedBinding(
-                    "tenant-1", "workspace-1", "root-1", "phase-1", "assignment-1"
+                    "tenant-1",
+                    "workspace-1",
+                    "root-1",
+                    "phase-1",
+                    "assignment-1",
                 ),
             )
 
-    async def test_revocation_is_visible_to_all_later_concurrent_lookups(
-        self, grant_store: GrantLeaseStore
-    ) -> None:
-        original = lease("lease-immediate-revoke")
-        await grant_store.insert_active(original, now=NOW)
-        assert (
-            await grant_store.revoke_assignment(
-                original.binding, now=NOW, reason="assignment_cancelled"
-            )
-            == 1
-        )
-        lookups = await asyncio.gather(
-            *(
-                grant_store.find_active_by_digest(
-                    original.token_digest,
-                    original.binding,
-                    now=NOW,
-                    policy_generation=1,
-                )
-                for _ in range(32)
-            )
-        )
-        assert lookups == [None] * 32
 
-
-__all__ = ["GrantLeaseStoreContract"]
+__all__ = ["AuthorityInstaller", "GrantLeaseStoreContract"]

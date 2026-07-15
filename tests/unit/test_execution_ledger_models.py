@@ -85,11 +85,52 @@ def _skills() -> tuple[SkillVersionPin, ...]:
 
 
 def _authority() -> AuthorityEvaluationRef:
-    return AuthorityEvaluationRef("authority-1", _digest("9"), 7, NOW)
+    return AuthorityEvaluationRef(
+        "authority-1",
+        _digest("9"),
+        7,
+        ("document.read", "ticket.read"),
+        NOW,
+    )
 
 
 def _lease() -> AssignmentLease:
     return AssignmentLease("lease-1", "worker-1", NOW, NOW + timedelta(minutes=5))
+
+
+def test_authority_evaluation_canonicalizes_exact_concrete_verbs() -> None:
+    authority = AuthorityEvaluationRef(
+        "authority-canonical",
+        _digest("8"),
+        7,
+        ("ticket.read", "document.read", "ticket.read"),
+        NOW,
+    )
+
+    assert authority.permitted_verbs == ("document.read", "ticket.read")
+
+
+@pytest.mark.parametrize(
+    "permitted_verbs",
+    (
+        ["ticket.read"],
+        ("ticket.*",),
+        ("ticket.\N{CYRILLIC SMALL LETTER A}",),
+        ("x" * 257,),
+        tuple(f"tool.verb{index}" for index in range(257)),
+    ),
+)
+def test_authority_evaluation_rejects_noncanonical_or_unbounded_verbs(
+    permitted_verbs: object,
+) -> None:
+    with pytest.raises((TypeError, ValueError), match="permitted|authority|bounded"):
+        AuthorityEvaluationRef(
+            "authority-invalid",
+            _digest("7"),
+            7,
+            permitted_verbs,  # type: ignore[arg-type]
+            NOW,
+        )
 
 
 @pytest.mark.invariant("FR-RUN-20")
@@ -114,19 +155,36 @@ def test_root_phase_work_assignment_are_scoped_pinned_and_boltrig_owned() -> Non
         created_at=NOW,
     )
     work = ExecutionWorkItem(
-        scope, "work-1", phase.id, 1, _digest("d"), ("work-0",),
-        status=LedgerWorkItemStatus.IN_FLIGHT, created_at=NOW,
+        scope,
+        "work-1",
+        phase.id,
+        1,
+        _digest("d"),
+        ("work-0",),
+        status=LedgerWorkItemStatus.IN_FLIGHT,
+        created_at=NOW,
     )
     assignment = ExecutionAssignment(
-        scope, "assignment-2", phase.id, work.id, "runtime-user-1", 2,
-        _profile(), _skills(), _authority(), _lease(), "assignment-1",
-        AssignmentStatus.RUNNING, created_at=NOW,
+        scope,
+        "assignment-2",
+        phase.id,
+        work.id,
+        "runtime-user-1",
+        2,
+        _profile(),
+        _skills(),
+        _authority(),
+        _lease(),
+        "assignment-1",
+        AssignmentStatus.RUNNING,
+        created_at=NOW,
     )
 
     assert all(item.scope == scope for item in (root, phase, work, assignment))
     assert all(item.engine_owner is EngineOwner.BOLTRIG for item in (root, phase, work, assignment))
     assert phase.objective_digest == _digest("3") and phase.policy_generation == 7
     assert assignment.authority.digest == _digest("9")
+    assert assignment.authority.permitted_verbs == ("document.read", "ticket.read")
     assert assignment.replaces_assignment_id == "assignment-1"
     with pytest.raises(FrozenInstanceError):
         assignment.status = AssignmentStatus.COMPLETED  # type: ignore[misc]
@@ -138,15 +196,32 @@ def test_result_and_verification_are_structured_digest_only_records() -> None:
     blocker = ResultBlocker("approval.required", _digest("4"), (evidence.id,))
     handoff = ResultHandoff(_profile(), _digest("5"), (evidence.id,))
     result = ExecutionResult(
-        _scope(), "result-1", "phase-1", "work-1", "assignment-1", _digest("0"),
-        ResultStatus.SUCCEEDED, (evidence,), (finding,), (blocker,), (handoff,),
-        ExecutionUsage(100, 40, 3, 2500), NOW,
+        _scope(),
+        "result-1",
+        "phase-1",
+        "work-1",
+        "assignment-1",
+        _digest("0"),
+        ResultStatus.SUCCEEDED,
+        (evidence,),
+        (finding,),
+        (blocker,),
+        (handoff,),
+        ExecutionUsage(100, 40, 3, 2500),
+        NOW,
     )
     verifier = VerifierRef(VerifierKind.SYSTEM, system_id="policy-verifier-v1")
     verification = ExecutionVerification(
-        _scope(), "verification-1", "phase-1", "work-1", result.id,
-        VerificationStatus.PASSED, _digest("1"),
-        (VerificationCheck("tests.pass", True, (evidence.id,)),), verifier, NOW,
+        _scope(),
+        "verification-1",
+        "phase-1",
+        "work-1",
+        result.id,
+        VerificationStatus.PASSED,
+        _digest("1"),
+        (VerificationCheck("tests.pass", True, (evidence.id,)),),
+        verifier,
+        NOW,
     )
 
     assert result.blockers[0].code == "approval.required"
@@ -155,16 +230,37 @@ def test_result_and_verification_are_structured_digest_only_records() -> None:
     assert verification.verified_by == verifier
     with pytest.raises(ValueError, match="unknown evidence"):
         ExecutionResult(
-            _scope(), "result-2", "phase-1", "work-1", "assignment-1", _digest("0"),
-            ResultStatus.FAILED, (), (finding,), (), (), ExecutionUsage(0, 0, 0, 0), NOW,
+            _scope(),
+            "result-2",
+            "phase-1",
+            "work-1",
+            "assignment-1",
+            _digest("0"),
+            ResultStatus.FAILED,
+            (),
+            (finding,),
+            (),
+            (),
+            ExecutionUsage(0, 0, 0, 0),
+            NOW,
         )
 
 
 def test_contracts_reject_plain_enums_wrong_nested_types_and_duplicate_skill_names() -> None:
     with pytest.raises(TypeError, match="exact PhaseMode"):
         ExecutionPhase(
-            _scope(), "phase-1", 1, "research", _digest("1"),
-            "read_only", _profile(), _skills(), 1, (), RetryPolicy(), created_at=NOW,  # type: ignore[arg-type]
+            _scope(),
+            "phase-1",
+            1,
+            "research",
+            _digest("1"),
+            "read_only",
+            _profile(),
+            _skills(),
+            1,
+            (),
+            RetryPolicy(),
+            created_at=NOW,  # type: ignore[arg-type]
         )
     duplicate_name = (
         SkillVersionPin("research", "1", _digest("a")),
@@ -172,13 +268,25 @@ def test_contracts_reject_plain_enums_wrong_nested_types_and_duplicate_skill_nam
     )
     with pytest.raises(ValueError, match="unique by name"):
         ExecutionAssignment(
-            _scope(), "assignment-1", "phase-1", "work-1", "runtime-user-1", 1,
-            _profile(), duplicate_name, _authority(), created_at=NOW,
+            _scope(),
+            "assignment-1",
+            "phase-1",
+            "work-1",
+            "runtime-user-1",
+            1,
+            _profile(),
+            duplicate_name,
+            _authority(),
+            created_at=NOW,
         )
     with pytest.raises(TypeError, match="exact ExecutionScopeRef"):
         ExecutionRootRun(
             object(),  # type: ignore[arg-type]
-            _principal(), _digest("1"), _profile(), 1, created_at=NOW,
+            _principal(),
+            _digest("1"),
+            _profile(),
+            1,
+            created_at=NOW,
         )
 
 
@@ -236,29 +344,62 @@ def test_lifecycle_matrices_and_terminal_metadata_fail_closed() -> None:
 
     cancellation = CancellationMetadata(_principal(), "user.requested", NOW, _digest("6"))
     cancelled = ExecutionRootRun(
-        _scope(), _principal(), _digest("2"), _profile(), 7,
-        RootRunStatus.CANCELLED, cancellation, created_at=NOW,
+        _scope(),
+        _principal(),
+        _digest("2"),
+        _profile(),
+        7,
+        RootRunStatus.CANCELLED,
+        cancellation,
+        created_at=NOW,
     )
     terminal = ExecutionPhase(
-        _scope(), "phase-1", 1, "research", _digest("3"), PhaseMode.READ_ONLY,
-        _profile(), _skills(), 7, (), RetryPolicy(), ExecutionPhaseStatus.SUCCEEDED,
-        PhaseTerminalOutcome("completed", _digest("7"), NOW), created_at=NOW,
+        _scope(),
+        "phase-1",
+        1,
+        "research",
+        _digest("3"),
+        PhaseMode.READ_ONLY,
+        _profile(),
+        _skills(),
+        7,
+        (),
+        RetryPolicy(),
+        ExecutionPhaseStatus.SUCCEEDED,
+        PhaseTerminalOutcome("completed", _digest("7"), NOW),
+        created_at=NOW,
     )
     succeeded = ExecutionRootRun(
-        _scope(), _principal(), _digest("2"), _profile(), 7,
-        RootRunStatus.SUCCEEDED, final_synthesis_digest=_digest("8"), created_at=NOW,
+        _scope(),
+        _principal(),
+        _digest("2"),
+        _profile(),
+        7,
+        RootRunStatus.SUCCEEDED,
+        final_synthesis_digest=_digest("8"),
+        created_at=NOW,
     )
     assert cancelled.cancellation == cancellation and terminal.terminal_outcome is not None
     assert succeeded.final_synthesis_digest == _digest("8")
     with pytest.raises(ValueError, match="requires cancellation"):
         ExecutionRootRun(
-            _scope(), _principal(), _digest("2"), _profile(), 7,
-            RootRunStatus.CANCELLED, created_at=NOW,
+            _scope(),
+            _principal(),
+            _digest("2"),
+            _profile(),
+            7,
+            RootRunStatus.CANCELLED,
+            created_at=NOW,
         )
     with pytest.raises(ValueError, match="final synthesis"):
         ExecutionRootRun(
-            _scope(), _principal(), _digest("2"), _profile(), 7,
-            RootRunStatus.SUCCEEDED, created_at=NOW,
+            _scope(),
+            _principal(),
+            _digest("2"),
+            _profile(),
+            7,
+            RootRunStatus.SUCCEEDED,
+            created_at=NOW,
         )
 
 
@@ -268,7 +409,8 @@ def test_runtime_identity_is_composite_scoped_and_contains_no_auth_state() -> No
     names = {item.name for item in fields(RuntimeIdentity)}
     assert identity.principal.user_id == "user-1" and identity.engine_owner is EngineOwner.BOLTRIG
     assert not any(
-        word in name for name in names
+        word in name
+        for name in names
         for word in ("credential", "token", "secret", "path", "subject", "email")
     )
     with pytest.raises(ValueError, match="tenants differ"):
@@ -288,16 +430,31 @@ def test_fleet_and_ledger_share_one_exact_principal_and_phase_mode_vocabulary() 
 
 def test_mutation_and_claim_outcomes_are_scoped_and_digest_bound() -> None:
     mutation = LedgerMutationOutcome(
-        _scope(), "command-1", _digest("8"), LedgerMutationStatus.APPLIED,
-        ExecutionAggregateKind.WORK_ITEM, "work-1", 3, 4,
+        _scope(),
+        "command-1",
+        _digest("8"),
+        LedgerMutationStatus.APPLIED,
+        ExecutionAggregateKind.WORK_ITEM,
+        "work-1",
+        3,
+        4,
     )
     claim = LedgerClaimOutcome(
-        _scope(), "command-1", _digest("8"), LedgerClaimStatus.ACQUIRED,
-        "work-1", "assignment-1", _lease(),
+        _scope(),
+        "command-1",
+        _digest("8"),
+        LedgerClaimStatus.ACQUIRED,
+        "work-1",
+        "assignment-1",
+        _lease(),
     )
     assert mutation.scope == claim.scope == _scope()
     with pytest.raises(ValueError, match="cannot issue"):
         LedgerClaimOutcome(
-            _scope(), "command-1", _digest("8"), LedgerClaimStatus.HELD_BY_OTHER,
-            "work-1", lease=_lease(),
+            _scope(),
+            "command-1",
+            _digest("8"),
+            LedgerClaimStatus.HELD_BY_OTHER,
+            "work-1",
+            lease=_lease(),
         )

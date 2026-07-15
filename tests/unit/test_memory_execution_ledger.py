@@ -24,6 +24,7 @@ from .execution_ledger_contract import (
 )
 from .execution_ledger_fixtures import CLOCK_NOW, LedgerValues
 from .execution_ledger_lifecycle_contract import (
+    assert_assignment_authority_matches_phase_policy,
     assert_hierarchy_lifecycle_and_atomic_outbox,
     assert_runtime_identity_and_binding_ownership,
     seed_running_work,
@@ -52,6 +53,11 @@ async def test_memory_store_event_stream_is_exact_and_monotonic() -> None:
 @pytest.mark.asyncio
 async def test_memory_store_enforces_hierarchy_lifecycle_and_atomic_outbox() -> None:
     await assert_hierarchy_lifecycle_and_atomic_outbox(_store())
+
+
+@pytest.mark.asyncio
+async def test_memory_store_binds_assignment_authority_to_phase_policy() -> None:
+    await assert_assignment_authority_matches_phase_policy(_store())
 
 
 @pytest.mark.asyncio
@@ -128,9 +134,7 @@ async def test_memory_store_fails_closed_at_hard_capacity() -> None:
         )
     )
     await seed_running_work(binding_store, first)
-    assert (
-        await binding_store.append_binding(first.thread())
-    ).status is AppendStatus.INSERTED
+    assert (await binding_store.append_binding(first.thread())).status is AppendStatus.INSERTED
     turn = CodexTurnBinding(
         first.scope,
         first.thread(),

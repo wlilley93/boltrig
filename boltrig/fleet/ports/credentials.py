@@ -6,8 +6,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import NoReturn, Protocol
 
-from boltrig.fleet.domain import PhaseAssignmentRef
-from boltrig.models import VerbId
+from boltrig.fleet.domain import (
+    GrantRequestObservation,
+    PhaseAssignmentRef,
+    StoredGrantLease,
+)
 
 
 class EphemeralBearer:
@@ -38,9 +41,11 @@ class GrantLease:
     """Persistable metadata for an expiring, immediately revocable grant."""
 
     lease_id: str
+    issue_operation_id: str
     assignment: PhaseAssignmentRef
     expires_at: datetime
-    policy_generation: int
+    authority_policy_generation: int
+    lease_generation: int
 
 
 @dataclass(frozen=True)
@@ -62,11 +67,15 @@ class RunScopedGrantBroker(Protocol):
         assignment: PhaseAssignmentRef,
         *,
         expires_at: datetime,
-        policy_generation: int,
-        permitted_verbs: tuple[VerbId, ...],
-        authority_evaluation_id: str,
-        authority_evaluation_digest: str,
+        issue_operation_id: str,
+        expected_current_lease_generation: int | None,
     ) -> IssuedGrant: ...
+
+    async def authenticate(
+        self,
+        bearer: EphemeralBearer,
+        observation: GrantRequestObservation,
+    ) -> StoredGrantLease: ...
 
     async def revoke(
         self, lease_id: str, assignment: PhaseAssignmentRef, *, reason: str
@@ -76,7 +85,4 @@ class RunScopedGrantBroker(Protocol):
         self,
         lease_id: str,
         assignment: PhaseAssignmentRef,
-        *,
-        at: datetime,
-        policy_generation: int,
     ) -> bool: ...
