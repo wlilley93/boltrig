@@ -53,6 +53,11 @@ invariants:
     description: Legacy MCP run tokens are random, stored only by SHA-256 digest, expire within a bounded mandatory TTL, and become unusable immediately when revoked.
     tests:
       - tests/security/test_mcp_face.py::test_run_tokens_are_hashed_expiring_and_immediately_revocable
+  SEC-151:
+    description: Effective runtime authority is the exact scope-bound intersection of the parent grant, profile ceiling, selected-skill requirements, workspace policy, and current durable approval state; no skill, approval, prompt, message, or mismatched tenant/workspace policy may widen it.
+    tests:
+      - tests/unit/test_effective_authority_evaluator.py::test_all_five_layers_reduce_candidates_in_fixed_explainable_order
+      - tests/unit/test_effective_authority_evaluator.py::test_selected_skill_requirements_can_never_grant_parent_authority
   FR-RUN-19:
     description: Boltrig admits only the exact reviewed Codex 0.144.3 Linux binary and canonical stable-v2 App Server schema, keeps experimental APIs disabled, and permits only stdio or a private Unix socket rather than a remote WebSocket listener.
     tests:
