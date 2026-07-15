@@ -58,6 +58,11 @@ invariants:
     tests:
       - tests/unit/test_effective_authority_evaluator.py::test_all_five_layers_reduce_candidates_in_fixed_explainable_order
       - tests/unit/test_effective_authority_evaluator.py::test_selected_skill_requirements_can_never_grant_parent_authority
+  SEC-152:
+    description: Codex and Opbox workers receive only opaque short-lived grant bearers bound to one exact tenant, workspace, root, phase, assignment, policy generation, and immutable authority evaluation; durable state contains only the token digest and concrete verbs, while expiry, replacement, assignment cancellation, and root cancellation fail closed immediately.
+    tests:
+      - tests/unit/test_run_grant_leases.py::test_issue_persists_only_digest_and_returns_redacted_ephemeral_bearer
+      - tests/unit/test_run_grant_leases.py::test_exact_and_cancellation_revocation_fail_closed_immediately
   FR-RUN-19:
     description: Boltrig admits only the exact reviewed Codex 0.144.3 Linux binary and canonical stable-v2 App Server schema, keeps experimental APIs disabled, and permits only stdio or a private Unix socket rather than a remote WebSocket listener.
     tests:

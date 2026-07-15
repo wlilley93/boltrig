@@ -3,6 +3,7 @@
 from .authority import AuthorityResolver
 from .credentials import EphemeralBearer, GrantLease, IssuedGrant, RunScopedGrantBroker
 from .events import RunEventLog
+from .grant_leases import GrantLeaseStore
 from .runtime import (
     AgentRuntime,
     RuntimeThreadSpec,
@@ -17,6 +18,7 @@ __all__ = [
     "DurablePhaseJob",
     "EphemeralBearer",
     "GrantLease",
+    "GrantLeaseStore",
     "IssuedGrant",
     "RunEventLog",
     "RunScopedGrantBroker",

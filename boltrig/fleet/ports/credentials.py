@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import NoReturn, Protocol
 
 from boltrig.fleet.domain import PhaseAssignmentRef
+from boltrig.models import VerbId
 
 
 class EphemeralBearer:
@@ -62,6 +63,9 @@ class RunScopedGrantBroker(Protocol):
         *,
         expires_at: datetime,
         policy_generation: int,
+        permitted_verbs: tuple[VerbId, ...],
+        authority_evaluation_id: str,
+        authority_evaluation_digest: str,
     ) -> IssuedGrant: ...
 
     async def revoke(self, lease_id: str, *, reason: str) -> None: ...

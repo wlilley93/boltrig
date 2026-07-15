@@ -27,6 +27,15 @@ from .execution import (
     SandboxPolicy,
     SkillVersionRef,
 )
+from .grant_lease import (
+    ActiveGrantGenerationConflict,
+    GrantLeaseBinding,
+    GrantLeaseConflict,
+    GrantLeaseStatus,
+    GrantRootBinding,
+    StaleGrantGeneration,
+    StoredGrantLease,
+)
 from .json_types import CanonicalJSON, JSONMapping, JSONValue
 
 __all__ = [
@@ -38,6 +47,11 @@ __all__ = [
     "AuthorityScopeMismatch",
     "CanonicalJSON",
     "EffectiveAuthority",
+    "ActiveGrantGenerationConflict",
+    "GrantLeaseBinding",
+    "GrantLeaseConflict",
+    "GrantLeaseStatus",
+    "GrantRootBinding",
     "JSONMapping",
     "JSONValue",
     "OrganisationUserRef",
@@ -55,5 +69,7 @@ __all__ = [
     "ScopedApproval",
     "ScopedGrantSet",
     "SkillVersionRef",
+    "StaleGrantGeneration",
+    "StoredGrantLease",
     "evaluate_authority",
 ]
