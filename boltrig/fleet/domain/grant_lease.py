@@ -14,6 +14,7 @@ from .execution import PhaseAssignmentRef, PhaseId
 MAX_IDENTIFIER_LENGTH = 256
 MAX_PERMITTED_VERBS = 256
 MAX_GRANT_TTL_SECONDS = 3600
+MAX_REVOCATION_REASON_LENGTH = 160
 
 
 def _identifier(label: str, value: str) -> str:
@@ -60,6 +61,24 @@ def _prefixed_sha256_digest(label: str, value: str) -> str:
     if not value.startswith("sha256:"):
         raise ValueError(f"{label} must be a lowercase sha256 digest")
     _raw_sha256_digest(label, value.removeprefix("sha256:"))
+    return value
+
+
+def validate_revocation_reason(value: str) -> str:
+    """Validate the canonical bounded reason shared with durable SQL storage."""
+
+    if (
+        not isinstance(value, str)
+        or not value
+        or value != value.strip()
+        or len(value) > MAX_REVOCATION_REASON_LENGTH
+        or any(ord(character) < 32 or 127 <= ord(character) <= 159 for character in value)
+    ):
+        raise ValueError("revocation reason must be bounded, trimmed, and control-free")
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError:
+        raise ValueError("revocation reason must be valid UTF-8") from None
     return value
 
 
@@ -190,7 +209,7 @@ class StoredGrantLease:
             if self.revoked_at is None or self.revocation_reason is None:
                 raise ValueError("revoked leases require a timestamp and reason")
             _aware("revoked_at", self.revoked_at)
-            _identifier("revocation_reason", self.revocation_reason)
+            validate_revocation_reason(self.revocation_reason)
             if self.revoked_at < self.issued_at:
                 raise ValueError("revoked_at cannot precede issued_at")
         elif self.revoked_at is not None or self.revocation_reason is not None:
@@ -205,7 +224,7 @@ class StoredGrantLease:
             self,
             status=GrantLeaseStatus.REVOKED,
             revoked_at=_aware("revoked_at", at),
-            revocation_reason=_identifier("revocation_reason", reason),
+            revocation_reason=validate_revocation_reason(reason),
         )
 
     def expire(self) -> StoredGrantLease:
@@ -236,6 +255,8 @@ __all__ = [
     "GrantRootBinding",
     "MAX_GRANT_TTL_SECONDS",
     "MAX_PERMITTED_VERBS",
+    "MAX_REVOCATION_REASON_LENGTH",
     "StaleGrantGeneration",
     "StoredGrantLease",
+    "validate_revocation_reason",
 ]

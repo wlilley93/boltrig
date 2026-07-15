@@ -39,7 +39,11 @@ class GrantLeaseStore(Protocol):
         policy_generation: int,
     ) -> StoredGrantLease | None: ...
 
-    async def get_by_id(self, lease_id: str) -> StoredGrantLease | None: ...
+    async def get_by_id(
+        self, lease_id: str, binding: GrantLeaseBinding
+    ) -> StoredGrantLease | None:
+        """Read metadata only through the lease's exact assignment scope."""
+        ...
 
     async def revoke_exact(
         self,

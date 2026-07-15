@@ -9,7 +9,6 @@ from .birth_policies import (
 from .grant_leases import (
     DurableRunScopedGrantBroker,
     GrantAuthenticationRejected,
-    GrantBindingMismatch,
 )
 from .phase_lifecycle import PhaseLifecycle, RuntimeBindingError
 
@@ -18,7 +17,6 @@ __all__ = [
     "BirthPolicyRejected",
     "DurableRunScopedGrantBroker",
     "GrantAuthenticationRejected",
-    "GrantBindingMismatch",
     "PhaseLifecycle",
     "RuntimeBindingError",
     "compile_birth_policy",

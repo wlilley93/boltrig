@@ -11,10 +11,8 @@ import pytest
 from boltrig.fleet.application.grant_leases import (
     DurableRunScopedGrantBroker,
     GrantAuthenticationRejected,
-    GrantBindingMismatch,
 )
 from boltrig.fleet.domain.execution import (
-    OrganisationUserRef,
     PhaseAssignmentRef,
     PhaseRef,
 )
@@ -25,6 +23,7 @@ from boltrig.fleet.domain.grant_lease import (
     StaleGrantGeneration,
 )
 from boltrig.fleet.ports.credentials import EphemeralBearer, IssuedGrant, RunScopedGrantBroker
+from boltrig.models import OrganisationUserRef
 
 from .grant_lease_store import MemoryGrantLeaseStore
 
@@ -261,12 +260,17 @@ async def test_exact_and_cancellation_revocation_fail_closed_immediately() -> No
     assignment = _assignment()
     issued = await _issue(broker, assignment)
 
-    with pytest.raises(GrantBindingMismatch, match="another assignment"):
-        await broker.revoke_bound(
-            issued.lease.lease_id,
-            _assignment(assignment="foreign-assignment"),
-            reason="operator_cancelled",
-        )
+    await broker.revoke_bound(
+        issued.lease.lease_id,
+        _assignment(assignment="foreign-assignment"),
+        reason="operator_cancelled",
+    )
+    assert await broker.authenticate(
+        issued.bearer_token,
+        assignment,
+        verb_id="ticket.read",
+        policy_generation=1,
+    )
     assert await broker.cancel_assignment(assignment) == 1
     results = await asyncio.gather(
         *(
@@ -288,6 +292,53 @@ async def test_exact_and_cancellation_revocation_fail_closed_immediately() -> No
     )
     with pytest.raises(StaleGrantGeneration):
         await _issue(broker, assignment, generation=1)
+
+
+async def test_operator_revoke_requires_exact_assignment_scope() -> None:
+    broker, _store, _clock = _broker()
+    assignment = _assignment()
+    issued = await _issue(broker, assignment)
+
+    await broker.revoke(
+        issued.lease.lease_id,
+        _assignment(tenant="tenant-foreign"),
+        reason="operator_cancelled",
+    )
+    assert await broker.authenticate(
+        issued.bearer_token,
+        assignment,
+        verb_id="ticket.read",
+        policy_generation=1,
+    )
+    await broker.revoke(
+        issued.lease.lease_id, assignment, reason="operator_cancelled"
+    )
+    with pytest.raises(GrantAuthenticationRejected, match="rejected"):
+        await broker.authenticate(
+            issued.bearer_token,
+            assignment,
+            verb_id="ticket.read",
+            policy_generation=1,
+        )
+
+
+@pytest.mark.parametrize(
+    "reason",
+    ("x" * 161, "invalid\nreason", "invalid\x7freason", "invalid\x85reason", "\ud800"),
+)
+async def test_revocation_reason_matches_bounded_utf8_storage_policy(reason: str) -> None:
+    broker, _store, _clock = _broker()
+    assignment = _assignment()
+    issued = await _issue(broker, assignment)
+
+    with pytest.raises(ValueError, match="reason|UTF-8"):
+        await broker.revoke(issued.lease.lease_id, assignment, reason=reason)
+    assert await broker.authenticate(
+        issued.bearer_token,
+        assignment,
+        verb_id="ticket.read",
+        policy_generation=1,
+    )
 
 
 async def test_root_revocation_is_exactly_tenant_workspace_and_root_scoped() -> None:

@@ -14,6 +14,7 @@ from boltrig.fleet.domain.grant_lease import (
     MAX_GRANT_TTL_SECONDS,
     MAX_PERMITTED_VERBS,
     StoredGrantLease,
+    validate_revocation_reason,
 )
 from boltrig.fleet.ports.credentials import EphemeralBearer, GrantLease, IssuedGrant
 from boltrig.fleet.ports.grant_leases import GrantLeaseStore
@@ -27,19 +28,9 @@ class GrantAuthenticationRejected(PermissionError):
     """A bearer, binding, generation, or concrete verb did not authenticate."""
 
 
-class GrantBindingMismatch(PermissionError):
-    """A revocation attempt named a lease from another exact assignment."""
-
-
 def _aware(label: str, value: datetime) -> datetime:
     if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
         raise ValueError(f"{label} must be timezone-aware")
-    return value
-
-
-def _reason(value: str) -> str:
-    if not isinstance(value, str) or not value or value != value.strip():
-        raise ValueError("revocation reason must be non-empty and trimmed")
     return value
 
 
@@ -195,17 +186,17 @@ class DurableRunScopedGrantBroker:
             and lease.is_active_at(now, policy_generation=generation)
         )
 
-    async def revoke(self, lease_id: str, *, reason: str) -> None:
-        """Idempotently revoke by opaque id after recovering its immutable exact binding."""
+    async def revoke(
+        self, lease_id: str, assignment: PhaseAssignmentRef, *, reason: str
+    ) -> None:
+        """Idempotently revoke only through an exact assignment binding."""
 
-        record = await self._store.get_by_id(lease_id)
-        if record is None:
-            return
+        binding = GrantLeaseBinding.from_assignment(assignment)
         await self._store.revoke_exact(
             lease_id,
-            record.binding,
+            binding,
             now=self._now(),
-            reason=_reason(reason),
+            reason=validate_revocation_reason(reason),
         )
 
     async def revoke_bound(
@@ -213,15 +204,7 @@ class DurableRunScopedGrantBroker:
     ) -> None:
         """Revoke only when the caller supplies the lease's exact assignment binding."""
 
-        binding = GrantLeaseBinding.from_assignment(assignment)
-        record = await self._store.get_by_id(lease_id)
-        if record is not None and record.binding != binding:
-            raise GrantBindingMismatch("grant lease belongs to another assignment")
-        if record is None:
-            return
-        await self._store.revoke_exact(
-            lease_id, binding, now=self._now(), reason=_reason(reason)
-        )
+        await self.revoke(lease_id, assignment, reason=reason)
 
     async def cancel_assignment(self, assignment: PhaseAssignmentRef) -> int:
         """Immediately revoke every active bearer for a cancelled assignment."""
@@ -249,6 +232,5 @@ __all__ = [
     "DEFAULT_MAX_TTL_SECONDS",
     "DurableRunScopedGrantBroker",
     "GrantAuthenticationRejected",
-    "GrantBindingMismatch",
     "HARD_MAX_TTL_SECONDS",
 ]

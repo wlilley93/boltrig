@@ -68,7 +68,9 @@ class RunScopedGrantBroker(Protocol):
         authority_evaluation_digest: str,
     ) -> IssuedGrant: ...
 
-    async def revoke(self, lease_id: str, *, reason: str) -> None: ...
+    async def revoke(
+        self, lease_id: str, assignment: PhaseAssignmentRef, *, reason: str
+    ) -> None: ...
 
     async def is_active(
         self,
