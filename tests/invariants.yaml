@@ -91,6 +91,19 @@ invariants:
       - tests/unit/test_execution_transport_models.py::test_command_digest_is_server_computed_and_models_replay_vs_conflict
       - tests/unit/test_execution_transport_models.py::test_event_payload_is_exact_bounded_sensitive_free_and_normalized
       - tests/unit/test_execution_transport_models.py::test_durable_values_reject_controls_and_signed_bigint_overflow
+  SEC-155:
+    description: Every Codex phase receives a bounded deterministic read-only workspace snapshot that excludes nested repository and Codex control layers and rejects symlinks, special files, traversal, overlap, races, and allocation overflow before the runtime starts.
+    tests:
+      - tests/unit/test_skill_artifacts.py::test_workspace_projection_excludes_control_layers_at_every_depth
+      - tests/unit/test_skill_artifacts.py::test_workspace_rejects_symlinks_and_special_files
+  SEC-156:
+    description: Boltrig materializes only exact digest-pinned selected skills, force-reloads Codex discovery, and admits a thread only when the enabled name, path, scope, and bytes exactly match the generation-bound allowlist; unselected built-ins, errors, drift, and skills/changed invalidate the receipt fail closed.
+    tests:
+      - tests/unit/test_skill_artifacts.py::test_materializes_only_exact_digest_pinned_selected_skills
+      - tests/unit/test_skill_attestation.py::test_exact_enabled_allowlist_attests_with_disabled_system_skill_visible
+      - tests/unit/test_skill_attestation.py::test_skills_changed_invalidates_until_a_new_attestation_is_accepted
+      - tests/unit/test_skill_discovery.py::test_unselected_bundled_skill_must_be_disabled
+      - tests/unit/test_skill_discovery.py::test_digest_drift_after_materialization_fails_closed
   P9:
     description: Backend unavailability degrades gracefully, never crashes (graceful degradation).
     tests:

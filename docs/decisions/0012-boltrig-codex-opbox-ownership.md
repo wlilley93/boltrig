@@ -167,6 +167,12 @@ for every governed tool call. Queued grant snapshots are not authoritative.
    authority or approval transition without a validated Boltrig command.
 7. Codex runtime homes and workspaces are stack-owned and tenant/workspace
    isolated. Production never reads a developer's personal `.codex` state.
+   A private `CODEX_HOME` is necessary but not sufficient: Codex also discovers
+   repository skills from `.agents/skills` between the working directory and
+   repository root, and project trust does not disable that discovery. A cell
+   therefore runs from a sanitized workspace projection with an isolated
+   `HOME`, materializes only digest-pinned selected skills, disables unselected
+   bundled skills, and must pass a pre-thread `skills/list` allowlist check.
 8. No unrestricted peer chat exists in v1. If sibling messaging is added later,
    it must be a typed, audited, expiring Boltrig mailbox with no
    authority-changing message types.

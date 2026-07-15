@@ -82,6 +82,7 @@ App Server documentation:
 | Transport | stdio JSONL; WebSocket-over-private-Unix-socket; TCP WebSocket is experimental | Use stdio per cell or a private same-host Unix socket; no unauthenticated remote listener |
 | Backpressure | A full WebSocket ingress queue returns error `-32001`, `Server overloaded; retry later.` | Retry only safe requests with exponential backoff and jitter; never duplicate a turn blindly |
 | Threads | `thread/start`, `thread/resume`, `thread/fork`, read/list/archive and related notifications | Persist Boltrig-to-Codex thread bindings and make resume explicit |
+| Skills | `skills/list` reports path, scope, and effective enablement; repository skills are discovered from `.agents/skills` independently of project trust | Attest the complete enabled set before starting a thread; isolated `CODEX_HOME` alone is not a skill boundary |
 | Turns | `turn/start`, `turn/steer`, `turn/interrupt`, started/completed notifications | Map chat send, steer, and Stop to real turn lifecycle operations |
 | Events | Thread, turn, item, text delta, command, file-change, MCP progress, plan, token, warning, and completion events | Normalize and durably record lifecycle events; raw events are not authority |
 | Approvals | Server requests for command execution, file change, and permission elevation include thread/turn/item/approval correlation | Bridge them to Boltrig approval state; never auto-accept from prompt content |
@@ -479,6 +480,10 @@ The following are blockers for approval-gated write phases, not optional cleanup
 12. Cancellation checks in `boltrig/fleet/pump.py:216-301` do not refresh the
     cancellation marker after the in-flight head execution boundary before
     terminal handling.
+13. Codex still discovers repository `.agents/skills` while project-local
+    `.codex` config, hooks, and rules are disabled for an untrusted project.
+    Directly pointing a cell at an unsanitized checkout would bypass Boltrig's
+    selected-skill catalogue even with an isolated `HOME` and `CODEX_HOME`.
 
 Read-only Codex protocol work may proceed behind a disabled feature flag while
 these are fixed. No Opbox or repository write capability may be enabled first.
@@ -521,6 +526,10 @@ byte-equivalent normalized stable schema.
 
 - add protocol, transport, supervisor, and runtime modules
 - start with stdio and a read-only disposable cell
+- create a sanitized workspace projection that excludes repository skill and
+  project-control layers, use isolated `HOME` and `CODEX_HOME`, materialize only
+  digest-pinned selected skills, disable unselected bundled skills, and fail
+  closed unless `skills/list` exactly matches the assignment allowlist
 - add fake-server tests for malformed frames, wrong IDs, duplicate responses,
   pre-initialize use, timeout, process exit, and bounded queues
 - keep the feature disabled in production
