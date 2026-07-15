@@ -34,7 +34,7 @@ RELEASE_VALIDATE_IMAGES_ENV ?= tests/fixtures/release-images.env
 RELEASE_PROFILES ?= --profile backup
 
 .DEFAULT_GOAL := help
-.PHONY: help up down logs test lint structure typecheck check python-quality ui-install ui-quality site-install site-quality ui-e2e compose-validate release-validate release-up doctor-fixture migration-parity python-audit sast iac-scan secret-scan actionlint security-source quality live-check lockfile-policy dependency-audit smoke invariants doctor migrate secure-up backup backup-schedule restore
+.PHONY: help up down logs test lint architecture structure typecheck check python-quality ui-install ui-quality site-install site-quality ui-e2e compose-validate release-validate release-up doctor-fixture migration-parity python-audit sast iac-scan secret-scan actionlint security-source quality live-check lockfile-policy dependency-audit smoke invariants doctor migrate secure-up backup backup-schedule restore
 
 help: ## List the available targets
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -58,15 +58,18 @@ test: ## Run the test suite (set BOLTRIG_TEST_DATABASE_URL to also run the Postg
 lint: ## Run ruff over the Python source, scripts, and tests
 	$(PY) -m ruff check boltrig scripts tests
 
+architecture: ## Enforce inward-only thin-orchestration dependencies
+	$(PY) scripts/check_architecture.py
+
 structure: ## Enforce Python file/function size limits and expiring debt ratchets
 	$(PY) scripts/check_structure.py
 
 typecheck: ## Module-by-module strict mypy gate (see [tool.mypy])
 	$(PY) -m mypy
 
-check: invariants lint structure typecheck test ## Run the local Python gates CI enforces
+check: invariants lint architecture structure typecheck test ## Run the local Python gates CI enforces
 
-python-quality: invariants lint structure typecheck ## Run Python tests on Postgres with coverage enforcement
+python-quality: invariants lint architecture structure typecheck ## Run Python tests on Postgres with coverage enforcement
 	scripts/with_test_postgres.sh $(PY) -m pytest -q \
 		--cov=boltrig --cov-report=term:skip-covered --cov-report=xml \
 		--cov-fail-under=$(COVERAGE_MIN)

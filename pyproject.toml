@@ -112,6 +112,9 @@ files = [
     "boltrig/config/settings.py",
     "boltrig/fleet/model_gateway_status.py",
     "boltrig/fleet/model_profiles.py",
+    "boltrig/fleet/application",
+    "boltrig/fleet/domain",
+    "boltrig/fleet/ports",
     "boltrig/fleet/opencode_plugin.py",
     "boltrig/fleet/result.py",
     "boltrig/fleet/runtime_resolver.py",
@@ -135,6 +138,7 @@ files = [
     "boltrig/store/base.py",
     "boltrig/workflows/library.py",
     "boltrig/workflows/snapshot.py",
+    "scripts/check_architecture.py",
 ]
 strict = true
 follow_imports = "silent"

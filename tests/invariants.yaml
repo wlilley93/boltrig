@@ -21,6 +21,25 @@
 # are Boltrig-local (from the SRS) and never restate a K-*.
 
 invariants:
+  FR-ARC-01:
+    description: Thin orchestration has a build-red accidental-dependency gate - direct imports and common dynamic-import forms in domain, ports, and application code may point only to their declared inward layers and the standard library.
+    tests:
+      - tests/unit/test_architecture_gate.py::test_thin_orchestration_layers_depend_inward_only
+  SEC-144:
+    description: An effective-authority value permits a verb only when every supplied current ceiling permits it - parent, profile, selected-skill requirements, workspace policy, and approval - while skill selection alone cannot widen the immutable value.
+    tests:
+      - tests/unit/test_orchestration_contracts.py::test_effective_authority_requires_every_current_ceiling
+      - tests/unit/test_orchestration_contracts.py::test_skill_selection_cannot_widen_authority_and_refs_are_immutable
+  SEC-145:
+    description: Every runtime thread, turn, and normalized event uses non-empty identifiers and is bound to one exact Boltrig phase assignment; cross-assignment lifecycle responses or event correlations fail closed.
+    tests:
+      - tests/unit/test_orchestration_contracts.py::test_phase_lifecycle_rejects_a_cross_assignment_thread
+      - tests/unit/test_orchestration_contracts.py::test_runtime_event_rejects_cross_assignment_thread_or_turn
+  SEC-146:
+    description: Runtime boundary JSON is copied into finite canonical immutable documents, while ephemeral bearer credentials are redacted, slot-isolated, and deliberately non-serializable.
+    tests:
+      - tests/unit/test_orchestration_contracts.py::test_canonical_json_is_copied_finite_and_immutable
+      - tests/unit/test_orchestration_contracts.py::test_ephemeral_bearer_is_explicitly_revealed_but_not_serializable
   P9:
     description: Backend unavailability degrades gracefully, never crashes (graceful degradation).
     tests:
