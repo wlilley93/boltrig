@@ -1,5 +1,7 @@
 """Stable execution-domain types for Boltrig's thin orchestration core."""
 
+from boltrig.models import OrganisationUserRef
+
 from .authority import EffectiveAuthority
 from .authority_evaluator import (
     AuthorityEvaluation,
@@ -13,7 +15,6 @@ from .authority_evaluator import (
 )
 from .execution import (
     ApprovalState,
-    OrganisationUserRef,
     PhaseAssignmentRef,
     PhaseMode,
     PhaseRef,
