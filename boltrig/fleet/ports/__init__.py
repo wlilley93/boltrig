@@ -4,6 +4,7 @@ from .authority import AuthorityResolver
 from .credentials import EphemeralBearer, GrantLease, IssuedGrant, RunScopedGrantBroker
 from .events import RunEventLog
 from .grant_leases import GrantLeaseStore
+from .profile_catalog import StaticProfileCatalog as StaticProfileCatalog
 from .runtime import (
     AgentRuntime,
     RuntimeThreadSpec,
@@ -22,6 +23,7 @@ __all__ = [
     "IssuedGrant",
     "RunEventLog",
     "RunScopedGrantBroker",
+    "StaticProfileCatalog",
     "RuntimeThreadSpec",
     "RuntimeTurnSpec",
     "TurnSteerRequest",
