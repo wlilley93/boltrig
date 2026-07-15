@@ -73,6 +73,24 @@ invariants:
     tests:
       - tests/unit/test_codex_protocol_pin.py::test_checked_in_codex_protocol_pin_is_exact
       - tests/unit/test_codex_protocol_pin.py::test_cli_verification_generates_only_stable_schema
+  FR-RUN-20:
+    description: Boltrig owns one canonical, exactly scoped and versioned root-run to phase to work-item to assignment to result to verification ledger with explicit legal transitions, durable terminal metadata, store-assigned event order, and transactional-outbox delivery state.
+    tests:
+      - tests/unit/test_execution_ledger_models.py::test_root_phase_work_assignment_are_scoped_pinned_and_boltrig_owned
+      - tests/unit/test_execution_ledger_models.py::test_lifecycle_matrices_and_terminal_metadata_fail_closed
+      - tests/unit/test_execution_transport_models.py::test_pending_recorded_event_and_outbox_keep_scopes_and_keys_distinct
+  SEC-153:
+    description: Organisation users and phase modes have one exact canonical vocabulary across orchestration and storage; runtime identities are credential-free tenant-workspace composites, and every Codex binding is a Boltrig-owned scoped observation that cannot mutate ledger authority.
+    tests:
+      - tests/unit/test_execution_ledger_models.py::test_runtime_identity_is_composite_scoped_and_contains_no_auth_state
+      - tests/unit/test_execution_ledger_models.py::test_fleet_and_ledger_share_one_exact_principal_and_phase_mode_vocabulary
+      - tests/unit/test_execution_transport_models.py::test_codex_bindings_are_scoped_boltrig_owned_and_explicitly_observational
+  SEC-154:
+    description: Execution commands use a server-computed canonical digest for replay/conflict decisions, while normalized event payloads and counters are bounded, canonical, control-safe, signed-BIGINT-safe, and reject credential-bearing keys before persistence.
+    tests:
+      - tests/unit/test_execution_transport_models.py::test_command_digest_is_server_computed_and_models_replay_vs_conflict
+      - tests/unit/test_execution_transport_models.py::test_event_payload_is_exact_bounded_sensitive_free_and_normalized
+      - tests/unit/test_execution_transport_models.py::test_durable_values_reject_controls_and_signed_bigint_overflow
   P9:
     description: Backend unavailability degrades gracefully, never crashes (graceful degradation).
     tests:

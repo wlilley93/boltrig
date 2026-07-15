@@ -6,23 +6,24 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 
-from boltrig.models import RunId, TenantId, UserId, WorkItemId, WorkspaceId, utcnow
+from boltrig.models import (
+    OrganisationUserRef,
+    PhaseMode as _CanonicalPhaseMode,
+    RunId,
+    WorkItemId,
+    WorkspaceId,
+    utcnow,
+)
 
 from .json_types import CanonicalJSON
 
 PhaseId = str
+PhaseMode = _CanonicalPhaseMode
 
 
 def _require_identifier(label: str, value: str) -> None:
     if not value or value != value.strip():
         raise ValueError(f"{label} must be a non-empty, trimmed identifier")
-
-
-class PhaseMode(str, Enum):
-    """Maximum effect class available to a phase."""
-
-    READ_ONLY = "read_only"
-    APPROVAL_GATED_WRITE = "approval_gated_write"
 
 
 class SandboxPolicy(str, Enum):
@@ -72,18 +73,6 @@ class RuntimeEventKind(str, Enum):
 
 
 @dataclass(frozen=True)
-class OrganisationUserRef:
-    """The canonical human principal inside one Boltrig organisation."""
-
-    tenant_id: TenantId
-    user_id: UserId
-
-    def __post_init__(self) -> None:
-        _require_identifier("tenant_id", self.tenant_id)
-        _require_identifier("user_id", self.user_id)
-
-
-@dataclass(frozen=True)
 class ProfileRef:
     """Immutable reference to a reusable agent birth configuration."""
 
@@ -120,6 +109,8 @@ class PhaseRef:
     def __post_init__(self) -> None:
         _require_identifier("root_run_id", self.root_run_id)
         _require_identifier("phase_id", self.phase_id)
+        if type(self.principal) is not OrganisationUserRef:
+            raise TypeError("principal must be an exact OrganisationUserRef")
         _require_identifier("workspace_id", self.workspace_id)
         if self.work_item_id is not None:
             _require_identifier("work_item_id", self.work_item_id)
