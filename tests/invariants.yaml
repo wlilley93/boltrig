@@ -53,6 +53,11 @@ invariants:
     description: Legacy MCP run tokens are random, stored only by SHA-256 digest, expire within a bounded mandatory TTL, and become unusable immediately when revoked.
     tests:
       - tests/security/test_mcp_face.py::test_run_tokens_are_hashed_expiring_and_immediately_revocable
+  FR-RUN-19:
+    description: Boltrig admits only the exact reviewed Codex 0.144.3 Linux binary and canonical stable-v2 App Server schema, keeps experimental APIs disabled, and permits only stdio or a private Unix socket rather than a remote WebSocket listener.
+    tests:
+      - tests/unit/test_codex_protocol_pin.py::test_checked_in_codex_protocol_pin_is_exact
+      - tests/unit/test_codex_protocol_pin.py::test_cli_verification_generates_only_stable_schema
   P9:
     description: Backend unavailability degrades gracefully, never crashes (graceful degradation).
     tests:

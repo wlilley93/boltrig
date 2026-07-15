@@ -140,6 +140,7 @@ files = [
     "boltrig/workflows/library.py",
     "boltrig/workflows/snapshot.py",
     "scripts/check_architecture.py",
+    "scripts/check_codex_protocol.py",
 ]
 strict = true
 follow_imports = "silent"
