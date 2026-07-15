@@ -3,6 +3,7 @@ from __future__ import annotations
 import pickle
 from collections.abc import AsyncIterator
 from dataclasses import FrozenInstanceError
+from datetime import UTC, datetime
 
 import pytest
 
@@ -209,6 +210,137 @@ def test_runtime_event_rejects_cross_assignment_thread_or_turn() -> None:
         RuntimeThreadRef(assignment=expected, runtime="codex", thread_id="")
 
 
+def test_runtime_domain_rejects_unsealed_nested_and_scalar_values() -> None:
+    assignment = _assignment()
+    thread = RuntimeThreadRef(assignment, "codex", "thread-1")
+    turn = RuntimeTurnRef(thread, "turn-1")
+    event = RuntimeEvent("event-1", assignment, RuntimeEventKind.WARNING)
+
+    with pytest.raises(TypeError, match="exact PhaseRef"):
+        PhaseAssignmentRef(object(), "assignment-2")  # type: ignore[arg-type]
+    with pytest.raises(TypeError, match="exact PhaseAssignmentRef"):
+        RuntimeThreadRef(object(), "codex", "thread-2")  # type: ignore[arg-type]
+    with pytest.raises(TypeError, match="exact RuntimeThreadRef"):
+        RuntimeTurnRef(object(), "turn-2")  # type: ignore[arg-type]
+    with pytest.raises(TypeError, match="exact RuntimeEventKind"):
+        RuntimeEvent("event-2", assignment, "runtime.warning")  # type: ignore[arg-type]
+    with pytest.raises(TypeError, match="exact CanonicalJSON"):
+        RuntimeEvent(
+            "event-2",
+            assignment,
+            RuntimeEventKind.WARNING,
+            payload=object(),  # type: ignore[arg-type]
+        )
+    with pytest.raises(TypeError, match="exact datetime"):
+        RuntimeEvent(
+            "event-2",
+            assignment,
+            RuntimeEventKind.WARNING,
+            occurred_at="not-a-time",  # type: ignore[arg-type]
+        )
+    with pytest.raises(ValueError, match="timezone-aware"):
+        RuntimeEvent(
+            "event-2",
+            assignment,
+            RuntimeEventKind.WARNING,
+            occurred_at=datetime(2026, 7, 15),
+        )
+    with pytest.raises(TypeError, match="exact integer"):
+        RuntimeEvent("event-2", assignment, RuntimeEventKind.WARNING, source_sequence=True)
+    with pytest.raises(TypeError, match="exact integer"):
+        RecordedRuntimeEvent(event, True)
+    with pytest.raises(TypeError, match="exact RuntimeEvent"):
+        RecordedRuntimeEvent(object(), 1)  # type: ignore[arg-type]
+
+    class PhaseSubclass(PhaseRef):
+        pass
+
+    class AssignmentSubclass(PhaseAssignmentRef):
+        pass
+
+    class ThreadSubclass(RuntimeThreadRef):
+        pass
+
+    class TurnSubclass(RuntimeTurnRef):
+        pass
+
+    class EventSubclass(RuntimeEvent):
+        pass
+
+    class CanonicalJSONSubclass(CanonicalJSON):
+        pass
+
+    class DateTimeSubclass(datetime):
+        pass
+
+    phase_subclass = PhaseSubclass(
+        assignment.phase.root_run_id,
+        assignment.phase.phase_id,
+        assignment.phase.principal,
+        assignment.phase.workspace_id,
+    )
+    with pytest.raises(TypeError, match="exact PhaseRef"):
+        PhaseAssignmentRef(phase_subclass, "assignment-2")
+    assignment_subclass = AssignmentSubclass(assignment.phase, "assignment-2")
+    with pytest.raises(TypeError, match="exact PhaseAssignmentRef"):
+        RuntimeThreadRef(assignment_subclass, "codex", "thread-2")
+    thread_subclass = ThreadSubclass(assignment, "codex", "thread-2")
+    with pytest.raises(TypeError, match="exact RuntimeThreadRef"):
+        RuntimeTurnRef(thread_subclass, "turn-2")
+    with pytest.raises(TypeError, match="exact RuntimeThreadRef"):
+        RuntimeEvent(
+            "event-2",
+            assignment,
+            RuntimeEventKind.WARNING,
+            thread=thread_subclass,
+        )
+    turn_subclass = TurnSubclass(thread, "turn-2")
+    with pytest.raises(TypeError, match="exact RuntimeTurnRef"):
+        RuntimeEvent(
+            "event-2",
+            assignment,
+            RuntimeEventKind.WARNING,
+            turn=turn_subclass,
+        )
+    with pytest.raises(TypeError, match="exact CanonicalJSON"):
+        RuntimeEvent(
+            "event-2",
+            assignment,
+            RuntimeEventKind.WARNING,
+            payload=CanonicalJSONSubclass(b"{}"),
+        )
+    with pytest.raises(TypeError, match="exact datetime"):
+        RuntimeEvent(
+            "event-2",
+            assignment,
+            RuntimeEventKind.WARNING,
+            occurred_at=DateTimeSubclass(2026, 7, 15, tzinfo=UTC),
+        )
+    with pytest.raises(TypeError, match="exact RuntimeEvent"):
+        RecordedRuntimeEvent(
+            EventSubclass("event-2", assignment, RuntimeEventKind.WARNING),
+            1,
+        )
+    assert turn.thread is thread
+
+
+@pytest.mark.parametrize(
+    "identifier",
+    ("x" * 161, "bad\nidentifier", "bad\u202eidentifier", "bad\u200didentifier"),
+)
+def test_runtime_identifiers_are_bounded_and_control_free(identifier: str) -> None:
+    with pytest.raises(ValueError, match="bounded, control-free"):
+        ProfileRef(identifier, "1")
+
+
+def test_runtime_identifiers_require_exact_strings() -> None:
+    class StringSubclass(str):
+        pass
+
+    with pytest.raises(TypeError, match="exact string"):
+        ProfileRef(StringSubclass("profile"), "1")
+
+
 @pytest.mark.invariant("SEC-146")
 def test_canonical_json_is_copied_finite_and_immutable() -> None:
     source = {"nested": {"items": [1, 2]}}
@@ -220,6 +352,21 @@ def test_canonical_json_is_copied_finite_and_immutable() -> None:
     assert document.to_mapping() == {"nested": {"items": [1, 2]}}
     with pytest.raises(ValueError, match="canonical JSON"):
         CanonicalJSON.from_mapping({"bad": float("nan")})
+
+    encoded = bytes(bytearray(b'{"status":"copied"}'))
+    copied = CanonicalJSON(encoded)
+    assert type(copied._encoded) is bytes
+    assert copied._encoded == encoded and copied._encoded is not encoded
+    with pytest.raises(TypeError, match="exact immutable bytes"):
+        CanonicalJSON(bytearray(b"{}"))  # type: ignore[arg-type]
+    with pytest.raises(TypeError, match="exact immutable bytes"):
+        CanonicalJSON(memoryview(b"{}"))  # type: ignore[arg-type]
+
+    class BytesSubclass(bytes):
+        pass
+
+    with pytest.raises(TypeError, match="exact immutable bytes"):
+        CanonicalJSON(BytesSubclass(b"{}"))
 
 
 @pytest.mark.invariant("SEC-146")

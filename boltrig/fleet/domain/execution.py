@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+import unicodedata
 
 from boltrig.models import (
     OrganisationUserRef,
@@ -19,11 +20,52 @@ from .json_types import CanonicalJSON
 
 PhaseId = str
 PhaseMode = _CanonicalPhaseMode
+MAX_IDENTIFIER_CHARS = 160
+MAX_SIGNED_BIGINT = 2**63 - 1
 
 
-def _require_identifier(label: str, value: str) -> None:
-    if not value or value != value.strip():
-        raise ValueError(f"{label} must be a non-empty, trimmed identifier")
+def _contains_unsafe_identifier_character(value: str) -> bool:
+    return any(
+        unicodedata.category(character) in {"Cc", "Cf", "Cs", "Zl", "Zp"} for character in value
+    )
+
+
+def _require_identifier(label: str, value: object) -> str:
+    if type(value) is not str:
+        raise TypeError(f"{label} must be an exact string")
+    text = value
+    if (
+        not text
+        or text != text.strip()
+        or len(text) > MAX_IDENTIFIER_CHARS
+        or _contains_unsafe_identifier_character(text)
+    ):
+        raise ValueError(f"{label} must be a bounded, control-free, trimmed identifier")
+    return text
+
+
+def _require_exact_type(label: str, value: object, expected: type[object]) -> None:
+    if type(value) is not expected:
+        raise TypeError(f"{label} must be an exact {expected.__name__}")
+
+
+def _require_aware_datetime(label: str, value: object) -> datetime:
+    if type(value) is not datetime:
+        raise TypeError(f"{label} must be an exact datetime")
+    timestamp = value
+    if timestamp.tzinfo is None or timestamp.utcoffset() is None:
+        raise ValueError(f"{label} must be timezone-aware")
+    return timestamp
+
+
+def _require_signed_bigint(label: str, value: object, *, minimum: int) -> int:
+    if type(value) is not int:
+        raise TypeError(f"{label} must be an exact integer")
+    number = value
+    if not minimum <= number <= MAX_SIGNED_BIGINT:
+        qualifier = "non-negative" if minimum == 0 else "positive"
+        raise ValueError(f"{label} must be {qualifier} and fit a signed BIGINT")
+    return number
 
 
 class SandboxPolicy(str, Enum):
@@ -124,6 +166,7 @@ class PhaseAssignmentRef:
     assignment_id: str
 
     def __post_init__(self) -> None:
+        _require_exact_type("phase", self.phase, PhaseRef)
         _require_identifier("assignment_id", self.assignment_id)
 
 
@@ -136,6 +179,7 @@ class RuntimeThreadRef:
     thread_id: str
 
     def __post_init__(self) -> None:
+        _require_exact_type("assignment", self.assignment, PhaseAssignmentRef)
         _require_identifier("runtime", self.runtime)
         _require_identifier("thread_id", self.thread_id)
 
@@ -148,6 +192,7 @@ class RuntimeTurnRef:
     turn_id: str
 
     def __post_init__(self) -> None:
+        _require_exact_type("thread", self.thread, RuntimeThreadRef)
         _require_identifier("turn_id", self.turn_id)
 
 
@@ -167,17 +212,24 @@ class RuntimeEvent:
 
     def __post_init__(self) -> None:
         _require_identifier("event_id", self.event_id)
+        _require_exact_type("assignment", self.assignment, PhaseAssignmentRef)
+        _require_exact_type("kind", self.kind, RuntimeEventKind)
         if self.item_id is not None:
             _require_identifier("item_id", self.item_id)
-        if self.thread is not None and self.thread.assignment != self.assignment:
-            raise ValueError("runtime event thread belongs to another assignment")
+        if self.thread is not None:
+            _require_exact_type("thread", self.thread, RuntimeThreadRef)
+            if self.thread.assignment != self.assignment:
+                raise ValueError("runtime event thread belongs to another assignment")
         if self.turn is not None:
+            _require_exact_type("turn", self.turn, RuntimeTurnRef)
             if self.thread is not None and self.turn.thread != self.thread:
                 raise ValueError("runtime event turn and thread bindings disagree")
             if self.turn.thread.assignment != self.assignment:
                 raise ValueError("runtime event turn belongs to another assignment")
-        if self.source_sequence is not None and self.source_sequence < 0:
-            raise ValueError("runtime event source_sequence must be non-negative")
+        if self.source_sequence is not None:
+            _require_signed_bigint("source_sequence", self.source_sequence, minimum=0)
+        _require_exact_type("payload", self.payload, CanonicalJSON)
+        _require_aware_datetime("occurred_at", self.occurred_at)
 
 
 @dataclass(frozen=True)
@@ -188,5 +240,5 @@ class RecordedRuntimeEvent:
     sequence: int
 
     def __post_init__(self) -> None:
-        if self.sequence < 1:
-            raise ValueError("recorded runtime event sequence must be positive")
+        _require_exact_type("event", self.event, RuntimeEvent)
+        _require_signed_bigint("sequence", self.sequence, minimum=1)

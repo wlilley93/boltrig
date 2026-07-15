@@ -19,8 +19,11 @@ class CanonicalJSON:
     _encoded: bytes = field(repr=False)
 
     def __post_init__(self) -> None:
+        if type(self._encoded) is not bytes:
+            raise TypeError("encoded value must be exact immutable bytes")
+        encoded = memoryview(self._encoded).tobytes()
         try:
-            value: JSONValue = json.loads(self._encoded)
+            value: JSONValue = json.loads(encoded)
             canonical = json.dumps(
                 value,
                 allow_nan=False,
@@ -30,8 +33,9 @@ class CanonicalJSON:
             ).encode("utf-8")
         except (TypeError, ValueError, UnicodeError) as exc:
             raise ValueError("encoded value is not canonical JSON") from exc
-        if canonical != self._encoded:
+        if canonical != encoded:
             raise ValueError("encoded value is not canonical JSON")
+        object.__setattr__(self, "_encoded", encoded)
 
     @classmethod
     def from_value(cls, value: JSONValue) -> CanonicalJSON:

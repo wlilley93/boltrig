@@ -5,39 +5,58 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from enum import Enum
+import unicodedata
 
 from boltrig.models import RunId, TenantId, VerbId, WorkspaceId
 from boltrig.models.grants import is_safe_identifier, normalize_identifier
 
 from .execution import PhaseAssignmentRef, PhaseId
 
-MAX_IDENTIFIER_LENGTH = 256
+MAX_IDENTIFIER_LENGTH = 160
 MAX_PERMITTED_VERBS = 256
 MAX_GRANT_TTL_SECONDS = 3600
 MAX_REVOCATION_REASON_LENGTH = 160
+MAX_SIGNED_BIGINT = 2**63 - 1
 
 
-def _identifier(label: str, value: str) -> str:
-    if not isinstance(value, str) or not value or value != value.strip():
-        raise ValueError(f"{label} must be a non-empty, trimmed identifier")
-    if len(value) > MAX_IDENTIFIER_LENGTH:
-        raise ValueError(f"{label} exceeds the bounded identifier length")
-    return value
+def _contains_control_character(value: str) -> bool:
+    return any(
+        unicodedata.category(character) in {"Cc", "Cf", "Cs", "Zl", "Zp"} for character in value
+    )
 
 
-def _aware(label: str, value: datetime) -> datetime:
-    if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
+def _identifier(label: str, value: object) -> str:
+    if type(value) is not str:
+        raise TypeError(f"{label} must be an exact string")
+    text = value
+    if (
+        not text
+        or text != text.strip()
+        or len(text) > MAX_IDENTIFIER_LENGTH
+        or _contains_control_character(text)
+    ):
+        raise ValueError(f"{label} must be a bounded, control-free, trimmed identifier")
+    return text
+
+
+def _aware(label: str, value: object) -> datetime:
+    if type(value) is not datetime:
+        raise TypeError(f"{label} must be an exact datetime")
+    timestamp = value
+    if timestamp.tzinfo is None or timestamp.utcoffset() is None:
         raise ValueError(f"{label} must be timezone-aware")
-    return value
+    return timestamp
 
 
 def _concrete_verbs(values: tuple[VerbId, ...]) -> tuple[VerbId, ...]:
+    if type(values) is not tuple:
+        raise TypeError("permitted verbs must be an immutable tuple")
     if len(values) > MAX_PERMITTED_VERBS:
         raise ValueError(f"authority snapshots permit at most {MAX_PERMITTED_VERBS} verbs")
     result: set[VerbId] = set()
     for value in values:
-        if not isinstance(value, str):
-            raise TypeError("permitted verb must be a string")
+        if type(value) is not str:
+            raise TypeError("permitted verb must be an exact string")
         canonical = normalize_identifier(_identifier("permitted verb", value))
         if canonical != value or not is_safe_identifier(canonical) or "*" in canonical:
             raise ValueError("permitted verbs must be safe concrete identifiers")
@@ -68,11 +87,11 @@ def validate_revocation_reason(value: str) -> str:
     """Validate the canonical bounded reason shared with durable SQL storage."""
 
     if (
-        not isinstance(value, str)
+        type(value) is not str
         or not value
         or value != value.strip()
         or len(value) > MAX_REVOCATION_REASON_LENGTH
-        or any(ord(character) < 32 or 127 <= ord(character) <= 159 for character in value)
+        or _contains_control_character(value)
     ):
         raise ValueError("revocation reason must be bounded, trimmed, and control-free")
     try:
@@ -121,8 +140,8 @@ class GrantLeaseBinding:
 
     @classmethod
     def from_assignment(cls, assignment: PhaseAssignmentRef) -> GrantLeaseBinding:
-        if not isinstance(assignment, PhaseAssignmentRef):
-            raise TypeError("assignment must be a PhaseAssignmentRef")
+        if type(assignment) is not PhaseAssignmentRef:
+            raise TypeError("assignment must be an exact PhaseAssignmentRef")
         phase = assignment.phase
         return cls(
             tenant_id=phase.principal.tenant_id,
@@ -172,8 +191,8 @@ class StoredGrantLease:
 
     def __post_init__(self) -> None:
         _identifier("lease_id", self.lease_id)
-        if not isinstance(self.binding, GrantLeaseBinding):
-            raise TypeError("binding must be a GrantLeaseBinding")
+        if type(self.binding) is not GrantLeaseBinding:
+            raise TypeError("binding must be an exact GrantLeaseBinding")
         object.__setattr__(
             self, "token_digest", _raw_sha256_digest("token digest", self.token_digest)
         )
@@ -192,19 +211,20 @@ class StoredGrantLease:
             type(self.max_ttl_seconds) is not int
             or not 1 <= self.max_ttl_seconds <= MAX_GRANT_TTL_SECONDS
         ):
-            raise ValueError(
-                f"max_ttl_seconds must be between 1 and {MAX_GRANT_TTL_SECONDS}"
-            )
-        if type(self.policy_generation) is not int or self.policy_generation < 1:
-            raise ValueError("policy_generation must be a positive integer")
+            raise ValueError(f"max_ttl_seconds must be between 1 and {MAX_GRANT_TTL_SECONDS}")
+        if (
+            type(self.policy_generation) is not int
+            or not 1 <= self.policy_generation <= MAX_SIGNED_BIGINT
+        ):
+            raise ValueError("policy_generation must be positive and fit a signed BIGINT")
         ttl = expires_at - issued_at
         if ttl <= timedelta(0) or ttl > timedelta(seconds=self.max_ttl_seconds):
             raise ValueError("lease lifetime must be positive and within its maximum TTL")
         self._validate_terminal_state()
 
     def _validate_terminal_state(self) -> None:
-        if not isinstance(self.status, GrantLeaseStatus):
-            raise TypeError("status must be a GrantLeaseStatus")
+        if type(self.status) is not GrantLeaseStatus:
+            raise TypeError("status must be an exact GrantLeaseStatus")
         if self.status is GrantLeaseStatus.REVOKED:
             if self.revoked_at is None or self.revocation_reason is None:
                 raise ValueError("revoked leases require a timestamp and reason")
@@ -238,7 +258,7 @@ class StoredGrantLease:
         """Evaluate metadata only; bearer authentication still requires digest comparison."""
 
         now = _aware("at", at)
-        if type(policy_generation) is not int or policy_generation < 1:
+        if type(policy_generation) is not int or not 1 <= policy_generation <= MAX_SIGNED_BIGINT:
             return False
         return (
             self.status is GrantLeaseStatus.ACTIVE

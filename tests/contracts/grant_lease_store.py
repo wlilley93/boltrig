@@ -40,34 +40,55 @@ class GrantLeaseStoreContract:
         await grant_store.insert_active(expected, now=NOW)
 
         assert await grant_store.get_by_id(expected.lease_id, expected.binding) == expected
-        assert await grant_store.get_by_id(
-            expected.lease_id, binding(tenant="tenant-foreign")
-        ) is None
-        assert await grant_store.find_active_by_digest(
-            expected.token_digest, expected.binding, now=NOW, policy_generation=1
-        ) == expected
-        assert await grant_store.find_active_by_id(
-            expected.lease_id, expected.binding, now=NOW, policy_generation=1
-        ) == expected
+        assert (
+            await grant_store.get_by_id(expected.lease_id, binding(tenant="tenant-foreign")) is None
+        )
+        assert (
+            await grant_store.find_active_by_digest(
+                expected.token_digest, expected.binding, now=NOW, policy_generation=1
+            )
+            == expected
+        )
+        assert (
+            await grant_store.find_active_by_id(
+                expected.lease_id, expected.binding, now=NOW, policy_generation=1
+            )
+            == expected
+        )
         for foreign in foreign_bindings():
-            assert await grant_store.find_active_by_digest(
-                expected.token_digest, foreign, now=NOW, policy_generation=1
-            ) is None
-            assert await grant_store.find_active_by_id(
-                expected.lease_id, foreign, now=NOW, policy_generation=1
-            ) is None
-        assert await grant_store.find_active_by_digest(
-            "b" * 64,
-            expected.binding,
-            now=NOW,
-            policy_generation=1,
-        ) is None
-        assert await grant_store.find_active_by_digest(
-            expected.token_digest, expected.binding, now=NOW, policy_generation=2
-        ) is None
-        assert await grant_store.find_active_by_digest(
-            "\N{SNOWMAN}", expected.binding, now=NOW, policy_generation=1
-        ) is None
+            assert (
+                await grant_store.find_active_by_digest(
+                    expected.token_digest, foreign, now=NOW, policy_generation=1
+                )
+                is None
+            )
+            assert (
+                await grant_store.find_active_by_id(
+                    expected.lease_id, foreign, now=NOW, policy_generation=1
+                )
+                is None
+            )
+        assert (
+            await grant_store.find_active_by_digest(
+                "b" * 64,
+                expected.binding,
+                now=NOW,
+                policy_generation=1,
+            )
+            is None
+        )
+        assert (
+            await grant_store.find_active_by_digest(
+                expected.token_digest, expected.binding, now=NOW, policy_generation=2
+            )
+            is None
+        )
+        assert (
+            await grant_store.find_active_by_digest(
+                "\N{SNOWMAN}", expected.binding, now=NOW, policy_generation=1
+            )
+            is None
+        )
 
     async def test_identifier_and_digest_collisions_are_atomic(
         self, grant_store: GrantLeaseStore
@@ -90,9 +111,12 @@ class GrantLeaseStoreContract:
                 await grant_store.insert_active(collision, now=NOW)
             assert collision.token_digest not in str(caught.value)
             assert collision.lease_id not in str(caught.value)
-        assert await grant_store.find_active_by_id(
-            original.lease_id, original.binding, now=NOW, policy_generation=1
-        ) == original
+        assert (
+            await grant_store.find_active_by_id(
+                original.lease_id, original.binding, now=NOW, policy_generation=1
+            )
+            == original
+        )
 
     async def test_concurrent_same_generation_has_exactly_one_winner(
         self, grant_store: GrantLeaseStore
@@ -110,17 +134,16 @@ class GrantLeaseStoreContract:
     ) -> None:
         first = lease("lease-generation-1")
         await grant_store.insert_active(first, now=NOW)
-        assert await grant_store.revoke_assignment(
-            first.binding, now=NOW, reason="assignment_cancelled"
-        ) == 1
-        with pytest.raises(StaleGrantGeneration):
-            await grant_store.insert_active(
-                lease("lease-generation-1-replay"), now=NOW
+        assert (
+            await grant_store.revoke_assignment(
+                first.binding, now=NOW, reason="assignment_cancelled"
             )
+            == 1
+        )
         with pytest.raises(StaleGrantGeneration):
-            await grant_store.insert_active(
-                lease("lease-generation-2", generation=2), now=NOW
-            )
+            await grant_store.insert_active(lease("lease-generation-1-replay"), now=NOW)
+        with pytest.raises(StaleGrantGeneration):
+            await grant_store.insert_active(lease("lease-generation-2", generation=2), now=NOW)
 
         root_target = lease(
             "lease-root-generation-1",
@@ -128,9 +151,7 @@ class GrantLeaseStoreContract:
         )
         await grant_store.insert_active(root_target, now=NOW)
         root = GrantRootBinding("tenant-1", "workspace-1", "root-1")
-        assert await grant_store.revoke_root(
-            root, now=NOW, reason="root_run_cancelled"
-        ) == 1
+        assert await grant_store.revoke_root(root, now=NOW, reason="root_run_cancelled") == 1
         with pytest.raises(StaleGrantGeneration):
             await grant_store.insert_active(
                 lease(
@@ -158,23 +179,22 @@ class GrantLeaseStoreContract:
 
         issued, revoked = await asyncio.gather(
             attempt_insert(grant_store, replacement),
-            grant_store.revoke_assignment(
-                original.binding, now=NOW, reason="assignment_cancelled"
-            ),
+            grant_store.revoke_assignment(original.binding, now=NOW, reason="assignment_cancelled"),
         )
 
         assert issued is None or isinstance(issued, StaleGrantGeneration)
         assert revoked == 1
-        assert await grant_store.find_active_by_digest(
-            replacement.token_digest,
-            replacement.binding,
-            now=NOW,
-            policy_generation=2,
-        ) is None
-        with pytest.raises(StaleGrantGeneration):
-            await grant_store.insert_active(
-                lease("lease-cancel-race-later", generation=3), now=NOW
+        assert (
+            await grant_store.find_active_by_digest(
+                replacement.token_digest,
+                replacement.binding,
+                now=NOW,
+                policy_generation=2,
             )
+            is None
+        )
+        with pytest.raises(StaleGrantGeneration):
+            await grant_store.insert_active(lease("lease-cancel-race-later", generation=3), now=NOW)
 
     async def test_higher_generation_atomically_supersedes_active_lease(
         self, grant_store: GrantLeaseStore
@@ -190,12 +210,18 @@ class GrantLeaseStoreContract:
             GrantLeaseStatus.REVOKED,
             "superseded_generation",
         )
-        assert await grant_store.find_active_by_digest(
-            first.token_digest, first.binding, now=NOW, policy_generation=1
-        ) is None
-        assert await grant_store.find_active_by_digest(
-            second.token_digest, second.binding, now=NOW, policy_generation=2
-        ) == second
+        assert (
+            await grant_store.find_active_by_digest(
+                first.token_digest, first.binding, now=NOW, policy_generation=1
+            )
+            is None
+        )
+        assert (
+            await grant_store.find_active_by_digest(
+                second.token_digest, second.binding, now=NOW, policy_generation=2
+            )
+            == second
+        )
 
     async def test_expiry_is_fail_closed_and_retains_generation_fence(
         self, grant_store: GrantLeaseStore
@@ -204,12 +230,15 @@ class GrantLeaseStoreContract:
         await grant_store.insert_active(original, now=NOW)
         expiry = original.expires_at
 
-        assert await grant_store.find_active_by_digest(
-            original.token_digest,
-            original.binding,
-            now=expiry,
-            policy_generation=1,
-        ) is None
+        assert (
+            await grant_store.find_active_by_digest(
+                original.token_digest,
+                original.binding,
+                now=expiry,
+                policy_generation=1,
+            )
+            is None
+        )
         stored = await grant_store.get_by_id(original.lease_id, original.binding)
         assert stored is not None and stored.status is GrantLeaseStatus.EXPIRED
         with pytest.raises(StaleGrantGeneration):
@@ -251,24 +280,34 @@ class GrantLeaseStoreContract:
         assert not await grant_store.revoke_exact(
             exact.lease_id, wrong, now=NOW, reason="wrong_scope"
         )
-        assert await grant_store.revoke_assignment(
-            exact.binding, now=NOW, reason="assignment_cancelled"
-        ) == 1
-        assert await grant_store.find_active_by_id(
-            sibling.lease_id, sibling.binding, now=NOW, policy_generation=1
-        ) == sibling
+        assert (
+            await grant_store.revoke_assignment(
+                exact.binding, now=NOW, reason="assignment_cancelled"
+            )
+            == 1
+        )
+        assert (
+            await grant_store.find_active_by_id(
+                sibling.lease_id, sibling.binding, now=NOW, policy_generation=1
+            )
+            == sibling
+        )
         root = GrantRootBinding("tenant-1", "workspace-1", "root-1")
-        assert await grant_store.revoke_root(
-            root, now=NOW, reason="root_run_cancelled"
-        ) == 1
+        assert await grant_store.revoke_root(root, now=NOW, reason="root_run_cancelled") == 1
         for record in (exact, sibling):
-            assert await grant_store.find_active_by_id(
-                record.lease_id, record.binding, now=NOW, policy_generation=1
-            ) is None
+            assert (
+                await grant_store.find_active_by_id(
+                    record.lease_id, record.binding, now=NOW, policy_generation=1
+                )
+                is None
+            )
         for record in foreign:
-            assert await grant_store.find_active_by_id(
-                record.lease_id, record.binding, now=NOW, policy_generation=1
-            ) == record
+            assert (
+                await grant_store.find_active_by_id(
+                    record.lease_id, record.binding, now=NOW, policy_generation=1
+                )
+                == record
+            )
 
     async def test_successful_exact_revoke_is_scoped_persisted_and_idempotent(
         self, grant_store: GrantLeaseStore
@@ -300,12 +339,15 @@ class GrantLeaseStoreContract:
             "operator_cancelled",
         )
         assert await grant_store.get_by_id(original.lease_id, foreign) is None
-        assert await grant_store.find_active_by_digest(
-            original.token_digest,
-            original.binding,
-            now=NOW,
-            policy_generation=1,
-        ) is None
+        assert (
+            await grant_store.find_active_by_digest(
+                original.token_digest,
+                original.binding,
+                now=NOW,
+                policy_generation=1,
+            )
+            is None
+        )
 
     async def test_root_revoke_is_atomic_under_clock_rollback(
         self, grant_store: GrantLeaseStore
@@ -322,9 +364,9 @@ class GrantLeaseStoreContract:
 
         root = GrantRootBinding("tenant-1", "workspace-1", "root-1")
         rolled_back = NOW + timedelta(seconds=5)
-        assert await grant_store.revoke_root(
-            root, now=rolled_back, reason="root_run_cancelled"
-        ) == 2
+        assert (
+            await grant_store.revoke_root(root, now=rolled_back, reason="root_run_cancelled") == 2
+        )
         first_stored = await grant_store.get_by_id(first.lease_id, first.binding)
         second_stored = await grant_store.get_by_id(second.lease_id, second.binding)
         assert first_stored is not None and second_stored is not None
@@ -344,33 +386,31 @@ class GrantLeaseStoreContract:
                 now=original.expires_at,
                 reason="invalid\nreason",
             )
-        assert await grant_store.get_by_id(
-            original.lease_id, original.binding
-        ) == original
+        assert await grant_store.get_by_id(original.lease_id, original.binding) == original
 
-    async def test_nested_binding_must_be_exact_domain_type(
-        self, grant_store: GrantLeaseStore
-    ) -> None:
+    def test_nested_binding_must_be_exact_domain_type(self) -> None:
         class DerivedBinding(GrantLeaseBinding):
             pass
 
-        malformed = replace(
-            lease("lease-derived-binding"),
-            binding=DerivedBinding(
-                "tenant-1", "workspace-1", "root-1", "phase-1", "assignment-1"
-            ),
-        )
         with pytest.raises(TypeError, match="exact GrantLeaseBinding"):
-            await grant_store.insert_active(malformed, now=NOW)
+            replace(
+                lease("lease-derived-binding"),
+                binding=DerivedBinding(
+                    "tenant-1", "workspace-1", "root-1", "phase-1", "assignment-1"
+                ),
+            )
 
     async def test_revocation_is_visible_to_all_later_concurrent_lookups(
         self, grant_store: GrantLeaseStore
     ) -> None:
         original = lease("lease-immediate-revoke")
         await grant_store.insert_active(original, now=NOW)
-        assert await grant_store.revoke_assignment(
-            original.binding, now=NOW, reason="assignment_cancelled"
-        ) == 1
+        assert (
+            await grant_store.revoke_assignment(
+                original.binding, now=NOW, reason="assignment_cancelled"
+            )
+            == 1
+        )
         lookups = await asyncio.gather(
             *(
                 grant_store.find_active_by_digest(
@@ -383,4 +423,6 @@ class GrantLeaseStoreContract:
             )
         )
         assert lookups == [None] * 32
+
+
 __all__ = ["GrantLeaseStoreContract"]

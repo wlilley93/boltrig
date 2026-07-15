@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import math
 import re
+import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -26,6 +27,8 @@ MAX_JSON_STRING_CHARS = 4_096
 MAX_SIGNED_BIGINT = 2**63 - 1
 
 _SHA256 = re.compile(r"sha256:[0-9a-f]{64}\Z")
+_CAMEL_CASE_BOUNDARY = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
+_ACRONYM_BOUNDARY = re.compile(r"(?<=[A-Z])(?=[A-Z][a-z])")
 _SENSITIVE_KEYS = frozenset(
     {
         "api_key",
@@ -52,10 +55,13 @@ _SENSITIVE_KEYS = frozenset(
         "token",
     }
 )
+_SENSITIVE_COMPACT_KEYS = frozenset(key.replace("_", "") for key in _SENSITIVE_KEYS)
 
 
 def _contains_control_character(value: str) -> bool:
-    return any(ord(character) < 32 or 127 <= ord(character) <= 159 for character in value)
+    return any(
+        unicodedata.category(character) in {"Cc", "Cf", "Cs", "Zl", "Zp"} for character in value
+    )
 
 
 def _require_identifier(label: str, value: object) -> str:
@@ -124,27 +130,19 @@ def _require_exact_enum(label: str, value: object, expected: type[Enum]) -> None
 
 
 def _normalized_key(key: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "_", key.casefold()).strip("_")
+    compatible = unicodedata.normalize("NFKC", key)
+    word_bounded = _CAMEL_CASE_BOUNDARY.sub("_", compatible)
+    word_bounded = _ACRONYM_BOUNDARY.sub("_", word_bounded)
+    return re.sub(r"[^a-z0-9]+", "_", word_bounded.casefold()).strip("_")
 
 
 def _is_sensitive_key(key: str) -> bool:
     normalized = _normalized_key(key)
     compact = normalized.replace("_", "")
-    sensitive_suffixes = (
-        "_api_key",
-        "_cookie",
-        "_credential",
-        "_password",
-        "_private_key",
-        "_secret",
-        "_token",
-    )
-    sensitive_prefixes = ("authorization_", "credential_", "password_", "secret_")
+    padded = f"_{normalized}_"
     return (
-        normalized in _SENSITIVE_KEYS
-        or compact in {"bearer", "jwt", "oauthtoken", "sessiontoken"}
-        or normalized.endswith(sensitive_suffixes)
-        or normalized.startswith(sensitive_prefixes)
+        any(f"_{sensitive}_" in padded for sensitive in _SENSITIVE_KEYS)
+        or compact in _SENSITIVE_COMPACT_KEYS
     )
 
 
@@ -179,8 +177,8 @@ def _validate_json(value: object, *, depth: int, budget: list[int]) -> None:
             if type(key) is not str:
                 raise TypeError("canonical payload keys must be exact strings")
             text = key
-            if not text or len(text) > MAX_JSON_KEY_CHARS:
-                raise ValueError("canonical payload key is empty or too long")
+            if not text or len(text) > MAX_JSON_KEY_CHARS or _contains_control_character(text):
+                raise ValueError("canonical payload key is empty, too long, or contains controls")
             if _is_sensitive_key(text):
                 raise ValueError("canonical payload contains a sensitive key")
             _validate_json(item, depth=depth + 1, budget=budget)

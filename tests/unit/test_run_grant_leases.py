@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import pickle
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -67,9 +67,7 @@ def _broker(
 ) -> tuple[DurableRunScopedGrantBroker, MemoryGrantLeaseStore, _Clock]:
     store = MemoryGrantLeaseStore()
     clock = _Clock()
-    broker = DurableRunScopedGrantBroker(
-        store, clock=clock, max_ttl_seconds=max_ttl_seconds
-    )
+    broker = DurableRunScopedGrantBroker(store, clock=clock, max_ttl_seconds=max_ttl_seconds)
     compatibility: RunScopedGrantBroker = broker
     assert compatibility is broker
     return broker, store, clock
@@ -114,6 +112,52 @@ async def test_issue_persists_only_digest_and_returns_redacted_ephemeral_bearer(
     assert not hasattr(issued.bearer_token, "__dict__")
     with pytest.raises(TypeError, match="cannot be serialized"):
         pickle.dumps(issued)
+
+
+async def test_grant_bindings_reject_dataclass_subclasses_and_unsafe_identifiers() -> None:
+    class AssignmentSubclass(PhaseAssignmentRef):
+        pass
+
+    class BindingSubclass(GrantLeaseBinding):
+        pass
+
+    class StringSubclass(str):
+        pass
+
+    assignment = _assignment()
+    assignment_subclass = AssignmentSubclass(assignment.phase, assignment.assignment_id)
+    with pytest.raises(TypeError, match="exact PhaseAssignmentRef"):
+        GrantLeaseBinding.from_assignment(assignment_subclass)
+
+    broker, store, _clock = _broker()
+    await _issue(broker, assignment)
+    record = store.snapshot()[0]
+    binding_subclass = BindingSubclass(
+        record.binding.tenant_id,
+        record.binding.workspace_id,
+        record.binding.root_run_id,
+        record.binding.phase_id,
+        record.binding.assignment_id,
+    )
+    with pytest.raises(TypeError, match="exact GrantLeaseBinding"):
+        replace(record, binding=binding_subclass)
+    with pytest.raises(TypeError, match="exact string"):
+        GrantLeaseBinding(
+            StringSubclass("tenant-1"),
+            "workspace-1",
+            "root-1",
+            "phase-1",
+            "assignment-1",
+        )
+    for invalid in ("x" * 161, "tenant\nforged", "tenant\u202eforged", "tenant\u200dforged"):
+        with pytest.raises(ValueError, match="bounded, control-free"):
+            GrantLeaseBinding(
+                invalid,
+                "workspace-1",
+                "root-1",
+                "phase-1",
+                "assignment-1",
+            )
 
 
 @pytest.mark.parametrize(
@@ -249,9 +293,7 @@ async def test_concurrent_issue_has_one_winner_and_generation_replay_fails() -> 
     )
     with pytest.raises(StaleGrantGeneration):
         await _issue(broker, assignment, generation=1)
-    assert any(
-        record.revocation_reason == "superseded_generation" for record in store.snapshot()
-    )
+    assert any(record.revocation_reason == "superseded_generation" for record in store.snapshot())
 
 
 @pytest.mark.invariant("SEC-152")
@@ -310,9 +352,7 @@ async def test_operator_revoke_requires_exact_assignment_scope() -> None:
         verb_id="ticket.read",
         policy_generation=1,
     )
-    await broker.revoke(
-        issued.lease.lease_id, assignment, reason="operator_cancelled"
-    )
+    await broker.revoke(issued.lease.lease_id, assignment, reason="operator_cancelled")
     with pytest.raises(GrantAuthenticationRejected, match="rejected"):
         await broker.authenticate(
             issued.bearer_token,
@@ -346,9 +386,7 @@ async def test_root_revocation_is_exactly_tenant_workspace_and_root_scoped() -> 
     first_assignment = _assignment(assignment="assignment-1")
     sibling_assignment = _assignment(phase="phase-2", assignment="assignment-2")
     other_root_assignment = _assignment(root="root-2", assignment="assignment-3")
-    other_workspace_assignment = _assignment(
-        workspace="workspace-2", assignment="assignment-4"
-    )
+    other_workspace_assignment = _assignment(workspace="workspace-2", assignment="assignment-4")
     first = await _issue(broker, first_assignment)
     sibling = await _issue(broker, sibling_assignment)
     other = await _issue(broker, other_root_assignment)
