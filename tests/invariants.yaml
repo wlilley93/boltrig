@@ -40,6 +40,10 @@ invariants:
     tests:
       - tests/unit/test_orchestration_contracts.py::test_canonical_json_is_copied_finite_and_immutable
       - tests/unit/test_orchestration_contracts.py::test_ephemeral_bearer_is_explicitly_revealed_but_not_serializable
+  SEC-147:
+    description: Every legacy spawn path treats selected-skill tool grants as requirements and intersects them with the current parent context before exposing tools, even when no optional extra ceiling is supplied.
+    tests:
+      - tests/integration/test_fleet_spawn.py::test_every_spawn_caps_skill_requirements_to_parent_authority
   P9:
     description: Backend unavailability degrades gracefully, never crashes (graceful degradation).
     tests:
