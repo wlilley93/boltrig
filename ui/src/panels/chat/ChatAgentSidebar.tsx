@@ -44,7 +44,7 @@ export function ChatAgentSidebar({
   if (!open) return null;
 
   return (
-    <aside className="chat-agent-rail" aria-label="Chat agents">
+    <aside className="chat-agent-rail" aria-label="Conversations">
       <div className="chat-agent-rail__head">
         <strong>Chat</strong>
         <div className="chat-agent-rail__tools">
@@ -73,14 +73,6 @@ export function ChatAgentSidebar({
           />
         </div>
       )}
-      <div className="chat-agent-rail__filters" role="tablist" aria-label="Chat filters">
-        <button className="chat-agent-rail__filter chat-agent-rail__filter--active" type="button">
-          All
-        </button>
-        <button className="chat-agent-rail__filter" type="button">
-          Unread
-        </button>
-      </div>
       <div className="chat-agent-list">
         {agents.map((agent) => (
           <AgentGroup
@@ -155,7 +147,7 @@ function AgentGroup({
         >
           <Icon name="chevRight" size={13} />
         </span>
-        <AgentAvatar agent={agent} />
+        <AgentAvatar agent={agent} status={false} />
         <span className="chat-agent-row__copy">
           <strong>{agent.name}</strong>
           <span>{agent.snippet}</span>

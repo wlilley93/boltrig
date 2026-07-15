@@ -8,12 +8,8 @@ import {
 } from "@/panels/automations/cardMeta";
 import type { WorkflowRunStat } from "@/api/types";
 
-// Design brief 22.1: REAL run stats override the deterministic placeholders on
-// the automations home cards; a workflow with no stat row keeps its placeholder.
-// The merge is a pure function (the route just feeds it the stats response), so
-// the characterization is the contract: real wins where present, placeholder
-// survives where absent, and the non-stat fields (accent / spark / owner /
-// trigger) are never touched.
+// Run statistics are presented only when supplied by the server. The pure merge
+// contract keeps descriptive metadata while leaving missing activity explicit.
 
 describe("mergeCardStats", () => {
   const wfId = "smoke-loop";
@@ -30,12 +26,13 @@ describe("mergeCardStats", () => {
     expect(merged.runCount).toBe(25);
     // 20 / 25 = 0.8 -> rounded to 80
     expect(merged.successRate).toBe(80);
+    expect(merged.hasRunStats).toBe(true);
     expect(merged.lastRun).not.toBe(base.lastRun);
     // lastRun is a relative label derived from last_run_at (never the raw ISO).
     expect(merged.lastRun).not.toContain("2026");
   });
 
-  it("preserves the deterministic accent / spark / owner / trigger", () => {
+  it("preserves descriptive metadata", () => {
     const base = deriveCardMeta(wfId, "precreated", ["onboarding"]);
     const stat: WorkflowRunStat = {
       workflow_id: wfId,
@@ -45,24 +42,21 @@ describe("mergeCardStats", () => {
     };
     const merged = mergeCardStats(base, stat);
     expect(merged.accent).toBe(base.accent);
-    expect(merged.spark).toBe(base.spark);
-    expect(merged.owner).toBe(base.owner);
-    expect(merged.trigger).toBe(base.trigger);
     expect(merged.status).toBe(base.status);
     expect(merged.description).toBe(base.description);
   });
 
-  it("keeps the placeholder when no stat is provided", () => {
+  it("shows an explicit empty history when no stat is provided", () => {
     const base = deriveCardMeta(wfId, "precreated", []);
     const seed = hashId(wfId);
     expect(mergeCardStats(base, undefined)).toEqual(base);
-    expect(mergeCardStats(base, undefined).runCount).toBe(base.runCount);
-    // sanity: the placeholder is the deterministic seed-derived value
-    expect(base.runCount).toBeLessThan(50);
+    expect(base.runCount).toBe(0);
+    expect(base.successRate).toBeNull();
+    expect(base.hasRunStats).toBe(false);
     expect(seed).toBeGreaterThan(0);
   });
 
-  it("keeps the placeholder when the stat has zero runs", () => {
+  it("keeps the empty history when the stat has zero runs", () => {
     const base = deriveCardMeta(wfId, "precreated", []);
     const stat: WorkflowRunStat = {
       workflow_id: wfId,

@@ -39,9 +39,17 @@ RUN rclone version
 
 WORKDIR /app
 COPY scripts/backup.sh /usr/local/bin/backup.sh
-RUN chmod +x /usr/local/bin/backup.sh
+COPY scripts/backup-loop.sh /usr/local/bin/backup-loop.sh
+COPY scripts/backup-healthcheck.sh /usr/local/bin/backup-healthcheck
+RUN chmod +x \
+        /usr/local/bin/backup.sh \
+        /usr/local/bin/backup-loop.sh \
+        /usr/local/bin/backup-healthcheck
 
 # The sidecar loops the backup script at BACKUP_INTERVAL seconds. The caller
-# mounts the backups directory and the rclone config directory as volumes.
-ENTRYPOINT ["/bin/bash", "-c"]
-CMD ["while true; do /usr/local/bin/backup.sh || echo 'backup: run failed (retrying next interval)' >&2; sleep \"\\${BACKUP_INTERVAL:-86400}\"; done"]
+# mounts the backups directory and the rclone config directory as volumes. A
+# failed run exits PID 1; Docker's restart policy retries it instead of masking a
+# permanently broken backup process. The healthcheck also detects stale success.
+HEALTHCHECK --interval=60s --timeout=5s --start-period=5m --retries=3 \
+    CMD ["/usr/local/bin/backup-healthcheck"]
+CMD ["/usr/local/bin/backup-loop.sh"]

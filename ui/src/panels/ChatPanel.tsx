@@ -8,7 +8,6 @@ import { ChatHeader } from "@/panels/chat/ChatHeader";
 import { ChatMessages } from "@/panels/chat/ChatMessages";
 import { ChatComposer } from "@/panels/chat/ChatComposer";
 import { FilesPanel } from "@/panels/chat/FilesPanel";
-import { VoiceOverlay } from "@/panels/chat/VoiceOverlay";
 import { SubRunPanel } from "@/panels/chat/SubRunPanel";
 import { CHAT_AGENTS } from "@/panels/chat/constants";
 import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES } from "@/panels/chat/constants";
@@ -67,8 +66,6 @@ export function ChatPanel(): JSX.Element {
           newConversation={chat.newConversation}
           rightPanel={chat.rightPanel}
           setRightPanel={chat.setRightPanel}
-          setInCall={chat.setInCall}
-          setCallSeconds={(setter) => chat.setCallSeconds(setter)}
           chatSearchOpen={chat.chatSearchOpen}
           setChatSearchOpen={chat.setChatSearchOpen}
           setChatSearchTerm={chat.setChatSearchTerm}
@@ -110,17 +107,6 @@ export function ChatPanel(): JSX.Element {
           onFull={() => chat.setSubRunFull(true)}
           onCollapse={() => chat.setSubRunFull(false)}
         />
-        {chat.inCall && (
-          <VoiceOverlay
-            agent={chat.selectedAgent}
-            seconds={chat.callSeconds}
-            muted={chat.callMuted}
-            speaker={chat.callSpeaker}
-            onMute={() => chat.setCallMuted((m) => !m)}
-            onSpeaker={() => chat.setCallSpeaker((s) => !s)}
-            onEnd={() => chat.setInCall(false)}
-          />
-        )}
         {chat.dragOver && (
           <div className="chat-drop" role="status">
             <Icon name="paperclip" size={40} />
@@ -141,8 +127,6 @@ export function ChatPanel(): JSX.Element {
           isEmpty={chat.isEmpty}
           activeAgent={chat.selectedAgent}
           userName={chat.userName}
-          switchDir={chat.switchDir}
-          switchCount={chat.switchCount}
           compactedCount={chat.compactedCount}
           compacted={chat.compacted}
           setCompacted={chat.setCompacted}
@@ -167,7 +151,6 @@ export function ChatPanel(): JSX.Element {
           showJump={chat.showJump}
           onJumpToLatest={chat.jumpToLatest}
           onMessagesScroll={chat.onMessagesScroll}
-          onCycleAgent={chat.cycleAgent}
           messagesRef={chat.messagesRef}
         />
 
@@ -184,8 +167,6 @@ export function ChatPanel(): JSX.Element {
           activeId={chat.activeId}
           send={chat.send}
           stopTurn={chat.stopTurn}
-          setInCall={chat.setInCall}
-          setCallSeconds={(setter) => chat.setCallSeconds(setter)}
           plusOpen={chat.plusOpen}
           setPlusOpen={chat.setPlusOpen}
           slashOpen={chat.slashOpen}

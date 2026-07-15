@@ -267,7 +267,7 @@ def test_platform_status_does_not_publish_run_events():
     )
     resp = client.get("/v1/platform/status")
     assert resp.status_code == 200
-    assert kernel.events.snapshot("anything") == []
+    assert kernel.events.snapshot(T, "anything") == []
 
 
 @pytest.mark.security

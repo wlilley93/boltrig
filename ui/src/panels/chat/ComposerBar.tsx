@@ -1,10 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect } from "react";
 
-import { api } from "@/api/client";
-import { useFetch } from "@/useFetch";
 import { Icon } from "@/panels/chat/icons";
 import type { ChatAttachment } from "@/api/types";
-import { CHAT_AGENTS } from "@/panels/chat/constants";
 import { onComposerFocusRequest } from "@/panels/chat/fleetFocus";
 import {
   ComposerActions,
@@ -13,30 +10,12 @@ import {
 
 type Setter<T> = (value: T | ((prev: T) => T)) => void;
 
-// Fallback model list when the catalogue endpoint is unavailable (logged-out /
-// offline). The live list is fetched from /v1/model-endpoints; glm-5.2 stays the
-// default first selection, matching the runtime model router's default endpoint.
-const FALLBACK_MODELS = ["glm-5.2"] as const;
-
-// "auto" plus every chat agent id, in catalogue order. Cycles wrap around.
-const AGENT_CYCLE = ["auto", ...CHAT_AGENTS.map((a) => a.id)];
-
-function agentLabel(id: string): string {
-  if (id === "auto") return "auto";
-  return CHAT_AGENTS.find((a) => a.id === id)?.name ?? id;
-}
-
 interface ComposerMenuProps {
   plusOpen: boolean;
   setPlusOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
   fileInputRef: React.RefObject<HTMLInputElement>;
   readAloud: boolean;
   setReadAloud: (on: boolean) => void;
-  startCall: () => void;
-  model: string;
-  onCycleModel: () => void;
-  agent: string;
-  onCycleAgent: () => void;
 }
 
 function ComposerMenu({
@@ -45,17 +24,13 @@ function ComposerMenu({
   fileInputRef,
   readAloud,
   setReadAloud,
-  startCall,
-  model,
-  onCycleModel,
-  agent,
-  onCycleAgent,
 }: ComposerMenuProps): JSX.Element {
   return (
     <>
       <button
         type="button"
         className={`composer-plus ${plusOpen ? "composer-plus--open" : ""}`}
+        aria-label="Add attachment or options"
         aria-expanded={plusOpen}
         style={{ width: 30, height: 30 }}
         onClick={() => setPlusOpen((open) => !open)}
@@ -68,22 +43,9 @@ function ComposerMenu({
             <Icon name="file" size={14} />
             Attach file
           </button>
-          <button type="button" onClick={onCycleModel}>
-            <span>Model</span>
-            <code>{model}</code>
-          </button>
-          <button type="button" onClick={onCycleAgent}>
-            <span>Direct to agent</span>
-            <code>{agent}</code>
-          </button>
           <button type="button" onClick={() => setReadAloud(!readAloud)}>
             <span>Read aloud</span>
             <code>{readAloud ? "on" : "off"}</code>
-          </button>
-          <i />
-          <button type="button" onClick={startCall}>
-            <Icon name="phone" size={14} />
-            Voice call
           </button>
         </div>
       )}
@@ -111,8 +73,6 @@ interface ComposerBarProps {
   dictationBaseRef: React.MutableRefObject<string>;
   send: () => void;
   stopTurn: () => void;
-  setInCall: (inCall: boolean) => void;
-  setCallSeconds: Setter<number>;
 }
 
 export function ComposerBar(props: ComposerBarProps): JSX.Element {
@@ -136,30 +96,7 @@ export function ComposerBar(props: ComposerBarProps): JSX.Element {
     dictationBaseRef,
     send,
     stopTurn,
-    setInCall,
-    setCallSeconds,
   } = props;
-
-  const startCall = () => {
-    setCallSeconds(() => 0);
-    setInCall(true);
-  };
-
-  // Plus-menu selections for the Model / Direct-to-agent rows (sec 5). The model
-  // list is the live tenant catalogue (/v1/model-endpoints) with a fallback; the
-  // agent row cycles "auto" + the chat agents. Clicking cycles the current value.
-  const models = useFetch(() => api.modelEndpoints(), []);
-  const MODEL_OPTIONS = useMemo(() => {
-    const live = (models.data?.endpoints ?? []).map((e) => e.model);
-    return live.length > 0 ? live : [...FALLBACK_MODELS];
-  }, [models.data]);
-  const [modelIdx, setModelIdx] = useState(0);
-  const [agentIdx, setAgentIdx] = useState(0);
-  const cycleModel = () => setModelIdx((i) => (i + 1) % Math.max(1, MODEL_OPTIONS.length));
-  const cycleAgent = () => setAgentIdx((i) => (i + 1) % AGENT_CYCLE.length);
-  useEffect(() => {
-    if (modelIdx >= MODEL_OPTIONS.length) setModelIdx(0);
-  }, [MODEL_OPTIONS.length, modelIdx]);
 
   // Honour the fleet Escape shortcut (sec 18): return focus to the composer
   // textarea when the fleet bar asks. The composer is always mounted, so this
@@ -181,11 +118,6 @@ export function ComposerBar(props: ComposerBarProps): JSX.Element {
         fileInputRef={fileInputRef}
         readAloud={readAloud}
         setReadAloud={setReadAloud}
-        startCall={startCall}
-        model={MODEL_OPTIONS[modelIdx] ?? "glm-5.2"}
-        onCycleModel={cycleModel}
-        agent={agentLabel(AGENT_CYCLE[agentIdx])}
-        onCycleAgent={cycleAgent}
       />
       <ComposerInput
         input={input}
@@ -206,7 +138,6 @@ export function ComposerBar(props: ComposerBarProps): JSX.Element {
         attachments={attachments}
         send={send}
         stopTurn={stopTurn}
-        startCall={startCall}
       />
     </div>
   );

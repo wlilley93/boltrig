@@ -10,6 +10,7 @@ import type {
   WorkflowsResponse,
 } from "@/api/types";
 import { csvToList, errText, listToCsv } from "@/panels/shared";
+import { useControlMutation } from "@/panels/uxFlow/useControlMutation";
 import { extractSteps, graphToSteps, stepsToGraph } from "./graph";
 import type { CanvasNode } from "./types";
 
@@ -54,11 +55,22 @@ export function useWorkflowApi({
   verbsById,
   workflows,
 }: ApiProps) {
+  const runMutation = useControlMutation({
+    verb: "control.workflow.execute",
+    onApplied(output, params) {
+      const record = output as WorkflowRunRecord;
+      meta.setRunResult(record);
+      if (record.run_id) {
+        meta.setRunView({ runId: record.run_id, wfId: String(params.workflow_id) });
+      }
+    },
+  });
   return {
     pickWorkflow: (w: WorkflowSummary) =>
       void pickWorkflow(w, meta, graph, verbsById),
     save: () => void saveWorkflow(meta, graph, workflows),
-    run: () => void runWorkflow(meta),
+    run: () => void runWorkflow(meta, runMutation),
+    runMutation,
     openRunCanvas: () => openRunCanvas(meta),
   };
 }
@@ -117,24 +129,18 @@ async function saveWorkflow(
   }
 }
 
-async function runWorkflow(meta: Meta) {
+async function runWorkflow(
+  meta: Meta,
+  mutation: ReturnType<typeof useControlMutation>,
+) {
   const id = meta.wfId.trim();
   if (!id) {
     meta.setRunError("Workflow id is required.");
     return;
   }
-  meta.setRunBusy(true);
   meta.setRunError(null);
   meta.setRunResult(null);
-  try {
-    const record = await api.executeWorkflow(id, {});
-    meta.setRunResult(record);
-    if (record.run_id) meta.setRunView({ runId: record.run_id, wfId: id });
-  } catch (err) {
-    meta.setRunError(errText(err));
-  } finally {
-    meta.setRunBusy(false);
-  }
+  await mutation.invoke({ workflow_id: id, inputs: {} });
 }
 
 function openRunCanvas(meta: Meta) {

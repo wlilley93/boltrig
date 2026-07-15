@@ -2,7 +2,6 @@ import { useEffect } from "react";
 
 import { consumeComposerPrefill } from "@/composerPrefill";
 import type { ChatPanelState } from "@/panels/chat/useChatState";
-import type { ChatActions } from "@/panels/chat/useChatActions";
 
 function useAbortOnUnmount(state: ChatPanelState): void {
   const { alive, abortRef } = state;
@@ -44,34 +43,6 @@ function useAutoGrow(state: ChatPanelState): void {
   }, [input, inputRef]);
 }
 
-function useCallTimer(state: ChatPanelState): void {
-  const { inCall, setCallSeconds } = state;
-  useEffect(() => {
-    if (!inCall) return;
-    const timer = window.setInterval(() => setCallSeconds((s) => s + 1), 1000);
-    return () => window.clearInterval(timer);
-  }, [inCall, setCallSeconds]);
-}
-
-function useAgentCycle(state: ChatPanelState, cycleAgent: (dir: "left" | "right") => void): void {
-  const { activeId, messages, pendingUser, selectedAgentId } = state;
-  useEffect(() => {
-    if (activeId || messages.length > 0 || pendingUser !== null) return;
-    const handler = (e: KeyboardEvent) => {
-      if (document.activeElement && ["INPUT", "TEXTAREA"].includes(document.activeElement.tagName)) return;
-      if (e.key === "ArrowLeft") {
-        e.preventDefault();
-        cycleAgent("left");
-      } else if (e.key === "ArrowRight") {
-        e.preventDefault();
-        cycleAgent("right");
-      }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [activeId, messages.length, pendingUser, selectedAgentId, cycleAgent]);
-}
-
 function usePinToBottom(state: ChatPanelState): void {
   const { messagesRef, pinnedRef, setShowJump, messages, pendingUser, liveEvents, streaming } = state;
   useEffect(() => {
@@ -86,11 +57,9 @@ function usePinToBottom(state: ChatPanelState): void {
   }, [messages.length, pendingUser, liveEvents.length, streaming, messagesRef, pinnedRef, setShowJump]);
 }
 
-export function useChatEffects(state: ChatPanelState, actions: ChatActions): void {
+export function useChatEffects(state: ChatPanelState): void {
   useAbortOnUnmount(state);
   usePrefill(state);
   useAutoGrow(state);
-  useCallTimer(state);
-  useAgentCycle(state, actions.cycleAgent);
   usePinToBottom(state);
 }

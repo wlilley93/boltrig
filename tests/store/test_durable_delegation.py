@@ -165,6 +165,7 @@ async def test_checkpoint_upsert_is_idempotent_and_lists_per_run(store):
 # --- new work-item fields round-trip (US-FLT-07 persistence) -----------------
 @pytest.mark.store
 @pytest.mark.invariant("US-FLT-07")
+@pytest.mark.invariant("SEC-141")
 async def test_work_item_degraded_result_attempts_roundtrip(store):
     lease_until = utcnow() + timedelta(seconds=60)
     await store.create_work_item(_item(
@@ -175,6 +176,7 @@ async def test_work_item_degraded_result_attempts_roundtrip(store):
         result={"summary": "done, degraded echo"},
         lease_owner="worker-a",
         lease_expires_at=lease_until,
+        workspace_id="ws-1",
     ))
     got = await store.get_work_item(T, "w1")
     assert got is not None
@@ -183,3 +185,56 @@ async def test_work_item_degraded_result_attempts_roundtrip(store):
     assert got.result == {"summary": "done, degraded echo"}
     assert got.lease_owner == "worker-a"
     assert got.lease_expires_at == lease_until
+    assert got.workspace_id == "ws-1"
+
+
+@pytest.mark.store
+@pytest.mark.invariant("SEC-142")
+async def test_work_item_workspace_scope_filters_before_pagination(store):
+    items = (
+        _item("a-org", hatchet_run_id="run-org"),
+        _item("b-ws1", hatchet_run_id="run-ws1", workspace_id="ws-1"),
+        _item("c-ws2", hatchet_run_id="run-ws2", workspace_id="ws-2"),
+        _item("collision", workspace_id="ws-2"),
+        _item("visible-alias", hatchet_run_id="collision", workspace_id="ws-1"),
+    )
+    for item in items:
+        await store.create_work_item(item)
+
+    async def ids(**kwargs):
+        return {item.id for item in await store.list_work_items(T, **kwargs)}
+
+    assert await ids() == {item.id for item in items}
+    assert await ids(enforce_workspace=True) == {"a-org"}
+    assert await ids(workspace_id="ws-1", enforce_workspace=True) == {
+        "a-org",
+        "b-ws1",
+        "visible-alias",
+    }
+    paged = await store.list_work_items(
+        T, limit=2, workspace_id="ws-2", enforce_workspace=True
+    )
+    paged_ids = {item.id for item in paged}
+    # Both backends must filter before LIMIT. Their configured string collations
+    # may order '-' and letters differently, so pin membership rather than locale.
+    assert len(paged_ids) == 2
+    assert "a-org" in paged_ids
+    assert paged_ids <= {"a-org", "c-ws2", "collision"}
+
+    assert await store.get_work_item(
+        T, "b-ws1", workspace_id="ws-1", enforce_workspace=True
+    ) is not None
+    assert await store.get_work_item(
+        T, "c-ws2", workspace_id="ws-1", enforce_workspace=True
+    ) is None
+    assert await store.get_work_item_by_run_id(
+        T, "run-ws1", workspace_id="ws-1", enforce_workspace=True
+    ) is not None
+    assert await store.get_work_item_by_run_id(
+        T, "run-ws2", workspace_id="ws-1", enforce_workspace=True
+    ) is None
+    # A hidden direct id wins over a visible hatchet alias; filtering cannot make
+    # lookup fall through to a different run with the same external identifier.
+    assert await store.get_work_item_by_run_id(
+        T, "collision", workspace_id="ws-1", enforce_workspace=True
+    ) is None

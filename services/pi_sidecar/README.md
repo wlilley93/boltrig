@@ -103,7 +103,7 @@ before it ever touches the per-run MCP token.
 ## Run it
 
 ```bash
-pip install -r requirements.txt
+pip install --require-hashes -r requirements.txt
 uvicorn app:app --host 0.0.0.0 --port 8090
 # or
 docker build -t boltrig-pi-sidecar . && docker run -p 8090:8090 boltrig-pi-sidecar
@@ -111,6 +111,10 @@ docker build -t boltrig-pi-sidecar . && docker run -p 8090:8090 boltrig-pi-sidec
 
 Importing the app needs no live kernel or model (those are per request only), so
 `uvicorn app:app` starts cleanly offline.
+
+`requirements.in` is the small direct-dependency source. `requirements.txt` is
+the complete hash-locked graph generated with CPython 3.12; update the source and
+regenerate the lock with the command recorded at the top of that file.
 
 ## Where a real "Pi" loop slots in
 

@@ -3,9 +3,10 @@ import { useState } from "react";
 import { api } from "@/api/client";
 import type { ChannelBindingSummary, ChannelBindingsResponse } from "@/api/types";
 import { useFetch, type FetchState } from "@/useFetch";
-import { errText } from "@/panels/shared";
 import { SegmentedV2 } from "@/panels/uxForm";
 import { ArmConfirm, Skeleton } from "@/panels/uxFlow";
+import { PendingHumanCard } from "@/panels/uxFlow/pendingHumanCard";
+import { useControlMutation } from "@/panels/uxFlow/useControlMutation";
 import { EmptyState, Field, FetchError } from "@/panels/ux";
 import { ROLE_OPTIONS } from "./options";
 
@@ -15,42 +16,36 @@ export function useBindingList(channelId: string) {
   const [ext, setExt] = useState("");
   const [subject, setSubject] = useState("");
   const [role, setRole] = useState("member");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const addMutation = useControlMutation({
+    verb: "control.channel.bind",
+    onApplied() {
+      setExt("");
+      setSubject("");
+      bindings.reload();
+    },
+  });
+  const removeMutation = useControlMutation({
+    verb: "control.channel.unbind",
+    onApplied() {
+      bindings.reload();
+    },
+  });
 
   async function addBinding() {
     if (!ext.trim() || !subject.trim()) {
-      setError("An external user id and a subject are required.");
+      addMutation.onPendingDenied("An external user id and a subject are required.");
       return;
     }
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await api.bindChannel(channelId, {
-        external_user_id: ext.trim(),
-        subject: subject.trim(),
-        role,
-      });
-      if (res.status === "ok") {
-        setExt("");
-        setSubject("");
-        bindings.reload();
-      } else {
-        setError(res.reason ?? "bind rejected");
-      }
-    } catch (err) {
-      setError(errText(err));
-    } finally {
-      setBusy(false);
-    }
+    await addMutation.invoke({
+      channel_id: channelId,
+      external_user_id: ext.trim(),
+      subject: subject.trim(),
+      role,
+    });
   }
 
   async function removeBinding(bindingId: string) {
-    const res = await api.deleteChannelBinding(channelId, bindingId);
-    if (res.status !== "ok") {
-      throw new Error(res.reason ?? "remove rejected");
-    }
-    bindings.reload();
+    await removeMutation.invoke({ channel_id: channelId, binding_id: bindingId });
   }
 
   const denied =
@@ -67,8 +62,8 @@ export function useBindingList(channelId: string) {
     setSubject,
     role,
     setRole,
-    busy,
-    error,
+    addMutation,
+    removeMutation,
     addBinding,
     removeBinding,
     denied,
@@ -190,8 +185,8 @@ export function BindingList({ channelId }: { channelId: string }) {
     setSubject,
     role,
     setRole,
-    busy,
-    error,
+    addMutation,
+    removeMutation,
     addBinding,
     removeBinding,
     denied,
@@ -213,10 +208,32 @@ export function BindingList({ channelId }: { channelId: string }) {
         setSubject={setSubject}
         role={role}
         setRole={setRole}
-        busy={busy}
-        error={error}
+        busy={addMutation.busy || addMutation.pending !== null}
+        error={addMutation.error ?? removeMutation.error}
         onAdd={addBinding}
       />
+      {addMutation.pending && (
+        <PendingHumanCard
+          hitlRequestId={addMutation.pending.id}
+          noun="control"
+          verb="control.channel.bind"
+          sentParams={addMutation.pending.params}
+          onApplied={addMutation.onPendingApplied}
+          onDenied={addMutation.onPendingDenied}
+          onReset={addMutation.resetPending}
+        />
+      )}
+      {removeMutation.pending && (
+        <PendingHumanCard
+          hitlRequestId={removeMutation.pending.id}
+          noun="control"
+          verb="control.channel.unbind"
+          sentParams={removeMutation.pending.params}
+          onApplied={removeMutation.onPendingApplied}
+          onDenied={removeMutation.onPendingDenied}
+          onReset={removeMutation.resetPending}
+        />
+      )}
     </div>
   );
 }

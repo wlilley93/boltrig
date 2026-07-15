@@ -11,7 +11,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from .base import HITLId, RunId, TenantId, UserId, WorkItemId, utcnow
+from .base import HITLId, RunId, TenantId, UserId, WorkItemId, WorkspaceId, utcnow
 
 
 class WorkStatus(str, Enum):
@@ -54,6 +54,12 @@ class WorkItem:
     result: dict[str, Any] | None = None
     lease_owner: str | None = None
     lease_expires_at: datetime | None = None
+    workspace_id: WorkspaceId | None = None  # originating active workspace
+
+
+def work_item_run_id(item: WorkItem) -> RunId:
+    """Return the durable run identity for spawned and pump-native work alike."""
+    return item.hatchet_run_id or item.id
 
 
 @dataclass

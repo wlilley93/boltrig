@@ -18,6 +18,10 @@ export const HINT: Record<string, string> = {
   memory: "Recall, browse, remember and ingest (scoped)",
   admin: "Manifest config, history, credentials",
   me: "Personal agent, prefs and memory",
+  runs: "Trace live and completed work",
+  build: "Agents, workflows and capabilities",
+  operate: "Queue, approvals and system posture",
+  health: "Runtime and dependency readiness",
 };
 
 // Filled geometric icons for the sidebar rail (kept dependency-free: small inline
@@ -25,6 +29,18 @@ export const HINT: Record<string, string> = {
 export const ICON: Record<string, ReactNode> = {
   home: (
     <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" opacity="0.85"><path d="M12 3L4 9.5V21h6v-6h4v6h6V9.5L12 3z" /></svg>
+  ),
+  runs: (
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M5 5v14M5 8h5a3 3 0 0 1 3 3v2a3 3 0 0 0 3 3h3" /><circle cx="5" cy="5" r="2" fill="currentColor" stroke="none" /><circle cx="19" cy="16" r="2" fill="currentColor" stroke="none" /></svg>
+  ),
+  build: (
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7h16M7 4v6M17 4v6M5 13h6v6H5zM15 13h4v6h-4" /></svg>
+  ),
+  operate: (
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6h16M4 12h16M4 18h16" /><circle cx="8" cy="6" r="2" fill="currentColor" stroke="none" /><circle cx="15" cy="12" r="2" fill="currentColor" stroke="none" /><circle cx="11" cy="18" r="2" fill="currentColor" stroke="none" /></svg>
+  ),
+  health: (
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12h4l2-5 4 10 2-5h6" /></svg>
   ),
   router: (
     <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" opacity="0.85"><circle cx="6" cy="12" r="3" /><circle cx="18" cy="6" r="2.5" /><circle cx="18" cy="18" r="2.5" /><path d="M9 12h2.5M11.5 12V6.5H15.5M11.5 12v5.5H15.5" fill="none" stroke="currentColor" strokeWidth="1.5" /></svg>

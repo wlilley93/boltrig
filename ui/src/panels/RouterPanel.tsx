@@ -7,7 +7,7 @@
 // Flow Capability plane: noun -> verb -> binding). Both share these fetches; the
 // resolveHealth / badge helpers below are exported so the canvas reuses them.
 
-import { Suspense, lazy, useMemo, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 
 import { api } from "../api/client";
 import type { AdapterHealth, HealthResponse, VerbInfo } from "../api/types";
@@ -20,7 +20,7 @@ import { useFetch } from "../useFetch";
 const RegistryCanvas = lazy(() =>
   import("./RegistryCanvas").then((m) => ({ default: m.RegistryCanvas })),
 );
-import { CONSEQUENCE, FetchError, InfoCallout, PageIntro } from "./ux";
+import { CONSEQUENCE, FetchError, InfoCallout, PageIntro, Select } from "./ux";
 
 function changeWhen(ts: string): string {
   const d = new Date(ts);
@@ -135,10 +135,25 @@ export function RouterPanel() {
   // The 15s health poll quiesces while this slide is not the active deck
   // cell; capabilities are fetch-once so they stay as-is.
   const active = useSlideActive();
-  const caps = useFetch(() => api.capabilities(), [], 0);
+  const [nounFilter, setNounFilter] = useState("");
+  const identityKey = `${identity.tenant}:${identity.subject}:${identity.role}:${identity.grants}:${identity.verbs}`;
+  const caps = useFetch(
+    () => api.capabilities(nounFilter || undefined),
+    [nounFilter, identityKey],
+    0,
+  );
   const health = useFetch(() => api.health(), [], 15000, { paused: !active });
   // "list" is the safe default; "tree" is the visual Capability plane.
   const [view, setView] = useState<RouterView>("list");
+  const [nounOptions, setNounOptions] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (nounFilter || !caps.data) return;
+    setNounOptions(
+      [...new Set(caps.data.verbs.map((verb) => verb.noun || "(unspecified)"))]
+        .sort((a, b) => a.localeCompare(b)),
+    );
+  }, [caps.data, nounFilter]);
 
   const grouped = useMemo(() => {
     const verbs = caps.data?.verbs ?? [];
@@ -163,6 +178,15 @@ export function RouterPanel() {
             <span className="muted">
               {caps.data ? `${caps.data.verbs.length} actions` : ""}
             </span>
+            <Select
+              ariaLabel="Filter capabilities by noun"
+              value={nounFilter}
+              onChange={setNounFilter}
+              options={[
+                { value: "", label: "All nouns" },
+                ...nounOptions.map((noun) => ({ value: noun, label: noun })),
+              ]}
+            />
             <div className="seg" role="group" aria-label="Router view">
               <button
                 className={`btn btn--seg ${view === "list" ? "btn--seg-on" : ""}`}
@@ -224,7 +248,7 @@ export function RouterPanel() {
         />
       )}
 
-      <CapabilityChangelog />
+      {identity.role !== "agent" && <CapabilityChangelog />}
     </section>
   );
 }

@@ -14,8 +14,6 @@ dispatch policy - the kernel chokepoint is unchanged (NFR-MNT-01).
 
 from __future__ import annotations
 
-import uuid
-
 from fastapi import Depends, Request
 from fastapi.responses import JSONResponse
 
@@ -23,16 +21,14 @@ from boltrig.models import (
     AI_CONFIG_LEVELS,
     WORKSPACE_ROLES,
     ActionType,
-    AiConfig,
     AuditEvent,
     ConversationStatus,
     GrantMissing,
     UserSetting,
-    Workspace,
-    WorkspaceMember,
     utcnow,
 )
 from boltrig.kernel.control_routes import dispatch_control_route
+from boltrig.kernel.run_access import visible_work_item_by_run
 
 # Per-workspace roles that may administer a workspace's AI key (D3 vocabulary).
 _WORKSPACE_ADMIN_ROLES = frozenset({"owner", "admin"})
@@ -139,16 +135,6 @@ def _org_member_view(m) -> dict:
         "user_id": m.user_id, "role": m.role,
         "created_at": m.created_at.isoformat() if m.created_at else None,
     }
-
-
-def _workspace_slug(name: str) -> str:
-    """A globally-unique url-safe slug for a new workspace (the workspaces_slug_idx
-    is unique across tenants), derived from the name plus a short random suffix so
-    two workspaces with the same name never collide."""
-    from boltrig.identity.tenancy import default_org_slug
-
-    base = default_org_slug(name) or "workspace"
-    return f"{base}-{uuid.uuid4().hex[:6]}"
 
 
 async def _authz_manage_workspace(k, p, workspace_id: str):
@@ -293,7 +279,7 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
         new_message, superseded_id = await chat_svc.regenerate_turn(
             tenant_id=p.tenant_id, user_id=p.subject, role=p.role,
             conversation_id=conversation_id, target_message_id=message_id,
-            grants=p.grants,
+            grants=p.grants, workspace_id=p.active_workspace_id, scope=p.scope,
         )
         # THEN set the marker (D2), marker-only (D3), and audit the supersede keys
         # only - never any message content (D7).
@@ -325,17 +311,17 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
         from boltrig.fleet.prompt_stack import wrap_untrusted
         from boltrig.models import HITLType
 
-        req = await k.hitl.get(p.tenant_id, question_id)
+        from .hitl_http import visible_hitl_request
+
+        req, item = await visible_hitl_request(k, p, question_id)
         if req is None:
             return JSONResponse({"status": "error", "reason": "not_found"}, status_code=404)
         if req.type != HITLType.QUESTION:
             return JSONResponse({"status": "error", "reason": "not_a_question"},
                                 status_code=409)
-        # Owner = the run's owner (the owning work item's on_behalf_of), the same
-        # identity the run was authorised under - a scoped-read role may SEE a run
-        # but never answer for its owner. Fail closed with NO write and NO audit
-        # when ownership cannot be confirmed (mirrors the cancel route).
-        item = await k.store.get_work_item(p.tenant_id, req.work_item_id or req.run_id)
+        # Owner = the run's owning work item's on_behalf_of. A scoped-read role may
+        # SEE a run but never answer for the identity the run was authorised under;
+        # fail closed with NO write/audit when ownership cannot be confirmed.
         if item is None or item.on_behalf_of != p.subject:
             return JSONResponse({"status": "denied", "reason": "not your run"},
                                 status_code=403)
@@ -359,14 +345,11 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
 
     @app.post("/v1/runs/{run_id}/cancel")
     async def cancel_run(run_id: str, request: Request, k=K, p=P) -> JSONResponse:
-        # Server-side run cancellation ([2026] VJS-COUNTY 6, D5). Owner-only,
-        # fail-closed, audited - mirroring the regenerate route: a scoped-read role
-        # (org-admin/compliance) may READ a run's events but never cancel it, so a
-        # non-owner is refused 403 with NO write and NO audit. Run ownership is the
-        # owning work item's on_behalf_of (a chat turn's item id IS its run id; a
-        # pumped item's run id is its own id), the same identity the run was
-        # authorised under.
-        item = await k.store.get_work_item(p.tenant_id, run_id)
+        # Owner-only, fail-closed, audited cancellation ([2026] VJS-COUNTY 6, D5):
+        # scoped-read roles may read but never cancel, and a non-owner gets 403
+        # without a write or audit. Ownership is the work item's on_behalf_of;
+        # chat and pump runs resolve through their canonical run id.
+        item = await visible_work_item_by_run(k.store, p, run_id)
         if item is None:
             return JSONResponse({"status": "error", "reason": "not_found"}, status_code=404)
         if item.on_behalf_of != p.subject:
@@ -381,7 +364,7 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
         # If this run is a live chat turn, end its SSE stream cleanly (D5).
         chat_svc = getattr(request.app.state, "chat", None)
         if chat_svc is not None and hasattr(chat_svc, "cancel"):
-            await chat_svc.cancel(run_id)
+            await chat_svc.cancel(p.tenant_id, run_id)
         return JSONResponse({"status": "ok", "run_id": run_id})
 
     # === Developer & Connections: personal access tokens (PAT-*, SEC-34) ===
@@ -656,11 +639,9 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
         }
 
     @app.put("/v1/ai-keys")
-    async def set_ai_key(body: dict, k=K, p=P) -> JSONResponse:
-        # Set (or replace) an AI key at a level. The key is accepted ONCE and stored
-        # ONLY through the sealed credential store (set_credential_ref); the ai_configs
-        # row carries just the credential_ref, provider and model. The key is never
-        # echoed back and never entered into the audit row (keys-only detail).
+    async def set_ai_key(body: dict, request: Request, k=K, p=P) -> JSONResponse:
+        # The key is accepted once, sealed behind a credential ref, and never echoed
+        # or included in audit detail.
         level = str(body.get("level") or "").strip()
         if level not in AI_CONFIG_LEVELS:
             return JSONResponse(
@@ -678,9 +659,7 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
         provider = str(body.get("provider") or "").strip()
         model = str(body.get("model") or "").strip()
         api_key = str(body.get("api_key") or "").strip()
-        # OPTIONAL routing host: when the config names a base_url the selected model
-        # routes to it; empty => the endpoint's own base_url is used. Routing metadata,
-        # never a secret.
+        # Optional routing host; empty uses the endpoint default. Never a secret.
         base_url = str(body.get("base_url") or "").strip() or None
         if not provider or not model or not api_key:
             return JSONResponse(
@@ -690,27 +669,29 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
         denied = await _authz_ai_key(k, p, level, scope_id)
         if denied is not None:
             return denied
-        # Seal the key: store it through the credential store, keyed by an opaque
-        # generated id. The raw key never lands in ai_configs (no plaintext column).
-        credential_ref = f"cred_ai_{uuid.uuid4().hex[:16]}"
-        await k.store.set_credential_ref(p.tenant_id, credential_ref, {"secret": api_key})
-        await k.store.set_ai_config(AiConfig(
-            tenant_id=p.tenant_id, level=level, scope_id=scope_id,
-            provider=provider, model=model, credential_ref=credential_ref,
-            base_url=base_url,
-        ))
+        params = {"level": level, "scope_id": scope_id, "provider": provider,
+                  "model": model, "api_key": api_key}
+        if base_url is not None:
+            params["base_url"] = base_url
+        output, pending = await dispatch_control_route(
+            k, p, "control.ai_key.set", params, request=request)
+        if pending is not None:
+            return pending
+        output = output or {}
         # Keys-only audit: level/scope/provider/model/base_url + the credential REF id,
         # NEVER the api_key itself (SEC-05, K-20).
         await _audit(k, p, "ai_key.set", {
             "level": level, "scope_id": scope_id, "provider": provider,
-            "model": model, "base_url": base_url, "credential_ref": credential_ref,
+            "model": model, "base_url": base_url,
+            "credential_ref": output.get("credential_ref"),
         })
         return JSONResponse({"status": "ok", "level": level, "scope_id": scope_id,
                              "provider": provider, "model": model,
                              "base_url": base_url})
 
     @app.delete("/v1/ai-keys/{level}/{scope_id}")
-    async def delete_ai_key(level: str, scope_id: str, k=K, p=P) -> JSONResponse:
+    async def delete_ai_key(level: str, scope_id: str, request: Request,
+                            k=K, p=P) -> JSONResponse:
         if level not in AI_CONFIG_LEVELS:
             return JSONResponse({"status": "error", "reason": "unknown level"},
                                 status_code=400)
@@ -720,9 +701,11 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
         existing = await k.store.get_ai_config(p.tenant_id, level, scope_id)
         if existing is None:
             return JSONResponse({"status": "error", "reason": "not_found"}, status_code=404)
-        # Drop the config row and the sealed credential together.
-        await k.store.delete_ai_config(p.tenant_id, level, scope_id)
-        await k.store.set_credential_ref(p.tenant_id, existing.credential_ref, {})
+        _, pending = await dispatch_control_route(
+            k, p, "control.ai_key.delete", {"level": level, "scope_id": scope_id},
+            request=request)
+        if pending is not None:
+            return pending
         await _audit(k, p, "ai_key.delete", {"level": level, "scope_id": scope_id})
         return JSONResponse({"status": "ok", "level": level, "scope_id": scope_id})
 
@@ -857,14 +840,14 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
         return JSONResponse({"status": "ok", **(output or {})})
 
     @app.delete("/v1/admin/invitations/{invite_id}")
-    async def revoke_invite(invite_id: str, k=K, p=P) -> JSONResponse:
+    async def revoke_invite(invite_id: str, request: Request, k=K, p=P) -> JSONResponse:
         _require_admin(p)
         inv = await k.store.get_invitation(p.tenant_id, invite_id)
         if inv is None:
             return JSONResponse({"status": "error", "reason": "not_found"}, status_code=404)
         _, pending = await dispatch_control_route(
-            k, p, "control.invitation.revoke", {"invite_id": invite_id}
-        )
+            k, p, "control.invitation.revoke", {"invite_id": invite_id},
+            request=request)
         if pending is not None:
             return pending
         await _audit(k, p, "admin.invite.revoke", {"id": invite_id})
@@ -885,31 +868,22 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
         return JSONResponse({"organisation": _org_view(org)})
 
     @app.patch("/v1/orgs/current")
-    async def update_current_org(body: dict, k=K, p=P) -> JSONResponse:
+    async def update_current_org(body: dict, request: Request, k=K, p=P) -> JSONResponse:
         # Org-admin only, fail-closed + audited: rename / settings / toggle the
         # allow_own_ai_keys + require_two_factor policy flags. A non-admin is refused
         # 403 with NO write by _require_admin (it raises GrantMissing -> 403).
-        from boltrig.identity.tenancy import ensure_default_org
-
         _require_admin(p)
-        # Ensure a row exists to update (idempotent backfill for a pre-COUNTY-8 tenant).
-        org = await ensure_default_org(k.store, p.tenant_id)
-        if "name" in body and isinstance(body["name"], str) and body["name"].strip():
-            org.name = body["name"].strip()
-        if "slug" in body and isinstance(body["slug"], str) and body["slug"].strip():
-            org.slug = body["slug"].strip()
-        if "settings" in body and isinstance(body["settings"], dict):
-            org.settings = body["settings"]
-        if "allow_own_ai_keys" in body:
-            org.allow_own_ai_keys = bool(body["allow_own_ai_keys"])
-        if "require_two_factor" in body:
-            org.require_two_factor = bool(body["require_two_factor"])
-        await k.store.update_org(org)
+        output, pending = await dispatch_control_route(
+            k, p, "control.org.update", body, request=request
+        )
+        if pending is not None:
+            return pending
+        organisation = (output or {}).get("organisation", {})
         await _audit(k, p, "org.update", {
-            "allow_own_ai_keys": org.allow_own_ai_keys,
-            "require_two_factor": org.require_two_factor,
+            "allow_own_ai_keys": organisation.get("allow_own_ai_keys"),
+            "require_two_factor": organisation.get("require_two_factor"),
         })
-        return JSONResponse({"status": "ok", "organisation": _org_view(org)})
+        return JSONResponse({"status": "ok", "organisation": organisation})
 
     @app.get("/v1/orgs/current/members")
     async def list_current_org_members(k=K, p=P) -> JSONResponse:
@@ -928,7 +902,7 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
         return JSONResponse({"workspaces": [_workspace_view(w) for w in workspaces]})
 
     @app.post("/v1/workspaces")
-    async def create_workspace(body: dict, k=K, p=P) -> JSONResponse:
+    async def create_workspace(body: dict, request: Request, k=K, p=P) -> JSONResponse:
         # Create a workspace in the caller's org. Org-admin / owner only (creating a
         # workspace is an org-level act); a non-admin is refused 403 with NO write.
         # The creator is seated as the workspace OWNER so they can manage it at once.
@@ -937,36 +911,37 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
         if not name:
             return JSONResponse({"status": "error", "reason": "name is required"},
                                 status_code=400)
-        ws = Workspace(
-            id=uuid.uuid4().hex, tenant_id=p.tenant_id, name=name,
-            slug=_workspace_slug(name),
-            settings=body.get("settings") if isinstance(body.get("settings"), dict) else {},
-        )
-        await k.store.create_workspace(ws)
-        await k.store.add_workspace_member(WorkspaceMember(
-            user_id=p.subject, workspace_id=ws.id, tenant_id=p.tenant_id, role="owner",
-        ))
-        await _audit(k, p, "workspace.create", {"workspace_id": ws.id, "slug": ws.slug})
-        return JSONResponse({"status": "ok", "workspace": _workspace_view(ws)})
+        params = {"name": name}
+        if isinstance(body.get("settings"), dict):
+            params["settings"] = body["settings"]
+        output, pending = await dispatch_control_route(
+            k, p, "control.workspace.create", params, request=request)
+        if pending is not None:
+            return pending
+        workspace = (output or {}).get("workspace", {})
+        await _audit(k, p, "workspace.create", {
+            "workspace_id": workspace.get("id"), "slug": workspace.get("slug"),
+        })
+        return JSONResponse({"status": "ok", "workspace": workspace})
 
     @app.patch("/v1/workspaces/{workspace_id}")
-    async def update_workspace(workspace_id: str, body: dict, k=K, p=P) -> JSONResponse:
+    async def update_workspace(workspace_id: str, body: dict, request: Request,
+                               k=K, p=P) -> JSONResponse:
         # Rename / settings / archive. Fail-closed: a caller who is neither an
         # org-admin nor an owner/admin of THIS workspace is refused (404 unknown, 403
         # non-manager) with NO write.
         ws, denied = await _authz_manage_workspace(k, p, workspace_id)
         if denied is not None:
             return denied
-        if "name" in body and isinstance(body["name"], str) and body["name"].strip():
-            ws.name = body["name"].strip()
-        if "settings" in body and isinstance(body["settings"], dict):
-            ws.settings = body["settings"]
-        if "status" in body and body["status"] in ("active", "archived"):
-            ws.status = body["status"]
-        await k.store.update_workspace(ws)
+        output, pending = await dispatch_control_route(
+            k, p, "control.workspace.update", {"workspace_id": workspace_id, **body},
+            request=request)
+        if pending is not None:
+            return pending
+        workspace = (output or {}).get("workspace", {})
         await _audit(k, p, "workspace.update",
-                     {"workspace_id": ws.id, "status": ws.status})
-        return JSONResponse({"status": "ok", "workspace": _workspace_view(ws)})
+                     {"workspace_id": workspace_id, "status": workspace.get("status")})
+        return JSONResponse({"status": "ok", "workspace": workspace})
 
     @app.get("/v1/workspaces/{workspace_id}/members")
     async def list_workspace_members(workspace_id: str, k=K, p=P) -> JSONResponse:
@@ -986,7 +961,8 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
         return JSONResponse({"members": [_workspace_member_view(m) for m in members]})
 
     @app.post("/v1/workspaces/{workspace_id}/members")
-    async def add_workspace_member(workspace_id: str, body: dict, k=K, p=P) -> JSONResponse:
+    async def add_workspace_member(workspace_id: str, body: dict, request: Request,
+                                   k=K, p=P) -> JSONResponse:
         # Add an EXISTING org user to the workspace with a per-workspace role. Manage
         # rights required (org-admin or workspace owner/admin) - fail-closed 403 with
         # NO write otherwise. The role must be one of WORKSPACE_ROLES (400 otherwise);
@@ -1008,25 +984,32 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
         if target is None:
             return JSONResponse({"status": "error", "reason": "unknown user"},
                                 status_code=404)
-        member = WorkspaceMember(
-            user_id=user_id, workspace_id=workspace_id, tenant_id=p.tenant_id, role=role,
-            permissions=body.get("permissions") if isinstance(body.get("permissions"), dict) else {},
-        )
-        await k.store.add_workspace_member(member)
+        params = {"workspace_id": workspace_id, "user_id": user_id, "role": role}
+        if isinstance(body.get("permissions"), dict):
+            params["permissions"] = body["permissions"]
+        output, pending = await dispatch_control_route(
+            k, p, "control.workspace.member.add", params, request=request)
+        if pending is not None:
+            return pending
+        member = (output or {}).get("member", {})
         await _audit(k, p, "workspace.member.add",
                      {"workspace_id": workspace_id, "user": user_id, "role": role})
-        return JSONResponse({"status": "ok", "member": _workspace_member_view(member)})
+        return JSONResponse({"status": "ok", "member": member})
 
     @app.delete("/v1/workspaces/{workspace_id}/members/{user_id}")
     async def remove_workspace_member(
-        workspace_id: str, user_id: str, k=K, p=P
+        workspace_id: str, user_id: str, request: Request, k=K, p=P
     ) -> JSONResponse:
         # Remove a member. Manage rights required - fail-closed 403 with NO write
         # otherwise (404 for an unknown workspace).
         ws, denied = await _authz_manage_workspace(k, p, workspace_id)
         if denied is not None:
             return denied
-        await k.store.remove_workspace_member(p.tenant_id, workspace_id, user_id)
+        _, pending = await dispatch_control_route(
+            k, p, "control.workspace.member.remove",
+            {"workspace_id": workspace_id, "user_id": user_id}, request=request)
+        if pending is not None:
+            return pending
         await _audit(k, p, "workspace.member.remove",
                      {"workspace_id": workspace_id, "user": user_id})
         return JSONResponse({"status": "ok", "workspace_id": workspace_id, "user": user_id})

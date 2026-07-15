@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 
-from .base import HITLId, RunId, TenantId, UserId, WorkItemId
+from .base import HITLId, RunId, TenantId, UserId, WorkItemId, WorkspaceId
 
 
 class HITLType(str, Enum):
@@ -63,6 +63,11 @@ class HITLRequest:
     # context and optional mutable-resource state.  A response is useful only for
     # an invocation that recomputes this exact fingerprint.
     request_fingerprint: str | None = None
+    # Object-level visibility is bound when the request is created. ``None`` is
+    # org-wide/backward-compatible; a list (including empty) is the originating
+    # principal's department scope and must never be widened by a reader.
+    workspace_id: WorkspaceId | None = None
+    department_scope: list[str] | None = None
 
 
 @dataclass

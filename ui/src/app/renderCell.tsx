@@ -10,11 +10,13 @@ import { ChannelsPanel } from "@/panels/ChannelsPanel";
 import { DevConsolePanel } from "@/panels/DevConsolePanel";
 import { EvalPanel } from "@/panels/EvalPanel";
 import { HomePanel } from "@/panels/HomePanel";
+import { HealthPanel } from "@/panels/HealthPanel";
 import { InsightPanel } from "@/panels/InsightPanel";
 import { KanbanPanel } from "@/panels/KanbanPanel";
 import { MemoryPanel } from "@/panels/MemoryPanel";
 import { MePanel } from "@/panels/MePanel";
 import { RouterPanel } from "@/panels/RouterPanel";
+import { RunsPanel } from "@/panels/RunsPanel";
 import { StepSlide } from "@/panels/StepSlide";
 import { AccountSlide } from "@/panels/settings/AccountSlide";
 import { AppearanceSlide } from "@/panels/settings/AppearanceSlide";
@@ -25,6 +27,7 @@ import { PersonalAgentSlide } from "@/panels/settings/PersonalAgentSlide";
 import { PrivacySlide } from "@/panels/settings/PrivacySlide";
 import { SecuritySlide } from "@/panels/settings/SecuritySlide";
 import { SettingsAnchorSlide } from "@/panels/settings/AnchorSlide";
+import { BuildOverviewPanel, OperateOverviewPanel } from "@/panels/ZoneOverviewPanel";
 
 // Studio pulls in the @xyflow/react canvas; lazy-load it so that heavy chunk
 // only downloads when the user opens the authoring hub (code-split, Fix 5).
@@ -42,6 +45,9 @@ type PanelFactory = () => ReactNode;
 
 const OPS_PANELS: Record<string, PanelFactory> = {
   home: () => <HomePanel />,
+  runs: () => <RunsPanel />,
+  build: () => <BuildOverviewPanel />,
+  operate: () => <OperateOverviewPanel />,
   router: () => <RouterPanel />,
   studio: () => <StudioPanel />,
   dev: () => <DevConsolePanel />,
@@ -50,6 +56,7 @@ const OPS_PANELS: Record<string, PanelFactory> = {
   insight: () => <InsightPanel />,
   eval: () => <EvalPanel />,
   memory: () => <MemoryPanel />,
+  health: () => <HealthPanel />,
   admin: () => <AdminPanel />,
   channels: () => <ChannelsPanel />,
   me: () => <MePanel />,

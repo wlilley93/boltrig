@@ -15,6 +15,9 @@ import { UserRow } from "@/panels/admin/tenancy/UserDirectory";
 import { ADMIN_SECTIONS } from "@/panels/admin/sections";
 import { useAdminConfig } from "@/panels/admin/useAdminConfig";
 import { ScheduleForm } from "@/panels/studio/workflow/forms/ScheduleForm";
+import { ExecuteForm } from "@/panels/studio/workflow/forms/ExecuteForm";
+import { ConnectForm } from "@/panels/channels/ConnectForm";
+import { NotificationsSlide } from "@/panels/settings/NotificationsSlide";
 import { PendingHumanCard, useControlMutation } from "@/panels/uxFlow";
 import { clearApiMocks, mockApi } from "../helpers";
 
@@ -220,6 +223,83 @@ describe("governed control mutations", () => {
       },
     });
     expect(screen.queryByText(/schedule_id/i)).toBeNull();
+  });
+
+  it("executes a workflow through the governed verb and waits on approval", async () => {
+    mockApi({
+      invoke: { status: "pending_human", hitl_request_id: "hitl-execute-1" },
+    });
+    render(
+      <InactiveSlide>
+        <ExecuteForm wfOptions={[{ value: "invoice-flow", label: "invoice-flow" }]} />
+      </InactiveSlide>,
+    );
+
+    fireEvent.change(screen.getByLabelText("Workflow"), {
+      target: { value: "invoice-flow" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Execute" }));
+
+    await screen.findByText("Paused for approval");
+    expect(api.invoke).toHaveBeenCalledWith({
+      noun: "control",
+      verb: "control.workflow.execute",
+      params: { workflow_id: "invoice-flow", inputs: {} },
+    });
+  });
+
+  it("connects a channel through control.channel.connect with exact params", async () => {
+    mockApi({
+      invoke: { status: "pending_human", hitl_request_id: "hitl-channel-1" },
+    });
+    render(
+      <InactiveSlide>
+        <ConnectForm onConnected={vi.fn()} />
+      </InactiveSlide>,
+    );
+
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Operations webhook" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Connect channel" }));
+
+    await screen.findByText("Paused for approval");
+    expect(api.invoke).toHaveBeenCalledWith({
+      noun: "control",
+      verb: "control.channel.connect",
+      params: {
+        platform: "webhook",
+        name: "Operations webhook",
+        unpaired_behavior: "reject",
+        enabled: true,
+      },
+    });
+  });
+
+  it("routes notifications through control.notification.route", async () => {
+    mockApi({
+      meNotifications: { prefs: [] },
+      invoke: { status: "pending_human", hitl_request_id: "hitl-notify-1" },
+    });
+    render(
+      <InactiveSlide>
+        <NotificationsSlide />
+      </InactiveSlide>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save routing" }));
+
+    await screen.findByText("Paused for approval");
+    expect(api.invoke).toHaveBeenCalledWith({
+      noun: "control",
+      verb: "control.notification.route",
+      params: {
+        event_type: "approval",
+        channel: "in_app",
+        target: "",
+        enabled: true,
+      },
+    });
   });
 
   it("uses the dedicated deactivation verb and waits before refreshing users", async () => {

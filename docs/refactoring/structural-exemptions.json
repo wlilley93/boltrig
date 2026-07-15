@@ -50,10 +50,10 @@
       "expires": "2026-12-31"
     },
     "boltrig/api/bootstrap.py": {
-      "max_file_lines": 585,
+      "max_file_lines": 584,
       "max_function_lines": 105,
       "over_limit_functions": [
-        {"name": "build_app", "line": 481, "lines": 105}
+        {"name": "build_app", "line": 480, "lines": 105}
       ],
       "owner": "platform-maintainers",
       "reason": "Split dependency construction and runtime wiring into typed bootstrap stages without changing startup order.",
@@ -158,31 +158,31 @@
       "expires": "2026-12-31"
     },
     "boltrig/kernel/access_routes.py": {
-      "max_file_lines": 1032,
-      "max_function_lines": 858,
+      "max_file_lines": 1015,
+      "max_function_lines": 855,
       "over_limit_functions": [
-        {"name": "register_access_routes", "line": 175, "lines": 858}
+        {"name": "register_access_routes", "line": 161, "lines": 855}
       ],
       "owner": "kernel-maintainers",
       "reason": "Decompose access, user, invitation, and notification route registrars behind the governed control chokepoint.",
       "expires": "2026-12-31"
     },
     "boltrig/kernel/app.py": {
-      "max_file_lines": 753,
-      "max_function_lines": 548,
+      "max_file_lines": 735,
+      "max_function_lines": 529,
       "over_limit_functions": [
-        {"name": "create_app", "line": 206, "lines": 548}
+        {"name": "create_app", "line": 207, "lines": 529}
       ],
       "owner": "kernel-maintainers",
       "reason": "Extract application middleware and route-family wiring while preserving dependency ownership and ordering.",
       "expires": "2026-12-31"
     },
     "boltrig/kernel/channel_routes.py": {
-      "max_file_lines": 415,
+      "max_file_lines": 406,
       "max_function_lines": 294,
       "over_limit_functions": [
-        {"name": "register_channel_routes", "line": 122, "lines": 294},
-        {"name": "register_channel_routes.channel_inbound", "line": 147, "lines": 99}
+        {"name": "register_channel_routes", "line": 113, "lines": 294},
+        {"name": "register_channel_routes.channel_inbound", "line": 138, "lines": 99}
       ],
       "owner": "kernel-maintainers",
       "reason": "Split channel administration and inbound gateway route registrars without weakening signature checks.",
@@ -209,11 +209,10 @@
       "expires": "2026-12-31"
     },
     "boltrig/kernel/platform_routes/observability.py": {
-      "max_file_lines": 343,
-      "max_function_lines": 256,
+      "max_file_lines": 315,
+      "max_function_lines": 227,
       "over_limit_functions": [
-        {"name": "register", "line": 88, "lines": 256},
-        {"name": "register.audit_search", "line": 208, "lines": 81}
+        {"name": "register", "line": 89, "lines": 227}
       ],
       "owner": "observability-maintainers",
       "reason": "Split audit, metrics, capability changelog, and model telemetry route registration by surface.",
@@ -231,24 +230,24 @@
     },
     "boltrig/store/base.py": {
       "max_file_lines": 540,
-      "max_function_lines": 18,
+      "max_function_lines": 15,
       "over_limit_functions": [],
       "owner": "store-maintainers",
       "reason": "Split the store protocol into domain protocols while preserving one composed compatibility contract.",
       "expires": "2026-12-31"
     },
     "boltrig/store/memory.py": {
-      "max_file_lines": 1093,
+      "max_file_lines": 1065,
       "max_function_lines": 88,
       "over_limit_functions": [
-        {"name": "InMemoryStore.__init__", "line": 88, "lines": 88}
+        {"name": "InMemoryStore.__init__", "line": 89, "lines": 88}
       ],
       "owner": "store-maintainers",
       "reason": "Extract domain partials in lockstep with PostgreSQL while preserving complete store parity.",
       "expires": "2026-12-31"
     },
     "boltrig/store/postgres.py": {
-      "max_file_lines": 2397,
+      "max_file_lines": 2342,
       "max_function_lines": 53,
       "over_limit_functions": [],
       "owner": "store-maintainers",

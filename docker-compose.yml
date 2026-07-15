@@ -271,7 +271,9 @@ services:
       - "--port"
       - "8000"
     ports:
-      - "${LOCAL_MODEL_PORT:-8001}:8000"
+      # The local sensitive-data model has no authenticated public surface. Keep
+      # the dev convenience port on loopback; the secure overlay removes it.
+      - "127.0.0.1:${LOCAL_MODEL_PORT:-8001}:8000"
     volumes:
       # Mount a local model cache so air-gapped boxes never reach the internet.
       - ${LOCAL_MODEL_CACHE:-./.models}:/root/.cache/huggingface
@@ -354,6 +356,7 @@ services:
       BACKUP_KEEP: ${BACKUP_KEEP:-7}
       BACKUP_REMOTE: ${BACKUP_REMOTE:-}
       BACKUP_PASSPHRASE: ${BACKUP_PASSPHRASE:-}
+      BACKUP_HEALTH_GRACE: ${BACKUP_HEALTH_GRACE:-3600}
     volumes:
       # The script is also baked into the image, but mounting it keeps the dev
       # loop editable without rebuilding. (IAC-003: rclone is built in, not

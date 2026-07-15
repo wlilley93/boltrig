@@ -6,9 +6,10 @@ import { useState } from "react";
 import { api } from "../../api/client";
 import type { MeNotificationItem } from "../../api/types";
 import { useFetch } from "../../useFetch";
-import { errText } from "../shared";
 import { EmptyState, FetchError, PageIntro } from "../ux";
 import { Skeleton } from "../uxFlow";
+import { PendingHumanCard } from "../uxFlow/pendingHumanCard";
+import { outputRecord, useControlMutation } from "../uxFlow/useControlMutation";
 import { Switch } from "../uxForm";
 
 const EVENT_TYPES: ReadonlyArray<string> = [
@@ -35,9 +36,15 @@ function NotificationsSection() {
   const [channel, setChannel] = useState(CHANNELS[0]);
   const [target, setTarget] = useState("");
   const [enabled, setEnabled] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const mutation = useControlMutation({
+    verb: "control.notification.route",
+    onApplied(output) {
+      const saved = outputRecord(output);
+      setMsg(`Saved routing ${String(saved.id ?? "")}.`);
+      prefs.reload();
+    },
+  });
 
   async function save(body: {
     id?: string;
@@ -46,22 +53,12 @@ function NotificationsSection() {
     target?: string;
     enabled?: boolean;
   }) {
-    setBusy(true);
-    setError(null);
     setMsg(null);
-    try {
-      const res = await api.putMeNotification(body);
-      if (res.status === "ok") {
-        setMsg(`Saved routing ${res.id ?? ""}.`);
-        prefs.reload();
-      } else {
-        setError(res.reason ?? "save rejected");
-      }
-    } catch (err) {
-      setError(errText(err));
-    } finally {
-      setBusy(false);
-    }
+    await mutation.invoke({
+      ...body,
+      target: body.target ?? "",
+      enabled: body.enabled ?? true,
+    });
   }
 
   const list: MeNotificationItem[] = prefs.data?.prefs ?? [];
@@ -116,10 +113,21 @@ function NotificationsSection() {
             hint="Whether this rule routes the event."
           />
         </div>
+        {mutation.pending && (
+          <PendingHumanCard
+            hitlRequestId={mutation.pending.id}
+            noun="control"
+            verb="control.notification.route"
+            sentParams={mutation.pending.params}
+            onApplied={mutation.onPendingApplied}
+            onDenied={mutation.onPendingDenied}
+            onReset={mutation.resetPending}
+          />
+        )}
         <div className="form__actions">
           <button
             className="btn btn--primary"
-            disabled={busy}
+            disabled={mutation.busy || mutation.pending !== null}
             onClick={() =>
               void save({
                 event_type: eventType,
@@ -129,10 +137,10 @@ function NotificationsSection() {
               })
             }
           >
-            {busy ? "..." : "Save routing"}
+            {mutation.busy ? "..." : "Save routing"}
           </button>
           {msg && <span className="ok">{msg}</span>}
-          {error && <span className="error">{error}</span>}
+          {mutation.error && <span className="error">{mutation.error}</span>}
         </div>
       </div>
 
@@ -171,7 +179,7 @@ function NotificationsSection() {
                 </span>
                 <button
                   className="btn"
-                  disabled={busy}
+                  disabled={mutation.busy || mutation.pending !== null}
                   onClick={() =>
                     void save({
                       id: pref.id,

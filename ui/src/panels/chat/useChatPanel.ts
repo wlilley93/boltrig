@@ -11,6 +11,6 @@ export function useChatPanel(): ChatPanelState {
   const state = useChatState();
   const derived = useChatDerived(state);
   const actions = useChatActions(state, derived);
-  useChatEffects(state, actions);
+  useChatEffects(state);
   return { ...state, ...derived, ...actions };
 }

@@ -2,8 +2,8 @@
 
 A chat turn is handed to the fleet, streamed back as typed events, and persisted
 as a conversation. Conversations are owner-scoped (SEC-25). Streaming rides the
-kernel event relay keyed by the turn's run id, so a Pi run's tool/sub-agent/HITL
-events surface in chat exactly as they happen (US-CONV-03/04) and a dropped
+kernel relay keyed by tenant plus run id, so a Pi run's tool/sub-agent/HITL events
+surface in chat exactly as they happen (US-CONV-03/04) and a dropped
 client can re-attach (US-CONV-07).
 
 This lives in the fleet layer (it orchestrates the fleet); the kernel and models
@@ -45,11 +45,8 @@ from .continuity import (
 )
 from .prompt_stack import wrap_untrusted
 from .pump import persist_new_work_items
+from .turn_executor_compat import invoke_turn_executor
 
-# turn_executor(*, tenant_id, user_id, role, grants, conversation_id, run_id,
-# message, attachments, relay) -> awaitable. It publishes events to
-# relay.publish(run_id, ...) during the run; ChatService closes the relay stream
-# when it returns.
 TurnExecutor = Callable[..., Awaitable[Any]]
 
 # summariser(older_messages) -> awaitable[str]. An OPTIONAL model summariser for
@@ -276,6 +273,7 @@ class ChatService:
         conversation_id: str | None = None,
         grants: GrantSet | None = None,
         attachments: list[dict[str, Any]] | None = None,
+        workspace_id: str | None = None, scope: dict[str, Any] | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         # Enforce the attachment caps FIRST ([2026] VJS-COUNTY 3, D3): an over-cap
         # turn is refused whole before ANY side effect - before a new conversation is
@@ -307,7 +305,8 @@ class ChatService:
 
         collected: list[dict[str, Any]] = []
         async for event in self._drive(
-            tenant_id, user_id, conv.id, run_id, message, role, grants, records
+            tenant_id, user_id, conv.id, run_id, message, role, grants, records,
+            workspace_id=workspace_id, scope=scope,
         ):
             # Heartbeats are transport keepalives (US-CHAT-11), not turn content:
             # stream them but never persist them on the turn's event record.
@@ -389,7 +388,7 @@ class ChatService:
 
     async def _drive(
         self, tenant_id, user_id, conv_id, run_id, message, role, grants,
-        attachments=None, *, heartbeat=True,
+        attachments=None, *, heartbeat=True, workspace_id=None, scope=None,
     ):
         if self._exec is None:
             yield {"type": "text_delta", "delta": "(no runtime configured)"}
@@ -401,7 +400,7 @@ class ChatService:
             self._safe_exec(
                 tenant_id=tenant_id, user_id=user_id, conversation_id=conv_id,
                 run_id=run_id, message=message, role=role, grants=grants,
-                attachments=attachments or [],
+                attachments=attachments or [], workspace_id=workspace_id, scope=scope,
             )
         )
         # SSE keepalive (US-CHAT-11): a relay-pump task feeds a local queue; the
@@ -417,7 +416,7 @@ class ChatService:
 
         async def _pump() -> None:
             try:
-                async for event in self._relay.subscribe(run_id, replay=True):
+                async for event in self._relay.subscribe(tenant_id, run_id, replay=True):
                     await queue.put(event)
             finally:
                 await queue.put(done)
@@ -451,6 +450,7 @@ class ChatService:
         conversation_id: str,
         target_message_id: str,
         grants: GrantSet | None = None,
+        workspace_id: str | None = None, scope: dict[str, Any] | None = None,
     ) -> tuple[ConversationMessage, str]:
         """Regenerate the last assistant reply (append-plus-supersede, [2026]
         VJS-COUNTY 4). Re-runs the last USER message on a NEW run id through the
@@ -490,7 +490,7 @@ class ChatService:
         async for event in self._drive(
             tenant_id, user_id, conversation_id, run_id,
             last_user.content or "", role, grants, last_user.attachments,
-            heartbeat=False,
+            heartbeat=False, workspace_id=workspace_id, scope=scope,
         ):
             collected.append(event)
 
@@ -516,7 +516,7 @@ class ChatService:
         await self._maybe_compact(tenant_id, conversation_id)
         return new_message, last_assistant.id
 
-    async def cancel(self, run_id: str) -> None:
+    async def cancel(self, tenant_id: str, run_id: str) -> None:
         """End a live chat turn's SSE stream cleanly on a server-side cancel
         ([2026] VJS-COUNTY 6, D5).
 
@@ -527,17 +527,17 @@ class ChatService:
         cancel-request row (written by the owner-only audited route) is the record
         that persists and stops a restart resurrecting the run. Idempotent: a
         second close is a no-op (the executor's own finally also closes the relay)."""
-        self._relay.publish(run_id, {"type": "cancelled", "run_id": run_id})
-        self._relay.close(run_id)
+        self._relay.publish(tenant_id, run_id, {"type": "cancelled", "run_id": run_id})
+        self._relay.close(tenant_id, run_id)
 
     async def _safe_exec(self, **kw):
         run_id = kw["run_id"]
         try:
-            await self._exec(relay=self._relay, **kw)
+            await invoke_turn_executor(self._exec, relay=self._relay.for_tenant(kw["tenant_id"]), kwargs=kw)
         except Exception as exc:  # a turn failure degrades, never crashes the stream (P9)
-            self._relay.publish(run_id, {"type": "text_delta", "delta": f"(turn error: {type(exc).__name__})"})
+            self._relay.publish(kw["tenant_id"], run_id, {"type": "text_delta", "delta": f"(turn error: {type(exc).__name__})"})
         finally:
-            self._relay.close(run_id)
+            self._relay.close(kw["tenant_id"], run_id)
 
 
 def build_turn_executor(
@@ -564,7 +564,7 @@ def build_turn_executor(
     chat_cfg = chat_config if chat_config is not None else ChatConfig()
 
     async def executor(*, tenant_id, user_id, role, grants, conversation_id,
-                       run_id, message, relay, attachments=None):
+                       run_id, message, relay, attachments=None, workspace_id=None, scope=None):
         perms = await kernel.store.get_tenant_permissions(tenant_id)
         # Bare-turn authority is manifest data under a caller ceiling
         # ([2026] VJS-COUNTY 1): the chat.skills_by_role knob selects the turn's
@@ -582,13 +582,13 @@ def build_turn_executor(
         item = WorkItem(
             id=run_id, tenant_id=tenant_id, source="chat", intent=message,
             confidence=1.0, convergent=False, status=WorkStatus.IN_FLIGHT,
-            owner_member="chief-of-staff", hatchet_run_id=run_id, on_behalf_of=user_id,
+            owner_member="chief-of-staff", hatchet_run_id=run_id, on_behalf_of=user_id, workspace_id=workspace_id,
         )
         await kernel.store.create_work_item(item)
         ctx = InvocationContext(
             tenant_id=tenant_id, grants=perms.grants, actor="chief-of-staff",
-            actor_tier="tier1", run_id=run_id, on_behalf_of=user_id,
-            extra={"conversation_id": conversation_id, "principal_role": role},
+            actor_tier="tier1", run_id=run_id, on_behalf_of=user_id, workspace_id=workspace_id,
+            extra={"conversation_id": conversation_id, "principal_role": role, **({"principal_scope": dict(scope)} if scope is not None else {})},
         )
         # The inbound turn text is untrusted user/channel input, so it is enveloped
         # before it reaches the model (M1 / SEC-72). On the continuity path the

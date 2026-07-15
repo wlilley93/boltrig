@@ -56,10 +56,26 @@ def _register_read_routes(app, P, K) -> None:
         return {"stats": await k.store.workflow_run_stats(p.tenant_id)}
 
     @app.get("/v1/workflows/{wf_id}/runs")
-    async def workflow_runs(wf_id: str, k=K, p=P) -> dict:
-        events = await k.store.audit_query(p.tenant_id, limit=1000)
-        runs = sorted({event.run_id for event in events if event.run_id})
-        return {"workflow_id": wf_id, "runs": runs[:100]}
+    async def workflow_runs(wf_id: str, k=K, p=P) -> JSONResponse:
+        workflows = await k.store.list_workflows(p.tenant_id)
+        workflow = next(
+            (
+                item
+                for item in workflows
+                if item.id == wf_id and _visible(item, p.active_workspace_id)
+            ),
+            None,
+        )
+        if workflow is None:
+            return JSONResponse({"error": "unknown_workflow"}, status_code=404)
+        recorded = await k.store.list_workflow_run_ids(p.tenant_id, wf_id, limit=100)
+        from boltrig.kernel.run_access import visible_run_events
+
+        runs = []
+        for run_id in recorded:
+            if await visible_run_events(k.store, p, run_id) is not None:
+                runs.append(run_id)
+        return JSONResponse({"workflow_id": wf_id, "runs": runs})
 
 
 def _register_author_routes(app, P, K) -> None:

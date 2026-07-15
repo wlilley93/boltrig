@@ -1,47 +1,45 @@
 import { useState } from "react";
 
-import { api } from "@/api/client";
-import { errText } from "@/panels/shared";
 import { Field } from "@/panels/ux";
 import { SegmentedV2 } from "@/panels/uxForm";
 import { SecretOnce } from "@/panels/uxFlow";
+import { PendingHumanCard } from "@/panels/uxFlow/pendingHumanCard";
+import { outputRecord, useControlMutation } from "@/panels/uxFlow/useControlMutation";
 import { ROLE_OPTIONS } from "./options";
 
 export function usePairForm(channelId: string) {
   const [ext, setExt] = useState("");
   const [subject, setSubject] = useState("");
   const [role, setRole] = useState("member");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [minted, setMinted] = useState<{ code: string; pairingId: string; role: string } | null>(
     null,
   );
+  const mutation = useControlMutation({
+    verb: "control.channel.pair",
+    onApplied(output, params) {
+      const issued = outputRecord(output);
+      if (typeof issued.code !== "string") return;
+      setMinted({
+        code: issued.code,
+        pairingId: typeof issued.pairing_id === "string" ? issued.pairing_id : "",
+        role: String(params.role),
+      });
+      setExt("");
+      setSubject("");
+    },
+  });
 
   async function issue() {
     if (!ext.trim() || !subject.trim()) {
-      setError("An external user id and a subject are required.");
+      mutation.onPendingDenied("An external user id and a subject are required.");
       return;
     }
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await api.pairChannel(channelId, {
-        external_user_id: ext.trim(),
-        subject: subject.trim(),
-        role,
-      });
-      if (res.status === "ok" && res.code) {
-        setMinted({ code: res.code, pairingId: res.pairing_id ?? "", role });
-        setExt("");
-        setSubject("");
-      } else {
-        setError(res.reason ?? "pairing rejected");
-      }
-    } catch (err) {
-      setError(errText(err));
-    } finally {
-      setBusy(false);
-    }
+    await mutation.invoke({
+      channel_id: channelId,
+      external_user_id: ext.trim(),
+      subject: subject.trim(),
+      role,
+    });
   }
 
   return {
@@ -51,8 +49,7 @@ export function usePairForm(channelId: string) {
     setSubject,
     role,
     setRole,
-    busy,
-    error,
+    mutation,
     minted,
     setMinted,
     issue,
@@ -60,7 +57,7 @@ export function usePairForm(channelId: string) {
 }
 
 export function PairForm({ channelId }: { channelId: string }) {
-  const { ext, setExt, subject, setSubject, role, setRole, busy, error, minted, setMinted, issue } =
+  const { ext, setExt, subject, setSubject, role, setRole, mutation, minted, setMinted, issue } =
     usePairForm(channelId);
 
   if (minted) {
@@ -104,11 +101,22 @@ export function PairForm({ channelId }: { channelId: string }) {
           />
         </Field>
       </div>
+      {mutation.pending && (
+        <PendingHumanCard
+          hitlRequestId={mutation.pending.id}
+          noun="control"
+          verb="control.channel.pair"
+          sentParams={mutation.pending.params}
+          onApplied={mutation.onPendingApplied}
+          onDenied={mutation.onPendingDenied}
+          onReset={mutation.resetPending}
+        />
+      )}
       <div className="form__actions">
-        <button className="btn" disabled={busy} onClick={() => void issue()}>
-          {busy ? "Issuing..." : "Issue code"}
+        <button className="btn" disabled={mutation.busy || mutation.pending !== null} onClick={() => void issue()}>
+          {mutation.busy ? "Issuing..." : "Issue code"}
         </button>
-        {error && <span className="error">{error}</span>}
+        {mutation.error && <span className="error">{mutation.error}</span>}
       </div>
     </div>
   );

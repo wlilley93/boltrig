@@ -148,15 +148,16 @@ async def test_chat_cancel_closes_the_run_stream():
     relay = EventRelay()
     chat = ChatService(InMemoryStore(), relay, turn_executor=_stub_executor("x"))
     run_id = "runZ"
+    scoped = relay.for_tenant(T)
     got: list[dict] = []
 
     async def consume():
-        async for ev in relay.subscribe(run_id, replay=True):
+        async for ev in scoped.subscribe(run_id, replay=True):
             got.append(ev)
 
     task = asyncio.create_task(consume())
     await asyncio.sleep(0)  # let the subscriber attach
-    await chat.cancel(run_id)
+    await chat.cancel(T, run_id)
     await asyncio.wait_for(task, timeout=1)
     # the subscriber received the cancel notice and the stream ended cleanly
     assert any(e.get("type") == "cancelled" for e in got)
@@ -214,7 +215,7 @@ async def test_in_flight_adapter_call_is_not_interrupted():
 @pytest.mark.invariant("SEC-87")
 async def test_cancelled_is_terminal_neutral_checkpointed_and_audited():
     store = InMemoryStore()
-    item = _item("run3")
+    item = _item("run3", workspace_id="ws-1")
     await store.create_work_item(item)
     await store.request_run_cancel(T, "run3", "alice")
     head = _SpyHead()
@@ -234,6 +235,7 @@ async def test_cancelled_is_terminal_neutral_checkpointed_and_audited():
     cancels = [e for e in await store.audit_query(T, limit=200) if e.verb == "work.cancel"]
     assert len(cancels) == 1
     assert cancels[0].status == "cancelled" and cancels[0].detail["work_item_id"] == "run3"
+    assert cancels[0].workspace_id == "ws-1"
 
 
 @pytest.mark.security

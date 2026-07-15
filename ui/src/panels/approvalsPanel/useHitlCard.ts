@@ -1,8 +1,13 @@
 import { useState } from "react";
 
 import { api } from "@/api/client";
-import type { HITLRequest } from "@/api/types";
+import type { HITLKind } from "@/api/types";
 import { reasonOf } from "./hitlUtils";
+
+export interface HitlResponseRequest {
+  id: string;
+  type: HITLKind;
+}
 
 export interface HitlCardState {
   decision: string;
@@ -18,7 +23,10 @@ export interface HitlCardState {
   confirmArmed: () => Promise<void>;
 }
 
-export function useHitlCard(req: HITLRequest, onAnswered: () => void): HitlCardState {
+export function useHitlCard(
+  req: HitlResponseRequest,
+  onAnswered: () => void,
+): HitlCardState {
   const [decision, setDecision] = useState("");
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
@@ -34,15 +42,16 @@ export function useHitlCard(req: HITLRequest, onAnswered: () => void): HitlCardS
     setBusy(true);
     setError(null);
     try {
-      const res = await api.respondHitl(req.id, { decision: value, notes });
-      const approved = ["approve", "yes", "allow"].includes(value.toLowerCase());
-      setDone(
-        res.status
-          ? approved
-            ? "Recorded - this action is now approved and will continue."
-            : "Recorded - this action was declined and will not run."
-          : "Recorded.",
-      );
+      if (req.type === "question") {
+        const res = await api.answerQuestion(req.id, value);
+        if (res.status !== "ok") {
+          setError(res.reason ?? `Answer failed: ${res.status}`);
+          return;
+        }
+      } else {
+        await api.respondHitl(req.id, { decision: value, notes });
+      }
+      setDone("Response recorded. Runtime state will update according to server policy.");
       onAnswered();
     } catch (err) {
       setError(reasonOf(err));

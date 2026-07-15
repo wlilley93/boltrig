@@ -121,7 +121,7 @@ async def run_workflow_definition(
         if relay is None or not rid:
             return
         try:
-            relay.publish(rid, {"type": "workflow_step", **event})
+            relay.publish(run_ctx.tenant_id, rid, {"type": "workflow_step", **event})
         except Exception:
             pass
 

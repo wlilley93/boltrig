@@ -57,7 +57,7 @@ async def test_interpreter_emits_step_events_on_the_run_stream():
 
     record = await lib.execute(T, wf.id, {}, _ctx())
     rid = record["run_id"]
-    events = k.events.snapshot(rid)
+    events = k.events.snapshot(T, rid)
     step_events = [e for e in events if e["type"] == "workflow_step"]
 
     # each step emitted running -> ok, keyed by step_id
@@ -81,7 +81,7 @@ async def test_skipped_descendant_emits_skipped_step_event():
     await lib.register(wf)
 
     record = await lib.execute(T, wf.id, {}, _ctx())
-    events = [e for e in k.events.snapshot(record["run_id"]) if e["type"] == "workflow_step"]
+    events = [e for e in k.events.snapshot(T, record["run_id"]) if e["type"] == "workflow_step"]
     by_id = {}
     for e in events:
         by_id.setdefault(e["step_id"], []).append(e["status"])

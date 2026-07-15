@@ -23,13 +23,18 @@ COMPOSE_VALIDATE_ENV ?= .env.example
 COMPOSE_VALIDATE_POSTGRES_PASSWORD ?= boltrig-compose-validation-only
 GITLEAKS_IMAGE ?= zricethezav/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
 ACTIONLINT_IMAGE ?= rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
+TRIVY_CONFIG_IMAGE ?= aquasec/trivy:0.72.0@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f
 PG_USER ?= boltrig
 PG_DB ?= boltrig
 BACKUP_DIR ?= ./backups
 BACKUP ?= $(BACKUP_DIR)/boltrig.dump
+RELEASE_ENV ?= .env
+RELEASE_IMAGES_ENV ?= boltrig-images.env
+RELEASE_VALIDATE_IMAGES_ENV ?= tests/fixtures/release-images.env
+RELEASE_PROFILES ?= --profile backup
 
 .DEFAULT_GOAL := help
-.PHONY: help up down logs test lint structure typecheck check python-quality ui-install ui-quality site-install site-quality ui-e2e compose-validate doctor-fixture migration-parity python-audit sast secret-scan actionlint security-source quality live-check lockfile-policy dependency-audit smoke invariants doctor migrate secure-up backup backup-schedule restore
+.PHONY: help up down logs test lint structure typecheck check python-quality ui-install ui-quality site-install site-quality ui-e2e compose-validate release-validate release-up doctor-fixture migration-parity python-audit sast iac-scan secret-scan actionlint security-source quality live-check lockfile-policy dependency-audit smoke invariants doctor migrate secure-up backup backup-schedule restore
 
 help: ## List the available targets
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -102,6 +107,38 @@ compose-validate: ## Validate base and secure Compose configurations
 	BOLTRIG_ENV_FILE=$(COMPOSE_VALIDATE_ENV) \
 		POSTGRES_PASSWORD=$(COMPOSE_VALIDATE_POSTGRES_PASSWORD) \
 		$(COMPOSE) -f docker-compose.yml -f deploy/compose.secure.yml config --quiet
+	$(PY) scripts/validate_release_images.py $(RELEASE_VALIDATE_IMAGES_ENV)
+	BOLTRIG_ENV_FILE=$(COMPOSE_VALIDATE_ENV) \
+		POSTGRES_PASSWORD=$(COMPOSE_VALIDATE_POSTGRES_PASSWORD) \
+		$(COMPOSE) --env-file $(COMPOSE_VALIDATE_ENV) --profile backup --profile local \
+		--env-file $(RELEASE_VALIDATE_IMAGES_ENV) \
+		-f docker-compose.yml -f deploy/compose.release.yml config --format json \
+		| $(PY) scripts/validate_release_compose.py
+	BOLTRIG_ENV_FILE=$(COMPOSE_VALIDATE_ENV) \
+		POSTGRES_PASSWORD=$(COMPOSE_VALIDATE_POSTGRES_PASSWORD) \
+		$(COMPOSE) --env-file $(COMPOSE_VALIDATE_ENV) --profile backup --profile local \
+		--env-file $(RELEASE_VALIDATE_IMAGES_ENV) \
+		-f docker-compose.yml -f deploy/compose.release.yml \
+		-f deploy/compose.secure.yml config --format json \
+		| $(PY) scripts/validate_release_compose.py --secure
+
+release-validate: ## Validate a downloaded digest-pinned release environment
+	$(PY) scripts/validate_release_images.py $(RELEASE_IMAGES_ENV)
+	BOLTRIG_ENV_FILE=$(RELEASE_ENV) \
+		$(COMPOSE) --env-file $(RELEASE_ENV) --env-file $(RELEASE_IMAGES_ENV) \
+		$(RELEASE_PROFILES) -f docker-compose.yml -f deploy/compose.release.yml \
+		-f deploy/compose.secure.yml config --format json \
+		| $(PY) scripts/validate_release_compose.py --secure
+
+release-up: release-validate ## Pull and start signed release images (secure + backup)
+	BOLTRIG_ENV_FILE=$(RELEASE_ENV) \
+		$(COMPOSE) --env-file $(RELEASE_ENV) --env-file $(RELEASE_IMAGES_ENV) \
+		$(RELEASE_PROFILES) -f docker-compose.yml -f deploy/compose.release.yml \
+		-f deploy/compose.secure.yml pull
+	BOLTRIG_ENV_FILE=$(RELEASE_ENV) \
+		$(COMPOSE) --env-file $(RELEASE_ENV) --env-file $(RELEASE_IMAGES_ENV) \
+		$(RELEASE_PROFILES) -f docker-compose.yml -f deploy/compose.release.yml \
+		-f deploy/compose.secure.yml up -d --no-build
 
 doctor-fixture: ## Prove the secure production-doctor fixture has no failures
 	$(PY) -m pytest -q tests/unit/test_doctor.py::test_production_doctor_has_no_failures_for_secure_posture
@@ -117,10 +154,16 @@ python-audit: ## Audit every shipped Python dependency graph
 	$(PY) -m pip_audit --strict --progress-spinner off --no-deps --disable-pip \
 		-r deploy/browser-cli-requirements.txt
 	$(PY) -m pip_audit --strict --progress-spinner off \
-		-r services/pi_sidecar/requirements.txt
+		--require-hashes -r services/pi_sidecar/requirements.txt
 
 sast: ## Run the blocking medium/high-confidence Python SAST gate
 	$(PY) -m bandit -q -r boltrig -ll -ii
+
+iac-scan: ## Run pinned, offline high/critical IaC misconfiguration checks
+	docker run --rm --volume "$(CURDIR):/repo:ro" --workdir /repo \
+		$(TRIVY_CONFIG_IMAGE) config --skip-check-update --skip-version-check \
+		--ignorefile /repo/.trivyignore.yaml --skip-dirs .git --skip-dirs .venv \
+		--skip-dirs .claude --severity HIGH,CRITICAL --exit-code 1 /repo
 
 secret-scan: ## Scan complete Git history with narrow test-fixture exceptions
 	docker run --rm --volume "$(CURDIR):/repo:ro" $(GITLEAKS_IMAGE) \
@@ -130,7 +173,7 @@ actionlint: ## Lint GitHub Actions with the pinned actionlint image
 	docker run --rm --volume "$(CURDIR):/repo:ro" --workdir /repo \
 		$(ACTIONLINT_IMAGE) -color
 
-security-source: python-audit sast secret-scan actionlint ## Run SCA, SAST, secret, and workflow gates
+security-source: python-audit sast iac-scan secret-scan actionlint ## Run SCA, SAST, IaC, secret, and workflow gates
 
 quality: python-quality ui-quality site-quality compose-validate doctor-fixture ui-e2e migration-parity security-source ## Run the complete local release gate
 

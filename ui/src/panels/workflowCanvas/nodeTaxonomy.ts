@@ -16,7 +16,8 @@ export type NodeVisualKind =
   | "notify"
   | "template";
 
-// The Bolt agent is the default target of an Agent Call node (design decision #51).
+// Retained for loaded legacy definitions. New catalogue nodes never invent an
+// agent target: they bind only to verbs the caller can actually discover.
 export const BOLT_AGENT_ID = "bolt";
 
 export interface NodeKindMeta {
@@ -39,7 +40,7 @@ export const CATEGORIES: NodeCategory[] = [
     label: "Common",
     items: [
       { kind: "trigger", name: "Start", desc: "Workflow entry trigger", color: "#E8B339", icon: "bolt" },
-      { kind: "agent-call", name: "Agent Call", desc: "Direct to an agent (default Bolt)", color: "#5E69DD", icon: "agent" },
+      { kind: "agent-call", name: "Ask user", desc: "Pause for a governed human answer", color: "#5E69DD", icon: "agent" },
       { kind: "end", name: "End", desc: "Terminal output", color: "#7E95B0", icon: "end" },
     ],
   },
@@ -89,6 +90,13 @@ export function allKinds(): NodeKindMeta[] {
   return CATEGORIES.flatMap((c) => c.items);
 }
 
+export const CONTROL_NODE_KINDS = new Set<NodeVisualKind>([
+  "trigger",
+  "end",
+  "conditional",
+  "loop",
+]);
+
 // The action + seed params a freshly dropped node of this kind carries.
 // Control nouns (trigger/flow/code) are resolved LOCALLY by the workflow
 // interpreter (boltrig/workflows/control_flow.py): trigger.start/flow.end are
@@ -107,7 +115,7 @@ export function defaultActionForKind(kind: NodeVisualKind): {
     case "end":
       return { action: "flow.end", params: {} };
     case "agent-call":
-      return { action: "agent.call", params: { agent: BOLT_AGENT_ID } };
+      return { action: "chat.ask_user", params: { prompt: "" } };
     case "conditional":
       return { action: "flow.branch", params: {} };
     case "code":
@@ -172,8 +180,24 @@ export function resolveVerbForKind(
   const preferred = PREFERRED_VERB_FOR_KIND[kind];
   if (preferred && verbsById.has(preferred)) {
     const params: Record<string, unknown> =
-      kind === "agent-call" ? { agent: BOLT_AGENT_ID } : {};
+      kind === "agent-call" ? { prompt: "" } : {};
     return { action: preferred, params };
   }
   return undefined;
+}
+
+export function isNodeKindAvailable(
+  kind: NodeVisualKind,
+  verbsById: Map<string, VerbInfo>,
+): boolean {
+  return CONTROL_NODE_KINDS.has(kind) || resolveVerbForKind(kind, verbsById) !== undefined;
+}
+
+export function categoriesForCatalogue(verbsById: Map<string, VerbInfo>): NodeCategory[] {
+  return CATEGORIES
+    .map((category) => ({
+      ...category,
+      items: category.items.filter((item) => isNodeKindAvailable(item.kind, verbsById)),
+    }))
+    .filter((category) => category.items.length > 0);
 }

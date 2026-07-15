@@ -68,6 +68,11 @@ services:
     # admin surface rather than publishing it directly.
     ports: !override []
 
+  local-model:
+    # Sensitive prompts are routed here. The base stack exposes a loopback-only
+    # operator port; production keeps the model API compose-internal.
+    ports: !override []
+
   postgres:
     # Encrypted-at-rest (SEC-11): point the data dir at an encrypted device/path
     # (LUKS volume, or a cloud encrypted disk). Set PGDATA_HOST to that mount.

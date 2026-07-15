@@ -1,11 +1,11 @@
 import { useState } from "react";
 
-import { api } from "@/api/client";
 import type { ChannelSummary } from "@/api/types";
-import { apiReason } from "@/panels/shared";
 import { Field } from "@/panels/ux";
 import { SegmentedV2 } from "@/panels/uxForm";
 import { ArmConfirm } from "@/panels/uxFlow";
+import { PendingHumanCard } from "@/panels/uxFlow/pendingHumanCard";
+import { useControlMutation } from "@/panels/uxFlow/useControlMutation";
 import { ENABLED_OPTIONS, UNPAIRED_OPTIONS } from "./options";
 import { BindingList } from "./BindingList";
 import { PairForm } from "./PairForm";
@@ -15,39 +15,33 @@ export function useChannelRow(channel: ChannelSummary, onChanged: () => void) {
   const [name, setName] = useState(channel.name);
   const [unpaired, setUnpaired] = useState(channel.unpaired_behavior);
   const [enabled, setEnabled] = useState(channel.enabled ? "true" : "false");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const configureMutation = useControlMutation({
+    verb: "control.channel.configure",
+    onApplied() {
+      setMsg("Saved.");
+      onChanged();
+    },
+  });
+  const disconnectMutation = useControlMutation({
+    verb: "control.channel.disconnect",
+    onApplied() {
+      onChanged();
+    },
+  });
 
   async function configure() {
-    setBusy(true);
-    setError(null);
     setMsg(null);
-    try {
-      const res = await api.configureChannel(channel.id, {
-        name: name.trim() || channel.name,
-        unpaired_behavior: unpaired,
-        enabled: enabled === "true",
-      });
-      if (res.status === "ok") {
-        setMsg("Saved.");
-        onChanged();
-      } else {
-        setError(res.reason ?? "update rejected");
-      }
-    } catch (err) {
-      setError(apiReason(err));
-    } finally {
-      setBusy(false);
-    }
+    await configureMutation.invoke({
+      channel_id: channel.id,
+      name: name.trim() || channel.name,
+      unpaired_behavior: unpaired,
+      enabled: enabled === "true",
+    });
   }
 
   async function disconnect() {
-    const res = await api.disconnectChannel(channel.id);
-    if (res.status !== "ok") {
-      throw new Error(res.reason ?? "disconnect rejected");
-    }
-    onChanged();
+    await disconnectMutation.invoke({ channel_id: channel.id });
   }
 
   return {
@@ -59,8 +53,8 @@ export function useChannelRow(channel: ChannelSummary, onChanged: () => void) {
     setUnpaired,
     enabled,
     setEnabled,
-    busy,
-    error,
+    configureMutation,
+    disconnectMutation,
     msg,
     configure,
     disconnect,
@@ -145,8 +139,8 @@ export function ChannelRow({
     setUnpaired,
     enabled,
     setEnabled,
-    busy,
-    error,
+    configureMutation,
+    disconnectMutation,
     msg,
     configure,
     disconnect,
@@ -195,10 +189,33 @@ export function ChannelRow({
           setUnpaired={setUnpaired}
           enabled={enabled}
           setEnabled={setEnabled}
-          busy={busy}
-          error={error}
+          busy={configureMutation.busy || configureMutation.pending !== null}
+          error={configureMutation.error}
           msg={msg}
           configure={configure}
+        />
+      )}
+      {configureMutation.pending && (
+        <PendingHumanCard
+          hitlRequestId={configureMutation.pending.id}
+          noun="control"
+          verb="control.channel.configure"
+          sentParams={configureMutation.pending.params}
+          onApplied={configureMutation.onPendingApplied}
+          onDenied={configureMutation.onPendingDenied}
+          onReset={configureMutation.resetPending}
+        />
+      )}
+      {disconnectMutation.error && <p className="error">{disconnectMutation.error}</p>}
+      {disconnectMutation.pending && (
+        <PendingHumanCard
+          hitlRequestId={disconnectMutation.pending.id}
+          noun="control"
+          verb="control.channel.disconnect"
+          sentParams={disconnectMutation.pending.params}
+          onApplied={disconnectMutation.onPendingApplied}
+          onDenied={disconnectMutation.onPendingDenied}
+          onReset={disconnectMutation.resetPending}
         />
       )}
     </div>

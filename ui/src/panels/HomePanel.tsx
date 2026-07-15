@@ -16,6 +16,7 @@ import { useSlideActive } from "../deck/context";
 import { useFetch } from "../useFetch";
 import { RunLink } from "./shared";
 import { HITL_TYPE, PageIntro, StatusBadge, WORK_STATUS } from "./ux";
+import { OperationalPulse } from "./home/OperationalPulse";
 
 // The lanes that read as "in flight" for the compact count summary; mirrors the
 // Kanban board order. Done / failed are terminal so they sit at the end.
@@ -46,13 +47,13 @@ function NeedsYou() {
       </div>
       <div className="list-card__body">
         {hitl.loading && !hitl.data && (
-          <p className="muted">Loading approvals...</p>
+          <p className="muted">Loading requests...</p>
         )}
         {hitl.error && (
-          <p className="error">Failed to load approvals: {hitl.error}</p>
+          <p className="error">Failed to load requests: {hitl.error}</p>
         )}
         {!hitl.loading && !hitl.error && requests.length === 0 && (
-          <p className="muted">You're all caught up - nothing needs your sign-off.</p>
+          <p className="muted">You're all caught up - nothing needs your response.</p>
         )}
         {top.map((req) => (
           <button
@@ -64,7 +65,7 @@ function NeedsYou() {
             <span className="home-line">
               <StatusBadge value={req.type} glossary={HITL_TYPE} />
               <span className="home-line__text">
-                {req.question || "A high-consequence action needs you."}
+                {req.question || "A pending human request needs you."}
               </span>
             </span>
           </button>
@@ -278,6 +279,7 @@ export function HomePanel() {
       />
 
       <div className="cols">
+        <OperationalPulse />
         <NeedsYou />
         <RecentRuns />
         <WorkInFlight />

@@ -140,6 +140,8 @@ class Kernel:
         *,
         departments: list[str] | None = None,
         status: Any = None,
+        workspace_id: str | None = None,
+        enforce_workspace: bool = False,
     ) -> list[Any]:
         """List work items, row-scoped by department at the store (US-IAM-02).
 
@@ -147,5 +149,9 @@ class Kernel:
         owned by those departments. Scoping is enforced in the store, never in the
         HTTP handler, so no caller can widen it."""
         return await self.store.list_work_items(
-            tenant_id, status, departments=departments
+            tenant_id,
+            status,
+            departments=departments,
+            workspace_id=workspace_id,
+            enforce_workspace=enforce_workspace,
         )

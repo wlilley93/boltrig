@@ -1,0 +1,17 @@
+misconfigurations:
+  - id: AVD-DS-0002
+    paths:
+      - deploy/backup.Dockerfile
+    expired_at: 2026-10-15
+    statement: >-
+      Release engineering owns migration from root after operator bind-mount
+      ownership is made portable; the service publishes no ports, the image
+      drops unused gosu, and it runs only the fixed backup loop entrypoint.
+  - id: AVD-DS-0002
+    paths:
+      - ui/Dockerfile
+    expired_at: 2026-08-15
+    statement: >-
+      Frontend engineering owns the nginx-unprivileged migration; the secure
+      overlay removes the direct host port and the digest-pinned runtime serves
+      only the generated static build through its fixed nginx configuration.

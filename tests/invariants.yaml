@@ -100,13 +100,20 @@ invariants:
     tests:
       - tests/security/test_round_three.py::test_authoring_requires_role_and_is_audited
   SEC-33:
-    description: Cost/audit/runs insight is scope-filtered - a dept cannot read another's.
+    description: Cost/audit/runs insight is scope-filtered - a department cannot read another's run or reconstruct it through the audit tree; unknown and out-of-scope run ids are indistinguishable 404s.
     tests:
       - tests/security/test_round_three.py::test_audit_and_runs_are_scope_filtered
+      - tests/security/test_audit_tree_scope.py::test_audit_tree_denies_cross_department_root_and_prunes_every_hidden_node
+      - tests/security/test_audit_tree_scope.py::test_audit_tree_unknown_and_foreign_tenant_are_indistinguishable_404s
+      - tests/security/test_audit_tree_scope.py::test_audit_tree_rejects_parent_only_when_root_rows_were_scope_filtered
   FR-OBS-02:
-    description: The audit browser is scope-filtered (and search/run links preserved).
+    description: The audit browser and execution tree are scope-filtered (and search/run links preserved); every tree node and aggregate is computed only from authorized rows while unrestricted callers retain the complete tree.
     tests:
       - tests/security/test_round_three.py::test_audit_and_runs_are_scope_filtered
+      - tests/security/test_audit_tree_scope.py::test_audit_tree_denies_cross_department_root_and_prunes_every_hidden_node
+      - tests/security/test_audit_tree_scope.py::test_audit_tree_rejects_parent_only_when_root_rows_were_scope_filtered
+      - tests/security/test_audit_tree_scope.py::test_audit_tree_preserves_legitimate_child_only_root
+      - tests/security/test_audit_tree_scope.py::test_unrestricted_audit_tree_preserves_complete_authorized_aggregate
   FR-OBS-08:
     description: Platform runtime status is authenticated, never public health.
     tests:
@@ -183,10 +190,11 @@ invariants:
       - tests/security/test_self_improvement_competence.py::test_promotion_record_carries_no_authority_field
       - tests/security/test_self_improvement_competence.py::test_promotion_is_eval_gated_and_changes_ranking_only
   US-WFL-09:
-    description: Harvested free signals reweight reuse, never authority ([2026] VJS-COUNTY 5) - a regenerate-supersede or HITL verdict feeds the reuse weighting through memory.improve (reweight-only, no scope/grant argument) and a bounded promotion score in [-1, 1] that never changes the eval-gated state, and every harvest is best-effort so it can never fail the run that produced it (P9).
+    description: Harvested free signals reweight reuse, never authority ([2026] VJS-COUNTY 5) - a regenerate-supersede or genuine APPROVAL verdict (never clarification, escalation, or question answer text) feeds reuse weighting through memory.improve (reweight-only, no scope/grant argument) and a bounded promotion score in [-1, 1] that never changes the eval-gated state, and every harvest is best-effort so it can never fail the run that produced it (P9).
     tests:
       - tests/security/test_self_improvement_competence.py::test_harvested_signal_reweights_reuse_only
       - tests/security/test_self_improvement_competence.py::test_harvest_reuse_signal_is_reweight_only_and_best_effort
+      - tests/security/test_self_improvement_competence.py::test_only_approval_verdicts_are_harvested_as_reuse_signals
   US-WFL-10:
     description: Post-run reflection is opt-in and rides the chokepoint ([2026] VJS-COUNTY 5) - with reflection enabled a terminal item stores exactly one lesson through kernel.invoke (audited memory.remember) and with it disabled stores none, and build_org wires the pump the kernel (not a bare store) so the memory verb is reachable but stays off by default.
     tests:
@@ -774,11 +782,13 @@ invariants:
     tests:
       - tests/security/test_round_ten.py::test_events_are_run_keyed_and_credential_free
   SEC-56:
-    description: A run's event stream is tenant/scope-scoped - the run-events endpoint streams only runs that produced audited activity in the caller's tenant and remain visible under the caller's department/workspace scope; another tenant or same-tenant out-of-scope caller gets 404.
+    description: A run's event stream is tenant/scope-scoped end to end - relay backlog, live subscriptions, publish, and close are keyed by tenant plus run id, and the run-events endpoint streams only runs that produced audited activity in the caller's tenant and remain visible under the caller's department/workspace scope; even an authorised attacker who chooses the same run id cannot read or terminate another tenant's stream, while another tenant or same-tenant out-of-scope caller gets 404.
     tests:
       - tests/security/test_round_eleven.py::test_run_events_are_tenant_scoped
       - tests/security/test_round_eleven.py::test_same_tenant_scoped_user_cannot_read_unowned_run_events
       - tests/security/test_round_eleven.py::test_department_scoped_user_can_read_visible_work_run_events
+      - tests/security/test_event_relay_tenant_scope.py::test_authorized_same_run_id_cannot_read_another_tenants_backlog
+      - tests/security/test_event_relay_tenant_scope.py::test_same_run_id_live_publish_and_close_are_tenant_scoped
   FR-EVT-03:
     description: The run-events endpoint returns the events a run emitted as SSE frames (snapshot), and an unknown run is a 404.
     tests:
@@ -839,15 +849,23 @@ invariants:
       - tests/security/test_dos_bounding.py::test_list_work_is_paginated_and_clamped
       - tests/security/test_dos_bounding.py::test_memory_list_limits_clamped_and_ingest_capped
   SEC-70:
-    description: The durable control plane is not LAN-exposed and the DB carries no baked default credential - Hatchet's engine (plaintext gRPC + API) and its unauthenticated dashboard bind their host ports to 127.0.0.1 in the base compose and are dropped entirely (ports []) by the secure overlay, and POSTGRES_PASSWORD uses the compose required-var form so the stack refuses to start unset while the Hatchet DSN interpolates the password rather than hardcoding boltrig:boltrig (M8/M9).
+    description: The durable and sensitive control plane is not LAN-exposed and the DB carries no baked default credential - Hatchet's engine (plaintext gRPC + API), its unauthenticated dashboard, and the sensitive-data local model bind operator ports to 127.0.0.1 in the base compose and are dropped entirely (ports []) by the secure overlay, and POSTGRES_PASSWORD uses the compose required-var form so the stack refuses to start unset while the Hatchet DSN interpolates the password rather than hardcoding boltrig:boltrig (M8/M9).
     tests:
       - tests/deploy/test_compose_hardening.py::test_hatchet_ports_are_loopback_only_in_base_compose
       - tests/deploy/test_compose_hardening.py::test_secure_overlay_drops_hatchet_host_ports
+      - tests/deploy/test_compose_hardening.py::test_local_model_port_is_loopback_only_and_removed_from_secure_compose
       - tests/deploy/test_compose_hardening.py::test_postgres_password_has_no_literal_default
   SEC-71:
-    description: A scheduled off-box backup ships by default - a profile-gated backup sidecar (so the dev stack is unaffected) loops scripts/backup.sh to pg_dump the durable state, optionally encrypt it, and copy it off-box via rclone, failing loudly when a configured remote is broken (M10).
+    description: A scheduled off-box backup ships by default - a profile-gated backup sidecar (so the dev stack is unaffected) atomically pg_dumps the durable state, refuses archives pg_restore cannot parse, optionally encrypts them, creates and verifies a portable SHA-256 sidecar, and copies both files off-box via rclone; a complete run alone updates the freshness marker, any configured remote failure exits PID 1 instead of being swallowed, and missing, malformed, or stale success is unhealthy (M10).
     tests:
       - tests/deploy/test_compose_hardening.py::test_backup_sidecar_ships_profile_gated
+      - tests/deploy/test_backup_scripts.py::test_backup_verifies_dump_checksum_and_remote_pair
+      - tests/deploy/test_backup_scripts.py::test_backup_refuses_unparseable_dump_without_success_marker
+      - tests/deploy/test_backup_scripts.py::test_backup_remote_failure_leaves_no_success_marker
+      - tests/deploy/test_backup_scripts.py::test_backup_encryption_retains_verified_checksum_contract
+      - tests/deploy/test_backup_scripts.py::test_backup_encryption_failure_leaves_no_final_archive
+      - tests/deploy/test_backup_scripts.py::test_backup_loop_exits_nonzero_instead_of_masking_failure
+      - tests/deploy/test_backup_scripts.py::test_backup_healthcheck_rejects_missing_malformed_and_stale_success
   SEC-72:
     description: Untrusted input is structurally enveloped - external tool results, the conversation transcript, and inbound channel/user text are wrapped in typed <untrusted ...>...</untrusted> delimiters at every composition site, a hostile payload that tries to close/forge the envelope is neutralised so it cannot break out, and the governance floor asserts that enveloped content is DATA never instructions (M1).
     tests:
@@ -994,6 +1012,7 @@ invariants:
     tests:
       - tests/security/test_chat_streaming_richness.py::test_answer_route_owner_only_wrapped_and_audited
       - tests/security/test_chat_streaming_richness.py::test_answer_route_refuses_to_answer_an_approval
+      - tests/security/test_hitl_access.py::test_generic_respond_cannot_bypass_owner_checked_question_answer_route
 
   # --- Long-conversation compaction (append-only derived summaries) -----------
   SEC-90:
@@ -1252,6 +1271,7 @@ invariants:
       - tests/security/test_audit_browser.py::test_audit_search_can_pivot_to_the_security_stream
       - tests/security/test_audit_browser.py::test_verify_endpoint_reports_intact_then_detects_a_broken_chain
       - tests/security/test_audit_browser.py::test_verify_and_search_are_gated_and_fail_closed_for_non_authors
+      - tests/security/test_audit_tree_scope.py::test_audit_tree_denies_cross_workspace_root_and_prunes_workspace_descendants
   SEC-124:
     description: The new audit fields are additive - a row written without them canonicalises byte-for-byte as before so the existing hash chain is unchanged (D1) - a row with all enrichment fields None serialises WITHOUT the new keys (its stored hash still verifies), a chain of un-enriched rows verifies and an enriched row appended after them keeps the chain contiguous and verifiable, while tampering a NEW field on an enriched row is detected (that field IS folded into that row's hash); the enrichment fields also round-trip identically on the in-memory and Postgres stores.
     tests:
@@ -1317,13 +1337,23 @@ invariants:
     tests:
       - tests/deploy/test_compose_hardening.py::test_backup_credentials_are_excluded_from_git_and_image_contexts
   SEC-137:
-    description: A protected semantic tag uses the named release environment and a draft GitHub release, rebuilds all five first-party images from a commit reachable from the default branch, blocks fixable high/critical vulnerabilities, publishes only run-scoped candidates until every immutable digest is keylessly signed and its CycloneDX SBOM attestation is verified, refuses to move existing public tags or overwrite evidence, and publishes the release only after all exact digests are promoted and reverified; required reviewers and tag protection remain an explicit external repository-setting gate.
+    description: A protected semantic tag uses the named release environment and a draft GitHub release only after the exact reachable commit has successful canonical CI and security workflow runs; it rebuilds all five first-party images, blocks fixable high/critical vulnerabilities, publishes only run-scoped candidates until every immutable digest is keylessly signed and its CycloneDX SBOM attestation is verified, refuses to move existing public tags or overwrite evidence, emits a strict five-image digest environment consumed by a no-build production Compose overlay, and publishes only after all exact digests are promoted and reverified; required reviewers and tag protection remain an explicit external repository-setting gate.
     tests:
       - tests/deploy/test_compose_hardening.py::test_release_publishes_only_scanned_signed_digest_images_with_sboms
+      - tests/deploy/test_compose_hardening.py::test_release_requires_canonical_success_for_the_exact_commit
+      - tests/deploy/test_compose_hardening.py::test_release_compose_uses_only_required_digest_images_without_builds
+      - tests/deploy/test_release_images.py::test_release_image_environment_requires_exactly_five_digest_refs
+      - tests/deploy/test_release_images.py::test_release_compose_validator_rejects_builds_tags_and_source_mounts
   IAC-002:
-    description: Production Python images consume hash-locked runtime dependencies without invoking an unlocked PEP 517 build environment; application source runs directly from the read-only image tree.
+    description: Production Python images, including the standalone Pi sidecar's complete CPython-3.12-resolved transitive graph, consume hash-locked runtime dependencies without invoking an unlocked PEP 517 build environment; the Pi lock has a small direct source, is Dependabot-managed and audited under hash enforcement, and application source runs directly from the read-only image tree.
     tests:
       - tests/deploy/test_compose_hardening.py::test_python_images_do_not_invoke_unlocked_build_isolation
+      - tests/deploy/test_pi_dependency_lock.py::test_pi_sidecar_uses_python312_generated_full_hash_lock
+      - tests/deploy/test_pi_dependency_lock.py::test_pi_sidecar_lock_is_audited_and_dependabot_managed
+  IAC-003:
+    description: High and critical IaC misconfigurations block both local security-source and canonical security CI through a digest-pinned Trivy binary and its embedded version-matched policy bundle without credentials or mutable policy downloads; the narrow root-runtime exceptions are path-scoped, owned, justified, compensating-control documented, and expiring.
+    tests:
+      - tests/deploy/test_pi_dependency_lock.py::test_iac_scan_is_pinned_offline_blocking_and_ci_enforced
   FR-OPS-02:
     description: Compose validation is reproducible from a clean checkout by using the checked non-secret example environment and a validation-only database password; operator launches retain the conventional ignored .env default.
     tests:
@@ -1372,3 +1402,29 @@ invariants:
     description: The control-plane HTTP routes hold the direct-write chokepoint - every k.store/kernel.store mutation in access_routes.py and channel_routes.py is a known sanctioned direct write (a caller's own-scope operation or the channel ingress/pairing seam), or is migrated debt that has moved onto a governed control.* verb; a new unsanctioned direct write, or a stale allowlist entry, fails the AST scan, so the debt is frozen and can only decrease.
     tests:
       - tests/security/test_control_write_chokepoint.py::test_control_plane_direct_writes_are_all_sanctioned
+  SEC-141:
+    description: Pending HITL collections and responses are object-authorized by tenant, originating workspace and department scope, live workspace membership when a scoped caller has no active workspace, assignee/requester relationship, work owner, and request type - scope-invisible, delegated, and non-owner QUESTION ids are hidden as unknown with no state change or resume; QUESTION responses are forced through the strict subject-owner wrapped answer route; clarification and escalation responses require an independent assigned or in-scope human and are wrapped as untrusted data before persistence and resume; chat and pump work items preserve their originating workspace through queued children, approvals, and parked escalations, and scope round-trips identically on memory and Postgres.
+    tests:
+      - tests/security/test_hitl_access.py::test_hitl_list_and_respond_enforce_department_and_workspace_scope
+      - tests/security/test_hitl_access.py::test_hitl_list_hides_requests_outside_assignee_and_requester_relationships
+      - tests/security/test_hitl_access.py::test_chat_question_persists_authenticated_workspace_and_department_scope
+      - tests/security/test_hitl_access.py::test_pump_preserves_workspace_and_department_on_approval_and_park
+      - tests/security/test_hitl_access.py::test_generic_respond_cannot_bypass_owner_checked_question_answer_route
+      - tests/security/test_hitl_access.py::test_nonapproval_generic_respond_requires_independent_assigned_human
+      - tests/store/test_store_parity.py::test_hitl_request_binding_round_trips
+      - tests/store/test_durable_delegation.py::test_work_item_degraded_result_attempts_roundtrip
+  SEC-142:
+    description: External WorkItem and run reads distinguish trusted unfiltered access from workspace enforcement - an active workspace sees only org-wide plus its own WorkItems, no active workspace sees org-wide WorkItems only, and filtering happens before pagination in both stores; detail, children, audit trail, run lists, workflow runs, streams, trees, cancellation, console, cost, audit search, and model telemetry bind nullable audit rows back to the owning WorkItem scope, hide direct-id/hatchet collisions and out-of-scope identifiers as unknown without side effects, preserve canonical pump-native ids, and allow genuinely audit-only runs only for unrestricted department roles when their audit workspace is visible; tree reconstruction bounds cyclic and pathological parent graphs.
+    tests:
+      - tests/store/test_durable_delegation.py::test_work_item_workspace_scope_filters_before_pagination
+      - tests/security/test_work_workspace_scope.py::test_work_list_detail_children_and_audit_are_workspace_scoped
+      - tests/security/test_work_workspace_scope.py::test_run_lists_streams_trees_and_cancel_bind_to_workitem_workspace
+      - tests/security/test_work_workspace_scope.py::test_console_cost_audit_and_model_views_reject_null_audit_for_hidden_work
+      - tests/security/test_work_workspace_scope.py::test_tree_assembly_bounds_self_and_multi_node_cycles
+      - tests/security/test_audit_tree_scope.py::test_no_active_workspace_sees_only_org_wide_audit_rows
+  SEC-143:
+    description: Budget policy and usage resets are high-consequence control-plane operations - policy changes preserve accumulated usage, resets require an audited reason and select explicit counters, tenant scopes cannot cross the authenticated organisation, non-admin callers are denied even with broad grants, and memory/Postgres expose one asynchronous contract.
+    tests:
+      - tests/security/test_budget_governance.py::test_budget_policy_preserves_usage_and_reset_is_selective
+      - tests/security/test_budget_governance.py::test_budget_http_mutations_are_held_and_tenant_bound
+      - tests/security/test_budget_governance.py::test_budget_control_verbs_reject_non_admin_even_with_grants

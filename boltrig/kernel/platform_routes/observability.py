@@ -9,8 +9,9 @@ from datetime import UTC, datetime
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
+from boltrig.models.work import work_item_run_id
 from boltrig.observability.model_telemetry import model_telemetry
-from ._shared import audit_authoring, can_author_route, dept_run_ids, scope_depts  # noqa: F401
+from ._shared import audit_authoring, can_author_route, dept_run_ids, scope_depts, scoped_work_items  # noqa: F401
 from ._shared import platform_state
 
 _STATUS_VALUES = {"ok", "degraded", "down", "unknown"}
@@ -100,41 +101,19 @@ def register(app, P, K) -> None:
     @app.get("/v1/cost")
     async def cost(request: Request, k=K, p=P) -> dict:
         depts = scope_depts(p)
-        allowed = await dept_run_ids(k, p.tenant_id, depts)
+        run_scope = await dept_run_ids(k, p, depts)
         events = await k.store.audit_query(p.tenant_id, limit=10_000)
         total = 0
         by_actor: dict[str, int] = {}
         for e in events:
-            if allowed is not None and (e.run_id not in allowed):
+            if not run_scope.permits(e.run_id):
+                continue
+            if not _ws_visible(p, e.workspace_id):
                 continue
             c = e.cost_micros or 0
             total += c
             by_actor[e.actor] = by_actor.get(e.actor, 0) + c
         return {"total_cost_micros": total, "by_actor": by_actor, "scope": depts or "all"}
-
-    @app.get("/v1/budgets")
-    async def budgets(request: Request, k=K, p=P) -> dict:
-        # The tenant's budgets with live burn-down. Department-scoped budgets are
-        # filtered to the caller's own departments (SEC-33); tenant + workflow
-        # budgets are visible to anyone in the tenant.
-        depts = scope_depts(p)
-        out = []
-        for b in await k.store.list_budgets(p.tenant_id):
-            if b.scope_type == "department" and depts is not None and b.id not in depts:
-                continue
-            out.append(
-                {
-                    "id": b.id,
-                    "scope_type": b.scope_type,
-                    "window": b.window,
-                    "hard_stop": b.hard_stop,
-                    "token_limit": b.token_limit,
-                    "spent_tokens": b.spent_tokens,
-                    "cost_limit_micros": b.cost_limit_micros,
-                    "spent_micros": b.spent_micros,
-                }
-            )
-        return {"budgets": out, "scope": depts or "all"}
 
     @app.get("/v1/capabilities/changelog")
     async def capability_changelog(request: Request, k=K, p=P) -> JSONResponse:
@@ -174,11 +153,9 @@ def register(app, P, K) -> None:
     def _ws_visible(p, ws_id) -> bool:
         # Workspace fail-closed scoping ([2026] VJS-COUNTY 9, D5): a caller with an
         # active workspace sees ONLY org-wide (NULL) rows + its OWN workspace's rows,
-        # never another workspace's. A caller with no active workspace sees the tenant
-        # set (org boundary is tenant_id, already fenced). Mirrors workflow scoping.
+        # never another workspace's. No active workspace means org-wide rows only,
+        # matching workflow visibility instead of widening to every workspace.
         active = getattr(p, "active_workspace_id", None)
-        if active is None:
-            return True
         return ws_id is None or ws_id == active
 
     @app.get("/v1/model/telemetry")
@@ -186,15 +163,12 @@ def register(app, P, K) -> None:
         request: Request, limit: int = 50, k=K, p=P
     ) -> dict:
         depts = scope_depts(p)
-        allowed = await dept_run_ids(k, p.tenant_id, depts)
+        run_scope = await dept_run_ids(k, p, depts)
         events = await k.store.audit_query(p.tenant_id, limit=10_000)
         visible = [
             e for e in events
-            if (
-                allowed is None
-                or e.run_id in allowed
-                or e.parent_run_id in allowed
-            ) and _ws_visible(p, e.workspace_id)
+            if run_scope.permits(e.run_id, e.parent_run_id)
+            and _ws_visible(p, e.workspace_id)
         ]
         return {
             "generated_at": datetime.now(UTC).isoformat(),
@@ -206,20 +180,15 @@ def register(app, P, K) -> None:
 
     @app.get("/v1/audit/search")
     async def audit_search(request: Request, actor: str | None = None, verb: str | None = None,
-                           run: str | None = None, resource: str | None = None,
+                           run: str | None = None, resource: str | None = None, status: str | None = None,
                            since: str | None = None, until: str | None = None,
                            security: int = 0, event_type: str | None = None,
                            k=K, p=P) -> dict:
-        # D5: filter by user (actor) / resource / date-range, and pivot to the
-        # distinct SecurityEvent stream when ``security`` is set. Reads are
-        # org/workspace-scoped fail-closed (tenant fence + the workspace filter).
+        # D5: scoped actor/resource/date filters plus a SecurityEvent stream pivot.
         depts = scope_depts(p)
-        allowed = await dept_run_ids(k, p.tenant_id, depts)
+        run_scope = await dept_run_ids(k, p, depts)
 
-        # Parse the date bounds ONCE into datetimes and compare by value, not by
-        # lexicographic string (a date-only until="2026-07-03" must include that
-        # whole day, so it is treated as inclusive end-of-day; a naive string
-        # compare "2026-07-03T06.." > "2026-07-03" wrongly excluded the day).
+        # Parse once by value; a date-only upper bound includes the whole day.
         def _parse_bound(raw: str | None, *, end_of_day: bool):
             if not raw:
                 return None
@@ -267,13 +236,15 @@ def register(app, P, K) -> None:
         events = await k.store.audit_query(p.tenant_id, run_id=run, limit=10_000)
         rows = []
         for e in events:
-            if allowed is not None and (e.run_id not in allowed):
+            if not run_scope.permits(e.run_id):
                 continue  # SEC-33: another department's runs are not visible
             if not _ws_visible(p, e.workspace_id):
                 continue
             if actor and e.actor != actor:
                 continue
             if verb and e.verb != verb:
+                continue
+            if status and e.status != status:
                 continue
             if resource and e.resource != resource:
                 continue
@@ -337,7 +308,8 @@ def register(app, P, K) -> None:
     @app.get("/v1/runs")
     async def runs(request: Request, k=K, p=P) -> dict:
         depts = scope_depts(p)
-        items = await k.list_work(p.tenant_id, departments=depts)
-        return {"runs": [{"run_id": w.hatchet_run_id, "work_item": w.id, "intent": w.intent,
+        run_scope = await dept_run_ids(k, p, depts)
+        items = await scoped_work_items(k, p, depts)
+        return {"runs": [{"run_id": work_item_run_id(w), "work_item": w.id, "intent": w.intent,
                           "status": w.status.value, "owner": w.owner_member} for w in items
-                         if w.hatchet_run_id]}
+                         if run_scope.permits(work_item_run_id(w))]}

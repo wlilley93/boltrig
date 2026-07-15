@@ -114,6 +114,7 @@ async def test_filed_work_item_completes_through_the_org():
     assert len(children) == 1
     assert children[0].status == WorkStatus.DONE
     assert children[0].owner_member == DEPT
+    assert children[0].hatchet_run_id == done.result["children"][0]["run_id"]
     # the audit trail records the steps: checkpoints + the AGENT_SPAWN row
     checkpoints = {c.step: c.status for c in await kernel.store.list_checkpoints(T, item.id)}
     assert checkpoints == {"route": "done", "execute": "done"}
@@ -149,6 +150,7 @@ async def test_transient_failure_requeues_until_the_cap_then_fails():
         name = DEPT
 
         async def handle(self, work_item, context, *, prefer=None, tree_id=None):
+            assert context.extra["principal_scope"] == {"departments": [DEPT]}
             raise RuntimeError("boom")
 
     kernel = _kernel()
@@ -161,6 +163,11 @@ async def test_transient_failure_requeues_until_the_cap_then_fails():
     first = await kernel.store.get_work_item(T, item.id)
     assert first.status == WorkStatus.PENDING
     assert first.attempts == 1
+    failures = [
+        c for c in await kernel.store.list_checkpoints(T, item.id)
+        if c.step == "execute" and c.status == "failed"
+    ]
+    assert failures[-1].output["error"] == "RuntimeError"
     # attempt 2: the cap is reached; exhaustion fails the item with the error
     assert await pump.run_once(T) is True
     final = await kernel.store.get_work_item(T, item.id)

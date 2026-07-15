@@ -122,7 +122,7 @@ async def test_ultracode_run_executes_phases_through_preferred_capability():
         "ultracode:phase-02-plan:plan": "completed",
     }
     assert any(
-        e.get("status") == "phase_finished" for e in kernel.events.snapshot("uc-run")
+        e.get("status") == "phase_finished" for e in kernel.events.snapshot(T, "uc-run")
     )
 
 
@@ -210,7 +210,7 @@ async def test_ultracode_replays_completed_phase_checkpoint():
     assert record["status"] == "completed"
     assert record["phases"] == [phase_record]
     assert any(
-        e.get("status") == "phase_replayed" for e in kernel.events.snapshot("uc-replay")
+        e.get("status") == "phase_replayed" for e in kernel.events.snapshot(T, "uc-replay")
     )
 
 
@@ -270,4 +270,3 @@ async def test_hatchet_child_runner_uses_registered_agent_task():
     assert record["id"] == "a"
     assert workflow.payload["run_id"] == "uc-child"
     assert workflow.payload["agent"]["id"] == "a"
-

@@ -5,6 +5,9 @@ import { App } from "./App";
 import { AuthGate } from "./panels/AuthGate";
 import { ErrorBoundary } from "./ErrorBoundary";
 import "./styles.css";
+import "./styles/shell-vnext.css";
+import "./styles/work-board.css";
+import "./styles/home-operations.css";
 
 const rootEl = document.getElementById("root");
 if (!rootEl) throw new Error("root element #root not found");

@@ -21,6 +21,7 @@ from .hitl import (
     HITLManager,
     approval_request_fingerprint,
     canonical_approval_value,
+    hitl_scope_fields,
 )
 
 AdapterProvider = Callable[[str, str], Awaitable[Adapter | None]]
@@ -84,8 +85,8 @@ async def enforce_approval(
             options=["approve", "reject"],
             verb=verb,
             requested_by=context.actor,
-            requested_on_behalf_of=context.on_behalf_of,
             request_fingerprint=fingerprint,
+            **hitl_scope_fields(context),
         )
         raise PendingHuman(request.id)
     return replace(

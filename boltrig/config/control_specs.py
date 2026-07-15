@@ -81,7 +81,6 @@ def _workflow_specs() -> list[VerbSpec]:
             {"workflow_id": _STRING, "inputs": _OBJ},
             ("workflow_id",),
             "Execute a stored workflow through governed step dispatch",
-            consequence="low",
         ),
     ]
 
@@ -237,7 +236,6 @@ def _administration_specs() -> list[VerbSpec]:
             },
             ("email",),
             "Create an expiring, single-use invitation below the caller's ceiling",
-            consequence="low",
             idempotency_mode="disabled",
         ),
         _spec(
@@ -245,7 +243,6 @@ def _administration_specs() -> list[VerbSpec]:
             {"invite_id": _STRING},
             ("invite_id",),
             "Revoke a pending invitation before it is accepted",
-            consequence="low",
             idempotency_mode="disabled",
         ),
         _spec(
@@ -259,17 +256,63 @@ def _administration_specs() -> list[VerbSpec]:
             },
             ("event_type", "channel"),
             "Create or update the delegated user's notification route",
-            consequence="low",
+        ),
+    ]
+
+
+def _budget_specs() -> list[VerbSpec]:
+    non_negative = {"type": "integer", "minimum": 0}
+    return [
+        _spec(
+            "control.budget.upsert",
+            {
+                "scope_type": {
+                    "type": "string",
+                    "enum": ["tenant", "department", "workflow"],
+                },
+                "scope_id": _STRING,
+                "token_limit": non_negative,
+                "cost_limit_micros": non_negative,
+                "hard_stop": {"type": "boolean"},
+                "window": {
+                    "type": "string",
+                    "enum": ["run", "daily", "monthly"],
+                },
+            },
+            ("scope_type", "scope_id"),
+            "Create or replace a budget policy while preserving usage counters",
+            additional=False,
+        ),
+        _spec(
+            "control.budget.reset",
+            {
+                "scope_type": {
+                    "type": "string",
+                    "enum": ["tenant", "department", "workflow"],
+                },
+                "scope_id": _STRING,
+                "reason": _STRING,
+                "reset_tokens": {"type": "boolean"},
+                "reset_cost": {"type": "boolean"},
+            },
+            ("scope_type", "scope_id", "reason"),
+            "Reset selected budget usage counters with an audited reason",
+            additional=False,
+            idempotency_mode="disabled",
         ),
     ]
 
 
 def control_specs() -> list[VerbSpec]:
     """Return the complete caller-discoverable control-plane verb catalogue."""
+    from .control_compat_specs import compatibility_specs
+
     return [
         *_workflow_specs(),
         *_profile_specs(),
         *_registry_specs(),
         *_adapter_specs(),
         *_administration_specs(),
+        *_budget_specs(),
+        *compatibility_specs(),
     ]

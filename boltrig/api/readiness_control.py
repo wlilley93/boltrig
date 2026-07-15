@@ -4,33 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from boltrig.config.control_specs import control_specs
 from boltrig.kernel import Kernel
 from boltrig.models import TargetType
 
-REQUIRED_CONTROL_VERBS = frozenset(
-    {
-        "control.workflow.upsert",
-        "control.capability.upsert",
-        "control.model_endpoint.upsert",
-        "control.skill.upsert",
-        "control.noun.define",
-        "control.verb.define",
-        "control.binding.set",
-        "control.mcp_server.register",
-        "control.config.upsert",
-        "control.workflow.schedule",
-        "control.workflow.trigger",
-        "control.workflow.execute",
-        "control.adapter.generate",
-        "control.adapter.activate",
-        "control.config.rollback",
-        "control.user.update",
-        "control.user.deactivate",
-        "control.invitation.create",
-        "control.invitation.revoke",
-        "control.notification.route",
-    }
-)
+REQUIRED_CONTROL_VERBS = frozenset(spec.verb_id for spec in control_specs())
 
 
 async def control_plane_check(kernel: Kernel, tenant_id: str) -> dict[str, Any]:

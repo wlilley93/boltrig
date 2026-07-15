@@ -38,11 +38,18 @@ class _SpyStore(InMemoryStore):
 
     async def list_work_items(
         self, tenant_id, status=None, parent_id=None, departments=None,
-        limit=None, cursor=None,
+        limit=None, cursor=None, workspace_id=None, enforce_workspace=False,
     ):
         self.work_list_calls.append({"parent_id": parent_id, "limit": limit, "cursor": cursor})
         return await super().list_work_items(
-            tenant_id, status, parent_id, departments, limit, cursor
+            tenant_id,
+            status,
+            parent_id,
+            departments,
+            limit,
+            cursor,
+            workspace_id,
+            enforce_workspace,
         )
 
     async def list_memory_facts(self, tenant_id, owner_scopes, kind=None, limit=50):

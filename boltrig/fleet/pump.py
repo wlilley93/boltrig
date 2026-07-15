@@ -121,7 +121,7 @@ async def persist_new_work_items(
         child = normalise(payload, source, parent.tenant_id)
         child.parent_id = parent.id
         child.depth = parent.depth + 1
-        child.on_behalf_of = parent.on_behalf_of
+        child.on_behalf_of, child.workspace_id = parent.on_behalf_of, parent.workspace_id
         await store.create_work_item(child)
         created.append(child)
     return created
@@ -254,7 +254,7 @@ class WorkPump:
             cancelled = await self._store.is_run_cancel_requested(tenant, run_id)
             if cancelled:
                 return item
-
+            ctx = await self._context_for(item, run_id)
             await store.upsert_checkpoint(tenant, run_id, "execute", "started")
             tree_id = await tree_root_id(store, item)
             # In-flight adapter call: a cancel requested DURING this never interrupts
@@ -375,9 +375,9 @@ class WorkPump:
             tenant_id=item.tenant_id,
             run_id=run_id,
             grants=perms.grants,
-            actor="chief-of-staff",
-            actor_tier="tier1",
-            on_behalf_of=item.on_behalf_of,
+            actor="chief-of-staff", actor_tier="tier1",
+            on_behalf_of=item.on_behalf_of, workspace_id=item.workspace_id,
+            extra={"principal_scope": {"departments": [item.owner_member]}} if item.owner_member else {},
         )
 
     async def _park(self, item: WorkItem, run_id: str, *, reason: str, detail: str) -> None:
@@ -389,7 +389,7 @@ class WorkPump:
             question=f"work item {item.id} needs a human ({reason}).",
             context=detail,
             urgency=Urgency.ASYNC,
-            work_item_id=item.id,
+            work_item_id=item.id, requested_by="chief-of-staff", requested_on_behalf_of=item.on_behalf_of, workspace_id=item.workspace_id, department_scope=[item.owner_member] if item.owner_member else None,
         )
         await self._await_human(item, run_id, request.id)
 
@@ -431,7 +431,7 @@ class WorkPump:
                 tenant_id=item.tenant_id, ts=utcnow(), actor=self.worker_id,
                 actor_tier="tier1", action_type=ActionType.TOOL_CALL,
                 status="cancelled", run_id=run_id, verb="work.cancel",
-                on_behalf_of=item.on_behalf_of,
+                on_behalf_of=item.on_behalf_of, workspace_id=item.workspace_id,
                 detail={"work_item_id": item.id, "reason": "cancel_requested"},
             )
         )

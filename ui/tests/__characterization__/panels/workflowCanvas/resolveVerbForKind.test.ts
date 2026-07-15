@@ -3,7 +3,6 @@ import type { VerbInfo } from "@/api/types";
 import {
   resolveVerbForKind,
   PREFERRED_VERB_FOR_KIND,
-  defaultActionForKind,
 } from "@/panels/workflowCanvas/nodeTaxonomy";
 
 const verb = (id: string): VerbInfo => ({ id, noun: id.split(".")[0] });
@@ -16,10 +15,10 @@ describe("resolveVerbForKind", () => {
     expect(v?.action).toBe("web.fetch");
   });
 
-  it("seeds the agent param for an agent-call node", () => {
+  it("seeds the governed question contract for an ask-user node", () => {
     const v = resolveVerbForKind("agent-call", catalogue(["chat.ask_user"]));
     expect(v?.action).toBe("chat.ask_user");
-    expect(v?.params).toEqual({ agent: "bolt" });
+    expect(v?.params).toEqual({ prompt: "" });
   });
 
   it("falls back to undefined when the preferred verb is absent", () => {
@@ -31,17 +30,16 @@ describe("resolveVerbForKind", () => {
     expect(resolveVerbForKind("conditional", catalogue(["web.fetch"]))).toBeUndefined();
   });
 
-  it("the synthetic default still covers every kind as a last resort", () => {
+  it("real preferred verbs resolve without a synthetic capability fallback", () => {
     const present = catalogue(Object.keys(PREFERRED_VERB_FOR_KIND).map(
       (k) => PREFERRED_VERB_FOR_KIND[k as keyof typeof PREFERRED_VERB_FOR_KIND]!,
     ));
-    // every capability kind resolves OR has a synthetic default action
     for (const kind of Object.keys(PREFERRED_VERB_FOR_KIND) as Array<
       keyof typeof PREFERRED_VERB_FOR_KIND
     >) {
       const resolved = resolveVerbForKind(kind, present);
-      const fallback = defaultActionForKind(kind);
-      expect((resolved?.action ?? fallback.action).length).toBeGreaterThan(0);
+      expect(resolved?.action).toBe(PREFERRED_VERB_FOR_KIND[kind]);
     }
+    expect(resolveVerbForKind("template", present)).toBeUndefined();
   });
 });

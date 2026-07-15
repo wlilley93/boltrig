@@ -16,6 +16,7 @@ jobs:
     timeout-minutes: 10
     environment: release
     permissions:
+      actions: read
       contents: write
     env:
       RELEASE_TAG: ${{ github.ref_name }}
@@ -41,6 +42,42 @@ jobs:
           release_commit="$(git rev-list -n 1 "$RELEASE_TAG")"
           git merge-base --is-ancestor "$release_commit" "origin/$DEFAULT_BRANCH"
           echo "release-commit=$release_commit" >> "$GITHUB_OUTPUT"
+
+      - name: Require canonical CI and security success for the exact release commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_COMMIT: ${{ steps.verify.outputs.release-commit }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          require_successful_workflow() {
+            local workflow_file="$1"
+            local check_name="$2"
+            local response latest status conclusion url
+            response="$(gh api --method GET \
+              -H 'Accept: application/vnd.github+json' \
+              -H 'X-GitHub-Api-Version: 2022-11-28' \
+              "/repos/$GITHUB_REPOSITORY/actions/workflows/$workflow_file/runs" \
+              -f branch="$DEFAULT_BRANCH" \
+              -f head_sha="$RELEASE_COMMIT" \
+              -f per_page=100)"
+            latest="$(jq -c --arg sha "$RELEASE_COMMIT" \
+              '[.workflow_runs[] | select(.head_sha == $sha)] | sort_by(.run_number) | reverse | .[0] // empty' \
+              <<<"$response")"
+            if [ -z "$latest" ]; then
+              echo "$check_name has no workflow run for $RELEASE_COMMIT" >&2
+              exit 1
+            fi
+            status="$(jq -r '.status' <<<"$latest")"
+            conclusion="$(jq -r '.conclusion // "pending"' <<<"$latest")"
+            url="$(jq -r '.html_url' <<<"$latest")"
+            if [ "$status" != completed ] || [ "$conclusion" != success ]; then
+              echo "$check_name is $status/$conclusion for $RELEASE_COMMIT: $url" >&2
+              exit 1
+            fi
+          }
+          require_successful_workflow ci.yml 'ci / quality'
+          require_successful_workflow security.yml 'security / Security gate'
 
       - name: Refuse to replace an existing release
         env:
@@ -244,6 +281,8 @@ jobs:
             --dir release-evidence
           test "$(find release-evidence -name 'image-ref-*.txt' -type f | wc -l)" -eq 5
           test "$(find release-evidence -name 'sbom-*.cdx.json' -type f | wc -l)" -eq 5
+          image_env=release-evidence/boltrig-images.env
+          : > "$image_env"
           for image in kernel fleet ui pi-sidecar backup; do
             image_name="$(printf 'ghcr.io/%s-%s' "$GITHUB_REPOSITORY" "$image" | tr '[:upper:]' '[:lower:]')"
             image_ref="$(tr -d '\r\n' < "release-evidence/image-ref-$image.txt")"
@@ -251,7 +290,16 @@ jobs:
             test "${image_ref%@*}" = "$image_name"
             [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
             jq -e . "release-evidence/sbom-$image.cdx.json" >/dev/null
+            case "$image" in
+              kernel) variable=BOLTRIG_KERNEL_IMAGE ;;
+              fleet) variable=BOLTRIG_FLEET_IMAGE ;;
+              ui) variable=BOLTRIG_UI_IMAGE ;;
+              pi-sidecar) variable=BOLTRIG_PI_SIDECAR_IMAGE ;;
+              backup) variable=BOLTRIG_BACKUP_IMAGE ;;
+            esac
+            printf '%s=%s\n' "$variable" "$image_ref" >> "$image_env"
           done
+          test "$(wc -l < "$image_env")" -eq 5
 
       - name: Refuse to move an existing public image tag
         shell: bash
@@ -301,6 +349,14 @@ jobs:
               test "$promoted_digest" = "$digest"
             done
           done
+
+      - name: Attach the digest-pinned Compose environment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >-
+          gh release upload "$RELEASE_TAG"
+          release-evidence/boltrig-images.env
+          --repo "$GITHUB_REPOSITORY"
 
       - name: Publish the fully verified GitHub release
         env:

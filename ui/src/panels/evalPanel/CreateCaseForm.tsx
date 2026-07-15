@@ -1,5 +1,6 @@
 import { Field, Select } from "@/panels/ux";
 import { SegmentedV2 } from "@/panels/uxForm";
+import { PendingHumanCard } from "@/panels/uxFlow/pendingHumanCard";
 import { ForbiddenGrantsField } from "./ForbiddenGrantsField";
 import type { EvalState } from "./useEvalState";
 
@@ -53,12 +54,29 @@ export function CreateCaseForm({ s }: { s: EvalState }) {
         <input value={s.labels} onChange={(e) => s.setLabels(e.target.value)} />
       </Field>
 
+      {s.createMutation.pending && (
+        <PendingHumanCard
+          hitlRequestId={s.createMutation.pending.id}
+          noun="control"
+          verb="control.eval_case.upsert"
+          sentParams={s.createMutation.pending.params}
+          onApplied={s.createMutation.onPendingApplied}
+          onDenied={s.createMutation.onPendingDenied}
+          onReset={s.createMutation.resetPending}
+        />
+      )}
+
       <div className="form__actions">
-        <button className="btn btn--primary" disabled={s.createBusy} onClick={s.createCase}>
-          {s.createBusy ? "Creating..." : "Create case"}
+        <button
+          className="btn btn--primary"
+          disabled={s.createMutation.busy || s.createMutation.pending !== null}
+          onClick={s.createCase}
+        >
+          {s.createMutation.busy ? "Creating..." : "Create case"}
         </button>
         {s.createMsg && <span className="ok">{s.createMsg}</span>}
         {s.createError && <span className="error">{s.createError}</span>}
+        {s.createMutation.error && <span className="error">{s.createMutation.error}</span>}
       </div>
     </div>
   );

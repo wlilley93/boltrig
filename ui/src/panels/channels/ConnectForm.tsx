@@ -1,9 +1,9 @@
 import { useState } from "react";
 
-import { api } from "@/api/client";
-import { errText } from "@/panels/shared";
 import { Field } from "@/panels/ux";
 import { SegmentedV2 } from "@/panels/uxForm";
+import { PendingHumanCard } from "@/panels/uxFlow/pendingHumanCard";
+import { outputRecord, useControlMutation } from "@/panels/uxFlow/useControlMutation";
 import { ENABLED_OPTIONS, PLATFORM_OPTIONS, UNPAIRED_OPTIONS } from "./options";
 
 export function useConnectForm(onConnected: () => void) {
@@ -12,39 +12,32 @@ export function useConnectForm(onConnected: () => void) {
   const [unpaired, setUnpaired] = useState("reject");
   const [secret, setSecret] = useState("");
   const [enabled, setEnabled] = useState("true");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [inboundUrl, setInboundUrl] = useState<string | null>(null);
+  const mutation = useControlMutation({
+    verb: "control.channel.connect",
+    onApplied(output) {
+      const connected = outputRecord(output);
+      setInboundUrl(typeof connected.inbound_url === "string" ? connected.inbound_url : null);
+      setName("");
+      setSecret("");
+      onConnected();
+    },
+  });
 
   async function connect() {
     if (!name.trim()) {
-      setError("A channel name is required.");
+      mutation.onPendingDenied("A channel name is required.");
       return;
     }
-    setBusy(true);
-    setError(null);
     setInboundUrl(null);
-    try {
-      const res = await api.connectChannel({
-        platform,
-        name: name.trim(),
-        unpaired_behavior: unpaired,
-        enabled: enabled === "true",
-        signing_secret: secret.trim() || undefined,
-      });
-      if (res.status === "ok") {
-        setInboundUrl(res.inbound_url ?? null);
-        setName("");
-        setSecret("");
-        onConnected();
-      } else {
-        setError(res.reason ?? "connect rejected");
-      }
-    } catch (err) {
-      setError(errText(err));
-    } finally {
-      setBusy(false);
-    }
+    const params: Record<string, unknown> = {
+      platform,
+      name: name.trim(),
+      unpaired_behavior: unpaired,
+      enabled: enabled === "true",
+    };
+    if (secret.trim()) params.signing_secret = secret.trim();
+    await mutation.invoke(params);
   }
 
   return {
@@ -58,8 +51,7 @@ export function useConnectForm(onConnected: () => void) {
     setSecret,
     enabled,
     setEnabled,
-    busy,
-    error,
+    mutation,
     inboundUrl,
     connect,
   };
@@ -85,8 +77,7 @@ export function ConnectForm({ onConnected }: { onConnected: () => void }) {
     setSecret,
     enabled,
     setEnabled,
-    busy,
-    error,
+    mutation,
     inboundUrl,
     connect,
   } = useConnectForm(onConnected);
@@ -109,7 +100,11 @@ export function ConnectForm({ onConnected }: { onConnected: () => void }) {
           />
         </Field>
         <Field label="Name">
-          <input value={name} onChange={(e) => setName(e.target.value)} />
+          <input
+            aria-label="Name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
         </Field>
         <Field
           label="Unpaired sender behaviour"
@@ -137,17 +132,29 @@ export function ConnectForm({ onConnected }: { onConnected: () => void }) {
         >
           <input
             type="password"
+            aria-label="Signing secret"
             value={secret}
             autoComplete="off"
             onChange={(e) => setSecret(e.target.value)}
           />
         </Field>
       </div>
+      {mutation.pending && (
+        <PendingHumanCard
+          hitlRequestId={mutation.pending.id}
+          noun="control"
+          verb="control.channel.connect"
+          sentParams={mutation.pending.params}
+          onApplied={mutation.onPendingApplied}
+          onDenied={mutation.onPendingDenied}
+          onReset={mutation.resetPending}
+        />
+      )}
       <div className="form__actions">
-        <button className="btn btn--primary" disabled={busy} onClick={() => void connect()}>
-          {busy ? "Connecting..." : "Connect channel"}
+        <button className="btn btn--primary" disabled={mutation.busy || mutation.pending !== null} onClick={() => void connect()}>
+          {mutation.busy ? "Connecting..." : "Connect channel"}
         </button>
-        {error && <span className="error">{error}</span>}
+        {mutation.error && <span className="error">{mutation.error}</span>}
       </div>
       {inboundUrl && <InboundUrlNotice url={inboundUrl} />}
     </div>

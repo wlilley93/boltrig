@@ -13,7 +13,12 @@ T = "acme"
 
 
 def _stub_executor(events):
-    async def executor(*, run_id, relay, **kw):
+    # Historical injected executors pre-date the authenticated workspace/scope
+    # keywords. The service keeps that extension seam backward compatible.
+    async def executor(
+        *, tenant_id, user_id, role, grants, conversation_id, run_id, message,
+        relay, attachments=None,
+    ):
         for ev in events:
             relay.publish(run_id, ev)  # ChatService closes the stream afterwards
 

@@ -23,6 +23,7 @@ from boltrig.kernel import Kernel
 from boltrig.kernel.app import create_app
 from boltrig.models import GrantSet, TenantPermissions
 from boltrig.store import InMemoryStore
+from tests.approval import approved_request
 
 T = "acme"
 SECRET = "whsec_gov_123"
@@ -46,6 +47,12 @@ def _member() -> dict:
     return {"x-boltrig-tenant": T, "x-boltrig-role": "member", "x-boltrig-subject": "joe"}
 
 
+def _approved(client, kernel, method, path, *, json=None):
+    return approved_request(
+        client, kernel, T, method, path, headers=_admin(), json=json
+    )
+
+
 def _signed(secret: str, payload: dict) -> dict:
     # timestamp bound into the HMAC (M3/SEC-66): a signed webhook now needs a t.
     ts = int(time.time())
@@ -60,8 +67,10 @@ def test_member_cannot_connect_or_pair():
     c = _client(kernel)
     assert c.post("/v1/channels", json={"platform": "webhook", "name": "x"}, headers=_member()).status_code == 403
     # connect as admin first, then confirm a member cannot pair or bind either
-    ch = c.post("/v1/channels", json={"platform": "webhook", "name": "x", "signing_secret": SECRET},
-                headers=_admin()).json()["channel"]
+    ch = _approved(
+        c, kernel, "POST", "/v1/channels",
+        json={"platform": "webhook", "name": "x", "signing_secret": SECRET},
+    ).json()["channel"]
     assert c.post(f"/v1/channels/{ch}/pair", json={"external_user_id": "U", "subject": "s", "role": "member"},
                   headers=_member()).status_code == 403
     assert c.post(f"/v1/channels/{ch}/bindings",
@@ -74,9 +83,11 @@ def test_member_cannot_connect_or_pair():
 def test_connect_stores_secret_kernel_side_never_returns_it():
     kernel, store = _kernel()
     c = _client(kernel)
-    r = c.post("/v1/channels", json={"platform": "webhook", "name": "Ops",
-                                     "signing_secret": SECRET, "config": {"sender_field": "sender"}},
-               headers=_admin())
+    r = _approved(
+        c, kernel, "POST", "/v1/channels",
+        json={"platform": "webhook", "name": "Ops", "signing_secret": SECRET,
+              "config": {"sender_field": "sender"}},
+    )
     assert r.status_code == 201
     body = r.json()
     assert "inbound_url" in body
@@ -94,9 +105,11 @@ def test_connect_stores_secret_kernel_side_never_returns_it():
 def test_disconnect_removes_channel_and_cascades():
     kernel, store = _kernel()
     c = _client(kernel)
-    ch = c.post("/v1/channels", json={"platform": "webhook", "name": "Gone", "signing_secret": SECRET},
-                headers=_admin()).json()["channel"]
-    assert c.delete(f"/v1/channels/{ch}", headers=_admin()).status_code == 200
+    ch = _approved(
+        c, kernel, "POST", "/v1/channels",
+        json={"platform": "webhook", "name": "Gone", "signing_secret": SECRET},
+    ).json()["channel"]
+    assert _approved(c, kernel, "DELETE", f"/v1/channels/{ch}").status_code == 200
     assert asyncio.run(store.get_channel(T, ch)) is None
 
 
@@ -105,13 +118,15 @@ def test_disconnect_removes_channel_and_cascades():
 def test_pairing_code_consumes_and_binds_unknown_sender():
     kernel, store = _kernel()
     c = _client(kernel)
-    ch = c.post("/v1/channels",
-                json={"platform": "webhook", "name": "Pair", "signing_secret": SECRET,
-                      "unpaired_behavior": "pair", "config": {"sender_field": "sender"}},
-                headers=_admin()).json()["channel"]
-    code = c.post(f"/v1/channels/{ch}/pair",
-                  json={"external_user_id": "U-new", "subject": "bob", "role": "member"},
-                  headers=_admin()).json()["code"]
+    ch = _approved(
+        c, kernel, "POST", "/v1/channels",
+        json={"platform": "webhook", "name": "Pair", "signing_secret": SECRET,
+              "unpaired_behavior": "pair", "config": {"sender_field": "sender"}},
+    ).json()["channel"]
+    code = _approved(
+        c, kernel, "POST", f"/v1/channels/{ch}/pair",
+        json={"external_user_id": "U-new", "subject": "bob", "role": "member"},
+    ).json()["code"]
     # the unbound sender presents the code in its first (signed) message -> bound + proceeds
     payload = {"sender": "U-new", "type": "message", "text": "hi", "id": "e1", "pairing_code": code}
     r = c.post(f"/v1/channels/{ch}/inbound", json=payload, headers=_signed(SECRET, payload))
@@ -130,13 +145,15 @@ def test_pairing_code_consumes_and_binds_unknown_sender():
 def test_wrong_pairing_code_locks_out_after_cap():
     kernel, store = _kernel()
     c = _client(kernel)
-    ch = c.post("/v1/channels",
-                json={"platform": "webhook", "name": "Lock", "signing_secret": SECRET,
-                      "unpaired_behavior": "pair", "config": {"sender_field": "sender"}},
-                headers=_admin()).json()["channel"]
-    correct = c.post(f"/v1/channels/{ch}/pair",
-                     json={"external_user_id": "U-new", "subject": "bob", "role": "member"},
-                     headers=_admin()).json()["code"]
+    ch = _approved(
+        c, kernel, "POST", "/v1/channels",
+        json={"platform": "webhook", "name": "Lock", "signing_secret": SECRET,
+              "unpaired_behavior": "pair", "config": {"sender_field": "sender"}},
+    ).json()["channel"]
+    correct = _approved(
+        c, kernel, "POST", f"/v1/channels/{ch}/pair",
+        json={"external_user_id": "U-new", "subject": "bob", "role": "member"},
+    ).json()["code"]
     # hammer the wrong code up to the lockout cap (each is a verified-but-failed attempt)
     for _ in range(5):
         payload = {"sender": "U-new", "type": "message", "id": "x", "pairing_code": "WRONG00"}
@@ -154,13 +171,15 @@ def test_wrong_pairing_code_locks_out_after_cap():
 def test_expired_pairing_is_denied():
     kernel, store = _kernel()
     c = _client(kernel)
-    ch = c.post("/v1/channels",
-                json={"platform": "webhook", "name": "TTL", "signing_secret": SECRET,
-                      "unpaired_behavior": "pair", "config": {"sender_field": "sender"}},
-                headers=_admin()).json()["channel"]
-    code = c.post(f"/v1/channels/{ch}/pair",
-                  json={"external_user_id": "U-new", "subject": "bob", "role": "member"},
-                  headers=_admin()).json()["code"]
+    ch = _approved(
+        c, kernel, "POST", "/v1/channels",
+        json={"platform": "webhook", "name": "TTL", "signing_secret": SECRET,
+              "unpaired_behavior": "pair", "config": {"sender_field": "sender"}},
+    ).json()["channel"]
+    code = _approved(
+        c, kernel, "POST", f"/v1/channels/{ch}/pair",
+        json={"external_user_id": "U-new", "subject": "bob", "role": "member"},
+    ).json()["code"]
     # force the pairing past its TTL by rewinding its expiry (simulates elapsed time)
     pairing = asyncio.run(store.get_pending_pairing_for_sender(T, ch, "U-new"))
     assert pairing is not None

@@ -4,7 +4,6 @@ import { saveAppearanceLocal, loadAppearance } from "@/appearance";
 import { saveReadAloud } from "@/voice";
 import { api } from "@/api/client";
 import { apiReason } from "@/panels/shared";
-import { CHAT_AGENTS } from "@/panels/chat/constants";
 import { encodeFile, formatBytes } from "@/panels/chat/attachmentUtils";
 import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_TOTAL_ATTACHMENT_BYTES } from "@/panels/chat/constants";
 import type { ChatDerivedState } from "@/panels/chat/useChatDerived";
@@ -19,7 +18,6 @@ export interface ChatActions extends ChatStreamActions {
   loadConversation: (id: string) => void;
   selectConversation: (id: string) => void;
   newConversation: () => void;
-  cycleAgent: (dir: "left" | "right") => void;
   executeSlash: (kind: "clear" | "compact") => void;
   onComposerKey: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   addFiles: (files: FileList | null) => void;
@@ -93,22 +91,6 @@ function useConversationSelectionActions(
   }, [state]);
 
   return { selectConversation, newConversation };
-}
-
-function useCycleAgent(state: ChatPanelState): (dir: "left" | "right") => void {
-  return useCallback(
-    (dir: "left" | "right") => {
-      const idx = CHAT_AGENTS.findIndex((a) => a.id === state.selectedAgentId);
-      const next =
-        dir === "left"
-          ? (idx - 1 + CHAT_AGENTS.length) % CHAT_AGENTS.length
-          : (idx + 1) % CHAT_AGENTS.length;
-      state.setSelectedAgentId(CHAT_AGENTS[next].id);
-      state.setSwitchDir(dir);
-      state.setSwitchCount((n) => n + 1);
-    },
-    [state],
-  );
 }
 
 function useComposerActions(
@@ -281,7 +263,6 @@ function useUiActions(
 export function useChatActions(state: ChatPanelState, derived: ChatDerivedState): ChatActions {
   const loadConversation = useLoadConversation(state);
   const conversationActions = useConversationSelectionActions(state, loadConversation);
-  const cycleAgent = useCycleAgent(state);
   const stream = useChatStreamActions(state, derived, loadConversation);
   // The fleet bar is "active" only when a run is live AND it would actually
   // render rows (has a run id, tools, or subagents). This gates the
@@ -302,6 +283,5 @@ export function useChatActions(state: ChatPanelState, derived: ChatDerivedState)
     ...uiActions,
     ...stream,
     loadConversation,
-    cycleAgent,
   };
 }

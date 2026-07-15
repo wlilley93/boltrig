@@ -236,6 +236,8 @@ def _answered_hitl(req_id: str) -> HITLRequest:
         requested_by="alice",
         requested_on_behalf_of="owner",
         request_fingerprint="delete-fingerprint",
+        workspace_id="ws-1",
+        department_scope=["engineering", "security"],
     )
 
 
@@ -270,12 +272,15 @@ async def test_consume_hitl_is_single_use(store):
 
 @pytest.mark.store
 @pytest.mark.invariant("SEC-14")
+@pytest.mark.invariant("SEC-141")
 async def test_hitl_request_binding_round_trips(store):
     expected = _pending_hitl("req-bound")
     await store.create_hitl_request(expected)
     actual = await store.get_hitl_request(T, expected.id)
     assert actual.requested_on_behalf_of == "owner"
     assert actual.request_fingerprint == "delete-fingerprint"
+    assert actual.workspace_id == "ws-1"
+    assert actual.department_scope == ["engineering", "security"]
 
 
 @pytest.mark.store

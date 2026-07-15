@@ -282,17 +282,16 @@ def wire_hitl_resume(kernel: Kernel, *, executor=None, pump=None) -> None:
 async def _harvest_hitl_signal(kernel: Kernel, request) -> None:
     """Turn a HITL verdict into a reuse signal ([2026] VJS-COUNTY 5), best-effort.
 
-    An approval is an ENDORSEMENT, a rejection a BLOCK signal for the run/item the
-    request paused. It reweights memory through ``memory.improve`` (reweight-only)
-    under a governed system context, so it runs through the chokepoint but can only
-    change reuse likelihood - never a grant, scope, or tier. Any failure is
-    swallowed: the recorded answer is the truth, a harvest fault never voids it (P9).
+    Approval endorses and rejection blocks reuse through the governed reweight-only
+    path. It never changes authority, and harvest failure never voids the answer.
     """
     from boltrig.kernel.hitl import _APPROVING
-    from boltrig.models import InvocationContext
+    from boltrig.models import HITLType, InvocationContext
     from boltrig.workflows import harvest_reuse_signal
 
     try:
+        if request.type != HITLType.APPROVAL:
+            return
         resp = await kernel.store.get_hitl_response(request.tenant_id, request.id)
         if resp is None:
             return

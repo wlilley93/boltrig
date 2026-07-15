@@ -38,6 +38,7 @@ from boltrig.models import (
     WorkspaceMember,
 )
 from boltrig.store import InMemoryStore
+from tests.approval import approved_request
 
 # The console tenant is 'default' (accept-invite operates within it), so the
 # management writes and the accept flow share one tenant.
@@ -59,6 +60,12 @@ def _app():
 def _hdr(role="org-admin", subject="admin"):
     return {"x-boltrig-tenant": T, "x-boltrig-subject": subject,
             "x-boltrig-role": role, "x-boltrig-grants": "*"}
+
+
+def _approved(c, k, method, path, *, headers=None, json=None):
+    return approved_request(
+        c, k, T, method, path, headers=headers or _hdr(), json=json
+    )
 
 
 async def _seat_user(store, user_id, *, role="member"):
@@ -84,7 +91,7 @@ def test_workspace_and_org_management_surface():
     c = TestClient(app)
 
     # An org-admin creates a workspace and is seated as its owner.
-    r = c.post("/v1/workspaces", headers=_hdr(), json={"name": "Acme Team"})
+    r = _approved(c, k, "POST", "/v1/workspaces", json={"name": "Acme Team"})
     assert r.status_code == 200
     ws = r.json()["workspace"]
     assert ws["name"] == "Acme Team" and ws["slug"].startswith("acme-team-")
@@ -93,20 +100,24 @@ def test_workspace_and_org_management_surface():
     assert [w["id"] for w in mine] == [ws["id"]]
 
     # Rename + settings via PATCH (the creator manages it as owner).
-    p = c.patch(f"/v1/workspaces/{ws['id']}", headers=_hdr(),
-                json={"name": "Renamed", "status": "archived"})
+    p = _approved(
+        c, k, "PATCH", f"/v1/workspaces/{ws['id']}",
+        json={"name": "Renamed", "status": "archived"},
+    )
     assert p.status_code == 200
     assert p.json()["workspace"]["name"] == "Renamed"
     assert p.json()["workspace"]["status"] == "archived"
 
     # Add an existing org user as a member, then list + remove.
     _run(_seat_user(store, "bob@x.io"))
-    add = c.post(f"/v1/workspaces/{ws['id']}/members", headers=_hdr(),
-                 json={"user_id": "bob@x.io", "role": "viewer"})
+    add = _approved(
+        c, k, "POST", f"/v1/workspaces/{ws['id']}/members",
+        json={"user_id": "bob@x.io", "role": "viewer"},
+    )
     assert add.status_code == 200 and add.json()["member"]["role"] == "viewer"
     roster = c.get(f"/v1/workspaces/{ws['id']}/members", headers=_hdr()).json()["members"]
     assert {m["user_id"] for m in roster} == {"admin", "bob@x.io"}
-    rm = c.delete(f"/v1/workspaces/{ws['id']}/members/bob@x.io", headers=_hdr())
+    rm = _approved(c, k, "DELETE", f"/v1/workspaces/{ws['id']}/members/bob@x.io")
     assert rm.status_code == 200
     roster2 = c.get(f"/v1/workspaces/{ws['id']}/members", headers=_hdr()).json()["members"]
     assert {m["user_id"] for m in roster2} == {"admin"}
@@ -114,8 +125,10 @@ def test_workspace_and_org_management_surface():
     # Org routes: read the org, then update its handle + flags.
     org = c.get("/v1/orgs/current", headers=_hdr()).json()["organisation"]
     assert org["id"] == T and org["allow_own_ai_keys"] is False
-    up = c.patch("/v1/orgs/current", headers=_hdr(),
-                 json={"name": "Acme Inc", "allow_own_ai_keys": True})
+    up = _approved(
+        c, k, "PATCH", "/v1/orgs/current",
+        json={"name": "Acme Inc", "allow_own_ai_keys": True},
+    )
     assert up.status_code == 200
     assert up.json()["organisation"]["name"] == "Acme Inc"
     assert up.json()["organisation"]["allow_own_ai_keys"] is True
@@ -180,8 +193,10 @@ def test_workspace_management_is_membership_role_fail_closed():
 
     # ...but the workspace OWNER themselves may manage it (positive control).
     owner_hdr = _hdr(role="member", subject="alice@x.io")
-    assert c.post("/v1/workspaces/ws-a/members", headers=owner_hdr,
-                  json={"user_id": "target@x.io", "role": "member"}).status_code == 200
+    assert _approved(
+        c, k, "POST", "/v1/workspaces/ws-a/members", headers=owner_hdr,
+        json={"user_id": "target@x.io", "role": "member"},
+    ).status_code == 200
     assert "target@x.io" in _members()
 
 
@@ -196,8 +211,10 @@ def test_scoped_invite_seats_and_provisions(monkeypatch):
 
     # 1) A workspace-targeted invite seats the invitee into THAT workspace on accept
     #    with the invited role.
-    inv = c.post("/v1/admin/invitations", headers=_hdr(),
-                 json={"email": "seat@x.io", "role": "viewer", "workspace_id": "ws-target"})
+    inv = _approved(
+        c, k, "POST", "/v1/admin/invitations",
+        json={"email": "seat@x.io", "role": "viewer", "workspace_id": "ws-target"},
+    )
     assert inv.status_code == 200
     tok = inv.json()["invite_token"]
     ac = c.post("/v1/auth/accept-invite",
@@ -208,9 +225,11 @@ def test_scoped_invite_seats_and_provisions(monkeypatch):
 
     # 2) A provisioning invite CREATES a workspace on accept and seats the invitee as
     #    its OWNER.
-    inv2 = c.post("/v1/admin/invitations", headers=_hdr(),
-                  json={"email": "founder@x.io", "role": "member",
-                        "provision_workspace_name": "Founder Space"})
+    inv2 = _approved(
+        c, k, "POST", "/v1/admin/invitations",
+        json={"email": "founder@x.io", "role": "member",
+              "provision_workspace_name": "Founder Space"},
+    )
     tok2 = inv2.json()["invite_token"]
     assert c.post("/v1/auth/accept-invite",
                   json={"token": tok2, "password": "founder-password-1"}).status_code == 200
@@ -228,9 +247,11 @@ def test_scoped_invite_seats_and_provisions(monkeypatch):
     assert denied.status_code == 403
     assert len(_run(store.list_invitations(T))) == before  # NO write
 
-    okorg = c.post("/v1/admin/invitations", headers=_hdr(role="superadmin"),
-                   json={"email": "neworg@x.io", "role": "member",
-                         "provision_org_name": "NewCo"})
+    okorg = _approved(
+        c, k, "POST", "/v1/admin/invitations", headers=_hdr(role="superadmin"),
+        json={"email": "neworg@x.io", "role": "member",
+              "provision_org_name": "NewCo"},
+    )
     assert okorg.status_code == 200
     tok3 = okorg.json()["invite_token"]
     assert c.post("/v1/auth/accept-invite",
@@ -265,8 +286,11 @@ def test_org_management_is_admin_fail_closed():
     assert org["allow_own_ai_keys"] is False and org["name"] != "hijack"
 
     # An org-admin may rename + toggle both policy flags.
-    up = c.patch("/v1/orgs/current", headers=_hdr(),
-                 json={"name": "Acme", "allow_own_ai_keys": True, "require_two_factor": True})
+    up = _approved(
+        c, k, "PATCH", "/v1/orgs/current",
+        json={"name": "Acme", "allow_own_ai_keys": True,
+              "require_two_factor": True},
+    )
     assert up.status_code == 200
     body = up.json()["organisation"]
     assert body["allow_own_ai_keys"] is True and body["require_two_factor"] is True

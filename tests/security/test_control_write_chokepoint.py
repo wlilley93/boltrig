@@ -1,11 +1,11 @@
-"""Freeze the control-plane direct-write debt (SEC-140).
+"""Enforce the control-plane direct-write chokepoint (SEC-140).
 
 The control plane is migrating console mutations off direct Store writes and onto
 governed control.* verbs through the ONE kernel chokepoint (SEC-75). Some writes
 legitimately STAY direct - a caller acting on their OWN scope, or channel ingress
-authenticated by the channel signature rather than a principal. The rest are debt
-still to be migrated. This AST scan pins the exact set of direct k.store /
-kernel.store mutations in the two console HTTP route modules so:
+authenticated by the channel signature rather than a principal. This AST scan
+pins the exact set of direct k.store / kernel.store mutations across every
+console authoring route so:
 
   - a NEW direct write cannot be added silently: it must be added to
     SANCTIONED_DIRECT_WRITES in the same change, which is the review signal; and
@@ -27,15 +27,20 @@ import pytest
 _REPO = pathlib.Path(__file__).resolve().parents[2]
 _KERNEL = _REPO / "boltrig" / "kernel"
 
-# The two console HTTP surfaces under the ratchet.
-_MODULES = ("access_routes.py", "channel_routes.py")
+# Every console HTTP surface that contains, or historically contained, a direct
+# Store mutation. Platform authoring modules stay in the ratchet even after their
+# debt reaches zero so a regression cannot silently reintroduce a write.
+_MODULES = (
+    "access_routes.py",
+    "channel_routes.py",
+    "platform_routes/eval_routes.py",
+    "platform_routes/personal.py",
+)
 
 # A store MUTATION: a method on a k.store / kernel.store receiver whose name
 # begins with one of these verbs. Reads (get_/list_/find_/audit_query) are not
 # writes and are ignored.
-_MUTATOR = re.compile(
-    r"^(upsert|update|create|add|remove|delete|set|mark|request|bump|consume)_"
-)
+_MUTATOR = re.compile(r"^(upsert|update|create|add|remove|delete|set|mark|request|bump|consume)_")
 _STORE_RECEIVERS = frozenset({"k", "kernel"})
 
 # The COMPLETE set of sanctioned direct writes, keyed by a STABLE scan key
@@ -61,24 +66,10 @@ SANCTIONED_DIRECT_WRITES: frozenset[tuple[str, str, str]] = frozenset(
         ("channel_routes.py", "_consume_pairing", "bump_channel_pairing_attempts"),
         ("channel_routes.py", "_consume_pairing", "consume_channel_pairing"),
         ("channel_routes.py", "_consume_pairing", "upsert_channel_binding"),
-        # --- not-yet-migrated debt: still to move onto control.* verbs --------
-        ("access_routes.py", "set_ai_key", "set_credential_ref"),
-        ("access_routes.py", "set_ai_key", "set_ai_config"),
-        ("access_routes.py", "delete_ai_key", "delete_ai_config"),
-        ("access_routes.py", "delete_ai_key", "set_credential_ref"),
-        ("access_routes.py", "update_current_org", "update_org"),
-        ("access_routes.py", "create_workspace", "create_workspace"),
-        ("access_routes.py", "create_workspace", "add_workspace_member"),
-        ("access_routes.py", "update_workspace", "update_workspace"),
-        ("access_routes.py", "add_workspace_member", "add_workspace_member"),
-        ("access_routes.py", "remove_workspace_member", "remove_workspace_member"),
-        ("channel_routes.py", "channel_connect", "set_credential_ref"),
-        ("channel_routes.py", "channel_connect", "upsert_channel"),
-        ("channel_routes.py", "channel_configure", "upsert_channel"),
-        ("channel_routes.py", "channel_disconnect", "delete_channel"),
-        ("channel_routes.py", "channel_pair", "create_channel_pairing"),
-        ("channel_routes.py", "channel_bind", "upsert_channel_binding"),
-        ("channel_routes.py", "delete_binding", "delete_channel_binding"),
+        # Caller-owned personal-agent configuration intentionally requires no
+        # control.* grant; dispatching it as authoring would widen authority or
+        # break the delegated-only contract pinned by SEC-30.
+        ("personal.py", "configure_personal_agent", "upsert_personal_agent"),
     }
 )
 
@@ -144,5 +135,5 @@ def test_control_plane_direct_writes_are_all_sanctioned():
         + "\n".join(f"  {m}::{fn} -> {meth}" for m, fn, meth in sorted(stale))
     )
 
-    # tripwire on the ledger size: 13 stay-direct + 17 not-yet-migrated.
-    assert len(SANCTIONED_DIRECT_WRITES) == 30
+    # Tripwire on the closed ledger: only 14 self-scope/ingress writes remain.
+    assert len(SANCTIONED_DIRECT_WRITES) == 14

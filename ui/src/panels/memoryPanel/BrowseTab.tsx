@@ -3,10 +3,10 @@ import { useState } from "react";
 import { api } from "@/api/client";
 import type { MemoryFactView } from "@/api/types";
 import { useFetch } from "@/useFetch";
-import { errText } from "@/panels/shared";
 import { FetchError, Field, InfoCallout, Select } from "@/panels/ux";
 import { denialText, isDenied, KIND_FILTER_OPTIONS } from "@/panels/memoryPanel/helpers";
 import { FactCard } from "@/panels/memoryPanel/FactCard";
+import { ArmConfirm } from "@/panels/uxFlow";
 
 type BrowseFilterProps = {
   kind: string;
@@ -14,11 +14,13 @@ type BrowseFilterProps = {
   onRefresh: () => void;
   scopes: string[];
   forgetMsg: string | null;
-  forgetError: string | null;
+  sourceRef: string;
+  setSourceRef: (value: string) => void;
+  onForgetSource: () => Promise<void>;
 };
 
 function BrowseFilter(props: BrowseFilterProps) {
-  const { kind, setKind, onRefresh, scopes, forgetMsg, forgetError } = props;
+  const { kind, setKind, onRefresh, scopes, forgetMsg, sourceRef, setSourceRef, onForgetSource } = props;
   return (
     <div className="form">
       <div className="form__title">Browse facts</div>
@@ -50,7 +52,32 @@ function BrowseFilter(props: BrowseFilterProps) {
         </p>
       )}
       {forgetMsg && <p className="ok">{forgetMsg}</p>}
-      {forgetError && <p className="error">{forgetError}</p>}
+      <div className="form__grid">
+        <Field
+          label="Erase by source"
+          htmlFor="memory-forget-source"
+          hint="Remove every fact derived from one exact source reference, including derived edges."
+          example="document:launch-plan-v3"
+        >
+          <input
+            id="memory-forget-source"
+            value={sourceRef}
+            onChange={(event) => setSourceRef(event.target.value)}
+            placeholder="Exact source_ref"
+          />
+        </Field>
+        <div className="form__actions">
+          <ArmConfirm
+            label="Forget source"
+            armLabel={<>Erase all memory derived from <code>{sourceRef.trim()}</code>? This is permanent and audited.</>}
+            confirmLabel="Erase source memory"
+            busyLabel="Erasing..."
+            tone="danger"
+            disabled={!sourceRef.trim()}
+            onConfirm={onForgetSource}
+          />
+        </div>
+      </div>
     </div>
   );
 }
@@ -62,12 +89,11 @@ type BrowseResultsProps = {
   error: string | null;
   errorStatus: number | null;
   onRetry: () => void;
-  forgetting: string | null;
-  onForget: (id: string) => void;
+  onForget: (id: string) => Promise<void>;
 };
 
 function BrowseResults(props: BrowseResultsProps) {
-  const { list, loading, hasData, error, errorStatus, onRetry, forgetting, onForget } = props;
+  const { list, loading, hasData, error, errorStatus, onRetry, onForget } = props;
   return (
     <div className="list-card">
       <div className="list-card__head">
@@ -95,14 +121,14 @@ function BrowseResults(props: BrowseResultsProps) {
                 fact={f}
                 key={f.id}
                 footer={
-                  <button
-                    className="btn btn--danger"
-                    disabled={forgetting === f.id}
-                    title="Erase this fact and its links - permanent."
-                    onClick={() => onForget(f.id)}
-                  >
-                    {forgetting === f.id ? "Forgetting..." : "Forget"}
-                  </button>
+                  <ArmConfirm
+                    label="Forget"
+                    armLabel={<>Erase fact <code>{f.id}</code> and its edges? This is permanent and audited.</>}
+                    confirmLabel={`Erase fact ${f.id}`}
+                    busyLabel="Erasing..."
+                    tone="danger"
+                    onConfirm={() => onForget(f.id)}
+                  />
                 }
               />
             ))}
@@ -120,32 +146,28 @@ export function BrowseTab() {
     [kind],
   );
 
-  const [forgetting, setForgetting] = useState<string | null>(null);
-  const [forgetError, setForgetError] = useState<string | null>(null);
   const [forgetMsg, setForgetMsg] = useState<string | null>(null);
+  const [sourceRef, setSourceRef] = useState("");
 
   async function forget(id: string) {
-    if (!window.confirm(`Forget fact ${id}? This erases it and its edges.`)) {
-      return;
-    }
-    setForgetting(id);
-    setForgetError(null);
     setForgetMsg(null);
-    try {
-      const res = await api.memoryForget({ target: id });
-      if (isDenied(res)) {
-        setForgetError(denialText(res.reason));
-        return;
-      }
-      setForgetMsg(
-        `Forgot ${id}: ${res.facts_removed ?? 0} fact(s) removed.`,
-      );
-      facts.reload();
-    } catch (err) {
-      setForgetError(errText(err));
-    } finally {
-      setForgetting(null);
+    const res = await api.memoryForget({ target: id });
+    if (isDenied(res)) {
+      throw new Error(denialText(res.reason));
     }
+    setForgetMsg(`Forgot ${id}: ${res.facts_removed ?? 0} fact(s) removed.`);
+    facts.reload();
+  }
+
+  async function forgetSource() {
+    const exact = sourceRef.trim();
+    if (!exact) return;
+    setForgetMsg(null);
+    const res = await api.memoryForget({ source_ref: exact });
+    if (isDenied(res)) throw new Error(denialText(res.reason));
+    setForgetMsg(`Forgot source ${exact}: ${res.facts_removed ?? 0} fact(s) removed.`);
+    setSourceRef("");
+    facts.reload();
   }
 
   const list: MemoryFactView[] = facts.data?.facts ?? [];
@@ -159,7 +181,9 @@ export function BrowseTab() {
         onRefresh={facts.reload}
         scopes={scopes}
         forgetMsg={forgetMsg}
-        forgetError={forgetError}
+        sourceRef={sourceRef}
+        setSourceRef={setSourceRef}
+        onForgetSource={forgetSource}
       />
       <BrowseResults
         list={list}
@@ -168,7 +192,6 @@ export function BrowseTab() {
         error={facts.error}
         errorStatus={facts.errorStatus}
         onRetry={facts.reload}
-        forgetting={forgetting}
         onForget={forget}
       />
     </div>

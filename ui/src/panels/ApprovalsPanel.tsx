@@ -1,12 +1,12 @@
-// US-HIL-05: the canonical record of pending human-in-the-loop requests
-// (approval / clarification / escalation). This is the safety surface: a
-// high-consequence action has paused and will not run until a person here
-// decides. Each request shows its stakes, and is answered inline via
-// POST /v1/hitl/{id}/respond.
+// US-HIL-05: the canonical record of pending, caller-visible human-in-the-loop
+// requests. Approval, clarification and escalation responses use the generic
+// endpoint; owner-scoped questions use their dedicated wrapped answer route.
 //
 // HitlCard is a thin orchestrator: its state + submit live in useHitlCard and
 // the three respond branches (confirm, fixed options, free-text answer) each
 // render through their own sub-component in approvalsPanel/.
+
+import { useMemo, useState } from "react";
 
 import { api } from "../api/client";
 import type { HITLRequest } from "../api/types";
@@ -19,17 +19,25 @@ import {
   HITL_TYPE,
   HITL_URGENCY,
   PageIntro,
+  Select,
   StatusBadge,
 } from "./ux";
 import { HitlRespond } from "./approvalsPanel/HitlRespond";
 import { useHitlCard } from "./approvalsPanel/useHitlCard";
-import { renderContext, runFromContext } from "./approvalsPanel/hitlUtils";
+import {
+  ALL_HITL_TYPES,
+  ALL_HITL_URGENCIES,
+  decisionOptions,
+  filterAndSortHitl,
+  renderContext,
+  runFromContext,
+} from "./approvalsPanel/hitlUtils";
 
 function HitlCard({ req, onAnswered }: { req: HITLRequest; onAnswered: () => void }) {
   const h = useHitlCard(req, onAnswered);
   const ctx = renderContext(req.context);
   const runId = runFromContext(req.context);
-  const options = req.options ?? [];
+  const options = decisionOptions(req.type, req.options);
   const isApproval = req.type === "approval";
 
   return (
@@ -42,7 +50,7 @@ function HitlCard({ req, onAnswered }: { req: HITLRequest; onAnswered: () => voi
       </div>
 
       <p className="hitl-card__question">
-        {req.question || "A high-consequence action needs your decision."}
+        {req.question || "A pending human request needs your response."}
       </p>
 
       {req.work_item_id ? (
@@ -66,7 +74,7 @@ function HitlCard({ req, onAnswered }: { req: HITLRequest; onAnswered: () => voi
         </details>
       ) : null}
 
-      <HitlRespond options={options} h={h} />
+      <HitlRespond options={options} h={h} showNotes={req.type !== "question"} />
     </article>
   );
 }
@@ -77,16 +85,26 @@ export function ApprovalsPanel() {
   const active = useSlideActive();
   const hitl = useFetch(() => api.hitl(), [], 8000, { paused: !active });
   const requests = hitl.data?.requests ?? [];
+  const [typeFilter, setTypeFilter] = useState(ALL_HITL_TYPES);
+  const [urgencyFilter, setUrgencyFilter] = useState(ALL_HITL_URGENCIES);
+  const visibleRequests = useMemo(
+    () => filterAndSortHitl(requests, { type: typeFilter, urgency: urgencyFilter }),
+    [requests, typeFilter, urgencyFilter],
+  );
+  const filtersActive =
+    typeFilter !== ALL_HITL_TYPES || urgencyFilter !== ALL_HITL_URGENCIES;
 
   return (
     <section className="panel">
       <PageIntro
-        title="Approvals"
-        lead="The one place you review and sign off on high-consequence actions the system has paused."
-        how="Nothing high-impact runs until a person here says yes. Each decision is deliberate and recorded. Take your time."
+        title="Approvals & requests"
+        lead="Review the pending human decisions the server has scoped to you."
+        how="Approvals, clarifications, escalations and owner-only questions use their matching governed response path. Every accepted response is recorded; the runtime decides what resumes next."
         actions={
           <>
-            <span className="muted">{requests.length} waiting</span>
+            <span className="muted">
+              {visibleRequests.length} of {requests.length} waiting
+            </span>
             <button className="btn" onClick={() => hitl.reload()}>
               Refresh
             </button>
@@ -97,15 +115,74 @@ export function ApprovalsPanel() {
       {hitl.loading && !hitl.data && <p className="muted">Loading...</p>}
       {hitl.error && <p className="error">Could not load approvals: {hitl.error}</p>}
 
+      {requests.length > 0 && (
+        <div className="kv" role="group" aria-label="Request filters">
+          <span className="muted">Filter</span>
+          <Select
+            ariaLabel="Request type filter"
+            value={typeFilter}
+            onChange={setTypeFilter}
+            options={[
+              { value: ALL_HITL_TYPES, label: "All types" },
+              { value: "approval", label: "Approvals" },
+              { value: "escalation", label: "Escalations" },
+              { value: "clarification", label: "Clarifications" },
+              { value: "question", label: "Questions" },
+            ]}
+          />
+          <Select
+            ariaLabel="Request urgency filter"
+            value={urgencyFilter}
+            onChange={setUrgencyFilter}
+            options={[
+              { value: ALL_HITL_URGENCIES, label: "All urgency" },
+              { value: "blocking", label: "Blocking" },
+              { value: "async", label: "Async" },
+            ]}
+          />
+          {filtersActive && (
+            <button
+              type="button"
+              className="btn btn--ghost btn--sm"
+              onClick={() => {
+                setTypeFilter(ALL_HITL_TYPES);
+                setUrgencyFilter(ALL_HITL_URGENCIES);
+              }}
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+      )}
+
       {requests.length === 0 && !hitl.loading && !hitl.error && (
         <EmptyState
-          title="No approvals waiting - you're all caught up"
-          body="When the system pauses a high-consequence action, it appears here for your sign-off."
+          title="No requests waiting - you're all caught up"
+          body="When a scoped run needs your approval or answer, it appears here."
+        />
+      )}
+
+      {requests.length > 0 && visibleRequests.length === 0 && (
+        <EmptyState
+          title="No requests match these filters"
+          body="Clear a filter to return to the full pending queue."
+          action={(
+            <button
+              type="button"
+              className="btn"
+              onClick={() => {
+                setTypeFilter(ALL_HITL_TYPES);
+                setUrgencyFilter(ALL_HITL_URGENCIES);
+              }}
+            >
+              Clear filters
+            </button>
+          )}
         />
       )}
 
       <div className="hitl-list">
-        {requests.map((req) => (
+        {visibleRequests.map((req) => (
           <HitlCard key={req.id} req={req} onAnswered={() => hitl.reload()} />
         ))}
       </div>

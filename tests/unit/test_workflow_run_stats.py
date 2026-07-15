@@ -27,6 +27,7 @@ from boltrig.models import (
 )
 from boltrig.store import InMemoryStore
 from boltrig.workflows import WorkflowLibrary
+from tests.approval import approved_request
 
 T = "acme"
 OTHER = "globex"
@@ -123,7 +124,7 @@ def _execute_client():
         intent_tags=[],
     )
     _seed(lib.register(wf))
-    return TestClient(create_app(k, platform={"workflows": lib}))
+    return TestClient(create_app(k, platform={"workflows": lib})), k
 
 
 def _h():
@@ -132,9 +133,11 @@ def _h():
 
 
 def test_execute_succeeds_even_when_record_workflow_run_raises():
-    c = _execute_client()
-    r = c.post("/v1/workflows/smoke-loop/execute",
-               headers=_h(), json={"inputs": {}})
+    c, k = _execute_client()
+    r = approved_request(
+        c, k, T, "POST", "/v1/workflows/smoke-loop/execute",
+        headers=_h(), json={"inputs": {}},
+    )
     assert r.status_code == 200
     body = r.json()
     assert body["status"] == "completed"

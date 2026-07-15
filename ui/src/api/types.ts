@@ -10,6 +10,18 @@ export interface HealthResponse {
   adapters: Record<string, AdapterHealth>;
 }
 
+export interface ReadinessCheck {
+  status: string;
+  required: boolean;
+  reason?: string;
+  [key: string]: unknown;
+}
+
+export interface ReadinessResponse {
+  status: "ready" | "not_ready" | string;
+  checks: Record<string, ReadinessCheck>;
+}
+
 export type Consequence = "low" | "high" | string;
 
 // Where a verb is fulfilled: an adapter or an agent, named by target_ref.
@@ -66,13 +78,32 @@ export interface WorkItem {
   source?: string | null;
   parent_id?: string | null;
   hatchet_run_id?: string | null;
+  on_behalf_of?: string | null;
 }
 
 export interface WorkResponse {
   items: WorkItem[];
+  limit?: number;
+  next_cursor?: string | null;
 }
 
-export type HITLKind = "approval" | "clarification" | "escalation";
+export interface WorkAuditEvent {
+  ts: string;
+  actor: string;
+  actor_tier: string;
+  noun: string;
+  verb: string;
+  status: string;
+  detail?: unknown;
+}
+
+export interface WorkDetailResponse {
+  item: WorkItem;
+  children: WorkItem[];
+  audit: WorkAuditEvent[];
+}
+
+export type HITLKind = "approval" | "clarification" | "escalation" | "question";
 
 export interface HITLRequest {
   id: string;
@@ -806,8 +837,8 @@ export interface CostResponse {
 
 export interface BudgetItem {
   id: string;
-  scope_type: string; // tenant | department | workflow
-  window: string; // run | daily | monthly
+  scope_type: "tenant" | "department" | "workflow";
+  window: "run" | "daily" | "monthly";
   hard_stop: boolean;
   token_limit: number | null;
   spent_tokens: number;
@@ -815,9 +846,78 @@ export interface BudgetItem {
   spent_micros: number;
 }
 
+export interface BudgetPolicyRequest {
+  scope_type: BudgetItem["scope_type"];
+  scope_id: string;
+  token_limit?: number;
+  cost_limit_micros?: number;
+  hard_stop: boolean;
+  window: BudgetItem["window"];
+}
+
 export interface BudgetsResponse {
   budgets: BudgetItem[];
   scope: string[] | string;
+}
+
+export interface ConsolePlatformItem {
+  id: string;
+  kind: string;
+  status: string;
+  message?: string;
+  updated_at?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ConsoleModelTelemetry {
+  provider: string;
+  model: string;
+  runtime: string;
+  profile?: string;
+  calls: number;
+  tokens: number;
+  cost_micros: number;
+  avg_latency_ms?: number | null;
+  last_seen: string;
+  statuses: Record<string, number>;
+}
+
+export interface ConsoleRunEvent {
+  seq: number;
+  ts: string;
+  run_id?: string | null;
+  parent_run_id?: string | null;
+  actor: string;
+  verb: string;
+  status: string;
+  tokens_used: number;
+  cost_micros: number;
+  latency_ms?: number | null;
+}
+
+export interface ConsoleOverviewResponse {
+  generated_at: string;
+  tenant_id: string;
+  workspace_id?: string | null;
+  scope: string[] | string;
+  platform: {
+    components: ConsolePlatformItem[];
+    runtimes: ConsolePlatformItem[];
+  };
+  models: ConsoleModelTelemetry[];
+  cost: {
+    total_cost_micros: number;
+    by_actor: Record<string, number>;
+    by_status: Record<string, number>;
+  };
+  budgets: BudgetItem[];
+  recent_runs: ConsoleRunEvent[];
+  approvals: HITLRequest[];
+  counts: {
+    visible_events: number;
+    recent_runs: number;
+    pending_approvals: number;
+  };
 }
 
 export interface CapabilityChange {
@@ -836,12 +936,20 @@ export interface AuditRow {
   seq: number;
   ts: string;
   actor: string;
-  verb: string;
-  status: string;
+  verb?: string;
+  status?: string;
   run_id?: string | null;
+  event_type?: string;
+  reason?: string | null;
+  workspace_id?: string | null;
+  ip_address?: string | null;
+  user_agent?: string | null;
+  resource?: string | null;
+  resource_id?: string | null;
 }
 
 export interface AuditSearchResponse {
+  stream?: "audit" | "security";
   results: AuditRow[];
   scope: string[] | string;
 }
@@ -870,6 +978,19 @@ export interface RunsResponse {
 }
 
 // --- Evaluation -------------------------------------------------------------
+
+export interface EvalCaseItem {
+  id: string;
+  target_kind: string;
+  target_ref: string;
+  input: Record<string, unknown>;
+  assertions: Record<string, unknown>;
+  labels: string[];
+}
+
+export interface EvalCasesResponse {
+  cases: EvalCaseItem[];
+}
 
 export interface CreateEvalCaseRequest {
   id?: string;

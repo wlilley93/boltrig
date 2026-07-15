@@ -120,7 +120,6 @@ interface ComposerActionsProps {
   attachments: ChatAttachment[];
   send: () => void;
   stopTurn: () => void;
-  startCall: () => void;
 }
 
 export function ComposerActions({
@@ -131,7 +130,6 @@ export function ComposerActions({
   attachments,
   send,
   stopTurn,
-  startCall,
 }: ComposerActionsProps): JSX.Element {
   return (
     <>
@@ -182,13 +180,13 @@ export function ComposerActions({
         </button>
       ) : (
         <button
-          className="composer-wave"
-          onClick={startCall}
+          className="composer-send"
           type="button"
-          aria-label="Start voice call"
+          aria-label="Send"
+          disabled
           style={{ width: 30, height: 30 }}
         >
-          <Icon name="wave" size={16} />
+          <Icon name="send" size={16} />
         </button>
       )}
     </>

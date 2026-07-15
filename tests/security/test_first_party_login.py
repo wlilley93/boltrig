@@ -20,6 +20,7 @@ from boltrig.kernel import Kernel
 from boltrig.kernel.app import create_app
 from boltrig.models import GrantSet, TenantPermissions, User, utcnow
 from boltrig.store import InMemoryStore
+from tests.approval import approved_request
 
 # The console is single-tenant; _console_tenant() defaults to 'default' with no env.
 T = "default"
@@ -79,9 +80,11 @@ def test_invite_only_no_self_signup_and_single_use(monkeypatch):
     lo = _login(owner_c, OWNER, OWNER_PW)
     assert lo.status_code == 200
     csrf = lo.json()["csrf_token"]
-    inv = owner_c.post("/v1/admin/invitations",
-                       json={"email": "newbie@example.io", "role": "member"},
-                       headers={"x-boltrig-csrf": csrf})
+    inv = approved_request(
+        owner_c, k, T, "POST", "/v1/admin/invitations",
+        json={"email": "newbie@example.io", "role": "member"},
+        headers={"x-boltrig-csrf": csrf},
+    )
     assert inv.status_code == 200
     token = inv.json()["invite_token"]
     assert token and token.startswith("boltrig_invite_")
@@ -107,9 +110,11 @@ def test_password_is_hashed_non_reversible_and_never_logged(monkeypatch):
     _run(_seat_owner(store))
     owner_c = TestClient(app)
     csrf = _login(owner_c, OWNER, OWNER_PW).json()["csrf_token"]
-    token = owner_c.post("/v1/admin/invitations",
-                         json={"email": "u@example.io", "role": "member"},
-                         headers={"x-boltrig-csrf": csrf}).json()["invite_token"]
+    token = approved_request(
+        owner_c, k, T, "POST", "/v1/admin/invitations",
+        json={"email": "u@example.io", "role": "member"},
+        headers={"x-boltrig-csrf": csrf},
+    ).json()["invite_token"]
     secret = "s3cret-user-password-xyz"
     TestClient(app).post("/v1/auth/accept-invite",
                          json={"token": token, "password": secret})
@@ -161,7 +166,7 @@ def test_login_is_rate_limited_and_non_enumerating(monkeypatch):
 def test_session_cookie_is_httponly_secure_bounded_and_revocable(monkeypatch):
     # Assert the cookie flags with Secure ON (the production default).
     monkeypatch.setenv("BOLTRIG_SESSION_COOKIE_SECURE", "1")
-    _, app, store = _app()
+    k, app, store = _app()
     _run(_seat_owner(store))
     resp = _login(TestClient(app), OWNER, OWNER_PW)
     set_cookies = [v for k, v in resp.headers.multi_items() if k.lower() == "set-cookie"]
@@ -193,7 +198,7 @@ def test_session_cookie_is_httponly_secure_bounded_and_revocable(monkeypatch):
 @pytest.mark.invariant("SEC-101")
 def test_resolver_fail_closed_and_csrf_protected(monkeypatch):
     _set_cookies_insecure(monkeypatch)
-    _, app, store = _app()
+    k, app, store = _app()
     _run(_seat_owner(store))
 
     # Fail-closed: no session cookie -> 401 on an authenticated route.
@@ -205,8 +210,11 @@ def test_resolver_fail_closed_and_csrf_protected(monkeypatch):
     assert c.get("/v1/me/sessions").status_code == 200
     no_csrf = c.post("/v1/admin/invitations", json={"email": "a@b.io", "role": "member"})
     assert no_csrf.status_code == 403
-    with_csrf = c.post("/v1/admin/invitations", json={"email": "a@b.io", "role": "member"},
-                       headers={"x-boltrig-csrf": csrf})
+    with_csrf = approved_request(
+        c, k, T, "POST", "/v1/admin/invitations",
+        json={"email": "a@b.io", "role": "member"},
+        headers={"x-boltrig-csrf": csrf},
+    )
     assert with_csrf.status_code == 200
 
     # Fail-closed on deactivation: the live session stops resolving at once.

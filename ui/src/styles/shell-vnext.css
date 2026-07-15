@@ -1,0 +1,761 @@
+/* Console shell vNext: a restrained, AI-lab-style layer over the established
+   Boltrig tokens. Product surfaces keep their behaviour; this file reduces the
+   old cinematic chrome and gives the five-zone IA one visual contract. */
+
+:root {
+  --font-ui: "Inter", "SF Pro Text", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: "SFMono-Regular", "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  --shell-border: color-mix(in srgb, var(--color-text-primary) 8%, transparent);
+  --shell-border-strong: color-mix(in srgb, var(--color-text-primary) 14%, transparent);
+  --shell-hover: color-mix(in srgb, var(--color-text-primary) 4%, transparent);
+  --shell-active: color-mix(in srgb, var(--color-accent) 9%, transparent);
+  --shell-sidebar: 224px;
+  --shell-sidebar-compact: 60px;
+}
+
+body {
+  background: var(--color-bg-base);
+  background-image: none;
+  letter-spacing: -0.006em;
+}
+
+.app--shell {
+  background: var(--color-bg-base);
+}
+
+.console-side.side {
+  flex-basis: var(--shell-sidebar);
+  width: var(--shell-sidebar);
+  gap: 0;
+  padding: 0 10px 10px;
+  background: var(--color-bg-base);
+  border-color: var(--shell-border);
+  transition: flex-basis var(--dur-med) var(--ease), width var(--dur-med) var(--ease);
+}
+
+.console-side.side[data-collapsed="true"] {
+  flex-basis: var(--shell-sidebar-compact);
+  width: var(--shell-sidebar-compact);
+  padding-inline: 8px;
+}
+
+.console-side .side__brand {
+  height: 54px;
+  margin: 0;
+  padding-inline: 8px;
+  border-color: transparent;
+}
+
+.console-side .side__mark,
+.console-side .side-item--active .side-item__icon {
+  filter: none;
+}
+
+.console-side .side__word {
+  font-size: 14px;
+  letter-spacing: -0.01em;
+}
+
+.console-side .side__collapse {
+  border-radius: var(--radius-md);
+}
+
+.console-side__nav.side__nav {
+  gap: 3px;
+  padding: 8px 0;
+}
+
+.console-side .console-side__item.side-item,
+.console-side .side__settings {
+  width: 100%;
+  height: 38px;
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+}
+
+.console-side .console-side__item.side-item:hover,
+.console-side .side__settings:hover {
+  background: var(--shell-hover);
+  color: var(--color-text-primary);
+}
+
+.console-side .console-side__item.side-item--active,
+.console-side .side__settings--active {
+  background: var(--shell-active);
+  color: var(--color-text-primary);
+}
+
+.console-side .console-side__item.side-item--active .side-item__icon,
+.console-side .side__settings--active {
+  color: var(--color-accent);
+}
+
+.console-side .side__foot {
+  gap: 4px;
+  padding: 8px 0 0;
+  border-top: 1px solid var(--shell-border);
+}
+
+.console-side .side__settings {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  padding-inline: 10px;
+}
+
+.console-side .identity-chip {
+  border-color: transparent;
+  background: transparent;
+  border-radius: var(--radius-md);
+}
+
+.console-side .identity-chip:hover {
+  background: var(--shell-hover);
+  border-color: transparent;
+}
+
+.console-side.side[data-collapsed="true"] .side__settings {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+.console-side.side[data-collapsed="true"] .side__settings .side-item__label {
+  display: none;
+}
+
+.app__body {
+  background: var(--color-bg-base);
+}
+
+/* The deck remains the keep-alive/lifecycle engine, but its spatial-game chrome
+   is no longer part of the product IA. The rail and local subnav are the sole
+   visible navigation contract. */
+.deck__crumb,
+.deck__chevron,
+.deck__map {
+  display: none;
+}
+
+.console-topbar {
+  min-height: 52px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 18px;
+  background: var(--color-bg-base);
+  border-bottom: 1px solid var(--shell-border);
+}
+
+.console-topbar__context,
+.console-topbar__title,
+.console-topbar__actions,
+.console-subnav {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.console-topbar__context {
+  gap: 20px;
+  overflow: hidden;
+}
+
+.console-topbar__title {
+  flex: 0 0 auto;
+  gap: 7px;
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+}
+
+.console-topbar__title strong {
+  color: var(--color-text-primary);
+  font-weight: 550;
+}
+
+.console-topbar__crumb {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.console-topbar__crumb:hover {
+  color: var(--color-text-primary);
+}
+
+.console-subnav {
+  gap: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.console-subnav::-webkit-scrollbar {
+  display: none;
+}
+
+.console-subnav__item {
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: var(--radius-md);
+  padding: 6px 9px;
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+
+.console-subnav__item:hover,
+.console-subnav__item.is-active {
+  background: var(--shell-hover);
+  color: var(--color-text-primary);
+}
+
+.console-subnav__item.is-active {
+  box-shadow: inset 0 -1px var(--color-accent);
+}
+
+.console-topbar__actions {
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.console-env,
+.console-health,
+.console-command {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--shell-border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-muted);
+  padding: 0 9px;
+  font: inherit;
+  font-size: var(--fs-xs);
+}
+
+.console-env {
+  min-height: 22px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+button.console-health,
+button.console-command {
+  cursor: pointer;
+}
+
+button.console-health:hover,
+button.console-command:hover {
+  border-color: var(--shell-border-strong);
+  color: var(--color-text-primary);
+  background: var(--shell-hover);
+}
+
+.console-health__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-warn);
+}
+
+.console-health__dot.is-ok {
+  background: var(--color-ok);
+}
+
+.console-command kbd {
+  padding: 1px 4px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--shell-hover);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.panel:not(.chat-v3) {
+  padding: 26px 30px 48px;
+}
+
+.page-intro {
+  margin-bottom: 22px;
+}
+
+.page-intro h2 {
+  font-size: 1.35rem;
+  letter-spacing: -0.025em;
+}
+
+.list-card,
+.card,
+.zone-card,
+.health-list,
+.health-hero {
+  background: var(--color-bg-raised);
+  border: 1px solid var(--shell-border);
+  border-radius: var(--radius-lg);
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.list-card__head {
+  border-color: var(--shell-border);
+}
+
+.zone-overview {
+  max-width: 1160px;
+  margin: 0 auto;
+}
+
+.zone-overview__signal {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 22px;
+  margin-bottom: 18px;
+  color: var(--color-text-muted);
+  font-size: var(--fs-sm);
+}
+
+.zone-overview__signal strong {
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-weight: 550;
+}
+
+.zone-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.zone-card {
+  min-height: 142px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 9px;
+  padding: 18px;
+  color: var(--color-text-primary);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+}
+
+.zone-card:hover {
+  border-color: var(--shell-border-strong);
+  background: color-mix(in srgb, var(--color-bg-raised) 96%, var(--color-text-primary));
+  transform: translateY(-1px);
+}
+
+.zone-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.zone-card__head strong {
+  font-size: var(--fs-md);
+  font-weight: 560;
+}
+
+.zone-card__body {
+  color: var(--color-text-muted);
+  font-size: var(--fs-sm);
+  line-height: 1.45;
+}
+
+.zone-card__meta {
+  margin-top: auto;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+}
+
+.runs-panel,
+.health-panel {
+  max-width: 1240px;
+  margin: 0 auto;
+}
+
+.runs-summary {
+  margin-bottom: 14px;
+}
+
+.runs-summary__items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 22px;
+}
+
+.runs-summary__item strong {
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+
+.runs-filters {
+  grid-template-columns: minmax(240px, 2fr) minmax(140px, 1fr) minmax(160px, 1fr);
+  margin: 14px 0;
+  padding: 14px;
+  border: 1px solid var(--shell-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-raised);
+}
+
+.runs-results .list-card__body {
+  padding: 0;
+}
+
+.runs-table {
+  margin: 0;
+}
+
+.runs-table__intent {
+  max-width: 440px;
+}
+
+.health-hero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 14px;
+  padding: 18px;
+}
+
+.health-hero__mark {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--color-warn) 14%, transparent);
+  color: var(--color-warn);
+  font-weight: 700;
+}
+
+.health-hero.is-ready .health-hero__mark {
+  background: color-mix(in srgb, var(--color-ok) 14%, transparent);
+  color: var(--color-ok);
+}
+
+.health-hero div,
+.health-row__name {
+  display: flex;
+  flex-direction: column;
+}
+
+.health-hero span:last-child,
+.health-row__name span {
+  color: var(--color-text-muted);
+  font-size: var(--fs-sm);
+}
+
+.health-list {
+  overflow: hidden;
+}
+
+.health-row {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 58px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--shell-border);
+}
+
+.health-row:last-child {
+  border-bottom: 0;
+}
+
+.health-row__status {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-down);
+}
+
+.health-row__status.is-ok { background: var(--color-ok); }
+.health-row__status.is-idle { background: var(--color-unknown); }
+
+.health-row__name strong,
+.health-row__value {
+  font-size: var(--fs-sm);
+}
+
+.health-row__value {
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+}
+
+.chat-v3 {
+  --chat-bg: var(--color-bg-base);
+  --chat-raised: var(--color-bg-raised);
+  --chat-card: var(--color-bg-card);
+  --chat-overlay: var(--color-bg-overlay);
+  --chat-border: var(--shell-border);
+  --chat-border-2: var(--shell-border-strong);
+  --chat-strong: var(--color-border-strong);
+  --chat-text: var(--color-text-primary);
+  --chat-secondary: var(--color-text-secondary);
+  --chat-muted: var(--color-text-muted);
+  --chat-faint: var(--color-text-faint);
+  --chat-accent: var(--color-accent);
+  --chat-ok: var(--color-ok);
+  --chat-warn: var(--color-warn);
+  --chat-down: var(--color-down);
+  --chat-high: var(--color-consequence-high);
+  min-height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: var(--color-bg-base);
+}
+
+.chat-v3::before {
+  display: none;
+}
+
+.chat-header {
+  height: 52px;
+  flex-basis: 52px;
+  padding-inline: 16px;
+  background: var(--color-bg-base);
+  border-color: var(--shell-border);
+  backdrop-filter: none;
+}
+
+.chat-v3 .chat__composer {
+  box-shadow: none !important;
+  border-color: var(--shell-border-strong);
+  background: var(--color-bg-raised);
+}
+
+.chat-v3 .chat__composer--thinking {
+  box-shadow: inset 0 0 0 1px var(--color-accent) !important;
+}
+
+.chat-v3 .chat-msg__bubble,
+.chat-v3 .tool-card,
+.chat-v3 .steps-card,
+.chat-v3 .subagent-card,
+.chat-hitl {
+  backdrop-filter: none;
+  filter: none;
+  box-shadow: none;
+}
+
+.chat-empty-v3 h1 {
+  font-size: clamp(1.65rem, 3vw, 2.15rem);
+  font-weight: 450;
+}
+
+.drawer-overlay,
+.cmdk-overlay {
+  background: color-mix(in srgb, var(--color-bg-base) 72%, transparent);
+  backdrop-filter: none;
+}
+
+.drawer.run-inspector-drawer {
+  width: min(760px, 94vw);
+  padding: 0;
+  background: var(--color-bg-raised);
+  border-color: var(--shell-border-strong);
+  box-shadow: -16px 0 42px color-mix(in srgb, var(--color-bg-base) 74%, transparent);
+  backdrop-filter: none;
+}
+
+.run-inspector-drawer__head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  min-height: 52px;
+  padding: 0 18px;
+  background: var(--color-bg-raised);
+  border-bottom: 1px solid var(--shell-border);
+}
+
+.run-inspector-drawer__run-id {
+  margin: 14px 18px 0;
+}
+
+.run-inspector__tabs {
+  position: sticky;
+  top: 52px;
+  z-index: 2;
+  display: flex;
+  gap: 2px;
+  padding: 12px 14px 0;
+  overflow-x: auto;
+  background: var(--color-bg-raised);
+  border-bottom: 1px solid var(--shell-border);
+}
+
+.run-inspector__tab {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--color-text-muted);
+  padding: 0 9px;
+  font: inherit;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+
+.run-inspector__tab:hover,
+.run-inspector__tab--active {
+  color: var(--color-text-primary);
+}
+
+.run-inspector__tab--active {
+  border-bottom-color: var(--color-accent);
+}
+
+.run-inspector__tab-count {
+  min-width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--shell-hover);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.run-inspector__panel {
+  padding: 20px 18px 32px;
+  outline: none;
+}
+
+.run-overview__head,
+.run-overview__statuses h4,
+.run-tool-calls h4,
+.run-approvals h4,
+.run-raw h4 {
+  margin: 0 0 12px;
+}
+
+.run-overview__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.run-overview__metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 20px;
+}
+
+.run-overview__metric {
+  padding: 12px;
+  border: 1px solid var(--shell-border);
+  border-radius: var(--radius-md);
+}
+
+.run-overview__metric dt {
+  color: var(--color-text-muted);
+  font-size: var(--fs-xs);
+}
+
+.run-overview__metric dd {
+  margin: 4px 0 0;
+  font-family: var(--font-mono);
+}
+
+.run-tool-calls__list,
+.run-approvals__list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.run-raw__json {
+  max-height: calc(100vh - 190px);
+}
+
+.cmdk {
+  background: var(--color-bg-raised);
+  border-color: var(--shell-border-strong);
+  border-radius: var(--radius-lg);
+  backdrop-filter: none;
+}
+
+.btn--primary,
+.btn--primary:hover {
+  filter: none;
+}
+
+.chat-v3 .composer-send:disabled {
+  cursor: default;
+  color: var(--color-text-muted);
+  background: color-mix(in srgb, var(--color-bg-raised) 75%, var(--color-border));
+  border-color: var(--shell-border);
+  opacity: 0.7;
+}
+
+@media (max-width: 980px) {
+  .console-topbar__context { gap: 10px; }
+  .console-topbar__title { display: none; }
+  .zone-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .runs-filters { grid-template-columns: 1fr 1fr; }
+  .runs-filters .ux-field--wide { grid-column: 1 / -1; }
+}
+
+@media (max-width: 760px) {
+  .console-side.side,
+  .console-side.side[data-collapsed="false"],
+  .console-side.side[data-collapsed="true"] {
+    flex-basis: var(--shell-sidebar-compact);
+    width: var(--shell-sidebar-compact);
+    padding-inline: 8px;
+  }
+  .console-side .side__word,
+  .console-side .side-item__label,
+  .console-side .identity-chip__who,
+  .console-side .side__collapse {
+    display: none;
+  }
+  .console-side .console-side__item.side-item,
+  .console-side .side__settings {
+    justify-content: center;
+    padding-inline: 0;
+  }
+  .console-topbar {
+    min-height: 48px;
+    padding-inline: 10px;
+  }
+  .console-health span:last-child,
+  .console-command span,
+  .console-command kbd,
+  .console-env {
+    display: none;
+  }
+  .panel:not(.chat-v3) { padding: 20px 16px 36px; }
+  .zone-grid,
+  .runs-filters,
+  .run-overview__metrics { grid-template-columns: 1fr; }
+  .runs-filters .ux-field--wide { grid-column: auto; }
+  .drawer.run-inspector-drawer { width: 100vw; max-width: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zone-card { transition: none; }
+  .zone-card:hover { transform: none; }
+}

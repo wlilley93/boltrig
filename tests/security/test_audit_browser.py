@@ -99,6 +99,12 @@ def test_audit_search_filters_by_user_and_resource():
     # rows carry the enrichment fields for the browser
     assert set(by_res[0]) >= {"resource", "resource_id", "workspace_id", "ip_address"}
 
+    by_status = client.get("/v1/audit/search", params={"status": "ok"}).json()["results"]
+    assert by_status and all(r["status"] == "ok" for r in by_status)
+    assert client.get(
+        "/v1/audit/search", params={"status": "does-not-exist"}
+    ).json()["results"] == []
+
 
 @pytest.mark.security
 @pytest.mark.invariant("SEC-123")

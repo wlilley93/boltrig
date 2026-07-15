@@ -192,6 +192,7 @@ class DepartmentHead:
                     "new_work_items": [],
                 }
         if child_item is not None:
+            child_item.hatchet_run_id = result.get("run_id")
             child_item.status = (
                 WorkStatus.FAILED if result.get("status") == "error" else WorkStatus.DONE
             )
@@ -222,6 +223,7 @@ class DepartmentHead:
             owner_member=self.name,
             depth=parent.depth + 1,
             on_behalf_of=parent.on_behalf_of,
+            workspace_id=parent.workspace_id,
         )
         await self._store.create_work_item(child)
         return child
@@ -271,6 +273,10 @@ class DepartmentHead:
             context=detail,
             urgency=Urgency.ASYNC,
             work_item_id=work_item.id,
+            requested_by=self.name,
+            requested_on_behalf_of=work_item.on_behalf_of,
+            workspace_id=context.workspace_id,
+            department_scope=[self.name],
         )
         return {
             "status": "escalated",

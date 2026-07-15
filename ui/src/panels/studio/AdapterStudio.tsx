@@ -2,21 +2,43 @@ import { useState } from "react";
 
 import { api } from "../../api/client";
 import type {
-  AdapterInventoryResponse,
-  AdapterRecord,
   GenerateAdapterResponse,
   StatusAck,
 } from "../../api/types";
-import { useFetch, type FetchState } from "../../useFetch";
+import { useFetch } from "../../useFetch";
 import { CodeBlock, errText, parseJson } from "../shared";
-import { outputRecord, PendingHumanCard, useControlMutation } from "../uxFlow";
+import {
+  PendingHumanCard,
+  type ControlMutationState,
+} from "../uxFlow";
 import { AckLine } from "./AckLine";
+import { AdapterInventory } from "./adapterStudio/AdapterInventory";
+import { OpenApiImport } from "./adapterStudio/IntegrationFields";
+
+function AdapterActivationPending({
+  mutation,
+}: {
+  mutation: ControlMutationState;
+}) {
+  if (mutation.pending === null) return null;
+  return (
+    <PendingHumanCard
+      hitlRequestId={mutation.pending.id}
+      noun="control"
+      verb="control.adapter.activate"
+      sentParams={mutation.pending.params}
+      onApplied={mutation.onPendingApplied}
+      onDenied={mutation.onPendingDenied}
+      onReset={mutation.resetPending}
+    />
+  );
+}
 
 // Generate an adapter from an OpenAPI spec. It lands inert (activated: false)
 // and reloads the inventory on success so the reviewer sees it immediately.
 function GenerateAdapterForm({ onGenerated }: { onGenerated: () => void }) {
   const [adapterId, setAdapterId] = useState("");
-  const [spec, setSpec] = useState("{}");
+  const [spec, setSpec] = useState("");
   const [genBusy, setGenBusy] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
   const [gen, setGen] = useState<GenerateAdapterResponse | null>(null);
@@ -24,6 +46,10 @@ function GenerateAdapterForm({ onGenerated }: { onGenerated: () => void }) {
   async function generate() {
     if (!adapterId.trim()) {
       setGenError("adapter_id is required.");
+      return;
+    }
+    if (!spec.trim()) {
+      setGenError("Import an OpenAPI JSON document first.");
       return;
     }
     let parsedSpec: unknown;
@@ -64,14 +90,7 @@ function GenerateAdapterForm({ onGenerated }: { onGenerated: () => void }) {
           onChange={(e) => setAdapterId(e.target.value)}
         />
       </label>
-      <label className="field">
-        <span>spec (OpenAPI JSON)</span>
-        <textarea
-          className="code"
-          value={spec}
-          onChange={(e) => setSpec(e.target.value)}
-        />
-      </label>
+      <OpenApiImport value={spec} onChange={setSpec} onError={setGenError} />
       <div className="form__actions">
         <button
           className="btn btn--primary"
@@ -107,79 +126,10 @@ function GenerateAdapterForm({ onGenerated }: { onGenerated: () => void }) {
   );
 }
 
-// Activate an inert adapter, binding its verbs. The authenticated approval
-// respondent is the reviewer; caller-supplied reviewer text is never trusted.
-function ActivateAdapterForm({ onActivated }: { onActivated: () => void }) {
-  const [actId, setActId] = useState("");
-  const [validationError, setValidationError] = useState<string | null>(null);
-  const [actResult, setActResult] = useState<string[] | null>(null);
-  const mutation = useControlMutation({
-    verb: "control.adapter.activate",
-    onApplied: (output) => {
-      const verbs = outputRecord(output).verbs;
-      setActResult(
-        Array.isArray(verbs)
-          ? verbs.filter((verb): verb is string => typeof verb === "string")
-          : [],
-      );
-      onActivated();
-    },
-  });
-
-  async function activate() {
-    if (!actId.trim()) {
-      setValidationError("adapter id is required.");
-      return;
-    }
-    setValidationError(null);
-    setActResult(null);
-    await mutation.invoke({ adapter_id: actId.trim() });
-  }
-
-  return (
-    <div className="form">
-      <div className="form__title">Activate adapter</div>
-      <label className="field">
-        <span>adapter id</span>
-        <input value={actId} onChange={(e) => setActId(e.target.value)} />
-      </label>
-      {mutation.pending && (
-        <PendingHumanCard
-          hitlRequestId={mutation.pending.id}
-          noun="control"
-          verb="control.adapter.activate"
-          sentParams={mutation.pending.params}
-          onApplied={mutation.onPendingApplied}
-          onDenied={mutation.onPendingDenied}
-          onReset={mutation.resetPending}
-        />
-      )}
-      <div className="form__actions">
-        <button
-          className="btn"
-          disabled={mutation.busy || mutation.pending !== null}
-          onClick={activate}
-        >
-          {mutation.busy ? "..." : "Activate"}
-        </button>
-        {(validationError ?? mutation.error) && (
-          <span className="error">{validationError ?? mutation.error}</span>
-        )}
-      </div>
-      {actResult && (
-        <p className="ok">
-          Activated. Bound verbs: {actResult.join(", ") || "(none)"}
-        </p>
-      )}
-    </div>
-  );
-}
-
 // Register an MCP server as an adapter source.
 function RegisterMcpForm({ onRegistered }: { onRegistered: () => void }) {
   const [mcpId, setMcpId] = useState("");
   const [mcpUrl, setMcpUrl] = useState("");
-  const [mcpToken, setMcpToken] = useState("");
   const [mcpBusy, setMcpBusy] = useState(false);
   const [mcpError, setMcpError] = useState<string | null>(null);
   const [mcpAck, setMcpAck] = useState<StatusAck | null>(null);
@@ -196,7 +146,6 @@ function RegisterMcpForm({ onRegistered }: { onRegistered: () => void }) {
       const res = await api.registerMcpServer({
         id: mcpId.trim(),
         url: mcpUrl.trim() || undefined,
-        token: mcpToken.trim() || undefined,
       });
       setMcpAck(res);
       if (res.status === "ok") onRegistered();
@@ -210,23 +159,26 @@ function RegisterMcpForm({ onRegistered }: { onRegistered: () => void }) {
   return (
     <div className="form">
       <div className="form__title">Register MCP server</div>
+      <p className="muted">
+        Credentials must be provisioned through the server-side credential store
+        and referenced by deployment configuration. Studio never accepts or
+        displays raw MCP tokens.
+      </p>
       <div className="form__grid">
         <label className="field">
           <span>id</span>
-          <input value={mcpId} onChange={(e) => setMcpId(e.target.value)} />
+          <input
+            aria-label="MCP server id"
+            value={mcpId}
+            onChange={(e) => setMcpId(e.target.value)}
+          />
         </label>
         <label className="field">
           <span>url</span>
           <input
+            aria-label="MCP server URL"
             value={mcpUrl}
             onChange={(e) => setMcpUrl(e.target.value)}
-          />
-        </label>
-        <label className="field">
-          <span>token</span>
-          <input
-            value={mcpToken}
-            onChange={(e) => setMcpToken(e.target.value)}
           />
         </label>
       </div>
@@ -241,53 +193,6 @@ function RegisterMcpForm({ onRegistered }: { onRegistered: () => void }) {
   );
 }
 
-function AdapterInventory({
-  inventory,
-}: {
-  inventory: FetchState<AdapterInventoryResponse>;
-}) {
-  const records: AdapterRecord[] = inventory.data?.adapters ?? [];
-  return (
-    <div className="list-card">
-      <div className="list-card__head">
-        <h3>Adapter inventory</h3>
-        <button className="btn" onClick={() => inventory.reload()}>
-          Refresh
-        </button>
-      </div>
-      <div className="list-card__body">
-        {inventory.loading && !inventory.data && (
-          <p className="muted">Loading...</p>
-        )}
-        {inventory.error && (
-          <p className="error">Failed to load: {inventory.error}</p>
-        )}
-        {!inventory.loading && records.length === 0 && (
-          <p className="muted">No adapters registered.</p>
-        )}
-        {records.map((a) => (
-          <div className="row-line" key={a.id}>
-            <div>
-              <code>{a.id}</code>{" "}
-              <span className="muted">
-                {a.runtime} v{a.version}
-              </span>
-            </div>
-            <div className="kv">
-              <span
-                className={`badge ${a.activated ? "badge--activated" : "badge--inert"}`}
-              >
-                {a.activated ? "activated" : "inert"}
-              </span>
-              <span className={`badge badge--${a.health}`}>{a.health}</span>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 export function AdapterStudio() {
   const inventory = useFetch(() => api.adapters(), []);
   const reload = () => inventory.reload();
@@ -296,10 +201,14 @@ export function AdapterStudio() {
     <div className="cols">
       <div className="stack">
         <GenerateAdapterForm onGenerated={reload} />
-        <ActivateAdapterForm onActivated={reload} />
         <RegisterMcpForm onRegistered={reload} />
       </div>
-      <AdapterInventory inventory={inventory} />
+      <AdapterInventory
+        inventory={inventory}
+        renderPending={(mutation) => (
+          <AdapterActivationPending mutation={mutation} />
+        )}
+      />
     </div>
   );
 }

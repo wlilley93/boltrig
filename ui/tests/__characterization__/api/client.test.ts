@@ -90,6 +90,7 @@ describe("api/client (public surface)", () => {
       "auditSearch",
       "auditExport",
       "runs",
+      "evalCases",
       "createEvalCase",
       "runEval",
       "evalRuns",

@@ -52,7 +52,7 @@ from .cost import CostAccountant
 from .credentials import CredentialResolver
 from .grants import GrantChecker
 from .approval_gate import enforce_approval
-from .hitl import HITLManager
+from .hitl import HITLManager, hitl_scope_fields
 from .idempotency import (
     IdempotencyCoordinator,
     IdempotencyReplay,
@@ -190,14 +190,14 @@ class Dispatcher:
             detail={"verb": verb},
         )
 
-    def _emit(self, run_id: str | None, event: dict[str, Any]) -> None:
+    def _emit(self, tenant_id: str, run_id: str | None, event: dict[str, Any]) -> None:
         """Publish a run event, fail-safe. Only when a relay is wired and the call
         belongs to a run; a publish error is swallowed so observability can never
         break the chokepoint."""
         if self._events is None or not run_id:
             return
         try:
-            self._events.publish(run_id, event)
+            self._events.publish(tenant_id, run_id, event)
         except Exception:  # observability must never break dispatch (P9)
             pass
 
@@ -225,10 +225,10 @@ class Dispatcher:
             options=choices,
             # a chat turn's work item id IS its run id, so binding the request to it
             # lets the ordinary resume wiring requeue the paused run on an answer.
-            work_item_id=context.run_id,
-            requested_by=context.actor,
+            work_item_id=context.run_id, requested_by=context.actor,
+            **hitl_scope_fields(context),
         )
-        self._emit(context.run_id, {
+        self._emit(context.tenant_id, context.run_id, {
             "type": "question", "run_id": context.run_id,
             "question_id": req.id, "prompt": prompt, "choices": choices,
         })
@@ -260,7 +260,7 @@ class Dispatcher:
         # redacted input rides for the run canvas + durable record (FR-EVT-01); the
         # chat stream forwards only the bounded ``tool``/``call_id``/``args_summary``
         # keys (K-20), never the raw input (see fleet/chat._project_chat_event).
-        self._emit(context.run_id, {"type": "tool_call", "verb": verb, "noun": noun,
+        self._emit(context.tenant_id, context.run_id, {"type": "tool_call", "verb": verb, "noun": noun,
                                     "input": _event_safe(params), "run_id": context.run_id,
                                     "tool": verb, "call_id": call_id,
                                     "args_summary": _summarise_params(params)})
@@ -274,7 +274,7 @@ class Dispatcher:
             detail = {"hitl_request_id": e.hitl_request_id}
             # the call paused for a human - surface it on the run stream so the
             # inline approval card appears where the agent is working.
-            self._emit(context.run_id, {"type": "hitl", "verb": verb,
+            self._emit(context.tenant_id, context.run_id, {"type": "hitl", "verb": verb,
                                         "call_id": call_id,
                                         "hitl_request_id": e.hitl_request_id})
             raise
@@ -310,7 +310,7 @@ class Dispatcher:
             # chat stream forwards only the bounded ``call_id``/``status``/
             # ``result_summary`` keys (K-20), never the raw output.
             if status != "pending_human":
-                self._emit(context.run_id, {
+                self._emit(context.tenant_id, context.run_id, {
                     "type": "tool_result", "verb": verb, "status": status,
                     "output": _event_safe(output) if status == "ok" else None,
                     "run_id": context.run_id, "call_id": call_id,

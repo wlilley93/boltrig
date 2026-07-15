@@ -1,20 +1,29 @@
 import { useEffect, useRef, useState } from "react";
 
 import { api } from "@/api/client";
+import { useIdentity } from "@/identity";
 import { useFetch } from "@/useFetch";
 
-import { usePaletteCommands, type Cmd } from "./usePaletteCommands";
+import {
+  usePaletteCommands,
+  type Cmd,
+  type CommandKind,
+} from "./usePaletteCommands";
 
 export function useCommandPalette() {
+  const identity = useIdentity();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [sel, setSel] = useState(0);
+  const [kind, setKindState] = useState<CommandKind>("all");
   const inputRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
 
   // capabilities only fetch once the palette is first opened.
   const [armed, setArmed] = useState(false);
   const caps = useFetch(() => (armed ? api.capabilities() : Promise.resolve(null)), [armed]);
+  const workflows = useFetch(() => (armed ? api.workflows() : Promise.resolve(null)), [armed]);
+  const runs = useFetch(() => (armed ? api.runs() : Promise.resolve(null)), [armed]);
 
   // global hotkey: Cmd/Ctrl-K toggles; a visible control dispatches the same open
   // via a custom event, so the palette is discoverable, not just a hidden hotkey.
@@ -45,6 +54,7 @@ export function useCommandPalette() {
     if (open) {
       setQ("");
       setSel(0);
+      setKindState("all");
       setArmed(true);
       // focus after paint
       const t = window.setTimeout(() => inputRef.current?.focus(), 0);
@@ -52,7 +62,27 @@ export function useCommandPalette() {
     }
   }, [open]);
 
-  const { filtered } = usePaletteCommands(caps.data, q);
+  const { filtered } = usePaletteCommands(
+    caps.data,
+    workflows.data,
+    runs.data,
+    identity.role,
+    q,
+    kind,
+  );
+
+  useEffect(() => {
+    setSel((current) =>
+      filtered.length === 0 ? 0 : Math.min(current, filtered.length - 1),
+    );
+  }, [filtered.length]);
+
+  useEffect(() => {
+    if (!open || filtered.length === 0) return;
+    document
+      .getElementById(`cmdk-opt-${sel}`)
+      ?.scrollIntoView?.({ block: "nearest" });
+  }, [open, sel, filtered.length]);
 
   function choose(c: Cmd | undefined) {
     if (!c) return;
@@ -63,10 +93,18 @@ export function useCommandPalette() {
   function onKeyDown(e: React.KeyboardEvent) {
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setSel((s) => Math.max(0, Math.min(s + 1, filtered.length - 1)));
+      if (filtered.length > 0) setSel((s) => (s + 1) % filtered.length);
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      setSel((s) => Math.max(s - 1, 0));
+      if (filtered.length > 0) {
+        setSel((s) => (s - 1 + filtered.length) % filtered.length);
+      }
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      setSel(0);
+    } else if (e.key === "End") {
+      e.preventDefault();
+      if (filtered.length > 0) setSel(filtered.length - 1);
     } else if (e.key === "Enter") {
       e.preventDefault();
       choose(filtered[sel]);
@@ -78,8 +116,13 @@ export function useCommandPalette() {
     setSel(0);
   }
 
+  function setKind(next: CommandKind) {
+    setKindState(next);
+    setSel(0);
+  }
+
   return {
-    open, setOpen, q, sel, setSel, filtered, inputRef, dialogRef,
+    open, setOpen, q, sel, setSel, kind, setKind, filtered, inputRef, dialogRef,
     onChangeQuery, onKeyDown, choose,
   };
 }

@@ -21,8 +21,6 @@ interface ChatComposerProps {
   activeId: string | null;
   send: () => void;
   stopTurn: () => void;
-  setInCall: (inCall: boolean) => void;
-  setCallSeconds: Setter<number>;
   plusOpen: boolean;
   setPlusOpen: Setter<boolean>;
   slashOpen: boolean;
@@ -54,8 +52,6 @@ export function ChatComposer(props: ChatComposerProps): JSX.Element {
     activeId,
     send,
     stopTurn,
-    setInCall,
-    setCallSeconds,
     plusOpen,
     setPlusOpen,
     slashOpen,
@@ -98,8 +94,6 @@ export function ChatComposer(props: ChatComposerProps): JSX.Element {
         dictationBaseRef={dictationBaseRef}
         send={send}
         stopTurn={stopTurn}
-        setInCall={setInCall}
-        setCallSeconds={setCallSeconds}
       />
       <ComposerMeta contextRemaining={contextRemaining} dictation={dictation} attachError={attachError} />
       <FleetBar live={live} activeAgent={selectedAgent} onOpenRun={onOpenRun} />

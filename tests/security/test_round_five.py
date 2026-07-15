@@ -318,6 +318,14 @@ def test_recall_is_audited_without_leaking_contents():
     secret = "the launch codes are 1234"
     c.post("/v1/memory/remember", json={"content": secret}, headers=_h("alice"))
     c.post("/v1/memory/recall", json={"query": "launch"}, headers=_h("alice"))
+    scoped_context = InvocationContext(
+        tenant_id=T,
+        grants=GrantSet.of(["*"]),
+        actor="alice",
+        on_behalf_of="alice",
+        workspace_id="ws-1",
+    )
+    asyncio.run(k.invoke("memory", "memory.recall", {"query": "launch"}, scoped_context))
     events = asyncio.run(k.store.audit_query(T))
     recalls = [e for e in events if e.verb == "memory.recall"]
     assert recalls, "recall must be audited"
@@ -325,6 +333,7 @@ def test_recall_is_audited_without_leaking_contents():
     # audits the verb call); contents are never in either.
     detailed = [e for e in recalls if e.detail.get("query") == "launch"]
     assert detailed and "count" in detailed[-1].detail  # query + count audited
+    assert any(e.workspace_id == "ws-1" for e in detailed)
     # fact contents never appear in ANY audit detail (SEC-45)
     assert all("launch codes" not in str(e.detail) for e in events)
 

@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 
-import type { EvalRunSummary, VerbInfo } from "@/api/types";
+import type { EvalCaseItem, EvalRunSummary, VerbInfo } from "@/api/types";
 import { parseJson } from "@/panels/shared";
 import type { EvalFields } from "./useEvalFields";
 
@@ -16,6 +16,7 @@ export interface EvalDerived {
   toggleForbidden: (verbId: string) => void;
   changeTargetKind: (v: string) => void;
   caseIdOptions: Option[];
+  savedCases: EvalCaseItem[];
   runList: EvalRunSummary[];
 }
 
@@ -69,19 +70,25 @@ export function useEvalDerived(f: EvalFields): EvalDerived {
   }
 
   const caseIdOptions = useMemo(() => {
-    const ids = new Set<string>();
-    for (const r of f.runs.data?.runs ?? []) if (r.case_id) ids.add(r.case_id);
-    if (f.runId) ids.add(f.runId);
+    const labels = new Map<string, string>();
+    for (const c of f.cases.data?.cases ?? []) {
+      labels.set(c.id, `${c.id} - ${c.target_kind}:${c.target_ref}`);
+    }
+    for (const r of f.runs.data?.runs ?? []) {
+      if (r.case_id && !labels.has(r.case_id)) labels.set(r.case_id, r.case_id);
+    }
+    if (f.runId && !labels.has(f.runId)) labels.set(f.runId, f.runId);
     return [
       { value: "", label: "Choose a case..." },
-      ...[...ids].map((id) => ({ value: id, label: id })),
+      ...[...labels].map(([value, label]) => ({ value, label })),
     ];
-  }, [f.runs.data, f.runId]);
+  }, [f.cases.data, f.runs.data, f.runId]);
 
+  const savedCases: EvalCaseItem[] = f.cases.data?.cases ?? [];
   const runList: EvalRunSummary[] = f.runs.data?.runs ?? [];
 
   return {
     targetOptions, verbs, forbidden, toggleForbidden, changeTargetKind,
-    caseIdOptions, runList,
+    caseIdOptions, savedCases, runList,
   };
 }

@@ -3,7 +3,6 @@ import { useState } from "react";
 import { api } from "@/api/client";
 import type { AdminInvitation } from "@/api/types";
 import { useFetch } from "@/useFetch";
-import { errText } from "@/panels/shared";
 import {
   EmptyState,
   FetchError,
@@ -14,41 +13,35 @@ import {
   ttlDaysFromSelection,
 } from "@/panels/ux";
 import { ArmConfirm, Skeleton } from "@/panels/uxFlow";
+import { PendingHumanCard } from "@/panels/uxFlow/pendingHumanCard";
+import { outputRecord, useControlMutation } from "@/panels/uxFlow/useControlMutation";
 
 function useInviteForm(onCreated: () => void) {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("agent");
   const [ttl, setTtl] = useState("14");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const mutation = useControlMutation({
+    verb: "control.invitation.create",
+    onApplied(output, params) {
+      const created = outputRecord(output);
+      setMsg(`Invited ${String(created.email ?? params.email)}.`);
+      setEmail("");
+      onCreated();
+    },
+  });
 
   async function createInvite() {
     if (!email.trim()) {
-      setError("An email is required.");
+      mutation.onPendingDenied("An email is required.");
       return;
     }
-    setBusy(true);
-    setError(null);
     setMsg(null);
-    try {
-      const res = await api.createInvitation({
-        email: email.trim(),
-        role,
-        ttl_days: ttlDaysFromSelection(ttl),
-      });
-      if (res.status === "ok") {
-        setMsg(`Invited ${res.email ?? email}.`);
-        setEmail("");
-        onCreated();
-      } else {
-        setError(res.reason ?? "invite rejected");
-      }
-    } catch (err) {
-      setError(errText(err));
-    } finally {
-      setBusy(false);
-    }
+    await mutation.invoke({
+      email: email.trim(),
+      role,
+      ttl_days: ttlDaysFromSelection(ttl),
+    });
   }
 
   return {
@@ -58,8 +51,7 @@ function useInviteForm(onCreated: () => void) {
     setRole,
     ttl,
     setTtl,
-    busy,
-    error,
+    mutation,
     msg,
     createInvite,
   };
@@ -96,31 +88,38 @@ function InviteForm({ form }: { form: ReturnType<typeof useInviteForm> }) {
       <div className="form__actions">
         <button
           className="btn btn--primary"
-          disabled={form.busy}
+          disabled={form.mutation.busy || form.mutation.pending !== null}
           onClick={() => void form.createInvite()}
         >
-          {form.busy ? "..." : "Send invitation"}
+          {form.mutation.busy ? "..." : "Send invitation"}
         </button>
         {form.msg && <span className="ok">{form.msg}</span>}
-        {form.error && <span className="error">{form.error}</span>}
+        {form.mutation.error && <span className="error">{form.mutation.error}</span>}
       </div>
+      {form.mutation.pending && (
+        <PendingHumanCard
+          hitlRequestId={form.mutation.pending.id}
+          noun="control"
+          verb="control.invitation.create"
+          sentParams={form.mutation.pending.params}
+          onApplied={form.mutation.onPendingApplied}
+          onDenied={form.mutation.onPendingDenied}
+          onReset={form.mutation.resetPending}
+        />
+      )}
     </>
   );
 }
 
 function InviteRow({
   invite,
-  onRevoked,
+  onRevoke,
 }: {
   invite: AdminInvitation;
-  onRevoked: () => void;
+  onRevoke: (inviteId: string) => Promise<void>;
 }) {
   async function revokeInvite() {
-    const res = await api.revokeInvitation(invite.id);
-    if (res.status !== "ok") {
-      throw new Error(res.reason ?? "revoke rejected");
-    }
-    onRevoked();
+    await onRevoke(invite.id);
   }
 
   return (
@@ -155,6 +154,12 @@ function InviteRow({
 export function InvitationsCard() {
   const invites = useFetch(() => api.adminInvitations(), []);
   const form = useInviteForm(() => invites.reload());
+  const revokeMutation = useControlMutation({
+    verb: "control.invitation.revoke",
+    onApplied() {
+      invites.reload();
+    },
+  });
 
   const invitesDenied =
     invites.data && invites.data.invitations === undefined
@@ -177,6 +182,18 @@ export function InvitationsCard() {
           (SEC-35).
         </p>
         <InviteForm form={form} />
+        {revokeMutation.error && <p className="error">{revokeMutation.error}</p>}
+        {revokeMutation.pending && (
+          <PendingHumanCard
+            hitlRequestId={revokeMutation.pending.id}
+            noun="control"
+            verb="control.invitation.revoke"
+            sentParams={revokeMutation.pending.params}
+            onApplied={revokeMutation.onPendingApplied}
+            onDenied={revokeMutation.onPendingDenied}
+            onReset={revokeMutation.resetPending}
+          />
+        )}
         {invites.loading && !invites.data && <Skeleton variant="rows" />}
         <FetchError
           error={invites.error}
@@ -191,7 +208,13 @@ export function InvitationsCard() {
           />
         )}
         {inviteList.map((inv) => (
-          <InviteRow key={inv.id} invite={inv} onRevoked={() => invites.reload()} />
+          <InviteRow
+            key={inv.id}
+            invite={inv}
+            onRevoke={async (inviteId) => {
+              await revokeMutation.invoke({ invite_id: inviteId });
+            }}
+          />
         ))}
       </div>
     </div>
