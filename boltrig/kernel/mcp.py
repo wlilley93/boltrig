@@ -13,9 +13,13 @@ into ``kernel.invoke`` - so the core stays thin (P1) and dep-light.
 
 from __future__ import annotations
 
+import hashlib
 import json
+import secrets
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 
 from boltrig.models import (
     DegradedMode,
@@ -24,6 +28,7 @@ from boltrig.models import (
     BoltrigError,
     PendingHuman,
     SecurityEventType,
+    utcnow,
 )
 
 _PROTOCOL_VERSION = "2024-11-05"
@@ -41,7 +46,7 @@ def _err(rid, code: int, message: str) -> dict:
 class RunToken:
     """A run-scoped MCP connection record (least privilege, SEC-23)."""
 
-    token: str
+    lease_id: str
     tenant_id: str
     grants: GrantSet
     run_id: str | None = None
@@ -53,32 +58,60 @@ class RunToken:
     workspace_id: str | None = None
     on_behalf_of: str | None = None
     extra: dict = field(default_factory=dict)
+    issued_at: datetime = field(default_factory=utcnow)
+    expires_at: datetime | None = None
 
 
 class McpFace:
-    def __init__(self, kernel) -> None:
+    MAX_RUN_TOKEN_TTL_SECONDS = 3600
+
+    def __init__(self, kernel, *, clock: Callable[[], datetime] = utcnow) -> None:
         self._kernel = kernel
         self._tokens: dict[str, RunToken] = {}
+        self._clock = clock
+
+    @staticmethod
+    def _token_key(token: str) -> str:
+        return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+    def _lookup(self, token: str | None) -> RunToken | None:
+        if not token:
+            return None
+        key = self._token_key(token)
+        record = self._tokens.get(key)
+        if record is not None and record.expires_at is not None:
+            if self._clock() >= record.expires_at:
+                self._tokens.pop(key, None)
+                return None
+        return record
 
     # --- token lifecycle (issued by the fleet per run) ---
     def issue_run_token(
         self, tenant_id: str, grants: GrantSet, *, run_id=None, actor="ephemeral",
-        skills=(), workspace_id=None, on_behalf_of=None, extra=None,
+        skills=(), workspace_id=None, on_behalf_of=None, extra=None, ttl_seconds=300,
     ) -> str:
-        token = uuid.uuid4().hex
-        self._tokens[token] = RunToken(
-            token=token, tenant_id=tenant_id, grants=grants, run_id=run_id,
+        if (
+            isinstance(ttl_seconds, bool)
+            or not isinstance(ttl_seconds, int)
+            or not 1 <= ttl_seconds <= self.MAX_RUN_TOKEN_TTL_SECONDS
+        ):
+            raise ValueError("MCP run-token TTL must be between 1 and 3600 seconds")
+        token = secrets.token_urlsafe(32)
+        now = self._clock()
+        self._tokens[self._token_key(token)] = RunToken(
+            lease_id=uuid.uuid4().hex, tenant_id=tenant_id, grants=grants, run_id=run_id,
             actor=actor, skills=tuple(skills), workspace_id=workspace_id,
             on_behalf_of=on_behalf_of, extra=dict(extra or {}),
+            issued_at=now, expires_at=now + timedelta(seconds=ttl_seconds),
         )
         return token
 
     def revoke(self, token: str) -> None:
-        self._tokens.pop(token, None)
+        self._tokens.pop(self._token_key(token), None)
 
     def is_run_token(self, token: str | None) -> bool:
         """Whether ``token`` is a live run-scoped token (vs a user bearer/PAT)."""
-        return bool(token) and token in self._tokens
+        return self._lookup(token) is not None
 
     def _context(
         self, rt: RunToken, *, ip_address: str | None = None, user_agent: str | None = None
@@ -98,7 +131,7 @@ class McpFace:
         self, token: str | None, request: dict, *,
         ip_address: str | None = None, user_agent: str | None = None,
     ) -> dict:
-        rt = self._tokens.get(token or "")
+        rt = self._lookup(token)
         if rt is None:
             # D3: a bad/expired MCP run token is a security signal (mcp_auth_failure)
             # on the distinct stream. Fail-safe recording; the -32001 below governs.
@@ -125,7 +158,7 @@ class McpFace:
         site - no reduced-security headless path - and is audited as the user, now
         with the caller's org/workspace + ip/ua at the same depth (D2)."""
         rt = RunToken(
-            token="", tenant_id=principal.tenant_id, grants=principal.grants,
+            lease_id="user-request", tenant_id=principal.tenant_id, grants=principal.grants,
             run_id=None, actor=principal.subject, skills=(),
             workspace_id=getattr(principal, "active_workspace_id", None),
             on_behalf_of=getattr(principal, "on_behalf_of", None),

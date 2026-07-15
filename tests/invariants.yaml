@@ -49,6 +49,10 @@ invariants:
     tests:
       - tests/security/test_ai_keys.py::test_production_runtime_refuses_ambient_ai_key_fallback
       - tests/security/test_ai_keys.py::test_configured_missing_ai_key_never_falls_through_to_ambient
+  SEC-149:
+    description: Legacy MCP run tokens are random, stored only by SHA-256 digest, expire within a bounded mandatory TTL, and become unusable immediately when revoked.
+    tests:
+      - tests/security/test_mcp_face.py::test_run_tokens_are_hashed_expiring_and_immediately_revocable
   P9:
     description: Backend unavailability degrades gracefully, never crashes (graceful degradation).
     tests:

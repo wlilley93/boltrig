@@ -6,6 +6,7 @@ only that run's tools (SEC-23, FR-MCP-02).
 """
 
 import asyncio
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -89,6 +90,31 @@ async def test_invalid_token_rejected():
     k = await _kernel()
     res = await k.mcp.handle("not-a-token", _req("tools/list"))
     assert "error" in res
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-149")
+async def test_run_tokens_are_hashed_expiring_and_immediately_revocable():
+    k = await _kernel()
+    clock = [datetime(2026, 7, 15, tzinfo=timezone.utc)]
+    k.mcp._clock = lambda: clock[0]
+    token = k.mcp.issue_run_token(T, GrantSet.of(["ticket.read"]), ttl_seconds=2)
+
+    assert token not in k.mcp._tokens
+    assert token not in repr(k.mcp._tokens)
+    assert k.mcp.is_run_token(token)
+
+    clock[0] += timedelta(seconds=2)
+    expired = await k.mcp.handle(token, _req("tools/list"))
+    assert expired["error"]["message"] == "invalid or expired run token"
+    assert not k.mcp.is_run_token(token)
+
+    replacement = k.mcp.issue_run_token(T, GrantSet.of(["ticket.read"]))
+    k.mcp.revoke(replacement)
+    assert not k.mcp.is_run_token(replacement)
+
+    with pytest.raises(ValueError, match="TTL"):
+        k.mcp.issue_run_token(T, GrantSet.of(["ticket.read"]), ttl_seconds=0)
 
 
 @pytest.mark.security
