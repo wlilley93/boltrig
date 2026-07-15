@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -19,6 +20,86 @@ def _copy_pin(tmp_path: Path) -> Path:
     return root
 
 
+def _write_json(path: Path, value: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(value), encoding="utf-8")
+
+
+def _synthetic_bundle(
+    tmp_path: Path,
+) -> tuple[Path, check_codex_protocol.Verification]:
+    verification = check_codex_protocol.check_repository(REPO_ROOT)
+    bundle = tmp_path / "reference-bundle"
+    bundle.mkdir()
+    shutil.copy2(verification.schema_path, bundle / verification.pin.root_file)
+    _write_json(
+        bundle / "ServerRequest.json",
+        {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "properties": {"id": {"type": "string"}, "method": {"type": "string"}},
+            "required": ["id", "method"],
+            "title": "ServerRequest",
+            "type": "object",
+        },
+    )
+    _write_json(
+        bundle / "v2/ThreadStartParams.json",
+        {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "properties": {"cwd": {"type": "string"}},
+            "required": ["cwd"],
+            "title": "ThreadStartParams",
+            "type": "object",
+        },
+    )
+    bundle_sha256, file_count = check_codex_protocol._canonical_bundle_sha256(bundle)
+    synthetic_pin = replace(
+        verification.pin,
+        generated_file_count=file_count,
+        bundle_sha256=bundle_sha256,
+    )
+    return bundle, replace(verification, pin=synthetic_pin)
+
+
+def _configure_fake_cli(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    bundle: Path,
+    verification: check_codex_protocol.Verification,
+    *,
+    tamper_auxiliary: bool = False,
+) -> tuple[Path, list[list[str]]]:
+    fake = tmp_path / "codex"
+    fake.write_text("pinned binary placeholder", encoding="utf-8")
+    fake.chmod(0o755)
+    commands: list[list[str]] = []
+
+    monkeypatch.setattr(
+        check_codex_protocol,
+        "_file_sha256",
+        lambda _path: verification.pin.binary_sha256,
+    )
+
+    def fake_run(
+        command: list[str], *, cwd: Path, env: dict[str, str]
+    ) -> subprocess.CompletedProcess[str]:
+        del cwd, env
+        commands.append(command)
+        if command[-1] == "--version":
+            return subprocess.CompletedProcess(command, 0, "codex-cli 0.144.3\n", "")
+        output = Path(command[-1])
+        shutil.copytree(bundle, output, dirs_exist_ok=True)
+        if tamper_auxiliary:
+            request_path = output / "ServerRequest.json"
+            request = json.loads(request_path.read_text(encoding="utf-8"))
+            request["properties"]["authority"] = {"type": "string"}
+            request_path.write_text(json.dumps(request), encoding="utf-8")
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(check_codex_protocol, "_run", fake_run)
+    return fake, commands
+
+
 @pytest.mark.invariant("FR-RUN-19")
 def test_checked_in_codex_protocol_pin_is_exact() -> None:
     verification = check_codex_protocol.check_repository(REPO_ROOT)
@@ -30,6 +111,7 @@ def test_checked_in_codex_protocol_pin_is_exact() -> None:
         root_file="codex_app_server_protocol.v2.schemas.json",
         schema_sha256="66ab7534f29e1ee7c065eb15c799d5f6e93fdd1d0ba86c262c3842a6a8f3d0c8",
         generated_file_count=267,
+        bundle_sha256="0194f4370fd6ec268f81270217b56b2d1133ecc2c2a1560f3870dd6ec16e9810",
     )
     assert verification.schema_path.is_file()
 
@@ -47,7 +129,7 @@ def test_manifest_records_stable_transport_and_bundle_probe() -> None:
     assert manifest["schema"]["bundleProbe"] == {
         "fileCount": 267,
         "canonicalSha256": "0194f4370fd6ec268f81270217b56b2d1133ecc2c2a1560f3870dd6ec16e9810",
-        "verification": "recorded-evidence",
+        "verification": "enforced-relative-path-canonical-json-sha256-lines-v1",
     }
 
 
@@ -132,6 +214,53 @@ def test_duplicate_json_keys_are_rejected(tmp_path: Path) -> None:
         check_codex_protocol._read_json(duplicate)
 
 
+def test_non_finite_json_is_rejected(tmp_path: Path) -> None:
+    non_finite = tmp_path / "non-finite.json"
+    non_finite.write_text('{"limit": NaN}', encoding="utf-8")
+
+    with pytest.raises(check_codex_protocol.ProtocolPinError, match="non-finite JSON"):
+        check_codex_protocol._read_json(non_finite)
+
+
+def test_bundle_digest_rejects_symlinks_and_non_json_files(tmp_path: Path) -> None:
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    _write_json(bundle / "ServerRequest.json", {"title": "ServerRequest"})
+    outside = tmp_path / "outside.json"
+    _write_json(outside, {"title": "Outside"})
+    (bundle / "linked.json").symlink_to(outside)
+
+    with pytest.raises(check_codex_protocol.ProtocolPinError, match="must not contain symlinks"):
+        check_codex_protocol._canonical_bundle_sha256(bundle)
+
+    (bundle / "linked.json").unlink()
+    (bundle / "README.txt").write_text("not schema JSON", encoding="utf-8")
+    with pytest.raises(check_codex_protocol.ProtocolPinError, match="non-JSON file"):
+        check_codex_protocol._canonical_bundle_sha256(bundle)
+
+
+def test_bundle_digest_is_order_stable_and_path_sensitive(tmp_path: Path) -> None:
+    left = tmp_path / "left"
+    right = tmp_path / "right"
+    moved = tmp_path / "moved"
+    for root in (left, right, moved):
+        root.mkdir()
+    _write_json(left / "A.json", {"title": "A", "type": "object"})
+    _write_json(left / "v2/B.json", {"title": "B", "type": "object"})
+    _write_json(right / "v2/B.json", {"type": "object", "title": "B"})
+    _write_json(right / "A.json", {"type": "object", "title": "A"})
+    _write_json(moved / "nested/A.json", {"title": "A", "type": "object"})
+    _write_json(moved / "v2/B.json", {"title": "B", "type": "object"})
+
+    left_digest, left_count = check_codex_protocol._canonical_bundle_sha256(left)
+    right_digest, right_count = check_codex_protocol._canonical_bundle_sha256(right)
+    moved_digest, moved_count = check_codex_protocol._canonical_bundle_sha256(moved)
+
+    assert (left_digest, left_count) == (right_digest, right_count)
+    assert moved_count == left_count
+    assert moved_digest != left_digest
+
+
 def test_cli_verification_rejects_wrong_binary_before_execution(tmp_path: Path) -> None:
     verification = check_codex_protocol.check_repository(REPO_ROOT)
     fake = tmp_path / "codex"
@@ -146,35 +275,27 @@ def test_cli_verification_rejects_wrong_binary_before_execution(tmp_path: Path) 
 def test_cli_verification_generates_only_stable_schema(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    verification = check_codex_protocol.check_repository(REPO_ROOT)
-    fake = tmp_path / "codex"
-    fake.write_text("pinned binary placeholder", encoding="utf-8")
-    fake.chmod(0o755)
-    commands: list[list[str]] = []
-
-    monkeypatch.setattr(
-        check_codex_protocol,
-        "_file_sha256",
-        lambda _path: verification.pin.binary_sha256,
-    )
-
-    def fake_run(
-        command: list[str], *, cwd: Path, env: dict[str, str]
-    ) -> subprocess.CompletedProcess[str]:
-        del cwd, env
-        commands.append(command)
-        if command[-1] == "--version":
-            return subprocess.CompletedProcess(command, 0, "codex-cli 0.144.3\n", "")
-        output = Path(command[-1])
-        shutil.copy2(verification.schema_path, output / verification.pin.root_file)
-        for index in range(verification.pin.generated_file_count - 1):
-            (output / f"schema-{index:03}.json").write_text("{}", encoding="utf-8")
-        return subprocess.CompletedProcess(command, 0, "", "")
-
-    monkeypatch.setattr(check_codex_protocol, "_run", fake_run)
+    bundle, verification = _synthetic_bundle(tmp_path)
+    fake, commands = _configure_fake_cli(tmp_path, monkeypatch, bundle, verification)
 
     check_codex_protocol.verify_codex_cli(fake, verification)
 
     generation = commands[1]
     assert generation[1:4] == ["app-server", "generate-json-schema", "--out"]
     assert "--experimental" not in generation
+
+
+def test_cli_verification_rejects_changed_auxiliary_schema_with_same_count_and_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bundle, verification = _synthetic_bundle(tmp_path)
+    fake, _commands = _configure_fake_cli(
+        tmp_path,
+        monkeypatch,
+        bundle,
+        verification,
+        tamper_auxiliary=True,
+    )
+
+    with pytest.raises(check_codex_protocol.ProtocolPinError, match="bundle digest mismatch"):
+        check_codex_protocol.verify_codex_cli(fake, verification)

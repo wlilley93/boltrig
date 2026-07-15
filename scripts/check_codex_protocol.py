@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -25,7 +26,10 @@ PIN_SCHEMA_FILE = "codex_app_server_protocol.v2.schemas.json"
 PIN_SCHEMA_SHA256 = "66ab7534f29e1ee7c065eb15c799d5f6e93fdd1d0ba86c262c3842a6a8f3d0c8"
 PIN_BUNDLE_FILE_COUNT = 267
 PIN_BUNDLE_SHA256 = "0194f4370fd6ec268f81270217b56b2d1133ecc2c2a1560f3870dd6ec16e9810"
+PIN_BUNDLE_VERIFICATION = "enforced-relative-path-canonical-json-sha256-lines-v1"
 PIN_TRANSPORTS = ("stdio", "private-unix-socket")
+
+_BUNDLE_PATH_COMPONENT = re.compile(r"[A-Za-z0-9._-]+")
 
 
 class ProtocolPinError(RuntimeError):
@@ -40,6 +44,7 @@ class ProtocolPin:
     root_file: str
     schema_sha256: str
     generated_file_count: int
+    bundle_sha256: str
 
 
 @dataclass(frozen=True)
@@ -132,7 +137,7 @@ def _load_manifest(path: Path) -> ProtocolPin:
     _exact_keys(bundle, {"fileCount", "canonicalSha256", "verification"}, "bundleProbe")
     _exact(bundle["fileCount"], PIN_BUNDLE_FILE_COUNT, "bundleProbe.fileCount")
     _exact(bundle["canonicalSha256"], PIN_BUNDLE_SHA256, "bundleProbe.canonicalSha256")
-    _exact(bundle["verification"], "recorded-evidence", "bundleProbe.verification")
+    _exact(bundle["verification"], PIN_BUNDLE_VERIFICATION, "bundleProbe.verification")
     return ProtocolPin(
         version=PIN_VERSION,
         target=PIN_TARGET,
@@ -140,21 +145,99 @@ def _load_manifest(path: Path) -> ProtocolPin:
         root_file=PIN_SCHEMA_FILE,
         schema_sha256=PIN_SCHEMA_SHA256,
         generated_file_count=PIN_BUNDLE_FILE_COUNT,
+        bundle_sha256=PIN_BUNDLE_SHA256,
     )
 
 
-def _canonical_json_sha256(value: object) -> str:
+def _canonical_json_bytes(value: object) -> bytes:
     try:
-        payload = json.dumps(
-            value,
-            allow_nan=False,
-            ensure_ascii=True,
-            separators=(",", ":"),
-            sort_keys=True,
-        ).encode("utf-8") + b"\n"
+        return (
+            json.dumps(
+                value,
+                allow_nan=False,
+                ensure_ascii=True,
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode("utf-8")
+            + b"\n"
+        )
     except (TypeError, ValueError) as exc:
         raise ProtocolPinError(f"cannot canonicalize JSON: {exc}") from exc
-    return hashlib.sha256(payload).hexdigest()
+
+
+def _canonical_json_sha256(value: object) -> str:
+    return hashlib.sha256(_canonical_json_bytes(value)).hexdigest()
+
+
+def _bundle_json_files(root: Path) -> tuple[tuple[bytes, Path], ...]:
+    """Return exact generated JSON paths without following filesystem links."""
+
+    if root.is_symlink() or not root.is_dir():
+        raise ProtocolPinError(f"schema bundle root must be a non-symlink directory: {root}")
+
+    pending = [root]
+    files: list[tuple[bytes, Path]] = []
+    while pending:
+        directory = pending.pop()
+        try:
+            with os.scandir(directory) as iterator:
+                entries = tuple(iterator)
+        except OSError as exc:
+            raise ProtocolPinError(
+                f"cannot enumerate schema bundle directory {directory}: {exc}"
+            ) from exc
+        for entry in entries:
+            path = Path(entry.path)
+            try:
+                if entry.is_symlink():
+                    raise ProtocolPinError(f"schema bundle must not contain symlinks: {path}")
+                if entry.is_dir(follow_symlinks=False):
+                    pending.append(path)
+                    continue
+                if not entry.is_file(follow_symlinks=False):
+                    raise ProtocolPinError(
+                        f"schema bundle entries must be regular files or directories: {path}"
+                    )
+            except OSError as exc:
+                raise ProtocolPinError(f"cannot inspect schema bundle entry {path}: {exc}") from exc
+            if path.suffix != ".json":
+                raise ProtocolPinError(f"schema bundle contains a non-JSON file: {path}")
+            relative = path.relative_to(root)
+            if not relative.parts or any(
+                not _BUNDLE_PATH_COMPONENT.fullmatch(component) for component in relative.parts
+            ):
+                raise ProtocolPinError(
+                    f"schema bundle path is not a portable relative JSON path: {relative.as_posix()}"
+                )
+            try:
+                relative_bytes = relative.as_posix().encode("utf-8", errors="strict")
+            except UnicodeError as exc:
+                raise ProtocolPinError(
+                    f"schema bundle path is not valid UTF-8: {relative!s}"
+                ) from exc
+            files.append((relative_bytes, path))
+    return tuple(sorted(files, key=lambda item: item[0]))
+
+
+def _canonical_bundle_sha256(root: Path) -> tuple[str, int]:
+    """Hash sorted ``relative-path canonical-json-sha256`` evidence lines.
+
+    Each JSON value is parsed strictly, encoded as sorted compact JSON with one
+    trailing LF, and hashed. The bundle digest then hashes one LF-terminated
+    line per file: its exact relative POSIX path, one ASCII space, and that
+    canonical JSON digest. Portable path validation makes the framing
+    unambiguous. This reproduces the reviewed 0.144.3 bundle pin.
+    """
+
+    digest = hashlib.sha256()
+    files = _bundle_json_files(root)
+    for relative_bytes, path in files:
+        value_digest = _canonical_json_sha256(_read_json(path)).encode("ascii")
+        digest.update(relative_bytes)
+        digest.update(b" ")
+        digest.update(value_digest)
+        digest.update(b"\n")
+    return digest.hexdigest(), len(files)
 
 
 def _file_sha256(path: Path) -> str:
@@ -190,7 +273,9 @@ def check_repository(root: Path = ROOT) -> Verification:
         raise ProtocolPinError("schema.rootFile must be a single relative file name")
     schema_path = pin_root / relative_schema
     if schema_path.is_symlink() or not schema_path.is_file():
-        raise ProtocolPinError(f"pinned root schema must be a regular non-symlink file: {schema_path}")
+        raise ProtocolPinError(
+            f"pinned root schema must be a regular non-symlink file: {schema_path}"
+        )
     _validate_root_schema(schema_path, pin.schema_sha256)
     return Verification(pin=pin, schema_path=schema_path)
 
@@ -249,11 +334,16 @@ def verify_codex_cli(codex: Path, verification: Verification) -> None:
             raise ProtocolPinError(
                 f"stable schema generation failed: {generated.stderr.strip() or generated.stdout.strip()}"
             )
-        files = tuple(path for path in output.rglob("*") if path.is_file())
-        if len(files) != verification.pin.generated_file_count:
+        bundle_sha256, file_count = _canonical_bundle_sha256(output)
+        if file_count != verification.pin.generated_file_count:
             raise ProtocolPinError(
                 "stable schema bundle file count mismatch; "
-                f"expected {verification.pin.generated_file_count}, got {len(files)}"
+                f"expected {verification.pin.generated_file_count}, got {file_count}"
+            )
+        if bundle_sha256 != verification.pin.bundle_sha256:
+            raise ProtocolPinError(
+                "stable schema bundle digest mismatch; "
+                f"expected {verification.pin.bundle_sha256}, got {bundle_sha256}"
             )
         _validate_root_schema(output / verification.pin.root_file, verification.pin.schema_sha256)
 
@@ -282,7 +372,9 @@ def main(argv: list[str] | None = None) -> int:
     print(
         f"Codex protocol pin clean ({scope}): "
         f"version={verification.pin.version}, target={verification.pin.target}, "
-        f"stable-v2={verification.pin.schema_sha256}"
+        f"stable-v2={verification.pin.schema_sha256}, "
+        f"bundle={verification.pin.bundle_sha256}, "
+        f"bundle-files={verification.pin.generated_file_count}"
     )
     return 0
 

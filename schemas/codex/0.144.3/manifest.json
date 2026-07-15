@@ -28,7 +28,7 @@
     "bundleProbe": {
       "fileCount": 267,
       "canonicalSha256": "0194f4370fd6ec268f81270217b56b2d1133ecc2c2a1560f3870dd6ec16e9810",
-      "verification": "recorded-evidence"
+      "verification": "enforced-relative-path-canonical-json-sha256-lines-v1"
     }
   }
 }
