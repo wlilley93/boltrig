@@ -104,6 +104,11 @@ invariants:
       - tests/unit/test_skill_attestation.py::test_skills_changed_invalidates_until_a_new_attestation_is_accepted
       - tests/unit/test_skill_discovery.py::test_unselected_bundled_skill_must_be_disabled
       - tests/unit/test_skill_discovery.py::test_digest_drift_after_materialization_fails_closed
+  SEC-161:
+    description: Capability-effect attestations can only reject an existing exact assignment authority snapshot - admission binds tenant, workspace, root, phase, assignment, authority evaluation id/digest/generation, catalog generation/digest, and the complete verb-definition/classification set; only READ_ONLY_NO_EXTERNAL_EFFECT with LOW consequence, or an exact empty no-tool set, admits, while egress, mutation, high consequence, drift, partial/broader evidence, subclass spoofing, and malformed evidence fail closed.
+    tests:
+      - tests/unit/test_capability_attestation.py::test_exact_safe_set_admits_only_the_existing_authority_snapshot
+      - tests/unit/test_capability_attestation_adversarial.py::test_attestations_can_only_reject_and_never_seed_authority
   P9:
     description: Backend unavailability degrades gracefully, never crashes (graceful degradation).
     tests:
