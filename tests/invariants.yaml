@@ -118,6 +118,13 @@ invariants:
     tests:
       - tests/unit/test_capability_attestation.py::test_exact_safe_set_admits_only_the_existing_authority_snapshot
       - tests/unit/test_capability_attestation_adversarial.py::test_attestations_can_only_reject_and_never_seed_authority
+  SEC-162:
+    description: Root routing is fused with insert-once persistence into one governed admission - every root obtains exactly one authoritative persisted decision through a single admit surface (no route-only or peek bypass), replaying the same trusted facts returns the identical persisted object without a second record, concurrent admission of one root resolves to one winner plus exact replays sharing one identity, and facts that drifted from immutable history are rejected without overwriting the retained decision.
+    tests:
+      - tests/unit/test_root_admission.py::test_root_admission_persists_one_decision_and_replays_the_same_object
+      - tests/unit/test_root_admission.py::test_concurrent_admission_resolves_to_one_persisted_identity
+      - tests/unit/test_root_admission.py::test_drifted_root_facts_are_rejected_without_overwrite
+      - tests/unit/test_root_admission.py::test_admission_exposes_no_route_only_or_peek_bypass
   P9:
     description: Backend unavailability degrades gracefully, never crashes (graceful degradation).
     tests:
