@@ -1276,3 +1276,21 @@ CREATE TABLE IF NOT EXISTS codex_item_bindings (
     runtime_source_owner        TEXT NOT NULL DEFAULT 'codex',
     PRIMARY KEY (tenant_id, workspace_id, root_run_id, thread_id, turn_id, item_id)
 );
+
+CREATE TABLE IF NOT EXISTS root_engine_decisions (
+    tenant_id               TEXT NOT NULL,
+    workspace_id            TEXT NOT NULL,
+    root_run_id             TEXT NOT NULL,
+    workload                TEXT NOT NULL,
+    compatibility           TEXT NOT NULL,
+    policy_generation       INT NOT NULL,
+    policy_digest           TEXT NOT NULL,
+    route                   TEXT NOT NULL,
+    execution_result_source TEXT NOT NULL,
+    reason_code             TEXT NOT NULL,
+    canary_bucket           INT,
+    decision_digest         TEXT NOT NULL,
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
+    engine_owner            TEXT NOT NULL DEFAULT 'boltrig',
+    PRIMARY KEY (tenant_id, workspace_id, root_run_id)
+);
