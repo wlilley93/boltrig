@@ -190,9 +190,9 @@ the canonical high-level path; this section is the granular working ledger.
 
 | Field | Value |
 |---|---|
-| Branch / SHA | `refactor/codex-thin-orchestration` / `3aa14c7` (clean, pushed to origin) |
+| Branch / SHA | `refactor/codex-thin-orchestration` / `632fe76` (clean, pushed to origin) |
 | Working tree | Clean. The Codex session's in-progress fixes were not written before the limit; the slice-1 gaps below were latent and are now guarded or confirmed landed by follow-on commits `d00597e` and `3aa14c7`. |
-| Last verification | 1,573 full tests, 70 expected skips; strict mypy across 116 files; Ruff, Bandit, architecture, structure, protocol pin, invariant debt 0 (281 declared / 281 bound). |
+| Last verification | make quality PASS: 1,639 backend + 226 UI + 11 site tests, 12 skipped; 18 Playwright; strict mypy, Ruff, Bandit, structure ratchets, protocol pin; invariant debt 0 (281 declared / 281 bound); migration parity green against real PostgreSQL; production-doctor fixture clean. |
 | Migration head | `0025_hitl_access_scope`. Migrations 0026-0031 (execution ledger, root decisions, capability attestations, approval receipts) are all unwritten; the in-memory adapters exist, the PostgreSQL migrations and adapters do not. |
 | Production posture | Deliberately `production_ready=False` until the supervisor and trusted filesystem/evidence gates land. |
 
