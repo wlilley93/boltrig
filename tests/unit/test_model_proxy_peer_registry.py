@@ -1,0 +1,140 @@
+from __future__ import annotations
+
+import asyncio
+from typing import cast
+
+import pytest
+
+from boltrig.fleet.infrastructure.model_proxy_peer_registry import (
+    ModelProxyCellAlreadyRegistered,
+    ModelProxyPeerRegistryCapacityExceeded,
+    ModelProxyProcessAlreadyRegistered,
+    ModelProxyProcessRegistry,
+    ModelProxyRegistrationState,
+)
+
+from .model_proxy_peer_fakes import DEFAULT_GID, DEFAULT_UID, cell_scope
+
+
+@pytest.mark.unit
+async def test_registration_is_exact_atomic_and_terminally_non_reusable() -> None:
+    registry = ModelProxyProcessRegistry(max_cells=2)
+    scope = cell_scope()
+
+    registration = await registry.register(
+        scope, expected_uid=DEFAULT_UID, expected_gid=DEFAULT_GID
+    )
+
+    first_snapshot = await registry.snapshot_live()
+    assert first_snapshot.version == 1
+    assert first_snapshot.registrations == (registration,)
+    assert await registry.confirm_snapshot_live(first_snapshot.version, registration)
+    assert await registry.revoke(scope)
+    assert not await registry.confirm_snapshot_live(first_snapshot.version, registration)
+    terminal_snapshot = await registry.snapshot_live()
+    assert terminal_snapshot.version == 2
+    assert terminal_snapshot.registrations == ()
+    assert not await registry.revoke(scope)
+    assert (await registry.snapshot_live()).version == 3
+    with pytest.raises(ModelProxyCellAlreadyRegistered):
+        await registry.register(scope, expected_uid=DEFAULT_UID, expected_gid=DEFAULT_GID)
+
+
+@pytest.mark.unit
+async def test_concurrent_registration_collision_has_one_winner() -> None:
+    registry = ModelProxyProcessRegistry()
+    scope = cell_scope()
+
+    results = await asyncio.gather(
+        *(
+            registry.register(scope, expected_uid=DEFAULT_UID, expected_gid=DEFAULT_GID)
+            for _ in range(16)
+        ),
+        return_exceptions=True,
+    )
+
+    assert sum(not isinstance(result, BaseException) for result in results) == 1
+    assert sum(isinstance(result, ModelProxyCellAlreadyRegistered) for result in results) == 15
+    assert await registry.retained_count() == 1
+
+
+@pytest.mark.unit
+async def test_live_pid_and_exact_process_identity_cannot_alias_cells() -> None:
+    registry = ModelProxyProcessRegistry()
+    original = cell_scope()
+    await registry.register(original, expected_uid=DEFAULT_UID, expected_gid=DEFAULT_GID)
+
+    same_live_pid = cell_scope(cell_id="cell-2", assignment_id="assignment-2", start_ticks=20_001)
+    with pytest.raises(ModelProxyProcessAlreadyRegistered):
+        await registry.register(same_live_pid, expected_uid=DEFAULT_UID, expected_gid=DEFAULT_GID)
+
+    assert await registry.revoke(original)
+    exact_reuse = cell_scope(cell_id="cell-3", assignment_id="assignment-3")
+    with pytest.raises(ModelProxyProcessAlreadyRegistered):
+        await registry.register(exact_reuse, expected_uid=DEFAULT_UID, expected_gid=DEFAULT_GID)
+
+    pid_reuse = cell_scope(cell_id="cell-4", assignment_id="assignment-4", start_ticks=20_002)
+    replacement = await registry.register(
+        pid_reuse, expected_uid=DEFAULT_UID, expected_gid=DEFAULT_GID
+    )
+    assert replacement.state is ModelProxyRegistrationState.LIVE
+
+
+@pytest.mark.unit
+async def test_registry_retains_tombstones_and_fails_closed_at_capacity() -> None:
+    registry = ModelProxyProcessRegistry(max_cells=1)
+    first = cell_scope()
+    await registry.register(first, expected_uid=DEFAULT_UID, expected_gid=DEFAULT_GID)
+    await registry.revoke(first)
+
+    with pytest.raises(ModelProxyPeerRegistryCapacityExceeded):
+        await registry.register(
+            cell_scope(pid=201, cell_id="cell-2"),
+            expected_uid=DEFAULT_UID,
+            expected_gid=DEFAULT_GID,
+        )
+
+
+@pytest.mark.unit
+async def test_registration_repr_does_not_expose_scope_or_process_details() -> None:
+    registry = ModelProxyProcessRegistry()
+    registration = await registry.register(
+        cell_scope(), expected_uid=DEFAULT_UID, expected_gid=DEFAULT_GID
+    )
+
+    rendered = repr(registration)
+    assert "tenant-1" not in rendered
+    assert "assignment-1" not in rendered
+    assert "200" not in rendered
+    assert "1001" not in rendered
+    assert "redacted" in rendered
+    assert repr(await registry.snapshot_live()) == "ModelProxyRegistrySnapshot(<redacted>)"
+
+
+@pytest.mark.unit
+async def test_any_register_or_revoke_invalidates_an_existing_snapshot() -> None:
+    registry = ModelProxyProcessRegistry()
+    first_scope = cell_scope()
+    first = await registry.register(first_scope, expected_uid=DEFAULT_UID, expected_gid=DEFAULT_GID)
+    snapshot = await registry.snapshot_live()
+
+    await registry.register(
+        cell_scope(pid=201, start_ticks=20_001, cell_id="cell-2", assignment_id="assignment-2"),
+        expected_uid=DEFAULT_UID,
+        expected_gid=DEFAULT_GID,
+    )
+    assert not await registry.confirm_snapshot_live(snapshot.version, first)
+
+    second_snapshot = await registry.snapshot_live()
+    assert await registry.revoke(first_scope)
+    assert not await registry.confirm_snapshot_live(second_snapshot.version, first)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("uid,gid", [(-1, 1), (1, -1), (2**32 - 1, 1), (1, True)])
+async def test_registration_rejects_invalid_linux_ids(uid: object, gid: object) -> None:
+    registry = ModelProxyProcessRegistry()
+    with pytest.raises((TypeError, ValueError)):
+        await registry.register(
+            cell_scope(), expected_uid=cast(int, uid), expected_gid=cast(int, gid)
+        )
