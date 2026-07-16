@@ -19,7 +19,7 @@ from .readiness_control import (
     control_plane_check,
 )
 
-EXPECTED_ALEMBIC_HEAD = "0028_grant_leases"
+EXPECTED_ALEMBIC_HEAD = "0029_model_proxy_grants"
 
 _TRUE_VALUES = {"1", "true", "yes", "on", "y", "t"}
 _PRODUCTION_NAMES = {"prod", "production", "staging"}
