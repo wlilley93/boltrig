@@ -109,20 +109,33 @@ class GrantAuthoritySnapshot:
         if type(assignment) is not ExecutionAssignment:
             raise TypeError("assignment must be an exact ExecutionAssignment")
         authority = assignment.authority
+        binding = GrantLeaseBinding.from_execution_assignment(assignment)
         snapshot = object.__new__(cls)
-        object.__setattr__(
-            snapshot,
-            "binding",
-            GrantLeaseBinding.from_execution_assignment(assignment),
-        )
+        object.__setattr__(snapshot, "binding", binding)
         object.__setattr__(snapshot, "authority_evaluation_id", authority.id)
         object.__setattr__(snapshot, "authority_evaluation_digest", authority.digest)
-        object.__setattr__(
-            snapshot,
-            "authority_policy_generation",
-            authority.policy_generation,
-        )
+        object.__setattr__(snapshot, "authority_policy_generation", authority.policy_generation)
         object.__setattr__(snapshot, "permitted_verbs", authority.permitted_verbs)
+        snapshot.__post_init__()
+        return snapshot
+
+    @classmethod
+    def from_stored_values(
+        cls,
+        *,
+        binding: GrantLeaseBinding,
+        authority_evaluation_id: str,
+        authority_evaluation_digest: str,
+        authority_policy_generation: int,
+        permitted_verbs: tuple[VerbId, ...],
+    ) -> GrantAuthoritySnapshot:
+        """Rehydrate a snapshot a durable adapter already validated and persisted."""
+        snapshot = object.__new__(cls)
+        object.__setattr__(snapshot, "binding", binding)
+        object.__setattr__(snapshot, "authority_evaluation_id", authority_evaluation_id)
+        object.__setattr__(snapshot, "authority_evaluation_digest", authority_evaluation_digest)
+        object.__setattr__(snapshot, "authority_policy_generation", authority_policy_generation)
+        object.__setattr__(snapshot, "permitted_verbs", permitted_verbs)
         snapshot.__post_init__()
         return snapshot
 
