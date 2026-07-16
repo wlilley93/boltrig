@@ -1446,3 +1446,41 @@ CREATE TABLE IF NOT EXISTS model_proxy_grant_cancelled_cells (
         cgroup_identity_digest
     )
 );
+
+CREATE TABLE IF NOT EXISTS capability_attestation_sets (
+    tenant_id                     TEXT NOT NULL,
+    workspace_id                  TEXT NOT NULL,
+    root_run_id                   TEXT NOT NULL,
+    phase_id                      TEXT NOT NULL,
+    assignment_id                 TEXT NOT NULL,
+    authority_evaluation_id       TEXT NOT NULL,
+    authority_evaluation_digest   TEXT NOT NULL,
+    authority_policy_generation   BIGINT NOT NULL,
+    catalog_generation            BIGINT NOT NULL,
+    catalog_digest                TEXT NOT NULL,
+    set_digest                    TEXT NOT NULL,
+    created_at                    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    engine_owner                  TEXT NOT NULL DEFAULT 'boltrig',
+    PRIMARY KEY (tenant_id, workspace_id, root_run_id, phase_id, assignment_id)
+);
+
+CREATE TABLE IF NOT EXISTS capability_attestation_entries (
+    tenant_id           TEXT NOT NULL,
+    workspace_id        TEXT NOT NULL,
+    root_run_id         TEXT NOT NULL,
+    phase_id            TEXT NOT NULL,
+    assignment_id       TEXT NOT NULL,
+    verb_id             TEXT NOT NULL,
+    definition_digest   TEXT NOT NULL,
+    effect_class        TEXT NOT NULL,
+    consequence         TEXT NOT NULL,
+    engine_owner        TEXT NOT NULL DEFAULT 'boltrig',
+    PRIMARY KEY (
+        tenant_id, workspace_id, root_run_id, phase_id, assignment_id, verb_id
+    ),
+    FOREIGN KEY (
+        tenant_id, workspace_id, root_run_id, phase_id, assignment_id
+    ) REFERENCES capability_attestation_sets (
+        tenant_id, workspace_id, root_run_id, phase_id, assignment_id
+    ) ON DELETE CASCADE
+);
