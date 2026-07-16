@@ -190,9 +190,10 @@ the canonical high-level path; this section is the granular working ledger.
 
 | Field | Value |
 |---|---|
-| Branch / SHA | `refactor/codex-thin-orchestration` / `143d516` (clean, pushed to origin) |
-| Working tree | Clean. Nothing uncommitted. The session's in-progress fixes were not written before the limit, so the gaps below are latent, not half-applied. |
-| Last verification | 1,573 full tests, 70 expected skips; strict mypy across 116 files; Ruff, Bandit, architecture, structure, protocol pin, invariant debt 0. |
+| Branch / SHA | `refactor/codex-thin-orchestration` / `3aa14c7` (clean, pushed to origin) |
+| Working tree | Clean. The Codex session's in-progress fixes were not written before the limit; the slice-1 gaps below were latent and are now guarded or confirmed landed by follow-on commits `d00597e` and `3aa14c7`. |
+| Last verification | 1,573 full tests, 70 expected skips; strict mypy across 116 files; Ruff, Bandit, architecture, structure, protocol pin, invariant debt 0 (281 declared / 281 bound). |
+| Migration head | `0025_hitl_access_scope`. Migrations 0026-0031 (execution ledger, root decisions, capability attestations, approval receipts) are all unwritten; the in-memory adapters exist, the PostgreSQL migrations and adapters do not. |
 | Production posture | Deliberately `production_ready=False` until the supervisor and trusted filesystem/evidence gates land. |
 
 ### Slice status
@@ -201,7 +202,7 @@ the canonical high-level path; this section is the granular working ledger.
 |---|---|---|---|
 | 0 | Secretless Codex 0.144.3 runtime config | landed (`143d516`) | Reviewed and pushed. Disabled for production until trusted-root, no-symlink, evidence, and supervisor gates are wired. |
 | 0 | Capability-attestation binding | landed (`8459e09`) | Attestation can only reject, never grant. Persistence and approval deferred to later migrations. |
-| 1 | Raw-success-quarantined App Server phase execution + result projection | in progress | Open gaps below. |
+| 1 | Raw-success-quarantined App Server phase execution + result projection | mostly landed | Terminal-first / event-arbitration / sole-reader races are landed and covered by 100 hardening tests. Budget gap guarded (`d00597e`) and peer-payload retention invariant pinned (`3aa14c7`). Only the budget re-derivation remains (a design decision that changes the pinned schema digest). |
 | 2 | Root routing / governed admission (atomic + total) | in progress | Subagent `root_admission_contract` was the task that errored on the usage limit. |
 | 3 | PostgreSQL execution ledger migrations 0026-0028 | pending | APPLIED must prove a same-transaction aggregate mutation; deadlock lock-order tests; exact command-to-row transition proof. Then 0030 (immutable capability attestations + assignment pins) and 0031 (approval/effect receipts). |
 | 4 | Memory/PostgreSQL ledger adapters + run-scoped grant persistence | pending | One shared semantic matrix across both stores: retry backoff, expiry, revocation, verifier identity, source sequencing, replay. Restart-time Codex binding lookup missing from the ledger port. Budget mutation is deliberately read-only (memory and Postgres disagree on counter/reset semantics). |
@@ -209,27 +210,24 @@ the canonical high-level path; this section is the granular working ledger.
 | 6 | Staged cutover + OpenCode/Herdr removal | pending | Deletion gated on wiring + parity, not code presence (readiness/images still validate the legacy runtimes). Opbox domain-effect adapter is a missing seam. |
 | 7 | Final gates | pending | Security diff scan, `make quality`, production doctor, docs, release verification. |
 
-### Slice 1 open gaps (confirmed)
+### Slice 1 open gaps (status after follow-on commits)
 
-These were identified by the Codex adversarial passes but never committed.
-
-1. **Phase-result char-vs-byte budget (now proven).** A maximally-populated,
-   schema-valid result is 1,638,017 canonical bytes, 50x over the 32,768-byte
-   wire/parser budget. The byte gate rejects it as `DOCUMENT_TOO_LARGE`, so
-   security is intact, but the advertised schema contract is self-contradictory:
-   a faithful agent that fills the schema to its limits is rejected. Guard added
-   as `test_worst_case_schema_valid_result_fits_within_the_wire_budget`
-   (strict-xfailed until the per-field char and collection limits are re-derived
-   so every schema-valid result fits the byte budget). Fixing this changes the
-   pinned schema digest and needs the reviewed contract workflow.
-2. **Raw peer payload retention through cancellation/timeout tracebacks.** Worker
-   narrative, peer IDs, or object graphs can survive into durable state through
-   traceback or debug object graphs even on nominal success. Targeted fix:
-   outcome-only wait arbitration; strip traceback-held event objects from the
-   phase executor.
-3. **An event winning over a simultaneous terminal failure.** Needs terminal-first
-   event handling so a terminal failure is never overridden by a racing success
-   event.
+1. **Phase-result char-vs-byte budget - guarded, fix pending.** A maximally-
+   populated, schema-valid result is 1,638,017 canonical bytes, 50x over the
+   32,768-byte wire/parser budget. The byte gate rejects it as
+   `DOCUMENT_TOO_LARGE`, so security is intact, but the advertised schema
+   contract is self-contradictory. Guard added as
+   `test_worst_case_schema_valid_result_fits_within_the_wire_budget`
+   (strict-xfailed, `d00597e`). Fixing it changes the pinned schema digest and
+   needs the reviewed contract workflow.
+2. **Raw peer payload retention - invariant pinned.** The decode path already
+   used generic messages and `from-None` suppression; terminals already carried
+   only bounded server-owned categories. Parametrized guards added in
+   `test_codex_payload_retention.py` (`3aa14c7`) so neither can regress.
+3. **Event winning over a terminal failure - confirmed landed.** Terminal-first
+   handling, outcome-only wait arbitration, sole-reader, and cancelled-consumer
+   reconnect are present in `codex_runtime_actor.py` and covered by
+   `test_codex_runtime_lifecycle_hardening.py` (100 hardening tests green).
 
 ### Open config trust-boundary fixes (before secretless gates enable)
 
