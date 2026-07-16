@@ -382,3 +382,86 @@ def test_output_schema_returns_an_isolated_copy() -> None:
     first = phase_result_output_schema().to_mapping()
     first["type"] = cast(JSONValue, "array")
     assert phase_result_output_schema().to_mapping()["type"] == "object"
+
+
+def _worst_case_schema_valid_document() -> dict[str, object]:
+    """Build the largest document the pinned schema admits.
+
+    Narrative fields use a 4-byte UTF-8 code point the schema permits (NFC,
+    non-control) so the worst-case byte cost is exercised. Identifiers are
+    restricted to ASCII by the schema pattern, so they cost one byte each,
+    but must be unique where the schema enforces ``uniqueItems``.
+    """
+
+    from boltrig.fleet.domain.phase_results import (
+        MAX_COMPLETION_SUMMARY_CHARS,
+        MAX_EVIDENCE_ITEMS,
+        MAX_EVIDENCE_REFS,
+        MAX_FINDING_ITEMS,
+        MAX_HANDOFF_ITEMS,
+        MAX_IDENTIFIER_CHARS,
+        MAX_NARRATIVE_CHARS,
+    )
+
+    wide = "\U0001f3af" * MAX_NARRATIVE_CHARS
+    completion_summary = "\U0001f3af" * MAX_COMPLETION_SUMMARY_CHARS
+
+    def identifier(index: int) -> str:
+        return f"a{index:0{MAX_IDENTIFIER_CHARS - 1}d}"
+
+    pool = [identifier(index) for index in range(MAX_EVIDENCE_ITEMS)]
+
+    return {
+        "schemaVersion": PHASE_RESULT_SCHEMA_VERSION,
+        "completion": {"status": "completed", "summary": completion_summary},
+        "evidence": [{"evidenceId": value} for value in pool],
+        "findings": [
+            {
+                "code": identifier(MAX_EVIDENCE_ITEMS + offset),
+                "severity": "low",
+                "summary": wide,
+                "detail": wide,
+                "evidenceIds": pool[:MAX_EVIDENCE_REFS],
+            }
+            for offset in range(MAX_FINDING_ITEMS)
+        ],
+        "blockers": [],
+        "handoffs": [
+            {
+                "profile": {
+                    "name": identifier(MAX_EVIDENCE_ITEMS + MAX_FINDING_ITEMS + offset),
+                    "version": "1.2.3",
+                },
+                "summary": wide,
+                "evidenceIds": pool[:MAX_EVIDENCE_REFS],
+            }
+            for offset in range(MAX_HANDOFF_ITEMS)
+        ],
+    }
+
+
+def test_worst_case_document_is_genuinely_schema_valid() -> None:
+    schema = phase_result_output_schema().to_mapping()
+    Draft202012Validator(schema).validate(_worst_case_schema_valid_document())
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "Phase-result v1 char limits compose to a worst-case canonical document of "
+        "~1.64 MB, 50x over the 32 KiB wire/parser budget. A schema-valid maximal "
+        "result is therefore rejected as DOCUMENT_TOO_LARGE. Re-derive the per-field "
+        "char and collection limits so every schema-valid result fits the byte budget "
+        "(codex 2026-07-16 slice 1; see docs/PATH-TO-10.md section 9). When the limits "
+        "are re-budgeted this guard flips to enforce the invariant permanently."
+    ),
+)
+def test_worst_case_schema_valid_result_fits_within_the_wire_budget() -> None:
+    encoded = json.dumps(
+        _worst_case_schema_valid_document(),
+        allow_nan=False,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    assert len(encoded) <= MAX_PHASE_RESULT_BYTES
