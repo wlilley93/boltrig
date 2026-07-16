@@ -82,9 +82,13 @@ async def assert_insert_once_replay_conflict_and_scope(
 
     assert inserted.status is RootEngineDecisionInsertStatus.INSERTED
     assert replayed.status is RootEngineDecisionInsertStatus.REPLAYED
+    # The inserter always receives its own object back by identity. A replay or a
+    # later read returns the canonical decision value: the in-memory adapter happens
+    # to preserve identity, a durable adapter reconstructs an equal value, so the
+    # shared contract binds on canonical equality, not object identity.
     assert inserted.decision is original
-    assert replayed.decision is original
-    assert await store.get(original.scope) is original
+    assert replayed.decision == original
+    assert await store.get(original.scope) == original
 
     for changed in changed_decisions(original):
         assert changed.scope == original.scope
@@ -95,7 +99,7 @@ async def assert_insert_once_replay_conflict_and_scope(
             pass
         else:  # pragma: no cover - a broken adapter reaches the assertion
             raise AssertionError("changed immutable routing history did not conflict")
-        assert await store.get(original.scope) is original
+        assert await store.get(original.scope) == original
 
     for foreign in (
         scope(tenant_id="tenant-2"),
@@ -116,8 +120,8 @@ async def assert_concurrent_exact_replay_is_serializable(
     statuses = [outcome.status for outcome in outcomes]
     assert statuses.count(RootEngineDecisionInsertStatus.INSERTED) == 1
     assert statuses.count(RootEngineDecisionInsertStatus.REPLAYED) == 31
-    assert all(outcome.decision is original for outcome in outcomes)
-    assert await store.get(original.scope) is original
+    assert all(outcome.decision == original for outcome in outcomes)
+    assert await store.get(original.scope) == original
 
 
 __all__ = [
