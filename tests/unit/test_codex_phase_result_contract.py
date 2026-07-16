@@ -101,7 +101,7 @@ def test_schema_is_pinned_valid_and_matches_the_successful_wire_document() -> No
         sort_keys=True,
     ).encode("utf-8")
     assert PHASE_RESULT_SCHEMA_DIGEST == (
-        "sha256:d32c15e2660f95da571a72cfd18741fe3a04819c39c335d85761ac484954aebe"
+        "sha256:5254686c4ca647cb78cbabd9f1d74f14a31c2c9ab037fd1dbde31c04e9990be5"
     )
     assert PHASE_RESULT_SCHEMA_DIGEST == f"sha256:{hashlib.sha256(encoded).hexdigest()}"
 
@@ -177,12 +177,12 @@ def test_depth_node_collection_and_field_bounds_are_enforced() -> None:
     _rejection({"extra": [0] * 512}, PhaseResultRejectionCode.BOUNDS_EXCEEDED)
 
     too_many = _document()
-    too_many["evidence"] = [{"evidenceId": f"evidence.{index}"} for index in range(65)]
+    too_many["evidence"] = [{"evidenceId": f"evidence.{index}"} for index in range(9)]
     _rejection(too_many, PhaseResultRejectionCode.BOUNDS_EXCEEDED)
 
     long_narrative = _document()
     cast(dict[str, object], cast(list[object], long_narrative["findings"])[0])["summary"] = (
-        "x" * 2049
+        "x" * 257
     )
     _rejection(long_narrative, PhaseResultRejectionCode.BOUNDS_EXCEEDED)
 
@@ -394,6 +394,7 @@ def _worst_case_schema_valid_document() -> dict[str, object]:
     """
 
     from boltrig.fleet.domain.phase_results import (
+        MAX_BLOCKER_ITEMS,
         MAX_COMPLETION_SUMMARY_CHARS,
         MAX_EVIDENCE_ITEMS,
         MAX_EVIDENCE_REFS,
@@ -410,10 +411,11 @@ def _worst_case_schema_valid_document() -> dict[str, object]:
         return f"a{index:0{MAX_IDENTIFIER_CHARS - 1}d}"
 
     pool = [identifier(index) for index in range(MAX_EVIDENCE_ITEMS)]
+    refs = pool[:MAX_EVIDENCE_REFS]
 
     return {
         "schemaVersion": PHASE_RESULT_SCHEMA_VERSION,
-        "completion": {"status": "completed", "summary": completion_summary},
+        "completion": {"status": "blocked", "summary": completion_summary},
         "evidence": [{"evidenceId": value} for value in pool],
         "findings": [
             {
@@ -421,19 +423,34 @@ def _worst_case_schema_valid_document() -> dict[str, object]:
                 "severity": "low",
                 "summary": wide,
                 "detail": wide,
-                "evidenceIds": pool[:MAX_EVIDENCE_REFS],
+                "evidenceIds": refs,
             }
             for offset in range(MAX_FINDING_ITEMS)
         ],
-        "blockers": [],
+        "blockers": [
+            {
+                "code": identifier(
+                    MAX_EVIDENCE_ITEMS + MAX_FINDING_ITEMS + offset
+                ),
+                "summary": wide,
+                "detail": wide,
+                "evidenceIds": refs,
+            }
+            for offset in range(MAX_BLOCKER_ITEMS)
+        ],
         "handoffs": [
             {
                 "profile": {
-                    "name": identifier(MAX_EVIDENCE_ITEMS + MAX_FINDING_ITEMS + offset),
+                    "name": identifier(
+                        MAX_EVIDENCE_ITEMS
+                        + MAX_FINDING_ITEMS
+                        + MAX_BLOCKER_ITEMS
+                        + offset
+                    ),
                     "version": "1.2.3",
                 },
                 "summary": wide,
-                "evidenceIds": pool[:MAX_EVIDENCE_REFS],
+                "evidenceIds": refs,
             }
             for offset in range(MAX_HANDOFF_ITEMS)
         ],
@@ -445,17 +462,6 @@ def test_worst_case_document_is_genuinely_schema_valid() -> None:
     Draft202012Validator(schema).validate(_worst_case_schema_valid_document())
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Phase-result v1 char limits compose to a worst-case canonical document of "
-        "~1.64 MB, 50x over the 32 KiB wire/parser budget. A schema-valid maximal "
-        "result is therefore rejected as DOCUMENT_TOO_LARGE. Re-derive the per-field "
-        "char and collection limits so every schema-valid result fits the byte budget "
-        "(codex 2026-07-16 slice 1; see docs/PATH-TO-10.md section 9). When the limits "
-        "are re-budgeted this guard flips to enforce the invariant permanently."
-    ),
-)
 def test_worst_case_schema_valid_result_fits_within_the_wire_budget() -> None:
     encoded = json.dumps(
         _worst_case_schema_valid_document(),
