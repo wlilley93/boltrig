@@ -83,20 +83,6 @@
       "reason": "Split dependency construction and runtime wiring into typed bootstrap stages without changing startup order.",
       "expires": "2026-12-31"
     },
-    "boltrig/api/cli.py": {
-      "max_file_lines": 169,
-      "max_function_lines": 137,
-      "over_limit_functions": [
-        {
-          "name": "main",
-          "line": 29,
-          "lines": 137
-        }
-      ],
-      "owner": "platform-maintainers",
-      "reason": "Decompose command parsing and command execution while preserving the existing CLI surface.",
-      "expires": "2026-12-31"
-    },
     "boltrig/api/doctor.py": {
       "max_file_lines": 579,
       "max_function_lines": 66,

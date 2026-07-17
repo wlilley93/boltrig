@@ -26,7 +26,7 @@ def _repo_script(name: str) -> str | None:
     return path if os.path.exists(path) else None
 
 
-def main(argv: list[str] | None = None) -> int:
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="boltrig")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
@@ -104,8 +104,10 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("version", help="print version")
 
-    args = parser.parse_args(argv)
+    return parser
 
+
+def _dispatch(args: argparse.Namespace) -> int:
     if args.cmd == "version":
         print(__version__)
         return 0
@@ -163,6 +165,10 @@ def main(argv: list[str] | None = None) -> int:
         print(report.to_json() if args.json else format_report(report))
         return report.exit_code
     return 1
+
+
+def main(argv: list[str] | None = None) -> int:
+    return _dispatch(_build_parser().parse_args(argv))
 
 
 if __name__ == "__main__":
