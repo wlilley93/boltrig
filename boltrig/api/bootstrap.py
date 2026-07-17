@@ -489,6 +489,7 @@ def build_app():
 
     def platform_factory(kernel):
         # Round Three studios/admin/eval ride existing services (C2)
+        from boltrig.api.codex_execution import build_codex_execution_stack
         from boltrig.api.readiness import ReadinessService
         from boltrig.config.admin import AdminConfig
         from boltrig.fleet import register_workers
@@ -505,10 +506,8 @@ def build_app():
             except Exception:
                 pass
         spawner = build_spawner(kernel)
-        # Honest executor selection (US-EXE-05): record which executor serves
-        # this app and whether it is durable. Workflow trigger descriptors
-        # already stamp `durable` per run; Beat 4 extends the same stamp into
-        # spawn/work-item execution metadata (fleet/spawner, not wired here).
+        # Honest executor selection (US-EXE-05): record which executor serves this
+        # app and whether it is durable (Beat 4 extends the stamp; not wired here).
         executor = register_workers(kernel)
         log.info(
             "workflow executor: %s (durable=%s)",
@@ -541,10 +540,11 @@ def build_app():
             "admin": admin,
             "eval": eval_runner,
             "spawner": spawner,
+            # Codex ledger scaffold (steps 1-2): None when BOLTRIG_CODEX_LEDGER off.
+            "codex_execution": build_codex_execution_stack(load_settings(), kernel.store),
             "workflows": workflows,
-            # Eval-gated promotion ([2026] VJS-COUNTY 5): shares the ONE EvalRunner
-            # so a candidate is proven through the same chokepoint under the
-            # initiator ceiling (SEC-29) before it is preferred for reuse.
+            # Eval-gated promotion ([2026] VJS-COUNTY 5): shares the ONE EvalRunner so a
+            # candidate is proven through the same chokepoint (SEC-29) before reuse.
             "promoter": WorkflowPromoter(kernel.store, eval_runner),
             "status": status,
             "readiness": ReadinessService(

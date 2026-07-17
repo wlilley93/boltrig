@@ -102,6 +102,7 @@ python_version = "3.12"
 files = [
     "boltrig/models",
     "boltrig/api/cli.py",
+    "boltrig/api/codex_execution.py",
     "boltrig/api/readiness.py",
     "boltrig/api/readiness_control.py",
     "boltrig/api/worker.py",

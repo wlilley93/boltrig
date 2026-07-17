@@ -136,6 +136,12 @@ invariants:
       - tests/unit/test_assignment_admission.py::test_a_refused_ledger_leaves_an_orphaned_set_and_no_dangling_reference
       - tests/store/test_postgres_assignment_admission.py::test_postgres_admission_mints_attests_and_persists
       - tests/store/test_postgres_assignment_admission.py::test_postgres_admitting_the_same_trusted_facts_twice_replays
+  SEC-170:
+    description: The Codex read-only ledger scaffold is a total no-op behind BOLTRIG_CODEX_LEDGER - flag off (the default) constructs nothing and parks None on app.state.platform, so no admission service exists and nothing calls admit; flag on constructs both the root-routing and assignment admission services behind an OFF policy and still calls nothing.
+    tests:
+      - tests/unit/test_codex_execution.py::test_codex_ledger_defaults_off_and_builds_no_stack
+      - tests/unit/test_codex_execution.py::test_flag_on_constructs_both_admission_services
+      - tests/integration/test_codex_execution_platform.py::test_platform_parks_none_when_flag_off
   P9:
     description: Backend unavailability degrades gracefully, never crashes (graceful degradation).
     tests:
