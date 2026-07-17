@@ -1220,6 +1220,10 @@ invariants:
     description: The four org/workspace tenancy tables are RLS-fenced (SEC-08) - workspaces, org_members and workspace_members are in the rls.sql generic tenant_id-scoped set, and organisations is fenced by its own id-keyed tenant_isolation policy (its id IS the tenant_id), with all four defined in schema.sql.
     tests:
       - tests/security/test_tenancy_isolation.py::test_the_four_tenancy_tables_are_rls_scoped
+  SEC-169:
+    description: No tenant table drifts outside the RLS fence (SEC-08, K-22, SEC-65) - against a real Postgres with schema.sql + the rls.sql overlay applied, EVERY table carrying a tenant_id column is either RLS-fenced (FORCE row security plus a tenant_isolation policy in pg_policy) or in a single explicit documented exclusion set (personal_access_tokens, identity_orgs, channels - each resolved by an unguessable key before any tenant is bound), so a future tenant table that lands unfenced and unexcused fails the build.
+    tests:
+      - tests/security/test_rls_fence_coverage.py::test_every_tenant_table_is_rls_fenced_or_documented_excluded
 
   # --- Session active workspace context + switching ([2026] VJS-COUNTY 8, D4) -
   FR-ORG-03:

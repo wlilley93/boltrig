@@ -16,7 +16,9 @@ E2E_PYTHON := $(shell command -v $(PY))
 else
 E2E_PYTHON := $(abspath $(PY))
 endif
-COVERAGE_MIN ?= 75
+# Floor raised 75 -> 82 (2026-07-17): actual is 84.43%, so 75 let coverage
+# silently regress ~9 points. 82 locks in the gain with a small honest headroom.
+COVERAGE_MIN ?= 82
 PLAYWRIGHT_INSTALL_ARGS ?= chromium
 COMPOSE ?= docker compose
 COMPOSE_VALIDATE_ENV ?= .env.example
