@@ -156,6 +156,13 @@ invariants:
       - tests/integration/test_codex_shadow_root_admission.py::test_flag_off_records_no_decision_and_is_execution_neutral
       - tests/integration/test_codex_shadow_root_admission.py::test_flag_on_records_one_legacy_decision_and_execution_is_unchanged
       - tests/integration/test_codex_shadow_root_admission.py::test_shadow_admit_failure_is_swallowed_and_turn_completes
+  SEC-173:
+    description: The pump root lane shadow-admits exactly like the chat root (SEC-172) - a top-level (parent_id is None) work item records exactly one LEGACY/ROLLOUT_OFF RootEngineDecision under the OFF flag, a child item (parent_id set) records nothing, flag off records nothing, and re-handling the same root is a safe insert-once replay (still one decision, no error); execution is unchanged throughout.
+    tests:
+      - tests/integration/test_codex_pump_root_admission.py::test_flag_off_pump_root_records_no_decision
+      - tests/integration/test_codex_pump_root_admission.py::test_flag_on_pump_root_records_one_legacy_decision
+      - tests/integration/test_codex_pump_root_admission.py::test_flag_on_pump_child_records_nothing
+      - tests/integration/test_codex_pump_root_admission.py::test_rehandling_the_same_root_is_a_safe_replay
   P9:
     description: Backend unavailability degrades gracefully, never crashes (graceful degradation).
     tests:

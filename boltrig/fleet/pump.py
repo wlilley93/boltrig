@@ -44,6 +44,7 @@ from .chief_of_staff import ChiefOfStaff, Department
 from .department_head import DepartmentHead, tree_root_id
 
 if TYPE_CHECKING:  # type-only seams (fleet imports stay kernel-free)
+    from boltrig.api.codex_execution import CodexExecutionStack
     from boltrig.config.manifest import FleetManifest
 
     from .spawn import Spawner
@@ -109,8 +110,7 @@ async def persist_new_work_items(
 
     Each entry becomes a normalised PENDING :class:`WorkItem` parented to the step's item
     (owner/department unset - the org lane routes it), so the pump picks it up on a later
-    cycle instead of the follow-on being dropped.
-    """
+    cycle instead of the follow-on being dropped."""
     created: list[WorkItem] = []
     for raw in new_items or []:
         payload = dict(raw) if isinstance(raw, dict) else {"intent": str(raw)}
@@ -138,6 +138,7 @@ class WorkPump:
         lease_seconds: int = DEFAULT_LEASE_SECONDS,
         worker_id: str | None = None,
         reflect: bool | None = None,
+        codex_execution: CodexExecutionStack | None = None,
     ) -> None:
         self._store = getattr(kernel_or_store, "store", kernel_or_store)
         # Post-run reflection (Phase 3, US-WFL-07) goes through the kernel chokepoint,
@@ -171,6 +172,7 @@ class WorkPump:
         self.max_attempts = max_attempts
         self.lease_seconds = lease_seconds
         self.worker_id = worker_id or f"pump-{uuid.uuid4().hex[:8]}"
+        self._codex_execution = codex_execution  # SEC-172 shadow root admission; None=off
         # One body, two carriages (US-EXE-05): the durable engine and the direct path
         # both run _run_item_payload; registering it lets a durable executor enqueue
         # it by name.
@@ -213,6 +215,10 @@ class WorkPump:
         store = self._store
         tenant = item.tenant_id
         run_id = item.hatchet_run_id or item.id
+        # Shadow Codex root admission (SEC-172): a ROOT (parent_id is None) records one
+        # execution-neutral decision; None=off => no-op, fail-open. Replay-safe (insert-once).
+        if self._codex_execution is not None and item.parent_id is None:
+            await self._codex_execution.shadow_admit(item.tenant_id, item.workspace_id, item.id)
 
         if item.status == WorkStatus.BLOCKED:  # blocked work is a human's, not a retry's
             await self._park(
@@ -221,12 +227,8 @@ class WorkPump:
             )
             return item
 
-        # Cooperative server-side cancel ([2026] VJS-COUNTY 6, D3/D4): the cancel signal is
-        # consulted at every step boundary and the run stops BEFORE the next effect begins;
-        # an in-flight adapter call is never interrupted (cancellation takes effect only at
-        # the next cooperative point). CANCELLED is written in the `finally` (D4), so the
-        # terminal state is durable even if a later step raises; the durable cancel-request
-        # row is the backstop that re-detects a cancel after a mid-flight process death.
+        # Cooperative server-side cancel ([2026] VJS-COUNTY 6, D3/D4): consulted at every step
+        # boundary; CANCELLED is written in the `finally`, durable even if a later step raises.
         cancelled = await self._store.is_run_cancel_requested(tenant, run_id)
         try:
             if cancelled:  # boundary 0: before any dispatch, nothing has run yet
@@ -399,12 +401,10 @@ class WorkPump:
 
         Writes the terminal ``WorkStatus.CANCELLED`` (a neutral outcome), persists a
         checkpoint, and emits one audit row on the transition. Called only from
-        ``handle_claimed_item``'s ``finally`` so the terminal state is durable even if
-        a later step raised. Any work the step completed before the cancel stays on
-        ``item.result``: ``_stamp_outcome`` preserves the head's aggregate (SEC-166).
-        Idempotent: re-running it on an already-cancelled item re-writes the same
-        terminal state, so a restart that re-detects the cancel-request row never
-        resurrects the run (FORBIDDEN: a cancelled run coming back to life)."""
+        ``handle_claimed_item``'s ``finally`` so the terminal state is durable even if a
+        later step raised; ``_stamp_outcome`` preserves the head's aggregate (SEC-166).
+        Idempotent: re-running it re-writes the same terminal state, so a restart that
+        re-detects the cancel-request row never resurrects the run."""
         item.status = WorkStatus.CANCELLED
         item.lease_owner = None
         item.lease_expires_at = None
@@ -461,14 +461,10 @@ class WorkPump:
         """Distil one lesson and store it via the memory verb, best-effort (US-WFL-07).
 
         Governed: the write goes through ``kernel.invoke`` (the one chokepoint), so the
-        memory adapter's scope + secret + injection screens all run on it - it is never
-        bypassed. Provenance is the run id (``source_ref``) and the work item id (in the
-        lesson). OFF unless enabled, and a reflection failure - a missing memory binding,
-        a screen rejection, any error - is swallowed so it can never fail the run (P9).
-
-        Carries the narrow reflection seat, NOT the item's execution context: this is the
-        pump's own bookkeeping into the CoS's memory scope, so it is neither the
-        principal's act nor the tenant's (``authority.REFLECTION_GRANTS``)."""
+        memory adapter's scope + secret + injection screens all run on it. Provenance is the
+        run id (``source_ref``) and work item id. OFF unless enabled, and any reflection
+        failure is swallowed so it can never fail the run (P9). Carries the narrow reflection
+        seat, NOT the item's execution context (``authority.REFLECTION_GRANTS``)."""
         if not self._reflect_enabled or self._kernel is None:
             return
         outcome = (item.result or {}).get("outcome") or {}
@@ -533,7 +529,11 @@ def build_org(
             spawner=spawner, store=kernel.store,
         )
     chief = ChiefOfStaff(kernel, departments)
+    # Codex shadow root admission (SEC-172) at the construction site: off => None => no admit.
+    from boltrig.api.codex_execution import build_codex_execution_stack
+    from boltrig.config import load_settings
     return WorkPump(
         kernel, spawner, chief, heads, executor,
         max_attempts=max_attempts, lease_seconds=lease_seconds,
+        codex_execution=build_codex_execution_stack(load_settings(), kernel.store),
     )
