@@ -557,8 +557,15 @@ The following are blockers for approval-gated write phases, not optional cleanup
     the pump then claims and executes) and `_maybe_learn` (which promotes the run's
     workflow into the reusable library). So a cancelled run can spawn fresh downstream
     work and mutate the flywheel, violating this document's own "no new domain effect
-    begins after revocation". Mechanical: re-read the marker after the head boundary.
-    Does not violate D3, since it adds a cooperative check rather than a mid-step kill.
+    begins after revocation". **FIXED (`1d7c86a`, SEC-166):** boundary 2 re-reads the
+    marker after the step and before the persist/learn block. D3 intact (the step is
+    never interrupted; this is a cooperative check at a boundary already crossed).
+    Semantics: the completed head outcome is RECORDED, its downstream effects are
+    SUPPRESSED, since the invariant is "no new domain effect BEGINS after revocation",
+    not "pretend the completed step never ran". Residual: a cancel landing between
+    boundary 2 and the terminal write still uses a stale value (now a millisecond window
+    of local writes rather than a whole in-flight call); closing it needs a
+    compare-and-set on the terminal write, a separate design question.
 13. Codex still discovers repository `.agents/skills` while project-local
     `.codex` config, hooks, and rules are disabled for an untrusted project.
     Directly pointing a cell at an unsanitized checkout would bypass Boltrig's
