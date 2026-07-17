@@ -35,13 +35,6 @@ class UltracodeAgentInput(BaseModel):
     ctx_envelope: dict[str, Any]
 
 
-async def ultracode_run_body(kernel: Any, payload: dict[str, Any]) -> dict[str, Any]:
-    """Run a Boltrig v2 phased agent workflow through the fleet spawner."""
-    from boltrig.fleet.ultracode import run_ultracode_body
-
-    return await run_ultracode_body(kernel, payload)
-
-
 async def ultracode_agent_body(kernel: Any, payload: dict[str, Any]) -> dict[str, Any]:
     """Run one Ultracode phase-agent child body through the fleet spawner."""
     from boltrig.fleet.ultracode import run_ultracode_agent_body
