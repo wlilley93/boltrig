@@ -159,6 +159,19 @@ async def _authz_manage_workspace(k, p, workspace_id: str):
 
 
 def register_access_routes(app, *, principal_dep, get_kernel) -> None:
+    _register_me_routes(app, principal_dep, get_kernel)
+    _register_hitl_run_routes(app, principal_dep, get_kernel)
+    _register_token_routes(app, principal_dep, get_kernel)
+    _register_session_routes(app, principal_dep, get_kernel)
+    _register_context_routes(app, principal_dep, get_kernel)
+    _register_ai_key_routes(app, principal_dep, get_kernel)
+    _register_notification_routes(app, principal_dep, get_kernel)
+    _register_admin_directory_routes(app, principal_dep, get_kernel)
+    _register_org_routes(app, principal_dep, get_kernel)
+    _register_workspace_routes(app, principal_dep, get_kernel)
+
+
+def _register_me_routes(app, principal_dep, get_kernel) -> None:
     P = Depends(principal_dep)
     K = Depends(get_kernel)
 
@@ -301,6 +314,11 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
                              "message_id": new_message.id, "superseded": superseded_id,
                              "run_id": new_message.run_id})
 
+
+def _register_hitl_run_routes(app, principal_dep, get_kernel) -> None:
+    P = Depends(principal_dep)
+    K = Depends(get_kernel)
+
     @app.post("/v1/hitl/{question_id}/answer")
     async def answer_question(question_id: str, body: dict, k=K, p=P) -> JSONResponse:
         # Owner-only, fail-closed, audited answer to an agent's clarifying QUESTION
@@ -367,6 +385,11 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
             await chat_svc.cancel(p.tenant_id, run_id)
         return JSONResponse({"status": "ok", "run_id": run_id})
 
+
+def _register_token_routes(app, principal_dep, get_kernel) -> None:
+    P = Depends(principal_dep)
+    K = Depends(get_kernel)
+
     # === Developer & Connections: personal access tokens (PAT-*, SEC-34) ===
     @app.get("/v1/me/tokens")
     async def list_my_tokens(k=K, p=P) -> dict:
@@ -404,6 +427,11 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
         await k.store.update_pat(pat)
         await _audit(k, p, "token.revoke", {"id": token_id})
         return JSONResponse({"status": "ok", "id": token_id})
+
+
+def _register_session_routes(app, principal_dep, get_kernel) -> None:
+    P = Depends(principal_dep)
+    K = Depends(get_kernel)
 
     @app.get("/v1/me/connections")
     async def my_connections(request: Request, p=P) -> dict:
@@ -468,6 +496,11 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
         set_current_tenant(p.tenant_id)  # restore the active tenant for the audit
         await _audit(k, p, "session.revoke", {"id": session_id})
         return JSONResponse({"status": "ok", "id": session_id})
+
+
+def _register_context_routes(app, principal_dep, get_kernel) -> None:
+    P = Depends(principal_dep)
+    K = Depends(get_kernel)
 
     # === Active workspace context ([2026] VJS-COUNTY 8, D4) ===
     @app.post("/v1/me/active-context")
@@ -563,6 +596,11 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
         set_current_tenant(p.tenant_id)
         await _audit(k, p, "session.active_org.switch", {"org_id": org_id})
         return JSONResponse({"status": "ok", "org_id": org_id})
+
+
+def _register_ai_key_routes(app, principal_dep, get_kernel) -> None:
+    P = Depends(principal_dep)
+    K = Depends(get_kernel)
 
     # === Per-org / workspace / user AI keys ([2026] VJS-COUNTY 8, D5) ===
     async def _authz_ai_key(k, p, level: str, scope_id: str):
@@ -709,6 +747,11 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
         await _audit(k, p, "ai_key.delete", {"level": level, "scope_id": scope_id})
         return JSONResponse({"status": "ok", "level": level, "scope_id": scope_id})
 
+
+def _register_notification_routes(app, principal_dep, get_kernel) -> None:
+    P = Depends(principal_dep)
+    K = Depends(get_kernel)
+
     # === Notifications (per-user, hosts SET-30) ===
     @app.get("/v1/me/notifications")
     async def my_notifications(k=K, p=P) -> dict:
@@ -739,6 +782,11 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
             return {"agent": None}
         return {"agent": {"id": agent.id, "runtime": agent.runtime,
                           "skills": list(agent.skills), "enabled": agent.enabled}}
+
+
+def _register_admin_directory_routes(app, principal_dep, get_kernel) -> None:
+    P = Depends(principal_dep)
+    K = Depends(get_kernel)
 
     # === Organisation administration: user directory & invitations (US-USR-02/03) ===
     @app.get("/v1/admin/users")
@@ -853,6 +901,11 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
         await _audit(k, p, "admin.invite.revoke", {"id": invite_id})
         return JSONResponse({"status": "ok", "id": invite_id})
 
+
+def _register_org_routes(app, principal_dep, get_kernel) -> None:
+    P = Depends(principal_dep)
+    K = Depends(get_kernel)
+
     # === Organisation (the active tenant) management ([2026] VJS-COUNTY 8, D6) ===
     @app.get("/v1/orgs/current")
     async def get_current_org(k=K, p=P) -> JSONResponse:
@@ -892,6 +945,11 @@ def register_access_routes(app, *, principal_dep, get_kernel) -> None:
         # add-member picker; it is their own org, never crosses a tenant boundary.
         members = await k.store.list_org_members(p.tenant_id)
         return JSONResponse({"members": [_org_member_view(m) for m in members]})
+
+
+def _register_workspace_routes(app, principal_dep, get_kernel) -> None:
+    P = Depends(principal_dep)
+    K = Depends(get_kernel)
 
     # === Workspace management ([2026] VJS-COUNTY 8, D6) ===
     @app.get("/v1/workspaces")

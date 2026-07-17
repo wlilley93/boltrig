@@ -196,13 +196,33 @@
       "expires": "2026-12-31"
     },
     "boltrig/kernel/access_routes.py": {
-      "max_file_lines": 1015,
-      "max_function_lines": 855,
+      "max_file_lines": 1073,
+      "max_function_lines": 148,
       "over_limit_functions": [
         {
-          "name": "register_access_routes",
-          "line": 161,
-          "lines": 855
+          "name": "_register_me_routes",
+          "line": 174,
+          "lines": 142
+        },
+        {
+          "name": "_register_context_routes",
+          "line": 501,
+          "lines": 98
+        },
+        {
+          "name": "_register_ai_key_routes",
+          "line": 601,
+          "lines": 148
+        },
+        {
+          "name": "_register_admin_directory_routes",
+          "line": 787,
+          "lines": 116
+        },
+        {
+          "name": "_register_workspace_routes",
+          "line": 950,
+          "lines": 124
         }
       ],
       "owner": "kernel-maintainers",
