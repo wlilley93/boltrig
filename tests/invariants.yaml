@@ -125,6 +125,17 @@ invariants:
       - tests/unit/test_root_admission.py::test_concurrent_admission_resolves_to_one_persisted_identity
       - tests/unit/test_root_admission.py::test_drifted_root_facts_are_rejected_without_overwrite
       - tests/unit/test_root_admission.py::test_admission_exposes_no_route_only_or_peek_bypass
+  SEC-163:
+    description: Minting an assignment's capability-attestation evidence is fused with persisting the assignment into one governed admission - an assignment reaches the ledger only with a retained attestation set behind it, the set is minted against a binding DERIVED from the assignment record rather than one handed in, the reference the record carries is built from the set the store retained rather than the local copy submitted to it, evidence the finished record cannot name fails closed, a refused ledger leaves a benign orphaned set and never a dangling reference, and re-admitting the same trusted facts replays over both the memory and PostgreSQL stores without a duplicate or a conflict.
+    tests:
+      - tests/unit/test_assignment_admission.py::test_admission_mints_attests_and_persists_one_assignment
+      - tests/unit/test_assignment_admission.py::test_admitting_the_same_trusted_facts_twice_replays
+      - tests/unit/test_assignment_admission.py::test_admission_exposes_no_binding_pin_or_mint_only_bypass
+      - tests/unit/test_assignment_admission.py::test_the_reference_carried_is_the_stores_retained_set_not_the_local_copy
+      - tests/unit/test_assignment_admission.py::test_a_retained_set_the_assignment_cannot_name_fails_closed
+      - tests/unit/test_assignment_admission.py::test_a_refused_ledger_leaves_an_orphaned_set_and_no_dangling_reference
+      - tests/store/test_postgres_assignment_admission.py::test_postgres_admission_mints_attests_and_persists
+      - tests/store/test_postgres_assignment_admission.py::test_postgres_admitting_the_same_trusted_facts_twice_replays
   P9:
     description: Backend unavailability degrades gracefully, never crashes (graceful degradation).
     tests:
