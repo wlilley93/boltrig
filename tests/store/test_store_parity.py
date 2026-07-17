@@ -220,6 +220,90 @@ async def test_audit_enrichment_and_security_stream_roundtrip_on_both_stores(sto
     assert await store.latest_audit_anchor(T, workspace_id="ws-1") is None
 
 
+# --- whole-chain verification pages ascending (SEC-168) ---------------------
+async def _write_audit_chain(store, n: int):
+    """A REAL hash-chained audit trail of n rows, via the production writer."""
+    from boltrig.kernel.audit import AuditWriter
+
+    writer = AuditWriter(store)
+    for i in range(n):
+        await writer.write(
+            AuditEvent(
+                tenant_id=T, run_id=f"r{i}", actor="t", actor_tier="human",
+                action_type=ActionType.TOOL_CALL, noun="ticket", verb="ticket.create",
+                status="ok", detail={}, ts=None,
+            )
+        )
+    return writer
+
+
+async def _tamper_audit_row(store, seq: int) -> None:
+    pool = getattr(store, "_pool", None)
+    if pool is not None:
+        await pool.execute(
+            "UPDATE audit_log SET status='tampered' WHERE tenant_id=$1 AND seq=$2", T, seq
+        )
+    else:
+        next(e for e in store._audit[T] if e.seq == seq).status = "tampered"
+
+
+@pytest.mark.store
+@pytest.mark.invariant("SEC-168")
+async def test_audit_verify_walks_every_page_of_a_long_chain(store):
+    # 25 rows at page_size=8 is four ascending pages: an untampered chain must
+    # verify OK across every page boundary on BOTH stores (a tail window would
+    # false-positive the moment the chain outgrew a single read).
+    writer = await _write_audit_chain(store, 25)
+    assert await writer.verify(T, page_size=8) == (True, None)
+
+
+@pytest.mark.store
+@pytest.mark.invariant("SEC-168")
+async def test_audit_tamper_in_the_oldest_page_is_caught(store):
+    # seq 2 sits in the OLDEST page: a tail window would never re-derive it.
+    writer = await _write_audit_chain(store, 25)
+    await _tamper_audit_row(store, 2)
+    assert await writer.verify(T, page_size=8) == (False, 2)
+
+
+@pytest.mark.store
+@pytest.mark.invariant("SEC-168")
+async def test_audit_scan_pages_ascending_and_query_keeps_tail(store):
+    await _write_audit_chain(store, 5)
+    # the scan seam: rows with seq > after_seq, oldest first, up to limit.
+    assert [e.seq for e in await store.audit_scan(T, 0, 2)] == [1, 2]
+    assert [e.seq for e in await store.audit_scan(T, 2, 10)] == [3, 4, 5]
+    assert await store.audit_scan(T, 5, 10) == []
+    # the existing query seam still returns the TAIL its callers rely on.
+    assert [e.seq for e in await store.audit_query(T, limit=2)] == [4, 5]
+
+
+@pytest.mark.store
+@pytest.mark.invariant("SEC-168")
+async def test_security_verify_and_scan_page_the_whole_chain(store):
+    from boltrig.kernel.security_events import SecurityWriter
+    from boltrig.models import SecurityEvent, SecurityEventType
+
+    writer = SecurityWriter(store)
+    for i in range(25):
+        await writer.write(SecurityEvent(
+            tenant_id=T, ts=utcnow(), event_type=SecurityEventType.LOGIN_FAILURE,
+            reason=f"attempt-{i}", actor="eve",
+        ))
+    assert await writer.verify(T, page_size=8) == (True, None)
+    assert [e.seq for e in await store.security_scan(T, 23, 10)] == [24, 25]
+    assert [e.seq for e in await store.security_query(T, limit=2)] == [24, 25]
+    # tampering the OLDEST page is caught on both stores.
+    pool = getattr(store, "_pool", None)
+    if pool is not None:
+        await pool.execute(
+            "UPDATE security_log SET reason='tampered' WHERE tenant_id=$1 AND seq=$2", T, 2
+        )
+    else:
+        next(e for e in store._security[T] if e.seq == 2).reason = "tampered"
+    assert await writer.verify(T, page_size=8) == (False, 2)
+
+
 # --- single-use HITL consume (SEC-14) --------------------------------------
 def _answered_hitl(req_id: str) -> HITLRequest:
     return HITLRequest(

@@ -22,22 +22,14 @@ from .guarded_writes import GuardedWritesPG
 from .idempotency import IdempotencyStorePG
 from .work_items import WorkItemReadsPG, work_item_from_row
 from boltrig.models import (
-    AdapterHealth,
-    AdapterRecord,
-    AgentCapability,
-    ActionType,
-    AuditEvent,
-    AuditRollupAnchor,
-    Budget,
-    Consequence,
-    ConfigRevision,
-    Conversation,
-    ConversationMessage,
-    ConversationStatus,
-    ConversationSummary,
-    EvalCase,
-    EvalRun,
-    MemoryItem,
+    AdapterHealth, AdapterRecord,
+    AgentCapability, ActionType,
+    AuditEvent, AuditRollupAnchor,
+    Budget, Consequence,
+    ConfigRevision, Conversation,
+    ConversationMessage, ConversationStatus,
+    ConversationSummary, EvalCase,
+    EvalRun, MemoryItem,
     MemoryErasure,
     MemoryFact,
     MemoryIngestion,
@@ -724,6 +716,10 @@ class PostgresStore(
             )
         return [_audit(r) for r in reversed(rows)]  # ascending, like InMemoryStore
 
+    async def audit_scan(self, tenant_id, after_seq, limit):
+        q = "SELECT * FROM audit_log WHERE tenant_id=$1 AND seq>$2 ORDER BY seq LIMIT $3"
+        return [_audit(r) for r in await self._pool.fetch(q, tenant_id, after_seq, limit)]
+
     # --- security event stream ([2026] VJS-COUNTY 9, D3) ------------------
     async def security_head(self, tenant_id):
         row = await self._pool.fetchrow(
@@ -758,6 +754,10 @@ class PostgresStore(
                 tenant_id, event_type, limit,
             )
         return [_security(r) for r in reversed(rows)]  # ascending, like InMemoryStore
+
+    async def security_scan(self, tenant_id, after_seq, limit):
+        q = "SELECT * FROM security_log WHERE tenant_id=$1 AND seq>$2 ORDER BY seq LIMIT $3"
+        return [_security(r) for r in await self._pool.fetch(q, tenant_id, after_seq, limit)]
 
     # --- audit rollup anchors ([2026] VJS-COUNTY 9, D4) -------------------
     async def add_audit_anchor(self, a: AuditRollupAnchor):

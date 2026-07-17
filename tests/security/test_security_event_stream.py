@@ -88,6 +88,42 @@ async def test_security_stream_is_hash_chained_and_keys_only(kernel):
 
 
 # --------------------------------------------------------------------------- #
+# whole-chain verification: no tail window, ever (SEC-168)
+# --------------------------------------------------------------------------- #
+async def _long_security_chain(n: int):
+    """A REAL hash-chained security stream of n rows on a fresh in-memory store."""
+    from boltrig.kernel.security_events import SecurityWriter
+
+    store = InMemoryStore()
+    writer = SecurityWriter(store)
+    for i in range(n):
+        await writer.write(SecurityEvent(
+            tenant_id=TENANT, ts=utcnow(), event_type=SecurityEventType.LOGIN_FAILURE,
+            reason=f"attempt-{i}", actor="eve@x.io",
+        ))
+    return store, writer
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-168")
+async def test_a_long_security_chain_verifies_ok():
+    # False-positive regression: the old verify read only the newest 10_000 rows
+    # and seeded prev=None, failing an UNTAMPERED chain longer than the window.
+    _store, writer = await _long_security_chain(10_050)
+    assert await writer.verify(TENANT) == (True, None)
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-168")
+async def test_security_tamper_below_the_old_window_is_caught():
+    # False-negative regression: seq 5 sits below the old 10_000-row tail window,
+    # so tampering it was never re-derived. It must be caught with the right seq.
+    store, writer = await _long_security_chain(10_050)
+    next(e for e in store._security[TENANT] if e.seq == 5).reason = "tampered"
+    assert await writer.verify(TENANT) == (False, 5)
+
+
+# --------------------------------------------------------------------------- #
 # separate stream: a business action does NOT land in the security stream
 # --------------------------------------------------------------------------- #
 @pytest.mark.security

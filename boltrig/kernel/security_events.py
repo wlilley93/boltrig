@@ -27,7 +27,7 @@ import uuid
 from boltrig.models import AuditEvent, AuditRollupAnchor, SecurityEvent, utcnow
 from boltrig.store import Store
 
-from .audit import _HMAC_KEY, _scrub
+from .audit import _HMAC_KEY, _scrub, verify_chain
 
 # Whether an external anchoring credential is configured. When absent (the
 # default), the anchorer writes a LOCAL dev-fallback anchor and leaves the
@@ -94,18 +94,12 @@ class SecurityWriter:
             await self._store.security_append(event)
         return event
 
-    async def verify(self, tenant_id: str) -> tuple[bool, int | None]:
-        """Re-derive the whole security chain. Returns (ok, first_bad_seq)."""
-        events = await self._store.security_query(tenant_id, limit=10_000)
-        prev: str | None = None
-        for e in events:
-            expected = hmac.new(
-                _HMAC_KEY, _security_canonical(e).encode(), hashlib.sha256
-            ).hexdigest()
-            if e.prev_hash != prev or e.hash != expected:
-                return (False, e.seq)
-            prev = e.hash
-        return (True, None)
+    async def verify(self, tenant_id: str, *, page_size: int = 1000) -> tuple[bool, int | None]:
+        """Re-derive the WHOLE security chain from seq 1 (SEC-168).
+        Returns (ok, first_bad_seq)."""
+        return await verify_chain(
+            self._store.security_scan, _security_canonical, tenant_id, page_size
+        )
 
     async def record(
         self,

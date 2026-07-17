@@ -12,22 +12,14 @@ from datetime import datetime
 from typing import Any, Protocol, runtime_checkable
 
 from boltrig.models import (
-    AdapterRecord,
-    AgentCapability,
-    AiConfig,
-    AuditEvent,
-    AuditRollupAnchor,
-    Budget,
-    Channel,
-    ChannelBinding,
-    ChannelPairing,
-    ConfigRevision,
-    Conversation,
-    ConversationMessage,
-    ConversationSummary,
-    EvalCase,
-    EvalRun,
-    HITLRequest,
+    AdapterRecord, AgentCapability,
+    AiConfig, AuditEvent,
+    AuditRollupAnchor, Budget,
+    Channel, ChannelBinding,
+    ChannelPairing, ConfigRevision,
+    Conversation, ConversationMessage,
+    ConversationSummary, EvalCase,
+    EvalRun, HITLRequest,
     MemoryErasure,
     MemoryFact,
     MemoryIngestion,
@@ -208,12 +200,20 @@ class Store(BudgetPolicyContract, IdempotencyStoreContract, GuardedWritesContrac
     async def audit_query(
         self, tenant_id: str, run_id: str | None = None, limit: int = 200
     ) -> list[AuditEvent]: ...
+    # ascending verification pages (rows with seq > after_seq, oldest first, up to
+    # limit): verify() re-derives the WHOLE chain through these (SEC-168).
+    async def audit_scan(
+        self, tenant_id: str, after_seq: int, limit: int
+    ) -> list[AuditEvent]: ...
 
     # --- security event stream ([2026] VJS-COUNTY 9, D3): its OWN hash chain ---
     async def security_head(self, tenant_id: str) -> tuple[int, str | None]: ...
     async def security_append(self, event: SecurityEvent) -> None: ...
     async def security_query(
         self, tenant_id: str, event_type: str | None = None, limit: int = 200
+    ) -> list[SecurityEvent]: ...
+    async def security_scan(
+        self, tenant_id: str, after_seq: int, limit: int
     ) -> list[SecurityEvent]: ...
 
     # --- audit rollup anchors ([2026] VJS-COUNTY 9, D4) ---

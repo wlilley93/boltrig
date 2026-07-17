@@ -14,6 +14,8 @@ import hashlib
 import hmac
 import json
 import os
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from boltrig.models import AuditEvent, utcnow
 from boltrig.store import Store
@@ -86,6 +88,39 @@ def _scrub(detail: dict) -> dict:
     return out
 
 
+async def verify_chain(
+    scan: Callable[[str, int, int], Awaitable[list[Any]]],
+    canonical: Callable[[Any], str],
+    tenant_id: str,
+    page_size: int,
+) -> tuple[bool, int | None]:
+    """Re-derive a tamper-evidence hash chain for a tenant from seq 1 upward.
+
+    Pages ASCENDING through the store's scan seam (rows with seq > after, oldest
+    first), so the ENTIRE chain is re-derived no matter its length (SEC-168). A
+    bounded tail window would both cry wolf on an untampered long chain (the
+    window's first row chains to a hash outside it while ``prev`` seeds None)
+    and never see tampering below the window. ``scan`` is ``store.audit_scan``
+    or ``store.security_scan``; ``canonical`` is the matching serialiser.
+    Returns (ok, first_bad_seq)."""
+    prev: str | None = None
+    after = 0
+    page = max(1, page_size)
+    while True:
+        events = await scan(tenant_id, after, page)
+        if not events:
+            return (True, None)
+        for e in events:
+            expected = hmac.new(_HMAC_KEY, canonical(e).encode(), hashlib.sha256).hexdigest()
+            if e.prev_hash != prev or e.hash != expected:
+                return (False, e.seq)
+            prev = e.hash
+        nxt = events[-1].seq or 0
+        if nxt <= after:  # a misbehaving scan page must never loop forever
+            return (False, events[-1].seq)
+        after = nxt
+
+
 class AuditWriter:
     def __init__(self, store: Store) -> None:
         self._store = store
@@ -119,15 +154,6 @@ class AuditWriter:
             await self._store.audit_append(event)
         return event
 
-    async def verify(self, tenant_id: str) -> tuple[bool, int | None]:
-        """Re-derive the whole chain. Returns (ok, first_bad_seq)."""
-        events = await self._store.audit_query(tenant_id, limit=10_000)
-        prev: str | None = None
-        for e in events:
-            expected = hmac.new(
-                _HMAC_KEY, _canonical(e).encode(), hashlib.sha256
-            ).hexdigest()
-            if e.prev_hash != prev or e.hash != expected:
-                return (False, e.seq)
-            prev = e.hash
-        return (True, None)
+    async def verify(self, tenant_id: str, *, page_size: int = 1000) -> tuple[bool, int | None]:
+        """Re-derive the WHOLE chain from seq 1 (SEC-168). Returns (ok, first_bad_seq)."""
+        return await verify_chain(self._store.audit_scan, _canonical, tenant_id, page_size)

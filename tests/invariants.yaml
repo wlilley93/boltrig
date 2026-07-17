@@ -1498,6 +1498,15 @@ invariants:
     description: Operator backups are restorable - a real pg_dump drill through the pinned PostgreSQL client image restores the live schema and data into a fresh database and the restored rows read back intact.
     tests:
       - tests/integration/test_backup_restore.py::test_backup_restores_into_a_fresh_database
+  FR-OPS-05:
+    description: /healthz is a bounded liveness probe - it answers from process state and the cached adapter posture without awaiting any live adapter I/O, so a slow or unreachable adapter backend can never make the probe slow or non-200 and flap a live kernel's Compose healthcheck; adapter posture freshness moves to a bounded background refresh (a stale cache schedules one off-path re-probe and every probe is cut off by a per-adapter timeout) and deep dependency readiness stays on the fail-closed /readyz.
+    tests:
+      - tests/unit/test_liveness.py::test_healthz_returns_200_for_a_live_app
+      - tests/unit/test_liveness.py::test_healthz_stays_prompt_and_200_when_an_adapter_health_hangs
+      - tests/unit/test_liveness.py::test_healthz_serves_cached_posture_without_reprobing
+      - tests/unit/test_liveness.py::test_health_snapshot_kicks_a_background_refresh_when_stale
+      - tests/unit/test_liveness.py::test_refresh_health_bounds_a_hung_probe
+      - tests/unit/test_liveness.py::test_readyz_stays_bounded_and_fail_closed_with_a_hung_adapter
   NFR-MNT-01:
     description: Python structural debt is an enforced expiring ratchet - every boltrig source file is at most 400 physical lines and every decorator-inclusive function or method at most 80 source-span lines unless its file has an explicit owner, reason, expiry, exact current file and largest-function baselines, and an exact record for every over-limit function; the gate rejects new or sibling debt, growth, stale-high or missing-file entries, malformed metadata, duplicate JSON keys, and expired exemptions.
     tests:
@@ -1579,3 +1588,16 @@ invariants:
       - tests/security/test_mcp_consumer_credential.py::test_the_adapter_holds_no_token_to_fall_back_on
       - tests/security/test_mcp_consumer_credential.py::test_rotating_the_stored_ref_changes_the_next_calls_bearer
       - tests/security/test_mcp_consumer_credential.py::test_registration_binds_the_ref_and_refuses_raw_material
+
+  # --- chain verification re-derives the WHOLE chain, never a tail window ---
+  SEC-168:
+    description: Audit-chain and security-chain verification re-derives the ENTIRE per-tenant chain from seq 1 through the ascending store scan seam (audit_scan/security_scan return rows with seq > after_seq, oldest first, up to limit), never a bounded tail window. The old verify read only the newest 10_000 rows and seeded prev=None, so an UNTAMPERED chain longer than the window failed at the window's first row (tamper-evidence crying wolf), and tampering any row below the window was never re-derived at all (tampering an old row went unseen). Now an untampered chain of any length verifies OK across every page boundary, tampering a row in the OLDEST page is caught with the correct first_bad_seq, and both hold identically on the in-memory and Postgres stores, while audit_query/security_query keep their existing tail semantics for the observability and /v1/audit callers that depend on them.
+    tests:
+      - tests/kernel/test_audit_chain.py::test_a_chain_longer_than_the_old_window_verifies_ok
+      - tests/kernel/test_audit_chain.py::test_tampering_below_the_old_window_is_still_caught
+      - tests/security/test_security_event_stream.py::test_a_long_security_chain_verifies_ok
+      - tests/security/test_security_event_stream.py::test_security_tamper_below_the_old_window_is_caught
+      - tests/store/test_store_parity.py::test_audit_verify_walks_every_page_of_a_long_chain
+      - tests/store/test_store_parity.py::test_audit_tamper_in_the_oldest_page_is_caught
+      - tests/store/test_store_parity.py::test_audit_scan_pages_ascending_and_query_keeps_tail
+      - tests/store/test_store_parity.py::test_security_verify_and_scan_page_the_whole_chain
