@@ -18,7 +18,7 @@ import binascii
 import contextlib
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from boltrig.config.manifest import ChatConfig
 from boltrig.models import (
@@ -47,14 +47,14 @@ from .prompt_stack import wrap_untrusted
 from .pump import persist_new_work_items
 from .turn_executor_compat import invoke_turn_executor
 
+if TYPE_CHECKING:  # import-only (chat.py is off the mypy set); no runtime import cycle
+    from boltrig.api.codex_execution import CodexExecutionStack
+
 TurnExecutor = Callable[..., Awaitable[Any]]
 
 # summariser(older_messages) -> awaitable[str]. An OPTIONAL model summariser for
-# conversation compaction. If wired it MUST run through the ONE kernel chokepoint
-# (its output re-enters the task, so the caller owns that governance); it may raise
-# or return empty, in which case the deterministic offline summariser stands in.
-# Absent one entirely, compaction uses the deterministic summariser only, so the
-# whole feature is testable with no model.
+# compaction; if wired it MUST run through the ONE kernel chokepoint (its output
+# re-enters the task). On raise/empty the deterministic offline summariser stands in.
 Summariser = Callable[[list[ConversationMessage]], Awaitable[str]]
 
 _SCOPED_ROLES = {"org-admin", "compliance"}  # may read others' threads (SEC-25)
@@ -546,6 +546,7 @@ def build_turn_executor(
     *,
     continuity: bool | None = None,
     chat_config: ChatConfig | None = None,
+    codex_execution: CodexExecutionStack | None = None,
 ) -> TurnExecutor:
     """The production turn executor: normalise the turn to a work item linked by
     run id (US-CONV-02, kanban), route it through the fleet, and stream the
@@ -554,8 +555,7 @@ def build_turn_executor(
     When continuity is on (the default, Round Six gap 3.1), the conversation's
     prior turns are composed into the task before the spawn so the turn carries
     its own context forward; the composition is deterministic + append-only
-    (``continuity.compose_turn_task``) and reads only the caller's own
-    tenant/conversation-scoped messages (SEC-27/SEC-49).
+    (``continuity.compose_turn_task``) and reads only the caller's own scoped messages (SEC-27/49).
 
     ``chat_config`` is the manifest ``chat`` knob deciding which skill set a
     bare turn spawns with per caller role; absent a manifest it defaults to the
@@ -566,18 +566,15 @@ def build_turn_executor(
     async def executor(*, tenant_id, user_id, role, grants, conversation_id,
                        run_id, message, relay, attachments=None, workspace_id=None, scope=None):
         perms = await kernel.store.get_tenant_permissions(tenant_id)
-        # Bare-turn authority is manifest data under a caller ceiling
-        # ([2026] VJS-COUNTY 1): the chat.skills_by_role knob selects the turn's
-        # skill set for the caller's role (default_skills when unmapped), and a
-        # manifest entry naming a missing skill is skipped, never escalated, so
-        # the knob can only reduce authority (fail-closed).
+        # Bare-turn authority is manifest data under a caller ceiling ([2026]
+        # VJS-COUNTY 1): chat.skills_by_role selects the role's skill set
+        # (default_skills when unmapped); a missing skill is skipped (fail-closed).
         turn_skills: list[str] = []
         for skill_id in chat_cfg.skills_by_role.get(role, chat_cfg.default_skills):
             if await kernel.store.get_skill(tenant_id, skill_id) is not None:
                 turn_skills.append(skill_id)
         # Every chat spawn is ceilinged by the caller's role-resolved grants
-        # (the Principal's, resolved via identity/rbac.py); a caller whose role
-        # resolution failed carries the empty set (SEC-78).
+        # (identity/rbac.py); a caller whose role resolution failed carries the empty set (SEC-78).
         ceiling = grants if grants is not None else EMPTY_GRANTS
         item = WorkItem(
             id=run_id, tenant_id=tenant_id, source="chat", intent=message,
@@ -585,6 +582,9 @@ def build_turn_executor(
             owner_member="chief-of-staff", hatchet_run_id=run_id, on_behalf_of=user_id, workspace_id=workspace_id,
         )
         await kernel.store.create_work_item(item)
+        # Shadow Codex root admission (SEC-170); None=>flag off=>no-op (execution-neutral, fail-open).
+        if codex_execution is not None:
+            await codex_execution.shadow_admit(tenant_id, workspace_id, run_id)
         ctx = InvocationContext(
             tenant_id=tenant_id, grants=perms.grants, actor="chief-of-staff",
             actor_tier="tier1", run_id=run_id, on_behalf_of=user_id, workspace_id=workspace_id,

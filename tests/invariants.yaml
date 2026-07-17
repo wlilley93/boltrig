@@ -150,6 +150,12 @@ invariants:
       - tests/integration/test_manifest_reconciliation.py::test_name_from_both_paths_becomes_manifest_and_reconciles
       - tests/integration/test_manifest_reconciliation.py::test_empty_manifest_aborts_without_confirm_and_succeeds_with_it
       - tests/integration/test_manifest_reconciliation.py::test_over_threshold_drop_aborts_without_confirm_and_succeeds_with_it
+  SEC-172:
+    description: Codex read-only root admission is an execution-neutral shadow write behind BOLTRIG_CODEX_LEDGER - flag off (the default) records no RootEngineDecision and the chat turn is byte-identical to the unwired path; flag on records exactly one LEGACY/ROLLOUT_OFF decision per root run and execution is unchanged; and a shadow-admit failure is swallowed and never breaks a live turn (fail-open under OFF, per LOG-2026-07-17-121829).
+    tests:
+      - tests/integration/test_codex_shadow_root_admission.py::test_flag_off_records_no_decision_and_is_execution_neutral
+      - tests/integration/test_codex_shadow_root_admission.py::test_flag_on_records_one_legacy_decision_and_execution_is_unchanged
+      - tests/integration/test_codex_shadow_root_admission.py::test_shadow_admit_failure_is_swallowed_and_turn_completes
   P9:
     description: Backend unavailability degrades gracefully, never crashes (graceful degradation).
     tests:

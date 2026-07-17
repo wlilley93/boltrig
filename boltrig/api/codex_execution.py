@@ -1,12 +1,14 @@
-"""Flag-gated composition of the Codex read-only execution stack (scaffold).
+"""Flag-gated composition of the Codex read-only execution stack.
 
-Steps 1-2 of the Codex ledger wiring. This module CONSTRUCTS the two governed
-admission services behind ``BOLTRIG_CODEX_LEDGER`` but CALLS NOTHING. With the
-flag off (the default) it is a total no-op: it returns ``None`` and constructs
-nothing. With the flag on it builds a small frozen container and parks it on
-``app.state.platform``; nothing invokes ``RootRoutingAdmission.admit`` or
-``AssignmentAdmission.admit``. Wiring an ``admit()`` into the live chat / pump /
-spawn path is a later, court-gated PR, not this one.
+The Codex ledger wiring behind ``BOLTRIG_CODEX_LEDGER``. With the flag off (the
+default) it is a total no-op: ``build_codex_execution_stack`` returns ``None`` and
+constructs nothing, and the chat root never calls admit. With the flag on it builds
+a small frozen container, parks it on ``app.state.platform``, and the chat root
+calls ``shadow_admit`` to record ONE execution-neutral ``RootEngineDecision`` per
+root run (SEC-170): under the default OFF policy the router returns ``route=LEGACY``
+before compatibility/workload are read, so nothing about execution changes. The
+ON execution path and ``AssignmentAdmission.admit`` remain deferred to a later,
+court-gated PR.
 
 Why this lives in ``boltrig/api/`` and not ``boltrig/fleet/application/``:
 selecting a store adapter imports the store / infrastructure layer, and the
@@ -17,12 +19,20 @@ must therefore sit outside the fleet core, at the API composition boundary.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 from boltrig.config.settings import Settings
 from boltrig.fleet.application.assignment_admission import AssignmentAdmission
 from boltrig.fleet.application.root_admission import RootRoutingAdmission
-from boltrig.fleet.domain.codex_rollout import CodexRolloutMode, CodexRolloutPolicy
+from boltrig.fleet.domain.codex_rollout import (
+    CodexCompatibility,
+    CodexRolloutMode,
+    CodexRolloutPolicy,
+    RootRouteScope,
+    RootRoutingFacts,
+    RootWorkload,
+)
 from boltrig.fleet.infrastructure.memory_capability_attestations import (
     MemoryCapabilityAttestationStore,
 )
@@ -34,6 +44,8 @@ from boltrig.fleet.ports.capability_attestations import CapabilityAttestationSto
 from boltrig.fleet.ports.execution_ledger import ExecutionLedgerStore
 from boltrig.fleet.ports.root_engine_decisions import RootEngineDecisionStore
 from boltrig.store import Store
+
+log = logging.getLogger(__name__)
 
 # Decisive call 1 (a decisive engineering call, NOT a court fork): the scaffold
 # policy is OFF at generation 1. Under CodexRolloutMode.OFF the router
@@ -47,16 +59,54 @@ _SCAFFOLD_POLICY = CodexRolloutPolicy(generation=1, mode=CodexRolloutMode.OFF)
 
 @dataclass(frozen=True)
 class CodexExecutionStack:
-    """A parked, inert container of the two Codex admission services.
+    """A container of the two Codex admission services plus the shadow root call.
 
     Constructed only when ``BOLTRIG_CODEX_LEDGER`` is on and landed on
-    ``app.state.platform``. Nothing in this scaffold calls
-    ``root_admission.admit`` or ``assignment_admission.admit``; wiring an
-    ``admit()`` into the live execution path is a later, court-gated PR.
+    ``app.state.platform``. ``shadow_admit`` is wired at the chat root (SEC-170)
+    to record one execution-neutral ``RootEngineDecision`` per root run; under the
+    default OFF policy the router returns ``route=LEGACY`` and nothing about
+    execution changes. ``assignment_admission.admit`` is still uncalled; wiring the
+    ON execution path (and the assignment lane) is a later, court-gated PR.
     """
 
     root_admission: RootRoutingAdmission
     assignment_admission: AssignmentAdmission
+    policy_generation: int
+
+    async def shadow_admit(
+        self, tenant_id: str, workspace_id: str | None, run_id: str
+    ) -> None:
+        """Record one shadow ``RootEngineDecision`` for a chat root, execution-neutral.
+
+        The root run maps onto the existing top-level WorkItem (root_run_id = the
+        root WorkItem id = the chat ``run_id``; LOG-2026-07-17-121829). Under the
+        default OFF policy the router short-circuits to ``route=LEGACY`` before it
+        reads compatibility or workload (``codex_routing.py`` _route_new_root, the
+        OFF branch), so this changes NOTHING about how the turn executes: it only
+        persists an insert-once decision. ``expected_policy_generation`` is NOT
+        inert (the router equality-checks it before routing) so it must match the
+        stack's generation; ``compatibility``/``workload`` ARE inert under OFF, so
+        the conservative legacy-compatible constants (INELIGIBLE, BOUNDED_READ_ONLY)
+        keep a hypothetical ON policy on the legacy path too.
+
+        DECISIVE CALL - SHADOW FAIL-OPEN: any failure (a drifted fact, an invalid
+        scope, a store error) is logged and swallowed so the shadow write can NEVER
+        break a live chat turn. This method is total: it never raises. Fail-CLOSED
+        authority is deferred to the ON-path PR; this increment is execution-neutral.
+        A None workspace scope is simply skipped (no valid identifier to key on).
+        """
+        if workspace_id is None:
+            return
+        try:
+            facts = RootRoutingFacts(
+                scope=RootRouteScope(tenant_id, workspace_id, run_id),
+                expected_policy_generation=self.policy_generation,
+                workload=RootWorkload.BOUNDED_READ_ONLY,
+                compatibility=CodexCompatibility.INELIGIBLE,
+            )
+            await self.root_admission.admit(facts)
+        except Exception:  # shadow write, fail-open (see the decisive call above)
+            log.warning("codex shadow root admission failed", exc_info=True)
 
 
 def build_codex_execution_stack(
@@ -112,6 +162,7 @@ def build_codex_execution_stack(
     return CodexExecutionStack(
         root_admission=RootRoutingAdmission(_SCAFFOLD_POLICY, decisions),
         assignment_admission=AssignmentAdmission(attestations, ledger),
+        policy_generation=_SCAFFOLD_POLICY.generation,
     )
 
 

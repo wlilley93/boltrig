@@ -467,6 +467,7 @@ def build_app():
     from boltrig.kernel.app import create_app
 
     def chat_factory(kernel):
+        from boltrig.api.codex_execution import build_codex_execution_stack
         # the conversational service routes turns through the fleet (US-CONV-02);
         # the manifest chat knob decides a bare turn's skill set per caller role
         # ([2026] VJS-COUNTY 1) - no manifest means the fail-closed empty knob
@@ -480,7 +481,9 @@ def build_app():
         return ChatService(
             kernel.store, kernel.events,
             turn_executor=build_turn_executor(
-                kernel, build_spawner(kernel), chat_config=chat_cfg
+                kernel, build_spawner(kernel), chat_config=chat_cfg,
+                # Codex shadow stack (SEC-170): None when BOLTRIG_CODEX_LEDGER is off.
+                codex_execution=build_codex_execution_stack(load_settings(), kernel.store),
             ),
             # The same ChatConfig carries the attachment caps ([2026] VJS-COUNTY 3);
             # ChatService enforces them fail-closed at intake.
@@ -509,10 +512,7 @@ def build_app():
         # Honest executor selection (US-EXE-05): record which executor serves this
         # app and whether it is durable (Beat 4 extends the stamp; not wired here).
         executor = register_workers(kernel)
-        log.info(
-            "workflow executor: %s (durable=%s)",
-            type(executor).__name__, executor.durable,
-        )
+        log.info("workflow executor: %s (durable=%s)", type(executor).__name__, executor.durable)
         # Beat 5: register the governed task bodies on the local executor (the
         # Hatchet executor got its client-side handles in register_workers) and
         # bridge HITL answers to the durable lane. No pump here - the API
