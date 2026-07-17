@@ -19,7 +19,7 @@ from .readiness_control import (
     control_plane_check,
 )
 
-EXPECTED_ALEMBIC_HEAD = "0030_capability_attestations"
+EXPECTED_ALEMBIC_HEAD = "0031_execution_ledger_fidelity"
 
 _TRUE_VALUES = {"1", "true", "yes", "on", "y", "t"}
 _PRODUCTION_NAMES = {"prod", "production", "staging"}

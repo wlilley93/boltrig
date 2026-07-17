@@ -1214,6 +1214,8 @@ CREATE TABLE IF NOT EXISTS execution_outbox (
     claimed_at          TIMESTAMPTZ,
     claim_expires_at    TIMESTAMPTZ,
     available_at        TIMESTAMPTZ NOT NULL,
+    requested_available_at TIMESTAMPTZ NOT NULL,
+    intent_ordinal      INT NOT NULL,
     delivered_at        TIMESTAMPTZ,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
     engine_owner        TEXT NOT NULL DEFAULT 'boltrig',
@@ -1224,11 +1226,13 @@ CREATE TABLE IF NOT EXISTS runtime_identities (
     tenant_id           TEXT NOT NULL,
     workspace_id        TEXT NOT NULL,
     id                  TEXT NOT NULL,
+    principal_user_id   TEXT NOT NULL,
     status              TEXT NOT NULL,
     generation          INT NOT NULL,
     profile             JSONB,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    revoked_at          TIMESTAMPTZ,
     PRIMARY KEY (tenant_id, workspace_id, id)
 );
 
