@@ -109,10 +109,10 @@
       "expires": "2026-12-31"
     },
     "boltrig/fleet/pump.py": {
-      "max_file_lines": 549,
+      "max_file_lines": 539,
       "max_function_lines": 86,
       "over_limit_functions": [
-        {"name": "WorkPump.handle_claimed_item", "line": 216, "lines": 86}
+        {"name": "WorkPump.handle_claimed_item", "line": 217, "lines": 86}
       ],
       "owner": "fleet-maintainers",
       "reason": "Extract work-claim lifecycle phases while preserving durable retry and checkpoint semantics.",

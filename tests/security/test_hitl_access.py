@@ -21,6 +21,7 @@ from boltrig.models import (
     PendingHuman,
     TenantPermissions,
     Urgency,
+    User,
     WorkItem,
     WorkStatus,
     Workspace,
@@ -266,6 +267,14 @@ async def test_chat_question_persists_authenticated_workspace_and_department_sco
 @pytest.mark.invariant("SEC-141")
 async def test_pump_preserves_workspace_and_department_on_approval_and_park():
     kernel = await _kernel()
+    # SEC-164: the pump runs an item under the REQUESTING principal's grants, so the
+    # named on_behalf_of principal must be a real, provisioned user holding the verb
+    # for the run to reach the approval gate at all. An unprovisioned name now
+    # resolves to no authority (fail-closed), which is a GrantMissing, not a park.
+    await kernel.store.upsert_user(User(
+        id="alice", tenant_id=T, email="alice@example.com", role="member",
+        scope={"verbs": ["ticket.create"]}, status="active",
+    ))
 
     class RoutingCoS:
         async def route(self, item, context):

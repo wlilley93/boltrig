@@ -39,6 +39,7 @@ from boltrig.models import (
 from boltrig.work import normalise
 from boltrig.workflows.generator import learn_from_success
 
+from .authority import context_for, reflection_context, route_to_head
 from .chief_of_staff import ChiefOfStaff, Department
 from .department_head import DepartmentHead, tree_root_id
 
@@ -240,14 +241,14 @@ class WorkPump:
                 return item
 
             ctx = await self._context_for(item, run_id)
-            await store.upsert_checkpoint(tenant, run_id, "route", "started")
-            department = await self._cos.route(item, ctx)
-            head = self._head_for(department)
-            item.owner_member = head.name
-            await store.update_work_item(item)
-            await store.upsert_checkpoint(
-                tenant, run_id, "route", "done", output={"department": department}
-            )
+            head = await route_to_head(self._cos, self.heads, store, item, run_id, ctx)
+            if head is None:  # SEC-165: unroutable parks; it never mis-routes
+                await self._park(
+                    item, run_id,
+                    reason="unroutable_department",
+                    detail="the routed department has no head; a human must route it",
+                )
+                return item
 
             # boundary 1: the chokepoint before dispatching the execute verb. If a
             # cancel arrived while routing, head.handle (the dispatch) never runs.
@@ -361,24 +362,9 @@ class WorkPump:
         if not will_retry:  # reflect only on the terminal failure, not each retry
             await self._reflect(item, run_id, WorkStatus.FAILED.value)
 
-    def _head_for(self, department: str) -> Any:
-        head = self.heads.get(department)
-        if head is not None:
-            return head
-        if not self.heads:
-            raise RuntimeError("no department heads configured")
-        return self.heads[min(self.heads)]  # deterministic fallback head
-
     async def _context_for(self, item: WorkItem, run_id: str) -> InvocationContext:
-        perms = await self._store.get_tenant_permissions(item.tenant_id)
-        return InvocationContext(
-            tenant_id=item.tenant_id,
-            run_id=run_id,
-            grants=perms.grants,
-            actor="chief-of-staff", actor_tier="tier1",
-            on_behalf_of=item.on_behalf_of, workspace_id=item.workspace_id,
-            extra={"principal_scope": {"departments": [item.owner_member]}} if item.owner_member else {},
-        )
+        """The item's execution context, capped to the requesting principal (SEC-164)."""
+        return await context_for(self._store, item, run_id)
 
     async def _park(self, item: WorkItem, run_id: str, *, reason: str, detail: str) -> None:
         """File a HITL escalation and put the item in AWAITING_HUMAN (D6)."""
@@ -477,13 +463,17 @@ class WorkPump:
         is never bypassed. Provenance is the run id (``source_ref``) and the work
         item id (in the lesson). OFF unless enabled, and a reflection failure - a
         missing memory binding, a screen rejection, any error - is swallowed so it
-        can never fail the run (P9)."""
+        can never fail the run (P9).
+
+        Carries the narrow reflection seat, NOT the item's execution context: this is
+        the pump's own bookkeeping into the CoS's memory scope, so it is neither the
+        principal's act nor the tenant's (``authority.REFLECTION_GRANTS``)."""
         if not self._reflect_enabled or self._kernel is None:
             return
         outcome = (item.result or {}).get("outcome") or {}
         lesson = reflection_lesson(item, terminal_status, outcome)
         try:
-            ctx = await self._context_for(item, run_id)
+            ctx = reflection_context(item, run_id)
             await self._kernel.invoke(
                 "memory", "memory.remember",
                 {

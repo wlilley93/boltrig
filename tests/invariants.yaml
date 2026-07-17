@@ -1543,3 +1543,18 @@ invariants:
       - tests/security/test_budget_governance.py::test_budget_policy_preserves_usage_and_reset_is_selective
       - tests/security/test_budget_governance.py::test_budget_http_mutations_are_held_and_tenant_bound
       - tests/security/test_budget_governance.py::test_budget_control_verbs_reject_non_admin_even_with_grants
+  # --- the delegated (pump) lane runs at the requesting principal's authority ---
+  SEC-164:
+    description: The delegated pump lane executes a work item at the REQUESTING principal's authority, never the tenant permission ceiling - the item's on_behalf_of/workspace_id resolve through the same effective_grants_for_request the request path uses, so a low-privilege principal's item cannot receive or dispatch a verb its principal lacks even when the selected skill declares that tool grant, a principal holding the verb still gets it, a deactivated principal carries nothing, and an item naming no principal (or one with no user record) fails closed to EMPTY_GRANTS rather than inheriting the tenant ceiling. The tenant ceiling remains the separate axis GrantChecker enforces at dispatch, and on_behalf_of provenance through the tree and the audit trail is unchanged. This aligns the pump with the SEC-29 / SEC-78 / SEC-139 capping every other spawn entry point already applies.
+    tests:
+      - tests/security/test_pump_principal_authority.py::test_low_privilege_principals_item_cannot_execute_a_verb_it_lacks
+      - tests/security/test_pump_principal_authority.py::test_a_principal_holding_the_verb_still_gets_it
+      - tests/security/test_pump_principal_authority.py::test_a_tenant_wide_principal_is_still_bound_by_a_narrow_tenant_ceiling
+      - tests/security/test_pump_principal_authority.py::test_an_unidentified_principal_carries_no_authority
+      - tests/security/test_pump_principal_authority.py::test_a_deactivated_principal_carries_no_authority
+      - tests/security/test_pump_principal_authority.py::test_system_originated_item_still_completes_and_audits_on_behalf_of
+      - tests/security/test_pump_principal_authority.py::test_on_behalf_of_is_still_carried_through_the_tree_and_the_audit
+  SEC-165:
+    description: Pump routing fails closed - a work item routed to a department with no configured head is parked for a human (an AWAITING_HUMAN escalation) rather than silently executing under an arbitrary fallback head, because the run's context claims owner_member as its principal_scope and a mis-route would make that scope claim untrue. Nothing spawns for an unroutable item.
+    tests:
+      - tests/security/test_pump_principal_authority.py::test_an_unroutable_department_parks_instead_of_running_under_another_head
