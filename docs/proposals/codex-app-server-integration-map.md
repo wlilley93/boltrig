@@ -451,42 +451,148 @@ Do not manufacture Codex equivalents for Herdr pane verbs.
 
 ## Security blockers found in the current implementation
 
-The following are blockers for approval-gated write phases, not optional cleanup:
+The following are blockers for approval-gated write phases, not optional cleanup.
 
-1. `boltrig/fleet/runtime_resolver.py:127-137` catches all AI-credential
-   resolution errors and returns no key, permitting downstream ambient fallback.
-2. `boltrig/fleet/spawn.py:121-126` currently creates child authority from
+> **Re-triaged 2026-07-17 against the tree at `6abe103`, and the list did not survive
+> contact with the code.** Of the original 13: two were already fixed on the day this
+> list was written, two were wrong as written, one was not a separate blocker, four are
+> design forks rather than defects, one is dead path, and four were genuinely live. The
+> item this list framed hardest (2) is false, and the real privilege escalation (4) was
+> partly obscured behind it. Statuses below are the re-triage; each is argued from the
+> code, not inherited from this document's original framing. The lesson is recorded
+> rather than smoothed over: a security list is evidence, not gospel, and acting on an
+> unverified one wastes effort on phantoms while the real defect sits underneath.
+
+1. ~~`boltrig/fleet/runtime_resolver.py:127-137` catches all AI-credential
+   resolution errors and returns no key, permitting downstream ambient fallback.~~
+   **ALREADY FIXED** by `2c7b5d3` ("fix(runtime): forbid ambient AI credentials in
+   production"), landed 2026-07-15, the same day this list was written. The resolver now
+   re-raises `CredentialResolution` when `production_signal()` is set, and additionally
+   refuses a default (unscoped) resolution in production. The bare `return None, None`
+   survives only outside production, which is the intended dev affordance. Not a blocker.
+2. ~~`boltrig/fleet/spawn.py:121-126` currently creates child authority from
    selected skill grants and intersects it only when an optional ceiling is
-   supplied.
-3. `boltrig/fleet/department_head.py:178-184` calls spawn without that ceiling.
+   supplied.~~ **WRONG AS WRITTEN.** `spawn.py:121-123` intersects against
+   `context.grants` UNCONDITIONALLY (`GrantSet.of(allow=...).intersect(context.grants)`),
+   and `GrantSet.intersect` can only narrow, so the child is always bounded by its
+   parent. The ceiling is an ADDITIONAL narrowing, not the only one. This item was
+   groping toward a real defect by the wrong mechanism: the actual problem was never
+   spawn, it was what `context.grants` CONTAINED when the pump built it. See 4.
+3. ~~`boltrig/fleet/department_head.py:178-184` calls spawn without that ceiling.~~
+   **NOT A SEPARATE BLOCKER; merged into 4 and FIXED (`929a274`).** True as a fact, but
+   the missing ceiling was only exploitable because of the tenant-wide context behind it.
 4. `boltrig/fleet/pump.py:372-381` reconstructs durable execution with
    tenant-wide permissions instead of the current user/profile/workspace
-   intersection.
+   intersection. **CONFIRMED LIVE, the most severe item on this list, now FIXED
+   (`929a274`, SEC-164/165).** The pump was the only spawn caller that both put
+   tenant-wide grants in the context and omitted the ceiling; chat, spawn, eval,
+   personal, skills and ultracode all already capped to the caller (SEC-78, SEC-139,
+   SEC-29). `_context_for` now resolves the principal via `effective_grants_for_request`,
+   `on_behalf_of=None` fails closed, and `_head_for` parks instead of mis-routing.
 5. `boltrig/fleet/hatchet_app.py:129-169` serializes effective grants into queued
    input, so stale authority may survive revocation or membership changes.
-6. `boltrig/kernel/mcp.py:58-81` stores non-expiring tokens in one process;
-   revocation is neither durable nor horizontally consistent.
+   **LIVE but over-severity as written.** `dispatch.py:382-383` re-reads
+   `get_tenant_permissions` fresh from the store on EVERY call and rejects anything
+   outside the current tenant ceiling before consulting `context.grants`, so a
+   tenant-level revocation is immediate even for an already-queued envelope, and
+   envelope grants can only be stale in the NARROWING direction. The real residual is
+   user-level revocation and workspace membership, which nothing re-derives on dequeue.
+   Note the sequencing: fixing 4 makes 5 matter MORE, not less, because before 4 there
+   was no user-level narrowing in the envelope to go stale. Mild design fork
+   (re-resolve on dequeue vs a queue-time snapshot with a TTL).
+6. ~~`boltrig/kernel/mcp.py:58-81` stores non-expiring tokens in one process;~~
+   revocation is neither durable nor horizontally consistent. **HALF FIXED; the
+   "non-expiring" clause is FALSE.** `0b862fd` ("fix(mcp): hash and expire run-scoped
+   tokens") landed 2026-07-15, also the day this list was written: tokens are stored
+   SHA-256 hashed, `ttl_seconds` is bounded to 1..3600 (default 300), and `_lookup`
+   evicts on expiry. The surviving half is real: `self._tokens` is per-process, so
+   `revoke()` on one replica does not revoke on another, bounded by the TTL. Design
+   fork, and the same shared-state decision as 8, not two separate ones.
 7. `boltrig/fleet/chat.py:519-531` closes the SSE stream on Stop but does not
-   interrupt the active runtime.
+   interrupt the active runtime. **LIVE, but this is an IMPLEMENTED INVARIANT, not an
+   oversight.** The docstring states the cooperative-never-hard-kill rule explicitly and
+   `pump.py:260-262` repeats it as "D3, FORBIDDEN: no mid-step hard kill". This
+   document's own "Add" section demands that Stop "interrupts the exact active turn",
+   which CONTRADICTS D3. That is a request to reverse a recorded decision, so it needs a
+   court ruling, not a code fix. Flagged as a contradiction in this document rather than
+   as an implementation defect.
 8. `boltrig/kernel/events.py:1-16` uses an in-memory execution relay that loses
-   reconnectable state across process restart.
+   reconnectable state across process restart. **LIVE and explicitly by design** (the
+   module says so, and the `TenantEventRelay` swap seam already exists). The consequence
+   is availability and UX, not authority or confidentiality: the durable record is
+   `ConversationMessage.events` plus the audit trail. **This does not belong on a
+   security-blocker list.** Same shared-state decision as 6.
 9. Manifest application upserts registry records but does not deactivate rows
-   omitted from the new manifest, leaving legacy capabilities active.
+   omitted from the new manifest, leaving legacy capabilities active. **CONFIRMED
+   LIVE.** `config/manifest.py:772-859` is upsert-only and there is no deactivation pass;
+   `agent_capabilities` has no `is_active` column at all, so removing a capability from
+   the manifest and redeploying does not remove it and it stays selectable forever.
+   Blast radius is capped because `set_tenant_permissions` IS fully replaced, but a
+   legacy capability still routes to a legacy adapter within that ceiling. NOT
+   mechanical: it needs a migration plus a decision on whether manifest application is
+   declarative (deactivate omitted) or additive (today). Cheap court matter.
 10. `boltrig/adapters/mcp_consumer.py` retains static token material on the
     adapter and does not make the per-call credential the authoritative source.
+    **CONFIRMED LIVE, and UNDERSOLD here.** The `credential` parameter is accepted by
+    `execute()` and then never referenced in the body: the only auth material is
+    `self._token`, set once at construction. So the per-call credential is not merely
+    "not authoritative", it has NO effect whatsoever, and credential rotation and
+    per-run scoping are silently inert on this path. `self._token or ""` also sends an
+    empty bearer rather than failing closed when unset. Mechanical, but verify the
+    credential provider actually supplies material on this binding first, or failing
+    closed turns the adapter off.
 11. `boltrig/fleet/ultracode.py:280-365` and
     `boltrig/fleet/hatchet_ultracode.py:10-128` schedule individual phase agents,
-    directly competing with Codex native-subagent orchestration.
+    directly competing with Codex native-subagent orchestration. **NOT A SECURITY ISSUE.**
+    The code is well-behaved (`ultracode.py:228` passes `grant_ceiling=context.grants`,
+    `:289-290` enforces the tenant fence). "Competes with Codex" is an
+    architecture-strategy claim, and nothing competes today: `codex_runtime_config_toml.py`
+    already sets `multi_agent: False` and `max_depth = 1`. Court matter, and it should not
+    be on this list.
 12. Cancellation checks in `boltrig/fleet/pump.py:216-301` do not refresh the
     cancellation marker after the in-flight head execution boundary before
-    terminal handling.
+    terminal handling. **CONFIRMED LIVE, and UNDERSOLD here.** The stated consequence is
+    a mislabelled terminal state. The real one is worse: between the boundary and the
+    terminal write the pump runs `persist_new_work_items` (which CREATES new work items
+    the pump then claims and executes) and `_maybe_learn` (which promotes the run's
+    workflow into the reusable library). So a cancelled run can spawn fresh downstream
+    work and mutate the flywheel, violating this document's own "no new domain effect
+    begins after revocation". Mechanical: re-read the marker after the head boundary.
+    Does not violate D3, since it adds a cooperative check rather than a mid-step kill.
 13. Codex still discovers repository `.agents/skills` while project-local
     `.codex` config, hooks, and rules are disabled for an untrusted project.
     Directly pointing a cell at an unsanitized checkout would bypass Boltrig's
     selected-skill catalogue even with an isolated `HOME` and `CODEX_HOME`.
+    **PARTLY MITIGATED, core claim UNVERIFIED, and DEAD PATH today.**
+    `bounded_filesystem.py:13` already strips `.agents` (and `.codex`, `.git`, ...) via
+    `CONTROL_NAMES` during capture, and the generated config sets
+    `project_doc_max_bytes = 0`, `project_root_markers = []`, `hooks: False`. The
+    scenario is the NON-projected path, but `codex_cell_supervisor.py:286` always passes
+    a constructed layout as cwd, never a caller-supplied path. Whether Codex 0.144.3
+    discovers `.agents/skills` from cwd independently of trust is an upstream-binary
+    behaviour claim that cannot be settled from this tree and needs an empirical check
+    against the pinned CLI. Also: nothing in production constructs the Codex cell
+    supervisor or app server at all, so this is unreachable today.
 
 Read-only Codex protocol work may proceed behind a disabled feature flag while
 these are fixed. No Opbox or repository write capability may be enabled first.
+
+### Issues found during the 2026-07-17 re-triage that were NOT on this list
+
+- `boltrig/fleet/chat.py:588-592` uses the same tenant-wide `grants=perms.grants`
+  pattern the pump did, and is rescued ONLY by the ceiling at `:627`. The invariant is
+  enforced by convention across six call sites rather than by construction. Consider
+  making the context helpers take a required principal so the safe thing is the only
+  expressible thing. Same class of latent bug, currently not exploitable.
+- `boltrig/adapters/mcp_consumer.py:108` sends `self._token or ""`, failing open into an
+  unauthenticated request rather than refusing. Closes with 10.
+- `boltrig/models/grants.py:126` calls `_matches(p, pattern.rstrip(".*"))`. `rstrip`
+  takes a CHARACTER SET, not a suffix, so it strips any trailing run of `.` and `*`.
+  `"ticket.*"` happens to give `"ticket"`, and no breaking input was found, so this is
+  "worth five minutes" rather than a finding. Flagged because it sits on the deny path,
+  where a false negative fails open.
+- `boltrig/fleet/pump.py` `_head_for` fell open to an arbitrary head on an unroutable
+  department while `principal_scope` still claimed the original. FIXED with 4 (SEC-165).
 
 ## Product and security decisions required
 
