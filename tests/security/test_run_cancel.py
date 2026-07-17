@@ -15,6 +15,10 @@ signal keyed by run id. These tests pin the HOLDING and its directives:
   durable - it is written in a finally with a checkpoint + one audit row on the
   transition, and a restart that re-detects the durable request re-cancels the
   run rather than resurrecting it.
+- SEC-166 (D3): the marker is re-read at boundary 2, the cooperative point AFTER
+  the completed step, so no new domain effect BEGINS after revocation - a cancel
+  that lands during head.handle spawns no follow-on work items and learns no
+  workflow, while the completed step's own record survives.
 """
 
 from __future__ import annotations
@@ -30,7 +34,7 @@ from boltrig.fleet.pump import outcome_score
 from boltrig.kernel import Kernel
 from boltrig.kernel.app import create_app
 from boltrig.kernel.events import EventRelay
-from boltrig.models import GrantSet, TenantPermissions, WorkItem, WorkStatus
+from boltrig.models import GrantSet, TenantPermissions, WorkflowSource, WorkItem, WorkStatus
 from boltrig.store import InMemoryStore
 
 T = "acme"
@@ -71,15 +75,18 @@ class _SpyHead:
     """A head whose ``handle`` records that it ran (so we can prove it was, or was
     not, dispatched) and optionally fires a hook mid-call (an in-flight adapter)."""
 
-    def __init__(self, name: str = "engineering", *, on_handle=None) -> None:
+    def __init__(self, name: str = "engineering", *, on_handle=None, outcome=None) -> None:
         self.name = name
         self.calls = 0
         self._on_handle = on_handle
+        self._outcome = outcome
 
     async def handle(self, item, ctx, *, tree_id=None, prefer=None):
         self.calls += 1
         if self._on_handle is not None:
             await self._on_handle()
+        if self._outcome is not None:
+            return dict(self._outcome)
         return {"status": "done", "children": [], "spawned": 0}
 
 
@@ -187,6 +194,7 @@ async def test_pump_stops_before_dispatch_at_the_chokepoint_boundary():
 
 @pytest.mark.security
 @pytest.mark.invariant("SEC-86")
+@pytest.mark.invariant("SEC-166")
 async def test_in_flight_adapter_call_is_not_interrupted():
     store = InMemoryStore()
     item = _item("run2")
@@ -202,11 +210,130 @@ async def test_in_flight_adapter_call_is_not_interrupted():
     pump = _pump(store, head)
     await pump.handle_claimed_item(item)
 
-    # the adapter call was NOT interrupted mid-flight (no hard kill)
+    # the adapter call was NOT interrupted mid-flight (no hard kill): the step ran to
+    # completion. D3 is about never interrupting a step, not about ignoring the cancel.
     assert head.calls == 1 and completed == ["ran"]
-    # cancellation takes effect only at the NEXT cooperative point; there is none
-    # after this terminal execute step, so the run completes normally, not killed.
-    assert (await store.get_work_item(T, "run2")).status == WorkStatus.DONE
+    # cancellation then lands at the NEXT cooperative point, which is boundary 2 - the
+    # point immediately after the completed step (SEC-166). The terminal state reflects
+    # the marker as REFRESHED there, never the stale pre-dispatch read.
+    assert (await store.get_work_item(T, "run2")).status == WorkStatus.CANCELLED
+
+
+# --- SEC-166: no new domain effect BEGINS after revocation -------------------
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-166")
+async def test_a_cancel_during_the_step_spawns_no_follow_on_work():
+    """The heart of it: a cancel arriving during ``head.handle`` must not let the run
+    go on to CREATE fresh work items. Those items are new domain effects that the pump
+    would subsequently claim and execute, so a cancelled run would keep growing a tree
+    of live work. Asserted against the STORE, not against a flag."""
+    store = InMemoryStore()
+    item = _item("run5")
+    await store.create_work_item(item)
+
+    async def during_handle():
+        await store.request_run_cancel(T, "run5", "alice")
+
+    # the head returns follow-on work: under the stale-marker bug these were persisted
+    # AFTER the cancel had already been requested.
+    head = _SpyHead(on_handle=during_handle, outcome={
+        "status": "done", "children": [], "spawned": 0,
+        "new_work_items": [{"intent": "downstream work that must never start"}],
+    })
+    await _pump(store, head).handle_claimed_item(item)
+
+    # NOTHING new was persisted: no child of this run exists to be claimed later.
+    assert await store.list_work_items(T, parent_id="run5") == []
+    # and the whole tenant queue is empty of anything the cancelled run could have made
+    assert [i.id for i in await store.list_work_items(T)] == ["run5"]
+    assert (await store.get_work_item(T, "run5")).status == WorkStatus.CANCELLED
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-166")
+async def test_a_cancel_during_the_step_learns_no_workflow():
+    """A cancelled run must not mutate the flywheel: promoting its workflow into the
+    reusable library is a new domain effect that outlives the run itself."""
+    from boltrig.workflows import generate_workflow
+
+    store = InMemoryStore()
+    item = _item("run6")
+    await store.create_work_item(item)
+    wf = generate_workflow("do the thing", ["engineering"], T)
+    assert wf.source == WorkflowSource.GENERATED
+
+    async def during_handle():
+        await store.request_run_cancel(T, "run6", "alice")
+
+    head = _SpyHead(on_handle=during_handle, outcome={
+        "status": "done", "children": [], "spawned": 0, "generated_workflow": wf,
+    })
+    await _pump(store, head).handle_claimed_item(item)
+
+    # the library was NOT mutated: nothing was promoted to LEARNED by a cancelled run
+    assert await store.list_workflows(T) == []
+    assert (await store.get_work_item(T, "run6")).status == WorkStatus.CANCELLED
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-166")
+async def test_the_completed_steps_own_record_survives_the_cancel():
+    """The invariant is "no new effect BEGINS after revocation", NOT "pretend the
+    completed step never ran". The step's aggregate really happened, so it is still
+    recorded on the item; only its DOWNSTREAM effects are suppressed."""
+    store = InMemoryStore()
+    item = _item("run7")
+    await store.create_work_item(item)
+
+    async def during_handle():
+        await store.request_run_cancel(T, "run7", "alice")
+
+    head = _SpyHead(on_handle=during_handle, outcome={
+        "status": "done", "children": [{"id": "kid", "degraded": False}], "spawned": 1,
+        "new_work_items": [{"intent": "must not start"}],
+    })
+    await _pump(store, head).handle_claimed_item(item)
+
+    after = await store.get_work_item(T, "run7")
+    assert after.status == WorkStatus.CANCELLED
+    # the work that DID happen is not lost: the head's aggregate is preserved ...
+    assert after.result["spawned"] == 1
+    assert after.result["children"] == [{"id": "kid", "degraded": False}]
+    # ... carrying the neutral cancel outcome alongside it, not a DONE score.
+    assert after.result["outcome"]["score"] is None
+    assert after.result["outcome"]["terminal_status"] == "cancelled"
+    # but its downstream effect still never began
+    assert await store.list_work_items(T, parent_id="run7") == []
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-166")
+async def test_an_uncancelled_run_is_completely_unaffected():
+    """The contrast case: without it every SEC-166 assertion above could pass by the
+    pump simply never persisting follow-on work or learning at all."""
+    from boltrig.workflows import generate_workflow
+
+    store = InMemoryStore()
+    item = _item("run8")
+    await store.create_work_item(item)
+    wf = generate_workflow("do the thing", ["engineering"], T)
+
+    head = _SpyHead(outcome={  # no cancel is ever requested for this run
+        "status": "done", "children": [], "spawned": 0, "generated_workflow": wf,
+        "new_work_items": [{"intent": "legitimate follow-on work"}],
+    })
+    await _pump(store, head).handle_claimed_item(item)
+
+    after = await store.get_work_item(T, "run8")
+    assert after.status == WorkStatus.DONE
+    assert after.result["outcome"]["score"] == 1.0
+    # the normal path still spawns its follow-on work ...
+    kids = await store.list_work_items(T, parent_id="run8")
+    assert [k.intent for k in kids] == ["legitimate follow-on work"]
+    assert all(k.status == WorkStatus.PENDING for k in kids)
+    # ... and still turns the flywheel
+    assert [w.source for w in await store.list_workflows(T)] == [WorkflowSource.LEARNED]
 
 
 # --- SEC-87: terminal, neutral, durable via finally --------------------------

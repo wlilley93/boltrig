@@ -1558,3 +1558,13 @@ invariants:
     description: Pump routing fails closed - a work item routed to a department with no configured head is parked for a human (an AWAITING_HUMAN escalation) rather than silently executing under an arbitrary fallback head, because the run's context claims owner_member as its principal_scope and a mis-route would make that scope claim untrue. Nothing spawns for an unroutable item.
     tests:
       - tests/security/test_pump_principal_authority.py::test_an_unroutable_department_parks_instead_of_running_under_another_head
+
+  # --- no new domain effect begins after a run is revoked ---
+  SEC-166:
+    description: The pump re-reads the cancellation marker at boundary 2 - the cooperative point immediately AFTER a completed step - so no new domain effect BEGINS after revocation ([2026] VJS-COUNTY 6, D3). A cancel arriving during the in-flight head.handle previously went unseen for the whole of that step's duration, because the run then acted on the marker as read BEFORE dispatch: the cancelled run went on to persist the step's new_work_items as fresh PENDING children (which the pump would subsequently claim and execute, growing a tree of live work out of a revoked run) and to promote its GENERATED workflow into the reusable library (mutating the flywheel durably, beyond the run's own lifetime). Refreshed at boundary 2, a cancel suppresses both downstream effects and the terminal state reflects the refreshed marker rather than the stale pre-dispatch one. The completed step's own record is NOT discarded - it really ran, so the head's aggregate (children/spawned) is preserved on the item beneath the neutral cancel outcome - and the step itself is still never interrupted (D3 forbids a mid-step hard kill; boundary 2 is a cooperative check at a boundary the step has already crossed, exactly like the pre-existing boundary 1 refresh). An uncancelled run is unaffected: it still spawns follow-on work and still learns.
+    tests:
+      - tests/security/test_run_cancel.py::test_a_cancel_during_the_step_spawns_no_follow_on_work
+      - tests/security/test_run_cancel.py::test_a_cancel_during_the_step_learns_no_workflow
+      - tests/security/test_run_cancel.py::test_the_completed_steps_own_record_survives_the_cancel
+      - tests/security/test_run_cancel.py::test_an_uncancelled_run_is_completely_unaffected
+      - tests/security/test_run_cancel.py::test_in_flight_adapter_call_is_not_interrupted

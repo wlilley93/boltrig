@@ -110,12 +110,10 @@
     },
     "boltrig/fleet/pump.py": {
       "max_file_lines": 539,
-      "max_function_lines": 86,
-      "over_limit_functions": [
-        {"name": "WorkPump.handle_claimed_item", "line": 217, "lines": 86}
-      ],
+      "max_function_lines": 68,
+      "over_limit_functions": [],
       "owner": "fleet-maintainers",
-      "reason": "Extract work-claim lifecycle phases while preserving durable retry and checkpoint semantics.",
+      "reason": "File-length debt only: the work-claim lifecycle phases still share one module. Function debt is cleared - handle_claimed_item was extracted down to 68 lines when boundary 2 (SEC-166) landed.",
       "expires": "2026-12-31"
     },
     "boltrig/fleet/runtime.py": {
