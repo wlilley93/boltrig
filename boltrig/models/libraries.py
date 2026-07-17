@@ -72,6 +72,16 @@ class AgentCapability:
     is_ephemeral: bool
     cost_tier: str  # cheap | standard | expensive
     model_endpoint: str | None = None
+    # Provenance for scoped-declarative reconciliation ([2026] LEXBY LOG-2026-07-17):
+    # 'manifest' rows are authored by the fleet manifest and are reconciled
+    # declaratively (a name dropped from a redeployed manifest is deactivated);
+    # 'control-plane' rows are governed grants (control.capability.upsert) and are
+    # only ever added, never touched by a manifest apply. The default is the
+    # fail-safe one: an unattributed row is treated as a governed grant.
+    source: str = "control-plane"  # manifest | control-plane
+    # Soft-active flag: a deactivated capability is never returned by
+    # list_capabilities so select_capability can never route to it.
+    is_active: bool = True
 
 
 class WorkflowSource(str, Enum):

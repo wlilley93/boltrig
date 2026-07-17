@@ -37,7 +37,10 @@ async def test_project_adapter_loads_by_module_ref():
     manifest = load_manifest(path)
     store = InMemoryStore()
     k = Kernel(store)
-    await apply_manifest(k, manifest)
+    # This extension-contract manifest declares no capabilities; under scoped-
+    # declarative reconciliation an empty-capability manifest needs an explicit
+    # confirm to clear the mass-deactivation guard.
+    await apply_manifest(k, manifest, confirm_bulk_deactivate=True)
     # the project adapter's verbs are registered though its id is not a builtin -
     # the manifest's module_ref was honoured (extend from outside, no core edit).
     assert await store.get_verb(T, "ticket.create") is not None

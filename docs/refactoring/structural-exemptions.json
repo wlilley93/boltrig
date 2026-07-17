@@ -5,7 +5,11 @@
       "max_file_lines": 284,
       "max_function_lines": 109,
       "over_limit_functions": [
-        {"name": "JiraAdapter.describe", "line": 68, "lines": 109}
+        {
+          "name": "JiraAdapter.describe",
+          "line": 68,
+          "lines": 109
+        }
       ],
       "owner": "adapter-maintainers",
       "reason": "Split the legacy describe schema into composable operation groups without changing the public adapter contract.",
@@ -15,7 +19,11 @@
       "max_file_lines": 390,
       "max_function_lines": 179,
       "over_limit_functions": [
-        {"name": "MsGraphAdapter.describe", "line": 61, "lines": 179}
+        {
+          "name": "MsGraphAdapter.describe",
+          "line": 61,
+          "lines": 179
+        }
       ],
       "owner": "adapter-maintainers",
       "reason": "Decompose the Microsoft Graph capability description by resource while preserving its existing verb schemas.",
@@ -41,9 +49,21 @@
       "max_file_lines": 820,
       "max_function_lines": 514,
       "over_limit_functions": [
-        {"name": "register_auth_routes", "line": 307, "lines": 514},
-        {"name": "register_auth_routes.login", "line": 382, "lines": 95},
-        {"name": "register_auth_routes.two_factor_challenge", "line": 668, "lines": 94}
+        {
+          "name": "register_auth_routes",
+          "line": 307,
+          "lines": 514
+        },
+        {
+          "name": "register_auth_routes.login",
+          "line": 382,
+          "lines": 95
+        },
+        {
+          "name": "register_auth_routes.two_factor_challenge",
+          "line": 668,
+          "lines": 94
+        }
       ],
       "owner": "identity-maintainers",
       "reason": "Extract login, invitation, session, and two-factor route groups while retaining one authentication boundary.",
@@ -53,7 +73,11 @@
       "max_file_lines": 564,
       "max_function_lines": 105,
       "over_limit_functions": [
-        {"name": "build_app", "line": 460, "lines": 105}
+        {
+          "name": "build_app",
+          "line": 460,
+          "lines": 105
+        }
       ],
       "owner": "platform-maintainers",
       "reason": "Split dependency construction and runtime wiring into typed bootstrap stages without changing startup order.",
@@ -63,7 +87,11 @@
       "max_file_lines": 169,
       "max_function_lines": 137,
       "over_limit_functions": [
-        {"name": "main", "line": 29, "lines": 137}
+        {
+          "name": "main",
+          "line": 29,
+          "lines": 137
+        }
       ],
       "owner": "platform-maintainers",
       "reason": "Decompose command parsing and command execution while preserving the existing CLI surface.",
@@ -81,18 +109,20 @@
       "max_file_lines": 222,
       "max_function_lines": 91,
       "over_limit_functions": [
-        {"name": "_run", "line": 48, "lines": 91}
+        {
+          "name": "_run",
+          "line": 48,
+          "lines": 91
+        }
       ],
       "owner": "platform-maintainers",
       "reason": "Extract initiation orchestration phases without changing request validation or execution semantics.",
       "expires": "2026-12-31"
     },
     "boltrig/config/manifest.py": {
-      "max_file_lines": 859,
-      "max_function_lines": 88,
-      "over_limit_functions": [
-        {"name": "apply_manifest", "line": 772, "lines": 88}
-      ],
+      "max_file_lines": 845,
+      "max_function_lines": 56,
+      "over_limit_functions": [],
       "owner": "configuration-maintainers",
       "reason": "Split manifest models, validation, and application into section-oriented modules with round-trip parity.",
       "expires": "2026-12-31"
@@ -101,8 +131,16 @@
       "max_file_lines": 659,
       "max_function_lines": 117,
       "over_limit_functions": [
-        {"name": "build_turn_executor", "line": 543, "lines": 117},
-        {"name": "build_turn_executor.executor", "line": 566, "lines": 92}
+        {
+          "name": "build_turn_executor",
+          "line": 543,
+          "lines": 117
+        },
+        {
+          "name": "build_turn_executor.executor",
+          "line": 566,
+          "lines": 92
+        }
       ],
       "owner": "fleet-maintainers",
       "reason": "Separate conversation context, turn execution, and event persistence while preserving streaming behavior.",
@@ -128,7 +166,11 @@
       "max_file_lines": 400,
       "max_function_lines": 94,
       "over_limit_functions": [
-        {"name": "Spawner.spawn", "line": 71, "lines": 94}
+        {
+          "name": "Spawner.spawn",
+          "line": 71,
+          "lines": 94
+        }
       ],
       "owner": "fleet-maintainers",
       "reason": "Split spawn selection, token issuance, and execution while preserving delegated authority checks.",
@@ -138,7 +180,11 @@
       "max_file_lines": 380,
       "max_function_lines": 101,
       "over_limit_functions": [
-        {"name": "run_ultracode_body", "line": 280, "lines": 101}
+        {
+          "name": "run_ultracode_body",
+          "line": 280,
+          "lines": 101
+        }
       ],
       "owner": "fleet-maintainers",
       "reason": "Extract UltraCode task-body orchestration stages without changing runtime registration behavior.",
@@ -148,8 +194,16 @@
       "max_file_lines": 359,
       "max_function_lines": 113,
       "over_limit_functions": [
-        {"name": "build_session_resolver", "line": 247, "lines": 113},
-        {"name": "build_session_resolver.resolver", "line": 258, "lines": 100}
+        {
+          "name": "build_session_resolver",
+          "line": 247,
+          "lines": 113
+        },
+        {
+          "name": "build_session_resolver.resolver",
+          "line": 258,
+          "lines": 100
+        }
       ],
       "owner": "identity-maintainers",
       "reason": "Separate session resolution and cross-tenant membership rebinding while retaining fail-closed identity semantics.",
@@ -159,7 +213,11 @@
       "max_file_lines": 1015,
       "max_function_lines": 855,
       "over_limit_functions": [
-        {"name": "register_access_routes", "line": 161, "lines": 855}
+        {
+          "name": "register_access_routes",
+          "line": 161,
+          "lines": 855
+        }
       ],
       "owner": "kernel-maintainers",
       "reason": "Decompose access, user, invitation, and notification route registrars behind the governed control chokepoint.",
@@ -169,7 +227,11 @@
       "max_file_lines": 735,
       "max_function_lines": 529,
       "over_limit_functions": [
-        {"name": "create_app", "line": 207, "lines": 529}
+        {
+          "name": "create_app",
+          "line": 207,
+          "lines": 529
+        }
       ],
       "owner": "kernel-maintainers",
       "reason": "Extract application middleware and route-family wiring while preserving dependency ownership and ordering.",
@@ -179,8 +241,16 @@
       "max_file_lines": 406,
       "max_function_lines": 294,
       "over_limit_functions": [
-        {"name": "register_channel_routes", "line": 113, "lines": 294},
-        {"name": "register_channel_routes.channel_inbound", "line": 138, "lines": 99}
+        {
+          "name": "register_channel_routes",
+          "line": 113,
+          "lines": 294
+        },
+        {
+          "name": "register_channel_routes.channel_inbound",
+          "line": 138,
+          "lines": 99
+        }
       ],
       "owner": "kernel-maintainers",
       "reason": "Split channel administration and inbound gateway route registrars without weakening signature checks.",
@@ -190,7 +260,11 @@
       "max_file_lines": 479,
       "max_function_lines": 116,
       "over_limit_functions": [
-        {"name": "Dispatcher.invoke", "line": 237, "lines": 116}
+        {
+          "name": "Dispatcher.invoke",
+          "line": 237,
+          "lines": 116
+        }
       ],
       "owner": "kernel-maintainers",
       "reason": "Extract dispatch phases behind private typed helpers while retaining the single governed chokepoint.",
@@ -200,7 +274,11 @@
       "max_file_lines": 112,
       "max_function_lines": 91,
       "over_limit_functions": [
-        {"name": "register_memory_routes", "line": 22, "lines": 91}
+        {
+          "name": "register_memory_routes",
+          "line": 22,
+          "lines": 91
+        }
       ],
       "owner": "kernel-maintainers",
       "reason": "Flatten the memory route registrar while preserving scope enforcement at every endpoint.",
@@ -210,7 +288,11 @@
       "max_file_lines": 315,
       "max_function_lines": 227,
       "over_limit_functions": [
-        {"name": "register", "line": 89, "lines": 227}
+        {
+          "name": "register",
+          "line": 89,
+          "lines": 227
+        }
       ],
       "owner": "observability-maintainers",
       "reason": "Split audit, metrics, capability changelog, and model telemetry route registration by surface.",
@@ -220,7 +302,11 @@
       "max_file_lines": 301,
       "max_function_lines": 83,
       "over_limit_functions": [
-        {"name": "PgVectorMemoryEngine.recall", "line": 127, "lines": 83}
+        {
+          "name": "PgVectorMemoryEngine.recall",
+          "line": 127,
+          "lines": 83
+        }
       ],
       "owner": "memory-maintainers",
       "reason": "Extract vector recall filtering and result mapping without changing tenant and scope isolation.",
@@ -235,17 +321,21 @@
       "expires": "2026-12-31"
     },
     "boltrig/store/memory.py": {
-      "max_file_lines": 1065,
+      "max_file_lines": 1060,
       "max_function_lines": 88,
       "over_limit_functions": [
-        {"name": "InMemoryStore.__init__", "line": 89, "lines": 88}
+        {
+          "name": "InMemoryStore.__init__",
+          "line": 90,
+          "lines": 88
+        }
       ],
       "owner": "store-maintainers",
       "reason": "Extract domain partials in lockstep with PostgreSQL while preserving complete store parity.",
       "expires": "2026-12-31"
     },
     "boltrig/store/postgres.py": {
-      "max_file_lines": 2342,
+      "max_file_lines": 2313,
       "max_function_lines": 53,
       "over_limit_functions": [],
       "owner": "store-maintainers",
@@ -256,7 +346,11 @@
       "max_file_lines": 294,
       "max_function_lines": 207,
       "over_limit_functions": [
-        {"name": "run_workflow_definition", "line": 88, "lines": 207}
+        {
+          "name": "run_workflow_definition",
+          "line": 88,
+          "lines": 207
+        }
       ],
       "owner": "workflow-maintainers",
       "reason": "Decompose workflow execution by step type while preserving checkpoint, retry, and governance semantics.",

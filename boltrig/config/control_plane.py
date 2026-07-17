@@ -178,7 +178,7 @@ class ControlPlaneAdapter:
                 max_depth=int(params.get("max_depth", 1)),
                 is_ephemeral=bool(params.get("is_ephemeral", True)),
                 cost_tier=params.get("cost_tier", "standard"),
-                model_endpoint=params.get("model_endpoint"),
+                model_endpoint=params.get("model_endpoint"), source="control-plane",
             )
             await self._store.upsert_capability(capability)
             return Result.success({"upserted": "capability", "id": capability.name})

@@ -95,6 +95,14 @@ CREATE TABLE IF NOT EXISTS agent_capabilities (
     max_depth        INT NOT NULL,
     is_ephemeral     BOOLEAN NOT NULL,
     cost_tier        TEXT NOT NULL,                     -- cheap | standard | expensive
+    -- Scoped-declarative reconciliation ([2026] LEXBY LOG-2026-07-17): is_active is
+    -- the soft-active flag (list_capabilities returns only active rows, so a
+    -- deactivated capability can never be selected); source is provenance -
+    -- 'manifest' rows are reconciled declaratively, 'control-plane' grants only ever
+    -- added. The 'control-plane' default is the fail-safe backfill for unknown rows.
+    is_active        BOOLEAN NOT NULL DEFAULT true,
+    source           TEXT NOT NULL DEFAULT 'control-plane'
+                         CHECK (source IN ('manifest', 'control-plane')),
     created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (tenant_id, name)

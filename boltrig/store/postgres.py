@@ -18,12 +18,13 @@ import asyncpg
 
 from .channels import ChannelStorePG
 from .budget_policy import BudgetPolicyPG
+from .capabilities import CapabilityStorePG
 from .guarded_writes import GuardedWritesPG
 from .idempotency import IdempotencyStorePG
 from .work_items import WorkItemReadsPG, work_item_from_row
 from boltrig.models import (
     AdapterHealth, AdapterRecord,
-    AgentCapability, ActionType,
+    ActionType,
     AuditEvent, AuditRollupAnchor,
     Budget, Consequence,
     ConfigRevision, Conversation,
@@ -158,7 +159,7 @@ async def _init_conn(conn: asyncpg.Connection) -> None:
 
 class PostgresStore(
     BudgetPolicyPG, WorkItemReadsPG, IdempotencyStorePG, GuardedWritesPG,
-    ChannelStorePG,
+    ChannelStorePG, CapabilityStorePG,
 ):
     """asyncpg-backed Store. Domain methods live in partial mixins
     (e.g. ``ChannelStorePG``) to keep this file under the structural floor;
@@ -371,25 +372,6 @@ class PostgresStore(
             tenant_id,
         )
         return [_skill(r) for r in rows]
-
-    async def upsert_capability(self, c: AgentCapability):
-        await self._pool.execute(
-            """INSERT INTO agent_capabilities (name, tenant_id, runtime, model_endpoint,
-                                               supported_skills, max_depth, is_ephemeral, cost_tier)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-               ON CONFLICT (tenant_id, name) DO UPDATE SET
-                 runtime=EXCLUDED.runtime, model_endpoint=EXCLUDED.model_endpoint,
-                 supported_skills=EXCLUDED.supported_skills, max_depth=EXCLUDED.max_depth,
-                 is_ephemeral=EXCLUDED.is_ephemeral, cost_tier=EXCLUDED.cost_tier, updated_at=now()""",
-            c.name, c.tenant_id, c.runtime, c.model_endpoint, c.supported_skills,
-            c.max_depth, c.is_ephemeral, c.cost_tier,
-        )
-
-    async def list_capabilities(self, tenant_id):
-        rows = await self._pool.fetch(
-            "SELECT * FROM agent_capabilities WHERE tenant_id=$1", tenant_id
-        )
-        return [_capability(r) for r in rows]
 
     async def upsert_workflow(self, w: WorkflowDefinition):
         await self._pool.execute(
@@ -1936,17 +1918,6 @@ def _skill(r):
         context_requirements=r["context_requirements"] or {}, extends=r["extends"],
         locale=r["locale"] or "en",
         description=(r["description"] if "description" in r else "") or "",
-    )
-
-
-def _capability(r):
-    if r is None:
-        return None
-    return AgentCapability(
-        name=r["name"], tenant_id=r["tenant_id"], runtime=r["runtime"],
-        supported_skills=list(r["supported_skills"] or []), max_depth=r["max_depth"],
-        is_ephemeral=r["is_ephemeral"], cost_tier=r["cost_tier"],
-        model_endpoint=r["model_endpoint"],
     )
 
 

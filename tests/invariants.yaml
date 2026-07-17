@@ -142,6 +142,14 @@ invariants:
       - tests/unit/test_codex_execution.py::test_codex_ledger_defaults_off_and_builds_no_stack
       - tests/unit/test_codex_execution.py::test_flag_on_constructs_both_admission_services
       - tests/integration/test_codex_execution_platform.py::test_platform_parks_none_when_flag_off
+  SEC-171:
+    description: Capabilities are reconciled scoped-declaratively - a manifest apply is declarative over the capabilities it authored (source='manifest') and additive over governed control-plane grants; a manifest-sourced capability a redeployed manifest no longer declares is soft-deactivated (and can no longer be routed to) while a control-plane grant survives, a name re-declared by the manifest reclaims manifest ownership and reconciles thereafter, and the mass-deactivation guard aborts the whole apply (nothing committed) on an empty manifest or an over-threshold drop unless an explicit confirm overrides.
+    tests:
+      - tests/integration/test_manifest_reconciliation.py::test_dropped_manifest_capability_deactivates_and_stops_routing
+      - tests/integration/test_manifest_reconciliation.py::test_control_plane_capability_survives_a_manifest_that_omits_it
+      - tests/integration/test_manifest_reconciliation.py::test_name_from_both_paths_becomes_manifest_and_reconciles
+      - tests/integration/test_manifest_reconciliation.py::test_empty_manifest_aborts_without_confirm_and_succeeds_with_it
+      - tests/integration/test_manifest_reconciliation.py::test_over_threshold_drop_aborts_without_confirm_and_succeeds_with_it
   P9:
     description: Backend unavailability degrades gracefully, never crashes (graceful degradation).
     tests:

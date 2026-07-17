@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 
 from .channels import ChannelStoreMem
 from .budget_policy import BudgetPolicyMem
+from .capabilities import CapabilityStoreMem
 from .guarded_writes import GuardedWritesMem
 from .idempotency import IdempotencyStoreMem
 from .work_items import WorkItemReadsMem
@@ -80,7 +81,7 @@ def _norm_email_key(value) -> str:
 
 
 class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
-                    GuardedWritesMem, ChannelStoreMem):
+                    GuardedWritesMem, ChannelStoreMem, CapabilityStoreMem):
     """In-memory Store (offline + test). Domain methods live in partial mixins
     (e.g. ``ChannelStoreMem``), composed here for one public method surface."""
 
@@ -226,12 +227,6 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
 
     async def list_skills(self, tenant_id):
         return [s for (t, _), s in self._skills.items() if t == tenant_id]
-
-    async def upsert_capability(self, cap):
-        self._caps[(cap.tenant_id, cap.name)] = cap
-
-    async def list_capabilities(self, tenant_id):
-        return [c for (t, _), c in self._caps.items() if t == tenant_id]
 
     async def upsert_workflow(self, wf):
         self._workflows[(wf.tenant_id, wf.id)] = wf
