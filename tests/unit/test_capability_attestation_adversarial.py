@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from dataclasses import replace
 
 import pytest
@@ -13,8 +14,13 @@ from boltrig.fleet.domain.capability_attestation import (
     attestations_admit_initial_read_only,
 )
 from boltrig.fleet.domain.grant_lease import GrantAuthoritySnapshot, GrantLeaseBinding
-from boltrig.models import Consequence
-from tests.contracts.grant_lease_fixtures import authority_snapshot, foreign_bindings
+from boltrig.models import AttestationSetRef, Consequence
+from tests.contracts.grant_lease_fixtures import (
+    assignment as assignment_record,
+    authority_snapshot,
+    binding as own_binding,
+    foreign_bindings,
+)
 
 _A = "sha256:" + "a" * 64
 _B = "sha256:" + "b" * 64
@@ -114,6 +120,79 @@ def test_repinning_a_partial_or_broader_safe_set_still_cannot_change_authority()
         broader,
         authority_verbs=original.verb_ids,
         pin=AssignmentCapabilityAttestationPin.from_set(broader),
+    )
+
+
+def test_from_assignment_takes_the_record_and_nothing_else() -> None:
+    """No caller may hand the pin a binding or an authority; there is no seam to.
+
+    This is the whole security property expressed as a signature: the only
+    parameter is the record, so every other constituent must be derived from it.
+    """
+
+    parameters = inspect.signature(AssignmentCapabilityAttestationPin.from_assignment).parameters
+    assert list(parameters) == ["assignment"]
+    assert AssignmentCapabilityAttestationPin.from_assignment(assignment_record()) is None
+    with pytest.raises(TypeError, match="exact ExecutionAssignment"):
+        AssignmentCapabilityAttestationPin.from_assignment(object())  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("scope", (own_binding(),) + foreign_bindings())
+def test_derived_pin_binding_is_always_its_own_records_binding(scope: GrantLeaseBinding) -> None:
+    """For an arbitrary record, the derived binding IS that record's binding."""
+
+    record = assignment_record(scope=scope, attestation_set=AttestationSetRef(1, _B, _C))
+    pin = AssignmentCapabilityAttestationPin.from_assignment(record)
+
+    assert pin is not None
+    assert pin.binding == GrantLeaseBinding.from_execution_assignment(record)
+    assert pin.binding == scope
+    assert pin.authority_evaluation_id == record.authority.id
+    assert pin.authority_evaluation_digest == record.authority.digest
+    assert pin.authority_policy_generation == record.authority.policy_generation
+    assert pin.attestation_set_digest == _C
+
+
+@pytest.mark.parametrize("foreign_binding", foreign_bindings())
+def test_derived_pin_can_never_resolve_another_assignments_set(
+    foreign_binding: GrantLeaseBinding,
+) -> None:
+    """Storing another assignment's set digest still cannot borrow its authority."""
+
+    own = _set(_capability("ticket.read"))
+    theirs = replace(own, binding=foreign_binding)
+    assert theirs.digest != own.digest
+    record = assignment_record(
+        scope=own_binding(),
+        attestation_set=AttestationSetRef(
+            theirs.catalog_generation, theirs.catalog_digest, theirs.digest
+        ),
+    )
+    pin = AssignmentCapabilityAttestationPin.from_assignment(record)
+    assert pin is not None
+
+    # The record can express no binding but its own, so the foreign set is
+    # unreachable: the pin resolves against theirs and fails on the binding.
+    assert pin.binding == GrantLeaseBinding.from_execution_assignment(record)
+    assert pin.binding != foreign_binding
+    assert not pin.matches(theirs)
+    assert not attestations_admit_initial_read_only(
+        authority_snapshot(permitted_verbs=theirs.verb_ids), pin, theirs
+    )
+
+    # Positive control: the same derivation over its OWN set does admit, so the
+    # rejection above is the binding, not an unconstructable pin.
+    own_pin = AssignmentCapabilityAttestationPin.from_assignment(
+        replace(
+            record,
+            attestation_set=AttestationSetRef(
+                own.catalog_generation, own.catalog_digest, own.digest
+            ),
+        )
+    )
+    assert own_pin is not None and own_pin.matches(own)
+    assert attestations_admit_initial_read_only(
+        authority_snapshot(permitted_verbs=own.verb_ids), own_pin, own
     )
 
 

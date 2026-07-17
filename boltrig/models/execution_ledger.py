@@ -30,6 +30,7 @@ from .execution_transitions import (
 )
 from .execution_work_values import (
     AssignmentLease,
+    AttestationSetRef,
     AuthorityEvaluationRef,
     CancellationMetadata,
     PhaseTerminalOutcome,
@@ -198,6 +199,7 @@ class ExecutionAssignment:
     skills: tuple[SkillVersionPin, ...]
     authority: AuthorityEvaluationRef
     lease: AssignmentLease | None = None
+    attestation_set: AttestationSetRef | None = None
     replaces_assignment_id: AssignmentId | None = None
     status: AssignmentStatus = AssignmentStatus.OFFERED
     version: int = 1
@@ -214,6 +216,8 @@ class ExecutionAssignment:
         _require_exact_type("authority", self.authority, AuthorityEvaluationRef)
         if self.lease is not None:
             _require_exact_type("lease", self.lease, AssignmentLease)
+        if self.attestation_set is not None:
+            _require_exact_type("attestation_set", self.attestation_set, AttestationSetRef)
         if self.replaces_assignment_id is not None:
             _require_identifier("replaces_assignment_id", self.replaces_assignment_id)
             if self.replaces_assignment_id == self.id:

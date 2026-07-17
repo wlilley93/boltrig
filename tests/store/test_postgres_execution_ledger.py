@@ -37,6 +37,7 @@ from tests.unit.execution_ledger_contract import (
 )
 from tests.unit.execution_ledger_fixtures import CLOCK_NOW, NOW, LedgerValues
 from tests.unit.execution_ledger_lifecycle_contract import (
+    assert_assignment_attestation_set_round_trips,
     assert_assignment_authority_matches_phase_policy,
     assert_hierarchy_lifecycle_and_atomic_outbox,
     assert_runtime_identity_and_binding_ownership,
@@ -76,6 +77,13 @@ async def test_postgres_store_binds_assignment_authority_to_phase_policy(
     ledger: PostgresExecutionLedger,
 ) -> None:
     await assert_assignment_authority_matches_phase_policy(ledger)
+
+
+@pg_only
+async def test_postgres_store_round_trips_assignment_attestation_set(
+    ledger: PostgresExecutionLedger,
+) -> None:
+    await assert_assignment_attestation_set_round_trips(ledger)
 
 
 @pg_only

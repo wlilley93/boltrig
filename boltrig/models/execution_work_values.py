@@ -96,6 +96,27 @@ class AuthorityEvaluationRef:
 
 
 @dataclass(frozen=True)
+class AttestationSetRef:
+    """The irreducible digests naming one exact capability-attestation set.
+
+    Every other constituent of the reference (the assignment binding and the
+    authority evaluation the set was cut against) is already carried by the
+    record this value is stored on, so it is derived from that record rather
+    than repeated here.  A reference therefore cannot name the attestation set
+    of any assignment other than the one it is stored on.
+    """
+
+    catalog_generation: int
+    catalog_digest: str
+    attestation_set_digest: str
+
+    def __post_init__(self) -> None:
+        _require_positive("catalog_generation", self.catalog_generation)
+        _require_sha256("catalog_digest", self.catalog_digest)
+        _require_sha256("attestation_set_digest", self.attestation_set_digest)
+
+
+@dataclass(frozen=True)
 class CancellationMetadata:
     requested_by: OrganisationUserRef
     reason_code: str

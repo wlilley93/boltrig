@@ -24,6 +24,7 @@ from .execution_ledger_contract import (
 )
 from .execution_ledger_fixtures import CLOCK_NOW, LedgerValues
 from .execution_ledger_lifecycle_contract import (
+    assert_assignment_attestation_set_round_trips,
     assert_assignment_authority_matches_phase_policy,
     assert_hierarchy_lifecycle_and_atomic_outbox,
     assert_runtime_identity_and_binding_ownership,
@@ -58,6 +59,11 @@ async def test_memory_store_enforces_hierarchy_lifecycle_and_atomic_outbox() -> 
 @pytest.mark.asyncio
 async def test_memory_store_binds_assignment_authority_to_phase_policy() -> None:
     await assert_assignment_authority_matches_phase_policy(_store())
+
+
+@pytest.mark.asyncio
+async def test_memory_store_round_trips_assignment_attestation_set() -> None:
+    await assert_assignment_attestation_set_round_trips(_store())
 
 
 @pytest.mark.asyncio

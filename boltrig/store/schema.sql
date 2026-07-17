@@ -1118,6 +1118,7 @@ CREATE TABLE IF NOT EXISTS execution_assignments (
     skills                  JSONB NOT NULL,
     authority               JSONB NOT NULL,
     lease                   JSONB,
+    attestation_set         JSONB,
     replaces_assignment_id  TEXT,
     status                  TEXT NOT NULL,
     version                 INT NOT NULL,

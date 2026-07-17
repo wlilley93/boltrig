@@ -1,0 +1,12 @@
+id: LOG-2026-07-17-074611
+time: 2026-07-17T07:46:11.003869488+00:00
+actor: lexby
+kind: architecture-decision
+issue: boltrig-attestation-pin
+decision: 'Option C governs, in cohesive form: add AttestationSetRef (3 irreducible digests) to models, one nullable attestation_set field on ExecutionAssignment, one JSONB column (migration 0032), and a single blessed AssignmentCapabilityAttestationPin.from_assignment classmethod deriving binding+authority from the record. GrantLeaseBinding and the pin do NOT move; 0 of 17 modules disturbed. check_architecture.py extended to police models->fleet in the SAME commit.'
+basis:
+- CONVENING-county-2026-07-17-074555 / SUBMISSION-2026-07-17-074150
+risk: medium
+reversibility: easy
+court_required: false
+why: 'Where a record already contains every constituent of a value, derive it by a single blessed constructor rather than store and validate it: derivation makes the mismatch unconstructable where storage makes it merely detectable. Structural relocation across a layer boundary requires demonstrated need, and no production code mints a pin today.'

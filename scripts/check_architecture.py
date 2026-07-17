@@ -36,6 +36,19 @@ _LAYER_IMPORTS = {
         "boltrig.fleet.ports",
         "boltrig.models",
     ),
+    # The innermost layer: models may not reach back out into fleet. This is the
+    # gate that keeps a record from carrying a fleet-owned type, and so keeps a
+    # value derivable from a record from also being stored beside it.
+    "models": ("boltrig.models",),
+}
+
+# Each layer's own package is the root that is scanned for it, so a new layer is
+# declared once above rather than special-cased against a single hardcoded tree.
+_LAYER_ROOTS = {
+    "domain": ("boltrig", "fleet", "domain"),
+    "ports": ("boltrig", "fleet", "ports"),
+    "application": ("boltrig", "fleet", "application"),
+    "models": ("boltrig", "models"),
 }
 
 
@@ -139,11 +152,10 @@ def _scan_file(path: Path, root: Path, layer: str) -> list[Violation]:
 
 
 def check_repository(root: Path = ROOT) -> Report:
-    source_root = root / "boltrig" / "fleet"
     violations: list[Violation] = []
     checked = 0
     for layer in _LAYER_IMPORTS:
-        layer_root = source_root / layer
+        layer_root = root.joinpath(*_LAYER_ROOTS[layer])
         if not layer_root.is_dir():
             violations.append(
                 Violation(

@@ -1,0 +1,67 @@
+id: SUBMISSION-2026-07-17-074150
+court_requested: county
+jurisdiction: default
+question: 'Which option governs binding the capability-attestation pin to an assignment, given fleet->models layering forbids the typed field the doctrine implies? A: move GrantLeaseBinding+Pin inward. B: status quo. C: carry only three irreducible digests, binding derived. Sub-question: should check_architecture.py police models->fleet?'
+facts: |
+  # Case file: binding the capability-attestation pin to an assignment
+
+  Filed on own motion. Symmetric, no preference.
+
+
+  ## Question
+  The pin is documented as "persisted with an assignment", but `ExecutionAssignment` has no
+  field for it. Deferred twice (0030, 0031). A typed field is blocked by dependency
+  direction, not effort.
+
+  ## Agreed facts (verified)
+  1. Direction is `fleet -> models`. `models` imports nothing from `fleet`.
+     `fleet/domain/grant_lease.py:10` imports `ExecutionAssignment` from models.
+  2. Module-level import of the pin into models raises a circular ImportError (probed).
+  3. TYPE_CHECKING-only import breaks `postgres_ledger_codec._hints`, which calls
+     `get_type_hints` at RUNTIME: decode breaks for EVERY assignment (probed).
+  4. `check_architecture.py` polices only `fleet.{domain,ports,application}`. The
+     `models -> fleet` edge is unpoliced; only Python's import machinery enforces it.
+  5. `GrantLeaseBinding` has 12 non-test + 5 test importers.
+  6. Of the pin's 7 fields: `binding` equals
+     `GrantLeaseBinding.from_execution_assignment(assignment)`, derivable. The three
+     `authority_*` fields already exist on the assignment's `authority`
+     (`AuthorityEvaluationRef.id/.digest/.policy_generation`). Only `catalog_generation`,
+     `catalog_digest`, `attestation_set_digest` are new, all int/str.
+  7. The set store is already keyed by the exact binding.
+  8. `pin.matches()` compares pin against SET only; nothing compares pin against ASSIGNMENT.
+
+  ## Security stake (all options)
+  A free-floating `binding` lets an assignment name ANOTHER assignment's set: `resolve` looks
+  up by `pin.binding`, `matches()` returns True, and the assignment executes under another's
+  attested capabilities. Privilege escalation. Must be unconstructable, not unlikely.
+
+  ## Option A: move value objects inward
+  Move `GrantLeaseBinding` + pin into models; fleet imports inward; typed pin field.
+  FOR: both are pure value objects over models types, arguably belonging there anyway; the
+  only option letting `__post_init__` enforce binding equality at the type boundary, the
+  strongest place; fixes the layering once.
+  AGAINST: 17 modules to add one field, unproven; forces `Pin.from_set` to invert to
+  `Set.to_pin()`, an API change serving layering not domain; pushes governance-adjacent types
+  into the innermost layer for all future consumers.
+
+  ## Option B: status quo
+  FOR: nothing is broken; nothing mints a pin (slice 5); slice 5 may change requirements.
+  AGAINST: doctrine says "persisted with an assignment" and under B that stays false. Twice
+  deferred to "the next leg", which has now been built twice and structurally could not. A
+  third deferral evades the decision rather than making it.
+
+  ## Option C: carry only irreducible digests
+  Assignment gains 3 nullable scalars. Binding derived, never carried.
+  FOR: confusion unconstructable by construction, not validation (facts 6+7). Smallest change,
+  0 of 17 modules. Removes duplication: A stores the authority triple twice, a drift-prone
+  invariant; C cannot drift.
+  AGAINST: primitive obsession, decomposing a cohesive value object into scalars;
+  reconstruction becomes a convention every caller must follow, and conventions do not enforce
+  themselves; 3 nullable columns admit partial states one field cannot; a future need for the
+  full pin undoes C and does A anyway.
+
+  ## Sub-question
+  Should `check_architecture.py` police `models -> fleet` (fact 4)?
+requested_order: TBD
+private_boundary: local
+word_count: 498

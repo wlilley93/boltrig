@@ -18,7 +18,13 @@ from dataclasses import dataclass
 from enum import Enum
 
 from boltrig.fleet.domain.grant_lease import GrantAuthoritySnapshot, GrantLeaseBinding
-from boltrig.models import Consequence, MAX_CONCRETE_VERBS, VerbId, canonical_concrete_verbs
+from boltrig.models import (
+    Consequence,
+    ExecutionAssignment,
+    MAX_CONCRETE_VERBS,
+    VerbId,
+    canonical_concrete_verbs,
+)
 
 _CAPABILITY_SCHEMA = "boltrig.capability-effect-attestation/v1"
 _SET_SCHEMA = "boltrig.assignment-capability-attestation-set/v1"
@@ -201,6 +207,35 @@ class AssignmentCapabilityAttestationPin:
             catalog_generation=attestations.catalog_generation,
             catalog_digest=attestations.catalog_digest,
             attestation_set_digest=attestations.digest,
+        )
+
+    @classmethod
+    def from_assignment(
+        cls, assignment: ExecutionAssignment
+    ) -> AssignmentCapabilityAttestationPin | None:
+        """Derive the pin from one exact assignment record and nothing else.
+
+        The caller supplies no binding and no authority: both are read off the
+        record, so a pin can only ever name the attestation set of the very
+        assignment it was derived from.  Naming another assignment's set is not
+        rejected here, it is inexpressible.  This is the only way to obtain a
+        pin from a record.
+        """
+
+        if type(assignment) is not ExecutionAssignment:
+            raise TypeError("assignment must be an exact ExecutionAssignment")
+        attestation_set = assignment.attestation_set
+        if attestation_set is None:
+            return None
+        authority = assignment.authority
+        return cls(
+            binding=GrantLeaseBinding.from_execution_assignment(assignment),
+            authority_evaluation_id=authority.id,
+            authority_evaluation_digest=authority.digest,
+            authority_policy_generation=authority.policy_generation,
+            catalog_generation=attestation_set.catalog_generation,
+            catalog_digest=attestation_set.catalog_digest,
+            attestation_set_digest=attestation_set.attestation_set_digest,
         )
 
     def matches(self, attestations: object) -> bool:

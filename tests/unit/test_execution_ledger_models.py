@@ -12,6 +12,7 @@ from boltrig.models import execution_transitions as transitions
 from boltrig.models import (
     AssignmentLease,
     AssignmentStatus,
+    AttestationSetRef,
     AuthorityEvaluationRef,
     CancellationMetadata,
     EngineOwner,
@@ -133,6 +134,28 @@ def test_authority_evaluation_rejects_noncanonical_or_unbounded_verbs(
         )
 
 
+def test_attestation_set_ref_requires_prefixed_digests_and_a_real_generation() -> None:
+    """A raw, unprefixed digest is not a digest, so it cannot be referenced."""
+
+    raw = "a" * 64
+    with pytest.raises(ValueError, match="lowercase sha256 digest"):
+        AttestationSetRef(2, raw, _digest("d"))
+    with pytest.raises(ValueError, match="lowercase sha256 digest"):
+        AttestationSetRef(2, _digest("c"), raw)
+    with pytest.raises(ValueError, match="lowercase sha256 digest"):
+        AttestationSetRef(2, _digest("c").upper(), _digest("d"))
+    with pytest.raises(ValueError, match="catalog_generation"):
+        AttestationSetRef(0, _digest("c"), _digest("d"))
+
+    reference = AttestationSetRef(2, _digest("c"), _digest("d"))
+    assert reference.attestation_set_digest == _digest("d")
+    assert [field.name for field in fields(reference)] == [
+        "catalog_generation",
+        "catalog_digest",
+        "attestation_set_digest",
+    ]
+
+
 @pytest.mark.invariant("FR-RUN-20")
 def test_root_phase_work_assignment_are_scoped_pinned_and_boltrig_owned() -> None:
     scope = _scope()
@@ -175,8 +198,8 @@ def test_root_phase_work_assignment_are_scoped_pinned_and_boltrig_owned() -> Non
         _skills(),
         _authority(),
         _lease(),
-        "assignment-1",
-        AssignmentStatus.RUNNING,
+        replaces_assignment_id="assignment-1",
+        status=AssignmentStatus.RUNNING,
         created_at=NOW,
     )
 

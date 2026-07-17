@@ -16,6 +16,7 @@ from boltrig.fleet.ports.execution_ledger import (
 from boltrig.models import (
     AssignmentLease,
     AssignmentStatus,
+    AttestationSetRef,
     AuthorityEvaluationRef,
     CanonicalEventPayload,
     CodexBindingKind,
@@ -120,12 +121,16 @@ class LedgerValues:
             created_at=NOW,
         )
 
+    def attestation_set(self) -> AttestationSetRef:
+        return AttestationSetRef(2, digest("catalog"), digest("attestation-set"))
+
     def assignment(
         self,
         *,
         attempt: int = 1,
         replaces: str | None = None,
         authority_policy_generation: int = 3,
+        attestation_set: AttestationSetRef | None = None,
     ) -> ExecutionAssignment:
         return ExecutionAssignment(
             self.scope,
@@ -143,6 +148,7 @@ class LedgerValues:
                 ("document.read", "ticket.read"),
                 NOW,
             ),
+            attestation_set=attestation_set,
             replaces_assignment_id=replaces,
             created_at=NOW,
         )

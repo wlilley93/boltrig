@@ -13,6 +13,7 @@ from boltrig.fleet.infrastructure.postgres_ledger_codec import decode, decode_se
 from boltrig.models import (
     AssignmentLease,
     AssignmentStatus,
+    AttestationSetRef,
     AuthorityEvaluationRef,
     CancellationMetadata,
     EvidenceRef,
@@ -63,7 +64,7 @@ WORK_COLS = [
 ASSIGNMENT_COLS = [
     "tenant_id", "workspace_id", "root_run_id", "id", "phase_id", "work_item_id",
     "runtime_identity_id", "attempt", "profile", "skills", "authority", "lease",
-    "replaces_assignment_id", "status", "version", "created_at",
+    "attestation_set", "replaces_assignment_id", "status", "version", "created_at",
 ]
 RESULT_COLS = [
     "tenant_id", "workspace_id", "root_run_id", "id", "phase_id", "work_item_id",
@@ -149,8 +150,8 @@ def assignment_values(record: ExecutionAssignment) -> tuple[Any, ...]:
         scope.tenant_id, scope.workspace_id, scope.root_run_id, record.id,
         record.phase_id, record.work_item_id, record.runtime_identity_id,
         record.attempt, encode(record.profile), encode(record.skills),
-        encode(record.authority), encode(record.lease), record.replaces_assignment_id,
-        record.status.value, record.version, record.created_at,
+        encode(record.authority), encode(record.lease), encode(record.attestation_set),
+        record.replaces_assignment_id, record.status.value, record.version, record.created_at,
     )
 
 
@@ -159,8 +160,9 @@ def row_to_assignment(row: Row) -> ExecutionAssignment:
         scope_of(row), row["id"], row["phase_id"], row["work_item_id"],
         row["runtime_identity_id"], row["attempt"], decode(ProfileVersionPin, row["profile"]),
         decode_seq(SkillVersionPin, row["skills"]), decode(AuthorityEvaluationRef, row["authority"]),
-        decode(AssignmentLease, row["lease"]), row["replaces_assignment_id"],
-        AssignmentStatus(row["status"]), row["version"], row["created_at"],
+        decode(AssignmentLease, row["lease"]), decode(AttestationSetRef, row["attestation_set"]),
+        row["replaces_assignment_id"], AssignmentStatus(row["status"]), row["version"],
+        row["created_at"],
     )
 
 

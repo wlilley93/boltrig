@@ -13,6 +13,7 @@ from boltrig.fleet.domain.grant_lease import (
 )
 from boltrig.fleet.ports.grant_leases import GrantLeaseStore
 from boltrig.models import (
+    AttestationSetRef,
     AuthorityEvaluationRef,
     ExecutionAssignment,
     ExecutionScopeRef,
@@ -61,16 +62,19 @@ def lease(
     )
 
 
-def authority_snapshot(
+def assignment(
     *,
     scope: GrantLeaseBinding | None = None,
     authority_evaluation_id: str = "authority-1",
     authority_evaluation_digest: str = "sha256:" + "a" * 64,
     authority_policy_generation: int = 1,
     permitted_verbs: tuple[str, ...] = ("document.read", "ticket.read"),
-) -> GrantAuthoritySnapshot:
+    attestation_set: AttestationSetRef | None = None,
+) -> ExecutionAssignment:
+    """Build the canonical record every grant-scope value is projected from."""
+
     exact_scope = scope or binding()
-    assignment = ExecutionAssignment(
+    return ExecutionAssignment(
         scope=ExecutionScopeRef(
             WorkspaceScopeRef(exact_scope.tenant_id, exact_scope.workspace_id),
             exact_scope.root_run_id,
@@ -93,9 +97,28 @@ def authority_snapshot(
             permitted_verbs,
             NOW,
         ),
+        attestation_set=attestation_set,
         created_at=NOW,
     )
-    return GrantAuthoritySnapshot.from_execution_assignment(assignment)
+
+
+def authority_snapshot(
+    *,
+    scope: GrantLeaseBinding | None = None,
+    authority_evaluation_id: str = "authority-1",
+    authority_evaluation_digest: str = "sha256:" + "a" * 64,
+    authority_policy_generation: int = 1,
+    permitted_verbs: tuple[str, ...] = ("document.read", "ticket.read"),
+) -> GrantAuthoritySnapshot:
+    return GrantAuthoritySnapshot.from_execution_assignment(
+        assignment(
+            scope=scope,
+            authority_evaluation_id=authority_evaluation_id,
+            authority_evaluation_digest=authority_evaluation_digest,
+            authority_policy_generation=authority_policy_generation,
+            permitted_verbs=permitted_verbs,
+        )
+    )
 
 
 async def attempt_insert(
@@ -127,6 +150,7 @@ def foreign_bindings() -> tuple[GrantLeaseBinding, ...]:
 
 __all__ = [
     "NOW",
+    "assignment",
     "attempt_insert",
     "authority_snapshot",
     "binding",

@@ -171,6 +171,45 @@ async def assert_assignment_authority_matches_phase_policy(
     )
 
 
+async def assert_assignment_attestation_set_round_trips(
+    store: ExecutionLedgerStore,
+) -> None:
+    """A pinned attestation set survives the store exactly; absence stays absent."""
+
+    pinned_values = LedgerValues()
+    await seed_running_work(store, pinned_values, include_assignment=False)
+    pinned = pinned_values.assignment(attestation_set=pinned_values.attestation_set())
+    await _applied(
+        store,
+        pinned_values.write(
+            pinned,
+            LedgerCommandKind.ASSIGN_WORK,
+            expected_version=0,
+            command_id="assign-with-attestation-set",
+        ),
+    )
+    stored = await store.get_assignment(pinned_values.scope, pinned.id)
+    assert stored == pinned
+    assert stored is not None
+    assert stored.attestation_set == pinned_values.attestation_set()
+
+    bare_values = LedgerValues("org-b", "workspace-b", "run-b")
+    await seed_running_work(store, bare_values, include_assignment=False)
+    bare = bare_values.assignment()
+    await _applied(
+        store,
+        bare_values.write(
+            bare,
+            LedgerCommandKind.ASSIGN_WORK,
+            expected_version=0,
+            command_id="assign-without-attestation-set",
+        ),
+    )
+    stored_bare = await store.get_assignment(bare_values.scope, bare.id)
+    assert stored_bare == bare
+    assert stored_bare is not None and stored_bare.attestation_set is None
+
+
 async def assert_hierarchy_lifecycle_and_atomic_outbox(
     store: ExecutionLedgerStore,
 ) -> None:
@@ -405,6 +444,7 @@ async def _applied(store: ExecutionLedgerStore, write: object) -> None:
 
 
 __all__ = [
+    "assert_assignment_attestation_set_round_trips",
     "assert_assignment_authority_matches_phase_policy",
     "assert_hierarchy_lifecycle_and_atomic_outbox",
     "assert_runtime_identity_and_binding_ownership",

@@ -113,6 +113,7 @@ from .execution_transitions import (
 )
 from .execution_work_values import (
     AssignmentLease,
+    AttestationSetRef,
     AuthorityEvaluationRef,
     CancellationMetadata,
     PhaseTerminalOutcome,
@@ -255,6 +256,7 @@ __all__ = [
     "RecordedExecutionEvent",
     "AssignmentLease",
     "AssignmentStatus",
+    "AttestationSetRef",
     "AuthorityEvaluationRef",
     "CancellationMetadata",
     "EngineOwner",
