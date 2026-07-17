@@ -86,7 +86,26 @@ async def _read_status_provider(provider: Any, p: Any) -> dict[str, Any]:
     return dict(raw or {}) if isinstance(raw, Mapping) else {}
 
 
+def _ws_visible(p, ws_id) -> bool:
+    # Workspace fail-closed scoping ([2026] VJS-COUNTY 9, D5): a caller with an
+    # active workspace sees ONLY org-wide (NULL) rows + its OWN workspace's rows,
+    # never another workspace's. No active workspace means org-wide rows only,
+    # matching workflow visibility instead of widening to every workspace.
+    active = getattr(p, "active_workspace_id", None)
+    return ws_id is None or ws_id == active
+
+
 def register(app, P, K) -> None:
+    _register_status_routes(app, P, K)
+    _register_cost_routes(app, P, K)
+    _register_changelog_routes(app, P, K)
+    _register_model_telemetry_routes(app, P, K)
+    _register_audit_search_routes(app, P, K)
+    _register_audit_integrity_routes(app, P, K)
+    _register_runs_routes(app, P, K)
+
+
+def _register_status_routes(app, P, K) -> None:
     @app.get("/v1/platform/status")
     async def platform_status(request: Request, p=P) -> dict:
         raw = await _read_status_provider(platform_state(request).get("status"), p)
@@ -98,6 +117,8 @@ def register(app, P, K) -> None:
             "runtimes": _items(raw.get("runtimes", []), limit=50),
         }
 
+
+def _register_cost_routes(app, P, K) -> None:
     @app.get("/v1/cost")
     async def cost(request: Request, k=K, p=P) -> dict:
         depts = scope_depts(p)
@@ -115,6 +136,8 @@ def register(app, P, K) -> None:
             by_actor[e.actor] = by_actor.get(e.actor, 0) + c
         return {"total_cost_micros": total, "by_actor": by_actor, "scope": depts or "all"}
 
+
+def _register_changelog_routes(app, P, K) -> None:
     @app.get("/v1/capabilities/changelog")
     async def capability_changelog(request: Request, k=K, p=P) -> JSONResponse:
         # A timeline of who changed capability (nouns / verbs / bindings / skills /
@@ -150,14 +173,8 @@ def register(app, P, K) -> None:
         rows.reverse()
         return JSONResponse({"changes": rows[:200]})
 
-    def _ws_visible(p, ws_id) -> bool:
-        # Workspace fail-closed scoping ([2026] VJS-COUNTY 9, D5): a caller with an
-        # active workspace sees ONLY org-wide (NULL) rows + its OWN workspace's rows,
-        # never another workspace's. No active workspace means org-wide rows only,
-        # matching workflow visibility instead of widening to every workspace.
-        active = getattr(p, "active_workspace_id", None)
-        return ws_id is None or ws_id == active
 
+def _register_model_telemetry_routes(app, P, K) -> None:
     @app.get("/v1/model/telemetry")
     async def model_telemetry_route(
         request: Request, limit: int = 50, k=K, p=P
@@ -178,6 +195,8 @@ def register(app, P, K) -> None:
             "models": model_telemetry(visible, limit=limit),
         }
 
+
+def _register_audit_search_routes(app, P, K) -> None:
     @app.get("/v1/audit/search")
     async def audit_search(request: Request, actor: str | None = None, verb: str | None = None,
                            run: str | None = None, resource: str | None = None, status: str | None = None,
@@ -257,6 +276,8 @@ def register(app, P, K) -> None:
                          "resource_id": e.resource_id})
         return {"stream": "audit", "results": rows[-500:], "scope": depts or "all"}
 
+
+def _register_audit_integrity_routes(app, P, K) -> None:
     @app.get("/v1/audit/verify")
     async def audit_verify(request: Request, workspace: str | None = None, k=K, p=P) -> JSONResponse:
         # D5: recompute the audit hash chain + check the latest rollup anchor for the
@@ -305,6 +326,8 @@ def register(app, P, K) -> None:
                                          "verb": e.verb, "status": e.status, "run_id": e.run_id,
                                          "on_behalf_of": e.on_behalf_of} for e in events]})
 
+
+def _register_runs_routes(app, P, K) -> None:
     @app.get("/v1/runs")
     async def runs(request: Request, k=K, p=P) -> dict:
         depts = scope_depts(p)

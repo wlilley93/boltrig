@@ -290,20 +290,6 @@
       "reason": "Flatten the memory route registrar while preserving scope enforcement at every endpoint.",
       "expires": "2026-12-31"
     },
-    "boltrig/kernel/platform_routes/observability.py": {
-      "max_file_lines": 315,
-      "max_function_lines": 227,
-      "over_limit_functions": [
-        {
-          "name": "register",
-          "line": 89,
-          "lines": 227
-        }
-      ],
-      "owner": "observability-maintainers",
-      "reason": "Split audit, metrics, capability changelog, and model telemetry route registration by surface.",
-      "expires": "2026-12-31"
-    },
     "boltrig/memory/pgvector.py": {
       "max_file_lines": 301,
       "max_function_lines": 83,
