@@ -1,0 +1,52 @@
+id: SUBMISSION-2026-07-17-110815
+court_requested: county
+jurisdiction: default
+question: Does D3 (cooperative-only cancel; [2026] VJS-COUNTY 6) EXTEND to Codex turn execution, or is it DISTINGUISHED because a Codex turn exposes a protocol-level cooperative interrupt (turn/interrupt)? PR3's gate 'Stop interrupts the exact active turn' depends on it.
+facts: |
+  # Case file: does D3 (cooperative-only cancel) extend to Codex turns?
+
+  Filed on own motion. Symmetric, no preference.
+
+  ## Question
+  Codex integration PR3 (read-only phase lifecycle) has a gate: "Stop interrupts the exact active
+  turn." Recorded invariant D3 ([2026] VJS-COUNTY 6, SEC-86) says the opposite for the legacy pump.
+  Does D3 extend to Codex turn execution, or is it distinguished?
+
+  ## Agreed facts (verified against code)
+  1. D3 / SEC-86: "Cancel takes effect only at a cooperative point, never mid-adapter-call... a cancel
+     during an in-flight adapter call never interrupts it (the step runs to completion; cancellation
+     lands only at the next cooperative point)." SEC-166 implements it: `head.handle` is never
+     interrupted. `models/work.py:24` calls it "a cooperative, owner-only server-side cancel".
+  2. The legacy step is opaque: `head.handle` is an in-process `await` with NO interrupt point. D3's
+     rationale is that absence: interrupting it would be an unsafe hard kill.
+  3. A Codex turn differs in kind: `AgentRuntime.interrupt_turn` (`codex_agent_runtime.py:235`) takes
+     the operation lock, checkpoints, asserts the turn active, then sends `turn/interrupt` over the App
+     Server wire (`codex_app_server.py:231-238`); the peer handles it at its own safe point. It is a
+     checkpointed, binding-checked, peer-honoured request, not a signal/kill.
+
+  ## Option A: D3 EXTENDS (Stop stays cooperative-boundary-only)
+  FOR: one uniform cancellation doctrine across every runtime; no per-runtime carve-out to reason
+  about; D3's ratio ("never interrupt an in-flight step") read literally covers a turn too; a turn
+  that is "interrupted" mid-generation may leave partial peer state the ledger must still reconcile.
+  AGAINST: it contradicts the PR3 gate, so read-only phases could never satisfy their own acceptance
+  criterion; it forbids using a capability the runtime already safely provides; a long Codex turn
+  would ignore a user Stop until it finishes, which is worse UX than the legacy pump (whose steps are
+  short) and arguably worse governance (a revoked run keeps computing).
+
+  ## Option B: D3 is DISTINGUISHED (Stop may call interrupt_turn)
+  FOR: D3's rationale was the ABSENCE of a safe interrupt point, not a blanket ban on stopping work;
+  `turn/interrupt` IS that safe point (checkpointed, binding-checked, peer-honoured), so it is a
+  cooperative interrupt in D3's own sense, not the hard kill D3 forbade; it satisfies the PR3 gate;
+  it strengthens governance (a Stop or revocation actually halts the turn); the distinction is
+  principled and narrow (only where the runtime exposes a protocol interrupt).
+  AGAINST: it narrows a recorded invariant, which must be done carefully lest "cooperative" be
+  stretched later to excuse a real hard kill; it needs a bright line so a future non-protocol
+  "interrupt" cannot claim the same cover; partial-turn peer state must be defined as reconcilable
+  (terminal-neutral, like SEC-87) or the distinction leaks.
+
+  ## Sub-question
+  If B: what bright line keeps "cooperative interrupt" from later excusing a hard kill, and must an
+  interrupted turn settle terminal-neutral per SEC-87?
+requested_order: TBD
+private_boundary: local
+word_count: 498

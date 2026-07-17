@@ -1,0 +1,12 @@
+id: LOG-2026-07-17-111415
+time: 2026-07-17T11:14:15.049435348+00:00
+actor: lexby
+kind: architecture-decision
+issue: boltrig-codex-stop-semantics
+decision: 'D3/SEC-86 (cancel never interrupts an in-flight step; [2026] VJS-COUNTY 6) is DISTINGUISHED, not extended and not overruled. For the legacy WorkPump it binds unchanged. For a runtime that exposes a protocol-level turn interrupt, Stop MAY call AgentRuntime.interrupt_turn (satisfying PR3''s ''Stop interrupts the exact active turn''), because turn/interrupt is an in-band, peer-honoured, checkpointed, binding-checked request that drives the turn to an audited INTERRUPTED terminal, which IS the cooperative point in D3''s sense. Bright line: permitted only if delivered as an in-band protocol request awaiting the peer''s receipt (never an OS signal, task-cancel, or transport teardown), honoured at the peer''s safe point through the audit/event stream, checkpointed+binding-checked to the exact turn, and never applied to an in-process await with no protocol interrupt point. An interrupted turn MUST settle terminal-neutral per SEC-87: PhaseStatus.INTERRUPTED, neutral score None, durable across restart, completed work recorded but no new downstream effect begun.'
+basis:
+- CONVENING-county-2026-07-17-111358 / SUBMISSION-2026-07-17-110815; distinguishes [2026] VJS-COUNTY 6 D3; applies SEC-87
+risk: high
+reversibility: easy
+court_required: false
+why: D3's binding rationale (per the originating order 2026-VJS-CC-BOLTRIG-SERVER-SIDE-CANCEL-001) is the prohibition on an un-audited hard kill that orphans a side effect, not a ban on stopping work; a legacy head.handle has no safe interrupt point so cooperation means waiting, whereas a Codex turn exposes one via turn/interrupt, so reaching it cooperatively satisfies D3 rather than breaching it. A literal extension would also forbid the durable-cancel backstop the same ruling mandates (D4), and would let a revoked run keep computing.
