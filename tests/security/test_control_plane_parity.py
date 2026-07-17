@@ -639,14 +639,15 @@ async def test_invitation_is_uncacheable_and_concurrent_creation_is_single_winne
 # --------------------------------------------------------------------------- #
 async def _chat_lane_spawn(k: Kernel, skills: list[str], ceiling: GrantSet | None) -> dict:
     """A chat-style spawn: the same call shape the turn executor makes
-    (fleet/chat.py build_turn_executor), with the skill set under test."""
+    (fleet/chat.py build_turn_executor). Post SEC-174 the caller ceiling lives in the
+    context BY CONSTRUCTION - ctx.grants IS the caller cap, with no separate
+    grant_ceiling argument (a missing caller ceiling fails closed to the empty set)."""
     await k.store.upsert_capability(
         AgentCapability("script-worker", T, "script", ["*"], 2, True, "cheap")
     )
-    perms = await k.store.get_tenant_permissions(T)
     ctx = InvocationContext(
         tenant_id=T,
-        grants=perms.grants,
+        grants=ceiling if ceiling is not None else GrantSet.of([]),
         actor="chief-of-staff",
         actor_tier="tier1",
         run_id="turn-1",
@@ -660,7 +661,6 @@ async def _chat_lane_spawn(k: Kernel, skills: list[str], ceiling: GrantSet | Non
         {},
         ctx,
         partial_on_budget=True,
-        grant_ceiling=ceiling,
     )
 
 
@@ -763,6 +763,7 @@ async def test_bare_chat_turn_uses_manifest_skills_under_caller_ceiling():
                 {
                     "tenant_id": tenant_id,
                     "skills": list(skills),
+                    "context_grants": context.grants,
                     "grant_ceiling": grant_ceiling,
                     "partial_on_budget": partial_on_budget,
                 }
@@ -795,7 +796,10 @@ async def test_bare_chat_turn_uses_manifest_skills_under_caller_ceiling():
     ]
     assert any(ev.get("type") == "text_delta" and ev.get("delta") == "ok" for ev in events)
     assert calls[0]["skills"] == ["authoring/control-plane"]
-    assert calls[0]["grant_ceiling"] == GrantSet.of(["ticket.*"])
+    # SEC-174: the caller ceiling now lives in the context by construction, not in a
+    # separate grant_ceiling argument (which is gone - None).
+    assert calls[0]["context_grants"] == GrantSet.of(["ticket.*"])
+    assert calls[0]["grant_ceiling"] is None
     assert calls[0]["partial_on_budget"] is True
 
     async for _ in svc.handle_turn(
@@ -807,7 +811,8 @@ async def test_bare_chat_turn_uses_manifest_skills_under_caller_ceiling():
     ):
         pass
     assert calls[-1]["skills"] == []
-    assert calls[-1]["grant_ceiling"] == GrantSet.of([])
+    assert calls[-1]["context_grants"] == GrantSet.of([])
+    assert calls[-1]["grant_ceiling"] is None
 
 
 @pytest.mark.security

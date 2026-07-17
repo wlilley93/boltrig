@@ -163,6 +163,12 @@ invariants:
       - tests/integration/test_codex_pump_root_admission.py::test_flag_on_pump_root_records_one_legacy_decision
       - tests/integration/test_codex_pump_root_admission.py::test_flag_on_pump_child_records_nothing
       - tests/integration/test_codex_pump_root_admission.py::test_rehandling_the_same_root_is_a_safe_replay
+  SEC-174:
+    description: The chat direct-spawn lane caps a turn to the CALLER's grants by construction, not by convention - the turn context carries the caller ceiling directly (no tenant-wide GrantSet is in scope to mis-place) and no separate grant_ceiling argument rescues it, mirroring the pump's authority.context_for doctrine (SEC-164). A caller whose ceiling lacks a verb never receives it though the turn's skill declares it and the tenant permits it (asserted on effective_grants and at the kernel chokepoint); a caller holding it does; and a caller wider than the skill is still bound by the skill. The tenant ceiling stays a separate axis enforced independently at dispatch.
+    tests:
+      - tests/security/test_chat_principal_authority.py::test_a_narrow_caller_never_gets_a_verb_it_lacks_though_the_skill_declares_it
+      - tests/security/test_chat_principal_authority.py::test_a_caller_holding_the_verb_still_gets_it
+      - tests/security/test_chat_principal_authority.py::test_a_caller_ceiling_wider_than_the_skill_is_bound_by_the_skill
   P9:
     description: Backend unavailability degrades gracefully, never crashes (graceful degradation).
     tests:

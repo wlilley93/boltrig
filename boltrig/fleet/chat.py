@@ -565,7 +565,6 @@ def build_turn_executor(
 
     async def executor(*, tenant_id, user_id, role, grants, conversation_id,
                        run_id, message, relay, attachments=None, workspace_id=None, scope=None):
-        perms = await kernel.store.get_tenant_permissions(tenant_id)
         # Bare-turn authority is manifest data under a caller ceiling ([2026]
         # VJS-COUNTY 1): chat.skills_by_role selects the role's skill set
         # (default_skills when unmapped); a missing skill is skipped (fail-closed).
@@ -585,8 +584,10 @@ def build_turn_executor(
         # Shadow Codex root admission (SEC-170); None=>flag off=>no-op (execution-neutral, fail-open).
         if codex_execution is not None:
             await codex_execution.shadow_admit(tenant_id, workspace_id, run_id)
+        # SEC-174: ctx carries the CALLER cap (ceiling) by construction, not the tenant-wide
+        # set; tenant axis enforced independently at dispatch. Mirrors authority.context_for.
         ctx = InvocationContext(
-            tenant_id=tenant_id, grants=perms.grants, actor="chief-of-staff",
+            tenant_id=tenant_id, grants=ceiling, actor="chief-of-staff",
             actor_tier="tier1", run_id=run_id, on_behalf_of=user_id, workspace_id=workspace_id,
             extra={"conversation_id": conversation_id, "principal_role": role, **({"principal_scope": dict(scope)} if scope is not None else {})},
         )
@@ -623,8 +624,7 @@ def build_turn_executor(
         task += attachment_task_supplement(attachments)
         try:
             result = await spawner.spawn(
-                tenant_id, task, turn_skills, {}, ctx,
-                partial_on_budget=True, grant_ceiling=ceiling,
+                tenant_id, task, turn_skills, {}, ctx, partial_on_budget=True,
             )
             summary = result.get("summary") or "Done."
             # Honesty about degradation (US-FLT-07): the flag persists on the
