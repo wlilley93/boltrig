@@ -1,0 +1,62 @@
+id: SUBMISSION-2026-07-17-115737
+court_requested: county
+jurisdiction: default
+question: 'Manifest application (apply_manifest) is upsert-only and agent_capabilities has no is_active column, so a capability removed from a redeployed manifest stays selectable forever (stale attack surface). Should manifest application be DECLARATIVE (source of truth, deactivate absent), ADDITIVE (current), or SCOPED-DECLARATIVE (deactivate only manifest-sourced-now-absent, preserving control.capability.upsert-registered ones)? Sub-question: soft-deactivate vs hard-delete, and a mass-deactivation guard?'
+facts: |
+  # Case file: manifest application semantics (declarative / additive / scoped)
+
+  Filed on own motion. Symmetric, no preference.
+
+  ## Question
+  `apply_manifest` is upsert-only and a capability removed from a redeployed manifest is never
+  deactivated, so it stays selectable forever. Should manifest application be declarative, additive
+  (current), or scoped-declarative?
+
+  ## Agreed facts (verified against code)
+  1. `agent_capabilities` (`store/schema.sql:89-101`) has NO `is_active` column, only
+     `created_at`/`updated_at`. There is no way to deactivate short of deleting the row.
+  2. `apply_manifest` (`config/manifest.py:772`) is upsert-only: `upsert_capability` at `:797,:803`,
+     with NO deactivation pass.
+  3. Capabilities are ALSO created OUTSIDE the manifest, via the governed verb
+     `control.capability.upsert` (`config/control_plane.py:172,183`). So the manifest is NOT the sole
+     source of capabilities.
+  4. `select_capability` (`spawn_skills.py:130`) and `list_capabilities` return ALL rows, so a
+     capability absent from the current manifest remains selectable and routes to its (possibly
+     legacy) adapter.
+
+  ## Security stake (all options)
+  A capability dropped from the manifest stays live forever: stale attack surface, and it keeps
+  routing to a legacy adapter/model within the tenant ceiling. Operators reasonably expect removing a
+  capability from the manifest to remove it.
+
+  ## Option A: DECLARATIVE (manifest is the complete source of truth)
+  Capabilities absent from a redeployed manifest are deactivated.
+  FOR: closes the stale-capability hole cleanly; the manifest means what it says; least surprise.
+  AGAINST: a partial or erroneous manifest mass-deactivates legitimate capabilities (an availability
+  foot-gun); and it CLOBBERS the runtime/control-plane-registered capabilities of fact 3, which the
+  manifest does not know about, so a governed `control.capability.upsert` would be silently undone by
+  the next manifest apply. That is a correctness regression, not only a UX one.
+
+  ## Option B: ADDITIVE (current)
+  FOR: safe against accidental mass-deactivation; preserves runtime-registered capabilities (fact 3);
+  simplest, no schema change.
+  AGAINST: it is the bug. Stale capabilities live forever, the security stake is unaddressed, and the
+  manifest silently fails to remove things an operator asked to remove.
+
+  ## Option C: SCOPED-DECLARATIVE (deactivate only manifest-sourced, now-absent capabilities)
+  Mark provenance (source = manifest | control-plane); on apply, deactivate manifest-sourced rows now
+  absent, preserve control-plane-sourced ones.
+  FOR: closes the hole for manifest-managed capabilities WITHOUT clobbering runtime-registered ones;
+  respects the two creation paths of fact 3; reconciles A's correctness with B's safety.
+  AGAINST: needs a provenance column plus a migration (and an `is_active` column if deactivation is
+  soft); more moving parts; a capability written by BOTH paths needs a documented tie-break (which
+  source wins on conflict).
+
+  ## Sub-question
+  Whichever wins: is deactivation SOFT (`is_active=false`, auditable and reversible, and
+  `select_capability`/`list_capabilities` must then exclude inactive rows) or a HARD delete? And does
+  a mass-deactivation need a guard (for example, refuse to deactivate more than N, or require an
+  explicit empty-manifest confirmation) to prevent a truncated manifest wiping a tenant?
+requested_order: TBD
+private_boundary: local
+word_count: 495
