@@ -23,6 +23,8 @@ from tests.contracts.assignment_admission import (
     assert_admission_is_idempotent_on_replay,
     assert_admission_mints_attests_and_persists,
     assert_admission_offers_no_bypass_surface,
+    assert_concurrent_distinct_admissions_are_total,
+    assert_concurrent_identical_admissions_are_coherent,
 )
 from tests.store.execution_ledger_pg import (
     DSN,
@@ -45,7 +47,12 @@ def _schema() -> str:
 
 @pytest.fixture
 async def admission_pool() -> AsyncIterator[asyncpg.Pool]:
-    pool = await asyncpg.create_pool(dsn=DSN, min_size=2, max_size=8, init=init_codec)
+    # max_size is well above 1 on purpose: the race proofs must contend on real
+    # backends holding real advisory locks in two lock domains, not queue up on
+    # the pool and serialize before they ever reach PostgreSQL. Both stores share
+    # this pool, exactly as a deployment binds them, so the sequence of
+    # acquire/release across the two transactions is the real one.
+    pool = await asyncpg.create_pool(dsn=DSN, min_size=2, max_size=16, init=init_codec)
     assert pool is not None
     async with pool.acquire() as conn:
         await conn.execute(_schema())
@@ -77,6 +84,22 @@ async def test_postgres_admitting_the_same_trusted_facts_twice_replays(
     admission_pool: asyncpg.Pool,
 ) -> None:
     await assert_admission_is_idempotent_on_replay(*_build(admission_pool))
+
+
+@pg_only
+@pytest.mark.invariant("SEC-163")
+async def test_postgres_concurrent_admission_of_one_command_is_coherent(
+    admission_pool: asyncpg.Pool,
+) -> None:
+    await assert_concurrent_identical_admissions_are_coherent(*_build(admission_pool))
+
+
+@pg_only
+@pytest.mark.invariant("SEC-163")
+async def test_postgres_concurrent_distinct_admissions_in_one_scope_do_not_deadlock(
+    admission_pool: asyncpg.Pool,
+) -> None:
+    await assert_concurrent_distinct_admissions_are_total(*_build(admission_pool))
 
 
 @pg_only

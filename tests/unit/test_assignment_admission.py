@@ -35,6 +35,8 @@ from tests.contracts.assignment_admission import (
     assert_admission_is_idempotent_on_replay,
     assert_admission_mints_attests_and_persists,
     assert_admission_offers_no_bypass_surface,
+    assert_concurrent_distinct_admissions_are_total,
+    assert_concurrent_identical_admissions_are_coherent,
     authority,
     facts,
 )
@@ -107,6 +109,18 @@ async def test_admission_mints_attests_and_persists_one_assignment() -> None:
 async def test_admitting_the_same_trusted_facts_twice_replays() -> None:
     admission, attestations, ledger = _build()
     await assert_admission_is_idempotent_on_replay(admission, attestations, ledger)
+
+
+@pytest.mark.invariant("SEC-163")
+async def test_concurrent_admission_of_one_command_yields_one_coherent_record() -> None:
+    admission, attestations, ledger = _build()
+    await assert_concurrent_identical_admissions_are_coherent(admission, attestations, ledger)
+
+
+@pytest.mark.invariant("SEC-163")
+async def test_concurrent_admission_of_distinct_assignments_in_one_scope_all_land() -> None:
+    admission, attestations, ledger = _build()
+    await assert_concurrent_distinct_admissions_are_total(admission, attestations, ledger)
 
 
 @pytest.mark.invariant("SEC-163")
