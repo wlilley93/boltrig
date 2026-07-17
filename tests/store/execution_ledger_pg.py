@@ -24,6 +24,8 @@ from boltrig.fleet.infrastructure.postgres_execution_ledger import PostgresExecu
 from tests.unit.execution_ledger_fixtures import CLOCK_NOW
 
 ROOT = Path(__file__).resolve().parents[2]
+# The ledger's own creating migration. Everything from here to head is replayed.
+_LEDGER_ORIGIN = "0026_execution_ledger"
 DSN = os.environ.get("BOLTRIG_TEST_DATABASE_URL")
 pg_only = pytest.mark.skipif(
     not DSN, reason="set BOLTRIG_TEST_DATABASE_URL for Postgres tests"
@@ -53,27 +55,65 @@ async def init_codec(conn: asyncpg.Connection) -> None:
     )
 
 
-def migration_sql(revision: str) -> list[str]:
-    """Collect one shipped migration's own statements by running its upgrade body."""
+def _load_migration(path: Path) -> object:
+    """Import one shipped migration module without running its upgrade body."""
 
-    path = ROOT / "migrations" / "versions" / f"{revision}.py"
-    spec = importlib.util.spec_from_file_location(f"boltrig_migration_{revision}", path)
+    spec = importlib.util.spec_from_file_location(f"boltrig_migration_{path.stem}", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    return module
+
+
+def migration_sql(revision: str) -> list[str]:
+    """Collect one shipped migration's own statements by running its upgrade body."""
+
+    module = _load_migration(ROOT / "migrations" / "versions" / f"{revision}.py")
     statements: list[str] = []
     module.op = SimpleNamespace(execute=statements.append)  # type: ignore[attr-defined]
-    module.upgrade()
+    module.upgrade()  # type: ignore[attr-defined]
     return statements
 
 
-def ddl() -> str:
-    """The execution-ledger schema as shipped: 0026 as created, 0031 as amended."""
+def _revision_chain() -> list[str]:
+    """Order every shipped migration by its own ``down_revision`` links.
 
-    return ";\n".join(
-        migration_sql("0026_execution_ledger")
-        + migration_sql("0031_execution_ledger_fidelity")
-    )
+    Reading the chain rather than listing it is the point. A hand-maintained list
+    omits each new migration by default and only a human notices, which is exactly
+    how 0032 shipped with its own round-trip test red: `make check` is offline and
+    skips this whole leg, so nothing else was watching.
+    """
+
+    versions = ROOT / "migrations" / "versions"
+    down_of: dict[str, str | None] = {}
+    for path in sorted(versions.glob("[0-9]*.py")):
+        module = _load_migration(path)
+        down_of[str(module.revision)] = module.down_revision
+    ordered: list[str] = []
+    by_down = {down: rev for rev, down in down_of.items()}
+    current: str | None = None
+    while (nxt := by_down.get(current)) is not None:
+        ordered.append(nxt)
+        current = nxt
+    assert len(ordered) == len(down_of), "migration chain is broken or forked"
+    return ordered
+
+
+def ddl() -> str:
+    """The execution-ledger schema exactly as a deployment builds it.
+
+    Every migration from the ledger's own creation to the current head is executed
+    in revision order, derived from the chain rather than listed here, so a new
+    migration is included the moment it ships and this fixture cannot drift behind
+    the schema it claims to prove the adapter against.
+    """
+
+    chain = _revision_chain()
+    start = chain.index(_LEDGER_ORIGIN)
+    statements: list[str] = []
+    for revision in chain[start:]:
+        statements.extend(migration_sql(revision))
+    return ";\n".join(statements)
 
 
 @pytest.fixture
