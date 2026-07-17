@@ -164,6 +164,7 @@ async def _register_control_plane(kernel: Kernel, tenant_id: str) -> None:
             kernel.store,
             loader=kernel.loader,
             registry=kernel.registry,
+            credentials=kernel.credentials,  # MCP bearers bind to the seam (SEC-04/05)
         ),
     )
     log.info("control-plane verbs registered (governed config amendment)")
@@ -204,19 +205,18 @@ async def _register_consumed_mcp(kernel: Kernel, tenant_id: str, mcp_cfg) -> Non
     """Register external MCP servers declared in the bundle's manifest
     (`mcp.consume`), each INERT pending review (SEC-22) - the review/activate route
     still gates them. Lets a project declare its external MCP servers as data
-    rather than POSTing them at runtime (Round Fifteen)."""
+    rather than POSTing them at runtime (Round Fifteen). An entry names its bearer
+    with ``credential_ref`` (a secret-store key, never the secret itself) so the
+    kernel resolves it per call (SEC-04/05); raw material is refused."""
+    from boltrig.adapters.mcp_consumer import McpConsumerAdapter
+    from boltrig.config.control_mcp import bind_mcp_credential
+
     for entry in (mcp_cfg or {}).get("consume", []) or []:
         if not isinstance(entry, dict) or not entry.get("id"):
             continue
-        from boltrig.adapters.mcp_consumer import McpConsumerAdapter
-
-        consumer = McpConsumerAdapter(
-            entry["id"], url=entry.get("url"),
-            # credential enters via ${ENV} interpolation at manifest load - held
-            # kernel-side, never handed to an agent.
-            token=entry.get("credential") or entry.get("token"),
-        )
+        consumer = McpConsumerAdapter(entry["id"], url=entry.get("url"))
         await kernel.register_adapter(tenant_id, consumer)  # describe()=[] until review
+        await bind_mcp_credential(kernel.store, kernel.credentials, tenant_id, consumer.id, entry)
         log.info("external MCP server '%s' registered (inert, pending review)", entry["id"])
 
 

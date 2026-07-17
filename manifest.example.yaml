@@ -318,12 +318,15 @@ mcp:
   server:
     enabled: true                            # granted verbs exposed as MCP tools
   # External MCP servers a project consumes (Round Fifteen): each registers an
-  # INERT consumer at boot (no verbs until the review/activate gate, SEC-22). The
-  # credential is ${ENV}-interpolated and held kernel-side, never given to an agent.
+  # INERT consumer at boot (no verbs until the review/activate gate, SEC-22).
+  # credential_ref NAMES the secret (a secret-store key - here an env var name);
+  # it is never the secret itself and is never ${ENV}-interpolated. The kernel
+  # resolves it per call and hands it to the adapter (SEC-04/05), so rotating the
+  # secret takes effect on the next call and no agent ever sees the material.
   consume: []                                # e.g.:
     # - id: linear-mcp
     #   url: https://linear-mcp.internal
-    #   credential: ${LINEAR_MCP_TOKEN}
+    #   credential_ref: LINEAR_MCP_TOKEN     # env var NAME, not ${LINEAR_MCP_TOKEN}
 
 # --- the conversational layer (Epic CONV) -----------------------------------
 chat:

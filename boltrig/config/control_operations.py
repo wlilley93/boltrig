@@ -118,12 +118,6 @@ async def set_binding_record(
     return binding
 
 
-def build_mcp_consumer(params: dict[str, Any]) -> Any:
-    from boltrig.adapters.mcp_consumer import McpConsumerAdapter
-
-    return McpConsumerAdapter(params["id"], url=params.get("url"), token=params.get("token"))
-
-
 async def record_inert_adapter(
     store: Any, tenant_id: str, adapter: Any, *, created_by: str | None
 ) -> None:
@@ -161,23 +155,6 @@ async def generate_adapter_record(
         raise ControlConflict("adapter id became live during registration")
     loader.register(tenant_id, adapter)
     return adapter
-
-
-async def register_mcp_consumer(
-    store: Any,
-    loader: Any,
-    tenant_id: str,
-    params: dict[str, Any],
-    *,
-    actor: str,
-) -> Any:
-    await ensure_adapter_id_available(store, loader, tenant_id, params["id"])
-    consumer = build_mcp_consumer(params)
-    await record_inert_adapter(store, tenant_id, consumer, created_by=actor)
-    if loader.peek(tenant_id, consumer.id) is not None:
-        raise ControlConflict("adapter id became live during registration")
-    loader.register(tenant_id, consumer)
-    return consumer
 
 
 async def activate_adapter_record(

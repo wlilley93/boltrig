@@ -18,7 +18,6 @@ from .control_operations import (
     create_invitation_record,
     deactivate_user_record,
     generate_adapter_record,
-    register_mcp_consumer,
     revoke_invitation_record,
     route_notification_record,
     safe_consequence,
@@ -30,6 +29,7 @@ from .control_operations import (
     upsert_verb_record,
     upsert_workflow_record,
 )
+from .control_mcp import register_mcp_consumer
 from .control_safety import ControlConflict
 from .control_specs import control_specs
 from .control_compat import execute_compat_operation
@@ -72,12 +72,14 @@ class ControlPlaneAdapter:
         registry: Any = None,
         admin: Any = None,
         workflows: Any = None,
+        credentials: Any = None,
     ) -> None:
         self._store = store
         self._loader = loader
         self._registry = registry
         self._admin = admin
         self._workflows = workflows
+        self._credentials = credentials
 
     def set_admin(self, admin: Any) -> None:
         self._admin = admin
@@ -274,8 +276,9 @@ class ControlPlaneAdapter:
             self._store,
             self._loader,
             tenant,
-            {"id": params["id"], "url": params.get("url")},
+            params,
             actor=context.actor,
+            credentials=self._credentials,
         )
         return Result.success({"registered": "mcp_server", "id": consumer.id, "activated": False})
 
@@ -388,11 +391,9 @@ def build_control_plane_adapter(
     registry: Any = None,
     admin: Any = None,
     workflows: Any = None,
+    credentials: Any = None,
 ) -> ControlPlaneAdapter:
     return ControlPlaneAdapter(
-        store,
-        loader=loader,
-        registry=registry,
-        admin=admin,
-        workflows=workflows,
+        store, loader=loader, registry=registry, admin=admin,
+        workflows=workflows, credentials=credentials,
     )

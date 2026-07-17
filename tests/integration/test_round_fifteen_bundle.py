@@ -48,7 +48,7 @@ async def test_consumed_mcp_servers_register_inert_pending_review():
     store = InMemoryStore()
     k = Kernel(store)
     await _register_consumed_mcp(k, T, {"consume": [
-        {"id": "trello-mcp", "url": "http://trello-mcp:9000", "credential": "tok-from-env"},
+        {"id": "trello-mcp", "url": "http://trello-mcp:9000", "credential_ref": "TRELLO_TOKEN"},
     ]})
     # registered as an adapter...
     rec = await store.get_adapter(T, "trello-mcp")

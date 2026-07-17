@@ -1568,3 +1568,14 @@ invariants:
       - tests/security/test_run_cancel.py::test_the_completed_steps_own_record_survives_the_cancel
       - tests/security/test_run_cancel.py::test_an_uncancelled_run_is_completely_unaffected
       - tests/security/test_run_cancel.py::test_in_flight_adapter_call_is_not_interrupted
+
+  SEC-167:
+    description: The MCP consumer's bearer is the credential the KERNEL resolved for that call, never material held on the adapter instance. The adapter carries no token (the token= constructor param is gone), so the per-call credential dispatch already resolves and passes is authoritative rather than silently inert: two calls on one instance present the two different credentials they were handed, and rotating the stored credential ref changes the next call's bearer with no adapter rebuild. A call with no credential, or with material carrying no usable token, FAILS CLOSED with an UNAUTHORISED refusal and reaches the transport not at all, rather than posting an empty bearer as an unauthenticated request. Registration puts a REFERENCE on the credential seam (set_credential_ref plus bind_adapter_credential, mirroring the manifest adapter-credential path, SEC-04/05) and refuses raw secret material outright, so the secret is never an audited control-plane param and never lives outside the kernel. The SEC-22 review gate is checked first and still refuses an unreviewed server holding a valid credential, and SEC-61 SSRF pinning still refuses a blocked destination before the bearer can leave.
+    tests:
+      - tests/security/test_mcp_consumer_credential.py::test_the_kernels_per_call_credential_is_the_bearer
+      - tests/security/test_mcp_consumer_credential.py::test_a_second_call_uses_the_second_credential_not_the_first
+      - tests/security/test_mcp_consumer_credential.py::test_no_credential_fails_closed_even_with_a_static_token_planted
+      - tests/security/test_mcp_consumer_credential.py::test_empty_credential_material_also_fails_closed
+      - tests/security/test_mcp_consumer_credential.py::test_the_adapter_holds_no_token_to_fall_back_on
+      - tests/security/test_mcp_consumer_credential.py::test_rotating_the_stored_ref_changes_the_next_calls_bearer
+      - tests/security/test_mcp_consumer_credential.py::test_registration_binds_the_ref_and_refuses_raw_material
