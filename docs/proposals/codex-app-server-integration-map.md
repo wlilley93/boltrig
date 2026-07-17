@@ -538,9 +538,20 @@ The following are blockers for approval-gated write phases, not optional cleanup
     `self._token`, set once at construction. So the per-call credential is not merely
     "not authoritative", it has NO effect whatsoever, and credential rotation and
     per-run scoping are silently inert on this path. `self._token or ""` also sends an
-    empty bearer rather than failing closed when unset. Mechanical, but verify the
-    credential provider actually supplies material on this binding first, or failing
-    closed turns the adapter off.
+    empty bearer rather than failing closed when unset. **FIXED (`33af0b4`, SEC-167).**
+    Not mechanical after all: nothing provisioned a credential for these adapters
+    (`build_mcp_consumer` took the token as a raw registration param and no
+    `set_credential_ref`/`_adapter_cred` mapping existed), so `resolve_for_adapter`
+    returned `None` and a naive fail-closed would have broken every MCP call.
+    Registration now goes through the credential seam, mirroring `manifest.py`'s
+    existing `set_credential_ref` + `bind_adapter_credential`; `self._token` is deleted
+    outright so no back door remains. Manifest `mcp.consume` entries move from
+    `credential: ${ENV}` (raw material) to `credential_ref: KEY` (a secret-store key),
+    and raw material is now refused loudly. Also fixed en route: the SSRF branch did
+    `raise AdapterError(...)`, which is a `TypeError` since `AdapterError` is a plain
+    dataclass, so SEC-61 failed closed by the wrong route and no `except AdapterError`
+    could have caught it. Now carried via `_McpFailure` and converted at the `execute`
+    boundary, mirroring `http_base._HttpFailure`.
 11. `boltrig/fleet/ultracode.py:280-365` and
     `boltrig/fleet/hatchet_ultracode.py:10-128` schedule individual phase agents,
     directly competing with Codex native-subagent orchestration. **NOT A SECURITY ISSUE.**
@@ -592,7 +603,13 @@ these are fixed. No Opbox or repository write capability may be enabled first.
   making the context helpers take a required principal so the safe thing is the only
   expressible thing. Same class of latent bug, currently not exploitable.
 - `boltrig/adapters/mcp_consumer.py:108` sends `self._token or ""`, failing open into an
-  unauthenticated request rather than refusing. Closes with 10.
+  unauthenticated request rather than refusing. **FIXED with 10 (`33af0b4`).**
+- `AdapterError` is a plain dataclass, so `raise AdapterError(...)` is a `TypeError`
+  rather than a refusal. `mcp_consumer` was the only such raise site and is **FIXED
+  (`33af0b4`)**. The latent trap remains for anyone who writes a new one: the correct
+  pattern is an exception carrier converted at the `execute` boundary
+  (`http_base._HttpFailure`, `mcp_consumer._McpFailure`). Making `AdapterError` itself
+  un-raisable-by-mistake (or a real exception) is unexamined.
 - `boltrig/models/grants.py:126` calls `_matches(p, pattern.rstrip(".*"))`. `rstrip`
   takes a CHARACTER SET, not a suffix, so it strips any trailing run of `.` and `*`.
   `"ticket.*"` happens to give `"ticket"`, and no breaking input was found, so this is
