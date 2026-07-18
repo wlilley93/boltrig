@@ -119,11 +119,19 @@
       "expires": "2026-12-31"
     },
     "boltrig/fleet/infrastructure/codex_agent_runtime.py": {
-      "max_file_lines": 440,
+      "max_file_lines": 413,
       "max_function_lines": 54,
       "over_limit_functions": [],
       "owner": "fleet-maintainers",
-      "reason": "File-length only. The read-only Codex cutover adds read_turn_output + the agentMessage payload traversal (events() is a content-free ledger, so the turn's answer is read back through thread/read); the module was already at the 399-line floor. Split the lifecycle from the read-back/terminal helpers into a sibling module when the admission source lands.",
+      "reason": "File-length only. The read-only Codex cutover adds read_turn_output, which returns the agentMessage text the event translator captures from the lifecycle stream (thread/read is not served in the App Server's exec mode); the module was already at the 399-line floor. Split the lifecycle from the read-back/terminal helpers into a sibling module when the runtime family is next refactored.",
+      "expires": "2026-12-31"
+    },
+    "boltrig/fleet/infrastructure/codex_runtime_events.py": {
+      "max_file_lines": 412,
+      "max_function_lines": 49,
+      "over_limit_functions": [],
+      "owner": "fleet-maintainers",
+      "reason": "File-length only. The read-only Codex cutover adds the agentMessage read-back capture (the translator records the latest agentMessage text for read_turn_output because thread/read is not served in the App Server exec mode) while events() stays content-free; the module was already at the 400-line floor. Split the item/turn lifecycle translation from the native-observation tripwire into a sibling module when the runtime family is next refactored.",
       "expires": "2026-12-31"
     },
     "boltrig/fleet/infrastructure/memory_model_proxy_grants.py": {

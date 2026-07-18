@@ -20,7 +20,6 @@ from boltrig.fleet.domain import (
     SandboxPolicy,
 )
 from boltrig.fleet.ports.runtime import RuntimeThreadSpec
-from boltrig.fleet.infrastructure.codex_agent_runtime import _latest_agent_message_text
 from boltrig.models import InvocationContext
 
 
@@ -117,27 +116,3 @@ async def test_run_degrades_and_never_raises_on_lifecycle_error() -> None:
     result = await CodexRuntime(fake, stack_root=_STACK).run("hi", _context(), tools=[])
     assert result.degraded is True
     assert result.output["_degraded"]["reason"] == "codex_turn_failed"
-
-
-def test_latest_agent_message_text_takes_last_turn_agent_message() -> None:
-    payload = {
-        "thread": {
-            "turns": [
-                {"items": [{"type": "agentMessage", "text": "first turn"}]},
-                {
-                    "items": [
-                        {"type": "reasoning", "text": "hidden"},
-                        {"type": "agentMessage", "text": "final answer"},
-                    ]
-                },
-            ]
-        }
-    }
-    assert _latest_agent_message_text(payload) == "final answer"
-
-
-def test_latest_agent_message_text_is_empty_on_missing_or_malformed() -> None:
-    assert _latest_agent_message_text({}) == ""
-    assert _latest_agent_message_text({"thread": {"turns": []}}) == ""
-    assert _latest_agent_message_text({"thread": {"turns": [{"items": []}]}}) == ""
-    assert _latest_agent_message_text("not a mapping") == ""

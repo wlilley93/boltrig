@@ -172,21 +172,44 @@ async def test_skills_reject_unexpected_security_relevant_fields_at_every_level(
         ("interface", {"allowedTools": ["shell.exec"]}),
     ],
 )
-async def test_skills_reject_non_null_dependencies_and_interface(
+async def test_skills_reject_enabled_skill_with_dependencies_or_interface(
     hardening_client_factory: ClientFactory,
     field: str,
     value: object,
 ) -> None:
+    # The quarantine breach is an ACTIVE skill carrying dependencies (e.g. an MCP
+    # server) or an interface, so the offending skill must be enabled.
     await _assert_rejected(
         hardening_client_factory,
         [
             (
                 "skills/list",
                 _SKILLS_PARAMS,
-                _skills_payload(skill_extra={field: value}),
+                _skills_payload(skill_extra={"enabled": True, field: value}),
             )
         ],
     )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("dependencies", {"tools": [{"type": "mcp", "value": "openaiDeveloperDocs"}]}),
+        ("interface", {"displayName": "Image Gen", "brandColor": None}),
+    ],
+)
+def test_disabled_skill_may_carry_dependencies_and_interface(
+    field: str, value: object
+) -> None:
+    # Real Codex 0.144.3 ships its system skills disabled but with display
+    # interface metadata (and some with declared dependencies). A disabled skill is
+    # inert, so the shape validation must accept it; only an enabled one is a breach.
+    disabled = _skills_payload(skill_extra={"enabled": False, field: value})
+    preflight_module._validate_skills_shape(disabled)  # does not raise
+
+    enabled = _skills_payload(skill_extra={"enabled": True, field: value})
+    with pytest.raises(CodexRuntimeAdmissionError):
+        preflight_module._validate_skills_shape(enabled)
 
 
 async def test_mcp_rejects_unexpected_security_relevant_root_field(

@@ -74,6 +74,11 @@ class CodexRuntimeActor:
         return self._translator.current_turn
 
     @property
+    def latest_agent_message_text(self) -> str:
+        """The latest turn's agentMessage text, for the read-back seam only."""
+        return self._translator.latest_agent_message_text
+
+    @property
     def pump_task(self) -> asyncio.Task[None] | None:
         return self._pump
 
