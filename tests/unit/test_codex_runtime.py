@@ -8,6 +8,7 @@ read-only spec, and degrade-don't-crash behaviour are pinned without a real cell
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from pathlib import Path
 
 from boltrig.fleet.codex_runtime import CodexRuntime
 from boltrig.fleet.domain import (
@@ -59,6 +60,9 @@ class _FakeLifecycle:
         self.closed = True
 
 
+_STACK = Path("/stack")
+
+
 def _context(**over: object) -> InvocationContext:
     base: dict[str, object] = {
         "tenant_id": "tenant-1",
@@ -72,7 +76,7 @@ def _context(**over: object) -> InvocationContext:
 
 async def test_run_returns_agent_message_text_and_closes_thread() -> None:
     fake = _FakeLifecycle(text="the answer")
-    result = await CodexRuntime(fake).run("question?", _context(), tools=[])
+    result = await CodexRuntime(fake, stack_root=_STACK).run("question?", _context(), tools=[])
     assert result.ok is True
     assert result.degraded is False
     assert result.output == {"runtime": "codex_app_server", "text": "the answer"}
@@ -83,7 +87,7 @@ async def test_run_returns_agent_message_text_and_closes_thread() -> None:
 
 async def test_run_builds_a_read_only_phase_spec() -> None:
     fake = _FakeLifecycle()
-    await CodexRuntime(fake).run("hi", _context(), tools=[])
+    await CodexRuntime(fake, stack_root=_STACK).run("hi", _context(), tools=[])
     spec = fake.spec
     assert spec is not None
     assert spec.mode is PhaseMode.READ_ONLY
@@ -96,21 +100,21 @@ async def test_run_builds_a_read_only_phase_spec() -> None:
 
 async def test_run_degrades_without_run_scope() -> None:
     fake = _FakeLifecycle()
-    result = await CodexRuntime(fake).run("hi", _context(run_id=None), tools=[])
+    result = await CodexRuntime(fake, stack_root=_STACK).run("hi", _context(run_id=None), tools=[])
     assert result.degraded is True
     assert result.output["_degraded"]["reason"] == "no_read_only_phase_scope"
     assert fake.spec is None  # never touched the lifecycle
 
 
 async def test_run_degrades_on_empty_output() -> None:
-    result = await CodexRuntime(_FakeLifecycle(text="")).run("hi", _context(), tools=[])
+    result = await CodexRuntime(_FakeLifecycle(text=""), stack_root=_STACK).run("hi", _context(), tools=[])
     assert result.degraded is True
     assert result.output["_degraded"]["reason"] == "codex_empty_output"
 
 
 async def test_run_degrades_and_never_raises_on_lifecycle_error() -> None:
     fake = _FakeLifecycle(fail_start=True)
-    result = await CodexRuntime(fake).run("hi", _context(), tools=[])
+    result = await CodexRuntime(fake, stack_root=_STACK).run("hi", _context(), tools=[])
     assert result.degraded is True
     assert result.output["_degraded"]["reason"] == "codex_turn_failed"
 

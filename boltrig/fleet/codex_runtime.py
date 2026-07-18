@@ -23,26 +23,22 @@ import uuid
 from collections.abc import AsyncIterator
 from typing import Protocol
 
+from pathlib import Path
+
 from boltrig.fleet.domain import (
     PhaseAssignmentRef,
     PhaseRef,
-    ProfileRef,
     RuntimeEvent,
     RuntimeEventKind,
     RuntimeThreadRef,
     RuntimeTurnRef,
 )
+from boltrig.fleet.infrastructure.codex_read_only_phase import read_only_thread_spec
 from boltrig.fleet.ports.runtime import RuntimeThreadSpec, RuntimeTurnSpec
 from boltrig.models import InvocationContext
 from boltrig.models.execution_scope import OrganisationUserRef
 
 from .result import AgentResult
-
-# Read-only cells operate in the projected sanitized workspace; the concrete path
-# is owned by the admission provisioning, so the spec carries the canonical mount
-# point (an absolute cwd, as ``validate_thread_spec`` requires).
-_WORKING_DIRECTORY = "/workspace"
-_PROFILE = ProfileRef("codex-read-only", "1")
 
 
 class CodexPhaseLifecycle(Protocol):
@@ -67,9 +63,14 @@ class CodexRuntime:
     runtime = "codex"
 
     def __init__(
-        self, lifecycle: CodexPhaseLifecycle, *, cost_tier: str = "standard"
+        self,
+        lifecycle: CodexPhaseLifecycle,
+        *,
+        stack_root: Path,
+        cost_tier: str = "standard",
     ) -> None:
         self._lifecycle = lifecycle
+        self._stack_root = stack_root
         self.cost_tier = cost_tier
 
     async def run(
@@ -83,11 +84,8 @@ class CodexRuntime:
             return AgentResult.degrade(
                 runtime=self.runtime, reason="no_read_only_phase_scope", prompt=prompt
             )
-        spec = RuntimeThreadSpec(
-            assignment=_mint_assignment(context, run_id, workspace_id),
-            profile=_PROFILE,
-            skills=(),
-            working_directory=_WORKING_DIRECTORY,
+        spec = read_only_thread_spec(
+            _mint_assignment(context, run_id, workspace_id), self._stack_root
         )
         text = ""
         thread: RuntimeThreadRef | None = None
