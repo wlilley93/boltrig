@@ -13,21 +13,13 @@ from typing import Any, Protocol, runtime_checkable
 
 from boltrig.models import (
     AdapterRecord,
-    AgentCapability,
-    AiConfig,
-    AuditEvent,
-    AuditRollupAnchor,
-    Budget,
-    Channel,
-    ChannelBinding,
-    ChannelPairing,
-    ConfigRevision,
-    Conversation,
-    ConversationMessage,
-    ConversationSummary,
-    EvalCase,
-    EvalRun,
-    HITLRequest,
+    AiConfig, AuditEvent,
+    AuditRollupAnchor, Budget,
+    Channel, ChannelBinding,
+    ChannelPairing, ConfigRevision,
+    Conversation, ConversationMessage,
+    ConversationSummary, EvalCase,
+    EvalRun, HITLRequest,
     MemoryErasure,
     MemoryFact,
     MemoryIngestion,
@@ -63,6 +55,7 @@ from boltrig.models.work import RunCheckpoint
 from .guarded_writes import GuardedWritesContract
 from .idempotency_contract import IdempotencyStoreContract
 from .budget_policy import BudgetPolicyContract
+from .capabilities import CapabilityStoreContract
 # --- resource-bounding ceilings (M7 / M9 DoS-bounding, SEC-69) --------------
 # A list read must never be able to return an unbounded slice: an ever-growing
 # tenant table would otherwise let one caller exhaust memory/latency. The store
@@ -89,7 +82,8 @@ def clamp_memory_list(limit: int) -> int:
 
 
 @runtime_checkable
-class Store(BudgetPolicyContract, IdempotencyStoreContract, GuardedWritesContract, Protocol):
+class Store(BudgetPolicyContract, IdempotencyStoreContract, GuardedWritesContract,
+            CapabilityStoreContract, Protocol):
     # --- registry ---
     async def get_noun(self, tenant_id: str, noun_id: str) -> Noun | None: ...
     async def get_verb(self, tenant_id: str, verb_id: str) -> Verb | None: ...
@@ -109,8 +103,6 @@ class Store(BudgetPolicyContract, IdempotencyStoreContract, GuardedWritesContrac
     async def upsert_skill(self, skill: Skill) -> None: ...
     async def get_skill(self, tenant_id: str, skill_id: str) -> Skill | None: ...
     async def list_skills(self, tenant_id: str) -> list[Skill]: ...
-    async def upsert_capability(self, cap: AgentCapability) -> None: ...
-    async def list_capabilities(self, tenant_id: str) -> list[AgentCapability]: ...
     async def upsert_workflow(self, wf: WorkflowDefinition) -> None: ...
     async def list_workflows(self, tenant_id: str) -> list[WorkflowDefinition]: ...
     # Eval-gated reuse ranking ([2026] VJS-COUNTY 5): a ranking record keyed by
@@ -208,12 +200,20 @@ class Store(BudgetPolicyContract, IdempotencyStoreContract, GuardedWritesContrac
     async def audit_query(
         self, tenant_id: str, run_id: str | None = None, limit: int = 200
     ) -> list[AuditEvent]: ...
+    # ascending verification pages (rows with seq > after_seq, oldest first, up to
+    # limit): verify() re-derives the WHOLE chain through these (SEC-168).
+    async def audit_scan(
+        self, tenant_id: str, after_seq: int, limit: int
+    ) -> list[AuditEvent]: ...
 
     # --- security event stream ([2026] VJS-COUNTY 9, D3): its OWN hash chain ---
     async def security_head(self, tenant_id: str) -> tuple[int, str | None]: ...
     async def security_append(self, event: SecurityEvent) -> None: ...
     async def security_query(
         self, tenant_id: str, event_type: str | None = None, limit: int = 200
+    ) -> list[SecurityEvent]: ...
+    async def security_scan(
+        self, tenant_id: str, after_seq: int, limit: int
     ) -> list[SecurityEvent]: ...
 
     # --- audit rollup anchors ([2026] VJS-COUNTY 9, D4) ---

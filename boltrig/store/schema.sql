@@ -95,6 +95,14 @@ CREATE TABLE IF NOT EXISTS agent_capabilities (
     max_depth        INT NOT NULL,
     is_ephemeral     BOOLEAN NOT NULL,
     cost_tier        TEXT NOT NULL,                     -- cheap | standard | expensive
+    -- Scoped-declarative reconciliation ([2026] LEXBY LOG-2026-07-17): is_active is
+    -- the soft-active flag (list_capabilities returns only active rows, so a
+    -- deactivated capability can never be selected); source is provenance -
+    -- 'manifest' rows are reconciled declaratively, 'control-plane' grants only ever
+    -- added. The 'control-plane' default is the fail-safe backfill for unknown rows.
+    is_active        BOOLEAN NOT NULL DEFAULT true,
+    source           TEXT NOT NULL DEFAULT 'control-plane'
+                         CHECK (source IN ('manifest', 'control-plane')),
     created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (tenant_id, name)
@@ -1047,3 +1055,445 @@ CREATE TABLE IF NOT EXISTS workflow_run_records (
 );
 CREATE INDEX IF NOT EXISTS workflow_run_records_wf_idx
     ON workflow_run_records (tenant_id, workflow_id);
+
+CREATE TABLE IF NOT EXISTS execution_root_runs (
+    tenant_id               TEXT NOT NULL,
+    workspace_id            TEXT NOT NULL,
+    root_run_id             TEXT NOT NULL,
+    requested_by_user_id    TEXT NOT NULL,
+    objective_digest        TEXT NOT NULL,
+    profile                 JSONB NOT NULL,
+    policy_generation       INT NOT NULL,
+    status                  TEXT NOT NULL,
+    cancellation            JSONB,
+    final_synthesis_digest  TEXT,
+    version                 INT NOT NULL,
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
+    engine_owner            TEXT NOT NULL DEFAULT 'boltrig',
+    PRIMARY KEY (tenant_id, workspace_id, root_run_id)
+);
+
+CREATE TABLE IF NOT EXISTS execution_phases (
+    tenant_id           TEXT NOT NULL,
+    workspace_id        TEXT NOT NULL,
+    root_run_id         TEXT NOT NULL,
+    id                  TEXT NOT NULL,
+    ordinal             INT NOT NULL,
+    name                TEXT NOT NULL,
+    objective_digest    TEXT NOT NULL,
+    mode                TEXT NOT NULL,
+    profile             JSONB NOT NULL,
+    skills              JSONB NOT NULL,
+    policy_generation   INT NOT NULL,
+    dependencies        JSONB NOT NULL,
+    retry               JSONB NOT NULL,
+    status              TEXT NOT NULL,
+    terminal_outcome    JSONB,
+    version             INT NOT NULL,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    engine_owner        TEXT NOT NULL DEFAULT 'boltrig',
+    PRIMARY KEY (tenant_id, workspace_id, root_run_id, id)
+);
+
+CREATE TABLE IF NOT EXISTS execution_work_items (
+    tenant_id               TEXT NOT NULL,
+    workspace_id            TEXT NOT NULL,
+    root_run_id             TEXT NOT NULL,
+    id                      TEXT NOT NULL,
+    phase_id                TEXT NOT NULL,
+    ordinal                 INT NOT NULL,
+    intent_digest           TEXT NOT NULL,
+    dependencies            JSONB NOT NULL,
+    parent_id               TEXT,
+    requires_verification   BOOLEAN NOT NULL,
+    status                  TEXT NOT NULL,
+    version                 INT NOT NULL,
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
+    engine_owner            TEXT NOT NULL DEFAULT 'boltrig',
+    PRIMARY KEY (tenant_id, workspace_id, root_run_id, id)
+);
+
+CREATE TABLE IF NOT EXISTS execution_assignments (
+    tenant_id               TEXT NOT NULL,
+    workspace_id            TEXT NOT NULL,
+    root_run_id             TEXT NOT NULL,
+    id                      TEXT NOT NULL,
+    phase_id                TEXT NOT NULL,
+    work_item_id            TEXT NOT NULL,
+    runtime_identity_id     TEXT NOT NULL,
+    attempt                 INT NOT NULL,
+    profile                 JSONB NOT NULL,
+    skills                  JSONB NOT NULL,
+    authority               JSONB NOT NULL,
+    lease                   JSONB,
+    attestation_set         JSONB,
+    replaces_assignment_id  TEXT,
+    status                  TEXT NOT NULL,
+    version                 INT NOT NULL,
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
+    engine_owner            TEXT NOT NULL DEFAULT 'boltrig',
+    PRIMARY KEY (tenant_id, workspace_id, root_run_id, id)
+);
+
+CREATE TABLE IF NOT EXISTS execution_results (
+    tenant_id           TEXT NOT NULL,
+    workspace_id        TEXT NOT NULL,
+    root_run_id         TEXT NOT NULL,
+    id                  TEXT NOT NULL,
+    phase_id            TEXT NOT NULL,
+    work_item_id        TEXT NOT NULL,
+    assignment_id       TEXT NOT NULL,
+    output_digest       TEXT NOT NULL,
+    status              TEXT NOT NULL,
+    evidence            JSONB NOT NULL,
+    findings            JSONB NOT NULL,
+    blockers            JSONB NOT NULL,
+    handoffs            JSONB NOT NULL,
+    usage               JSONB NOT NULL,
+    completed_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    engine_owner        TEXT NOT NULL DEFAULT 'boltrig',
+    PRIMARY KEY (tenant_id, workspace_id, root_run_id, id)
+);
+
+CREATE TABLE IF NOT EXISTS execution_verifications (
+    tenant_id           TEXT NOT NULL,
+    workspace_id        TEXT NOT NULL,
+    root_run_id         TEXT NOT NULL,
+    id                  TEXT NOT NULL,
+    phase_id            TEXT NOT NULL,
+    work_item_id        TEXT NOT NULL,
+    result_id           TEXT NOT NULL,
+    status              TEXT NOT NULL,
+    evidence_digest     TEXT NOT NULL,
+    checks              JSONB NOT NULL,
+    verified_by         JSONB,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    engine_owner        TEXT NOT NULL DEFAULT 'boltrig',
+    PRIMARY KEY (tenant_id, workspace_id, root_run_id, id)
+);
+
+CREATE TABLE IF NOT EXISTS execution_commands (
+    tenant_id           TEXT NOT NULL,
+    workspace_id        TEXT NOT NULL,
+    root_run_id         TEXT NOT NULL,
+    command_id          TEXT NOT NULL,
+    request_digest      TEXT NOT NULL,
+    aggregate_kind      TEXT NOT NULL,
+    aggregate_id        TEXT NOT NULL,
+    status              TEXT NOT NULL,
+    previous_version    INT,
+    resulting_version   INT,
+    submitted           JSONB NOT NULL,
+    recorded_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, workspace_id, root_run_id, command_id)
+);
+
+CREATE TABLE IF NOT EXISTS execution_events (
+    tenant_id           TEXT NOT NULL,
+    workspace_id        TEXT NOT NULL,
+    root_run_id         TEXT NOT NULL,
+    sequence            BIGINT NOT NULL,
+    event_id            TEXT NOT NULL,
+    aggregate_kind      TEXT NOT NULL,
+    aggregate_id        TEXT NOT NULL,
+    kind                TEXT NOT NULL,
+    idempotency_key     TEXT NOT NULL,
+    correlation_id      TEXT NOT NULL,
+    causation_command_id TEXT,
+    source_owner        TEXT NOT NULL,
+    source_sequence     BIGINT,
+    payload             JSONB NOT NULL,
+    occurred_at         TIMESTAMPTZ NOT NULL,
+    recorded_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    engine_owner        TEXT NOT NULL DEFAULT 'boltrig',
+    PRIMARY KEY (tenant_id, workspace_id, root_run_id, sequence)
+);
+
+CREATE TABLE IF NOT EXISTS execution_outbox (
+    tenant_id           TEXT NOT NULL,
+    workspace_id        TEXT NOT NULL,
+    root_run_id         TEXT NOT NULL,
+    id                  TEXT NOT NULL,
+    event_sequence      BIGINT NOT NULL,
+    destination         TEXT NOT NULL,
+    delivery_key        TEXT NOT NULL,
+    status              TEXT NOT NULL,
+    attempts            INT NOT NULL DEFAULT 0,
+    claim_owner         TEXT,
+    claimed_at          TIMESTAMPTZ,
+    claim_expires_at    TIMESTAMPTZ,
+    available_at        TIMESTAMPTZ NOT NULL,
+    requested_available_at TIMESTAMPTZ NOT NULL,
+    intent_ordinal      INT NOT NULL,
+    delivered_at        TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    engine_owner        TEXT NOT NULL DEFAULT 'boltrig',
+    PRIMARY KEY (tenant_id, workspace_id, root_run_id, id)
+);
+
+CREATE TABLE IF NOT EXISTS runtime_identities (
+    tenant_id           TEXT NOT NULL,
+    workspace_id        TEXT NOT NULL,
+    id                  TEXT NOT NULL,
+    principal_user_id   TEXT NOT NULL,
+    status              TEXT NOT NULL,
+    generation          INT NOT NULL,
+    profile             JSONB,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    revoked_at          TIMESTAMPTZ,
+    PRIMARY KEY (tenant_id, workspace_id, id)
+);
+
+CREATE TABLE IF NOT EXISTS codex_thread_bindings (
+    tenant_id                   TEXT NOT NULL,
+    workspace_id                TEXT NOT NULL,
+    root_run_id                 TEXT NOT NULL,
+    phase_id                    TEXT NOT NULL,
+    assignment_id               TEXT NOT NULL,
+    runtime_identity_id         TEXT NOT NULL,
+    kind                        TEXT NOT NULL,
+    thread_id                   TEXT NOT NULL,
+    native_parent_thread_id     TEXT,
+    bound_at                    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    engine_owner                TEXT NOT NULL DEFAULT 'boltrig',
+    runtime_source_owner        TEXT NOT NULL DEFAULT 'codex',
+    PRIMARY KEY (tenant_id, workspace_id, root_run_id, thread_id)
+);
+
+CREATE TABLE IF NOT EXISTS codex_turn_bindings (
+    tenant_id                   TEXT NOT NULL,
+    workspace_id                TEXT NOT NULL,
+    root_run_id                 TEXT NOT NULL,
+    thread_id                   TEXT NOT NULL,
+    kind                        TEXT NOT NULL,
+    turn_id                     TEXT NOT NULL,
+    native_parent_turn_id       TEXT,
+    bound_at                    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    engine_owner                TEXT NOT NULL DEFAULT 'boltrig',
+    runtime_source_owner        TEXT NOT NULL DEFAULT 'codex',
+    PRIMARY KEY (tenant_id, workspace_id, root_run_id, thread_id, turn_id)
+);
+
+CREATE TABLE IF NOT EXISTS codex_item_bindings (
+    tenant_id                   TEXT NOT NULL,
+    workspace_id                TEXT NOT NULL,
+    root_run_id                 TEXT NOT NULL,
+    thread_id                   TEXT NOT NULL,
+    turn_id                     TEXT NOT NULL,
+    kind                        TEXT NOT NULL,
+    item_id                     TEXT NOT NULL,
+    native_parent_item_id       TEXT,
+    bound_at                    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    engine_owner                TEXT NOT NULL DEFAULT 'boltrig',
+    runtime_source_owner        TEXT NOT NULL DEFAULT 'codex',
+    PRIMARY KEY (tenant_id, workspace_id, root_run_id, thread_id, turn_id, item_id)
+);
+
+CREATE TABLE IF NOT EXISTS root_engine_decisions (
+    tenant_id               TEXT NOT NULL,
+    workspace_id            TEXT NOT NULL,
+    root_run_id             TEXT NOT NULL,
+    workload                TEXT NOT NULL,
+    compatibility           TEXT NOT NULL,
+    policy_generation       INT NOT NULL,
+    policy_digest           TEXT NOT NULL,
+    route                   TEXT NOT NULL,
+    execution_result_source TEXT NOT NULL,
+    reason_code             TEXT NOT NULL,
+    canary_bucket           INT,
+    decision_digest         TEXT NOT NULL,
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
+    engine_owner            TEXT NOT NULL DEFAULT 'boltrig',
+    PRIMARY KEY (tenant_id, workspace_id, root_run_id)
+);
+
+CREATE TABLE IF NOT EXISTS grant_leases (
+    lease_id                          TEXT NOT NULL,
+    tenant_id                         TEXT NOT NULL,
+    workspace_id                      TEXT NOT NULL,
+    root_run_id                       TEXT NOT NULL,
+    phase_id                          TEXT NOT NULL,
+    assignment_id                     TEXT NOT NULL,
+    issue_operation_id                TEXT NOT NULL,
+    token_digest                      TEXT NOT NULL,
+    authority_evaluation_id           TEXT NOT NULL,
+    authority_evaluation_digest       TEXT NOT NULL,
+    authority_policy_generation       BIGINT NOT NULL,
+    permitted_verbs                   JSONB NOT NULL,
+    issued_at                         TIMESTAMPTZ NOT NULL,
+    expires_at                        TIMESTAMPTZ NOT NULL,
+    max_ttl_seconds                   INT NOT NULL,
+    expected_current_lease_generation BIGINT,
+    lease_generation                  BIGINT NOT NULL,
+    status                            TEXT NOT NULL,
+    revoked_at                        TIMESTAMPTZ,
+    revocation_reason                 TEXT,
+    created_at                        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    engine_owner                      TEXT NOT NULL DEFAULT 'boltrig',
+    PRIMARY KEY (lease_id)
+);
+
+CREATE TABLE IF NOT EXISTS grant_authority_snapshots (
+    tenant_id                     TEXT NOT NULL,
+    workspace_id                  TEXT NOT NULL,
+    root_run_id                   TEXT NOT NULL,
+    phase_id                      TEXT NOT NULL,
+    assignment_id                 TEXT NOT NULL,
+    authority_evaluation_id       TEXT NOT NULL,
+    authority_evaluation_digest   TEXT NOT NULL,
+    authority_policy_generation   BIGINT NOT NULL,
+    permitted_verbs               JSONB NOT NULL,
+    installed_at                  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    engine_owner                  TEXT NOT NULL DEFAULT 'boltrig',
+    PRIMARY KEY (tenant_id, workspace_id, root_run_id, phase_id, assignment_id)
+);
+
+CREATE TABLE IF NOT EXISTS grant_lease_cancelled_assignments (
+    tenant_id       TEXT NOT NULL,
+    workspace_id    TEXT NOT NULL,
+    root_run_id     TEXT NOT NULL,
+    phase_id        TEXT NOT NULL,
+    assignment_id   TEXT NOT NULL,
+    cancelled_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    reason          TEXT NOT NULL,
+    engine_owner    TEXT NOT NULL DEFAULT 'boltrig',
+    PRIMARY KEY (tenant_id, workspace_id, root_run_id, phase_id, assignment_id)
+);
+
+CREATE TABLE IF NOT EXISTS grant_lease_cancelled_roots (
+    tenant_id       TEXT NOT NULL,
+    workspace_id    TEXT NOT NULL,
+    root_run_id     TEXT NOT NULL,
+    cancelled_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    reason          TEXT NOT NULL,
+    engine_owner    TEXT NOT NULL DEFAULT 'boltrig',
+    PRIMARY KEY (tenant_id, workspace_id, root_run_id)
+);
+
+CREATE TABLE IF NOT EXISTS model_proxy_grants (
+    grant_id                     TEXT NOT NULL,
+    tenant_id                    TEXT NOT NULL,
+    workspace_id                 TEXT NOT NULL,
+    root_run_id                  TEXT NOT NULL,
+    phase_id                     TEXT NOT NULL,
+    assignment_id                TEXT NOT NULL,
+    cell_id                      TEXT NOT NULL,
+    pid                          BIGINT NOT NULL,
+    pid_start_ticks              BIGINT NOT NULL,
+    boot_id                      TEXT NOT NULL,
+    pid_namespace_inode          BIGINT NOT NULL,
+    cgroup_identity_digest       TEXT NOT NULL,
+    model_id                     TEXT NOT NULL,
+    model_policy_digest          TEXT NOT NULL,
+    budget_id                    TEXT NOT NULL,
+    max_input_tokens             BIGINT NOT NULL,
+    max_output_tokens            BIGINT NOT NULL,
+    max_total_tokens             BIGINT NOT NULL,
+    max_cost_micros              BIGINT NOT NULL,
+    budget_policy_digest         TEXT NOT NULL,
+    bearer_digest                TEXT NOT NULL,
+    startup_request_digest       TEXT NOT NULL,
+    issued_at                    TIMESTAMPTZ NOT NULL,
+    expires_at                   TIMESTAMPTZ NOT NULL,
+    generation                   BIGINT NOT NULL,
+    status                       TEXT NOT NULL,
+    revoked_at                   TIMESTAMPTZ,
+    revocation_reason            TEXT,
+    created_at                   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    engine_owner                 TEXT NOT NULL DEFAULT 'boltrig',
+    PRIMARY KEY (grant_id)
+);
+
+CREATE TABLE IF NOT EXISTS model_proxy_grant_cancelled_roots (
+    tenant_id       TEXT NOT NULL,
+    workspace_id    TEXT NOT NULL,
+    root_run_id     TEXT NOT NULL,
+    cancelled_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    reason          TEXT NOT NULL,
+    engine_owner    TEXT NOT NULL DEFAULT 'boltrig',
+    PRIMARY KEY (tenant_id, workspace_id, root_run_id)
+);
+
+CREATE TABLE IF NOT EXISTS model_proxy_grant_cancelled_phases (
+    tenant_id       TEXT NOT NULL,
+    workspace_id    TEXT NOT NULL,
+    root_run_id     TEXT NOT NULL,
+    phase_id        TEXT NOT NULL,
+    cancelled_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    reason          TEXT NOT NULL,
+    engine_owner    TEXT NOT NULL DEFAULT 'boltrig',
+    PRIMARY KEY (tenant_id, workspace_id, root_run_id, phase_id)
+);
+
+CREATE TABLE IF NOT EXISTS model_proxy_grant_cancelled_assignments (
+    tenant_id       TEXT NOT NULL,
+    workspace_id    TEXT NOT NULL,
+    root_run_id     TEXT NOT NULL,
+    phase_id        TEXT NOT NULL,
+    assignment_id   TEXT NOT NULL,
+    cancelled_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    reason          TEXT NOT NULL,
+    engine_owner    TEXT NOT NULL DEFAULT 'boltrig',
+    PRIMARY KEY (tenant_id, workspace_id, root_run_id, phase_id, assignment_id)
+);
+
+CREATE TABLE IF NOT EXISTS model_proxy_grant_cancelled_cells (
+    tenant_id                TEXT NOT NULL,
+    workspace_id             TEXT NOT NULL,
+    root_run_id              TEXT NOT NULL,
+    phase_id                 TEXT NOT NULL,
+    assignment_id            TEXT NOT NULL,
+    cell_id                  TEXT NOT NULL,
+    pid                      BIGINT NOT NULL,
+    pid_start_ticks          BIGINT NOT NULL,
+    boot_id                  TEXT NOT NULL,
+    pid_namespace_inode      BIGINT NOT NULL,
+    cgroup_identity_digest   TEXT NOT NULL,
+    cancelled_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
+    reason                   TEXT NOT NULL,
+    engine_owner             TEXT NOT NULL DEFAULT 'boltrig',
+    PRIMARY KEY (
+        tenant_id, workspace_id, root_run_id, phase_id, assignment_id,
+        cell_id, pid, pid_start_ticks, boot_id, pid_namespace_inode,
+        cgroup_identity_digest
+    )
+);
+
+CREATE TABLE IF NOT EXISTS capability_attestation_sets (
+    tenant_id                     TEXT NOT NULL,
+    workspace_id                  TEXT NOT NULL,
+    root_run_id                   TEXT NOT NULL,
+    phase_id                      TEXT NOT NULL,
+    assignment_id                 TEXT NOT NULL,
+    authority_evaluation_id       TEXT NOT NULL,
+    authority_evaluation_digest   TEXT NOT NULL,
+    authority_policy_generation   BIGINT NOT NULL,
+    catalog_generation            BIGINT NOT NULL,
+    catalog_digest                TEXT NOT NULL,
+    set_digest                    TEXT NOT NULL,
+    created_at                    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    engine_owner                  TEXT NOT NULL DEFAULT 'boltrig',
+    PRIMARY KEY (tenant_id, workspace_id, root_run_id, phase_id, assignment_id)
+);
+
+CREATE TABLE IF NOT EXISTS capability_attestation_entries (
+    tenant_id           TEXT NOT NULL,
+    workspace_id        TEXT NOT NULL,
+    root_run_id         TEXT NOT NULL,
+    phase_id            TEXT NOT NULL,
+    assignment_id       TEXT NOT NULL,
+    verb_id             TEXT NOT NULL,
+    definition_digest   TEXT NOT NULL,
+    effect_class        TEXT NOT NULL,
+    consequence         TEXT NOT NULL,
+    engine_owner        TEXT NOT NULL DEFAULT 'boltrig',
+    PRIMARY KEY (
+        tenant_id, workspace_id, root_run_id, phase_id, assignment_id, verb_id
+    ),
+    FOREIGN KEY (
+        tenant_id, workspace_id, root_run_id, phase_id, assignment_id
+    ) REFERENCES capability_attestation_sets (
+        tenant_id, workspace_id, root_run_id, phase_id, assignment_id
+    ) ON DELETE CASCADE
+);

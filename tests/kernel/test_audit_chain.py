@@ -77,6 +77,44 @@ async def test_concurrent_writes_keep_a_contiguous_verifiable_chain():
     assert ok and bad is None
 
 
+async def _long_chain(n: int):
+    """A REAL hash-chained audit trail of n rows on a fresh in-memory store."""
+    from boltrig.kernel.audit import AuditWriter
+    from boltrig.models import ActionType, AuditEvent
+    from boltrig.store import InMemoryStore
+
+    store = InMemoryStore()
+    writer = AuditWriter(store)
+    for i in range(n):
+        await writer.write(AuditEvent(
+            tenant_id=TENANT, run_id=f"r{i}", actor="t", actor_tier="human",
+            action_type=ActionType.TOOL_CALL, noun="ticket", verb="ticket.create",
+            status="ok", detail={}, ts=None,
+        ))
+    return store, writer
+
+
+@pytest.mark.kernel
+@pytest.mark.invariant("SEC-168")
+async def test_a_chain_longer_than_the_old_window_verifies_ok():
+    # SEC-168 false-positive regression: verify() once read only the newest 10_000
+    # rows and seeded prev=None, so the window's first row (whose prev_hash points
+    # at a row OUTSIDE the window) "failed" on a completely untampered chain.
+    _store, writer = await _long_chain(10_050)
+    assert await writer.verify(TENANT) == (True, None)
+
+
+@pytest.mark.kernel
+@pytest.mark.invariant("SEC-168")
+async def test_tampering_below_the_old_window_is_still_caught():
+    # SEC-168 false-negative regression: rows below any tail window were never
+    # re-derived, so tampering an OLD row went unseen. seq 5 sits 10_045 rows from
+    # the head - far below the old 10_000-row window.
+    store, writer = await _long_chain(10_050)
+    next(e for e in store._audit[TENANT] if e.seq == 5).status = "tampered"
+    assert await writer.verify(TENANT) == (False, 5)
+
+
 @pytest.mark.kernel
 @pytest.mark.invariant("K-19")
 async def test_chain_verifies_and_detects_tampering(kernel):

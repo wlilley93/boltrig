@@ -1,0 +1,12 @@
+id: LOG-2026-07-17-121829
+time: 2026-07-17T12:18:29.001776309+00:00
+actor: lexby
+kind: implementation-decision
+issue: boltrig-codex-root-run-model
+decision: 'The Codex read-only admit() wiring maps a root run onto the existing top-level WorkItem tree root (parent_id is None, tree_root_id), NOT to a chat conversation. root_run_id = the root WorkItem id (= run_id in chat.py where WorkItem.id==run_id). RootRouteScope = (tenant_id, workspace_id, root_run_id). RootRoutingFacts derived mechanically: workload = BOUNDED_READ_ONLY (fixed for read-only), expected_policy_generation from the server policy (inert under the OFF default since codex_routing short-circuits to LEGACY before generation is read), compatibility a server-derived conservative constant. admit() is invoked at each top-level (root) WorkItem creation lane (chat root chokepoint, pump root lane, spawn), gated on BOLTRIG_CODEX_LEDGER; under the OFF policy it records a RootEngineDecision(route=LEGACY) in the ledger and changes NO execution (shadow write). This is a DECISIVE CALL, not a court fork: the accepted architecture (docs/decisions/0012, integration-map Domain model) already defines a root run as a top-level objective with a synthesis decomposing into phase/work-item/assignment, which is exactly the WorkItem tree root. Routing it would re-litigate accepted architecture (S-11(c)).'
+basis:
+- docs/decisions/0012-boltrig-codex-opbox-ownership.md; docs/proposals/codex-app-server-integration-map.md Domain model (root run -> phase -> work item); low-blast + reversible (flag-gated, execution-neutral shadow write under OFF)
+risk: low
+reversibility: easy
+court_required: false
+why: The spec's root-run record carries a single objective + synthesis, so a multi-turn conversation is many root runs (one per top-level task), matching WorkItem tree roots; the mapping is the obvious spec-consistent one and, being flag-gated and execution-neutral under OFF, is low-blast and reversible, so it is a decisive call with a logged note rather than a first-impression fork.

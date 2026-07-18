@@ -169,5 +169,7 @@ async def test_spawn_runtime_and_mcp_preserve_trusted_principal_metadata(monkeyp
         actor="worker",
         extra=restored.extra,
     )
-    run_context = kernel.mcp._context(kernel.mcp._tokens[token])
+    run_token = kernel.mcp._lookup(token)
+    assert run_token is not None
+    run_context = kernel.mcp._context(run_token)
     _assert_trusted(run_context)

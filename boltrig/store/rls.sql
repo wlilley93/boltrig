@@ -82,7 +82,25 @@ DECLARE
     'ai_configs',
     -- Workflow run records (design brief 22.1): tenant-scoped observability rows
     -- fed by execute_workflow. Same generic tenant_id policy binds them.
-    'workflow_run_records'
+    'workflow_run_records',
+    -- Execution ledger + grant leases + model-proxy grants + capability
+    -- attestations + root decisions + runtime identities + codex bindings
+    -- (migrations 0026-0032). Every one carries a real tenant_id, so the generic
+    -- tenant_id policy fences it (a null GUC -> zero rows, fail-closed) exactly
+    -- like the rows above. NOTE `channels` is NOT in this set even though it
+    -- carries a tenant_id: it is resolved by its unguessable id BEFORE the tenant
+    -- is bound (decision 0003, the inbound webhook path), so it stays a documented
+    -- exclusion in the block above alongside personal_access_tokens/identity_orgs.
+    'execution_root_runs','execution_phases','execution_work_items',
+    'execution_assignments','execution_results','execution_verifications',
+    'execution_commands','execution_events','execution_outbox',
+    'runtime_identities','codex_thread_bindings','codex_turn_bindings',
+    'codex_item_bindings','root_engine_decisions','grant_leases',
+    'grant_authority_snapshots','grant_lease_cancelled_assignments',
+    'grant_lease_cancelled_roots','model_proxy_grants',
+    'model_proxy_grant_cancelled_roots','model_proxy_grant_cancelled_phases',
+    'model_proxy_grant_cancelled_assignments','model_proxy_grant_cancelled_cells',
+    'capability_attestation_sets','capability_attestation_entries'
   ];
 BEGIN
   FOREACH t IN ARRAY scoped LOOP

@@ -118,7 +118,7 @@ class Spawner:
                 raise
             return self._budget_partial(run_id, capability)
 
-        child_grants = GrantSet.of(allow=list(merged.tool_grants))
+        child_grants = GrantSet.of(allow=list(merged.tool_grants)).intersect(context.grants)
         if grant_ceiling is not None:
             child_grants = child_grants.intersect(grant_ceiling)
         child_ctx = self._child_context(
@@ -131,7 +131,7 @@ class Spawner:
             self._publish_subagent_event(context, task, skills, run_id, capability)
         started = time.monotonic()
         result = await runtime.run(
-            self._compose_prompt(merged_prompt, task), child_ctx, tools=list(merged.tool_grants)
+            self._compose_prompt(merged_prompt, task), child_ctx, tools=list(child_grants.allow)
         )
         latency_ms = int((time.monotonic() - started) * 1000)
         if model_route and isinstance(result.output, dict):

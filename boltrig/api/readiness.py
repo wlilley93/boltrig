@@ -19,7 +19,7 @@ from .readiness_control import (
     control_plane_check,
 )
 
-EXPECTED_ALEMBIC_HEAD = "0025_hitl_access_scope"
+EXPECTED_ALEMBIC_HEAD = "0033_capability_source_active"
 
 _TRUE_VALUES = {"1", "true", "yes", "on", "y", "t"}
 _PRODUCTION_NAMES = {"prod", "production", "staging"}

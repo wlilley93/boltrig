@@ -1,0 +1,12 @@
+id: LOG-2026-07-17-120214
+time: 2026-07-17T12:02:14.134034865+00:00
+actor: lexby
+kind: architecture-decision
+issue: boltrig-manifest-declarative
+decision: 'Option C (SCOPED-DECLARATIVE) governs manifest capability application. Manifest is declarative only over the capabilities it authored and additive over all others: apply_manifest soft-deactivates a capability iff source=''manifest'' and the current manifest no longer declares it, and NEVER touches a capability registered out-of-band by a governed control-plane verb (control.capability.upsert). Soft (is_active=false), not hard delete. Routing and listing (list_capabilities/select_capability) exclude inactive rows; a separate list_all_capabilities serves admin/audit. Tie-break: a name arriving from both paths resolves to source=''manifest'' (writing a name into the deploy artifact is an explicit ownership claim) and reconciles thereafter. Mass-deactivation guard (fail-closed): abort the whole apply (transactional) if the manifest declares zero capabilities OR if drop count D > max(3, floor(A/2)) of active manifest-sourced rows, overridable only by an explicit logged confirm. NOTE: the ruling said migration 0031 but that ordinal is TAKEN; the implementing migration is 0033 (head is 0032_assignment_attestation_set), adding is_active BOOLEAN NOT NULL DEFAULT true + source TEXT NOT NULL DEFAULT ''control-plane'' CHECK in (''manifest'',''control-plane''); the control-plane backfill default is deliberately fail-safe so the first post-migration apply cannot mass-deactivate rows of unknown provenance.'
+basis:
+- CONVENING-county-2026-07-17-120157 / SUBMISSION-2026-07-17-115737; distinguishes the tenant_permissions full-replace comparator as SINGLE-source; applies deny-dominant + consolidation-over-fragmentation; soft-state precedent adapters.activated / users.status
+risk: medium
+reversibility: easy
+court_required: false
+why: The tenant_permissions comparator that accepts full declarative replace is single-source single-row, so full-replace is safe there; capabilities are MULTI-source (control.capability.upsert is a governed second write path), so blind declarative apply would silently undo a governed grant, a correctness regression and itself a fail-open. Declarative only within the manifest's own provenance honours both fail-closed (stale surface removed) and fact-3 (governed rows preserved). Soft over hard because the estate models reversible surface state and the erroneous-manifest case is the one most needing recovery + audit.

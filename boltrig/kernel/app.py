@@ -325,7 +325,7 @@ def create_app(
 
     @app.get("/healthz")
     async def healthz(k: Kernel = Depends(_get_kernel)) -> dict:
-        health = await k.loader.refresh_health()
+        health = k.loader.health_snapshot()  # liveness: cached posture, no adapter I/O awaited
         return {"status": "ok", "adapters": {f"{t}/{a}": h for (t, a), h in health.items()}}
 
     @app.get("/readyz")

@@ -6,7 +6,8 @@ import os
 from dataclasses import replace
 from typing import Any, cast
 
-from boltrig.models import AgentCapability, InvocationContext, ModelEndpoint
+from boltrig.config.environment import production_signal
+from boltrig.models import AgentCapability, CredentialResolution, InvocationContext, ModelEndpoint
 
 from .model_gateway import ModelGateway, apply_gateway, gateway_config
 from .model_profiles import apply_model_profile, select_model_profile
@@ -120,7 +121,12 @@ class RuntimeResolver:
     async def _resolve_ai_key(
         self, tenant_id: str, context: InvocationContext | None
     ) -> tuple[str | None, Any | None]:
+        production = production_signal() is not None
         if context is None:
+            if production:
+                raise CredentialResolution(
+                    "production runtime requires an authenticated execution context"
+                )
             return None, None
         from boltrig.identity import load_ai_key_material, resolve_ai_key
 
@@ -132,9 +138,19 @@ class RuntimeResolver:
                 user_id=context.on_behalf_of,
             )
             material = await load_ai_key_material(self._kernel.store, tenant_id, resolution)
-            return material, resolution
-        except Exception:
+        except Exception as exc:
+            if production:
+                raise CredentialResolution(
+                    "production AI credential resolution is unavailable"
+                ) from exc
             return None, None
+        if resolution.credential_ref is not None and not material:
+            raise CredentialResolution("configured AI credential material is unavailable")
+        if resolution.is_default and production:
+            raise CredentialResolution(
+                "production AI execution requires a scoped credential reference"
+            )
+        return material, resolution
 
     def _pi_config(self, context: InvocationContext | None) -> dict[str, Any]:
         cfg: dict[str, Any] = {

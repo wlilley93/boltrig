@@ -70,6 +70,24 @@ async def test_cheapest_capable_runtime_chosen():
     assert "run_id" in res
 
 
+@pytest.mark.invariant("SEC-147")
+async def test_every_spawn_caps_skill_requirements_to_parent_authority():
+    kernel = await _kernel_with_caps()
+    spawner = build_spawner(kernel)
+    parent = _ctx()
+    parent = InvocationContext(
+        tenant_id=parent.tenant_id,
+        grants=GrantSet.of(["other.read"]),
+        actor=parent.actor,
+        extra=parent.extra,
+    )
+
+    res = await spawner.spawn(T, "decompose epic", ["analysis/decompose"], {}, parent)
+
+    assert res["effective_grants"] == []
+    assert res["output"]["tools"] == []
+
+
 @pytest.mark.invariant("FR-RUN-15")
 async def test_opencode_spawn_preserves_workspace_for_scoped_mcp(monkeypatch, tmp_path):
     store = InMemoryStore()

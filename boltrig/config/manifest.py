@@ -21,8 +21,12 @@ from typing import Any, Mapping
 import yaml
 
 from boltrig.identity.rbac import grants_for_scope
+from boltrig.config.manifest_reconcile import (
+    declared_capabilities,
+    plan_capability_reconciliation,
+    reconcile_capabilities,
+)
 from boltrig.models import (
-    AgentCapability,
     Budget,
     GrantSet,
     ModelEndpoint,
@@ -655,7 +659,7 @@ def load_manifest(path: str, *, env: Mapping[str, str] | None = None) -> FleetMa
         extra={k: doc[k] for k in (
             "evaluation", "notifications", "personal_agents", "memory",
             "runtimes", "mcp", "chat", "stack", "mastra", "rivet_agentos",
-            "browser_cli", "langfuse",
+            "browser_cli", "langfuse", "reconcile",
         ) if k in doc},
     )
 
@@ -727,32 +731,6 @@ async def _seed_call(store: Any, method: str, *args: Any) -> None:
         await result
 
 
-def _capability_from_tier(tier: HierarchyTier, tenant_id: str) -> AgentCapability:
-    return AgentCapability(
-        name=tier.name,
-        tenant_id=tenant_id,
-        runtime=tier.runtime,
-        supported_skills=list(tier.supported_skills),
-        max_depth=tier.max_depth,
-        is_ephemeral=False,
-        cost_tier=tier.cost_tier,
-        model_endpoint=tier.model_endpoint,
-    )
-
-
-def _capability_from_ephemeral(rt: EphemeralRuntime, tenant_id: str) -> AgentCapability:
-    return AgentCapability(
-        name=rt.name,
-        tenant_id=tenant_id,
-        runtime=rt.runtime,
-        supported_skills=list(rt.supported_skills),
-        max_depth=rt.max_depth,
-        is_ephemeral=True,
-        cost_tier=rt.cost_tier,
-        model_endpoint=rt.model_endpoint,
-    )
-
-
 def _budget_from_tier(
     tier: HierarchyTier, tenant_id: str, *, scope_type: str, scope_id: str
 ) -> Budget:
@@ -769,8 +747,49 @@ def _budget_from_tier(
     )
 
 
+async def _seed_tier_budgets(store: Any, manifest: FleetManifest, tenant: str) -> None:
+    """Seed the tenant + department budgets from the tier budget blocks."""
+    if manifest.hierarchy.tier1 is not None and manifest.hierarchy.tier1.budget:
+        await _seed_call(store, "set_budget", _budget_from_tier(
+            manifest.hierarchy.tier1, tenant, scope_type="tenant", scope_id=tenant))
+    for tier in manifest.hierarchy.tier2:
+        if tier.budget:
+            scope_id = tier.department or tier.name
+            await _seed_call(store, "set_budget", _budget_from_tier(
+                tier, tenant, scope_type="department", scope_id=scope_id))
+
+
+async def _seed_credentials(
+    kernel: Any, store: Any, manifest: FleetManifest, tenant: str
+) -> None:
+    """Seed credential references + adapter bindings (refs only, SEC-04)."""
+    for adapter in manifest.adapters:
+        if adapter.credential is not None:
+            cred = adapter.credential
+            await _seed_call(store, "set_credential_ref", tenant, cred.id, cred.as_ref())
+            kernel.credentials.bind_adapter_credential(tenant, adapter.id, cred.id)
+
+
+async def _register_manifest_adapters(
+    kernel: Any, manifest: FleetManifest, tenant: str
+) -> None:
+    """Import + register the builtin/module-ref adapters named in the manifest. A
+    builtin id maps to a known module; otherwise the adapter's own ``module_ref``
+    ("pkg.mod" or "pkg.mod:factory") is honoured, so a project extends the kernel
+    from OUTSIDE with no core edit (the extension contract). Unknown ids skip."""
+    for adapter in manifest.adapters:
+        module_path = _BUILTIN_MODULES.get(adapter.id) or adapter.module_ref
+        if not module_path:
+            continue  # unknown id and no module_ref -> skip gracefully
+        mod_name, _, factory = module_path.partition(":")
+        module = importlib.import_module(mod_name)
+        build = getattr(module, factory or "build")
+        await kernel.register_adapter(tenant, build())
+
+
 async def apply_manifest(
-    kernel: Any, manifest: FleetManifest, *, load_builtin_adapters: bool = True
+    kernel: Any, manifest: FleetManifest, *, load_builtin_adapters: bool = True,
+    confirm_bulk_deactivate: bool = False,
 ) -> None:
     """Seed the store from the manifest so the kernel/fleet can run (S11.2, P7).
 
@@ -778,82 +797,49 @@ async def apply_manifest(
     hierarchy tiers), tier budgets, tenant permissions, credential references
     (and adapter bindings), then optionally imports + registers the builtin
     adapters named in the manifest. Unknown adapter ids are skipped gracefully.
+
+    Capabilities are reconciled scoped-declaratively ([2026] LEXBY LOG-2026-07-17):
+    the manifest is declarative over the capabilities it authored
+    (``source='manifest'``) and additive over governed control-plane grants. A
+    manifest-sourced capability a redeployed manifest no longer declares is
+    soft-deactivated; the mass-deactivation guard aborts the whole apply (nothing
+    committed) unless ``confirm_bulk_deactivate`` (or ``reconcile.allow_bulk_
+    deactivate`` in the manifest) is set.
     """
     export_runtime_environment(manifest)
     tenant = manifest.tenant_id
     store = kernel.store
 
+    # Plan + enforce the mass-deactivation guard BEFORE any write (fail-closed): a
+    # tripped guard aborts the whole apply here, with nothing committed.
+    plan = await plan_capability_reconciliation(
+        store, manifest, confirm_bulk_deactivate=confirm_bulk_deactivate)
+
     # 1. model endpoints (P4) + the per-model price table (FR-COST-04, audit M14).
-    #    Prices are policy-as-data on the cost accountant so post-run true-up and
-    #    reservations price real spend; absent any prices the tier defaults stand.
     for endpoint in manifest.models.endpoints:
         await store.upsert_model_endpoint(endpoint)
     cost = getattr(kernel, "cost", None)
     if cost is not None and manifest.models.prices:
         cost.set_prices(manifest.models.prices)
 
-    # 2. agent capabilities: ephemeral runtimes + hierarchy tiers
-    for rt in manifest.ephemeral_runtimes:
-        await store.upsert_capability(_capability_from_ephemeral(rt, tenant))
-    tiers: list[HierarchyTier] = []
-    if manifest.hierarchy.tier1 is not None:
-        tiers.append(manifest.hierarchy.tier1)
-    tiers.extend(manifest.hierarchy.tier2)
-    for tier in tiers:
-        await store.upsert_capability(_capability_from_tier(tier, tenant))
+    # 2. agent capabilities: ephemeral runtimes + hierarchy tiers (source='manifest')
+    for capability in declared_capabilities(manifest):
+        await store.upsert_capability(capability)
 
-    # 3. budgets from tier budget blocks (FR cost-control)
-    if manifest.hierarchy.tier1 is not None and manifest.hierarchy.tier1.budget:
-        await _seed_call(
-            store,
-            "set_budget",
-            _budget_from_tier(
-                manifest.hierarchy.tier1, tenant, scope_type="tenant", scope_id=tenant
-            ),
-        )
-    for tier in manifest.hierarchy.tier2:
-        if tier.budget:
-            scope_id = tier.department or tier.name
-            await _seed_call(
-                store,
-                "set_budget",
-                _budget_from_tier(
-                    tier, tenant, scope_type="department", scope_id=scope_id
-                ),
-            )
-
-    # 4. tenant permissions (the verb ceiling, US-IAM-04)
-    await _seed_call(
-        store,
-        "set_tenant_permissions",
-        TenantPermissions(tenant, manifest.tenant_grants()),
-    )
-
-    # 4b. governed built-in verbs: the "ask the user a question" tool (US-CHAT-12).
-    #     A first-class governed verb so a turn can pause for a human answer through
-    #     the ONE chokepoint; seeded per tenant so discovery + the grant check apply.
+    # 3. tier budgets, 4. tenant permissions, 4b. the governed questions verb
+    await _seed_tier_budgets(store, manifest, tenant)
+    await _seed_call(store, "set_tenant_permissions",
+                     TenantPermissions(tenant, manifest.tenant_grants()))
     from boltrig.kernel.questions import register_questions_verb
 
     await register_questions_verb(store, tenant)
 
-    # 5. credential references + adapter bindings (refs only, SEC-04)
-    for adapter in manifest.adapters:
-        if adapter.credential is not None:
-            cred = adapter.credential
-            await _seed_call(store, "set_credential_ref", tenant, cred.id, cred.as_ref())
-            kernel.credentials.bind_adapter_credential(tenant, adapter.id, cred.id)
-
-    # 6. adapters: import the module, build(), register (P1). A builtin id maps to
-    #    a known module; otherwise the adapter's own `module_ref` ("pkg.mod" or
-    #    "pkg.mod:factory") is honoured, so a PROJECT ships its adapter as an
-    #    importable module + a manifest entry and extends the kernel from OUTSIDE,
-    #    no core edit (the extension contract, Round Fifteen).
+    # 5. credential refs + adapter bindings; 6. register the builtin adapters
+    await _seed_credentials(kernel, store, manifest, tenant)
     if load_builtin_adapters:
-        for adapter in manifest.adapters:
-            module_path = _BUILTIN_MODULES.get(adapter.id) or adapter.module_ref
-            if not module_path:
-                continue  # unknown id and no module_ref -> skip gracefully
-            mod_name, _, factory = module_path.partition(":")
-            module = importlib.import_module(mod_name)
-            build = getattr(module, factory or "build")
-            await kernel.register_adapter(tenant, build())
+        await _register_manifest_adapters(kernel, manifest, tenant)
+
+    # 7. reconcile: soft-deactivate the manifest-sourced capabilities this redeployed
+    #    manifest no longer declares (control-plane grants untouched). The guard
+    #    already passed, so this drops a safe number; every drop is audited.
+    await reconcile_capabilities(kernel, manifest, plan)

@@ -27,6 +27,8 @@ from .base import VerbId
 # Unicode homoglyph/confusable, a control char, a zero-width joiner) is NOT a safe
 # identifier and so can never match a grant.
 _SAFE_ID_CHARS = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-/@*")
+MAX_CONCRETE_VERBS = 256
+MAX_VERB_ID_BYTES = 256
 
 
 def normalize_identifier(value: str) -> str:
@@ -40,6 +42,29 @@ def is_safe_identifier(value: str) -> bool:
     homoglyph (e.g. Cyrillic 'а') or control/zero-width char makes it unsafe."""
     norm = normalize_identifier(value)
     return bool(norm) and all(ch in _SAFE_ID_CHARS for ch in norm)
+
+
+def canonical_concrete_verbs(values: tuple[VerbId, ...]) -> tuple[VerbId, ...]:
+    """Validate and canonicalize a bounded immutable concrete-verb snapshot."""
+
+    if type(values) is not tuple:
+        raise TypeError("permitted verbs must be an immutable tuple")
+    if len(values) > MAX_CONCRETE_VERBS:
+        raise ValueError(f"authority snapshots permit at most {MAX_CONCRETE_VERBS} verbs")
+    canonical: set[VerbId] = set()
+    for value in values:
+        if type(value) is not str:
+            raise TypeError("permitted verb must be an exact string")
+        normalized = normalize_identifier(value)
+        if (
+            normalized != value
+            or not is_safe_identifier(normalized)
+            or "*" in normalized
+            or len(normalized.encode("utf-8")) > MAX_VERB_ID_BYTES
+        ):
+            raise ValueError("permitted verbs must be bounded safe concrete identifiers")
+        canonical.add(normalized)
+    return tuple(sorted(canonical))
 
 
 def _matches(pattern: str, verb_id: VerbId) -> bool:

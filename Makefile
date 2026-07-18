@@ -16,7 +16,9 @@ E2E_PYTHON := $(shell command -v $(PY))
 else
 E2E_PYTHON := $(abspath $(PY))
 endif
-COVERAGE_MIN ?= 75
+# Floor raised 75 -> 82 (2026-07-17): actual is 84.43%, so 75 let coverage
+# silently regress ~9 points. 82 locks in the gain with a small honest headroom.
+COVERAGE_MIN ?= 82
 PLAYWRIGHT_INSTALL_ARGS ?= chromium
 COMPOSE ?= docker compose
 COMPOSE_VALIDATE_ENV ?= .env.example
@@ -34,7 +36,7 @@ RELEASE_VALIDATE_IMAGES_ENV ?= tests/fixtures/release-images.env
 RELEASE_PROFILES ?= --profile backup
 
 .DEFAULT_GOAL := help
-.PHONY: help up down logs test lint structure typecheck check python-quality ui-install ui-quality site-install site-quality ui-e2e compose-validate release-validate release-up doctor-fixture migration-parity python-audit sast iac-scan secret-scan actionlint security-source quality live-check lockfile-policy dependency-audit smoke invariants doctor migrate secure-up backup backup-schedule restore
+.PHONY: help up down logs test lint architecture structure codex-protocol typecheck check python-quality ui-install ui-quality site-install site-quality ui-e2e compose-validate release-validate release-up doctor-fixture migration-parity python-audit sast iac-scan secret-scan actionlint security-source quality live-check lockfile-policy dependency-audit smoke invariants doctor migrate secure-up backup backup-schedule restore
 
 help: ## List the available targets
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -58,15 +60,21 @@ test: ## Run the test suite (set BOLTRIG_TEST_DATABASE_URL to also run the Postg
 lint: ## Run ruff over the Python source, scripts, and tests
 	$(PY) -m ruff check boltrig scripts tests
 
+architecture: ## Enforce inward-only thin-orchestration dependencies
+	$(PY) scripts/check_architecture.py
+
 structure: ## Enforce Python file/function size limits and expiring debt ratchets
 	$(PY) scripts/check_structure.py
+
+codex-protocol: ## Verify the exact checked-in stable Codex App Server protocol pin
+	$(PY) scripts/check_codex_protocol.py
 
 typecheck: ## Module-by-module strict mypy gate (see [tool.mypy])
 	$(PY) -m mypy
 
-check: invariants lint structure typecheck test ## Run the local Python gates CI enforces
+check: invariants lint architecture structure codex-protocol typecheck test ## Run the local Python gates CI enforces
 
-python-quality: invariants lint structure typecheck ## Run Python tests on Postgres with coverage enforcement
+python-quality: invariants lint architecture structure codex-protocol typecheck ## Run Python tests on Postgres with coverage enforcement
 	scripts/with_test_postgres.sh $(PY) -m pytest -q \
 		--cov=boltrig --cov-report=term:skip-covered --cov-report=xml \
 		--cov-fail-under=$(COVERAGE_MIN)

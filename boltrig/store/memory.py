@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 
 from .channels import ChannelStoreMem
 from .budget_policy import BudgetPolicyMem
+from .capabilities import CapabilityStoreMem
 from .guarded_writes import GuardedWritesMem
 from .idempotency import IdempotencyStoreMem
 from .work_items import WorkItemReadsMem
@@ -80,7 +81,7 @@ def _norm_email_key(value) -> str:
 
 
 class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
-                    GuardedWritesMem, ChannelStoreMem):
+                    GuardedWritesMem, ChannelStoreMem, CapabilityStoreMem):
     """In-memory Store (offline + test). Domain methods live in partial mixins
     (e.g. ``ChannelStoreMem``), composed here for one public method surface."""
 
@@ -227,12 +228,6 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
     async def list_skills(self, tenant_id):
         return [s for (t, _), s in self._skills.items() if t == tenant_id]
 
-    async def upsert_capability(self, cap):
-        self._caps[(cap.tenant_id, cap.name)] = cap
-
-    async def list_capabilities(self, tenant_id):
-        return [c for (t, _), c in self._caps.items() if t == tenant_id]
-
     async def upsert_workflow(self, wf):
         self._workflows[(wf.tenant_id, wf.id)] = wf
 
@@ -250,9 +245,8 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
 
     # --- workflow run records (design brief 22.1, observability-only) -------
     async def record_workflow_run(self, tenant_id, workflow_id, run_id, status):
-        # Insert/replace on the run_id PK. ``started_at`` stamps on first insert
-        # and is preserved on a replace (a re-record of the same run_id keeps its
-        # original start time), matching the postgres ON CONFLICT DO NOTHING shape.
+        # Insert/replace on the run_id PK. ``started_at`` stamps on first insert and
+        # survives a replace, matching the postgres ON CONFLICT DO NOTHING shape.
         key = (tenant_id, run_id)
         existing = self._workflow_runs.get(key)
         started = existing[2] if existing is not None else utcnow()
@@ -307,9 +301,8 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
         self._work[(item.tenant_id, item.id)] = item
 
     async def claim_work_item(self, tenant_id, worker_id, lease_seconds):
-        # atomic pending -> in_flight claim with a lease (US-FLT-05). No await
-        # between the scan and the write, so it is atomic under cooperative
-        # scheduling (mirrors consume_hitl). Insertion order stands in for the
+        # atomic pending -> in_flight claim with a lease (US-FLT-05): no await between
+        # scan and write (mirrors consume_hitl); insertion order stands in for the
         # Postgres ORDER BY created_at (oldest first).
         now = utcnow()
         for (t, _), item in self._work.items():
@@ -330,8 +323,7 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
         return None
 
     async def try_increment_fanout(self, tenant_id, tree_id, counter, n, cap):
-        # atomic capped increment (US-EXE-07): all-or-nothing, no await between
-        # the read and the write.
+        # atomic capped increment (US-EXE-07): all-or-nothing, no await between read/write.
         key = (tenant_id, tree_id, counter)
         new_value = self._fanout.get(key, 0) + n
         if new_value > cap:
@@ -376,11 +368,8 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
         return self._hitl.get((tenant_id, req_id))
 
     async def list_pending_hitl(self, tenant_id):
-        return [
-            r
-            for (t, _), r in self._hitl.items()
-            if t == tenant_id and r.status == HITLStatus.PENDING
-        ]
+        pending = HITLStatus.PENDING
+        return [r for (t, _), r in self._hitl.items() if t == tenant_id and r.status == pending]
 
     async def answer_hitl(self, resp):
         req = self._hitl.get((resp.tenant_id, resp.request_id))
@@ -422,6 +411,9 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
             chain = [e for e in chain if e.run_id == run_id or e.parent_run_id == run_id]
         return chain[-limit:]
 
+    async def audit_scan(self, tenant_id, after_seq, limit):
+        return [e for e in self._audit.get(tenant_id, []) if (e.seq or 0) > after_seq][:limit]
+
     # --- security event stream ([2026] VJS-COUNTY 9, D3) ---
     async def security_head(self, tenant_id):
         chain = self._security.get(tenant_id, [])
@@ -438,6 +430,9 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
         if event_type is not None:
             chain = [e for e in chain if e.event_type.value == event_type]
         return chain[-limit:]
+
+    async def security_scan(self, tenant_id, after_seq, limit):
+        return [e for e in self._security.get(tenant_id, []) if (e.seq or 0) > after_seq][:limit]
 
     # --- audit rollup anchors ([2026] VJS-COUNTY 9, D4) ---
     async def add_audit_anchor(self, anchor):

@@ -21,6 +21,154 @@
 # are Boltrig-local (from the SRS) and never restate a K-*.
 
 invariants:
+  FR-ARC-01:
+    description: Thin orchestration has a build-red accidental-dependency gate - direct imports and common dynamic-import forms in domain, ports, and application code may point only to their declared inward layers and the standard library.
+    tests:
+      - tests/unit/test_architecture_gate.py::test_thin_orchestration_layers_depend_inward_only
+  SEC-144:
+    description: An effective-authority value permits a verb only when every supplied current ceiling permits it - parent, profile, selected-skill requirements, workspace policy, and approval - while skill selection alone cannot widen the immutable value.
+    tests:
+      - tests/unit/test_orchestration_contracts.py::test_effective_authority_requires_every_current_ceiling
+      - tests/unit/test_orchestration_contracts.py::test_skill_selection_cannot_widen_authority_and_refs_are_immutable
+  SEC-145:
+    description: Every runtime thread, turn, and normalized event uses non-empty identifiers and is bound to one exact Boltrig phase assignment; cross-assignment lifecycle responses or event correlations fail closed.
+    tests:
+      - tests/unit/test_orchestration_contracts.py::test_phase_lifecycle_rejects_a_cross_assignment_thread
+      - tests/unit/test_orchestration_contracts.py::test_runtime_event_rejects_cross_assignment_thread_or_turn
+  SEC-146:
+    description: Runtime boundary JSON is copied into finite canonical immutable documents, while ephemeral bearer credentials are redacted, slot-isolated, and deliberately non-serializable.
+    tests:
+      - tests/unit/test_orchestration_contracts.py::test_canonical_json_is_copied_finite_and_immutable
+      - tests/unit/test_orchestration_contracts.py::test_ephemeral_bearer_is_explicitly_revealed_but_not_serializable
+  SEC-147:
+    description: Every legacy spawn path treats selected-skill tool grants as requirements and intersects them with the current parent context before exposing tools, even when no optional extra ceiling is supplied.
+    tests:
+      - tests/integration/test_fleet_spawn.py::test_every_spawn_caps_skill_requirements_to_parent_authority
+  SEC-148:
+    description: Production AI execution never falls through to ambient process credentials, and a configured but unavailable sealed credential fails closed in every environment instead of silently using an env key.
+    tests:
+      - tests/security/test_ai_keys.py::test_production_runtime_refuses_ambient_ai_key_fallback
+      - tests/security/test_ai_keys.py::test_configured_missing_ai_key_never_falls_through_to_ambient
+  SEC-149:
+    description: Legacy MCP run tokens are random, stored only by SHA-256 digest, expire within a bounded mandatory TTL, and become unusable immediately when revoked.
+    tests:
+      - tests/security/test_mcp_face.py::test_run_tokens_are_hashed_expiring_and_immediately_revocable
+  SEC-150:
+    description: The first Codex App Server client admits only the pinned stable omitted-jsonrpc protocol over a bounded local transport, hard-enforces a read-only sandbox with local approvals disabled, binds lifecycle responses to exact requested identifiers and policy, rejects every untyped server request fail closed, and never exposes peer payloads in errors.
+    tests:
+      - tests/unit/test_codex_app_server.py::test_read_only_lifecycle_uses_exact_monotonic_stable_shapes
+      - tests/unit/test_codex_app_server.py::test_server_request_failure_is_generic_and_sanitized
+  SEC-151:
+    description: Effective runtime authority is the exact scope-bound intersection of the parent grant, profile ceiling, selected-skill requirements, workspace policy, and current durable approval state; no skill, approval, prompt, message, or mismatched tenant/workspace policy may widen it.
+    tests:
+      - tests/unit/test_effective_authority_evaluator.py::test_all_five_layers_reduce_candidates_in_fixed_explainable_order
+      - tests/unit/test_effective_authority_evaluator.py::test_selected_skill_requirements_can_never_grant_parent_authority
+  SEC-152:
+    description: Codex and Opbox workers receive only opaque short-lived grant bearers bound to one exact tenant, workspace, root, phase, assignment, policy generation, and immutable authority evaluation; durable state contains only the token digest and concrete verbs, while expiry, replacement, assignment cancellation, and root cancellation fail closed immediately.
+    tests:
+      - tests/unit/test_run_grant_leases.py::test_issue_uses_trusted_snapshot_and_persists_only_digest
+      - tests/unit/test_run_grant_leases.py::test_exact_and_assignment_cancellation_revoke_immediately
+  FR-RUN-19:
+    description: Boltrig admits only the exact reviewed Codex 0.144.3 Linux binary and canonical stable-v2 App Server schema, keeps experimental APIs disabled, and permits only stdio or a private Unix socket rather than a remote WebSocket listener.
+    tests:
+      - tests/unit/test_codex_protocol_pin.py::test_checked_in_codex_protocol_pin_is_exact
+      - tests/unit/test_codex_protocol_pin.py::test_cli_verification_generates_only_stable_schema
+  FR-RUN-20:
+    description: Boltrig owns one canonical, exactly scoped and versioned root-run to phase to work-item to assignment to result to verification ledger with explicit legal transitions, durable terminal metadata, store-assigned event order, and transactional-outbox delivery state.
+    tests:
+      - tests/unit/test_execution_ledger_models.py::test_root_phase_work_assignment_are_scoped_pinned_and_boltrig_owned
+      - tests/unit/test_execution_ledger_models.py::test_lifecycle_matrices_and_terminal_metadata_fail_closed
+      - tests/unit/test_execution_transport_models.py::test_pending_recorded_event_and_outbox_keep_scopes_and_keys_distinct
+  SEC-153:
+    description: Organisation users and phase modes have one exact canonical vocabulary across orchestration and storage; runtime identities are credential-free tenant-workspace composites, and every Codex binding is a Boltrig-owned scoped observation that cannot mutate ledger authority.
+    tests:
+      - tests/unit/test_execution_ledger_models.py::test_runtime_identity_is_composite_scoped_and_contains_no_auth_state
+      - tests/unit/test_execution_ledger_models.py::test_fleet_and_ledger_share_one_exact_principal_and_phase_mode_vocabulary
+      - tests/unit/test_execution_transport_models.py::test_codex_bindings_are_scoped_boltrig_owned_and_explicitly_observational
+  SEC-154:
+    description: Execution commands use a server-computed canonical digest for replay/conflict decisions, while normalized event payloads and counters are bounded, canonical, control-safe, signed-BIGINT-safe, and reject credential-bearing keys before persistence.
+    tests:
+      - tests/unit/test_execution_transport_models.py::test_command_digest_is_server_computed_and_models_replay_vs_conflict
+      - tests/unit/test_execution_transport_models.py::test_event_payload_is_exact_bounded_sensitive_free_and_normalized
+      - tests/unit/test_execution_transport_models.py::test_durable_values_reject_controls_and_signed_bigint_overflow
+  SEC-155:
+    description: Every Codex phase receives a bounded deterministic read-only workspace snapshot that excludes nested repository and Codex control layers and rejects symlinks, special files, traversal, overlap, races, and allocation overflow before the runtime starts.
+    tests:
+      - tests/unit/test_skill_artifacts.py::test_workspace_projection_excludes_control_layers_at_every_depth
+      - tests/unit/test_skill_artifacts.py::test_workspace_rejects_symlinks_and_special_files
+  SEC-156:
+    description: Boltrig materializes only exact digest-pinned selected skills, force-reloads Codex discovery, and admits a thread only when the enabled name, path, scope, and bytes exactly match the generation-bound allowlist; unselected built-ins, errors, drift, and skills/changed invalidate the receipt fail closed.
+    tests:
+      - tests/unit/test_skill_artifacts.py::test_materializes_only_exact_digest_pinned_selected_skills
+      - tests/unit/test_skill_attestation.py::test_exact_enabled_allowlist_attests_with_disabled_system_skill_visible
+      - tests/unit/test_skill_attestation.py::test_skills_changed_invalidates_until_a_new_attestation_is_accepted
+      - tests/unit/test_skill_discovery.py::test_unselected_bundled_skill_must_be_disabled
+      - tests/unit/test_skill_discovery.py::test_digest_drift_after_materialization_fails_closed
+  SEC-159:
+    description: Codex runtime configuration is deterministically composed from a private revalidated request snapshot with secretless command authentication, read-only sandboxing, approvals and every reviewed dynamic surface disabled, lexically cell-local helper and skill paths, and exact receipt-to-TOML coherence; coherent forgeries cannot widen helper or skill policy, request repr is redacted and pickle/copy serialization is blocked, and production readiness remains false until trusted-root, no-symlink, and evidence verification are wired.
+    tests:
+      - tests/unit/test_codex_runtime_config.py::test_composes_exact_secretless_read_only_config_and_receipt
+      - tests/unit/test_codex_runtime_config.py::test_caller_constructible_surface_digests_never_grant_dynamic_surfaces
+      - tests/unit/test_codex_runtime_config_adversarial.py::test_compose_revalidates_a_request_mutated_after_construction
+      - tests/unit/test_codex_runtime_config_adversarial.py::test_compose_uses_a_private_snapshot_after_validation
+      - tests/unit/test_codex_runtime_config_adversarial.py::test_self_consistent_receipt_cannot_move_helper_outside_cell
+      - tests/unit/test_codex_runtime_config_adversarial.py::test_self_consistent_receipt_cannot_widen_skill_policy
+  SEC-161:
+    description: Capability-effect attestations can only reject an existing exact assignment authority snapshot - admission binds tenant, workspace, root, phase, assignment, authority evaluation id/digest/generation, catalog generation/digest, and the complete verb-definition/classification set; only READ_ONLY_NO_EXTERNAL_EFFECT with LOW consequence, or an exact empty no-tool set, admits, while egress, mutation, high consequence, drift, partial/broader evidence, subclass spoofing, and malformed evidence fail closed.
+    tests:
+      - tests/unit/test_capability_attestation.py::test_exact_safe_set_admits_only_the_existing_authority_snapshot
+      - tests/unit/test_capability_attestation_adversarial.py::test_attestations_can_only_reject_and_never_seed_authority
+  SEC-162:
+    description: Root routing is fused with insert-once persistence into one governed admission - every root obtains exactly one authoritative persisted decision through a single admit surface (no route-only or peek bypass), replaying the same trusted facts returns the identical persisted object without a second record, concurrent admission of one root resolves to one winner plus exact replays sharing one identity, and facts that drifted from immutable history are rejected without overwriting the retained decision.
+    tests:
+      - tests/unit/test_root_admission.py::test_root_admission_persists_one_decision_and_replays_the_same_object
+      - tests/unit/test_root_admission.py::test_concurrent_admission_resolves_to_one_persisted_identity
+      - tests/unit/test_root_admission.py::test_drifted_root_facts_are_rejected_without_overwrite
+      - tests/unit/test_root_admission.py::test_admission_exposes_no_route_only_or_peek_bypass
+  SEC-163:
+    description: Minting an assignment's capability-attestation evidence is fused with persisting the assignment into one governed admission - an assignment reaches the ledger only with a retained attestation set behind it, the set is minted against a binding DERIVED from the assignment record rather than one handed in, the reference the record carries is built from the set the store retained rather than the local copy submitted to it, evidence the finished record cannot name fails closed, a refused ledger leaves a benign orphaned set and never a dangling reference, and re-admitting the same trusted facts replays over both the memory and PostgreSQL stores without a duplicate or a conflict.
+    tests:
+      - tests/unit/test_assignment_admission.py::test_admission_mints_attests_and_persists_one_assignment
+      - tests/unit/test_assignment_admission.py::test_admitting_the_same_trusted_facts_twice_replays
+      - tests/unit/test_assignment_admission.py::test_admission_exposes_no_binding_pin_or_mint_only_bypass
+      - tests/unit/test_assignment_admission.py::test_the_reference_carried_is_the_stores_retained_set_not_the_local_copy
+      - tests/unit/test_assignment_admission.py::test_a_retained_set_the_assignment_cannot_name_fails_closed
+      - tests/unit/test_assignment_admission.py::test_a_refused_ledger_leaves_an_orphaned_set_and_no_dangling_reference
+      - tests/store/test_postgres_assignment_admission.py::test_postgres_admission_mints_attests_and_persists
+      - tests/store/test_postgres_assignment_admission.py::test_postgres_admitting_the_same_trusted_facts_twice_replays
+  SEC-170:
+    description: The Codex read-only ledger scaffold is a total no-op behind BOLTRIG_CODEX_LEDGER - flag off (the default) constructs nothing and parks None on app.state.platform, so no admission service exists and nothing calls admit; flag on constructs both the root-routing and assignment admission services behind an OFF policy and still calls nothing.
+    tests:
+      - tests/unit/test_codex_execution.py::test_codex_ledger_defaults_off_and_builds_no_stack
+      - tests/unit/test_codex_execution.py::test_flag_on_constructs_both_admission_services
+      - tests/integration/test_codex_execution_platform.py::test_platform_parks_none_when_flag_off
+  SEC-171:
+    description: Capabilities are reconciled scoped-declaratively - a manifest apply is declarative over the capabilities it authored (source='manifest') and additive over governed control-plane grants; a manifest-sourced capability a redeployed manifest no longer declares is soft-deactivated (and can no longer be routed to) while a control-plane grant survives, a name re-declared by the manifest reclaims manifest ownership and reconciles thereafter, and the mass-deactivation guard aborts the whole apply (nothing committed) on an empty manifest or an over-threshold drop unless an explicit confirm overrides.
+    tests:
+      - tests/integration/test_manifest_reconciliation.py::test_dropped_manifest_capability_deactivates_and_stops_routing
+      - tests/integration/test_manifest_reconciliation.py::test_control_plane_capability_survives_a_manifest_that_omits_it
+      - tests/integration/test_manifest_reconciliation.py::test_name_from_both_paths_becomes_manifest_and_reconciles
+      - tests/integration/test_manifest_reconciliation.py::test_empty_manifest_aborts_without_confirm_and_succeeds_with_it
+      - tests/integration/test_manifest_reconciliation.py::test_over_threshold_drop_aborts_without_confirm_and_succeeds_with_it
+  SEC-172:
+    description: Codex read-only root admission is an execution-neutral shadow write behind BOLTRIG_CODEX_LEDGER - flag off (the default) records no RootEngineDecision and the chat turn is byte-identical to the unwired path; flag on records exactly one LEGACY/ROLLOUT_OFF decision per root run and execution is unchanged; and a shadow-admit failure is swallowed and never breaks a live turn (fail-open under OFF, per LOG-2026-07-17-121829).
+    tests:
+      - tests/integration/test_codex_shadow_root_admission.py::test_flag_off_records_no_decision_and_is_execution_neutral
+      - tests/integration/test_codex_shadow_root_admission.py::test_flag_on_records_one_legacy_decision_and_execution_is_unchanged
+      - tests/integration/test_codex_shadow_root_admission.py::test_shadow_admit_failure_is_swallowed_and_turn_completes
+  SEC-173:
+    description: The pump root lane shadow-admits exactly like the chat root (SEC-172) - a top-level (parent_id is None) work item records exactly one LEGACY/ROLLOUT_OFF RootEngineDecision under the OFF flag, a child item (parent_id set) records nothing, flag off records nothing, and re-handling the same root is a safe insert-once replay (still one decision, no error); execution is unchanged throughout.
+    tests:
+      - tests/integration/test_codex_pump_root_admission.py::test_flag_off_pump_root_records_no_decision
+      - tests/integration/test_codex_pump_root_admission.py::test_flag_on_pump_root_records_one_legacy_decision
+      - tests/integration/test_codex_pump_root_admission.py::test_flag_on_pump_child_records_nothing
+      - tests/integration/test_codex_pump_root_admission.py::test_rehandling_the_same_root_is_a_safe_replay
+  SEC-174:
+    description: The chat direct-spawn lane caps a turn to the CALLER's grants by construction, not by convention - the turn context carries the caller ceiling directly (no tenant-wide GrantSet is in scope to mis-place) and no separate grant_ceiling argument rescues it, mirroring the pump's authority.context_for doctrine (SEC-164). A caller whose ceiling lacks a verb never receives it though the turn's skill declares it and the tenant permits it (asserted on effective_grants and at the kernel chokepoint); a caller holding it does; and a caller wider than the skill is still bound by the skill. The tenant ceiling stays a separate axis enforced independently at dispatch.
+    tests:
+      - tests/security/test_chat_principal_authority.py::test_a_narrow_caller_never_gets_a_verb_it_lacks_though_the_skill_declares_it
+      - tests/security/test_chat_principal_authority.py::test_a_caller_holding_the_verb_still_gets_it
+      - tests/security/test_chat_principal_authority.py::test_a_caller_ceiling_wider_than_the_skill_is_bound_by_the_skill
   P9:
     description: Backend unavailability degrades gracefully, never crashes (graceful degradation).
     tests:
@@ -1105,6 +1253,10 @@ invariants:
     description: The four org/workspace tenancy tables are RLS-fenced (SEC-08) - workspaces, org_members and workspace_members are in the rls.sql generic tenant_id-scoped set, and organisations is fenced by its own id-keyed tenant_isolation policy (its id IS the tenant_id), with all four defined in schema.sql.
     tests:
       - tests/security/test_tenancy_isolation.py::test_the_four_tenancy_tables_are_rls_scoped
+  SEC-169:
+    description: No tenant table drifts outside the RLS fence (SEC-08, K-22, SEC-65) - against a real Postgres with schema.sql + the rls.sql overlay applied, EVERY table carrying a tenant_id column is either RLS-fenced (FORCE row security plus a tenant_isolation policy in pg_policy) or in a single explicit documented exclusion set (personal_access_tokens, identity_orgs, channels - each resolved by an unguessable key before any tenant is bound), so a future tenant table that lands unfenced and unexcused fails the build.
+    tests:
+      - tests/security/test_rls_fence_coverage.py::test_every_tenant_table_is_rls_fenced_or_documented_excluded
 
   # --- Session active workspace context + switching ([2026] VJS-COUNTY 8, D4) -
   FR-ORG-03:
@@ -1383,6 +1535,15 @@ invariants:
     description: Operator backups are restorable - a real pg_dump drill through the pinned PostgreSQL client image restores the live schema and data into a fresh database and the restored rows read back intact.
     tests:
       - tests/integration/test_backup_restore.py::test_backup_restores_into_a_fresh_database
+  FR-OPS-05:
+    description: /healthz is a bounded liveness probe - it answers from process state and the cached adapter posture without awaiting any live adapter I/O, so a slow or unreachable adapter backend can never make the probe slow or non-200 and flap a live kernel's Compose healthcheck; adapter posture freshness moves to a bounded background refresh (a stale cache schedules one off-path re-probe and every probe is cut off by a per-adapter timeout) and deep dependency readiness stays on the fail-closed /readyz.
+    tests:
+      - tests/unit/test_liveness.py::test_healthz_returns_200_for_a_live_app
+      - tests/unit/test_liveness.py::test_healthz_stays_prompt_and_200_when_an_adapter_health_hangs
+      - tests/unit/test_liveness.py::test_healthz_serves_cached_posture_without_reprobing
+      - tests/unit/test_liveness.py::test_health_snapshot_kicks_a_background_refresh_when_stale
+      - tests/unit/test_liveness.py::test_refresh_health_bounds_a_hung_probe
+      - tests/unit/test_liveness.py::test_readyz_stays_bounded_and_fail_closed_with_a_hung_adapter
   NFR-MNT-01:
     description: Python structural debt is an enforced expiring ratchet - every boltrig source file is at most 400 physical lines and every decorator-inclusive function or method at most 80 source-span lines unless its file has an explicit owner, reason, expiry, exact current file and largest-function baselines, and an exact record for every over-limit function; the gate rejects new or sibling debt, growth, stale-high or missing-file entries, malformed metadata, duplicate JSON keys, and expired exemptions.
     tests:
@@ -1428,3 +1589,52 @@ invariants:
       - tests/security/test_budget_governance.py::test_budget_policy_preserves_usage_and_reset_is_selective
       - tests/security/test_budget_governance.py::test_budget_http_mutations_are_held_and_tenant_bound
       - tests/security/test_budget_governance.py::test_budget_control_verbs_reject_non_admin_even_with_grants
+  # --- the delegated (pump) lane runs at the requesting principal's authority ---
+  SEC-164:
+    description: The delegated pump lane executes a work item at the REQUESTING principal's authority, never the tenant permission ceiling - the item's on_behalf_of/workspace_id resolve through the same effective_grants_for_request the request path uses, so a low-privilege principal's item cannot receive or dispatch a verb its principal lacks even when the selected skill declares that tool grant, a principal holding the verb still gets it, a deactivated principal carries nothing, and an item naming no principal (or one with no user record) fails closed to EMPTY_GRANTS rather than inheriting the tenant ceiling. The tenant ceiling remains the separate axis GrantChecker enforces at dispatch, and on_behalf_of provenance through the tree and the audit trail is unchanged. This aligns the pump with the SEC-29 / SEC-78 / SEC-139 capping every other spawn entry point already applies.
+    tests:
+      - tests/security/test_pump_principal_authority.py::test_low_privilege_principals_item_cannot_execute_a_verb_it_lacks
+      - tests/security/test_pump_principal_authority.py::test_a_principal_holding_the_verb_still_gets_it
+      - tests/security/test_pump_principal_authority.py::test_a_tenant_wide_principal_is_still_bound_by_a_narrow_tenant_ceiling
+      - tests/security/test_pump_principal_authority.py::test_an_unidentified_principal_carries_no_authority
+      - tests/security/test_pump_principal_authority.py::test_a_deactivated_principal_carries_no_authority
+      - tests/security/test_pump_principal_authority.py::test_system_originated_item_still_completes_and_audits_on_behalf_of
+      - tests/security/test_pump_principal_authority.py::test_on_behalf_of_is_still_carried_through_the_tree_and_the_audit
+  SEC-165:
+    description: Pump routing fails closed - a work item routed to a department with no configured head is parked for a human (an AWAITING_HUMAN escalation) rather than silently executing under an arbitrary fallback head, because the run's context claims owner_member as its principal_scope and a mis-route would make that scope claim untrue. Nothing spawns for an unroutable item.
+    tests:
+      - tests/security/test_pump_principal_authority.py::test_an_unroutable_department_parks_instead_of_running_under_another_head
+
+  # --- no new domain effect begins after a run is revoked ---
+  SEC-166:
+    description: The pump re-reads the cancellation marker at boundary 2 - the cooperative point immediately AFTER a completed step - so no new domain effect BEGINS after revocation ([2026] VJS-COUNTY 6, D3). A cancel arriving during the in-flight head.handle previously went unseen for the whole of that step's duration, because the run then acted on the marker as read BEFORE dispatch: the cancelled run went on to persist the step's new_work_items as fresh PENDING children (which the pump would subsequently claim and execute, growing a tree of live work out of a revoked run) and to promote its GENERATED workflow into the reusable library (mutating the flywheel durably, beyond the run's own lifetime). Refreshed at boundary 2, a cancel suppresses both downstream effects and the terminal state reflects the refreshed marker rather than the stale pre-dispatch one. The completed step's own record is NOT discarded - it really ran, so the head's aggregate (children/spawned) is preserved on the item beneath the neutral cancel outcome - and the step itself is still never interrupted (D3 forbids a mid-step hard kill; boundary 2 is a cooperative check at a boundary the step has already crossed, exactly like the pre-existing boundary 1 refresh). An uncancelled run is unaffected: it still spawns follow-on work and still learns.
+    tests:
+      - tests/security/test_run_cancel.py::test_a_cancel_during_the_step_spawns_no_follow_on_work
+      - tests/security/test_run_cancel.py::test_a_cancel_during_the_step_learns_no_workflow
+      - tests/security/test_run_cancel.py::test_the_completed_steps_own_record_survives_the_cancel
+      - tests/security/test_run_cancel.py::test_an_uncancelled_run_is_completely_unaffected
+      - tests/security/test_run_cancel.py::test_in_flight_adapter_call_is_not_interrupted
+
+  SEC-167:
+    description: The MCP consumer's bearer is the credential the KERNEL resolved for that call, never material held on the adapter instance. The adapter carries no token (the token= constructor param is gone), so the per-call credential dispatch already resolves and passes is authoritative rather than silently inert: two calls on one instance present the two different credentials they were handed, and rotating the stored credential ref changes the next call's bearer with no adapter rebuild. A call with no credential, or with material carrying no usable token, FAILS CLOSED with an UNAUTHORISED refusal and reaches the transport not at all, rather than posting an empty bearer as an unauthenticated request. Registration puts a REFERENCE on the credential seam (set_credential_ref plus bind_adapter_credential, mirroring the manifest adapter-credential path, SEC-04/05) and refuses raw secret material outright, so the secret is never an audited control-plane param and never lives outside the kernel. The SEC-22 review gate is checked first and still refuses an unreviewed server holding a valid credential, and SEC-61 SSRF pinning still refuses a blocked destination before the bearer can leave.
+    tests:
+      - tests/security/test_mcp_consumer_credential.py::test_the_kernels_per_call_credential_is_the_bearer
+      - tests/security/test_mcp_consumer_credential.py::test_a_second_call_uses_the_second_credential_not_the_first
+      - tests/security/test_mcp_consumer_credential.py::test_no_credential_fails_closed_even_with_a_static_token_planted
+      - tests/security/test_mcp_consumer_credential.py::test_empty_credential_material_also_fails_closed
+      - tests/security/test_mcp_consumer_credential.py::test_the_adapter_holds_no_token_to_fall_back_on
+      - tests/security/test_mcp_consumer_credential.py::test_rotating_the_stored_ref_changes_the_next_calls_bearer
+      - tests/security/test_mcp_consumer_credential.py::test_registration_binds_the_ref_and_refuses_raw_material
+
+  # --- chain verification re-derives the WHOLE chain, never a tail window ---
+  SEC-168:
+    description: Audit-chain and security-chain verification re-derives the ENTIRE per-tenant chain from seq 1 through the ascending store scan seam (audit_scan/security_scan return rows with seq > after_seq, oldest first, up to limit), never a bounded tail window. The old verify read only the newest 10_000 rows and seeded prev=None, so an UNTAMPERED chain longer than the window failed at the window's first row (tamper-evidence crying wolf), and tampering any row below the window was never re-derived at all (tampering an old row went unseen). Now an untampered chain of any length verifies OK across every page boundary, tampering a row in the OLDEST page is caught with the correct first_bad_seq, and both hold identically on the in-memory and Postgres stores, while audit_query/security_query keep their existing tail semantics for the observability and /v1/audit callers that depend on them.
+    tests:
+      - tests/kernel/test_audit_chain.py::test_a_chain_longer_than_the_old_window_verifies_ok
+      - tests/kernel/test_audit_chain.py::test_tampering_below_the_old_window_is_still_caught
+      - tests/security/test_security_event_stream.py::test_a_long_security_chain_verifies_ok
+      - tests/security/test_security_event_stream.py::test_security_tamper_below_the_old_window_is_caught
+      - tests/store/test_store_parity.py::test_audit_verify_walks_every_page_of_a_long_chain
+      - tests/store/test_store_parity.py::test_audit_tamper_in_the_oldest_page_is_caught
+      - tests/store/test_store_parity.py::test_audit_scan_pages_ascending_and_query_keeps_tail
+      - tests/store/test_store_parity.py::test_security_verify_and_scan_page_the_whole_chain

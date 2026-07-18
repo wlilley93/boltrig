@@ -39,6 +39,11 @@ class Settings:
     oidc_audience: str | None = None
     oidc_jwks_uri: str | None = None
     dev_auth: bool = False  # BOLTRIG_DEV_AUTH=1 -> header-trust resolver (dev only)
+    # Codex read-only ledger scaffold (BOLTRIG_CODEX_LEDGER). Disabled by default;
+    # when off the Codex execution stack is never constructed (a total no-op). When
+    # on it is constructed and parked on app.state.platform, but nothing calls it
+    # yet: wiring an admit() into the live path is a later, court-gated PR.
+    codex_ledger: bool = False  # BOLTRIG_CODEX_LEDGER=1 -> construct the inert stack
     # Cloudflare Access (zero-trust edge IdP). When the team domain + AUD are set,
     # the kernel verifies the per-request Cf-Access-Jwt-Assertion against CF's
     # JWKS and derives the principal from the authenticated email. Login, MFA and
@@ -85,6 +90,7 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         oidc_audience=e.get("OIDC_AUDIENCE") or None,
         oidc_jwks_uri=e.get("OIDC_JWKS_URI") or None,
         dev_auth=_as_bool(e.get("BOLTRIG_DEV_AUTH")),
+        codex_ledger=_as_bool(e.get("BOLTRIG_CODEX_LEDGER")),
         cf_access_team_domain=(e.get("CF_ACCESS_TEAM_DOMAIN") or "").rstrip("/") or None,
         cf_access_aud=e.get("CF_ACCESS_AUD") or None,
         cf_access_role_map=e.get("CF_ACCESS_ROLE_MAP") or None,

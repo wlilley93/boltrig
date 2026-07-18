@@ -7,6 +7,7 @@ an organisation without touching core code (P1/P7).
 
 from __future__ import annotations
 
+from .environment import production_signal
 from .manifest import (
     AdapterConfig,
     BudgetConfig,
@@ -30,6 +31,7 @@ from .settings import Settings, load_settings
 
 __all__ = [
     "Settings",
+    "production_signal",
     "load_settings",
     "load_manifest",
     "apply_manifest",

@@ -12,7 +12,7 @@ import asyncio
 import logging
 import os
 
-from boltrig.config import apply_manifest, load_manifest, load_settings
+from boltrig.config import apply_manifest, load_manifest, load_settings, production_signal
 from boltrig.fleet import make_agent_invoker, make_app_spawner
 from boltrig.kernel import Kernel
 from boltrig.store import InMemoryStore, Store
@@ -164,6 +164,7 @@ async def _register_control_plane(kernel: Kernel, tenant_id: str) -> None:
             kernel.store,
             loader=kernel.loader,
             registry=kernel.registry,
+            credentials=kernel.credentials,  # MCP bearers bind to the seam (SEC-04/05)
         ),
     )
     log.info("control-plane verbs registered (governed config amendment)")
@@ -204,19 +205,18 @@ async def _register_consumed_mcp(kernel: Kernel, tenant_id: str, mcp_cfg) -> Non
     """Register external MCP servers declared in the bundle's manifest
     (`mcp.consume`), each INERT pending review (SEC-22) - the review/activate route
     still gates them. Lets a project declare its external MCP servers as data
-    rather than POSTing them at runtime (Round Fifteen)."""
+    rather than POSTing them at runtime (Round Fifteen). An entry names its bearer
+    with ``credential_ref`` (a secret-store key, never the secret itself) so the
+    kernel resolves it per call (SEC-04/05); raw material is refused."""
+    from boltrig.adapters.mcp_consumer import McpConsumerAdapter
+    from boltrig.config.control_mcp import bind_mcp_credential
+
     for entry in (mcp_cfg or {}).get("consume", []) or []:
         if not isinstance(entry, dict) or not entry.get("id"):
             continue
-        from boltrig.adapters.mcp_consumer import McpConsumerAdapter
-
-        consumer = McpConsumerAdapter(
-            entry["id"], url=entry.get("url"),
-            # credential enters via ${ENV} interpolation at manifest load - held
-            # kernel-side, never handed to an agent.
-            token=entry.get("credential") or entry.get("token"),
-        )
+        consumer = McpConsumerAdapter(entry["id"], url=entry.get("url"))
         await kernel.register_adapter(tenant_id, consumer)  # describe()=[] until review
+        await bind_mcp_credential(kernel.store, kernel.credentials, tenant_id, consumer.id, entry)
         log.info("external MCP server '%s' registered (inert, pending review)", entry["id"])
 
 
@@ -351,26 +351,6 @@ def _deny_all_resolver():
     return resolver
 
 
-_PROD_SIGNALS = ("prod", "production", "staging")
-
-
-def production_signal(env: dict | None = None) -> str | None:
-    """Return a production signal if one is present, else None (IAM-09).
-
-    A signal is: ENV / BOLTRIG_ENV / APP_ENV set to prod/production/staging, or an
-    explicit BOLTRIG_PRODUCTION=1. Pure + env-injectable so it is unit-testable."""
-    import os
-
-    e = env if env is not None else os.environ
-    if (e.get("BOLTRIG_PRODUCTION") or "").strip().lower() in {"1", "true", "yes", "on"}:
-        return "BOLTRIG_PRODUCTION"
-    for key in ("ENV", "BOLTRIG_ENV", "APP_ENV"):
-        val = (e.get(key) or "").strip().lower()
-        if val in _PROD_SIGNALS:
-            return f"{key}={val}"
-    return None
-
-
 def refuse_dev_auth_in_prod(env: dict | None = None) -> None:
     """Abort if dev auth is enabled with any production signal (IAM-09).
 
@@ -487,6 +467,7 @@ def build_app():
     from boltrig.kernel.app import create_app
 
     def chat_factory(kernel):
+        from boltrig.api.codex_execution import build_codex_execution_stack
         # the conversational service routes turns through the fleet (US-CONV-02);
         # the manifest chat knob decides a bare turn's skill set per caller role
         # ([2026] VJS-COUNTY 1) - no manifest means the fail-closed empty knob
@@ -500,7 +481,9 @@ def build_app():
         return ChatService(
             kernel.store, kernel.events,
             turn_executor=build_turn_executor(
-                kernel, build_spawner(kernel), chat_config=chat_cfg
+                kernel, build_spawner(kernel), chat_config=chat_cfg,
+                # Codex shadow stack (SEC-170): None when BOLTRIG_CODEX_LEDGER is off.
+                codex_execution=build_codex_execution_stack(load_settings(), kernel.store),
             ),
             # The same ChatConfig carries the attachment caps ([2026] VJS-COUNTY 3);
             # ChatService enforces them fail-closed at intake.
@@ -509,6 +492,7 @@ def build_app():
 
     def platform_factory(kernel):
         # Round Three studios/admin/eval ride existing services (C2)
+        from boltrig.api.codex_execution import build_codex_execution_stack
         from boltrig.api.readiness import ReadinessService
         from boltrig.config.admin import AdminConfig
         from boltrig.fleet import register_workers
@@ -525,15 +509,10 @@ def build_app():
             except Exception:
                 pass
         spawner = build_spawner(kernel)
-        # Honest executor selection (US-EXE-05): record which executor serves
-        # this app and whether it is durable. Workflow trigger descriptors
-        # already stamp `durable` per run; Beat 4 extends the same stamp into
-        # spawn/work-item execution metadata (fleet/spawner, not wired here).
+        # Honest executor selection (US-EXE-05): record which executor serves this
+        # app and whether it is durable (Beat 4 extends the stamp; not wired here).
         executor = register_workers(kernel)
-        log.info(
-            "workflow executor: %s (durable=%s)",
-            type(executor).__name__, executor.durable,
-        )
+        log.info("workflow executor: %s (durable=%s)", type(executor).__name__, executor.durable)
         # Beat 5: register the governed task bodies on the local executor (the
         # Hatchet executor got its client-side handles in register_workers) and
         # bridge HITL answers to the durable lane. No pump here - the API
@@ -561,10 +540,11 @@ def build_app():
             "admin": admin,
             "eval": eval_runner,
             "spawner": spawner,
+            # Codex ledger scaffold (steps 1-2): None when BOLTRIG_CODEX_LEDGER off.
+            "codex_execution": build_codex_execution_stack(load_settings(), kernel.store),
             "workflows": workflows,
-            # Eval-gated promotion ([2026] VJS-COUNTY 5): shares the ONE EvalRunner
-            # so a candidate is proven through the same chokepoint under the
-            # initiator ceiling (SEC-29) before it is preferred for reuse.
+            # Eval-gated promotion ([2026] VJS-COUNTY 5): shares the ONE EvalRunner so a
+            # candidate is proven through the same chokepoint (SEC-29) before reuse.
             "promoter": WorkflowPromoter(kernel.store, eval_runner),
             "status": status,
             "readiness": ReadinessService(

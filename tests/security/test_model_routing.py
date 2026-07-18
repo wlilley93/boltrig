@@ -266,8 +266,11 @@ runtimes:
             encoding="utf-8",
         )
         kernel = Kernel(InMemoryStore())
+        # This manifest declares model routing only (no capabilities); under
+        # scoped-declarative reconciliation an empty-capability manifest needs an
+        # explicit confirm to pass the mass-deactivation guard.
         await apply_manifest(kernel, load_manifest(str(manifest_path)),
-                             load_builtin_adapters=False)
+                             load_builtin_adapters=False, confirm_bulk_deactivate=True)
         cap = AgentCapability(
             "w", T, "claude-api", ["*"], 2, True, "standard",
             model_endpoint="standard",
