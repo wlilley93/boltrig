@@ -168,7 +168,11 @@ async def test_opencode_timeout_terminates_child_and_revokes(tmp_path):
         mcp_url="http://kernel.example/v1/mcp",
         issue_token=lambda *a, **k: "RUN_TOKEN_SECRET",
         revoke_token=revoked.append,
-        timeout=0.1,
+        # Comfortably longer than a cold Python interpreter start so SIGTERM never
+        # races ahead of the child arming its handler (a sub-second timeout let the
+        # default action kill it before the marker was written). The contract under
+        # test - timeout -> SIGTERM -> child handles -> token revoked - is unchanged.
+        timeout=2.0,
     )
     res = await rt.run("prompt", _ctx(repo_root=str(tmp_path)), tools=[])
 
