@@ -214,8 +214,13 @@ def test_browser_cli_state_roots_are_stack_owned():
     assert "/opt/boltrig/browser-cli/bin/pip install" in fleet_dockerfile
     assert "--no-deps" in fleet_dockerfile
     assert "--require-hashes" in fleet_dockerfile
-    assert "ARG CHROMIUM_VERSION=" in fleet_dockerfile
-    assert '"chromium=${CHROMIUM_VERSION}"' in fleet_dockerfile
+    # chromium/tini install UNPINNED from apt: exact Debian version pins rot out of
+    # the bookworm pool on every security bump and break the build (apt exit 100).
+    # Still apt-provided from the stack image, never a runtime download (the sibling
+    # test_browser_cli_never_relies_on_a_runtime_browser_download guards that).
+    assert "apt-get install -y --no-install-recommends" in fleet_dockerfile
+    assert "\n        chromium \\" in fleet_dockerfile
+    assert "\n        tini &&" in fleet_dockerfile
     assert "fleet-entrypoint" in fleet_dockerfile
     assert "boltrig-browser-smoke" in fleet_dockerfile
     assert "/usr/local/bin/browser-use" in fleet_dockerfile

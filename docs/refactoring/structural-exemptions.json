@@ -1,20 +1,6 @@
 {
   "version": 1,
   "exemptions": {
-    "boltrig/adapters/builtin/jira.py": {
-      "max_file_lines": 284,
-      "max_function_lines": 109,
-      "over_limit_functions": [
-        {
-          "name": "JiraAdapter.describe",
-          "line": 68,
-          "lines": 109
-        }
-      ],
-      "owner": "adapter-maintainers",
-      "reason": "Split the legacy describe schema into composable operation groups without changing the public adapter contract.",
-      "expires": "2026-12-31"
-    },
     "boltrig/adapters/builtin/ms_graph.py": {
       "max_file_lines": 390,
       "max_function_lines": 179,

@@ -173,6 +173,7 @@ invariants:
     description: Backend unavailability degrades gracefully, never crashes (graceful degradation).
     tests:
       - tests/kernel/test_ratelimit_degraded.py::test_degraded_mode_when_backend_down
+      - tests/emotion/test_relay.py::test_a_broken_engine_or_unwritable_path_never_raises_out_of_publish
   FR-OPS-01:
     description: Alembic is the authoritative ordered schema chain - its immutable baseline plus head revisions produce the same PostgreSQL catalogue as schema.sql bootstrap.
     tests:
@@ -1638,3 +1639,27 @@ invariants:
       - tests/store/test_store_parity.py::test_audit_tamper_in_the_oldest_page_is_caught
       - tests/store/test_store_parity.py::test_audit_scan_pages_ascending_and_query_keeps_tail
       - tests/store/test_store_parity.py::test_security_verify_and_scan_page_the_whole_chain
+
+  # --- emotion add-on: a fail-safe cosmetic projection over the event stream ---
+  EMO-1:
+    description: Emotion is strictly downstream of dispatch - the kernel's only emotion touch is the relay factory seam in kernel/__init__.py, and dispatch outcomes (results, audit rows, run events) are identical with the emotion relay attached vs the plain relay.
+    tests:
+      - tests/emotion/test_relay.py::test_dispatch_outcomes_are_identical_with_and_without_the_emotion_relay
+      - tests/emotion/test_relay.py::test_no_kernel_module_imports_the_emotion_package
+  EMO-2:
+    description: Emotion state contains no message content - engine snapshots and the phenotype file are keys and numbers only, and a sentinel pumped through publish never reaches either.
+    tests:
+      - tests/emotion/test_relay.py::test_message_content_never_reaches_snapshots_or_the_phenotype_file
+  EMO-3:
+    description: appraise() is pure - no I/O, no network, no clock reads beyond passed timestamps; the same inputs give the same deltas, enforced by determinism plus an AST import whitelist over boltrig/emotion/engine.py.
+    tests:
+      - tests/emotion/test_engine.py::test_appraise_is_deterministic_for_identical_inputs
+      - tests/emotion/test_engine.py::test_engine_module_imports_stay_inside_the_pure_whitelist
+  EMO-4:
+    description: Emotion state is tenant-scoped - engines are keyed per tenant and events for one tenant never touch another tenant's engine.
+    tests:
+      - tests/emotion/test_relay.py::test_tenant_b_events_leave_tenant_a_engine_untouched
+  EMO-5:
+    description: The appraisal table is data - the runtime tables load from libraries/emotion YAML and changing the parsed data changes behavior with no code edit.
+    tests:
+      - tests/emotion/test_engine.py::test_appraisal_table_is_data_and_mutating_it_changes_behavior

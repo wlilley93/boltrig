@@ -54,6 +54,120 @@ def _status_of(fields: dict[str, Any]) -> str | None:
     return status.get("name") if isinstance(status, dict) else None
 
 
+_READ_RL = {"per": "minute", "max": 300, "scope": "tenant"}
+_WRITE_RL = {"per": "minute", "max": 100, "scope": "tenant"}
+
+# The ``ticket`` verb schemas as a module-level declaration (was the body of
+# ``JiraAdapter.describe``). These are immutable capability specs; ``describe``
+# returns a fresh list over them so a caller can never mutate the shared table.
+_VERBS: list[VerbSpec] = [
+    VerbSpec(
+        verb_id="ticket.create",
+        noun_id="ticket",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "project": {"type": "string"},
+                "summary": {"type": "string"},
+                "issue_type": {"type": "string"},
+                "description": {"type": "string"},
+                "assignee": {"type": "string"},
+                "labels": {"type": "array", "items": {"type": "string"}},
+                "priority": {"type": "string"},
+            },
+            "required": ["project", "summary"],
+        },
+        output_schema=_TICKET_OUT,
+        consequence="high",
+        description="Create a Jira issue",
+        rate_limit=_WRITE_RL,
+    ),
+    VerbSpec(
+        verb_id="ticket.read",
+        noun_id="ticket",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "key": {"type": "string"},
+                "fields": {"type": ["array", "string"]},
+            },
+            "required": ["key"],
+        },
+        output_schema=_TICKET_OUT,
+        description="Read a Jira issue by key",
+        rate_limit=_READ_RL,
+    ),
+    VerbSpec(
+        verb_id="ticket.update",
+        noun_id="ticket",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "key": {"type": "string"},
+                "summary": {"type": "string"},
+                "description": {"type": "string"},
+                "fields": {"type": "object"},
+            },
+            "required": ["key"],
+        },
+        output_schema={
+            "type": "object",
+            "properties": {
+                "key": {"type": "string"},
+                "updated": {"type": "boolean"},
+            },
+        },
+        consequence="high",
+        description="Update fields on a Jira issue",
+        rate_limit=_WRITE_RL,
+    ),
+    VerbSpec(
+        verb_id="ticket.search",
+        noun_id="ticket",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "jql": {"type": "string"},
+                "limit": {"type": "integer"},
+            },
+            "required": ["jql"],
+        },
+        output_schema={
+            "type": "object",
+            "properties": {
+                "results": {"type": "array"},
+                "count": {"type": "integer"},
+            },
+        },
+        description="Search Jira issues by JQL",
+        rate_limit=_READ_RL,
+    ),
+    VerbSpec(
+        verb_id="ticket.comment",
+        noun_id="ticket",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "key": {"type": "string"},
+                "body": {"type": "string"},
+            },
+            "required": ["key", "body"],
+        },
+        output_schema={
+            "type": "object",
+            "properties": {
+                "id": {"type": "string"},
+                "created": {"type": "string"},
+            },
+            "required": ["id"],
+        },
+        consequence="high",
+        description="Add a comment to a Jira issue",
+        rate_limit=_WRITE_RL,
+    ),
+]
+
+
 class JiraAdapter(HttpAdapter):
     id = "jira"
     version = "1.0.0"
@@ -66,114 +180,7 @@ class JiraAdapter(HttpAdapter):
         )
 
     def describe(self) -> list[VerbSpec]:
-        read_rl = {"per": "minute", "max": 300, "scope": "tenant"}
-        write_rl = {"per": "minute", "max": 100, "scope": "tenant"}
-        return [
-            VerbSpec(
-                verb_id="ticket.create",
-                noun_id="ticket",
-                input_schema={
-                    "type": "object",
-                    "properties": {
-                        "project": {"type": "string"},
-                        "summary": {"type": "string"},
-                        "issue_type": {"type": "string"},
-                        "description": {"type": "string"},
-                        "assignee": {"type": "string"},
-                        "labels": {"type": "array", "items": {"type": "string"}},
-                        "priority": {"type": "string"},
-                    },
-                    "required": ["project", "summary"],
-                },
-                output_schema=_TICKET_OUT,
-                consequence="high",
-                description="Create a Jira issue",
-                rate_limit=write_rl,
-            ),
-            VerbSpec(
-                verb_id="ticket.read",
-                noun_id="ticket",
-                input_schema={
-                    "type": "object",
-                    "properties": {
-                        "key": {"type": "string"},
-                        "fields": {"type": ["array", "string"]},
-                    },
-                    "required": ["key"],
-                },
-                output_schema=_TICKET_OUT,
-                description="Read a Jira issue by key",
-                rate_limit=read_rl,
-            ),
-            VerbSpec(
-                verb_id="ticket.update",
-                noun_id="ticket",
-                input_schema={
-                    "type": "object",
-                    "properties": {
-                        "key": {"type": "string"},
-                        "summary": {"type": "string"},
-                        "description": {"type": "string"},
-                        "fields": {"type": "object"},
-                    },
-                    "required": ["key"],
-                },
-                output_schema={
-                    "type": "object",
-                    "properties": {
-                        "key": {"type": "string"},
-                        "updated": {"type": "boolean"},
-                    },
-                },
-                consequence="high",
-                description="Update fields on a Jira issue",
-                rate_limit=write_rl,
-            ),
-            VerbSpec(
-                verb_id="ticket.search",
-                noun_id="ticket",
-                input_schema={
-                    "type": "object",
-                    "properties": {
-                        "jql": {"type": "string"},
-                        "limit": {"type": "integer"},
-                    },
-                    "required": ["jql"],
-                },
-                output_schema={
-                    "type": "object",
-                    "properties": {
-                        "results": {"type": "array"},
-                        "count": {"type": "integer"},
-                    },
-                },
-                description="Search Jira issues by JQL",
-                rate_limit=read_rl,
-            ),
-            VerbSpec(
-                verb_id="ticket.comment",
-                noun_id="ticket",
-                input_schema={
-                    "type": "object",
-                    "properties": {
-                        "key": {"type": "string"},
-                        "body": {"type": "string"},
-                    },
-                    "required": ["key", "body"],
-                },
-                output_schema={
-                    "type": "object",
-                    "properties": {
-                        "id": {"type": "string"},
-                        "created": {"type": "string"},
-                    },
-                    "required": ["id"],
-                },
-                consequence="high",
-                description="Add a comment to a Jira issue",
-                rate_limit=write_rl,
-            ),
-        ]
+        return list(_VERBS)
 
     def _handlers(self) -> dict[str, Handler]:
         return {

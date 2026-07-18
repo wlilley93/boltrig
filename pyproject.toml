@@ -55,6 +55,9 @@ dev = [
     # exactly for the same reason; the stub is what lets the chokepoint be strict
     # without a blanket type: ignore.
     "types-jsonschema==4.26.0.20260518",
+    # Third-party stubs for PyYAML (boltrig/emotion/tables.py's yaml.safe_load),
+    # pinned exactly on the same precedent as types-jsonschema above.
+    "types-PyYAML==6.0.12.20260518",
     # Source-security tools are exact-pinned so `make quality` and CI run the
     # same analyzers rather than whatever a developer happens to have globally.
     "pip-audit==2.10.1",
@@ -112,6 +115,10 @@ files = [
     "boltrig/config/control_specs.py",
     "boltrig/config/environment.py",
     "boltrig/config/settings.py",
+    "boltrig/emotion/__init__.py",
+    "boltrig/emotion/engine.py",
+    "boltrig/emotion/relay.py",
+    "boltrig/emotion/tables.py",
     "boltrig/fleet/model_gateway_status.py",
     "boltrig/fleet/model_profiles.py",
     "boltrig/fleet/application",

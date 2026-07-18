@@ -44,12 +44,18 @@ COPY boltrig/ /app/boltrig/
 # Boltrig v2 browser automation runtime: ship Browser Use CLI as an isolated
 # tool venv. Its dependency closure is hash-locked separately so it cannot
 # upgrade/downgrade the Boltrig app environment.
-ARG CHROMIUM_VERSION=150.0.7871.114-1~deb12u1
-ARG TINI_VERSION=0.19.0-1+b3
+#
+# chromium/tini install UNPINNED from the Debian bookworm repo. Exact apt version
+# pins rot: Debian keeps only the newest security build in the pool, so a pinned
+# patch (e.g. chromium=150.0.7871.114-1~deb12u1) stops resolving on the next
+# security bump and breaks every rebuild (apt exit 100). Taking the current repo
+# version keeps the image buildable and on the latest security patch. Exact
+# chromium reproducibility, if ever required, belongs behind a snapshot.debian.org
+# pinned repo, not a live-repo version pin.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        "chromium=${CHROMIUM_VERSION}" \
-        "tini=${TINI_VERSION}" && \
+        chromium \
+        tini && \
     rm -rf /var/lib/apt/lists/*
 RUN python -m venv /opt/boltrig/browser-cli && \
     /opt/boltrig/browser-cli/bin/pip install \

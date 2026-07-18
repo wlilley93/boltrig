@@ -90,11 +90,16 @@ def test_pi_sidecar_imports_no_boltrig_package_code():
 _LAYER_RULES = {
     # layer dir -> the boltrig subpackages it must NOT import
     "models": ("kernel", "fleet", "api", "store", "adapters", "workflows",
-               "memory", "identity", "observability", "config", "skills", "work"),
+               "memory", "identity", "observability", "config", "skills", "work",
+               "emotion"),
     "store": ("kernel", "fleet", "api", "adapters", "workflows", "memory",
-              "identity", "observability", "config", "skills", "work"),
+              "identity", "observability", "config", "skills", "work", "emotion"),
     "adapters": ("kernel", "fleet", "api", "store", "workflows", "memory",
-                 "identity", "observability", "config", "skills", "work"),
+                 "identity", "observability", "config", "skills", "work", "emotion"),
+    # the emotion add-on is a leaf, fail-safe side-channel (EMO-1): it may see
+    # the kernel's relay type and the models, never the runtime, the store,
+    # the api, or observability.
+    "emotion": ("fleet", "api", "store", "adapters", "observability"),
 }
 
 
