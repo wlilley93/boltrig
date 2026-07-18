@@ -134,6 +134,8 @@ files = [
     "boltrig/fleet/infrastructure/codex_runtime_config_policy.py",
     "boltrig/fleet/infrastructure/codex_runtime_config_toml.py",
     "boltrig/fleet/infrastructure/codex_stdio_transport.py",
+    "boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py",
+    "boltrig/fleet/infrastructure/codex_trusted_proxy_support.py",
     "boltrig/fleet/infrastructure/skill_artifacts.py",
     "boltrig/fleet/infrastructure/skill_config.py",
     "boltrig/fleet/infrastructure/skill_discovery.py",
