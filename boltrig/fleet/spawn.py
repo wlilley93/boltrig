@@ -62,10 +62,20 @@ def _public_model_route(route: dict[str, Any] | None) -> dict[str, str]:
 class Spawner:
     """Composes and runs ephemeral agents on top of the kernel."""
 
-    def __init__(self, kernel: Kernel, *, sensitive_endpoint_id: str | None = None) -> None:
+    def __init__(
+        self,
+        kernel: Kernel,
+        *,
+        sensitive_endpoint_id: str | None = None,
+        codex_config: dict[str, Any] | None = None,
+    ) -> None:
         self._kernel = kernel
         self._sensitive_endpoint_id = sensitive_endpoint_id
-        self._runtime_resolver = RuntimeResolver(kernel, sensitive_endpoint_id=sensitive_endpoint_id)
+        self._runtime_resolver = RuntimeResolver(
+            kernel,
+            sensitive_endpoint_id=sensitive_endpoint_id,
+            codex_config=codex_config,
+        )
         self._observability = build_observability_sink()
 
     async def spawn(
@@ -321,9 +331,16 @@ class Spawner:
         }
 
 
-def build_spawner(kernel: Kernel) -> Spawner:
-    """Construct the fleet ``Spawner`` for a kernel."""
-    return Spawner(kernel)
+def build_spawner(
+    kernel: Kernel, *, codex_config: dict[str, Any] | None = None
+) -> Spawner:
+    """Construct the fleet ``Spawner`` for a kernel.
+
+    ``codex_config`` is the trusted read-only Codex provider config assembled at the
+    api composition root ([2026] VJS-CC-VJS 2); None (the default) keeps existing
+    callers unaffected and the codex runtime degrading to ScriptRuntime.
+    """
+    return Spawner(kernel, codex_config=codex_config)
 
 
 def make_app_spawner(

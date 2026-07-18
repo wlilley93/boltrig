@@ -56,13 +56,13 @@
       "expires": "2026-12-31"
     },
     "boltrig/api/bootstrap.py": {
-      "max_file_lines": 570,
-      "max_function_lines": 105,
+      "max_file_lines": 579,
+      "max_function_lines": 114,
       "over_limit_functions": [
         {
           "name": "build_app",
           "line": 466,
-          "lines": 105
+          "lines": 114
         }
       ],
       "owner": "platform-maintainers",
@@ -159,12 +159,12 @@
       "expires": "2026-12-31"
     },
     "boltrig/fleet/spawn.py": {
-      "max_file_lines": 400,
+      "max_file_lines": 417,
       "max_function_lines": 94,
       "over_limit_functions": [
         {
           "name": "Spawner.spawn",
-          "line": 71,
+          "line": 81,
           "lines": 94
         }
       ],

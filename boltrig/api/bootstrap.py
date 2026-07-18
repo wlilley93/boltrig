@@ -474,6 +474,8 @@ def build_app():
 
     def chat_factory(kernel):
         from boltrig.api.codex_execution import build_codex_execution_stack
+        from boltrig.api.codex_trusted import build_trusted_codex_config
+        from boltrig.fleet.model_gateway import gateway_config
         # the conversational service routes turns through the fleet (US-CONV-02);
         # the manifest chat knob decides a bare turn's skill set per caller role
         # ([2026] VJS-COUNTY 1) - no manifest means the fail-closed empty knob
@@ -484,12 +486,19 @@ def build_app():
                 chat_cfg = load_manifest(manifest_path).chat
             except Exception:
                 pass
+        # Trusted read-only Codex ([2026] VJS-CC-VJS 2): None unless all 3 flags set.
+        settings = load_settings()
+        codex_config = build_trusted_codex_config(
+            settings,
+            model_id=settings.codex_model,
+            gateway_base_url=str(gateway_config().get("base_url") or ""),
+        )
         return ChatService(
             kernel.store, kernel.events,
             turn_executor=build_turn_executor(
-                kernel, build_spawner(kernel), chat_config=chat_cfg,
+                kernel, build_spawner(kernel, codex_config=codex_config), chat_config=chat_cfg,
                 # Codex shadow stack (SEC-170): None when BOLTRIG_CODEX_LEDGER is off.
-                codex_execution=build_codex_execution_stack(load_settings(), kernel.store),
+                codex_execution=build_codex_execution_stack(settings, kernel.store),
             ),
             # The same ChatConfig carries the attachment caps ([2026] VJS-COUNTY 3);
             # ChatService enforces them fail-closed at intake.
