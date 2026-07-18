@@ -85,6 +85,7 @@ async def build_store() -> Store:
 
 async def _seed_default(kernel: Kernel) -> None:
     """Seed a minimal, offline-safe demo tenant when no manifest is present."""
+    from boltrig.adapters.builtin.familiar import build as build_familiar
     from boltrig.adapters.builtin.memory_tickets import build as build_tickets
     from boltrig.models import GrantSet, TenantPermissions
 
@@ -96,6 +97,7 @@ async def _seed_default(kernel: Kernel) -> None:
     if inspect.isawaitable(res):  # PostgresStore seed helper is async
         await res
     await kernel.register_adapter(_DEFAULT_TENANT, build_tickets())
+    await kernel.register_adapter(_DEFAULT_TENANT, build_familiar())  # familiar.express (WL-3)
     await _register_control_plane(kernel, _DEFAULT_TENANT)
     await _register_web_fetch(kernel, _DEFAULT_TENANT, {})
     await _register_skill_shelf(kernel, _DEFAULT_TENANT)
