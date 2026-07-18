@@ -154,3 +154,29 @@ def test_bearer_parsing() -> None:
     assert _bearer("Basic abc") is None
     assert _bearer(None) is None
     assert _bearer("Bearer    ") is None
+
+
+async def test_store_bearer_verifier_accepts_an_issued_bearer_and_rejects_others() -> None:
+    from boltrig.fleet.application.model_proxy_grants import (
+        PhaseScopedModelProxyGrantBroker,
+    )
+    from boltrig.fleet.infrastructure.codex_model_proxy_server import store_bearer_verifier
+    from boltrig.fleet.infrastructure.memory_model_proxy_grants import (
+        MemoryModelProxyGrantStore,
+    )
+    from tests.unit.test_model_proxy_grants import _binding
+
+    store = MemoryModelProxyGrantStore()
+    broker = PhaseScopedModelProxyGrantBroker(store)
+    binding = _binding()
+    issued = await broker.issue("startup-req-1", binding, ttl_seconds=60, generation=1)
+    bearer = issued.bearer.reveal()
+
+    verify = store_bearer_verifier(store, generation=1)
+    assert await verify(bearer) is True  # the issued bearer is accepted
+    assert await verify("not-a-real-bearer") is False  # an unknown bearer is rejected
+    assert await verify("") is False
+
+    # bound to the rollout generation: the same bearer fails at another generation
+    verify_other_gen = store_bearer_verifier(store, generation=2)
+    assert await verify_other_gen(bearer) is False

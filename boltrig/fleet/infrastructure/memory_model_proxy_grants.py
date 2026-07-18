@@ -177,6 +177,31 @@ class MemoryModelProxyGrantStore:
                 return record
             return None
 
+    async def find_active_by_bearer_digest(
+        self, bearer_digest: str, *, generation: int
+    ) -> StoredModelProxyGrant | None:
+        """Find an active grant by its bearer digest alone, without a binding.
+
+        The bearer-authenticated loopback channel authorised by [2026] VJS-CC-VJS 1:
+        issuance is SO_PEERCRED-gated over the unix socket, so possession of the
+        issued bearer secret IS the capability and the model-call proxy verifies a
+        presented bearer by digest alone (it holds no peer-attested observation).
+        Constant-time digest comparison; expiry is applied before the match.
+        """
+        if not _digest_candidate(bearer_digest):
+            return None
+        async with self._lock:
+            current = self._authoritative_now()
+            if self._clock_rollback:
+                return None
+            self._records.update(self._expiry_plan(current))
+            for record in self._records.values():
+                if hmac.compare_digest(
+                    record.bearer_digest, bearer_digest
+                ) and record.active_at(current, generation=generation):
+                    return record
+            return None
+
     async def get_by_id(
         self, grant_id: str, binding: ModelProxyGrantBinding
     ) -> StoredModelProxyGrant | None:

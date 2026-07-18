@@ -19,7 +19,9 @@ injected so the concrete grant-store check is wired at the composition root.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from collections.abc import Awaitable, Callable
+from typing import Protocol
 
 import httpx
 import uvicorn
@@ -29,6 +31,8 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response, StreamingResponse
 from starlette.routing import Route
 
+from boltrig.fleet.domain.model_proxy_grant import StoredModelProxyGrant
+
 _LOOPBACK = "127.0.0.1"
 _METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH"]
 _START_TIMEOUT_SECONDS = 5.0
@@ -37,6 +41,37 @@ _START_TIMEOUT_SECONDS = 5.0
 # active, non-expired grant; any error or miss is a reject. Injected so the
 # transport never imports or hard-codes a store.
 BearerVerifier = Callable[[str], Awaitable[bool]]
+
+
+class BearerDigestLookup(Protocol):
+    """The one grant-store method the proxy verifier needs (structural)."""
+
+    async def find_active_by_bearer_digest(
+        self, bearer_digest: str, *, generation: int
+    ) -> StoredModelProxyGrant | None: ...
+
+
+def store_bearer_verifier(
+    store: BearerDigestLookup, *, generation: int
+) -> BearerVerifier:
+    """A :class:`BearerVerifier` backed by the grant store.
+
+    Accepts a presented bearer iff its sha256 digest (the store's issuance digest,
+    over the ascii bearer secret) maps to an active, non-expired grant at the given
+    rollout generation. A non-ascii or unknown bearer is rejected. This is the
+    bearer-authenticated verification the model-call proxy uses under
+    [2026] VJS-CC-VJS 1 (issuance was SO_PEERCRED-gated upstream).
+    """
+
+    async def verify(bearer: str) -> bool:
+        try:
+            digest = hashlib.sha256(bearer.encode("ascii")).hexdigest()
+        except UnicodeEncodeError:
+            return False
+        found = await store.find_active_by_bearer_digest(digest, generation=generation)
+        return found is not None
+
+    return verify
 
 
 def _bearer(header: str | None) -> str | None:
@@ -165,4 +200,9 @@ def _bound_port(server: uvicorn.Server) -> int:
     raise RuntimeError("model proxy server did not bind a socket")
 
 
-__all__ = ["BearerVerifier", "PerCellModelProxyServer"]
+__all__ = [
+    "BearerDigestLookup",
+    "BearerVerifier",
+    "PerCellModelProxyServer",
+    "store_bearer_verifier",
+]
