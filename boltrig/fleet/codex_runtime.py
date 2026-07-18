@@ -21,9 +21,12 @@ from __future__ import annotations
 import contextlib
 import uuid
 from collections.abc import AsyncIterator
-from typing import Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from pathlib import Path
+
+if TYPE_CHECKING:  # avoid importing runtime.py at module load (it imports us lazily)
+    from boltrig.fleet.runtime import Runtime
 
 from boltrig.fleet.domain import (
     PhaseAssignmentRef,
@@ -115,6 +118,35 @@ class CodexRuntime:
         )
 
 
+def build_trusted_codex_runtime(
+    codex_config: dict[str, Any] | None, cost_tier: str
+) -> "Runtime":
+    """Construct the trusted read-only Codex runtime, or degrade to a script run.
+
+    The provider + stack_root are pre-built at the composition root and carried in
+    ``codex_config``. Re-assert the dev/prod wall HERE ([2026] VJS-CC-VJS 2, D1) so
+    the runtime is structurally unreachable under any production signal, then run
+    under the existing ``allow_test_only_runtime`` gate with ``production_ready``
+    left False (D4). Anything short of trusted+wired degrades to ``ScriptRuntime``.
+    """
+    from .runtime import ScriptRuntime
+
+    cfg = dict(codex_config or {})
+    provider = cfg.get("provider")
+    stack_root = cfg.get("stack_root")
+    if not (cfg.get("trusted") and provider is not None and stack_root is not None):
+        return ScriptRuntime(cost_tier=cost_tier or "cheap")
+    from boltrig.fleet.codex_trusted_wall import require_codex_trusted_posture
+    from boltrig.fleet.infrastructure.codex_agent_runtime import CodexAgentRuntime
+
+    require_codex_trusted_posture()
+    return CodexRuntime(
+        CodexAgentRuntime(provider, allow_test_only_runtime=True),
+        stack_root=stack_root,
+        cost_tier=cost_tier or "standard",
+    )
+
+
 async def _drain_until_complete(events: AsyncIterator[RuntimeEvent]) -> None:
     """Consume the lifecycle stream until the turn completes (the completion
     signal, not the content source). A terminal stream raises and the caller
@@ -146,4 +178,4 @@ def _mint_assignment(
     return PhaseAssignmentRef(phase=phase, assignment_id=f"{run_id}-codex-assignment")
 
 
-__all__ = ["CodexPhaseLifecycle", "CodexRuntime"]
+__all__ = ["CodexPhaseLifecycle", "CodexRuntime", "build_trusted_codex_runtime"]

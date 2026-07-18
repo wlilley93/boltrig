@@ -386,31 +386,27 @@ def build_runtime(
     pi_config: dict[str, Any] | None = None,
     opencode_config: dict[str, Any] | None = None,
     rivet_config: dict[str, Any] | None = None,
+    codex_config: dict[str, Any] | None = None,
     api_key: str | None = None,
     runtime_override: str | None = None,
     endpoint_override: "ModelEndpoint | None" = None,
 ) -> Runtime:
     """Select the runtime implementation for a capability (P4, US-FLT-04, US-RUN-01).
 
-    Dispatch is by ``capability.runtime``. The model endpoint (if any) is
-    resolved through ``endpoint_lookup`` so the chosen model is pinned by data,
-    not code. ``pi_config`` supplies the Pi sidecar wiring (sidecar_url, mcp_url,
-    issue_token, ...); ``opencode_config`` supplies the same kernel-issued scoped
-    MCP token callbacks for OpenCode. Unknown runtimes fall back to ScriptRuntime.
+    Dispatch is by ``capability.runtime``. The model endpoint (if any) is resolved
+    through ``endpoint_lookup`` so the model is pinned by data. ``pi_config`` supplies
+    the Pi sidecar wiring; ``opencode_config`` the OpenCode scoped-MCP callbacks.
+    Unknown runtimes fall back to ScriptRuntime.
 
     ``api_key`` is the resolved per-org/workspace/user AI key ([2026] VJS-COUNTY 8,
-    D5): a network runtime uses it instead of the env-configured provider key. When
-    None (no org/workspace/user config, or a keyless local endpoint) the runtime
-    falls back to the env key exactly as before - so an existing single-tenant deploy
-    is unchanged.
+    D5): a network runtime uses it instead of the env-configured provider key; None
+    falls back to the env key so an existing single-tenant deploy is unchanged.
 
     ``runtime_override`` / ``endpoint_override`` carry the model/provider ROUTING an
-    ai_config selects (D5): when a resolved config names a known provider, the spawner
-    passes the mapped runtime kind and the endpoint (model / base_url) it selected, and
-    they win over ``capability.runtime`` and the looked-up endpoint. Both default to
-    None so a call with no config dispatches EXACTLY as before (backward-compat). The
-    spawner only ever passes a KNOWN ``runtime_override`` (an unknown provider degrades
-    to None upstream), and it never routes sensitive data this way (SEC-12).
+    ai_config selects (D5): a known provider's mapped runtime kind + endpoint win over
+    ``capability.runtime`` and the lookup. Both default to None (dispatch EXACTLY as
+    before), the spawner only passes a KNOWN override, and never routes sensitive data
+    this way (SEC-12).
     """
     endpoint: ModelEndpoint | None = endpoint_override
     if endpoint is None and capability.model_endpoint and endpoint_lookup is not None:
@@ -444,6 +440,10 @@ def build_runtime(
         return OpenCodeRuntime(
             endpoint=endpoint, cost_tier=capability.cost_tier or "standard", **cfg
         )
+    if kind == "codex":  # trusted read-only Codex; wall re-asserted in builder (D1)
+        from .codex_runtime import build_trusted_codex_runtime
+
+        return build_trusted_codex_runtime(codex_config, capability.cost_tier)
     if kind in {"rivet", "rivet_agentos", "rivet-agentos"}:
         from .rivet_runtime import RivetAgentOSRuntime
 
