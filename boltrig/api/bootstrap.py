@@ -85,6 +85,7 @@ async def build_store() -> Store:
 
 async def _seed_default(kernel: Kernel) -> None:
     """Seed a minimal, offline-safe demo tenant when no manifest is present."""
+    from boltrig.adapters.builtin.familiar import build as build_familiar
     from boltrig.adapters.builtin.memory_tickets import build as build_tickets
     from boltrig.models import GrantSet, TenantPermissions
 
@@ -96,6 +97,7 @@ async def _seed_default(kernel: Kernel) -> None:
     if inspect.isawaitable(res):  # PostgresStore seed helper is async
         await res
     await kernel.register_adapter(_DEFAULT_TENANT, build_tickets())
+    await kernel.register_adapter(_DEFAULT_TENANT, build_familiar())  # familiar.express (WL-3)
     await _register_control_plane(kernel, _DEFAULT_TENANT)
     await _register_web_fetch(kernel, _DEFAULT_TENANT, {})
     await _register_skill_shelf(kernel, _DEFAULT_TENANT)
@@ -226,6 +228,10 @@ async def _seed_from_manifest(kernel: Kernel, manifest) -> None:
     await _register_control_plane(kernel, manifest.tenant_id)
     await _register_skill_shelf(kernel, manifest.tenant_id)
     await _register_channel_send(kernel, manifest.tenant_id)
+    if os.environ.get("BOLTRIG_EMOTION", "").strip() == "1":
+        # desktop-only: the same box that publishes the phenotype accepts voluntary gestures (WL-3).
+        from boltrig.adapters.builtin.familiar import build as build_familiar
+        await kernel.register_adapter(manifest.tenant_id, build_familiar())
     await _register_consumed_mcp(kernel, manifest.tenant_id, manifest.section("mcp"))
     net = manifest.network
     await _register_web_fetch(kernel, manifest.tenant_id, {

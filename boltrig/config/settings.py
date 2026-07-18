@@ -44,6 +44,13 @@ class Settings:
     # on it is constructed and parked on app.state.platform, but nothing calls it
     # yet: wiring an admit() into the live path is a later, court-gated PR.
     codex_ledger: bool = False  # BOLTRIG_CODEX_LEDGER=1 -> construct the inert stack
+    # Trusted single-tenant read-only Codex runtime ([2026] VJS-CC-VJS 2). Opt-in:
+    # BOLTRIG_CODEX_TRUSTED=1 selects the loopback-proxy Codex runtime that mints a
+    # per-cell bearer from the child's real process identity WITHOUT SO_PEERCRED, for
+    # a single trusted operator only. Lawful ONLY when hard-walled from production
+    # (see require_codex_trusted_posture): it requires dev_auth AND refuses under any
+    # production signal or real ingress posture. Off by default = never constructed.
+    codex_trusted: bool = False  # BOLTRIG_CODEX_TRUSTED=1 -> trusted Codex runtime
     # Cloudflare Access (zero-trust edge IdP). When the team domain + AUD are set,
     # the kernel verifies the per-request Cf-Access-Jwt-Assertion against CF's
     # JWKS and derives the principal from the authenticated email. Login, MFA and
@@ -91,6 +98,7 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         oidc_jwks_uri=e.get("OIDC_JWKS_URI") or None,
         dev_auth=_as_bool(e.get("BOLTRIG_DEV_AUTH")),
         codex_ledger=_as_bool(e.get("BOLTRIG_CODEX_LEDGER")),
+        codex_trusted=_as_bool(e.get("BOLTRIG_CODEX_TRUSTED")),
         cf_access_team_domain=(e.get("CF_ACCESS_TEAM_DOMAIN") or "").rstrip("/") or None,
         cf_access_aud=e.get("CF_ACCESS_AUD") or None,
         cf_access_role_map=e.get("CF_ACCESS_ROLE_MAP") or None,

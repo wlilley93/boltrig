@@ -1663,3 +1663,12 @@ invariants:
     description: The appraisal table is data - the runtime tables load from libraries/emotion YAML and changing the parsed data changes behavior with no code edit.
     tests:
       - tests/emotion/test_engine.py::test_appraisal_table_is_data_and_mutating_it_changes_behavior
+
+  # --- wayland add-on: voluntary expression through the chokepoint ---
+  WL-3:
+    description: Voluntary expression goes through the chokepoint - familiar.express is a registered verb with a binding, a grant check, and an audit row, and the express channel the surface reads is written ONLY by that dispatched handler (no direct agent-to-surface socket).
+    tests:
+      - tests/security/test_familiar_express.py::test_familiar_express_is_registered_with_a_binding
+      - tests/security/test_familiar_express.py::test_ungranted_express_is_denied_audited_and_writes_nothing
+      - tests/security/test_familiar_express.py::test_bad_gesture_is_rejected_by_the_binding_and_writes_nothing
+      - tests/security/test_familiar_express.py::test_a_dispatched_gesture_is_audited
