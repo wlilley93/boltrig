@@ -228,6 +228,10 @@ async def _seed_from_manifest(kernel: Kernel, manifest) -> None:
     await _register_control_plane(kernel, manifest.tenant_id)
     await _register_skill_shelf(kernel, manifest.tenant_id)
     await _register_channel_send(kernel, manifest.tenant_id)
+    if os.environ.get("BOLTRIG_EMOTION", "").strip() == "1":
+        # desktop-only: the same box that publishes the phenotype accepts voluntary gestures (WL-3).
+        from boltrig.adapters.builtin.familiar import build as build_familiar
+        await kernel.register_adapter(manifest.tenant_id, build_familiar())
     await _register_consumed_mcp(kernel, manifest.tenant_id, manifest.section("mcp"))
     net = manifest.network
     await _register_web_fetch(kernel, manifest.tenant_id, {

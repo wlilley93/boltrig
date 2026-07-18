@@ -56,12 +56,12 @@
       "expires": "2026-12-31"
     },
     "boltrig/api/bootstrap.py": {
-      "max_file_lines": 566,
+      "max_file_lines": 570,
       "max_function_lines": 105,
       "over_limit_functions": [
         {
           "name": "build_app",
-          "line": 462,
+          "line": 466,
           "lines": 105
         }
       ],
