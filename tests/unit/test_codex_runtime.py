@@ -1,0 +1,139 @@
+"""Unit tests for the read-only Codex ``Runtime`` adapter (Stage A).
+
+The adapter bridges the one-shot ``Runtime.run`` seam onto the Codex phase
+lifecycle. These tests drive it against a fake lifecycle so the mapping,
+read-only spec, and degrade-don't-crash behaviour are pinned without a real cell.
+"""
+
+from __future__ import annotations
+
+from collections.abc import AsyncIterator
+
+from boltrig.fleet.codex_runtime import CodexRuntime
+from boltrig.fleet.domain import (
+    PhaseMode,
+    RuntimeEvent,
+    RuntimeEventKind,
+    RuntimeThreadRef,
+    RuntimeTurnRef,
+    SandboxPolicy,
+)
+from boltrig.fleet.ports.runtime import RuntimeThreadSpec
+from boltrig.fleet.infrastructure.codex_agent_runtime import _latest_agent_message_text
+from boltrig.models import InvocationContext
+
+
+class _FakeLifecycle:
+    def __init__(self, *, text: str = "Hello from Codex.", fail_start: bool = False) -> None:
+        self._text = text
+        self._fail_start = fail_start
+        self.spec: RuntimeThreadSpec | None = None
+        self.closed = False
+        self.turn_prompt: str | None = None
+
+    async def start_thread(self, spec: RuntimeThreadSpec) -> RuntimeThreadRef:
+        self.spec = spec
+        if self._fail_start:
+            raise RuntimeError("cell provisioning failed")
+        return RuntimeThreadRef(spec.assignment, "codex_app_server", "thr-1")
+
+    async def start_turn(self, spec) -> RuntimeTurnRef:  # type: ignore[no-untyped-def]
+        self.turn_prompt = spec.prompt
+        return RuntimeTurnRef(spec.thread, "turn-1")
+
+    def events(self, thread: RuntimeThreadRef) -> AsyncIterator[RuntimeEvent]:
+        return self._events(thread)
+
+    async def _events(self, thread: RuntimeThreadRef) -> AsyncIterator[RuntimeEvent]:
+        yield RuntimeEvent(
+            event_id="e1",
+            assignment=thread.assignment,
+            kind=RuntimeEventKind.TURN_COMPLETED,
+            thread=thread,
+        )
+
+    async def read_turn_output(self, thread: RuntimeThreadRef) -> str:
+        return self._text
+
+    async def close_thread(self, thread: RuntimeThreadRef) -> None:
+        self.closed = True
+
+
+def _context(**over: object) -> InvocationContext:
+    base: dict[str, object] = {
+        "tenant_id": "tenant-1",
+        "run_id": "run-1",
+        "workspace_id": "ws-1",
+        "actor": "chief-of-staff",
+    }
+    base.update(over)
+    return InvocationContext(**base)  # type: ignore[arg-type]
+
+
+async def test_run_returns_agent_message_text_and_closes_thread() -> None:
+    fake = _FakeLifecycle(text="the answer")
+    result = await CodexRuntime(fake).run("question?", _context(), tools=[])
+    assert result.ok is True
+    assert result.degraded is False
+    assert result.output == {"runtime": "codex_app_server", "text": "the answer"}
+    assert result.summary == "the answer"
+    assert fake.turn_prompt == "question?"
+    assert fake.closed is True  # the thread is always closed, even on success
+
+
+async def test_run_builds_a_read_only_phase_spec() -> None:
+    fake = _FakeLifecycle()
+    await CodexRuntime(fake).run("hi", _context(), tools=[])
+    spec = fake.spec
+    assert spec is not None
+    assert spec.mode is PhaseMode.READ_ONLY
+    assert spec.sandbox is SandboxPolicy.READ_ONLY
+    assert spec.skills == ()
+    assert spec.assignment.phase.root_run_id == "run-1"
+    assert spec.assignment.phase.workspace_id == "ws-1"
+    assert spec.assignment.phase.principal.tenant_id == "tenant-1"
+
+
+async def test_run_degrades_without_run_scope() -> None:
+    fake = _FakeLifecycle()
+    result = await CodexRuntime(fake).run("hi", _context(run_id=None), tools=[])
+    assert result.degraded is True
+    assert result.output["_degraded"]["reason"] == "no_read_only_phase_scope"
+    assert fake.spec is None  # never touched the lifecycle
+
+
+async def test_run_degrades_on_empty_output() -> None:
+    result = await CodexRuntime(_FakeLifecycle(text="")).run("hi", _context(), tools=[])
+    assert result.degraded is True
+    assert result.output["_degraded"]["reason"] == "codex_empty_output"
+
+
+async def test_run_degrades_and_never_raises_on_lifecycle_error() -> None:
+    fake = _FakeLifecycle(fail_start=True)
+    result = await CodexRuntime(fake).run("hi", _context(), tools=[])
+    assert result.degraded is True
+    assert result.output["_degraded"]["reason"] == "codex_turn_failed"
+
+
+def test_latest_agent_message_text_takes_last_turn_agent_message() -> None:
+    payload = {
+        "thread": {
+            "turns": [
+                {"items": [{"type": "agentMessage", "text": "first turn"}]},
+                {
+                    "items": [
+                        {"type": "reasoning", "text": "hidden"},
+                        {"type": "agentMessage", "text": "final answer"},
+                    ]
+                },
+            ]
+        }
+    }
+    assert _latest_agent_message_text(payload) == "final answer"
+
+
+def test_latest_agent_message_text_is_empty_on_missing_or_malformed() -> None:
+    assert _latest_agent_message_text({}) == ""
+    assert _latest_agent_message_text({"thread": {"turns": []}}) == ""
+    assert _latest_agent_message_text({"thread": {"turns": [{"items": []}]}}) == ""
+    assert _latest_agent_message_text("not a mapping") == ""

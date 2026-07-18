@@ -118,6 +118,14 @@
       "reason": "Separate conversation context, turn execution, and event persistence while preserving streaming behavior.",
       "expires": "2026-12-31"
     },
+    "boltrig/fleet/infrastructure/codex_agent_runtime.py": {
+      "max_file_lines": 440,
+      "max_function_lines": 54,
+      "over_limit_functions": [],
+      "owner": "fleet-maintainers",
+      "reason": "File-length only. The read-only Codex cutover adds read_turn_output + the agentMessage payload traversal (events() is a content-free ledger, so the turn's answer is read back through thread/read); the module was already at the 399-line floor. Split the lifecycle from the read-back/terminal helpers into a sibling module when the admission source lands.",
+      "expires": "2026-12-31"
+    },
     "boltrig/fleet/pump.py": {
       "max_file_lines": 539,
       "max_function_lines": 68,
