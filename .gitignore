@@ -46,3 +46,6 @@ ui/node_modules/
 .vscode/
 *.swp
 .DS_Store
+
+# Local per-box compose override (desktop orb phenotype handoff etc.) - never committed.
+docker-compose.override.yml
