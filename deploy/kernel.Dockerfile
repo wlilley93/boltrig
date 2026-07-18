@@ -92,6 +92,14 @@ RUN set -eux; \
     fi
 ENV BOLTRIG_CODEX_BIN=/opt/boltrig/codex/codex
 
+# bubblewrap is Codex's documented sandbox prerequisite. Without it on PATH the
+# App Server emits a configWarning at startup and falls back to a bundled copy;
+# that warning is an invalidation-class notification the read-only preflight
+# rejects. Installing it removes the warning at the source and gives real cell
+# sandboxing. (See https://developers.openai.com/codex/concepts/sandboxing.)
+RUN apt-get update && apt-get install -y --no-install-recommends bubblewrap && \
+    rm -rf /var/lib/apt/lists/*
+
 # Run as an unprivileged user (INF-01 defence in depth). The app reads /app + the
 # read-only mounts and writes nothing to disk (logs go to stdout); the compose
 # runs the container read-only with a tmpfs for /tmp.
