@@ -1,0 +1,27 @@
+# Event map (EMO-5): relay event -> appraisal kind. The FIRST matching rule
+# wins. Rule fields: type (must equal event.type); where (each field must equal
+# its value); where_not (field must NOT equal its value); has (fields present
+# and truthy); appraise (kind); intensity; throttle_s (per tenant+kind rate
+# limit, default 0). message_start/message_end/heartbeat never reach the relay
+# (SSE-layer only), so they are not mapped; has [noun]/[call_id] keeps
+# kernel-shaped tool events and skips their sidecar duplicates.
+rules:
+  - {type: text_delta, appraise: stream_text, intensity: 0.5, throttle_s: 2}
+  - {type: reasoning_delta, appraise: thinking, intensity: 0.6, throttle_s: 2}
+  - {type: tool_call, has: [noun], appraise: tool_call, intensity: 0.7, throttle_s: 1}
+  - {type: tool_result, has: [call_id], where: {status: ok}, appraise: task_success, intensity: 0.7}
+  - type: tool_result
+    has: [call_id]
+    where_not: {status: ok}
+    appraise: task_error
+    intensity: 0.8
+  - {type: hitl, appraise: hitl_pause, intensity: 1.0}
+  - {type: question, appraise: hitl_pause, intensity: 1.0}
+  - {type: subagent, appraise: spawn_worker, intensity: 0.9}
+  - {type: workflow_step, where: {status: failed}, appraise: task_error, intensity: 0.7}
+  - {type: workflow_step, where: {status: error}, appraise: task_error, intensity: 0.7}
+  - {type: workflow_step, where: {status: ok}, appraise: step_ok, intensity: 0.4}
+  - {type: ultracode, where: {status: phase_started}, appraise: spawn_worker, intensity: 0.6}
+  - {type: ultracode, where: {status: agent_finished}, appraise: step_ok, intensity: 0.4}
+  - {type: cancelled, appraise: interrupted, intensity: 0.8}
+  - {type: final, appraise: task_success, intensity: 1.0}

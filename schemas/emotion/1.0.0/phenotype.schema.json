@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Boltrig emotion phenotype file",
+  "description": "The atomically-written phenotype snapshot the emotion relay publishes to $XDG_RUNTIME_DIR/boltrig-phenotype.json for cosmetic consumers (the desktop orb). Keys and numbers only, never message content (EMO-2).",
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1
+    },
+    "ts": {
+      "type": "number",
+      "description": "Publish time, epoch seconds."
+    },
+    "phenotype": {
+      "type": "object",
+      "properties": {
+        "fatigue": { "$ref": "#/$defs/scalar" },
+        "valence": { "$ref": "#/$defs/scalar" },
+        "arousal": { "$ref": "#/$defs/scalar" },
+        "irritation": { "$ref": "#/$defs/scalar" },
+        "attention": { "$ref": "#/$defs/scalar" },
+        "social": { "$ref": "#/$defs/scalar" },
+        "buoyancy": { "$ref": "#/$defs/scalar" },
+        "luminosity": { "$ref": "#/$defs/scalar" },
+        "tension": { "$ref": "#/$defs/scalar" }
+      },
+      "required": [
+        "fatigue",
+        "valence",
+        "arousal",
+        "irritation",
+        "attention",
+        "social",
+        "buoyancy",
+        "luminosity",
+        "tension"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": ["v", "ts", "phenotype"],
+  "additionalProperties": false,
+  "$defs": {
+    "scalar": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    }
+  }
+}

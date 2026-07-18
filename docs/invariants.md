@@ -12,7 +12,7 @@ The gate (the K-29 / K-30 ratchet) fails the build if:
   (an undeclared invariant), or
 - the catalogue claims a test node id that no marker actually backs (drift).
 
-Binding debt may only ever decrease. Today: **245 declared, debt 0** (492 bound
+Binding debt may only ever decrease. Today: **250 declared, debt 0** (500 bound
 test node ids), per `python scripts/check_invariants.py`. `tests/invariants.yaml`
 is the authoritative, machine-checked list; the table below is the curated
 human-readable view and highlights the core kernel set plus each round's new
@@ -336,6 +336,23 @@ enter a row (K-20), reads are tenant + workspace fenced, and rows are append-onl
 | **FR-OPS-02** | Compose validation works from a clean checkout with the checked non-secret environment fixture and a validation-only database password, while normal operator launches retain the ignored `.env` default. | `tests/deploy/test_compose_hardening.py::test_compose_validation_is_clean_checkout_safe` |
 | **FR-OPS-03** | `/readyz` is a bounded, redacted, fail-closed deep readiness gate: production requires Postgres, Redis, the exact Alembic head, a kernel-local Herdr execution probe, and a fresh HMAC-authenticated, deployment-scoped fleet receipt proving OpenCode, Browser Use, and Chromium CDP health without assuming shared containers; concurrent calls are coalesced/cached to bound the unauthenticated surface; enabled Hatchet/model-gateway seams are live-probed; a failed requirement returns 503 without exposing deployment secrets or command output. | `tests/unit/test_readiness.py`, `tests/unit/test_stack_tool_health.py`, `tests/integration/test_migration_parity.py::test_packaged_readiness_head_matches_alembic_head` |
 | **SEC-137** | Protected semantic tags create a draft release, build and scan all five images, sign and attest run-scoped candidate digests, refuse mutable public tags or overwritten evidence, and publish only after every exact digest is reverified and promoted. | `tests/deploy/test_compose_hardening.py::test_release_publishes_only_scanned_signed_digest_images_with_sboms` |
+
+### Emotion add-on (EMO)
+
+The emotion add-on is a read-only affective projection over the kernel's
+run-event stream: a fail-safe cosmetic side-channel attached at the ONE relay
+factory seam in `boltrig/kernel/__init__.py`. It must never influence grant
+checks, HITL, or dispatch. Its P9 posture (a broken engine or an unwritable
+path never raises out of `publish`) is bound under the existing **P9** entry by
+`tests/emotion/test_relay.py::test_a_broken_engine_or_unwritable_path_never_raises_out_of_publish`.
+
+| Invariant | Meaning | Bound test(s) |
+| --- | --- | --- |
+| **EMO-1** | Emotion is strictly downstream of dispatch - the kernel's only emotion touch is the relay factory seam in `kernel/__init__.py`, and dispatch outcomes (results, audit rows, run events) are identical with the emotion relay attached vs the plain relay; no module under `boltrig/kernel/` except `__init__.py` imports `boltrig.emotion` (AST-enforced). | `tests/emotion/test_relay.py::test_dispatch_outcomes_are_identical_with_and_without_the_emotion_relay`, `tests/emotion/test_relay.py::test_no_kernel_module_imports_the_emotion_package` |
+| **EMO-2** | Emotion state contains no message content - engine snapshots and the phenotype file are keys and numbers only; a sentinel pumped through `publish` never reaches either. | `tests/emotion/test_relay.py::test_message_content_never_reaches_snapshots_or_the_phenotype_file` |
+| **EMO-3** | `appraise()` is pure - no I/O, no network, no clock reads beyond passed timestamps; the same inputs give the same deltas, enforced by determinism plus an AST import whitelist over `boltrig/emotion/engine.py`. | `tests/emotion/test_engine.py::test_appraise_is_deterministic_for_identical_inputs`, `tests/emotion/test_engine.py::test_engine_module_imports_stay_inside_the_pure_whitelist` |
+| **EMO-4** | Emotion state is tenant-scoped - engines are keyed per tenant and events for one tenant never touch another tenant's engine. | `tests/emotion/test_relay.py::test_tenant_b_events_leave_tenant_a_engine_untouched` |
+| **EMO-5** | The appraisal table is data - the runtime tables load from `libraries/emotion` YAML and changing the parsed data changes behavior with no code edit. | `tests/emotion/test_engine.py::test_appraisal_table_is_data_and_mutating_it_changes_behavior` |
 
 ## How a new invariant is added
 

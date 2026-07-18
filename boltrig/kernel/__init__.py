@@ -55,7 +55,7 @@ class Kernel:
         self._blocking_verbs = blocking_verbs or set()
 
         from boltrig.adapters.loader import AdapterLoader
-        from boltrig.observability.orb_presence import build_event_relay
+        from boltrig.emotion.relay import build_event_relay
 
         from .mcp import McpFace
 
@@ -63,7 +63,7 @@ class Kernel:
         # MCP server face: granted verbs as MCP tools, every call via the chokepoint.
         self.mcp = McpFace(self)
         # Event relay: run/conversation event streams for the conversational layer. The factory
-        # upgrades it to the desktop-orb presence relay when orbctl exists (see orb_presence.py);
+        # upgrades it to the emotion relay when the add-on is enabled (see boltrig/emotion/);
         # everywhere else it is the plain EventRelay.
         self.events = build_event_relay()
         self.dispatcher = Dispatcher(

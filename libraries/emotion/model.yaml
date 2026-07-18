@@ -1,0 +1,29 @@
+# Emotion model data (EMO-5): the runtime model is data, never code.
+# Atrophy donor values with hours VERBATIM; the engine rescales via tempo
+# (default 60.0: one model-hour passes per real minute). Emotions decay toward
+# a mood-biased baseline (0..1); needs decay toward zero (0..10, default 5.0).
+tempo: 60.0
+emotions:
+  connection: {baseline: 0.5, half_life_h: 2}
+  curiosity: {baseline: 0.6, half_life_h: 1}
+  confidence: {baseline: 0.5, half_life_h: 2}
+  warmth: {baseline: 0.5, half_life_h: 1.5}
+  frustration: {baseline: 0.1, half_life_h: 1}
+  playfulness: {baseline: 0.3, half_life_h: 0.5}
+  amusement: {baseline: 0.2, half_life_h: 0.5}
+  anticipation: {baseline: 0.4, half_life_h: 1.5}
+  satisfaction: {baseline: 0.4, half_life_h: 3}
+  restlessness: {baseline: 0.2, half_life_h: 1}
+  tenderness: {baseline: 0.3, half_life_h: 3}
+  melancholy: {baseline: 0.1, half_life_h: 4}
+  focus: {baseline: 0.5, half_life_h: 1}
+  defiance: {baseline: 0.1, half_life_h: 1}
+needs:
+  stimulation: {default: 5.0, decay_h: 6}
+  expression: {default: 5.0, decay_h: 8}
+  purpose: {default: 5.0, decay_h: 12}
+  autonomy: {default: 5.0, decay_h: 8}
+  recognition: {default: 5.0, decay_h: 12}
+  novelty: {default: 5.0, decay_h: 4}
+  social: {default: 5.0, decay_h: 6}
+  rest: {default: 5.0, decay_h: 24}

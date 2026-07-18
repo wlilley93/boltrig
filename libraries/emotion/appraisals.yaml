@@ -1,0 +1,54 @@
+# Appraisal table (EMO-5): appraisal kind -> emotion deltas, need deltas and an
+# optional tension kick, all scaled by the firing rule's intensity at appraise
+# time. The first nine kinds are Atrophy donor VERBATIM; the last five are
+# authored for boltrig event coverage.
+user_message:
+  emotions: {connection: 0.18, curiosity: 0.15, anticipation: 0.12, restlessness: -0.08}
+  needs: {social: 2.2, stimulation: 1.2}
+task_success:
+  emotions:
+    {satisfaction: 0.28, confidence: 0.18, playfulness: 0.12, frustration: -0.15, focus: -0.1}
+  needs: {purpose: 2.5, recognition: 1}
+task_error:
+  emotions:
+    {frustration: 0.3, confidence: -0.12, restlessness: 0.18, focus: 0.15, satisfaction: -0.1}
+  needs: {stimulation: 0.8}
+  tension: 0.6
+hitl_pause:
+  emotions: {anticipation: 0.25, restlessness: 0.2, defiance: 0.08, focus: 0.1}
+  needs: {autonomy: -1.5}
+  tension: 0.3
+spawn_worker:
+  emotions: {focus: 0.22, anticipation: 0.15, curiosity: 0.1}
+  needs: {stimulation: 1.5, purpose: 0.8}
+praise:
+  emotions:
+    {warmth: 0.25, tenderness: 0.18, satisfaction: 0.2, confidence: 0.12, melancholy: -0.1}
+  needs: {recognition: 3, social: 1.5}
+poke:
+  emotions: {frustration: 0.22, defiance: 0.15, restlessness: 0.15, curiosity: 0.08}
+  needs: {stimulation: 1.5}
+  tension: 0.6
+startle:
+  emotions: {restlessness: 0.25, frustration: 0.08, confidence: -0.08}
+  needs: {}
+  tension: 0.6
+audio_beat:
+  emotions: {playfulness: 0.02, restlessness: 0.01}
+  needs: {stimulation: 0.05}
+stream_text:
+  emotions: {focus: 0.12, connection: 0.05}
+  needs: {expression: 0.6, stimulation: 0.3}
+thinking:
+  emotions: {curiosity: 0.12, focus: 0.15}
+  needs: {stimulation: 0.4}
+tool_call:
+  emotions: {anticipation: 0.12, focus: 0.15, curiosity: 0.06}
+  needs: {stimulation: 0.6, purpose: 0.3}
+step_ok:
+  emotions: {satisfaction: 0.1, confidence: 0.06}
+  needs: {purpose: 0.6}
+interrupted:
+  emotions: {melancholy: 0.15, frustration: 0.15, restlessness: 0.1, satisfaction: -0.1}
+  needs: {}
+  tension: 0.4
