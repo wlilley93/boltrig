@@ -352,3 +352,87 @@ async def test_preflight_rejects_invalidation_queued_before_thread_start(
 
     with pytest.raises(CodexRuntimeAdmissionError, match="quarantined preflight"):
         await task
+
+
+async def _drive_with_pre_hook_notification(
+    runtime_client_factory: ClientFactory, notification: dict[str, object]
+) -> "asyncio.Task[QuarantinedCodexPreflightReceipt]":
+    client, transport = runtime_client_factory()
+    await initialize(client, transport)
+    task = asyncio.create_task(QuarantinedCodexPreflightProbe().probe(client, _plan()))
+    await _respond(
+        transport, "skills/list", {"cwds": [WORKSPACE], "forceReload": True}, _skills()
+    )
+    await _respond(
+        transport,
+        "mcpServerStatus/list",
+        {"detail": "toolsAndAuthOnly", "limit": MCP_STATUS_PAGE_LIMIT},
+        {"data": [], "nextCursor": None},
+    )
+    request = await sent(transport)
+    assert isinstance(request, wire.RequestMessage) and request.method == "hooks/list"
+    await transport.receive(notification)
+    await transport.receive(
+        {
+            "id": request.request_id,
+            "result": {
+                "data": [{"cwd": WORKSPACE, "errors": [], "hooks": [], "warnings": []}]
+            },
+        }
+    )
+    return task
+
+
+async def test_preflight_drains_a_disabled_remote_control_notification(
+    runtime_client_factory: ClientFactory,
+) -> None:
+    # Real Codex 0.144.3 emits remoteControl/status/changed at startup; when it
+    # reports remote control DISABLED (plus benign install/server identity) the
+    # attestation drains it and succeeds - it has verified remote control is off.
+    task = await _drive_with_pre_hook_notification(
+        runtime_client_factory,
+        {
+            "method": "remoteControl/status/changed",
+            "params": {
+                "environmentId": None,
+                "installationId": "4f71b517-653a-48f9-87a5-9acc8e0ef27a",
+                "serverName": "beelink",
+                "status": "disabled",
+            },
+        },
+    )
+    receipt = await task
+    assert receipt.production_complete is False
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"status": "enabled"},
+        {"installationId": "x", "serverName": "b", "status": "active"},
+        {"status": "disabled", "unexpected": "field"},
+    ],
+    ids=["enabled", "active", "unexpected-key"],
+)
+async def test_preflight_rejects_active_or_malformed_remote_control(
+    runtime_client_factory: ClientFactory, params: dict[str, object]
+) -> None:
+    # Benign only when remote control is DISABLED with known fields; an enabled/
+    # active status or an unexpected field is a security-relevant state change.
+    task = await _drive_with_pre_hook_notification(
+        runtime_client_factory,
+        {"method": "remoteControl/status/changed", "params": params},
+    )
+    with pytest.raises(CodexRuntimeAdmissionError, match="quarantined preflight"):
+        await task
+
+
+async def test_preflight_rejects_a_non_remote_control_notification(
+    runtime_client_factory: ClientFactory,
+) -> None:
+    task = await _drive_with_pre_hook_notification(
+        runtime_client_factory,
+        {"method": "skills/changed", "params": {}},
+    )
+    with pytest.raises(CodexRuntimeAdmissionError, match="quarantined preflight"):
+        await task

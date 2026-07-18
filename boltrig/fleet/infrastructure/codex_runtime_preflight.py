@@ -133,8 +133,19 @@ def _validate_skills_shape(payload: dict[str, object]) -> None:
         skill = _exact_keys(value, _SKILL_REQUIRED_KEYS, _SKILL_OPTIONAL_KEYS)
         if type(skill["description"]) is not str or type(skill["enabled"]) is not bool:
             raise CodexRuntimeAdmissionError("Codex skill metadata is malformed")
-        if skill.get("dependencies") is not None or skill.get("interface") is not None:
-            raise CodexRuntimeAdmissionError("Codex skill dependencies are not quarantined")
+        # The quarantine is that no ACTIVE skill carries dependencies (e.g. an MCP
+        # server) or an interface. Real Codex 0.144.3 ships its system skills with
+        # display interface metadata (and some with declared dependencies), all
+        # enabled=false; a disabled skill is inert, so only an ENABLED one with
+        # either field is a breach. attest_skills_list independently rejects any
+        # enabled skill outside the (empty read-only) plan, and the MCP inventory is
+        # separately attested empty, so a disabled skill's metadata is harmless.
+        if skill["enabled"] and (
+            skill.get("dependencies") is not None or skill.get("interface") is not None
+        ):
+            raise CodexRuntimeAdmissionError(
+                "Codex enabled a skill with unquarantined dependencies or interface"
+            )
         short = skill.get("shortDescription")
         if short is not None and type(short) is not str:
             raise CodexRuntimeAdmissionError("Codex skill metadata is malformed")
@@ -161,12 +172,40 @@ def _attest_empty_hooks(payload: dict[str, object], workspace: str) -> None:
         raise CodexRuntimeAdmissionError("Codex hooks inventory is not empty")
 
 
+# Real Codex 0.144.3 emits a remoteControl/status/changed notification at startup
+# reporting whether the App Server can be driven remotely, plus benign install/
+# server identity. For a locked-down read-only cell the only acceptable state is
+# remote control DISABLED, so draining this one notification is not a relaxation:
+# it verifies remote control is off. Any other status, any unexpected field, or any
+# other notification method is a security-relevant pre-thread state change, rejected
+# fail-closed.
+_REMOTE_CONTROL_NOTIFICATION = "remoteControl/status/changed"
+_REMOTE_CONTROL_BENIGN_KEYS = frozenset(
+    {"environmentId", "installationId", "serverName", "status"}
+)
+
+
+def _is_disabled_remote_control(note: wire.NotificationMessage) -> bool:
+    if note.method != _REMOTE_CONTROL_NOTIFICATION:
+        return False
+    params = note.params.to_mapping()
+    return (
+        isinstance(params, Mapping)
+        and set(params) <= _REMOTE_CONTROL_BENIGN_KEYS
+        and params.get("status") == "disabled"
+    )
+
+
 async def _attest_no_queued_notifications(client: CodexAppServerClient) -> None:
-    try:
-        await client.next_notification(timeout=0)
-    except TimeoutError:
-        return
-    raise CodexRuntimeAdmissionError("Codex pre-thread state changed during preflight")
+    while True:
+        try:
+            note = await client.next_notification(timeout=0)
+        except TimeoutError:
+            return
+        if not _is_disabled_remote_control(note):
+            raise CodexRuntimeAdmissionError(
+                "Codex pre-thread state changed during preflight"
+            )
 
 
 __all__ = [

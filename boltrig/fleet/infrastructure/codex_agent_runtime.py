@@ -261,20 +261,19 @@ class CodexAgentRuntime(AgentRuntime):
             raise CodexRuntimeOperationError("Codex thread cleanup failed")
 
     async def read_turn_output(self, thread: RuntimeThreadRef) -> str:
-        """The latest turn's assistant text, read back via the ``thread/read`` seam.
+        """The latest turn's assistant text, captured from the lifecycle stream.
 
         ``events()`` is a deliberately content-free lifecycle ledger (it never
-        copies model output, a contract pinned by test), so the turn's actual
-        answer is obtained by reading the thread back through the App Server. This
-        is a read: it does not steer, resume, or mutate the thread. Returns an
-        empty string when no ``agentMessage`` text is present (the caller degrades).
+        copies model output into an emitted event, a contract pinned by test). The
+        App Server's headless exec mode does not serve ``thread/read`` (it answers
+        -32600), so the turn's actual answer is captured internally by the event
+        translator as it processes the ``item/completed`` ``agentMessage`` and read
+        back here. This is a pure read: it does not steer, resume, or mutate the
+        thread. Returns an empty string when no ``agentMessage`` text was seen (the
+        caller degrades).
         """
         state = await self._lookup(thread)
-        async with state.operation_lock:
-            result = await state.cell.client.thread_read(
-                thread.thread_id, include_turns=True
-            )
-        return _latest_agent_message_text(result.payload.to_mapping())
+        return state.exact_actor().latest_agent_message_text
 
     async def _event_stream(self, thread: RuntimeThreadRef) -> AsyncIterator[RuntimeEvent]:
         state = await self._event_state(thread)
@@ -395,32 +394,6 @@ def _terminal_from_exception(error: BaseException) -> CodexRuntimeTerminal:
     if isinstance(error, CodexRuntimeBindingError):
         return CodexRuntimeTerminal("binding", str(error))
     return CodexRuntimeTerminal("operation", "Codex phase start failed")
-
-
-def _latest_agent_message_text(payload: object) -> str:
-    """Extract the latest ``agentMessage`` text from a ``thread/read`` payload.
-
-    Traverses ``thread.turns[-1].items[]`` for entries of type ``agentMessage``
-    and joins their text. Content-defensive: any missing or misshaped node yields
-    an empty string rather than raising, so a malformed read never crashes a run.
-    """
-    thread = payload.get("thread") if isinstance(payload, dict) else None
-    turns = thread.get("turns") if isinstance(thread, dict) else None
-    if not isinstance(turns, list) or not turns:
-        return ""
-    last = turns[-1]
-    items = last.get("items") if isinstance(last, dict) else None
-    if not isinstance(items, list):
-        return ""
-    parts: list[str] = []
-    for item in items:
-        if (
-            isinstance(item, dict)
-            and item.get("type") == "agentMessage"
-            and isinstance(item.get("text"), str)
-        ):
-            parts.append(item["text"])
-    return "\n".join(part for part in parts if part)
 
 
 def _terminal_exception(terminal: CodexRuntimeTerminal | None) -> Exception:

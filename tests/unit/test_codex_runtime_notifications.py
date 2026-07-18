@@ -267,3 +267,33 @@ def test_closed_native_parent_cannot_emit_or_parent_later_work() -> None:
 
 def _turn_value(turn: RuntimeTurnRef, status: str) -> dict[str, object]:
     return {"id": turn.turn_id, "items": [], "status": status}
+
+
+def test_agent_message_text_is_captured_for_readback_but_never_in_the_event() -> None:
+    # The read-back seam (read_turn_output) needs the answer, but events() must stay
+    # a content-free ledger: the text is captured on the translator, never emitted.
+    translator, _thread, _turn = _translator()
+    translator.translate(
+        _notification(
+            "turn/started",
+            {
+                "threadId": "thread-1",
+                "turn": {"id": "turn-1", "items": [], "status": "inProgress"},
+            },
+        )
+    )
+    item = {"id": "item-1", "text": "the answer is 4", "type": "agentMessage"}
+    translator.translate(
+        _notification(
+            "item/started",
+            {"item": item, "startedAtMs": 1, "threadId": "thread-1", "turnId": "turn-1"},
+        )
+    )
+    event = translator.translate(
+        _notification(
+            "item/completed",
+            {"completedAtMs": 2, "item": item, "threadId": "thread-1", "turnId": "turn-1"},
+        )
+    )
+    assert translator.latest_agent_message_text == "the answer is 4"
+    assert "the answer is 4" not in repr(event.payload.to_mapping())

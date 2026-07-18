@@ -126,6 +126,11 @@ class CodexEventTranslator:
         self._turn_started = False
         self._item_types: dict[str, str] = {}
         self._active_items: set[str] = set()
+        # The latest phase-thread agentMessage text, captured for the read-back
+        # seam only. It is NEVER placed in an emitted RuntimeEvent (events() stays a
+        # content-free ledger, a test-pinned contract); read_turn_output reads it
+        # here because thread/read is not served in the App Server's exec mode.
+        self._latest_agent_message_text = ""
         self._native = NativeObservationState(
             max_concurrent=max_native_concurrent,
             max_total=max_native_total,
@@ -137,6 +142,12 @@ class CodexEventTranslator:
     @property
     def current_turn(self) -> RuntimeTurnRef | None:
         return self._current_turn
+
+    @property
+    def latest_agent_message_text(self) -> str:
+        """The most recent phase-thread agentMessage text (read-back seam only)."""
+
+        return self._latest_agent_message_text
 
     @property
     def root_started(self) -> bool:
@@ -272,6 +283,10 @@ class CodexEventTranslator:
         if not self._turn_started:
             raise CodexRuntimeProtocolError("item preceded its turn start")
         self._transition_item(method, item_id, item_type)
+        if method == "item/completed" and item_type == "agentMessage":
+            text = item.get("text")
+            if type(text) is str:
+                self._latest_agent_message_text = text
         if item_type in _NATIVE_ITEM_TYPES:
             raise CodexRuntimeProtocolError("native agent activity is not admitted")
         kind = (
