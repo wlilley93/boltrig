@@ -51,6 +51,14 @@ class Settings:
     # (see require_codex_trusted_posture): it requires dev_auth AND refuses under any
     # production signal or real ingress posture. Off by default = never constructed.
     codex_trusted: bool = False  # BOLTRIG_CODEX_TRUSTED=1 -> trusted Codex runtime
+    # Wiring for the trusted read-only Codex runtime ([2026] VJS-CC-VJS 2). These are
+    # inert unless codex_trusted is set: the composition-root factory
+    # (build_trusted_codex_config) constructs the live provider ONLY when all three
+    # are present, so a missing value keeps the runtime degrading to ScriptRuntime.
+    codex_binary: str | None = None  # BOLTRIG_CODEX_BINARY (path to the pinned CLI)
+    codex_stack_root: str | None = None  # BOLTRIG_CODEX_STACK_ROOT (per-cell layout root)
+    codex_model: str = "glm-4.6"  # BOLTRIG_CODEX_MODEL (model id the read-only cell pins)
+    model_gateway_key: str | None = None  # BOLTRIG_MODEL_GATEWAY_KEY (upstream proxy key)
     # Cloudflare Access (zero-trust edge IdP). When the team domain + AUD are set,
     # the kernel verifies the per-request Cf-Access-Jwt-Assertion against CF's
     # JWKS and derives the principal from the authenticated email. Login, MFA and
@@ -99,6 +107,10 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         dev_auth=_as_bool(e.get("BOLTRIG_DEV_AUTH")),
         codex_ledger=_as_bool(e.get("BOLTRIG_CODEX_LEDGER")),
         codex_trusted=_as_bool(e.get("BOLTRIG_CODEX_TRUSTED")),
+        codex_binary=e.get("BOLTRIG_CODEX_BINARY") or None,
+        codex_stack_root=e.get("BOLTRIG_CODEX_STACK_ROOT") or None,
+        codex_model=(e.get("BOLTRIG_CODEX_MODEL") or "glm-4.6").strip() or "glm-4.6",
+        model_gateway_key=e.get("BOLTRIG_MODEL_GATEWAY_KEY") or None,
         cf_access_team_domain=(e.get("CF_ACCESS_TEAM_DOMAIN") or "").rstrip("/") or None,
         cf_access_aud=e.get("CF_ACCESS_AUD") or None,
         cf_access_role_map=e.get("CF_ACCESS_ROLE_MAP") or None,

@@ -34,9 +34,19 @@ def _routed_endpoint(tenant_id: str, base: ModelEndpoint | None, resolution: Any
 class RuntimeResolver:
     """Owns runtime routing while leaving spawn orchestration thin."""
 
-    def __init__(self, kernel: Any, *, sensitive_endpoint_id: str | None = None) -> None:
+    def __init__(
+        self,
+        kernel: Any,
+        *,
+        sensitive_endpoint_id: str | None = None,
+        codex_config: dict[str, Any] | None = None,
+    ) -> None:
         self._kernel = kernel
         self._sensitive_endpoint_id = sensitive_endpoint_id
+        # Trusted read-only Codex provider config, injected from the api composition
+        # root ([2026] VJS-CC-VJS 2). None (the default) => the codex runtime degrades
+        # to ScriptRuntime exactly as before (off by default = total no-op).
+        self._codex = codex_config
         self._pi = {
             "sidecar_url": os.environ.get("BOLTRIG_PI_SIDECAR_URL") or None,
             "mcp_url": os.environ.get("BOLTRIG_PI_MCP_URL", "http://kernel:8000/v1/mcp"),
@@ -110,6 +120,7 @@ class RuntimeResolver:
             pi_config=self._pi_config(context) if capability.runtime == "pi" else None,
             opencode_config=self._opencode_config(capability, runtime_override),
             rivet_config=self._rivet_config(capability, runtime_override),
+            codex_config=self._codex_config(capability, runtime_override),
             api_key=api_key,
             runtime_override=runtime_override,
             endpoint_override=endpoint_override,
@@ -179,6 +190,21 @@ class RuntimeResolver:
             "issue_token": self._kernel.mcp.issue_run_token,
             "revoke_token": self._kernel.mcp.revoke,
         }
+
+    def _codex_config(
+        self, capability: AgentCapability, runtime_override: str | None
+    ) -> dict[str, Any] | None:
+        """The injected trusted-Codex config, gated ONLY on ``capability.runtime``.
+
+        Codex is a trusted, hard-walled lane ([2026] VJS-CC-VJS 2), NOT a
+        provider-routing target: an ai_config ``runtime_override == "codex"`` must
+        never select it, so (unlike the opencode/rivet lanes) this never triggers on
+        the override. None when the capability is not a codex runtime, or when no
+        provider was injected (off by default = no-op -> ScriptRuntime).
+        """
+        if capability.runtime != "codex":
+            return None
+        return self._codex
 
     def _opencode_config(
         self, capability: AgentCapability, runtime_override: str | None

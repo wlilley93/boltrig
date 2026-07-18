@@ -85,6 +85,13 @@ services:
     image: boltrig/kernel:0.1.0
     restart: unless-stopped
     <<: *app-hardening
+    # Override the shared hardening tmpfs to add a private, exec-capable tmpfs for
+    # trusted-Codex cells: the per-cell auth helper is an executable script and the
+    # shared /tmp is noexec. Scoped to uid 10001, mode 0700 (not world-writable),
+    # ephemeral, and empty unless BOLTRIG_CODEX_TRUSTED is set. /tmp stays noexec.
+    tmpfs:
+      - /tmp
+      - /var/lib/boltrig/codex-cells:exec,mode=0700,uid=10001,gid=10001
     command: ["uvicorn", "boltrig.api.asgi:app", "--host", "0.0.0.0", "--port", "8000"]
     # Local/operator runs keep the conventional .env default. Validation and CI
     # can point at the checked non-secret fixture without creating an ignored

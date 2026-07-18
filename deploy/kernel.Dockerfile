@@ -68,6 +68,38 @@ RUN set -eux; \
     chmod 0755 /usr/local/bin/herdr; \
     herdr --version
 
+# Boltrig v2 Codex App Server runtime: ship the pinned Codex CLI in the kernel image
+# too, since a console chat turn resolves + spawns the Codex runtime IN the kernel
+# process (not only the fleet-worker). Same pin + digest as deploy/fleet.Dockerfile;
+# the supervisor re-verifies the exact sha256 at spawn (codex_cell_policy.
+# verify_pinned_binary), so this is defence in depth. amd64-only (x86_64 musl build);
+# other arches skip rather than fail. Inert unless BOLTRIG_CODEX_TRUSTED is set - the
+# runtime is dev-gated and refuses under any production signal. TARGETARCH is
+# already in scope from the Herdr block above.
+ARG CODEX_VERSION=0.144.3
+ARG CODEX_SHA256=37e6f5953f191b04f7b62cb07dae90f51d0947ad89f0355665b421fbde28700b
+RUN set -eux; \
+    if [ "${TARGETARCH:-amd64}" != "amd64" ]; then \
+        echo "codex ${CODEX_VERSION} is amd64-only; skipping on ${TARGETARCH:-unknown}"; \
+    else \
+        url="https://github.com/openai/codex/releases/download/rust-v${CODEX_VERSION}/codex-x86_64-unknown-linux-musl.tar.gz"; \
+        python -c 'import sys, urllib.request; urllib.request.urlretrieve(sys.argv[1], "/tmp/codex.tgz")' "$url"; \
+        tar -xzf /tmp/codex.tgz -C /tmp codex-x86_64-unknown-linux-musl; \
+        printf '%s  %s\n' "$CODEX_SHA256" /tmp/codex-x86_64-unknown-linux-musl | sha256sum -c -; \
+        install -D -m 0755 /tmp/codex-x86_64-unknown-linux-musl /opt/boltrig/codex/codex; \
+        rm -f /tmp/codex.tgz /tmp/codex-x86_64-unknown-linux-musl; \
+        /opt/boltrig/codex/codex --version; \
+    fi
+ENV BOLTRIG_CODEX_BIN=/opt/boltrig/codex/codex
+
+# bubblewrap is Codex's documented sandbox prerequisite. Without it on PATH the
+# App Server emits a configWarning at startup and falls back to a bundled copy;
+# that warning is an invalidation-class notification the read-only preflight
+# rejects. Installing it removes the warning at the source and gives real cell
+# sandboxing. (See https://developers.openai.com/codex/concepts/sandboxing.)
+RUN apt-get update && apt-get install -y --no-install-recommends bubblewrap && \
+    rm -rf /var/lib/apt/lists/*
+
 # Run as an unprivileged user (INF-01 defence in depth). The app reads /app + the
 # read-only mounts and writes nothing to disk (logs go to stdout); the compose
 # runs the container read-only with a tmpfs for /tmp.

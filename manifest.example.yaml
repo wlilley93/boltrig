@@ -162,6 +162,15 @@ ephemeral_runtimes:
     supported_skills: ["*"]
     max_depth: 2
     cost_tier: standard
+  # Trusted read-only Codex ([2026] VJS-CC-VJS 2): a single, hard-walled analysis
+  # lane. Inert unless BOLTRIG_CODEX_TRUSTED + binary + stack root are configured;
+  # otherwise the runtime degrades to a deterministic script run.
+  - name: codex-worker
+    runtime: codex
+    model_endpoint: standard
+    supported_skills: ["analysis/*"]
+    max_depth: 2
+    cost_tier: standard
 
 # --- spawn rules: match a task to a runtime + skill set (S6) -----------------
 spawn_rules:
@@ -181,6 +190,13 @@ spawn_rules:
       intent_tags: ["content", "writing"]
     capability: worker-cheap
     skills: ["writing/long-form"]
+  # Route read-only analysis/research to the trusted Codex lane ([2026] VJS-CC-VJS 2).
+  - name: read-only-analysis
+    match:
+      intent_tags: ["analysis", "research"]
+    capability: codex-worker
+    skills: ["analysis/research"]
+    max_depth: 2
 
 # --- adapters: the integrations this tenant uses + their credential refs -----
 # ids are the builtin adapters (boltrig/adapters/builtin/*); credential refs map

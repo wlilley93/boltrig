@@ -55,7 +55,8 @@ COPY boltrig/ /app/boltrig/
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         chromium \
-        tini && \
+        tini \
+        bubblewrap && \
     rm -rf /var/lib/apt/lists/*
 RUN python -m venv /opt/boltrig/browser-cli && \
     /opt/boltrig/browser-cli/bin/pip install \
