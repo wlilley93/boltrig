@@ -325,3 +325,76 @@ async def test_cancelling_cell_close_still_finishes_process_cleanup(
 
     assert process.returncode is not None
     assert cell.closed
+
+
+async def test_on_spawned_runs_with_the_real_pid_before_any_protocol_traffic(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Registration must precede the first byte, so no live cell is unregistered."""
+
+    layout = make_layout(tmp_path)
+    binary = fake_binary(tmp_path)
+    admit_binary(monkeypatch, binary)
+    process = FakeProcess()
+    install_initialize_responder(process, codex_home=layout.codex_home)
+    factory = FakeProcessFactory(process)
+    supervisor = CodexCellSupervisor(binary=binary, process_factory=factory)
+    seen: dict[str, object] = {}
+
+    async def on_spawned(pid: int) -> None:
+        seen["pid"] = pid
+        seen["writes"] = list(process.stdin.writes)
+
+    cell = await supervisor.start(layout, on_spawned=on_spawned)
+
+    assert seen["pid"] == process.pid == cell.metadata.pid
+    assert seen["writes"] == []  # nothing had been sent yet
+    await cell.aclose()
+
+
+async def test_on_spawned_failure_reaps_the_process_and_releases_the_claim(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A cell that cannot be registered is never handed out."""
+
+    layout = make_layout(tmp_path)
+    binary = fake_binary(tmp_path)
+    admit_binary(monkeypatch, binary)
+    process = FakeProcess()
+    install_initialize_responder(process, codex_home=layout.codex_home)
+    supervisor = CodexCellSupervisor(
+        binary=binary, process_factory=FakeProcessFactory(process)
+    )
+
+    async def on_spawned(pid: int) -> None:
+        raise RuntimeError("registration refused")
+
+    with pytest.raises(CodexCellStartupError):
+        await supervisor.start(layout, on_spawned=on_spawned)
+
+    assert process.returncode is not None  # reaped, no orphan
+
+
+async def test_on_spawned_hang_is_bounded_and_reaps(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A registry that never answers must not hang the spawn forever."""
+
+    layout = make_layout(tmp_path)
+    binary = fake_binary(tmp_path)
+    admit_binary(monkeypatch, binary)
+    process = FakeProcess()
+    install_initialize_responder(process, codex_home=layout.codex_home)
+    supervisor = CodexCellSupervisor(
+        binary=binary,
+        process_factory=FakeProcessFactory(process),
+        startup_timeout=0.05,
+    )
+
+    async def on_spawned(pid: int) -> None:
+        await asyncio.sleep(3600)
+
+    with pytest.raises(CodexCellStartupError):
+        await supervisor.start(layout, on_spawned=on_spawned)
+
+    assert process.returncode is not None
