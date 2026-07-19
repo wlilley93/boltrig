@@ -1,8 +1,16 @@
 """Atomic supervisor-owned registry for live Codex App Server identities.
 
-Registration is deliberately separate from process spawning for now.  Wiring
-the supervisor to register only a policy-verified helper executable is a
-production blocker, not an implicit promise of this isolated seam.
+Registration is performed inside ``CodexCellSupervisor.start`` against the
+just-spawned child pid, before any protocol traffic, so no instant exists in
+which a live App Server is unregistered; a cell that fails to register is reaped
+and never handed out. Issuance is likewise bound to liveness: ``authorize`` mints
+under the same lock ``revoke`` takes.
+
+The narrower gap that remains: the cell's auth-helper file content is not
+re-verified from disk against its recorded digest. That digest is audit evidence,
+not a control - what actually gates a bearer is SO_PEERCRED ancestry attestation
+over the socket, which a rewritten helper cannot defeat (it would still have to
+connect from a descendant of the registered App Server).
 """
 
 from __future__ import annotations

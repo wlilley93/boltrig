@@ -43,6 +43,9 @@ class CodexCellStartupError(wire.CodexAppServerError):
 
 
 ReleaseCell = Callable[[str, str], Awaitable[None]]
+# Run against the just-spawned child pid, before any protocol traffic. If it does
+# not succeed the cell is never handed out. The supervisor treats it as opaque.
+OnCellSpawned = Callable[[int], Awaitable[None]]
 
 
 def _close_late_binary(task: asyncio.Task[PinnedCodexBinary]) -> None:
@@ -215,7 +218,9 @@ class CodexCellSupervisor:
         self._active_phases: set[str] = set()
         self._claimed_cells: set[str] = set()
 
-    async def start(self, layout: CodexCellLayout) -> InitializedCodexCell:
+    async def start(
+        self, layout: CodexCellLayout, *, on_spawned: OnCellSpawned | None = None
+    ) -> InitializedCodexCell:
         admitted = validate_cell_layout(layout)
         await self._attest_workspace(admitted)
         await self._claim(admitted.phase_id, admitted.cell_id)
@@ -227,6 +232,9 @@ class CodexCellSupervisor:
                 raise CodexCellPolicyError("Codex binary must be outside the mutable cell root")
             binary = await self._verify_binary()
             process = await self._spawn(binary, admitted)
+            if on_spawned is not None:
+                # Earliest instant the pid exists; every failure below reaps it.
+                await asyncio.wait_for(on_spawned(process.pid), self._startup_timeout)
             transport = self._make_transport(process)
             client = CodexAppServerClient(
                 transport,

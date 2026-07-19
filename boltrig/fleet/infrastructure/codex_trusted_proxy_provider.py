@@ -184,28 +184,40 @@ class TrustedProxyCodexPhaseCellProvider:
                 proxy_port=proxy.port,
                 socket_path=socket_path,
             )
-            cell = await self._supervisor.start(admission.layout)
-            # FINDING #1: build the registered scope from the App Server's real
-            # /proc identity via the SAME capture attestation uses (canonical cgroup
-            # digest), so the auth-helper child attests against a matching ancestor.
-            identity = capture_cell_identity(assignment, cell.metadata.cell_id, cell.metadata.pid)
-            scope = identity.scope
-            # Register + bind + serve BEFORE the preflight/first turn, so the App
-            # Server's first lazy auth.command call always finds a live registration.
             ingress = CodexTrustedIngress(self._registry, self._attestor)
-            await ingress.start(
-                identity=identity,
-                socket_path=socket_path,
-                bearer_issuer=build_ingress_bearer_issuer(
-                    broker=self._broker,
-                    registry=self._registry,
-                    model_id=model_id,
-                    policy_digest=model_policy_digest(model_id, self._reasoning_effort),
-                    budget=read_only_budget(),
-                    ttl_seconds=self._ttl,
-                    holder=holder,
-                ),
+            issuer = build_ingress_bearer_issuer(
+                broker=self._broker,
+                registry=self._registry,
+                model_id=model_id,
+                policy_digest=model_policy_digest(model_id, self._reasoning_effort),
+                budget=read_only_budget(),
+                ttl_seconds=self._ttl,
+                holder=holder,
             )
+
+            async def register_spawned(pid: int) -> None:
+                # FINDING #1: build the registered scope from the App Server's real
+                # /proc identity via the SAME capture attestation uses (canonical
+                # cgroup digest), so the auth-helper child attests against a matching
+                # ancestor.
+                nonlocal scope
+                identity = capture_cell_identity(assignment, layout.cell_id, pid)
+                scope = identity.scope
+                await ingress.start(
+                    identity=identity, socket_path=socket_path, bearer_issuer=issuer
+                )
+
+            # The supervisor runs the registration against the just-spawned pid,
+            # before any protocol traffic, so there is no instant in which a live
+            # App Server is unregistered. A cell that fails to register is reaped
+            # by the supervisor and never handed out.
+            cell = await self._supervisor.start(
+                admission.layout, on_spawned=register_spawned
+            )
+            if scope is None:
+                # start() only returns once on_spawned succeeded, so this cannot
+                # happen; fail closed rather than hand out an unregistered cell.
+                raise CodexRuntimeAdmissionError("cell started without a registered scope")
             preflight = await self._probe.probe(cell.client, admission.skill_plan)
             admitted = AdmittedCodexCell(admission, cell, preflight)
             self._register_session(cell, proxy, scope, ingress, holder)
