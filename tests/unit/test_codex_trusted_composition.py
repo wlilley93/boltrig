@@ -10,7 +10,10 @@ Codex turn runs here; the factory only CONSTRUCTS.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
+
+import pytest
 
 from boltrig.api.codex_trusted import build_trusted_codex_config
 from boltrig.config.settings import Settings
@@ -67,7 +70,13 @@ def test_returns_none_when_stack_root_missing() -> None:
     )
 
 
-def test_builds_provider_when_all_three_set(tmp_path: Path) -> None:
+def test_builds_provider_when_all_three_set(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The image bakes the shared helper at /opt/boltrig/codex/model_auth_helper,
+    # which does not exist on a dev host; /bin/sh has the same proved shape
+    # (root-owned, unwritable chain) so the boundary assertion is real, not stubbed.
+    monkeypatch.setenv("BOLTRIG_CODEX_AUTH_HELPER", os.path.realpath("/bin/sh"))
     settings = _settings(
         codex_trusted=True,
         codex_binary=_REAL_BINARY,

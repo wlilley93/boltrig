@@ -38,6 +38,11 @@ from boltrig.fleet.domain.model_proxy_scope import (
     ModelProxyPhaseScope,
     ModelProxyRootScope,
 )
+from boltrig.fleet.infrastructure.codex_cell_boundary import (
+    SHARED_HELPER_ENV_KEY,
+    CellIsolationBoundary,
+    assert_cell_isolation_boundary,
+)
 from boltrig.fleet.infrastructure.codex_model_proxy_issuance import issue_cell_bearer
 from boltrig.fleet.infrastructure.codex_trusted_proxy_support import (
     GenerationHolder,
@@ -182,17 +187,36 @@ class CodexTrustedIngress:
     and tests this in isolation; beat 3b wires it into the live ``acquire``.
     """
 
-    __slots__ = ("_attestor", "_listener", "_registration", "_registry", "_serve_task")
+    __slots__ = (
+        "_attestor",
+        "_boundary",
+        "_listener",
+        "_registration",
+        "_registry",
+        "_serve_task",
+        "_stack_root",
+    )
 
     def __init__(
-        self, registry: ModelProxyProcessRegistry, attestor: LinuxModelProxyPeerAttestor
+        self,
+        registry: ModelProxyProcessRegistry,
+        attestor: LinuxModelProxyPeerAttestor,
+        *,
+        stack_root: Path,
+        boundary: CellIsolationBoundary,
     ) -> None:
         if type(registry) is not ModelProxyProcessRegistry:
             raise TypeError("registry must be an exact ModelProxyProcessRegistry")
         if type(attestor) is not LinuxModelProxyPeerAttestor:
             raise TypeError("attestor must be an exact LinuxModelProxyPeerAttestor")
+        if type(boundary) is not CellIsolationBoundary:
+            raise TypeError("boundary must be an exact CellIsolationBoundary")
+        if not isinstance(stack_root, Path) or not stack_root.is_absolute():
+            raise CodexTrustedIngressError("stack_root must be an absolute Path")
         self._registry = registry
         self._attestor = attestor
+        self._stack_root = stack_root
+        self._boundary = boundary
         self._listener: PeerAttestationUnixListener | None = None
         self._serve_task: asyncio.Task[None] | None = None
         self._registration: ModelProxyCellScope | None = None
@@ -204,15 +228,35 @@ class CodexTrustedIngress:
         socket_path: Path,
         bearer_issuer: BearerIssuer,
     ) -> None:
-        """Register the App Server, bind the listener, and start serving.
+        """Assert the boundary, register the App Server, bind, and start serving.
 
         Registration happens BEFORE the listener serves, so the first auth-helper
         connection (which Codex makes lazily on its first model request) always finds
         a live registered ancestor to attest against.
+
+        [2026] VJS-CC-VJS 5 G4: the boundary is RE-PROVED here, at ingress startup,
+        not merely at composition. Composition can succeed minutes before a cell
+        starts, and the whole point of the ruling is that an attestation input must
+        be protected at the moment it is USED, so a boundary that has since gone is
+        fatal here and no listener is ever bound.
         """
 
         if self._listener is not None:
             raise CodexTrustedIngressError("ingress already started")
+        # Re-prove the EXACT helper composition bound to, not whatever ambient env
+        # now resolves: the question is whether THIS program is still protected.
+        proved = assert_cell_isolation_boundary(
+            stack_root=self._stack_root,
+            env={SHARED_HELPER_ENV_KEY: self._boundary.helper_path.as_posix()},
+        )
+        if (
+            proved.mechanism != self._boundary.mechanism
+            or proved.helper_path != self._boundary.helper_path
+            or proved.helper_sha256 != self._boundary.helper_sha256
+        ):
+            raise CodexTrustedIngressError(
+                "the per-cell isolation boundary changed after composition"
+            )
         registration = await self._registry.register(
             identity.scope, expected_uid=identity.uid, expected_gid=identity.gid
         )

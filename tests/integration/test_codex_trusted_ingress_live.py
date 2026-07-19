@@ -26,6 +26,10 @@ from boltrig.fleet.domain.execution import (
     PhaseRef,
 )
 from boltrig.fleet.domain.model_proxy_scope import ModelProxyCellScope
+from boltrig.fleet.infrastructure.codex_cell_boundary import (
+    SHARED_HELPER_ENV_KEY,
+    assert_cell_isolation_boundary,
+)
 from boltrig.fleet.infrastructure.codex_trusted_proxy_ingress import (
     CodexTrustedIngress,
     capture_cell_identity,
@@ -76,12 +80,20 @@ async def test_ingress_registers_binds_serves_and_delivers_to_the_helper() -> No
 
     registry = ModelProxyProcessRegistry()
     attestor = LinuxModelProxyPeerAttestor(registry, max_ancestry=1)
-    ingress = CodexTrustedIngress(registry, attestor)
+    # Short stack-root base so the AF_UNIX path stays within 108 bytes (FINDING #2).
+    stack_root = Path(tempfile.mkdtemp(prefix="bi-"))
+    # /bin/sh stands in for the baked image helper: root-owned on a chain we
+    # cannot write ([2026] VJS-CC-VJS 5 G2).
+    boundary = assert_cell_isolation_boundary(
+        stack_root=stack_root,
+        env={SHARED_HELPER_ENV_KEY: os.path.realpath("/bin/sh")},
+    )
+    ingress = CodexTrustedIngress(
+        registry, attestor, stack_root=stack_root, boundary=boundary
+    )
 
     identity = capture_cell_identity(_assignment(), "cell-3a", os.getpid())
 
-    # Short stack-root base so the AF_UNIX path stays within 108 bytes (FINDING #2).
-    stack_root = Path(tempfile.mkdtemp(prefix="bi-"))
     socket_path = select_ingress_socket_path(stack_root, "cell-3a")
 
     async def bearer_issuer(attested: ModelProxyCellScope) -> bytes:

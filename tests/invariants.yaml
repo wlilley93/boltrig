@@ -111,7 +111,7 @@ invariants:
       - tests/unit/test_codex_runtime_config.py::test_caller_constructible_surface_digests_never_grant_dynamic_surfaces
       - tests/unit/test_codex_runtime_config_adversarial.py::test_compose_revalidates_a_request_mutated_after_construction
       - tests/unit/test_codex_runtime_config_adversarial.py::test_compose_uses_a_private_snapshot_after_validation
-      - tests/unit/test_codex_runtime_config_adversarial.py::test_self_consistent_receipt_cannot_move_helper_outside_cell
+      - tests/unit/test_codex_runtime_config_adversarial.py::test_self_consistent_receipt_cannot_move_helper_into_the_cell_root
       - tests/unit/test_codex_runtime_config_adversarial.py::test_self_consistent_receipt_cannot_widen_skill_policy
   SEC-161:
     description: Capability-effect attestations can only reject an existing exact assignment authority snapshot - admission binds tenant, workspace, root, phase, assignment, authority evaluation id/digest/generation, catalog generation/digest, and the complete verb-definition/classification set; only READ_ONLY_NO_EXTERNAL_EFFECT with LOW consequence, or an exact empty no-tool set, admits, while egress, mutation, high consequence, drift, partial/broader evidence, subclass spoofing, and malformed evidence fail closed.

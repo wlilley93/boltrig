@@ -20,11 +20,15 @@ parallel. The cell scope is now peer-attested, not merely observed, and the App
 Server is registered inside ``CodexCellSupervisor.start`` against the just-spawned
 pid, so no live-and-unregistered window exists.
 
-NOT YET SAFE FOR MULTIPLE MUTUALLY-DISTRUSTING CELLS ([2026] VJS-CC-VJS 5): all
-cells share one uid, and the auth helper and config.toml live in the MUTABLE cell
-root, so one cell can rewrite another's attestation inputs and have the sibling's
-App Server execute them as its own child. ``production_ready`` therefore stays
-False. Read-only reasoning cutover only; write/effects are separately court-gated
+[2026] VJS-CC-VJS 5: the auth helper is no longer written into the mutable cell
+root. There is one shared helper, root-owned and non-writable on the read-only
+image mount, proved at composition and re-proved at ingress startup by
+``assert_cell_isolation_boundary`` (G2, G4). The cell's config.toml is NOT so
+protected: it carries ``auth.command`` and must live in a CODEX_HOME the shared
+cell uid owns, and this container holds neither CAP_SETUID (per-cell uids) nor
+CAP_SYS_ADMIN (per-cell read-only binds), so G3 is OPEN. While it is open this
+provider REFUSES a second concurrent cell, and ``production_ready`` stays False.
+Read-only reasoning cutover only; write/effects are separately court-gated
 (PR8, D6).
 """
 
@@ -71,13 +75,17 @@ from boltrig.fleet.infrastructure.codex_runtime_config import CodexReasoningEffo
 from boltrig.fleet.infrastructure.codex_trusted_proxy_support import (
     GenerationHolder,
     TrustedProxyProvisionError,
-    materialize_helper,
     model_policy_digest,
     read_only_budget,
     render_trusted_config,
     tracking_bearer_verifier,
     write_cell_config,
 )
+from boltrig.fleet.infrastructure.codex_cell_boundary import (
+    CellIsolationBoundary,
+    assert_cell_isolation_boundary,
+)
+from boltrig.fleet.infrastructure.model_proxy_peer_listener import BearerIssuer
 from boltrig.fleet.infrastructure.model_proxy_peer_attestation import (
     LinuxModelProxyPeerAttestor,
 )
@@ -153,6 +161,11 @@ class TrustedProxyCodexPhaseCellProvider:
         self._ttl = ttl_seconds
         self._env = env
         self._settings = settings
+        # G4: prove the named boundary once at composition, so a misbuilt image or a
+        # helper on a writable path can never construct a live provider at all.
+        self._boundary: CellIsolationBoundary = assert_cell_isolation_boundary(
+            stack_root=stack_root, env=env
+        )
         self._sessions: dict[str, _TrustedSession] = {}
 
     async def acquire(self, assignment: PhaseAssignmentRef) -> AdmittedCodexCell:
@@ -160,6 +173,7 @@ class TrustedProxyCodexPhaseCellProvider:
             raise TypeError("assignment must be an exact PhaseAssignmentRef")
         # D1: fail closed BEFORE any provisioning or bearer mint can happen.
         require_codex_trusted_posture(self._env, self._settings)
+        self._require_admissible_concurrency()
         admission = await self._source.admit(assignment)
         if type(admission) is not CodexPhaseAdmission or admission.assignment != assignment:
             raise CodexRuntimeAdmissionError("admission source returned another assignment")
@@ -189,16 +203,8 @@ class TrustedProxyCodexPhaseCellProvider:
                 proxy_port=proxy.port,
                 socket_path=socket_path,
             )
-            ingress = CodexTrustedIngress(self._registry, self._attestor)
-            issuer = build_ingress_bearer_issuer(
-                broker=self._broker,
-                registry=self._registry,
-                model_id=model_id,
-                policy_digest=model_policy_digest(model_id, self._reasoning_effort),
-                budget=read_only_budget(),
-                ttl_seconds=self._ttl,
-                holder=holder,
-            )
+            ingress = self._build_ingress()
+            issuer = self._build_issuer(model_id, holder)
 
             async def register_spawned(pid: int) -> None:
                 # FINDING #1: build the registered scope from the App Server's real
@@ -233,6 +239,41 @@ class TrustedProxyCodexPhaseCellProvider:
                 await _close_ignoring_failure(cell)
             raise
 
+    def _build_ingress(self) -> CodexTrustedIngress:
+        return CodexTrustedIngress(
+            self._registry,
+            self._attestor,
+            stack_root=self._stack_root,
+            boundary=self._boundary,
+        )
+
+    def _build_issuer(self, model_id: str, holder: GenerationHolder) -> BearerIssuer:
+        return build_ingress_bearer_issuer(
+            broker=self._broker,
+            registry=self._registry,
+            model_id=model_id,
+            policy_digest=model_policy_digest(model_id, self._reasoning_effort),
+            budget=read_only_budget(),
+            ttl_seconds=self._ttl,
+            holder=holder,
+        )
+
+    def _require_admissible_concurrency(self) -> None:
+        """Refuse a second live cell while config.toml is unprotected (G3).
+
+        config.toml carries ``auth.command`` and must live in a CODEX_HOME the cell
+        uid owns, so a sibling cell can replace it and name another program. The
+        attack needs two mutually distrusting cells at once, so while
+        ``config_toml_protected`` is False we refuse the second one outright rather
+        than assert an isolation we cannot prove.
+        """
+
+        if self._sessions and not self._boundary.config_toml_protected:
+            raise TrustedProxyProvisionError(
+                "concurrent Codex cells are refused: config.toml is not protected by "
+                f"the {self._boundary.mechanism} boundary ([2026] VJS-CC-VJS 5 G3)"
+            )
+
     async def _start_proxy(
         self, holder: GenerationHolder, allowed_tools: frozenset[str]
     ) -> PerCellModelProxyServer:
@@ -256,13 +297,13 @@ class TrustedProxyCodexPhaseCellProvider:
         proxy_port: int,
         socket_path: Path,
     ) -> None:
-        helper_path, helper_sha256 = materialize_helper(cell_root, cell_id, socket_path)
         config_toml = render_trusted_config(
             cell_id=cell_id,
             cell_root=cell_root,
             codex_home=codex_home,
-            helper_path=helper_path,
-            helper_sha256=helper_sha256,
+            helper_path=self._boundary.helper_path,
+            helper_sha256=self._boundary.helper_sha256,
+            socket_path=socket_path,
             model_id=model_id,
             policy_digest=model_policy_digest(model_id, self._reasoning_effort),
             reasoning_effort=self._reasoning_effort,

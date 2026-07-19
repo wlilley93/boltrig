@@ -54,8 +54,9 @@ def _request() -> CodexRuntimeConfigRequest:
         cell_id="cell-001",
         cell_root=_CELL,
         codex_home=_CODEX_HOME,
-        helper_path=_CELL / "bin" / "codex-model-auth",
+        helper_path=Path("/opt/boltrig/codex/model_auth_helper"),
         helper_sha256=_DIGEST_A,
+        socket_path=Path("/var/lib/boltrig/codex-cells/mp-0123456789abcdef.sock"),
         model_id="gpt-5.4",
         model_policy_digest=_DIGEST_B,
         reasoning_effort=CodexReasoningEffort.HIGH,
@@ -93,9 +94,11 @@ def _skill_digest(config_toml: str) -> str:
 @pytest.mark.invariant("SEC-159")
 def test_compose_revalidates_a_request_mutated_after_construction() -> None:
     request = _request()
-    object.__setattr__(request, "helper_path", Path("/tmp/attacker-helper"))
+    # Mutate to the position G2 now forbids: inside the mutable cell root, where a
+    # sibling cell could rewrite the program the App Server executes.
+    object.__setattr__(request, "helper_path", _CELL / "bin" / "codex-model-auth")
 
-    with pytest.raises(CodexRuntimeConfigError, match="exact cell"):
+    with pytest.raises(CodexRuntimeConfigError, match="outside the mutable cell root"):
         compose_codex_runtime_config(request)
 
 
@@ -116,9 +119,7 @@ def test_compose_uses_a_private_snapshot_after_validation(
 
     composed = compose_codex_runtime_config(request)
 
-    assert composed.receipt.helper_path == (
-        _CELL / "bin" / "codex-model-auth"
-    ).as_posix()
+    assert composed.receipt.helper_path == "/opt/boltrig/codex/model_auth_helper"
     assert "/tmp/attacker-helper" not in composed.config_toml
 
 
@@ -133,14 +134,20 @@ def test_request_is_slot_isolated_redacted_and_not_pickle_serializable() -> None
 
 
 @pytest.mark.invariant("SEC-159")
-def test_self_consistent_receipt_cannot_move_helper_outside_cell() -> None:
-    composed = compose_codex_runtime_config(_request())
-    external = "/tmp/attacker-helper"
-    widened = composed.config_toml.replace(composed.receipt.helper_path, external)
-    receipt = _config_receipt(composed, widened)
-    object.__setattr__(receipt, "helper_path", external)
+def test_self_consistent_receipt_cannot_move_helper_into_the_cell_root() -> None:
+    """[2026] VJS-CC-VJS 5 G2 inverted this: INSIDE the cell root is the danger.
 
-    with pytest.raises(CodexRuntimeConfigError, match="exact cell"):
+    A helper in the mutable cell root is rewritable by every sibling cell under the
+    shared uid, so a receipt that relocates it there must fail closed.
+    """
+
+    composed = compose_codex_runtime_config(_request())
+    inside = (_CELL / "bin" / "codex-model-auth").as_posix()
+    widened = composed.config_toml.replace(composed.receipt.helper_path, inside)
+    receipt = _config_receipt(composed, widened)
+    object.__setattr__(receipt, "helper_path", inside)
+
+    with pytest.raises(CodexRuntimeConfigError, match="outside the mutable cell root"):
         ComposedCodexRuntimeConfig(widened, receipt)
 
 
