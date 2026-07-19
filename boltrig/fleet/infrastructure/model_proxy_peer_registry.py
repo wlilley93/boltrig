@@ -6,11 +6,22 @@ which a live App Server is unregistered; a cell that fails to register is reaped
 and never handed out. Issuance is likewise bound to liveness: ``authorize`` mints
 under the same lock ``revoke`` takes.
 
-The narrower gap that remains: the cell's auth-helper file content is not
-re-verified from disk against its recorded digest. That digest is audit evidence,
-not a control - what actually gates a bearer is SO_PEERCRED ancestry attestation
-over the socket, which a rewritten helper cannot defeat (it would still have to
-connect from a descendant of the registered App Server).
+THE OPEN GAP ([2026] VJS-CC-VJS 5): attestation proves the PROVENANCE of a
+connection, not the INTEGRITY of the program that makes it. Under the present
+shared uid, a hostile cell can rewrite a sibling's auth helper (0700 inside the
+sibling's MUTABLE cell root) or its config.toml ``auth.command``. The sibling's
+App Server then executes attacker-supplied code as its own direct child, which
+passes ancestry attestation ON THE MERITS - correct ancestor, cgroup, pid
+namespace, uid and gid - and receives the sibling's bearer. Because the scope
+carries a tenant id, that is a cross-tenant compromise.
+
+An earlier version of this docstring claimed a rewritten helper "cannot defeat"
+attestation because it would still have to connect from a descendant of the
+registered App Server. That reasoning holds only under a boundary that stops one
+cell rewriting another's helper. Under one uid it is circular: the attacker
+chooses what the descendant is. Until a kernel-enforced per-cell boundary over
+attestation inputs is enacted and asserted at startup, this machinery must not be
+read as conferring cross-cell isolation.
 """
 
 from __future__ import annotations
