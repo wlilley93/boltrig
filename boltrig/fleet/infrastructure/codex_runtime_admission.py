@@ -34,6 +34,14 @@ MAX_BIRTH_INSTRUCTIONS_BYTES = 128 * 1024
 CODEX_PROTOCOL_BUNDLE_DIGEST = (
     "sha256:0194f4370fd6ec268f81270217b56b2d1133ecc2c2a1560f3870dd6ec16e9810"
 )
+# ``effective_tools`` is NOT discharged by asking Codex: 0.144.3 has no method that
+# enumerates a thread's effective tools, and its [tools] table accepts only
+# web_search and experimental_request_user_input. It is instead DETERMINED by the
+# kernel at the per-cell model proxy, which filters the tools array against this
+# policy's enabled_tools on every upstream call. [2026] VJS-CC-VJS 4 holds that
+# determination discharges such a limb, but only on four proofs by test -
+# exclusivity, derivation, fail-closed and live re-proof - so the blocker STAYS
+# until all four pass. Never read this value as a vendored self-report.
 QUARANTINED_PREFLIGHT_BLOCKERS = (
     "effective_apps",
     "effective_config",

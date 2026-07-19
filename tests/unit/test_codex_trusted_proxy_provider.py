@@ -34,6 +34,7 @@ from boltrig.fleet.application.model_proxy_grants import PhaseScopedModelProxyGr
 from boltrig.fleet.codex_trusted_wall import CodexTrustedPostureError
 from boltrig.fleet.domain import PhaseAssignmentRef, PhaseRef
 from boltrig.fleet.infrastructure.codex_cell_policy import CodexUpstreamAuth
+from boltrig.fleet.infrastructure.codex_cell_policy import sanitized_environment
 from boltrig.fleet.infrastructure.codex_cell_supervisor import CodexCellSupervisor
 from boltrig.fleet.infrastructure.codex_model_proxy_server import (
     PerCellModelProxyServer,
@@ -64,6 +65,8 @@ from boltrig.fleet.infrastructure.model_proxy_peer_registry import (
     ModelProxyProcessRegistry,
 )
 from boltrig.models.execution_scope import OrganisationUserRef
+
+from .codex_process_fakes import make_layout
 
 _CODEX_BIN = Path("/opt/boltrig/codex/codex")
 _CELL_ID = "cell-abc1234567890ab"
@@ -334,3 +337,54 @@ async def test_write_cell_config_writes_no_executable_into_the_cell_root(
     document = tomllib.loads((codex_home / "config.toml").read_text())
     provider_block = document["model_providers"]["boltrig_model_proxy"]  # type: ignore[index]
     assert provider_block["base_url"] == "http://127.0.0.1:44001/v1"
+
+
+# --- [2026] VJS-CC-VJS 4: the four limbs of the effective_tools claim ---------
+
+
+@pytest.mark.parametrize(
+    "granted",
+    [frozenset(), frozenset({"update_plan"}), frozenset({"update_plan", "view_image"})],
+)
+async def test_the_proxy_ceiling_is_derived_from_the_policy_not_a_default(
+    granted: frozenset[str],
+) -> None:
+    """F3 DERIVATION: the ceiling must come from the compiled policy it cites.
+
+    The constructor defaults allowed_tools to empty and fails closed, which means a
+    lane that FORGOT to wire the ceiling would look identical to one that wired it.
+    A non-empty policy is therefore the load-bearing case: it can only pass if the
+    value genuinely travelled from the policy rather than from the default.
+    """
+
+    store, broker = _store_broker()
+    async with httpx.AsyncClient() as client:
+        provider = _provider(broker=broker, store=store, client=client)
+        proxy = await provider._start_proxy(GenerationHolder(1), granted)
+        try:
+            assert proxy._allowed_tools == granted
+        finally:
+            await proxy.aclose()
+
+
+def test_the_cell_environment_carries_no_upstream_credential_or_gateway(
+    tmp_path: Path,
+) -> None:
+    """F4 EXCLUSIVITY, limb (b): no credentialed egress is reachable from the cell.
+
+    The court held that "the key is injected server-side" is a statement about
+    CREDENTIAL exclusivity and does not by itself prove PATH exclusivity. This pins
+    the credential half as a test: the sanitized child environment is exactly five
+    variables, and carries neither the upstream key nor any gateway URL, so the cell
+    cannot present authority to the gateway directly however it reaches the network.
+    """
+
+    environment = sanitized_environment(make_layout(tmp_path), None)
+
+    assert set(environment) == {"CODEX_HOME", "HOME", "LANG", "LC_ALL", "PATH"}
+    assert "CODEX_ACCESS_TOKEN" not in environment
+    joined = " ".join(environment.values())
+    assert "KERNEL-ONLY-KEY" not in joined
+    assert "gateway" not in joined and "bifrost" not in joined
+    # The sanitized PATH holds no general-purpose fetch tool either.
+    assert environment["PATH"] == "/usr/bin:/bin"
