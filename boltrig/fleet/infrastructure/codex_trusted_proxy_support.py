@@ -43,9 +43,9 @@ from boltrig.fleet.infrastructure.codex_runtime_config import (
 from boltrig.fleet.infrastructure.skill_config import REVIEWED_SYSTEM_SKILLS_0_144_3
 
 HELPER_FILENAME = "model_auth_helper"
-BEARER_FILENAME = "model_auth_bearer"
 _HELPER_MODE = 0o700
-_BEARER_MODE = 0o600
+# 0600 for the cell's private config.toml (there is no bearer file - Option B).
+_PRIVATE_FILE_MODE = 0o600
 
 # A fixed, small read-only reasoning budget. Read-only cutover only (D6); the
 # write/effects phase is separately court-gated (PR8).
@@ -58,18 +58,24 @@ READ_ONLY_MAX_COST_MICROS = 5_000_000
 # Codex 0.144.3 ``[model_providers.*.auth] command`` contract (verified against
 # openai/codex PR #16288 "core: support dynamic auth tokens for model providers"):
 # the command receives no stdin, writes the RAW bearer token to stdout (any
-# leading/trailing whitespace is trimmed), and exits 0. It is NOT JSON. The helper
-# reveals only the short-TTL scoped bearer from its sibling 0600 file; the real
-# upstream key is injected server-side by the loopback proxy and never lives here.
+# leading/trailing whitespace is trimmed), and exits 0. It is NOT JSON.
+#
+# Option-B delivery ([2026] VJS-CC-VJS 3): the helper CONNECTS to the per-cell
+# SO_PEERCRED unix socket and drains the raw bearer from that connection to stdout -
+# NO bearer file at rest. The kernel attests THIS process over the socket and mints
+# the bearer at issuance; the upstream key is injected server-side by the loopback
+# proxy and never lives here. Only the acquisition changed (socket read, not
+# ``cat`` of a file); the stdout contract (E3) is identical. python3 is the ABSOLUTE
+# ``/usr/local/bin/python3`` because the sanitized cell PATH is ``/usr/bin:/bin``
+# (no ``/usr/local/bin``, and no socat/nc). The socket path is passed as argv so it
+# never has to be escaped into the Python literal.
 _HELPER_TEMPLATE = """\
 #!/bin/sh
-# Boltrig trusted per-cell model-auth helper ([2026] VJS-CC-VJS 2, D2/D5).
-# Codex 0.144.3 auth.command contract (verified openai/codex#16288): print the
-# RAW bearer to stdout (Codex trims whitespace), exit 0. No JSON. Reveals only the
-# short-TTL scoped bearer from the sibling 0600 file; the upstream key is never here.
+# Boltrig trusted per-cell model-auth helper ([2026] VJS-CC-VJS 1/3, D2/E1/E3).
+# Connect to the attested unix socket, drain the raw bearer to EOF, print it to
+# stdout (Codex trims whitespace), exit 0. No JSON, no file at rest.
 set -eu
 expected='__CELL_ID__'
-dir=$(dirname -- "$0")
 cell=''
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -78,7 +84,18 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 [ "$cell" = "$expected" ] || { printf 'trusted model-auth cell mismatch\\n' >&2; exit 2; }
-exec cat -- "$dir/__BEARER__"
+exec /usr/local/bin/python3 -c 'import socket, sys
+s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+s.connect(sys.argv[1])
+buf = bytearray()
+while True:
+    b = s.recv(4096)
+    if not b:
+        break
+    buf += b
+sys.stdout.buffer.write(bytes(buf))
+sys.stdout.buffer.flush()
+' "__SOCKET__"
 """
 
 
@@ -265,16 +282,20 @@ def render_trusted_config(
     return compose_codex_runtime_config(request).config_toml
 
 
-def materialize_helper(cell_root: Path, cell_id: str) -> tuple[Path, str]:
-    """Write the 0700 auth helper and return ``(path, sha256_digest)``.
+def materialize_helper(cell_root: Path, cell_id: str, socket_path: Path) -> tuple[Path, str]:
+    """Write the 0700 socket-client auth helper and return ``(path, sha256_digest)``.
 
-    The helper reads ONLY the sibling 0600 bearer file, so it is delivered to and
-    readable by exactly the SINGLE service uid that owns the cell (D5); file
-    permissions are never widened to bridge a distinct-uid cell.
+    The helper connects to ``socket_path`` (the per-cell SO_PEERCRED unix socket) and
+    drains the raw bearer to stdout ([2026] VJS-CC-VJS 3, Option B) - no bearer file
+    at rest. The socket path is embedded as a shell double-quoted argv, so it is
+    validated to contain no shell-active or non-ASCII bytes (we control it - it is
+    ``mp-<hex>.sock`` under the stack root - so this is a cheap defensive invariant).
     """
 
+    socket_literal = os.fspath(socket_path)
+    _validate_socket_literal(socket_literal)
     script = _HELPER_TEMPLATE.replace("__CELL_ID__", cell_id).replace(
-        "__BEARER__", BEARER_FILENAME
+        "__SOCKET__", socket_literal
     )
     data = script.encode("ascii")
     helper_path = cell_root / HELPER_FILENAME
@@ -282,19 +303,18 @@ def materialize_helper(cell_root: Path, cell_id: str) -> tuple[Path, str]:
     return helper_path, _sha256_prefixed(data)
 
 
-def write_bearer(cell_root: Path, bearer: str) -> Path:
-    """Atomically (temp + ``os.replace``) write the 0600 bearer file (D2/D5)."""
-
-    bearer_path = cell_root / BEARER_FILENAME
-    _atomic_write(bearer_path, bearer.encode("ascii"), _BEARER_MODE)
-    return bearer_path
+def _validate_socket_literal(socket_literal: str) -> None:
+    if not socket_literal or not socket_literal.isascii():
+        raise TrustedProxyProvisionError("socket path must be non-empty ASCII")
+    if any(ch in socket_literal for ch in ('"', "\\", "`", "$", "\n", "\r", "'")):
+        raise TrustedProxyProvisionError("socket path contains a shell-active character")
 
 
 def write_cell_config(codex_home: Path, config_toml: str) -> Path:
     """Atomically write the rendered ``config.toml`` into the cell's CODEX_HOME."""
 
     config_path = codex_home / "config.toml"
-    _atomic_write(config_path, config_toml.encode("ascii"), _BEARER_MODE)
+    _atomic_write(config_path, config_toml.encode("ascii"), _PRIVATE_FILE_MODE)
     return config_path
 
 
@@ -322,7 +342,6 @@ def startup_request_id(cell_id: str) -> str:
 
 
 __all__ = [
-    "BEARER_FILENAME",
     "GenerationHolder",
     "HELPER_FILENAME",
     "TrustedProxyProvisionError",
@@ -334,6 +353,5 @@ __all__ = [
     "render_trusted_config",
     "startup_request_id",
     "tracking_bearer_verifier",
-    "write_bearer",
     "write_cell_config",
 ]

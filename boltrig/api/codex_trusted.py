@@ -60,6 +60,12 @@ def build_trusted_codex_config(
     from boltrig.fleet.infrastructure.memory_model_proxy_grants import (
         MemoryModelProxyGrantStore,
     )
+    from boltrig.fleet.infrastructure.model_proxy_peer_attestation import (
+        LinuxModelProxyPeerAttestor,
+    )
+    from boltrig.fleet.infrastructure.model_proxy_peer_registry import (
+        ModelProxyProcessRegistry,
+    )
 
     stack_root = Path(settings.codex_stack_root)
     source = ProvisioningCodexPhaseAdmissionSource(stack_root=stack_root, model_id=model_id)
@@ -69,12 +75,19 @@ def build_trusted_codex_config(
     probe = QuarantinedCodexPreflightProbe()
     grant_store = MemoryModelProxyGrantStore()
     broker = PhaseScopedModelProxyGrantBroker(grant_store)
+    # The SO_PEERCRED ingress ([2026] VJS-CC-VJS 1/3): the registry the supervisor
+    # registers each App Server into, and the attestor the per-cell listener uses.
+    registry = ModelProxyProcessRegistry()
+    attestor = LinuxModelProxyPeerAttestor(registry)
     provider = TrustedProxyCodexPhaseCellProvider(
         source=source,
         supervisor=supervisor,
         probe=probe,
         broker=broker,
         grant_store=grant_store,
+        registry=registry,
+        attestor=attestor,
+        stack_root=stack_root,
         upstream_base_url=gateway_base_url,
         # Dev bifrost is unauth, so an empty key is acceptable; prefer the configured
         # value when present.
