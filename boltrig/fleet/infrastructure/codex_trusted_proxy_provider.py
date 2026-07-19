@@ -11,16 +11,21 @@ seam (D1). It never flips a production gate - it runs under the existing
 The credential split (D2): the real upstream key is injected server-side by the
 proxy and NEVER placed in the cell environment (the supervisor is constructed with
 ``auth=None``, so ``sanitized_environment`` never sets ``CODEX_ACCESS_TOKEN``); the
-cell holds only the short-TTL scoped bearer, delivered to a SINGLE service uid as a
-0600 file (D5).
+cell holds only the short-TTL scoped bearer.
 
-D3 caveat: the cell scope is the child's real ``/proc`` identity, but WITHOUT the
-SO_PEERCRED cross-check production issuance performs over the unix socket. It is
-observed, not attested, and must never be mistaken for a peer-attested identity.
-The only difference from production is that one cross-check, so the trusted path
-maps onto the future SO_PEERCRED swap with an identical ``auth.command`` and
-bearer-file delivery contract (D5). Read-only reasoning cutover only; write/effects
-are separately court-gated (PR8, D6).
+Delivery is Option B ([2026] VJS-CC-VJS 3 E1/E4): the bearer is written to the
+SO_PEERCRED-attested socket connection and NO bearer file exists. The interim
+0600-file path this module once described is gone, and the two are never run in
+parallel. The cell scope is now peer-attested, not merely observed, and the App
+Server is registered inside ``CodexCellSupervisor.start`` against the just-spawned
+pid, so no live-and-unregistered window exists.
+
+NOT YET SAFE FOR MULTIPLE MUTUALLY-DISTRUSTING CELLS ([2026] VJS-CC-VJS 5): all
+cells share one uid, and the auth helper and config.toml live in the MUTABLE cell
+root, so one cell can rewrite another's attestation inputs and have the sibling's
+App Server execute them as its own child. ``production_ready`` therefore stays
+False. Read-only reasoning cutover only; write/effects are separately court-gated
+(PR8, D6).
 """
 
 from __future__ import annotations
