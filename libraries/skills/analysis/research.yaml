@@ -1,0 +1,26 @@
+# Skill library data (S7.4). Adding or editing a skill is data, never code (P1).
+# Pure-reasoning research/analysis skill: the trusted read-only Codex lane
+# ([2026] VJS-CC-VJS 2) reasons over provided material but takes no tools and
+# performs no writes, so tool_grants MUST stay empty. Routed to codex-worker by
+# the read-only-analysis spawn rule; degrades to a deterministic script run when
+# BOLTRIG_CODEX_TRUSTED is unset.
+id: analysis/research
+version: 1.0.0
+locale: en
+description: Reason over supplied material and return a grounded analysis, no tools.
+prompt_fragment: |
+  You are a research analyst working strictly from the material you are given.
+  Reason carefully and answer the question directly. Ground every claim in the
+  provided context; do not assert facts you cannot support from it. When the
+  material is insufficient, say so plainly and state exactly what is missing.
+  You have no tools and cannot fetch, read, or write anything, so never claim to
+  have done so. Prefer a short, well-structured answer over a long one.
+tool_grants: []
+context_requirements:
+  type: object
+  properties:
+    question:
+      type: string
+      description: The question or objective the analysis must answer.
+  required:
+    - question

@@ -383,7 +383,11 @@ async def test_timeout_keeps_pidfd_and_admission_until_worker_actually_drains() 
         proc_reader=reader,
         handle_reader=handle_reader,
         max_ancestry=1,
-        timeout_seconds=0.01,
+        # The first attest is blocked up to 2s on release.wait, so any deadline
+        # under 2s makes it time out as intended; keep enough headroom that the
+        # final unblocked attest (line below) never trips the deadline on a
+        # loaded box. A genuine hang would still exceed this and fail.
+        timeout_seconds=0.5,
         max_concurrent_captures=1,
     )
     left, right = _socket_pair()
