@@ -184,6 +184,13 @@ class PerCellModelProxyServer:
             upstream_request = self._client.build_request(
                 request.method, f"{self._base}/{tail}", content=body, headers=headers
             )
+            # Exclusivity limb (a): the chokepoint is only the only path if the
+            # tail cannot leave it. httpx normalizes "/v1/../admin" to "/admin", so
+            # without this a cell could reach any gateway endpoint WITH the
+            # kernel-only key attached. Check the composed URL, not the raw tail:
+            # it is the value that will actually be sent.
+            if not str(upstream_request.url).startswith(f"{self._base}/"):
+                return JSONResponse({"error": "path_escape"}, status_code=400)
             upstream = await self._client.send(upstream_request, stream=True)
         except httpx.HTTPError:
             # Bounded, body-safe: never leak the key or the upstream error detail.

@@ -306,3 +306,33 @@ async def test_an_unsolicited_tool_call_in_the_response_is_truncated_not_relayed
         assert b"response.completed" not in resp.content  # relay stopped
     finally:
         await server.aclose()
+
+
+async def test_a_traversing_path_cannot_escape_the_v1_base() -> None:
+    """Exclusivity limb (a): the chokepoint is only the only path if it holds.
+
+    httpx normalizes "/v1/../admin" to "/admin", so without a guard a cell could
+    reach any gateway endpoint with the kernel-only key attached. The composed URL
+    is checked rather than the raw tail, because that is what would be sent.
+    """
+
+    async def verify(token: str) -> bool:
+        return True
+
+    for tail in ("../admin", "../../etc/passwd", "a/../../admin"):
+        captured: dict[str, Any] = {}
+        server = _server(verify, _upstream(captured))
+        port = await server.start()
+        try:
+            async with httpx.AsyncClient() as caller:
+                resp = await caller.request(
+                    "POST",
+                    f"http://127.0.0.1:{port}/v1/{tail}",
+                    headers={"authorization": "Bearer good-bearer"},
+                    content=b"{}",
+                    extensions={"target": f"/v1/{tail}".encode()},
+                )
+            assert resp.status_code == 400, tail
+            assert "url" not in captured, tail  # nothing reached upstream
+        finally:
+            await server.aclose()
