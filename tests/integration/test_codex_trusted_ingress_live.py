@@ -104,6 +104,7 @@ async def test_ingress_registers_binds_serves_and_delivers_to_the_helper() -> No
         assert stdout == _TEST_BEARER
     finally:
         await ingress.aclose()
+        await attestor.aclose()  # release the attestor's capture executor threads
         if child is not None:
             child.wait(timeout=10)
         shutil.rmtree(stack_root, ignore_errors=True)
