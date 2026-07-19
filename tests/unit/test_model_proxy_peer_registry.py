@@ -8,6 +8,7 @@ import pytest
 from boltrig.fleet.infrastructure.model_proxy_peer_registry import (
     ModelProxyCellAlreadyRegistered,
     ModelProxyPeerRegistryCapacityExceeded,
+    ModelProxyPeerRegistryError,
     ModelProxyProcessAlreadyRegistered,
     ModelProxyProcessRegistry,
     ModelProxyRegistrationState,
@@ -138,3 +139,56 @@ async def test_registration_rejects_invalid_linux_ids(uid: object, gid: object) 
         await registry.register(
             cell_scope(), expected_uid=cast(int, uid), expected_gid=cast(int, gid)
         )
+
+
+@pytest.mark.unit
+async def test_authorize_mints_only_while_the_registration_is_live() -> None:
+    """Attested-then-revoked must not still yield a bearer (the issuance TOCTOU)."""
+
+    registry = ModelProxyProcessRegistry()
+    scope = cell_scope()
+    await registry.register(scope, expected_uid=DEFAULT_UID, expected_gid=DEFAULT_GID)
+
+    async def mint() -> str:
+        return "bearer"
+
+    assert await registry.authorize(scope, mint) == "bearer"
+    assert await registry.revoke(scope)
+    with pytest.raises(ModelProxyPeerRegistryError):
+        await registry.authorize(scope, mint)
+
+
+@pytest.mark.unit
+async def test_authorize_refuses_an_unregistered_scope() -> None:
+    registry = ModelProxyProcessRegistry()
+
+    async def mint() -> str:  # pragma: no cover - must never run
+        raise AssertionError("mint ran for an unregistered scope")
+
+    with pytest.raises(ModelProxyPeerRegistryError):
+        await registry.authorize(cell_scope(), mint)
+
+
+@pytest.mark.unit
+async def test_a_revoke_cannot_interleave_with_an_in_flight_mint() -> None:
+    """revoke takes the same lock, so it cannot land mid-issuance."""
+
+    registry = ModelProxyProcessRegistry()
+    scope = cell_scope()
+    await registry.register(scope, expected_uid=DEFAULT_UID, expected_gid=DEFAULT_GID)
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def mint() -> str:
+        entered.set()
+        await release.wait()
+        return "bearer"
+
+    minting = asyncio.create_task(registry.authorize(scope, mint))
+    await entered.wait()
+    revoking = asyncio.create_task(registry.revoke(scope))
+    await asyncio.sleep(0)
+    assert not revoking.done()  # blocked on the registry lock the mint holds
+    release.set()
+    assert await minting == "bearer"
+    assert await revoking

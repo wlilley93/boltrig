@@ -8,6 +8,7 @@ production blocker, not an implicit promise of this isolated seam.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import TypeAlias
@@ -160,6 +161,35 @@ class ModelProxyProcessRegistry:
             self._live_pids.pop((scope.boot_id, scope.pid), None)
             self._version = next_version
             return True
+
+    async def authorize[T](
+        self, scope: ModelProxyCellScope, issue: Callable[[], Awaitable[T]]
+    ) -> T:
+        """Run ``issue`` only while ``scope`` is registered LIVE, under the lock.
+
+        Attestation and issuance are otherwise two separate steps, so a cell could
+        be revoked (or its ingress closed) in between and a valid bearer would still
+        be minted and delivered. ``revoke`` takes the same lock, so running the mint
+        inside it makes "attested" and "still live at mint" one indivisible fact.
+
+        ``issue`` must not re-enter this registry: it is called with the lock held.
+        """
+
+        if type(scope) is not ModelProxyCellScope:
+            raise TypeError("scope must be an exact ModelProxyCellScope")
+        if not callable(issue):
+            raise TypeError("issue must be an awaitable callable")
+        async with self._lock:
+            current = self._records.get(_logical_key(scope))
+            if (
+                current is None
+                or current.scope != scope
+                or current.state is not ModelProxyRegistrationState.LIVE
+            ):
+                raise ModelProxyPeerRegistryError(
+                    "process registration is not live at issuance"
+                )
+            return await issue()
 
     async def snapshot_live(self) -> ModelProxyRegistrySnapshot:
         async with self._lock:

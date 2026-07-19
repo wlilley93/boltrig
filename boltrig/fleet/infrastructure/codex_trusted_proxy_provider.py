@@ -198,6 +198,7 @@ class TrustedProxyCodexPhaseCellProvider:
                 socket_path=socket_path,
                 bearer_issuer=build_ingress_bearer_issuer(
                     broker=self._broker,
+                    registry=self._registry,
                     model_id=model_id,
                     policy_digest=model_policy_digest(model_id, self._reasoning_effort),
                     budget=read_only_budget(),

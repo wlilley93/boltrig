@@ -36,6 +36,10 @@ from boltrig.fleet.infrastructure.codex_trusted_proxy_support import (
     build_cell_scope,
     read_only_budget,
 )
+from boltrig.fleet.infrastructure.model_proxy_peer_registry import (
+    ModelProxyPeerRegistryError,
+    ModelProxyProcessRegistry,
+)
 from boltrig.fleet.infrastructure.linux_peer_identity import (
     LinuxProcReader,
     capture_linux_process,
@@ -143,15 +147,18 @@ def _cell_scope(cell_id: str) -> ModelProxyCellScope:
 async def test_bearer_issuer_mints_per_attested_scope_at_rising_generation() -> None:
     broker = _FakeBroker()
     holder = GenerationHolder(1)
+    registry = ModelProxyProcessRegistry()
+    scope = _cell_scope("cell-issuer")
+    await registry.register(scope, expected_uid=os.getuid(), expected_gid=os.getgid())
     issuer = build_ingress_bearer_issuer(
         broker=cast(PhaseScopedModelProxyGrantBroker, broker),
+        registry=registry,
         model_id="glm-4.6",
         policy_digest="sha256:" + "a" * 64,
         budget=read_only_budget(),
         ttl_seconds=30,
         holder=holder,
     )
-    scope = _cell_scope("cell-issuer")
 
     first = await issuer(scope)
     second = await issuer(scope)
@@ -160,3 +167,29 @@ async def test_bearer_issuer_mints_per_attested_scope_at_rising_generation() -> 
     assert second == b"bearer-gen-3"
     assert broker.generations == [2, 3]  # strictly increasing per connection
     assert broker.cells == ["cell-issuer", "cell-issuer"]  # bound to the attested cell
+
+
+@pytest.mark.unit
+@pytest.mark.skipif(sys.platform != "linux", reason="build_cell_scope reads this process /proc")
+async def test_a_revoked_cell_is_refused_a_bearer_at_issuance() -> None:
+    """A cell revoked between attestation and mint must get nothing."""
+
+    broker = _FakeBroker()
+    registry = ModelProxyProcessRegistry()
+    scope = _cell_scope("cell-revoked")
+    await registry.register(scope, expected_uid=os.getuid(), expected_gid=os.getgid())
+    issuer = build_ingress_bearer_issuer(
+        broker=cast(PhaseScopedModelProxyGrantBroker, broker),
+        registry=registry,
+        model_id="glm-4.6",
+        policy_digest="sha256:" + "a" * 64,
+        budget=read_only_budget(),
+        ttl_seconds=30,
+        holder=GenerationHolder(1),
+    )
+
+    await registry.revoke(scope)
+
+    with pytest.raises(ModelProxyPeerRegistryError):
+        await issuer(scope)
+    assert broker.generations == []  # nothing was minted

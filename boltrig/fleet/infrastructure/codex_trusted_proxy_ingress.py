@@ -133,6 +133,7 @@ def select_ingress_socket_path(stack_root: Path, cell_id: str) -> Path:
 def build_ingress_bearer_issuer(
     *,
     broker: PhaseScopedModelProxyGrantBroker,
+    registry: ModelProxyProcessRegistry,
     model_id: str,
     policy_digest: str,
     budget: ModelProxyBudgetBinding,
@@ -152,16 +153,22 @@ def build_ingress_bearer_issuer(
         return ModelProxyGrantBinding(cell_scope, cell_model_binding(model_id, policy_digest), budget)
 
     async def issue(attested: ModelProxyCellScope) -> bytes:
-        holder.value += 1
-        bearer = await issue_cell_bearer(
-            attested,
-            broker=broker,
-            binding_for_cell=binding_for_cell,
-            startup_request_id=startup_request_id(attested.cell_id),
-            generation=holder.value,
-            ttl_seconds=ttl_seconds,
-        )
-        return bearer.encode("ascii")
+        async def mint() -> bytes:
+            holder.value += 1
+            bearer = await issue_cell_bearer(
+                attested,
+                broker=broker,
+                binding_for_cell=binding_for_cell,
+                startup_request_id=startup_request_id(attested.cell_id),
+                generation=holder.value,
+                ttl_seconds=ttl_seconds,
+            )
+            return bearer.encode("ascii")
+
+        # Attestation and issuance are two steps; a cell revoked in between must
+        # not still receive a bearer. authorize re-checks liveness and mints under
+        # the registry lock, so the two become one indivisible fact.
+        return await registry.authorize(attested, mint)
 
     return issue
 
