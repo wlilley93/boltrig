@@ -32,6 +32,10 @@ from starlette.responses import JSONResponse, Response, StreamingResponse
 from starlette.routing import Route
 
 from boltrig.fleet.domain.model_proxy_grant import StoredModelProxyGrant
+from boltrig.fleet.infrastructure.model_proxy_tool_ceiling import (
+    ToolCeilingViolation,
+    enforce_tool_ceiling,
+)
 
 _LOOPBACK = "127.0.0.1"
 _METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH"]
@@ -100,7 +104,11 @@ class PerCellModelProxyServer:
         upstream_base_url: str,
         upstream_key: str,
         client: httpx.AsyncClient,
+        allowed_tools: frozenset[str] = frozenset(),
     ) -> None:
+        if type(allowed_tools) is not frozenset:
+            raise TypeError("allowed_tools must be an exact frozenset")
+        self._allowed_tools = allowed_tools
         self._verify = verify_bearer
         self._base = upstream_base_url.rstrip("/")
         self._key = upstream_key
@@ -157,7 +165,13 @@ class PerCellModelProxyServer:
             # Fail-closed: never reach upstream without an active bearer.
             return JSONResponse({"error": "unauthorized"}, status_code=401)
         tail = request.path_params["tail"]
-        body = await request.body()
+        try:
+            # The cell's tool ceiling is enforced HERE, not trusted to the
+            # runtime's own config: Codex 0.144.3 cannot suppress its built-in
+            # tools, and this proxy is the one point every model call traverses.
+            body = enforce_tool_ceiling(await request.body(), self._allowed_tools)
+        except ToolCeilingViolation:
+            return JSONResponse({"error": "tool_ceiling"}, status_code=400)
         headers = {
             "content-type": request.headers.get("content-type", "application/json"),
             "accept": request.headers.get("accept", "application/json"),
