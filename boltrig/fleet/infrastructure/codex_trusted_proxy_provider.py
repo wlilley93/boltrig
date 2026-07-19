@@ -164,7 +164,13 @@ class TrustedProxyCodexPhaseCellProvider:
         scope: ModelProxyCellScope | None = None
         ingress: CodexTrustedIngress | None = None
         try:
-            proxy = await self._start_proxy(holder)
+            # The ceiling is the compiled policy's effective tools, which admission
+            # requires to be empty on the quarantined read-only lane. Deriving it
+            # here (rather than hard-coding empty) means the PR8 write phase widens
+            # by policy, never by editing the proxy.
+            proxy = await self._start_proxy(
+                holder, frozenset(admission.compilation.policy.enabled_tools)
+            )
             model_id = admission.compilation.policy.model.model_id
             layout = admission.layout
             # The socket path is derived from the (pre-start) cell id, so the helper
@@ -209,12 +215,15 @@ class TrustedProxyCodexPhaseCellProvider:
                 await _close_ignoring_failure(cell)
             raise
 
-    async def _start_proxy(self, holder: GenerationHolder) -> PerCellModelProxyServer:
+    async def _start_proxy(
+        self, holder: GenerationHolder, allowed_tools: frozenset[str]
+    ) -> PerCellModelProxyServer:
         proxy = PerCellModelProxyServer(
             verify_bearer=tracking_bearer_verifier(self._grant_store, holder),
             upstream_base_url=self._upstream_base_url,
             upstream_key=self._upstream_key,
             client=self._client,
+            allowed_tools=allowed_tools,
         )
         await proxy.start()
         return proxy

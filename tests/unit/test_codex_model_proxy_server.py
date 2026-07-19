@@ -49,6 +49,57 @@ def _server(verify: Any, client: httpx.AsyncClient) -> PerCellModelProxyServer:
     )
 
 
+async def test_the_tool_ceiling_is_enforced_before_the_call_leaves_the_box() -> None:
+    """Codex offers exec_command on every turn; the read-only lane must never see it.
+
+    config.toml cannot suppress Codex's built-in tools, so this proxy is the only
+    place the admission-time "no effective tools" assertion can be made true.
+    """
+
+    captured: dict[str, Any] = {}
+
+    async def verify(token: str) -> bool:
+        return True
+
+    server = _server(verify, _upstream(captured))
+    port = await server.start()
+    try:
+        async with httpx.AsyncClient() as caller:
+            resp = await caller.post(
+                f"http://127.0.0.1:{port}/v1/responses",
+                headers={"authorization": "Bearer good-bearer"},
+                content=(
+                    b'{"input":"hi","tools":[{"type":"function","name":"exec_command"}]}'
+                ),
+            )
+        assert resp.status_code == 200
+        assert b"exec_command" not in captured["body"]
+        assert b'"tools"' not in captured["body"]
+    finally:
+        await server.aclose()
+
+
+async def test_an_unverifiable_body_is_refused_without_reaching_upstream() -> None:
+    captured: dict[str, Any] = {}
+
+    async def verify(token: str) -> bool:
+        return True
+
+    server = _server(verify, _upstream(captured))
+    port = await server.start()
+    try:
+        async with httpx.AsyncClient() as caller:
+            resp = await caller.post(
+                f"http://127.0.0.1:{port}/v1/responses",
+                headers={"authorization": "Bearer good-bearer"},
+                content=b"{not json",
+            )
+        assert resp.status_code == 400
+        assert "url" not in captured
+    finally:
+        await server.aclose()
+
+
 async def test_valid_bearer_forwards_with_the_kernel_key_injected() -> None:
     captured: dict[str, Any] = {}
 
