@@ -159,3 +159,30 @@ def test_accepted_child_peer_pidfd_detects_exit_and_closes_idempotently() -> Non
             except ProcessLookupError:
                 pass
             os.waitpid(child_pid, 0)
+
+
+@pytest.mark.unit
+def test_send_bearer_reaches_the_attested_peer_and_guards_its_inputs() -> None:
+    listener, path, directory = _filesystem_listener()
+    client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    accepted: AcceptedUnixPeer | None = None
+    try:
+        client.connect(path)
+        accepted = accept_model_proxy_unix_peer(listener)
+        # Empty and non-bytes bearers are refused before any write.
+        with pytest.raises(LinuxPeerIdentityError):
+            accepted.send_bearer(b"")
+        with pytest.raises(LinuxPeerIdentityError):
+            accepted.send_bearer(cast(bytes, "not-bytes"))
+        # A well-formed bearer reaches exactly this peer's connected socket.
+        accepted.send_bearer(b"bearer-xyz")
+        assert client.recv(64) == b"bearer-xyz"
+        # A closed peer refuses delivery.
+        accepted.close()
+        with pytest.raises(LinuxPeerIdentityError):
+            accepted.send_bearer(b"after-close")
+    finally:
+        if accepted is not None:
+            accepted.close()
+        client.close()
+        _cleanup_listener(listener, path, directory)

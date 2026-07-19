@@ -46,6 +46,22 @@ class AcceptedUnixPeer:
         self._closed = True
         self._socket.close()
 
+    def send_bearer(self, bearer: bytes) -> None:
+        """Deliver bytes to exactly this attested peer, then let the caller close.
+
+        Writes to this peer's own connected socket only; unlike ``_borrow`` it never
+        surrenders the socket, so the bearer can reach only the one attested
+        endpoint ([2026] VJS-CC-VJS 3). Provenance and close semantics are unchanged.
+        """
+        if type(bearer) is not bytes or not bearer:
+            raise LinuxPeerIdentityError("bearer must be non-empty bytes")
+        if self._closed:
+            raise LinuxPeerIdentityError("accepted peer is unavailable")
+        try:
+            self._socket.sendall(bearer)
+        except OSError as exc:
+            raise LinuxPeerIdentityError("accepted peer delivery failed") from exc
+
     def __repr__(self) -> str:
         state = "closed" if self._closed else "accepted"
         return f"AcceptedUnixPeer({state}, <redacted>)"

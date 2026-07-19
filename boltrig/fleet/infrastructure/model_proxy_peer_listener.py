@@ -13,11 +13,13 @@ blocking accept runs through that seam and never a bypass that fabricates an
 ``AcceptedUnixPeer``. This module never mints a bearer, grants authority, or
 reads request data; ``production_ready`` stays False.
 
-Beat 1 exposes only single-shot ``accept_once`` (attest, then close the peer -
-no bearer, nothing at rest). The production accept loop and the Option-B
-bearer-over-socket write ([2026] VJS-CC-VJS 3, the raw bearer to the attested
-peer, no file) land in the next beat, at the point where ``accept_once`` returns
-the attested scope.
+``accept_once`` is the single-shot seam (attest, then close - no bearer). The
+production accept loop is ``serve``: after SO_PEERCRED attestation it writes the
+raw bearer to the SAME attested peer socket and closes it - Option-B delivery
+([2026] VJS-CC-VJS 3), nothing at rest. The bearer is minted by an injected
+issuer keyed on the attested scope (never the real broker in tests). Wiring
+``serve`` into the live provider, and materializing the socket-client helper, is
+the later provider-swap beat.
 """
 
 from __future__ import annotations
@@ -25,6 +27,7 @@ from __future__ import annotations
 import asyncio
 import os
 import socket
+from collections.abc import Awaitable, Callable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -36,6 +39,10 @@ from .linux_peer_process_handle import (
     accept_model_proxy_unix_peer,
 )
 from .model_proxy_peer_attestation import LinuxModelProxyPeerAttestor
+
+# Injected by the composition (never the real broker in tests): given the attested
+# cell scope, return the raw bearer bytes to deliver to that exact peer.
+BearerIssuer = Callable[[ModelProxyCellScope], Awaitable[bytes]]
 
 _SOCKET_BACKLOG = 16
 # Owner-only: in the single-uid interim the supervisor and the cell share a uid,
@@ -108,6 +115,46 @@ class PeerAttestationUnixListener:
         finally:
             peer.close()
 
+    async def serve(self, bearer_issuer: BearerIssuer) -> None:
+        """Accept, attest, and deliver a scoped bearer to each peer, forever.
+
+        Option-B delivery ([2026] VJS-CC-VJS 3): after SO_PEERCRED attestation the
+        raw bearer is written to the SAME attested socket, then the peer is closed -
+        nothing at rest (E1). A peer that fails attestation or delivery is dropped
+        without disturbing the loop, and nothing is written on failure (fail-closed).
+        Stop it by cancelling the serve task, then calling :meth:`aclose`.
+        """
+
+        while not self._closing:
+            try:
+                peer = await self._accept()
+            except PeerAttestationListenerError:
+                if self._closing:
+                    return
+                continue
+            await self._attest_and_deliver(peer, bearer_issuer)
+
+    async def _attest_and_deliver(
+        self, peer: AcceptedUnixPeer, bearer_issuer: BearerIssuer
+    ) -> None:
+        try:
+            scope = await self._attestor.attest(peer)
+            bearer = await bearer_issuer(scope)
+            if type(bearer) is not bytes or not bearer:
+                raise PeerAttestationListenerError("bearer issuer returned no bearer")
+            await self._deliver(peer, bearer)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            # Fail-closed: drop this peer, write nothing, keep serving.
+            pass
+        finally:
+            peer.close()
+
+    async def _deliver(self, peer: AcceptedUnixPeer, bearer: bytes) -> None:
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(self._accepts, peer.send_bearer, bearer)
+
     async def _accept(self) -> AcceptedUnixPeer:
         loop = asyncio.get_running_loop()
         try:
@@ -160,6 +207,7 @@ def _unlink_quietly(path: Path) -> None:
 
 __all__ = [
     "MAX_UNIX_SOCKET_PATH_BYTES",
+    "BearerIssuer",
     "PeerAttestationListenerError",
     "PeerAttestationUnixListener",
 ]
