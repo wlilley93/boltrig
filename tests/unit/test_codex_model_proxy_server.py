@@ -13,6 +13,9 @@ from typing import Any
 
 import httpx
 
+from boltrig.fleet.infrastructure.model_proxy_tool_ceiling import (
+    MAX_MODEL_CALL_BODY_BYTES,
+)
 from boltrig.fleet.infrastructure.codex_model_proxy_server import (
     PerCellModelProxyServer,
     _bearer,
@@ -77,6 +80,35 @@ async def test_the_tool_ceiling_is_enforced_before_the_call_leaves_the_box() -> 
         assert b'"tools"' not in captured["body"]
     finally:
         await server.aclose()
+
+
+async def test_every_unverifiable_body_shape_is_refused_without_reaching_upstream() -> None:
+    """F6 FAIL-CLOSED as a gate: a tool set we cannot read is one we cannot bound."""
+
+    async def verify(token: str) -> bool:
+        return True
+
+    bodies = [
+        b"{not json",  # unparseable
+        b"\xff\xfe",  # not utf-8
+        b'{"tools":"exec_command"}',  # tools present but not a list
+        b"x" * (MAX_MODEL_CALL_BODY_BYTES + 1),  # beyond the verifiable cap
+    ]
+    for body in bodies:
+        captured: dict[str, Any] = {}
+        server = _server(verify, _upstream(captured))
+        port = await server.start()
+        try:
+            async with httpx.AsyncClient() as caller:
+                resp = await caller.post(
+                    f"http://127.0.0.1:{port}/v1/responses",
+                    headers={"authorization": "Bearer good-bearer"},
+                    content=body,
+                )
+            assert resp.status_code == 400
+            assert "url" not in captured  # nothing was built or sent upstream
+        finally:
+            await server.aclose()
 
 
 async def test_an_unverifiable_body_is_refused_without_reaching_upstream() -> None:
