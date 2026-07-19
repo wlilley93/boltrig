@@ -7,6 +7,13 @@ its raw-bearer contract (D2), the loopback-proxy config render (D6), the fixed
 read-only budget, atomic 0600 bearer delivery to a SINGLE service uid (D5), and a
 generation-tracking bearer verifier.
 
+[2026] VJS-CC-VJS 5 G2: this module no longer materializes a per-cell auth helper.
+It used to write ``model_auth_helper`` at 0700 INSIDE the mutable cell root, which
+under a single shared cell uid was writable by every sibling cell, so cell A could
+rewrite cell B's helper and have B's App Server execute it as its own child. There
+is now exactly ONE shared helper, root-owned and non-writable on the read-only
+image mount, resolved and proved by ``codex_cell_boundary``.
+
 D3 caveat (stated here and echoed at every call site): the cell scope is built
 from the child's real ``/proc`` identity but WITHOUT the SO_PEERCRED cross-check
 that production issuance performs over the unix socket. The value is therefore
@@ -42,8 +49,6 @@ from boltrig.fleet.infrastructure.codex_runtime_config import (
 )
 from boltrig.fleet.infrastructure.skill_config import REVIEWED_SYSTEM_SKILLS_0_144_3
 
-HELPER_FILENAME = "model_auth_helper"
-_HELPER_MODE = 0o700
 # 0600 for the cell's private config.toml (there is no bearer file - Option B).
 _PRIVATE_FILE_MODE = 0o600
 
@@ -69,34 +74,6 @@ READ_ONLY_MAX_COST_MICROS = 5_000_000
 # ``/usr/local/bin/python3`` because the sanitized cell PATH is ``/usr/bin:/bin``
 # (no ``/usr/local/bin``, and no socat/nc). The socket path is passed as argv so it
 # never has to be escaped into the Python literal.
-_HELPER_TEMPLATE = """\
-#!/bin/sh
-# Boltrig trusted per-cell model-auth helper ([2026] VJS-CC-VJS 1/3, D2/E1/E3).
-# Connect to the attested unix socket, drain the raw bearer to EOF, print it to
-# stdout (Codex trims whitespace), exit 0. No JSON, no file at rest.
-set -eu
-expected='__CELL_ID__'
-cell=''
-while [ "$#" -gt 0 ]; do
-  case "$1" in
-    --cell-id) cell="${2:-}"; shift 2 || exit 2 ;;
-    *) shift ;;
-  esac
-done
-[ "$cell" = "$expected" ] || { printf 'trusted model-auth cell mismatch\\n' >&2; exit 2; }
-exec /usr/local/bin/python3 -c 'import socket, sys
-s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-s.connect(sys.argv[1])
-buf = bytearray()
-while True:
-    b = s.recv(4096)
-    if not b:
-        break
-    buf += b
-sys.stdout.buffer.write(bytes(buf))
-sys.stdout.buffer.flush()
-' "__SOCKET__"
-"""
 
 
 class TrustedProxyProvisionError(RuntimeError):
@@ -254,6 +231,7 @@ def render_trusted_config(
     codex_home: Path,
     helper_path: Path,
     helper_sha256: str,
+    socket_path: Path,
     model_id: str,
     policy_digest: str,
     reasoning_effort: CodexReasoningEffort,
@@ -262,7 +240,9 @@ def render_trusted_config(
     """Render the exact read-only config.toml pointing at the loopback proxy (D6).
 
     ``base_url`` is ``http://127.0.0.1:{proxy_port}/v1``, ``wire_api`` is
-    ``responses``, and the provider auth is the materialized helper command.
+    ``responses``, and the provider auth is the SHARED root-owned helper proved by
+    ``assert_cell_isolation_boundary`` ([2026] VJS-CC-VJS 5 G2), never a file this
+    process wrote into the cell root; the per-cell values travel on ``auth.args``.
     """
 
     fragment = _system_skill_fragment(codex_home)
@@ -272,6 +252,7 @@ def render_trusted_config(
         codex_home=codex_home,
         helper_path=helper_path,
         helper_sha256=helper_sha256,
+        socket_path=socket_path,
         model_id=model_id,
         model_policy_digest=policy_digest,
         reasoning_effort=reasoning_effort,
@@ -280,34 +261,6 @@ def render_trusted_config(
         skill_inventory_digest=_sha256_prefixed(fragment),
     )
     return compose_codex_runtime_config(request).config_toml
-
-
-def materialize_helper(cell_root: Path, cell_id: str, socket_path: Path) -> tuple[Path, str]:
-    """Write the 0700 socket-client auth helper and return ``(path, sha256_digest)``.
-
-    The helper connects to ``socket_path`` (the per-cell SO_PEERCRED unix socket) and
-    drains the raw bearer to stdout ([2026] VJS-CC-VJS 3, Option B) - no bearer file
-    at rest. The socket path is embedded as a shell double-quoted argv, so it is
-    validated to contain no shell-active or non-ASCII bytes (we control it - it is
-    ``mp-<hex>.sock`` under the stack root - so this is a cheap defensive invariant).
-    """
-
-    socket_literal = os.fspath(socket_path)
-    _validate_socket_literal(socket_literal)
-    script = _HELPER_TEMPLATE.replace("__CELL_ID__", cell_id).replace(
-        "__SOCKET__", socket_literal
-    )
-    data = script.encode("ascii")
-    helper_path = cell_root / HELPER_FILENAME
-    _atomic_write(helper_path, data, _HELPER_MODE)
-    return helper_path, _sha256_prefixed(data)
-
-
-def _validate_socket_literal(socket_literal: str) -> None:
-    if not socket_literal or not socket_literal.isascii():
-        raise TrustedProxyProvisionError("socket path must be non-empty ASCII")
-    if any(ch in socket_literal for ch in ('"', "\\", "`", "$", "\n", "\r", "'")):
-        raise TrustedProxyProvisionError("socket path contains a shell-active character")
 
 
 def write_cell_config(codex_home: Path, config_toml: str) -> Path:
@@ -343,11 +296,9 @@ def startup_request_id(cell_id: str) -> str:
 
 __all__ = [
     "GenerationHolder",
-    "HELPER_FILENAME",
     "TrustedProxyProvisionError",
     "build_cell_scope",
     "cell_model_binding",
-    "materialize_helper",
     "model_policy_digest",
     "read_only_budget",
     "render_trusted_config",

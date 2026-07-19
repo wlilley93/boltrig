@@ -69,7 +69,14 @@ _CODEX_BIN = Path("/opt/boltrig/codex/codex")
 _CELL_ID = "cell-abc1234567890ab"
 _MODEL_ID = "gpt-5.2-codex"
 _POLICY_DIGEST = "sha256:" + "b" * 64
-_TRUSTED_ENV = {"BOLTRIG_DEV_AUTH": "1", "BOLTRIG_CODEX_TRUSTED": "1"}
+# /bin/sh stands in for the baked image helper: root-owned, executable, on a
+# directory chain this account cannot write ([2026] VJS-CC-VJS 5 G2).
+_TEST_SHARED_HELPER = os.path.realpath("/bin/sh")
+_TRUSTED_ENV = {
+    "BOLTRIG_DEV_AUTH": "1",
+    "BOLTRIG_CODEX_TRUSTED": "1",
+    "BOLTRIG_CODEX_AUTH_HELPER": _TEST_SHARED_HELPER,
+}
 
 
 def _assignment() -> PhaseAssignmentRef:
@@ -159,7 +166,13 @@ async def test_acquire_refuses_before_admit_without_trusted_posture() -> None:
     store, broker = _store_broker()
     source = _FakeSource()
     async with httpx.AsyncClient() as client:
-        provider = _provider(broker=broker, store=store, client=client, source=source, env={})
+        provider = _provider(
+            broker=broker,
+            store=store,
+            client=client,
+            source=source,
+            env={"BOLTRIG_CODEX_AUTH_HELPER": _TEST_SHARED_HELPER},
+        )
         with pytest.raises(CodexTrustedPostureError):
             await provider.acquire(_assignment())
     assert source.calls == 0
@@ -251,7 +264,12 @@ async def test_teardown_revokes_grant_and_closes_proxy_and_ingress(
         assert await store.find_active_by_bearer_digest(digest, generation=2) is not None
         assert not any((tmp_path).iterdir())  # nothing at rest under the cell dir
 
-        ingress = CodexTrustedIngress(registry, attestor)  # unstarted: aclose is a safe no-op
+        ingress = CodexTrustedIngress(  # unstarted: aclose is a safe no-op
+            registry,
+            attestor,
+            stack_root=Path("/tmp"),
+            boundary=provider._boundary,
+        )
         await provider._teardown(proxy, scope, ingress)
 
         assert proxy._server is None
@@ -264,13 +282,15 @@ async def test_teardown_revokes_grant_and_closes_proxy_and_ingress(
 def test_config_points_the_cell_at_the_loopback_proxy(tmp_path: Path) -> None:
     codex_home = tmp_path / "codex-home"
     codex_home.mkdir()
-    helper = tmp_path / "model_auth_helper"
+    # G2: the helper is the SHARED root-owned program, never a per-cell file.
+    helper = Path(_TEST_SHARED_HELPER)
     config_toml = render_trusted_config(
         cell_id="cell-001",
         cell_root=tmp_path,
         codex_home=codex_home,
         helper_path=helper,
         helper_sha256="sha256:" + "a" * 64,
+        socket_path=tmp_path / "mp-deadbeef.sock",
         model_id=_MODEL_ID,
         policy_digest="sha256:" + "b" * 64,
         reasoning_effort=CodexReasoningEffort.HIGH,
@@ -281,11 +301,16 @@ def test_config_points_the_cell_at_the_loopback_proxy(tmp_path: Path) -> None:
     assert provider["base_url"] == "http://127.0.0.1:45123/v1"
     assert provider["wire_api"] == "responses"
     assert provider["auth"]["command"] == helper.as_posix()
-    assert provider["auth"]["args"] == ["--cell-id", "cell-001"]
+    assert provider["auth"]["args"] == [
+        "--cell-id",
+        "cell-001",
+        "--socket",
+        (tmp_path / "mp-deadbeef.sock").as_posix(),
+    ]
     assert document["sandbox_mode"] == "read-only"
 
 
-async def test_write_cell_config_materializes_socket_helper_and_writes_config(
+async def test_write_cell_config_writes_no_executable_into_the_cell_root(
     tmp_path: Path,
 ) -> None:
     store, broker = _store_broker()
@@ -302,9 +327,10 @@ async def test_write_cell_config_materializes_socket_helper_and_writes_config(
             proxy_port=44001,
             socket_path=socket_path,
         )
-    helper = tmp_path / "model_auth_helper"
-    assert oct(helper.stat().st_mode & 0o777) == "0o700"
-    assert socket_path.as_posix() in helper.read_text(encoding="ascii")
+    # G2: nothing executable is written into the mutable cell root any more; the
+    # helper is the one root-owned program on the read-only image mount.
+    assert not (tmp_path / "model_auth_helper").exists()
+    assert [entry.name for entry in tmp_path.iterdir()] == ["codex-home"]
     document = tomllib.loads((codex_home / "config.toml").read_text())
     provider_block = document["model_providers"]["boltrig_model_proxy"]  # type: ignore[index]
     assert provider_block["base_url"] == "http://127.0.0.1:44001/v1"

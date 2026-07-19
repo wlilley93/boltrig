@@ -58,8 +58,9 @@ def _request(
         cell_id="cell-001",
         cell_root=cell,
         codex_home=codex_home,
-        helper_path=cell / "bin" / "codex-model-auth",
+        helper_path=Path("/opt/boltrig/codex/model_auth_helper"),
         helper_sha256=_DIGEST_A,
+        socket_path=Path("/var/lib/boltrig/codex-cells/mp-0123456789abcdef.sock"),
         model_id="gpt-5.4",
         model_policy_digest=_DIGEST_B,
         reasoning_effort=CodexReasoningEffort.HIGH,
@@ -138,8 +139,13 @@ def test_custom_provider_contract_uses_only_verified_command_auth_fields() -> No
     assert provider["request_max_retries"] == 0
     assert provider["stream_max_retries"] == 0
     assert provider["auth"] == {
-        "command": "/srv/boltrig/cells/cell-001/bin/codex-model-auth",
-        "args": ["--cell-id", "cell-001"],
+        "command": "/opt/boltrig/codex/model_auth_helper",
+        "args": [
+            "--cell-id",
+            "cell-001",
+            "--socket",
+            "/var/lib/boltrig/codex-cells/mp-0123456789abcdef.sock",
+        ],
         "timeout_ms": 1000,
         "refresh_interval_ms": 30000,
     }
@@ -162,7 +168,7 @@ def test_config_and_receipt_contain_no_upstream_or_provider_secret_channel() -> 
 
     assert all(item not in composed.config_toml for item in forbidden)
     assert all(item not in repr(composed) for item in forbidden)
-    assert composed.receipt.helper_path.endswith("/codex-model-auth")
+    assert composed.receipt.helper_path.endswith("/model_auth_helper")
 
 
 def test_stable_stdio_strict_config_contract_is_explicit_and_not_ready() -> None:
@@ -222,7 +228,10 @@ def test_ambient_and_unknown_override_fields_fail_closed_without_echoing_values(
 @pytest.mark.parametrize(
     ("change", "message"),
     [
-        ({"helper_path": Path("/usr/local/bin/helper")}, "exact cell"),
+        (
+            {"helper_path": Path("/srv/boltrig/cells/cell-001/bin/helper")},
+            "outside the mutable cell root",
+        ),
         ({"codex_home": Path("/srv/boltrig/codex")}, "exact child"),
         ({"proxy_port": 0}, "between 1 and 65535"),
         ({"model_id": "gpt 5"}, "model id"),
@@ -279,10 +288,14 @@ def test_receipt_detects_config_tampering() -> None:
         ('sandbox_mode = "read-only"', 'sandbox_mode = "workspace-write"'),
         ('multi_agent = false', 'multi_agent = true'),
         (
-            'command = "/srv/boltrig/cells/cell-001/bin/codex-model-auth"',
+            'command = "/opt/boltrig/codex/model_auth_helper"',
             'command = "/tmp/attacker-helper"',
         ),
-        ('args = ["--cell-id", "cell-001"]', 'args = ["--cell-id", "cell-999"]'),
+        ('"--cell-id", "cell-001"', '"--cell-id", "cell-999"'),
+        (
+            '"--socket", "/var/lib/boltrig/codex-cells/mp-0123456789abcdef.sock"',
+            '"--socket", "/tmp/attacker.sock"',
+        ),
         ('base_url = "http://127.0.0.1:43190/v1"', 'base_url = "http://127.0.0.1:9/v1"'),
     ],
 )
@@ -345,7 +358,7 @@ def test_malformed_parsed_config_container_fails_closed(container: str) -> None:
         {"cell_id": "cell-999"},
         {"model_id": "gpt-5.3"},
         {"reasoning_effort": CodexReasoningEffort.LOW},
-        {"helper_path": "/srv/boltrig/cells/cell-001/bin/other-helper"},
+        {"helper_path": "/opt/boltrig/codex/other_helper"},
         {"proxy_port": 43191},
     ],
 )

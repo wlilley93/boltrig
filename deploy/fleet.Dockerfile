@@ -118,6 +118,16 @@ RUN set -eux; \
 # (a normalized absolute path; the supervisor still re-verifies the digest).
 ENV BOLTRIG_CODEX_BIN=/opt/boltrig/codex/codex
 
+# [2026] VJS-CC-VJS 5 G2: the per-cell auth helper used to be written into the
+# MUTABLE cell root at 0700, which under a single shared cell uid stopped nothing
+# between siblings. There is now ONE shared helper, baked here root-owned and
+# non-writable on the read-only rootfs, extending the exact rule the pinned codex
+# binary above already relies on. No new container privileges are required.
+COPY deploy/codex/model_auth_helper /opt/boltrig/codex/model_auth_helper
+RUN chown 0:0 /opt/boltrig/codex/model_auth_helper && \
+    chmod 0555 /opt/boltrig/codex/model_auth_helper
+ENV BOLTRIG_CODEX_AUTH_HELPER=/opt/boltrig/codex/model_auth_helper
+
 # Run as an unprivileged user (INF-01). Writes nothing to disk; compose runs it
 # read-only with a tmpfs for /tmp.
 RUN useradd --create-home --uid 10001 boltrig && \

@@ -58,16 +58,39 @@ def _path(label: str, value: object) -> Path:
 def validate_cell_paths(
     cell_root: object, codex_home: object, helper: object
 ) -> tuple[Path, Path, Path]:
-    """Validate lexical paths; production must separately bind roots and reject symlinks."""
+    """Validate lexical paths; production must separately bind roots and reject symlinks.
+
+    [2026] VJS-CC-VJS 5 G2 INVERTED THIS RULE. The helper previously had to be
+    INSIDE the cell root, which is precisely the defect the court found: under one
+    shared uid, a helper in a mutable cell root is rewritable by every sibling cell,
+    so the App Server executes attacker code and hands over an attested bearer. The
+    helper must now live OUTSIDE the cell tree entirely, on a path the cell uid
+    cannot write; ``codex_cell_boundary`` proves that at runtime, and this is the
+    lexical half of the same rule.
+    """
 
     root = _path("cell root", cell_root)
     home = _path("Codex home", codex_home)
     auth_helper = _path("model auth helper", helper)
     if home.parent != root:
         raise CodexRuntimeConfigError("Codex home must be an exact child of the cell root")
-    if not auth_helper.is_relative_to(root) or auth_helper.is_relative_to(home):
-        raise CodexRuntimeConfigError("model auth helper must be local to the exact cell")
+    if auth_helper.is_relative_to(root):
+        raise CodexRuntimeConfigError("model auth helper must live outside the mutable cell root")
+    if root.is_relative_to(auth_helper.parent):
+        raise CodexRuntimeConfigError("model auth helper directory must not contain the cell root")
     return root, home, auth_helper
+
+
+def validate_ingress_socket_path(value: object) -> Path:
+    """Validate the ingress socket path the shared helper receives on argv.
+
+    The socket is named, not secret. Pointing it elsewhere yields no cross-cell
+    bearer, because the attestor matches the connecting peer's OWN ancestor chain
+    against the shared registry snapshot, so a cell that connects to a sibling's
+    socket is still issued only its own scope.
+    """
+
+    return _path("ingress socket", value)
 
 
 def validate_receipt_paths(

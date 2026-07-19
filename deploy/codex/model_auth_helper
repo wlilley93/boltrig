@@ -1,0 +1,39 @@
+#!/bin/sh
+# Boltrig SHARED model-auth helper ([2026] VJS-CC-VJS 1/3/5).
+#
+# ONE program for ALL cells, baked into the image at a root-owned path on the
+# read-only rootfs, so no cell can rewrite the helper another cell's App Server
+# executes. It embeds NOTHING per-cell: every per-cell value arrives on argv via
+# the pinned [model_providers.*.auth] args array. The old per-cell cell-id guard
+# is gone on purpose: the value it compared against came from the same file an
+# attacker could rewrite, so it was never a boundary, and the real boundary is
+# now the kernel-enforced non-writability of this file.
+#
+# Contract (Codex 0.144.3): no stdin, write the RAW bearer to stdout, exit 0.
+# Option-B delivery: connect to the SO_PEERCRED ingress socket, drain to EOF,
+# print. No bearer at rest. python3 is the absolute /usr/local/bin/python3
+# because the sanitized cell PATH is /usr/bin:/bin.
+set -eu
+cell=''
+socket=''
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --cell-id) cell="${2:-}"; shift 2 || exit 2 ;;
+    --socket) socket="${2:-}"; shift 2 || exit 2 ;;
+    *) shift ;;
+  esac
+done
+[ -n "$cell" ] || { printf 'boltrig model-auth: missing --cell-id\n' >&2; exit 2; }
+[ -n "$socket" ] || { printf 'boltrig model-auth: missing --socket\n' >&2; exit 2; }
+exec /usr/local/bin/python3 -c 'import socket, sys
+s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+s.connect(sys.argv[1])
+buf = bytearray()
+while True:
+    b = s.recv(4096)
+    if not b:
+        break
+    buf += b
+sys.stdout.buffer.write(bytes(buf))
+sys.stdout.buffer.flush()
+' "$socket"
