@@ -20,6 +20,7 @@ test_codex_trusted_proxy_helper.py.
 from __future__ import annotations
 
 import hashlib
+import os
 import subprocess
 import sys
 import tomllib
@@ -230,8 +231,12 @@ async def test_teardown_revokes_grant_and_closes_proxy_and_ingress(
         await proxy.start()
 
         scope = build_cell_scope(_assignment(), _CELL_ID, running_child)
+        # The issuer mints only under a LIVE registration (the issuance TOCTOU),
+        # so the scope must be registered before a bearer can exist.
+        await registry.register(scope, expected_uid=os.getuid(), expected_gid=os.getgid())
         issuer = build_ingress_bearer_issuer(
             broker=broker,
+            registry=registry,
             model_id=_MODEL_ID,
             policy_digest=_POLICY_DIGEST,
             budget=read_only_budget(),
