@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Protocol
 
 import httpx
@@ -33,6 +33,7 @@ from starlette.routing import Route
 
 from boltrig.fleet.domain.model_proxy_grant import StoredModelProxyGrant
 from boltrig.fleet.infrastructure.model_proxy_tool_ceiling import (
+    ToolCallStreamGuard,
     ToolCeilingViolation,
     enforce_tool_ceiling,
 )
@@ -188,11 +189,31 @@ class PerCellModelProxyServer:
             # Bounded, body-safe: never leak the key or the upstream error detail.
             return JSONResponse({"error": "upstream_unavailable"}, status_code=502)
         return StreamingResponse(
-            upstream.aiter_raw(),
+            self._guarded_stream(upstream),
             status_code=upstream.status_code,
             media_type=_content_type(upstream),
             background=BackgroundTask(upstream.aclose),
         )
+
+    async def _guarded_stream(self, upstream: httpx.Response) -> AsyncIterator[bytes]:
+        """Relay the upstream body, holding the ceiling on the way back too.
+
+        Stripping tools from the REQUEST bounds what the model is offered; it does
+        not bound what the gateway returns. An unsolicited ``function_call`` in the
+        response would still be executed by the App Server, conferring a capability
+        by a path that never crossed the request ceiling. On a violation the relay
+        STOPS: status and headers are already with the cell, so truncation is the
+        only fail-closed move left, and a truncated stream is strictly better than a
+        complete one carrying a tool call.
+        """
+
+        guard = ToolCallStreamGuard(self._allowed_tools)
+        async for chunk in upstream.aiter_raw():
+            try:
+                guard.inspect(chunk)
+            except ToolCeilingViolation:
+                return
+            yield chunk
 
     async def _reject_safe(self, token: str) -> bool:
         """Verify the bearer, treating any verifier error as a rejection."""

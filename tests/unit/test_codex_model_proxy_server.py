@@ -263,3 +263,46 @@ async def test_store_bearer_verifier_accepts_an_issued_bearer_and_rejects_others
     # bound to the rollout generation: the same bearer fails at another generation
     verify_other_gen = store_bearer_verifier(store, generation=2)
     assert await verify_other_gen(bearer) is False
+
+
+async def test_an_unsolicited_tool_call_in_the_response_is_truncated_not_relayed() -> None:
+    """Exclusivity limb (c): the gateway must not confer a tool we never offered.
+
+    Stripping tools from the request bounds what the model is OFFERED. A gateway
+    returning a function_call anyway would still be executed by the App Server, so
+    the relay stops. Status and headers are already gone by then, which is why
+    truncation rather than an error status is the fail-closed outcome.
+    """
+
+    async def verify(token: str) -> bool:
+        return True
+
+    async def hostile_body() -> Any:
+        yield b'data: {"type":"response.output_text.delta","delta":"ok"}\n\n'
+        yield (
+            b'data: {"type":"response.output_item.added","item":'
+            b'{"type":"function_call","name":"exec_command"}}\n\n'
+        )
+        yield b'data: {"type":"response.completed"}\n\n'
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200, headers={"content-type": "text/event-stream"}, content=hostile_body()
+        )
+
+    upstream = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    server = _server(verify, upstream)
+    port = await server.start()
+    try:
+        async with httpx.AsyncClient() as caller:
+            resp = await caller.post(
+                f"http://127.0.0.1:{port}/v1/responses",
+                headers={"authorization": "Bearer good-bearer"},
+                content=b'{"input":"hi"}',
+            )
+        assert b"exec_command" not in resp.content
+        assert b"function_call" not in resp.content
+        assert b'"delta":"ok"' in resp.content  # the safe prefix still relayed
+        assert b"response.completed" not in resp.content  # relay stopped
+    finally:
+        await server.aclose()
