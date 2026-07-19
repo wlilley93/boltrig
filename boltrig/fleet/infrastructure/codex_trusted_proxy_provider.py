@@ -40,18 +40,20 @@ from boltrig.fleet.application.model_proxy_grants import (
 )
 from boltrig.fleet.codex_trusted_wall import require_codex_trusted_posture
 from boltrig.fleet.domain import PhaseAssignmentRef
-from boltrig.fleet.domain.model_proxy_scope import (
-    ModelProxyCellScope,
-    ModelProxyGrantBinding,
-)
+from boltrig.fleet.domain.model_proxy_scope import ModelProxyCellScope
 from boltrig.fleet.infrastructure.codex_cell_supervisor import (
     CodexCellSupervisor,
     InitializedCodexCell,
 )
-from boltrig.fleet.infrastructure.codex_model_proxy_issuance import issue_cell_bearer
 from boltrig.fleet.infrastructure.codex_model_proxy_server import (
     BearerDigestLookup,
     PerCellModelProxyServer,
+)
+from boltrig.fleet.infrastructure.codex_trusted_proxy_ingress import (
+    CodexTrustedIngress,
+    build_ingress_bearer_issuer,
+    capture_cell_identity,
+    select_ingress_socket_path,
 )
 from boltrig.fleet.infrastructure.codex_runtime_admission import (
     AdmittedCodexCell,
@@ -64,20 +66,19 @@ from boltrig.fleet.infrastructure.codex_runtime_config import CodexReasoningEffo
 from boltrig.fleet.infrastructure.codex_trusted_proxy_support import (
     GenerationHolder,
     TrustedProxyProvisionError,
-    build_cell_scope,
-    cell_model_binding,
     materialize_helper,
     model_policy_digest,
     read_only_budget,
     render_trusted_config,
-    startup_request_id,
     tracking_bearer_verifier,
-    write_bearer,
     write_cell_config,
 )
-
-_MIN_REFRESH_INTERVAL_SECONDS = 1.0
-
+from boltrig.fleet.infrastructure.model_proxy_peer_attestation import (
+    LinuxModelProxyPeerAttestor,
+)
+from boltrig.fleet.infrastructure.model_proxy_peer_registry import (
+    ModelProxyProcessRegistry,
+)
 
 @dataclass(eq=False)
 class _TrustedSession:
@@ -85,7 +86,7 @@ class _TrustedSession:
 
     proxy: PerCellModelProxyServer
     scope: ModelProxyCellScope
-    refresh: asyncio.Task[None]
+    ingress: CodexTrustedIngress
     holder: GenerationHolder
     reaper: asyncio.Task[None]
 
@@ -101,6 +102,9 @@ class TrustedProxyCodexPhaseCellProvider:
         probe: CodexPreflightProbe,
         broker: PhaseScopedModelProxyGrantBroker,
         grant_store: BearerDigestLookup,
+        registry: ModelProxyProcessRegistry,
+        attestor: LinuxModelProxyPeerAttestor,
+        stack_root: Path,
         upstream_base_url: str,
         upstream_key: str,
         http_client: httpx.AsyncClient,
@@ -122,11 +126,20 @@ class TrustedProxyCodexPhaseCellProvider:
             raise ValueError("generation must be a positive integer")
         if type(reasoning_effort) is not CodexReasoningEffort:
             raise TypeError("reasoning_effort must be an exact CodexReasoningEffort")
+        if type(registry) is not ModelProxyProcessRegistry:
+            raise TypeError("registry must be an exact ModelProxyProcessRegistry")
+        if type(attestor) is not LinuxModelProxyPeerAttestor:
+            raise TypeError("attestor must be an exact LinuxModelProxyPeerAttestor")
+        if not isinstance(stack_root, Path) or not stack_root.is_absolute():
+            raise TrustedProxyProvisionError("stack_root must be an absolute Path")
         self._source = source
         self._supervisor = supervisor
         self._probe = probe
         self._broker = broker
         self._grant_store = grant_store
+        self._registry = registry
+        self._attestor = attestor
+        self._stack_root = stack_root
         self._upstream_base_url = upstream_base_url
         self._upstream_key = upstream_key
         self._client = http_client
@@ -149,36 +162,49 @@ class TrustedProxyCodexPhaseCellProvider:
         proxy: PerCellModelProxyServer | None = None
         cell: InitializedCodexCell | None = None
         scope: ModelProxyCellScope | None = None
-        refresh: asyncio.Task[None] | None = None
+        ingress: CodexTrustedIngress | None = None
         try:
             proxy = await self._start_proxy(holder)
             model_id = admission.compilation.policy.model.model_id
             layout = admission.layout
+            # The socket path is derived from the (pre-start) cell id, so the helper
+            # the App Server will exec can be materialized before start.
+            socket_path = select_ingress_socket_path(self._stack_root, layout.cell_id)
             self._write_cell_config(
                 cell_id=layout.cell_id,
                 cell_root=layout.cell_root,
                 codex_home=layout.codex_home,
                 model_id=model_id,
                 proxy_port=proxy.port,
+                socket_path=socket_path,
             )
             cell = await self._supervisor.start(admission.layout)
-            scope = build_cell_scope(assignment, cell.metadata.cell_id, cell.metadata.pid)
-            await self._mint_and_deliver(
-                model_id=model_id,
-                cell_root=admission.layout.cell_root,
-                scope=scope,
-                generation=holder.value,
-            )
-            refresh = asyncio.create_task(
-                self._refresh_loop(model_id, admission.layout.cell_root, scope, holder),
-                name=f"codex-trusted-refresh-{cell.metadata.cell_id}",
+            # FINDING #1: build the registered scope from the App Server's real
+            # /proc identity via the SAME capture attestation uses (canonical cgroup
+            # digest), so the auth-helper child attests against a matching ancestor.
+            identity = capture_cell_identity(assignment, cell.metadata.cell_id, cell.metadata.pid)
+            scope = identity.scope
+            # Register + bind + serve BEFORE the preflight/first turn, so the App
+            # Server's first lazy auth.command call always finds a live registration.
+            ingress = CodexTrustedIngress(self._registry, self._attestor)
+            await ingress.start(
+                identity=identity,
+                socket_path=socket_path,
+                bearer_issuer=build_ingress_bearer_issuer(
+                    broker=self._broker,
+                    model_id=model_id,
+                    policy_digest=model_policy_digest(model_id, self._reasoning_effort),
+                    budget=read_only_budget(),
+                    ttl_seconds=self._ttl,
+                    holder=holder,
+                ),
             )
             preflight = await self._probe.probe(cell.client, admission.skill_plan)
             admitted = AdmittedCodexCell(admission, cell, preflight)
-            self._register_session(cell, proxy, scope, refresh, holder)
+            self._register_session(cell, proxy, scope, ingress, holder)
             return admitted
         except BaseException:
-            await self._teardown(proxy, scope, refresh)
+            await self._teardown(proxy, scope, ingress)
             if cell is not None:
                 await _close_ignoring_failure(cell)
             raise
@@ -201,8 +227,9 @@ class TrustedProxyCodexPhaseCellProvider:
         codex_home: Path,
         model_id: str,
         proxy_port: int,
+        socket_path: Path,
     ) -> None:
-        helper_path, helper_sha256 = materialize_helper(cell_root, cell_id)
+        helper_path, helper_sha256 = materialize_helper(cell_root, cell_id, socket_path)
         config_toml = render_trusted_config(
             cell_id=cell_id,
             cell_root=cell_root,
@@ -216,79 +243,20 @@ class TrustedProxyCodexPhaseCellProvider:
         )
         write_cell_config(codex_home, config_toml)
 
-    async def _mint_and_deliver(
-        self,
-        *,
-        model_id: str,
-        cell_root: Path,
-        scope: ModelProxyCellScope,
-        generation: int,
-    ) -> None:
-        digest = model_policy_digest(model_id, self._reasoning_effort)
-        budget = read_only_budget()
-
-        def binding_for_cell(cell_scope: ModelProxyCellScope) -> ModelProxyGrantBinding:
-            return ModelProxyGrantBinding(
-                cell_scope, cell_model_binding(model_id, digest), budget
-            )
-
-        bearer = await issue_cell_bearer(
-            scope,
-            broker=self._broker,
-            binding_for_cell=binding_for_cell,
-            startup_request_id=startup_request_id(scope.cell_id),
-            generation=generation,
-            ttl_seconds=self._ttl,
-        )
-        write_bearer(cell_root, bearer)
-
-    async def _refresh_loop(
-        self,
-        model_id: str,
-        cell_root: Path,
-        scope: ModelProxyCellScope,
-        holder: GenerationHolder,
-    ) -> None:
-        """Re-mint the bearer every ~TTL/2 at a strictly higher generation.
-
-        A same-generation re-mint would collide, so each refresh supersedes the
-        prior grant; the holder advances only on success so the loopback proxy
-        verifies the generation actually in force. A failed refresh leaves the
-        current bearer valid until its TTL and retries at a higher generation.
-        """
-
-        interval = max(_MIN_REFRESH_INTERVAL_SECONDS, self._ttl / 2)
-        next_generation = holder.value
-        while True:
-            await asyncio.sleep(interval)
-            next_generation += 1
-            try:
-                await self._mint_and_deliver(
-                    model_id=model_id,
-                    cell_root=cell_root,
-                    scope=scope,
-                    generation=next_generation,
-                )
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                continue
-            holder.value = next_generation
-
     def _register_session(
         self,
         cell: InitializedCodexCell,
         proxy: PerCellModelProxyServer,
         scope: ModelProxyCellScope,
-        refresh: asyncio.Task[None],
+        ingress: CodexTrustedIngress,
         holder: GenerationHolder,
     ) -> None:
         reaper = asyncio.create_task(
-            self._reap(cell, proxy, scope, refresh),
+            self._reap(cell, proxy, scope, ingress),
             name=f"codex-trusted-reap-{cell.metadata.cell_id}",
         )
         self._sessions[cell.metadata.cell_id] = _TrustedSession(
-            proxy, scope, refresh, holder, reaper
+            proxy, scope, ingress, holder, reaper
         )
 
     async def _reap(
@@ -296,24 +264,23 @@ class TrustedProxyCodexPhaseCellProvider:
         cell: InitializedCodexCell,
         proxy: PerCellModelProxyServer,
         scope: ModelProxyCellScope,
-        refresh: asyncio.Task[None],
+        ingress: CodexTrustedIngress,
     ) -> None:
         try:
             await cell.wait_closed()
         finally:
-            await self._teardown(proxy, scope, refresh)
+            await self._teardown(proxy, scope, ingress)
             self._sessions.pop(cell.metadata.cell_id, None)
 
     async def _teardown(
         self,
         proxy: PerCellModelProxyServer | None,
         scope: ModelProxyCellScope | None,
-        refresh: asyncio.Task[None] | None,
+        ingress: CodexTrustedIngress | None,
     ) -> None:
-        if refresh is not None:
-            refresh.cancel()
+        if ingress is not None:
             with contextlib.suppress(Exception, asyncio.CancelledError):
-                await refresh
+                await ingress.aclose()
         if proxy is not None:
             with contextlib.suppress(Exception):
                 await proxy.aclose()

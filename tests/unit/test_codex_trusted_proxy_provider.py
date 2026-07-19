@@ -1,23 +1,24 @@
-"""Tests for the trusted read-only Codex proxy provider ([2026] VJS-CC-VJS 2).
+"""Tests for the trusted read-only Codex proxy provider ([2026] VJS-CC-VJS 1/2/3).
 
-Security-critical: a fail-open in the mint or an upstream-key leak is the
+Security-critical: a fail-open in issuance or an upstream-key leak is the
 catastrophic failure. These pin the load-bearing directives without running the
-live Codex turn (the parent runs that on the real box):
+live Codex turn (the in-container re-proof runs that on the real box):
 
-  * D1 - the dev/prod wall fails closed BEFORE any admit or mint.
+  * D1 - the dev/prod wall fails closed BEFORE any admit or issuance.
   * D2 - the supervisor is constructed with auth=None (the child env never carries
-    the upstream key); the cell holds only the short-TTL scoped bearer.
-  * D3 - the cell scope is built from a child's REAL /proc identity.
-  * a minted bearer verifies via the canonical store_bearer_verifier.
-  * release cancels the refresh, revokes the grant, and closes the proxy.
-  * the rendered config.toml points the cell at the loopback proxy.
+    the upstream key).
+  * a bearer minted through the ingress issuer verifies via the store verifier, and
+    teardown revokes the grant, closes the proxy, and closes the ingress.
+  * the rendered config.toml points the cell at the loopback proxy + socket helper.
 
-The auth.command helper contract is pinned in test_codex_trusted_proxy_helper.py.
+Option-B delivery (VJS-CC-VJS 3): there is NO bearer file at rest. The per-cell
+socket ingress + issuer lifecycle is covered in test_codex_trusted_proxy_ingress.py
+and test_codex_trusted_ingress_live.py; the auth.command helper in
+test_codex_trusted_proxy_helper.py.
 """
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import subprocess
 import sys
@@ -35,28 +36,38 @@ from boltrig.fleet.infrastructure.codex_cell_policy import CodexUpstreamAuth
 from boltrig.fleet.infrastructure.codex_cell_supervisor import CodexCellSupervisor
 from boltrig.fleet.infrastructure.codex_model_proxy_server import (
     PerCellModelProxyServer,
-    store_bearer_verifier,
 )
 from boltrig.fleet.infrastructure.codex_runtime_config import CodexReasoningEffort
+from boltrig.fleet.infrastructure.codex_trusted_proxy_ingress import (
+    CodexTrustedIngress,
+    build_ingress_bearer_issuer,
+)
 from boltrig.fleet.infrastructure.codex_trusted_proxy_provider import (
     TrustedProxyCodexPhaseCellProvider,
     TrustedProxyProvisionError,
 )
 from boltrig.fleet.infrastructure.codex_trusted_proxy_support import (
-    BEARER_FILENAME,
     GenerationHolder,
     build_cell_scope,
+    read_only_budget,
     render_trusted_config,
     tracking_bearer_verifier,
 )
 from boltrig.fleet.infrastructure.memory_model_proxy_grants import (
     MemoryModelProxyGrantStore,
 )
+from boltrig.fleet.infrastructure.model_proxy_peer_attestation import (
+    LinuxModelProxyPeerAttestor,
+)
+from boltrig.fleet.infrastructure.model_proxy_peer_registry import (
+    ModelProxyProcessRegistry,
+)
 from boltrig.models.execution_scope import OrganisationUserRef
 
 _CODEX_BIN = Path("/opt/boltrig/codex/codex")
 _CELL_ID = "cell-abc1234567890ab"
 _MODEL_ID = "gpt-5.2-codex"
+_POLICY_DIGEST = "sha256:" + "b" * 64
 _TRUSTED_ENV = {"BOLTRIG_DEV_AUTH": "1", "BOLTRIG_CODEX_TRUSTED": "1"}
 
 
@@ -111,13 +122,20 @@ def _provider(
     env: dict[str, str] | None = None,
     generation: int = 1,
     ttl_seconds: int = 60,
+    registry: ModelProxyProcessRegistry | None = None,
+    attestor: LinuxModelProxyPeerAttestor | None = None,
 ) -> TrustedProxyCodexPhaseCellProvider:
+    reg = registry if registry is not None else ModelProxyProcessRegistry()
+    att = attestor if attestor is not None else LinuxModelProxyPeerAttestor(reg)
     return TrustedProxyCodexPhaseCellProvider(
         source=source or _FakeSource(),
         supervisor=supervisor or _supervisor(),
         probe=_FakeProbe(),
         broker=broker,
         grant_store=store,
+        registry=reg,
+        attestor=att,
+        stack_root=Path("/tmp"),
         upstream_base_url="http://gateway/v1",
         upstream_key="KERNEL-ONLY-KEY",
         http_client=client,
@@ -133,7 +151,7 @@ def _store_broker() -> tuple[MemoryModelProxyGrantStore, PhaseScopedModelProxyGr
     return store, PhaseScopedModelProxyGrantBroker(store, max_ttl_seconds=120)
 
 
-# --- D1: the wall fails closed before any provisioning or mint ---------------
+# --- D1: the wall fails closed before any provisioning or issuance -----------
 
 
 async def test_acquire_refuses_before_admit_without_trusted_posture() -> None:
@@ -169,63 +187,73 @@ async def test_provider_holds_an_auth_none_supervisor() -> None:
     assert provider._supervisor._auth is None
 
 
-# --- D3 + mint: real /proc scope, bearer verifies via store_bearer_verifier --
+async def test_provider_requires_an_absolute_stack_root() -> None:
+    store, broker = _store_broker()
+    reg = ModelProxyProcessRegistry()
+    async with httpx.AsyncClient() as client:
+        with pytest.raises(TrustedProxyProvisionError, match="stack_root"):
+            TrustedProxyCodexPhaseCellProvider(
+                source=_FakeSource(),
+                supervisor=_supervisor(),
+                probe=_FakeProbe(),
+                broker=broker,
+                grant_store=store,
+                registry=reg,
+                attestor=LinuxModelProxyPeerAttestor(reg),
+                stack_root=Path("relative/root"),
+                upstream_base_url="http://gateway/v1",
+                upstream_key="KERNEL-ONLY-KEY",
+                http_client=client,
+            )
 
 
-async def test_mint_writes_bearer_that_verifies_via_store_verifier(
+# --- issuance + teardown: no bearer file, grant revoked, proxy + ingress closed --
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="build_cell_scope reads /proc")
+async def test_teardown_revokes_grant_and_closes_proxy_and_ingress(
     tmp_path: Path, running_child: int
 ) -> None:
     store, broker = _store_broker()
-    scope = build_cell_scope(_assignment(), _CELL_ID, running_child)
-    assert scope.pid == running_child  # real /proc identity, not fabricated
-    assert scope.boot_id and scope.cgroup_identity_digest.startswith("sha256:")
+    registry = ModelProxyProcessRegistry()
+    attestor = LinuxModelProxyPeerAttestor(registry)
     async with httpx.AsyncClient() as client:
-        provider = _provider(broker=broker, store=store, client=client)
-        await provider._mint_and_deliver(
-            model_id=_MODEL_ID, cell_root=tmp_path, scope=scope, generation=1
+        provider = _provider(
+            broker=broker, store=store, client=client, registry=registry, attestor=attestor
         )
-    bearer = (tmp_path / BEARER_FILENAME).read_text()
-    assert bearer
-    assert await store_bearer_verifier(store, generation=1)(bearer) is True
-    # a foreign generation (a superseded/other rollout) does not verify
-    assert await store_bearer_verifier(store, generation=2)(bearer) is False
-
-
-# --- release: cancel refresh, revoke the grant, close the proxy --------------
-
-
-async def test_teardown_cancels_refresh_revokes_grant_and_closes_proxy(
-    tmp_path: Path, running_child: int
-) -> None:
-    store, broker = _store_broker()
-    holder = GenerationHolder(1)
-    async with httpx.AsyncClient() as client:
-        provider = _provider(broker=broker, store=store, client=client)
         proxy = PerCellModelProxyServer(
-            verify_bearer=tracking_bearer_verifier(store, holder),
+            verify_bearer=tracking_bearer_verifier(store, GenerationHolder(1)),
             upstream_base_url="http://gateway/v1",
             upstream_key="KERNEL-ONLY-KEY",
             client=client,
         )
         await proxy.start()
+
         scope = build_cell_scope(_assignment(), _CELL_ID, running_child)
-        await provider._mint_and_deliver(
-            model_id=_MODEL_ID, cell_root=tmp_path, scope=scope, generation=1
+        issuer = build_ingress_bearer_issuer(
+            broker=broker,
+            model_id=_MODEL_ID,
+            policy_digest=_POLICY_DIGEST,
+            budget=read_only_budget(),
+            ttl_seconds=60,
+            holder=GenerationHolder(1),
         )
-        digest = hashlib.sha256(
-            (tmp_path / BEARER_FILENAME).read_text().encode("ascii")
-        ).hexdigest()
-        assert await store.find_active_by_bearer_digest(digest, generation=1) is not None
+        # The issuer mints a fresh single-cell bearer per attested connection; the
+        # first mint bumps the holder to generation 2. No file is ever written.
+        bearer = await issuer(scope)
+        assert isinstance(bearer, bytes) and bearer
+        digest = hashlib.sha256(bearer).hexdigest()
+        assert await store.find_active_by_bearer_digest(digest, generation=2) is not None
+        assert not any((tmp_path).iterdir())  # nothing at rest under the cell dir
 
-        refresh: asyncio.Task[None] = asyncio.create_task(asyncio.sleep(3600))  # type: ignore[assignment]
-        await provider._teardown(proxy, scope, refresh)
+        ingress = CodexTrustedIngress(registry, attestor)  # unstarted: aclose is a safe no-op
+        await provider._teardown(proxy, scope, ingress)
 
-        assert refresh.cancelled()
         assert proxy._server is None
-        assert await store.find_active_by_bearer_digest(digest, generation=1) is None
+        assert await store.find_active_by_bearer_digest(digest, generation=2) is None
 
 
-# --- config: the cell is pointed at the loopback proxy -----------------------
+# --- config: the cell is pointed at the loopback proxy + socket helper --------
 
 
 def test_config_points_the_cell_at_the_loopback_proxy(tmp_path: Path) -> None:
@@ -252,7 +280,7 @@ def test_config_points_the_cell_at_the_loopback_proxy(tmp_path: Path) -> None:
     assert document["sandbox_mode"] == "read-only"
 
 
-async def test_write_cell_config_materializes_helper_and_writes_config(
+async def test_write_cell_config_materializes_socket_helper_and_writes_config(
     tmp_path: Path,
 ) -> None:
     store, broker = _store_broker()
@@ -260,15 +288,18 @@ async def test_write_cell_config_materializes_helper_and_writes_config(
         provider = _provider(broker=broker, store=store, client=client)
         codex_home = tmp_path / "codex-home"
         codex_home.mkdir()
+        socket_path = tmp_path / "mp-deadbeef.sock"
         provider._write_cell_config(
             cell_id="cell-002",
             cell_root=tmp_path,
             codex_home=codex_home,
             model_id=_MODEL_ID,
             proxy_port=44001,
+            socket_path=socket_path,
         )
     helper = tmp_path / "model_auth_helper"
     assert oct(helper.stat().st_mode & 0o777) == "0o700"
+    assert socket_path.as_posix() in helper.read_text(encoding="ascii")
     document = tomllib.loads((codex_home / "config.toml").read_text())
     provider_block = document["model_providers"]["boltrig_model_proxy"]  # type: ignore[index]
     assert provider_block["base_url"] == "http://127.0.0.1:44001/v1"
