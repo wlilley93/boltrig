@@ -14,6 +14,7 @@ import pytest
 
 from boltrig.fleet.infrastructure.model_proxy_tool_ceiling import (
     MAX_MODEL_CALL_BODY_BYTES,
+    ToolCallStreamGuard,
     ToolCeilingViolation,
     enforce_tool_ceiling,
 )
@@ -103,3 +104,39 @@ def test_a_non_list_tools_key_is_refused() -> None:
 def test_a_non_object_json_body_is_forwarded_unchanged() -> None:
     body = _body(["ping"])
     assert enforce_tool_ceiling(body, frozenset()) is body
+
+
+def test_the_stream_guard_refuses_an_unsolicited_tool_call() -> None:
+    """Exclusivity limb (c): the gateway must not confer a tool we never offered."""
+
+    guard = ToolCallStreamGuard(frozenset())
+    guard.inspect(b'data: {"type":"response.output_text.delta","delta":"hi"}\n\n')
+    with pytest.raises(ToolCeilingViolation):
+        guard.inspect(
+            b'data: {"type":"response.output_item.added","item":'
+            b'{"type":"function_call","name":"exec_command"}}\n\n'
+        )
+
+
+def test_the_stream_guard_sees_a_marker_split_across_chunks() -> None:
+    """A chunk boundary must not be a way through the guard."""
+
+    guard = ToolCallStreamGuard(frozenset())
+    guard.inspect(b'data: {"item":{"type":"functio')
+    with pytest.raises(ToolCeilingViolation):
+        guard.inspect(b'n_call","name":"exec_command"}}')
+
+
+def test_the_stream_guard_allows_a_granted_tool_and_bars_the_rest() -> None:
+    """PR8's write phase widens by policy here too, not by disabling the guard."""
+
+    guard = ToolCallStreamGuard(frozenset({"update_plan"}))
+    guard.inspect(b'{"item":{"type":"function_call","name":"update_plan"}}')
+    with pytest.raises(ToolCeilingViolation):
+        guard.inspect(b'{"item":{"type":"function_call","name":"exec_command"}}')
+
+
+def test_the_stream_guard_passes_ordinary_text() -> None:
+    guard = ToolCallStreamGuard(frozenset())
+    for chunk in (b'data: {"object":"response",', b'"output":[{"type":"message"}]}'):
+        guard.inspect(chunk)

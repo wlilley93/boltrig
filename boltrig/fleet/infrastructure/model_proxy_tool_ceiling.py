@@ -21,6 +21,14 @@ it is rejected rather than forwarded.
 from __future__ import annotations
 
 import json
+import re
+
+# The Responses API names a tool call by this item type; the SSE frames that carry
+# one always contain it, so it is the cheapest exact marker to scan a stream for.
+_FUNCTION_CALL_MARKER = b"function_call"
+_NAME_FIELD = re.compile(rb'"name"\s*:\s*"([^"]*)"')
+# A tail long enough that a marker or a name split across two chunks is still seen.
+_STREAM_TAIL_BYTES = 512
 
 # A model-call body we cannot parse is one whose tool set we cannot check. The
 # cap is generous (a full read-only context is well under it) and exists so an
@@ -69,6 +77,56 @@ def enforce_tool_ceiling(body: bytes, allowed: frozenset[str]) -> bytes:
     return json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
 
 
+class ToolCallStreamGuard:
+    """Hold the ceiling on the RESPONSE stream, not only the request.
+
+    ``enforce_tool_ceiling`` bounds what the model is OFFERED. It does not bound
+    what comes back: a gateway that returns a ``function_call`` for a tool we
+    stripped would still be executed by the App Server, which never needed to be
+    offered the tool at all. [2026] VJS-CC-VJS 4's exclusivity limb asks whether
+    the capability can be conferred by ANY path that misses the chokepoint, and an
+    unsolicited tool call in the response is exactly such a path.
+
+    The stream is scanned as it passes, with a sliding tail so a marker split
+    across two chunks is still seen. On a violation the caller must stop relaying:
+    a truncated response is the fail-closed outcome, because by then the status and
+    headers have already gone to the cell and no error status is available.
+
+    When the ceiling is empty (the read-only lane) the test is exact and needs no
+    name parsing: ANY function call at all is a violation.
+    """
+
+    __slots__ = ("_allowed", "_tail")
+
+    def __init__(self, allowed: frozenset[str]) -> None:
+        if type(allowed) is not frozenset:
+            raise TypeError("allowed must be an exact frozenset")
+        self._allowed = allowed
+        self._tail = b""
+
+    def inspect(self, chunk: bytes) -> None:
+        """Raise :class:`ToolCeilingViolation` if the chunk carries a barred call."""
+
+        if type(chunk) is not bytes:
+            raise TypeError("chunk must be exact bytes")
+        window = self._tail + chunk
+        if _FUNCTION_CALL_MARKER in window:
+            if not self._allowed or not self._named_calls_are_allowed(window):
+                raise ToolCeilingViolation("upstream returned a tool call outside the ceiling")
+        # Keep enough tail that a marker or name split across chunks is still seen.
+        self._tail = window[-_STREAM_TAIL_BYTES:]
+
+    def _named_calls_are_allowed(self, window: bytes) -> bool:
+        for match in _NAME_FIELD.finditer(window):
+            try:
+                name = match.group(1).decode("utf-8")
+            except UnicodeDecodeError:
+                return False
+            if name not in self._allowed:
+                return False
+        return True
+
+
 def _tool_name(tool: object) -> str | None:
     """The wire name of a Responses-API tool entry, or None if it has no name.
 
@@ -87,6 +145,7 @@ def _tool_name(tool: object) -> str | None:
 
 __all__ = [
     "MAX_MODEL_CALL_BODY_BYTES",
+    "ToolCallStreamGuard",
     "ToolCeilingViolation",
     "enforce_tool_ceiling",
 ]
