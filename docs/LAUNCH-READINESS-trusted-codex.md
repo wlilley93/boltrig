@@ -46,13 +46,31 @@ Codex today only reasons. Letting it act (edit files, run effectful tools) is a 
 court-gated phase and should not open before the read-only lane has real use. This is the next goal,
 not the tail of this one. Opening it now would be scope inflation against a standing judgment.
 
-### 3. The prod cutover — APPROVED, deferred with cause
+### 3. The prod cutover — APPROVED, and now BLOCKED ON A SCHEMA-RECONCILIATION PLAN
 
-The Principal's go is banked. It is not started at a session's tail because it is a ~500-commit jump
-whose Alembic chain includes `0022`, a type conversion and column removal with **no automated
-downgrade**, on live customer data. The runbook (`PROD-CUTOVER-RUNBOOK.md`, Path A) mandates a
-verified off-box snapshot and a restore rehearsal first. This is done first, with full context, not
-as an exhausted final step. Deferring an irreversible migration is the right call, not reluctance.
+The Principal's go is banked. The read-only first steps of the runbook were taken this session and
+they surfaced a hard precondition that must be resolved before the irreversible step, so the cutover
+is not a blind `alembic upgrade head`:
+
+**Observed on jellytot-prod-01, read-only (2026-07-20):** the `boltrig` database has 57 tables, one
+real user, `organisations`, `workspaces` and `audit_log` — and **NO `alembic_version` table**. It
+was created directly from `schema.sql` (the first-boot load) and has NEVER been migrated through
+alembic. `boltrig-kernel-1` still runs `boltrig/kernel:0.1.0`.
+
+So "deploy the new image and run `alembic upgrade head`" is not routine. Applying a 33-step chain to
+a schema.sql-created database with no baseline is the exact destructive bug-class already on record
+(a stale-schema migration dropping or recreating live tables). The cutover therefore needs a
+decision made deliberately, with a verified off-box snapshot in hand, BEFORE any migration runs:
+
+- stamp an alembic baseline matching the current schema.sql state, then upgrade forward; or
+- dump the one user's data, migrate a fresh database, and reload; or
+- reconcile schema.sql against the migration chain and pick the safe entry point.
+
+`0022` (a type conversion and column removal with no automated downgrade) sits inside that chain, so
+whichever route is chosen is irreversible on the real user's data and is done first, with full
+context and a rehearsal on a disposable copy, not as an exhausted final step. Deferring it was the
+right call; the read-only inspection turned "probably risky" into "concretely blocked until the
+reconciliation route is chosen."
 
 ## The one-line answer
 
