@@ -25,6 +25,7 @@ from boltrig.fleet.infrastructure.cell_spawner import (
     CellSpawnerError,
     SpawnPolicy,
     parse_spawn_request,
+    reap_cell,
     receive_spawn_result,
     send_spawn_result,
 )
@@ -208,3 +209,31 @@ def test_a_result_without_descriptors_is_refused() -> None:
 def test_a_spawn_policy_demands_absolute_paths() -> None:
     with pytest.raises(CellSpawnerError):
         SpawnPolicy(binary=Path("codex"), stack_root=Path(_STACK))
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("pid", "uid", "number"),
+    [
+        (0, 20001, 15),      # not a real pid
+        (1, 20001, 15),      # pid 1, which is never a cell
+        (-5, 20001, 15),     # negative: a process GROUP, not a process
+        (999, 0, 15),        # root
+        (999, 10001, 15),    # the API's own uid
+        (999, 20001, 9999),  # not a signal
+        (999, 20001, 2),     # SIGINT: not one a supervisor needs
+        (999, 20001, 19),    # SIGSTOP: would wedge a cell rather than end it
+    ],
+)
+def test_the_reaper_refuses_anything_outside_its_narrow_job(
+    pid: int, uid: int, number: int
+) -> None:
+    """A general signal verb would let a compromised API poke at anything.
+
+    The negative-pid case matters most: on Linux a negative pid means a process
+    GROUP, so an unchecked reaper would let one request signal every process the
+    cell uid can reach rather than the single cell it named.
+    """
+
+    with pytest.raises(CellSpawnerError):
+        reap_cell(pid, uid, number)
