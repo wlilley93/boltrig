@@ -225,6 +225,43 @@ def receive_spawn_result(sock: socket.socket) -> tuple[int, tuple[int, int, int]
     return pid, (descriptors[0], descriptors[1], descriptors[2])
 
 
+def serve_spawner(sock: socket.socket, policy: SpawnPolicy) -> None:
+    """The privileged loop: read a request, validate it, spawn, hand back. Forever.
+
+    Runs in the only process that keeps CAP_SETUID. It is deliberately a plain
+    blocking loop with no framework, no plugins and no dynamic dispatch: this is
+    the code that must be auditable by eye, because everything else in the stack
+    depends on it refusing what the API asks for.
+
+    A refused or malformed request never kills the loop. Killing it would take the
+    whole lane down on one bad message from a process we already assume may be
+    compromised, which converts a validation success into an outage.
+    """
+
+    while True:
+        try:
+            payload = sock.recv(_MAX_REQUEST_BYTES)
+        except OSError:
+            return
+        if not payload:
+            return  # the API closed; nothing left to serve
+        try:
+            request = parse_spawn_request(payload, policy)
+            pid, stdio = spawn_cell(request, policy)
+        except (CellSpawnerError, OSError):
+            # Fail closed and stay up. The API sees a result with no descriptors
+            # and raises; it never mistakes a refusal for a running cell.
+            try:
+                sock.sendmsg([json.dumps({"error": "refused"}).encode("utf-8")])
+            except OSError:
+                return
+            continue
+        try:
+            send_spawn_result(sock, pid, stdio)
+        except OSError:
+            return
+
+
 __all__ = [
     "MAX_CELL_UID",
     "MIN_CELL_UID",
@@ -233,6 +270,7 @@ __all__ = [
     "SpawnRequest",
     "parse_spawn_request",
     "receive_spawn_result",
+    "serve_spawner",
     "send_spawn_result",
     "spawn_cell",
 ]
