@@ -91,3 +91,39 @@ I record two things honestly rather than treating this as vindication:
 
 Meanwhile the argv and `/etc/codex` pinning is ordered anyway under H5 as free defence in depth, and
 `production_ready` stays False under H12.
+
+---
+
+## Addendum: the H5 return
+
+H5 ordered "the argv and /etc/codex pinning". Both halves are now landed. Three matters are
+reported back to the court, two of which go beyond what it named.
+
+**1. I pinned more than the court listed, and it should know why.** H5 named `model_provider`,
+`auth.command`, `base_url`, `approval_policy`, `sandbox_mode` and `features`. I also pinned:
+
+- **`auth.args`**, because pinning `auth.command` alone pins the PROGRAM but not its TARGET. A
+  rewritten config could keep our pinned helper and change only its arguments, aiming it at a
+  SIBLING cell's ingress socket, and be handed that cell's bearer. Pinning one without the other
+  would have looked like a defence and not been one.
+- **`name` and `wire_api`**, for a duller reason found by running the binary rather than reading
+  it: a provider table assembled purely from overrides is refused at startup with "provider name
+  must not be empty". A pin set that cannot start the cell is not a pin set.
+
+**2. The `/etc/codex` layer is stronger than the argument in the case file assumed.** The case file
+treated it as a place for cell-invariant defaults. Tested, it BEATS a hostile
+`$CODEX_HOME/config.toml` for leaf keys, including leaves inside tables: a managed
+`[features] hooks = false` defeats an attacker's `hooks = true`. That makes it the strongest
+no-capability layer available, and the cell-invariant half of the policy now lives there.
+
+**3. The residual, stated plainly so no future filing overstates it.** Between the two surfaces,
+every key we NAME is now beyond a sibling cell's reach. Keys we do not name are not: Codex merges
+tables, so an attacker-added `[mcp_servers.attacker]` with its own `command` still survives, and
+that is an independent program-execution surface reaching the same bearer. G3 is therefore still
+open, `config_toml_protected` is still False, the provider still refuses a second concurrent cell,
+and `production_ready` is still False.
+
+A stronger variant exists and is NOT taken here: walk the rendered TOML and emit one `-c` per leaf,
+which would also cover array-valued leaves such as `skills.config`, since arrays replace rather than
+merge. It multiplies the `--strict-config` startup-failure surface and is beyond the ordered scope,
+so it is recorded as the obvious follow-on rather than done quietly.

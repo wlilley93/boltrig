@@ -165,7 +165,12 @@ What the order establishes:
 
 Any re-application must satisfy H6 (plead the COMPLETE grant), H7 (clear the capability from the
 child's permitted, inheritable and bounding sets before `execve`) and H8 (prove it adversarially).
-H5 orders the argv pinning ANYWAY as free defence in depth, which does not discharge G3.
+H5 ordered the argv AND `/etc/codex` pinning anyway as free defence in depth. **Both halves are
+landed** (PRs #63 and #64) and neither discharges G3. The division is: cell-invariant keys live in
+the root-owned `/etc/codex/managed_config.toml` on the read-only image mount, which BEATS a hostile
+`$CODEX_HOME/config.toml` even for leaves inside tables; per-cell keys travel on argv, fixed at
+`execve`. Every key we NAME is now beyond a sibling's reach. Keys we do not name are not, because
+tables merge.
 
 One further note: **argv is not secret.** `auth.args` lands in `/proc/<pid>/cmdline`, readable by
 every same-uid cell. Cell ids and socket names are fine there; never migrate a token onto argv.
