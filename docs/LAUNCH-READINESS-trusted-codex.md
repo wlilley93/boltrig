@@ -12,9 +12,19 @@ being re-asked. Written against the code on `main`, not from memory.
 - Bearer delivery is attested and nothing is at rest (VJS-CC-VJS 1/3); the ingress socket is
   abstract and uid-bound (VJS-CC-VJS 7 J8).
 - **Two mutually distrusting cells run concurrently under kernel-enforced per-cell uids**
-  (VJS-CC-VJS 7, enacted). The adversarial gate passes as a recorded test: hostile cell A, with full
-  write access to everything its uid can reach, cannot reach cell B's `config.toml` by any of nine
-  routes, and the API itself is never privileged.
+  (VJS-CC-VJS 7, enacted AND wired into the product). The adversarial gate passes as a recorded
+  test: hostile cell A, with full write access to everything its uid can reach, cannot reach cell
+  B's `config.toml` by any of nine routes, and the API itself is never privileged.
+
+  A correctness bug was found and fixed after the first enactment, and it is worth recording because
+  it was another overclaim: the J9 gate proved the mechanism in a harness that stayed uid 0, but the
+  PRODUCT decides per-cell mode inside the API, which the entrypoint deliberately DROPS to uid 10001.
+  So `per_cell_uid_mode_available()` read False in the running API, `config_toml_protected` stayed
+  False, the provider kept refusing the second cell, and nothing built a `CellLane` - the feature was
+  enacted in compose but OFF in the product. The dropped API cannot answer "are per-cell uids on?"
+  from its own uid; the honest signal is the live spawner socket the entrypoint hands it. That is now
+  the signal, the composition root builds the `CellLane` from it, and the dropped API reads True (
+  proven in-container). Without the capability the socket is absent and the API is unchanged.
 
 Gate green: 1926 passed. `tests/integration/test_per_cell_uid_gates.py` arms the J7/J9 live gates.
 

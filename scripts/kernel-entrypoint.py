@@ -34,6 +34,7 @@ from pathlib import Path
 sys.path.insert(0, "/app")
 
 from boltrig.fleet.infrastructure.cell_privilege import (  # noqa: E402
+    SPAWNER_FD_ENV,
     drop_privileges,
     per_cell_uid_mode_available,
 )
@@ -45,8 +46,8 @@ from boltrig.fleet.infrastructure.cell_spawner import (  # noqa: E402
 # The unprivileged identity the API runs as. Matches the image's boltrig user.
 API_UID = 10001
 API_GID = 10001
-# How the API finds the spawner socket it inherited across the exec.
-SPAWNER_FD_ENV = "BOLTRIG_CELL_SPAWNER_FD"
+# SPAWNER_FD_ENV is imported from cell_privilege so the writer and the reader of
+# this env var cannot drift apart.
 _BINARY_ENV = "BOLTRIG_CODEX_BINARY"
 _STACK_ENV = "BOLTRIG_CODEX_STACK_ROOT"
 

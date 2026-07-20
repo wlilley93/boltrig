@@ -30,6 +30,9 @@ from __future__ import annotations
 
 import ctypes
 import os
+import socket
+import stat
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -197,36 +200,85 @@ def assert_cell_process_unprivileged(pid: int, *, expected_uid: int | None = Non
         raise PrivilegeError("cell privilege state is unreadable") from error
 
 
-def per_cell_uid_mode_available(status_path: Path = PROC_STATUS) -> bool:
-    """True only where this process can actually mint per-cell uids.
+# The entrypoint writes the spawner socket's fd here before it drops the API. Its
+# PRESENCE, validated as a live socket, is how the dropped API knows per-cell uids
+# are in force - see per_cell_uid_mode_available.
+SPAWNER_FD_ENV = "BOLTRIG_CELL_SPAWNER_FD"
 
-    The lane must keep working exactly as it does today wherever the capability
-    was not granted, and it must NEVER pretend it is in the privileged mode when
-    it is not: claiming per-cell separation while every cell shares one uid is the
-    precise failure [2026] VJS-CC-VJS 5 found. So the test is the kernel's own
-    answer (are we uid 0 with a non-empty permitted set), not an env var a
-    deployment could set aspirationally.
+
+def inherited_spawner_socket_fd(env: Mapping[str, str] | None = None) -> int | None:
+    """The fd of a live inherited spawner socket, if the entrypoint handed one over.
+
+    Validated as a real AF_UNIX/SOCK_STREAM socket rather than trusted as a bare
+    env var, and validated WITHOUT taking ownership: a socket object built from the
+    fd would close it on garbage collection, so the probe is detached. Returns the
+    fd, or None if the value is absent, malformed, or not a live unix socket.
     """
 
+    source = env if env is not None else os.environ
+    raw = source.get(SPAWNER_FD_ENV)
+    if not raw or not raw.isdigit():
+        return None
+    fd = int(raw)
+    try:
+        if not stat.S_ISSOCK(os.fstat(fd).st_mode):
+            return None
+    except OSError:
+        return None
+    probe = socket.socket(fileno=fd)
+    try:
+        live = probe.family == socket.AF_UNIX and probe.type == socket.SOCK_STREAM
+    except OSError:
+        live = False
+    finally:
+        probe.detach()  # never close the inherited fd
+    return fd if live else None
+
+
+def per_cell_uid_mode_available(
+    status_path: Path = PROC_STATUS, env: Mapping[str, str] | None = None
+) -> bool:
+    """True where per-cell uids are actually in force, answered per vantage point.
+
+    There are TWO honest vantage points and they cannot share one test, which is
+    the correctness bug this function had:
+
+    - The SPAWNER / entrypoint is uid 0 with the capability, so it answers from the
+      kernel: uid 0 with a non-empty permitted set.
+    - The API is DELIBERATELY dropped to a non-root uid with an empty permitted
+      set, so it can never answer yes from its own /proc. It answers instead from
+      the live spawner socket the entrypoint handed it. That fd is the transitive
+      proof: the entrypoint forks a spawner ONLY after confirming its own uid-0
+      capability, and the entrypoint is our own trusted code. The API trusting it
+      is within the threat model - VJS-CC-VJS 5 is a hostile CELL reaching a
+      sibling, not a hostile API, and the API is the party enforcing the boundary.
+
+    It must still NEVER pretend: a bare env var is not enough, the fd is validated
+    as a live unix socket, and a cell (which inherits neither the fd env nor uid 0)
+    correctly reads False.
+    """
+
+    if inherited_spawner_socket_fd(env) is not None:
+        return True
     try:
         state = read_privilege_state(status_path)
     except (PrivilegeError, OSError):
-        # OSError matters as much as PrivilegeError: an absent or unreadable
-        # /proc is an UNPROVEN state, and an unproven boundary must read as
-        # absent rather than propagate out of a predicate the caller is using to
-        # choose a mode.
+        # An absent or unreadable /proc is an UNPROVEN state, and an unproven
+        # boundary must read as absent rather than propagate out of a predicate.
         return False
     return state.uid == 0 and bool(state.cap_permitted)
 
 
 __all__ = [
     "PROC_STATUS",
+    "SPAWNER_FD_ENV",
     "PrivilegeError",
     "PrivilegeState",
     "assert_cell_process_unprivileged",
     "assert_unprivileged",
     "clear_capability_sets",
     "drop_privileges",
+    "inherited_spawner_socket_fd",
     "per_cell_uid_mode_available",
     "read_privilege_state",
 ]
