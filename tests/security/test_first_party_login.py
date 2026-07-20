@@ -152,6 +152,15 @@ def test_login_is_rate_limited_and_non_enumerating(monkeypatch):
     assert unknown.json() == wrong.json()
 
     # Rate limit: the per-identity bound (5/min) trips on the 6th attempt with 429.
+    #
+    # The limiter uses a FIXED wall-clock window (int(time.time() // 60)), not a
+    # sliding one, so six attempts that straddle a minute boundary land in two
+    # buckets, the count resets, and the sixth returns 401. Each attempt does a
+    # deliberately slow password hash, so on a loaded box that straddle is not
+    # rare: this test failed exactly that way in a 113s suite run. Pinning the
+    # clock removes the race without weakening the assertion, which is about the
+    # limiter's behaviour WITHIN a window, not about wall time.
+    monkeypatch.setattr("boltrig.kernel.ratelimit.time.time", lambda: 1_700_000_000.0)
     _, app_b, store_b = _app()
     _run(_seat_owner(store_b))
     cb = TestClient(app_b)

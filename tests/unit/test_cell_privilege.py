@@ -18,6 +18,7 @@ import pytest
 
 from boltrig.fleet.infrastructure.cell_privilege import (
     PrivilegeError,
+    assert_cell_process_unprivileged,
     assert_unprivileged,
     per_cell_uid_mode_available,
     read_privilege_state,
@@ -155,3 +156,35 @@ def test_a_missing_capability_field_is_treated_as_unknown_bad(tmp_path: Path) ->
 def test_an_unparseable_status_is_an_error_not_a_default(tmp_path: Path) -> None:
     with pytest.raises(PrivilegeError):
         read_privilege_state(_status(tmp_path, "Name:\tpython3\n"))
+
+
+@pytest.mark.unit
+def test_a_cell_process_is_judged_from_proc_not_from_what_it_claims() -> None:
+    """J5: the kernel reads the cell's /proc; the cell never self-reports.
+
+    A compromised cell is exactly the one that would report a clean state, so
+    self-attestation would be worth nothing at the moment it matters most.
+    """
+
+    import os
+
+    # This process is a real, live, unprivileged process, so it stands in for a
+    # cell. It has no_new_privs unset (a shell does not set it), which is itself
+    # one of the conditions, so the assertion must REFUSE it.
+    with pytest.raises(PrivilegeError):
+        assert_cell_process_unprivileged(os.getpid())
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("pid", [0, 1, -1])
+def test_a_cell_privilege_check_needs_a_real_pid(pid: int) -> None:
+    with pytest.raises(PrivilegeError, match="real pid"):
+        assert_cell_process_unprivileged(pid)
+
+
+@pytest.mark.unit
+def test_an_unreadable_cell_proc_is_refused_rather_than_assumed_clean() -> None:
+    """A cell whose /proc we cannot read is a cell we cannot vouch for."""
+
+    with pytest.raises(PrivilegeError, match="unreadable"):
+        assert_cell_process_unprivileged(4_194_303)  # above any real pid

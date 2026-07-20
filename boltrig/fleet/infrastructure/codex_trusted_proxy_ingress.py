@@ -42,6 +42,10 @@ from boltrig.fleet.domain.model_proxy_scope import (
     ModelProxyPhaseScope,
     ModelProxyRootScope,
 )
+from boltrig.fleet.infrastructure.cell_privilege import (
+    assert_cell_process_unprivileged,
+    per_cell_uid_mode_available,
+)
 from boltrig.fleet.infrastructure.codex_cell_boundary import (
     SHARED_HELPER_ENV_KEY,
     CellIsolationBoundary,
@@ -184,6 +188,15 @@ def build_ingress_bearer_issuer(
                 ttl_seconds=ttl_seconds,
             )
             return bearer.encode("ascii")
+
+        # [2026] VJS-CC-VJS 7 J5: prove the CELL's own privilege state, read by the
+        # kernel from /proc, immediately before it is trusted with a credential. A
+        # cell that is root, holds any capability, or lost no_new_privs gets
+        # nothing. Only meaningful once per-cell uids are enacted, and skipped
+        # rather than faked before then: asserting a boundary that does not exist
+        # is the failure this whole programme has been correcting.
+        if per_cell_uid_mode_available():
+            assert_cell_process_unprivileged(attested.pid)
 
         # Attestation and issuance are two steps; a cell revoked in between must
         # not still receive a bearer. authorize re-checks liveness and mints under
