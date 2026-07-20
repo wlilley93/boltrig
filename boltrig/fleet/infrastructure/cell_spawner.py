@@ -35,6 +35,7 @@ from __future__ import annotations
 import array
 import json
 import os
+import signal
 import socket
 from dataclasses import dataclass
 from pathlib import Path
@@ -225,6 +226,48 @@ def receive_spawn_result(sock: socket.socket) -> tuple[int, tuple[int, int, int]
     return pid, (descriptors[0], descriptors[1], descriptors[2])
 
 
+ALLOWED_SIGNALS = (signal.SIGTERM, signal.SIGKILL)
+
+
+def reap_cell(pid: int, uid: int, number: int) -> None:
+    """Signal a cell by forking a reaper that shares its uid.
+
+    Found by testing rather than reasoning, and it changes the shape of this
+    module: under the granted capability set NOTHING can signal a per-cell-uid
+    cell directly. The API is a different uid and not the parent (EPERM, ECHILD),
+    and the SPAWNER cannot either, because signalling across uids needs CAP_KILL
+    and the grant is SETUID and SETGID only. Being uid 0 under ``cap_drop: ALL``
+    is root in name and not in the one respect this needs.
+
+    Same-uid signalling needs no capability, so the reaper drops to the cell's own
+    uid and signals from there. It exists for one syscall and exits. The spawner
+    stays the parent, so it still reaps normally.
+
+    See docs/findings/2026-07-20-cell-lifecycle-under-per-cell-uids.md.
+    """
+
+    if type(pid) is not int or pid <= 1:
+        raise CellSpawnerError("reap target must be a real pid")
+    if not (MIN_CELL_UID <= uid <= MAX_CELL_UID):
+        raise CellSpawnerError("reap uid is outside the cell band")
+    if number not in ALLOWED_SIGNALS:
+        # Only the two signals a supervisor legitimately needs. A general signal
+        # verb would let a compromised API poke at anything the cell uid can reach.
+        raise CellSpawnerError("only SIGTERM and SIGKILL may be delivered")
+    reaper = os.fork()
+    if reaper == 0:  # pragma: no cover - the child never returns to the caller
+        try:
+            os.setgid(uid)
+            os.setuid(uid)
+            os.kill(pid, number)
+            os._exit(0)
+        except BaseException:
+            os._exit(1)
+    _, status = os.waitpid(reaper, 0)
+    if os.waitstatus_to_exitcode(status) != 0:
+        raise CellSpawnerError("the same-uid reaper could not deliver the signal")
+
+
 def serve_spawner(sock: socket.socket, policy: SpawnPolicy) -> None:
     """The privileged loop: read a request, validate it, spawn, hand back. Forever.
 
@@ -263,12 +306,14 @@ def serve_spawner(sock: socket.socket, policy: SpawnPolicy) -> None:
 
 
 __all__ = [
+    "ALLOWED_SIGNALS",
     "MAX_CELL_UID",
     "MIN_CELL_UID",
     "CellSpawnerError",
     "SpawnPolicy",
     "SpawnRequest",
     "parse_spawn_request",
+    "reap_cell",
     "receive_spawn_result",
     "serve_spawner",
     "send_spawn_result",
