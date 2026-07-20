@@ -1,0 +1,18 @@
+# Dev override: run the kernel as the single-tenant / in-process Codex posture.
+#
+# The committed docker-compose.yml targets the per-cell-uid (multi-tenant) posture
+# (user "0:0" + cap_add SETUID/SETGID + per-slot tmpfs), which is the goal but is
+# BLOCKED on the Gap 5 provisioning reconciliation
+# (docs/findings/2026-07-20-per-cell-uid-product-path-gaps.md). Until Gap 5 lands,
+# this override runs the kernel directly as uid 10001, so kernel-entrypoint.py takes
+# the passthrough path (per_cell_uid_mode_available() is False at a non-root uid, an
+# empty permitted set), and the Codex supervisor uses the proven in-process spawn
+# that provisions an API-owned cell tree it can write. Single-tenant is the safe
+# one-cell posture VJS-CC-VJS 5 established; concurrent multi-tenant needs Gap 5.
+#
+# Apply on the dev box:
+#   docker compose -f docker-compose.yml -f docker-compose.override.yml \
+#     -f deploy/compose.inprocess.yml --profile gateway up -d --force-recreate kernel
+services:
+  kernel:
+    user: "10001:10001"

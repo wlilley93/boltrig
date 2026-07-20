@@ -122,14 +122,14 @@ services:
       # pleaded as an enacted control while resting on a runtime default, which is
       # exactly the kind of unearned claim the court has now twice corrected. A
       # control we rely on in argument has to be stated in the file.
-      # 0711, not 0700: a cell runs at its own uid (20001+) and must TRAVERSE this
-      # parent to reach its own slot below. 0700 (owner 10001 only) blocked that, so
-      # the App Server could not read its CODEX_HOME. 0711 grants traverse (--x) to
-      # other uids WITHOUT list (r): a cell reaches a KNOWN slot path but cannot
-      # enumerate the set, and each slot below is still 0700 owned by its own uid so
-      # a cell is refused EACCES on any sibling's slot. The slot uids are public and
-      # deterministic, so exposing that a sibling path exists leaks nothing.
-      - /var/lib/boltrig/codex-cells:mode=0711,uid=10001,gid=10001,noexec,nosuid,nodev
+      # NOTE: 0700 for the single-uid / in-process path, which validate_cell_layout
+      # requires and which provisions an API-owned tree here. The per-cell-uid path
+      # needs this 0711 (so a uid-2000N cell can traverse to its own slot below) AND
+      # a reworked validate/provision that puts the cell tree in the slot owned by
+      # the cell uid - both land together in the Gap 5 beat
+      # (docs/findings/2026-07-20-per-cell-uid-product-path-gaps.md). Kept 0700 until
+      # then so the single-tenant lane validates.
+      - /var/lib/boltrig/codex-cells:mode=0700,uid=10001,gid=10001,noexec,nosuid,nodev
       # [2026] VJS-CC-VJS 7 J2: one slot per cell, each created by the KERNEL
       # already owned by that cell's uid. This is what replaces the CAP_CHOWN the
       # court REFUSED: nothing is ever given away, so nothing needs chowning, and
