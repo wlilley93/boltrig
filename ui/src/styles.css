@@ -6889,13 +6889,25 @@ body {
   inset: -1px;
   border-radius: inherit;
   padding: 1px;
-  background: conic-gradient(from 0deg, rgba(61, 211, 240, 0.9), rgba(94, 105, 221, 0.7), rgba(61, 211, 240, 0.9));
+  /* Lights tracing the edge, not the box rotating. The element (and its border
+     mask) stay STILL; only the conic gradient's origin angle sweeps (--spin, an
+     @property registered above so it interpolates), so a bright cyan "runner"
+     with an indigo tail travels around a faint always-on track - a train on an
+     oval track. The previous version animated `transform: rotate` on this ::before,
+     which spun the whole masked ring and read as the box itself rotating. */
+  background: conic-gradient(
+    from var(--spin),
+    rgba(61, 211, 240, 0.16) 0deg,
+    rgba(61, 211, 240, 0.16) 250deg,
+    rgba(94, 105, 221, 0.85) 306deg,
+    rgba(61, 211, 240, 1) 344deg,
+    rgba(61, 211, 240, 0.16) 360deg
+  );
   mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   mask-composite: exclude;
-  animation: chat-spin 1.3s linear infinite;
+  animation: border-spin 1.3s linear infinite;
   pointer-events: none;
 }
-@keyframes chat-spin { to { transform: rotate(360deg); } }
 /* reduced-motion: drop the spinning conic mask and use a calm static border in
    the site accent (cyan/indigo). Design decision #46: cyan/indigo, NEVER green. */
 :root.reduce-motion .chat-v3 .chat__composer--thinking {
