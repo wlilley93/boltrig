@@ -188,3 +188,80 @@ def test_an_unreadable_cell_proc_is_refused_rather_than_assumed_clean() -> None:
 
     with pytest.raises(PrivilegeError, match="unreadable"):
         assert_cell_process_unprivileged(4_194_303)  # above any real pid
+
+
+@pytest.mark.unit
+def test_the_dropped_api_reads_per_cell_mode_from_the_inherited_socket() -> None:
+    """The correctness bug this fixes: the API is dropped, so it cannot answer from
+    its own uid, and every API-side call (config_toml_protected, the J5 gate) was
+    therefore reading False even with the capability granted. The honest signal is
+    the live spawner socket the entrypoint handed over.
+    """
+
+    import socket
+
+    parent, child = socket.socketpair()
+    try:
+        env = {"BOLTRIG_CELL_SPAWNER_FD": str(parent.fileno())}
+        # This test process is not uid 0, standing in for the dropped API.
+        assert per_cell_uid_mode_available(env=env) is True
+        # The check must not consume the fd; the socket is still usable after.
+        parent.send(b"ping")
+        assert child.recv(4) == b"ping"
+    finally:
+        parent.close()
+        child.close()
+
+
+@pytest.mark.unit
+def test_per_cell_mode_is_false_without_the_spawner_socket() -> None:
+    """A cell, and any process the entrypoint did not hand a socket, reads False."""
+
+    assert per_cell_uid_mode_available(env={}) is False
+
+
+@pytest.mark.unit
+def test_the_inherited_spawner_fd_is_validated_not_trusted(tmp_path: Path) -> None:
+    """A bare env var is not enough: the fd must be a live AF_UNIX stream socket.
+
+    A deployment that set the var aspirationally, or a stale fd number, must not be
+    read as per-cell mode - that would claim isolation that is not there.
+    """
+
+    import os
+    import socket
+
+    from boltrig.fleet.infrastructure.cell_privilege import inherited_spawner_socket_fd
+
+    assert inherited_spawner_socket_fd({}) is None
+    assert inherited_spawner_socket_fd({"BOLTRIG_CELL_SPAWNER_FD": "notanumber"}) is None
+    assert inherited_spawner_socket_fd({"BOLTRIG_CELL_SPAWNER_FD": "999999"}) is None
+
+    # A regular file fd is not a socket.
+    regular = os.open(tmp_path / "f", os.O_CREAT | os.O_RDWR)
+    try:
+        assert inherited_spawner_socket_fd(
+            {"BOLTRIG_CELL_SPAWNER_FD": str(regular)}
+        ) is None
+    finally:
+        os.close(regular)
+
+    # An AF_INET socket is the wrong family.
+    inet = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        assert inherited_spawner_socket_fd(
+            {"BOLTRIG_CELL_SPAWNER_FD": str(inet.fileno())}
+        ) is None
+    finally:
+        inet.close()
+
+    # A real AF_UNIX stream socket is accepted, and survives the check unclosed.
+    parent, child = socket.socketpair()
+    try:
+        fd = inherited_spawner_socket_fd({"BOLTRIG_CELL_SPAWNER_FD": str(parent.fileno())})
+        assert fd == parent.fileno()
+        parent.send(b"ok")
+        assert child.recv(2) == b"ok"
+    finally:
+        parent.close()
+        child.close()

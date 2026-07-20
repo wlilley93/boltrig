@@ -35,6 +35,9 @@ CELL_SLOT_ROOT = Path("/var/lib/boltrig/codex-cells")
 # uid for slot N. Deliberately dense and predictable: the uid is not a secret, it
 # is a kernel-enforced separator, and a readable mapping is easier to audit.
 FIRST_SLOT_UID = 20001
+# The number of per-cell slots declared as tmpfs mounts in docker-compose. The
+# allocator and the compose file must agree; test_cell_slots holds them in step.
+DECLARED_CELL_SLOTS = 4
 
 
 class CellSlotError(RuntimeError):
@@ -152,6 +155,7 @@ def assert_slots_are_distinct(slots: tuple[CellSlot, ...]) -> None:
 
 __all__ = [
     "CELL_SLOT_ROOT",
+    "DECLARED_CELL_SLOTS",
     "FIRST_SLOT_UID",
     "CellSlot",
     "CellSlotAllocator",

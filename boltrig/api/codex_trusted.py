@@ -21,9 +21,43 @@ call ``require_codex_trusted_posture``); returning a live provider only when
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from boltrig.config.settings import Settings
+
+if TYPE_CHECKING:
+    from boltrig.fleet.infrastructure.cell_lane import CellLane
+
+
+def _build_cell_lane() -> CellLane | None:
+    """The CellLane the enactment was missing ([2026] VJS-CC-VJS 7 J1), or None.
+
+    When the entrypoint privilege-separated it handed this (deliberately dropped)
+    API a live spawner socket. Its presence is how per-cell uids reach the PRODUCT
+    rather than only the J9 harness: build a CellLane over it and the supervisor
+    routes every spawn through the privileged spawner, under a distinct uid. Absent
+    it (no capability, or single-tenant), this returns None and the supervisor
+    keeps today's in-process spawn, byte-identical. The lane owns a DUP so the raw
+    inherited fd stays valid for the per-cell mode check.
+    """
+
+    import os
+    import socket
+
+    from boltrig.fleet.infrastructure.cell_lane import CellLane
+    from boltrig.fleet.infrastructure.cell_privilege import inherited_spawner_socket_fd
+    from boltrig.fleet.infrastructure.cell_slots import (
+        DECLARED_CELL_SLOTS,
+        CellSlotAllocator,
+    )
+
+    spawner_fd = inherited_spawner_socket_fd(os.environ)
+    if spawner_fd is None:
+        return None
+    spawner_socket = socket.socket(fileno=os.dup(spawner_fd))
+    # Capacity matches the per-cell tmpfs slots declared in docker-compose; a test
+    # holds slot_for_index in step with those mounts.
+    return CellLane(spawner_socket, CellSlotAllocator(DECLARED_CELL_SLOTS))
 
 
 def build_trusted_codex_config(
@@ -71,7 +105,9 @@ def build_trusted_codex_config(
     source = ProvisioningCodexPhaseAdmissionSource(stack_root=stack_root, model_id=model_id)
     # D2: the supervisor is constructed with auth=None so the child environment
     # never carries the upstream key; the provider enforces supervisor._auth is None.
-    supervisor = CodexCellSupervisor(binary=Path(settings.codex_binary), auth=None)
+    supervisor = CodexCellSupervisor(
+        binary=Path(settings.codex_binary), auth=None, cell_lane=_build_cell_lane()
+    )
     probe = QuarantinedCodexPreflightProbe()
     grant_store = MemoryModelProxyGrantStore()
     broker = PhaseScopedModelProxyGrantBroker(grant_store)

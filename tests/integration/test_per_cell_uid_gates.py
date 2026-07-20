@@ -136,3 +136,24 @@ def test_j9_a_hostile_cell_cannot_reach_a_siblings_config() -> None:
     assert "auth.command intact: True" in output, output
     # Even uid 0 is locked out, because cap_drop ALL removes CAP_DAC_OVERRIDE.
     assert "could list B's slot: refused, as expected" in output, output
+
+
+def test_j1_wiring_the_dropped_api_routes_a_spawn_through_the_lane() -> None:
+    """The PRODUCT path, which every green test hid until it was tested directly.
+
+    The J9 gate proved the mechanism in a harness that stayed uid 0. The product
+    decides per-cell mode inside the API, which the entrypoint DROPS to uid 10001,
+    so per_cell_uid_mode_available read False there and nothing built a lane: the
+    feature was enacted in compose and OFF in the product. This drives the real
+    join - a dropped API sees per-cell mode from the inherited spawner socket,
+    builds a CellLane, and routes a real spawn through it under a distinct uid.
+    """
+
+    output = _run(
+        _mount("wiring_driver.py", "/driver.py"),
+        "/driver.py",
+        ("--tmpfs", "/tmp:mode=0777"),
+    )
+    assert "dropped API uid: 10001" in output, output
+    assert "per_cell_uid_mode_available: True" in output, output
+    assert "routed-through-the-lane" in output, output
