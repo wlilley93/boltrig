@@ -102,6 +102,15 @@ RUN chown 0:0 /opt/boltrig/codex/model_auth_helper && \
     chmod 0555 /opt/boltrig/codex/model_auth_helper
 ENV BOLTRIG_CODEX_AUTH_HELPER=/opt/boltrig/codex/model_auth_helper
 
+# [2026] VJS-CC-VJS 6 H5: the cell-INVARIANT security-critical config, installed
+# root-owned on the read-only image mount. Verified on the pinned binary that a
+# leaf set here BEATS the same leaf in a hostile $CODEX_HOME/config.toml, which a
+# sibling cell can rewrite. It does NOT stop a key being ADDED (tables merge), so
+# it hardens, it does not discharge G3.
+COPY deploy/codex/managed_config.toml /etc/codex/managed_config.toml
+RUN chown 0:0 /etc/codex/managed_config.toml && \
+    chmod 0444 /etc/codex/managed_config.toml
+
 # bubblewrap is Codex's documented sandbox prerequisite. Without it on PATH the
 # App Server emits a configWarning at startup and falls back to a bundled copy;
 # that warning is an invalidation-class notification the read-only preflight
