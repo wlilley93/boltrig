@@ -21,11 +21,26 @@ at startup (it never assumes) that the boundary is in force by asking the kernel
 itself, names the mechanism, and fails closed when it is absent.
 
 WHAT THIS DELIBERATELY DOES NOT CLAIM: the cell's config.toml carries
-``auth.command`` and must sit at ``$CODEX_HOME/config.toml`` inside a directory
+``auth.command``, and it sits at ``$CODEX_HOME/config.toml`` inside a directory
 the cell uid owns, so a sibling cell can still replace it and name a different
 program. ``config_toml_protected`` is therefore False under this mechanism, and
 callers MUST refuse to run mutually distrusting cells concurrently while it is
 False. Reporting that honestly is the point of the field.
+
+[2026] VJS-CC-VJS 6 H3 corrects a false necessity claim this docstring used to
+make. It said config.toml "must" sit in a cell-uid-owned CODEX_HOME. That "must"
+was ours, not the runtime's: ``codex_cell_policy.validate_cell_layout`` is what
+requires a 0700 CODEX_HOME owned by this account. Pleading our own policy as a
+property of Codex is how the capability application in VJS-CC-VJS 6 came to be
+argued on a false premise, so the word is now "does", not "must".
+
+The court's proposed no-capability route (one root-owned read-only CODEX_HOME
+shared by every cell, all per-cell values on argv) was then tested under H1/H2
+and does NOT work: the App Server initialises a sqlite state runtime inside
+CODEX_HOME and fails to start when it cannot write there. See
+``docs/findings/2026-07-20-codex-home-writability.md`` for the evidence. The
+constraint is therefore ours to state but not ours to lift unilaterally, which
+is a different and weaker claim than the one made before.
 """
 
 from __future__ import annotations
