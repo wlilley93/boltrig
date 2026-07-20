@@ -98,6 +98,17 @@ services:
       # exactly the kind of unearned claim the court has now twice corrected. A
       # control we rely on in argument has to be stated in the file.
       - /var/lib/boltrig/codex-cells:mode=0700,uid=10001,gid=10001,noexec,nosuid,nodev
+      # [2026] VJS-CC-VJS 7 J2: one slot per cell, each created by the KERNEL
+      # already owned by that cell's uid. This is what replaces the CAP_CHOWN the
+      # court REFUSED: nothing is ever given away, so nothing needs chowning, and
+      # a cell that has dropped to its own uid is refused EACCES on any sibling's
+      # slot. The uids must match cell_slots.slot_for_index; a test holds them in
+      # step. Inert until the capability is granted, since without per-cell uids
+      # every cell is still 10001 and simply uses the shared root above.
+      - /var/lib/boltrig/codex-cells/slot-0:mode=0700,uid=20001,gid=20001,noexec,nosuid,nodev
+      - /var/lib/boltrig/codex-cells/slot-1:mode=0700,uid=20002,gid=20002,noexec,nosuid,nodev
+      - /var/lib/boltrig/codex-cells/slot-2:mode=0700,uid=20003,gid=20003,noexec,nosuid,nodev
+      - /var/lib/boltrig/codex-cells/slot-3:mode=0700,uid=20004,gid=20004,noexec,nosuid,nodev
     command: ["uvicorn", "boltrig.api.asgi:app", "--host", "0.0.0.0", "--port", "8000"]
     # Local/operator runs keep the conventional .env default. Validation and CI
     # can point at the checked non-secret fixture without creating an ignored
