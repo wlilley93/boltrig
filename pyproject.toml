@@ -88,6 +88,12 @@ markers = [
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+# The per-cell uid probes ([2026] VJS-CC-VJS 7 J7/J9) run INSIDE a container, as
+# the cell or as the privileged driver, executed rather than imported. They must
+# depend on nothing but the standard library (a dropped cell holds no capabilities
+# and no repo path), and their compact style is deliberate: an attacker probe
+# should fit on screen beside the property it tests. See the README beside them.
+extend-exclude = ["tests/integration/percell"]
 
 # Static type-checking gate. Scoped STRICT to the highest-value, most-typed core
 # FIRST - the domain models (boltrig.models.*) and the ONE dispatch chokepoint

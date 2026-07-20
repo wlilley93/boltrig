@@ -143,6 +143,16 @@ RUN useradd --create-home --uid 10001 boltrig && \
         /var/lib/boltrig/herdr/config \
         /var/lib/boltrig/herdr/data \
         /var/lib/boltrig/herdr/state
+# [2026] VJS-CC-VJS 7 J3. The entrypoint privilege-separates when, and ONLY when,
+# the kernel reports uid 0 with a non-empty permitted set. Everywhere else it
+# execs the command it was given and gets out of the way, verified byte-identical
+# to running that command directly, so a deployment that has not granted the
+# capability gains no new failure mode from this line.
+COPY scripts/kernel-entrypoint.py /opt/boltrig/kernel-entrypoint.py
+RUN chown 0:0 /opt/boltrig/kernel-entrypoint.py && \
+    chmod 0555 /opt/boltrig/kernel-entrypoint.py
+ENTRYPOINT ["/usr/local/bin/python3", "/opt/boltrig/kernel-entrypoint.py"]
+
 USER boltrig
 
 EXPOSE 8000

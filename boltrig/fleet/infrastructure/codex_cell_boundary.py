@@ -20,12 +20,19 @@ pinned Codex binary already relies on. This module resolves that helper, PROVES
 at startup (it never assumes) that the boundary is in force by asking the kernel
 itself, names the mechanism, and fails closed when it is absent.
 
-WHAT THIS DELIBERATELY DOES NOT CLAIM: the cell's config.toml carries
-``auth.command``, and it sits at ``$CODEX_HOME/config.toml`` inside a directory
-the cell uid owns, so a sibling cell can still replace it and name a different
-program. ``config_toml_protected`` is therefore False under this mechanism, and
-callers MUST refuse to run mutually distrusting cells concurrently while it is
-False. Reporting that honestly is the point of the field.
+WHAT ``config_toml_protected`` NOW MEANS, and it is conditional: config.toml
+carries ``auth.command`` and sits inside a directory the cell uid owns. Where
+every cell shares ONE uid that is no boundary, so the field is False and callers
+refuse to run mutually distrusting cells concurrently. Where [2026] VJS-CC-VJS 7
+per-cell uids are in force the owning uid is the CELL's own, so a sibling is
+refused by the KERNEL, and the field is True.
+
+It is DERIVED from the kernel, never configured. A deployment without the
+capability gets False and keeps the refusal, because claiming a boundary that is
+not there is the failure this programme spent itself correcting. Proved by the J9
+two-cell adversarial test: hostile A, holding full write access to everything its
+uid can reach, could not rewrite, append to, read, unlink, rename over, chmod or
+even list cell B's config.
 
 [2026] VJS-CC-VJS 6 H3 corrects a false necessity claim this docstring used to
 make. It said config.toml "must" sit in a cell-uid-owned CODEX_HOME. That "must"
@@ -52,11 +59,14 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+from boltrig.fleet.infrastructure.cell_privilege import per_cell_uid_mode_available
+
 SHARED_HELPER_ENV_KEY = "BOLTRIG_CODEX_AUTH_HELPER"
 DEFAULT_SHARED_HELPER_PATH = Path("/opt/boltrig/codex/model_auth_helper")
 PTRACE_SCOPE_PATH = Path("/proc/sys/kernel/yama/ptrace_scope")
 MINIMUM_PTRACE_SCOPE = 1
 BOUNDARY_MECHANISM = "root-owned-shared-helper-on-read-only-image-mount"
+PER_CELL_UID_MECHANISM = "per-cell-uid-slots-plus-root-owned-shared-helper"
 _MAX_HELPER_BYTES = 256 * 1024
 
 
@@ -68,9 +78,9 @@ class CodexCellBoundaryError(RuntimeError):
 class CellIsolationBoundary:
     """One proved statement about the boundary in force, carrying its evidence.
 
-    ``config_toml_protected`` is a load-bearing admission, not a formality: it is
-    False under this mechanism because config.toml cannot be taken out of a
-    cell-uid-owned directory without privileges this container does not hold.
+    ``config_toml_protected`` is a load-bearing admission, not a formality. It is
+    True only where per-cell uids are actually in force, read from the kernel at
+    the moment the boundary is proved.
     """
 
     mechanism: str
@@ -243,13 +253,25 @@ def assert_cell_isolation_boundary(
     _assert_immutable_chain(helper_path)
     scope = assert_ptrace_scope() if require_ptrace_scope else -1
     return CellIsolationBoundary(
-        mechanism=BOUNDARY_MECHANISM,
+        mechanism=(
+            PER_CELL_UID_MECHANISM if per_cell_uid_mode_available() else BOUNDARY_MECHANISM
+        ),
         helper_path=helper_path,
         helper_sha256=_digest_helper(helper_path),
         helper_on_read_only_mount=bool(os.statvfs(helper_path).f_flag & os.ST_RDONLY),
         ptrace_scope=scope,
-        # Honest and load-bearing: config.toml stays in a cell-uid-owned CODEX_HOME.
-        config_toml_protected=False,
+        # [2026] VJS-CC-VJS 7. True ONLY where per-cell uids are actually in
+        # force, read from the kernel. config.toml still lives in a CODEX_HOME the
+        # cell uid owns; what changed is that the uid is now the CELL's own, so a
+        # sibling is refused by the kernel rather than by our good intentions.
+        # Proved by the J9 two-cell adversarial test: hostile A holding full write
+        # access to everything its uid can reach cannot rewrite, append to, read,
+        # unlink, rename over, chmod, or even list cell B's config.
+        #
+        # Derived, never configured. A deployment without the capability gets
+        # False and keeps the single-cell refusal, because claiming a boundary
+        # that is not there is the failure this whole programme corrected.
+        config_toml_protected=per_cell_uid_mode_available(),
     )
 
 
@@ -300,6 +322,7 @@ def assert_no_setuid_binaries(roots: tuple[str, ...] = SETUID_SCAN_ROOTS) -> int
 
 __all__ = [
     "BOUNDARY_MECHANISM",
+    "PER_CELL_UID_MECHANISM",
     "CellIsolationBoundary",
     "CodexCellBoundaryError",
     "DEFAULT_SHARED_HELPER_PATH",
