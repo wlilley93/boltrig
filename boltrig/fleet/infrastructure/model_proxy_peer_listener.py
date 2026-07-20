@@ -66,16 +66,25 @@ class PeerAttestationUnixListener:
     registry) are injected, so the listener grants no authority of its own.
     """
 
-    __slots__ = ("_accepts", "_attestor", "_closed", "_closing", "_listener", "_path")
+    __slots__ = (
+        "_abstract",
+        "_accepts",
+        "_attestor",
+        "_closed",
+        "_closing",
+        "_listener",
+        "_path",
+    )
 
     def __init__(
         self,
         listener: socket.socket,
-        path: Path,
+        path: Path | str,
         attestor: LinuxModelProxyPeerAttestor,
     ) -> None:
         self._listener = listener
         self._path = path
+        self._abstract = isinstance(path, str)
         self._attestor = attestor
         self._accepts = ThreadPoolExecutor(
             max_workers=1, thread_name_prefix="boltrig-peer-accept"
@@ -85,20 +94,35 @@ class PeerAttestationUnixListener:
 
     @classmethod
     def bind(
-        cls, path: Path, attestor: LinuxModelProxyPeerAttestor
+        cls, path: Path | str, attestor: LinuxModelProxyPeerAttestor
     ) -> PeerAttestationUnixListener:
+        """Bind either an abstract ``@name`` or a filesystem path.
+
+        The production form is abstract: it has no filesystem presence, so a cell
+        sharing the stack-root tmpfs cannot pre-create or replace it, and a second
+        ``bind`` of a name already taken fails ``EADDRINUSE`` rather than silently
+        winning a race. The filesystem form is retained for the live listener
+        tests, which bind this class directly on a temp path.
+        """
+
         if type(attestor) is not LinuxModelProxyPeerAttestor:
             raise TypeError("attestor must be an exact LinuxModelProxyPeerAttestor")
-        target = _writable_socket_path(path)
+        target = _abstract_socket_name(path) if isinstance(path, str) else None
+        if target is None:
+            target = _writable_socket_path(path)
         listener = socket.socket(socket.AF_UNIX, ALLOWED_MODEL_PROXY_SOCKET_TYPE)
         try:
-            listener.bind(os.fspath(target))
-            os.chmod(target, _SOCKET_MODE)
+            listener.bind(target if isinstance(target, str) else os.fspath(target))
+            if not isinstance(target, str):
+                # An abstract socket has no inode and so no mode to set; it is
+                # reachable only by exact name, which is the stronger property.
+                os.chmod(target, _SOCKET_MODE)
             listener.listen(_SOCKET_BACKLOG)
             listener.setblocking(True)
         except OSError as exc:
             listener.close()
-            _unlink_quietly(target)
+            if not isinstance(target, str):
+                _unlink_quietly(target)
             raise PeerAttestationListenerError("unix peer listener bind failed") from exc
         return cls(listener, target, attestor)
 
@@ -173,7 +197,9 @@ class PeerAttestationUnixListener:
         self._wake_accept()
         self._listener.close()
         self._accepts.shutdown(wait=True)
-        _unlink_quietly(self._path)
+        if not self._abstract:
+            # An abstract name has no directory entry; it is released with the socket.
+            _unlink_quietly(self._path)
         self._closed = True
 
     def _wake_accept(self) -> None:
@@ -185,6 +211,24 @@ class PeerAttestationUnixListener:
                 waker.close()
         except OSError:
             pass
+
+
+def _abstract_socket_name(value: str) -> str:
+    """Translate the ``@name`` argv convention into a real abstract name.
+
+    A Linux abstract socket name begins with a NUL byte, which can never travel
+    through ``execve`` argv, so the name reaches the cell's auth helper as ``@name``
+    (the convention ``ss``, ``socat`` and systemd all use) and is translated here
+    and in the helper. Length is checked against the same ``sun_path`` bound as a
+    filesystem path, since the kernel applies it to both.
+    """
+
+    if not value.startswith("@") or len(value) < 2:
+        raise PeerAttestationListenerError("abstract socket name must start with @")
+    name = "\0" + value[1:]
+    if len(os.fsencode(name)) > MAX_UNIX_SOCKET_PATH_BYTES:
+        raise PeerAttestationListenerError("socket name exceeds the AF_UNIX name bound")
+    return name
 
 
 def _writable_socket_path(path: Path) -> Path:

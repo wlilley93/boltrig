@@ -56,7 +56,7 @@ def _request() -> CodexRuntimeConfigRequest:
         codex_home=_CODEX_HOME,
         helper_path=Path("/opt/boltrig/codex/model_auth_helper"),
         helper_sha256=_DIGEST_A,
-        socket_path=Path("/var/lib/boltrig/codex-cells/mp-0123456789abcdef.sock"),
+        socket_name="@boltrig-mp-0123456789abcdef0123456789abcdef",
         model_id="gpt-5.4",
         model_policy_digest=_DIGEST_B,
         reasoning_effort=CodexReasoningEffort.HIGH,
