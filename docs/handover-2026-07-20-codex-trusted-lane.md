@@ -151,13 +151,25 @@ applied with no clean rollback.
 **Path A** (ship code, KEEP Cloudflare Access): lowest blast, auth gate untouched, zero login risk.
 The approval is banked; do not ask again.
 
-### 3.2 The per-cell uid enactment (task #44)
+### 3.2 The per-cell uid enactment (task #44) - DONE
 
-J3 and J4 are landed and proven; **nothing is enacted yet**. What remains is J1 (route
-`CodexCellSupervisor` through the spawner, add the capability to compose, switch the Dockerfile
-ENTRYPOINT), J2 (per-cell-slot tmpfs with `uid=`/`mode=0700`, which is what replaces the REFUSED
-`CAP_CHOWN`), J5, then J7/J9/J10. `config_toml_protected` stays False and the provider keeps
-refusing a second concurrent cell until J9 passes.
+[2026] VJS-CC-VJS 7 granted `CAP_SETUID`/`CAP_SETGID`, and it is now ENACTED and proven. Compose
+runs the kernel as `user: "0:0"` with `cap_add: [SETUID, SETGID]`; `scripts/kernel-entrypoint.py`
+forks a minimal spawner that alone keeps the capabilities and drops the API to uid 10001 with an
+empty permitted set; per-cell tmpfs slots (J2) replace the refused `CAP_CHOWN`; the setuid bits are
+stripped from the image (J4); `config_toml_protected` is DERIVED from `per_cell_uid_mode_available()`
+so a deployment without the capability keeps the single-cell refusal.
+
+The two court acceptance gates are recorded tests, not hand-runs
+(`tests/integration/test_per_cell_uid_gates.py`, armed by `BOLTRIG_PER_CELL_IMAGE=<tag>`):
+- **J7**: a spawned cell cannot setuid back/sideways or exec a setuid binary.
+- **J9**: two live cells, hostile A cannot rewrite/append/read/unlink/rename/chmod/list/chown B's
+  config.toml; B verifies its own `auth.command` survived.
+
+Not part of this and still open: the `production_ready` flip (a fresh application under VJS-CC-VJS 4
+F9 - this judgment is expressly not that permission), and PR8 write/effects. A same-uid reaper was
+added because nothing can signal a cell otherwise (no `CAP_KILL` under `cap_drop: ALL`); the finding
+is in `docs/findings/2026-07-20-cell-lifecycle-under-per-cell-uids.md`.
 
 ### 3.2 G3: protect `config.toml` (task #40) - REFUSED, and now evidenced
 
