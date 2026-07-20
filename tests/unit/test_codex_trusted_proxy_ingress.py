@@ -8,9 +8,9 @@ Codex App Server.
 from __future__ import annotations
 
 import os
+import socket
 import sys
 from dataclasses import dataclass
-from pathlib import Path
 from typing import cast
 
 import pytest
@@ -26,10 +26,9 @@ from boltrig.fleet.domain.model_proxy_scope import (
 )
 from boltrig.fleet.application.model_proxy_grants import PhaseScopedModelProxyGrantBroker
 from boltrig.fleet.infrastructure.codex_trusted_proxy_ingress import (
-    CodexTrustedIngressError,
     build_ingress_bearer_issuer,
     capture_cell_identity,
-    select_ingress_socket_path,
+    select_ingress_socket_name,
 )
 from boltrig.fleet.infrastructure.codex_trusted_proxy_support import (
     GenerationHolder,
@@ -45,8 +44,13 @@ from boltrig.fleet.infrastructure.linux_peer_identity import (
     capture_linux_process,
     read_boot_id,
 )
+from boltrig.fleet.infrastructure.model_proxy_peer_attestation import (
+    LinuxModelProxyPeerAttestor,
+)
 from boltrig.fleet.infrastructure.model_proxy_peer_listener import (
     MAX_UNIX_SOCKET_PATH_BYTES,
+    PeerAttestationListenerError,
+    PeerAttestationUnixListener,
 )
 
 
@@ -93,23 +97,52 @@ def test_capture_cell_identity_uses_the_canonical_digest_not_the_raw_hash() -> N
 
 
 @pytest.mark.unit
-def test_select_ingress_socket_path_is_short_and_at_the_stack_root_base() -> None:
-    """FINDING #2: bind at the short stack-root base, never the deep cell_root."""
+def test_select_ingress_socket_name_is_abstract_unguessable_and_within_bound() -> None:
+    """FINDING #2: no filesystem presence to squat, and no predictable name.
 
-    stack_root = Path("/var/lib/boltrig/codex-cells")
-    path = select_ingress_socket_path(stack_root, "some-long-cell-id-abc123")
-    assert path.parent == stack_root
-    assert path.name.startswith("mp-") and path.suffix == ".sock"
-    assert len(os.fsencode(os.fspath(path))) <= MAX_UNIX_SOCKET_PATH_BYTES
-    # Deterministic in the cell id.
-    assert select_ingress_socket_path(stack_root, "some-long-cell-id-abc123") == path
-    assert select_ingress_socket_path(stack_root, "other-cell") != path
+    The old name was a path under the uid-10001 tmpfs derived from the cell id, so
+    a sibling cell could pre-create the exact file and be handed another cell's
+    bearer. Determinism was the vulnerability, which is why this asserts the
+    opposite of what the old test asserted.
+    """
+
+    name = select_ingress_socket_name()
+    assert name.startswith("@boltrig-mp-")
+    assert "/" not in name and "\x00" not in name  # survives TOML and execve argv
+    # The kernel bound applies to abstract names too, counted with the NUL.
+    assert len(os.fsencode("\0" + name[1:])) <= MAX_UNIX_SOCKET_PATH_BYTES
+    # Unguessable: a fresh name every time, so the bind race cannot be won by
+    # deriving the name from anything the other cell knows.
+    assert select_ingress_socket_name() != name
 
 
 @pytest.mark.unit
-def test_select_ingress_socket_path_rejects_a_relative_stack_root() -> None:
-    with pytest.raises(CodexTrustedIngressError):
-        select_ingress_socket_path(Path("relative/root"), "cell")
+def test_a_squatted_abstract_name_fails_closed_rather_than_being_replaced() -> None:
+    """An abstract name already held cannot be silently taken over.
+
+    A filesystem socket can be unlinked and re-bound by anyone who can write the
+    directory; an abstract one cannot. A second bind is EADDRINUSE, so the ingress
+    refuses to start instead of serving on a socket a squatter also holds.
+    """
+
+    name = select_ingress_socket_name()
+    squatter = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        squatter.bind("\0" + name[1:])
+        squatter.listen(1)
+        attestor = LinuxModelProxyPeerAttestor(ModelProxyProcessRegistry())
+        with pytest.raises(PeerAttestationListenerError):
+            PeerAttestationUnixListener.bind(name, attestor)
+    finally:
+        squatter.close()
+
+
+@pytest.mark.unit
+def test_the_listener_refuses_a_name_that_is_not_in_the_at_form() -> None:
+    attestor = LinuxModelProxyPeerAttestor(ModelProxyProcessRegistry())
+    for bad in ("", "@", "boltrig-mp-abc", "/tmp/attacker.sock"):
+        with pytest.raises(PeerAttestationListenerError):
+            PeerAttestationUnixListener.bind(bad, attestor)
 
 
 @dataclass

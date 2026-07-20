@@ -293,7 +293,7 @@ def test_config_points_the_cell_at_the_loopback_proxy(tmp_path: Path) -> None:
         codex_home=codex_home,
         helper_path=helper,
         helper_sha256="sha256:" + "a" * 64,
-        socket_path=tmp_path / "mp-deadbeef.sock",
+        socket_name="@boltrig-mp-0123456789abcdef0123456789abcdef",
         model_id=_MODEL_ID,
         policy_digest="sha256:" + "b" * 64,
         reasoning_effort=CodexReasoningEffort.HIGH,
@@ -308,7 +308,7 @@ def test_config_points_the_cell_at_the_loopback_proxy(tmp_path: Path) -> None:
         "--cell-id",
         "cell-001",
         "--socket",
-        (tmp_path / "mp-deadbeef.sock").as_posix(),
+        "@boltrig-mp-0123456789abcdef0123456789abcdef",
     ]
     assert document["sandbox_mode"] == "read-only"
 
@@ -321,14 +321,14 @@ async def test_write_cell_config_writes_no_executable_into_the_cell_root(
         provider = _provider(broker=broker, store=store, client=client)
         codex_home = tmp_path / "codex-home"
         codex_home.mkdir()
-        socket_path = tmp_path / "mp-deadbeef.sock"
+        socket_name = "@boltrig-mp-0123456789abcdef0123456789abcdef"
         provider._write_cell_config(
             cell_id="cell-002",
             cell_root=tmp_path,
             codex_home=codex_home,
             model_id=_MODEL_ID,
             proxy_port=44001,
-            socket_path=socket_path,
+            socket_name=socket_name,
         )
     # G2: nothing executable is written into the mutable cell root any more; the
     # helper is the one root-owned program on the read-only image mount.

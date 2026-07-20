@@ -23,7 +23,7 @@ from .codex_runtime_config_policy import (
     CodexRuntimeConfigError,
     validate_cell_id,
     validate_cell_paths,
-    validate_ingress_socket_path,
+    validate_ingress_socket_name,
     validate_digest,
     validate_model_id,
     validate_receipt_paths,
@@ -95,7 +95,7 @@ class CodexRuntimeConfigRequest:
     codex_home: Path
     helper_path: Path
     helper_sha256: str
-    socket_path: Path
+    socket_name: str
     model_id: str
     model_policy_digest: str
     reasoning_effort: CodexReasoningEffort
@@ -118,7 +118,7 @@ def _validate_request(request: CodexRuntimeConfigRequest) -> None:
     validate_cell_id(request.cell_id)
     validate_cell_paths(request.cell_root, request.codex_home, request.helper_path)
     validate_digest("model auth helper digest", request.helper_sha256)
-    validate_ingress_socket_path(request.socket_path)
+    validate_ingress_socket_name(request.socket_name)
     validate_model_id(request.model_id)
     validate_digest("model policy digest", request.model_policy_digest)
     if type(request.reasoning_effort) is not CodexReasoningEffort:
@@ -140,7 +140,7 @@ def _snapshot_request(
         codex_home=request.codex_home,
         helper_path=request.helper_path,
         helper_sha256=request.helper_sha256,
-        socket_path=request.socket_path,
+        socket_name=request.socket_name,
         model_id=request.model_id,
         model_policy_digest=request.model_policy_digest,
         reasoning_effort=request.reasoning_effort,
@@ -163,7 +163,7 @@ class CodexRuntimeConfigReceipt:
     model_policy_digest: str
     helper_path: str
     helper_sha256: str
-    socket_path: str
+    socket_name: str
     reasoning_effort: CodexReasoningEffort
     proxy_port: int
     skill_entries_digest: str
@@ -203,6 +203,10 @@ def _validate_receipt(receipt: CodexRuntimeConfigReceipt) -> None:
         raise CodexRuntimeConfigError("config byte count is invalid")
     validate_cell_id(receipt.cell_id)
     validate_receipt_paths(receipt.cell_root, receipt.codex_home, receipt.helper_path)
+    # The receipt's socket name was previously covered only by the re-render
+    # comparison. Check it in its own right: it names the endpoint the App Server's
+    # helper will connect to, so it is worth the same standing as the other paths.
+    validate_ingress_socket_name(receipt.socket_name)
     validate_model_id(receipt.model_id)
     validate_digest("model policy digest", receipt.model_policy_digest)
     if type(receipt.reasoning_effort) is not CodexReasoningEffort:
@@ -267,7 +271,7 @@ class ComposedCodexRuntimeConfig:
             reasoning_effort=self.receipt.reasoning_effort.value,
             cell_id=self.receipt.cell_id,
             helper_path=self.receipt.helper_path,
-            socket_path=self.receipt.socket_path,
+            socket_name=self.receipt.socket_name,
             proxy_port=self.receipt.proxy_port,
             provider_id=self.receipt.provider_id,
             skill_entries=skill_entries,
@@ -303,7 +307,7 @@ def compose_codex_runtime_config(
         reasoning_effort=snapshot.reasoning_effort.value,
         cell_id=snapshot.cell_id,
         helper_path=snapshot.helper_path.as_posix(),
-        socket_path=snapshot.socket_path.as_posix(),
+        socket_name=snapshot.socket_name,
         proxy_port=snapshot.proxy_port,
         features=CODEX_RUNTIME_DISABLED_FEATURES,
         skill_entries=entries,
@@ -321,7 +325,7 @@ def compose_codex_runtime_config(
         model_policy_digest=snapshot.model_policy_digest,
         helper_path=snapshot.helper_path.as_posix(),
         helper_sha256=snapshot.helper_sha256,
-        socket_path=snapshot.socket_path.as_posix(),
+        socket_name=snapshot.socket_name,
         reasoning_effort=snapshot.reasoning_effort,
         proxy_port=snapshot.proxy_port,
         skill_entries_digest=canonical_skill_entries_digest(entries),

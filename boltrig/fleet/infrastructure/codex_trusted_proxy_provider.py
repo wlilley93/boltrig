@@ -62,7 +62,7 @@ from boltrig.fleet.infrastructure.codex_trusted_proxy_ingress import (
     CodexTrustedIngress,
     build_ingress_bearer_issuer,
     capture_cell_identity,
-    select_ingress_socket_path,
+    select_ingress_socket_name,
 )
 from boltrig.fleet.infrastructure.codex_runtime_admission import (
     AdmittedCodexCell,
@@ -194,14 +194,14 @@ class TrustedProxyCodexPhaseCellProvider:
             layout = admission.layout
             # The socket path is derived from the (pre-start) cell id, so the helper
             # the App Server will exec can be materialized before start.
-            socket_path = select_ingress_socket_path(self._stack_root, layout.cell_id)
+            socket_name = select_ingress_socket_name()
             self._write_cell_config(
                 cell_id=layout.cell_id,
                 cell_root=layout.cell_root,
                 codex_home=layout.codex_home,
                 model_id=model_id,
                 proxy_port=proxy.port,
-                socket_path=socket_path,
+                socket_name=socket_name,
             )
             ingress = self._build_ingress()
             issuer = self._build_issuer(model_id, holder)
@@ -215,7 +215,7 @@ class TrustedProxyCodexPhaseCellProvider:
                 identity = capture_cell_identity(assignment, layout.cell_id, pid)
                 scope = identity.scope
                 await ingress.start(
-                    identity=identity, socket_path=socket_path, bearer_issuer=issuer
+                    identity=identity, socket_name=socket_name, bearer_issuer=issuer
                 )
 
             # The supervisor runs the registration against the just-spawned pid,
@@ -295,7 +295,7 @@ class TrustedProxyCodexPhaseCellProvider:
         codex_home: Path,
         model_id: str,
         proxy_port: int,
-        socket_path: Path,
+        socket_name: str,
     ) -> None:
         config_toml = render_trusted_config(
             cell_id=cell_id,
@@ -303,7 +303,7 @@ class TrustedProxyCodexPhaseCellProvider:
             codex_home=codex_home,
             helper_path=self._boundary.helper_path,
             helper_sha256=self._boundary.helper_sha256,
-            socket_path=socket_path,
+            socket_name=socket_name,
             model_id=model_id,
             policy_digest=model_policy_digest(model_id, self._reasoning_effort),
             reasoning_effort=self._reasoning_effort,

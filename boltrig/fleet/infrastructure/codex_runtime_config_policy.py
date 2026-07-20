@@ -12,6 +12,9 @@ from .skill_config import MAX_SKILL_CONFIG_BYTES, REVIEWED_SYSTEM_SKILLS_0_144_3
 _IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}\Z")
 _MODEL_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:/-]{0,127}\Z")
 _SHA256 = re.compile(r"sha256:[0-9a-f]{64}\Z")
+# The abstract ingress name, in the "@name" argv convention. Printable ASCII by
+# construction, so it survives TOML rendering and execve unchanged.
+_ABSTRACT_SOCKET = re.compile(r"@boltrig-mp-[0-9a-f]{32}\Z")
 
 
 class CodexRuntimeConfigError(ValueError):
@@ -81,16 +84,25 @@ def validate_cell_paths(
     return root, home, auth_helper
 
 
-def validate_ingress_socket_path(value: object) -> Path:
-    """Validate the ingress socket path the shared helper receives on argv.
+def validate_ingress_socket_name(value: object) -> str:
+    """Validate the ABSTRACT ingress socket name the shared helper gets on argv.
 
-    The socket is named, not secret. Pointing it elsewhere yields no cross-cell
-    bearer, because the attestor matches the connecting peer's OWN ancestor chain
-    against the shared registry snapshot, so a cell that connects to a sibling's
-    socket is still issued only its own scope.
+    This used to accept a filesystem path, which was the defect: the stack root is
+    a tmpfs owned by the same uid the cells run as, and the name was derived from
+    the cell id, so a sibling could pre-create the exact path and be handed another
+    cell's bearer. The name is now an abstract one carried in the ``@name`` argv
+    convention, with a random token.
+
+    The shape is pinned rather than merely checked for a leading ``@``, so a
+    rewritten config naming ``@something-else``, or falling back to a filesystem
+    path, fails closed here instead of being bound. The token is not a secret: it
+    exists to close the bind race, since abstract names live in the network
+    namespace the cells share.
     """
 
-    return _path("ingress socket", value)
+    if type(value) is not str or _ABSTRACT_SOCKET.fullmatch(value) is None:
+        raise CodexRuntimeConfigError("ingress socket must be an abstract @boltrig-mp-<hex> name")
+    return value
 
 
 def validate_receipt_paths(

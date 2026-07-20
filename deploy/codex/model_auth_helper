@@ -25,9 +25,18 @@ while [ "$#" -gt 0 ]; do
 done
 [ -n "$cell" ] || { printf 'boltrig model-auth: missing --cell-id\n' >&2; exit 2; }
 [ -n "$socket" ] || { printf 'boltrig model-auth: missing --socket\n' >&2; exit 2; }
+# The ingress is an ABSTRACT socket, so a sibling cell cannot squat its name on
+# the shared tmpfs. An abstract name begins with a NUL, which cannot survive
+# execve argv, so it travels as "@name" (the ss/socat/systemd convention) and is
+# translated below. A value that is not in that form is refused rather than
+# treated as a filesystem path, which would silently reopen the squat.
+case "$socket" in
+  @?*) ;;
+  *) printf 'boltrig model-auth: --socket must be an abstract @name\n' >&2; exit 2 ;;
+esac
 exec /usr/local/bin/python3 -c 'import socket, sys
 s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-s.connect(sys.argv[1])
+s.connect("\0" + sys.argv[1][1:])
 buf = bytearray()
 while True:
     b = s.recv(4096)

@@ -16,15 +16,19 @@ Two findings this module encodes (both would fail silently-until-live otherwise)
   the SAME capture attestation uses (``canonical_cgroup_digest``) - NOT from
   ``build_cell_scope``/``_read_proc_identity``, which hashes the raw cgroup bytes.
   A raw-vs-canonical digest mismatch would make every ancestry attestation fail.
-- FINDING #2: the AF_UNIX socket path must fit in 108 bytes, but the per-cell
-  ``cell_root`` under the stack root can exceed it, so the socket binds at the
-  SHORT stack-root base (``mp-<token>.sock``), never inside ``cell_root``.
+- FINDING #2: the ingress must not bind a FILESYSTEM socket at all. The stack root
+  is a tmpfs owned by the same uid the cells run as, and the old name was derived
+  from the cell id, so a sibling cell could pre-create a predictable path and be
+  handed another cell's bearer. The ingress binds an ABSTRACT name with a random
+  token instead (``select_ingress_socket_name``): no inode to squat, and a name
+  already held fails EADDRINUSE rather than losing a race. The 108-byte AF_UNIX
+  bound still applies and is still checked.
 """
 
 from __future__ import annotations
 
 import asyncio
-import hashlib
+import secrets
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -120,19 +124,30 @@ def capture_cell_identity(
     return CapturedCellIdentity(scope, captured.uid, captured.gid)
 
 
-def select_ingress_socket_path(stack_root: Path, cell_id: str) -> Path:
-    """A short AF_UNIX socket path at the stack-root base, not inside cell_root.
+def select_ingress_socket_name() -> str:
+    """A fresh unguessable ABSTRACT socket name, in the ``@name`` argv convention.
 
-    The per-cell ``cell_root`` can exceed the 108-byte AF_UNIX name limit, so the
-    socket binds directly under the (short) stack root with a hashed token derived
-    from the cell id (FINDING #2). ``PeerAttestationUnixListener.bind`` re-checks the
-    length; this keeps it comfortably within bound.
+    The ingress used to bind a filesystem path under the stack root, derived by
+    hashing the cell id. Both halves of that were wrong. The stack root is a tmpfs
+    owned by uid 10001, which is the SAME uid the cells run as, so a hostile cell
+    could pre-create or replace a sibling's socket file; and because the name was
+    derived from the cell id it was entirely predictable, so the squat needed no
+    guessing at all. The bearer for that sibling would then be delivered to the
+    squatter.
+
+    An abstract name has no filesystem presence, so there is nothing to create,
+    replace or unlink, and a second ``bind`` of a name already held fails
+    ``EADDRINUSE`` rather than quietly winning. That alone is not enough: abstract
+    names live in the network namespace, which the cells share with the kernel, so
+    a predictable name could still be squatted by binding it FIRST. Hence the
+    random token - the name is not a secret, it exists to close the bind race.
+
+    Returned in the ``@name`` form because the name must travel to the cell's auth
+    helper through ``execve`` argv, which cannot carry the literal NUL an abstract
+    name begins with. The listener and the helper both translate it.
     """
 
-    if not isinstance(stack_root, Path) or not stack_root.is_absolute():
-        raise CodexTrustedIngressError("stack_root must be an absolute Path")
-    token = hashlib.sha256(cell_id.encode("utf-8")).hexdigest()[:_SOCKET_TOKEN_BYTES]
-    return stack_root / f"mp-{token}.sock"
+    return f"@boltrig-mp-{secrets.token_hex(_SOCKET_TOKEN_BYTES)}"
 
 
 def build_ingress_bearer_issuer(
@@ -225,7 +240,7 @@ class CodexTrustedIngress:
         self,
         *,
         identity: CapturedCellIdentity,
-        socket_path: Path,
+        socket_name: str,
         bearer_issuer: BearerIssuer,
     ) -> None:
         """Assert the boundary, register the App Server, bind, and start serving.
@@ -261,7 +276,7 @@ class CodexTrustedIngress:
             identity.scope, expected_uid=identity.uid, expected_gid=identity.gid
         )
         self._registration = registration.scope
-        listener = PeerAttestationUnixListener.bind(socket_path, self._attestor)
+        listener = PeerAttestationUnixListener.bind(socket_name, self._attestor)
         self._listener = listener
         self._serve_task = asyncio.create_task(
             listener.serve(bearer_issuer), name=f"codex-trusted-ingress-{identity.scope.cell_id}"
@@ -288,5 +303,5 @@ __all__ = [
     "CodexTrustedIngressError",
     "build_ingress_bearer_issuer",
     "capture_cell_identity",
-    "select_ingress_socket_path",
+    "select_ingress_socket_name",
 ]

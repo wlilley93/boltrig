@@ -33,7 +33,7 @@ from boltrig.fleet.infrastructure.codex_cell_boundary import (
 from boltrig.fleet.infrastructure.codex_trusted_proxy_ingress import (
     CodexTrustedIngress,
     capture_cell_identity,
-    select_ingress_socket_path,
+    select_ingress_socket_name,
 )
 from boltrig.fleet.infrastructure.model_proxy_peer_attestation import (
     LinuxModelProxyPeerAttestor,
@@ -45,7 +45,9 @@ from boltrig.fleet.infrastructure.model_proxy_peer_registry import (
 _HELPER_SCRIPT = (
     "import socket, sys\n"
     "s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)\n"
-    "s.connect(sys.argv[1])\n"
+    # Mirrors deploy/codex/model_auth_helper: translate the @name argv convention
+    # back into the leading NUL an abstract socket name actually needs.
+    '''s.connect("\\0" + sys.argv[1][1:])\n'''
     "buf = bytearray()\n"
     "while True:\n"
     "    b = s.recv(4096)\n"
@@ -94,7 +96,7 @@ async def test_ingress_registers_binds_serves_and_delivers_to_the_helper() -> No
 
     identity = capture_cell_identity(_assignment(), "cell-3a", os.getpid())
 
-    socket_path = select_ingress_socket_path(stack_root, "cell-3a")
+    socket_name = select_ingress_socket_name()
 
     async def bearer_issuer(attested: ModelProxyCellScope) -> bytes:
         # Handed the attested scope; the registered cell is this process.
@@ -104,10 +106,10 @@ async def test_ingress_registers_binds_serves_and_delivers_to_the_helper() -> No
     child: subprocess.Popen[bytes] | None = None
     try:
         await ingress.start(
-            identity=identity, socket_path=socket_path, bearer_issuer=bearer_issuer
+            identity=identity, socket_name=socket_name, bearer_issuer=bearer_issuer
         )
         child = subprocess.Popen(
-            [sys.executable, "-c", _HELPER_SCRIPT, os.fspath(socket_path)],
+            [sys.executable, "-c", _HELPER_SCRIPT, socket_name],
             stdout=subprocess.PIPE,
         )
         stdout, _ = await asyncio.wait_for(

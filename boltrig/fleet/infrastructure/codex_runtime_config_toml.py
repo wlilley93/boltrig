@@ -157,7 +157,7 @@ def _skill_lines(entries: tuple[tuple[str, bool], ...]) -> list[str]:
 
 
 def _provider_lines(
-    *, cell_id: str, helper_path: str, socket_path: str, proxy_port: int
+    *, cell_id: str, helper_path: str, socket_name: str, proxy_port: int
 ) -> list[str]:
     provider = f"model_providers.{CODEX_MODEL_PROVIDER_ID}"
     return [
@@ -177,7 +177,7 @@ def _provider_lines(
         # identical for all cells or it is writable by one of them.
         f"command = {_string(helper_path)}",
         f"args = [{_string('--cell-id')}, {_string(cell_id)}, "
-        f"{_string('--socket')}, {_string(socket_path)}]",
+        f"{_string('--socket')}, {_string(socket_name)}]",
         "timeout_ms = 1000",
         "refresh_interval_ms = 30000",
     ]
@@ -189,7 +189,7 @@ def _render_codex_runtime_config(
     reasoning_effort: str,
     cell_id: str,
     helper_path: str,
-    socket_path: str,
+    socket_name: str,
     proxy_port: int,
     features: Mapping[str, bool],
     skill_entries: tuple[tuple[str, bool], ...],
@@ -206,7 +206,7 @@ def _render_codex_runtime_config(
         _provider_lines(
             cell_id=cell_id,
             helper_path=helper_path,
-            socket_path=socket_path,
+            socket_name=socket_name,
             proxy_port=proxy_port,
         )
     )
@@ -251,7 +251,7 @@ def runtime_config_matches_receipt(
     reasoning_effort: str,
     cell_id: str,
     helper_path: str,
-    socket_path: str,
+    socket_name: str,
     proxy_port: int,
     provider_id: str,
     skill_entries: tuple[tuple[str, bool], ...],
@@ -271,7 +271,7 @@ def runtime_config_matches_receipt(
         reasoning_effort=reasoning_effort,
         cell_id=cell_id,
         helper_path=helper_path,
-        socket_path=socket_path,
+        socket_name=socket_name,
         proxy_port=proxy_port,
         features=CODEX_RUNTIME_DISABLED_FEATURES,
         skill_entries=parsed_entries,
