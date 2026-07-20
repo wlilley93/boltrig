@@ -229,6 +229,45 @@ def receive_spawn_result(sock: socket.socket) -> tuple[int, tuple[int, int, int]
 ALLOWED_SIGNALS = (signal.SIGTERM, signal.SIGKILL)
 
 
+def _reap_exited(live: dict[int, int]) -> None:
+    """Clear any exited cells, so the spawner does not accumulate zombies."""
+
+    while True:
+        try:
+            pid, _status = os.waitpid(-1, os.WNOHANG)
+        except ChildProcessError:
+            return  # no children at all
+        if pid == 0:
+            return  # children exist, none have exited
+        live.pop(pid, None)
+
+
+def _is_signal_request(payload: bytes) -> bool:
+    try:
+        raw = json.loads(payload.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return False
+    return isinstance(raw, dict) and raw.get("verb") == "signal"
+
+
+def _serve_signal(sock: socket.socket, payload: bytes, live: dict[int, int]) -> None:
+    """Signal a pid THIS spawner started, at the uid it started it with.
+
+    The API names a pid and a signal. It does NOT name a uid: the spawner looks
+    that up from its own record of what it spawned. Letting the caller choose the
+    uid would turn a narrow supervisor verb into a general kill primitive over
+    every uid in the cell band.
+    """
+
+    raw = json.loads(payload.decode("utf-8"))
+    pid, number = raw.get("pid"), raw.get("signal")
+    uid = live.get(pid) if type(pid) is int else None
+    if uid is None or type(number) is not int:
+        raise CellSpawnerError("signal request names a pid this spawner did not start")
+    reap_cell(pid, uid, number)
+    sock.sendmsg([json.dumps({"signalled": pid}).encode("utf-8")])
+
+
 def reap_cell(pid: int, uid: int, number: int) -> None:
     """Signal a cell by forking a reaper that shares its uid.
 
@@ -281,7 +320,17 @@ def serve_spawner(sock: socket.socket, policy: SpawnPolicy) -> None:
     compromised, which converts a validation success into an outage.
     """
 
+    # Only pids this spawner actually started may ever be signalled, and only at
+    # the uid it started them with. The API names a pid; it does not get to say
+    # whose uid to become, which would be a general kill primitive.
+    live: dict[int, int] = {}
     while True:
+        # Reap before blocking. The spawner is the cells' parent, so an exited
+        # cell stays a ZOMBIE until someone waits for it, and a long-lived spawner
+        # that never did would leak a pid-table entry per cell until the container
+        # could fork no more. Opportunistic reaping here is enough because a cell
+        # can only exit after a request created it, and every request passes here.
+        _reap_exited(live)
         try:
             payload = sock.recv(_MAX_REQUEST_BYTES)
         except OSError:
@@ -289,8 +338,12 @@ def serve_spawner(sock: socket.socket, policy: SpawnPolicy) -> None:
         if not payload:
             return  # the API closed; nothing left to serve
         try:
+            if _is_signal_request(payload):
+                _serve_signal(sock, payload, live)
+                continue
             request = parse_spawn_request(payload, policy)
             pid, stdio = spawn_cell(request, policy)
+            live[pid] = request.uid
         except (CellSpawnerError, OSError):
             # Fail closed and stay up. The API sees a result with no descriptors
             # and raises; it never mistakes a refusal for a running cell.
