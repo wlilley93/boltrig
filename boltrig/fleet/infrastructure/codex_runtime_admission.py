@@ -149,6 +149,11 @@ class CodexPhaseAdmission:
     skill_plan: SkillAttestationPlan
     developer_instructions: str
     provisioned_policy_digest: str
+    # True when the cell tree lives in a per-cell-uid slot provisioned cell-uid-side
+    # by the spawner (VJS-CC-VJS 7 J2). Lets validate_admission relax the exact
+    # workspace-path token (the slot is dynamic) to a slot-shape check, while every
+    # other admission binding still holds. Defaults False: in-process is unchanged.
+    slot_provisioned: bool = False
 
     def __post_init__(self) -> None:
         _validate_admission_types(self)
@@ -222,7 +227,9 @@ class AdmittedCodexCell:
 
 
 class CodexPhaseAdmissionSource(Protocol):
-    async def admit(self, assignment: PhaseAssignmentRef) -> CodexPhaseAdmission: ...
+    async def admit(
+        self, assignment: PhaseAssignmentRef, slot: "CellSlot | None" = None
+    ) -> CodexPhaseAdmission: ...
 
 
 class CodexPhaseCellProvider(Protocol):

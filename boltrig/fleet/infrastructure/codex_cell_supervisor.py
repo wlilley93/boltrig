@@ -12,6 +12,7 @@ from typing import cast
 from . import codex_protocol as wire
 from .codex_app_server import CodexAppServerClient
 from .cell_lane import CellLane
+from .cell_slots import CellSlot
 from .codex_runtime_config_argv import validate_app_server_arguments
 from .codex_cell_policy import (
     CODEX_CLI_SHA256,
@@ -21,6 +22,7 @@ from .codex_cell_policy import (
     CodexCellPolicyError,
     CodexUpstreamAuth,
     PinnedCodexBinary,
+    attest_empty_workspace_projection,
     attest_workspace_projection,
     normalized_absolute_path,
     sanitized_environment,
@@ -224,15 +226,22 @@ class CodexCellSupervisor:
         layout: CodexCellLayout,
         *,
         arguments: tuple[str, ...],
+        slot: CellSlot | None = None,
         on_spawned: OnCellSpawned | None = None,
     ) -> InitializedCodexCell:
-        admitted = validate_cell_layout(layout)
+        # Under per-cell uids the cell tree is owned by the cell uid (2000N) in its
+        # slot, which the API cannot traverse; those ownership checks were performed
+        # cell-uid-side by the spawner at provision time, so skip only that leg here
+        # (every path-shape/containment/overlap check still runs). In-process keeps
+        # the full local-ownership validation.
+        per_cell = self._cell_lane is not None
+        admitted = validate_cell_layout(layout, require_local_ownership=not per_cell)
         # [2026] VJS-CC-VJS 6 H5: argv is REQUIRED, never defaulted. A caller who
         # forgets to pin gets a TypeError at the call site rather than a silently
         # unpinned App Server, and an argv minted for another cell is refused here
         # rather than discovered when the helper fetches the wrong bearer.
         pinned = validate_app_server_arguments(arguments, cell_id=admitted.cell_id)
-        await self._attest_workspace(admitted)
+        await self._attest_workspace(admitted, per_cell=per_cell)
         await self._claim(admitted.phase_id, admitted.cell_id)
         process: ManagedCodexProcess | None = None
         transport: CodexStdioTransport | None = None
@@ -241,7 +250,7 @@ class CodexCellSupervisor:
             if self._binary_path.is_relative_to(admitted.cell_root):
                 raise CodexCellPolicyError("Codex binary must be outside the mutable cell root")
             binary = await self._verify_binary()
-            process = await self._spawn(binary, admitted, pinned)
+            process = await self._spawn(binary, admitted, pinned, slot)
             if on_spawned is not None:
                 # Earliest instant the pid exists; every failure below reaps it.
                 await asyncio.wait_for(on_spawned(process.pid), self._startup_timeout)
@@ -289,7 +298,14 @@ class CodexCellSupervisor:
             task.add_done_callback(_close_late_binary)
             raise
 
-    async def _attest_workspace(self, layout: CodexCellLayout) -> None:
+    async def _attest_workspace(self, layout: CodexCellLayout, *, per_cell: bool) -> None:
+        # Per-cell: the workspace lives in a 0700 cell-uid slot the API cannot read,
+        # and the read-only lane's workspace is always EMPTY, so re-attest against the
+        # known empty-projection constant (pure, no filesystem) rather than a capture
+        # the API cannot perform. In-process re-runs the real capture-based attest.
+        if per_cell:
+            attest_empty_workspace_projection(layout.workspace_projection)
+            return
         try:
             await asyncio.wait_for(
                 asyncio.to_thread(attest_workspace_projection, layout.workspace_projection),
@@ -298,16 +314,43 @@ class CodexCellSupervisor:
         except TimeoutError:
             raise CodexCellStartupError("Codex workspace re-attestation timed out") from None
 
+    def acquire_slot(self) -> CellSlot | None:
+        """Reserve a per-cell slot when per-cell uids are in force, else None."""
+
+        return self._cell_lane.acquire_slot() if self._cell_lane is not None else None
+
+    def release_slot(self, slot: CellSlot | None) -> None:
+        """Return a slot to the pool (no-op in-process, or when nothing was taken)."""
+
+        if self._cell_lane is not None and slot is not None:
+            self._cell_lane.release_slot(slot)
+
+    async def provision_cell_tree(
+        self,
+        slot: CellSlot | None,
+        *,
+        dirs: list[dict[str, object]],
+        files: list[dict[str, object]],
+    ) -> None:
+        """Have the spawner build the cell's tree/files as the cell uid (per-cell)."""
+
+        if self._cell_lane is not None and slot is not None:
+            await self._cell_lane.provision(slot, dirs=dirs, files=files)
+
     async def _spawn(
         self,
         binary: PinnedCodexBinary,
         layout: CodexCellLayout,
         arguments: tuple[str, ...],
+        slot: CellSlot | None = None,
     ) -> ManagedCodexProcess:
         environment = sanitized_environment(layout, self._auth)
         try:
             if self._cell_lane is not None:  # J1: per-cell uid, via the spawner
+                if slot is None:
+                    raise CodexCellPolicyError("per-cell spawn requires an allocated slot")
                 return await self._cell_lane.spawn(
+                    slot,
                     binary=binary, arguments=arguments,
                     cwd=layout.workspace.as_posix(), environment=environment,
                 )

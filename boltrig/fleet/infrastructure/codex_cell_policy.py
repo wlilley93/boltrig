@@ -239,6 +239,34 @@ def attest_workspace_projection(
         raise CodexCellPolicyError("sanitized workspace does not match its projection")
 
 
+# The read-only reasoning lane's workspace is always EMPTY, so its projection is a
+# constant: the sha256 of nothing, zero files, zero bytes. Defined once (and drift-
+# tested against a real capture_directory of an empty dir) so the per-cell path can
+# assert the projection without the filesystem read the capless API cannot perform
+# on a 0700 cell-uid slot.
+EMPTY_WORKSPACE_DIGEST = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+EMPTY_WORKSPACE_FILE_COUNT = 0
+EMPTY_WORKSPACE_TOTAL_BYTES = 0
+
+
+def attest_empty_workspace_projection(projection: object) -> None:
+    """Assert a projection is the known EMPTY read-only workspace, without any fs read.
+
+    Under per-cell uids the workspace is a 0700 cell-uid dir the API cannot capture,
+    but the read-only lane never populates it, so its projection must be exactly the
+    empty constant. This pure check preserves the guarantee the capture-based
+    re-attestation gives on the in-process path: that the workspace is what the
+    admission recorded (here, provably empty).
+    """
+
+    if type(projection) is not SanitizedWorkspaceProjection:
+        raise CodexCellPolicyError("workspace projection has an invalid type")
+    actual = (projection.workspace_digest, projection.file_count, projection.total_bytes)
+    expected = (EMPTY_WORKSPACE_DIGEST, EMPTY_WORKSPACE_FILE_COUNT, EMPTY_WORKSPACE_TOTAL_BYTES)
+    if actual != expected:
+        raise CodexCellPolicyError("per-cell workspace projection is not the empty constant")
+
+
 def _file_identity(details: os.stat_result) -> tuple[int, int, int, int, int]:
     return (
         details.st_dev,
@@ -249,7 +277,9 @@ def _file_identity(details: os.stat_result) -> tuple[int, int, int, int, int]:
     )
 
 
-def validate_cell_layout(layout: object) -> CodexCellLayout:
+def validate_cell_layout(
+    layout: object, *, require_local_ownership: bool = True
+) -> CodexCellLayout:
     if type(layout) is not CodexCellLayout:
         raise CodexCellPolicyError("layout must be a prevalidated CodexCellLayout")
     phase_id = _identifier("phase id", layout.phase_id)
@@ -285,8 +315,15 @@ def validate_cell_layout(layout: object) -> CodexCellLayout:
         for right in isolated[index + 1 :]
     ):
         raise CodexCellPolicyError("workspace, HOME, and CODEX_HOME must not overlap")
-    for label, path in paths.items():
-        _require_owned_directory(label, path, 0o500 if label == "workspace" else 0o700)
+    # The ownership/mode leg. On the per-cell path the tree is owned by the cell uid
+    # (2000N) in a 0700 slot the API cannot traverse, so these exact lstat/resolve/
+    # uid/mode checks are performed cell-uid-side by the spawner's provisioning child
+    # (cell_spawner._verify_owned) - the only euid that can see the tree. Skipping
+    # here therefore relocates the checks, it does not drop them. In-process keeps
+    # them local. Every path-shape/containment/overlap check above always runs.
+    if require_local_ownership:
+        for label, path in paths.items():
+            _require_owned_directory(label, path, 0o500 if label == "workspace" else 0o700)
     return CodexCellLayout(
         phase_id=phase_id,
         cell_id=cell_id,

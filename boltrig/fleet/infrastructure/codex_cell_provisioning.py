@@ -27,8 +27,12 @@ from boltrig.fleet.domain.profile_policy_values import NativeSubagentLimits
 from boltrig.fleet.domain.skill_attestation import SkillAttestationPlan
 
 from .bounded_filesystem import capture_directory
+from .cell_slots import CellSlot
 from .codex_cell_policy import (
     CODEX_WORKSPACE_LIMITS,
+    EMPTY_WORKSPACE_DIGEST,
+    EMPTY_WORKSPACE_FILE_COUNT,
+    EMPTY_WORKSPACE_TOTAL_BYTES,
     CodexCellLayout,
     normalized_absolute_path,
     validate_cell_layout,
@@ -58,12 +62,18 @@ class ProvisioningCodexPhaseAdmissionSource:
             raise ValueError("codex model id must be a non-empty string")
         self._model_id = model_id
 
-    async def admit(self, assignment: PhaseAssignmentRef) -> CodexPhaseAdmission:
+    async def admit(
+        self, assignment: PhaseAssignmentRef, slot: CellSlot | None = None
+    ) -> CodexPhaseAdmission:
         if type(assignment) is not PhaseAssignmentRef:
             raise TypeError("assignment must be an exact PhaseAssignmentRef")
-        return await asyncio.to_thread(self._provision, assignment)
+        return await asyncio.to_thread(self._provision, assignment, slot)
 
-    def _provision(self, assignment: PhaseAssignmentRef) -> CodexPhaseAdmission:
+    def _provision(
+        self, assignment: PhaseAssignmentRef, slot: CellSlot | None = None
+    ) -> CodexPhaseAdmission:
+        if slot is not None:
+            return self._provision_per_cell(assignment, slot)
         cell_id = read_only_cell_id(assignment)
         cell_root = read_only_cell_root(self._stack_root, assignment)
         workspace = cell_root / "workspace"
@@ -124,6 +134,86 @@ class ProvisioningCodexPhaseAdmissionSource:
             READ_ONLY_INSTRUCTIONS,
             compilation.policy.digest(),
         )
+
+
+    def _provision_per_cell(
+        self, assignment: PhaseAssignmentRef, slot: CellSlot
+    ) -> CodexPhaseAdmission:
+        """Assemble a slot-rooted admission WITHOUT touching the filesystem.
+
+        Under per-cell uids the tree lives in the cell's own 0700 slot, owned by the
+        cell uid (2000N), which this API process (uid 10001, no caps) can neither
+        write nor traverse. So the source does no ``mkdir``/``capture`` here: it
+        builds the layout with slot paths and the constant EMPTY-workspace
+        projection, and defers the actual creation to the spawner (driven by the
+        provider via ``provision_cell_tree``). ``validate_cell_layout`` runs every
+        path-shape check but skips the local-ownership leg, which the spawner's child
+        performs cell-uid-side.
+        """
+
+        cell_id = read_only_cell_id(assignment)
+        cell_root = slot.root
+        workspace = cell_root / "workspace"
+        home = cell_root / "home"
+        codex_home = cell_root / "codex-home"
+        source = cell_root / "source"
+        projection = SanitizedWorkspaceProjection(
+            source.as_posix(),
+            workspace.as_posix(),
+            EMPTY_WORKSPACE_DIGEST,
+            EMPTY_WORKSPACE_FILE_COUNT,
+            EMPTY_WORKSPACE_TOTAL_BYTES,
+        )
+        profile = read_only_static_profile(self._model_id)
+        compilation = compile_birth_policy(
+            BirthPolicyRequest(
+                profile.pin,
+                selected_skills=(),
+                requested_native_subagents=NativeSubagentLimits(),
+            ),
+            profile,
+            (),
+        )
+        layout = validate_cell_layout(
+            CodexCellLayout(
+                assignment.phase.phase_id,
+                cell_id,
+                self._stack_root,
+                cell_root,
+                projection,
+                home,
+                codex_home,
+            ),
+            require_local_ownership=False,
+        )
+        return CodexPhaseAdmission(
+            assignment,
+            layout,
+            CodexWorkspaceProjectionBinding(assignment, projection),
+            compilation,
+            (),
+            SkillAttestationPlan(workspace.as_posix(), (), generation=1),
+            READ_ONLY_INSTRUCTIONS,
+            compilation.policy.digest(),
+            slot_provisioned=True,
+        )
+
+    def cell_tree_manifest(
+        self, layout: CodexCellLayout
+    ) -> list[dict[str, object]]:
+        """The directory manifest the spawner creates for a per-cell layout.
+
+        home/codex-home/source at 0700, workspace at 0500 (empty, read-only). The
+        provider hands this to ``provision_cell_tree``; the config.toml file is added
+        separately by ``_write_cell_config`` once it is rendered.
+        """
+
+        return [
+            {"path": layout.home.as_posix(), "mode": _CELL_DIR_MODE},
+            {"path": layout.codex_home.as_posix(), "mode": _CELL_DIR_MODE},
+            {"path": (layout.cell_root / "source").as_posix(), "mode": _CELL_DIR_MODE},
+            {"path": layout.workspace.as_posix(), "mode": _WORKSPACE_MODE},
+        ]
 
 
 __all__ = ["ProvisioningCodexPhaseAdmissionSource"]

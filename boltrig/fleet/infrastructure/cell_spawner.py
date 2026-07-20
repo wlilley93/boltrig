@@ -38,6 +38,7 @@ import logging
 import os
 import signal
 import socket
+import stat
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -150,6 +151,175 @@ def parse_spawn_request(payload: bytes, policy: SpawnPolicy) -> SpawnRequest:
     return SpawnRequest(uid, gid, tuple(argv), cwd, dict(env))
 
 
+# --- the provision verb ([2026] VJS-CC-VJS 7 J2) ---------------------------
+# The cell tree (home, codex-home, workspace, source) and its config.toml must be
+# created AS the cell uid, inside the cell's OWN slot, because only a child that
+# has setuid'd to that uid can write the kernel-owned 0700 slot: the API cannot
+# chown (CAP_CHOWN was refused) and cannot setuid (empty permitted set). Same
+# "validate, do not obey" posture as parse_spawn_request - every path is pinned to
+# THIS uid's own slot, so a compromised API cannot make the privileged child write
+# into a sibling's slot, which would be the exact VJS-CC-VJS 5 cross-tenant leak.
+
+# Must match cell_slots.FIRST_SLOT_UID; a test holds them in step. Kept local
+# rather than imported because cell_slots imports THIS module.
+_FIRST_SLOT_UID = 20001
+_PROVISION_DIR_MODES = frozenset({0o700, 0o500})
+_PROVISION_FILE_MODES = frozenset({0o600, 0o400})
+_MAX_PROVISION_DIRS = 8
+_MAX_PROVISION_FILES = 4
+
+
+@dataclass(frozen=True, slots=True)
+class ProvisionEntry:
+    """One directory or file the spawner will create as the cell uid."""
+
+    path: str
+    mode: int
+    content: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ProvisionRequest:
+    """One validated request to build a cell's own tree under its own uid."""
+
+    uid: int
+    gid: int
+    dirs: tuple[ProvisionEntry, ...]
+    files: tuple[ProvisionEntry, ...]
+
+
+def _require_slot_path(path: object, slot_prefix: str, label: str) -> None:
+    _require(type(path) is str and bool(path), f"{label} path must be a non-empty string")
+    assert isinstance(path, str)
+    resolved = Path(path)
+    _require(resolved.is_absolute(), f"{label} path must be absolute")
+    # Lexical checks, as in parse_spawn_request: never resolve (a cell uid can plant
+    # a symlink inside its own tree), demand the path already be normalized.
+    _require(".." not in resolved.parts, f"{label} path must not traverse upwards")
+    _require(os.path.normpath(path) == path, f"{label} path must be a normalized path")
+    # THE anti-VJS-CC-VJS-5 invariant: the path must live inside the slot THIS uid
+    # owns, never a sibling's. slot_prefix already ends in "/".
+    _require(path.startswith(slot_prefix), f"{label} path must live inside this cell's own slot")
+
+
+def parse_provision_request(payload: bytes, policy: SpawnPolicy) -> ProvisionRequest:
+    """Validate a provision request against policy the SPAWNER holds. Fail closed."""
+
+    _require(type(payload) is bytes, "provision request must be bytes")
+    _require(0 < len(payload) <= _MAX_REQUEST_BYTES, "provision request size is not sane")
+    try:
+        raw = json.loads(payload.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise CellSpawnerError("provision request is not parseable JSON") from error
+    _require(isinstance(raw, dict), "provision request must be an object")
+
+    uid, gid = raw.get("uid"), raw.get("gid")
+    _require(type(uid) is int and type(gid) is int, "provision uid and gid must be ints")
+    _require(MIN_CELL_UID <= uid <= MAX_CELL_UID, "provision uid is outside the cell band")
+    _require(MIN_CELL_UID <= gid <= MAX_CELL_UID, "provision gid is outside the cell band")
+    slot_index = uid - _FIRST_SLOT_UID
+    _require(slot_index >= 0, "provision uid is below the first slot uid")
+    # The one slot this uid owns; bind every path to it.
+    slot_prefix = (policy.stack_root / f"slot-{slot_index}").as_posix().rstrip("/") + "/"
+
+    raw_dirs = raw.get("dirs", [])
+    raw_files = raw.get("files", [])
+    _require(
+        isinstance(raw_dirs, list) and len(raw_dirs) <= _MAX_PROVISION_DIRS,
+        "provision dirs must be a bounded list",
+    )
+    _require(
+        isinstance(raw_files, list) and len(raw_files) <= _MAX_PROVISION_FILES,
+        "provision files must be a bounded list",
+    )
+
+    dirs: list[ProvisionEntry] = []
+    for entry in raw_dirs:
+        _require(isinstance(entry, dict), "provision dir must be an object")
+        path, mode = entry.get("path"), entry.get("mode")
+        _require_slot_path(path, slot_prefix, "provision dir")
+        _require(type(mode) is int and mode in _PROVISION_DIR_MODES, "provision dir mode not allowed")
+        dirs.append(ProvisionEntry(path=path, mode=mode))
+
+    files: list[ProvisionEntry] = []
+    for entry in raw_files:
+        _require(isinstance(entry, dict), "provision file must be an object")
+        path, mode, content = entry.get("path"), entry.get("mode"), entry.get("content")
+        _require_slot_path(path, slot_prefix, "provision file")
+        _require(type(mode) is int and mode in _PROVISION_FILE_MODES, "provision file mode not allowed")
+        _require(type(content) is str, "provision file content must be a string")
+        files.append(ProvisionEntry(path=path, mode=mode, content=content))
+
+    return ProvisionRequest(uid=uid, gid=gid, dirs=tuple(dirs), files=tuple(files))
+
+
+def _verify_owned(path: str, expected_mode: int, expected_uid: int) -> None:
+    """The ownership/mode leg of validate_cell_layout, run by the cell uid itself.
+
+    The API cannot perform these checks on a 0700 cell-uid tree it cannot traverse,
+    so they are relocated here, to the one euid that can see the tree. A byte-for-
+    byte port of ``_require_owned_directory``/``_require_projected_file``.
+    """
+
+    entry = Path(path)
+    details = entry.lstat()
+    if stat.S_ISLNK(details.st_mode):
+        raise CellSpawnerError("provisioned path must not be a symlink")
+    if entry.resolve(strict=True) != entry:
+        raise CellSpawnerError("provisioned path must not traverse symlinks")
+    if details.st_uid != os.getuid() or details.st_gid != os.getgid():
+        raise CellSpawnerError("provisioned path is not owned by the cell uid")
+    if details.st_uid != expected_uid:
+        raise CellSpawnerError("provisioned path uid does not match the cell uid")
+    if stat.S_IMODE(details.st_mode) != expected_mode:
+        raise CellSpawnerError("provisioned path mode is not exact")
+
+
+def provision_cell(request: ProvisionRequest, policy: SpawnPolicy) -> None:
+    """Create the cell's tree + files under its own uid, in a forked child.
+
+    The child drops to the cell uid FIRST (proved from /proc by drop_privileges),
+    so every write is done by the cell, never by root, and lands in the kernel-owned
+    slot the cell alone can write. Files are created O_EXCL|O_NOFOLLOW so a planted
+    symlink cannot redirect the write out of the slot. The child re-verifies every
+    path it made and exits non-zero on any mismatch.
+    """
+
+    if type(request) is not ProvisionRequest or type(policy) is not SpawnPolicy:
+        raise CellSpawnerError("provision requires an exact request and policy")
+    pid = os.fork()
+    if pid == 0:  # pragma: no cover - the child never returns to the caller
+        try:
+            drop_privileges(request.uid, request.gid)
+            for directory in request.dirs:
+                os.mkdir(directory.path, directory.mode)
+                os.chmod(directory.path, directory.mode)  # exact, past the umask
+            flags = (
+                os.O_WRONLY
+                | os.O_CREAT
+                | os.O_EXCL
+                | os.O_NOFOLLOW
+                | getattr(os, "O_CLOEXEC", 0)
+            )
+            for file in request.files:
+                descriptor = os.open(file.path, flags, file.mode)
+                try:
+                    os.fchmod(descriptor, file.mode)
+                    os.write(descriptor, (file.content or "").encode("utf-8"))
+                finally:
+                    os.close(descriptor)
+            for directory in request.dirs:
+                _verify_owned(directory.path, directory.mode, request.uid)
+            for file in request.files:
+                _verify_owned(file.path, file.mode, request.uid)
+            os._exit(0)
+        except BaseException:
+            os._exit(37)
+    _, status = os.waitpid(pid, 0)
+    if os.waitstatus_to_exitcode(status) != 0:
+        raise CellSpawnerError("cell provisioning child failed")
+
+
 def _exec_cell(request: SpawnRequest, stdio: tuple[int, int, int]) -> None:
     """In the forked child: drop to the cell uid, wire stdio, exec. Never returns."""
 
@@ -253,6 +423,26 @@ def _is_signal_request(payload: bytes) -> bool:
     return isinstance(raw, dict) and raw.get("verb") == "signal"
 
 
+def _is_provision_request(payload: bytes) -> bool:
+    try:
+        raw = json.loads(payload.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return False
+    return isinstance(raw, dict) and raw.get("verb") == "provision"
+
+
+def _serve_provision(sock: socket.socket, payload: bytes, policy: SpawnPolicy) -> None:
+    """Provision a cell's own tree as the cell uid, then acknowledge.
+
+    A refusal is handled by the serve loop's except, exactly like a spawn: the API
+    is told only "refused" while the spawner logs the cause, and the loop stays up.
+    """
+
+    request = parse_provision_request(payload, policy)
+    provision_cell(request, policy)
+    sock.sendmsg([json.dumps({"provisioned": True}).encode("utf-8")])
+
+
 def _serve_signal(sock: socket.socket, payload: bytes, live: dict[int, int]) -> None:
     """Signal a pid THIS spawner started, at the uid it started it with.
 
@@ -343,6 +533,9 @@ def serve_spawner(sock: socket.socket, policy: SpawnPolicy) -> None:
         try:
             if _is_signal_request(payload):
                 _serve_signal(sock, payload, live)
+                continue
+            if _is_provision_request(payload):
+                _serve_provision(sock, payload, policy)
                 continue
             request = parse_spawn_request(payload, policy)
             pid, stdio = spawn_cell(request, policy)

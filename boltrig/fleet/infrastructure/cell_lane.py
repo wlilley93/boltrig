@@ -54,28 +54,72 @@ class CellLane:
         # descriptors. Serialising here is what makes concurrency safe upstream.
         self._lock = asyncio.Lock()
 
+    def acquire_slot(self) -> CellSlot:
+        """Reserve a distinct per-cell uid slot, or refuse.
+
+        The kernel re-check lives here (not in ``spawn``) because acquisition is now
+        the first step the provider takes; refusing here, before any admission or
+        bearer work, is the same "never pretend" rule the lane was built on. A cell
+        sharing the API's uid while callers believe it is isolated is worse than no
+        cell at all ([2026] VJS-CC-VJS 5).
+        """
+
+        if not per_cell_uid_mode_available():
+            raise CellSpawnerError("per-cell uid mode is not available on this host")
+        return self._allocator.acquire()
+
+    def release_slot(self, slot: CellSlot) -> None:
+        """Return a slot to the pool. Release ownership sits with the provider,
+        which ties it to the cell's observed exit (J10: a uid is never reused while
+        its cell is still live)."""
+
+        self._allocator.release(slot)
+
+    async def provision(
+        self,
+        slot: CellSlot,
+        *,
+        dirs: list[dict[str, object]],
+        files: list[dict[str, object]],
+    ) -> None:
+        """Have the spawner build this cell's own tree + files, AS the cell uid.
+
+        The API cannot write the kernel-owned 0700 slot, so it hands the spawner a
+        directory/file manifest; the spawner forks a child that setuids to this
+        cell's uid and creates them inside the cell's own slot (paths the spawner
+        re-binds to that uid). Refusal raises, exactly like a spawn refusal.
+        """
+
+        payload = json.dumps(
+            {"verb": "provision", "uid": slot.uid, "gid": slot.gid, "dirs": dirs, "files": files}
+        ).encode("utf-8")
+        async with self._lock:
+            await asyncio.to_thread(self._sock.sendall, payload)
+            reply = await asyncio.to_thread(self._sock.recv, 4096)
+        try:
+            parsed = json.loads(reply.decode("utf-8")) if reply else {}
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise CellSpawnerError("provision reply was not readable") from error
+        if not (isinstance(parsed, dict) and parsed.get("provisioned") is True):
+            raise CellSpawnerError("cell provisioning was refused")
+
     async def spawn(
         self,
+        slot: CellSlot,
         *,
         binary: PinnedCodexBinary,
         arguments: tuple[str, ...],
         cwd: str,
         environment: dict[str, str],
     ) -> SpawnedCellProcess:
-        """Take a slot, ask the spawner for a cell under that uid, adopt it."""
+        """Ask the spawner for a cell under the given (already-acquired) slot's uid.
 
-        if not per_cell_uid_mode_available():
-            # Never pretend. A cell sharing the API's uid while callers believe it
-            # is isolated is worse than no cell at all.
-            raise CellSpawnerError("per-cell uid mode is not available on this host")
-        slot = self._allocator.acquire()
-        try:
-            process = await self._request(slot, binary, arguments, cwd, environment)
-        except BaseException:
-            self._allocator.release(slot)
-            raise
-        _release_on_exit(process, self._allocator, slot)
-        return process
+        The slot is acquired by the provider via :meth:`acquire_slot` and released by
+        the provider when the cell exits, so this method neither allocates nor frees:
+        it turns a slot into a running, adopted process.
+        """
+
+        return await self._request(slot, binary, arguments, cwd, environment)
 
     async def _request(
         self,
@@ -106,35 +150,6 @@ class CellLane:
             await asyncio.to_thread(self._sock.sendall, payload)
             pid, stdio = await asyncio.to_thread(receive_spawn_result, self._sock)
         return await adopt_spawned_cell(pid=pid, stdio=stdio, spawner=self._sock)
-
-
-def _release_on_exit(
-    process: SpawnedCellProcess, allocator: CellSlotAllocator, slot: CellSlot
-) -> None:
-    """Return the slot when the cell actually exits, not when a caller says so.
-
-    Tying the release to the process rather than to a caller's discipline is what
-    stops a forgotten teardown leaking a uid out of the pool, and stops an eager
-    teardown handing a live cell's uid to its successor.
-    """
-
-    async def wait_then_release() -> None:
-        try:
-            await process.wait()
-        finally:
-            try:
-                allocator.release(slot)
-            except CellSpawnerError:
-                pass
-            process.close()
-
-    task = asyncio.ensure_future(wait_then_release())
-    # Held so the task is not garbage collected mid-flight; dropped when it ends.
-    _PENDING.add(task)
-    task.add_done_callback(_PENDING.discard)
-
-
-_PENDING: set[asyncio.Task[None]] = set()
 
 
 __all__ = ["CellLane"]
