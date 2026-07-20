@@ -45,11 +45,6 @@ ENV REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt \
 COPY pyproject.toml requirements-lock.txt /app/
 RUN pip install --require-hashes -r /app/requirements-lock.txt
 
-# Run directly from the copied, read-only source tree. Installing the project
-# itself would invoke PEP 517 build isolation and download an unlocked hatchling
-# toolchain; /app is the workdir and therefore already on Python's import path.
-COPY boltrig/ /app/boltrig/
-
 # Boltrig v2 cockpit runtime: ship Herdr with the stack, not from a developer
 # workstation. Pinned release asset + sha256; override all three args together
 # when intentionally upgrading.
@@ -132,6 +127,14 @@ RUN find / -xdev -perm /6000 -type f -exec chmod a-s {} + 2>/dev/null; \
 # sandboxing. (See https://developers.openai.com/codex/concepts/sandboxing.)
 RUN apt-get update && apt-get install -y --no-install-recommends bubblewrap && \
     rm -rf /var/lib/apt/lists/*
+
+# Run directly from the copied, read-only source tree. Installing the project
+# itself would invoke PEP 517 build isolation and download an unlocked hatchling
+# toolchain; /app is the workdir and therefore already on Python's import path.
+# Copied LATE, after the expensive pinned-binary fetches (herdr, codex) so that an
+# ordinary source change re-uses those cached layers instead of re-downloading
+# ~300MB every time.
+COPY boltrig/ /app/boltrig/
 
 # Run as an unprivileged user (INF-01 defence in depth). The app reads /app + the
 # read-only mounts and writes nothing to disk (logs go to stdout); the compose

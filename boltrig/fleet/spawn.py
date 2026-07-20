@@ -196,13 +196,23 @@ class Spawner:
         skills: list[str],
         grants: GrantSet,
     ) -> InvocationContext:
+        # A read-only Codex leaf is scoped by a run + workspace. Under [2026]
+        # VJS-CC-VJS 8 the kernel orchestrates the leaf, so it supplies the leaf's
+        # read-only scope: when a scopeless caller (e.g. /v1/spawn with no active
+        # workspace) orchestrates a codex leaf, scope it to its OWN run. The phase is
+        # read-only, writes nothing, and its per-cell tree is already run/slot
+        # isolated, so the run is a sufficient and self-contained scope. Other
+        # runtimes keep inheriting the parent's workspace unchanged (None stays None).
+        workspace_id = parent.workspace_id
+        if workspace_id is None and capability.runtime == "codex":
+            workspace_id = run_id
         return InvocationContext(
             tenant_id=tenant_id,
             run_id=run_id,
             parent_run_id=parent.run_id,
             depth=child_depth,
             on_behalf_of=parent.on_behalf_of,
-            workspace_id=parent.workspace_id,
+            workspace_id=workspace_id,
             ip_address=parent.ip_address,
             user_agent=parent.user_agent,
             grants=grants,

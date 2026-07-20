@@ -159,7 +159,7 @@
       "expires": "2026-12-31"
     },
     "boltrig/fleet/spawn.py": {
-      "max_file_lines": 421,
+      "max_file_lines": 431,
       "max_function_lines": 94,
       "over_limit_functions": [
         {
@@ -240,12 +240,12 @@
       "expires": "2026-12-31"
     },
     "boltrig/kernel/app.py": {
-      "max_file_lines": 735,
+      "max_file_lines": 740,
       "max_function_lines": 529,
       "over_limit_functions": [
         {
           "name": "create_app",
-          "line": 207,
+          "line": 212,
           "lines": 529
         }
       ],

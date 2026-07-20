@@ -135,6 +135,11 @@ async def _dev_principal(request: Request) -> Principal:
         actor_tier=h.get("x-boltrig-tier", "human"),
         on_behalf_of=h.get("x-boltrig-obo"),
         scope=scope,
+        # The dev resolver simulates the authenticated session via headers; the
+        # active workspace is part of that session. Without it a codex-routed turn
+        # has no run+workspace scope and the read-only Codex phase degrades
+        # (no_read_only_phase_scope). Optional: absent header keeps today's None.
+        active_workspace_id=h.get("x-boltrig-workspace") or None,
     )
 
 

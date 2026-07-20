@@ -27,6 +27,7 @@ assumed because a drop that silently failed is exactly what this exists to catch
 from __future__ import annotations
 
 import os
+import pwd
 import socket
 import sys
 from pathlib import Path
@@ -88,6 +89,14 @@ def main(argv: list[str]) -> int:
     # drop_privileges re-reads /proc and raises if the process is still privileged,
     # so an API that reaches execvp is one the kernel has confirmed is not root.
     drop_privileges(API_UID, API_GID)
+    # The container starts as uid 0, so HOME is /root, which the dropped API uid
+    # cannot even stat (/root is 0700 root). Libraries that probe $HOME for default
+    # files then fail closed on a PermissionError rather than a clean "absent":
+    # libpq/asyncpg resolves ~/.postgresql/postgresql.key during connect-arg parsing
+    # and raised PermissionError here, taking the whole API down at startup. Point
+    # HOME at the dropped uid's own home so those probes resolve to a readable,
+    # non-existent path. Only reached on the privileged (per-cell) path.
+    os.environ["HOME"] = pwd.getpwuid(API_UID).pw_dir
     os.execvp(argv[0], argv)
     return 0  # pragma: no cover - execvp does not return
 
