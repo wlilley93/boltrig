@@ -127,3 +127,42 @@ A stronger variant exists and is NOT taken here: walk the rendered TOML and emit
 which would also cover array-valued leaves such as `skills.config`, since arrays replace rather than
 merge. It multiplies the `--strict-config` startup-failure surface and is beyond the ordered scope,
 so it is recorded as the obvious follow-on rather than done quietly.
+
+---
+
+## J12: the fifth understatement, filed as ordered
+
+[2026] VJS-CC-VJS 7 J12 orders me to correct the record and file this as the fifth recorded
+understatement of this lane's posture. It is the most consequential of the five, so it is recorded
+in its own words rather than folded into a summary.
+
+**What I pled:** "The container currently runs unprivileged. Under this application the SUPERVISOR
+runs as root inside the container." I offered that as the cost of the application, and framed the
+trade as a root *supervisor* against separated cells.
+
+**What was actually true:** `CodexCellSupervisor._spawn` is an in-process `asyncio` spawn inside the
+uvicorn API process. There is no separate supervisor process. Setting `user: 0` in compose, as I
+pled it, would have made uid 0 the identity of the **entire Boltrig API**, including the code paths
+that parse untrusted model output. The court found this and conditioned the grant on real privilege
+separation (J3): uid 0 confined to a minimal spawner, the API dropped to uid 10001 with an empty
+permitted set, both asserted at startup.
+
+**Why it happened, since a pattern is more useful than an apology.** I described the intended
+architecture rather than the built one. "Supervisor" is the name of a class, and I let the name carry
+an implication about process boundaries that the code does not support. The check that would have
+caught it is the one that has caught everything else in this programme: read what the process tree
+actually is, do not infer it from a type name.
+
+**The other four**, for the record: (1) pleading this lane was the hardened production path when
+SO_PEERCRED was wired inside the trusted wall; (2) offering server-side key injection as proof of
+path exclusivity when it proves only credential exclusivity; (3) pleading our own
+`validate_cell_layout` rule as a property of the Codex runtime; (4) describing H5 as discharged when
+only the argv half of "the argv and /etc/codex pinning" was done. Three were caught by the court,
+one by me.
+
+**A sixth, not caught by the court because it was not before it:** I told the Principal a prod deploy
+was "a `compose pull && up -d` plus a health check, ten minutes". Prod is 507 commits behind, runs
+locally-built image tags with no newer tag to pull, and the Alembic chain includes `0022`, a type
+conversion and column removal with no automated downgrade, on live customer data. The runbook is
+expressly HELD pending an explicit go. I withdrew the characterisation and declined to act on a
+general delegation.

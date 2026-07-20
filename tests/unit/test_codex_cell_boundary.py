@@ -22,6 +22,7 @@ from boltrig.fleet.infrastructure.codex_cell_boundary import (
     SHARED_HELPER_ENV_KEY,
     CodexCellBoundaryError,
     assert_cell_isolation_boundary,
+    assert_no_setuid_binaries,
     assert_ptrace_scope,
     resolve_shared_helper_path,
 )
@@ -171,3 +172,51 @@ def test_the_host_ptrace_scope_is_a_recorded_deployment_precondition() -> None:
     """
 
     assert assert_ptrace_scope() >= 1
+
+
+@pytest.mark.unit
+def test_a_surviving_setuid_bit_is_refused(tmp_path: Path) -> None:
+    """J4 ([2026] VJS-CC-VJS 7): the second leg of the no-regain property.
+
+    The court corrected me: an empty permitted set does NOT make the capability
+    bounding set inert, ``no_new_privileges`` does, and only that. Since the
+    bounding set cannot be cleared without CAP_SETPCAP (refused), stripping the
+    image's setuid bits is what gives the property a second, independent leg. This
+    is the guard that stops a base-image bump quietly taking that leg away again.
+    """
+
+    clean = tmp_path / "clean"
+    clean.mkdir()
+    (clean / "ordinary").write_bytes(b"#!/bin/sh\n")
+    assert assert_no_setuid_binaries((clean.as_posix(),)) == 1
+
+    tainted = tmp_path / "tainted"
+    tainted.mkdir()
+    binary = tainted / "su"
+    binary.write_bytes(b"#!/bin/sh\n")
+    binary.chmod(0o4755)
+    with pytest.raises(CodexCellBoundaryError, match="setuid"):
+        assert_no_setuid_binaries((tainted.as_posix(),))
+
+
+@pytest.mark.unit
+def test_a_surviving_setgid_bit_is_refused_too(tmp_path: Path) -> None:
+    root = tmp_path / "sgid"
+    root.mkdir()
+    binary = root / "wall"
+    binary.write_bytes(b"#!/bin/sh\n")
+    binary.chmod(0o2755)
+    with pytest.raises(CodexCellBoundaryError, match="setgid"):
+        assert_no_setuid_binaries((root.as_posix(),))
+
+
+@pytest.mark.unit
+def test_both_images_strip_the_setuid_bits_at_build(tmp_path: Path) -> None:
+    """The runtime assertion is only half of J4; the image must actually strip."""
+
+    deploy = Path(__file__).resolve().parents[2] / "deploy"
+    for dockerfile in ("kernel.Dockerfile", "fleet.Dockerfile"):
+        text = (deploy / dockerfile).read_text(encoding="utf-8")
+        assert "-perm /6000 -type f -exec chmod a-s" in text
+        # The build must FAIL if anything survives, not warn.
+        assert 'test -z "$(find / -xdev -perm /6000 -type f 2>/dev/null)"' in text

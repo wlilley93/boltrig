@@ -253,6 +253,51 @@ def assert_cell_isolation_boundary(
     )
 
 
+# Roots worth walking for a stray setuid bit. The whole image would be slow and
+# mostly noise (/proc, /sys, the read-only /nix-style trees), and a setuid binary
+# outside these is not on any PATH the cell can reach.
+SETUID_SCAN_ROOTS = ("/bin", "/sbin", "/usr", "/opt", "/lib")
+
+
+def assert_no_setuid_binaries(roots: tuple[str, ...] = SETUID_SCAN_ROOTS) -> int:
+    """Refuse to run if any setuid/setgid binary survives in the image (J4).
+
+    [2026] VJS-CC-VJS 7 corrected a claim I had made and it is worth stating the
+    corrected version here, because the code depends on it. A dropped cell holds an
+    empty permitted set, but an empty permitted set does NOT make the capability
+    BOUNDING set inert: the bounding set is the ceiling on what an ``execve`` of a
+    file bearing file capabilities may place in the permitted set. What makes it
+    inert is ``no_new_privileges``, and only that. The bounding set cannot be
+    cleared without CAP_SETPCAP, which the court refused.
+
+    So the property rested on a single control. Stripping the setuid bits at image
+    build gives it a second, independent leg, and this assertion is what stops the
+    build step silently regressing: a base-image bump that reintroduces ``su`` or
+    ``mount`` fails here rather than quietly narrowing the boundary to one leg.
+
+    Returns the number of files scanned, so a caller can tell a real pass from a
+    vacuous one where the roots did not exist.
+    """
+
+    if type(roots) is not tuple or not all(type(root) is str for root in roots):
+        raise TypeError("roots must be an exact tuple of str")
+    scanned = 0
+    for root in roots:
+        for parent, _directories, files in os.walk(root, followlinks=False):
+            for name in files:
+                path = os.path.join(parent, name)
+                try:
+                    mode = os.lstat(path).st_mode
+                except OSError:
+                    continue  # raced or dangling; it is not a binary we can exec
+                scanned += 1
+                if mode & (stat.S_ISUID | stat.S_ISGID):
+                    raise CodexCellBoundaryError(
+                        f"setuid or setgid bit survives on {path}"
+                    )
+    return scanned
+
+
 __all__ = [
     "BOUNDARY_MECHANISM",
     "CellIsolationBoundary",
@@ -261,7 +306,9 @@ __all__ = [
     "MINIMUM_PTRACE_SCOPE",
     "PTRACE_SCOPE_PATH",
     "SHARED_HELPER_ENV_KEY",
+    "SETUID_SCAN_ROOTS",
     "assert_cell_isolation_boundary",
+    "assert_no_setuid_binaries",
     "assert_ptrace_scope",
     "resolve_shared_helper_path",
 ]
