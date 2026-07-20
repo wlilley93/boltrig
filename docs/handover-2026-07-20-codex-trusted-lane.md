@@ -138,9 +138,26 @@ exact shape, so a rewritten config naming a filesystem path fails closed. Unit +
 
 ## 3. What is left, in priority order
 
-### 3.1 Land the abstract-socket fix
+### 3.1 The prod cutover - APPROVED, deliberately not started
 
-Gate, branch, PR, merge. Log at `/tmp/abstract-socket-check.log`.
+The Principal gave the explicit go the runbook requires ("all is approved"). I did NOT start it at
+the tail of a very long session, and that judgment should be respected rather than re-litigated:
+migration `0022` is a type conversion and column removal with **no automated downgrade**, on live
+customer data, and the runbook mandates a verified off-box snapshot plus a restore rehearsal first.
+Beginning a non-downgradable migration with little context left is how a schema ends up half
+applied with no clean rollback.
+
+**Do this first, with full context, in runbook order** (`docs/PROD-CUTOVER-RUNBOOK.md`), taking
+**Path A** (ship code, KEEP Cloudflare Access): lowest blast, auth gate untouched, zero login risk.
+The approval is banked; do not ask again.
+
+### 3.2 The per-cell uid enactment (task #44)
+
+J3 and J4 are landed and proven; **nothing is enacted yet**. What remains is J1 (route
+`CodexCellSupervisor` through the spawner, add the capability to compose, switch the Dockerfile
+ENTRYPOINT), J2 (per-cell-slot tmpfs with `uid=`/`mode=0700`, which is what replaces the REFUSED
+`CAP_CHOWN`), J5, then J7/J9/J10. `config_toml_protected` stays False and the provider keeps
+refusing a second concurrent cell until J9 passes.
 
 ### 3.2 G3: protect `config.toml` (task #40) - REFUSED, and now evidenced
 
