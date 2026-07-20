@@ -50,7 +50,13 @@ class ManagedCodexProcess(Protocol):
     def kill(self) -> None: ...
 
 
-def _timeout(label: str, value: object) -> float:
+def validated_timeout(label: str, value: object) -> float:
+    """A finite positive timeout, or a precise error.
+
+    Shared with codex_cell_supervisor, which carried a byte-identical private
+    copy. Two implementations of one rule is one more than can be kept correct.
+    """
+
     if type(value) not in {int, float}:
         raise TypeError(f"{label} must be a finite positive number")
     numeric = float(cast(int | float, value))
@@ -82,10 +88,10 @@ class CodexStdioTransport:
         self._stdin = process.stdin
         self._stdout = process.stdout
         self._stderr = process.stderr
-        self._write_timeout = _timeout("write timeout", write_timeout)
-        self._close_timeout = _timeout("close timeout", close_timeout)
-        self._terminate_timeout = _timeout("terminate timeout", terminate_timeout)
-        self._kill_timeout = _timeout("kill timeout", kill_timeout)
+        self._write_timeout = validated_timeout("write timeout", write_timeout)
+        self._close_timeout = validated_timeout("close timeout", close_timeout)
+        self._terminate_timeout = validated_timeout("terminate timeout", terminate_timeout)
+        self._kill_timeout = validated_timeout("kill timeout", kill_timeout)
         self._max_frame_bytes = max_frame_bytes
         self._read_lock = asyncio.Lock()
         self._write_lock = asyncio.Lock()

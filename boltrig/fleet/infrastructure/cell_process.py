@@ -32,6 +32,7 @@ import os
 import signal
 import socket
 
+from boltrig.fleet.infrastructure.codex_stdio_transport import CodexStdin
 from boltrig.fleet.infrastructure.cell_spawner import (
     ALLOWED_SIGNALS,
     CellSpawnerError,
@@ -44,6 +45,15 @@ class SpawnedCellProcess:
     """A ``ManagedCodexProcess`` over a cell the privileged spawner created."""
 
     __slots__ = ("_closed", "_pidfd", "_returncode", "_sock", "pid", "stderr", "stdin", "stdout")
+
+    # Declared with the protocol's own optional types rather than the narrower
+    # concrete ones. ManagedCodexProcess attributes are invariant, so a stricter
+    # annotation here would make this class fail to satisfy the very protocol the
+    # supervisor consumes it through.
+    pid: int
+    stdin: CodexStdin | None
+    stdout: asyncio.StreamReader | None
+    stderr: asyncio.StreamReader | None
 
     def __init__(
         self,
