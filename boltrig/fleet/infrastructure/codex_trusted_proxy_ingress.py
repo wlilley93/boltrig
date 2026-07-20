@@ -62,6 +62,7 @@ from boltrig.fleet.infrastructure.linux_peer_identity import (
     ProcReader,
     capture_linux_process,
     read_boot_id,
+    read_pid_namespace_inode,
 )
 from boltrig.fleet.infrastructure.model_proxy_peer_attestation import (
     LinuxModelProxyPeerAttestor,
@@ -110,7 +111,17 @@ def capture_cell_identity(
         raise TypeError("assignment must be an exact PhaseAssignmentRef")
     proc_reader = reader if reader is not None else LinuxProcReader()
     boot_id = read_boot_id(proc_reader)
-    captured = capture_linux_process(proc_reader, pid, expected_boot_id=boot_id)
+    # The dropped API (uid 10001, empty permitted set) cannot read a uid-distinct
+    # cell's restricted /proc/<pid>/ns/pid. But this cell was forked by our spawner
+    # with plain os.fork (no CLONE_NEWPID), so it is definitionally in THIS
+    # container's pid namespace; that inode is an invariant we can read from self.
+    # Supplying it lets the capture complete without the cross-uid read. Spoof
+    # detection for a CONNECTING peer is a distinct concern at ingress attestation,
+    # not here: we spawned this cell and already know its namespace.
+    container_pid_ns = read_pid_namespace_inode(proc_reader)
+    captured = capture_linux_process(
+        proc_reader, pid, expected_boot_id=boot_id, pid_namespace_inode=container_pid_ns
+    )
     phase = assignment.phase
     root = ModelProxyRootScope(phase.principal.tenant_id, phase.workspace_id, phase.root_run_id)
     scope_assignment = ModelProxyAssignmentScope(

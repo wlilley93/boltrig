@@ -133,8 +133,29 @@ def read_boot_id(reader: ProcReader) -> str:
     return value
 
 
+def read_pid_namespace_inode(reader: ProcReader, pid: object = "self") -> int:
+    """The pid-namespace inode for a process, defaulting to the caller's own.
+
+    Reading ``/proc/<pid>/ns/pid`` of a DIFFERENT uid requires the process owner or
+    CAP_SYS_PTRACE, neither of which the capless dropped API holds. But every cell
+    the spawner forks lives in THIS container's single pid namespace (plain
+    ``os.fork``, no ``CLONE_NEWPID`` - VJS-CC-VJS 7), so the inode is a container
+    invariant identical read from any member. Callers that spawned the target
+    themselves can therefore source it from ``self`` instead of a cross-uid read.
+    """
+
+    target = "self" if pid == "self" else str(_positive("pid", pid))
+    return _parse_namespace(
+        reader.read_link(f"{target}/ns/pid", max_bytes=MAX_PROC_LINK_BYTES)
+    )
+
+
 def capture_linux_process(
-    reader: ProcReader, pid: int, *, expected_boot_id: str
+    reader: ProcReader,
+    pid: int,
+    *,
+    expected_boot_id: str,
+    pid_namespace_inode: int | None = None,
 ) -> CapturedLinuxProcess:
     safe_pid = _positive("pid", pid)
     if _BOOT_ID.fullmatch(expected_boot_id) is None:
@@ -142,9 +163,15 @@ def capture_linux_process(
     prefix = str(safe_pid)
     first_stat = _parse_stat(reader.read_file(f"{prefix}/stat", max_bytes=4_096), safe_pid)
     uid, gid = _parse_status(reader.read_file(f"{prefix}/status", max_bytes=4_096))
-    namespace = _parse_namespace(
-        reader.read_link(f"{prefix}/ns/pid", max_bytes=MAX_PROC_LINK_BYTES)
-    )
+    # A caller that knows the process shares its pid namespace (it forked it) may
+    # supply the invariant inode directly, avoiding a cross-uid ns/pid read the
+    # capless API cannot perform; otherwise read the target's own link.
+    if pid_namespace_inode is not None:
+        namespace = _positive("pid namespace inode", pid_namespace_inode)
+    else:
+        namespace = _parse_namespace(
+            reader.read_link(f"{prefix}/ns/pid", max_bytes=MAX_PROC_LINK_BYTES)
+        )
     cgroup = canonical_cgroup_digest(
         reader.read_file(f"{prefix}/cgroup", max_bytes=MAX_PROC_FILE_BYTES)
     )
@@ -308,5 +335,6 @@ __all__ = [
     "ProcReader",
     "canonical_cgroup_digest",
     "capture_linux_process",
+    "read_pid_namespace_inode",
     "read_boot_id",
 ]
