@@ -1,0 +1,54 @@
+# Boltrig managed Codex config ([2026] VJS-CC-VJS 6 H5).
+#
+# Installed root-owned and mode 0444 at /etc/codex/managed_config.toml, on the
+# container's READ-ONLY image mount. No cell can write it, because no cell can
+# write /etc at all. It is the strongest config layer Codex 0.144.3 offers that
+# costs no capability.
+#
+# Why this file exists at all, given the per-cell config.toml already says most of
+# it: the per-cell file lives in a CODEX_HOME the shared cell uid owns, so a
+# sibling cell can rewrite it. VERIFIED on the pinned binary: a leaf set here BEATS
+# the same leaf set in a hostile $CODEX_HOME/config.toml, and that holds for leaves
+# inside tables too (a hostile "[features] hooks = true" loses to the hooks = false
+# below). So every cell-INVARIANT security-critical key belongs here rather than
+# only in a file the attacker controls.
+#
+# What this does NOT do, and must never be pleaded as doing: Codex MERGES tables
+# rather than replacing them, so a key this file does not NAME can still be ADDED
+# by a rewritten per-cell config. In particular an attacker-supplied
+# [mcp_servers.attacker] with its own "command" survives, which is why G3 stays
+# open and production_ready stays False. Naming a leaf defends that leaf. It does
+# not defend the table it sits in.
+#
+# Per-cell values (the provider table, the auth command and args, the loopback
+# port) are NOT here, because they differ per cell. Those are pinned on argv
+# instead, which is likewise unwritable by another process. See
+# codex_runtime_config_argv.py.
+
+sandbox_mode = "read-only"
+approval_policy = "never"
+web_search = "disabled"
+
+# Every reviewed 0.144.3 feature that can execute a program, reach the network, or
+# widen the surface. Kept byte-identical to CODEX_RUNTIME_DISABLED_FEATURES in
+# codex_runtime_config_toml.py; the structure test holds the two in step.
+[features]
+apps = false
+auth_elicitation = false
+browser_use = false
+browser_use_external = false
+browser_use_full_cdp_access = false
+code_mode_host = false
+computer_use = false
+hooks = false
+image_generation = false
+in_app_browser = false
+memories = false
+multi_agent = false
+plugin_sharing = false
+plugins = false
+remote_plugin = false
+request_permissions_tool = false
+skill_mcp_dependency_install = false
+tool_call_mcp_elicitation = false
+workspace_dependencies = false
