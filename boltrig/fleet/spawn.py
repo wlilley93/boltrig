@@ -344,10 +344,14 @@ def build_spawner(
 
 
 def make_app_spawner(
-    kernel: Kernel,
+    kernel: Kernel, *, codex_config: dict[str, Any] | None = None
 ) -> Callable[[Principal, SpawnBody], Awaitable[dict[str, Any]]]:
-    """Adapt ``Spawner.spawn`` to the ``POST /v1/spawn`` seam."""
-    spawner = build_spawner(kernel)
+    """Adapt ``Spawner.spawn`` to the ``POST /v1/spawn`` seam.
+
+    ``codex_config`` (VJS-CC-VJS 2/8) lets a spawn that pins a ``runtime: codex``
+    capability answer through the per-cell proxy instead of degrading to a script.
+    """
+    spawner = build_spawner(kernel, codex_config=codex_config)
     envelope = {"run_id", "parent_run_id", "depth", "skills_loaded"}
 
     async def app_spawner(principal: Principal, body: SpawnBody) -> dict[str, Any]:

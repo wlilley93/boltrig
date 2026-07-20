@@ -150,7 +150,9 @@ async def test_spawn_runtime_and_mcp_preserve_trusted_principal_metadata(monkeyp
 
     kernel, _ = await _kernel()
     capture = CaptureSpawner()
-    monkeypatch.setattr(spawn_module, "build_spawner", lambda _kernel: capture)
+    monkeypatch.setattr(
+        spawn_module, "build_spawner", lambda _kernel, *, codex_config=None: capture
+    )
     app_spawner = spawn_module.make_app_spawner(kernel)
     await app_spawner(
         _principal(),

@@ -463,6 +463,31 @@ def select_principal_resolver():
     return _deny_all_resolver()
 
 
+def _build_shared_codex_config() -> "dict[str, object] | None":
+    """Assemble the trusted read-only Codex provider ONCE, for all spawners.
+
+    Shared deliberately ([2026] VJS-CC-VJS 2, and VJS-CC-VJS 8 which makes the kernel
+    the locus of orchestration with Codex a routed leaf). Sharing is load-bearing:
+    the provider owns the CellLane that accounts the four physical per-cell tmpfs
+    slots, so a second provider would double-count them. Threading this one instance
+    into the chat, platform and /v1/spawn spawners also closes the gap VJS-CC-VJS 8
+    named - previously only the chat spawner carried it, yet a bare chat turn resolves
+    to the cheapest (pi) capability and never to codex-worker, while /v1/spawn could
+    pin codex-worker but had no provider and degraded to a script, so no single call
+    both routed to Codex and answered. None (any of the three flags unset) constructs
+    nothing and keeps every path byte-identical.
+    """
+    from boltrig.api.codex_trusted import build_trusted_codex_config
+    from boltrig.fleet.model_gateway import gateway_config
+
+    settings = load_settings()
+    return build_trusted_codex_config(
+        settings,
+        model_id=settings.codex_model,
+        gateway_base_url=str(gateway_config().get("base_url") or ""),
+    )
+
+
 def build_app():
     """Build the FastAPI app for uvicorn (target: boltrig.api.asgi:app).
 
@@ -472,10 +497,12 @@ def build_app():
     from boltrig.fleet.chat import ChatService, build_turn_executor
     from boltrig.kernel.app import create_app
 
+    # Trusted read-only Codex built ONCE and shared by every spawner (see
+    # _build_shared_codex_config). None when off, keeping every path byte-identical.
+    codex_config = _build_shared_codex_config()
+
     def chat_factory(kernel):
         from boltrig.api.codex_execution import build_codex_execution_stack
-        from boltrig.api.codex_trusted import build_trusted_codex_config
-        from boltrig.fleet.model_gateway import gateway_config
         # the conversational service routes turns through the fleet (US-CONV-02);
         # the manifest chat knob decides a bare turn's skill set per caller role
         # ([2026] VJS-COUNTY 1) - no manifest means the fail-closed empty knob
@@ -486,13 +513,7 @@ def build_app():
                 chat_cfg = load_manifest(manifest_path).chat
             except Exception:
                 pass
-        # Trusted read-only Codex ([2026] VJS-CC-VJS 2): None unless all 3 flags set.
         settings = load_settings()
-        codex_config = build_trusted_codex_config(
-            settings,
-            model_id=settings.codex_model,
-            gateway_base_url=str(gateway_config().get("base_url") or ""),
-        )
         return ChatService(
             kernel.store, kernel.events,
             turn_executor=build_turn_executor(
@@ -523,7 +544,7 @@ def build_app():
                 tenant = load_manifest(manifest_path).tenant_id
             except Exception:
                 pass
-        spawner = build_spawner(kernel)
+        spawner = build_spawner(kernel, codex_config=codex_config)
         # Honest executor selection (US-EXE-05): record which executor serves this
         # app and whether it is durable (Beat 4 extends the stamp; not wired here).
         executor = register_workers(kernel)
@@ -572,7 +593,7 @@ def build_app():
 
     return create_app(
         kernel_factory=build_kernel_async,
-        spawner_factory=make_app_spawner,
+        spawner_factory=lambda kernel: make_app_spawner(kernel, codex_config=codex_config),
         principal_resolver=select_principal_resolver(),
         chat_factory=chat_factory,
         platform_factory=platform_factory,

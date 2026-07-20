@@ -94,3 +94,39 @@ def test_builds_provider_when_all_three_set(
     import asyncio
 
     asyncio.run(result["provider"]._client.aclose())
+
+
+def test_make_app_spawner_threads_codex_config_to_resolver() -> None:
+    """The /v1/spawn seam must carry the trusted provider ([2026] VJS-CC-VJS 8).
+
+    The gap this guards: ``build_trusted_codex_config`` was injected ONLY into the
+    chat spawner, so a ``/v1/spawn`` that pinned a ``runtime: codex`` capability
+    resolved the codex runtime yet had no provider and degraded to a script - no
+    single call both routed to Codex and answered. ``make_app_spawner`` must thread
+    the config into the ``Spawner`` it builds. RuntimeResolver stores only the
+    kernel, so a sentinel kernel is enough (mirroring test_runtime_resolver_codex).
+    """
+    from boltrig.fleet.spawn import Spawner, make_app_spawner
+
+    sentinel = {"trusted": True, "provider": object()}
+    app_spawner = make_app_spawner(object(), codex_config=sentinel)
+    # The Spawner is captured in the returned closure; it must carry the config.
+    spawner = next(
+        cell.cell_contents
+        for cell in app_spawner.__closure__ or ()
+        if isinstance(cell.cell_contents, Spawner)
+    )
+    assert spawner._runtime_resolver._codex is sentinel
+
+
+def test_make_app_spawner_defaults_to_no_codex_config() -> None:
+    """Off by default: no config threaded => the codex runtime degrades as before."""
+    from boltrig.fleet.spawn import Spawner, make_app_spawner
+
+    app_spawner = make_app_spawner(object())
+    spawner = next(
+        cell.cell_contents
+        for cell in app_spawner.__closure__ or ()
+        if isinstance(cell.cell_contents, Spawner)
+    )
+    assert spawner._runtime_resolver._codex is None
