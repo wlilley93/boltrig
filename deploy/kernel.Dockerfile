@@ -111,6 +111,20 @@ COPY deploy/codex/managed_config.toml /etc/codex/managed_config.toml
 RUN chown 0:0 /etc/codex/managed_config.toml && \
     chmod 0444 /etc/codex/managed_config.toml
 
+# [2026] VJS-CC-VJS 7 J4: strip every setuid/setgid bit in the image.
+#
+# The court corrected a claim I made about why a dropped cell cannot regain
+# privilege. An empty permitted set does NOT make the capability bounding set
+# inert: the bounding set is the ceiling on what an execve of a file bearing file
+# capabilities may place in the permitted set. What makes it inert is
+# no_new_privileges, and ONLY that. Since the bounding set cannot be cleared
+# without CAP_SETPCAP (refused), the property rested on a single control while
+# this image shipped eleven setuid-root binaries (su, mount, passwd and friends)
+# on a rootfs that is not nosuid. Stripping them gives the property a second,
+# independent leg. It is free, so there was never a reason not to.
+RUN find / -xdev -perm /6000 -type f -exec chmod a-s {} + 2>/dev/null; \
+    test -z "$(find / -xdev -perm /6000 -type f 2>/dev/null)"
+
 # bubblewrap is Codex's documented sandbox prerequisite. Without it on PATH the
 # App Server emits a configWarning at startup and falls back to a bundled copy;
 # that warning is an invalidation-class notification the read-only preflight
