@@ -357,6 +357,14 @@
       "owner": "workflow-maintainers",
       "reason": "Decompose workflow execution by step type while preserving checkpoint, retry, and governance semantics.",
       "expires": "2026-12-31"
+    },
+    "boltrig/fleet/infrastructure/codex_cell_supervisor.py": {
+      "max_file_lines": 408,
+      "max_function_lines": 55,
+      "over_limit_functions": [],
+      "owner": "fleet-maintainers",
+      "reason": "Per-cell Codex supervisor carries operability logging on the cell-startup failure paths (timeout and generic), added after silent CodexCellStartupError failures proved unactionable in ops; the 8-line overage is that diagnostic logging.",
+      "expires": "2026-12-31"
     }
   }
 }

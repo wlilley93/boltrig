@@ -115,4 +115,6 @@ async def test_run_degrades_and_never_raises_on_lifecycle_error() -> None:
     fake = _FakeLifecycle(fail_start=True)
     result = await CodexRuntime(fake, stack_root=_STACK).run("hi", _context(), tools=[])
     assert result.degraded is True
-    assert result.output["_degraded"]["reason"] == "codex_turn_failed"
+    # The reason carries a short cause tag ("codex_turn_failed:<ExceptionType>")
+    # so a failure is actionable on the wire without leaking the full traceback.
+    assert result.output["_degraded"]["reason"].startswith("codex_turn_failed")

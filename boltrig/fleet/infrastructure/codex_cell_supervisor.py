@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -37,6 +38,8 @@ from .codex_process_spawn import (
     default_process_factory,
     spawn_registered_process,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class CodexCellStartupError(wire.CodexAppServerError):
@@ -261,9 +264,15 @@ class CodexCellSupervisor:
             raise
         except TimeoutError:
             await self._cleanup_failed_start(client, transport, process, admitted)
+            logger.warning("Codex cell %s startup timed out", admitted.cell_id)
             raise CodexCellStartupError("Codex cell startup timed out") from None
         except Exception:
+            # The public error is deliberately sanitized (``from None``) so a cell
+            # failure leaks nothing to the caller. But the real cause must not be
+            # lost: log it internally so an operator can see WHY a cell would not
+            # start, without widening what the caller learns.
             await self._cleanup_failed_start(client, transport, process, admitted)
+            logger.exception("Codex cell %s startup failed", admitted.cell_id)
             raise CodexCellStartupError("Codex cell startup failed") from None
 
     async def _verify_binary(self) -> PinnedCodexBinary:

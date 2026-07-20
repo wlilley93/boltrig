@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import array
 import json
+import logging
 import os
 import signal
 import socket
@@ -41,6 +42,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from boltrig.fleet.infrastructure.cell_privilege import drop_privileges
+
+logger = logging.getLogger(__name__)
 
 # The reserved per-cell uid band. Chosen well above the API's 10001 and far from
 # anything Debian allocates, so a cell uid can never collide with a system account
@@ -344,9 +347,12 @@ def serve_spawner(sock: socket.socket, policy: SpawnPolicy) -> None:
             request = parse_spawn_request(payload, policy)
             pid, stdio = spawn_cell(request, policy)
             live[pid] = request.uid
-        except (CellSpawnerError, OSError):
+        except (CellSpawnerError, OSError) as error:
             # Fail closed and stay up. The API sees a result with no descriptors
-            # and raises; it never mistakes a refusal for a running cell.
+            # and raises; it never mistakes a refusal for a running cell. Log the
+            # cause here (the ONLY place that holds it): the API is told nothing but
+            # "refused" by design, so a silent refusal would be unactionable in ops.
+            logger.warning("cell spawn refused: %s", error)
             try:
                 sock.sendmsg([json.dumps({"error": "refused"}).encode("utf-8")])
             except OSError:

@@ -19,6 +19,7 @@ phase is the separate, court-gated PR8 and is not reachable from here).
 from __future__ import annotations
 
 import contextlib
+import logging
 import uuid
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any, Protocol
@@ -42,6 +43,8 @@ from boltrig.models import InvocationContext
 from boltrig.models.execution_scope import OrganisationUserRef
 
 from .result import AgentResult
+
+logger = logging.getLogger(__name__)
 
 
 class CodexPhaseLifecycle(Protocol):
@@ -101,9 +104,16 @@ class CodexRuntime:
             )
             await _drain_until_complete(self._lifecycle.events(thread))
             text = await self._lifecycle.read_turn_output(thread)
-        except Exception:
+        except Exception as error:
+            # A degrade must never swallow the cause: a silent codex_turn_failed is
+            # unactionable in ops. Log the full traceback and carry a short cause
+            # tag in the reason so the failure is visible on the wire and in logs.
+            logger.exception("codex read-only turn failed for run %s", run_id)
+            cause = type(error).__name__
             return AgentResult.degrade(
-                runtime=self.runtime, reason="codex_turn_failed", prompt=prompt
+                runtime=self.runtime,
+                reason=f"codex_turn_failed:{cause}",
+                prompt=prompt,
             )
         finally:
             if thread is not None:

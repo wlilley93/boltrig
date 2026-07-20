@@ -85,11 +85,19 @@ class CellLane:
         cwd: str,
         environment: dict[str, str],
     ) -> SpawnedCellProcess:
+        # argv[0] is the binary's REAL path, not its execution_path. execution_path
+        # is ``/proc/self/fd/<n>`` in the API's own fd table (for a TOCTOU-safe
+        # fexecve on the in-process path), but the spawner is a SEPARATE process:
+        # that fd number means nothing across the process boundary, and the spawner
+        # execs by path and pins argv[0] to its policy binary. Path-exec is sound
+        # here because the binary lives at a fixed, root-owned, world-executable path
+        # on a read-only rootfs the cell uid cannot rewrite, so it cannot be swapped
+        # between the supervisor's sha256 verify and the spawner's execve.
         payload = json.dumps(
             {
                 "uid": slot.uid,
                 "gid": slot.gid,
-                "argv": [binary.execution_path, *arguments],
+                "argv": [binary.path.as_posix(), *arguments],
                 "cwd": cwd,
                 "env": environment,
             }
