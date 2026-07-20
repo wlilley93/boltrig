@@ -11,8 +11,8 @@ from typing import cast
 
 from . import codex_protocol as wire
 from .codex_app_server import CodexAppServerClient
+from .codex_runtime_config_argv import validate_app_server_arguments
 from .codex_cell_policy import (
-    CODEX_APP_SERVER_ARGUMENTS,
     CODEX_CLI_SHA256,
     CODEX_CLI_TARGET,
     CODEX_CLI_VERSION,
@@ -219,9 +219,18 @@ class CodexCellSupervisor:
         self._claimed_cells: set[str] = set()
 
     async def start(
-        self, layout: CodexCellLayout, *, on_spawned: OnCellSpawned | None = None
+        self,
+        layout: CodexCellLayout,
+        *,
+        arguments: tuple[str, ...],
+        on_spawned: OnCellSpawned | None = None,
     ) -> InitializedCodexCell:
         admitted = validate_cell_layout(layout)
+        # [2026] VJS-CC-VJS 6 H5: argv is REQUIRED, never defaulted. A caller who
+        # forgets to pin gets a TypeError at the call site rather than a silently
+        # unpinned App Server, and an argv minted for another cell is refused here
+        # rather than discovered when the helper fetches the wrong bearer.
+        pinned = validate_app_server_arguments(arguments, cell_id=admitted.cell_id)
         await self._attest_workspace(admitted)
         await self._claim(admitted.phase_id, admitted.cell_id)
         process: ManagedCodexProcess | None = None
@@ -231,7 +240,7 @@ class CodexCellSupervisor:
             if self._binary_path.is_relative_to(admitted.cell_root):
                 raise CodexCellPolicyError("Codex binary must be outside the mutable cell root")
             binary = await self._verify_binary()
-            process = await self._spawn(binary, admitted)
+            process = await self._spawn(binary, admitted, pinned)
             if on_spawned is not None:
                 # Earliest instant the pid exists; every failure below reaps it.
                 await asyncio.wait_for(on_spawned(process.pid), self._startup_timeout)
@@ -283,14 +292,17 @@ class CodexCellSupervisor:
             raise CodexCellStartupError("Codex workspace re-attestation timed out") from None
 
     async def _spawn(
-        self, binary: PinnedCodexBinary, layout: CodexCellLayout
+        self,
+        binary: PinnedCodexBinary,
+        layout: CodexCellLayout,
+        arguments: tuple[str, ...],
     ) -> ManagedCodexProcess:
         environment = sanitized_environment(layout, self._auth)
         try:
             return await spawn_registered_process(
                 self._factory,
                 binary=binary.execution_path,
-                arguments=CODEX_APP_SERVER_ARGUMENTS,
+                arguments=arguments,
                 cwd=layout.workspace.as_posix(),
                 environment=environment,
                 pass_fds=(binary.fileno(),),

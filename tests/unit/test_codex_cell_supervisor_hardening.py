@@ -21,6 +21,7 @@ from boltrig.fleet.infrastructure.codex_cell_policy import (
 from boltrig.fleet.infrastructure.codex_cell_supervisor import CodexCellSupervisor
 from boltrig.fleet.infrastructure.skill_artifacts import project_sanitized_workspace
 from tests.unit.codex_process_fakes import (
+    pinned_arguments,
     FakeProcess,
     FakeProcessFactory,
     install_initialize_responder,
@@ -104,7 +105,7 @@ async def test_supervisor_reattests_a_real_sanitized_projection_before_spawn(
     layout = _projected_layout(tmp_path)
     supervisor, factory = _ready_supervisor(tmp_path, monkeypatch, layout)
 
-    cell = await supervisor.start(layout)
+    cell = await supervisor.start(layout, arguments=pinned_arguments(layout))
 
     assert factory.calls
     assert (layout.workspace / "README.md").read_text(encoding="utf-8") == (
@@ -130,10 +131,10 @@ async def test_forged_projection_accounting_fails_before_claim_or_spawn(
     supervisor, factory = _ready_supervisor(tmp_path, monkeypatch, layout)
 
     with pytest.raises(policy.CodexCellPolicyError, match="does not match"):
-        await supervisor.start(forged)
+        await supervisor.start(forged, arguments=pinned_arguments(layout))
 
     assert factory.calls == []
-    cell = await supervisor.start(layout)
+    cell = await supervisor.start(layout, arguments=pinned_arguments(layout))
     await cell.aclose()
 
 
@@ -150,7 +151,7 @@ async def test_workspace_byte_tamper_fails_before_process_allocation(
     supervisor, factory = _ready_supervisor(tmp_path, monkeypatch, layout)
 
     with pytest.raises(policy.CodexCellPolicyError, match="does not match"):
-        await supervisor.start(layout)
+        await supervisor.start(layout, arguments=pinned_arguments(layout))
 
     assert factory.calls == []
 
@@ -163,7 +164,7 @@ async def test_workspace_file_mode_tamper_fails_closed(
     supervisor, factory = _ready_supervisor(tmp_path, monkeypatch, layout)
 
     with pytest.raises(policy.CodexCellPolicyError, match="unsafe mode"):
-        await supervisor.start(layout)
+        await supervisor.start(layout, arguments=pinned_arguments(layout))
 
     assert factory.calls == []
 
@@ -187,7 +188,7 @@ async def test_workspace_unsafe_injection_fails_closed(
     supervisor, factory = _ready_supervisor(tmp_path, monkeypatch, layout)
 
     with pytest.raises(policy.CodexCellPolicyError, match="re-attestation failed"):
-        await supervisor.start(layout)
+        await supervisor.start(layout, arguments=pinned_arguments(layout))
 
     assert factory.calls == []
     layout.workspace.chmod(0o700)
@@ -228,7 +229,7 @@ async def test_workspace_change_between_bounded_captures_fails_as_a_race(
     supervisor, factory = _ready_supervisor(tmp_path, monkeypatch, layout)
 
     with pytest.raises(policy.CodexCellPolicyError, match="changed"):
-        await supervisor.start(layout)
+        await supervisor.start(layout, arguments=pinned_arguments(layout))
 
     assert factory.calls == []
 
@@ -252,7 +253,7 @@ async def test_supervisor_exec_target_survives_verified_path_replacement(
 
     factory.before_allocate = replace_path
 
-    cell = await supervisor.start(layout)
+    cell = await supervisor.start(layout, arguments=pinned_arguments(layout))
 
     assert observed == [b"reviewed executable"]
     assert cell.metadata.binary_path == binary
@@ -280,7 +281,7 @@ async def test_cancellation_during_binary_verification_closes_late_descriptor(
         binary=binary,
         process_factory=FakeProcessFactory(FakeProcess()),
     )
-    starting = asyncio.create_task(supervisor.start(layout))
+    starting = asyncio.create_task(supervisor.start(layout, arguments=pinned_arguments(layout)))
     while not entered.is_set():
         await asyncio.sleep(0)
 

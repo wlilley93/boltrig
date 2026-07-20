@@ -11,6 +11,7 @@ import pytest
 
 from boltrig.fleet.infrastructure import codex_cell_policy as policy
 from scripts import check_codex_protocol
+from boltrig.fleet.infrastructure import codex_runtime_config_argv as argv
 from tests.unit.codex_process_fakes import make_layout
 
 
@@ -18,7 +19,7 @@ def test_runtime_pin_exactly_matches_checked_in_protocol_checker() -> None:
     assert policy.CODEX_CLI_VERSION == check_codex_protocol.PIN_VERSION == "0.144.3"
     assert policy.CODEX_CLI_TARGET == check_codex_protocol.PIN_TARGET
     assert policy.CODEX_CLI_SHA256 == check_codex_protocol.PIN_BINARY_SHA256
-    assert policy.CODEX_APP_SERVER_ARGUMENTS == (
+    assert argv.CODEX_APP_SERVER_BASE_ARGUMENTS == (
         "app-server",
         "--listen",
         "stdio://",

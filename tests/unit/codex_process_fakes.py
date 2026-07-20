@@ -6,6 +6,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 
+from boltrig.fleet.infrastructure.codex_runtime_config_argv import (
+    codex_app_server_arguments,
+)
 from boltrig.fleet.infrastructure.codex_cell_policy import CodexCellLayout
 from boltrig.fleet.infrastructure.codex_process_spawn import ProcessAllocated
 from boltrig.fleet.infrastructure.skill_artifacts import (
@@ -211,3 +214,20 @@ def install_initialize_responder(
         process.feed_stdout(json.dumps(response, separators=(",", ":")).encode() + b"\n")
 
     process.stdin_callback = respond
+
+
+def pinned_arguments(layout: CodexCellLayout) -> tuple[str, ...]:
+    """A valid H5-pinned argv for ``layout`` ([2026] VJS-CC-VJS 6).
+
+    ``CodexCellSupervisor.start`` now REQUIRES argv rather than defaulting it, so
+    that no caller can spawn an unpinned App Server by forgetting. Tests that only
+    care about supervision, not about pinning, use this to satisfy the contract
+    with a well-formed argv bound to the layout's own cell id.
+    """
+
+    return codex_app_server_arguments(
+        cell_id=layout.cell_id,
+        helper_path="/opt/boltrig/codex/model_auth_helper",
+        socket_name="@boltrig-mp-0123456789abcdef0123456789abcdef",
+        proxy_port=41234,
+    )

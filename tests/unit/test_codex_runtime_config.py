@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from boltrig.fleet.infrastructure.codex_runtime_config import (
-    CODEX_RUNTIME_APP_SERVER_ARGUMENTS,
+    CODEX_APP_SERVER_BASE_ARGUMENTS,
     CODEX_RUNTIME_CLI_VERSION,
     CODEX_RUNTIME_CONFIG_PRODUCTION_READY,
     CODEX_RUNTIME_INITIALIZE_EXPERIMENTAL_API,
@@ -176,13 +176,30 @@ def test_stable_stdio_strict_config_contract_is_explicit_and_not_ready() -> None
 
     assert CODEX_RUNTIME_CLI_VERSION == "0.144.3"
     assert receipt.codex_cli_version == "0.144.3"
-    assert CODEX_RUNTIME_APP_SERVER_ARGUMENTS == (
+    assert CODEX_APP_SERVER_BASE_ARGUMENTS == (
         "app-server",
         "--listen",
         "stdio://",
         "--strict-config",
     )
-    assert receipt.app_server_arguments == CODEX_RUNTIME_APP_SERVER_ARGUMENTS
+    # H5: argv now EXTENDS the base with the pinned overrides, and is DERIVED from
+    # the receipt rather than stored on it, so it cannot drift from the TOML.
+    arguments = receipt.app_server_arguments
+    assert arguments[:4] == CODEX_APP_SERVER_BASE_ARGUMENTS
+    # Every odd element from index 5 is a "key=value" override payload.
+    overrides = dict(argument.split("=", 1) for argument in arguments[5::2])
+    assert overrides["model_provider"] == '"boltrig_model_proxy"'
+    assert overrides["approval_policy"] == '"never"'
+    assert overrides["sandbox_mode"] == '"read-only"'
+    provider = "model_providers.boltrig_model_proxy"
+    assert overrides[f"{provider}.auth.command"] == f'"{receipt.helper_path}"'
+    # auth.args is pinned as well as auth.command: pinning the program without its
+    # target would still let a rewritten config aim the helper at a SIBLING socket.
+    assert receipt.socket_name in overrides[f"{provider}.auth.args"]
+    assert receipt.cell_id in overrides[f"{provider}.auth.args"]
+    assert overrides["features.hooks"] == "false"
+    # Nothing secret may reach /proc/<pid>/cmdline.
+    assert not any("token" in argument.lower() for argument in arguments)
     assert receipt.initialize_experimental_api is False
     assert CODEX_RUNTIME_INITIALIZE_EXPERIMENTAL_API is False
     assert receipt.production_ready is False

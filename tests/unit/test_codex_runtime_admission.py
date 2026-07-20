@@ -41,8 +41,14 @@ class _Supervisor:
         self.cell = cell
         self.calls = 0
 
-    async def start(self, _layout: object) -> InitializedCodexCell:
+    async def start(
+        self, _layout: object, *, arguments: tuple[str, ...]
+    ) -> InitializedCodexCell:
         self.calls += 1
+        # H5 ([2026] VJS-CC-VJS 6): the double mirrors the real signature, so a
+        # caller that stops pinning argv fails here too rather than passing
+        # against a stub that is more permissive than the thing it stands for.
+        self.arguments = arguments
         return self.cell.initialized
 
 

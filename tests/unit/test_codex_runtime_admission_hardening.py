@@ -62,8 +62,13 @@ class _Supervisor:
         self.cell = cell
         self.calls = 0
 
-    async def start(self, _layout: CodexCellLayout) -> InitializedCodexCell:
+    async def start(
+        self, _layout: CodexCellLayout, *, arguments: tuple[str, ...]
+    ) -> InitializedCodexCell:
         self.calls += 1
+        # Mirrors the real signature (H5): a double looser than the thing it
+        # stands for would let an unpinned spawn pass here and fail in production.
+        self.arguments = arguments
         return self.cell.initialized
 
 

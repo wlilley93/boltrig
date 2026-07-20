@@ -25,12 +25,6 @@ CODEX_CLI_TARGET = "x86_64-unknown-linux-musl"
 CODEX_CLI_SHA256 = "37e6f5953f191b04f7b62cb07dae90f51d0947ad89f0355665b421fbde28700b"
 CODEX_AUTH_ENVIRONMENT_KEY = "CODEX_ACCESS_TOKEN"
 MAX_CODEX_ACCESS_TOKEN_BYTES = 16 * 1024
-CODEX_APP_SERVER_ARGUMENTS = (
-    "app-server",
-    "--listen",
-    "stdio://",
-    "--strict-config",
-)
 _MINIMAL_PATH = "/usr/bin:/bin"
 CODEX_WORKSPACE_LIMITS = FilesystemLimits()
 

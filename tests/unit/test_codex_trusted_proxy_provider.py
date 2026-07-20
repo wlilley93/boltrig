@@ -287,7 +287,7 @@ def test_config_points_the_cell_at_the_loopback_proxy(tmp_path: Path) -> None:
     codex_home.mkdir()
     # G2: the helper is the SHARED root-owned program, never a per-cell file.
     helper = Path(_TEST_SHARED_HELPER)
-    config_toml = render_trusted_config(
+    composed = render_trusted_config(
         cell_id="cell-001",
         cell_root=tmp_path,
         codex_home=codex_home,
@@ -299,7 +299,7 @@ def test_config_points_the_cell_at_the_loopback_proxy(tmp_path: Path) -> None:
         reasoning_effort=CodexReasoningEffort.HIGH,
         proxy_port=45123,
     )
-    document = tomllib.loads(config_toml)
+    document = tomllib.loads(composed.config_toml)
     provider = document["model_providers"]["boltrig_model_proxy"]  # type: ignore[index]
     assert provider["base_url"] == "http://127.0.0.1:45123/v1"
     assert provider["wire_api"] == "responses"
@@ -311,6 +311,19 @@ def test_config_points_the_cell_at_the_loopback_proxy(tmp_path: Path) -> None:
         "@boltrig-mp-0123456789abcdef0123456789abcdef",
     ]
     assert document["sandbox_mode"] == "read-only"
+
+    # H5 ([2026] VJS-CC-VJS 6): the SAME composed record derives the argv, so the
+    # file and the command line cannot disagree about the values that matter. This
+    # is the property that makes pinning worth anything: a sibling cell rewriting
+    # config.toml still faces the argv, and the argv still says what the file said.
+    overrides = dict(
+        argument.split("=", 1) for argument in composed.receipt.app_server_arguments[5::2]
+    )
+    base = "model_providers.boltrig_model_proxy"
+    assert overrides[f"{base}.base_url"] == f'"{provider["base_url"]}"'
+    assert overrides[f"{base}.auth.command"] == f'"{provider["auth"]["command"]}"'
+    assert overrides["sandbox_mode"] == f'"{document["sandbox_mode"]}"'
+    assert "cell-001" in overrides[f"{base}.auth.args"]
 
 
 async def test_write_cell_config_writes_no_executable_into_the_cell_root(

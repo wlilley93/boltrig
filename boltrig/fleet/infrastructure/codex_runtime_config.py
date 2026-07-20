@@ -10,6 +10,11 @@ from enum import Enum
 from pathlib import Path
 from typing import Never, SupportsIndex
 
+from .codex_runtime_config_argv import (
+    CODEX_APP_SERVER_BASE_ARGUMENTS,
+    codex_app_server_arguments,
+    validate_app_server_arguments,
+)
 from .codex_runtime_config_toml import (
     CODEX_MODEL_PROVIDER_ID,
     CODEX_RUNTIME_DISABLED_FEATURES,
@@ -34,12 +39,6 @@ from .codex_runtime_config_policy import (
 CODEX_RUNTIME_CONFIG_VERSION = 1
 CODEX_RUNTIME_CLI_VERSION = "0.144.3"
 CODEX_RUNTIME_CONFIG_PRODUCTION_READY = False
-CODEX_RUNTIME_APP_SERVER_ARGUMENTS = (
-    "app-server",
-    "--listen",
-    "stdio://",
-    "--strict-config",
-)
 CODEX_RUNTIME_INITIALIZE_EXPERIMENTAL_API = False
 MAX_CODEX_RUNTIME_CONFIG_BYTES = 768 * 1024
 
@@ -173,12 +172,30 @@ class CodexRuntimeConfigReceipt:
     codex_cli_version: str = CODEX_RUNTIME_CLI_VERSION
     provider_id: str = CODEX_MODEL_PROVIDER_ID
     provider_contract_digest: str = CODEX_RUNTIME_PROVIDER_CONTRACT_DIGEST
-    app_server_arguments: tuple[str, ...] = CODEX_RUNTIME_APP_SERVER_ARGUMENTS
     initialize_experimental_api: bool = CODEX_RUNTIME_INITIALIZE_EXPERIMENTAL_API
     production_ready: bool = CODEX_RUNTIME_CONFIG_PRODUCTION_READY
 
     def __post_init__(self) -> None:
         _validate_receipt(self)
+
+    @property
+    def app_server_arguments(self) -> tuple[str, ...]:
+        """Derive the H5-pinned App Server argv from this receipt's own fields.
+
+        Deliberately NOT a stored field. A stored copy would have to be validated
+        beside the record it duplicates, and the two could then drift apart; the
+        argv is a function of the record, so it is computed from the record. A
+        forged value is not merely rejected, it is not expressible: there is no
+        slot to write and no setter to call.
+        """
+
+        return codex_app_server_arguments(
+            cell_id=self.cell_id,
+            helper_path=self.helper_path,
+            socket_name=self.socket_name,
+            proxy_port=self.proxy_port,
+            features=CODEX_RUNTIME_DISABLED_FEATURES,
+        )
 
     def matches(self, config_toml: str) -> bool:
         if type(config_toml) is not str:
@@ -207,6 +224,9 @@ def _validate_receipt(receipt: CodexRuntimeConfigReceipt) -> None:
     # comparison. Check it in its own right: it names the endpoint the App Server's
     # helper will connect to, so it is worth the same standing as the other paths.
     validate_ingress_socket_name(receipt.socket_name)
+    # Derived from the record, so it cannot disagree with it. Checked anyway so a
+    # broken derivation fails at composition rather than at execve.
+    validate_app_server_arguments(receipt.app_server_arguments, cell_id=receipt.cell_id)
     validate_model_id(receipt.model_id)
     validate_digest("model policy digest", receipt.model_policy_digest)
     if type(receipt.reasoning_effort) is not CodexReasoningEffort:
@@ -227,9 +247,6 @@ def _validate_receipt(receipt: CodexRuntimeConfigReceipt) -> None:
         and receipt.provider_id == CODEX_MODEL_PROVIDER_ID
         and type(receipt.provider_contract_digest) is str
         and receipt.provider_contract_digest == CODEX_RUNTIME_PROVIDER_CONTRACT_DIGEST
-        and type(receipt.app_server_arguments) is tuple
-        and all(type(argument) is str for argument in receipt.app_server_arguments)
-        and receipt.app_server_arguments == CODEX_RUNTIME_APP_SERVER_ARGUMENTS
         and receipt.initialize_experimental_api is False
         and receipt.production_ready is False
     )
@@ -336,7 +353,7 @@ def compose_codex_runtime_config(
 
 
 __all__ = [
-    "CODEX_RUNTIME_APP_SERVER_ARGUMENTS",
+    "CODEX_APP_SERVER_BASE_ARGUMENTS",
     "CODEX_RUNTIME_CLI_VERSION",
     "CODEX_RUNTIME_CONFIG_PRODUCTION_READY",
     "CODEX_RUNTIME_CONFIG_VERSION",
