@@ -173,6 +173,30 @@ def drop_privileges(uid: int, gid: int) -> PrivilegeState:
     return assert_unprivileged(expected_uid=uid)
 
 
+def assert_cell_process_unprivileged(pid: int, *, expected_uid: int | None = None) -> PrivilegeState:
+    """Prove a SPAWNED CELL's privilege state before it is handed any credential.
+
+    [2026] VJS-CC-VJS 7 J5. The reading is taken by the KERNEL from
+    ``/proc/<pid>/status``, never from anything the cell says about itself: a cell
+    that has been compromised is exactly the one that would report a clean state,
+    so self-attestation would be worth nothing here.
+
+    Checked immediately before issuance rather than at spawn, because the question
+    is whether the process is unprivileged AT THE MOMENT it is trusted, and a spawn
+    that succeeded some seconds ago proves nothing about now.
+    """
+
+    if type(pid) is not int or pid <= 1:
+        raise PrivilegeError("cell privilege check needs a real pid")
+    try:
+        return assert_unprivileged(
+            expected_uid=expected_uid, status_path=Path(f"/proc/{pid}/status")
+        )
+    except OSError as error:
+        # A cell whose /proc we cannot read is a cell we cannot vouch for.
+        raise PrivilegeError("cell privilege state is unreadable") from error
+
+
 def per_cell_uid_mode_available(status_path: Path = PROC_STATUS) -> bool:
     """True only where this process can actually mint per-cell uids.
 
@@ -199,6 +223,7 @@ __all__ = [
     "PROC_STATUS",
     "PrivilegeError",
     "PrivilegeState",
+    "assert_cell_process_unprivileged",
     "assert_unprivileged",
     "clear_capability_sets",
     "drop_privileges",
