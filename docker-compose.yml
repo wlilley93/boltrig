@@ -85,6 +85,31 @@ services:
     image: boltrig/kernel:0.1.0
     restart: unless-stopped
     <<: *app-hardening
+    # [2026] VJS-CC-VJS 7 J1/J11. Per-cell uids, and the VERIFIED reason uid 0 is
+    # required, recorded here so the necessity is auditable and revisitable rather
+    # than folklore: a NON-ROOT container cannot hold CAP_SETUID at all. Under
+    # --user 10001 --cap-add SETUID the permitted set is EMPTY and only the
+    # bounding set survives, so a uid-10001 supervisor that setuids and then drops
+    # is not merely unsafe, it is unavailable at the runtime. The court found this
+    # itself and it supplies the necessity my own pleading failed to establish.
+    #
+    # uid 0 here is NOT the API. scripts/kernel-entrypoint.py forks a minimal
+    # spawner that alone keeps these capabilities, then drops the API to 10001
+    # with an empty permitted set and proves it from /proc before serving. J3
+    # forbids any other arrangement. CAP_CHOWN is REFUSED and unnecessary: the
+    # per-slot tmpfs mounts above are created already owned by their cell uid.
+    #
+    # ENACTED. The J9 two-cell adversarial gate passed on the built image: hostile
+    # cell A at uid 20001, holding full write access to everything its uid can
+    # reach, could not rewrite, append to, read, unlink, rename over, chmod or even
+    # list cell B's config.toml at uid 20002, and B verified its own auth.command
+    # survived intact. J7 passed too: a cell cannot setuid back to the spawner,
+    # to the API, or sideways to a sibling, and cannot exec a setuid binary
+    # (there are none left; the image strips them under J4).
+    user: "0:0"
+    cap_add:
+      - SETUID
+      - SETGID
     # [2026] VJS-CC-VJS 5 G2: the per-cell auth helper no longer lives in the cell
     # root (it is baked root-owned at /opt/boltrig/codex/model_auth_helper on the
     # read-only rootfs), so this tmpfs no longer needs exec. Reverting to noexec
