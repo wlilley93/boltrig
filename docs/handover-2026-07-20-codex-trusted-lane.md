@@ -142,58 +142,33 @@ exact shape, so a rewritten config naming a filesystem path fails closed. Unit +
 
 Gate, branch, PR, merge. Log at `/tmp/abstract-socket-check.log`.
 
-### 3.2 G3: protect `config.toml` (task #40) - COURT
+### 3.2 G3: protect `config.toml` (task #40) - REFUSED, and now evidenced
 
-[2026] VJS-CC-VJS 5 directive G3 requires the same protection for `config.toml` as for the helper,
-because `auth.command` names the program the App Server executes and is an attestation input of
-equal rank. Today a hostile cell can rewrite a sibling's `config.toml`.
+**Status changed since this handover was first written.** The capability application was put to
+First Instance and [2026] VJS-CC-VJS 6 (Marchbanks CCJ) **REFUSED** it, with liberty to re-apply.
+Read that order before touching G3; it corrects three things I had wrong.
 
-The two obvious fixes both need a capability the deploy does not grant (the container is
-`cap_drop: [ALL]`, `no-new-privileges:true`, `read_only: true`, uid 10001):
+What the order establishes:
 
-- per-cell uids need `CAP_SETUID` / `CAP_SETGID` (this was the design agent's recommendation);
-- a per-cell read-only bind mount needs `CAP_SYS_ADMIN`.
+- The argv `-c` route wins over `config.toml` for LEAF keys but **table overrides MERGE**, so
+  `-c 'mcp_servers={}'` does not remove an attacker-added `[mcp_servers.attacker]`. Same for the
+  root-owned `/etc/codex/managed_config.toml`. Verified twice.
+- The court's own proposed alternative (one root-owned read-only CODEX_HOME shared by all cells) was
+  ordered tested under H1/H2 and **does not work**: Codex 0.144.3 keeps sqlite state inside
+  CODEX_HOME and refuses to start without write access. Sticky-bit repairs give nothing under one
+  shared uid; unprivileged user namespaces are `EPERM` under the container seccomp. Evidence:
+  `docs/findings/2026-07-20-codex-home-writability.md`.
+- **`CAP_SETUID` + `CAP_SETGID` was never the minimum sufficient grant.** setuid between two
+  non-zero uids does NOT clear capabilities, and `no-new-privileges` does not help
+  (`PR_SET_NO_NEW_PRIVS` constrains what `execve` may GRANT, not what a process already holds), so a
+  cell could setuid sideways into a sibling. Chowning per-cell trees also needs `CAP_CHOWN`.
 
-A no-capability route was investigated and **empirically settled: it does not fully work.** Do not
-re-litigate this without new evidence; the experiments are reproducible.
+Any re-application must satisfy H6 (plead the COMPLETE grant), H7 (clear the capability from the
+child's permitted, inheritable and bounding sets before `execve`) and H8 (prove it adversarially).
+H5 orders the argv pinning ANYWAY as free defence in depth, which does not discharge G3.
 
-What WAS proved to work, on the real pinned binary:
-
-- Codex 0.144.3 takes `-c key=value` dotted-path overrides on `app-server`, parsed as TOML (so
-  arrays work), applied AFTER `config.toml` and **winning against it** for leaf keys. Verified:
-  a fixture config.toml with `model_provider = "evil"` plus a full `model_providers.evil` table was
-  overridden by `-c model_provider="boltrig_model_proxy"`, and the argv-supplied `auth.command` is
-  genuinely the program the App Server execve's.
-- There is also a root-owned managed layer at `/etc/codex/managed_config.toml` (plus
-  `/etc/codex/config.toml` and a constraint file `/etc/codex/requirements.toml`), which sits on the
-  read-only image mount and needs no capability to install.
-
-What KILLS it: **table-valued overrides MERGE, they do not replace.** A hostile cell that adds
-
-```toml
-[mcp_servers.attacker]
-command = "/tmp/attacker-mcp"
-```
-
-to a sibling's `config.toml` survives BOTH `-c 'mcp_servers={}'` on argv AND `mcp_servers = {}` in
-the root-owned `/etc/codex/managed_config.toml`. Verified twice, the second time inside a container
-where the managed file was genuinely root-owned: `codex doctor --json` still reported
-`"configured servers": "1"` with the attacker entry intact. `mcp_servers.*.command` is an
-independent program-execution surface, so the App Server would execve attacker code as its own
-child, which passes ancestry attestation on the merits and is handed the sibling's bearer. That is
-precisely the VJS-CC-VJS 5 vector, unclosed.
-
-Overriding a leaf cannot remove sibling keys an attacker ADDS. So argv pinning is a genuine
-hardening (and worth doing for `model_provider`, `approval_policy`, `sandbox_mode`, `base_url`,
-`auth.command`, `features.*`) but it is **not** a discharge of G3.
-
-**Therefore the minimum grant is `CAP_SETUID` + `CAP_SETGID`** for per-cell uids - strictly cheaper
-than `CAP_SYS_ADMIN` for per-cell bind mounts. Granting any capability to a `cap_drop: [ALL]`,
-`no-new-privileges` container is a first-impression posture change: **not my call - the court.**
-
-One further note for whoever drafts the case: **argv is not secret.** `auth.args` lands in
-`/proc/<pid>/cmdline`, readable by every same-uid cell. Cell ids and socket names are fine there;
-never migrate a token onto argv.
+One further note: **argv is not secret.** `auth.args` lands in `/proc/<pid>/cmdline`, readable by
+every same-uid cell. Cell ids and socket names are fine there; never migrate a token onto argv.
 
 ### 3.3 The `production_ready` flip - COURT, expressly
 
