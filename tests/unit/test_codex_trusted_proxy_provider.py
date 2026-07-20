@@ -335,7 +335,7 @@ async def test_write_cell_config_writes_no_executable_into_the_cell_root(
         codex_home = tmp_path / "codex-home"
         codex_home.mkdir()
         socket_name = "@boltrig-mp-0123456789abcdef0123456789abcdef"
-        provider._write_cell_config(
+        await provider._write_cell_config(
             cell_id="cell-002",
             cell_root=tmp_path,
             codex_home=codex_home,

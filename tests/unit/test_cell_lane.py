@@ -36,25 +36,23 @@ async def test_the_lane_refuses_when_per_cell_uids_are_not_available(
     parent, child = socket.socketpair()
     try:
         lane = CellLane(parent, CellSlotAllocator(2))
+        # The refusal moved to acquire_slot, the first step the provider takes, so a
+        # slot is never reserved on a box where per-cell uids are not in force.
         with pytest.raises(CellSpawnerError, match="not available"):
-            await lane.spawn(
-                binary=_Binary(),  # type: ignore[arg-type]
-                arguments=("app-server",),
-                cwd="/var/lib/boltrig/codex-cells/slot-0",
-                environment={},
-            )
+            lane.acquire_slot()
     finally:
         parent.close()
         child.close()
 
 
-async def test_a_failed_spawn_returns_the_slot_to_the_pool(
+async def test_a_failed_spawn_leaves_slot_release_to_the_caller(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A leaked slot would permanently shrink the number of cells the lane serves.
+    """Slot lifecycle now sits with the CALLER (the provider), not the lane.
 
-    Worse, it would do so silently: the lane would start refusing tenants with a
-    "no free slot" error that has nothing to do with how many are actually live.
+    ``acquire_slot`` reserves, ``spawn(slot)`` only turns the slot into a process,
+    and the provider releases on failure and on the cell's exit. This keeps a single
+    release owner (J10): the lane never double-frees or leaks behind the provider.
     """
 
     monkeypatch.setattr(lane_module, "per_cell_uid_mode_available", lambda: True)
@@ -67,15 +65,21 @@ async def test_a_failed_spawn_returns_the_slot_to_the_pool(
     try:
         allocator = CellSlotAllocator(1)
         lane = CellLane(parent, allocator)
+        slot = lane.acquire_slot()
+        assert allocator.held_uids() == frozenset({slot.uid})
         with pytest.raises(CellSpawnerError, match="spawner said no"):
             await lane.spawn(
+                slot,
                 binary=_Binary(),  # type: ignore[arg-type]
                 arguments=("app-server",),
                 cwd="/var/lib/boltrig/codex-cells/slot-0",
                 environment={},
             )
+        # spawn did NOT auto-release; the caller returns the slot.
+        assert allocator.held_uids() == frozenset({slot.uid})
+        lane.release_slot(slot)
         assert allocator.held_uids() == frozenset()
-        allocator.acquire()  # the slot is genuinely reusable, not just untracked
+        lane.acquire_slot()  # the slot is genuinely reusable, not just untracked
     finally:
         parent.close()
         child.close()

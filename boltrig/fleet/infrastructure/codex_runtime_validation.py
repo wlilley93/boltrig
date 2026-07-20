@@ -52,7 +52,18 @@ def validate_admission(spec: RuntimeThreadSpec, leased: object) -> AdmittedCodex
         raise CodexRuntimeAdmissionError("cell provider returned another assignment")
     admission = leased.admission
     policy = admission.compilation.policy
-    if spec.working_directory != admission.layout.workspace.as_posix():
+    if admission.slot_provisioned:
+        # The per-cell workspace lives in a DYNAMICALLY allocated slot the adapter
+        # cannot predict, so the exact spec-token compare is relaxed to a slot-shape
+        # check on the admitted layout. The REAL process cwd is layout.workspace (used
+        # by the supervisor directly), and the spawner independently confirms it is
+        # inside the stack root, and validate_cell_layout already proved workspace is a
+        # child of cell_root of stack_root - so this stays bounded, not open. The
+        # assignment/profile/skills bindings below are unchanged.
+        workspace = admission.layout.workspace
+        if not (workspace.name == "workspace" and workspace.parent.name.startswith("slot-")):
+            raise CodexRuntimeAdmissionError("per-cell workspace is not a slot workspace path")
+    elif spec.working_directory != admission.layout.workspace.as_posix():
         raise CodexRuntimeAdmissionError("working directory is not the admitted workspace")
     if (spec.profile.name, spec.profile.version) != (policy.profile.name, policy.profile.version):
         raise CodexRuntimeAdmissionError("profile does not match the admitted birth policy")

@@ -59,6 +59,8 @@ from boltrig.fleet.application.model_proxy_grants import (
 from boltrig.fleet.codex_trusted_wall import require_codex_trusted_posture
 from boltrig.fleet.domain import PhaseAssignmentRef
 from boltrig.fleet.domain.model_proxy_scope import ModelProxyCellScope
+from boltrig.fleet.infrastructure.cell_slots import CellSlot
+from boltrig.fleet.infrastructure.codex_cell_policy import CodexCellLayout
 from boltrig.fleet.infrastructure.codex_cell_supervisor import (
     CodexCellSupervisor,
     InitializedCodexCell,
@@ -111,6 +113,20 @@ class _TrustedSession:
     ingress: CodexTrustedIngress
     holder: GenerationHolder
     reaper: asyncio.Task[None]
+    slot: "CellSlot | None" = None
+
+
+def _per_cell_tree_dirs(layout: CodexCellLayout) -> list[dict[str, object]]:
+    """The cell tree the spawner creates cell-uid-side: home/codex-home/source at
+    0700, the empty read-only workspace at 0500. Matches validate_cell_layout's
+    expected modes, which the spawner child re-verifies as it creates them."""
+
+    return [
+        {"path": layout.home.as_posix(), "mode": 0o700},
+        {"path": layout.codex_home.as_posix(), "mode": 0o700},
+        {"path": (layout.cell_root / "source").as_posix(), "mode": 0o700},
+        {"path": layout.workspace.as_posix(), "mode": 0o500},
+    ]
 
 
 class TrustedProxyCodexPhaseCellProvider:
@@ -183,7 +199,14 @@ class TrustedProxyCodexPhaseCellProvider:
         # D1: fail closed BEFORE any provisioning or bearer mint can happen.
         require_codex_trusted_posture(self._env, self._settings)
         self._require_admissible_concurrency()
-        admission = await self._source.admit(assignment)
+        # Per-cell uids: reserve this cell's slot (distinct uid + kernel-owned tree)
+        # up front, so admission, config and argv all use the slot's paths. None in
+        # the in-process posture, which is byte-identical to before. Release ownership
+        # moves to the reaper once the session is registered; until then, this method
+        # releases on any failure (reaper_started tracks the handover).
+        slot = self._supervisor.acquire_slot()
+        reaper_started = False
+        admission = await self._source.admit(assignment, slot)
         if type(admission) is not CodexPhaseAdmission or admission.assignment != assignment:
             raise CodexRuntimeAdmissionError("admission source returned another assignment")
         holder = GenerationHolder(self._generation)
@@ -201,19 +224,27 @@ class TrustedProxyCodexPhaseCellProvider:
             )
             model_id = admission.compilation.policy.model.model_id
             layout = admission.layout
+            # Per-cell: the API cannot write the cell-uid slot, so the spawner builds
+            # the directory tree AS the cell uid first. Must precede the config write,
+            # which lands config.toml inside CODEX_HOME. No-op in-process.
+            if slot is not None:
+                await self._supervisor.provision_cell_tree(
+                    slot, dirs=_per_cell_tree_dirs(layout), files=[]
+                )
             # The socket path is derived from the (pre-start) cell id, so the helper
             # the App Server will exec can be materialized before start.
             socket_name = select_ingress_socket_name()
             # The SAME composed record renders the file and derives the argv, so
             # the two surfaces cannot disagree about the provider, the helper, the
             # socket or the port ([2026] VJS-CC-VJS 6 H5).
-            arguments = self._write_cell_config(
+            arguments = await self._write_cell_config(
                 cell_id=layout.cell_id,
                 cell_root=layout.cell_root,
                 codex_home=layout.codex_home,
                 model_id=model_id,
                 proxy_port=proxy.port,
                 socket_name=socket_name,
+                slot=slot,
             )
             ingress = self._build_ingress()
             issuer = self._build_issuer(model_id, holder)
@@ -235,7 +266,7 @@ class TrustedProxyCodexPhaseCellProvider:
             # App Server is unregistered. A cell that fails to register is reaped
             # by the supervisor and never handed out.
             cell = await self._supervisor.start(
-                admission.layout, arguments=arguments, on_spawned=register_spawned
+                admission.layout, arguments=arguments, slot=slot, on_spawned=register_spawned
             )
             if scope is None:
                 # start() only returns once on_spawned succeeded, so this cannot
@@ -243,12 +274,17 @@ class TrustedProxyCodexPhaseCellProvider:
                 raise CodexRuntimeAdmissionError("cell started without a registered scope")
             preflight = await self._probe.probe(cell.client, admission.skill_plan)
             admitted = AdmittedCodexCell(admission, cell, preflight)
-            self._register_session(cell, proxy, scope, ingress, holder)
+            self._register_session(cell, proxy, scope, ingress, holder, slot)
+            reaper_started = True
             return admitted
         except BaseException:
             await self._teardown(proxy, scope, ingress)
             if cell is not None:
                 await _close_ignoring_failure(cell)
+            # Single-owner slot release: the reaper owns it once the session is
+            # registered; before that, this failure path returns it to the pool.
+            if not reaper_started:
+                self._supervisor.release_slot(slot)
             raise
 
     def _build_ingress(self) -> CodexTrustedIngress:
@@ -299,7 +335,7 @@ class TrustedProxyCodexPhaseCellProvider:
         await proxy.start()
         return proxy
 
-    def _write_cell_config(
+    async def _write_cell_config(
         self,
         *,
         cell_id: str,
@@ -308,8 +344,16 @@ class TrustedProxyCodexPhaseCellProvider:
         model_id: str,
         proxy_port: int,
         socket_name: str,
+        slot: CellSlot | None = None,
     ) -> tuple[str, ...]:
-        """Write the cell's config.toml and return the argv pinning the same values."""
+        """Write the cell's config.toml and return the argv pinning the same values.
+
+        Rendering is pure and API-side. The WRITE differs by posture: in-process the
+        API writes CODEX_HOME/config.toml directly; per-cell the API cannot write the
+        cell-uid slot, so the content is handed to the spawner, whose cell-uid child
+        writes it (0600) into the cell's own CODEX_HOME - the tree the spawner already
+        created above.
+        """
 
         composed = render_trusted_config(
             cell_id=cell_id,
@@ -323,7 +367,20 @@ class TrustedProxyCodexPhaseCellProvider:
             reasoning_effort=self._reasoning_effort,
             proxy_port=proxy_port,
         )
-        write_cell_config(codex_home, composed.config_toml)
+        if slot is not None:
+            await self._supervisor.provision_cell_tree(
+                slot,
+                dirs=[],
+                files=[
+                    {
+                        "path": (codex_home / "config.toml").as_posix(),
+                        "mode": 0o600,
+                        "content": composed.config_toml,
+                    }
+                ],
+            )
+        else:
+            write_cell_config(codex_home, composed.config_toml)
         return composed.receipt.app_server_arguments
 
     def _register_session(
@@ -333,13 +390,14 @@ class TrustedProxyCodexPhaseCellProvider:
         scope: ModelProxyCellScope,
         ingress: CodexTrustedIngress,
         holder: GenerationHolder,
+        slot: CellSlot | None = None,
     ) -> None:
         reaper = asyncio.create_task(
-            self._reap(cell, proxy, scope, ingress),
+            self._reap(cell, proxy, scope, ingress, slot),
             name=f"codex-trusted-reap-{cell.metadata.cell_id}",
         )
         self._sessions[cell.metadata.cell_id] = _TrustedSession(
-            proxy, scope, ingress, holder, reaper
+            proxy, scope, ingress, holder, reaper, slot
         )
 
     async def _reap(
@@ -348,11 +406,15 @@ class TrustedProxyCodexPhaseCellProvider:
         proxy: PerCellModelProxyServer,
         scope: ModelProxyCellScope,
         ingress: CodexTrustedIngress,
+        slot: CellSlot | None = None,
     ) -> None:
         try:
             await cell.wait_closed()
         finally:
             await self._teardown(proxy, scope, ingress)
+            # Return the uid to the pool only after the cell is observed closed, so a
+            # successor can never take a uid still in use (J10).
+            self._supervisor.release_slot(slot)
             self._sessions.pop(cell.metadata.cell_id, None)
 
     async def _teardown(

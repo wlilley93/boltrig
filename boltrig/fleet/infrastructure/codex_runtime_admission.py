@@ -7,7 +7,10 @@ import hashlib
 import json
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
+
+if TYPE_CHECKING:
+    from boltrig.fleet.infrastructure.cell_slots import CellSlot
 
 from boltrig.fleet.domain import PhaseAssignmentRef, SandboxPolicy
 from boltrig.fleet.domain.profile_policy import (

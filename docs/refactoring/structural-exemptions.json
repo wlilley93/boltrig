@@ -118,6 +118,14 @@
       "reason": "Separate conversation context, turn execution, and event persistence while preserving streaming behavior.",
       "expires": "2026-12-31"
     },
+    "boltrig/fleet/infrastructure/cell_spawner.py": {
+      "max_file_lines": 573,
+      "max_function_lines": 57,
+      "over_limit_functions": [],
+      "owner": "fleet-maintainers",
+      "reason": "Gap 5 adds the privileged 'provision' verb (parse/validate slot-bound paths, forked cell-uid provisioner with O_EXCL|O_NOFOLLOW writes + ownership re-verify) to the one auditable-by-eye spawner. Follow-up: extract the provision verb into a sibling cell_provisioner module and lower this to <=400.",
+      "expires": "2026-12-31"
+    },
     "boltrig/fleet/infrastructure/codex_agent_runtime.py": {
       "max_file_lines": 413,
       "max_function_lines": 54,
@@ -126,12 +134,34 @@
       "reason": "File-length only. The read-only Codex cutover adds read_turn_output, which returns the agentMessage text the event translator captures from the lifecycle stream (thread/read is not served in the App Server's exec mode); the module was already at the 399-line floor. Split the lifecycle from the read-back/terminal helpers into a sibling module when the runtime family is next refactored.",
       "expires": "2026-12-31"
     },
+    "boltrig/fleet/infrastructure/codex_cell_supervisor.py": {
+      "max_file_lines": 451,
+      "max_function_lines": 62,
+      "over_limit_functions": [],
+      "owner": "fleet-maintainers",
+      "reason": "Gap 5 adds the per-cell slot seam (acquire_slot/release_slot/provision_cell_tree) and the per-cell workspace-attest + require_local_ownership branch, plus the earlier cell-startup diagnostic logging. Follow-up: extract the slot seam and lower back toward 408.",
+      "expires": "2026-12-31"
+    },
     "boltrig/fleet/infrastructure/codex_runtime_events.py": {
       "max_file_lines": 412,
       "max_function_lines": 49,
       "over_limit_functions": [],
       "owner": "fleet-maintainers",
       "reason": "File-length only. The read-only Codex cutover adds the agentMessage read-back capture (the translator records the latest agentMessage text for read_turn_output because thread/read is not served in the App Server exec mode) while events() stays content-free; the module was already at the 400-line floor. Split the item/turn lifecycle translation from the native-observation tripwire into a sibling module when the runtime family is next refactored.",
+      "expires": "2026-12-31"
+    },
+    "boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py": {
+      "max_file_lines": 450,
+      "max_function_lines": 93,
+      "over_limit_functions": [
+        {
+          "name": "TrustedProxyCodexPhaseCellProvider.acquire",
+          "line": 196,
+          "lines": 93
+        }
+      ],
+      "owner": "fleet-maintainers",
+      "reason": "Gap 5 threads the per-cell slot through acquire (acquire slot -> admit(slot) -> provision tree -> config via spawner -> start(slot) -> release in the reaper). Follow-up: extract the per-cell provisioning steps out of acquire() into a helper and lower both baselines.",
       "expires": "2026-12-31"
     },
     "boltrig/fleet/infrastructure/memory_model_proxy_grants.py": {
@@ -356,14 +386,6 @@
       ],
       "owner": "workflow-maintainers",
       "reason": "Decompose workflow execution by step type while preserving checkpoint, retry, and governance semantics.",
-      "expires": "2026-12-31"
-    },
-    "boltrig/fleet/infrastructure/codex_cell_supervisor.py": {
-      "max_file_lines": 408,
-      "max_function_lines": 55,
-      "over_limit_functions": [],
-      "owner": "fleet-maintainers",
-      "reason": "Per-cell Codex supervisor carries operability logging on the cell-startup failure paths (timeout and generic), added after silent CodexCellStartupError failures proved unactionable in ops; the 8-line overage is that diagnostic logging.",
       "expires": "2026-12-31"
     }
   }
