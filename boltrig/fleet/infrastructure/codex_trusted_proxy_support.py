@@ -43,6 +43,7 @@ from boltrig.fleet.domain.model_proxy_scope import (
 )
 from boltrig.fleet.infrastructure.codex_model_proxy_server import BearerDigestLookup
 from boltrig.fleet.infrastructure.codex_runtime_config import (
+    ComposedCodexRuntimeConfig,
     CodexReasoningEffort,
     CodexRuntimeConfigRequest,
     compose_codex_runtime_config,
@@ -236,7 +237,7 @@ def render_trusted_config(
     policy_digest: str,
     reasoning_effort: CodexReasoningEffort,
     proxy_port: int,
-) -> str:
+) -> ComposedCodexRuntimeConfig:
     """Render the exact read-only config.toml pointing at the loopback proxy (D6).
 
     ``base_url`` is ``http://127.0.0.1:{proxy_port}/v1``, ``wire_api`` is
@@ -260,7 +261,7 @@ def render_trusted_config(
         skill_config_fragment=fragment,
         skill_inventory_digest=_sha256_prefixed(fragment),
     )
-    return compose_codex_runtime_config(request).config_toml
+    return compose_codex_runtime_config(request)
 
 
 def write_cell_config(codex_home: Path, config_toml: str) -> Path:

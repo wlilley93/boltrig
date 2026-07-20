@@ -9,6 +9,11 @@ from collections.abc import Mapping
 from types import MappingProxyType
 
 CODEX_MODEL_PROVIDER_ID = "boltrig_model_proxy"
+# Shared with codex_runtime_config_argv: the same provider identity is pinned on
+# argv and rendered into the TOML, so it lives in ONE place rather than being
+# written out twice and hoped to match ([2026] VJS-CC-VJS 6 H5).
+CODEX_RUNTIME_PROVIDER_NAME = "Boltrig per-cell model proxy"
+CODEX_RUNTIME_WIRE_API = "responses"
 _PROVIDER_FIELDS = (
     "name",
     "base_url",
@@ -163,9 +168,9 @@ def _provider_lines(
     return [
         "",
         f"[{provider}]",
-        'name = "Boltrig per-cell model proxy"',
+        f"name = {_string(CODEX_RUNTIME_PROVIDER_NAME)}",
         f'base_url = "http://127.0.0.1:{proxy_port}/v1"',
-        'wire_api = "responses"',
+        f"wire_api = {_string(CODEX_RUNTIME_WIRE_API)}",
         "request_max_retries = 0",
         "stream_max_retries = 0",
         "stream_idle_timeout_ms = 300000",

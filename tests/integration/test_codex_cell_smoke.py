@@ -9,6 +9,7 @@ import pytest
 
 from boltrig.fleet.infrastructure.codex_cell_policy import CodexCellLayout
 from boltrig.fleet.infrastructure.codex_cell_supervisor import CodexCellSupervisor
+from tests.unit.codex_process_fakes import pinned_arguments
 from boltrig.fleet.infrastructure.skill_artifacts import SanitizedWorkspaceProjection
 
 _BINARY_ENV = "BOLTRIG_CODEX_01443_SMOKE_BINARY"
@@ -57,7 +58,7 @@ async def test_exact_pinned_binary_initializes_in_an_empty_sanitized_cell(
         kill_timeout=2.0,
     )
 
-    cell = await supervisor.start(layout)
+    cell = await supervisor.start(layout, arguments=pinned_arguments(layout))
     try:
         assert cell.metadata.binary_path == binary
         assert cell.metadata.codex_home == codex_home

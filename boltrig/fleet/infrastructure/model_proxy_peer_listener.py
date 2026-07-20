@@ -67,7 +67,6 @@ class PeerAttestationUnixListener:
     """
 
     __slots__ = (
-        "_abstract",
         "_accepts",
         "_attestor",
         "_closed",
@@ -84,7 +83,6 @@ class PeerAttestationUnixListener:
     ) -> None:
         self._listener = listener
         self._path = path
-        self._abstract = isinstance(path, str)
         self._attestor = attestor
         self._accepts = ThreadPoolExecutor(
             max_workers=1, thread_name_prefix="boltrig-peer-accept"
@@ -107,22 +105,41 @@ class PeerAttestationUnixListener:
 
         if type(attestor) is not LinuxModelProxyPeerAttestor:
             raise TypeError("attestor must be an exact LinuxModelProxyPeerAttestor")
-        target = _abstract_socket_name(path) if isinstance(path, str) else None
-        if target is None:
-            target = _writable_socket_path(path)
+        if isinstance(path, str):
+            return cls._bind_abstract(_abstract_socket_name(path), attestor)
+        return cls._bind_path(_writable_socket_path(path), attestor)
+
+    @classmethod
+    def _bind_abstract(
+        cls, name: str, attestor: LinuxModelProxyPeerAttestor
+    ) -> PeerAttestationUnixListener:
+        """Bind an abstract name: no inode, so no mode to set and nothing to unlink."""
+
         listener = socket.socket(socket.AF_UNIX, ALLOWED_MODEL_PROXY_SOCKET_TYPE)
         try:
-            listener.bind(target if isinstance(target, str) else os.fspath(target))
-            if not isinstance(target, str):
-                # An abstract socket has no inode and so no mode to set; it is
-                # reachable only by exact name, which is the stronger property.
-                os.chmod(target, _SOCKET_MODE)
+            listener.bind(name)
             listener.listen(_SOCKET_BACKLOG)
             listener.setblocking(True)
         except OSError as exc:
             listener.close()
-            if not isinstance(target, str):
-                _unlink_quietly(target)
+            raise PeerAttestationListenerError("unix peer listener bind failed") from exc
+        return cls(listener, name, attestor)
+
+    @classmethod
+    def _bind_path(
+        cls, target: Path, attestor: LinuxModelProxyPeerAttestor
+    ) -> PeerAttestationUnixListener:
+        """Bind a filesystem path. Retained for the live listener tests only."""
+
+        listener = socket.socket(socket.AF_UNIX, ALLOWED_MODEL_PROXY_SOCKET_TYPE)
+        try:
+            listener.bind(os.fspath(target))
+            os.chmod(target, _SOCKET_MODE)
+            listener.listen(_SOCKET_BACKLOG)
+            listener.setblocking(True)
+        except OSError as exc:
+            listener.close()
+            _unlink_quietly(target)
             raise PeerAttestationListenerError("unix peer listener bind failed") from exc
         return cls(listener, target, attestor)
 
@@ -197,7 +214,7 @@ class PeerAttestationUnixListener:
         self._wake_accept()
         self._listener.close()
         self._accepts.shutdown(wait=True)
-        if not self._abstract:
+        if isinstance(self._path, Path):
             # An abstract name has no directory entry; it is released with the socket.
             _unlink_quietly(self._path)
         self._closed = True

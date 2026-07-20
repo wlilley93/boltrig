@@ -204,7 +204,10 @@ class TrustedProxyCodexPhaseCellProvider:
             # The socket path is derived from the (pre-start) cell id, so the helper
             # the App Server will exec can be materialized before start.
             socket_name = select_ingress_socket_name()
-            self._write_cell_config(
+            # The SAME composed record renders the file and derives the argv, so
+            # the two surfaces cannot disagree about the provider, the helper, the
+            # socket or the port ([2026] VJS-CC-VJS 6 H5).
+            arguments = self._write_cell_config(
                 cell_id=layout.cell_id,
                 cell_root=layout.cell_root,
                 codex_home=layout.codex_home,
@@ -232,7 +235,7 @@ class TrustedProxyCodexPhaseCellProvider:
             # App Server is unregistered. A cell that fails to register is reaped
             # by the supervisor and never handed out.
             cell = await self._supervisor.start(
-                admission.layout, on_spawned=register_spawned
+                admission.layout, arguments=arguments, on_spawned=register_spawned
             )
             if scope is None:
                 # start() only returns once on_spawned succeeded, so this cannot
@@ -305,8 +308,10 @@ class TrustedProxyCodexPhaseCellProvider:
         model_id: str,
         proxy_port: int,
         socket_name: str,
-    ) -> None:
-        config_toml = render_trusted_config(
+    ) -> tuple[str, ...]:
+        """Write the cell's config.toml and return the argv pinning the same values."""
+
+        composed = render_trusted_config(
             cell_id=cell_id,
             cell_root=cell_root,
             codex_home=codex_home,
@@ -318,7 +323,8 @@ class TrustedProxyCodexPhaseCellProvider:
             reasoning_effort=self._reasoning_effort,
             proxy_port=proxy_port,
         )
-        write_cell_config(codex_home, config_toml)
+        write_cell_config(codex_home, composed.config_toml)
+        return composed.receipt.app_server_arguments
 
     def _register_session(
         self,

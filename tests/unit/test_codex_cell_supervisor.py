@@ -16,12 +16,16 @@ from boltrig.fleet.infrastructure.codex_cell_policy import (
     CodexUpstreamAuth,
     PinnedCodexBinary,
 )
+from boltrig.fleet.infrastructure.codex_runtime_config_argv import (
+    CodexAppServerArgumentError,
+)
 from boltrig.fleet.infrastructure.codex_cell_supervisor import (
     CodexCellStartupError,
     CodexCellSupervisor,
 )
 from boltrig.fleet.infrastructure.codex_stdio_transport import STDIO_STREAM_LIMIT
 from tests.unit.codex_process_fakes import (
+    pinned_arguments,
     FakeProcess,
     FakeProcessFactory,
     install_initialize_responder,
@@ -66,7 +70,7 @@ async def test_supervisor_spawns_exact_sanitized_stdio_argv_then_returns_initial
     auth = CodexUpstreamAuth("only-upstream-auth")
     supervisor = CodexCellSupervisor(binary=binary, auth=auth, process_factory=factory)
 
-    cell = await supervisor.start(layout)
+    cell = await supervisor.start(layout, arguments=pinned_arguments(layout))
 
     assert cell.client.state is wire.ClientState.READY
     assert cell.metadata.cli_version == CODEX_CLI_VERSION
@@ -78,12 +82,17 @@ async def test_supervisor_spawns_exact_sanitized_stdio_argv_then_returns_initial
     argv = call["argv"]
     assert isinstance(argv, tuple)
     assert argv[0].startswith("/proc/self/fd/")
-    assert argv[1:] == (
+    # H5 ([2026] VJS-CC-VJS 6): the spawn argv is the pinned base FOLLOWED BY the
+    # security-critical -c overrides, and it is exactly the argv the caller
+    # supplied. The supervisor neither invents nor drops pins.
+    assert argv[1:] == pinned_arguments(layout)
+    assert argv[1:5] == (
         "app-server",
         "--listen",
         "stdio://",
         "--strict-config",
     )
+    assert any(argument.startswith("model_provider=") for argument in argv)
     descriptor = inherited_descriptor(factory)
     assert call["pass_fds"] == (descriptor,)
     with pytest.raises(OSError):
@@ -105,7 +114,7 @@ async def test_supervisor_spawns_exact_sanitized_stdio_argv_then_returns_initial
     await cell.aclose()
     assert process.returncode == 0 and cell.closed
     with pytest.raises(CodexCellStartupError, match="previously claimed cell"):
-        await supervisor.start(layout)
+        await supervisor.start(layout, arguments=pinned_arguments(layout))
 
 
 @pytest.mark.parametrize(
@@ -131,7 +140,7 @@ async def test_supervisor_rejects_wrong_runtime_platform_and_cleans_process(
     supervisor = CodexCellSupervisor(binary=binary, process_factory=FakeProcessFactory(process))
 
     with pytest.raises(CodexCellStartupError, match="identity"):
-        await supervisor.start(layout)
+        await supervisor.start(layout, arguments=pinned_arguments(layout))
 
     assert process.returncode == 0
 
@@ -147,7 +156,7 @@ async def test_supervisor_rejects_wrong_codex_home_and_never_returns_client(
     supervisor = CodexCellSupervisor(binary=binary, process_factory=FakeProcessFactory(process))
 
     with pytest.raises(CodexCellStartupError, match="identity"):
-        await supervisor.start(layout)
+        await supervisor.start(layout, arguments=pinned_arguments(layout))
 
     assert process.returncode == 0
 
@@ -169,7 +178,7 @@ async def test_initialize_timeout_is_bounded_and_kills_owned_process(
     )
 
     with pytest.raises((wire.RequestTimeoutError, CodexCellStartupError)):
-        await supervisor.start(layout)
+        await supervisor.start(layout, arguments=pinned_arguments(layout))
 
     assert process.returncode is not None
 
@@ -185,7 +194,7 @@ async def test_cancellation_during_spawn_releases_claim_and_starts_no_orphan(
     factory = FakeProcessFactory(process)
     factory.gate = asyncio.Event()
     supervisor = CodexCellSupervisor(binary=binary, process_factory=factory)
-    starting = asyncio.create_task(supervisor.start(layout))
+    starting = asyncio.create_task(supervisor.start(layout, arguments=pinned_arguments(layout)))
     while not factory.calls:
         await asyncio.sleep(0)
 
@@ -200,7 +209,7 @@ async def test_cancellation_during_spawn_releases_claim_and_starts_no_orphan(
     factory.gate.set()
     retry_layout = make_layout(tmp_path, cell_id="cell-2")
     install_initialize_responder(process, codex_home=retry_layout.codex_home)
-    cell = await supervisor.start(retry_layout)
+    cell = await supervisor.start(retry_layout, arguments=pinned_arguments(retry_layout))
     assert factory.allocations == 1
     await cell.aclose()
 
@@ -216,7 +225,7 @@ async def test_cancellation_reaps_a_factory_process_registered_before_return(
     factory.allocate_before_gate = True
     factory.gate = asyncio.Event()
     supervisor = CodexCellSupervisor(binary=binary, process_factory=factory)
-    starting = asyncio.create_task(supervisor.start(layout))
+    starting = asyncio.create_task(supervisor.start(layout, arguments=pinned_arguments(layout)))
     while factory.allocations == 0:
         await asyncio.sleep(0)
 
@@ -240,10 +249,10 @@ async def test_one_active_owner_and_crash_cleanup_allow_replacement_process(
     install_initialize_responder(process, codex_home=layout.codex_home)
     factory = FakeProcessFactory(process)
     supervisor = CodexCellSupervisor(binary=binary, process_factory=factory)
-    cell = await supervisor.start(layout)
+    cell = await supervisor.start(layout, arguments=pinned_arguments(layout))
 
     with pytest.raises(CodexCellStartupError, match="active Codex owner"):
-        await supervisor.start(layout)
+        await supervisor.start(layout, arguments=pinned_arguments(layout))
 
     process.feed_stderr(b"secret stderr is discarded")
     process.exit(17)
@@ -254,7 +263,7 @@ async def test_one_active_owner_and_crash_cleanup_allow_replacement_process(
     replacement = FakeProcess(pid=4322)
     install_initialize_responder(replacement, codex_home=replacement_layout.codex_home)
     factory.process = replacement
-    replacement_cell = await supervisor.start(replacement_layout)
+    replacement_cell = await supervisor.start(replacement_layout, arguments=pinned_arguments(replacement_layout))
     assert replacement_cell.metadata.pid == 4322
     await replacement_cell.aclose()
 
@@ -270,7 +279,7 @@ async def test_client_protocol_failure_automatically_reaps_the_cell_process(
     supervisor = CodexCellSupervisor(
         binary=binary, process_factory=FakeProcessFactory(process), close_timeout=0.01
     )
-    cell = await supervisor.start(layout)
+    cell = await supervisor.start(layout, arguments=pinned_arguments(layout))
 
     process.feed_stdout(b"not-json\n")
     await asyncio.wait_for(cell.wait_closed(), 1.0)
@@ -294,7 +303,7 @@ async def test_spawn_failure_is_sanitized_and_auth_never_enters_error(
     )
 
     with pytest.raises(CodexCellStartupError) as captured:
-        await supervisor.start(layout)
+        await supervisor.start(layout, arguments=pinned_arguments(layout))
 
     assert "upstream-secret-value" not in str(captured.value)
     assert "upstream-secret-value" not in repr(captured.value)
@@ -315,7 +324,7 @@ async def test_cancelling_cell_close_still_finishes_process_cleanup(
         process_factory=FakeProcessFactory(process),
         close_timeout=0.1,
     )
-    cell = await supervisor.start(layout)
+    cell = await supervisor.start(layout, arguments=pinned_arguments(layout))
     closing = asyncio.create_task(cell.aclose())
     await asyncio.sleep(0)
 
@@ -345,7 +354,7 @@ async def test_on_spawned_runs_with_the_real_pid_before_any_protocol_traffic(
         seen["pid"] = pid
         seen["writes"] = list(process.stdin.writes)
 
-    cell = await supervisor.start(layout, on_spawned=on_spawned)
+    cell = await supervisor.start(layout, arguments=pinned_arguments(layout), on_spawned=on_spawned)
 
     assert seen["pid"] == process.pid == cell.metadata.pid
     assert seen["writes"] == []  # nothing had been sent yet
@@ -370,7 +379,7 @@ async def test_on_spawned_failure_reaps_the_process_and_releases_the_claim(
         raise RuntimeError("registration refused")
 
     with pytest.raises(CodexCellStartupError):
-        await supervisor.start(layout, on_spawned=on_spawned)
+        await supervisor.start(layout, arguments=pinned_arguments(layout), on_spawned=on_spawned)
 
     assert process.returncode is not None  # reaped, no orphan
 
@@ -395,6 +404,46 @@ async def test_on_spawned_hang_is_bounded_and_reaps(
         await asyncio.sleep(3600)
 
     with pytest.raises(CodexCellStartupError):
-        await supervisor.start(layout, on_spawned=on_spawned)
+        await supervisor.start(layout, arguments=pinned_arguments(layout), on_spawned=on_spawned)
 
     assert process.returncode is not None
+
+
+@pytest.mark.unit
+async def test_the_supervisor_refuses_to_spawn_without_a_pinned_argv(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """H5: argv is required, so a forgotten pin is a TypeError, not a silent hole.
+
+    If ``arguments`` had a default the pinning could be skipped by omission, and
+    the one surface an attacker cannot rewrite would quietly carry nothing.
+    """
+
+    layout = make_layout(tmp_path)
+    binary = fake_binary(tmp_path)
+    admit_binary(monkeypatch, binary)
+    factory = FakeProcessFactory(FakeProcess())
+    supervisor = CodexCellSupervisor(binary=binary, auth=None, process_factory=factory)
+    with pytest.raises(TypeError):
+        await supervisor.start(layout)  # type: ignore[call-arg]
+
+
+@pytest.mark.unit
+async def test_an_argv_minted_for_another_cell_never_reaches_execve(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The spawn seam verifies the argv belongs to the layout it is spawning.
+
+    An argv naming a sibling's cell id would aim this cell's pinned auth helper
+    at the sibling's ingress socket, so it is refused before any process exists.
+    """
+
+    layout = make_layout(tmp_path)
+    other = make_layout(tmp_path, cell_id="cell-2")
+    binary = fake_binary(tmp_path)
+    admit_binary(monkeypatch, binary)
+    factory = FakeProcessFactory(FakeProcess())
+    supervisor = CodexCellSupervisor(binary=binary, auth=None, process_factory=factory)
+    with pytest.raises(CodexAppServerArgumentError):
+        await supervisor.start(layout, arguments=pinned_arguments(other))
+    assert factory.calls == []

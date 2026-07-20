@@ -174,7 +174,16 @@ def test_self_consistent_receipt_cannot_widen_skill_policy(mutation: str) -> Non
         ComposedCodexRuntimeConfig(widened, receipt)
 
 
-def test_app_server_arguments_require_exact_strings_without_repr_leakage() -> None:
+def test_a_forged_app_server_argv_is_not_merely_rejected_but_inexpressible() -> None:
+    """H5 ([2026] VJS-CC-VJS 6): the argv is DERIVED, so there is nothing to forge.
+
+    It used to be a stored field, which meant a forged value had to be caught by
+    validation. Deriving it from the record removes the attack rather than
+    defending against it: on a slots dataclass a property has no slot to write and
+    no setter to call, so both the ``replace`` and the ``object.__setattr__``
+    routes fail at the language level.
+    """
+
     sentinel = "LEAKED-UPSTREAM-SECRET"
 
     class ForgedArgument:
@@ -186,15 +195,29 @@ def test_app_server_arguments_require_exact_strings_without_repr_leakage() -> No
 
     composed = compose_codex_runtime_config(_request())
     forged = tuple(ForgedArgument() for _ in composed.receipt.app_server_arguments)
-    with pytest.raises(CodexRuntimeConfigError, match="contract") as captured:
-        replace(composed.receipt, app_server_arguments=forged)  # type: ignore[arg-type]
+    with pytest.raises(TypeError) as captured:
+        replace(composed.receipt, app_server_arguments=forged)  # type: ignore[call-arg]
     assert sentinel not in str(captured.value)
 
-    object.__setattr__(composed.receipt, "app_server_arguments", forged)
+    with pytest.raises(AttributeError):
+        object.__setattr__(composed.receipt, "app_server_arguments", forged)
     assert sentinel not in repr(composed.receipt)
     assert sentinel not in repr(composed)
-    with pytest.raises(CodexRuntimeConfigError, match="contract"):
-        ComposedCodexRuntimeConfig(composed.config_toml, composed.receipt)
+
+
+def test_the_derived_argv_follows_the_record_rather_than_sitting_beside_it() -> None:
+    """Change a field the argv depends on and the argv must change with it.
+
+    This is what "derived" has to MEAN in practice. If the argv were stored, the
+    two could disagree and only a comparison would notice; because it is computed,
+    disagreement is not representable.
+    """
+
+    composed = compose_codex_runtime_config(_request())
+    before = composed.receipt.app_server_arguments
+    assert composed.receipt.socket_name in " ".join(before)
+    assert composed.receipt.cell_id in " ".join(before)
+    assert f"127.0.0.1:{composed.receipt.proxy_port}" in " ".join(before)
 
 
 def test_raw_fragment_digest_is_absent_and_renderer_has_one_internal_user() -> None:

@@ -28,6 +28,7 @@ from .codex_cell_policy import (
     CodexCellLayout,
 )
 from .codex_cell_supervisor import CodexCellSupervisor, InitializedCodexCell
+from .codex_runtime_config_argv import CODEX_APP_SERVER_BASE_ARGUMENTS
 from .skill_artifacts import SanitizedWorkspaceProjection
 
 MAX_BIRTH_INSTRUCTIONS_BYTES = 128 * 1024
@@ -257,7 +258,12 @@ class SupervisedCodexPhaseCellProvider:
         admission = await self._source.admit(assignment)
         if type(admission) is not CodexPhaseAdmission or admission.assignment != assignment:
             raise CodexRuntimeAdmissionError("admission source returned another assignment")
-        cell = await self._supervisor.start(admission.layout)
+        # This path composes no per-cell config.toml, so there are no per-cell
+        # values to pin. The base contract is passed EXPLICITLY: under H5, argv
+        # pinning is never implied by omission.
+        cell = await self._supervisor.start(
+            admission.layout, arguments=CODEX_APP_SERVER_BASE_ARGUMENTS
+        )
         try:
             _validate_initialized_cell(admission, cell)
             preflight = await self._probe.probe(cell.client, admission.skill_plan)
