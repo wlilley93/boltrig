@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import math
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -11,6 +10,7 @@ from typing import cast
 
 from . import codex_protocol as wire
 from .codex_app_server import CodexAppServerClient
+from .cell_lane import CellLane
 from .codex_runtime_config_argv import validate_app_server_arguments
 from .codex_cell_policy import (
     CODEX_CLI_SHA256,
@@ -27,6 +27,7 @@ from .codex_cell_policy import (
     verify_pinned_binary,
 )
 from .codex_stdio_transport import (
+    validated_timeout,
     CodexStdioTransport,
     ManagedCodexProcess,
 )
@@ -173,15 +174,6 @@ class InitializedCodexCell:
             await self._release(self.metadata.phase_id, self.metadata.cell_id)
 
 
-def _positive_timeout(label: str, value: object) -> float:
-    if type(value) not in {int, float}:
-        raise TypeError(f"{label} must be a finite positive number")
-    numeric = float(cast(int | float, value))
-    if not math.isfinite(numeric) or numeric <= 0:
-        raise ValueError(f"{label} must be a finite positive number")
-    return numeric
-
-
 class CodexCellSupervisor:
     """Spawn one stdio App Server for each admitted active phase."""
 
@@ -197,16 +189,22 @@ class CodexCellSupervisor:
         close_timeout: float = 3.0,
         terminate_timeout: float = 3.0,
         kill_timeout: float = 3.0,
+        cell_lane: CellLane | None = None,
     ) -> None:
         self._binary_path = normalized_absolute_path("Codex binary", binary)
+        # J1: None means today's in-process spawn. See cell_lane for why the lane
+        # re-checks the kernel rather than trusting that it was constructed.
+        if cell_lane is not None and type(cell_lane) is not CellLane:
+            raise TypeError("cell_lane must be an exact CellLane or None")
+        self._cell_lane = cell_lane
         if auth is not None and type(auth) is not CodexUpstreamAuth:
             raise TypeError("auth must be CodexUpstreamAuth or None")
         self._auth = auth
         self._factory = process_factory or default_process_factory
-        self._startup_timeout = _positive_timeout("startup timeout", startup_timeout)
-        self._initialize_timeout = _positive_timeout("initialize timeout", initialize_timeout)
+        self._startup_timeout = validated_timeout("startup timeout", startup_timeout)
+        self._initialize_timeout = validated_timeout("initialize timeout", initialize_timeout)
         self._transport_timeouts = tuple(
-            _positive_timeout(label, value)
+            validated_timeout(label, value)
             for label, value in (
                 ("write timeout", write_timeout),
                 ("close timeout", close_timeout),
@@ -299,6 +297,11 @@ class CodexCellSupervisor:
     ) -> ManagedCodexProcess:
         environment = sanitized_environment(layout, self._auth)
         try:
+            if self._cell_lane is not None:  # J1: per-cell uid, via the spawner
+                return await self._cell_lane.spawn(
+                    binary=binary, arguments=arguments,
+                    cwd=layout.workspace.as_posix(), environment=environment,
+                )
             return await spawn_registered_process(
                 self._factory,
                 binary=binary.execution_path,
