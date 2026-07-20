@@ -93,7 +93,11 @@ services:
     # interpreter), which is why concurrent multi-cell is refused at runtime.
     tmpfs:
       - /tmp
-      - /var/lib/boltrig/codex-cells:mode=0700,uid=10001,gid=10001
+      # noexec is written EXPLICITLY ([2026] VJS-CC-VJS 6 H11). It was previously
+      # pleaded as an enacted control while resting on a runtime default, which is
+      # exactly the kind of unearned claim the court has now twice corrected. A
+      # control we rely on in argument has to be stated in the file.
+      - /var/lib/boltrig/codex-cells:mode=0700,uid=10001,gid=10001,noexec,nosuid,nodev
     command: ["uvicorn", "boltrig.api.asgi:app", "--host", "0.0.0.0", "--port", "8000"]
     # Local/operator runs keep the conventional .env default. Validation and CI
     # can point at the checked non-secret fixture without creating an ignored

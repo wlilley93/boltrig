@@ -24,10 +24,19 @@ pid, so no live-and-unregistered window exists.
 root. There is one shared helper, root-owned and non-writable on the read-only
 image mount, proved at composition and re-proved at ingress startup by
 ``assert_cell_isolation_boundary`` (G2, G4). The cell's config.toml is NOT so
-protected: it carries ``auth.command`` and must live in a CODEX_HOME the shared
-cell uid owns, and this container holds neither CAP_SETUID (per-cell uids) nor
-CAP_SYS_ADMIN (per-cell read-only binds), so G3 is OPEN. While it is open this
-provider REFUSES a second concurrent cell, and ``production_ready`` stays False.
+protected: it carries ``auth.command`` and lives in a CODEX_HOME the shared cell
+uid owns, so G3 is OPEN. While it is open this provider REFUSES a second
+concurrent cell, and ``production_ready`` stays False.
+
+[2026] VJS-CC-VJS 6 corrects how that last sentence used to be argued. This
+docstring said config.toml "must" live in a cell-owned CODEX_HOME, and that the
+only routes out were CAP_SETUID or CAP_SYS_ADMIN. The "must" was our own rule in
+``codex_cell_policy.validate_cell_layout``, not the runtime's, and the court
+refused a capability application built on that premise. The tested position is
+now narrower and evidenced: Codex 0.144.3 keeps sqlite state inside CODEX_HOME
+and will not start without write access to it, so a read-only shared CODEX_HOME
+is not available either (``docs/findings/2026-07-20-codex-home-writability.md``).
+G3 stays open on facts, not on an assumed necessity.
 Read-only reasoning cutover only; write/effects are separately court-gated
 (PR8, D6).
 """
