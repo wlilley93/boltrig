@@ -83,7 +83,9 @@ own uid so cross-cell access is still refused EACCES. The slot uids are public/d
 exposing that a sibling path exists leaks nothing. (Confirmed live: codex 0.144.3 runs as uid 20001 and
 now writes its slot.)
 
-## Gap 5 - provisioning and the per-cell slot are DISJOINT (OPEN, the core J2 wiring)
+## Gap 5 - provisioning and the per-cell slot are DISJOINT (CLOSED 2026-07-21)
+> **UPDATE 2026-07-21: Gap 5 CLOSED.** Implemented on branch `gap5-percell-provisioning`: spawner `provision` verb (slot-bound, clears a reused slot, creates the tree + config as the cell uid), provider orchestration, validate split, empty-workspace constant, admission slot-shape relaxation, and the connect-time ancestry ns fix. Proven LIVE: a real per-cell Codex turn answered `"A spinlock is a lock that busy-waits in a loop."` (runtime=codex_app_server). `make check` green (1942 passed); J7/J9/J1 adversarial gates all pass.
+
 
 This is the substantial one. `ProvisioningCodexPhaseAdmissionSource._provision` creates the cell tree
 at `cell_root = read_only_cell_root(stack_root, assignment)` = `codex-cells/<cell_id>`, owned by the

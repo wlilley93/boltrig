@@ -31,6 +31,9 @@ if pid == 0:
     cp.drop_privileges(10001, 10001)  # become the API
 
     class _Binary:
+        # argv[0] is the binary's real path now (the lane sends binary.path, not the
+        # /proc/self/fd execution_path, which does not cross the spawner boundary).
+        path = Path("/bin/echo")
         execution_path = "/bin/echo"
 
         def close(self) -> None:
@@ -41,12 +44,15 @@ if pid == 0:
               "| per_cell_uid_mode_available:", cp.per_cell_uid_mode_available())
         fd = cp.inherited_spawner_socket_fd(os.environ)
         lane = CellLane(socket.socket(fileno=os.dup(fd)), CellSlotAllocator(4))
+        # The provider now reserves the slot, then spawns into it; mirror that.
+        slot = lane.acquire_slot()
         proc = await lane.spawn(
-            binary=_Binary(), arguments=("routed-through-the-lane",), cwd="/tmp", environment={}
+            slot, binary=_Binary(), arguments=("routed-through-the-lane",), cwd="/tmp", environment={}
         )
         out = await proc.stdout.read(64)
         print("lane spawned cell pid:", proc.pid, "| stdout:", out.decode().strip())
         proc.close()
+        lane.release_slot(slot)
 
     asyncio.run(main())
     sys.stdout.flush()
