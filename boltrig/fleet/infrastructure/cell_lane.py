@@ -91,7 +91,14 @@ class CellLane:
         """
 
         payload = json.dumps(
-            {"verb": "provision", "uid": slot.uid, "gid": slot.gid, "dirs": dirs, "files": files}
+            {
+                "verb": "provision",
+                "uid": slot.uid,
+                "gid": slot.gid,
+                "root": slot.root.as_posix(),
+                "dirs": dirs,
+                "files": files,
+            }
         ).encode("utf-8")
         async with self._lock:
             await asyncio.to_thread(self._sock.sendall, payload)

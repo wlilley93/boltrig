@@ -8,6 +8,7 @@ from .linux_peer_identity import (
     ProcReader,
     capture_linux_process,
     read_boot_id,
+    read_pid_namespace_inode,
 )
 from .linux_peer_process_handle import PeerProcessHandle
 from .model_proxy_peer_registry import ModelProxyProcessRegistration
@@ -28,8 +29,19 @@ def attest_peer_ancestry(
     handle.assert_alive()
     credentials = handle.credentials
     boot_id = read_boot_id(reader)
+    # The helper and its ancestors run at the CELL uid (2000N), whose restricted
+    # /proc/<pid>/ns/pid the capless API cannot read. Every one of them shares THIS
+    # container's single pid namespace (no CLONE_NEWPID), so the inode is an invariant
+    # read from self; supplying it lets the ancestry capture complete without the
+    # cross-uid read. The registered cell scope carries the same container inode
+    # (capture_cell_identity sources it identically), so the match still holds.
+    container_pid_ns = read_pid_namespace_inode(reader)
     first_chain = _capture_chain(
-        reader, credentials.pid, boot_id=boot_id, max_ancestry=max_ancestry
+        reader,
+        credentials.pid,
+        boot_id=boot_id,
+        max_ancestry=max_ancestry,
+        pid_namespace_inode=container_pid_ns,
     )
     registration, registered_depth = _select_registration(first_chain, registrations, credentials)
     if read_boot_id(reader) != boot_id:
@@ -39,6 +51,7 @@ def attest_peer_ancestry(
         credentials.pid,
         boot_id=boot_id,
         max_ancestry=registered_depth,
+        pid_namespace_inode=container_pid_ns,
     )
     if first_chain[: registered_depth + 1] != second_chain:
         raise ModelProxyPeerAncestryError("peer ancestry changed")
@@ -54,6 +67,7 @@ def _capture_chain(
     *,
     boot_id: str,
     max_ancestry: int,
+    pid_namespace_inode: int | None = None,
 ) -> tuple[CapturedLinuxProcess, ...]:
     current_pid = helper_pid
     seen: set[int] = set()
@@ -62,7 +76,9 @@ def _capture_chain(
         if current_pid in seen:
             raise ModelProxyPeerAncestryError("peer ancestry cycle")
         seen.add(current_pid)
-        process = capture_linux_process(reader, current_pid, expected_boot_id=boot_id)
+        process = capture_linux_process(
+            reader, current_pid, expected_boot_id=boot_id, pid_namespace_inode=pid_namespace_inode
+        )
         chain.append(process)
         if process.parent_pid in seen:
             raise ModelProxyPeerAncestryError("peer ancestry cycle")

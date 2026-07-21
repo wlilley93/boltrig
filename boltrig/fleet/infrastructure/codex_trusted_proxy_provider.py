@@ -224,19 +224,14 @@ class TrustedProxyCodexPhaseCellProvider:
             )
             model_id = admission.compilation.policy.model.model_id
             layout = admission.layout
-            # Per-cell: the API cannot write the cell-uid slot, so the spawner builds
-            # the directory tree AS the cell uid first. Must precede the config write,
-            # which lands config.toml inside CODEX_HOME. No-op in-process.
-            if slot is not None:
-                await self._supervisor.provision_cell_tree(
-                    slot, dirs=_per_cell_tree_dirs(layout), files=[]
-                )
             # The socket path is derived from the (pre-start) cell id, so the helper
             # the App Server will exec can be materialized before start.
             socket_name = select_ingress_socket_name()
             # The SAME composed record renders the file and derives the argv, so
             # the two surfaces cannot disagree about the provider, the helper, the
-            # socket or the port ([2026] VJS-CC-VJS 6 H5).
+            # socket or the port ([2026] VJS-CC-VJS 6 H5). Per-cell, this ALSO builds
+            # the cell tree + config.toml in ONE spawner provision (clear the slot
+            # once, then create), because a second provision would re-clear the slot.
             arguments = await self._write_cell_config(
                 cell_id=layout.cell_id,
                 cell_root=layout.cell_root,
@@ -245,6 +240,7 @@ class TrustedProxyCodexPhaseCellProvider:
                 proxy_port=proxy.port,
                 socket_name=socket_name,
                 slot=slot,
+                tree_dirs=_per_cell_tree_dirs(layout) if slot is not None else [],
             )
             ingress = self._build_ingress()
             issuer = self._build_issuer(model_id, holder)
@@ -345,14 +341,15 @@ class TrustedProxyCodexPhaseCellProvider:
         proxy_port: int,
         socket_name: str,
         slot: CellSlot | None = None,
+        tree_dirs: list[dict[str, object]] | None = None,
     ) -> tuple[str, ...]:
         """Write the cell's config.toml and return the argv pinning the same values.
 
         Rendering is pure and API-side. The WRITE differs by posture: in-process the
         API writes CODEX_HOME/config.toml directly; per-cell the API cannot write the
-        cell-uid slot, so the content is handed to the spawner, whose cell-uid child
-        writes it (0600) into the cell's own CODEX_HOME - the tree the spawner already
-        created above.
+        cell-uid slot, so the tree AND the config are handed to the spawner in ONE
+        provision (the child clears the slot once, creates the dirs, then writes
+        config.toml 0600) - a second provision would re-clear the freshly made tree.
         """
 
         composed = render_trusted_config(
@@ -370,7 +367,7 @@ class TrustedProxyCodexPhaseCellProvider:
         if slot is not None:
             await self._supervisor.provision_cell_tree(
                 slot,
-                dirs=[],
+                dirs=tree_dirs or [],
                 files=[
                     {
                         "path": (codex_home / "config.toml").as_posix(),

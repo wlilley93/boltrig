@@ -26,7 +26,11 @@ DEFAULT_GID = 1002
 class ScriptedProcReader:
     def __init__(self) -> None:
         self.files: dict[str, list[str]] = {"sys/kernel/random/boot_id": [BOOT_ID + "\n"]}
-        self.links: dict[str, list[str]] = {}
+        # The container's own pid-ns inode (read from self), an invariant every
+        # process in the container shares. Ancestry attestation sources the ns from
+        # here rather than each peer's restricted /proc/<pid>/ns/pid (unreadable
+        # cross-uid under per-cell uids).
+        self.links: dict[str, list[str]] = {"self/ns/pid": [f"pid:[{DEFAULT_NAMESPACE}]"]}
         self.calls: dict[tuple[str, str], int] = {}
         self.on_read: Callable[[str, str, int], None] | None = None
         self._lock = threading.Lock()

@@ -119,11 +119,11 @@
       "expires": "2026-12-31"
     },
     "boltrig/fleet/infrastructure/cell_spawner.py": {
-      "max_file_lines": 573,
+      "max_file_lines": 608,
       "max_function_lines": 57,
       "over_limit_functions": [],
       "owner": "fleet-maintainers",
-      "reason": "Gap 5 adds the privileged 'provision' verb (parse/validate slot-bound paths, forked cell-uid provisioner with O_EXCL|O_NOFOLLOW writes + ownership re-verify) to the one auditable-by-eye spawner. Follow-up: extract the provision verb into a sibling cell_provisioner module and lower this to <=400.",
+      "reason": "Gap 5 adds the privileged 'provision' verb (parse/validate slot-bound paths + root, forked cell-uid provisioner that clears the reused slot then creates the tree with O_EXCL|O_NOFOLLOW + ownership re-verify) to the one auditable-by-eye spawner. Follow-up: extract the provision verb into a sibling cell_provisioner module and lower this to <=400.",
       "expires": "2026-12-31"
     },
     "boltrig/fleet/infrastructure/codex_agent_runtime.py": {
@@ -151,13 +151,13 @@
       "expires": "2026-12-31"
     },
     "boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py": {
-      "max_file_lines": 450,
-      "max_function_lines": 93,
+      "max_file_lines": 447,
+      "max_function_lines": 89,
       "over_limit_functions": [
         {
           "name": "TrustedProxyCodexPhaseCellProvider.acquire",
           "line": 196,
-          "lines": 93
+          "lines": 89
         }
       ],
       "owner": "fleet-maintainers",

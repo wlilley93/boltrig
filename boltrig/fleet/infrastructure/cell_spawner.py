@@ -36,6 +36,7 @@ import array
 import json
 import logging
 import os
+import shutil
 import signal
 import socket
 import stat
@@ -184,6 +185,7 @@ class ProvisionRequest:
 
     uid: int
     gid: int
+    root: str
     dirs: tuple[ProvisionEntry, ...]
     files: tuple[ProvisionEntry, ...]
 
@@ -219,8 +221,12 @@ def parse_provision_request(payload: bytes, policy: SpawnPolicy) -> ProvisionReq
     _require(MIN_CELL_UID <= gid <= MAX_CELL_UID, "provision gid is outside the cell band")
     slot_index = uid - _FIRST_SLOT_UID
     _require(slot_index >= 0, "provision uid is below the first slot uid")
-    # The one slot this uid owns; bind every path to it.
-    slot_prefix = (policy.stack_root / f"slot-{slot_index}").as_posix().rstrip("/") + "/"
+    # The one slot this uid owns; bind the root and every path to it.
+    slot_root = (policy.stack_root / f"slot-{slot_index}").as_posix()
+    slot_prefix = slot_root.rstrip("/") + "/"
+
+    root = raw.get("root")
+    _require(type(root) is str and root == slot_root, "provision root must be this cell's own slot")
 
     raw_dirs = raw.get("dirs", [])
     raw_files = raw.get("files", [])
@@ -250,7 +256,7 @@ def parse_provision_request(payload: bytes, policy: SpawnPolicy) -> ProvisionReq
         _require(type(content) is str, "provision file content must be a string")
         files.append(ProvisionEntry(path=path, mode=mode, content=content))
 
-    return ProvisionRequest(uid=uid, gid=gid, dirs=tuple(dirs), files=tuple(files))
+    return ProvisionRequest(uid=uid, gid=gid, root=slot_root, dirs=tuple(dirs), files=tuple(files))
 
 
 def _verify_owned(path: str, expected_mode: int, expected_uid: int) -> None:
@@ -275,6 +281,28 @@ def _verify_owned(path: str, expected_mode: int, expected_uid: int) -> None:
         raise CellSpawnerError("provisioned path mode is not exact")
 
 
+def _clear_slot_contents(root: str, expected_uid: int) -> None:
+    """Empty the slot the child owns, so a reused slot never carries prior data.
+
+    Runs AS the cell uid. Refuses a root that is not a real directory owned by this
+    uid, and unlinks symlink entries rather than following them out of the slot.
+    """
+
+    base = Path(root)
+    details = base.lstat()
+    if stat.S_ISLNK(details.st_mode) or not stat.S_ISDIR(details.st_mode):
+        raise CellSpawnerError("slot root is not a real directory")
+    if details.st_uid != expected_uid or details.st_uid != os.getuid():
+        raise CellSpawnerError("slot root is not owned by the cell uid")
+    for name in os.listdir(root):
+        entry = os.path.join(root, name)
+        entry_details = os.lstat(entry)
+        if stat.S_ISLNK(entry_details.st_mode) or not stat.S_ISDIR(entry_details.st_mode):
+            os.unlink(entry)
+        else:
+            shutil.rmtree(entry)
+
+
 def provision_cell(request: ProvisionRequest, policy: SpawnPolicy) -> None:
     """Create the cell's tree + files under its own uid, in a forked child.
 
@@ -291,6 +319,13 @@ def provision_cell(request: ProvisionRequest, policy: SpawnPolicy) -> None:
     if pid == 0:  # pragma: no cover - the child never returns to the caller
         try:
             drop_privileges(request.uid, request.gid)
+            # A slot is reused across TIME (J10 allows it: a uid returns to the pool
+            # when its cell dies). The tmpfs is NOT wiped by the mount, so a prior
+            # tenant's home/codex-home session state would still be here. Clear the
+            # slot's own contents FIRST, as the cell uid, so a later tenant never
+            # inherits an earlier one's data. Done here, not on release, because only
+            # the cell uid can write the 0700 slot and the API that releases cannot.
+            _clear_slot_contents(request.root, request.uid)
             for directory in request.dirs:
                 os.mkdir(directory.path, directory.mode)
                 os.chmod(directory.path, directory.mode)  # exact, past the umask

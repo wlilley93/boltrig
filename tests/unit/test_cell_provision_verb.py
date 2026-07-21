@@ -26,9 +26,18 @@ _STACK = Path("/var/lib/boltrig/codex-cells")
 _POLICY = SpawnPolicy(binary=Path("/opt/boltrig/codex/codex"), stack_root=_STACK)
 
 
-def _payload(uid: int, dirs=(), files=()) -> bytes:
+def _payload(uid: int, dirs=(), files=(), root: str | None = None) -> bytes:
+    if root is None:
+        root = f"/var/lib/boltrig/codex-cells/slot-{uid - 20001}"
     return json.dumps(
-        {"verb": "provision", "uid": uid, "gid": uid, "dirs": list(dirs), "files": list(files)}
+        {
+            "verb": "provision",
+            "uid": uid,
+            "gid": uid,
+            "root": root,
+            "dirs": list(dirs),
+            "files": list(files),
+        }
     ).encode("utf-8")
 
 
