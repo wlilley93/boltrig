@@ -247,6 +247,16 @@ adapters:
   # auth/session; Boltrig only exposes governed, narrow browser verbs.
   - id: browser-cli
     runtime: script
+  # xAI voice (TTS/STT) seam. Registered via module_ref (the extension
+  # contract) so no core _BUILTIN_MODULES edit is needed. The API key is a
+  # credential ref, resolved kernel-side only and never returned to agents.
+  - id: xai-voice
+    runtime: http
+    module_ref: boltrig.adapters.builtin.xai_voice:build
+    credential:
+      id: XAI_API_KEY
+      store: env
+      kind: api_key
 
 # --- HITL: routing + the verbs that ALWAYS require human approval (P5) -------
 hitl:
@@ -268,6 +278,7 @@ network:
   allowed_domains:
     - graph.microsoft.com
     - your-org.atlassian.net
+    - api.x.ai
   blocked_domains: []
 
 # --- privacy: data-handling posture (US-PRIV-02, SEC-13) --------------------

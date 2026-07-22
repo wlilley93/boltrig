@@ -2,7 +2,10 @@
 
 The channel gateway's adapter registry (`adapters.py`) is the port target for
 real socket-class platforms: Slack Socket Mode, Discord WS, Telegram long-poll,
-WhatsApp/Baileys, Signal. This guide is the contract. Read it together with
+WhatsApp/Baileys, Signal, and the xAI Realtime voice surface
+(`xai_voice_adapter.py` - a speech-to-speech WSS whose tool list is
+kernel-discovered function tools ONLY; read its docstring before touching the
+tool path, the fail-closed rule there is SEC-183). This guide is the contract. Read it together with
 decision `docs/decisions/0003-channel-gateway-ruling.md` - its 10 conditions
 are binding and a port that violates them is rejected, not debated.
 

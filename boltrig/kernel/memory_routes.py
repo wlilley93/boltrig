@@ -53,6 +53,11 @@ def register_memory_routes(app, *, principal_dep, get_kernel) -> None:
         # is not a string).
         params = {key: body[key] for key in ("target", "source_ref")
                   if body.get(key) is not None}
+        if not params:
+            return JSONResponse(
+                {"status": "error", "reason": "target or source_ref is required"},
+                status_code=400,
+            )
         out = await k.invoke("memory", "memory.forget", params, _ctx(p))
         return JSONResponse({"status": "ok", **out})
 

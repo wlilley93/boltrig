@@ -309,6 +309,21 @@ def test_complete_audited_erasure():
     assert any(e.verb == "memory.forget" for e in events)
 
 
+@pytest.mark.security
+@pytest.mark.invariant("SEC-44")
+def test_empty_erasure_is_refused_not_a_silent_noop():
+    """An erasure with neither target nor source_ref must never look like a
+    success: the route 400s and the verb returns INVALID (defence in depth)."""
+    k, store, engine = asyncio.run(_kernel())
+    c = _client(k)
+    res = c.post("/v1/memory/forget", json={"fact_ids": ["e1"]}, headers=_h("alice"))
+    assert res.status_code == 400
+    res = c.post("/v1/memory/forget", json={}, headers=_h("alice"))
+    assert res.status_code == 400
+    # nothing was ledgered as an erasure
+    assert asyncio.run(store.list_memory_erasures(T)) == []
+
+
 # --- SEC-45: recall is least-privilege and audited (no content leak) ---------
 @pytest.mark.security
 @pytest.mark.invariant("SEC-45")

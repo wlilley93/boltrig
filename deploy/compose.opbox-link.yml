@@ -1,0 +1,16 @@
+# Opt-in overlay: attach the boltrig kernel to the Opbox stack's backend
+# network so the consumed Opbox MCP door (http://Opbox-Kernel:8088/mcp)
+# resolves WITHOUT a manual `docker network connect` after every recreate.
+# Usage:
+#   docker compose -f docker-compose.yml -f deploy/compose.opbox-link.yml up -d kernel
+# Requires the opbox-prod stack to be running first (the network is external).
+services:
+  kernel:
+    networks:
+      - default
+      - opbox_backend
+
+networks:
+  opbox_backend:
+    external: true
+    name: opbox-prod_backend

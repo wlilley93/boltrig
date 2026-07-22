@@ -785,6 +785,9 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
     async def get_personal_agent(self, tenant_id, user_id):
         return self._personal.get((tenant_id, user_id))
 
+    async def delete_personal_agent(self, tenant_id, user_id):
+        return self._personal.pop((tenant_id, user_id), None) is not None
+
     # --- memory (scope-filtered, SEC-31) ---
     async def add_memory_item(self, item):
         self._memory.append(item)

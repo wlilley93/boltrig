@@ -1262,6 +1262,13 @@ class PostgresStore(
         )
         return _personal(row)
 
+    async def delete_personal_agent(self, tenant_id, user_id):
+        result = await self._pool.execute(
+            "DELETE FROM personal_agents WHERE tenant_id=$1 AND user_id=$2",
+            tenant_id, user_id,
+        )
+        return result != "DELETE 0"
+
     # --- memory ---
     async def add_memory_item(self, m: MemoryItem):
         await self._pool.execute(

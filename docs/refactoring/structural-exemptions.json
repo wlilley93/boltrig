@@ -343,13 +343,13 @@
       "expires": "2026-12-31"
     },
     "boltrig/kernel/memory_routes.py": {
-      "max_file_lines": 115,
-      "max_function_lines": 94,
+      "max_file_lines": 120,
+      "max_function_lines": 99,
       "over_limit_functions": [
         {
           "name": "register_memory_routes",
           "line": 22,
-          "lines": 94
+          "lines": 99
         }
       ],
       "owner": "kernel-maintainers",
@@ -404,7 +404,7 @@
       "expires": "2026-12-31"
     },
     "boltrig/store/base.py": {
-      "max_file_lines": 637,
+      "max_file_lines": 638,
       "max_function_lines": 15,
       "over_limit_functions": [],
       "owner": "store-maintainers",
@@ -412,7 +412,7 @@
       "expires": "2026-12-31"
     },
     "boltrig/store/memory.py": {
-      "max_file_lines": 1165,
+      "max_file_lines": 1168,
       "max_function_lines": 92,
       "over_limit_functions": [
         {
@@ -426,7 +426,7 @@
       "expires": "2026-12-31"
     },
     "boltrig/store/postgres.py": {
-      "max_file_lines": 1954,
+      "max_file_lines": 1961,
       "max_function_lines": 53,
       "over_limit_functions": [],
       "owner": "store-maintainers",

@@ -81,6 +81,10 @@ SANCTIONED_DIRECT_WRITES: frozenset[tuple[str, str, str]] = frozenset(
         # control.* grant; dispatching it as authoring would widen authority or
         # break the delegated-only contract pinned by SEC-30.
         ("personal.py", "configure_personal_agent", "upsert_personal_agent"),
+        # Same caller-owned contract as the configure route above: deleting your
+        # OWN personal agent requires no control.* grant (SEC-30); it is audited
+        # via audit_authoring.
+        ("personal.py", "delete_personal_agent", "delete_personal_agent"),
     }
 )
 
@@ -150,5 +154,5 @@ def test_control_plane_direct_writes_are_all_sanctioned():
         + "\n".join(f"  {m}::{fn} -> {meth}" for m, fn, meth in sorted(stale))
     )
 
-    # Tripwire on the closed ledger: only 15 self-scope/ingress writes remain.
-    assert len(SANCTIONED_DIRECT_WRITES) == 15
+    # Tripwire on the closed ledger: only 16 self-scope/ingress writes remain.
+    assert len(SANCTIONED_DIRECT_WRITES) == 16

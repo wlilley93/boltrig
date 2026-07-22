@@ -28,6 +28,23 @@ def register(app, P, K) -> None:
         await k.store.upsert_personal_agent(agent)
         return JSONResponse({"status": "ok", "id": agent.id, "owner": p.subject})
 
+    @app.get("/v1/me/agent")
+    async def get_personal_agent(k=K, p=P) -> JSONResponse:
+        agent = await k.store.get_personal_agent(p.tenant_id, p.subject)
+        if agent is None:
+            return JSONResponse({"error": "no_personal_agent"}, status_code=404)
+        return JSONResponse(
+            {"id": agent.id, "runtime": agent.runtime, "skills": list(agent.skills)}
+        )
+
+    @app.delete("/v1/me/agent")
+    async def delete_personal_agent(k=K, p=P) -> JSONResponse:
+        deleted = await k.store.delete_personal_agent(p.tenant_id, p.subject)
+        if not deleted:
+            return JSONResponse({"error": "no_personal_agent"}, status_code=404)
+        await audit_authoring(k, p, "personal_agent.delete", {})
+        return JSONResponse({"status": "ok", "deleted": True})
+
     @app.post("/v1/me/agent/invoke")
     async def invoke_personal_agent(body: dict, request: Request, k=K, p=P) -> JSONResponse:
         spawner = platform_state(request).get("spawner")

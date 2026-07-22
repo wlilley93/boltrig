@@ -58,6 +58,7 @@ import telegram_adapter  # noqa: F401
 import discord_adapter  # noqa: F401
 import signal_adapter  # noqa: F401
 import whatsapp_adapter  # noqa: F401
+import xai_voice_adapter  # noqa: F401
 
 log = logging.getLogger("channel_gateway")
 

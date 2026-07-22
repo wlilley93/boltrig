@@ -135,6 +135,33 @@ def test_personal_agent_is_delegated_only():
     assert any(e.on_behalf_of == "alice" for e in events)
 
 
+@pytest.mark.security
+@pytest.mark.invariant("SEC-30")
+def test_personal_agent_get_and_delete_lifecycle():
+    k = asyncio.run(_kernel())
+    c = _client(k)
+    h = _hdr("employee", grants="")
+    h["x-boltrig-subject"] = "alice"
+
+    assert c.get("/v1/me/agent", headers=h).status_code == 404
+    assert c.post("/v1/me/agent", json={"runtime": "script", "skills": ["risky"]},
+                  headers=h).status_code == 200
+    got = c.get("/v1/me/agent", headers=h)
+    assert got.status_code == 200
+    assert got.json()["runtime"] == "script" and got.json()["skills"] == ["risky"]
+    # another subject never sees it
+    other = _hdr("employee", grants="")
+    other["x-boltrig-subject"] = "bob"
+    assert c.get("/v1/me/agent", headers=other).status_code == 404
+
+    assert c.delete("/v1/me/agent", headers=h).status_code == 200
+    assert c.get("/v1/me/agent", headers=h).status_code == 404
+    assert c.delete("/v1/me/agent", headers=h).status_code == 404
+    # delete is audited
+    events = asyncio.run(k.store.audit_query(T))
+    assert any(e.verb == "authoring.personal_agent.delete" and e.actor == "alice" for e in events)
+
+
 # --- SEC-31: memory is scope-isolated ----------------------------------------
 @pytest.mark.security
 @pytest.mark.invariant("SEC-31")

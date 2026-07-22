@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import itertools
 import json
 import time
 from typing import Any
@@ -65,6 +66,7 @@ class KernelClient:
         self._client = client or httpx.AsyncClient(
             base_url=base_url.rstrip("/"), timeout=timeout
         )
+        self._rpc_ids = itertools.count(1)
 
     async def aclose(self) -> None:
         await self._client.aclose()
@@ -106,6 +108,22 @@ class KernelClient:
             f"/v1/channels/gateway/outbox/{message_id}/fail", {"error": error}
         )
         return resp.get("status") == "ok"
+
+    async def mcp_call(self, method: str, params: dict) -> dict:
+        """One JSON-RPC call over the kernel's MCP face (``POST /v1/mcp``) on
+        the SAME run-scoped token seam as link (b). This is how a socket-class
+        adapter (the voice surface) discovers and invokes verbs: every call
+        runs the kernel's unchanged chokepoint. Returns the full JSON-RPC
+        response; raises KernelAuthError on 401, KernelLinkError otherwise."""
+        return await self._link_post(
+            "/v1/mcp",
+            {
+                "jsonrpc": "2.0",
+                "id": next(self._rpc_ids),
+                "method": method,
+                "params": params,
+            },
+        )
 
     async def _link_post(self, path: str, body: dict) -> dict:
         try:

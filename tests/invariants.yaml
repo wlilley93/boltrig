@@ -195,6 +195,7 @@ invariants:
       - tests/security/test_channel_telegram_roundtrip.py::test_telegram_adapter_round_trip_against_a_test_kernel
       - tests/security/test_channel_discord_roundtrip.py::test_discord_adapter_round_trip_against_a_test_kernel
       - tests/security/test_channel_signal_roundtrip.py::test_signal_adapter_round_trip_against_a_test_kernel
+      - tests/security/test_channel_xai_voice_roundtrip.py::test_voice_adapter_round_trip_against_a_test_kernel
   SEC-178:
     description: Channel addressing is routing data, not authority - intake resolves the target (explicit sender target, else the channel config chat->target mapping, else the tier-1 CoS default) and stamps it plus the reply route on the work item; identity stays binding-row-authoritative. A target of the form "workflow:<wf_id>" is honored by the pump BEFORE any CoS routing: the named workflow is triggered through the durable library path (checkpointed, engine task) under the SENDER's grants - every step chokepoint-checked - and an unknown workflow fails closed exactly like an unroutable department (parked AWAITING_HUMAN with a HITL filed), never a silent fallthrough to CoS routing.
     tests:
@@ -220,6 +221,11 @@ invariants:
       - tests/security/test_sole_author_exemption.py::test_exemption_lapses_the_moment_a_second_author_exists
       - tests/security/test_sole_author_exemption.py::test_exemption_counts_only_active_author_tier_users
       - tests/security/test_sole_author_exemption.py::test_exemption_never_lifts_the_live_grant_requirement
+  SEC-183:
+    description: A realtime voice session exposes ONLY kernel-discovered client-side function tools and every voice tool call routes through the kernel - the xai_voice channel adapter builds session.tools exclusively from tools/list over the run-scoped MCP token (already tenant-ceiling ∩ run-grants scoped kernel-side), forwards every function_call_arguments.done event through POST /v1/mcp tools/call (the unchanged chokepoint: grant check, HITL, rate limit, kernel-side credential resolution, audit) and returns the result as function_call_output, while any config-injected xAI server-side tool (web_search / x_search / remote mcp - all of which execute OUTSIDE the chokepoint) or config tool list of any kind is REJECTED at adapter init, before any socket opens.
+    tests:
+      - tests/security/test_channel_xai_voice_roundtrip.py::test_voice_adapter_round_trip_against_a_test_kernel
+      - tests/security/test_channel_xai_voice_roundtrip.py::test_server_side_tool_config_is_rejected_at_init
   SEC-181:
     description: Secure input - a chat.ask_user question with secure:true + a bounded purpose label is schema-validated as a pair (secure requires purpose; purpose only with secure) and marked on the HITL request, the question/hitl run events and the list projection for consumers, but its ANSWER never enters the run - the shared answer path seals the value through the credential seam as a run+purpose-scoped credential (run:<run_id>:<purpose>, envelope-sealed at rest with no plaintext in the raw store row) and records the enveloped REFERENCE (credential:run/<run_id>/<purpose>) as the decision, so the resume wiring replays the reference and the value appears in no answer response body, run event, or audit row (not even its length). A verb param carrying the reference is resolved to the material INSIDE the kernel at the dispatch resolve-credential stage (the adapter receives the material; agent/context/events/audit only ever carried the reference), and resolution FAILS CLOSED (CredentialResolution) for another run, a run-less context, an unsealed purpose, a tampered row, or a foreign credential under a run: id. A non-secure ask_user is byte-for-byte the old behaviour, and the documented run-settle sweep removes exactly the finished run's secure credentials.
     tests:
@@ -638,6 +644,8 @@ invariants:
       - tests/kernel/test_chokepoint_order.py::test_credential_never_resolved_when_the_grant_check_fails
       - tests/kernel/test_chokepoint_order.py::test_credential_never_resolved_when_the_hitl_gate_pends
       - tests/kernel/test_chokepoint_order.py::test_credential_never_resolved_when_rate_limited
+      - tests/adapters/test_xai_voice_adapter.py::test_speak_uses_bearer_and_never_leaks_the_credential
+      - tests/adapters/test_xai_voice_adapter.py::test_missing_credential_fails_closed
   FR-MCP-01:
     description: The kernel MCP face lists granted verbs (with schemas) as tools.
     tests:

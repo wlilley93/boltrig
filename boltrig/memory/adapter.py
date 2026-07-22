@@ -150,6 +150,14 @@ class MemoryAdapter:
         if verb == "memory.improve":
             return await self._improve(params, context)
         if verb == "memory.forget":
+            if not params.get("target") and not params.get("source_ref"):
+                return Result.failure(
+                    AdapterError(
+                        ErrorClass.INVALID,
+                        "memory.forget requires a 'target' or 'source_ref' - an empty "
+                        "erasure must never be a silent no-op",
+                    )
+                )
             return await self._forget(params, context, scopes)
         return Result.failure(AdapterError(ErrorClass.INVALID, f"unknown verb {verb}"))
 

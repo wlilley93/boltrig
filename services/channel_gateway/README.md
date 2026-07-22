@@ -129,6 +129,31 @@ and `api_base`/`http_url` overrides for tests.
   JSON-RPC `send` (`/api/v1/rpc`); the envelope timestamp is the delivery id.
 - **Thread shape**: the sender's number for a DM, `group:<id>` for a group.
 
+### Voice (`xai_voice_adapter.py`) - xAI Realtime speech-to-speech
+
+- **Token**: `api_key` (an xAI console key, connect-time injected, never
+  logged) plus the standard run-scoped kernel token for its tool path.
+- **Egress allow**: `api.x.ai` (the one host it dials:
+  `wss://api.x.ai/v1/realtime`).
+- **Transport**: a held-open OpenAI-Realtime-compatible WSS with server VAD
+  and barge-in; session bootstrap uses the nested `audio.input.format` schema
+  (xAI silently ignores the legacy flat fields).
+- **Tools are kernel-owned (SEC-183, fail-closed)**: `session.tools` is built
+  ONLY from `tools/list` over the run-scoped MCP token (already grant-scoped
+  kernel-side), every entry a client-side `type: "function"`; each function
+  call is dispatched back through `POST /v1/mcp` `tools/call` - the unchanged
+  chokepoint. A config that injects ANY tool list (above all xAI's
+  server-side `web_search` / `x_search` / remote `mcp`, which execute outside
+  the chokepoint) is REJECTED at adapter init.
+- **Local audio seam**: no sound card is hardcoded. `config["audio"]` takes a
+  `LocalAudio` implementation (`read_frame` / `write_frame` / `interrupt`);
+  the default `NullAudio` makes it a transcript-only surface. A real device -
+  or the hey-nabu box - plugs in there.
+- **Shape**: a completed transcript becomes
+  `{"id": <item_id>, "sender": <configured speaker>, "text", "thread"}`; the
+  speaker is bound kernel-side to a Principal like any platform user.
+  Outbound `channel.send` text is spoken back through the live session.
+
 ## Automation webhooks (machine sources: CI, monitoring)
 
 A machine source - a CI pipeline, a monitoring alertmanager, a cron-adjacent
