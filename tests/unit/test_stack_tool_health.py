@@ -66,14 +66,14 @@ async def test_fleet_probe_requires_both_binaries_and_live_loopback_cdp(
 
     statuses = await probe_fleet_tools(
         {
-            "BOLTRIG_OPENCODE_BIN": "/stack/opencode",
+            "BOLTRIG_OPENCODE_BIN": "/stack/opencode",  # residue: must be ignored
             "BOLTRIG_BROWSER_CLI_BIN": "/stack/browser-use",
         },
         0.5,
     )
 
-    assert seen == ["/stack/opencode", "/stack/browser-use"]
-    assert statuses == {"opencode": True, "browser-cli": False}
+    assert seen == ["/stack/browser-use"]
+    assert statuses == {"browser-cli": False}
 
 
 @pytest.mark.invariant("FR-OPS-03")
@@ -112,7 +112,7 @@ async def test_browser_probe_accepts_only_a_chromium_cdp_response() -> None:
         ("not-json", 100.0, (False, "malformed")),
         (
             _receipt_payload(
-                {"opencode": True, "browser-cli": True},
+                {"browser-cli": True},
                 _SIGNING_KEY,
                 _TENANT,
                 now=60.0,
@@ -122,7 +122,7 @@ async def test_browser_probe_accepts_only_a_chromium_cdp_response() -> None:
         ),
         (
             _receipt_payload(
-                {"opencode": True, "browser-cli": True},
+                {"browser-cli": True},
                 _SIGNING_KEY,
                 _TENANT,
                 now=110.0,
@@ -132,7 +132,7 @@ async def test_browser_probe_accepts_only_a_chromium_cdp_response() -> None:
         ),
         (
             _receipt_payload(
-                {"opencode": False, "browser-cli": True},
+                {"browser-cli": False},
                 _SIGNING_KEY,
                 _TENANT,
                 now=100.0,
@@ -142,7 +142,7 @@ async def test_browser_probe_accepts_only_a_chromium_cdp_response() -> None:
         ),
         (
             _receipt_payload(
-                {"opencode": True, "browser-cli": True},
+                {"browser-cli": True},
                 _SIGNING_KEY,
                 _TENANT,
                 now=100.0,
@@ -170,7 +170,7 @@ def test_fleet_receipt_requires_schema_freshness_and_all_tools(
 @pytest.mark.invariant("FR-OPS-03")
 def test_fleet_receipt_rejects_forged_or_cross_deployment_evidence() -> None:
     receipt = _receipt_payload(
-        {"opencode": True, "browser-cli": True},
+        {"browser-cli": True},
         b"different-deployment-key",
         _TENANT,
         now=100.0,
@@ -185,7 +185,7 @@ def test_fleet_receipt_rejects_forged_or_cross_deployment_evidence() -> None:
     ) == (False, "unauthenticated")
 
     copied_receipt = _receipt_payload(
-        {"opencode": True, "browser-cli": True},
+        {"browser-cli": True},
         _SIGNING_KEY,
         "healthy-tenant",
         now=100.0,

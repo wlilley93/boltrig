@@ -210,28 +210,26 @@ async def _probe_browser_cdp(
 
 
 async def probe_fleet_tools(env: Mapping[str, str], timeout_s: float) -> dict[str, bool]:
-    """Probe only tools that execute in the fleet worker container."""
-    opencode = (env.get("BOLTRIG_OPENCODE_BIN") or "opencode").strip()
+    """Probe only tools that execute in the fleet worker container.
+
+    The probe pair matches the readiness required set (decision 0012): OpenCode
+    is staged-cutover residue and is no longer probed - a missing/unhealthy
+    residue binary must never trip the heartbeat warning."""
     browser = (env.get("BOLTRIG_BROWSER_CLI_BIN") or "browser-use").strip()
-    opencode_root = (env.get("BOLTRIG_OPENCODE_HOME") or "/var/lib/boltrig/opencode").strip()
     browser_root = (env.get("BOLTRIG_BROWSER_CLI_HOME") or "/var/lib/boltrig/browser-cli").strip()
-    if not opencode or not browser or not opencode_root or not browser_root:
-        return {"opencode": False, "browser-cli": False}
+    if not browser or not browser_root:
+        return {"browser-cli": False}
     try:
-        opencode_ok, browser_ok, cdp_ok = await asyncio.wait_for(
+        browser_ok, cdp_ok = await asyncio.wait_for(
             asyncio.gather(
-                _probe_version(opencode, timeout_s, env, state_root=opencode_root),
                 _probe_version(browser, timeout_s, env, state_root=browser_root),
                 _probe_browser_cdp(timeout_s),
             ),
             timeout=timeout_s,
         )
     except asyncio.TimeoutError:
-        return {"opencode": False, "browser-cli": False}
-    return {
-        "opencode": opencode_ok,
-        "browser-cli": browser_ok and cdp_ok,
-    }
+        return {"browser-cli": False}
+    return {"browser-cli": browser_ok and cdp_ok}
 
 
 async def run_fleet_tool_heartbeat(

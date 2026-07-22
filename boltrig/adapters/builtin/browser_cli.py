@@ -119,6 +119,11 @@ class BrowserCliAdapter:
 
     async def health(self) -> str:
         code, _, _ = await self._run([self.bin_path, "--doctor"], None, {})
+        if code == 127:
+            # The binary is not co-located with this process (it executes in the
+            # fleet worker); absence here is unknown, not down - the fleet
+            # heartbeat is the live proof path for this tool.
+            return "unknown"
         return "ok" if code == 0 else "down"
 
     def _command(

@@ -19,7 +19,7 @@ from collections.abc import Mapping
 
 _RECEIPT_SCHEMA = 1
 _RECEIPT_PREFIX = "boltrig:readiness:stack-tools:v1"
-_FLEET_TOOL_IDS = frozenset({"opencode", "browser-cli"})
+_FLEET_TOOL_IDS = frozenset({"browser-cli"})
 _MAX_RECEIPT_BYTES = 4096
 _CLOCK_SKEW_SECONDS = 5.0
 
