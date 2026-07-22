@@ -9,6 +9,7 @@ mirrors the manifest adapter-credential path in ``manifest.py``.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from .control_operations import ensure_adapter_id_available, record_inert_adapter
@@ -20,7 +21,13 @@ __all__ = ["bind_mcp_credential", "build_mcp_consumer", "register_mcp_consumer"]
 def build_mcp_consumer(params: dict[str, Any]) -> Any:
     from boltrig.adapters.mcp_consumer import McpConsumerAdapter
 
-    return McpConsumerAdapter(params["id"], url=params.get("url"))
+    return McpConsumerAdapter(
+        params["id"],
+        url=params.get("url"),
+        # The reviewed opt-in for an operator-vetted INTERNAL server (SEC-61
+        # waiver); absent/anything-but-true reads as the guarded default.
+        allow_internal=bool(params.get("allow_internal")),
+    )
 
 
 async def bind_mcp_credential(
@@ -66,10 +73,18 @@ async def register_mcp_consumer(
 ) -> Any:
     await ensure_adapter_id_available(store, loader, tenant_id, params["id"])
     consumer = build_mcp_consumer(params)
-    # The url is the row's spec_ref: boot rehydration rebuilds the consumer
-    # from it, so a registration without one can never be rehydrated.
+    # The row's spec_ref is what boot rehydration rebuilds the consumer FROM,
+    # so it now persists the server url AND its reviewed egress posture as a
+    # small JSON object (read back by control_rehydrate.consumer_spec, which
+    # also reads the pre-flag plain-url rows). A registration without a url
+    # can never be rehydrated.
+    spec_ref = None
+    if params.get("url"):
+        spec_ref = json.dumps(
+            {"url": params["url"], "allow_internal": bool(params.get("allow_internal"))}
+        )
     await record_inert_adapter(
-        store, tenant_id, consumer, created_by=actor, spec_ref=params.get("url")
+        store, tenant_id, consumer, created_by=actor, spec_ref=spec_ref
     )
     if credentials is not None:
         await bind_mcp_credential(store, credentials, tenant_id, consumer.id, params)

@@ -198,6 +198,13 @@ def _adapter_specs() -> list[VerbSpec]:
             {
                 "id": _STRING,
                 "url": _STRING,
+                # Human-reviewed opt-in for an operator-vetted INTERNAL server
+                # (e.g. a docker-network address): waives exactly the egress
+                # guard's internal-address refusal (SEC-61). Registration is
+                # inert until the SEC-22 review gate, so the flag is always
+                # human-approved before any call. Never for agent-influenced
+                # URLs.
+                "allow_internal": {"type": "boolean"},
                 # credential params NAME a secret-store key (bind_mcp_credential);
                 # raw secret material has no param here and stays refused.
                 "credential_ref": _STRING,

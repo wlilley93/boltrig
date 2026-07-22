@@ -444,6 +444,9 @@ invariants:
       - tests/security/test_adapter_lifecycle.py::test_boot_rehydrates_a_control_plane_registered_consumer
       - tests/security/test_adapter_lifecycle.py::test_boot_skips_rows_it_cannot_reconstruct_loudly
       - tests/security/test_adapter_lifecycle.py::test_lifecycle_verbs_govern_a_store_only_phantom_row
+      - tests/security/test_adapter_lifecycle.py::test_phantom_row_activate_rehydrates_on_demand
+      - tests/security/test_adapter_lifecycle.py::test_phantom_row_without_a_url_fails_loudly_and_typed
+      - tests/security/test_mcp_consumer_activation.py::test_approval_for_the_inert_adapter_covers_discovery
       - tests/store/test_store_parity.py::test_adapter_lifecycle_deletes_are_idempotent_and_tenant_scoped
   FR-MCP-03:
     description: An external MCP server is consumed as an adapter - its tools register as verbs.
@@ -451,6 +454,8 @@ invariants:
       - tests/integration/test_mcp_consumer.py::test_consume_external_mcp_server_as_verbs
       - tests/security/test_mcp_consumer_activation.py::test_activation_discovers_and_publishes_the_servers_tools
       - tests/security/test_mcp_consumer_activation.py::test_a_second_activation_resyncs_idempotently
+      - tests/security/test_mcp_consumer_activation.py::test_opbox_risk_class_drives_consequence_on_the_published_verbs
+      - tests/security/test_mcp_consumer_activation.py::test_approval_for_the_inert_adapter_covers_discovery
   FR-HOST-01:
     description: Herdr host-control capabilities are declared as governed adapter verbs with read/mutate consequence levels.
     tests:
@@ -785,7 +790,7 @@ invariants:
     tests:
       - tests/security/test_budget_and_pii.py::test_pii_redaction
   SEC-14:
-    description: High-consequence / blocking verbs pause for human approval and cannot be bypassed - an approval is single-use and bound to the exact tenant, verb, canonical params, authenticated/delegated initiator, and mutable resource snapshot; only an explicitly authorised assigned human independent of the direct/delegated requester may answer it. Channel-native /approve|/deny replies at intake run through the SAME respond authorization (fail-closed for a non-approver, a self-approver, or an unbound sender, and a replayed command can never re-answer), and a channel /answer can feed a QUESTION back but can never be laundered into clearing a gated verb - the approval/question separation holds on every surface.
+    description: High-consequence / blocking verbs pause for human approval and cannot be bypassed - an approval is single-use and bound to the exact tenant, verb, canonical params, authenticated/delegated initiator, and mutable resource snapshot; only an explicitly authorised assigned human independent of the direct/delegated requester may answer it; and a spent (consumed) approval FAILS LOUDLY with a typed 409 rather than silently re-pending, so a retry after a successful consume can never loop on fresh 202s. Channel-native /approve|/deny replies at intake run through the SAME respond authorization (fail-closed for a non-approver, a self-approver, or an unbound sender, and a replayed command can never re-answer), and a channel /answer can feed a QUESTION back but can never be laundered into clearing a gated verb - the approval/question separation holds on every surface.
     tests:
       - tests/security/test_hitl_gate.py::test_blocking_verb_pauses_for_approval
       - tests/security/test_hitl_gate.py::test_resumes_after_approval
@@ -797,6 +802,7 @@ invariants:
       - tests/security/test_hitl_gate.py::test_escalation_answer_cannot_clear_high_consequence_gate
       - tests/security/test_hitl_gate.py::test_approval_is_bound_to_params_and_initiating_principal
       - tests/security/test_hitl_gate.py::test_mutable_adapter_approval_context_is_recomputed
+      - tests/security/test_adapter_lifecycle.py::test_a_consumed_approval_fails_loudly_instead_of_repending
       - tests/security/test_hitl_gate.py::test_approval_fingerprint_canonicalises_json_order_and_unicode
       - tests/security/test_channel_hitl_replies.py::test_channel_approve_clears_a_pending_approval_as_the_bound_approver
       - tests/security/test_channel_hitl_replies.py::test_channel_approve_and_deny_use_the_api_eligibility
@@ -1078,12 +1084,18 @@ invariants:
     tests:
       - tests/security/test_round_sixteen.py::test_dev_auth_refuses_production_signal
   SEC-61:
-    description: The shared egress guard blocks cloud-metadata / link-local targets for every HTTP adapter (not just web.fetch), closing the SSRF to IMDS token-theft path (INJ-02 / CLOUD-03); and it PINS the vetted resolution - every egress client connects to the audited IP literal (host/SNI preserved), so a low-TTL domain cannot re-resolve to internal space between the check and the connect (H2 DNS-rebinding TOCTOU).
+    description: The shared egress guard blocks cloud-metadata / link-local targets for every HTTP adapter (not just web.fetch), closing the SSRF to IMDS token-theft path (INJ-02 / CLOUD-03); and it PINS the vetted resolution - every egress client connects to the audited IP literal (host/SNI preserved), so a low-TTL domain cannot re-resolve to internal space between the check and the connect (H2 DNS-rebinding TOCTOU). The ONE waiver is explicit and governed: control.mcp_server.register's allow_internal flag names an operator-vetted INTERNAL service (human-approved via the SEC-22 review gate, persisted in spec_ref so a restart rebuilds the same posture, and never readable from a pre-flag plain-url row) and skips ONLY the internal-address check - scheme, air-gap, and the domain lists still apply. No agent-influenced path (the generator's spec fetch, web.fetch, the browser adapter) can set it.
     tests:
       - tests/security/test_round_sixteen.py::test_shared_egress_guard_blocks_metadata
       - tests/security/test_egress_pinning.py::test_egress_rejects_dns_rebind_between_check_and_connect
       - tests/security/test_egress_pinning.py::test_pinned_client_uses_vetted_ip_and_preserves_host
       - tests/security/test_egress_pinning.py::test_pinned_client_refuses_internal_resolution
+      - tests/security/test_egress_pinning.py::test_allow_internal_skips_only_the_internal_address_check
+      - tests/security/test_egress_pinning.py::test_allow_internal_vets_and_pins_an_operator_vetted_internal_service
+      - tests/security/test_adapter_lifecycle.py::test_the_reviewed_allow_internal_flag_persists_and_rehydrates
+      - tests/security/test_adapter_lifecycle.py::test_a_pre_flag_plain_url_row_rehydrates_with_the_guarded_default
+      - tests/adapters/test_mcp_consumer_adapter.py::test_an_internal_server_is_refused_without_the_reviewed_waiver
+      - tests/adapters/test_mcp_consumer_adapter.py::test_an_internal_server_connects_with_the_reviewed_waiver
   SEC-62:
     description: A Unicode-confusable or non-canonical verb id can never match a grant - matching is NFKC-normalised and restricted to a safe identifier charset (UPLOAD-05 / AZ-02).
     tests:

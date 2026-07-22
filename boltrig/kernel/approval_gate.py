@@ -11,6 +11,8 @@ from typing import Any
 from boltrig.adapters.base import Adapter
 from boltrig.models import (
     BoltrigError,
+    HITLStateConflict,
+    HITLStatus,
     HITLType,
     InvocationContext,
     PendingHuman,
@@ -123,6 +125,18 @@ async def enforce_approval(
         else None
     )
     if not approved_by:
+        if approval_id is not None:
+            spent = await hitl.get(context.tenant_id, approval_id)
+            if spent is not None and spent.status == HITLStatus.CONSUMED:
+                # A spent approval must NEVER silently re-pend: its invocation
+                # already ran (succeeded or failed - e.g. the HITL-resume lane
+                # consumed it). Re-pending here loops forever - every retry
+                # spends nothing new yet returns a fresh 202 - so fail loudly
+                # and let the caller inspect the resource state instead.
+                raise HITLStateConflict(
+                    f"approval '{approval_id}' was already consumed; "
+                    "its invocation already ran"
+                )
         request = await hitl.create(
             tenant_id=context.tenant_id,
             run_id=context.run_id or "",

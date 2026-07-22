@@ -113,7 +113,7 @@ test("registerMcpServer surfaces kernel refusals without the token", async () =>
 test("activateAdapter re-applies an approval via the x-boltrig-approval-id header", async () => {
   const { fetch: f, calls } = mockFetch({
     status: 200,
-    payload: { status: "ok", id: "opbox-acme", activated: true, verbs: ["orders.list"] },
+    payload: { status: "ok", id: "opbox-acme", activated: true, verbs: ["opbox-acme.orders.list"] },
   });
   const outcome = await activateAdapter({
     server: SERVER,
@@ -126,7 +126,7 @@ test("activateAdapter re-applies an approval via the x-boltrig-approval-id heade
   assert.equal(call.url, "http://kernel.test/v1/adapters/opbox-acme/activate");
   assert.equal(call.headers["x-boltrig-approval-id"], "hitl-123");
   assert.equal(outcome.status, "ok");
-  if (outcome.status === "ok") assert.deepEqual(outcome.verbs, ["orders.list"]);
+  if (outcome.status === "ok") assert.deepEqual(outcome.verbs, ["opbox-acme.orders.list"]);
 });
 
 test("activateAdapter passes pending_human through (the review gate drives HITL)", async () => {

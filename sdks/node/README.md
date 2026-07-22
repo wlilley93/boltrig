@@ -45,7 +45,7 @@ import { createBoltrigMcpServer, VerbError, type VerbDef } from "boltrig-app-sdk
 
 const verbs: VerbDef[] = [
   {
-    name: "orders.list",                 // "noun.verb" — the kernel noun is "orders"
+    name: "orders.list",                 // publishes as "<adapter-id>.orders.list" (see below)
     description: "List Opbox orders, optionally filtered by status.",
     schema: {                            // JSON Schema; the KERNEL validates params
       type: "object",                    // against this at dispatch
@@ -73,26 +73,26 @@ Handler contract:
 - Return any JSON-serialisable value → wrapped as
   `{ content: [{type:"text",text:<json>}], isError: false, _boltrig: {status:"ok", output} }`.
   The kernel's consumer reads `_boltrig.output` as the verb's structured output
-  (`mcp_consumer.py:142`); the `content` array is the standard-MCP fallback.
+  (`boltrig/adapters/mcp_consumer.py`); the `content` array is the standard-MCP fallback.
 - Throw `VerbError("order not found")` →
   `{ isError: true, _boltrig: {status:"error", reason} }`, which the consumer maps
-  onto its typed error taxonomy (`mcp_consumer.py:138-141`). Any other throw is
+  onto its typed error taxonomy (same module). Any other throw is
   reported as a generic `"verb handler error"` — internals never cross the wire.
 
-**Transport, and why not `@modelcontextprotocol/sdk`.** The kernel's consumer
-(`boltrig/adapters/mcp_consumer.py:159-185`) POSTs ONE plain JSON-RPC 2.0 body
-per call to your URL — no `initialize` handshake, no SSE stream, no session
-headers. The official SDK's StreamableHTTP transport *mandates* the handshake
-and an `Accept: application/json, text/event-stream` header, so it would reject
-every call the consumer makes. This scaffold therefore serves plain JSON-RPC
-POST, mirroring the kernel's own MCP face (`boltrig/kernel/mcp.py`, also a thin
-hand-rolled JSON-RPC face). `initialize`/`ping` are still answered, so any
-standard MCP client can talk to the server too.
+**Transport.** The kernel's consumer (`boltrig/adapters/mcp_transport.py`)
+POSTs one JSON-RPC 2.0 body per call with an
+`Accept: application/json, text/event-stream` header. A plain JSON-RPC door
+like this scaffold is used as-is; a strict Streamable-HTTP server that demands
+the `initialize` handshake and a session id gets them (lazily, on the server's
+refusal), and SSE-framed answers are decoded. So EITHER shape works — this
+scaffold serves plain JSON-RPC POST, mirroring the kernel's own MCP face
+(`boltrig/kernel/mcp.py`, also a thin hand-rolled JSON-RPC face).
+`initialize`/`ping` are still answered, so any standard MCP client can talk to
+the server too.
 
 **Auth (defense in depth).** Every method — including `tools/list` — requires
-the bearer. The consumer presents it as `x-boltrig-mcp-token: <token>`
-(`mcp_consumer.py:183`); `Authorization: Bearer` is also accepted for operator
-probes. The comparison is constant-time, the token comes from an env var whose
+the bearer. The consumer presents it as BOTH `x-boltrig-mcp-token: <token>`
+and `Authorization: Bearer <token>` (`mcp_transport.py`); either is accepted. The comparison is constant-time, the token comes from an env var whose
 NAME you configure, the value is never logged, and the server refuses to start
 when it is unset (an unauthenticated verb server would be a side door around
 the chokepoint). Note this is *defense in depth behind* the kernel's credential
@@ -117,7 +117,7 @@ const outcome = await registerMcpServer({
   token: pat.secret,                     // or rely on env BOLTRIG_TOKEN
   id: "opbox-acme",                      // ONE registration per app instance/tenant
   url: "http://127.0.0.1:8790/",
-  // credentialRef: "OPBOX_MCP_TOKEN",   // see the spec-mismatch caveat below
+  // credentialRef: "OPBOX_MCP_TOKEN",   // binds the credential at registration
 });
 ```
 
@@ -128,16 +128,11 @@ string or a JSON object with `token`/`api_key`/`value`). Raw secret material in
 the params is refused kernel-side outright — this client has no field that
 could carry it.
 
-> **Spec-mismatch caveat (verified live).** The control-plane HANDLER supports
-> `credential_ref` (`control_mcp.py:bind_mcp_credential`), but the verb SPEC
-> (`control_specs.py:184-191`) declares `control.mcp_server.register` with
-> `additional=False` and only `{id, url}` — so a live kernel rejects
-> `credential_ref` with `400 schema_invalid`. The client exposes the field for
-> when the spec is fixed; today registration succeeds only without it, which
-> also means no credential gets bound and calls would fail closed with
-> `mcp credential missing` (`mcp_consumer.py:127-130`) until one is bound
-> kernel-side. Both this and the discovery caveat below are kernel-side seams,
-> not SDK gaps.
+> The verb spec (`control_specs.py`, `control.mcp_server.register`) declares
+> `credential_ref` (and `allow_internal` for an operator-vetted internal URL),
+> so registration can bind the credential in one call. Without it no credential
+> is bound and calls fail closed with `mcp credential missing`
+> (`mcp_consumer.py`) until one is bound kernel-side.
 
 The registration lands **INERT** (the SEC-22 review gate): the adapter row is
 visible in `GET /v1/adapters` with `activated: false`, and execution refuses
@@ -162,7 +157,7 @@ if (isPendingHuman(act)) {
   await respondToHitl({ server, token: reviewerToken, requestId: act.hitlRequestId, decision: "approve" });
   act = await activateAdapter({ server, token, adapterId: "opbox-acme", approvalId: act.hitlRequestId });
 }
-// act.verbs — the verb bindings now published for this tenant
+// act.verbs — the published verb ids, namespaced "<adapter-id>.<tool>"
 ```
 
 - **Grants.** Activation publishes verb *bindings*; agents still need grants
@@ -171,19 +166,15 @@ if (isPendingHuman(act)) {
 - **HITL per call.** Verbs the kernel treats as high-consequence pend a human
   at dispatch (`PendingHuman`); the head client surfaces them as `hitl` SSE
   events and `respondHitl` answers them.
-- **Consequence caveat (verified against the code).** Today's consumer builds
-  `VerbSpec`s without a consequence, so every consumed verb registers as
-  `"low"` (`mcp_consumer.py:85-93`). This SDK surfaces `consequence: "high"` as
-  MCP tool `annotations.destructiveHint`, but until the consumer propagates it,
-  re-assert high consequence kernel-side after activation via the governed
-  `control.verb.define` verb (`consequence: "high"`) if you want the per-call
-  HITL gate on e.g. `inventory.adjust`.
-- **Discovery caveat (verified).** Production activation publishes
-  `adapter.describe()`, and nothing in the kernel currently calls the consumer's
-  `connect()` (tools/list discovery) outside tests — so activation today
-  publishes zero verbs for a consumed MCP server. This is a kernel-side seam to
-  close (wire `connect()` into activation with the resolved credential); the
-  SDK's `tools/list` is ready for it.
+- **Namespacing.** Verbs publish as `<adapter-id>.<tool name>` under the
+  noun `<adapter-id>` (e.g. adapter `opbox-acme` → verb `opbox-acme.orders.list`);
+  grants must cover the prefixed ids. Tool names that can't be verb ids after
+  prefixing (a `/`, whitespace, empty) are skipped with a warning, not published.
+- **Consequence.** A tool's declared `consequence` hint propagates (capped at
+  `"high"`, default `"low"`), as do the standard MCP annotations
+  (`destructiveHint` → high, `readOnlyHint` → low) this SDK emits. Discovery
+  (`connect()` → `tools/list`) runs at activation with the kernel-resolved
+  credential, so the published verbs are the server's actual tools.
 
 ## 4. Auth model: service PAT, on_behalf_of
 

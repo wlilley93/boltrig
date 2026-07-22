@@ -1424,3 +1424,37 @@ host-app runtime: facade adapters, approval continuation, external MCP hardening
 pinned packaging, host-owned conversation mode, and worker/drainer profile. Then
 use those pieces to replace Opbox `agent-chat`, prove parity, and only then move
 the drainer.
+
+## Status note (2026-07-22): the consumption seam is LIVE
+
+Phase 1's core mechanism is now proven end-to-end on the dev stack, against the
+running Opbox kernel (demo deployment):
+
+- Opbox's kernel MCP door is registered as a consumed server (`opbox` adapter,
+  AGENT-seat worker `boltrig-shadow` minted via the governed `org.agent.create`
+  as the CoS; its bound key rides boltrig's credential seam as an env
+  `credential_ref`). Activation ran real discovery: 142 verbs published,
+  namespaced as `opbox.<tool>` (one noun per consumed server; presentation
+  meta-tools skipped; reserved-prefix collisions like `system.health` solved by
+  the namespace).
+- Reads execute through the boltrig chokepoint (`opbox.matter.list` returned
+  live matters). Writes HITL-gate: Opbox `riskClass=WRITE/SENSITIVE/MONEY/
+  DESTRUCTIVE` maps to boltrig consequence high via the consumer's hint
+  precedence (explicit consequence > riskClass > MCP annotations > low), so
+  `opbox.matter.create` pended for human approval and, once approved, created
+  matter 1003 on the Opbox kernel. Credential resolution, idempotency, and
+  audit all rode the standard dispatch path.
+- Interop shipped for this: StreamableHTTP client (Bearer + lazy handshake +
+  session + SSE decode), operator-vetted `allow_internal` egress waiver
+  (registration-time, review-gated), adapter lifecycle verbs
+  (deactivate/delete), boot + on-demand rehydration, and the spent-approval
+  loud-409 fix.
+
+Boltrig-side remaining: none for the seam itself. Opbox-side remaining (their
+repo): schema coverage beyond the ~40 verbs in `verb_input_schemas.json`,
+frontend repoint (`AGENT_CHAT_URL` + SSE shape mapping), opbox-agent runtime
+retirement, and the Gen-1 Prisma-tool fold (their pre-existing track). The
+Opbox seat for production use should be re-minted with a tighter capability
+scope agreed per environment; the demo `boltrig-shadow` worker key appeared in
+a session transcript and should be rotated (`org.agent.remove` + re-create) if
+the demo box ever gains real data.

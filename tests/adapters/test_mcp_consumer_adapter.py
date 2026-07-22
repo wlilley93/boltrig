@@ -143,9 +143,9 @@ async def test_a_plain_jsonrpc_door_gets_no_handshake_and_both_credential_header
 
     specs = await consumer.connect(cred)
     consumer.review_and_activate("reviewer@acme")
-    result = await consumer.execute("ticket.read", {}, cred, _ctx())
+    result = await consumer.execute("ext-mcp.ticket.read", {}, cred, _ctx())
 
-    assert [s.verb_id for s in specs] == ["ticket.read"]
+    assert [s.verb_id for s in specs] == ["ext-mcp.ticket.read"]  # namespaced
     assert result.ok and result.output == {"text": "done"}
     assert [m for m, _ in door.posts] == ["tools/list", "tools/call"]  # no initialize
     for _, headers in door.posts:
@@ -220,9 +220,9 @@ async def test_a_strict_streamable_http_door_gets_the_full_round_trip(monkeypatc
 
     specs = await consumer.connect(cred)
     consumer.review_and_activate("reviewer@acme")
-    result = await consumer.execute("ticket.read", {}, cred, _ctx())
+    result = await consumer.execute("ext-mcp.ticket.read", {}, cred, _ctx())
 
-    assert [s.verb_id for s in specs] == ["ticket.read"]
+    assert [s.verb_id for s in specs] == ["ext-mcp.ticket.read"]  # namespaced
     assert result.ok and result.output == {"text": "strict-ok"}  # SSE-decoded
     assert [m for m, _ in door.posts] == [
         "tools/list",  # refused (400): no session yet
@@ -251,7 +251,7 @@ async def test_an_expired_session_re_handshakes_once_and_retries(monkeypatch):
 
     door.live_sessions.clear()  # the server forgot sess-1
 
-    result = await consumer.execute("ticket.read", {}, cred, _ctx())
+    result = await consumer.execute("ext-mcp.ticket.read", {}, cred, _ctx())
 
     assert result.ok and result.output == {"text": "strict-ok"}
     assert [m for m, _ in door.posts][-4:] == [
@@ -259,3 +259,178 @@ async def test_an_expired_session_re_handshakes_once_and_retries(monkeypatch):
         "initialize", "notifications/initialized",  # re-handshake mints sess-2
         "tools/call",  # retried on the fresh session
     ]
+
+
+# --- consequence-hint precedence (explicit > Opbox risk_class > annotations) ---
+
+
+def _opbox_desc(name: str, risk_class: str) -> str:
+    """The description run the Opbox kernel's projection emits verbatim
+    (opbox-kernel kernel/src/mcp/tools.rs ``verb_to_tool``)."""
+    return (
+        f"Opbox verb '{name}' (capability=cap, riskClass={risk_class}, "
+        "authz=OrgMember, idempotent=false, egress=None, tier=Core). "
+        "Routed through the one kernel dispatch; authz + audit + egress "
+        "are enforced at the verb."
+    )
+
+
+_PRECEDENCE_TOOLS = [
+    # an explicit consequence declaration wins over the Opbox risk class
+    {"name": "t.explicit_low", "consequence": "low",
+     "description": _opbox_desc("t.explicit_low", "DESTRUCTIVE")},
+    # a bogus explicit hint clamps low, fail-closed - even over a MONEY class
+    {"name": "t.bogus", "consequence": "critical",
+     "description": _opbox_desc("t.bogus", "MONEY")},
+    # a structured riskClass field is honoured too (tolerant parse)
+    {"name": "t.structured", "riskClass": "WRITE"},
+    # standard MCP annotations: destructive -> high, read-only -> low
+    {"name": "t.ann_destructive", "annotations": {"destructiveHint": True}},
+    {"name": "t.ann_readonly", "annotations": {"readOnlyHint": True}},
+    # the risk class beats annotations: READ stays low under a destructive hint
+    {"name": "t.class_beats_ann", "annotations": {"destructiveHint": True},
+     "description": _opbox_desc("t.class_beats_ann", "READ")},
+    # an unknown class (structured or in the token) falls through to low
+    {"name": "t.unknown", "riskClass": "CHARGE"},
+    # prose alone never trips the description parse
+    {"name": "t.prose",
+     "description": "a destructive purge that deletes every record, irreversible"},
+]
+
+
+@pytest.mark.invariant("FR-MCP-03")
+async def test_consequence_hint_precedence_and_fail_closed_clamps():
+    """Precedence: explicit ``consequence`` (bogus clamps low) > Opbox risk_class
+    > MCP annotations > low; nothing climbs above the Consequence ceiling."""
+    async def rpc(request):
+        return {"jsonrpc": "2.0", "id": request["id"],
+                "result": {"tools": _PRECEDENCE_TOOLS}}
+
+    specs = await McpConsumerAdapter(id="mcp-x", rpc=rpc).connect(_cred())
+
+    assert {s.verb_id: s.consequence for s in specs} == {
+        "mcp-x.t.explicit_low": "low",  # verb ids are namespaced
+        "mcp-x.t.bogus": "low",
+        "mcp-x.t.structured": "high",
+        "mcp-x.t.ann_destructive": "high",
+        "mcp-x.t.ann_readonly": "low",
+        "mcp-x.t.class_beats_ann": "low",
+        "mcp-x.t.unknown": "low",
+        "mcp-x.t.prose": "low",
+    }
+
+
+# --- allow_internal: the reviewed waiver for an operator-vetted internal server ---
+
+_INTERNAL_URL = "http://opbox-kernel:8088/mcp"  # a docker-network address
+
+
+def _vetting_stub(monkeypatch, door):
+    """Route the consumer's pinned-client creation through the REAL egress vet
+    (``resolve_host`` stubbed to a 172.x address), then hand back the fake door
+    instead of a real client: the guard's decision is genuinely exercised and
+    no socket is opened."""
+    from boltrig.adapters import egress
+
+    monkeypatch.setattr(egress, "resolve_host", lambda host: ["172.18.0.2"])
+
+    def vet_then_fake(url, config=None, timeout=None):  # noqa: ANN001
+        egress.resolve_and_vet(url, config)  # the real guard: raises without the waiver
+        return door
+
+    monkeypatch.setattr(egress, "pinned_async_client", vet_then_fake)
+
+
+@pytest.mark.invariant("SEC-61")
+async def test_an_internal_server_is_refused_without_the_reviewed_waiver(monkeypatch):
+    """The default posture: an internal MCP URL (a docker-network 172.x target)
+    is refused by the egress guard before the bearer can leave, even though the
+    URL was registered and reviewed - the operator must opt in explicitly."""
+    door = _PlainDoor(list(_TOOLS))
+    _vetting_stub(monkeypatch, door)
+    consumer = McpConsumerAdapter("ext-mcp", url=_INTERNAL_URL)  # allow_internal off
+    consumer.review_and_activate("reviewer@acme")
+    cred = Credential(id="MCP", kind="api_key", material={"value": "tok"})
+
+    result = await consumer.execute("ext-mcp.ticket.read", {}, cred, _ctx())
+
+    assert not result.ok
+    assert result.error is not None
+    assert result.error.error_class.value == "invalid"
+    assert "egress refused" in result.error.message
+    assert door.posts == []  # the bearer never left
+
+
+@pytest.mark.invariant("SEC-61")
+async def test_an_internal_server_connects_with_the_reviewed_waiver(monkeypatch):
+    """With allow_internal the SAME internal target vets and pins: the full
+    connect -> execute round trip runs against the internal door."""
+    door = _PlainDoor(list(_TOOLS))
+    _vetting_stub(monkeypatch, door)
+    consumer = McpConsumerAdapter("ext-mcp", url=_INTERNAL_URL, allow_internal=True)
+    cred = Credential(id="MCP", kind="api_key", material={"value": "tok"})
+
+    specs = await consumer.connect(cred)
+    consumer.review_and_activate("reviewer@acme")
+    result = await consumer.execute("ext-mcp.ticket.read", {}, cred, _ctx())
+
+    assert [s.verb_id for s in specs] == ["ext-mcp.ticket.read"]  # namespaced
+    assert result.ok and result.output == {"text": "done"}
+
+
+# --- verb namespacing: <adapter_id>.<tool_name>, skip what can't publish ---
+
+
+@pytest.mark.invariant("FR-MCP-03")
+async def test_unpublishable_tool_names_are_skipped_with_a_warning(caplog):
+    """Names that can't be verb ids after prefixing - a '/' (a presentation
+    meta-tool like opbox/expand_tools), whitespace, empty - are SKIPPED with a
+    warning, never published and never an activation error."""
+    import logging
+
+    async def rpc(request):
+        return {"jsonrpc": "2.0", "id": request["id"], "result": {"tools": [
+            {"name": "matter.list", "inputSchema": {}},
+            {"name": "opbox/expand_tools", "inputSchema": {}},
+            {"name": "weird name", "inputSchema": {}},
+            {"name": "", "inputSchema": {}},
+        ]}}
+
+    with caplog.at_level(logging.WARNING, logger="boltrig.adapters.mcp_consumer"):
+        specs = await McpConsumerAdapter(id="opbox", rpc=rpc).connect(_cred())
+
+    assert [s.verb_id for s in specs] == ["opbox.matter.list"]
+    skipped = [r.message for r in caplog.records if r.levelno >= logging.WARNING]
+    assert len(skipped) == 3
+    assert any("opbox/expand_tools" in message for message in skipped)
+
+
+@pytest.mark.invariant("FR-MCP-03")
+async def test_calls_use_the_bare_tool_name_not_the_prefixed_verb():
+    """The wire sees the server's OWN tool name: the namespace is publish-side
+    only. Also pins the rehydrated shape: a consumer that never connected (an
+    empty mapping) still strips its own prefix deterministically."""
+    seen: list[str] = []
+
+    async def rpc(request):
+        if request["method"] == "tools/list":
+            return {"jsonrpc": "2.0", "id": request["id"],
+                    "result": {"tools": [{"name": "matter.list", "inputSchema": {}}]}}
+        seen.append(request["params"]["name"])
+        return {"jsonrpc": "2.0", "id": request["id"],
+                "result": {"content": [{"type": "text", "text": "ok"}]}}
+
+    consumer = McpConsumerAdapter(id="opbox", rpc=rpc)
+    await consumer.connect(_cred())
+    consumer.review_and_activate("reviewer@acme")
+    result = await consumer.execute("opbox.matter.list", {}, _cred(), _ctx())
+
+    assert result.ok
+    assert seen == ["matter.list"]  # the BARE name on the wire
+
+    fresh = McpConsumerAdapter(id="opbox", rpc=rpc)  # rehydrated: never connected
+    fresh.review_and_activate("reviewer@acme")
+    result = await fresh.execute("opbox.matter.list", {}, _cred(), _ctx())
+
+    assert result.ok
+    assert seen == ["matter.list", "matter.list"]

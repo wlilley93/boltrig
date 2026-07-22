@@ -201,51 +201,47 @@ async def _rehydrate_store_adapters(kernel: Kernel, tenant_id: str) -> None:
     activate, execute, deactivate, or delete. Only shapes the boot can rebuild
     HONESTLY are rehydrated:
 
-    - ``boltrig.adapters.mcp_consumer`` rows rebuild as
-      ``McpConsumerAdapter(id, url=spec_ref)`` - the url registration persisted
-      in ``spec_ref``. The persisted review-gate flag stands (``activated``),
-      and the default credential-id convention is re-bound from its persisted
-      ref row so activation/execution resolve the credential again (an explicit
-      ``credential_id`` binding is not recoverable; activation fails closed and
-      the fix is re-registration). A row with no ``spec_ref`` lost its server
-      address (registered before the url was persisted): skipped loudly -
-      delete and re-register it.
+    - ``boltrig.adapters.mcp_consumer`` rows rebuild from the registration in
+      ``spec_ref`` - JSON ``{"url", "allow_internal"}`` for current rows, a
+      plain url string for pre-flag rows (``control_rehydrate.consumer_spec``
+      reads both; the plain string gets the guarded default). The persisted
+      review-gate flag stands (``activated``), and the default credential-id
+      convention is re-bound from its persisted ref row so activation/execution
+      resolve the credential again (an explicit ``credential_id`` binding is
+      not recoverable; activation fails closed - re-register). A row with no
+      ``spec_ref`` lost its server address: skipped loudly - delete, re-register.
     - anything else is skipped with a warning rather than reconstructed
       halfway: generated adapters keep no rehydration source (their OpenAPI
       document was inline at generation, and ``spec_ref`` is a reference
       column, not a document store).
 
-    Rows already live (manifest ``mcp.consume`` registers them first) win.
+    Rows already live (manifest ``mcp.consume`` registers them first) win. The
+    per-row rebuild itself is shared with the activation path's on-demand
+    rehydration (``config.control_rehydrate``).
     """
-    from boltrig.adapters.mcp_consumer import McpConsumerAdapter
+    from boltrig.config.control_rehydrate import rehydrate_adapter_instance
 
     for record in await kernel.store.list_adapters(tenant_id):
         if kernel.loader.peek(tenant_id, record.id) is not None:
             continue  # the manifest registered this id this boot already
-        if record.module_ref != "boltrig.adapters.mcp_consumer":
+        consumer = await rehydrate_adapter_instance(
+            kernel.store, kernel.credentials, kernel.loader, tenant_id, record
+        )
+        if consumer is not None:
+            log.info("rehydrated mcp adapter '%s' from its store row", record.id)
+        elif record.module_ref != "boltrig.adapters.mcp_consumer":
             log.warning(
                 "adapter '%s' (module_ref %s) has no honest boot reconstruction; "
                 "leaving it a store-only row",
                 record.id,
                 record.module_ref,
             )
-            continue
-        if not record.spec_ref:
+        else:
             log.warning(
                 "mcp adapter '%s' has no persisted url (spec_ref) and cannot be "
                 "rehydrated; delete and re-register it",
                 record.id,
             )
-            continue
-        consumer = McpConsumerAdapter(record.id, url=record.spec_ref)
-        # The persisted review gate stands (SEC-22): a row activated before the
-        # restart stays dispatchable; an inert row stays inert.
-        consumer.activated = bool(record.activated)
-        kernel.loader.register(tenant_id, consumer)
-        cred_id = f"{record.id}-mcp-token"  # bind_mcp_credential's default id
-        if await kernel.store.get_credential_ref(tenant_id, cred_id) is not None:
-            kernel.credentials.bind_adapter_credential(tenant_id, record.id, cred_id)
-        log.info("rehydrated mcp adapter '%s' from its store row", record.id)
 
 
 async def _seed_from_manifest(kernel: Kernel, manifest) -> None:

@@ -13,6 +13,14 @@ guard:
     headline threat: SSRF -> IMDS -> managed-identity token theft),
   * honours an optional NetworkConfig (air-gap, allow/block domain lists).
 
+The internal-address refusal has ONE explicit opt-in: ``allow_internal`` in the
+config skips the ``is_blocked_ip`` check (and ONLY that check - scheme, air-gap,
+and the block/allow lists still apply). It exists for operator-vetted INTERNAL
+services whose URL was registered through the governed control plane and
+approved by a human (the MCP consumer's ``control.mcp_server.register`` +
+SEC-22 review gate), never for agent-influenced URLs: the generated-adapter
+spec fetch and every web/browser path must keep the full guard.
+
 DNS rebinding (H2/SEC-61). The pure check is not enough on its own: an adapter
 that vets a host then hands the raw URL to httpx lets httpx resolve AGAIN at
 connect time, so a low-TTL attacker domain can return a public IP to the guard
@@ -92,7 +100,12 @@ def check_network_policy(
     """Return a refusal reason if the fetch is not permitted, else ``None``.
 
     ``resolved_ips`` is injectable so the policy is testable without DNS. Order:
-    scheme, air-gap, block list, allow list, then the SSRF guard over every IP."""
+    scheme, air-gap, block list, allow list, then the SSRF guard over every IP.
+
+    ``allow_internal`` skips ONLY the final SSRF guard (the is_blocked_ip
+    check): an explicit opt-in for an operator-vetted internal service whose
+    URL arrived through a human-reviewed registration - never for an
+    agent-influenced URL. Scheme, air-gap, and the domain lists still apply."""
     config = config or {}
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"}:
@@ -111,9 +124,10 @@ def check_network_policy(
     if resolved_ips is not None:
         if not resolved_ips:
             return "host did not resolve"
-        for ip in resolved_ips:
-            if is_blocked_ip(ip):
-                return f"target resolves to a non-routable/internal address ({ip})"
+        if not config.get("allow_internal"):
+            for ip in resolved_ips:
+                if is_blocked_ip(ip):
+                    return f"target resolves to a non-routable/internal address ({ip})"
     return None
 
 

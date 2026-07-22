@@ -7,6 +7,8 @@ from typing import Any
 from boltrig.models import AdapterFailure, InvocationContext
 from boltrig.workflows.snapshot import workflow_snapshot_digest
 
+from .control_rehydrate import rehydratable
+
 _WORKFLOW_ACTIONS = frozenset(
     {
         "control.workflow.schedule",
@@ -108,19 +110,17 @@ _LIFECYCLE_ACTIONS = frozenset({"control.adapter.deactivate", "control.adapter.d
 
 
 async def _store_adapter_view(
-    store: Any, params: dict[str, Any], context: InvocationContext
-) -> dict[str, Any] | None:
+    store: Any, record: Any, context: InvocationContext
+) -> dict[str, Any]:
     """Approval fingerprint for an adapter row the loader has no instance of.
 
-    Only the lifecycle verbs fall back here: after a restart that did not
-    rehydrate the row, suspend/delete must remain governable (activation still
-    requires the live instance - it connects and describes). The verb list
-    comes from the store's owned binding/verb rows (empty for an inert row),
-    sorted for a stable fingerprint.
+    The lifecycle verbs use it so a non-rehydrated row stays governable, and
+    activation uses it for a rehydratable row (execution rebuilds the instance
+    on demand; discovery populating the verb set afterwards is the EXPECTED
+    post-approval effect, not drift). The verb list comes from the store's
+    owned binding/verb rows (empty for an inert row), sorted for a stable
+    fingerprint.
     """
-    record = await store.get_adapter(context.tenant_id, params["adapter_id"])
-    if record is None:
-        return None
     verbs = []
     for verb in await store.list_verbs(context.tenant_id):
         binding = await store.get_binding(context.tenant_id, verb.id)
@@ -157,12 +157,23 @@ async def _adapter_context(
         )
     adapter = await loader.get(context.tenant_id, params["adapter_id"])
     if adapter is None:
+        record = await store.get_adapter(context.tenant_id, params["adapter_id"])
+        if record is None:
+            raise AdapterFailure(
+                "adapter not found", status_code=404, reason="control_resource_not_found"
+            )
         if verb in _LIFECYCLE_ACTIONS:
-            view = await _store_adapter_view(store, params, context)
-            if view is not None:
-                return view
+            return await _store_adapter_view(store, record, context)
+        # activate: proceed to a pend only when execution can honestly rebuild
+        # the instance (control_rehydrate); an unreconstructible row fails
+        # loudly NOW, before any approval work is created.
+        if rehydratable(record):
+            return await _store_adapter_view(store, record, context)
         raise AdapterFailure(
-            "adapter not found", status_code=404, reason="control_resource_not_found"
+            "adapter cannot be reconstructed from its store row; "
+            "delete and re-register it",
+            status_code=409,
+            reason="control_adapter_unrehydratable",
         )
     record = await store.get_adapter(context.tenant_id, params["adapter_id"])
     verbs = [

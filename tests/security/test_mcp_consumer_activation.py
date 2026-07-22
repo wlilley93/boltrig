@@ -173,24 +173,140 @@ async def test_activation_discovers_and_publishes_the_servers_tools(monkeypatch)
     out = await _approved(k, "control.adapter.activate", {"adapter_id": "ext-mcp"}, run_id="a1")
 
     assert out["activated"] is True
-    assert set(out["verbs"]) == {"ticket.create", "ticket.read", "ticket.purge"}
+    # tools publish NAMESPACED under the adapter id (many apps share one kernel)
+    assert set(out["verbs"]) == {
+        "ext-mcp.ticket.create",
+        "ext-mcp.ticket.read",
+        "ext-mcp.ticket.purge",
+    }
     # discovery carried the credential the KERNEL resolved, like a dispatch call
     assert server.bearers == ["server-bearer"]
     consumer = await k.loader.get(T, "ext-mcp")
     assert consumer is not None and consumer.activated is True
 
-    create = await k.store.get_verb(T, "ticket.create")
+    create = await k.store.get_verb(T, "ext-mcp.ticket.create")
     assert create is not None
+    assert create.noun_id == "ext-mcp"  # one noun per consumed server
     assert create.input_schema == _TOOLS[0]["inputSchema"]  # schema from tools/list
     assert create.consequence.value == "high"  # the server's declared hint
-    read = await k.store.get_verb(T, "ticket.read")
+    read = await k.store.get_verb(T, "ext-mcp.ticket.read")
     assert read is not None and read.consequence.value == "low"  # no hint: default
-    purge = await k.store.get_verb(T, "ticket.purge")
+    purge = await k.store.get_verb(T, "ext-mcp.ticket.purge")
     assert purge is not None and purge.consequence.value == "low"  # clamped to the ceiling
 
-    binding = await k.store.get_binding(T, "ticket.create")
+    binding = await k.store.get_binding(T, "ext-mcp.ticket.create")
     assert binding is not None
     assert binding.target_type is TargetType.ADAPTER and binding.target_ref == "ext-mcp"
+
+
+@pytest.mark.invariant("FR-MCP-03")
+@pytest.mark.invariant("SEC-22")
+async def test_approval_for_the_inert_adapter_covers_discovery(monkeypatch):
+    """The approval is given for the INERT adapter (verbs []): discovery
+    populating describe() afterwards is the EXPECTED post-approval effect, not
+    drift. Even when the server's tool set changes between the pend and the
+    retry, the unchanged-check compares the pre-discovery contexts (both inert)
+    and activation publishes what discovery actually found."""
+    k = await _kernel()
+    server = _FakeMcpServer(list(_TOOLS))
+    await _register(monkeypatch, k, server)
+
+    params = {"adapter_id": "ext-mcp"}
+    with pytest.raises(PendingHuman) as held:
+        await k.invoke("control", "control.adapter.activate", params, _ctx(["*"], run_id="a1"))
+    req_id = held.value.hitl_request_id
+    # the server grows a tool while the approval waits for a human
+    server.tools.append(
+        {"name": "ticket.close", "description": "close a ticket", "inputSchema": {}}
+    )
+    await k.hitl.answer(T, req_id, "approve", "admin@acme")
+    out = await k.invoke(
+        "control", "control.adapter.activate", params,
+        _ctx(["*"], run_id="a1"), approval_id=req_id,
+    )
+
+    assert out["activated"] is True
+    assert "ext-mcp.ticket.close" in out["verbs"]  # discovery's own result, published
+    close = await k.store.get_verb(T, "ext-mcp.ticket.close")
+    assert close is not None
+    binding = await k.store.get_binding(T, "ext-mcp.ticket.close")
+    assert binding is not None and binding.target_ref == "ext-mcp"
+
+
+def _opbox_tool(name: str, risk_class: str) -> dict:
+    """A tool descriptor in the EXACT shape the Opbox kernel's tools/list
+    projection emits (opbox-kernel kernel/src/mcp/tools.rs ``verb_to_tool``):
+    only name/description/inputSchema, the risk class inside the description's
+    metadata run (the labels are ``RiskClass::as_str``)."""
+    return {
+        "name": name,
+        "description": (
+            f"Opbox verb '{name}' (capability=cap, riskClass={risk_class}, "
+            "authz=OrgMember, idempotent=false, egress=None, tier=Core). "
+            "Routed through the one kernel dispatch; authz + audit + egress "
+            "are enforced at the verb."
+        ),
+        "inputSchema": {"type": "object", "additionalProperties": True},
+    }
+
+
+@pytest.mark.invariant("FR-MCP-03")
+@pytest.mark.invariant("SEC-22")
+async def test_opbox_risk_class_drives_consequence_on_the_published_verbs(monkeypatch, caplog):
+    """The Opbox door declares no ``consequence`` hint; its risk class rides in
+    the description. Every class above READ must publish high so the HITL gate
+    bites. Two live findings are covered too: a tool named like a RESERVED core
+    prefix (``system.health``) publishes safely under the namespace, and the
+    ``opbox/expand_tools`` presentation meta-tool (a slash, not a verb id) is
+    SKIPPED with a warning rather than published."""
+    import logging
+
+    k = await _kernel()
+    server = _FakeMcpServer([
+        _opbox_tool("matter.list", "READ"),
+        _opbox_tool("doc.edit", "WRITE"),
+        _opbox_tool("d6.token.mint", "SENSITIVE"),
+        _opbox_tool("bill.charge", "MONEY"),
+        _opbox_tool("client.archive", "DESTRUCTIVE"),
+        # live: the Opbox Core catalogue names a tool system.health, which
+        # verbatim would hit _RESERVED_VERB_PREFIXES and fail activation
+        _opbox_tool("system.health", "READ"),
+        {
+            # the expand_tools meta-tool's real description: prose, no token
+            "name": "opbox/expand_tools",
+            "description": "Expand the MCP tool catalog to include more verb "
+                           "tiers. Call with tier=2 for OnDemand verbs or "
+                           "tier=3 for Verticals.",
+            "inputSchema": {"type": "object"},
+        },
+    ])
+    await _register(monkeypatch, k, server)
+
+    with caplog.at_level(logging.WARNING, logger="boltrig.adapters.mcp_consumer"):
+        out = await _approved(
+            k, "control.adapter.activate", {"adapter_id": "ext-mcp"}, run_id="a1"
+        )
+
+    assert out["activated"] is True
+    for verb, expected in {
+        "ext-mcp.matter.list": "low",
+        "ext-mcp.doc.edit": "high",
+        "ext-mcp.d6.token.mint": "high",
+        "ext-mcp.bill.charge": "high",
+        "ext-mcp.client.archive": "high",
+        "ext-mcp.system.health": "low",  # namespaced: no reserved-prefix collision
+    }.items():
+        row = await k.store.get_verb(T, verb)
+        assert row is not None, verb
+        assert row.consequence.value == expected, verb
+    # the presentation meta-tool is skipped, not published
+    assert "ext-mcp.opbox/expand_tools" not in out["verbs"]
+    assert await k.store.get_verb(T, "ext-mcp.opbox/expand_tools") is None
+    assert any(
+        "opbox/expand_tools" in r.message and "skipped" in r.message
+        for r in caplog.records
+        if r.levelno >= logging.WARNING
+    )
 
 
 @pytest.mark.invariant("FR-MCP-03")
@@ -208,11 +324,11 @@ async def test_a_second_activation_resyncs_idempotently(monkeypatch):
     out = await _approved(k, "control.adapter.activate", {"adapter_id": "ext-mcp"}, run_id="a2")
 
     assert out["activated"] is True
-    assert "ticket.close" in out["verbs"]
+    assert "ext-mcp.ticket.close" in out["verbs"]
     after = {v.id for v in await k.store.list_verbs(T)}
-    assert after == before | {"ticket.close"}
+    assert after == before | {"ext-mcp.ticket.close"}
     # a re-synced verb keeps exactly one row, still bound to the consumer
-    create = await k.store.get_verb(T, "ticket.create")
+    create = await k.store.get_verb(T, "ext-mcp.ticket.create")
     assert create is not None and create.input_schema == _TOOLS[0]["inputSchema"]
-    binding = await k.store.get_binding(T, "ticket.close")
+    binding = await k.store.get_binding(T, "ext-mcp.ticket.close")
     assert binding is not None and binding.target_ref == "ext-mcp"

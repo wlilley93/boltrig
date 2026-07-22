@@ -114,3 +114,63 @@ async def test_pinned_client_refuses_internal_resolution(monkeypatch):
     monkeypatch.setattr("boltrig.adapters.egress.resolve_host", lambda host: [])
     with pytest.raises(EgressBlocked):
         pinned_async_client("https://noresolve.example.com/", {})
+
+
+_INTERNAL = "172.18.0.2"  # a docker-network address (RFC 1918)
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-61")
+def test_allow_internal_skips_only_the_internal_address_check():
+    """The opt-in waives EXACTLY the is_blocked_ip guard: a vetted internal
+    service resolves and vets clean, while every other check - scheme, air-gap,
+    block/allow lists, a failed resolution - still refuses, flag or not."""
+    from boltrig.adapters.egress import check_network_policy
+
+    url = "http://opbox-kernel:8088/mcp"
+    # the guarded default refuses the internal resolution...
+    assert check_network_policy(url, {}, resolved_ips=[_INTERNAL])
+    # ...and the explicit opt-in permits it (this is the whole point of the flag)
+    assert check_network_policy(url, {"allow_internal": True}, resolved_ips=[_INTERNAL]) is None
+
+    # everything else still refuses even WITH the flag:
+    assert check_network_policy(  # scheme
+        "file:///etc/passwd", {"allow_internal": True}, resolved_ips=[_INTERNAL]
+    )
+    assert check_network_policy(  # air-gap
+        url, {"allow_internal": True, "air_gapped": True}, resolved_ips=[_INTERNAL]
+    )
+    assert check_network_policy(  # block list
+        url,
+        {"allow_internal": True, "blocked_domains": ["opbox-kernel"]},
+        resolved_ips=[_INTERNAL],
+    )
+    assert check_network_policy(  # allow list
+        url,
+        {"allow_internal": True, "allowed_domains": ["other.example"]},
+        resolved_ips=[_INTERNAL],
+    )
+    assert check_network_policy(  # a failed resolution is still fail-closed
+        url, {"allow_internal": True}, resolved_ips=[]
+    )
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-61")
+async def test_allow_internal_vets_and_pins_an_operator_vetted_internal_service(monkeypatch):
+    """End to end through the pinned client: with the flag the internal target
+    is vetted and the connection pinned to the audited 172.x address; without
+    it the same target raises EgressBlocked before any client exists."""
+    monkeypatch.setattr("boltrig.adapters.egress.resolve_host", lambda host: [_INTERNAL])
+    url = "http://opbox-kernel:8088/mcp"
+
+    with pytest.raises(EgressBlocked):  # the default guard: no waiver
+        pinned_async_client(url, timeout=30.0)
+
+    connected: list[str] = []
+    monkeypatch.setattr(httpcore.AnyIOBackend, "connect_tcp", _spy_connect(connected))
+    client = pinned_async_client(url, {"allow_internal": True}, timeout=30.0)
+    async with client:
+        with pytest.raises(_Sentinel):  # the connect spy is the only way this fails
+            await client.post(url, json={})
+    assert connected == [_INTERNAL]  # pinned to the audited internal address

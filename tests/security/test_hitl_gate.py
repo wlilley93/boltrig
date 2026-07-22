@@ -88,7 +88,11 @@ async def test_resumes_after_approval(gated_kernel):
 @pytest.mark.security
 @pytest.mark.invariant("SEC-14")
 async def test_approval_is_single_use(gated_kernel):
-    # An approval authorises exactly one execution; a replay with the same id pauses.
+    # An approval authorises exactly one execution. A replay with the spent id
+    # FAILS LOUDLY (409 hitl_state_conflict) rather than silently re-pending:
+    # the spend already ran its invocation (succeeded or failed - e.g. the
+    # HITL-resume lane consumed it), so a fresh 202 here would loop forever,
+    # with the caller unable to tell "spent" from "still waiting".
     with pytest.raises(PendingHuman) as exc:
         await gated_kernel.invoke(
             "ticket", "ticket.create", {"title": "x"}, make_ctx(["ticket.create"])
@@ -100,11 +104,12 @@ async def test_approval_is_single_use(gated_kernel):
         approval_id=req_id,
     )
     assert out["status"] == "open"
-    with pytest.raises(PendingHuman):  # replay refused -> a fresh approval is needed
+    with pytest.raises(HITLStateConflict):  # spent approval: loud, never a re-pend
         await gated_kernel.invoke(
             "ticket", "ticket.create", {"title": "x"}, make_ctx(["ticket.create"]),
             approval_id=req_id,
         )
+    assert await gated_kernel.hitl.list_pending(TENANT) == []
 
 
 @pytest.mark.security

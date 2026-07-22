@@ -11,30 +11,27 @@ the kernel per call, from the credential seam, and handed to ``execute`` as
 ``credential`` (SEC-04/05, K-20 - credentials resolve inside the kernel only). A
 call with no credential FAILS CLOSED rather than posting an empty bearer.
 
-## Transport interop (Streamable-HTTP and the plain convention)
+## Verb namespacing
 
-One HTTP shape serves strict MCP Streamable-HTTP servers AND plain JSON-RPC
-doors (the Opbox kernel's ``POST /mcp`` and Boltrig's own MCP face are both the
-plain kind):
+Many apps register consumed servers under ONE kernel, so tool names are never
+published verbatim: every discovered tool becomes ``<adapter_id>.<tool_name>``
+(adapter ``opbox`` consuming ``matter.list`` publishes the verb
+``opbox.matter.list`` under the noun ``opbox``). This keeps a consumed server
+out of every other app's namespace and out of the reserved core prefixes
+(``system.`` et al., ``control_safety._RESERVED_VERB_PREFIXES``) by
+construction. Tools that cannot form a verb id after prefixing - empty, or
+carrying characters outside the verb-id charset (the ``control_safety``
+identifier convention: ASCII alphanumerics plus ``. _ -``) such as a ``/`` or
+whitespace - are SKIPPED with a warning, never published: that honestly drops
+presentation-layer meta-tools like Opbox's ``opbox/expand_tools``, which is
+not a real verb. ``execute`` maps the prefixed verb id back to the BARE tool
+name for ``tools/call``; the server never sees the prefix.
 
-  * Every POST carries ``Accept: application/json, text/event-stream`` and BOTH
-    credential conventions for the same kernel-resolved token:
-    ``Authorization: Bearer <token>`` (the spec convention - the only header the
-    Opbox door reads) and ``x-boltrig-mcp-token: <token>`` (the Boltrig face's
-    convention; it also accepts the bearer form). The token is never logged.
-  * The handshake is LAZY: the plain call goes out first. Only a 400/404 - how
-    a strict server says "no live session" (no ``initialize`` yet, or an
-    expired/unknown ``Mcp-Session-Id``) - triggers the one handshake
-    (``initialize`` + a best-effort ``notifications/initialized``) and ONE
-    retry of the call. A server that answers plain calls never sees a
-    handshake; a server that refuses ``initialize`` is used session-less. A
-    session id returned as the ``Mcp-Session-Id`` response header is carried on
-    every later POST.
-  * A response framed ``text/event-stream`` (SSE) is decoded to the JSON-RPC
-    payload it carries; a plain JSON body is read as before.
-  * Any other HTTP refusal maps onto the ErrorClass taxonomy with a static
-    message - never the response body, which can echo the request (credential
-    headers included) back.
+The HTTP mechanics - the dual credential headers, the lazy Streamable-HTTP
+handshake, the server-issued session id, SSE decoding, and the
+``allow_internal`` egress opt-in for operator-vetted internal servers - live in
+``boltrig.adapters.mcp_transport``; this module is the adapter: verb mapping,
+the review gate, and the error taxonomy.
 
 httpx is imported lazily so the module is import-safe offline; a transport can be
 injected for tests (and to let Boltrig consume its own MCP face).
@@ -42,7 +39,8 @@ injected for tests (and to let Boltrig consume its own MCP face).
 
 from __future__ import annotations
 
-import json
+import logging
+import re
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -54,10 +52,19 @@ from boltrig.adapters.base import (
     VerbSpec,
     bearer_token,
 )
+from boltrig.adapters.mcp_transport import McpHttpRefusal, StreamableHttp
 from boltrig.models import Consequence, CredentialResolution, InvocationContext
+
+log = logging.getLogger(__name__)
 
 # rpc(request: dict) -> response: dict  (a JSON-RPC round-trip to the MCP server)
 Rpc = Callable[[dict], Awaitable[dict]]
+
+# The verb-id charset, mirroring the control_safety identifier convention
+# (ASCII alphanumerics plus . _ -): applied to the PREFIXED id, so a tool name
+# with a '/' (a presentation meta-tool like opbox/expand_tools), whitespace, or
+# an empty name can never publish.
+_TOOL_VERB_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
 
 # A consumed server may declare a per-tool ``consequence`` hint in the tool
 # descriptor. The ceiling is the Consequence enum itself ("high" - the same
@@ -66,18 +73,13 @@ Rpc = Callable[[dict], Awaitable[dict]]
 # declares can push a verb above it.
 _CONSEQUENCE_HINTS = frozenset({Consequence.LOW.value, Consequence.HIGH.value})
 
-# The protocol revision offered in `initialize`. A server answers with the
-# revision IT speaks; the methods used here (initialize, tools/list, tools/call)
-# are stable across the dated revisions, so the answer is not negotiated further.
-_PROTOCOL_VERSION = "2025-06-18"
-
-_ACCEPT = "application/json, text/event-stream"
-_SESSION_HEADER = "mcp-session-id"
-
-# How a strict Streamable-HTTP server says "no live session": no initialize yet
-# (400) or an expired/unknown Mcp-Session-Id (404). Either earns ONE handshake +
-# retry; any other status is a real refusal, mapped by _status_error.
-_SESSION_STATUSES = frozenset({400, 404})
+# The Opbox kernel's MCP door declares no ``consequence`` hint: its tools/list
+# projection (opbox-kernel kernel/src/mcp/tools.rs ``verb_to_tool``) emits only
+# name/description/inputSchema, the risk class inside the description's metadata
+# run as ``riskClass=READ|WRITE|SENSITIVE|MONEY|DESTRUCTIVE`` (uppercase, from
+# ``RiskClass::as_str``). READ maps low, the rest high (FR-MCP-03).
+_OPBOX_RISK = re.compile(r"\briskClass=(READ|WRITE|SENSITIVE|MONEY|DESTRUCTIVE)\b")
+_OPBOX_RISK_HIGH = frozenset({"WRITE", "SENSITIVE", "MONEY", "DESTRUCTIVE"})
 
 
 def _status_error(status: int) -> ErrorClass:
@@ -92,32 +94,36 @@ def _status_error(status: int) -> ErrorClass:
     return ErrorClass.INVALID
 
 
-def _decode_sse(body: str) -> dict:
-    """The JSON-RPC response carried by an SSE-framed body: the last ``data``
-    event holding a result/error (earlier events may be notifications)."""
-    found: dict | None = None
-    for event in body.split("\n\n"):
-        data = "\n".join(
-            line.removeprefix("data:").lstrip()
-            for line in event.splitlines()
-            if line.startswith("data:")
-        )
-        if not data:
-            continue
-        try:
-            payload = json.loads(data)
-        except ValueError:
-            continue
-        if isinstance(payload, dict) and ("result" in payload or "error" in payload):
-            found = payload
-    if found is None:
-        raise ValueError("no JSON-RPC response in the mcp event stream")
-    return found
+def _risk_class_hint(tool: dict) -> str | None:
+    """Opbox risk_class -> consequence, or None (structured field, else the description token)."""
+    value = tool.get("riskClass") or tool.get("risk_class")
+    if not (isinstance(value, str) and value):
+        match = _OPBOX_RISK.search(str(tool.get("description") or ""))
+        value = match.group(1) if match else ""
+    risk = value.upper()
+    if risk == "READ":
+        return Consequence.LOW.value
+    return Consequence.HIGH.value if risk in _OPBOX_RISK_HIGH else None
+
+
+def _annotations_hint(tool: dict) -> str | None:
+    """Standard MCP tool annotations: destructiveHint -> high, readOnlyHint -> low."""
+    annotations = tool.get("annotations")
+    if not isinstance(annotations, dict):
+        return None
+    if annotations.get("destructiveHint") is True:
+        return Consequence.HIGH.value
+    return Consequence.LOW.value if annotations.get("readOnlyHint") is True else None
 
 
 def _consequence_hint(tool: dict) -> str:
-    hint = str(tool.get("consequence") or "").lower()
-    return hint if hint in _CONSEQUENCE_HINTS else Consequence.LOW.value
+    # Precedence: an explicit ``consequence`` declaration (an unrecognised value
+    # clamps low, fail-closed) > the Opbox risk_class mapping > MCP annotations
+    # > low. No path returns above the Consequence ceiling.
+    if tool.get("consequence") is not None:
+        hint = str(tool.get("consequence") or "").lower()
+        return hint if hint in _CONSEQUENCE_HINTS else Consequence.LOW.value
+    return _risk_class_hint(tool) or _annotations_hint(tool) or Consequence.LOW.value
 
 
 class _McpFailure(Exception):
@@ -144,6 +150,7 @@ class McpConsumerAdapter:
         rpc: Rpc | None = None,
         version: str = "1.0.0",
         source: str = "manual",
+        allow_internal: bool = False,
     ) -> None:
         self.id = id
         self.version = version
@@ -152,10 +159,16 @@ class McpConsumerAdapter:
         self._url = url
         self._rpc = rpc
         self._specs: list[VerbSpec] = []
-        # Server-issued Streamable-HTTP session id (transport state, NOT a
-        # credential): captured from an Mcp-Session-Id response header and
-        # carried on later POSTs. None = the server speaks the plain convention.
-        self._session_id: str | None = None
+        # Prefixed verb id -> the server's BARE tool name (the namespacing map;
+        # rebuilt by every connect()). Rebuilt per discovery, so a re-sync can
+        # never leave a stale mapping.
+        self._tools: dict[str, str] = {}
+        # allow_internal is the registration-time, human-reviewed opt-in for an
+        # operator-vetted INTERNAL server (SEC-22); it relaxes exactly one
+        # egress check (see mcp_transport.StreamableHttp).
+        self._transport = StreamableHttp(
+            url or "", client_version=version, allow_internal=allow_internal
+        )
 
     async def connect(self, credential: Credential | None = None) -> list[VerbSpec]:
         """Discover the external server's tools and map them to VerbSpecs.
@@ -173,17 +186,31 @@ class McpConsumerAdapter:
             bearer_token(credential),
         )
         tools = (resp.get("result") or {}).get("tools", [])
-        self._specs = [
-            VerbSpec(
-                verb_id=t["name"],
-                noun_id=t["name"].split(".")[0] if "." in t["name"] else t["name"],
-                input_schema=t.get("inputSchema", {}),
-                output_schema={"type": "object"},
-                description=t.get("description", ""),
-                consequence=_consequence_hint(t),
+        specs: list[VerbSpec] = []
+        self._tools = {}
+        for t in tools:
+            name = str(t.get("name") or "")
+            verb_id = f"{self.id}.{name}"  # namespaced: see the module docstring
+            if not name or not _TOOL_VERB_ID.fullmatch(verb_id):
+                log.warning(
+                    "mcp server '%s' tool %r skipped: not a verb id after "
+                    "namespacing (a presentation meta-tool or an unsafe charset)",
+                    self.id,
+                    name,
+                )
+                continue
+            self._tools[verb_id] = name
+            specs.append(
+                VerbSpec(
+                    verb_id=verb_id,
+                    noun_id=self.id,  # one noun per consumed server (opbox.*)
+                    input_schema=t.get("inputSchema", {}),
+                    output_schema={"type": "object"},
+                    description=t.get("description", ""),
+                    consequence=_consequence_hint(t),
+                )
             )
-            for t in tools
-        ]
+        self._specs = specs
         return self._specs
 
     def describe(self) -> list[VerbSpec]:
@@ -220,9 +247,16 @@ class McpConsumerAdapter:
             return Result.failure(
                 AdapterError(ErrorClass.UNAUTHORISED, "mcp credential missing")
             )
+        # The prefixed verb id maps back to the server's BARE tool name - the
+        # server never sees the namespace. The prefix strip is deterministic,
+        # so a boot-rehydrated consumer (activated, not yet re-connected) also
+        # calls correctly before any re-discovery.
+        name = self._tools.get(verb) or (
+            verb[len(self.id) + 1:] if verb.startswith(f"{self.id}.") else verb
+        )
         resp = await self._call(
             {"jsonrpc": "2.0", "id": 2, "method": "tools/call",
-             "params": {"name": verb, "arguments": params}},
+             "params": {"name": name, "arguments": params}},
             bearer_token(credential),
         )
         result = resp.get("result") or {}
@@ -258,106 +292,31 @@ class McpConsumerAdapter:
             # guard for connect()): never post an empty bearer, which would be an
             # unauthenticated request.
             raise CredentialResolution(f"no mcp credential resolved for '{self.id}'")
-        from boltrig.adapters.egress import EgressBlocked, pinned_async_client
+        from boltrig.adapters.egress import EgressBlocked
 
         # SSRF (SEC-61, H2): pin the connection to the vetted IP before
         # posting - this path carries the MCP bearer token, so httpx re-resolving
         # to internal space would both reach internal services AND leak the token.
-        # pinned_async_client forces follow_redirects=False.
+        # pinned_async_client forces follow_redirects=False. allow_internal (the
+        # reviewed registration opt-in) is the ONLY waiver, for an
+        # operator-vetted internal server.
         try:
-            client = pinned_async_client(self._url or "", timeout=30.0)
+            client = self._transport.pinned_client()
         except EgressBlocked as exc:
             raise _McpFailure(
                 AdapterError(ErrorClass.INVALID, str(exc), retryable=False)
             ) from exc
         async with client:
-            return await self._post(client, request, bearer)
-
-    def _headers(self, bearer: str) -> dict:
-        # BOTH credential conventions for the same kernel-resolved token: a spec
-        # server reads Authorization (it is the only header the Opbox /mcp door
-        # reads); the Boltrig face prefers its own header and also accepts the
-        # bearer form. The token never enters a log line or an error message.
-        headers = {
-            "Accept": _ACCEPT,
-            "Authorization": f"Bearer {bearer}",
-            "x-boltrig-mcp-token": bearer,
-        }
-        if self._session_id:
-            headers["Mcp-Session-Id"] = self._session_id
-        return headers
-
-    async def _post(self, client: Any, request: dict, bearer: str, *, retried: bool = False) -> dict:
-        r = await client.post(self._url, json=request, headers=self._headers(bearer))
-        if r.status_code < 400:
-            session = r.headers.get(_SESSION_HEADER)
-            if session:
-                self._session_id = session
-            return self._decode(r)
-        if r.status_code in _SESSION_STATUSES and not retried:
-            # No live session on a strict server: run the ONE handshake, then
-            # retry the call once. The refused first attempt never executed
-            # (the refusal is the transport's, ahead of dispatch), so the retry
-            # is not a replay. Bounded by `retried`; a repeated refusal maps.
-            self._session_id = None
-            await self._handshake(client, bearer)
-            return await self._post(client, request, bearer, retried=True)
-        # Static message, never the body: a refusal page can echo the request
-        # back, credential headers included.
-        raise _McpFailure(
-            AdapterError(
-                _status_error(r.status_code),
-                f"mcp server refused the call (HTTP {r.status_code})",
-                retryable=r.status_code == 429 or r.status_code >= 500,
-            )
-        )
-
-    async def _handshake(self, client: Any, bearer: str) -> None:
-        """The MCP handshake, run lazily when a server demands a session.
-
-        A strict Streamable-HTTP server answers ``initialize`` with a result
-        and usually an ``Mcp-Session-Id`` to carry from then on; a plain door
-        that refuses or cannot answer it is used session-less. Never raises (a
-        transport fault re-surfaces on the retried call, typed by ``execute``'s
-        catch-all) and never logs - the bearer is on the wire here too.
-        """
-        try:
-            r = await client.post(
-                self._url,
-                json={
-                    "jsonrpc": "2.0", "id": 0, "method": "initialize",
-                    "params": {
-                        "protocolVersion": _PROTOCOL_VERSION,
-                        "capabilities": {},
-                        "clientInfo": {"name": "boltrig-mcp-consumer", "version": self.version},
-                    },
-                },
-                headers=self._headers(bearer),
-            )
-            payload = self._decode(r)
-        except Exception:  # a refused/undecodable initialize: plain convention
-            return
-        if r.status_code >= 400 or not isinstance(payload, dict) or "result" not in payload:
-            return
-        session = r.headers.get(_SESSION_HEADER)
-        if session:
-            self._session_id = session
-        try:  # best-effort: strict servers 202 it; a plain door may refuse it
-            await client.post(
-                self._url,
-                json={"jsonrpc": "2.0", "method": "notifications/initialized"},
-                headers=self._headers(bearer),
-            )
-        except Exception:  # the initialized notification is advisory
-            pass
-
-    @staticmethod
-    def _decode(response: Any) -> dict:
-        # A strict Streamable-HTTP server may frame the JSON-RPC payload as an
-        # SSE stream instead of returning a plain JSON body.
-        if response.headers.get("content-type", "").startswith("text/event-stream"):
-            return _decode_sse(response.text)
-        return response.json()
+            try:
+                return await self._transport.call(client, request, bearer)
+            except McpHttpRefusal as refusal:
+                raise _McpFailure(
+                    AdapterError(
+                        _status_error(refusal.status),
+                        str(refusal),  # status only - the body never crosses
+                        retryable=refusal.status == 429 or refusal.status >= 500,
+                    )
+                ) from refusal
 
 
 def build() -> Any:  # loader hook; real config comes from the mcp_servers table

@@ -31,7 +31,11 @@ async def test_consume_external_mcp_server_as_verbs():
     # the consumer talks to the server's MCP face over an injected transport
     consumer = McpConsumerAdapter("ext-tickets", rpc=lambda req: server.mcp.handle(token, req))
     specs = await consumer.connect()
-    assert {s.verb_id for s in specs} >= {"ticket.create", "ticket.read"}
+    # tools publish NAMESPACED under the adapter id, not verbatim
+    assert {s.verb_id for s in specs} >= {
+        "ext-tickets.ticket.create",
+        "ext-tickets.ticket.read",
+    }
 
 
 @pytest.mark.invariant("SEC-22")
@@ -41,9 +45,10 @@ async def test_consumed_server_inert_until_reviewed():
     await consumer.connect()
     ctx = InvocationContext(tenant_id=T, grants=GrantSet.of(["*"]))
 
-    inert = await consumer.execute("ticket.create", {"title": "x"}, None, ctx)
+    inert = await consumer.execute("ext-tickets.ticket.create", {"title": "x"}, None, ctx)
     assert inert.ok is False  # pending review
 
     consumer.review_and_activate("alice@acme")
-    live = await consumer.execute("ticket.create", {"title": "x"}, None, ctx)
+    live = await consumer.execute("ext-tickets.ticket.create", {"title": "x"}, None, ctx)
+    # the prefixed verb maps back to the BARE tool name for tools/call
     assert live.ok and live.output["status"] == "open"  # via the external chokepoint

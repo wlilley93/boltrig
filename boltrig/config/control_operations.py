@@ -178,7 +178,23 @@ async def activate_adapter_record(
 ) -> list[str]:
     adapter = await loader.get(tenant_id, adapter_id)
     if adapter is None:
-        raise LookupError("adapter not found")
+        # A store row this kernel never rebuilt (another replica's
+        # registration, or a boot skip): rebuild it on demand when the row
+        # carries everything an honest reconstruction needs, and refuse loudly
+        # otherwise - never pend or fail opaquely on a row that exists.
+        from .control_rehydrate import rehydrate_adapter_instance
+
+        record = await store.get_adapter(tenant_id, adapter_id)
+        if record is None:
+            raise LookupError("adapter not found")
+        adapter = await rehydrate_adapter_instance(
+            store, credentials, loader, tenant_id, record
+        )
+        if adapter is None:
+            raise ControlConflict(
+                "adapter cannot be reconstructed from its store row; "
+                "delete and re-register it"
+            )
     connect = getattr(adapter, "connect", None)
     if connect is not None:
         # A consuming adapter (MCP, US-MCP-03) discovers its verbs HERE: connect()

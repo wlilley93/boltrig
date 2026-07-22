@@ -2,9 +2,9 @@
  * Worked example: "Opbox" exposes its verbs to a Boltrig kernel.
  *
  * Five verbs over in-memory demo data. `inventory.adjust` is declared
- * high-consequence (surfaced as MCP annotations; see the README for how to
- * re-assert "high" kernel-side after activation, since today's consumer maps
- * every consumed verb to consequence "low").
+ * high-consequence (surfaced as MCP annotations, which the consumer propagates
+ * to the published verb). Verbs publish NAMESPACED as
+ * `<adapter-id>.<tool name>` (e.g. `opbox-acme.orders.list`) - see the README.
  *
  * Run:
  *   export OPBOX_MCP_TOKEN=$(openssl rand -hex 24)   # the bearer the KERNEL will present

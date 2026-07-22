@@ -20,6 +20,7 @@ non-rehydrated phantom row can be suspended and deleted.
 
 from __future__ import annotations
 
+import json
 import logging
 
 import pytest
@@ -31,9 +32,13 @@ from boltrig.models import (
     AdapterRecord,
     BindingNotFound,
     GrantSet,
+    HITLStateConflict,
     InvocationContext,
     PendingHuman,
+    TargetType,
     TenantPermissions,
+    Verb,
+    VerbBinding,
 )
 from boltrig.store import InMemoryStore
 
@@ -147,21 +152,21 @@ async def _live(monkeypatch, k: Kernel) -> _FakeMcpServer:
 async def test_deactivate_suspends_execution_like_a_never_registered_verb(monkeypatch):
     k = await _kernel()
     await _live(monkeypatch, k)
-    out = await k.invoke("ticket", "ticket.read", {"id": "1"}, _ctx(["*"], run_id="r1"))
+    out = await k.invoke("ext-mcp", "ext-mcp.ticket.read", {"id": "1"}, _ctx(["*"], run_id="r1"))
     assert out == {"text": "done"}
 
     # the reference refusal: a verb that was never registered
     with pytest.raises(BindingNotFound) as unknown:
-        await k.invoke("ticket", "ticket.ghost", {}, _ctx(["*"], run_id="r2"))
+        await k.invoke("ext-mcp", "ext-mcp.ticket.ghost", {}, _ctx(["*"], run_id="r2"))
 
     out = await _approved(k, "control.adapter.deactivate", {"adapter_id": "ext-mcp"}, run_id="d1")
     assert out["activated"] is False
-    assert set(out["verbs"]) == {"ticket.read", "ticket.create"}
+    assert set(out["verbs"]) == {"ext-mcp.ticket.read", "ext-mcp.ticket.create"}
 
     # dispatch now refuses the suspended verb EXACTLY like the never-registered one
     with pytest.raises(BindingNotFound) as suspended:
-        await k.invoke("ticket", "ticket.read", {"id": "1"}, _ctx(["*"], run_id="r3"))
-    assert str(suspended.value) == str(unknown.value).replace("ticket.ghost", "ticket.read")
+        await k.invoke("ext-mcp", "ext-mcp.ticket.read", {"id": "1"}, _ctx(["*"], run_id="r3"))
+    assert str(suspended.value) == str(unknown.value).replace("ext-mcp.ticket.ghost", "ext-mcp.ticket.read")
 
     record = await k.store.get_adapter(T, "ext-mcp")
     assert record is not None and record.activated is False
@@ -171,7 +176,7 @@ async def test_deactivate_suspends_execution_like_a_never_registered_verb(monkey
     # the state machine is not one-way: re-activation re-runs the gate and republishes
     out = await _approved(k, "control.adapter.activate", {"adapter_id": "ext-mcp"}, run_id="a2")
     assert out["activated"] is True
-    out = await k.invoke("ticket", "ticket.read", {"id": "1"}, _ctx(["*"], run_id="r4"))
+    out = await k.invoke("ext-mcp", "ext-mcp.ticket.read", {"id": "1"}, _ctx(["*"], run_id="r4"))
     assert out == {"text": "done"}
 
 
@@ -224,7 +229,7 @@ async def test_delete_refuses_a_live_adapter(monkeypatch):
     # nothing was torn down: the adapter is still live and dispatchable
     record = await k.store.get_adapter(T, "ext-mcp")
     assert record is not None and record.activated is True
-    out = await k.invoke("ticket", "ticket.read", {"id": "1"}, _ctx(["*"], run_id="r1"))
+    out = await k.invoke("ext-mcp", "ext-mcp.ticket.read", {"id": "1"}, _ctx(["*"], run_id="r1"))
     assert out == {"text": "done"}
 
 
@@ -251,9 +256,9 @@ async def test_delete_reverses_registration_exactly(monkeypatch):
     assert out["credential_ref"] == "ext-mcp-mcp-token"
     # every row registration + activation persisted is gone
     assert await store.get_adapter(T, "ext-mcp") is None
-    assert await store.get_verb(T, "ticket.read") is None
-    assert await store.get_binding(T, "ticket.read") is None
-    assert await store.get_noun(T, "ticket") is None  # orphaned by the removal
+    assert await store.get_verb(T, "ext-mcp.ticket.read") is None
+    assert await store.get_binding(T, "ext-mcp.ticket.read") is None
+    assert await store.get_noun(T, "ext-mcp") is None  # orphaned by the removal
     assert await store.get_credential_ref(T, "ext-mcp-mcp-token") is None
     assert await k.credentials.resolve_for_adapter(T, "ext-mcp") is None
     assert k.loader.peek(T, "ext-mcp") is None
@@ -311,7 +316,71 @@ async def test_registration_persists_the_url_for_boot_rehydration(monkeypatch):
 
     assert record is not None
     assert record.module_ref == "boltrig.adapters.mcp_consumer"
-    assert record.spec_ref == "https://mcp.example.com"
+    # spec_ref is the rehydration source: the url plus the reviewed egress
+    # posture, as JSON (the flag defaults off - the guarded posture)
+    assert json.loads(record.spec_ref) == {
+        "url": "https://mcp.example.com",
+        "allow_internal": False,
+    }
+
+
+@pytest.mark.invariant("SEC-61")
+async def test_the_reviewed_allow_internal_flag_persists_and_rehydrates():
+    """An operator-vetted INTERNAL server registers with allow_internal (the
+    SEC-61 waiver, itself behind the SEC-22 gate); the flag persists in
+    spec_ref and a restarted kernel rebuilds the consumer with it ON."""
+    from boltrig.api.bootstrap import _rehydrate_store_adapters
+
+    k1 = await _kernel()
+    out = await k1.invoke(
+        "control",
+        "control.mcp_server.register",
+        {"id": "ext-mcp", "url": "http://opbox-kernel:8088/mcp", "allow_internal": True},
+        _ctx(["*"]),
+    )
+    assert out["activated"] is False  # still inert pending the review gate
+
+    record = await k1.store.get_adapter(T, "ext-mcp")
+    assert record is not None
+    assert json.loads(record.spec_ref) == {
+        "url": "http://opbox-kernel:8088/mcp",
+        "allow_internal": True,
+    }
+
+    k2 = await _restart_kernel(k1.store)
+    await _rehydrate_store_adapters(k2, T)
+
+    consumer = k2.loader.peek(T, "ext-mcp")
+    assert consumer is not None
+    assert consumer._transport.allow_internal is True  # the waiver survived restart
+
+
+@pytest.mark.invariant("SEC-61")
+async def test_a_pre_flag_plain_url_row_rehydrates_with_the_guarded_default():
+    """Backward compatibility: rows written before the egress flag existed hold
+    the plain url STRING in spec_ref. They rehydrate with allow_internal OFF -
+    an old row can never silently gain the internal waiver."""
+    from boltrig.api.bootstrap import _rehydrate_store_adapters
+
+    k = await _kernel()
+    await k.store.upsert_adapter(
+        AdapterRecord(
+            id="legacy-mcp",
+            tenant_id=T,
+            version="1",
+            runtime="mcp",
+            source="manual",
+            module_ref="boltrig.adapters.mcp_consumer",
+            spec_ref="http://opbox-kernel:8088/mcp",  # the pre-flag plain string
+        )
+    )
+
+    await _rehydrate_store_adapters(k, T)
+
+    consumer = k.loader.peek(T, "legacy-mcp")
+    assert consumer is not None
+    assert consumer._url == "http://opbox-kernel:8088/mcp"
+    assert consumer._transport.allow_internal is False  # the guarded default
 
 
 @pytest.mark.invariant("SEC-22")
@@ -332,7 +401,7 @@ async def test_boot_rehydrates_a_control_plane_registered_consumer(monkeypatch):
     resolved = await k2.credentials.resolve_for_adapter(T, "ext-mcp")
     assert resolved is not None and resolved.id == "ext-mcp-mcp-token"
     # and the rehydrated instance executes through the chokepoint
-    out = await k2.invoke("ticket", "ticket.read", {"id": "1"}, _ctx(["*"], run_id="r9"))
+    out = await k2.invoke("ext-mcp", "ext-mcp.ticket.read", {"id": "1"}, _ctx(["*"], run_id="r9"))
     assert out == {"text": "done"}
 
 
@@ -386,7 +455,7 @@ async def test_lifecycle_verbs_govern_a_store_only_phantom_row(monkeypatch):
 
     out = await _approved(k2, "control.adapter.deactivate", {"adapter_id": "ext-mcp"}, run_id="pd1")
     assert out["activated"] is False
-    assert set(out["verbs"]) == {"ticket.read", "ticket.create"}
+    assert set(out["verbs"]) == {"ext-mcp.ticket.read", "ext-mcp.ticket.create"}
 
     out = await _approved(k2, "control.adapter.delete", {"adapter_id": "ext-mcp"}, run_id="px1")
     assert out["deleted"] is True
@@ -394,6 +463,102 @@ async def test_lifecycle_verbs_govern_a_store_only_phantom_row(monkeypatch):
 
     store = k2.store
     assert await store.get_adapter(T, "ext-mcp") is None
-    assert await store.get_verb(T, "ticket.read") is None
-    assert await store.get_noun(T, "ticket") is None
+    assert await store.get_verb(T, "ext-mcp.ticket.read") is None
+    assert await store.get_noun(T, "ext-mcp") is None
     assert await store.get_credential_ref(T, "ext-mcp-mcp-token") is None
+
+
+# --- approval-gated activation: no silent re-pend, phantom activation --------
+@pytest.mark.invariant("SEC-14")
+async def test_a_consumed_approval_fails_loudly_instead_of_repending(monkeypatch):
+    """The live infinite-pend repro: retry #1 spends the approval and then the
+    activation FAILS (here: a verb ownership conflict); retry #2 with the spent
+    approval_id previously returned 202 with a FRESH pend forever. A spent
+    approval must fail loudly - the caller inspects state, not re-approves."""
+    k = await _kernel()
+    await _register(monkeypatch, k, _FakeMcpServer(list(_TOOLS)))
+    # a verb the activation would publish is already owned by another target:
+    # discovery succeeds, the publish refuses, the approval is already spent
+    await k.store.upsert_verb(
+        Verb(id="ext-mcp.ticket.read", tenant_id=T, noun_id="ext-mcp",
+             input_schema={}, output_schema={})
+    )
+    await k.store.upsert_binding(
+        VerbBinding(verb_id="ext-mcp.ticket.read", tenant_id=T,
+                    target_type=TargetType.ADAPTER, target_ref="other-adapter")
+    )
+
+    params = {"adapter_id": "ext-mcp"}
+    with pytest.raises(PendingHuman) as held:
+        await k.invoke("control", "control.adapter.activate", params, _ctx(["*"], run_id="a1"))
+    req_id = held.value.hitl_request_id
+    await k.hitl.answer(T, req_id, "approve", "admin@acme")
+    with pytest.raises(AdapterFailure) as conflict:
+        await k.invoke(
+            "control", "control.adapter.activate", params,
+            _ctx(["*"], run_id="a1"), approval_id=req_id,
+        )
+    assert conflict.value.status_code == 409  # activation refused; approval spent
+
+    with pytest.raises(HITLStateConflict) as spent:
+        await k.invoke(
+            "control", "control.adapter.activate", params,
+            _ctx(["*"], run_id="a1"), approval_id=req_id,
+        )
+    assert spent.value.status_code == 409
+    assert spent.value.reason == "hitl_state_conflict"
+    assert await k.hitl.list_pending(T) == []  # the retry created NO new pend
+
+
+@pytest.mark.invariant("SEC-22")
+async def test_phantom_row_activate_rehydrates_on_demand(monkeypatch):
+    """A rehydratable phantom row (spec_ref persisted, loader empty - another
+    replica's registration or a post-boot registration elsewhere) activates
+    through the full gate: pend on the store-view context, approve, retry ->
+    on-demand rebuild -> discovery -> verbs published -> adapter live."""
+    k1 = await _kernel()
+    await _register(monkeypatch, k1, _FakeMcpServer(list(_TOOLS)))
+    k2 = await _restart_kernel(k1.store)  # restart shape WITHOUT boot rehydration
+    assert k2.loader.peek(T, "ext-mcp") is None
+
+    out = await _approved(k2, "control.adapter.activate", {"adapter_id": "ext-mcp"}, run_id="a1")
+
+    assert out["activated"] is True
+    assert set(out["verbs"]) == {"ext-mcp.ticket.read", "ext-mcp.ticket.create"}
+    consumer = k2.loader.peek(T, "ext-mcp")
+    assert consumer is not None and consumer.activated is True
+    record = await k2.store.get_adapter(T, "ext-mcp")
+    assert record is not None and record.activated is True
+    out = await k2.invoke("ext-mcp", "ext-mcp.ticket.read", {"id": "1"}, _ctx(["*"], run_id="r9"))
+    assert out == {"text": "done"}
+
+
+@pytest.mark.invariant("SEC-22")
+async def test_phantom_row_without_a_url_fails_loudly_and_typed():
+    """An unreconstructible phantom (a pre-spec_ref row, or a shape with no
+    honest rebuild) fails the activate pend with a typed 409 BEFORE any
+    approval work exists - never an infinite pend loop - while the lifecycle
+    verbs stay the repair path."""
+    k = await _kernel()
+    await k.store.upsert_adapter(
+        AdapterRecord(
+            id="old-mcp",
+            tenant_id=T,
+            version="1",
+            runtime="mcp",
+            source="manual",
+            module_ref="boltrig.adapters.mcp_consumer",
+        )
+    )
+
+    with pytest.raises(AdapterFailure) as caught:
+        await k.invoke(
+            "control", "control.adapter.activate", {"adapter_id": "old-mcp"}, _ctx(["*"])
+        )
+
+    assert caught.value.status_code == 409
+    assert caught.value.reason == "control_adapter_unrehydratable"
+    assert await k.hitl.list_pending(T) == []
+    # the repair path still governs the row
+    out = await _approved(k, "control.adapter.delete", {"adapter_id": "old-mcp"}, run_id="x1")
+    assert out["deleted"] is True
