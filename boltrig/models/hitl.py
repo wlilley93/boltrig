@@ -68,6 +68,13 @@ class HITLRequest:
     # principal's department scope and must never be widened by a reader.
     workspace_id: WorkspaceId | None = None
     department_scope: list[str] | None = None
+    # SEC-181: a secure QUESTION asks for a value the agent never sees. The flag
+    # + the bounded purpose label ride on the request so the answer route seals
+    # the answer as a run/purpose-scoped credential reference (never recording
+    # the value) and so UI/CLI/channel consumers can render a secure-input
+    # affordance. ``secure_purpose`` is set only when ``secure`` is true.
+    secure: bool = False
+    secure_purpose: str | None = None
 
 
 @dataclass

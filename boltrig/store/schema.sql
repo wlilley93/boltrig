@@ -263,6 +263,8 @@ CREATE TABLE IF NOT EXISTS hitl_requests (
     request_fingerprint TEXT,                           -- SEC-14: exact canonical request binding
     workspace_id TEXT,                                  -- SEC-141: originating workspace (NULL = org-wide)
     department_scope JSONB,                             -- SEC-141: originating department ids
+    secure       BOOLEAN NOT NULL DEFAULT false,        -- SEC-181: secure-input question (answer is sealed, never recorded)
+    secure_purpose TEXT,                                -- SEC-181: bounded purpose label (only when secure)
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (tenant_id, id)
@@ -274,6 +276,8 @@ ALTER TABLE hitl_requests ADD COLUMN IF NOT EXISTS requested_on_behalf_of TEXT;
 ALTER TABLE hitl_requests ADD COLUMN IF NOT EXISTS request_fingerprint TEXT;
 ALTER TABLE hitl_requests ADD COLUMN IF NOT EXISTS workspace_id TEXT;
 ALTER TABLE hitl_requests ADD COLUMN IF NOT EXISTS department_scope JSONB;
+ALTER TABLE hitl_requests ADD COLUMN IF NOT EXISTS secure BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE hitl_requests ADD COLUMN IF NOT EXISTS secure_purpose TEXT;
 
 CREATE TABLE IF NOT EXISTS hitl_responses (
     id           TEXT NOT NULL,

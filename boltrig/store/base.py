@@ -310,6 +310,13 @@ class Store(BudgetPolicyContract, IdempotencyStoreContract, GuardedWritesContrac
     # --- credential references (sealed at rest; never plaintext, SEC-04) ---
     async def get_credential_ref(self, tenant_id: str, cred_id: str) -> dict[str, Any] | None: ...
 
+    async def delete_credential_refs_for_run(self, tenant_id: str, run_id: str) -> int:
+        """Delete every run-scoped secure-input credential of one run (SEC-181
+        lifecycle): rows whose id carries the ``run:<run_id>:`` prefix minted by
+        ``CredentialResolver.seal_run_scoped_value``. Returns the count deleted.
+        Tenant-scoped like every method (SEC-08)."""
+        ...
+
     # --- Round Three: versioned config, eval, customisation, memory ---
     async def add_config_revision(self, rev: ConfigRevision) -> ConfigRevision: ...
     async def list_config_revisions(

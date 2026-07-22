@@ -543,16 +543,24 @@ class WorkPump:
         await self._notify_terminal(item)
 
     async def _notify_terminal(self, item: WorkItem) -> None:
-        """Notify a channel-originated item's human of its terminal state (SEC-179).
+        """Notify a channel-originated item's human of its terminal state (SEC-179),
+        and sweep the run's secure-input credentials (SEC-181).
 
-        Best-effort (P9): a notifier fault never changes the item's outcome. No-op
-        for items without a human origin or a reply route (non-channel sources)."""
+        Best-effort (P9): a notifier/sweep fault never changes the item's outcome.
+        Notify is a no-op for items without a human origin or a reply route
+        (non-channel sources); the sweep is a no-op without a kernel."""
+        run_id = item.hatchet_run_id or item.id
         try:
             from boltrig.kernel.channel_notify import notify_work_item_result
 
             await notify_work_item_result(self._store, item)
         except Exception:
             log.warning("terminal notify failed for item %s", item.id, exc_info=True)
+        if self._kernel is not None:
+            try:  # SEC-181: run-scoped secure-input refs die with the run
+                await self._kernel.credentials.sweep_run_scoped(item.tenant_id, run_id)
+            except Exception:
+                log.warning("secure-input sweep failed for run %s", run_id, exc_info=True)
 
     # --- learning loop (Phase 3, US-WFL-03/06/07) ---------------------------------
     def _stamp_outcome(self, item: WorkItem, terminal_status: str) -> None:

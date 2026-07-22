@@ -167,11 +167,18 @@ class HITLManager:
         request_fingerprint: str | None = None,
         workspace_id: str | None = None,
         department_scope: list[str] | None = None,
+        secure: bool = False,
+        secure_purpose: str | None = None,
     ) -> HITLRequest:
         if type == HITLType.APPROVAL and not (
             verb and requested_by and request_fingerprint
         ):
             raise ValueError("approval requests must be action- and requester-bound")
+        # SEC-181: a secure QUESTION must carry its bounded purpose label (the
+        # answer route seals the answer under it); a purpose without the secure
+        # flag is meaningless and dropped rather than half-recorded.
+        if secure and not secure_purpose:
+            raise ValueError("a secure question requires a purpose label")
         req = HITLRequest(
             id=uuid.uuid4().hex,
             tenant_id=tenant_id,
@@ -196,6 +203,8 @@ class HITLManager:
             timeout_at=(
                 utcnow() + timedelta(seconds=timeout_seconds) if timeout_seconds else None
             ),
+            secure=bool(secure),
+            secure_purpose=secure_purpose if secure else None,
         )
         await self._store.create_hitl_request(req)
         await self._notify_request(req)
@@ -228,7 +237,7 @@ class HITLManager:
     ) -> dict[str, Any]:
         """Project one bounded run-stream event from a canonical HITL request."""
         request = await self.get(context.tenant_id, request_id)
-        return {
+        event = {
             "type": "hitl",
             "verb": verb,
             "call_id": call_id,
@@ -238,6 +247,12 @@ class HITLManager:
             "options": list(request.options) if request else ["approve", "reject"],
             "requested_by": request.requested_by if request else context.actor,
         }
+        if request and request.secure:
+            # SEC-181 marker (present only when secure, so the pause event's
+            # shape is unchanged for every existing consumer): a secure-input
+            # affordance may be rendered.
+            event["secure"] = True
+        return event
 
     async def list_pending(self, tenant_id: str) -> list[HITLRequest]:
         return await self._store.list_pending_hitl(tenant_id)

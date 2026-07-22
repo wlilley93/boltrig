@@ -3,16 +3,26 @@
 Posting to a channel is high-consequence (HITL by default) and delivers through a
 per-transport seam: a socket channel with no direct outbound is queued for the
 Phase-2 sidecar. The kernel resolves the channel tenant-scoped and never sends to
-an unknown/disabled or cross-tenant one.
+an unknown/disabled or cross-tenant one. The optional ``comment`` param is
+approver-only: visible in the approval display context, stripped before delivery.
 """
 
 import asyncio
+import json
 
 import pytest
 
 from boltrig.adapters.builtin.channel_send import build_channel_send
-from boltrig.models import Channel, InvocationContext
+from boltrig.kernel import Kernel
+from boltrig.models import (
+    Channel,
+    GrantSet,
+    InvocationContext,
+    PendingHuman,
+    TenantPermissions,
+)
 from boltrig.store import InMemoryStore
+from tests.conftest import make_ctx
 
 T = "acme"
 
@@ -57,5 +67,50 @@ def test_channel_send_delivers_via_seam_and_is_tenant_scoped():
         xt = await a.execute("channel.send", {"channel_id": "ch-1", "text": "x"}, None, other)
         assert not xt.ok
         assert len(sent) == 1  # only the one legitimate send happened
+
+    asyncio.run(go())
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-39")
+def test_comment_is_approver_only_and_never_rides_the_outbox():
+    async def go():
+        store = InMemoryStore()
+        store.set_tenant_permissions(TenantPermissions(T, GrantSet.of(["*"])))
+        await store.upsert_channel(
+            Channel(id="ch-1", tenant_id=T, platform="slack", name="Ops", transport="socket")
+        )
+        kernel = Kernel(store, blocking_verbs={"channel.send"})
+        await kernel.register_adapter(T, build_channel_send(store))
+        params = {
+            "channel_id": "ch-1",
+            "text": "shipping the release now",
+            "target": "C123",
+            "comment": "approver note: legal signed off, do NOT quote externally",
+        }
+        ctx = make_ctx(["channel.send"], actor="agent:x")
+
+        # the send pauses; the comment is shown to the approver in the display
+        # context (faithful, unredacted - it is FOR the approver)
+        with pytest.raises(PendingHuman) as exc:
+            await kernel.invoke("channel", "channel.send", params, ctx)
+        request = await kernel.hitl.get(T, exc.value.hitl_request_id)
+        display = json.loads(request.context)
+        assert display["inputs"]["comment"] == params["comment"]
+        assert display["inputs"]["text"] == params["text"]
+
+        # the approver clears it and the send executes through the real seam
+        await kernel.hitl.answer(T, request.id, "approve", "lead@acme")
+        out = await kernel.invoke(
+            "channel", "channel.send", params, ctx, approval_id=request.id
+        )
+        assert out["delivery"]["status"] == "queued"
+
+        # the enqueued outbox row carries ONLY text + target: the comment can
+        # never ride the outbox to the channel sender
+        (msg,) = await store.claim_channel_outbox(T, ["ch-1"], "test", 60, 20)
+        assert set(msg.payload) == {"text", "target"}
+        assert msg.payload["text"] == params["text"]
+        assert "approver note" not in json.dumps(msg.payload)
 
     asyncio.run(go())

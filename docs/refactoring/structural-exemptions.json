@@ -181,7 +181,7 @@
       "expires": "2026-12-31"
     },
     "boltrig/fleet/pump.py": {
-      "max_file_lines": 666,
+      "max_file_lines": 674,
       "max_function_lines": 78,
       "over_limit_functions": [],
       "owner": "fleet-maintainers",
@@ -252,7 +252,7 @@
       "expires": "2026-12-31"
     },
     "boltrig/kernel/access_routes.py": {
-      "max_file_lines": 1078,
+      "max_file_lines": 1069,
       "max_function_lines": 148,
       "over_limit_functions": [
         {
@@ -262,22 +262,22 @@
         },
         {
           "name": "_register_context_routes",
-          "line": 504,
+          "line": 495,
           "lines": 100
         },
         {
           "name": "_register_ai_key_routes",
-          "line": 606,
+          "line": 597,
           "lines": 148
         },
         {
           "name": "_register_admin_directory_routes",
-          "line": 792,
+          "line": 783,
           "lines": 116
         },
         {
           "name": "_register_workspace_routes",
-          "line": 955,
+          "line": 946,
           "lines": 124
         }
       ],
@@ -300,41 +300,41 @@
       "expires": "2026-12-31"
     },
     "boltrig/kernel/channel_routes.py": {
-      "max_file_lines": 596,
-      "max_function_lines": 344,
+      "max_file_lines": 759,
+      "max_function_lines": 356,
       "over_limit_functions": [
         {
           "name": "register_channel_routes",
-          "line": 253,
-          "lines": 344
+          "line": 404,
+          "lines": 356
         },
         {
           "name": "register_channel_routes.channel_inbound",
-          "line": 289,
-          "lines": 132
+          "line": 440,
+          "lines": 144
         }
       ],
       "owner": "kernel-maintainers",
-      "reason": "Split channel administration and inbound gateway route registrars without weakening signature checks. SEC-180 self-serve onboarding added the _self_onboard helper and its wiring in channel_inbound.",
+      "reason": "Split channel administration and inbound gateway route registrars without weakening signature checks. SEC-180 self-serve onboarding added the _self_onboard helper and its wiring in channel_inbound. SEC-14/SEC-179 channel-native HITL replies added the command-parse/addressed-to/sole-pending helpers and their intake wiring.",
       "expires": "2026-12-31"
     },
     "boltrig/kernel/dispatch.py": {
-      "max_file_lines": 484,
+      "max_file_lines": 507,
       "max_function_lines": 116,
       "over_limit_functions": [
         {
           "name": "Dispatcher.invoke",
-          "line": 234,
+          "line": 248,
           "lines": 116
         },
         {
           "name": "Dispatcher._invoke_inner",
-          "line": 351,
+          "line": 365,
           "lines": 88
         }
       ],
       "owner": "kernel-maintainers",
-      "reason": "Extract dispatch phases behind private typed helpers while retaining the single governed chokepoint.",
+      "reason": "Extract dispatch phases behind private typed helpers while retaining the single governed chokepoint. SEC-181 secure input added the run-scoped param resolution at the credential stage and the secure-question marker.",
       "expires": "2026-12-31"
     },
     "boltrig/kernel/memory_routes.py": {
@@ -399,7 +399,7 @@
       "expires": "2026-12-31"
     },
     "boltrig/store/base.py": {
-      "max_file_lines": 614,
+      "max_file_lines": 621,
       "max_function_lines": 15,
       "over_limit_functions": [],
       "owner": "store-maintainers",
@@ -407,7 +407,7 @@
       "expires": "2026-12-31"
     },
     "boltrig/store/memory.py": {
-      "max_file_lines": 1131,
+      "max_file_lines": 1141,
       "max_function_lines": 92,
       "over_limit_functions": [
         {
@@ -421,7 +421,7 @@
       "expires": "2026-12-31"
     },
     "boltrig/store/postgres.py": {
-      "max_file_lines": 1907,
+      "max_file_lines": 1918,
       "max_function_lines": 53,
       "over_limit_functions": [],
       "owner": "store-maintainers",
@@ -429,7 +429,7 @@
       "expires": "2026-12-31"
     },
     "boltrig/store/rows.py": {
-      "max_file_lines": 461,
+      "max_file_lines": 462,
       "max_function_lines": 17,
       "over_limit_functions": [],
       "owner": "store-maintainers",

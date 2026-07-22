@@ -14,7 +14,7 @@ dispatch policy - the kernel chokepoint is unchanged (NFR-MNT-01).
 
 from __future__ import annotations
 
-from fastapi import Depends, Request
+from fastapi import Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from boltrig.models import (
@@ -325,41 +325,32 @@ def _register_hitl_run_routes(app, principal_dep, get_kernel) -> None:
         # (US-CHAT-12), mirroring the regenerate / cancel pattern. This route answers
         # ONLY a QUESTION HITL - never an approval (those stay on the approvals panel
         # with their human / anti-self-approval checks, SEC-14), so a question can
-        # never be laundered into clearing a gated verb.
-        from boltrig.text_envelope import wrap_untrusted
-        from boltrig.models import HITLType
+        # never be laundered into clearing a gated verb. The eligibility + wrap logic
+        # is the SHARED answer path (hitl_http.answer_hitl_question) that channel
+        # intake replies also use; this route only maps outcomes and audits.
+        from .hitl_http import answer_hitl_question
 
-        from .hitl_http import visible_hitl_request
-
-        req, item = await visible_hitl_request(k, p, question_id)
-        if req is None:
-            return JSONResponse({"status": "error", "reason": "not_found"}, status_code=404)
-        if req.type != HITLType.QUESTION:
-            return JSONResponse({"status": "error", "reason": "not_a_question"},
-                                status_code=409)
-        # Owner = the run's owning work item's on_behalf_of. A scoped-read role may
-        # SEE a run but never answer for the identity the run was authorised under;
-        # fail closed with NO write/audit when ownership cannot be confirmed.
-        if item is None or item.on_behalf_of != p.subject:
-            return JSONResponse({"status": "denied", "reason": "not your run"},
-                                status_code=403)
-        raw = body.get("answer")
-        answer = raw.strip() if isinstance(raw, str) else ""
-        if not answer:
-            return JSONResponse({"status": "error", "reason": "answer is required"},
-                                status_code=400)
-        # The answer is user-supplied, so it is enveloped as DATA before it is
-        # recorded and replayed into the run (M1 / SEC-72): the resume wiring pushes
-        # the recorded decision back into the paused run, so wrapping it here is what
-        # guarantees the run never re-ingests raw inbound text as instructions.
-        wrapped = wrap_untrusted("user_answer", p.subject, answer)
-        resp = await k.hitl.answer(p.tenant_id, question_id, wrapped, p.subject)
+        try:
+            outcome = await answer_hitl_question(k, p, question_id, body.get("answer"))
+        except HTTPException as exc:
+            shape = {
+                404: {"status": "error", "reason": "not_found"},
+                409: {"status": "error", "reason": "not_a_question"},
+                403: {"status": "denied", "reason": "not your run"},
+            }.get(exc.status_code, {"status": "error", "reason": str(exc.detail)})
+            return JSONResponse(shape, status_code=exc.status_code)
         # keys-only audit: the length, never the answer text (K-20 / US-CONV-08).
-        await _audit(k, p, "hitl.question.answer",
-                     {"question_id": question_id, "run_id": req.run_id,
-                      "answer_len": len(answer)})
+        # A SECURE answer records the marker only - even its length is withheld
+        # (SEC-181; the value itself was sealed inside the kernel, never here).
+        audit_detail = {"question_id": question_id, "run_id": outcome["run_id"]}
+        if outcome.get("secure"):
+            audit_detail["secure"] = True
+        else:
+            audit_detail["answer_len"] = outcome["answer_len"]
+        await _audit(k, p, "hitl.question.answer", audit_detail)
         return JSONResponse({"status": "ok", "question_id": question_id,
-                             "response_id": resp.id, "run_id": req.run_id})
+                             "response_id": outcome["response_id"],
+                             "run_id": outcome["run_id"]})
 
     @app.post("/v1/runs/{run_id}/cancel")
     async def cancel_run(run_id: str, request: Request, k=K, p=P) -> JSONResponse:

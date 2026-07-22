@@ -18,7 +18,7 @@ from __future__ import annotations
 import hashlib
 import uuid
 
-from fastapi import Depends, Request
+from fastapi import Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from boltrig.adapters.builtin.inbound_webhook import (
@@ -32,6 +32,8 @@ from boltrig.models import (
     AuditEvent,
     ChannelBinding,
     ChannelOutboxMessage,
+    HITLStateConflict,
+    HITLType,
     RateLimit,
     RateLimited,
     utcnow,
@@ -45,6 +47,8 @@ from .channel_principal import (
     self_onboard_subject,
 )
 from .control_routes import dispatch_control_route
+from .hitl_http import answer_hitl_question, respond_to_hitl
+from .hitl_response_auth import related_work_item
 
 # The pairing flow (decision 0003): one-time codes are short, human-transcribable,
 # hashed at rest (SEC-05), TTL-bounded, lockout-guarded. They bind an unknown
@@ -139,6 +143,153 @@ def _resolve_addressing(ch, body: dict) -> tuple[str, dict]:
         target = _clean_target(addressing.get("default_target")) or DEFAULT_TARGET
     reply_route = {"channel_id": ch.id, "thread": thread_id or None, "sender": None}
     return target, reply_route
+
+
+# --------------------------------------------------------------------------- #
+# Channel-native HITL replies (SEC-14 the approval/question separation, SEC-179
+# the round-trip): a BOUND sender answers a pending approval/question from the
+# channel itself. Explicit commands work from anywhere; a plain reply answers a
+# QUESTION only when it is unambiguous - EXACTLY ONE pending item addressed to
+# that sender in that thread. Anything else is a normal message, never a guess.
+# --------------------------------------------------------------------------- #
+_HITL_COMMANDS = ("approve", "deny", "answer")
+
+
+def _parse_hitl_command(text: str) -> tuple[str, str, str] | None:
+    """Parse ``/approve <id>`` | ``/deny <id>`` | ``/answer <id> <text>``.
+
+    Returns (command, request_id, remainder). A recognised verb with missing
+    arguments returns ("usage", verb, "") so the caller can answer with a usage
+    error rather than guess; any other text (including other slash-commands) is
+    NOT a HITL command and falls through to normal intake."""
+    if not text.startswith("/"):
+        return None
+    verb, _, rest = text[1:].partition(" ")
+    if verb not in _HITL_COMMANDS:
+        return None
+    request_id, _, remainder = rest.strip().partition(" ")
+    if not request_id or (verb == "answer" and not remainder.strip()):
+        return ("usage", verb, "")
+    return (verb, request_id, remainder.strip())
+
+
+def _hitl_addressed_to(req, subject: str) -> bool:
+    """A pending request is 'addressed to' a sender only when it NAMES them:
+    the explicit assignee, or - unassigned - the human it was raised on behalf
+    of (the same subject the request notification resolves to). Anything looser
+    would be a guess about who may answer."""
+    if req.assignee:
+        return req.assignee == subject
+    return bool(subject) and req.requested_on_behalf_of == subject
+
+
+async def _sole_pending_for(kernel, ch, subject: str, thread: str):
+    """The EXACTLY-ONE pending HITL request addressed to ``subject`` whose work
+    item's reply route is this channel+thread, else None: zero matches (nothing
+    to answer) or several (ambiguous) both fall back to normal intake. A SECURE
+    question (SEC-181) is never matched - its answer must be sealed via the
+    secure-input surface, never typed into a chat."""
+    if not thread:
+        return None
+    matches = []
+    for req in await kernel.hitl.list_pending(ch.tenant_id):
+        if getattr(req, "secure", False) or not _hitl_addressed_to(req, subject):
+            continue
+        item = await related_work_item(kernel, req)
+        route = getattr(item, "reply_route", None) or {}
+        if route.get("channel_id") == ch.id and route.get("thread") == thread:
+            matches.append(req)
+    return matches[0] if len(matches) == 1 else None
+
+
+async def _is_secure_question(kernel, tenant_id: str, request_id: str) -> bool:
+    """SEC-181 adjacency: a SECURE question's answer is sealed as a
+    run/purpose-scoped credential reference by the secure-input surface; a
+    channel reply is plaintext chat and must never feed it."""
+    req = await kernel.hitl.get(tenant_id, request_id)
+    return bool(req is not None and getattr(req, "secure", False))
+
+
+async def _hitl_reply_response(
+    kernel, ch, principal, external_user_id: str, body: dict, reply_route: dict
+) -> JSONResponse | None:
+    """Route a bound sender's HITL reply through the SHARED respond/answer logic
+    (hitl_http) AS THAT PRINCIPAL - approver eligibility is exactly what
+    hitl_response_auth enforces on the API, so a non-approver gets the same
+    fail-closed denial here. Returns the intake response when the message was
+    consumed as a HITL reply (a confirmation or the denial), or None when the
+    message is ordinary intake."""
+    text = str(body.get("text") or "").strip()
+    if not text:
+        return None
+    command = _parse_hitl_command(text)
+    if command is None:
+        # Implicit reply: unambiguous only - exactly one pending item addressed
+        # to this sender in this thread, and it must be a QUESTION (a plain
+        # message can never decide an approval: explicit /approve|/deny only).
+        req = await _sole_pending_for(
+            kernel, ch, principal.subject, reply_route.get("thread") or ""
+        )
+        if req is None or req.type != HITLType.QUESTION:
+            return None
+        verb, request_id, answer = "answer", req.id, text
+    elif command[0] == "usage":
+        return JSONResponse(
+            {"status": "error",
+             "reason": f"usage: /{command[1]} <request_id>"
+                       + (" <text>" if command[1] == "answer" else "")},
+            status_code=400,
+        )
+    else:
+        verb, request_id, answer = command
+    try:
+        if verb == "answer":
+            if await _is_secure_question(kernel, ch.tenant_id, request_id):
+                return JSONResponse(
+                    {"status": "denied", "reason": "secure questions use secure input"},
+                    status_code=403,
+                )
+            outcome = await answer_hitl_question(kernel, principal, request_id, answer)
+            detail = {"channel": ch.id, "request": request_id, "kind": "answer",
+                      "answer_len": outcome["answer_len"]}
+        else:
+            decision = "approve" if verb == "approve" else "reject"
+            outcome = await respond_to_hitl(kernel, principal, request_id, decision, "")
+            detail = {"channel": ch.id, "request": request_id, "kind": verb}
+    except HTTPException as exc:  # the SAME fail-closed denial the API returns
+        status = exc.status_code if 400 <= exc.status_code < 500 else 403
+        return JSONResponse(
+            {"status": "denied", "reason": str(exc.detail)}, status_code=status
+        )
+    except HITLStateConflict as exc:  # already answered/consumed - never reusable
+        return JSONResponse({"status": "denied", "reason": str(exc)}, status_code=409)
+    # audit-always, keys-only (the decision kind and answer length, never text)
+    await kernel.audit.write(
+        AuditEvent(
+            tenant_id=ch.tenant_id, ts=utcnow(), actor=principal.subject,
+            actor_tier="human", action_type=ActionType.TOOL_CALL, noun="channel",
+            verb="channel.hitl.reply", status="ok",
+            on_behalf_of=principal.on_behalf_of, detail=detail,
+        )
+    )
+    # Confirm the outcome back on the originating surface/thread (SEC-179):
+    # the socket class gets a durable outbox row; the webhook class's
+    # confirmation is this intake response body.
+    if ch.transport == "socket":
+        await kernel.store.enqueue_channel_outbox(
+            ChannelOutboxMessage(
+                id=f"co_{uuid.uuid4().hex[:16]}", tenant_id=ch.tenant_id,
+                channel_id=ch.id,
+                payload={"text": f"HITL {detail['kind']} recorded for {request_id}",
+                         "target": reply_route.get("thread") or external_user_id,
+                         "event": "hitl_reply", "subject": principal.subject},
+            )
+        )
+    return JSONResponse(
+        {"status": "ok", "hitl_reply": detail["kind"], "request": request_id,
+         "response_id": outcome["response_id"]},
+        status_code=200,
+    )
 
 
 async def _audit(kernel, p, verb: str, detail: dict, status: str = "ok") -> None:
@@ -396,17 +547,29 @@ def register_channel_routes(app, *, principal_dep, get_kernel) -> None:
                 status_code=200,
             )
 
-        # 8. normalise -> a work-item intake (the CoS routes it), tenant-scoped.
+        # 8. channel-native HITL replies (SEC-14/SEC-179): a BOUND sender's
+        # /approve|/deny|/answer command - or a plain reply in a thread with
+        # EXACTLY ONE pending item addressed to them - is answered through the
+        # same chokepoint logic the API uses, AS the resolved principal. A
+        # consumed reply mints NO work item; anything else is normal intake.
+        target, reply_route = _resolve_addressing(ch, body)
+        hitl_reply = await _hitl_reply_response(
+            k, ch, principal, external_user_id, body, reply_route
+        )
+        if hitl_reply is not None:
+            return hitl_reply
+
+        # 9. normalise -> a work-item intake (the CoS routes it), tenant-scoped.
         # The item carries the ADDRESSING (decision 0003 Phase 2): the resolved
         # target (tier-1 CoS by default, a named tier-2 subagent/run when the
         # message addresses one) and the reply route for round-trip delivery.
         item = normalise(body, source=ch.platform, tenant_id=ch.tenant_id)
         item.on_behalf_of = principal.subject
-        item.target, item.reply_route = _resolve_addressing(ch, body)
+        item.target, item.reply_route = target, reply_route
         item.reply_route["sender"] = external_user_id
         await k.store.create_work_item(item)
 
-        # 9. audit the intake as the resolved principal (audit-always)
+        # 10. audit the intake as the resolved principal (audit-always)
         await k.audit.write(
             AuditEvent(
                 tenant_id=ch.tenant_id, ts=utcnow(), actor=principal.subject,

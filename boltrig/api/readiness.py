@@ -20,7 +20,7 @@ from .readiness_control import (
     control_plane_check,
 )
 
-EXPECTED_ALEMBIC_HEAD = "0036_channel_addressing"
+EXPECTED_ALEMBIC_HEAD = "0037_secure_input"
 
 _PRODUCTION_NAMES = {"prod", "production", "staging"}
 # The tools /readyz requires. Codex is the only target agent runtime (decision

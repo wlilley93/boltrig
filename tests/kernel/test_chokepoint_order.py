@@ -115,6 +115,13 @@ class RecordingResolver:
         self.resolutions += 1
         return await self._inner.resolve_for_adapter(tenant_id, adapter_id)
 
+    async def resolve_run_scoped_params(self, tenant_id, params, *, run_id=None):
+        # SEC-181 run-scoped param references resolve at the same stage; they
+        # are not adapter-credential resolutions, so they pass through uncounted.
+        return await self._inner.resolve_run_scoped_params(
+            tenant_id, params, run_id=run_id
+        )
+
 
 def _recording(k: Kernel) -> RecordingResolver:
     rec = RecordingResolver(k.credentials)

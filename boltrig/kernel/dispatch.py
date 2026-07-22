@@ -213,6 +213,13 @@ class Dispatcher:
         choices = (
             [str(c) for c in raw_choices] if isinstance(raw_choices, list) else []
         )
+        # SEC-181 secure input: the QUESTION is marked secure with its bounded
+        # purpose label so the answer route seals the answer as a run/purpose-
+        # scoped credential reference (the value never enters the run) and
+        # consumers can render a secure-input affordance. The prompt/choices
+        # themselves stay ordinary text.
+        secure = params.get("secure") is True
+        purpose = str(params.get("purpose") or "") if secure else ""
         req = await self._hitl.create(
             tenant_id=context.tenant_id,
             run_id=context.run_id or "",
@@ -223,12 +230,19 @@ class Dispatcher:
             # a chat turn's work item id IS its run id, so binding the request to it
             # lets the ordinary resume wiring requeue the paused run on an answer.
             work_item_id=context.run_id, requested_by=context.actor,
+            secure=secure, secure_purpose=purpose or None,
             **hitl_scope_fields(context),
         )
-        self._emit(context.tenant_id, context.run_id, {
+        event = {
             "type": "question", "run_id": context.run_id,
             "question_id": req.id, "prompt": prompt, "choices": choices,
-        })
+        }
+        if secure:
+            # SEC-181 marker (present only when secure, so the event shape is
+            # unchanged otherwise); the purpose label is a bounded non-secret.
+            event["secure"] = True
+            event["purpose"] = purpose
+        self._emit(context.tenant_id, context.run_id, event)
         raise PendingHuman(req.id)
 
     async def invoke(
@@ -450,7 +464,16 @@ class Dispatcher:
         credential = await self._creds.resolve_for_adapter(
             context.tenant_id, binding.target_ref
         )
-        result: Result = await adapter.execute(verb_def.id, params, credential, context)
+        # SEC-181: at this same resolve-credential stage, a param carrying a
+        # run-scoped credential REFERENCE (a secure ask_user answer) is resolved
+        # to its material INSIDE the kernel - the adapter receives the material
+        # on a resolved copy; the params the agent authored, the events and the
+        # audit only ever held the reference. Scoped: another run's or purpose's
+        # reference fails closed (CredentialResolution).
+        resolved_params = await self._creds.resolve_run_scoped_params(
+            context.tenant_id, params, run_id=context.run_id
+        )
+        result: Result = await adapter.execute(verb_def.id, resolved_params, credential, context)
         if result.ok:
             return result.output
         err = result.error

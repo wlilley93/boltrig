@@ -609,13 +609,15 @@ class PostgresStore(
         await self._pool.execute(
             """INSERT INTO hitl_requests (id, tenant_id, run_id, work_item_id, type, urgency,
                                           context, question, options, assignee, status, timeout_at,
-                                          verb, requested_by, requested_on_behalf_of, request_fingerprint, workspace_id, department_scope)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+                                          verb, requested_by, requested_on_behalf_of, request_fingerprint, workspace_id, department_scope,
+                                          secure, secure_purpose)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
                ON CONFLICT (tenant_id, id) DO UPDATE SET
                  status=EXCLUDED.status, updated_at=now()""",
             r.id, r.tenant_id, r.run_id, r.work_item_id, r.type.value, r.urgency.value,
             r.context, r.question, r.options, r.assignee, r.status.value, r.timeout_at,
             r.verb, r.requested_by, r.requested_on_behalf_of, r.request_fingerprint, r.workspace_id, r.department_scope,
+            r.secure, r.secure_purpose,
         )
 
     async def consume_hitl(self, tenant_id, request_id):
@@ -934,6 +936,15 @@ class PostgresStore(
             cred_id, tenant_id, ref.get("store", "env"), ref.get("ref", ""), seal_ref(ref),
             ref.get("expires_at"),
         )
+
+    async def delete_credential_refs_for_run(self, tenant_id: str, run_id: str) -> int:
+        # strpos prefix match (no LIKE wildcards to escape): only the run-scoped
+        # secure-input ids minted as ``run:<run_id>:<purpose>`` (SEC-181).
+        result = await self._pool.execute(
+            "DELETE FROM credential_refs WHERE tenant_id=$1 AND strpos(id, $2) = 1",
+            tenant_id, f"run:{run_id}:",
+        )
+        return int(result.rsplit(" ", 1)[-1])
 
     # --- conversations ---
     async def create_conversation(self, c: Conversation):

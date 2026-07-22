@@ -7,16 +7,53 @@ dict carrying inline material that the store seam envelope-SEALS at rest
 (``boltrig/store/sealing.py``) and unseals transparently on read. A resolved
 ``Credential`` is handed to one adapter call and never returned to,
 embedded in, or logged by an agent.
+
+SEC-181 run-scoped secure input: a secure ``chat.ask_user`` answer is sealed by
+the answer route through this seam as a PURPOSE- AND RUN-SCOPED credential
+(stored under the id ``run:<run_id>:<purpose>``, sealed at rest like any inline
+material). The run and its events/audit/context only ever carry the REFERENCE
+string ``credential:run/<run_id>/<purpose>``; a verb param holding that shape is
+resolved to the material inside the kernel at the dispatch credential stage
+(``resolve_run_scoped_params``), and ONLY for the same run id and the declared
+purpose - a reference from another run or purpose fails closed
+(``CredentialResolution``).
 """
 
 from __future__ import annotations
 
 import os
-from typing import Protocol
+from typing import Any, Protocol
 
 from boltrig.adapters.base import Credential
 from boltrig.models import CredentialResolution
 from boltrig.store import Store
+
+# The reference shape a run carries in place of a secure answer's value, and
+# the credential_refs id prefix the value is sealed under (SEC-181).
+RUN_SCOPED_REF_PREFIX = "credential:run/"
+RUN_SCOPED_CRED_PREFIX = "run:"
+# Marker on the sealed row so an unrelated credential that happens to sit under
+# a ``run:`` id is never resolvable as a secure-input reference.
+_SECURE_ANSWER_KIND = "secure_answer"
+
+
+def run_scoped_cred_id(run_id: str, purpose: str) -> str:
+    """The credential_refs id a secure answer is sealed under."""
+    return f"{RUN_SCOPED_CRED_PREFIX}{run_id}:{purpose}"
+
+
+def parse_run_scoped_ref(value: Any) -> tuple[str, str] | None:
+    """Parse a ``credential:run/<run_id>/<purpose>`` reference, else ``None``.
+
+    Strict shape (exactly one run id and one purpose segment): anything else -
+    including a reference with extra path segments - is not a run-scoped ref at
+    all, so it is never silently reinterpreted."""
+    if not isinstance(value, str) or not value.startswith(RUN_SCOPED_REF_PREFIX):
+        return None
+    parts = value[len(RUN_SCOPED_REF_PREFIX):].split("/")
+    if len(parts) != 2 or not parts[0] or not parts[1]:
+        return None
+    return parts[0], parts[1]
 
 
 class SecretStore(Protocol):
@@ -76,3 +113,95 @@ class CredentialResolver:
         through the SecretStore seam. Kernel-side only (SEC-04/05): the material
         is never logged, audited, or handed to an agent."""
         return await self._secret.fetch(ref.get("store", "env"), ref["ref"])
+
+    # --- SEC-181: run-scoped secure input ------------------------------------
+
+    async def seal_run_scoped_value(
+        self, tenant_id: str, run_id: str, purpose: str, value: str
+    ) -> str:
+        """Seal a secure question's answer as a run+purpose-scoped credential
+        and return the REFERENCE string the run carries in its place.
+
+        The value goes straight through the sealed credential seam
+        (``set_credential_ref`` envelope-seals it at rest, SEC-04); it is never
+        returned, logged, or audited by this path. The caller records the
+        returned reference (enveloped) as the answer, so the resume wiring
+        replays the reference, never the value."""
+        if not run_id or not purpose:
+            raise CredentialResolution(
+                "a secure answer requires both a run id and a purpose"
+            )
+        await self._store.set_credential_ref(
+            tenant_id,
+            run_scoped_cred_id(run_id, purpose),
+            {
+                "kind": _SECURE_ANSWER_KIND,
+                "run_id": run_id,
+                "purpose": purpose,
+                "value": value,
+            },
+        )
+        return f"{RUN_SCOPED_REF_PREFIX}{run_id}/{purpose}"
+
+    async def _resolve_run_scoped(
+        self, tenant_id: str, run_id: str, purpose: str, context_run_id: str | None
+    ) -> Any:
+        """Resolve one parsed reference to its material, FAIL CLOSED: only the
+        SAME run may resolve it, only a genuine secure-answer row whose embedded
+        run/purpose match the reference exactly qualifies (a tampered id or a
+        foreign credential under a ``run:`` id never resolves), and a missing
+        row resolves to nothing."""
+        if not context_run_id or run_id != context_run_id:
+            raise CredentialResolution(
+                "run-scoped credential reference does not belong to this run"
+            )
+        ref = await self._store.get_credential_ref(
+            tenant_id, run_scoped_cred_id(run_id, purpose)
+        )
+        if (
+            not isinstance(ref, dict)
+            or ref.get("kind") != _SECURE_ANSWER_KIND
+            or ref.get("run_id") != run_id
+            or ref.get("purpose") != purpose
+        ):
+            raise CredentialResolution(
+                "run-scoped credential reference is unknown or scope-mismatched"
+            )
+        return ref["value"]
+
+    async def resolve_run_scoped_params(
+        self, tenant_id: str, params: Any, *, run_id: str | None
+    ) -> Any:
+        """Return a copy of ``params`` with every run-scoped credential
+        REFERENCE string replaced by its material (SEC-181).
+
+        Called at the dispatch resolve-credential stage, immediately before the
+        adapter executes: the agent, the run context, the events and the audit
+        only ever carried the reference. Resolution is scoped - a reference from
+        another run or purpose fails closed (``CredentialResolution``). Values
+        that are not references pass through unchanged."""
+        if isinstance(params, dict):
+            return {
+                key: await self.resolve_run_scoped_params(tenant_id, item, run_id=run_id)
+                for key, item in params.items()
+            }
+        if isinstance(params, (list, tuple)):
+            return [
+                await self.resolve_run_scoped_params(tenant_id, item, run_id=run_id)
+                for item in params
+            ]
+        parsed = parse_run_scoped_ref(params)
+        if parsed is None:
+            return params
+        return await self._resolve_run_scoped(tenant_id, parsed[0], parsed[1], run_id)
+
+    async def sweep_run_scoped(self, tenant_id: str, run_id: str) -> int:
+        """Delete every run-scoped secure-input credential of a finished run.
+
+        Lifecycle honesty: the kernel owns no run-terminal hook - run settle /
+        cancel is written by the fleet pump (outside the kernel's reach by the
+        layering rule), so this sweep is the lifecycle seam the fleet calls when
+        a run reaches a terminal state. Until it is wired there the blast radius
+        of a lingering ref is bounded by the fail-closed scoping above: it can
+        never be resolved by any other run."""
+        return await self._store.delete_credential_refs_for_run(tenant_id, run_id)

@@ -213,8 +213,17 @@ invariants:
       - tests/security/test_channel_self_onboard.py::test_onboarding_is_rate_limited_per_channel
       - tests/security/test_channel_self_onboard.py::test_off_by_default_and_an_over_broad_role_never_onboards
       - tests/security/test_channel_self_onboard.py::test_an_existing_binding_is_never_onboarded_over
+  SEC-181:
+    description: Secure input - a chat.ask_user question with secure:true + a bounded purpose label is schema-validated as a pair (secure requires purpose; purpose only with secure) and marked on the HITL request, the question/hitl run events and the list projection for consumers, but its ANSWER never enters the run - the shared answer path seals the value through the credential seam as a run+purpose-scoped credential (run:<run_id>:<purpose>, envelope-sealed at rest with no plaintext in the raw store row) and records the enveloped REFERENCE (credential:run/<run_id>/<purpose>) as the decision, so the resume wiring replays the reference and the value appears in no answer response body, run event, or audit row (not even its length). A verb param carrying the reference is resolved to the material INSIDE the kernel at the dispatch resolve-credential stage (the adapter receives the material; agent/context/events/audit only ever carried the reference), and resolution FAILS CLOSED (CredentialResolution) for another run, a run-less context, an unsealed purpose, a tampered row, or a foreign credential under a run: id. A non-secure ask_user is byte-for-byte the old behaviour, and the documented run-settle sweep removes exactly the finished run's secure credentials.
+    tests:
+      - tests/security/test_secure_input.py::test_secure_answer_is_sealed_and_the_run_carries_only_the_reference
+      - tests/security/test_secure_input.py::test_reference_resolves_to_material_at_dispatch_events_keep_reference
+      - tests/security/test_secure_input.py::test_cross_run_and_cross_purpose_resolution_fails_closed
+      - tests/security/test_secure_input.py::test_sweep_removes_only_the_finished_runs_secure_credentials
+      - tests/security/test_secure_input.py::test_secure_purpose_pairing_fails_schema_validation
+      - tests/security/test_secure_input.py::test_non_secure_ask_user_is_unchanged
   SEC-179:
-    description: Channel notifications round-trip - HITL approval/escalation and run-completion notices enqueue durably to the user's BOUND socket-class surface per notification_prefs, addressed back to the originating thread; no pref, no binding, a disabled pref, or a non-socket channel delivers nothing. A team-scoped pref names a department (the user record's scope['departments']) and resolves to every ACTIVE member, delivered per member through the same binding-gated path - an unbound or deactivated member is excluded.
+    description: Channel notifications round-trip - HITL approval/escalation and run-completion notices enqueue durably to the user's BOUND socket-class surface per notification_prefs, addressed back to the originating thread; no pref, no binding, a disabled pref, or a non-socket channel delivers nothing. A team-scoped pref names a department (the user record's scope['departments']) and resolves to every ACTIVE member, delivered per member through the same binding-gated path - an unbound or deactivated member is excluded. The round-trip CLOSES inbound too: a bound sender answers a pending approval/question from the channel (/approve|/deny|/answer <id>, or an unambiguous plain reply - EXACTLY ONE pending item addressed to that sender in that thread, QUESTIONs only), the outcome is confirmed on the intake response and, for the socket class, enqueued back to the originating thread.
     tests:
       - tests/security/test_channel_notifications.py::test_hitl_approval_reaches_the_bound_surface
       - tests/security/test_channel_notifications.py::test_no_pref_no_binding_or_disabled_means_no_delivery
@@ -222,6 +231,11 @@ invariants:
       - tests/security/test_channel_notifications.py::test_direct_enqueue_is_user_scoped_and_event_matched
       - tests/security/test_channel_notifications.py::test_team_pref_reaches_exactly_the_bound_members
       - tests/security/test_channel_notifications.py::test_team_pref_disabled_or_memberless_delivers_nothing
+      - tests/security/test_channel_hitl_replies.py::test_channel_approve_clears_a_pending_approval_as_the_bound_approver
+      - tests/security/test_channel_hitl_replies.py::test_channel_answer_feeds_a_question_back_and_resumes
+      - tests/security/test_channel_hitl_replies.py::test_implicit_reply_answers_the_sole_pending_question_in_thread
+      - tests/security/test_channel_hitl_replies.py::test_implicit_reply_with_two_pending_is_normal_intake
+      - tests/security/test_channel_hitl_replies.py::test_channel_reply_confirms_back_on_the_originating_thread
   P9:
     description: Backend unavailability degrades gracefully, never crashes (graceful degradation).
     tests:
@@ -750,7 +764,7 @@ invariants:
     tests:
       - tests/security/test_budget_and_pii.py::test_pii_redaction
   SEC-14:
-    description: High-consequence / blocking verbs pause for human approval and cannot be bypassed - an approval is single-use and bound to the exact tenant, verb, canonical params, authenticated/delegated initiator, and mutable resource snapshot; only an explicitly authorised assigned human independent of the direct/delegated requester may answer it.
+    description: High-consequence / blocking verbs pause for human approval and cannot be bypassed - an approval is single-use and bound to the exact tenant, verb, canonical params, authenticated/delegated initiator, and mutable resource snapshot; only an explicitly authorised assigned human independent of the direct/delegated requester may answer it. Channel-native /approve|/deny replies at intake run through the SAME respond authorization (fail-closed for a non-approver, a self-approver, or an unbound sender, and a replayed command can never re-answer), and a channel /answer can feed a QUESTION back but can never be laundered into clearing a gated verb - the approval/question separation holds on every surface.
     tests:
       - tests/security/test_hitl_gate.py::test_blocking_verb_pauses_for_approval
       - tests/security/test_hitl_gate.py::test_resumes_after_approval
@@ -763,6 +777,10 @@ invariants:
       - tests/security/test_hitl_gate.py::test_approval_is_bound_to_params_and_initiating_principal
       - tests/security/test_hitl_gate.py::test_mutable_adapter_approval_context_is_recomputed
       - tests/security/test_hitl_gate.py::test_approval_fingerprint_canonicalises_json_order_and_unicode
+      - tests/security/test_channel_hitl_replies.py::test_channel_approve_clears_a_pending_approval_as_the_bound_approver
+      - tests/security/test_channel_hitl_replies.py::test_channel_approve_and_deny_use_the_api_eligibility
+      - tests/security/test_channel_hitl_replies.py::test_channel_answer_feeds_a_question_back_and_resumes
+      - tests/security/test_channel_hitl_replies.py::test_unbound_senders_command_is_rejected_like_an_unknown_sender
       - tests/store/test_store_parity.py::test_hitl_request_binding_round_trips
   SEC-16:
     description: Every action (allowed or denied) is audited, hash-chained, append-only.
@@ -833,11 +851,12 @@ invariants:
     tests:
       - tests/security/test_round_four.py::test_no_unauthenticated_access_to_tokens
   SEC-39:
-    description: An authored verb with a destructive/outbound name defaults to high-consequence so the HITL gate engages.
+    description: An authored verb with a destructive/outbound name defaults to high-consequence so the HITL gate engages. channel.send's optional comment param is approver-only commentary - it is shown faithful and unredacted in the approval display context, but stripped at execution so the deliver seam (outbox payload / webhook body) only ever carries text and target and a comment can never reach the channel sender.
     tests:
       - tests/security/test_round_four.py::test_authored_verbs_safe_by_default
       - tests/security/test_channel_send.py::test_channel_send_is_high_consequence
       - tests/security/test_channel_send.py::test_channel_send_delivers_via_seam_and_is_tenant_scoped
+      - tests/security/test_channel_send.py::test_comment_is_approver_only_and_never_rides_the_outbox
 
   # --- Round Five: kernel-governed structured memory (SEC-40..45) ---
   SEC-40:

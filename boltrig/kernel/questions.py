@@ -15,6 +15,13 @@ check apply to it uniformly. Its consequence is LOW: the pause IS its effect, so
 it is never routed through the HIGH-consequence approval gate (an approval clears
 a gated action; a question only feeds an answer back - the two must never be
 interchangeable, H1 / SEC-14).
+
+SEC-181 secure input: with ``secure: true`` + a ``purpose`` label the QUESTION is
+marked secure (a flag consumers can render a secure-input affordance from); the
+ANSWER never enters the run - the answer route seals it through the credential
+seam as a run- and purpose-scoped reference and records the enveloped REFERENCE
+as the decision, and verb params carrying that reference are resolved to the
+material inside the kernel at the dispatch credential stage only.
 """
 
 from __future__ import annotations
@@ -32,6 +39,12 @@ QUESTIONS_NOUN = "chat"
 QUESTIONS_VERB = "chat.ask_user"
 
 # Bounded, value-free schema: a prompt the agent authors plus optional choices.
+# ``secure`` + ``purpose`` ask for a value the AGENT never sees (SEC-181): the
+# prompt stays ordinary text, but the ANSWER is sealed inside the kernel as a
+# run- and purpose-scoped credential reference and only the reference resumes
+# the run (see kernel/credentials.py). ``purpose`` is a short bounded label
+# (no ``:``/``/`` so it is safe inside the reference shape); it is required with
+# ``secure`` and meaningless without it, so the pairing fails schema validation.
 QUESTIONS_INPUT_SCHEMA: dict = {
     "type": "object",
     "properties": {
@@ -41,9 +54,26 @@ QUESTIONS_INPUT_SCHEMA: dict = {
             "items": {"type": "string", "maxLength": 200},
             "maxItems": 12,
         },
+        "secure": {"type": "boolean"},
+        "purpose": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+        },
     },
     "required": ["prompt"],
     "additionalProperties": False,
+    "allOf": [
+        {  # secure requires a purpose label
+            "if": {"properties": {"secure": {"const": True}}, "required": ["secure"]},
+            "then": {"required": ["purpose"]},
+        },
+        {  # a purpose is only meaningful on a secure question
+            "if": {"required": ["purpose"]},
+            "then": {"properties": {"secure": {"const": True}}, "required": ["secure"]},
+        },
+    ],
 }
 
 # The verb pauses (raises PendingHuman) rather than returning a value, so its

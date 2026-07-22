@@ -14,6 +14,12 @@ directly, not the sidecar). Delivery is a per-transport seam:
   - a webhook-class channel with no outbound_url has no consumer at all, so the
     send stays honestly queued-but-unwired (no direct path and no outbox
     listener serves that class today).
+
+The optional ``comment`` param is APPROVER-ONLY commentary (SEC-39): it rides
+the params into the approval display context and the audit detail, but is
+stripped at execution - the deliver seam (and therefore the outbox payload and
+the webhook POST body) only ever carries ``text`` and ``target``, so an
+approver's note can never reach the channel sender.
 """
 
 from __future__ import annotations
@@ -83,6 +89,9 @@ class ChannelSendAdapter:
                         "channel_id": {"type": "string"},
                         "text": {"type": "string"},
                         "target": {"type": "string"},
+                        # approver-only commentary: shown in the approval display
+                        # context, never delivered (stripped before the seam)
+                        "comment": {"type": "string"},
                     },
                     "required": ["channel_id", "text"],
                 },
@@ -103,6 +112,9 @@ class ChannelSendAdapter:
         if ch is None or not ch.enabled:
             return Result.failure(AdapterError(ErrorClass.NOT_FOUND, "unknown or disabled channel"))
         try:
+            # The approver-only ``comment`` is deliberately NOT passed on: the
+            # deliver seam carries exactly (text, target), so a comment can
+            # never ride the outbox row or the webhook body to the sender.
             delivery = await self._deliver(ch, params["text"], params.get("target"))
         except Exception as exc:  # egress-blocked or a delivery failure
             return Result.failure(AdapterError(ErrorClass.INVALID, f"delivery failed: {exc}"))

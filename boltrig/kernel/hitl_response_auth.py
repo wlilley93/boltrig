@@ -23,7 +23,11 @@ def _requester_ids(request: HITLRequest) -> set[str]:
     }
 
 
-async def _related_work_item(kernel: Any, request: HITLRequest) -> Any:
+async def related_work_item(kernel: Any, request: HITLRequest) -> Any:
+    """The work item a HITL request is linked to (by id, else by run id).
+
+    Shared by the scope check below and by channel intake's thread matching -
+    one definition of 'the item this request concerns'."""
     if request.work_item_id:
         item = await kernel.store.get_work_item(
             request.tenant_id, request.work_item_id
@@ -70,7 +74,7 @@ async def authorize_hitl_scope(
     kernel: Any, principal: Any, request: HITLRequest
 ) -> Any:
     """Return the linked item when the request is in scope, else hide its existence."""
-    item = await _related_work_item(kernel, request)
+    item = await related_work_item(kernel, request)
     if not await _scope_matches(kernel, principal, request, item):
         raise HTTPException(status_code=404, detail="unknown request")
     return item

@@ -586,6 +586,16 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
     async def set_credential_ref(self, tenant_id: str, cred_id: str, ref: dict) -> None:
         self._creds[(tenant_id, cred_id)] = seal_ref(ref)
 
+    async def delete_credential_refs_for_run(self, tenant_id: str, run_id: str) -> int:
+        prefix = f"run:{run_id}:"
+        doomed = [
+            key for key in self._creds
+            if key[0] == tenant_id and key[1].startswith(prefix)
+        ]
+        for key in doomed:
+            del self._creds[key]
+        return len(doomed)
+
     # --- conversations ---
     async def create_conversation(self, conv):
         # Insert-if-absent (mirrors the PG ON CONFLICT (tenant_id, id) DO NOTHING).

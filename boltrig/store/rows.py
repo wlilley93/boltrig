@@ -127,6 +127,7 @@ def _hitl_req(r):
         options=list(r["options"] or []), assignee=r["assignee"], timeout_at=r["timeout_at"],
         verb=r["verb"], requested_by=r["requested_by"],
         requested_on_behalf_of=r["requested_on_behalf_of"], request_fingerprint=r["request_fingerprint"], workspace_id=r["workspace_id"], department_scope=None if r["department_scope"] is None else list(r["department_scope"]),
+        secure=bool(r["secure"]), secure_purpose=r["secure_purpose"],
     )
 
 def _hitl_resp(r):
