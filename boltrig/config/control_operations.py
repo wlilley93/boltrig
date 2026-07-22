@@ -119,7 +119,12 @@ async def set_binding_record(
 
 
 async def record_inert_adapter(
-    store: Any, tenant_id: str, adapter: Any, *, created_by: str | None
+    store: Any,
+    tenant_id: str,
+    adapter: Any,
+    *,
+    created_by: str | None,
+    spec_ref: str | None = None,
 ) -> None:
     created = await store.create_adapter_if_absent(
         AdapterRecord(
@@ -129,6 +134,10 @@ async def record_inert_adapter(
             runtime=getattr(adapter, "runtime", "script"),
             source=getattr(adapter, "source", "generated"),
             module_ref=type(adapter).__module__,
+            # spec_ref is what boot rehydration rebuilds the instance FROM (for
+            # an MCP consumer, its url); without it the row is a phantom after
+            # the first restart.
+            spec_ref=spec_ref,
             health=AdapterHealth.UNKNOWN,
             created_by=created_by,
             activated=False,

@@ -66,7 +66,11 @@ async def register_mcp_consumer(
 ) -> Any:
     await ensure_adapter_id_available(store, loader, tenant_id, params["id"])
     consumer = build_mcp_consumer(params)
-    await record_inert_adapter(store, tenant_id, consumer, created_by=actor)
+    # The url is the row's spec_ref: boot rehydration rebuilds the consumer
+    # from it, so a registration without one can never be rehydrated.
+    await record_inert_adapter(
+        store, tenant_id, consumer, created_by=actor, spec_ref=params.get("url")
+    )
     if credentials is not None:
         await bind_mcp_credential(store, credentials, tenant_id, consumer.id, params)
     if loader.peek(tenant_id, consumer.id) is not None:

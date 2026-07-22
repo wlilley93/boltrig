@@ -192,6 +192,62 @@ async def _register_consumed_mcp(kernel: Kernel, tenant_id: str, mcp_cfg) -> Non
         log.info("external MCP server '%s' registered (inert, pending review)", entry["id"])
 
 
+async def _rehydrate_store_adapters(kernel: Kernel, tenant_id: str) -> None:
+    """Rebuild live instances for adapter rows the control plane persisted.
+
+    The loader is in-memory only, so without this step a control-plane
+    registration (``control.mcp_server.register`` / ``control.adapter.generate``)
+    is a phantom row after every restart: present in the store, impossible to
+    activate, execute, deactivate, or delete. Only shapes the boot can rebuild
+    HONESTLY are rehydrated:
+
+    - ``boltrig.adapters.mcp_consumer`` rows rebuild as
+      ``McpConsumerAdapter(id, url=spec_ref)`` - the url registration persisted
+      in ``spec_ref``. The persisted review-gate flag stands (``activated``),
+      and the default credential-id convention is re-bound from its persisted
+      ref row so activation/execution resolve the credential again (an explicit
+      ``credential_id`` binding is not recoverable; activation fails closed and
+      the fix is re-registration). A row with no ``spec_ref`` lost its server
+      address (registered before the url was persisted): skipped loudly -
+      delete and re-register it.
+    - anything else is skipped with a warning rather than reconstructed
+      halfway: generated adapters keep no rehydration source (their OpenAPI
+      document was inline at generation, and ``spec_ref`` is a reference
+      column, not a document store).
+
+    Rows already live (manifest ``mcp.consume`` registers them first) win.
+    """
+    from boltrig.adapters.mcp_consumer import McpConsumerAdapter
+
+    for record in await kernel.store.list_adapters(tenant_id):
+        if kernel.loader.peek(tenant_id, record.id) is not None:
+            continue  # the manifest registered this id this boot already
+        if record.module_ref != "boltrig.adapters.mcp_consumer":
+            log.warning(
+                "adapter '%s' (module_ref %s) has no honest boot reconstruction; "
+                "leaving it a store-only row",
+                record.id,
+                record.module_ref,
+            )
+            continue
+        if not record.spec_ref:
+            log.warning(
+                "mcp adapter '%s' has no persisted url (spec_ref) and cannot be "
+                "rehydrated; delete and re-register it",
+                record.id,
+            )
+            continue
+        consumer = McpConsumerAdapter(record.id, url=record.spec_ref)
+        # The persisted review gate stands (SEC-22): a row activated before the
+        # restart stays dispatchable; an inert row stays inert.
+        consumer.activated = bool(record.activated)
+        kernel.loader.register(tenant_id, consumer)
+        cred_id = f"{record.id}-mcp-token"  # bind_mcp_credential's default id
+        if await kernel.store.get_credential_ref(tenant_id, cred_id) is not None:
+            kernel.credentials.bind_adapter_credential(tenant_id, record.id, cred_id)
+        log.info("rehydrated mcp adapter '%s' from its store row", record.id)
+
+
 async def _seed_from_manifest(kernel: Kernel, manifest) -> None:
     await apply_manifest(kernel, manifest)
     await _register_memory(kernel, manifest.tenant_id, manifest.section("memory"))
@@ -207,6 +263,7 @@ async def _seed_from_manifest(kernel: Kernel, manifest) -> None:
         # governed hands on the desktop host (DH-1), only when the add-on is turned on
         await _register_desktop_hands(kernel, manifest.tenant_id)
     await _register_consumed_mcp(kernel, manifest.tenant_id, manifest.section("mcp"))
+    await _rehydrate_store_adapters(kernel, manifest.tenant_id)
     net = manifest.network
     await _register_web_fetch(kernel, manifest.tenant_id, {
         "air_gapped": net.air_gapped, "https_proxy": net.https_proxy,

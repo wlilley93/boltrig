@@ -54,8 +54,13 @@ _TOOLS = [
 
 
 class _Resp:
+    """The httpx response shape the consumer now reads: a status (typed error
+    mapping), headers (session id / content type), and the JSON payload."""
+
     def __init__(self, payload: dict) -> None:
         self._payload = payload
+        self.status_code = 200
+        self.headers: dict = {}
 
     def json(self) -> dict:
         return self._payload
@@ -63,7 +68,11 @@ class _Resp:
 
 class _FakeMcpServer:
     """Stands in for the external MCP server at the pinned-HTTP seam: records the
-    bearer each POST sent and answers the MCP methods a consumer issues."""
+    bearer each POST sent and answers the MCP methods a consumer issues.
+
+    It speaks the PLAIN convention (plain JSON 200 answers, no session), so the
+    consumer's lazy handshake never fires here; the strict Streamable-HTTP door
+    is exercised in tests/adapters/test_mcp_consumer_adapter.py."""
 
     def __init__(self, tools: list[dict]) -> None:
         self.tools = tools

@@ -30,6 +30,7 @@ from .control_operations import (
     upsert_workflow_record,
 )
 from .control_mcp import register_mcp_consumer
+from .control_lifecycle import execute_adapter_lifecycle
 from .control_safety import ControlConflict
 from .control_specs import control_specs
 from .control_compat import execute_compat_operation
@@ -264,6 +265,10 @@ class ControlPlaneAdapter:
                 reviewer=reviewer, credentials=self._credentials,
             )
             return Result.success({"id": params["adapter_id"], "activated": True, "verbs": verbs})
+        if verb in {"control.adapter.deactivate", "control.adapter.delete"}:
+            return await execute_adapter_lifecycle(
+                self._store, self._loader, self._credentials, verb, params, context
+            )
         if verb != "control.mcp_server.register":
             return None
         if self._loader is None:

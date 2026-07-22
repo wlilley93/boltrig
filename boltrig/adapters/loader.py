@@ -36,6 +36,11 @@ class AdapterLoader:
         self._live[(tenant_id, adapter.id)] = adapter
         self._health[(tenant_id, adapter.id)] = "unknown"
 
+    def unload(self, tenant_id: str, adapter_id: str) -> None:
+        """Forget a live instance (governed adapter delete). No-op if absent."""
+        self._live.pop((tenant_id, adapter_id), None)
+        self._health.pop((tenant_id, adapter_id), None)
+
     def load_module(self, tenant_id: str, module_ref: str) -> Adapter | None:
         """Load an adapter from ``module:factory``. Never raises - returns None
         and records ``down`` on failure (US-ADP-06)."""

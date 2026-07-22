@@ -8,6 +8,12 @@ client can re-attach (US-CONV-07).
 
 This lives in the fleet layer (it orchestrates the fleet); the kernel and models
 import nothing from it.
+
+Mid-run steers (US-CHAT-15): a message posted to a conversation whose turn is in
+flight never starts a parallel turn - it is persisted as a user message (the
+append-only message log is the durable queue), acknowledged with a ``queued``
+frame, and auto-started as the NEXT turn on the same stream once the in-flight
+turn completes. A cancelled turn never auto-consumes the queue (cancel wins).
 """
 
 from __future__ import annotations
@@ -223,6 +229,44 @@ class ChatService:
         self._cfg = chat_config if chat_config is not None else ChatConfig()
         # Optional model summariser for compaction; None => deterministic only.
         self._summariser = summariser
+        # Mid-run steer queue (US-CHAT-15): conversation_id -> run_id of the turn
+        # currently in flight (in-process: the executor runs in this process), plus
+        # one lock per conversation so the active-check / registration / drain
+        # hand-off between concurrent turns is race-free.
+        self._active: dict[str, str] = {}
+        self._locks: dict[str, asyncio.Lock] = {}
+
+    def _lock_for(self, conversation_id: str) -> asyncio.Lock:
+        lock = self._locks.get(conversation_id)
+        if lock is None:
+            lock = self._locks[conversation_id] = asyncio.Lock()
+        return lock
+
+    async def _next_pending_steer(
+        self, tenant_id: str, conversation_id: str
+    ) -> ConversationMessage | None:
+        """The OLDEST queued steer still waiting for its turn, else None.
+
+        The durable steer queue IS the append-only message log (no new store
+        structure). Derivation: chat turns are serialised per conversation by the
+        in-flight mark, and every turn appends exactly ONE assistant reply
+        (chat.py is the only message writer), so live user/assistant messages pair
+        off in order - the first live user message beyond the live assistant count
+        has no reply yet. The candidate must also carry no ``run_id`` of its own:
+        a turn's direct input is tagged with its run at insert, so only a message
+        that QUEUED as a steer is ever consumed here - an explicit input is never
+        re-run, even when a cancelled steer left the counts unbalanced (a stranded
+        steer rides the next turn's continuity; cancel wins, US-CHAT-15)."""
+        messages = await self._store.list_messages(tenant_id, conversation_id)
+        live = [m for m in messages if m.superseded_by is None]
+        users = [m for m in live if m.role == MessageRole.USER]
+        answered = sum(1 for m in live if m.role == MessageRole.ASSISTANT)
+        if len(users) <= answered:
+            return None
+        candidate = users[answered]
+        if candidate.run_id is not None:
+            return None
+        return candidate
 
     async def list_conversations(self, tenant_id: str, user_id: str) -> list[Conversation]:
         return await self._store.list_conversations(tenant_id, user_id)
@@ -295,45 +339,116 @@ class ChatService:
             await self._store.create_conversation(conv)
 
         run_id = uuid.uuid4().hex
-        await self._store.add_message(
-            ConversationMessage(
-                id=uuid.uuid4().hex, conversation_id=conv.id, tenant_id=tenant_id,
-                role=MessageRole.USER, content=message, attachments=records,
+        # Mid-run steer (US-CHAT-15): when this conversation already has a turn in
+        # flight, do NOT start a parallel turn. The message is persisted as an
+        # ordinary user message - the message log IS the durable queue - and the
+        # in-flight turn consumes it at its completion boundary (semantics (b):
+        # the queued message auto-starts the next turn; the executor is one spawn
+        # per turn with no cooperative mid-turn boundary the fleet could inject at,
+        # so mid-turn prompt-append is not honestly available here). The check and
+        # the in-flight registration share the per-conversation lock, so a steer
+        # can never slip between a turn finding the queue empty and clearing its
+        # in-flight mark.
+        async with self._lock_for(conv.id):
+            active_run_id = self._active.get(conv.id)
+            if active_run_id is None:
+                self._active[conv.id] = run_id
+                steer_message_id = None
+            else:
+                steer_message_id = uuid.uuid4().hex
+                await self._store.add_message(
+                    ConversationMessage(
+                        id=steer_message_id, conversation_id=conv.id,
+                        tenant_id=tenant_id, role=MessageRole.USER,
+                        content=message, attachments=records,
+                    )
+                )
+        if active_run_id is not None:
+            # Announce on the live run's stream (additive typed event) and settle:
+            # the caller gets a single ``queued`` frame, which the route maps to a
+            # 202 ack - no parallel turn, no second stream.
+            self._relay.publish(
+                tenant_id, active_run_id,
+                {"type": "steer_queued", "run_id": active_run_id,
+                 "conversation_id": conv.id, "message_id": steer_message_id},
             )
-        )
-        yield {"type": "message_start", "run_id": run_id, "conversation_id": conv.id}
+            yield {
+                "type": "queued", "run_id": active_run_id,
+                "conversation_id": conv.id, "message_id": steer_message_id,
+            }
+            return
 
-        collected: list[dict[str, Any]] = []
-        async for event in self._drive(
-            tenant_id, user_id, conv.id, run_id, message, role, grants, records,
-            workspace_id=workspace_id, scope=scope,
-        ):
-            # Heartbeats are transport keepalives (US-CHAT-11), not turn content:
-            # stream them but never persist them on the turn's event record.
-            if event.get("type") != "heartbeat":
-                collected.append(event)
-            yield event
-
-        yield {"type": "message_end", "run_id": run_id}
-
-        text = "".join(e.get("delta", "") for e in collected if e.get("type") == "text_delta")
-        hitl_id = next(
-            (e.get("hitl_request_id") for e in collected if e.get("type") == "hitl"), None
-        )
-        await self._store.add_message(
-            ConversationMessage(
-                id=uuid.uuid4().hex, conversation_id=conv.id, tenant_id=tenant_id,
-                role=MessageRole.ASSISTANT, content=text, run_id=run_id,
-                hitl_request_id=hitl_id, events=collected,
+        try:
+            # The turn's direct input is tagged with its run id at insert (the
+            # field's existing "run this turn used" semantics): that is what
+            # distinguishes it from a queued steer (run_id None) at drain time.
+            await self._store.add_message(
+                ConversationMessage(
+                    id=uuid.uuid4().hex, conversation_id=conv.id, tenant_id=tenant_id,
+                    role=MessageRole.USER, content=message, attachments=records,
+                    run_id=run_id,
+                )
             )
-        )
-        conv.updated_at = utcnow()
-        await self._store.update_conversation(conv)
-        # Derive an append-only compaction summary AFTER the turn is fully
-        # persisted, so the NEXT turn's continuity read can compose the cheaper
-        # [summary + tail] form. Never mutates a message (P-append-only); a no-op
-        # until the thread crosses the threshold.
-        await self._maybe_compact(tenant_id, conv.id)
+            turn_message, turn_records = message, records
+            consumed_steer_id: str | None = None
+            # Sequential turns on ONE stream: the caller's turn first, then each
+            # queued steer as its own run, until the queue drains. The in-flight
+            # mark stays held across the whole drain so a late steer always queues.
+            while True:
+                if consumed_steer_id is not None:
+                    yield {
+                        "type": "steer_consumed", "run_id": run_id,
+                        "conversation_id": conv.id, "message_id": consumed_steer_id,
+                    }
+                yield {"type": "message_start", "run_id": run_id, "conversation_id": conv.id}
+
+                collected: list[dict[str, Any]] = []
+                async for event in self._drive(
+                    tenant_id, user_id, conv.id, run_id, turn_message, role, grants,
+                    turn_records, workspace_id=workspace_id, scope=scope,
+                ):
+                    # Heartbeats are transport keepalives (US-CHAT-11), not turn content:
+                    # stream them but never persist them on the turn's event record.
+                    if event.get("type") != "heartbeat":
+                        collected.append(event)
+                    yield event
+
+                yield {"type": "message_end", "run_id": run_id}
+
+                text = "".join(e.get("delta", "") for e in collected if e.get("type") == "text_delta")
+                hitl_id = next(
+                    (e.get("hitl_request_id") for e in collected if e.get("type") == "hitl"), None
+                )
+                await self._store.add_message(
+                    ConversationMessage(
+                        id=uuid.uuid4().hex, conversation_id=conv.id, tenant_id=tenant_id,
+                        role=MessageRole.ASSISTANT, content=text, run_id=run_id,
+                        hitl_request_id=hitl_id, events=collected,
+                    )
+                )
+                conv.updated_at = utcnow()
+                await self._store.update_conversation(conv)
+                # Derive an append-only compaction summary AFTER the turn is fully
+                # persisted, so the NEXT turn's continuity read can compose the cheaper
+                # [summary + tail] form. Never mutates a message (P-append-only); a no-op
+                # until the thread crosses the threshold.
+                await self._maybe_compact(tenant_id, conv.id)
+                # Cancel wins (US-CHAT-15, [2026] VJS-COUNTY 6): a cancelled turn does
+                # NOT auto-consume the queue. The queued messages stay durable and join
+                # the next explicit turn's continuity instead of auto-starting a turn.
+                if any(e.get("type") == "cancelled" for e in collected):
+                    return
+                async with self._lock_for(conv.id):
+                    steer = await self._next_pending_steer(tenant_id, conv.id)
+                    if steer is None:
+                        self._active.pop(conv.id, None)
+                        return
+                    run_id = uuid.uuid4().hex
+                    self._active[conv.id] = run_id
+                turn_message, turn_records = steer.content or "", steer.attachments
+                consumed_steer_id = steer.id
+        finally:
+            self._active.pop(conv.id, None)
 
     async def _summarise(self, older: list[ConversationMessage]) -> str:
         """Derive summary text for the older turns. Try the optional model

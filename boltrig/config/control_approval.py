@@ -104,8 +104,50 @@ async def _workflow_context(
     return {"workflow_sha256": workflow_snapshot_digest(workflow)}
 
 
+_LIFECYCLE_ACTIONS = frozenset({"control.adapter.deactivate", "control.adapter.delete"})
+
+
+async def _store_adapter_view(
+    store: Any, params: dict[str, Any], context: InvocationContext
+) -> dict[str, Any] | None:
+    """Approval fingerprint for an adapter row the loader has no instance of.
+
+    Only the lifecycle verbs fall back here: after a restart that did not
+    rehydrate the row, suspend/delete must remain governable (activation still
+    requires the live instance - it connects and describes). The verb list
+    comes from the store's owned binding/verb rows (empty for an inert row),
+    sorted for a stable fingerprint.
+    """
+    record = await store.get_adapter(context.tenant_id, params["adapter_id"])
+    if record is None:
+        return None
+    verbs = []
+    for verb in await store.list_verbs(context.tenant_id):
+        binding = await store.get_binding(context.tenant_id, verb.id)
+        if binding is not None and binding.target_ref == record.id:
+            verbs.append(
+                {
+                    "id": verb.id,
+                    "input": verb.input_schema,
+                    "output": verb.output_schema,
+                    "consequence": verb.consequence.value,
+                }
+            )
+    verbs.sort(key=lambda item: item["id"])
+    return {
+        "adapter": {
+            "id": record.id,
+            "version": record.version,
+            "runtime": record.runtime,
+            "source": record.source,
+            "activated": bool(record.activated),
+            "verbs": verbs,
+        }
+    }
+
+
 async def _adapter_context(
-    store: Any, loader: Any, params: dict[str, Any], context: InvocationContext
+    store: Any, loader: Any, verb: str, params: dict[str, Any], context: InvocationContext
 ) -> dict[str, Any]:
     if loader is None:
         raise AdapterFailure(
@@ -115,6 +157,10 @@ async def _adapter_context(
         )
     adapter = await loader.get(context.tenant_id, params["adapter_id"])
     if adapter is None:
+        if verb in _LIFECYCLE_ACTIONS:
+            view = await _store_adapter_view(store, params, context)
+            if view is not None:
+                return view
         raise AdapterFailure(
             "adapter not found", status_code=404, reason="control_resource_not_found"
         )
@@ -160,8 +206,12 @@ async def control_approval_context(
         ) from exc
     if verb in _WORKFLOW_ACTIONS:
         return await _workflow_context(store, params, context)
-    if verb == "control.adapter.activate":
-        return await _adapter_context(store, loader, params, context)
+    if verb in {
+        "control.adapter.activate",
+        "control.adapter.deactivate",
+        "control.adapter.delete",
+    }:
+        return await _adapter_context(store, loader, verb, params, context)
     if verb.startswith("control.budget."):
         return await _budget_context(store, params, context)
     return None

@@ -210,6 +210,15 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
     async def upsert_binding(self, binding):
         self._bindings[(binding.tenant_id, binding.verb_id)] = binding
 
+    async def delete_noun(self, tenant_id, noun_id):
+        self._nouns.pop((tenant_id, noun_id), None)
+
+    async def delete_verb(self, tenant_id, verb_id):
+        self._verbs.pop((tenant_id, verb_id), None)
+
+    async def delete_binding(self, tenant_id, verb_id):
+        self._bindings.pop((tenant_id, verb_id), None)
+
     # --- permissions ---
     async def get_tenant_permissions(self, tenant_id):
         return self._perms.get(tenant_id, TenantPermissions(tenant_id, EMPTY_GRANTS))
@@ -227,6 +236,9 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
 
     async def list_adapters(self, tenant_id):
         return [a for (t, _), a in self._adapters.items() if t == tenant_id]
+
+    async def delete_adapter(self, tenant_id, adapter_id):
+        self._adapters.pop((tenant_id, adapter_id), None)
 
     async def upsert_skill(self, skill):
         # Versioned like Postgres (PK tenant+id+version): every version is kept.
@@ -585,6 +597,9 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
 
     async def set_credential_ref(self, tenant_id: str, cred_id: str, ref: dict) -> None:
         self._creds[(tenant_id, cred_id)] = seal_ref(ref)
+
+    async def delete_credential_ref(self, tenant_id: str, cred_id: str) -> None:
+        self._creds.pop((tenant_id, cred_id), None)
 
     async def delete_credential_refs_for_run(self, tenant_id: str, run_id: str) -> int:
         prefix = f"run:{run_id}:"

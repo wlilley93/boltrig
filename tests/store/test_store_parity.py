@@ -659,3 +659,75 @@ async def test_list_run_items_scoped_pushes_run_scope_into_the_store(store):
         T, workspace_id="ws-1", limit=2, cursor=page1[-1].id
     )
     assert [w.id for w in page2] == ["work-ws1"]
+
+
+# --- adapter lifecycle deletes (SEC-22) --------------------------------------
+@pytest.mark.store
+@pytest.mark.invariant("SEC-22")
+async def test_adapter_lifecycle_deletes_are_idempotent_and_tenant_scoped(store):
+    from boltrig.models import (
+        AdapterRecord,
+        Noun,
+        TargetType,
+        Verb,
+        VerbBinding,
+    )
+
+    for tenant in (T, "rival"):
+        await store.upsert_noun(Noun(id="ticket", tenant_id=tenant))
+        await store.upsert_verb(
+            Verb(
+                id="ticket.read",
+                tenant_id=tenant,
+                noun_id="ticket",
+                input_schema={},
+                output_schema={},
+            )
+        )
+        await store.upsert_binding(
+            VerbBinding(
+                verb_id="ticket.read",
+                tenant_id=tenant,
+                target_type=TargetType.ADAPTER,
+                target_ref="ext-mcp",
+            )
+        )
+        await store.upsert_adapter(
+            AdapterRecord(
+                id="ext-mcp",
+                tenant_id=tenant,
+                version="1",
+                runtime="mcp",
+                source="manual",
+                module_ref="m",
+            )
+        )
+        await store.set_credential_ref(
+            tenant, "ext-mcp-mcp-token", {"store": "env", "ref": "TOK", "kind": "api_key"}
+        )
+
+    # the governed delete path's store primitives remove one tenant's rows...
+    await store.delete_binding(T, "ticket.read")
+    await store.delete_verb(T, "ticket.read")
+    await store.delete_noun(T, "ticket")
+    await store.delete_adapter(T, "ext-mcp")
+    await store.delete_credential_ref(T, "ext-mcp-mcp-token")
+    assert await store.get_binding(T, "ticket.read") is None
+    assert await store.get_verb(T, "ticket.read") is None
+    assert await store.get_noun(T, "ticket") is None
+    assert await store.get_adapter(T, "ext-mcp") is None
+    assert await store.get_credential_ref(T, "ext-mcp-mcp-token") is None
+
+    # ...are idempotent no-ops on absent rows...
+    await store.delete_binding(T, "ticket.read")
+    await store.delete_verb(T, "ticket.read")
+    await store.delete_noun(T, "ticket")
+    await store.delete_adapter(T, "ext-mcp")
+    await store.delete_credential_ref(T, "ext-mcp-mcp-token")
+
+    # ...and never touch another tenant (SEC-08).
+    assert await store.get_binding("rival", "ticket.read") is not None
+    assert await store.get_verb("rival", "ticket.read") is not None
+    assert await store.get_noun("rival", "ticket") is not None
+    assert await store.get_adapter("rival", "ext-mcp") is not None
+    assert (await store.get_credential_ref("rival", "ext-mcp-mcp-token")) is not None

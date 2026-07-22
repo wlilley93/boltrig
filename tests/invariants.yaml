@@ -429,11 +429,22 @@ invariants:
     tests:
       - tests/integration/test_generated_adapter.py::test_generator_derives_verbs_from_openapi
   SEC-22:
-    description: A generated / consumed adapter is inert until a human review gate activates it.
+    description: A generated / consumed adapter is inert until a human review gate activates it, and its lifecycle stays governed after activation - control.adapter.deactivate suspends a live adapter by unpublishing its owned verbs (dispatch refuses exactly as for a never-registered verb, and the review gate must re-run to reactivate), and control.adapter.delete removes a non-live adapter's rows (adapter, owned verbs/bindings, orphaned nouns, an unshared credential ref) while refusing a live one fail-closed. Registration persists what boot needs to rebuild the instance (an MCP consumer's url in the row's spec_ref), boot rehydrates control-plane-registered consumers from their rows (skipping loudly what it cannot reconstruct honestly), and the lifecycle verbs govern even a non-rehydrated store-only row via the approval-context store fallback.
     tests:
       - tests/integration/test_generated_adapter.py::test_generated_adapter_inert_until_reviewed
       - tests/integration/test_mcp_consumer.py::test_consumed_server_inert_until_reviewed
       - tests/security/test_mcp_consumer_activation.py::test_activation_discovers_and_publishes_the_servers_tools
+      - tests/security/test_adapter_lifecycle.py::test_deactivate_suspends_execution_like_a_never_registered_verb
+      - tests/security/test_adapter_lifecycle.py::test_deactivate_is_a_clean_noop_on_an_inert_adapter
+      - tests/security/test_adapter_lifecycle.py::test_an_unknown_adapter_is_a_governed_not_found
+      - tests/security/test_adapter_lifecycle.py::test_delete_refuses_a_live_adapter
+      - tests/security/test_adapter_lifecycle.py::test_delete_reverses_registration_exactly
+      - tests/security/test_adapter_lifecycle.py::test_delete_refuses_the_control_adapter_itself
+      - tests/security/test_adapter_lifecycle.py::test_registration_persists_the_url_for_boot_rehydration
+      - tests/security/test_adapter_lifecycle.py::test_boot_rehydrates_a_control_plane_registered_consumer
+      - tests/security/test_adapter_lifecycle.py::test_boot_skips_rows_it_cannot_reconstruct_loudly
+      - tests/security/test_adapter_lifecycle.py::test_lifecycle_verbs_govern_a_store_only_phantom_row
+      - tests/store/test_store_parity.py::test_adapter_lifecycle_deletes_are_idempotent_and_tenant_scoped
   FR-MCP-03:
     description: An external MCP server is consumed as an adapter - its tools register as verbs.
     tests:
@@ -1266,6 +1277,14 @@ invariants:
     description: Streaming chat runs do not duplicate the final reply - a runtime that already produced the answer as text_delta events does not receive an extra summary text_delta at turn end, so the UI never shows repeated text.
     tests:
       - tests/security/test_chat_streaming_richness.py::test_streaming_runtime_does_not_duplicate_summary
+  US-CHAT-15:
+    description: A mid-run user message ("steer") queues durably instead of starting a parallel turn - a POST to an in-flight conversation persists the message as an ordinary user row (the append-only message log IS the queue), acks 202/queued with no second executor run and nothing persisted for a non-owner (403), the live stream emits typed steer_queued/steer_consumed events, the in-flight turn auto-starts the oldest pending steer as the NEXT turn on the same stream with the untrusted envelope intact (M1/SEC-72), and a cancel never auto-consumes the queue (the steer stays durable for the next explicit turn).
+    tests:
+      - tests/integration/test_chat.py::test_steer_queues_during_in_flight_turn_and_is_consumed_at_boundary
+      - tests/integration/test_chat.py::test_consumed_steer_enters_the_prompt_inside_the_untrusted_envelope
+      - tests/integration/test_chat.py::test_second_user_cannot_steer_an_in_flight_conversation
+      - tests/integration/test_chat.py::test_cancel_wins_over_the_queue
+      - tests/integration/test_chat.py::test_http_steer_returns_202_queued_and_stream_carries_both_turns
   SEC-88:
     description: Chat tool events never leak verb values (K-20 bounded observability on the user-facing surface) - a secret/untrusted value passed to a verb appears nowhere on the chat stream nor in the persisted turn events (only key names + counts do), while the full payload still exists on the run relay for the canvas + durable audit.
     tests:

@@ -11,12 +11,38 @@ the kernel per call, from the credential seam, and handed to ``execute`` as
 ``credential`` (SEC-04/05, K-20 - credentials resolve inside the kernel only). A
 call with no credential FAILS CLOSED rather than posting an empty bearer.
 
+## Transport interop (Streamable-HTTP and the plain convention)
+
+One HTTP shape serves strict MCP Streamable-HTTP servers AND plain JSON-RPC
+doors (the Opbox kernel's ``POST /mcp`` and Boltrig's own MCP face are both the
+plain kind):
+
+  * Every POST carries ``Accept: application/json, text/event-stream`` and BOTH
+    credential conventions for the same kernel-resolved token:
+    ``Authorization: Bearer <token>`` (the spec convention - the only header the
+    Opbox door reads) and ``x-boltrig-mcp-token: <token>`` (the Boltrig face's
+    convention; it also accepts the bearer form). The token is never logged.
+  * The handshake is LAZY: the plain call goes out first. Only a 400/404 - how
+    a strict server says "no live session" (no ``initialize`` yet, or an
+    expired/unknown ``Mcp-Session-Id``) - triggers the one handshake
+    (``initialize`` + a best-effort ``notifications/initialized``) and ONE
+    retry of the call. A server that answers plain calls never sees a
+    handshake; a server that refuses ``initialize`` is used session-less. A
+    session id returned as the ``Mcp-Session-Id`` response header is carried on
+    every later POST.
+  * A response framed ``text/event-stream`` (SSE) is decoded to the JSON-RPC
+    payload it carries; a plain JSON body is read as before.
+  * Any other HTTP refusal maps onto the ErrorClass taxonomy with a static
+    message - never the response body, which can echo the request (credential
+    headers included) back.
+
 httpx is imported lazily so the module is import-safe offline; a transport can be
 injected for tests (and to let Boltrig consume its own MCP face).
 """
 
 from __future__ import annotations
 
+import json
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -39,6 +65,54 @@ Rpc = Callable[[dict], Awaitable[dict]]
 # an absent or unrecognised hint defaults to "low", so nothing a consumed server
 # declares can push a verb above it.
 _CONSEQUENCE_HINTS = frozenset({Consequence.LOW.value, Consequence.HIGH.value})
+
+# The protocol revision offered in `initialize`. A server answers with the
+# revision IT speaks; the methods used here (initialize, tools/list, tools/call)
+# are stable across the dated revisions, so the answer is not negotiated further.
+_PROTOCOL_VERSION = "2025-06-18"
+
+_ACCEPT = "application/json, text/event-stream"
+_SESSION_HEADER = "mcp-session-id"
+
+# How a strict Streamable-HTTP server says "no live session": no initialize yet
+# (400) or an expired/unknown Mcp-Session-Id (404). Either earns ONE handshake +
+# retry; any other status is a real refusal, mapped by _status_error.
+_SESSION_STATUSES = frozenset({400, 404})
+
+
+def _status_error(status: int) -> ErrorClass:
+    if status in (401, 403):
+        return ErrorClass.UNAUTHORISED
+    if status == 404:
+        return ErrorClass.NOT_FOUND
+    if status == 429:
+        return ErrorClass.RATE_LIMITED
+    if status >= 500:
+        return ErrorClass.UNAVAILABLE
+    return ErrorClass.INVALID
+
+
+def _decode_sse(body: str) -> dict:
+    """The JSON-RPC response carried by an SSE-framed body: the last ``data``
+    event holding a result/error (earlier events may be notifications)."""
+    found: dict | None = None
+    for event in body.split("\n\n"):
+        data = "\n".join(
+            line.removeprefix("data:").lstrip()
+            for line in event.splitlines()
+            if line.startswith("data:")
+        )
+        if not data:
+            continue
+        try:
+            payload = json.loads(data)
+        except ValueError:
+            continue
+        if isinstance(payload, dict) and ("result" in payload or "error" in payload):
+            found = payload
+    if found is None:
+        raise ValueError("no JSON-RPC response in the mcp event stream")
+    return found
 
 
 def _consequence_hint(tool: dict) -> str:
@@ -78,6 +152,10 @@ class McpConsumerAdapter:
         self._url = url
         self._rpc = rpc
         self._specs: list[VerbSpec] = []
+        # Server-issued Streamable-HTTP session id (transport state, NOT a
+        # credential): captured from an Mcp-Session-Id response header and
+        # carried on later POSTs. None = the server speaks the plain convention.
+        self._session_id: str | None = None
 
     async def connect(self, credential: Credential | None = None) -> list[VerbSpec]:
         """Discover the external server's tools and map them to VerbSpecs.
@@ -193,10 +271,93 @@ class McpConsumerAdapter:
                 AdapterError(ErrorClass.INVALID, str(exc), retryable=False)
             ) from exc
         async with client:
-            r = await client.post(
-                self._url, json=request, headers={"x-boltrig-mcp-token": bearer}
+            return await self._post(client, request, bearer)
+
+    def _headers(self, bearer: str) -> dict:
+        # BOTH credential conventions for the same kernel-resolved token: a spec
+        # server reads Authorization (it is the only header the Opbox /mcp door
+        # reads); the Boltrig face prefers its own header and also accepts the
+        # bearer form. The token never enters a log line or an error message.
+        headers = {
+            "Accept": _ACCEPT,
+            "Authorization": f"Bearer {bearer}",
+            "x-boltrig-mcp-token": bearer,
+        }
+        if self._session_id:
+            headers["Mcp-Session-Id"] = self._session_id
+        return headers
+
+    async def _post(self, client: Any, request: dict, bearer: str, *, retried: bool = False) -> dict:
+        r = await client.post(self._url, json=request, headers=self._headers(bearer))
+        if r.status_code < 400:
+            session = r.headers.get(_SESSION_HEADER)
+            if session:
+                self._session_id = session
+            return self._decode(r)
+        if r.status_code in _SESSION_STATUSES and not retried:
+            # No live session on a strict server: run the ONE handshake, then
+            # retry the call once. The refused first attempt never executed
+            # (the refusal is the transport's, ahead of dispatch), so the retry
+            # is not a replay. Bounded by `retried`; a repeated refusal maps.
+            self._session_id = None
+            await self._handshake(client, bearer)
+            return await self._post(client, request, bearer, retried=True)
+        # Static message, never the body: a refusal page can echo the request
+        # back, credential headers included.
+        raise _McpFailure(
+            AdapterError(
+                _status_error(r.status_code),
+                f"mcp server refused the call (HTTP {r.status_code})",
+                retryable=r.status_code == 429 or r.status_code >= 500,
             )
-            return r.json()
+        )
+
+    async def _handshake(self, client: Any, bearer: str) -> None:
+        """The MCP handshake, run lazily when a server demands a session.
+
+        A strict Streamable-HTTP server answers ``initialize`` with a result
+        and usually an ``Mcp-Session-Id`` to carry from then on; a plain door
+        that refuses or cannot answer it is used session-less. Never raises (a
+        transport fault re-surfaces on the retried call, typed by ``execute``'s
+        catch-all) and never logs - the bearer is on the wire here too.
+        """
+        try:
+            r = await client.post(
+                self._url,
+                json={
+                    "jsonrpc": "2.0", "id": 0, "method": "initialize",
+                    "params": {
+                        "protocolVersion": _PROTOCOL_VERSION,
+                        "capabilities": {},
+                        "clientInfo": {"name": "boltrig-mcp-consumer", "version": self.version},
+                    },
+                },
+                headers=self._headers(bearer),
+            )
+            payload = self._decode(r)
+        except Exception:  # a refused/undecodable initialize: plain convention
+            return
+        if r.status_code >= 400 or not isinstance(payload, dict) or "result" not in payload:
+            return
+        session = r.headers.get(_SESSION_HEADER)
+        if session:
+            self._session_id = session
+        try:  # best-effort: strict servers 202 it; a plain door may refuse it
+            await client.post(
+                self._url,
+                json={"jsonrpc": "2.0", "method": "notifications/initialized"},
+                headers=self._headers(bearer),
+            )
+        except Exception:  # the initialized notification is advisory
+            pass
+
+    @staticmethod
+    def _decode(response: Any) -> dict:
+        # A strict Streamable-HTTP server may frame the JSON-RPC payload as an
+        # SSE stream instead of returning a plain JSON body.
+        if response.headers.get("content-type", "").startswith("text/event-stream"):
+            return _decode_sse(response.text)
+        return response.json()
 
 
 def build() -> Any:  # loader hook; real config comes from the mcp_servers table

@@ -470,6 +470,20 @@ def create_app(
         except StopAsyncIteration:
             first = None
 
+        # Mid-run steer (US-CHAT-15): the conversation's turn was already in flight,
+        # so the message was durably queued instead of starting a parallel turn -
+        # acknowledge with a 202, no SSE stream on this POST.
+        if first is not None and first.get("type") == "queued":
+            return JSONResponse(
+                {
+                    "status": "queued",
+                    "conversation_id": first.get("conversation_id"),
+                    "message_id": first.get("message_id"),
+                    "run_id": first.get("run_id"),
+                },
+                status_code=202,
+            )
+
         async def stream():
             if first is not None:
                 yield f"data: {json.dumps(first)}\n\n"

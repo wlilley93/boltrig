@@ -38,6 +38,12 @@ class _Recorder:
 
 
 class _Resp:
+    """The httpx response shape the consumer now reads: a status (typed error
+    mapping), headers (session id / content type), and the JSON payload."""
+
+    status_code = 200
+    headers: dict = {}
+
     def json(self) -> dict:
         return {"result": {"_boltrig": {"output": {"ok": True}}}}
 
@@ -237,3 +243,53 @@ async def test_ssrf_pinning_still_applies(monkeypatch):
     assert result.error is not None and result.error.error_class is ErrorClass.INVALID
     # the pinned client was consulted and refused: nothing was posted past it
     assert posted == ["http://169.254.169.254"]
+
+
+@pytest.mark.invariant("SEC-167")
+async def test_a_refusal_never_echoes_the_bearer_back(monkeypatch, caplog):
+    """A refused call is typed from the STATUS alone - never from the body.
+
+    The canary server demands a session (400 on the call), then REFUSES the
+    handshake itself (401 on initialize) with a body that echoes the presented
+    bearer, the way a careless refusal page would. The handshake failure is
+    tolerated, the retried call is refused again, and the surfaced AdapterError
+    must carry a static message: the bearer goes on the wire and nowhere else -
+    not into an error, not into a log (SEC-05).
+    """
+    token = "CANARY-BEARER"
+
+    class _R:
+        def __init__(self, status: int, payload: dict | None = None) -> None:
+            self.status_code = status
+            self.headers: dict = {}
+            self._payload = payload
+
+        def json(self) -> dict:
+            return self._payload or {}
+
+    class _Refusing:
+        async def post(self, url, json, headers):  # noqa: ANN001 - httpx-shaped stub
+            if json.get("method") == "initialize":  # the handshake itself fails
+                return _R(401, {"error": f"bad token {token}"})  # the canary echo
+            return _R(400)  # "no live session" - forces the handshake path
+
+        async def __aenter__(self) -> "_Refusing":
+            return self
+
+        async def __aexit__(self, *exc) -> bool:
+            return False
+
+    monkeypatch.setattr(
+        "boltrig.adapters.egress.pinned_async_client", lambda url, timeout: _Refusing()
+    )
+    consumer = McpConsumerAdapter("ext-mcp", url="http://ext-mcp.internal:9000")
+    consumer.review_and_activate("alice@acme")
+    cred = Credential(id="c1", kind="api_key", material={"token": token})
+
+    result = await consumer.execute("ticket.create", {}, cred, _ctx())
+
+    assert result.ok is False
+    assert result.error is not None  # the repeated 400 maps to a typed refusal
+    assert result.error.error_class is ErrorClass.INVALID
+    assert token not in result.error.message  # typed from the status, not the body
+    assert token not in caplog.text

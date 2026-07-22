@@ -299,6 +299,22 @@ class PostgresStore(
             b.verb_id, b.tenant_id, b.target_type.value, b.target_ref, rl,
         )
 
+    async def delete_noun(self, tenant_id, noun_id):
+        await self._pool.execute(
+            "DELETE FROM nouns WHERE tenant_id=$1 AND id=$2", tenant_id, noun_id
+        )
+
+    async def delete_verb(self, tenant_id, verb_id):
+        await self._pool.execute(
+            "DELETE FROM verbs WHERE tenant_id=$1 AND id=$2", tenant_id, verb_id
+        )
+
+    async def delete_binding(self, tenant_id, verb_id):
+        await self._pool.execute(
+            "DELETE FROM verb_bindings WHERE tenant_id=$1 AND verb_id=$2",
+            tenant_id, verb_id,
+        )
+
     # --- permissions ------------------------------------------------------
     async def get_tenant_permissions(self, tenant_id):
         row = await self._pool.fetchrow(
@@ -343,6 +359,11 @@ class PostgresStore(
     async def list_adapters(self, tenant_id):
         rows = await self._pool.fetch("SELECT * FROM adapters WHERE tenant_id=$1", tenant_id)
         return [_adapter(r) for r in rows]
+
+    async def delete_adapter(self, tenant_id, adapter_id):
+        await self._pool.execute(
+            "DELETE FROM adapters WHERE tenant_id=$1 AND id=$2", tenant_id, adapter_id
+        )
 
     async def upsert_skill(self, s: Skill):
         await self._pool.execute(
@@ -935,6 +956,11 @@ class PostgresStore(
                  expires_at=EXCLUDED.expires_at, updated_at=now()""",
             cred_id, tenant_id, ref.get("store", "env"), ref.get("ref", ""), seal_ref(ref),
             ref.get("expires_at"),
+        )
+
+    async def delete_credential_ref(self, tenant_id: str, cred_id: str) -> None:
+        await self._pool.execute(
+            "DELETE FROM credential_refs WHERE tenant_id=$1 AND id=$2", tenant_id, cred_id
         )
 
     async def delete_credential_refs_for_run(self, tenant_id: str, run_id: str) -> int:

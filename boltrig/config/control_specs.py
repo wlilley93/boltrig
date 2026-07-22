@@ -182,6 +182,18 @@ def _adapter_specs() -> list[VerbSpec]:
             "Activate a reviewed adapter and publish its verb bindings",
         ),
         _spec(
+            "control.adapter.deactivate",
+            {"adapter_id": _STRING},
+            ("adapter_id",),
+            "Suspend a live adapter and unpublish its verbs pending re-review",
+        ),
+        _spec(
+            "control.adapter.delete",
+            {"adapter_id": _STRING},
+            ("adapter_id",),
+            "Delete a non-live adapter with its registry rows and credential ref",
+        ),
+        _spec(
             "control.mcp_server.register",
             {
                 "id": _STRING,
