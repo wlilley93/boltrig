@@ -57,6 +57,19 @@ def hitl_scope_fields(context: Any) -> dict[str, Any]:
     }
 
 
+def request_timed_out(req: HITLRequest) -> bool:
+    """True when a still-PENDING request's timeout_at has passed (SEC-14).
+
+    Only a pending request can expire; an answered one is already decided (the
+    gate's ``consume_approved_by`` applies the timeout to the stale approval
+    itself)."""
+    return (
+        req.status == HITLStatus.PENDING
+        and req.timeout_at is not None
+        and req.timeout_at <= utcnow()
+    )
+
+
 def _normalise_json(value: Any) -> Any:
     """Return a deterministic JSON value for approval request binding.
 
@@ -138,10 +151,19 @@ def approval_request_fingerprint(
 
 class HITLManager:
     def __init__(
-        self, store: Store, resume_notifier: Callable[..., Any] | None = None
+        self,
+        store: Store,
+        resume_notifier: Callable[..., Any] | None = None,
+        *,
+        approval_timeout_seconds: int | None = None,
     ) -> None:
         self._store = store
         self._resume_notifier = resume_notifier
+        # The manifest's hitl.approval_timeout_seconds, threaded in at the
+        # composition root (Kernel). The approval gate stamps every request it
+        # creates with it; a manager without one (the fleet's escalation lane)
+        # creates unbounded requests, matching the pre-timeout behaviour.
+        self.approval_timeout_seconds = approval_timeout_seconds
 
     def set_resume_notifier(self, notifier: Callable[..., Any] | None) -> None:
         """Attach the answer -> resume bridge (NFR-REL-03): a callable (sync or
@@ -260,6 +282,15 @@ class HITLManager:
     async def answer(
         self, tenant_id: str, request_id: str, decision: str, respondent: str, notes: str = ""
     ) -> HITLResponse:
+        req = await self._store.get_hitl_request(tenant_id, request_id)
+        if req is not None and request_timed_out(req):
+            # Lazy timeout enforcement (SEC-14): a request past its timeout_at is
+            # expired on the spot and refuses the answer with a typed 409 - the
+            # human's decision arrives too late to authorise anything.
+            await self._store.expire_hitl(tenant_id, request_id)
+            raise HITLStateConflict(
+                f"HITL request '{request_id}' has timed out and cannot be answered"
+            )
         resp = HITLResponse(
             id=uuid.uuid4().hex,
             request_id=request_id,
@@ -316,6 +347,11 @@ class HITLManager:
         """
         req = await self._store.get_hitl_request(tenant_id, request_id)
         if req is None or req.status != HITLStatus.ANSWERED:
+            return None
+        if req.timeout_at is not None and req.timeout_at <= utcnow():
+            # A stale approval can never execute (SEC-14): the human approved in
+            # time, but the gated verb did not run before the request's deadline,
+            # so the authorisation is void and the gate must re-pend.
             return None
         if (
             req.type != HITLType.APPROVAL

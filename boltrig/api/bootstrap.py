@@ -366,7 +366,11 @@ async def build_kernel_async() -> Kernel:
     manifest_path = _find_manifest()
     if manifest_path:
         manifest = load_manifest(manifest_path)
-        kernel = Kernel(store, blocking_verbs=manifest.blocking_verbs())
+        kernel = Kernel(
+            store,
+            blocking_verbs=manifest.blocking_verbs(),
+            approval_timeout_seconds=manifest.hitl.approval_timeout_seconds,
+        )
         if _desktop_hands_enabled():
             _attach_hands_registry(kernel)
         await _seed_from_manifest(kernel, manifest)

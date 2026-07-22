@@ -31,6 +31,33 @@ log = logging.getLogger("boltrig.worker")
 _POLL_SECONDS = 5.0
 
 
+def _start_hitl_expiry_janitor(store) -> "asyncio.Task[None] | None":
+    """Start the HITL expiry janitor (SEC-14), or None when disabled.
+
+    On an interval the janitor transitions every overdue PENDING request to
+    TIMED_OUT and settles its parked work item, so a request raised by a
+    crashed run never sits actionable forever. Same worker-side loop shape as
+    the anchor janitor - store-only, engine-independent, never crashes boot
+    (P9). Off when BOLTRIG_HITL_EXPIRY_INTERVAL is <= 0; one-minute default
+    (the lazy 409 layer already fails overdue answers closed, so this is
+    hygiene). Held in a name so the task is not garbage-collected mid-flight.
+    """
+    from boltrig.kernel.hitl_expiry import (
+        hitl_expiry_interval_from_env,
+        run_hitl_expiry_forever,
+    )
+
+    interval = hitl_expiry_interval_from_env()
+    if interval <= 0:
+        log.info("hitl-expiry janitor disabled (interval<=0)")
+        return None
+    log.info("hitl-expiry janitor live (interval=%ss)", interval)
+    return asyncio.create_task(
+        run_hitl_expiry_forever(store, interval=interval),
+        name="hitl-expiry-janitor",
+    )
+
+
 async def _run() -> None:
     kernel = await build_kernel_async()  # async build (no nested asyncio.run)
     executor = register_workers(kernel)
@@ -93,16 +120,22 @@ async def _run() -> None:
         log.info("audit-anchor janitor live (interval=%ss)", anchor_interval)
     else:
         log.info("audit-anchor janitor disabled (interval<=0)")
+    # The HITL expiry janitor (SEC-14) alongside the anchor janitor.
+    expiry_task = _start_hitl_expiry_janitor(kernel.store)
     try:
         await pump.run_forever(tenant, interval=_POLL_SECONDS)
     finally:
         if anchor_task is not None:
             anchor_task.cancel()
+        if expiry_task is not None:
+            expiry_task.cancel()
         if stack_health_task is not None:
             stack_health_task.cancel()
-        # Gather both cancelled tasks so neither is destroyed while pending (an
+        # Gather the cancelled tasks so none is destroyed while pending (an
         # ungathered anchor janitor also leaves an unsealed anchor tail).
-        pending = [t for t in (anchor_task, stack_health_task) if t is not None]
+        pending = [
+            t for t in (anchor_task, expiry_task, stack_health_task) if t is not None
+        ]
         if pending:
             await asyncio.gather(*pending, return_exceptions=True)
 

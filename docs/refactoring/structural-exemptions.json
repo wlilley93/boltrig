@@ -70,12 +70,12 @@
       "expires": "2026-12-31"
     },
     "boltrig/api/bootstrap.py": {
-      "max_file_lines": 640,
+      "max_file_lines": 644,
       "max_function_lines": 110,
       "over_limit_functions": [
         {
           "name": "build_app",
-          "line": 531,
+          "line": 535,
           "lines": 110
         }
       ],
@@ -404,7 +404,7 @@
       "expires": "2026-12-31"
     },
     "boltrig/store/base.py": {
-      "max_file_lines": 634,
+      "max_file_lines": 637,
       "max_function_lines": 15,
       "over_limit_functions": [],
       "owner": "store-maintainers",
@@ -412,7 +412,7 @@
       "expires": "2026-12-31"
     },
     "boltrig/store/memory.py": {
-      "max_file_lines": 1156,
+      "max_file_lines": 1165,
       "max_function_lines": 92,
       "over_limit_functions": [
         {
@@ -426,7 +426,7 @@
       "expires": "2026-12-31"
     },
     "boltrig/store/postgres.py": {
-      "max_file_lines": 1944,
+      "max_file_lines": 1954,
       "max_function_lines": 53,
       "over_limit_functions": [],
       "owner": "store-maintainers",

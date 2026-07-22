@@ -452,6 +452,15 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
         req.status = HITLStatus.CONSUMED
         return True
 
+    async def expire_hitl(self, tenant_id, request_id):
+        # atomic PENDING -> TIMED_OUT (SEC-14). Same no-await CAS shape as
+        # consume_hitl: a concurrently answered request is never clobbered.
+        req = self._hitl.get((tenant_id, request_id))
+        if req is None or req.status != HITLStatus.PENDING:
+            return False
+        req.status = HITLStatus.TIMED_OUT
+        return True
+
     # --- audit ---
     async def audit_head(self, tenant_id):
         chain = self._audit.get(tenant_id, [])

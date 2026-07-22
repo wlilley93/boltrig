@@ -37,6 +37,7 @@ class Kernel:
         secret_store: SecretStore | None = None,
         counter: Counter | None = None,
         blocking_verbs: set[str] | None = None,
+        approval_timeout_seconds: int | None = None,
         alert: AlertFn | None = None,
     ) -> None:
         self.store = store
@@ -49,7 +50,7 @@ class Kernel:
         # security writer records fail-safe so a signal never breaks a guarded path.
         self.security = SecurityWriter(store)
         self.anchorer = AuditAnchorer(store)
-        self.hitl = HITLManager(store)
+        self.hitl = HITLManager(store, approval_timeout_seconds=approval_timeout_seconds)
         self.cost = CostAccountant(store, alert)
         self.registry = KernelRegistry(store)
         self._blocking_verbs = blocking_verbs or set()

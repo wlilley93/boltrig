@@ -790,7 +790,7 @@ invariants:
     tests:
       - tests/security/test_budget_and_pii.py::test_pii_redaction
   SEC-14:
-    description: High-consequence / blocking verbs pause for human approval and cannot be bypassed - an approval is single-use and bound to the exact tenant, verb, canonical params, authenticated/delegated initiator, and mutable resource snapshot; only an explicitly authorised assigned human independent of the direct/delegated requester may answer it; and a spent (consumed) approval FAILS LOUDLY with a typed 409 rather than silently re-pending, so a retry after a successful consume can never loop on fresh 202s. Channel-native /approve|/deny replies at intake run through the SAME respond authorization (fail-closed for a non-approver, a self-approver, or an unbound sender, and a replayed command can never re-answer), and a channel /answer can feed a QUESTION back but can never be laundered into clearing a gated verb - the approval/question separation holds on every surface.
+    description: High-consequence / blocking verbs pause for human approval and cannot be bypassed - an approval is single-use and bound to the exact tenant, verb, canonical params, authenticated/delegated initiator, and mutable resource snapshot; only an explicitly authorised assigned human independent of the direct/delegated requester may answer it; and a spent (consumed) approval FAILS LOUDLY with a typed 409 rather than silently re-pending, so a retry after a successful consume can never loop on fresh 202s. Channel-native /approve|/deny replies at intake run through the SAME respond authorization (fail-closed for a non-approver, a self-approver, or an unbound sender, and a replayed command can never re-answer), and a channel /answer can feed a QUESTION back but can never be laundered into clearing a gated verb - the approval/question separation holds on every surface. Approval timeouts are recorded AND enforced: the gate stamps every request it raises with the manifest's hitl.approval_timeout_seconds (threaded manifest -> Kernel -> HITLManager at construction, never read ad hoc); LAZILY, an overdue request refuses an answer with a typed 409 and transitions to TIMED_OUT, and a stale (answered-but-unconsumed) approval past its deadline can never authorise an execution (the gate re-pends for a fresh human decision); and a worker-side sweep janitor (BOLTRIG_HITL_EXPIRY_INTERVAL, store-only, engine-independent, fail-safe per tenant) expires only overdue PENDING requests and settles the linked AWAITING_HUMAN work item at the neutral terminal CANCELLED - never a silent success, never an automatic re-queue loop.
     tests:
       - tests/security/test_hitl_gate.py::test_blocking_verb_pauses_for_approval
       - tests/security/test_hitl_gate.py::test_resumes_after_approval
@@ -809,6 +809,13 @@ invariants:
       - tests/security/test_channel_hitl_replies.py::test_channel_answer_feeds_a_question_back_and_resumes
       - tests/security/test_channel_hitl_replies.py::test_unbound_senders_command_is_rejected_like_an_unknown_sender
       - tests/store/test_store_parity.py::test_hitl_request_binding_round_trips
+      - tests/security/test_hitl_timeout.py::test_gate_created_approval_carries_manifest_timeout
+      - tests/security/test_hitl_timeout.py::test_respond_after_timeout_fails_409_and_expires_the_request
+      - tests/security/test_hitl_timeout.py::test_consume_refuses_a_stale_approval
+      - tests/security/test_hitl_timeout.py::test_sweep_expires_only_overdue_requests
+      - tests/security/test_hitl_timeout.py::test_sweep_settles_the_parked_work_item_never_a_silent_success
+      - tests/security/test_hitl_timeout.py::test_sweep_continues_past_a_failing_tenant_and_the_loop_cancels
+      - tests/security/test_hitl_timeout.py::test_expiry_interval_knob
   SEC-16:
     description: Every action (allowed or denied) is audited, hash-chained, append-only.
     tests:

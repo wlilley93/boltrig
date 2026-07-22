@@ -650,6 +650,16 @@ class PostgresStore(
         )
         return row is not None
 
+    async def expire_hitl(self, tenant_id, request_id):
+        # atomic PENDING -> TIMED_OUT (SEC-14); RETURNING tells us if we won the
+        # CAS, so a concurrently answered request is never clobbered.
+        row = await self._pool.fetchrow(
+            """UPDATE hitl_requests SET status='timed_out', updated_at=now()
+               WHERE tenant_id=$1 AND id=$2 AND status='pending' RETURNING id""",
+            tenant_id, request_id,
+        )
+        return row is not None
+
     async def get_hitl_request(self, tenant_id, req_id):
         row = await self._pool.fetchrow(
             "SELECT * FROM hitl_requests WHERE tenant_id=$1 AND id=$2", tenant_id, req_id

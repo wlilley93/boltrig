@@ -109,7 +109,7 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _add_chat_parser(sub: argparse._SubParsersAction) -> None:
+def _add_chat_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p_chat = sub.add_parser(
         "chat",
         help="chat with agents from the terminal (thin client, never a runtime)",

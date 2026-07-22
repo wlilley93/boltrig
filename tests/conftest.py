@@ -26,11 +26,19 @@ def make_ctx(grants: list[str], *, run_id: str = "run-1", depth: int = 0, **kw) 
     )
 
 
-async def _build_kernel(*, blocking_verbs: set[str] | None = None) -> tuple[Kernel, object]:
+async def _build_kernel(
+    *,
+    blocking_verbs: set[str] | None = None,
+    approval_timeout_seconds: int | None = None,
+) -> tuple[Kernel, object]:
     store = InMemoryStore()
     # tenant ceiling permits the whole ticket noun (role-derived in production)
     store.set_tenant_permissions(TenantPermissions(TENANT, GrantSet.of(["ticket.*"])))
-    kernel = Kernel(store, blocking_verbs=blocking_verbs or set())
+    kernel = Kernel(
+        store,
+        blocking_verbs=blocking_verbs or set(),
+        approval_timeout_seconds=approval_timeout_seconds,
+    )
     adapter = build_tickets()
     await kernel.register_adapter(TENANT, adapter)
     return kernel, adapter

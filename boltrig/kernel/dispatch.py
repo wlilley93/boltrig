@@ -233,7 +233,7 @@ class Dispatcher:
             secure=secure, secure_purpose=purpose or None,
             **hitl_scope_fields(context),
         )
-        event = {
+        event: dict[str, Any] = {
             "type": "question", "run_id": context.run_id,
             "question_id": req.id, "prompt": prompt, "choices": choices,
         }

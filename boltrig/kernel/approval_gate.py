@@ -147,6 +147,10 @@ async def enforce_approval(
             verb=verb,
             requested_by=context.actor,
             request_fingerprint=fingerprint,
+            # The manifest's approval timeout travels with the manager (wired at
+            # the composition root), so a gate-raised approval expires instead of
+            # parking a run forever (SEC-14).
+            timeout_seconds=hitl.approval_timeout_seconds,
             **hitl_scope_fields(context),
         )
         raise PendingHuman(request.id)
