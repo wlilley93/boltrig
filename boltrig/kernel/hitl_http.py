@@ -84,7 +84,7 @@ async def respond_to_hitl(
     request = await kernel.hitl.get(principal.tenant_id, request_id)
     if request is None:
         raise HTTPException(status_code=404, detail="unknown request")
-    await authorize_hitl_response(kernel, principal, request)
+    sole_author_exempt = await authorize_hitl_response(kernel, principal, request)
     if request.type != HITLType.APPROVAL:
         from boltrig.text_envelope import wrap_untrusted
 
@@ -92,7 +92,25 @@ async def respond_to_hitl(
     response = await kernel.hitl.answer(
         principal.tenant_id, request_id, decision, principal.subject, notes
     )
-    return {"status": "answered", "response_id": response.id}
+    if sole_author_exempt:
+        # The four-eyes bootstrap exemption always leaves a flag on the chain:
+        # a single-author tenant approved its own request (SEC-182).
+        from boltrig.models import ActionType, AuditEvent, utcnow
+
+        await kernel.audit.write(
+            AuditEvent(
+                tenant_id=principal.tenant_id, ts=utcnow(),
+                actor=principal.subject, actor_tier=principal.actor_tier,
+                action_type=ActionType.TOOL_CALL, verb="hitl.sole_author_approval",
+                status="ok", run_id=request.run_id,
+                on_behalf_of=principal.on_behalf_of,
+                detail={"hitl_request_id": request.id, "verb": request.verb},
+            )
+        )
+    result = {"status": "answered", "response_id": response.id}
+    if sole_author_exempt:
+        result["sole_author_exemption"] = True
+    return result
 
 
 async def answer_hitl_question(

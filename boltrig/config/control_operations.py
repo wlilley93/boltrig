@@ -165,10 +165,25 @@ async def activate_adapter_record(
     adapter_id: str,
     *,
     reviewer: str,
+    credentials: Any = None,
 ) -> list[str]:
     adapter = await loader.get(tenant_id, adapter_id)
     if adapter is None:
         raise LookupError("adapter not found")
+    connect = getattr(adapter, "connect", None)
+    if connect is not None:
+        # A consuming adapter (MCP, US-MCP-03) discovers its verbs HERE: connect()
+        # runs tools/list against the external server so describe() below
+        # publishes the server's actual tools (schemas + consequence hints), not
+        # an empty catalogue. The credential comes from the same kernel seam
+        # dispatch uses (SEC-04/05); a credential-less HTTP consumer fails closed
+        # inside connect() rather than activating silently with zero verbs.
+        credential = (
+            await credentials.resolve_for_adapter(tenant_id, adapter_id)
+            if credentials is not None
+            else None
+        )
+        await connect(credential)
     await ensure_activation_safe(store, tenant_id, adapter_id, adapter)
     activate = getattr(adapter, "review_and_activate", None)
     if activate is not None:

@@ -260,12 +260,8 @@ class ControlPlaneAdapter:
                     )
                 )
             verbs = await activate_adapter_record(
-                self._store,
-                self._loader,
-                self._registry,
-                tenant,
-                params["adapter_id"],
-                reviewer=reviewer,
+                self._store, self._loader, self._registry, tenant, params["adapter_id"],
+                reviewer=reviewer, credentials=self._credentials,
             )
             return Result.success({"id": params["adapter_id"], "activated": True, "verbs": verbs})
         if verb != "control.mcp_server.register":

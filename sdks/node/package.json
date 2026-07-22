@@ -1,0 +1,20 @@
+{
+  "name": "boltrig-app-sdk",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Node SDK for exposing an external app's verbs to a Boltrig kernel (MCP-consumable server scaffold, registration client, head client).",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && node --test \"dist/tests/*.test.js\"",
+    "example": "npm run build && node dist/examples/opbox-verbs/server.js"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "typescript": "5.6.3"
+  }
+}

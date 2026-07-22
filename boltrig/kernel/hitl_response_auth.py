@@ -121,12 +121,34 @@ async def hitl_request_visible(
     return request.assignee in identities if request.assignee else True
 
 
+async def _sole_active_author(kernel: Any, principal: Any) -> bool:
+    """True when the principal is the tenant's ONLY active author-tier user.
+
+    The four-eyes bootstrap exemption: on a single-author tenant the independent-
+    approver rule is unsatisfiable (every high-consequence control verb, including
+    the invitation flow that would add a second human, deadlocks). The exemption
+    lifts self-approval ONLY while the tenant has exactly one active author; it
+    lapses automatically the moment a second author exists."""
+    from boltrig.identity.rbac import AUTHOR_ROLES
+
+    users = await kernel.store.list_users(principal.tenant_id)
+    authors = [
+        u for u in users
+        if u.status == "active" and u.role in AUTHOR_ROLES
+    ]
+    return len(authors) == 1 and authors[0].id == principal.subject
+
+
 async def authorize_approval_response(
     kernel: Any, principal: Any, request: HITLRequest
-) -> None:
-    """Require an independent, assigned human with the live action grant."""
+) -> bool:
+    """Require an independent, assigned human with the live action grant.
+
+    Returns True when the sole-author bootstrap exemption was applied (the
+    caller MUST audit-flag it); the exemption never lifts the assignment,
+    humanity, or live-grant requirements below."""
     if request.type != HITLType.APPROVAL:
-        return
+        return False
     if principal.actor_tier != "human":
         raise HTTPException(status_code=403, detail="only a human may approve")
     if not request.verb or not request.request_fingerprint:
@@ -141,8 +163,11 @@ async def authorize_approval_response(
     respondents = {
         value for value in (principal.subject, principal.on_behalf_of) if value
     }
+    exempt = False
     if initiators & respondents:
-        raise HTTPException(status_code=403, detail="cannot approve your own request")
+        if not await _sole_active_author(kernel, principal):
+            raise HTTPException(status_code=403, detail="cannot approve your own request")
+        exempt = True
     permissions = await kernel.store.get_tenant_permissions(principal.tenant_id)
     try:
         kernel.grants.check(principal.context(), request.verb, permissions)
@@ -150,12 +175,16 @@ async def authorize_approval_response(
         raise HTTPException(
             status_code=403, detail="not authorised to approve this action"
         ) from exc
+    return exempt
 
 
 async def authorize_hitl_response(
     kernel: Any, principal: Any, request: HITLRequest
-) -> None:
-    """Apply common scope, then the type-specific mutation authorization."""
+) -> bool:
+    """Apply common scope, then the type-specific mutation authorization.
+
+    Returns True only when the APPROVAL path applied the sole-author bootstrap
+    exemption (see authorize_approval_response) - the caller MUST audit-flag it."""
     item = await authorize_hitl_scope(kernel, principal, request)
     if request.type == HITLType.QUESTION:
         owner = getattr(item, "on_behalf_of", None)
@@ -163,8 +192,7 @@ async def authorize_hitl_response(
             raise HTTPException(status_code=404, detail="unknown request")
         raise HTTPException(status_code=409, detail="use the question answer route")
     if request.type == HITLType.APPROVAL:
-        await authorize_approval_response(kernel, principal, request)
-        return
+        return await authorize_approval_response(kernel, principal, request)
     if principal.actor_tier != "human":
         raise HTTPException(status_code=403, detail="only a human may respond")
     owner = getattr(item, "on_behalf_of", None)
@@ -173,3 +201,4 @@ async def authorize_hitl_response(
         raise HTTPException(status_code=403, detail="cannot answer your own request")
     if request.assignee and request.assignee != principal.subject:
         raise HTTPException(status_code=403, detail="request is assigned to another user")
+    return False

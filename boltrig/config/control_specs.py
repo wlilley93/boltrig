@@ -183,7 +183,16 @@ def _adapter_specs() -> list[VerbSpec]:
         ),
         _spec(
             "control.mcp_server.register",
-            {"id": _STRING, "url": _STRING},
+            {
+                "id": _STRING,
+                "url": _STRING,
+                # credential params NAME a secret-store key (bind_mcp_credential);
+                # raw secret material has no param here and stays refused.
+                "credential_ref": _STRING,
+                "credential_id": _STRING,
+                "credential_store": _STRING,
+                "credential_kind": _STRING,
+            },
             ("id",),
             "Register an external MCP server, inert until human review",
             consequence="low",

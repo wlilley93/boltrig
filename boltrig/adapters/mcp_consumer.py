@@ -28,10 +28,22 @@ from boltrig.adapters.base import (
     VerbSpec,
     bearer_token,
 )
-from boltrig.models import CredentialResolution, InvocationContext
+from boltrig.models import Consequence, CredentialResolution, InvocationContext
 
 # rpc(request: dict) -> response: dict  (a JSON-RPC round-trip to the MCP server)
 Rpc = Callable[[dict], Awaitable[dict]]
+
+# A consumed server may declare a per-tool ``consequence`` hint in the tool
+# descriptor. The ceiling is the Consequence enum itself ("high" - the same
+# ceiling generated adapters live under, where only mutating verbs reach high):
+# an absent or unrecognised hint defaults to "low", so nothing a consumed server
+# declares can push a verb above it.
+_CONSEQUENCE_HINTS = frozenset({Consequence.LOW.value, Consequence.HIGH.value})
+
+
+def _consequence_hint(tool: dict) -> str:
+    hint = str(tool.get("consequence") or "").lower()
+    return hint if hint in _CONSEQUENCE_HINTS else Consequence.LOW.value
 
 
 class _McpFailure(Exception):
@@ -70,12 +82,13 @@ class McpConsumerAdapter:
     async def connect(self, credential: Credential | None = None) -> list[VerbSpec]:
         """Discover the external server's tools and map them to VerbSpecs.
 
-        Registration-time discovery runs OUTSIDE a dispatch call, so no per-call
-        credential exists yet: the caller passes one it resolved through the same
-        kernel seam (``kernel.credentials.resolve_for_adapter``) that dispatch
-        uses, after binding the adapter's credential. There is deliberately no
-        instance-held token to fall back on, so this path cannot become a back
-        door around the per-call credential.
+        Discovery runs at ACTIVATION (``control.adapter.activate`` wires it), OUTSIDE
+        a dispatch call, so no per-call credential exists yet: the caller passes one
+        it resolved through the same kernel seam (``kernel.credentials.resolve_for_adapter``)
+        that dispatch uses, after binding the adapter's credential. There is
+        deliberately no instance-held token to fall back on, so this path cannot
+        become a back door around the per-call credential. Each tool's declared
+        ``consequence`` hint propagates to its VerbSpec (see ``_consequence_hint``).
         """
         resp = await self._call(
             {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}},
@@ -89,6 +102,7 @@ class McpConsumerAdapter:
                 input_schema=t.get("inputSchema", {}),
                 output_schema={"type": "object"},
                 description=t.get("description", ""),
+                consequence=_consequence_hint(t),
             )
             for t in tools
         ]

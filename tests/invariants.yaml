@@ -213,6 +213,13 @@ invariants:
       - tests/security/test_channel_self_onboard.py::test_onboarding_is_rate_limited_per_channel
       - tests/security/test_channel_self_onboard.py::test_off_by_default_and_an_over_broad_role_never_onboards
       - tests/security/test_channel_self_onboard.py::test_an_existing_binding_is_never_onboarded_over
+  SEC-182:
+    description: The four-eyes independent-approver rule (SEC-14) has exactly one bootstrap exemption - on a tenant with a single active author-tier user, that user may self-approve (otherwise no high-consequence control verb, including the invitation flow that adds a second human, could ever complete); every exempted self-approval writes a hitl.sole_author_approval audit flag, and the exemption lapses automatically when a second active author exists, never applies to non-authors or deactivated accounts, and never lifts the assignment, humanity, or live-grant requirements.
+    tests:
+      - tests/security/test_sole_author_exemption.py::test_sole_author_may_self_approve_with_an_audit_flag
+      - tests/security/test_sole_author_exemption.py::test_exemption_lapses_the_moment_a_second_author_exists
+      - tests/security/test_sole_author_exemption.py::test_exemption_counts_only_active_author_tier_users
+      - tests/security/test_sole_author_exemption.py::test_exemption_never_lifts_the_live_grant_requirement
   SEC-181:
     description: Secure input - a chat.ask_user question with secure:true + a bounded purpose label is schema-validated as a pair (secure requires purpose; purpose only with secure) and marked on the HITL request, the question/hitl run events and the list projection for consumers, but its ANSWER never enters the run - the shared answer path seals the value through the credential seam as a run+purpose-scoped credential (run:<run_id>:<purpose>, envelope-sealed at rest with no plaintext in the raw store row) and records the enveloped REFERENCE (credential:run/<run_id>/<purpose>) as the decision, so the resume wiring replays the reference and the value appears in no answer response body, run event, or audit row (not even its length). A verb param carrying the reference is resolved to the material INSIDE the kernel at the dispatch resolve-credential stage (the adapter receives the material; agent/context/events/audit only ever carried the reference), and resolution FAILS CLOSED (CredentialResolution) for another run, a run-less context, an unsealed purpose, a tampered row, or a foreign credential under a run: id. A non-secure ask_user is byte-for-byte the old behaviour, and the documented run-settle sweep removes exactly the finished run's secure credentials.
     tests:
@@ -426,10 +433,13 @@ invariants:
     tests:
       - tests/integration/test_generated_adapter.py::test_generated_adapter_inert_until_reviewed
       - tests/integration/test_mcp_consumer.py::test_consumed_server_inert_until_reviewed
+      - tests/security/test_mcp_consumer_activation.py::test_activation_discovers_and_publishes_the_servers_tools
   FR-MCP-03:
     description: An external MCP server is consumed as an adapter - its tools register as verbs.
     tests:
       - tests/integration/test_mcp_consumer.py::test_consume_external_mcp_server_as_verbs
+      - tests/security/test_mcp_consumer_activation.py::test_activation_discovers_and_publishes_the_servers_tools
+      - tests/security/test_mcp_consumer_activation.py::test_a_second_activation_resyncs_idempotently
   FR-HOST-01:
     description: Herdr host-control capabilities are declared as governed adapter verbs with read/mutate consequence levels.
     tests:
@@ -1734,6 +1744,7 @@ invariants:
       - tests/security/test_mcp_consumer_credential.py::test_the_adapter_holds_no_token_to_fall_back_on
       - tests/security/test_mcp_consumer_credential.py::test_rotating_the_stored_ref_changes_the_next_calls_bearer
       - tests/security/test_mcp_consumer_credential.py::test_registration_binds_the_ref_and_refuses_raw_material
+      - tests/security/test_mcp_consumer_activation.py::test_registration_with_credential_ref_binds_the_ref_through_the_chokepoint
 
   # --- chain verification re-derives the WHOLE chain, never a tail window ---
   SEC-168:
