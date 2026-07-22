@@ -129,6 +129,67 @@ and `api_base`/`http_url` overrides for tests.
   JSON-RPC `send` (`/api/v1/rpc`); the envelope timestamp is the delivery id.
 - **Thread shape**: the sender's number for a DM, `group:<id>` for a group.
 
+## Automation webhooks (machine sources: CI, monitoring)
+
+A machine source - a CI pipeline, a monitoring alertmanager, a cron-adjacent
+internal tool - does NOT come through this gateway (the gateway terminates the
+socket class only). It registers as a **`webhook`-platform channel**, which the
+kernel terminates in-process, and fires a workflow deterministically through
+channel addressing. The whole path is the governed one: signature-verified
+intake, kernel-authoritative identity, the one chokepoint.
+
+1. **Register the channel** (admin) with the signing secret as a REFERENCE, so
+   the DB never holds the material (SEC-04/05):
+
+   ```bash
+   curl -X POST $KERNEL/v1/channels -H "Authorization: Bearer $ADMIN" \
+     -d '{"platform": "webhook", "name": "ci-deploy",
+          "signing_secret_ref": "ci-deploy-hmac"}'
+   # -> {"channel": "ch_...", "inbound_url": "/v1/channels/ch_.../inbound"}
+   ```
+
+   `signing_secret_ref` names an entry behind the kernel's SecretStore seam;
+   ingress resolves it kernel-side at verify time.
+
+2. **Bind the machine sender** (admin) so its platform id resolves to a
+   governed principal - identity is the binding row, never the payload:
+
+   ```bash
+   curl -X POST $KERNEL/v1/channels/ch_.../bindings -H "Authorization: Bearer $ADMIN" \
+     -d '{"external_user_id": "ci-bot", "subject": "ci-deploy-bot", "role": "member"}'
+   ```
+
+   Keep the role at `member`: automation operates but can never configure or
+   administer (`control.*` is denied by the member grant ceiling).
+
+3. **Map a route to a `workflow:` target** so a message pins the workflow it
+   fires (SEC-178). The target is routing data, never authority - every step of
+   the workflow is still chokepoint-checked against the bound sender's grants:
+
+   ```bash
+   curl -X PATCH $KERNEL/v1/channels/ch_... -H "Authorization: Bearer $ADMIN" \
+     -d '{"config": {"sender_field": "sender",
+          "addressing": {"routes": {"deploy-prod": "workflow:wf-deploy"}}}}'
+   ```
+
+   The source then POSTs `{"sender": "ci-bot", "chat": "deploy-prod",
+   "text": "...", "id": "<stable delivery id>"}` to the inbound URL, signed
+   under the same `x-boltrig-signature: t=<unix>,v1=<hex>` canonical-JSON HMAC
+   scheme. The intake work item carries `target: "workflow:wf-deploy"`; the
+   pump honors it before any chief-of-staff routing and triggers the workflow
+   through the durable path (checkpointed, engine-owned task). An UNKNOWN
+   workflow id fails closed: the item parks AWAITING_HUMAN with an escalation
+   filed - it never falls through to inferred routing. A completion notice
+   returns to the originating thread via the reply route (SEC-179).
+
+**Cron is deliberately NOT a gateway/webhook source.** Scheduled automation is
+internal in origin, so it never traverses an external-signature ingress at
+all: the governed control verbs `POST /v1/workflows/{id}/schedule` and
+`.../trigger` (admin-authored, approval-bound, audited) are the only way a
+schedule is registered or a run fired. What a scheduled run SAYS still egresses
+through the durable channel outbox like any other notification - the boundary
+is about where authority enters, not where results leave.
+
 ## Run it
 
 ```bash

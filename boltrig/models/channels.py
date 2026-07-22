@@ -59,7 +59,16 @@ class Channel:
     #   config["addressing"] = {
     #     "default_target": "cos",              # tier-1 chief of staff (default)
     #     "routes": {"<chat/thread id>": "<target>"},  # pin a chat to a subagent
+    #                                           # or to "workflow:<wf_id>" (SEC-178)
     #     "thread_field": "chat",               # body field holding the chat id
+    #   }
+    # Self-serve onboarding (SEC-180, OFF by default - absent key means the
+    # unpaired_behavior below applies exactly as before):
+    #   config["self_onboard"] = {
+    #     "role": "member",        # constrained tier only (SELF_ONBOARD_ROLES);
+    #                              # anything higher disables onboarding fail-closed
+    #     "scope": {...},          # visibility scope for the synthetic subject
+    #     "welcome": "Hi ...",     # optional static reply, enqueued to the outbox
     #   }
     config: dict[str, Any] = field(default_factory=dict)
     unpaired_behavior: str = "reject"  # reject | ignore | pair

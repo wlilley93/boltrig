@@ -25,6 +25,10 @@ Every mutating request made with the session cookie MUST echo the CSRF token in 
 `X-Boltrig-CSRF` header (safe GET/HEAD are exempt). Bearer/PAT requests are not
 CSRF-gated.
 
+The terminal client `boltrig chat` is such a PAT client: it authenticates with a
+PAT bearer (`--token` / `BOLTRIG_CLI_TOKEN` / `~/.config/boltrig/cli.toml`) and
+drives the same `/v1/chat` chokepoint as the site - no CSRF, no session cookie.
+
 ### POST /v1/auth/accept-invite   (public)
 Consume a single-use invite token and set a password.
 

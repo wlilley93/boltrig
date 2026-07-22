@@ -130,7 +130,9 @@ async def route_to_head(
     # Addressed routing (SEC-178): an explicit target from channel intake is routing
     # data, not authority — it names the department directly when it resolves to a
     # configured head ("cos" is the tier-1 default: route normally). Anything else
-    # falls through to the CoS's inferred route; grants bind either way.
+    # falls through to the CoS's inferred route; grants bind either way. A
+    # "workflow:<wf_id>" target never reaches here - the pump honors it upstream
+    # (pump._run_addressed_workflow) before any routing.
     explicit = getattr(item, "target", None)
     if explicit and explicit != "cos" and explicit in heads:
         department = explicit

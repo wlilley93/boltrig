@@ -2,6 +2,8 @@
 
     boltrig serve [--host H --port P]   start the kernel API
     boltrig worker                      start a fleet worker
+    boltrig chat [--server URL]         chat with agents from the terminal
+        [--via-gateway ...]             (head = the control API; gateway = a messaging surface)
     boltrig initiate --email E [...]    seat the founding OWNER (invite-only, VJS-COUNTY 7)
     boltrig set-password --email E      set/reset an EXISTING user's password (SSO -> session)
     boltrig smoke                       run the offline in-process smoke test
@@ -73,6 +75,8 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser("smoke", help="offline in-process smoke test")
     sub.add_parser("check-invariants", help="run the invariant-binding gate")
 
+    _add_chat_parser(sub)
+
     p_opencode = sub.add_parser(
         "opencode-plugin", help="install OpenCode project-local integration files"
     )
@@ -80,9 +84,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p_oc_install = opencode_sub.add_parser(
         "install", help="write the Boltrig MCP plugin into an OpenCode config dir"
     )
-    p_oc_install.add_argument(
-        "--dir", default=".opencode", help="OpenCode config directory"
-    )
+    p_oc_install.add_argument("--dir", default=".opencode", help="OpenCode config directory")
 
     p_doctor = sub.add_parser("doctor", help="static production-readiness checks")
     p_doctor.add_argument(
@@ -105,6 +107,60 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser("version", help="print version")
 
     return parser
+
+
+def _add_chat_parser(sub: argparse._SubParsersAction) -> None:
+    p_chat = sub.add_parser(
+        "chat",
+        help="chat with agents from the terminal (thin client, never a runtime)",
+        description=(
+            "Chat with agents THROUGH the stack. Default (head) mode: "
+            "PAT-authenticated SSE chat against the kernel API - the full "
+            "control surface (tool stream, HITL approve/deny/answer inline). "
+            "--via-gateway: a messaging surface over the channel gateway's "
+            "generic JSON-lines adapter - channel semantics (addressing via "
+            "--target or /target, outbound notifications), not the control API."
+        ),
+    )
+    p_chat.add_argument(
+        "--server", default=None,
+        help="kernel API URL (default: BOLTRIG_CLI_SERVER, else the config file, "
+        "else http://127.0.0.1:8000)",
+    )
+    p_chat.add_argument(
+        "--token", default=None,
+        help="a personal access token (default: BOLTRIG_CLI_TOKEN, else the "
+        "config file; never logged)",
+    )
+    p_chat.add_argument(
+        "--conversation", default=None,
+        help="resume an existing conversation id (else a new one per session; "
+        "the id is kept across turns)",
+    )
+    p_chat.add_argument(
+        "--config", default=None,
+        help="CLI config file (default: ~/.config/boltrig/cli.toml)",
+    )
+    p_chat.add_argument(
+        "--via-gateway", action="store_true",
+        help="connect through the channel gateway's generic adapter instead of "
+        "the kernel API",
+    )
+    p_chat.add_argument(
+        "--gateway-host", default="127.0.0.1",
+        help="gateway listen host (default: 127.0.0.1)",
+    )
+    p_chat.add_argument(
+        "--gateway-port", type=int, default=9090, help="gateway listen port (default: 9090)"
+    )
+    p_chat.add_argument(
+        "--sender-id", default="cli",
+        help="the sender id stamped on gateway frames (default: cli)",
+    )
+    p_chat.add_argument(
+        "--target", default=None,
+        help="(gateway) address the CoS or a named tier-2 subagent by slug",
+    )
 
 
 def _dispatch(args: argparse.Namespace) -> int:
@@ -145,6 +201,10 @@ def _dispatch(args: argparse.Namespace) -> int:
             return 2
         runpy.run_path(script, run_name="__main__")
         return 0
+    if args.cmd == "chat":
+        from .chat_cli import run as chat_run
+
+        return chat_run(args)
     if args.cmd == "opencode-plugin":
         from boltrig.fleet.opencode_plugin import install_opencode_plugin
 

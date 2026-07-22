@@ -72,6 +72,11 @@ SANCTIONED_DIRECT_WRITES: frozenset[tuple[str, str, str]] = frozenset(
         ("channel_routes.py", "_consume_pairing", "bump_channel_pairing_attempts"),
         ("channel_routes.py", "_consume_pairing", "consume_channel_pairing"),
         ("channel_routes.py", "_consume_pairing", "upsert_channel_binding"),
+        # SEC-180 self-serve onboarding is the same ingress seam: the writer is
+        # the channel-signature-authenticated intake, not a principal, and the
+        # binding it mints is constrained to SELF_ONBOARD_ROLES (never above
+        # member) with the onboarding itself rate-limited and audited.
+        ("channel_routes.py", "_self_onboard", "upsert_channel_binding"),
         # Caller-owned personal-agent configuration intentionally requires no
         # control.* grant; dispatching it as authoring would widen authority or
         # break the delegated-only contract pinned by SEC-30.
@@ -145,5 +150,5 @@ def test_control_plane_direct_writes_are_all_sanctioned():
         + "\n".join(f"  {m}::{fn} -> {meth}" for m, fn, meth in sorted(stale))
     )
 
-    # Tripwire on the closed ledger: only 14 self-scope/ingress writes remain.
-    assert len(SANCTIONED_DIRECT_WRITES) == 14
+    # Tripwire on the closed ledger: only 15 self-scope/ingress writes remain.
+    assert len(SANCTIONED_DIRECT_WRITES) == 15

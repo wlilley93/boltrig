@@ -20,6 +20,24 @@ from boltrig.models import Channel
 # Access resolver, so identity means the same thing on every ingress surface).
 CHANNEL_TIERS: tuple[str, ...] = ("superadmin", "admin", "member")
 
+# Self-serve onboarding (SEC-180) may bind an unknown VERIFIED sender at NO HIGHER
+# than the member tier - the lowest console tier, which operates but can never
+# configure or administer (``control.*`` is denied by its grant ceiling). A
+# channel's ``self_onboard`` config naming any other role is rejected fail-closed
+# (the onboarding simply does not happen; the unpaired behaviour applies).
+SELF_ONBOARD_ROLES: tuple[str, ...] = ("member",)
+
+
+def self_onboard_subject(platform: str, external_user_id: str) -> str:
+    """The synthetic subject a self-onboarded stranger acts as (SEC-180).
+
+    Deliberately NOT a user id: there is no user record behind it, so the
+    resolved principal's ceiling is the recorded tier's alone (SEC-34 parity -
+    nothing intersects it UP), and the pump lane (SEC-164) refuses it authority
+    entirely. The shape is deterministic so the resolver can recognise a
+    self-onboarded binding without trusting the message body."""
+    return f"external:{platform}:{external_user_id}"
+
 # A channel sender's grant ceiling is derived from the binding's RECORDED tier,
 # mapped onto the workspace-role grant ceilings (rbac.WORKSPACE_ROLE_CEILINGS -
 # the one role -> grant-ceiling table the rest of the system uses); superadmin
@@ -66,7 +84,14 @@ async def resolve_channel_principal(
         # A bare subject (no user record) still gets no wildcard: the recorded
         # tier's ceiling alone (a member operates; ``control.*`` is denied).
         grants = ceiling
-        scope = {}
+        # A self-onboarded binding (SEC-180) carries the channel's configured
+        # visibility scope; any other bare subject carries none. The match is on
+        # the deterministic synthetic-subject shape, never the message body.
+        onboard_cfg = (channel.config or {}).get("self_onboard") or {}
+        if binding.subject == self_onboard_subject(channel.platform, external_user_id):
+            scope = dict(onboard_cfg.get("scope") or {})
+        else:
+            scope = {}
     return Principal(
         tenant_id=channel.tenant_id,
         subject=binding.subject,

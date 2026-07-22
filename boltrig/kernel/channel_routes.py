@@ -31,13 +31,19 @@ from boltrig.models import (
     ActionType,
     AuditEvent,
     ChannelBinding,
+    ChannelOutboxMessage,
     RateLimit,
     RateLimited,
     utcnow,
 )
 from boltrig.work.normalise import normalise
 
-from .channel_principal import CHANNEL_TIERS, resolve_channel_principal
+from .channel_principal import (
+    CHANNEL_TIERS,
+    SELF_ONBOARD_ROLES,
+    resolve_channel_principal,
+    self_onboard_subject,
+)
 from .control_routes import dispatch_control_route
 
 # The pairing flow (decision 0003): one-time codes are short, human-transcribable,
@@ -55,6 +61,11 @@ PAIR_MAX_ATTEMPTS = 5
 # for cross-channel fairness (#81).
 INBOUND_RL_PER_CHANNEL = RateLimit(per="minute", max=120, scope="verb")
 INBOUND_RL_PER_SENDER = RateLimit(per="minute", max=30, scope="verb")
+
+# Self-serve onboarding (SEC-180) is throttled per channel BEFORE a binding is
+# minted (the same fixed-window idiom as intake above): an open, customer-facing
+# channel must not let strangers mint unbounded synthetic identities.
+ONBOARD_RL_PER_CHANNEL = RateLimit(per="minute", max=5, scope="verb")
 
 
 def _hash_code(code: str) -> str:
@@ -138,6 +149,66 @@ async def _audit(kernel, p, verb: str, detail: dict, status: str = "ok") -> None
             on_behalf_of=p.on_behalf_of, detail=detail,
         )
     )
+
+
+async def _self_onboard(kernel, channel, external_user_id: str):
+    """Opt-in self-serve onboarding for a customer-facing channel (SEC-180).
+
+    When the channel's config carries ``self_onboard`` with a CONSTRAINED role
+    (``SELF_ONBOARD_ROLES`` - never above member), an unknown VERIFIED sender is
+    bound at that role/scope as a synthetic ``external:<platform>:<id>`` subject
+    with NO user record (the honest minimum: identity is still a kernel-minted
+    binding row, never the message body). The onboarding is a first-class audited
+    event, is rate-limited per channel before anything is minted (``RateLimited``
+    propagates to the caller's 429), and enqueues the configured static welcome
+    to the durable outbox (socket class only - the webhook class has no outbox
+    consumer). Returns the freshly-resolved Principal, or ``None`` when the
+    channel does not opt in or its config role is over-broad (fail-closed)."""
+    cfg = (channel.config or {}).get("self_onboard")
+    if not isinstance(cfg, dict):
+        return None
+    role = str(cfg.get("role") or "").strip()
+    if role not in SELF_ONBOARD_ROLES:
+        return None  # an over-broad config role disables onboarding, fail-closed
+    if await kernel.store.get_channel_binding(
+        channel.tenant_id, channel.id, external_user_id
+    ) is not None:
+        # A binding EXISTS but resolved to no principal (an unknown tier, or a
+        # deactivated user): onboarding must never mint a fresh synthetic
+        # identity over it - that would resurrect a revoked sender.
+        return None
+    await kernel.rate_limiter.enforce(
+        channel.tenant_id, f"channel.onboard:{channel.id}", ONBOARD_RL_PER_CHANNEL
+    )
+    subject = self_onboard_subject(channel.platform, external_user_id)
+    await kernel.store.upsert_channel_binding(
+        ChannelBinding(
+            id=f"cb_{uuid.uuid4().hex[:12]}", tenant_id=channel.tenant_id,
+            channel_id=channel.id, platform=channel.platform,
+            external_user_id=external_user_id, subject=subject, role=role,
+        )
+    )
+    await kernel.audit.write(
+        AuditEvent(
+            tenant_id=channel.tenant_id, ts=utcnow(), actor=subject,
+            actor_tier="human", action_type=ActionType.TOOL_CALL, noun="channel",
+            verb="channel.self_onboard", status="ok",
+            detail={"channel": channel.id, "platform": channel.platform,
+                    "external_user_id": external_user_id, "subject": subject,
+                    "role": role},
+        )
+    )
+    welcome = str(cfg.get("welcome") or "").strip()
+    if welcome and channel.transport == "socket":
+        await kernel.store.enqueue_channel_outbox(
+            ChannelOutboxMessage(
+                id=f"co_{uuid.uuid4().hex[:16]}", tenant_id=channel.tenant_id,
+                channel_id=channel.id,
+                payload={"text": welcome, "target": external_user_id,
+                         "event": "channel.self_onboard", "subject": subject},
+            )
+        )
+    return await resolve_channel_principal(kernel.store, channel, external_user_id)
 
 
 async def _consume_pairing(kernel, channel, external_user_id, code) -> bool:
@@ -266,6 +337,20 @@ def register_channel_routes(app, *, principal_dep, get_kernel) -> None:
                 if code and await _consume_pairing(k, ch, external_user_id, code):
                     principal = await resolve_channel_principal(
                         k.store, ch, external_user_id
+                    )
+            if principal is None:
+                # SEC-180: an opted-in channel onboards the stranger itself, at
+                # the configured CONSTRAINED role (rate-limited per channel).
+                try:
+                    principal = await _self_onboard(k, ch, external_user_id)
+                except RateLimited as exc:
+                    headers = {}
+                    if exc.retry_after_seconds is not None:
+                        headers["Retry-After"] = str(int(exc.retry_after_seconds))
+                    return JSONResponse(
+                        {"status": "throttled", "reason": "onboarding rate limit"},
+                        status_code=429,
+                        headers=headers,
                     )
             if principal is None:
                 if ch.unpaired_behavior == "ignore":

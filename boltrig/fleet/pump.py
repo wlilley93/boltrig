@@ -39,6 +39,7 @@ from boltrig.models import (
 )
 from boltrig.work import normalise
 from boltrig.workflows.generator import learn_from_success
+from boltrig.workflows.library import WorkflowLibrary
 
 from .authority import context_for, reflection_context, route_to_head
 from .chief_of_staff import ChiefOfStaff, Department
@@ -65,6 +66,24 @@ DEFAULT_SPAWN_BUDGET = 32
 # from (Phase 3, US-WFL-03): today the pump learns from any outcome that already
 # carries a GENERATED definition (proven by the wiring test).
 GENERATED_WORKFLOW_KEY = "generated_workflow"
+
+# Addressed workflow execution (SEC-178): a channel-addressed target of the form
+# "workflow:<wf_id>" names a STORED WORKFLOW, not a department. The pump honors it
+# before any CoS routing (see handle_claimed_item), so a channel can pin a chat to
+# a deterministic automation. It stays routing data, never authority: the workflow
+# runs under the requesting principal's grants, every step chokepoint-checked.
+WORKFLOW_TARGET_PREFIX = "workflow:"
+
+
+def workflow_target_id(item: WorkItem) -> str | None:
+    """The workflow id the item's ``target`` addresses, or None.
+
+    A bare ``workflow:`` (no id) is not a workflow target: it falls through to
+    ordinary routing like any other unknown target slug."""
+    target = getattr(item, "target", None) or ""
+    if not target.startswith(WORKFLOW_TARGET_PREFIX):
+        return None
+    return target[len(WORKFLOW_TARGET_PREFIX):].strip() or None
 
 # Transport-layer errors (httpx, asyncpg) can embed request URLs / DSNs - internal
 # hosts, credentials - in str(exc), and a FAILED item's result is caller-visible.
@@ -251,6 +270,16 @@ class WorkPump:
                 return item
 
             ctx = await self._context_for(item, run_id)
+            wf_id = workflow_target_id(item)
+            if wf_id is not None:
+                # SEC-178: an addressed workflow is honored BEFORE any routing -
+                # the CoS path is untouched when no workflow target is present.
+                # The boundary-1 cancel refresh is mirrored so a cancel landing
+                # before the trigger still takes effect (the finally settles it).
+                cancelled = await self._store.is_run_cancel_requested(tenant, run_id)
+                if cancelled:
+                    return item
+                return await self._run_addressed_workflow(item, run_id, ctx, wf_id)
             head = await route_to_head(self._cos, self.heads, store, item, run_id, ctx)
             if head is None:  # SEC-165: unroutable parks; it never mis-routes
                 await self._park(
@@ -294,6 +323,65 @@ class WorkPump:
         finally:
             if cancelled:
                 await self._cancel(item, run_id)
+
+    async def _run_addressed_workflow(
+        self, item: WorkItem, run_id: str, ctx: InvocationContext, wf_id: str
+    ) -> WorkItem:
+        """Honor a ``workflow:<wf_id>`` target: trigger the named workflow (SEC-178).
+
+        The trigger goes through the library's durable path (the registered
+        workflow task - checkpointed, engine-owned) under the item's execution
+        context, so every step is chokepoint-checked against the REQUESTING
+        principal's grants: the address steers which workflow runs, never what
+        it may do. Fail-closed symmetry with routing (SEC-165): an unknown
+        workflow parks the item AWAITING_HUMAN with a HITL filed - never a
+        silent fallthrough to CoS routing."""
+        store = self._store
+        tenant = item.tenant_id
+        await store.upsert_checkpoint(tenant, run_id, "route", "started")
+        library = WorkflowLibrary(store, executor=self._executor)
+        try:
+            descriptor = await library.trigger(
+                tenant,
+                wf_id,
+                {"intent": item.intent, "message": dict(item.raw or {})},
+                active_workspace_id=item.workspace_id,
+                context=ctx,
+            )
+        except LookupError:
+            await store.upsert_checkpoint(
+                tenant, run_id, "route", "done",
+                output={"workflow": wf_id, "error": "unknown_workflow"},
+            )
+            await self._park(
+                item, run_id, reason="unknown_workflow",
+                detail=f"the addressed workflow '{wf_id}' is unknown; a human must route it",
+            )
+            return item
+        await store.upsert_checkpoint(
+            tenant, run_id, "route", "done", output={"workflow": wf_id}
+        )
+        item.status = WorkStatus.DONE
+        item.result = {"workflow": descriptor}
+        self._stamp_outcome(item, WorkStatus.DONE.value)
+        await store.update_work_item(item)
+        await store.upsert_checkpoint(
+            tenant, run_id, "execute", "done",
+            output={"workflow": wf_id, "run_id": descriptor.get("run_id")},
+        )
+        await self._audit.write(
+            AuditEvent(
+                tenant_id=tenant, ts=utcnow(), actor=self.worker_id,
+                actor_tier="tier1", action_type=ActionType.TOOL_CALL,
+                status="ok", run_id=run_id, verb="workflow.trigger",
+                on_behalf_of=item.on_behalf_of, workspace_id=item.workspace_id,
+                detail={"work_item_id": item.id, "workflow": wf_id,
+                        "run_id": descriptor.get("run_id"),
+                        "engine": descriptor.get("engine")},
+            )
+        )
+        await self._notify_terminal(item)
+        return item
 
     async def _settle(self, item: WorkItem, run_id: str, outcome: dict) -> WorkItem:
         """Walk a joined, uncancelled item to its terminal state (US-FLT-06, D6)."""

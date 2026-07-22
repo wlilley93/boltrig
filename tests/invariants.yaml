@@ -196,13 +196,23 @@ invariants:
       - tests/security/test_channel_discord_roundtrip.py::test_discord_adapter_round_trip_against_a_test_kernel
       - tests/security/test_channel_signal_roundtrip.py::test_signal_adapter_round_trip_against_a_test_kernel
   SEC-178:
-    description: Channel addressing is routing data, not authority - intake resolves the target (explicit sender target, else the channel config chat->target mapping, else the tier-1 CoS default) and stamps it plus the reply route on the work item; identity stays binding-row-authoritative.
+    description: Channel addressing is routing data, not authority - intake resolves the target (explicit sender target, else the channel config chat->target mapping, else the tier-1 CoS default) and stamps it plus the reply route on the work item; identity stays binding-row-authoritative. A target of the form "workflow:<wf_id>" is honored by the pump BEFORE any CoS routing: the named workflow is triggered through the durable library path (checkpointed, engine task) under the SENDER's grants - every step chokepoint-checked - and an unknown workflow fails closed exactly like an unroutable department (parked AWAITING_HUMAN with a HITL filed), never a silent fallthrough to CoS routing.
     tests:
       - tests/security/test_channel_addressing.py::test_intake_defaults_to_the_tier1_chief_of_staff
       - tests/security/test_channel_addressing.py::test_an_explicit_target_addresses_a_tier2_subagent
       - tests/security/test_channel_addressing.py::test_the_channel_config_maps_a_chat_to_a_target
+      - tests/security/test_channel_addressing.py::test_a_config_mapped_workflow_target_triggers_the_workflow
+      - tests/security/test_channel_addressing.py::test_an_unknown_workflow_target_parks_for_a_human
+      - tests/security/test_channel_addressing.py::test_a_bare_workflow_prefix_is_not_a_workflow_target
       - tests/security/test_pump_principal_authority.py::test_an_addressed_item_routes_to_its_named_head_not_the_inferred_one
       - tests/security/test_pump_principal_authority.py::test_an_unknown_target_falls_back_to_the_inferred_route
+  SEC-180:
+    description: Self-serve onboarding for customer-facing channels is opt-in config, never authority - an unknown VERIFIED sender on a channel whose config carries self_onboard is bound at the configured CONSTRAINED role (never above member; an over-broad config role disables onboarding fail-closed) as a synthetic external:<platform>:<id> subject with NO user record, so the resolved principal's grant ceiling is the member tier's (operates, but control.* configure/administer verbs are denied). The onboarding is a first-class audited event (who / platform id / role), rate-limited per channel before any binding is minted, and can enqueue a static welcome to the durable outbox. Off by default: a channel without self_onboard rejects an unpaired sender exactly as before.
+    tests:
+      - tests/security/test_channel_self_onboard.py::test_a_stranger_onboards_at_exactly_the_configured_constrained_role
+      - tests/security/test_channel_self_onboard.py::test_onboarding_is_rate_limited_per_channel
+      - tests/security/test_channel_self_onboard.py::test_off_by_default_and_an_over_broad_role_never_onboards
+      - tests/security/test_channel_self_onboard.py::test_an_existing_binding_is_never_onboarded_over
   SEC-179:
     description: Channel notifications round-trip - HITL approval/escalation and run-completion notices enqueue durably to the user's BOUND socket-class surface per notification_prefs, addressed back to the originating thread; no pref, no binding, a disabled pref, or a non-socket channel delivers nothing. A team-scoped pref names a department (the user record's scope['departments']) and resolves to every ACTIVE member, delivered per member through the same binding-gated path - an unbound or deactivated member is excluded.
     tests:

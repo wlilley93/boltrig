@@ -181,11 +181,11 @@
       "expires": "2026-12-31"
     },
     "boltrig/fleet/pump.py": {
-      "max_file_lines": 578,
-      "max_function_lines": 68,
+      "max_file_lines": 666,
+      "max_function_lines": 78,
       "over_limit_functions": [],
       "owner": "fleet-maintainers",
-      "reason": "File-length debt only: the work-claim lifecycle phases still share one module. Function debt is cleared - handle_claimed_item was extracted down to 68 lines when boundary 2 (SEC-166) landed. Audit fixes: _record_failure defers to a requested cancel and persists a bounded, URL-redacted error detail instead of raw str(exc).",
+      "reason": "File-length debt only: the work-claim lifecycle phases still share one module. SEC-178 addressed-workflow execution added _run_addressed_workflow (the workflow: target honoring branch); handle_claimed_item grew to 78 lines with the mirrored boundary-1 cancel refresh. Audit fixes: _record_failure defers to a requested cancel and persists a bounded, URL-redacted error detail instead of raw str(exc).",
       "expires": "2026-12-31"
     },
     "boltrig/fleet/runtime.py": {
@@ -300,22 +300,22 @@
       "expires": "2026-12-31"
     },
     "boltrig/kernel/channel_routes.py": {
-      "max_file_lines": 511,
-      "max_function_lines": 330,
+      "max_file_lines": 596,
+      "max_function_lines": 344,
       "over_limit_functions": [
         {
           "name": "register_channel_routes",
-          "line": 182,
-          "lines": 330
+          "line": 253,
+          "lines": 344
         },
         {
           "name": "register_channel_routes.channel_inbound",
-          "line": 218,
-          "lines": 118
+          "line": 289,
+          "lines": 132
         }
       ],
       "owner": "kernel-maintainers",
-      "reason": "Split channel administration and inbound gateway route registrars without weakening signature checks.",
+      "reason": "Split channel administration and inbound gateway route registrars without weakening signature checks. SEC-180 self-serve onboarding added the _self_onboard helper and its wiring in channel_inbound.",
       "expires": "2026-12-31"
     },
     "boltrig/kernel/dispatch.py": {
