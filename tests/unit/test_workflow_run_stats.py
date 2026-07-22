@@ -73,7 +73,7 @@ async def test_record_workflow_run_is_idempotent_on_run_id():
     await store.record_workflow_run(T, "smoke-loop", "r1", "failed")
     second = await store.workflow_run_stats(T)
     assert second[0]["run_count"] == 1
-    assert second[0]["success_count"] == 0
+    assert second[0]["success_count"] == 1
     assert second[0]["last_run_at"] == first_at
 
 

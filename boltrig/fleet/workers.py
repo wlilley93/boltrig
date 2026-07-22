@@ -141,10 +141,18 @@ class HatchetExecutor:
         run_id: str | None = None,
         **kwargs: Any,
     ) -> Any:
-        """Await ``fn`` directly. This is NOT a durable step: nothing here is
-        recorded or resumable. Real durability comes from running the body
-        inside a Hatchet workflow (hatchet_app.py); this method only keeps the
-        call surface uniform with the local fallback."""
+        """Await ``fn`` directly. This is NOT a durable engine step: the
+        installed hatchet-sdk (1.33.x) exposes no public durable child-step API
+        on ``DurableContext`` (only durable waits/sleeps and a private memo),
+        so nothing here is independently recorded or resumable by the engine.
+        On the workflow-run path (hatchet_app.run_workflow_body) the honest
+        guarantee is therefore: the engine retries the whole durable TASK on a
+        crash, checkpoints replay every COMPLETED step (they are never
+        re-dispatched), and the interpreter's per-step idempotency key replays
+        the recorded kernel result for a step that completed but whose
+        checkpoint write was lost. Only a genuinely in-flight step re-executes,
+        after its idempotency claim lease expires. If a future SDK adds durable
+        child steps, this method is the single seam to upgrade."""
         return await fn(*args, **kwargs)
 
     async def enqueue(self, task_name: str, payload: dict) -> str | None:
@@ -170,7 +178,9 @@ class HatchetExecutor:
 
 def _require_durable() -> bool:
     """True when BOLTRIG_REQUIRE_DURABLE demands fail-closed selection (US-EXE-05)."""
-    return os.environ.get("BOLTRIG_REQUIRE_DURABLE", "").strip().lower() in ("1", "true")
+    from boltrig.config.environment import is_truthy
+
+    return is_truthy(os.environ.get("BOLTRIG_REQUIRE_DURABLE"))
 
 
 def register_workers(

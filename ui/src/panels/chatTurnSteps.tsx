@@ -14,7 +14,11 @@ export function StepsCard({ steps }: { steps: StepEntry[] }) {
       <ol className="steps-card__list">
         {steps.map((s) => (
           <li className="steps-card__item" key={s.stepId}>
-            <span className={`badge badge--tool-${s.status === "failed" ? "error" : s.status}`}>
+            <span
+              className={`badge badge--tool-${
+                s.status === "failed" || s.status === "error" ? "error" : s.status
+              }`}
+            >
               {s.status}
             </span>
             <code className="badge badge--verb">{s.action}</code>

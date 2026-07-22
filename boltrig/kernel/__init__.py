@@ -73,7 +73,6 @@ class Kernel:
             credentials=self.credentials,
             audit=self.audit,
             hitl=self.hitl,
-            cost=self.cost,
             adapter_provider=self.loader.get,
             agent_invoker=None,
             blocking_verbs=self._blocking_verbs,
@@ -91,6 +90,12 @@ class Kernel:
         from boltrig.models import AdapterHealth, AdapterRecord
 
         self.loader.register(tenant_id, adapter)
+        resource_specs = getattr(adapter, "mcp_resources", None)
+        self.mcp.register_resources(
+            tenant_id,
+            adapter.id,
+            resource_specs() if callable(resource_specs) else (),
+        )
         await self.store.upsert_adapter(
             AdapterRecord(
                 id=adapter.id,

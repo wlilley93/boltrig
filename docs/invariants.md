@@ -354,6 +354,23 @@ path never raises out of `publish`) is bound under the existing **P9** entry by
 | **EMO-4** | Emotion state is tenant-scoped - engines are keyed per tenant and events for one tenant never touch another tenant's engine. | `tests/emotion/test_relay.py::test_tenant_b_events_leave_tenant_a_engine_untouched` |
 | **EMO-5** | The appraisal table is data - the runtime tables load from `libraries/emotion` YAML and changing the parsed data changes behavior with no code edit. | `tests/emotion/test_engine.py::test_appraisal_table_is_data_and_mutating_it_changes_behavior` |
 | **WL-3** | Voluntary expression goes through the chokepoint - `familiar.express` is a registered verb with a binding, a grant check, and an audit row, and the express channel the surface reads is written ONLY by that dispatched handler (no direct agent-to-surface socket). | `tests/security/test_familiar_express.py::test_familiar_express_is_registered_with_a_binding`, `tests/security/test_familiar_express.py::test_ungranted_express_is_denied_audited_and_writes_nothing`, `tests/security/test_familiar_express.py::test_bad_gesture_is_rejected_by_the_binding_and_writes_nothing`, `tests/security/test_familiar_express.py::test_a_dispatched_gesture_is_audited` |
+| **DH-1** | Desktop control goes through the chokepoint with no side door - the only way a window action reaches the host is a granted, schema-bound, audited `desktop.*` dispatch claimed over the authenticated `/v1/hands` pull surface; an ungranted or schema-invalid call queues nothing, a claimed command cannot be claimed twice, and every executor receipt is kernel-recorded. | `tests/security/test_desktop_hands.py::test_granted_focus_dispatches_audits_and_queues`, `tests/security/test_desktop_hands.py::test_ungranted_desktop_call_is_denied_audited_and_queues_nothing`, `tests/security/test_desktop_hands.py::test_schema_bad_args_are_rejected_by_the_binding_and_queue_nothing`, `tests/security/test_desktop_hands.py::test_full_round_trip_receipt_resolves_the_waiting_dispatch`, `tests/security/test_desktop_hands.py::test_executor_offline_still_dispatches_and_audits`, `tests/security/test_desktop_hands.py::test_hands_routes_require_the_principal`, `tests/security/test_desktop_hands.py::test_hands_routes_claim_once_and_record_the_receipt` |
+
+### Credential-at-rest sealing (SEC-04 made true)
+
+The doctrine always claimed the application DB holds references only - never
+plaintext - but `set_credential_ref` persisted the caller's dict verbatim, and
+three writers (TOTP enrolment, per-org AI keys, legacy channel signing secrets)
+pass inline secret material. `boltrig/store/sealing.py` closes that gap at the
+store seam: every written dict rests as a versioned Fernet envelope
+(`{"sealed": "v1", "ct": ...}`) under a kernel-held key (`BOLTRIG_SEAL_KEY`,
+production-guarded like `BOLTRIG_AUDIT_HMAC_KEY`; optional
+`BOLTRIG_SEAL_KEY_PREVIOUS` for decrypt-only rotation), unsealed transparently
+on read. Legacy plaintext rows keep reading; any rewrite re-seals.
+
+| Invariant | Meaning | Bound test(s) |
+| --- | --- | --- |
+| **SEC-169** | No plaintext credential material rests in the credential store - writes rest as a sealed envelope, reads unseal transparently, legacy rows still read, a wrong key fails closed, rotation decrypts via the previous key, and a missing/default key is fatal in production but seals offline. | `tests/security/test_credential_sealing.py` (all eight tests) |
 
 ## How a new invariant is added
 

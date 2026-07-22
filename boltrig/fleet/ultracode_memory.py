@@ -71,18 +71,23 @@ def memory_config(defaults: dict[str, Any], agent: dict[str, Any]) -> dict[str, 
 
 
 def owner_scopes(context: InvocationContext) -> tuple[str, ...]:
-    """Existing memory RBAC owner scopes only: user, department, org."""
-    extra = dict(context.extra or {})
+    """Memory RBAC owner scopes derivable at this layer: the principal + org.
+
+    Caller-supplied ``extra`` NEVER widens memory visibility: a ``memory_scopes``
+    list arrives via ``/v1/spawn``'s caller-controlled ``body.context``, so
+    honouring it would let a caller name any user:/department: scope and read
+    another principal's memory. This mirrors the server-side derivation
+    (``identity.rbac.memory_owner_scopes``: own user + org), minus department
+    scopes, which this layer cannot derive from a verified role/scope - the only
+    ``role``/``scope`` data available here rides in the same caller-controlled
+    extra. Losing department-scoped recall in Ultracode is the deliberate cost of
+    failing closed.
+    """
+
     scopes: list[str] = []
     if context.on_behalf_of:
         scopes.append(f"user:{context.on_behalf_of}")
-    for scope in extra.get("memory_scopes") or []:
-        text = str(scope)
-        if text == "org" or text.startswith("user:") or text.startswith("department:"):
-            if text not in scopes:
-                scopes.append(text)
-    if "org" not in scopes:
-        scopes.append("org")
+    scopes.append("org")
     return tuple(scopes)
 
 

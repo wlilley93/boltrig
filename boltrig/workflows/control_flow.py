@@ -157,11 +157,14 @@ def run_control_step(
         return {"status": "ok", "output": {"branch": outcome}}
     if noun == "flow" and verb == "loop":
         items = resolve_items(params, results)
-        return {
-            "status": "ok",
-            "output": {"items": len(items), "count": len(items)},
-            "_items": items,
-        }
+        overflow = max(0, len(items) - MAX_LOOP_ITEMS)
+        items = items[:MAX_LOOP_ITEMS]
+        output: dict[str, Any] = {"items": len(items), "count": len(items)}
+        if overflow:
+            # The excess items are never dispatched (MAX_LOOP_ITEMS): recorded
+            # as skipped so the cap is observable in the run record.
+            output["skipped_overflow"] = overflow
+        return {"status": "ok", "output": output, "_items": items}
     if noun == "code" and verb == "run":
         # Arbitrary script execution is unsafe without a sandbox; record intent.
         script = params.get("script") or params.get("code") or ""
@@ -205,6 +208,11 @@ def branch_matches(
 # with an external parent falls outside the body (it would be ambiguous to
 # iterate) and is skipped with a clear reason. Self-contained bodies iterate
 # fully; this covers the common map/for-each pattern.
+
+# Items come from prior step output (adapter/agent-influenced), so an unbounded
+# list would fan out into an unbounded number of dispatches per run: cap the
+# iterations a single flow.loop expands into and record the excess as skipped.
+MAX_LOOP_ITEMS = 100
 
 
 def loop_body_ids(steps: list[dict[str, Any]], loop_id: str) -> list[str]:

@@ -90,7 +90,8 @@ class WebFetchAdapter:
             # A blocked target is refused before any network call (fail-closed).
             raise NetworkPolicyViolation(f"web.fetch refused: {reason}")
 
-        cap = int(params.get("max_bytes") or _MAX_BYTES)
+        # Agent-supplied max_bytes can only shrink the cap, never lift it.
+        cap = min(int(params.get("max_bytes") or _MAX_BYTES), _MAX_BYTES)
         proxy = self._config.get("https_proxy") or None
         # Redirects are NOT followed: a public URL must not redirect into internal
         # space and slip past the SSRF guard.

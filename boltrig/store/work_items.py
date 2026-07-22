@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from boltrig.models import WorkItem, WorkStatus
+from boltrig.models.work import work_item_run_id
 
 from .base import clamp_work_page
 from .workspace_scope import (
@@ -73,6 +74,36 @@ class WorkItemReadsMem:
             out = [item for item in out if item.id > cursor]
         return out[: clamp_work_page(limit)] if limit is not None else out
 
+    async def list_work_items_by_refs(self, tenant_id, refs):
+        wanted = set(refs)
+        out = [
+            item
+            for (tenant, _), item in self._work.items()
+            if tenant == tenant_id
+            and (item.id in wanted or item.hatchet_run_id in wanted)
+        ]
+        out.sort(key=lambda item: item.id)
+        return out
+
+    async def list_run_items_scoped(
+        self, tenant_id, *, departments=None, workspace_id=None, limit=None, cursor=None
+    ):
+        items = [w for (tenant, _), w in self._work.items() if tenant == tenant_id]
+        allowed = None if departments is None else set(departments)
+
+        def _visible(w) -> bool:
+            dept_ok = allowed is None or w.owner_member in allowed
+            return dept_ok and work_item_workspace_visible(w, workspace_id, True)
+
+        # The RunScope hidden-wins rule: a run ref owned by ANY non-visible item
+        # hides every item carrying that ref, visible aliases included.
+        hidden = {work_item_run_id(w) for w in items if not _visible(w)}
+        out = [w for w in items if _visible(w) and work_item_run_id(w) not in hidden]
+        out.sort(key=lambda w: w.id)
+        if cursor is not None:
+            out = [w for w in out if w.id > cursor]
+        return out[: clamp_work_page(limit)] if limit is not None else out
+
 
 class WorkItemReadsPG:
     async def get_work_item(
@@ -137,6 +168,50 @@ class WorkItemReadsPG:
         rows = await self._pool.fetch(sql, *args)
         return [work_item_from_row(row) for row in rows]
 
+    async def list_work_items_by_refs(self, tenant_id, refs):
+        rows = await self._pool.fetch(
+            """SELECT * FROM work_items WHERE tenant_id=$1
+               AND (id = ANY($2::text[]) OR hatchet_run_id = ANY($2::text[]))
+               ORDER BY id""",
+            tenant_id,
+            list(refs),
+        )
+        return [work_item_from_row(row) for row in rows]
+
+    async def list_run_items_scoped(
+        self, tenant_id, *, departments=None, workspace_id=None, limit=None, cursor=None
+    ):
+        args: list[Any] = [tenant_id]
+        # V(item): the visible-item predicate - department scope plus the
+        # enforced workspace visibility (org-wide + active). Unqualified columns
+        # resolve to the outer item in the WHERE clause and to the hidden-alias
+        # candidate h inside the NOT EXISTS subquery.
+        visible_clauses = []
+        if departments is not None:
+            args.append(list(departments))
+            visible_clauses.append(f"owner_member = ANY(${len(args)}::text[])")
+        append_work_workspace_clause(visible_clauses, args, workspace_id, True)
+        visible_sql = " AND ".join(visible_clauses)
+        clauses = ["w.tenant_id=$1", visible_sql]
+        # RunScope hidden-wins: a ref owned by ANY non-visible item hides the
+        # row. COALESCE keeps three-valued logic honest (a NULL owner_member
+        # makes V NULL, and that item counts as NOT visible), exactly like
+        # audit_query_scoped.
+        clauses.append(
+            "NOT EXISTS (SELECT 1 FROM work_items h WHERE h.tenant_id=$1"
+            " AND COALESCE(h.hatchet_run_id, h.id) = COALESCE(w.hatchet_run_id, w.id)"
+            f" AND NOT COALESCE(({visible_sql}), false))"
+        )
+        if cursor is not None:
+            args.append(cursor)
+            clauses.append(f"w.id > ${len(args)}")
+        sql = f"SELECT w.* FROM work_items w WHERE {' AND '.join(clauses)} ORDER BY w.id"
+        if limit is not None:
+            args.append(clamp_work_page(limit))
+            sql += f" LIMIT ${len(args)}"
+        rows = await self._pool.fetch(sql, *args)
+        return [work_item_from_row(row) for row in rows]
+
 
 def work_item_from_row(row: Any) -> WorkItem | None:
     if row is None:
@@ -163,4 +238,6 @@ def work_item_from_row(row: Any) -> WorkItem | None:
         result=row["result"],
         lease_owner=row["lease_owner"],
         lease_expires_at=row["lease_expires_at"],
+        target=row["target"],
+        reply_route=row["reply_route"],
     )

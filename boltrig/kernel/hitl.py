@@ -198,10 +198,46 @@ class HITLManager:
             ),
         )
         await self._store.create_hitl_request(req)
+        await self._notify_request(req)
         return req
+
+    async def _notify_request(self, req: HITLRequest) -> None:
+        """Best-effort channel notice to the human who must act (SEC-179):
+        enqueue to their bound surface per their notification_prefs so an
+        approval/escalation raised by a channel-originated run reaches the
+        originating chat. Fail-safe (P9), mirroring _fire_resume: the recorded
+        request is the truth; a notifier fault never voids it."""
+        try:
+            from boltrig.kernel.channel_notify import enqueue_user_notification
+
+            subject = req.assignee or req.requested_on_behalf_of or req.requested_by
+            if not subject:
+                return
+            event = "approval" if req.type == HITLType.APPROVAL else "escalation"
+            await enqueue_user_notification(
+                self._store, req.tenant_id, subject, event, req.question
+            )
+        except Exception:  # noqa: BLE001 - delivery is a side channel
+            pass
 
     async def get(self, tenant_id: str, req_id: str) -> HITLRequest | None:
         return await self._store.get_hitl_request(tenant_id, req_id)
+
+    async def pending_event(
+        self, context: Any, request_id: str, verb: str, call_id: str
+    ) -> dict[str, Any]:
+        """Project one bounded run-stream event from a canonical HITL request."""
+        request = await self.get(context.tenant_id, request_id)
+        return {
+            "type": "hitl",
+            "verb": verb,
+            "call_id": call_id,
+            "hitl_request_id": request_id,
+            "kind": request.type.value if request else "approval",
+            "question": request.question if request else f"Approve {verb}?",
+            "options": list(request.options) if request else ["approve", "reject"],
+            "requested_by": request.requested_by if request else context.actor,
+        }
 
     async def list_pending(self, tenant_id: str) -> list[HITLRequest]:
         return await self._store.list_pending_hitl(tenant_id)

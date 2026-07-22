@@ -47,7 +47,7 @@ The dispatcher also publishes paired `tool_call`/`tool_result` (and `hitl`) even
 
 **Governed by.** K-13 (fail-closed), SEC-21 (schema before side effect), SEC-07 (grants), SEC-14 (HITL cannot be bypassed), FR-KER-05 (rate limits), SEC-15 (idempotent replay), SEC-16 (every action audited), SEC-26 and SEC-37 (chokepoint parity from MCP and headless paths), P9 (degradation), FR-EVT-01/02 (paired tool events as a side channel).
 
-**Maturity.** Production-grade. This is the most heavily tested object in the repository. One honest caveat: the dispatcher is handed a `CostAccountant` but never calls it, so budgets are enforced at agent spawn time, not per verb call (see 1.9).
+**Maturity.** Production-grade. This is the most heavily tested object in the repository. One honest caveat: budgets are enforced at agent spawn time, not per verb call - the dispatcher holds no `CostAccountant`; cost accounting lives in the fleet spawn path via `Kernel.cost` (see 1.9).
 
 ### 1.2 Registry and discovery
 
@@ -101,7 +101,7 @@ The dispatcher also publishes paired `tool_call`/`tool_result` (and `hitl`) even
 
 **Public surface.** `GET /v1/admin/credentials` (references only, admin-gated). Never any route that returns material.
 
-**Governed by.** SEC-05 (resolved material never enters the audit log), K-20 (bounded observability), SEC-27 (no tool credential is ever sent to the Pi sidecar).
+**Governed by.** SEC-05 (resolved material never enters the audit log), K-20 (bounded observability), SEC-27 (no tool credential is ever sent to the Pi gateway).
 
 **Maturity.** Production-grade design; the only shipped `SecretStore` is env-backed (`EnvSecretStore`). Vault/KMS backends are declared seams, not implementations.
 
@@ -159,7 +159,7 @@ The dispatcher also publishes paired `tool_call`/`tool_result` (and `hitl`) even
 
 **Governed by.** FR-COST-02 (hard stop halts before exceeding; soft records overage only).
 
-**Maturity.** Wired-but-thin in one specific sense: `reserve` is called only from the fleet spawner (`boltrig/fleet/spawn.py`) with tenant and department scopes. The dispatcher holds a `CostAccountant` but never calls it, so there is no per-verb budget check at the chokepoint, and the workflow/agent-type scopes described in the docstring are not passed at enforcement time.
+**Maturity.** Wired-but-thin in one specific sense: `reserve` is called only from the fleet spawner (`boltrig/fleet/spawn.py`, via `Kernel.cost`) with tenant and department scopes. The dispatcher holds no `CostAccountant`, so there is no per-verb budget check at the chokepoint, and the workflow/agent-type scopes described in the docstring are not passed at enforcement time.
 
 ### 1.10 Egress guard
 
@@ -205,23 +205,25 @@ The dispatcher also publishes paired `tool_call`/`tool_result` (and `hitl`) even
 
 ### 1.13 Channel gateway and channel routes
 
-**One line.** External messaging channels (webhooks) become governed intake: verified signature, kernel-authoritative identity, then the one chokepoint.
+**One line.** External messaging channels become governed intake: verified signature, kernel-authoritative identity, then the one chokepoint — with a severed gateway terminating the socket class, durable dedup/outbox, and tiered addressing.
 
 **Plain language.** A mailbox on the outside wall with a very suspicious mailroom behind it. An inbound webhook is only accepted if its HMAC signature verifies and its timestamp is inside the replay window. The tenant comes from the verified channel record, never the payload. The sender is mapped to an internal identity through a tenant-scoped binding row; an unknown sender is denied fail-closed, or walked through a pairing flow (short one-time codes, hashed at rest, TTL-bounded, lockout after repeated wrong guesses). The resulting message becomes a normal governed work item. Outbound replies go through `channel.send`, a high-consequence verb, so a human gate applies by default.
 
-**Key files.** `boltrig/kernel/channel_gateway.py` (`resolve_channel_principal`), `boltrig/kernel/channel_routes.py` (ingress + management + pairing), `boltrig/adapters/builtin/inbound_webhook.py` (`verify_and_normalise`), `boltrig/adapters/builtin/channel_send.py`, `boltrig/models/channels.py`, `boltrig/store/channels.py`. Decision record: `docs/decisions/0003-channel-gateway-ruling.md`.
+Phase 2 (the socket class) landed: the severed `services/channel_gateway` daemon — the one message edge, policy-free — holds the persistent platform connections the stateless kernel must not, owning no policy/grants/persistent credential. It signs normalized inbound messages into the SAME intake route with the connect-time secret (one intake path) and pumps the durable `channel_outbox` over a run-scoped token minted through the MCP seam (claim/ack/fail-with-backoff). Replay dedup is store-backed (`channel_deliveries`, atomic record-and-check; messages with no platform id are content-hashed inside a 5-minute window), so it holds across workers and restarts. Intake stamps ADDRESSING on the work item: a target slug (the tier-1 chief of staff by default; a named tier-2 subagent/run when the sender or the channel's chat→target config mapping addresses one) plus the reply route, and notifications (HITL approvals, escalations, run completion) enqueue back to the user's bound surface and originating thread per `notification_prefs` (user- and department-scoped). Platform adapters wired with round-trip proofs against fake platform servers: Slack (Socket Mode), Telegram (long-poll), Discord (WS gateway), Signal (signal-cli sibling), WhatsApp (vendored MIT Baileys bridge, sibling Node image) — all derived from the MIT-licensed Hermes gateway adapters with attribution; live-platform verification is the operator's step (`services/channel_gateway/README.md`). The reference "custom interface" adapter (JSON-lines over localhost TCP, plus `clients/custom_surface.py`) is the seam the desktop-familiar, hey-nabu, and site front-ends target; the boltrig UI stays a first-party head on the kernel API (SSE relay), never a gateway channel.
 
-**Public surface.** `GET/POST /v1/channels`, `PATCH/DELETE /v1/channels/{id}`, `POST /v1/channels/{id}/inbound` (signature-authenticated ingress), `POST /v1/channels/{id}/pair`, `GET/POST /v1/channels/{id}/bindings`, `DELETE /v1/channels/{id}/bindings/{binding_id}`.
+**Key files.** `boltrig/kernel/channel_principal.py` (`resolve_channel_principal` — renamed from `channel_gateway.py` when the daemon took the gateway name), `boltrig/kernel/channel_routes.py` (ingress + management + pairing + addressing), `boltrig/kernel/channel_gateway_routes.py` (session mint + outbox links), `boltrig/kernel/channel_notify.py` (notification round-trip), `boltrig/adapters/builtin/inbound_webhook.py` (`verify_and_normalise`, durable dedup), `boltrig/adapters/builtin/channel_send.py`, `boltrig/models/channels.py`, `boltrig/store/channels.py`, `boltrig/store/channel_dedup.py`, `boltrig/store/channel_outbox.py`, `services/channel_gateway/`. Decision record: `docs/decisions/0003-channel-gateway-ruling.md`.
 
-**Governed by.** SEC-01 (the channel gateway, inbound, and governance test batteries), SEC-63 (replay window), SEC-39 (channel.send is high consequence and tenant-scoped), SEC-05 (secrets and pairing codes hashed at rest).
+**Public surface.** `GET/POST /v1/channels`, `PATCH/DELETE /v1/channels/{id}`, `POST /v1/channels/{id}/inbound` (signature-authenticated ingress), `POST /v1/channels/{id}/pair`, `GET/POST /v1/channels/{id}/bindings`, `DELETE /v1/channels/{id}/bindings/{binding_id}`, `POST /v1/channels/gateway/session` (admin), `POST /v1/channels/gateway/outbox/claim` + `.../outbox/{id}/ack|fail` (run-scoped token).
 
-**Maturity.** Production-grade for the webhook/request-response class. Note the intake honesty in 8.2: a channel-created work item currently has nothing pumping it onward (the delegation pump gap).
+**Governed by.** SEC-01 (the channel gateway, inbound, and governance test batteries), SEC-63 (replay window), SEC-39 (channel.send is high consequence and tenant-scoped), SEC-05 (secrets and pairing codes hashed at rest), SEC-175 (durable replay dedup), SEC-176 (outbox single-winner CAS), SEC-177 (gateway token auth + generic-adapter round trip), SEC-178 (addressing is routing data, not authority), SEC-179 (notification round-trip), SEC-28 (gateway severability).
+
+**Maturity.** Production-grade for the webhook/request-response class; Phase-2 skeleton landed for the socket class (generic adapter end-to-end, durable dedup/outbox/addressing wired; platform ports pending). Note the intake honesty in 8.2: a channel-created work item currently has nothing pumping it onward (the delegation pump gap), and the run-completion notification seam (`channel_notify.notify_work_item_result`) awaits its pump call site.
 
 ### 1.14 MCP server face
 
 **One line.** Granted verbs advertised as MCP tools; every `tools/call` runs the unchanged chokepoint.
 
-**Plain language.** A standard wall socket for AI tools. Any MCP-speaking client (the Pi sidecar, Claude Code, another agent) plugs in and sees a tool list, but the socket is wired straight back into the one security desk: the tool list shows only what that connection's token is scoped to, and every call runs all ten steps, including the human gate. A run-scoped token (the run's skill grants intersected with the tenant ceiling) is minted per agent run and revoked when it ends.
+**Plain language.** A standard wall socket for AI tools. Any MCP-speaking client (the Pi gateway, Claude Code, another agent) plugs in and sees a tool list, but the socket is wired straight back into the one security desk: the tool list shows only what that connection's token is scoped to, and every call runs all ten steps, including the human gate. A run-scoped token (the run's skill grants intersected with the tenant ceiling) is minted per agent run and revoked when it ends.
 
 **Key files.** `boltrig/kernel/mcp.py` (`McpFace`: `issue_run_token`, `revoke`, `handle` for run tokens, `handle_user` for console principals; JSON-RPC 2.0 `initialize`/`tools/list`/`tools/call`).
 
@@ -309,7 +311,7 @@ The dispatcher also publishes paired `tool_call`/`tool_result` (and `hitl`) even
 
 **One line.** The interchangeable reasoning backends a capability names; all degrade to a marked non-crash result without keys.
 
-**Plain language.** Four kinds of worker you can hire, all wearing the same uniform (`Runtime` protocol, returning `AgentResult`). Script is the deterministic no-model fallback: it literally echoes the task back (zero tokens, zero cost). Hermes and Claude-API are single-shot model calls (OpenAI-shaped and Anthropic respectively): no tool loop, one completion. Pi is the only multi-step, tool-calling lane (see 2.5). The honest and load-bearing behaviour: without an API key or endpoint, every non-script runtime returns a degraded result with a reason (`no_api_key`, `no_endpoint`, `no_sidecar`) rather than crashing, and the script runtime is a literal echo. In a keyless environment, "the agent replied" therefore means "the engine echoed", which is why degraded honesty is first on the plan (Part 10). Every runtime prepends the kernel-composed system prompt so the governance cage cannot be stripped.
+**Plain language.** Four kinds of worker you can hire, all wearing the same uniform (`Runtime` protocol, returning `AgentResult`). Script is the deterministic no-model fallback: it literally echoes the task back (zero tokens, zero cost). Hermes and Claude-API are single-shot model calls (OpenAI-shaped and Anthropic respectively): no tool loop, one completion. Pi is the only multi-step, tool-calling lane (see 2.5). The honest and load-bearing behaviour: without an API key or endpoint, every non-script runtime returns a degraded result with a reason (`no_api_key`, `no_endpoint`, `no_sidecar`) rather than crashing, and the script runtime is a literal echo. In a keyless environment, "the agent replied" therefore means "the engine echoed", which is why degraded honesty is first on the plan (Part 10). Every runtime prepends the kernel-composed system prompt so the governance cage cannot be stripped. Decision 0012 gate: Codex is the only target agent runtime and script stays the deterministic fallback, so every other lane (hermes, openai, claude-api, pi, opencode, rivet) is staged-cutover rollback residue reachable only when `BOLTRIG_ENABLE_LEGACY_RUNTIMES` is set (default OFF); with the flag unset a legacy lane request returns the typed unavailable result (`runtime_unavailable`, degrade-marked under the requested lane's name) instead of reaching the lane.
 
 **Key files.** `boltrig/fleet/runtime.py` (`Runtime`, `ScriptRuntime`, `HermesRuntime`, `ClaudeApiRuntime`, `build_runtime`), `boltrig/fleet/result.py` (`AgentResult`, where even a degraded run is `ok=True` with `output["_degraded"]` set).
 
@@ -319,17 +321,17 @@ The dispatcher also publishes paired `tool_call`/`tool_result` (and `hitl`) even
 
 **Maturity.** Wired-but-thin toward the real backends (single-shot, degrade to echo without keys); production-grade on the degrade path itself.
 
-### 2.5 PiRuntime and the Pi sidecar service
+### 2.5 PiRuntime and the Pi gateway service
 
 **One line.** The one agentic, tool-calling lane, run in a severed sandboxed process that reaches tools only through the kernel's MCP socket.
 
-**Plain language.** The one worker allowed to use power tools, kept in a locked workshop. The kernel-side `PiRuntime` mints a run-scoped MCP token, posts the job to the sidecar over HTTP, streams its events back, and revokes the token afterwards. The sidecar (a standalone FastAPI service, deliberately outside the `boltrig` package) receives only a model key and that token: no filesystem, no processes, no tool credentials, network egress restricted to the kernel and the model. Inside, it runs a loop: ask the model, execute any tool calls through `tools/call` on the kernel MCP face (so every tool call passes the full ten-step gate, including the human gate, which pauses the loop), feed results back, repeat up to `max_steps`. Honesty: this loop is a first-party stand-in written so the service works with no external Pi package; its own docstring marks `run_loop` as the integration point where a real third-party agent loop would replace the body. Offline it degrades to listing the tools it would have had.
+**Plain language.** The one worker allowed to use power tools, kept in a locked workshop. The kernel-side `PiRuntime` mints a run-scoped MCP token, posts the job to the gateway over HTTP, streams its events back, and revokes the token afterwards. The gateway (a standalone FastAPI service, deliberately outside the `boltrig` package) receives only a model key and that token: no filesystem, no processes, no tool credentials, network egress restricted to the kernel and the model. Inside, it runs a loop: ask the model, execute any tool calls through `tools/call` on the kernel MCP face (so every tool call passes the full ten-step gate, including the human gate, which pauses the loop), feed results back, repeat up to `max_steps`. Honesty: this loop is a first-party stand-in written so the service works with no external Pi package; its own docstring marks `run_loop` as the integration point where a real third-party agent loop would replace the body. Offline it degrades to listing the tools it would have had.
 
 **Key files.** `boltrig/fleet/pi_runtime.py` (`PiRuntime`, `build_request`); `services/pi_sidecar/app.py` (`run_loop`, `McpClient`, the FastAPI app).
 
-**Public surface.** Sidecar: `GET /health`, `POST /run` (streaming ndjson). It consumes `POST /v1/mcp` with the `x-boltrig-mcp-token` header. Compose keeps it on the `sandbox` network only, with no published port.
+**Public surface.** Gateway: `GET /health`, `POST /run` (streaming ndjson). It consumes `POST /v1/mcp` with the `x-boltrig-mcp-token` header. Compose keeps it on the `sandbox` network only, with no published port.
 
-**Governed by.** FR-RUN-02 and SEC-27 (only the scoped MCP connection and model, no tool credentials), FR-RUN-03 (every tool call passes the chokepoint), FR-RUN-05 (degrades without the sidecar), SEC-24 and SEC-48 (sandbox declared and enforced in the deploy manifests), SEC-28 (kernel and models import nothing from Pi or the sidecar), SEC-23/FR-MCP-02.
+**Governed by.** FR-RUN-02 and SEC-27 (only the scoped MCP connection and model, no tool credentials), FR-RUN-03 (every tool call passes the chokepoint), FR-RUN-05 (degrades without the gateway), SEC-24 and SEC-48 (sandbox declared and enforced in the deploy manifests), SEC-28 (kernel and models import nothing from Pi or the gateway), SEC-23/FR-MCP-02.
 
 **Maturity.** Wired-but-thin: the transport, sandboxing contract, token scoping, and degrade paths are real and tested; the reasoning loop is a home-grown stand-in, not the real Pi library.
 
@@ -337,7 +339,7 @@ The dispatcher also publishes paired `tool_call`/`tool_result` (and `hitl`) even
 
 **One line.** A chat turn becomes a governed work item and a spawned run whose live events stream back over SSE and are persisted.
 
-**Plain language.** The reception phone line with a live intercom. When a message arrives, the service checks you may use this thread (owner-scoped; only org-admin and compliance may read others'), persists your message, mints a run id, and starts the turn in the background while forwarding every event from the relay to your browser as it happens: text deltas, tool calls, sub-agent announcements, inline approval cards. When the run ends, the assistant message (with the full event list) is persisted, so a dropped client can re-attach to the same run and replay what it missed. The relay itself is an in-memory, single-process fan-out with a 500-event backlog per stream, by design a thin stand-in for Redis pub/sub in a multi-replica deployment. Publishers: the chat executor, the spawner, the dispatch chokepoint, and (relayed) the Pi sidecar.
+**Plain language.** The reception phone line with a live intercom. When a message arrives, the service checks you may use this thread (owner-scoped; only org-admin and compliance may read others'), persists your message, mints a run id, and starts the turn in the background while forwarding every event from the relay to your browser as it happens: text deltas, tool calls, sub-agent announcements, inline approval cards. When the run ends, the assistant message (with the full event list) is persisted, so a dropped client can re-attach to the same run and replay what it missed. The relay itself is an in-memory, single-process fan-out with a 500-event backlog per stream, by design a thin stand-in for Redis pub/sub in a multi-replica deployment. Publishers: the chat executor, the spawner, the dispatch chokepoint, and (relayed) the Pi gateway.
 
 **Key files.** `boltrig/fleet/chat.py` (`ChatService`, `build_turn_executor`, `sse`), `boltrig/kernel/events.py` (`EventRelay`).
 
@@ -365,11 +367,11 @@ The dispatcher also publishes paired `tool_call`/`tool_result` (and `hitl`) even
 
 **One line.** The layered system prompt: a non-overridable governance floor, then tier character, then an optional department slant.
 
-**Plain language.** Every worker's briefing card, printed top-down: house rules first (the cage no input can strip, because every runtime and the sidecar place it above user content), then the voice for the rank (chief of staff, department head, or worker), then a department flavour. A human caller gets no system prompt at all.
+**Plain language.** Every worker's briefing card, printed top-down: house rules first (the cage no input can strip, because every runtime and the gateway place it above user content), then the voice for the rank (chief of staff, department head, or worker), then a department flavour. A human caller gets no system prompt at all.
 
 **Key files.** `boltrig/fleet/prompt_stack.py` (`GOVERNANCE_FLOOR`, `TIER_CHARACTER`, `compose_system_prompt`); prompt data also under `libraries/prompts/`.
 
-**Public surface.** None; consumed by every runtime and by the sidecar request builder.
+**Public surface.** None; consumed by every runtime and by the gateway request builder.
 
 **Governed by.** No binding invariant id; exercised by `tests/unit/test_prompt_stack.py` without invariant markers.
 
@@ -421,7 +423,7 @@ The dispatcher also publishes paired `tool_call`/`tool_result` (and `hitl`) even
 
 **One line.** The durability seam: Hatchet wraps steps durably in production; a loudly non-durable local executor stands in offline.
 
-**Plain language.** Two kinds of job board. The production one (Hatchet) writes every step down so a crashed process resumes where it left off, and its `hitl_demo` durable task can genuinely sleep for up to 24 hours waiting for an approval event and then resume. The dev one is a whiteboard: `LocalDurableExecutor` runs the step and notes it in an in-memory Python list; its own docstring says it does not persist, retry, or resume across a restart, and `durable = False`. Which one you get is decided at boot: if the Hatchet SDK imports and a client constructs, `HatchetExecutor`; otherwise the local fallback. Honesty on the production half too: `HatchetExecutor.run_step` currently awaits the function directly rather than registering it as a Hatchet workflow; richer registration is layered on by the deployment, and a Hatchet-resumed step does not yet re-enter the chokepoint on its own (Part 10).
+**Plain language.** Two kinds of job board. The production one (Hatchet) writes every run down so a crashed process resumes where it left off. The dev one is a whiteboard: `LocalDurableExecutor` runs the step and notes it in an in-memory Python list; its own docstring says it does not persist, retry, or resume across a restart, and `durable = False`. Which one you get is decided at boot: if the Hatchet SDK imports and a client constructs, `HatchetExecutor`; otherwise the local fallback. Honesty on the production half too: `HatchetExecutor.run_step` awaits the function directly — the installed hatchet-sdk (1.33.x) exposes no public durable child-step API on `DurableContext` (only durable waits/sleeps and a private memo), so a step is not its own engine-durable unit today. What the workflow-run path guarantees instead (hatchet_app `run_workflow_body` wires BOTH seams): the engine retries the whole durable task on a crash, checkpoints replay every completed step without re-dispatching it, and a deterministic per-step idempotency key replays the recorded kernel result for a step that completed but whose checkpoint write was lost. Only a genuinely in-flight step re-executes, with standard at-least-once engine-retry semantics. The remaining seam is per-step engine durability: if a future SDK adds durable child steps, `HatchetExecutor.run_step` is the single method to upgrade.
 
 **Key files.** `boltrig/fleet/workers.py` (`LocalDurableExecutor`, `HatchetExecutor`, `register_workers`), `boltrig/fleet/hatchet_app.py` (`build_hatchet_app`, `ping`, `hitl_demo`, `approve`), `boltrig/fleet/hatchet_worker.py` (the worker entrypoint against a live engine).
 
@@ -758,7 +760,7 @@ Also registered at boot but living elsewhere: the control-plane adapter (1.16), 
 
 **Key files.** `boltrig/config/manifest.py` (`load_manifest`, `apply_manifest`, the frozen `FleetManifest` tree); `manifest.yaml`, `manifest.example.yaml`.
 
-**Governed by.** FR-EXT-01, K-2 (ceiling), FR-COST-02 (budgets), SEC-24 (sidecar sandbox declared restrictive in the manifest).
+**Governed by.** FR-EXT-01, K-2 (ceiling), FR-COST-02 (budgets), SEC-24 (gateway sandbox declared restrictive in the manifest).
 
 **Maturity.** Production-grade parsing and seeding; policy-as-data is real.
 
@@ -825,11 +827,11 @@ Also registered at boot but living elsewhere: the control-plane adapter (1.16), 
 | ui | ui/Dockerfile (nginx) | 8080 | the React console, proxying `/v1/` to the kernel |
 | bifrost | maximhq/bifrost (profile `gateway`) | 8080 | the model gateway seam's target |
 | local-model | vllm/vllm-openai (profile `local`) | 8001 | on-box inference for sensitive data |
-| pi-sidecar | services/pi_sidecar/Dockerfile | expose 8090, `sandbox` network only | the sandboxed agent loop |
+| pi_sidecar | services/pi_sidecar/Dockerfile | expose 8090, `sandbox` network only | the sandboxed agent loop |
 
-First-party containers run read-only rootfs, all capabilities dropped, no-new-privileges, resource caps, non-root. The secure overlay (`deploy/compose.secure.yml`) adds a Caddy edge and flips the `sandbox` network to internal, making the sidecar's egress restriction a matter of infrastructure, not documentation.
+First-party containers run read-only rootfs, all capabilities dropped, no-new-privileges, resource caps, non-root. The secure overlay (`deploy/compose.secure.yml`) adds a Caddy edge and flips the `sandbox` network to internal, making the gateway's egress restriction a matter of infrastructure, not documentation.
 
-**Governed by.** SEC-64 (containers hardened, enforced so it cannot silently regress), SEC-48 (sidecar egress enforced in manifests), SEC-24, FR-GW-01.
+**Governed by.** SEC-64 (containers hardened, enforced so it cannot silently regress), SEC-48 (gateway egress enforced in manifests), SEC-24, FR-GW-01.
 
 **Maturity.** Production-grade topology; Hatchet, Bifrost, and local-model are explicitly optional external lanes.
 
@@ -867,7 +869,7 @@ The whole engine in one trace. A user types "create a ticket for the login bug" 
 2. **Thread.** `ChatService.handle_turn` checks the caller may use this conversation, persists the user message, mints a fresh `run_id`, and starts streaming SSE frames back, beginning with `message_start`.
 3. **Become work.** The turn executor creates a governed `WorkItem` (source `chat`, id = run id, `on_behalf_of` the user) and an `InvocationContext` at tier 1. Continuity composes the conversation's own prior turns into the task, deterministically.
 4. **Spawn.** `Spawner.spawn` runs its pipeline: resolve and merge skills (none on a plain chat turn), validate context, pick the cheapest capable capability, check recursion depth, reserve budget against the tenant and department cards, intersect the child's grants with the parent's ceiling, route the model through the sensitive-to-local guard and (if configured) the gateway, and write an `AGENT_SPAWN` audit row.
-5. **Reason.** The selected runtime runs with the composed system prompt (governance floor first). If it is the Pi lane, the kernel mints a run-scoped MCP token and streams the job to the sandboxed sidecar, which loops: model, tool calls, model.
+5. **Reason.** The selected runtime runs with the composed system prompt (governance floor first). If it is the Pi lane, the kernel mints a run-scoped MCP token and streams the job to the sandboxed gateway, which loops: model, tool calls, model.
 6. **Chokepoint.** Every tool call the run makes (say `ticket.create`) comes back through `POST /v1/mcp` `tools/call` and runs the ten steps of `Dispatcher.invoke`: resolve the verb and binding, validate params, check grants, hit the HITL gate (if `ticket.create` were high consequence, a `PendingHuman` pauses here and an approval card streams inline into the chat), rate limit, idempotency replay, resolve the Jira credential inside the kernel, execute the adapter, validate output, record the idempotent result.
 7. **Audit.** In the same logical step, win or lose, one audit row is written, hash-chained to the previous row, scrubbed of anything secret-shaped, attributing the adapter, the actor, the depth, the latency, and the status. Paired `tool_call`/`tool_result` events were emitted onto the run stream as a side channel that can never break the call.
 8. **Return.** The runtime's result surfaces as the spawn summary; the executor publishes it as a `text_delta`; `message_end` closes the stream; the assistant message, with the full event list and any pending approval id, is persisted. `GET /v1/audit/tree/{run_id}` can now reconstruct everything that just happened, with costs totalled up the tree.
@@ -882,7 +884,7 @@ The approved engine plan closes the gap between the governance shell (largely pr
 
 **1. Degraded honesty.** Today a keyless or endpoint-less run returns an echo or a degraded summary that reads like an answer (2.4, 2.6): `AgentResult` marks degradation internally (`output["_degraded"]`) but the chat surface presents it as a normal reply. The plan makes degradation visible end to end: label degraded turns honestly in the stream and the UI, so "the engine could not reason" is never dressed as "the agent replied".
 
-**2. Durable tasks re-entering the chokepoint.** `LocalDurableExecutor` is a self-declared non-durable stand-in and `HatchetExecutor.run_step` awaits functions directly (2.12). The plan finishes the durability story: real Hatchet workflow registration, and the rule that a durably resumed step re-enters `kernel.invoke` like any fresh action, so a resume after a restart or a long HITL pause gets the same ten-step treatment as the original call (the Postgres-proven durable pause, 1.4, becomes a live production loop).
+**2. Durable tasks re-entering the chokepoint.** Partially landed: `boltrig-workflow-run` now runs every step through `kernel.invoke` inside an `executor.run_step` boundary WITH checkpoint-resume and per-step idempotency keys (2.12), so a durably resumed run re-enters the chokepoint per step and never re-executes completed work. What remains: `HatchetExecutor.run_step` still awaits functions directly — the SDK exposes no durable child-step API — so per-step ENGINE durability (each step its own retriable Hatchet unit) is the open seam, closed either by an SDK upgrade or by registering one Hatchet task per step.
 
 **3. The delegation pump.** Intake works (1.13, 2.13) and the org chart exists as code (2.1, 2.2), but the fleet worker's loop is a keepalive and neither ChiefOfStaff nor DepartmentHead is ever invoked in serving (8.2). The plan wires the pump: the worker polls pending work items, the ChiefOfStaff routes them, DepartmentHeads decompose and fan out under their caps, and the manifest's currently-dead `spawn_rules` (7.2) get their consumer.
 

@@ -29,6 +29,23 @@ class Credential:
         return f"<Credential {self.id} ({self.kind})>"
 
 
+def bearer_token(credential: Credential | None) -> str | None:
+    """The bearer token carried by kernel-resolved credential material, or None.
+
+    The shared material convention for token-style credentials (used by the MCP
+    consumer and the runpod adapter); the material itself is never logged or
+    returned (SEC-05), only this derived header value.
+    """
+    if credential is None:
+        return None
+    material = credential.material or {}
+    for key in ("token", "api_key", "value"):
+        value = material.get(key)
+        if value:
+            return str(value)
+    return None
+
+
 class ErrorClass(str, Enum):
     """Common error taxonomy adapters map their native errors onto (S7.3)."""
 
@@ -84,6 +101,27 @@ class VerbSpec:
     # persisted for replay (for example an invitation token).  It is declarative
     # adapter data, not a kernel hard-coded verb list.
     idempotency_mode: str = "cacheable"
+
+
+@dataclass(frozen=True)
+class McpResourceSpec:
+    """Declarative mapping from governed verbs to MCP resources.
+
+    The MCP face only translates this data. Listing and reading still invoke
+    the named verbs through the dispatcher, so an adapter cannot create a
+    reduced-security resource side door.
+    """
+
+    uri_prefix: str
+    list_verb: str
+    read_verb: str
+    collection_key: str
+    id_key: str = "id"
+    name_key: str = "title"
+    description_key: str = "filename"
+    read_id_param: str = "id"
+    blob_key: str = "data"
+    media_type_key: str = "media_type"
 
 
 @runtime_checkable

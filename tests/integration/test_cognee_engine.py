@@ -26,14 +26,16 @@ tools/json_schema modes, which instructor rejects.)
 from __future__ import annotations
 
 import importlib.util
+import builtins
 import os
 import re
 import sys
+from types import SimpleNamespace
 import uuid
 
 import pytest
 
-from boltrig.memory.cognee import CogneeEngine, dataset_for
+from boltrig.memory.cognee import CogneeEngine, _require_cognee, dataset_for
 from boltrig.memory.engine import EngineFact
 
 _COGNEE_PRESENT = importlib.util.find_spec("cognee") is not None
@@ -70,6 +72,29 @@ async def test_operations_raise_typed_unavailable_error_without_cognee(monkeypat
         await engine.remember("acme", [_fact("f1", "user:alice", "clean note")])
     with pytest.raises(RuntimeError, match="cognee"):
         await engine.recall("acme", "note", scopes=["user:alice"])
+
+
+@pytest.mark.invariant("SEC-27")
+def test_cognee_import_cannot_load_host_dotenv_into_process(monkeypatch):
+    """A provider import cannot activate Boltrig flags or absorb ambient secrets."""
+    original_import = builtins.__import__
+
+    def importing(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "cognee":
+            assert os.environ.get("PYTHON_DOTENV_DISABLED") == "1"
+            os.environ["BOLTRIG_CODEX_TRUSTED"] = "1"
+            os.environ.pop("BOLTRIG_IMPORT_SENTINEL", None)
+            return SimpleNamespace()
+        return original_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.delenv("BOLTRIG_CODEX_TRUSTED", raising=False)
+    monkeypatch.setenv("BOLTRIG_IMPORT_SENTINEL", "preserve-me")
+    monkeypatch.setattr(builtins, "__import__", importing)
+
+    assert _require_cognee() is not None
+    assert "BOLTRIG_CODEX_TRUSTED" not in os.environ
+    assert os.environ["BOLTRIG_IMPORT_SENTINEL"] == "preserve-me"
+    assert "PYTHON_DOTENV_DISABLED" not in os.environ
 
 
 @pytest.mark.invariant("SEC-42")

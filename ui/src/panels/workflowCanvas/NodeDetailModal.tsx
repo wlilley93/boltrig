@@ -49,6 +49,7 @@ const STATUS_LABEL: Record<RunNodeStatus, string> = {
   failed: "Failed",
   error: "Error",
   skipped: "Skipped",
+  paused: "Needs you",
 };
 
 export function NodeDetailModal({
@@ -83,7 +84,7 @@ export function NodeDetailModal({
         <header className="wf3-modal__head">
           <span
             className="wf3-modal__icon"
-            style={{ color: meta?.color ?? "#7E95B0", background: "rgba(255,255,255,0.05)" }}
+            style={{ color: meta?.color ?? "var(--color-text-muted)" }}
           >
             <NodeIcon name={meta?.icon ?? "agent"} size={20} />
           </span>

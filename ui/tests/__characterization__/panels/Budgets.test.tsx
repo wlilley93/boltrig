@@ -30,6 +30,7 @@ describe("Budgets", () => {
     render(<Budgets />);
 
     await screen.findByText("Budget policy");
+    expect(screen.getByText(/Workflow scope and window values are policy metadata/)).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Token limit"), {
       target: { value: "2000" },
     });

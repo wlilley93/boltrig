@@ -30,6 +30,7 @@ export function useRunStream(runId: string): RunStream {
 
   useEffect(() => {
     const ctrl = new AbortController();
+    let terminalTimer: number | undefined;
     setEvents([]);
     setStreamError(null);
     setResolvedHitls({});
@@ -37,7 +38,13 @@ export function useRunStream(runId: string): RunStream {
     setReplayIdx(null);
     streamRunEvents(
       runId,
-      (ev) => setEvents((prev) => [...prev, ev]),
+      (ev) => {
+        setEvents((prev) => [...prev, ev]);
+        if (ev.type === "workflow_run" && ev.status !== "paused") {
+          setSettled(true);
+          terminalTimer = window.setTimeout(() => ctrl.abort(), 50);
+        }
+      },
       { signal: ctrl.signal, follow: true },
     )
       .then(() => {
@@ -46,7 +53,10 @@ export function useRunStream(runId: string): RunStream {
       .catch((err) => {
         if (!ctrl.signal.aborted) setStreamError(errText(err));
       });
-    return () => ctrl.abort();
+    return () => {
+      if (terminalTimer !== undefined) window.clearTimeout(terminalTimer);
+      ctrl.abort();
+    };
   }, [runId]);
 
   const canReplay = settled && events.length > 1;

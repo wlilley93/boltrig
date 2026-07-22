@@ -1,12 +1,26 @@
 ---
 tags: [meta, changelog]
-updated: 2026-05-23
+updated: 2026-07-21
 ---
 
 # Changelog
 
 Chronological log of notable changes to the project. Newest first.
 This is a human-curated log — not a mirror of `git log`.
+
+## 2026-07-21
+
+- **Citable Knowledge added to the catalogue** - the shipped feature list now
+  includes the first Knowledge slice: canonical text/Markdown/PDF originals,
+  permission-first search, and immutable revision citations. Cognee is the
+  bundled rebuildable compiler; later datatypes and external provider
+  connections are not advertised as active capability. See [[features-section]].
+- **Feature claims re-audited** - all 30 catalogue entries were traced to the
+  current engine and tests. The copy now includes Agent Studio and evaluations,
+  narrows workflow schedules, budget scopes, memory provenance, outbound channels,
+  and connector claims to shipped behavior, and has a regression test preventing
+  known seams from being advertised as active product capability. See
+  [[features-section]].
 
 ## 2026-07-01
 

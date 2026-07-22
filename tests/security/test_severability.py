@@ -16,6 +16,7 @@ import pytest
 _REPO = pathlib.Path(__file__).resolve().parents[2]
 _ROOT = _REPO / "boltrig"
 _PI_SIDECAR = _REPO / "services" / "pi_sidecar"
+_CHANNEL_GATEWAY = _REPO / "services" / "channel_gateway"
 _SCOPED = [_ROOT / "kernel", _ROOT / "models"]
 
 # import tokens that would indicate coupling to a sibling estate kernel
@@ -24,11 +25,12 @@ _FORBIDDEN = re.compile(
     re.IGNORECASE,
 )
 
-# Round Two: the kernel/models must not import Pi or the sidecar; the sidecar is
+# Round Two: the kernel/models must not import Pi or the gateway; the gateway is
 # reached over the wire only (SEC-28). Also forbid runtime-backbone specifics
-# (hatchet, the fleet's pi_runtime) leaking into the core.
+# (hatchet, the fleet's pi_runtime) leaking into the core. Decision 0003 (Phase
+# 2, condition 3): the channel gateway joins the same forbidden set.
 _FORBIDDEN_PI = re.compile(
-    r"^\s*(?:from|import)\s+(.*\b)?(pi_runtime|pi_sidecar|hatchet|hatchet_sdk)\b",
+    r"^\s*(?:from|import)\s+(.*\b)?(pi_runtime|pi_sidecar|channel_gateway|hatchet|hatchet_sdk)\b",
     re.IGNORECASE,
 )
 
@@ -61,7 +63,7 @@ def test_kernel_and_models_have_no_estate_coupling():
 @pytest.mark.invariant("SEC-28")
 def test_kernel_and_models_have_no_pi_or_sidecar_coupling():
     offenders = _scan(_FORBIDDEN_PI)
-    assert not offenders, "Pi/sidecar coupling in kernel/models (SEC-28):\n" + "\n".join(
+    assert not offenders, "Pi/gateway coupling in kernel/models (SEC-28):\n" + "\n".join(
         offenders
     )
 
@@ -76,8 +78,26 @@ def test_pi_sidecar_imports_no_boltrig_package_code():
             if pattern.match(line):
                 offenders.append(f"{path}:{n}: {line.strip()}")
     assert not offenders, (
-        "Pi sidecar must stay package-severed and communicate over HTTP/MCP only "
+        "Pi gateway must stay package-severed and communicate over HTTP/MCP only "
         "(SEC-28):\n" + "\n".join(offenders)
+    )
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-28")
+def test_channel_gateway_imports_no_boltrig_package_code():
+    # Decision 0003, condition 3: the channel gateway is severed exactly like
+    # the pi_sidecar - the only coupling is the wire protocol (signed intake
+    # POSTs + the run-scoped outbox links), never a package import.
+    offenders: list[str] = []
+    pattern = re.compile(r"^\s*(?:from|import)\s+boltrig(?:\.|\b)")
+    for path in _CHANNEL_GATEWAY.rglob("*.py"):
+        for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if pattern.match(line):
+                offenders.append(f"{path}:{n}: {line.strip()}")
+    assert not offenders, (
+        "Channel gateway must stay package-severed and communicate over the "
+        "kernel links only (SEC-28, decision 0003):\n" + "\n".join(offenders)
     )
 
 

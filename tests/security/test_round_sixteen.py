@@ -18,7 +18,7 @@ from __future__ import annotations
 import time
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from boltrig.adapters.builtin.inbound_webhook import WebhookAuthError, verify_and_normalise
@@ -113,19 +113,8 @@ def test_wildcard_hosts_refused_in_production():
 # --------------------------------------------------------------------------- #
 # SEC-59  JWT verification hardening (IAM-02/03/04)
 # --------------------------------------------------------------------------- #
-def _have_authlib() -> bool:
-    try:
-        import authlib.jose  # noqa: F401
-        import cryptography  # noqa: F401
-
-        return True
-    except Exception:
-        return False
-
-
 @pytest.mark.security
 @pytest.mark.invariant("SEC-59")
-@pytest.mark.skipif(not _have_authlib(), reason="authlib + cryptography required")
 async def test_jwt_alg_allowlist_and_access_token_only():
     from authlib.jose import JsonWebKey, jwt
     from cryptography.hazmat.primitives.asymmetric import rsa
@@ -152,11 +141,13 @@ async def test_jwt_alg_allowlist_and_access_token_only():
     # a valid RS256 access token verifies (alg is on the allowlist)
     assert (await v.verify(sign(base)))["sub"] == "u"
     # an ID token presented as an access token is rejected (IAM-04)
-    with pytest.raises(Exception):
+    with pytest.raises(HTTPException) as exc:
         await v.verify(sign({**base, "token_use": "id"}))
+    assert exc.value.status_code == 401
     # a token with no expiry is rejected (IAM-03)
-    with pytest.raises(Exception):
+    with pytest.raises(HTTPException) as exc:
         await v.verify(sign({k: val for k, val in base.items() if k != "exp"}))
+    assert exc.value.status_code == 401
 
 
 # --------------------------------------------------------------------------- #
@@ -219,6 +210,10 @@ async def test_worker_boot_refuses_default_audit_key_under_prod_signal(monkeypat
         await build_kernel_async()
 
     monkeypatch.setenv("BOLTRIG_AUDIT_HMAC_KEY", "a-real-secret")
+    # The SEC-169 seal guard is production-gated the same way: booting under the
+    # signal also requires a real BOLTRIG_SEAL_KEY (manifest credential seeding
+    # seals at the store seam during boot).
+    monkeypatch.setenv("BOLTRIG_SEAL_KEY", "a-real-seal-key")
     kernel = await build_kernel_async()
     assert kernel is not None
 

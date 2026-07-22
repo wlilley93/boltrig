@@ -1,8 +1,11 @@
 """Credential resolution (P3, US-KER-03, SEC-04/05, K-20).
 
 Credentials are resolved only inside the kernel, at call time, from an external
-secret store. The application DB holds *references* only - never plaintext. A
-resolved ``Credential`` is handed to one adapter call and never returned to,
+secret store. The application DB never holds plaintext: a credential_refs row is
+either a pure *reference* (``{store, ref}`` into a SecretStore) or a reference
+dict carrying inline material that the store seam envelope-SEALS at rest
+(``boltrig/store/sealing.py``) and unseals transparently on read. A resolved
+``Credential`` is handed to one adapter call and never returned to,
 embedded in, or logged by an agent.
 """
 
@@ -65,5 +68,11 @@ class CredentialResolver:
             raise CredentialResolution(
                 f"no credential reference '{cred_id}' for tenant '{tenant_id}'"
             )
-        material = await self._secret.fetch(ref.get("store", "env"), ref["ref"])
+        material = await self.fetch_material(ref)
         return Credential(id=cred_id, kind=ref.get("kind", "api_key"), material=material)
+
+    async def fetch_material(self, ref: dict) -> dict:
+        """Fetch the material behind a stored credential REFERENCE ({store, ref})
+        through the SecretStore seam. Kernel-side only (SEC-04/05): the material
+        is never logged, audited, or handed to an agent."""
+        return await self._secret.fetch(ref.get("store", "env"), ref["ref"])

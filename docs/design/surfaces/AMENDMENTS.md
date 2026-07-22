@@ -25,18 +25,17 @@ this sheet wins. Implementing seats read the spec AND this sheet.
    outcome of the first submit. The automations spec's "Save workflow" button and
    its ok-first treatment are amended accordingly; the ok treatment documents the
    post-approval apply leg.
-3. **The approver cannot currently see what they are approving.** GET /v1/hitl
-   returns question "Approve <verb> ?" and an opaque context STRING
-   (app.py:392-406; dispatch.py creates context as "{actor} requests {verb}").
-   There are no params, and verb/requested_by are stored on the row but not
-   returned. All best-effort context-scanning UI (agent-builder PAR-7 pending
-   reconciliation chips, approvals diff rendering) is reclassified DEPENDS-BACKEND
-   (dependency A3). Session-local pending indicators only until it lands.
-4. **POST /v1/workflows/{id}/execute is synchronous.** The run_id only arrives
-   when the run has completed or paused (platform_routes.py:299-314). "Run now"
-   copy: "Run now returns when the run completes or pauses; step results then
-   appear on the canvas." The live-during-run overlay is DEPENDS-BACKEND (async
-   execute or an early run-id handshake, dependency A4).
+3. **Approvals carry structured, bounded context.** GET /v1/hitl returns the
+   requester, optional on-behalf-of actor, exact verb, run id, resource context,
+   and redacted literal inputs. The approval surface renders that structure and
+   links to the run. Secret-shaped keys and token-shaped values are redacted at
+   the storage boundary, not merely hidden by the UI. This landed as A3 on
+   2026-07-21.
+4. **Workflow live view uses an early run-id handshake.** Execute remains a
+   synchronous HTTP call, but the client mints the run id and passes it in the
+   governed invocation context before dispatch. The canvas subscribes immediately,
+   retries the initial not-yet-created stream briefly, and keeps the identical
+   run context through any approval re-invocation. This landed as A4 on 2026-07-21.
 5. **Run on a never-saved draft 404s.** When a workflow has never been saved,
    disable Run with hint "Save the workflow first - runs use the saved version."
 
@@ -92,6 +91,15 @@ this sheet wins. Implementing seats read the spec AND this sheet.
 
 ## D. Shared backend-dependency ledger (deduplicated)
 
+Landed on 2026-07-21:
+
+- A3. Structured HITL context, bounded persistence, secret redaction, and exact
+  requester, verb, inputs, resource, and run projection.
+- A4. Early workflow run-id handshake through caller invocation context, with
+  immediate stream following and approval-continuous identity.
+
+Remaining or partially landed:
+
 - A1. control.* verbs for the remaining console writes: skill.upsert,
   verb.define, noun.define, binding.set, mcp_server.register, config.upsert
   (+ rollback), hierarchy via config.upsert, user.update, invitation.create and
@@ -99,10 +107,6 @@ this sheet wins. Implementing seats read the spec AND this sheet.
   deviation). First tranche in flight as Beat 3.5.
 - A2. account.* low-consequence self-scope verbs (settings/notifications/token
   revoke/session revoke) so chat reaches the account plane.
-- A3. Structured HITL context: store {verb_id, params} at gate time; return
-  verb, requested_by, and structured context from GET /v1/hitl. Unblocks
-  approver legibility, cross-session PendingHumanCards, and pending chips.
-- A4. Async workflow execute (or early run-id handshake) for live run overlay.
 - A5. control.workflow.upsert current-version-bump default (or orchestrator
   read-then-bump documented).
 - A6. Revision payload read: GET /v1/admin/config/{section}/history/{rev} for

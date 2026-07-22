@@ -100,6 +100,17 @@ async def test_pending_human_emits_hitl_event():
     kinds = [e["type"] for e in events]
     assert "hitl" in kinds  # the pause surfaces on the run stream
     assert "tool_result" not in kinds  # a paused call has no result yet
+    hitl = next(event for event in events if event["type"] == "hitl")
+    assert hitl == {
+        "type": "hitl",
+        "verb": "ticket.create",
+        "call_id": events[0]["call_id"],
+        "hitl_request_id": hitl["hitl_request_id"],
+        "kind": "approval",
+        "question": "Approve ticket.create?",
+        "options": ["approve", "reject"],
+        "requested_by": "u",
+    }
 
 
 # --------------------------------------------------------------------------- #

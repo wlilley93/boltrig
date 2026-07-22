@@ -1,5 +1,12 @@
 # Boltrig - system overview (the whole picture)
 
+> **Runtime currency (2026-07-21):** this is a historical whole-system view of
+> the Round Six/Seven implementation. Its Pi, Hermes, and runtime-selection
+> sections do not describe the target product architecture. Accepted decision
+> 0012 makes Codex the target agent runtime; `docs/PATH-TO-10.md` records the
+> incomplete cutover and the still-live legacy residue. Historical labels remain
+> below so the implementation it documented can still be understood.
+
 Addendum, not a replacement. The whole-system view that the Pi runtime spec
 (`requirements-pi-runtime.md`, Round Six) and the control plane spec
 (`requirements-control-plane.md`, Round Seven) sit inside. It does not repeat

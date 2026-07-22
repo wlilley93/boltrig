@@ -26,7 +26,7 @@ export const CHAT_AGENTS: ChatAgent[] = [
     name: "Boltrig",
     role: "Governed assistant",
     initials: "B",
-    color: "#3DD3F0",
+    color: "var(--color-accent)",
     dept: "Current scope",
     status: "active",
     snippet: "Conversations in your scope",

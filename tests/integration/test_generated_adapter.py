@@ -55,3 +55,26 @@ def test_generated_adapter_inert_until_reviewed():
 
     gen.review_and_activate("alice@acme")
     assert gen.activated is True
+
+
+@pytest.mark.invariant("SEC-61")
+def test_spec_url_fetch_is_refused_for_internal_targets():
+    # SSRF: a spec URL resolving to the cloud-metadata endpoint is refused by
+    # the egress guard BEFORE any network call (no redirects are followed).
+    with pytest.raises(ValueError, match="egress"):
+        generate_adapter_from_spec(
+            "http://169.254.169.254/latest/meta-data", adapter_id="ssrf"
+        )
+
+
+def test_local_spec_path_requires_explicit_opt_in(tmp_path):
+    import yaml
+
+    spec_file = tmp_path / "spec.yaml"
+    spec_file.write_text(yaml.safe_dump(_SPEC), encoding="utf-8")
+    with pytest.raises(ValueError, match="allow_local_paths"):
+        generate_adapter_from_spec(str(spec_file), adapter_id="local")
+    gen = generate_adapter_from_spec(
+        str(spec_file), adapter_id="local", allow_local_paths=True
+    )
+    assert {v.verb_id for v in gen.describe()} >= {"pet.list"}

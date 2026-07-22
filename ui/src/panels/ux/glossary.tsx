@@ -27,6 +27,15 @@ export const AUDIT_STATUS: Record<string, Term> = {
   pending_human: { label: "Paused", tip: "Paused for an approval.", cls: "badge--run-paused" },
 };
 
+export const MEMORY_INGEST_STATUS: Record<string, Term> = {
+  pending: { label: "Pending", tip: "Queued for screening.", cls: "badge--run-pending" },
+  screening: { label: "Screening", tip: "Checking source content before storage.", cls: "badge--run-running" },
+  cognifying: { label: "Loading", tip: "Turning accepted source items into scoped facts.", cls: "badge--run-running" },
+  done: { label: "Done", tip: "Screened facts were stored.", cls: "badge--ok" },
+  failed: { label: "Failed", tip: "The ingestion stopped with an error.", cls: "badge--down" },
+  rejected: { label: "Rejected", tip: "No source item passed screening.", cls: "badge--down" },
+};
+
 export const HITL_TYPE: Record<string, Term> = {
   approval: { label: "Approval", tip: "Needs your sign-off before it runs.", cls: "badge--type-approval" },
   clarification: { label: "Question", tip: "The system has a question for you.", cls: "badge--type-clarification" },
@@ -45,6 +54,8 @@ export const HITL_URGENCY: Record<string, Term> = {
 // the raw token via StatusBadge.
 export const TOOL_STATUS: Record<string, Term> = {
   pending: { label: "Running", tip: "The tool call is in flight - awaiting its result.", cls: "badge--tool-running" },
+  pending_human: { label: "Needs you", tip: "The tool call is paused for human approval.", cls: "badge--run-paused" },
+  paused: { label: "Needs you", tip: "The tool call is paused for human approval.", cls: "badge--run-paused" },
   ok: { label: "OK", tip: "The tool call succeeded.", cls: "badge--tool-ok" },
   degraded: { label: "Degraded", tip: "Worked, but a system was unhealthy.", cls: "badge--degraded" },
   error: { label: "Error", tip: "The tool call failed.", cls: "badge--tool-error" },

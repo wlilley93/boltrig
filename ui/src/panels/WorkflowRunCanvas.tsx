@@ -14,7 +14,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import { ReactFlow, Background, Controls, MiniMap, type Edge } from "@xyflow/react";
+import { ReactFlow, Background, Controls, MiniMap } from "@xyflow/react";
 
 import "@xyflow/react/dist/style.css";
 
@@ -26,14 +26,35 @@ import {
   extractSteps,
   nodeTypes,
   stepsToGraph,
-  type CanvasNode,
   type RunNodeStatus,
-  type StepNode,
 } from "./WorkflowCanvas";
 import { errText } from "./shared";
+import { overlayRunState } from "./workflowCanvas/runState";
+import { edgeTypes } from "./workflowCanvas/edges";
 
 function isNotFound(err: string | null): boolean {
   return !!err && (err.includes("404") || err.toLowerCase().includes("not found"));
+}
+
+function isTerminalWorkflowEvent(event: ChatEvent): boolean {
+  return event.type === "workflow_run" && event.status !== "paused";
+}
+
+async function followRunWithStartupRetry(
+  runId: string,
+  onEvent: (event: ChatEvent) => void,
+  signal: AbortSignal,
+): Promise<void> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await streamRunEvents(runId, onEvent, { signal, follow: true });
+      return;
+    } catch (error) {
+      if (signal.aborted) throw error;
+      if (attempt >= 8 || !isNotFound(errText(error))) throw error;
+      await new Promise((resolve) => window.setTimeout(resolve, 150));
+    }
+  }
 }
 
 interface WorkflowRunCanvasProps {
@@ -70,16 +91,24 @@ export function WorkflowRunCanvas({ runId, wfId, onBack }: WorkflowRunCanvasProp
   // Follow the run's stream: replay-then-live. Each workflow_step lights a node.
   useEffect(() => {
     const ctrl = new AbortController();
+    let terminalTimer: number | undefined;
     setStatusById({});
     setStreamDone(false);
     setStreamError(null);
-    streamRunEvents(
+    followRunWithStartupRetry(
       runId,
       (ev: ChatEvent) => {
-        if (ev.type !== "workflow_step") return;
-        setStatusById((prev) => ({ ...prev, [ev.step_id]: ev.status }));
+        if (ev.type === "workflow_step") {
+          setStatusById((prev) => ({ ...prev, [ev.step_id]: ev.status }));
+        }
+        if (isTerminalWorkflowEvent(ev)) {
+          setStreamDone(true);
+          // Let any event already buffered behind the terminal marker render,
+          // then release the long-lived follow socket.
+          terminalTimer = window.setTimeout(() => ctrl.abort(), 50);
+        }
       },
-      { signal: ctrl.signal, follow: true },
+      ctrl.signal,
     )
       .then(() => {
         if (!ctrl.signal.aborted) setStreamDone(true);
@@ -87,21 +116,18 @@ export function WorkflowRunCanvas({ runId, wfId, onBack }: WorkflowRunCanvasProp
       .catch((err) => {
         if (!ctrl.signal.aborted) setStreamError(errText(err));
       });
-    return () => ctrl.abort();
+    return () => {
+      if (terminalTimer !== undefined) window.clearTimeout(terminalTimer);
+      ctrl.abort();
+    };
   }, [runId]);
 
-  // Overlay status onto a copy of the static nodes. A node with no event yet is
-  // "pending"; once the stream has closed any node still "running" is stale, so
-  // we drop it back to pending to stop the pulse and leave final states intact.
-  const nodes: CanvasNode[] = useMemo(() => {
-    return base.nodes.map((n: StepNode) => {
-      let runStatus = statusById[n.id] ?? "pending";
-      if (streamDone && runStatus === "running") runStatus = "pending";
-      return { ...n, data: { ...n.data, runStatus } };
-    });
-  }, [base.nodes, statusById, streamDone]);
-
-  const edges: Edge[] = base.edges;
+  // Overlay status onto the same authored graph. Nodes carry a glyph + ring;
+  // each incoming edge carries the target step's live or settled state.
+  const { nodes, edges } = useMemo(
+    () => overlayRunState(base.nodes, base.edges, statusById, streamDone),
+    [base.nodes, base.edges, statusById, streamDone],
+  );
 
   const notFound = isNotFound(detail.error) && isNotFound(streamError);
 
@@ -151,6 +177,7 @@ export function WorkflowRunCanvas({ runId, wfId, onBack }: WorkflowRunCanvasProp
             nodes={nodes}
             edges={edges}
             nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
             onNodeClick={() => openRun(runId)}
             nodesDraggable={false}
             nodesConnectable={false}
@@ -158,7 +185,7 @@ export function WorkflowRunCanvas({ runId, wfId, onBack }: WorkflowRunCanvasProp
             fitView
             proOptions={{ hideAttribution: true }}
           >
-            <Background />
+            <Background color="var(--dot-color)" />
             <Controls showInteractive={false} />
             <MiniMap pannable zoomable />
           </ReactFlow>

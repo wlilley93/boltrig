@@ -185,6 +185,8 @@ CREATE TABLE IF NOT EXISTS work_items (
     attempts        INT NOT NULL DEFAULT 0,              -- claim count
     degraded        BOOLEAN NOT NULL DEFAULT false,      -- degraded honesty persisted (US-FLT-07)
     result          JSONB,                               -- terminal output of the run
+    target          TEXT,                                -- channel addressing: NULL/'cos' = tier-1 CoS (decision 0003 Phase 2)
+    reply_route     JSONB,                               -- {"channel_id","thread","sender"} for round-trip replies
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (tenant_id, id)
@@ -432,14 +434,17 @@ CREATE TABLE IF NOT EXISTS budgets (
 );
 
 -- Secret references only - never plaintext secrets at rest (SEC-04, FR-SEC-02).
--- ``data`` holds the full reference dict the resolver consumes (store, ref, kind,
--- ...); the typed columns mirror it for queryability. No secret material here.
+-- ``data`` holds the reference dict the resolver consumes, SEALED at the store
+-- seam (boltrig/store/sealing.py): a versioned envelope {"sealed": "v1", "ct":
+-- <fernet token>} whose ciphertext is the reference dict. Legacy plaintext rows
+-- (no "sealed" marker) still read; any write re-seals. The typed columns mirror
+-- the reference metadata (an env var name, not secret material).
 CREATE TABLE IF NOT EXISTS credential_refs (
     id          TEXT NOT NULL,                          -- "jira-oauth"
     tenant_id   TEXT NOT NULL,
     store       TEXT NOT NULL,                          -- vault | kms | docker-secret | env
     ref         TEXT NOT NULL,                          -- path/name in the external store
-    data        JSONB,                                  -- the full reference dict (no secrets)
+    data        JSONB,                                  -- the SEALED reference envelope (ciphertext)
     expires_at  TIMESTAMPTZ,                            -- for rotation alerts (US-COST-04)
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -592,6 +597,44 @@ CREATE TABLE IF NOT EXISTS channel_pairings (
 );
 CREATE INDEX IF NOT EXISTS channel_pairings_code_idx
     ON channel_pairings (tenant_id, channel_id, code_hash);
+
+-- Channel deliveries: durable replay-dedup markers for channel intake
+-- (decision 0003 Phase 2, M3/SEC-66). One row per seen (channel, delivery_id);
+-- TTL-bounded, evicted opportunistically on write. RLS-scoped.
+CREATE TABLE IF NOT EXISTS channel_deliveries (
+    tenant_id         TEXT NOT NULL,
+    channel_id        TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+    delivery_id       TEXT NOT NULL,
+    seen_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expires_at        TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (tenant_id, channel_id, delivery_id)
+);
+CREATE INDEX IF NOT EXISTS channel_deliveries_expiry_idx
+    ON channel_deliveries (tenant_id, expires_at);
+
+-- Channel outbox: the durable outbound hand-off for socket-class channels
+-- (decision 0003 Phase 2). The kernel enqueues; the severed sidecar claims
+-- (leased, one winner - the work_items claim shape), delivers over its held
+-- platform connection, then acks (terminal) or fails (backoff-gated retry,
+-- terminal 'failed' at the attempt cap). RLS-scoped; the payload carries no
+-- credential (platform secrets are connect-time injected into the sidecar).
+CREATE TABLE IF NOT EXISTS channel_outbox (
+    id                TEXT NOT NULL,
+    tenant_id         TEXT NOT NULL,
+    channel_id        TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+    payload           JSONB NOT NULL DEFAULT '{}'::jsonb,
+    status            TEXT NOT NULL DEFAULT 'pending',  -- pending | in_flight | delivered | failed
+    attempts          INTEGER NOT NULL DEFAULT 0,
+    lease_owner       TEXT,
+    lease_expires_at  TIMESTAMPTZ,
+    next_attempt_at   TIMESTAMPTZ,
+    last_error        TEXT,
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, id)
+);
+CREATE INDEX IF NOT EXISTS channel_outbox_claim_idx
+    ON channel_outbox (tenant_id, channel_id, status, created_at);
 
 -- Round Three (optional): memory & knowledge (Epic MEM). owner_scope is the RBAC
 -- boundary; sensitive memory follows sensitive-routing (SEC-31).
@@ -785,7 +828,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS sessions_token_hash_idx
 -- view/export. Tenant-isolated + RLS-scoped (see rls.sql).
 --
 -- D1: the TOTP enrolment row. The base32 shared secret is NOT stored here: it is
--- SEALED in credential_refs and referenced by secret_ref (the same sealed seam the
+-- SEALED in credential_refs (envelope-encrypted at the store seam, see
+-- boltrig/store/sealing.py) and referenced by secret_ref (the same sealed seam the
 -- channel signing secret + per-org AI keys use). Only the ref + the enrolled flag
 -- live here. enrolled is false for a begun-but-unconfirmed enrolment, true only
 -- after a verify-enroll code confirms the authenticator (D3).
@@ -1497,3 +1541,127 @@ CREATE TABLE IF NOT EXISTS capability_attestation_entries (
         tenant_id, workspace_id, root_run_id, phase_id, assignment_id
     ) ON DELETE CASCADE
 );
+
+-- ---------------------------------------------------------------------------
+-- Codex-native Knowledge fabric (decision 0015)
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS knowledge_uploads (
+    tenant_id TEXT NOT NULL, id TEXT NOT NULL, workspace_id TEXT,
+    title TEXT NOT NULL, filename TEXT NOT NULL, media_type TEXT NOT NULL,
+    owner_scope TEXT NOT NULL, source_kind TEXT NOT NULL, source_ref TEXT,
+    staged_key TEXT, digest TEXT, byte_size BIGINT,
+    status TEXT NOT NULL CHECK (status IN ('begun','staged','committed')),
+    asset_id TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (tenant_id,id)
+);
+CREATE TABLE IF NOT EXISTS knowledge_blobs (
+    tenant_id TEXT NOT NULL, digest TEXT NOT NULL, object_key TEXT NOT NULL,
+    byte_size BIGINT NOT NULL, media_type TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id,digest), UNIQUE (tenant_id,object_key)
+);
+CREATE TABLE IF NOT EXISTS knowledge_assets (
+    tenant_id TEXT NOT NULL, id TEXT NOT NULL, workspace_id TEXT,
+    title TEXT NOT NULL, filename TEXT NOT NULL, asset_type TEXT NOT NULL,
+    owner_scope TEXT NOT NULL, current_revision_id TEXT NOT NULL,
+    source_kind TEXT NOT NULL, source_ref TEXT, deleted_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (tenant_id,id)
+);
+CREATE TABLE IF NOT EXISTS knowledge_source_occurrences (
+    tenant_id TEXT NOT NULL, id TEXT NOT NULL, asset_id TEXT NOT NULL,
+    source_kind TEXT NOT NULL, external_id TEXT NOT NULL, external_path TEXT,
+    observed_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (tenant_id,id),
+    FOREIGN KEY (tenant_id,asset_id) REFERENCES knowledge_assets(tenant_id,id)
+      ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS knowledge_source_occurrences_asset_idx
+  ON knowledge_source_occurrences(tenant_id,asset_id,observed_at);
+CREATE TABLE IF NOT EXISTS knowledge_revisions (
+    tenant_id TEXT NOT NULL, id TEXT NOT NULL, asset_id TEXT NOT NULL,
+    blob_digest TEXT NOT NULL, version INT NOT NULL, media_type TEXT NOT NULL,
+    byte_size BIGINT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id,id), UNIQUE (tenant_id,asset_id,version),
+    FOREIGN KEY (tenant_id,asset_id) REFERENCES knowledge_assets(tenant_id,id)
+      ON DELETE CASCADE,
+    FOREIGN KEY (tenant_id,blob_digest) REFERENCES knowledge_blobs(tenant_id,digest)
+      ON DELETE RESTRICT
+);
+CREATE TABLE IF NOT EXISTS knowledge_representations (
+    tenant_id TEXT NOT NULL, id TEXT NOT NULL, revision_id TEXT NOT NULL,
+    kind TEXT NOT NULL, format TEXT NOT NULL, generator TEXT NOT NULL,
+    generator_version TEXT NOT NULL, content_hash TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (tenant_id,id),
+    FOREIGN KEY (tenant_id,revision_id) REFERENCES knowledge_revisions(tenant_id,id)
+      ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS knowledge_segments (
+    tenant_id TEXT NOT NULL, id TEXT NOT NULL, asset_id TEXT NOT NULL,
+    revision_id TEXT NOT NULL, representation_id TEXT NOT NULL,
+    sequence INT NOT NULL, text TEXT NOT NULL, locator JSONB NOT NULL,
+    content_hash TEXT NOT NULL,
+    search_vector TSVECTOR GENERATED ALWAYS AS
+      (to_tsvector('simple',coalesce(text,''))) STORED,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (tenant_id,id),
+    UNIQUE (tenant_id,representation_id,sequence),
+    FOREIGN KEY (tenant_id,asset_id) REFERENCES knowledge_assets(tenant_id,id)
+      ON DELETE CASCADE,
+    FOREIGN KEY (tenant_id,revision_id) REFERENCES knowledge_revisions(tenant_id,id)
+      ON DELETE CASCADE,
+    FOREIGN KEY (tenant_id,representation_id)
+      REFERENCES knowledge_representations(tenant_id,id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS knowledge_segments_search_idx
+  ON knowledge_segments USING GIN(search_vector);
+CREATE INDEX IF NOT EXISTS knowledge_segments_asset_idx
+  ON knowledge_segments(tenant_id,asset_id,sequence);
+CREATE TABLE IF NOT EXISTS knowledge_embeddings (
+    tenant_id TEXT NOT NULL, id TEXT NOT NULL, subject_type TEXT NOT NULL,
+    subject_id TEXT NOT NULL, model_provider TEXT NOT NULL, model_name TEXT NOT NULL,
+    model_version TEXT NOT NULL, dimensions INT NOT NULL, distance_metric TEXT NOT NULL,
+    vector vector(256) NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id,id),
+    UNIQUE (tenant_id,subject_id,model_provider,model_name,model_version),
+    FOREIGN KEY (tenant_id,subject_id) REFERENCES knowledge_segments(tenant_id,id)
+      ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS knowledge_embeddings_subject_idx
+  ON knowledge_embeddings(tenant_id,subject_type,subject_id);
+CREATE TABLE IF NOT EXISTS knowledge_asset_access (
+    tenant_id TEXT NOT NULL, asset_id TEXT NOT NULL, scope TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id,asset_id,scope),
+    FOREIGN KEY (tenant_id,asset_id) REFERENCES knowledge_assets(tenant_id,id)
+      ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS knowledge_asset_access_scope_idx
+  ON knowledge_asset_access(tenant_id,scope,asset_id);
+CREATE TABLE IF NOT EXISTS knowledge_providers (
+    tenant_id TEXT NOT NULL, id TEXT NOT NULL, display_name TEXT NOT NULL,
+    role TEXT NOT NULL, enabled BOOLEAN NOT NULL, bundled BOOLEAN NOT NULL,
+    health TEXT NOT NULL, status TEXT NOT NULL, last_error TEXT, config JSONB NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (tenant_id,id)
+);
+CREATE TABLE IF NOT EXISTS knowledge_projection_statuses (
+    tenant_id TEXT NOT NULL, provider_id TEXT NOT NULL, subject_type TEXT NOT NULL,
+    subject_id TEXT NOT NULL, operation TEXT NOT NULL, status TEXT NOT NULL,
+    projection_ref TEXT, error TEXT, updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id,provider_id,subject_id,operation),
+    FOREIGN KEY (tenant_id,provider_id) REFERENCES knowledge_providers(tenant_id,id)
+      ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS knowledge_jobs (
+    tenant_id TEXT NOT NULL, id TEXT NOT NULL, kind TEXT NOT NULL,
+    subject_id TEXT NOT NULL, status TEXT NOT NULL, detail JSONB NOT NULL DEFAULT '{}',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (tenant_id,id)
+);
+CREATE TABLE IF NOT EXISTS knowledge_projection_outbox (
+    tenant_id TEXT NOT NULL, id TEXT NOT NULL, provider_id TEXT NOT NULL,
+    subject_type TEXT NOT NULL, subject_id TEXT NOT NULL, operation TEXT NOT NULL,
+    payload JSONB NOT NULL, status TEXT NOT NULL DEFAULT 'pending', attempts INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (tenant_id,id)
+);
+CREATE INDEX IF NOT EXISTS knowledge_projection_outbox_pending_idx
+  ON knowledge_projection_outbox(tenant_id,status,created_at);

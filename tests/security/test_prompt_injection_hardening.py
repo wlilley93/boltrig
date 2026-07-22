@@ -13,6 +13,7 @@ outbound connection - closing an SSRF pivot from the sidecar's network position.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import sys
 import types
@@ -26,11 +27,17 @@ from boltrig.kernel.events import EventRelay
 from boltrig.models import GrantSet, TenantPermissions
 from boltrig.store import InMemoryStore
 
-# The sidecar is a SEVERED service (not part of the boltrig package, SEC-28); import
-# it by path exactly as the deploy does.
-_SIDECAR_DIR = Path(__file__).resolve().parents[2] / "services" / "pi_sidecar"
-sys.path.insert(0, str(_SIDECAR_DIR))
-import app as sidecar  # noqa: E402
+# The sidecar is a SEVERED service (not part of the boltrig package, SEC-28);
+# load it by path exactly as the deploy does, under a UNIQUE module name so it
+# never shadows another ``app`` module in sys.modules and never mutates sys.path
+# for the rest of the pytest session.
+_SIDECAR_APP = Path(__file__).resolve().parents[2] / "services" / "pi_sidecar" / "app.py"
+_spec = importlib.util.spec_from_file_location("pi_sidecar_app", _SIDECAR_APP)
+sidecar = importlib.util.module_from_spec(_spec)
+# Registered under the unique name only (pydantic resolves forward refs through
+# sys.modules); sys.path is never touched and ``app`` is never claimed.
+sys.modules[_spec.name] = sidecar
+_spec.loader.exec_module(sidecar)
 
 T = "acme"
 

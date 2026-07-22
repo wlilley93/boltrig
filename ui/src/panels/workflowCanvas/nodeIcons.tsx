@@ -52,7 +52,7 @@ function EndIcon(p: IconProps) {
   return (
     <Svg {...p}>
       <rect x="4.5" y="4.5" width="15" height="15" rx="3" fill="currentColor" />
-      <rect x="8.5" y="8.5" width="7" height="7" rx="1.5" fill="#04060D" />
+      <rect x="8.5" y="8.5" width="7" height="7" rx="1.5" fill="var(--color-bg-base)" />
     </Svg>
   );
 }

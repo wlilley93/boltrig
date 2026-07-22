@@ -19,14 +19,12 @@ interface LogLine {
   status: string;
 }
 
-const STATUS_COLOR: Record<string, string> = {
-  ok: "#3FB984",
-  failed: "#F0654A",
-  error: "#F0654A",
-  paused: "#E8B339",
-  skipped: "#4E637E",
-  running: "#3DD3F0",
-};
+function statusClass(status: string): string {
+  if (["ok", "failed", "error", "paused", "skipped", "running"].includes(status)) {
+    return `wf3-console__agent--${status}`;
+  }
+  return "wf3-console__agent--default";
+}
 
 function linesFromRun(run: WorkflowRunRecord | null): LogLine[] {
   if (!run) return [];
@@ -78,10 +76,7 @@ export function ExecutionConsole({ open, onClose, runResult }: ExecutionConsoleP
           lines.map((line, i) => (
             <div className="wf3-console__row" key={i}>
               <span className="wf3-console__time">{line.time}</span>
-              <span
-                className="wf3-console__agent"
-                style={{ color: STATUS_COLOR[line.status] ?? "#B8C8DA" }}
-              >
+              <span className={`wf3-console__agent ${statusClass(line.status)}`}>
                 {line.agent}
               </span>
               <span className="wf3-console__msg">{line.message}</span>

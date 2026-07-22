@@ -7,6 +7,12 @@ manifest and the libraries. This document maps the components, the dispatch
 flow, the data model, the internal contracts (SRS S7), and where the binding
 architectural principles P1-P10 are enforced.
 
+> **Runtime currency (2026-07-21):** the component map documents both live
+> legacy implementation and current seams. Accepted decision 0012 makes Codex
+> the only target agent runtime. The cutover is not yet complete, so runtime
+> selection code remains factual implementation residue but is not the product
+> direction. See `docs/PATH-TO-10.md` for the honest rollout state.
+
 > **Doctrine source (binding, [2026] VJS-CC NANKLE-CONSOLIDATION 001).** The
 > chokepoint + capability + audit discipline Boltrig implements (the `K-1..K-30`
 > invariants) is owned by the `agent-kernel-doctrine` repository, which is its
@@ -25,6 +31,7 @@ architectural principles P1-P10 are enforced.
 | Adapters | `boltrig/adapters/` | The single adapter Protocol (`base.py`), the loader (`loader.py`), builtin adapters (`builtin/`), and HTTP/SQL bases + a generator (`http_base.py`, `sql_base.py`, `generator.py`). |
 | Fleet | `boltrig/fleet/` | The durable hierarchy and ephemeral spawning: spawner (`spawn.py`), runtimes (`runtime.py`), chief-of-staff (`chief_of_staff.py`), department head (`department_head.py`), workers/Hatchet seam (`workers.py`). |
 | Skills | `boltrig/skills/` | Skill schema + loader (`schema.py`, `loader.py`) over `libraries/skills/`. |
+| Knowledge | `boltrig/knowledge/` | Canonical source assets, immutable revisions, ObjectVault ports, stable passages, permission-first retrieval, typed context, and rebuildable provider projections. |
 | Workflows | `boltrig/workflows/` | Precreated/generated workflow library (`library.py`, `generator.py`) over `libraries/workflows/`. |
 | Work | `boltrig/work/` | Source-agnostic work-item normalise/queue/store (`normalise.py`, `queue.py`, `store.py`). |
 | Identity | `boltrig/identity/` | Token verification + principal resolver (`auth.py`), IdP-group to role/scope (`rbac.py`), delegation (`delegation.py`). |
@@ -74,6 +81,10 @@ per-transaction `app.tenant_id` GUC (a null GUC yields zero rows, fail-closed).
   monotonic `seq`, `prev_hash` -> `hash` chain), `idempotency_keys`, `budgets`
   (token/cost limit, hard_stop, window), `credential_refs` (refs only, never
   plaintext).
+- **Knowledge**: upload sessions, content-addressed blob references, assets,
+  revisions, source occurrences, representations, stable segments, versioned
+  embeddings, access scopes, processing jobs, provider state, and projection
+  status/outbox rows. Original bytes live in ObjectVault, not Postgres.
 
 ## Internal contracts (SRS S7)
 
@@ -89,7 +100,8 @@ per-transaction `app.tenant_id` GUC (a null GUC yields zero rows, fail-closed).
 - **S7.3 Adapter interface.** One `Adapter` Protocol (`adapters/base.py`):
   `describe() -> [VerbSpec]`, `execute(verb, params, credential, context) ->
   Result`, `health()`. Errors map onto a common `ErrorClass`; `Credential`
-  material is repr-suppressed.
+  material is repr-suppressed. An adapter may also declare `McpResourceSpec`
+  mappings; each resource list/read maps back to named governed verbs.
 - **S7.4 Skills + inheritance.** `Skill` (`models/libraries.py`) with
   parent-first `extends` resolution in `fleet/spawn.py` (`_resolve_skill_chain`):
   prompts concatenate, grants union, context_requirements merge.
@@ -122,5 +134,5 @@ per-transaction `app.tenant_id` GUC (a null GUC yields zero rows, fail-closed).
 The HTTP API (`kernel/app.py`) reads no policy: it authenticates a `Principal`
 (pluggable resolver, K-3), builds an `InvocationContext`, and calls
 `kernel.invoke` / `kernel.discover` / the spawner. In-process callers (tests,
-`scripts/smoke.py`) and a future MCP front door use the same engine, so the
+`scripts/smoke.py`) and the MCP tool/resource face use the same engine, so the
 guarantees hold no matter which mouth speaks.

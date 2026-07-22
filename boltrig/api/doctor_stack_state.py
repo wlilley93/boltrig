@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
 
+from boltrig.config.environment import is_truthy
 from boltrig.config.manifest import FleetManifest
 
 
@@ -94,7 +95,7 @@ def _needs_browser_cli(manifest: FleetManifest) -> bool:
     if str(stack.get("browser_automation") or "").lower() == "browser_cli":
         return True
     browser = manifest.section("browser_cli")
-    if str(browser.get("enabled") or "").lower() in {"1", "true", "yes", "on"}:
+    if is_truthy(str(browser.get("enabled") or "")):
         return True
     return any(adapter.id == "browser-cli" for adapter in manifest.adapters)
 

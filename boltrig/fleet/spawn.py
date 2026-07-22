@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import time
 import uuid
@@ -135,15 +136,12 @@ class Spawner:
             tenant_id, run_id, child_depth, context, capability, skills, child_grants
         )
 
-        runtime = await self._runtime_for(tenant_id, capability, context)
-        model_route = getattr(runtime, "model_route", None)
-        if context.run_id:
-            self._publish_subagent_event(context, task, skills, run_id, capability)
-        started = time.monotonic()
-        result = await runtime.run(
-            self._compose_prompt(merged_prompt, task), child_ctx, tools=list(child_grants.allow)
+        result, model_route, latency_ms = await self._invoke_runtime(
+            tenant_id, capability, context,
+            task=task, skills=skills, run_id=run_id, merged_prompt=merged_prompt,
+            child_ctx=child_ctx, child_grants=child_grants, scope_ids=scope_ids,
+            tokens_est=tokens_est, micros_est=micros_est,
         )
-        latency_ms = int((time.monotonic() - started) * 1000)
         if model_route and isinstance(result.output, dict):
             result.output.setdefault("model_route", _public_model_route(model_route))
 
@@ -185,6 +183,46 @@ class Spawner:
         context: InvocationContext | None = None,
     ):
         return await self._runtime_resolver.runtime_for(tenant_id, capability, context)
+
+    async def _invoke_runtime(
+        self,
+        tenant_id: str,
+        capability: AgentCapability,
+        context: InvocationContext,
+        *,
+        task: str,
+        skills: list[str],
+        run_id: str,
+        merged_prompt: str,
+        child_ctx: InvocationContext,
+        child_grants: GrantSet,
+        scope_ids: list[str],
+        tokens_est: int,
+        micros_est: int,
+    ) -> tuple[AgentResult, dict[str, Any] | None, int]:
+        """Resolve the runtime and run the turn, refunding the reservation on a raise.
+
+        A run that never happened must not keep its reservation: the full estimate
+        is refunded (delta = -estimate) so a raised runtime cannot leak budget
+        against the tenant's hard stop (FR-COST-03)."""
+        try:
+            runtime = await self._runtime_for(tenant_id, capability, context)
+            model_route = getattr(runtime, "model_route", None)
+            if context.run_id:
+                self._publish_subagent_event(context, task, skills, run_id, capability)
+            started = time.monotonic()
+            result = await runtime.run(
+                self._compose_prompt(merged_prompt, task), child_ctx, tools=list(child_grants.allow)
+            )
+        except Exception:
+            with contextlib.suppress(Exception):
+                await self._kernel.cost.reconcile(
+                    tenant_id, scope_ids=scope_ids,
+                    delta_tokens=-tokens_est, delta_micros=-micros_est,
+                )
+            raise
+        latency_ms = int((time.monotonic() - started) * 1000)
+        return result, model_route, latency_ms
 
     def _child_context(
         self,
@@ -331,7 +369,9 @@ class Spawner:
             "run_id": run_id,
             "agent_type": capability.name,
             "status": "partial",
-            "degraded": False,
+            # The run never happened: honest degradation (US-FLT-07), so the chat
+            # executor flags the turn instead of presenting a skip as success.
+            "degraded": True,
             "reason": "budget_exceeded",
             "summary": "spawn skipped: budget hard-stop reached",
             "output": {},
@@ -348,7 +388,7 @@ def build_spawner(
 
     ``codex_config`` is the trusted read-only Codex provider config assembled at the
     api composition root ([2026] VJS-CC-VJS 2); None (the default) keeps existing
-    callers unaffected and the codex runtime degrading to ScriptRuntime.
+    callers unaffected and the codex runtime degrade-marked unavailable.
     """
     return Spawner(kernel, codex_config=codex_config)
 
@@ -359,7 +399,8 @@ def make_app_spawner(
     """Adapt ``Spawner.spawn`` to the ``POST /v1/spawn`` seam.
 
     ``codex_config`` (VJS-CC-VJS 2/8) lets a spawn that pins a ``runtime: codex``
-    capability answer through the per-cell proxy instead of degrading to a script.
+    capability answer through the per-cell proxy instead of a degrade-marked
+    unavailable result.
     """
     spawner = build_spawner(kernel, codex_config=codex_config)
     envelope = {"run_id", "parent_run_id", "depth", "skills_loaded"}
@@ -404,13 +445,41 @@ def make_agent_invoker(kernel: Kernel) -> AgentInvoker:
         )
         caps = await kernel.store.list_capabilities(context.tenant_id)
         cap = next((item for item in caps if item.name == agent_capability), None)
-        try:
-            runtime = (
-                await spawner._runtime_for(context.tenant_id, cap, context)
-                if cap is not None
-                else ScriptRuntime()
+        if cap is not None:
+            # The same governance Spawner.spawn applies, or an agent-bound verb is
+            # an unmetered side door around it: the depth cap first, then a budget
+            # reservation that is refunded if the run raises and trued up after.
+            child_depth = context.depth + 1
+            if child_depth > cap.max_depth:
+                raise DepthExceeded(
+                    f"depth {child_depth} exceeds max_depth {cap.max_depth} "
+                    f"for capability '{cap.name}'"
+                )
+            scope_ids = ["tenant"]
+            tokens_est, micros_est = _estimate(prompt, "", [], cap.cost_tier)
+            await kernel.cost.reserve(
+                context.tenant_id, scope_ids=scope_ids, tokens=tokens_est, micros=micros_est
             )
-            result = await runtime.run(prompt, context, tools=list(context.grants.allow))
+        try:
+            if cap is not None:
+                try:
+                    runtime = await spawner._runtime_for(context.tenant_id, cap, context)
+                    result = await runtime.run(prompt, context, tools=list(context.grants.allow))
+                except Exception:
+                    with contextlib.suppress(Exception):
+                        await kernel.cost.reconcile(
+                            context.tenant_id, scope_ids=scope_ids,
+                            delta_tokens=-tokens_est, delta_micros=-micros_est,
+                        )
+                    raise
+                await spawner._true_up_cost(
+                    context.tenant_id, scope_ids, cap, tokens_est, micros_est, result
+                )
+            else:
+                # No capability: the unmetered deterministic script fallback is deliberate.
+                result = await ScriptRuntime().run(
+                    prompt, context, tools=list(context.grants.allow)
+                )
         except Exception as exc:
             # A raised runtime must never be papered over with an ok=True echo
             # (US-FLT-07): return a degrade-marked result with an audit reason.

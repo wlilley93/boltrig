@@ -41,8 +41,10 @@ class WorkflowLibrary:
 
     An optional ``kernel`` enables ``execute`` (Round Seven): the generic
     interpreter that walks a stored definition's steps and dispatches each
-    through the chokepoint. ``trigger`` stays the enqueue seam (in production the
-    enqueued run's body calls ``execute``)."""
+    through the chokepoint. ``trigger`` stays the enqueue seam; the enqueued
+    run's body (``run_workflow_body``) combines the per-step executor boundary
+    with checkpoint-resume, while ``execute`` stays the single-shot route path
+    (executor boundary, no store)."""
 
     def __init__(
         self, store: Any, executor: Any | None = None, *, kernel: Any | None = None
@@ -186,10 +188,16 @@ class WorkflowLibrary:
         }
         if self._executor is not None and context is not None:
             # The route/control path carries the authenticated context envelope
-            # into the registered workflow task. Hatchet therefore executes the
-            # definition durably; the local executor runs the exact same task body
-            # inline. A bare library caller without a context retains the legacy
-            # descriptor-only seam below rather than inventing authority.
+            # into the registered workflow task. The engine (Hatchet, or the
+            # local executor inline) owns the run as ONE durable task, and the
+            # task body wires BOTH durability seams: each step dispatches
+            # inside an executor.run_step boundary AND checkpoint-resume is
+            # active (with per-step idempotency keys closing the
+            # completed-but-uncheckpointed crash window). What the boundary
+            # itself guarantees depends on the executor - see
+            # HatchetExecutor.run_step's honest docstring. A bare library
+            # caller without a context retains the legacy descriptor-only seam
+            # below rather than inventing authority.
             from boltrig.fleet.hatchet_app import (
                 TASK_WORKFLOW_RUN,
                 context_to_envelope,
@@ -222,10 +230,14 @@ class WorkflowLibrary:
         """Interpret a stored workflow: run its steps through the chokepoint.
 
         Resolves the definition, then hands it to the generic interpreter, which
-        walks the steps in dependency order and dispatches each as its own
-        durable boundary via ``kernel.invoke`` (Round Seven, control-plane gap 3).
-        Raises ``LookupError`` if the workflow is unknown (fail-closed). Requires
-        a ``kernel`` (wired at construction); without one this is a config error.
+        walks the steps in dependency order and dispatches each via
+        ``kernel.invoke`` - inside its own ``executor.run_step`` durable
+        boundary when an executor is wired here, inline when it is not (Round
+        Seven, control-plane gap 3). This path passes no ``store``, so the walk
+        is single-shot: no checkpoint/resume (that seam is the trigger path's,
+        via the registered workflow task body). Raises ``LookupError`` if the
+        workflow is unknown (fail-closed). Requires a ``kernel`` (wired at
+        construction); without one this is a config error.
         """
         if self._kernel is None:
             raise RuntimeError("WorkflowLibrary.execute requires a kernel")

@@ -127,6 +127,12 @@ def test_platform_status_is_bounded_and_redacted():
 def test_model_gateway_status_is_bounded_and_redacted(monkeypatch):
     monkeypatch.setenv("BOLTRIG_MODEL_GATEWAY_URL", "http://bifrost:8080/v1")
     monkeypatch.setenv("BOLTRIG_MODEL_GATEWAY_TTL", "120")
+    # Live-health polling stays OFF regardless of test order: apply_manifest's
+    # runtime-env export (pinned by tests/security/test_model_routing.py) leaks
+    # BOLTRIG_MODEL_GATEWAY_* into os.environ process-wide, and a HEALTH=1 leak
+    # would have this snapshot poll a dead health URL.
+    monkeypatch.delenv("BOLTRIG_MODEL_GATEWAY_HEALTH", raising=False)
+    monkeypatch.delenv("BOLTRIG_MODEL_GATEWAY_HEALTH_URL", raising=False)
     monkeypatch.setenv("BOLTRIG_MODEL_PROFILES", json.dumps({
         "code": {
             "provider": "bifrost",

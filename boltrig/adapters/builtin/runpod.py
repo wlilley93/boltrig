@@ -3,17 +3,30 @@
 Docs basis: Runpod's REST API exposes pod listing plus start/stop/restart
 operations under https://rest.runpod.io/v1/pods. Credentials stay kernel-side
 and are presented only as an Authorization header for the duration of one call.
+
+Built on :class:`HttpAdapter` (S7.3): HTTP status -> ErrorClass mapping, retry/
+backoff (idempotent reads only), cooperative rate limiting and egress pinning
+all come from the base; this module carries only the verb surface, the bearer
+convention and payload redaction.
 """
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
 from typing import Any
+from urllib.parse import quote
 
-from boltrig.adapters.base import AdapterError, Credential, ErrorClass, Result, VerbSpec
+import httpx
+
+from boltrig.adapters.base import (
+    AdapterError,
+    Credential,
+    ErrorClass,
+    Result,
+    VerbSpec,
+    bearer_token,
+)
+from boltrig.adapters.http_base import Handler, HttpAdapter
 from boltrig.models import InvocationContext
-
-Transport = Callable[[str, str, dict[str, str]], Awaitable[tuple[int, Any]]]
 
 _BASE_URL = "https://rest.runpod.io/v1"
 
@@ -24,17 +37,6 @@ def _schema(required: list[str] | None = None) -> dict[str, Any]:
         "properties": {"pod_id": {"type": "string"}},
         "required": required or [],
     }
-
-
-def _token(credential: Credential | None) -> str | None:
-    if credential is None:
-        return None
-    material = credential.material or {}
-    for key in ("token", "api_key", "value"):
-        value = material.get(key)
-        if value:
-            return str(value)
-    return None
 
 
 def _safe_pod(raw: dict[str, Any]) -> dict[str, Any]:
@@ -64,22 +66,21 @@ def _pods(payload: Any) -> list[dict[str, Any]]:
     return [_safe_pod(item) for item in raw if isinstance(item, dict)]
 
 
-class RunpodAdapter:
+class RunpodAdapter(HttpAdapter):
     id = "runpod"
     version = "0.1.0"
-    runtime = "http"
     source = "builtin"
+    user_agent = "boltrig-runpod/1.0"
 
     def __init__(
         self,
         *,
         base_url: str = _BASE_URL,
-        transport: Transport | None = None,
         timeout: float = 30.0,
+        transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
-        self.base_url = base_url.rstrip("/")
+        super().__init__(base_url=base_url, timeout=timeout)
         self._transport = transport
-        self.timeout = timeout
 
     def describe(self) -> list[VerbSpec]:
         any_out = {"type": "object"}
@@ -96,60 +97,95 @@ class RunpodAdapter:
                      "Restart a Runpod pod."),
         ]
 
+    def _handlers(self) -> dict[str, Handler]:
+        return {
+            "runpod.pod.list": self._pod_list,
+            "runpod.pod.get": self._pod_get,
+            "runpod.pod.start": self._pod_start,
+            "runpod.pod.stop": self._pod_stop,
+            "runpod.pod.restart": self._pod_restart,
+        }
+
     async def execute(
         self, verb: str, params: dict[str, Any], credential: Credential | None,
         context: InvocationContext,
     ) -> Result:
-        del context
-        token = _token(credential)
-        if not token:
-            return Result.failure(AdapterError(ErrorClass.UNAUTHORISED, "runpod credential missing"))
-        try:
-            method, path = self._request(verb, params)
-        except ValueError as exc:
-            return Result.failure(AdapterError(ErrorClass.INVALID, str(exc)))
-        code, payload = await self._call(method, path, {"Authorization": f"Bearer {token}"})
-        if code >= 400:
+        # Fail closed: never post an empty bearer (SEC-04/05).
+        if bearer_token(credential) is None:
             return Result.failure(
-                AdapterError(ErrorClass.UNAVAILABLE, f"runpod API returned {code}", retryable=True)
+                AdapterError(ErrorClass.UNAUTHORISED, "runpod credential missing")
             )
-        if verb == "runpod.pod.list":
-            return Result.success({"pods": _pods(payload)})
-        if verb == "runpod.pod.get":
-            pod = _safe_pod(payload) if isinstance(payload, dict) else {}
-            return Result.success({"pod": pod})
-        return Result.success({"status_code": code, "pod_id": params["pod_id"], "action": verb})
+        return await super().execute(verb, params, credential, context)
+
+    def _auth(self, credential: Credential) -> tuple[dict[str, str], httpx.Auth | None]:
+        token = bearer_token(credential)
+        if token:
+            return {"Authorization": f"Bearer {token}"}, None
+        return {}, None
+
+    def _client(self, credential: Credential | None) -> httpx.AsyncClient:
+        if self._transport is None:
+            return super()._client(credential)
+        # Injected transport (tests): same headers/auth, no egress pinning.
+        base = self.base_url_for(credential)
+        headers: dict[str, str] = {
+            "User-Agent": self.user_agent,
+            "Accept": "application/json",
+        }
+        auth: httpx.Auth | None = None
+        if credential is not None:
+            extra, auth = self._auth(credential)
+            headers.update(extra)
+        return httpx.AsyncClient(
+            base_url=base,
+            headers=headers,
+            timeout=self.timeout,
+            auth=auth,
+            follow_redirects=False,
+            transport=self._transport,
+        )
 
     async def health(self) -> str:
         return "unknown"
 
-    def _request(self, verb: str, params: dict[str, Any]) -> tuple[str, str]:
-        if verb == "runpod.pod.list":
-            return "GET", "/pods"
-        if verb == "runpod.pod.get":
-            return "GET", f"/pods/{params['pod_id']}"
-        if verb == "runpod.pod.start":
-            return "POST", f"/pods/{params['pod_id']}/start"
-        if verb == "runpod.pod.stop":
-            return "POST", f"/pods/{params['pod_id']}/stop"
-        if verb == "runpod.pod.restart":
-            return "POST", f"/pods/{params['pod_id']}/restart"
-        raise ValueError(f"unknown verb {verb}")
+    # --- handlers ------------------------------------------------------------
+    async def _pod_list(
+        self, params: dict[str, Any], client: httpx.AsyncClient, context: InvocationContext
+    ) -> Result:
+        data = await self.request(client, "GET", "/pods")
+        return Result.success({"pods": _pods(data.get("items", data))})
 
-    async def _call(
-        self, method: str, path: str, headers: dict[str, str]
-    ) -> tuple[int, Any]:
-        if self._transport is not None:
-            return await self._transport(method, path, headers)
-        import httpx
+    async def _pod_get(
+        self, params: dict[str, Any], client: httpx.AsyncClient, context: InvocationContext
+    ) -> Result:
+        data = await self.request(client, "GET", f"/pods/{_pod_id(params)}")
+        return Result.success({"pod": _safe_pod(data) if isinstance(data, dict) else {}})
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.request(method, self.base_url + path, headers=headers)
-            try:
-                payload = response.json()
-            except ValueError:
-                payload = {}
-            return response.status_code, payload
+    async def _pod_start(
+        self, params: dict[str, Any], client: httpx.AsyncClient, context: InvocationContext
+    ) -> Result:
+        return await self._pod_action("start", params, client)
+
+    async def _pod_stop(
+        self, params: dict[str, Any], client: httpx.AsyncClient, context: InvocationContext
+    ) -> Result:
+        return await self._pod_action("stop", params, client)
+
+    async def _pod_restart(
+        self, params: dict[str, Any], client: httpx.AsyncClient, context: InvocationContext
+    ) -> Result:
+        return await self._pod_action("restart", params, client)
+
+    async def _pod_action(
+        self, action: str, params: dict[str, Any], client: httpx.AsyncClient
+    ) -> Result:
+        await self.request(client, "POST", f"/pods/{_pod_id(params)}/{action}")
+        return Result.success({"pod_id": params["pod_id"], "action": f"runpod.pod.{action}"})
+
+
+def _pod_id(params: dict[str, Any]) -> str:
+    # URL-quoted: a pod id with '/', '?' or '..' must not rewrite the path.
+    return quote(str(params["pod_id"]), safe="")
 
 
 def build() -> RunpodAdapter:

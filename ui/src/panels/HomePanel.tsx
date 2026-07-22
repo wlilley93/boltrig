@@ -278,8 +278,10 @@ export function HomePanel() {
         }
       />
 
-      <div className="cols">
-        <OperationalPulse />
+      <div className="home-grid">
+        <div className="home-grid__wide">
+          <OperationalPulse />
+        </div>
         <NeedsYou />
         <RecentRuns />
         <WorkInFlight />

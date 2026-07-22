@@ -62,3 +62,30 @@ never to an agent). `connect/disconnect/send` default to `consequence=high`.
 - **Phase 2** (when a live channel is committed): the supervised sidecar (vendor
   Hermes's gateway in proxy mode) for the socket channels; implements Slack v0 /
   Discord Ed25519 there. Needs the Principal's app/bot credentials.
+
+## Status note (2026-07-21)
+Phase 2 skeleton landed: the severed `services/channel_sidecar` daemon (generic
+JSON-lines "custom interface" adapter end-to-end; registry is the Hermes port
+target), durable store-backed dedup (`channel_deliveries`) and outbound
+(`channel_outbox` claim/ack/backoff), run-scoped-token sidecar links
+(`channel_sidecar_routes.py`, same MCP seam), tier-1/tier-2 addressing on
+intake, and the notification round-trip into the outbox
+(`channel_notify.py` + `notification_prefs`). Conditions 1-3, 5, 7 hold
+machine-enforced (SEC-28, SEC-175..179). Platform ports (Slack v0 / Discord
+Ed25519, condition 4) and the pump call site for run-completion notices are
+the remaining seams.
+
+## Status note (2026-07-21, later the same day)
+Phase 2 COMPLETE. The daemon is renamed `services/channel_gateway` — it is the
+one message edge (the ruling's own "channel gateway domain" name; "sidecar" was
+the severability nickname). The kernel's principal-resolution module yielded the
+name (`kernel/channel_gateway.py` → `kernel/channel_principal.py`); routes moved
+to `/v1/channels/gateway/*` (`kernel/channel_gateway_routes.py`). Landed on top
+of the skeleton: platform adapters with round-trip proofs (Slack Socket Mode,
+Telegram long-poll, Discord WS gateway, Signal via signal-cli sibling, WhatsApp
+via the vendored MIT Baileys bridge — Hermes policy stripped, attribution kept);
+content-hash dedup for id-less messages (5-minute window); department-scoped
+`notification_prefs`; the pump's terminal-state notify call site; and
+`clients/custom_surface.py` for the desktop-familiar/hey-nabu/site surfaces.
+Remaining follow-ons: native media, team scopes beyond departments, live-platform
+verification (operator step, per the gateway README).

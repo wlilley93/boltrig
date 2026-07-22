@@ -43,6 +43,13 @@ from .codex_process_spawn import (
 
 logger = logging.getLogger(__name__)
 
+# Cell ids are per-run unique, so a set of EVER-claimed ids would otherwise grow
+# one entry per historical cell for the life of the supervisor. The peer
+# registry's durable tombstones are the real non-reuse guard; this is the cheap
+# first check, bounded FIFO (aligned with the registry's own default bound) so a
+# long-lived supervisor stays flat.
+_MAX_CLAIMED_CELLS = 4_096
+
 
 class CodexCellStartupError(wire.CodexAppServerError):
     """A local Codex cell could not reach its verified initialized state."""
@@ -219,7 +226,7 @@ class CodexCellSupervisor:
         )
         self._claim_lock = asyncio.Lock()
         self._active_phases: set[str] = set()
-        self._claimed_cells: set[str] = set()
+        self._claimed_cells: dict[str, None] = {}  # insertion-ordered, FIFO-bounded
 
     async def start(
         self,
@@ -417,7 +424,9 @@ class CodexCellSupervisor:
             if phase_id in self._active_phases or cell_id in self._claimed_cells:
                 raise CodexCellStartupError("active Codex owner or previously claimed cell")
             self._active_phases.add(phase_id)
-            self._claimed_cells.add(cell_id)
+            self._claimed_cells[cell_id] = None
+            while len(self._claimed_cells) > _MAX_CLAIMED_CELLS:
+                self._claimed_cells.pop(next(iter(self._claimed_cells)))
 
     async def _release(self, phase_id: str, cell_id: str) -> None:
         async with self._claim_lock:

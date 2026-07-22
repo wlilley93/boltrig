@@ -1,5 +1,10 @@
 # Boltrig as a stack - the four pieces, the boundary, and the split trigger
 
+> **Runtime currency (2026-07-21):** this disposition describes the stack that
+> existed when it was written. Decision 0012 now makes Codex the only target
+> agent runtime. The Pi container and other legacy runtime references below are
+> implementation history and staged-cutover residue, not the target stack.
+
 A disposition record. The question raised: should Boltrig be split into four
 distinct `boltrig-[piece]` units (kernel / frontend / database / agent-runtime)?
 

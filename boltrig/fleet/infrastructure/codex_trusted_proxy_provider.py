@@ -82,6 +82,7 @@ from boltrig.fleet.infrastructure.codex_runtime_admission import (
     CodexPreflightProbe,
     CodexRuntimeAdmissionError,
 )
+from boltrig.fleet.infrastructure.codex_runtime_state import remove_cell_root
 from boltrig.fleet.infrastructure.codex_runtime_config import CodexReasoningEffort
 from boltrig.fleet.infrastructure.codex_trusted_proxy_support import (
     GenerationHolder,
@@ -192,13 +193,26 @@ class TrustedProxyCodexPhaseCellProvider:
             stack_root=stack_root, env=env
         )
         self._sessions: dict[str, _TrustedSession] = {}
+        # G3 admission is check-then-register: without a lock two concurrent
+        # acquires both pass _require_admissible_concurrency before either
+        # registers, provisioning the forbidden two-cell state. The lock makes
+        # the check and the session registration one indivisible step.
+        self._admission_lock = asyncio.Lock()
 
     async def acquire(self, assignment: PhaseAssignmentRef) -> AdmittedCodexCell:
         if type(assignment) is not PhaseAssignmentRef:
             raise TypeError("assignment must be an exact PhaseAssignmentRef")
         # D1: fail closed BEFORE any provisioning or bearer mint can happen.
         require_codex_trusted_posture(self._env, self._settings)
-        self._require_admissible_concurrency()
+        if self._boundary.config_toml_protected:
+            # The two-cell attack needs an UNPROTECTED config.toml; a protected
+            # one admits concurrent cells and needs no admission serialisation.
+            return await self._acquire_cell(assignment)
+        async with self._admission_lock:
+            self._require_admissible_concurrency()
+            return await self._acquire_cell(assignment)
+
+    async def _acquire_cell(self, assignment: PhaseAssignmentRef) -> AdmittedCodexCell:
         # Per-cell uids: reserve this cell's slot (distinct uid + kernel-owned tree)
         # up front, so admission, config and argv all use the slot's paths. None in
         # the in-process posture, which is byte-identical to before. Release ownership
@@ -274,14 +288,32 @@ class TrustedProxyCodexPhaseCellProvider:
             reaper_started = True
             return admitted
         except BaseException:
-            await self._teardown(proxy, scope, ingress)
-            if cell is not None:
-                await _close_ignoring_failure(cell)
-            # Single-owner slot release: the reaper owns it once the session is
-            # registered; before that, this failure path returns it to the pool.
-            if not reaper_started:
-                self._supervisor.release_slot(slot)
+            await self._abort_acquire(proxy, scope, ingress, cell, admission, slot, reaper_started)
             raise
+
+    async def _abort_acquire(
+        self,
+        proxy: PerCellModelProxyServer | None,
+        scope: ModelProxyCellScope | None,
+        ingress: CodexTrustedIngress | None,
+        cell: InitializedCodexCell | None,
+        admission: CodexPhaseAdmission,
+        slot: CellSlot | None,
+        reaper_started: bool,
+    ) -> None:
+        """Roll back a failed acquire: teardown, close, remove the tree, release the slot."""
+        await self._teardown(proxy, scope, ingress)
+        if cell is not None:
+            await _close_ignoring_failure(cell)
+        # A failed acquire must not strand the API-owned cell tree the
+        # admission source laid down (in-process posture only; a per-cell
+        # slot's tree is the spawner's to clear).
+        if not admission.slot_provisioned:
+            await remove_cell_root(admission.layout.cell_root)
+        # Single-owner slot release: the reaper owns it once the session is
+        # registered; before that, this failure path returns it to the pool.
+        if not reaper_started:
+            self._supervisor.release_slot(slot)
 
     def _build_ingress(self) -> CodexTrustedIngress:
         return CodexTrustedIngress(

@@ -6,9 +6,8 @@
 > Two classes of entry:
 > - **CANON-LOCKED** - already binding in a committed doctrine doc (DESIGN-v2, the pattern
 >   language, AMENDMENTS, tokens). Ratified by virtue of being enacted. Fable inherits these.
-> - **INFERRED (ratify)** - read out of the code/specs by this pass. **Will ratifies each
->   before it binds Fable.** A record that guesses intent is worse than none, so these are
->   marked pending until confirmed.
+> - **RESOLVED INFERENCE** - a decision first read from the code, then explicitly accepted or
+>   revised. The resolution and its reason stay recorded so it is not re-litigated.
 
 ---
 
@@ -27,15 +26,21 @@
 | D9 | **No em or en dashes** anywhere in UI copy or code. Spaced hyphen, comma, colon, or parentheses only. | DESIGN-TOKENS, global rule |
 | D10 | **Every surface declares an 80% path (P20)** completable with Tier-1 controls only, and exposes exactly one `btn--primary` at rest. | ui-patterns P20 |
 | D11 | **A11y baseline is a contract, not a nicety** - the `250` ink step and indigo `550` exist specifically to clear WCAG AA on dark surfaces. Contrast/density variants are load-bearing. | DESIGN-TOKENS Accessibility |
+| D12 | **Settings is a full deck row, not a modal or drawer.** Its anchor and section columns are URL-addressable pages inside the spatial deck. | Ratified 2026-07-21; `surfaces/settings-retrofit.md` |
+| D13 | **Panels use the full slide width and the sidebar is collapsible. Spatial deck moves stay directional.** There is no unrelated panel glide or ornamental entrance motion. Reduced motion makes deck moves instantaneous. | Revised and ratified 2026-07-21; D1-D3 remain controlling |
+| D14 | **Modal surfaces use the mesh backdrop, full-width form inputs, and a softer raised card.** They remain rare, in-frame overlays and never replace a page-level task. | Ratified 2026-07-21; component and token canon |
+| D15 | **Console and chat are the only two product clients of one verb-space.** New capability appears through shared verbs and structured events, not a third bespoke client surface. The prototype is a development-only design harness and is unreachable in production builds. | Ratified 2026-07-21; L2 and P31-P33 |
 
-## INFERRED (ratify before binding Fable)
+## RESOLVED INFERENCES (decision history)
 
-| # | Inferred decision | Why I think it's deliberate | Status |
-|---|---|---|---|
-| D12 | Settings is a full **page**, not a modal/drawer. | Explicit recent commit "settings as a page". | ratify |
-| D13 | Full-width panels, collapsible sidebar, **no glide animation**. | Explicit recent commit "Full-width panels, no glide, collapsible sidebar". | ratify |
-| D14 | Modals use the mesh background + full-width inputs + softer card. | Explicit recent commit "Polish modals: mesh background...". | ratify |
-| D15 | The console and chat are the **only two clients**; there is no third bespoke client surface. | L2 framing treats them as two clients of one verb-space. | ratify |
+Resolved by the operator directive to finish the complete creative handover on 2026-07-21.
+
+| # | Original inference | Resolution |
+|---|---|---|
+| D12 | Settings is a full page, not a modal or drawer. | Accepted and made precise as a full deck row. |
+| D13 | Full-width panels, collapsible sidebar, no glide animation. | Partly accepted. Full-width panels and the collapsible sidebar are canon. The no-glide clause was rejected because D1 already freezes a directional spatial deck. Only unrelated entrance motion is forbidden. |
+| D14 | Modals use the mesh background, full-width inputs, and a softer card. | Accepted with the existing D3 in-frame overlay constraint. |
+| D15 | Console and chat are the only two clients. | Accepted. Both remain clients of the same governed verb-space. |
 
 ---
 

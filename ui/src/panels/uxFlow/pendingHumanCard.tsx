@@ -73,6 +73,7 @@ function usePendingHumanApply({
   verb,
   sentParams,
   hitlRequestId,
+  invocationContext,
   setState,
   onAppliedRef,
   onDeniedRef,
@@ -81,6 +82,7 @@ function usePendingHumanApply({
   verb: string;
   sentParams: Record<string, unknown> | null;
   hitlRequestId: string;
+  invocationContext?: Record<string, unknown>;
   setState: React.Dispatch<React.SetStateAction<PendingPhase>>;
   onAppliedRef: React.MutableRefObject<(result: InvokeResult) => void>;
   onDeniedRef: React.MutableRefObject<((reason: string) => void) | undefined>;
@@ -108,6 +110,7 @@ function usePendingHumanApply({
           noun,
           verb,
           params: sentParams,
+          ...(invocationContext ? { context: invocationContext } : {}),
           approval_id: hitlRequestId,
           idempotency_key: idempotencyKey,
         });
@@ -144,10 +147,19 @@ function usePendingHumanApply({
           break;
       }
     })();
-  }, [noun, verb, sentParams, hitlRequestId, idempotencyKey, setState]);
+  }, [
+    noun,
+    verb,
+    sentParams,
+    invocationContext,
+    hitlRequestId,
+    idempotencyKey,
+    setState,
+  ]);
 }
 function usePendingHumanState({
   hitlRequestId,
+  invocationContext,
   verb,
   noun,
   sentParams,
@@ -155,6 +167,7 @@ function usePendingHumanState({
   onDenied,
 }: {
   hitlRequestId: string;
+  invocationContext?: Record<string, unknown>;
   verb: string;
   noun: string;
   sentParams: Record<string, unknown> | null;
@@ -181,6 +194,7 @@ function usePendingHumanState({
     verb,
     sentParams,
     hitlRequestId,
+    invocationContext,
     setState,
     onAppliedRef,
     onDeniedRef,
@@ -409,6 +423,7 @@ export function PendingHumanCard({
   verb,
   noun,
   sentParams,
+  invocationContext,
   onApplied,
   onDenied,
   onReset,
@@ -419,6 +434,9 @@ export function PendingHumanCard({
   // The exact params of the paused invoke. null = this session never held
   // them (cross-session); applying then needs backend dependency A3.
   sentParams: Record<string, unknown> | null;
+  // Authority-bearing run ancestry must be identical when the approved action
+  // is re-invoked, just like its verb and parameters.
+  invocationContext?: Record<string, unknown>;
   onApplied: (result: InvokeResult) => void;
   onDenied?: (reason: string) => void;
   // A terminal denial/error needs a new approval. Callers that lock their form
@@ -430,6 +448,7 @@ export function PendingHumanCard({
     verb,
     noun,
     sentParams,
+    invocationContext,
     onApplied,
     onDenied,
   });

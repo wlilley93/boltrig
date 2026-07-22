@@ -12,14 +12,14 @@ import os
 from dataclasses import dataclass
 from typing import Mapping
 
-_TRUE = {"1", "true", "yes", "on", "y", "t"}
+from boltrig.config.environment import is_truthy
 
 
 def _as_bool(value: str | None, default: bool = False) -> bool:
     """Parse an env-style boolean; missing / blank -> ``default``."""
     if value is None or value == "":
         return default
-    return value.strip().lower() in _TRUE
+    return is_truthy(value)
 
 
 @dataclass(frozen=True)

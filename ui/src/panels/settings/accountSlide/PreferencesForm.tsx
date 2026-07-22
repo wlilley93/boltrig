@@ -10,8 +10,13 @@ export function PreferencesForm({ s }: { s: AccountProfileState }) {
         A preferred display name and your locale / timezone. These are your own
         per-user settings (SET-10).
       </p>
-      <Field label="Display name" hint="A preferred name shown in the app.">
+      <Field
+        label="Display name"
+        htmlFor="settings-display-name"
+        hint="A preferred name shown in the app."
+      >
         <input
+          id="settings-display-name"
           value={s.displayName}
           onChange={(e) => s.setDisplayName(e.target.value)}
         />

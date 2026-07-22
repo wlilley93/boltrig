@@ -51,6 +51,12 @@ _LAYER_ROOTS = {
     "models": ("boltrig", "models"),
 }
 
+# The kernel composes every sibling package, so an allow-list cannot express its
+# boundary; it is gated by a DENY-list instead (AGENTS.md "Layering &
+# severability": kernel/ imports nothing from fleet/ or the sidecars).
+_KERNEL_ROOT = ("boltrig", "kernel")
+_KERNEL_FORBIDDEN = ("boltrig.fleet", "services")
+
 
 @dataclass(frozen=True)
 class Violation:
@@ -96,6 +102,10 @@ def _is_allowed(module: str, allowed: tuple[str, ...]) -> bool:
     if root in _STDLIB_MODULES:
         return True
     return any(module == prefix or module.startswith(prefix + ".") for prefix in allowed)
+
+
+def _is_forbidden(module: str, forbidden: tuple[str, ...]) -> bool:
+    return any(module == prefix or module.startswith(prefix + ".") for prefix in forbidden)
 
 
 def _dynamic_import_name(node: ast.Call, dynamic_names: set[str]) -> str | None:
@@ -151,6 +161,42 @@ def _scan_file(path: Path, root: Path, layer: str) -> list[Violation]:
     return violations
 
 
+def _scan_kernel_file(path: Path, root: Path) -> list[Violation]:
+    """The deny-list twin of ``_scan_file`` for the kernel layer."""
+    relative = path.relative_to(root).as_posix()
+    source = path.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(path))
+    module_name = _module_name(path, root)
+    violations: list[Violation] = []
+    dynamic_names = {"__import__", "eval", "exec"}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            dependency = _resolve_from(module_name, path.name == "__init__.py", node)
+            if dependency in {"builtins", "importlib"}:
+                for alias in node.names:
+                    if alias.name in {"__import__", "eval", "exec", "import_module"}:
+                        dynamic_names.add(alias.asname or alias.name)
+    for node in ast.walk(tree):
+        dependencies: tuple[str, ...] = ()
+        line = int(getattr(node, "lineno", 1))
+        if isinstance(node, ast.Import):
+            dependencies = tuple(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            dependencies = (_resolve_from(module_name, path.name == "__init__.py", node),)
+        for dependency in dependencies:
+            if _is_forbidden(dependency, _KERNEL_FORBIDDEN):
+                violations.append(
+                    Violation(relative, line, dependency, "kernel dependency points outward")
+                )
+        if isinstance(node, ast.Call):
+            dynamic_name = _dynamic_import_name(node, dynamic_names)
+            if dynamic_name is not None:
+                violations.append(
+                    Violation(relative, node.lineno, dynamic_name, "dynamic import bypasses gate")
+                )
+    return violations
+
+
 def check_repository(root: Path = ROOT) -> Report:
     violations: list[Violation] = []
     checked = 0
@@ -169,6 +215,11 @@ def check_repository(root: Path = ROOT) -> Report:
         for path in sorted(layer_root.rglob("*.py")):
             checked += 1
             violations.extend(_scan_file(path, root, layer))
+    kernel_root = root.joinpath(*_KERNEL_ROOT)
+    if kernel_root.is_dir():
+        for path in sorted(kernel_root.rglob("*.py")):
+            checked += 1
+            violations.extend(_scan_kernel_file(path, root))
     return Report(checked, tuple(sorted(violations, key=lambda item: (item.path, item.line))))
 
 

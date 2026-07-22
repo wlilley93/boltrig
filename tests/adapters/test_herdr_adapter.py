@@ -104,7 +104,7 @@ async def test_herdr_timeout_terminates_child(monkeypatch):
         return proc
 
     monkeypatch.setattr(
-        "boltrig.adapters.builtin.herdr.asyncio.create_subprocess_exec",
+        "boltrig.adapters.builtin.script_base.asyncio.create_subprocess_exec",
         create_subprocess_exec,
     )
 

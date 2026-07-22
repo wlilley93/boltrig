@@ -22,7 +22,7 @@
 # Container runtime hardening (INF-01): our first-party app containers run
 # read-only, drop all Linux capabilities, forbid privilege escalation, and are
 # resource-capped. The app writes nothing to disk (logs -> stdout); a tmpfs backs
-# /tmp. Merged into the kernel / fleet-worker / pi-sidecar services below.
+# /tmp. Merged into the kernel / fleet-worker / pi_sidecar services below.
 x-app-hardening: &app-hardening
   read_only: true
   tmpfs:
@@ -148,7 +148,9 @@ services:
     env_file: ${BOLTRIG_ENV_FILE:-.env}
     environment:
       BOLTRIG_HERDR_HOME: ${BOLTRIG_HERDR_HOME:-/var/lib/boltrig/herdr}
-    # On both the app network and the sandbox, so the Pi sidecar can reach the
+      BOLTRIG_KNOWLEDGE_VAULT: ${BOLTRIG_KNOWLEDGE_VAULT:-/var/lib/boltrig/knowledge}
+      BOLTRIG_COGNEE_ROOT: ${BOLTRIG_COGNEE_ROOT:-/var/lib/boltrig/cognee}
+    # On both the app network and the sandbox, so the Pi gateway can reach the
     # MCP face (sandbox) while the kernel keeps its normal connectivity (default).
     networks:
       - default
@@ -160,6 +162,9 @@ services:
       - ./libraries:/app/libraries:ro
       # Stack-owned Herdr state only; never bind a developer user's ~/.config/herdr.
       - herdr_data:/var/lib/boltrig/herdr
+      # Canonical originals and rebuildable Cognee state are persisted separately.
+      - knowledge_data:/var/lib/boltrig/knowledge
+      - cognee_data:/var/lib/boltrig/cognee
     depends_on:
       postgres:
         condition: service_healthy
@@ -344,12 +349,12 @@ services:
               capabilities: ["gpu"]
 
   pi-sidecar:
-    # Round Two: the Pi reasoning sidecar (Epic RUN). Sandboxed: it has no native
+    # Round Two: the Pi reasoning gateway (Epic RUN). Sandboxed: it has no native
     # tools and reaches ONLY the kernel MCP face + the model endpoint (SEC-24).
     # It is not internet-facing (no published ports).
     #
     # Egress is ENFORCED, not just documented (Round Six gap 3.3, SEC-48): the
-    # sidecar sits on the `sandbox` network ONLY, so it can reach the kernel (its
+    # gateway sits on the `sandbox` network ONLY, so it can reach the kernel (its
     # MCP face) but NOT postgres/redis/the other services on `default`. The secure
     # overlay (deploy/compose.secure.yml) flips `sandbox` to internal: true, which
     # removes arbitrary internet egress entirely - in that posture the model must
@@ -368,7 +373,7 @@ services:
       # the SAME PI_SIDECAR_TOKEN so PiRuntime presents it. See .env.example.
       PI_SIDECAR_TOKEN: ${PI_SIDECAR_TOKEN:-}
       PI_SIDECAR_EGRESS_ALLOW: ${PI_SIDECAR_EGRESS_ALLOW:-kernel,bifrost,local-model}
-      # Pass the prod signals the sidecar's fail-closed auth checks (it reads
+      # Pass the prod signals the gateway's fail-closed auth checks (it reads
       # these directly, mirroring the kernel), so an unset token fails closed
       # in prod but stays open in dev.
       BOLTRIG_ENV: ${BOLTRIG_ENV:-}
@@ -387,9 +392,133 @@ services:
       retries: 3
       start_period: 10s
 
+  channel-gateway:
+    # Decision 0003, Phase 2: the severed terminator for the socket channel
+    # class (Slack/Discord/Telegram/WhatsApp/Signal + the reference generic
+    # adapter). Profile-gated: it is inert without operator config (the
+    # connect-time injection), so bring it up deliberately with
+    #   docker compose --profile channels up -d
+    # after minting a run-scoped token (POST /v1/channels/gateway/session).
+    #
+    # Sandboxed like the pi_sidecar (conditions 2 + 7): it sits on the
+    # `sandbox` network ONLY - it reaches the kernel intake but NOT
+    # postgres/redis. Egress to platform endpoints is allow-listed
+    # (CHANNEL_GATEWAY_EGRESS_ALLOW); the secure overlay's internal sandbox
+    # removes arbitrary internet egress, so in that posture platform traffic
+    # must route via an allow-list proxy. It holds no persistent credential:
+    # the token and the per-channel secrets are env at spawn, never logged.
+    profiles: ["channels"]
+    networks:
+      - sandbox
+    <<: *app-hardening
+    build:
+      context: ./services/channel_gateway
+      dockerfile: Dockerfile
+    image: boltrig/channel-gateway:0.1.0
+    restart: unless-stopped
+    environment:
+      BOLTRIG_KERNEL_URL: ${CHANNEL_GATEWAY_KERNEL_URL:-http://kernel:8000}
+      # The connect-time injection (operator-supplied; empty = idle daemon).
+      CHANNEL_GATEWAY_TOKEN: ${CHANNEL_GATEWAY_TOKEN:-}
+      CHANNEL_GATEWAY_CHANNELS: ${CHANNEL_GATEWAY_CHANNELS:-}
+      CHANNEL_GATEWAY_EGRESS_ALLOW: ${CHANNEL_GATEWAY_EGRESS_ALLOW:-kernel}
+      BOLTRIG_ENV: ${BOLTRIG_ENV:-}
+      BOLTRIG_PRODUCTION: ${BOLTRIG_PRODUCTION:-}
+    expose:
+      - "8091"
+    depends_on:
+      kernel:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - python -c "import urllib.request; urllib.request.urlopen('http://localhost:8091/health')" || exit 1
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  signal-cli:
+    # The Signal sibling daemon for the channel gateway's signal adapter
+    # (decision 0003): signal-cli holds the registered account keys and
+    # terminates the Signal protocol; the gateway's signal adapter speaks
+    # JSON-RPC (outbound) + SSE (inbound) to it and dials NO other host for
+    # Signal - allow `signal-cli` in CHANNEL_GATEWAY_EGRESS_ALLOW. Profile-
+    # gated with the gateway itself:
+    #   docker compose --profile channels up -d
+    # Register/link the account into the named volume FIRST (per the image's
+    # docs, e.g. `docker compose run --rm signal-cli ... register`); the daemon
+    # is inert without one. The account NUMBER reaches the adapter via the
+    # CHANNEL_GATEWAY_CHANNELS connect-time injection - it is never written
+    # here. Third-party image, so the first-party hardening anchor does not
+    # apply; pinned by tag + digest like every other third-party image (IAC).
+    profiles: ["channels"]
+    networks:
+      - sandbox
+    image: bbernhard/signal-cli-rest-api:0.99@sha256:96578363477d97cb1d8da303791b2ad686b374a255fce4d78c7c6f00ef56cba8
+    restart: unless-stopped
+    environment:
+      # json-rpc mode: POST /api/v1/rpc + SSE /api/v1/events on :8080
+      MODE: json-rpc
+    volumes:
+      - signal_cli_data:/home/.local/share/signal-cli
+    expose:
+      - "8080"
+
+  whatsapp-bridge:
+    # WhatsApp via Baileys (decision 0003, Phase 2): the Node bridge is a
+    # sibling of the channel gateway (condition 9 - the Baileys SDK lives in
+    # THIS image, never the kernel's or the Python gateway's). Derived from the
+    # MIT-licensed Hermes bridge (Copyright (c) 2025 Nous Research; see
+    # services/channel_gateway/whatsapp_bridge/LICENSE.md) with the Hermes
+    # allowlist/self-chat POLICY stripped - who-may-talk is the kernel's
+    # binding rows (condition 2). Profile-gated with the gateway:
+    #   docker compose --profile channels up -d
+    #
+    # The bridge terminates WhatsApp's E2EE and holds the session credentials
+    # on the whatsapp-session volume - treat that volume like a credential.
+    #
+    # Pairing (one-off, before first up) - scan the QR in WhatsApp >
+    # Linked devices:
+    #   docker compose --profile channels run --rm -it whatsapp-bridge \
+    #     node bridge.js --pair-only --session /data
+    profiles: ["channels"]
+    networks:
+      - sandbox
+    <<: *app-hardening
+    build:
+      context: ./services/channel_gateway/whatsapp_bridge
+      dockerfile: Dockerfile
+    image: boltrig/channel-gateway-whatsapp-bridge:1.0.0
+    restart: unless-stopped
+    command: ["node", "bridge.js", "--host", "0.0.0.0", "--port", "3000", "--session", "/data"]
+    environment:
+      # The whatsapp adapter's inbound listener on the gateway service (the
+      # channel's config in CHANNEL_GATEWAY_CHANNELS sets listen_host
+      # "0.0.0.0" / listen_port 3001 - see the README's WhatsApp section).
+      ADAPTER_URL: ${WHATSAPP_ADAPTER_URL:-http://channel-gateway:3001/inbound}
+      # This service's alias, accepted by the bridge's Host-header
+      # DNS-rebinding defence in addition to loopback.
+      WA_ACCEPTED_HOSTS: whatsapp-bridge
+    volumes:
+      - whatsapp-session:/data
+    expose:
+      - "3000"
+    depends_on:
+      channel-gateway:
+        condition: service_started
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget -qO- http://localhost:3000/health || exit 1
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
   backup:
     # M10 (SEC-70): scheduled off-box backup. The base `make backup` is a manual,
-    # same-host dump; this sidecar SHIPS the scheduled + off-box path so a self-
+    # same-host dump; this gateway SHIPS the scheduled + off-box path so a self-
     # hosted deployment with a durable audit chain is not one-disk-failure away
     # from total loss. Profile-gated so the DEFAULT (dev) stack is unaffected:
     #   docker compose --profile backup up -d
@@ -430,7 +559,7 @@ networks:
   # The app network: every service joins this by default.
   default:
     driver: bridge
-  # The Pi sidecar's isolation network (SEC-48 / FIND-IAC-001). Only the sidecar
+  # The Pi gateway's isolation network (SEC-48 / FIND-IAC-001). Only the gateway
   # and the kernel MCP face plus model endpoints/proxies (bifrost/local-model) sit
   # here. WARNING: the base docker-compose.yml is a dev stack. It leaves the
   # sandbox as a normal bridge so an external model endpoint is reachable without
@@ -446,3 +575,7 @@ volumes:
   herdr_data:
   opencode_data:
   browser_cli_data:
+  knowledge_data:
+  cognee_data:
+  signal_cli_data:
+  whatsapp_session:

@@ -13,7 +13,7 @@ import asyncio
 import logging
 import os
 
-from boltrig.config import load_manifest
+from boltrig.config import load_manifest, load_settings
 from boltrig.fleet import (
     anchor_interval_from_env,
     build_org,
@@ -23,6 +23,7 @@ from boltrig.fleet import (
 )
 
 from .bootstrap import _DEFAULT_TENANT, _find_manifest, build_kernel_async
+from .codex_execution import build_codex_execution_stack
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("boltrig.worker")
@@ -49,7 +50,12 @@ async def _run() -> None:
         except Exception as exc:
             log.warning("manifest load failed (%s); using the default org", exc)
     tenant = manifest.tenant_id if manifest is not None else _DEFAULT_TENANT
-    pump = build_org(kernel, build_spawner(kernel), manifest, executor=executor)
+    pump = build_org(
+        kernel, build_spawner(kernel), manifest, executor=executor,
+        # Codex shadow root admission (SEC-172), built here at the composition
+        # root: None when BOLTRIG_CODEX_LEDGER is off => no admit.
+        codex_execution=build_codex_execution_stack(load_settings(), kernel.store),
+    )
     log.info(
         "delegation pump live (tenant=%s, departments=%s)",
         tenant,
@@ -94,7 +100,11 @@ async def _run() -> None:
             anchor_task.cancel()
         if stack_health_task is not None:
             stack_health_task.cancel()
-            await asyncio.gather(stack_health_task, return_exceptions=True)
+        # Gather both cancelled tasks so neither is destroyed while pending (an
+        # ungathered anchor janitor also leaves an unsealed anchor tail).
+        pending = [t for t in (anchor_task, stack_health_task) if t is not None]
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
 
 
 def main() -> None:

@@ -74,6 +74,13 @@ def _ctx(**extra) -> InvocationContext:
     return InvocationContext(tenant_id=T, actor="w", on_behalf_of="u1", extra=extra)
 
 
+@pytest.fixture(autouse=True)
+def _legacy_runtimes(monkeypatch):
+    # Every lane this suite routes to (claude-api / openai / hermes) is legacy
+    # rollback residue (decision 0012): reachable only behind the explicit flag.
+    monkeypatch.setenv("BOLTRIG_ENABLE_LEGACY_RUNTIMES", "1")
+
+
 # --- FR-AIKEY-03: provider selects the runtime + model/base_url the endpoint ------
 @pytest.mark.invariant("FR-AIKEY-03")
 def test_no_config_dispatches_the_env_default_runtime_and_model():

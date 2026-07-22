@@ -158,13 +158,6 @@ export function ComposerActions({
           className="composer-stop"
           onClick={() => void stopTurn()}
           type="button"
-          style={{
-            background: "rgba(240,101,74,0.15)",
-            border: "1px solid rgba(240,101,74,0.35)",
-            color: "#F0654A",
-            height: 30,
-            borderRadius: 15,
-          }}
         >
           Stop
         </button>

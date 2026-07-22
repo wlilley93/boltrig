@@ -1,8 +1,9 @@
 /**
  * Feature catalogue for the post-story features section (see
  * `components/features/features-section.tsx`). Six themed groups, each with a
- * one-line hook and a handful of concrete capabilities written as buyer
- * outcomes. Pure typed content: no markup, no styling.
+ * one-line hook and five concrete capabilities written as buyer outcomes.
+ * Claims are bounded to shipped behaviour; known seams are not advertised as
+ * active capability. Pure typed content: no markup, no styling.
  */
 
 export interface FeatureItem {
@@ -31,17 +32,17 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
       {
         name: "One place to delegate",
         outcome:
-          "Ask Bolt to handle support triage, release prep, renewals, reporting or internal chores from one console.",
+          "Use Bolt chat, the work board and workflow runs from one console to delegate and track operational work.",
       },
       {
-        name: "Specialist workers",
+        name: "Governed agent profiles",
         outcome:
-          "Department agents spin up focused workers with only the skills and tools each task requires.",
+          "Configure specialist workers by runtime, skills, depth, lifecycle and cost tier while caller authority remains the ceiling.",
       },
       {
-        name: "Durable workflows",
+        name: "Governed workflows",
         outcome:
-          "Schedule or trigger repeatable workflows so routine work runs without another meeting or reminder.",
+          "Define and trigger dependency-ordered workflows whose capability steps still cross the kernel.",
       },
       {
         name: "Work board",
@@ -62,7 +63,7 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
       {
         name: "Scoped permissions",
         outcome:
-          "Every tool call is checked against the tenant, user and run grants before it executes.",
+          "Every capability call is checked against organisation, workspace, caller and run authority before it executes.",
       },
       {
         name: "Human approvals",
@@ -74,8 +75,9 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
         outcome: "Credentials are resolved inside Boltrig for one call and are never handed to the agent.",
       },
       {
-        name: "Cost boundaries",
-        outcome: "Per-run budgets stop runaway work before it turns into surprise spend.",
+        name: "Scoped cost boundaries",
+        outcome:
+          "Configured organisation and department budgets reserve estimated spend and can hard-stop over-limit spawned agent work.",
       },
       {
         name: "Sensitive routing",
@@ -99,17 +101,19 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
         outcome: "Open any run and walk through the steps, workers and tool receipts behind the result.",
       },
       {
-        name: "Audit trail",
+        name: "Audit and scoped reporting",
         outcome:
-          "Every action produces a durable record of who asked, what ran, what changed and whether it was allowed.",
+          "Governed actions, denials and approvals produce a tamper-evident record, with cost and activity views filtered to the caller's scope.",
       },
       {
-        name: "Memory with provenance",
-        outcome: "Facts the fleet remembers carry source context, so teams can trace where an answer came from.",
+        name: "Knowledge with citations",
+        outcome:
+          "Keep text, Markdown and PDF originals, search authorised passages and return immutable revision citations while memory stays separate.",
       },
       {
-        name: "Role-scoped reporting",
-        outcome: "Cost, activity and audit views are filtered to what each person is allowed to see.",
+        name: "Evaluation cases",
+        outcome:
+          "Run reusable cases under the initiator's grants and inspect assertions, outputs, effective permissions and history.",
       },
     ],
   },
@@ -133,13 +137,14 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
         outcome: "Expose governed capabilities to external agents and consume reviewed MCP tool servers as new verbs.",
       },
       {
-        name: "Channel intake",
+        name: "Signed channel intake",
         outcome:
-          "Route work from chat platforms or signed webhooks while keeping identity, approvals and audit intact.",
+          "Accept identity-bound Microsoft Teams or generic webhook events after signature, replay and rate-limit checks.",
       },
       {
         name: "Governed outbound",
-        outcome: "Let agents send updates while high-risk messages stay approval-gated and traceable.",
+        outcome:
+          "Send updates through configured outbound webhook endpoints using one approval-gated and audited high-consequence verb.",
       },
     ],
   },
@@ -149,23 +154,24 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
     hook: "Package the nouns, verbs, workflows and rules that make your business specific.",
     items: [
       {
-        name: "Plugin bundles",
-        outcome: "Ship project adapters, skills and workflows as an adopted bundle loaded by Boltrig at deploy time.",
+        name: "Deployment bundles",
+        outcome:
+          "Ship project adapters, skills, workflows and manifest policy as a bundle loaded by Boltrig at deploy time.",
       },
       {
-        name: "Runtime authoring",
+        name: "Live authoring",
         outcome:
-          "Author nouns, verbs, bindings, skills and workflows as data from the console or API.",
+          "Author nouns, verbs, bindings, skills, workflows and agent profiles as governed data from the console or API.",
       },
       {
         name: "External systems",
         outcome:
-          "Connect SQL, HTTP, messaging and file-backed systems through the same governed verb model.",
+          "Register reviewed HTTP, OpenAPI, SQL and MCP integrations through the same governed verb model.",
       },
       {
-        name: "Client hard gates",
+        name: "Domain guardrails",
         outcome:
-          "Model customer-specific go/no-go checks as governed capabilities rather than hidden application logic.",
+          "Compose customer-specific checks from workflow branches and high-consequence capabilities instead of hidden application logic.",
       },
       {
         name: "No core fork",
@@ -184,9 +190,9 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
           "Run the kernel, database, console and agent runtime on your own infrastructure.",
       },
       {
-        name: "Enterprise access",
+        name: "Organisation and workspace access",
         outcome:
-          "Use SSO or first-party invite-only access, with roles mapped to what people may see and do.",
+          "Manage members, invitations, workspaces and AI keys with OIDC SSO or first-party invite-only access.",
       },
       {
         name: "Private credentials",
@@ -195,7 +201,8 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
       },
       {
         name: "Production deploys",
-        outcome: "Build repeatable Docker deployments with Postgres, Redis, Hatchet and the Pi sidecar.",
+        outcome:
+          "Build repeatable Docker deployments for the kernel, database, console, workers and durable services.",
       },
       {
         name: "Tested guarantees",

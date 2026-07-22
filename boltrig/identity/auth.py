@@ -75,6 +75,10 @@ class OidcVerifier:
     _ALLOWED_ALGS = ("RS256", "RS384", "RS512", "ES256", "ES384", "ES512")
     # A token may not claim a longer life than this regardless of its exp (IAM-03).
     _MAX_LIFETIME = 24 * 3600
+    # Minimum interval between FORCED JWKS refetches (IAM-05): an unauthenticated
+    # request with a bogus kid must not amplify into an outbound IdP fetch per
+    # request.
+    _FORCE_REFETCH_MIN_INTERVAL = 30.0
 
     def __init__(
         self,
@@ -134,7 +138,10 @@ class OidcVerifier:
         kid = self._kid(token)
         jwks = await self._load_jwks()
         if not self._kid_present(jwks, kid):  # kid miss -> refetch then fail closed
-            jwks = await self._load_jwks(force=True)
+            # Throttle forced refetches (_FORCE_REFETCH_MIN_INTERVAL, IAM-05): a
+            # bogus-kid request storm re-checks the CACHED set instead of fetching.
+            if time.monotonic() - self._jwks_at >= self._FORCE_REFETCH_MIN_INTERVAL:
+                jwks = await self._load_jwks(force=True)
             if not self._kid_present(jwks, kid):
                 raise HTTPException(status_code=401, detail="unknown signing key")
         # IAM-02: pin the algorithm allowlist; iat/exp/nbf essential (IAM-03).
@@ -160,6 +167,10 @@ class OidcVerifier:
         if isinstance(iat, (int, float)) and isinstance(exp, (int, float)):
             if exp - iat > self._MAX_LIFETIME:
                 raise HTTPException(status_code=401, detail="token lifetime too long")
+        # A missing/non-numeric iat must not let a far-future exp sail through:
+        # cap exp absolutely (exp <= now + _MAX_LIFETIME) as well.
+        if isinstance(exp, (int, float)) and exp - time.time() > self._MAX_LIFETIME:
+            raise HTTPException(status_code=401, detail="token lifetime too long")
         return data
 
 

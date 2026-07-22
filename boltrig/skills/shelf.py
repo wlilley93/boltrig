@@ -36,6 +36,7 @@ from boltrig.adapters.base import AdapterError, Credential, ErrorClass, Result, 
 from boltrig.models import ContextRequirementsUnmet, InvocationContext
 
 from .loader import SkillNotFound, resolve_skill
+from .schema import SkillValidationError
 
 _OBJ: dict = {"type": "object"}
 
@@ -101,7 +102,7 @@ class SkillShelfAdapter:
     # --- the shelf: descriptions only, never bodies (SEC-57 / FR-SKILL-01) ---
     async def _search(self, tenant: str, params: dict) -> Result:
         query = str(params.get("query") or "")
-        limit = int(params.get("limit") or 50)
+        limit = max(1, int(params.get("limit") or 50))
         skills = await self._store.list_skills(tenant)
         shelf = [
             {"id": s.id, "version": s.version,
@@ -130,6 +131,8 @@ class SkillShelfAdapter:
             resolved = await resolve_skill(self._store, tenant, params["id"])
         except SkillNotFound:
             return Result.failure(AdapterError(ErrorClass.NOT_FOUND, f"unknown skill {params['id']}"))
+        except SkillValidationError as exc:  # e.g. a cyclic extends chain
+            return Result.failure(AdapterError(ErrorClass.INVALID, str(exc)))
 
         job_context = {k: v for k, v in (params.get("context") or {}).items() if v is not None}
         schema = resolved.context_requirements or {}

@@ -9,6 +9,7 @@ never comes from the payload.
 
 import asyncio
 import time
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -18,6 +19,7 @@ from boltrig.adapters.builtin.inbound_webhook import (
     WebhookAuthError,
     canonical_body,
     expected_signature,
+    is_duplicate_delivery,
     signed_content,
     verify_and_normalise,
 )
@@ -25,7 +27,7 @@ from boltrig.kernel import Kernel
 from boltrig.kernel.app import create_app
 from boltrig.kernel.channel_routes import INBOUND_RL_PER_SENDER
 from boltrig.models import Channel, ChannelBinding, GrantSet, TenantPermissions
-from boltrig.store import InMemoryStore
+from boltrig.store import InMemoryStore, channel_dedup
 
 T = "acme"
 SECRET = "whsec_test_123"
@@ -171,3 +173,66 @@ def test_inbound_intake_rate_limited_per_sender():
     # no extra work item was created past the limit
     items = asyncio.run(store.list_work_items(T))
     assert sum(1 for w in items if w.on_behalf_of == "alice") == accepted == limit
+
+
+# --------------------------------------------------------------------------- #
+# SEC-175  id-less, unsigned deliveries dedup by CONTENT within a bounded window
+# --------------------------------------------------------------------------- #
+@pytest.mark.security
+@pytest.mark.invariant("SEC-175")
+def test_idless_redelivery_dedupes_by_content():
+    inbound_webhook._seen_deliveries.clear()  # isolate the first-tier cache
+    store = InMemoryStore()
+    # no explicit id, unsigned: no stable delivery id at all, so the content
+    # hash fallback synthesises one
+    payload = {"sender": "U-42", "type": "message", "text": "hi"}
+    first = verify_and_normalise(payload, {}, None, channel_id="ch-1")
+    repeat = verify_and_normalise(dict(payload), {}, None, channel_id="ch-1")
+    assert first["delivery_id"] is not None
+    assert repeat["delivery_id"] == first["delivery_id"]  # same content, same id
+    first_seen = asyncio.run(
+        is_duplicate_delivery(store, T, "ch-1", first["delivery_id"]))
+    repeat_seen = asyncio.run(
+        is_duplicate_delivery(store, T, "ch-1", repeat["delivery_id"]))
+    assert first_seen is False  # first sighting: ingested
+    assert repeat_seen is True  # the identical redelivery in-window: dropped
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-175")
+def test_idless_distinct_bodies_are_not_deduped():
+    inbound_webhook._seen_deliveries.clear()
+    store = InMemoryStore()
+    base = {"sender": "U-42", "type": "message", "text": "hi"}
+    one = verify_and_normalise(base, {}, None, channel_id="ch-1")
+    two = verify_and_normalise({**base, "text": "different"}, {}, None, channel_id="ch-1")
+    assert one["delivery_id"] != two["delivery_id"]
+    for candidate in (one, two):
+        assert asyncio.run(
+            is_duplicate_delivery(store, T, "ch-1", candidate["delivery_id"])
+        ) is False  # each distinct body is a NEW delivery
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-175")
+def test_idless_redelivery_passes_after_the_content_window(monkeypatch):
+    inbound_webhook._seen_deliveries.clear()
+    store = InMemoryStore()
+    # a controllable clock for the STORE tier (the record-and-check authority);
+    # the process-local tier takes ``now`` explicitly, the codebase idiom
+    clock = datetime(2026, 7, 22, tzinfo=timezone.utc)
+    monkeypatch.setattr(channel_dedup, "utcnow", lambda: clock)
+    payload = {"sender": "U-42", "type": "message", "text": "hi"}
+    did = verify_and_normalise(payload, {}, None, channel_id="ch-1")["delivery_id"]
+    t0 = clock.timestamp()
+    assert asyncio.run(is_duplicate_delivery(store, T, "ch-1", did, now=t0)) is False
+    # inside the window the identical redelivery is a replay - proven against
+    # the STORE tier too (local cache cleared, so the store row must answer)
+    inbound_webhook._seen_deliveries.clear()
+    assert asyncio.run(
+        is_duplicate_delivery(store, T, "ch-1", did, now=t0 + 60)) is True
+    # ...but once the content window lapses the same body passes as NEW
+    later = clock + timedelta(seconds=inbound_webhook._CONTENT_SEEN_TTL_SECONDS + 1)
+    monkeypatch.setattr(channel_dedup, "utcnow", lambda: later)
+    assert asyncio.run(
+        is_duplicate_delivery(store, T, "ch-1", did, now=later.timestamp())) is False

@@ -23,6 +23,7 @@ def register_platform_routes(app, *, principal_dep, get_kernel) -> None:
         budgets,
         console,
         eval_routes,
+        knowledge,
         memory,
         observability,
         personal,
@@ -35,6 +36,6 @@ def register_platform_routes(app, *, principal_dep, get_kernel) -> None:
     K = Depends(get_kernel)
     for module in (
         skills, router, adapters, workflows, admin, budgets, observability, console,
-        eval_routes, personal, memory,
+        eval_routes, personal, memory, knowledge,
     ):
         module.register(app, P, K)

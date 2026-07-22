@@ -6,7 +6,6 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 
 from boltrig.kernel.control_routes import dispatch_control_route
-from boltrig.models import BoltrigError
 
 from ._shared import require_author
 
@@ -103,9 +102,10 @@ def _register_author_routes(app, P, K) -> None:
             if pending is not None:
                 return pending
             return JSONResponse({"status": "ok", **(output or {})})
-        except (BoltrigError, ValueError) as exc:
-            code = getattr(exc, "status_code", 400)
-            return JSONResponse({"status": "error", "reason": str(exc)}, status_code=code)
+        except ValueError:
+            # BoltrigError propagates to the central handler (canonical envelope);
+            # a bare ValueError never leaks internal text as the client reason.
+            return JSONResponse({"status": "error", "reason": "invalid schedule"}, status_code=400)
 
 
 def _register_run_routes(app, P, K) -> None:

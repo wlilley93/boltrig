@@ -34,7 +34,10 @@ _SCOPED = (
     "eval_cases,eval_runs,notification_prefs,personal_agents,memory_items,mcp_servers,"
     "conversation_messages,user_invitations,user_settings,user_sessions,memory_facts,"
     "memory_ingestions,memory_erasures,memory_projection_statuses,"
-    "memory_vectors,memory_vector_edges"
+    "memory_vectors,memory_vector_edges,knowledge_uploads,knowledge_blobs,knowledge_assets,"
+    "knowledge_source_occurrences,knowledge_revisions,knowledge_representations,"
+    "knowledge_segments,knowledge_embeddings,knowledge_asset_access,knowledge_providers,"
+    "knowledge_projection_statuses,knowledge_jobs,knowledge_projection_outbox"
 ).split(",")
 
 _DISABLE_RLS = (

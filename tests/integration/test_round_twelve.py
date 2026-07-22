@@ -34,8 +34,10 @@ async def _kernel() -> Kernel:
     return k
 
 
-def _ctx() -> InvocationContext:
-    return InvocationContext(tenant_id=T, grants=GrantSet.of(["*"]), actor="u")
+def _ctx(run_id: str | None = None) -> InvocationContext:
+    return InvocationContext(
+        tenant_id=T, grants=GrantSet.of(["*"]), actor="u", run_id=run_id
+    )
 
 
 def _wf(steps: list[dict]) -> WorkflowDefinition:
@@ -68,6 +70,26 @@ async def test_interpreter_emits_step_events_on_the_run_stream():
     # the run is bound to one stream: the steps' own tool events are here too
     assert any(e["type"] == "tool_call" for e in events)
     assert any(e["type"] == "tool_result" for e in events)
+    assert events[-1] == {
+        "type": "workflow_run",
+        "run_id": rid,
+        "workflow_id": "wf-12",
+        "status": "completed",
+    }
+
+
+@pytest.mark.invariant("FR-EVT-04")
+async def test_caller_run_id_is_the_live_workflow_stream_key():
+    k = await _kernel()
+    lib = WorkflowLibrary(k.store, executor=LocalDurableExecutor(), kernel=k)
+    await lib.register(_wf([
+        {"id": "s1", "parents": [], "action": "ticket.create", "params": {"title": "a"}},
+    ]))
+
+    record = await lib.execute(T, "wf-12", {}, _ctx("operator-chosen-run"))
+
+    assert record["run_id"] == "operator-chosen-run"
+    assert k.events.snapshot(T, "operator-chosen-run")[-1]["status"] == "completed"
 
 
 @pytest.mark.invariant("FR-EVT-04")

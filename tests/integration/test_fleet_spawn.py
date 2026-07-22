@@ -90,6 +90,8 @@ async def test_every_spawn_caps_skill_requirements_to_parent_authority():
 
 @pytest.mark.invariant("FR-RUN-15")
 async def test_opencode_spawn_preserves_workspace_for_scoped_mcp(monkeypatch, tmp_path):
+    # opencode is a legacy lane (decision 0012): reachable only behind the flag.
+    monkeypatch.setenv("BOLTRIG_ENABLE_LEGACY_RUNTIMES", "1")
     store = InMemoryStore()
     store.set_tenant_permissions(TenantPermissions(T, GrantSet.of(["*"])))
     await store.upsert_model_endpoint(
@@ -173,6 +175,8 @@ async def test_opencode_spawn_preserves_workspace_for_scoped_mcp(monkeypatch, tm
 async def test_rivet_spawn_preserves_workspace_for_scoped_mcp(monkeypatch):
     from boltrig.fleet.rivet_runtime import RivetAgentOSRuntime
 
+    # rivet is a legacy lane (decision 0012): reachable only behind the flag.
+    monkeypatch.setenv("BOLTRIG_ENABLE_LEGACY_RUNTIMES", "1")
     monkeypatch.setenv("RIVET_AGENTOS_URL", "http://rivet-agentos:2468")
     monkeypatch.setenv("BOLTRIG_RIVET_MCP_URL", "http://kernel.example/v1/mcp")
     store = InMemoryStore()

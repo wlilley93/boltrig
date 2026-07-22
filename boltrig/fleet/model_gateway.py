@@ -34,7 +34,15 @@ class ModelGateway:
     pinned to one model for the gateway's cache window. The TTL is synchronised to
     the gateway's own cache TTL so a binding never outlives (pinning a cold cache)
     or under-lives (re-routing a warm one) the cache it exists to track.
+
+    The table is additionally size-bounded: conversation ids arrive per request,
+    and TTL eviction on read alone would let a churn of one-turn conversations
+    grow the dict without limit. At the bound, expired entries are swept first,
+    then the earliest-expiring live ones (a live binding evicted early simply
+    re-pins on the next turn - affinity, never correctness).
     """
+
+    _MAX_BINDINGS = 4_096
 
     def __init__(self, *, ttl_seconds: int = 900) -> None:
         self._ttl = timedelta(seconds=max(1, ttl_seconds))
@@ -58,8 +66,19 @@ class ModelGateway:
         otherwise pick a different one this turn."""
         existing = self.resolve(conversation_id)
         chosen = existing or model
+        if conversation_id not in self._bindings and len(self._bindings) >= self._MAX_BINDINGS:
+            self._sweep()
         self._bindings[conversation_id] = (chosen, utcnow() + self._ttl)
         return chosen
+
+    def _sweep(self) -> None:
+        """Evict expired bindings, then earliest-expiring live ones under the bound."""
+        now = utcnow()
+        for key in [k for k, (_model, exp) in self._bindings.items() if now >= exp]:
+            del self._bindings[key]
+        while len(self._bindings) >= self._MAX_BINDINGS:
+            oldest = min(self._bindings, key=lambda k: self._bindings[k][1])
+            del self._bindings[oldest]
 
 
 def gateway_config() -> dict[str, object]:

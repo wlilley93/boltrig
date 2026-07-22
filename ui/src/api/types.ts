@@ -47,6 +47,18 @@ export interface VerbInfo {
 export interface CapabilitiesResponse {
   verbs: VerbInfo[];
   nouns?: unknown;
+  workflows?: unknown;
+  agent_capabilities?: AgentCapabilityInfo[];
+}
+
+export interface AgentCapabilityInfo {
+  name: string;
+  runtime: string;
+  supported_skills: string[];
+  max_depth: number;
+  is_ephemeral: boolean;
+  cost_tier: string;
+  model_endpoint?: string | null;
 }
 
 export interface ModelEndpointInfo {
@@ -114,6 +126,11 @@ export interface HITLRequest {
   options?: string[];
   work_item_id?: string | null;
   status?: string;
+  run_id?: string | null;
+  verb?: string | null;
+  requested_by?: string | null;
+  requested_on_behalf_of?: string | null;
+  inputs?: unknown;
 }
 
 export interface HITLListResponse {
@@ -322,6 +339,7 @@ export interface ChatToolCall {
   input?: unknown;
   // legacy: older frames set a literal "running"; the normaliser no longer needs it
   status?: "running";
+  consequence?: "low" | "high";
 }
 // The paired result, matched to its call by `call_id`. The chat stream carries
 // only `call_id`, `status` and a keys-only `result_summary`; the run relay also
@@ -376,9 +394,12 @@ export interface ChatSubagent {
 export interface ChatHitlEvent {
   type: "hitl";
   hitl_request_id: string;
-  kind: HITLKind;
-  question: string;
+  kind?: HITLKind;
+  question?: string;
   options?: string[];
+  verb?: string;
+  call_id?: string;
+  requested_by?: string;
 }
 export interface ChatMessageEnd {
   type: "message_end";
@@ -397,7 +418,17 @@ export interface ChatWorkflowStep {
   type: "workflow_step";
   step_id: string;
   action: string;
-  status: "running" | "ok" | "failed" | "skipped" | "error";
+  status: "running" | "ok" | "failed" | "skipped" | "paused" | "error";
+}
+
+// The interpreter's run-level state marker. A completed or failed marker lets
+// live clients settle their follow connection without waiting for an idle
+// timeout; paused remains open because the same run may resume after approval.
+export interface ChatWorkflowRun {
+  type: "workflow_run";
+  run_id: string;
+  workflow_id: string;
+  status: "completed" | "failed" | "paused";
 }
 
 export type ChatEvent =
@@ -412,7 +443,8 @@ export type ChatEvent =
   | ChatHeartbeat
   | ChatMessageEnd
   | ChatCancelled
-  | ChatWorkflowStep;
+  | ChatWorkflowStep
+  | ChatWorkflowRun;
 
 // POST /v1/hitl/{question_id}/answer: owner-only, fail-closed answer to an
 // agent's clarifying QUESTION. On success {status:"ok", question_id, response_id,
@@ -1402,6 +1434,85 @@ export interface MemoryIngestionRow {
 
 export interface MemoryIngestionsResponse {
   ingestions: MemoryIngestionRow[];
+}
+
+// --- Codex-native Knowledge fabric (decision 0015) -------------------------
+export interface KnowledgeAsset {
+  id: string;
+  title: string;
+  filename: string;
+  asset_type: string;
+  workspace_id?: string | null;
+  revision_id: string;
+  source_kind: string;
+  source_ref?: string | null;
+  segment_count: number;
+  created_at: string;
+}
+
+export interface KnowledgeAssetsResponse {
+  assets: KnowledgeAsset[];
+}
+
+export interface KnowledgeCitation {
+  asset_id: string;
+  revision_id: string;
+  segment_id: string;
+  title: string;
+  filename: string;
+  locator: Record<string, unknown>;
+  source_kind: string;
+  source_ref?: string | null;
+  content_hash: string;
+}
+
+export interface KnowledgeSearchHit {
+  asset_id: string;
+  revision_id: string;
+  segment_id: string;
+  title: string;
+  filename: string;
+  text: string;
+  locator: Record<string, unknown>;
+  score: number;
+  citation: KnowledgeCitation;
+}
+
+export interface KnowledgeSearchResponse {
+  query: string;
+  hits: KnowledgeSearchHit[];
+}
+
+export interface KnowledgeProvider {
+  id: string;
+  display_name: string;
+  role: string;
+  enabled: boolean;
+  bundled: boolean;
+  health: string;
+  status: string;
+  last_error?: string | null;
+}
+
+export interface KnowledgeProvidersResponse {
+  providers: KnowledgeProvider[];
+}
+
+export interface KnowledgeUploadResponse {
+  asset_id: string;
+  revision_id: string;
+  status: string;
+  segment_count: number;
+  digest: string;
+  projections: Array<{ provider_id: string; status: string; error?: string | null }>;
+}
+
+export interface KnowledgeMutationResponse {
+  asset_id?: string;
+  status?: string;
+  provider?: KnowledgeProvider;
+  hitl_request_id?: string;
+  reason?: string;
 }
 
 // === First-party auth + org/workspace tenancy (COUNTY 7 / 8) ===

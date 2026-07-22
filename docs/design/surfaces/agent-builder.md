@@ -1,5 +1,9 @@
 # Agent builder row: build-ready surface spec
 
+Status: **ratified 2026-07-21**. This closes the Agent Studio IA gate in the Enhancement
+Charter. Changes within this org-first model are Enhance altitude; changing the row's mental
+model requires the challenge protocol.
+
 Row id `agents` in the deck grid (DESIGN-v2). Anchor (col 0) = the org chart. Columns 1..n = one slide per agent, keyed by agent name, in org order. This spec covers both slides, the create flows, the row data layer, all states, all copy, and the chat-parity mapping. Pattern citations (P-numbers, N-numbers, L-laws) refer to `docs/design/ui-patterns.md`. Everything renders inside the deck slide frame: each slide is its own scroller with the bordered-slide look, breadcrumb position chip in the header, edge chevrons, Ctrl+Alt+Arrow chord (DESIGN-v2 renderer + navigation affordances). No em dashes anywhere, including generated copy.
 
 ---
@@ -32,7 +36,7 @@ A row-scoped provider (the same model DESIGN-v2 mandates for the automations row
 |---|---|---|
 | Org tiers | `GET /v1/admin/config/hierarchy` (platform_routes.py:323-330) | `{tier1:{name,runtime,model_endpoint,max_depth,supported_skills[],cost_tier,budget}, tier2:[{...+department}]}` (config/manifest.py:92-111; manifest.yaml:43-100). Author/admin gated; a 403 here makes the whole row denied (section 4). |
 | Worker pool | `GET /v1/admin/config/ephemeral_runtimes` | `[{name,runtime,model_endpoint,supported_skills[],max_depth,cost_tier}]` |
-| Model endpoints | `GET /v1/admin/config/models` | `{endpoints:[{id,kind,model,base_url,data_class}], default, sensitive_endpoint}`. Transport for the endpoint picker. DEPENDS-BACKEND: `GET /v1/model-endpoints` reading store rows (reader-agents item 4); until then the config section is the source and the picker's hint says "as configured", not "as live". |
+| Model endpoints | `GET /v1/model-endpoints` | Live store-backed endpoint rows for the model picker. The manifest configuration remains available in Admin, but the agent surface reads the live registry. |
 | Skills | `GET /v1/skills` (platform_routes.py:90-96) | `{skills:[{id,version,extends,tool_grants[],locale}]}`. Omits `prompt_fragment`/`description` (reader-agents item 9). |
 | Verbs + bindings | `GET /v1/capabilities` (app.py:373-379; kernel/registry.py:76-111) | `{verbs:[{id,noun,input_schema,output_schema,consequence,binding}]}`, grant-intersected with the caller. Bindings inverted client-side: `binding.target_type === "agent"` groups by `target_ref` (= agent-capability name, models/registry.py:67-75). |
 | Budgets | `GET /v1/budgets` (platform_routes.py:400-422) | Department rows matched by `scope_type === "department" && id === dept`. |
@@ -133,7 +137,7 @@ Header "Soul" with TermTip: "What this agent is told it is. Composed by the kern
 1. **Governance floor** (all kinds): locked card (lock glyph, `--color-text-muted` border), label "Layer 1 - Governance floor (every agent, immutable)", body = the GOVERNANCE_FLOOR text verbatim (prompt_stack.py:27-37), collapsed to 2 lines with a Disclosure (N11) "Show full text". Hint: "This layer is the cage. It cannot be edited from anywhere."
 2. **Tier character**: locked card, label "Layer 2 - Tier character (`tier1` / `tier2` / `ephemeral`)", body = the TIER_CHARACTER text for this kind verbatim (prompt_stack.py:84-104), same collapse. Hint: "Set by the agent's tier, shared by every agent at that tier."
 3. **Department slant** (heads only): a card with two parts: the fixed line "Your department is engineering." (rendered as the kernel will compose it) and **Department brief**, the one editable soul field: auto-growing textarea (P10 long free text, prose, mono OFF), label "Department brief", hint "Extra standing context for this head. Sits below the governance floor and tier character; it can narrow, never widen.", placeholder "e.g. Prefer the internal ticket system for all engineering work. Escalate anything touching production credentials."
-   **DEPENDS-BACKEND (SOUL-1)**: `department_brief` is plumbed into `compose_system_prompt` but nothing populates it from config (prompt_stack.py:118-125; reader-agents item 3). Required seam: the hierarchy tier2 entry gains a `brief` field, the pump passes it through, and the write travels via `control.hierarchy.upsert` (P31 registry). Until the seam lands, this field renders read-only-disabled with the honest line "Not wired up yet: the kernel supports a department brief but nothing stores one. Coming with the org-config verb." Never fake the write.
+   **DEPENDS-BACKEND (SOUL-1)**: `department_brief` is plumbed into `compose_system_prompt` but nothing populates it from config (prompt_stack.py:118-125; reader-agents item 3). Required seam: the hierarchy tier2 entry gains a `brief` field, the pump passes it through, and the write travels via `control.config.upsert` for the hierarchy section. Until the seam lands, this field renders read-only-disabled with the honest line "Not wired up yet: the kernel supports a department brief but nothing stores one." Never fake the write.
 4. **Skill fragments** (workers and personal only): a card listing the matched skills whose `prompt_fragment`s are merged at spawn (fleet/spawn.py:236,267): skill ids as mono chips + the line "Each skill adds its own instructions when a worker is convened with it." **DEPENDS-BACKEND (SOUL-2)**: `GET /v1/skills` omits `prompt_fragment` and there is no `GET /v1/skills/{id}` (platform_routes.py:90-96; reader-agents item 9), so the fragment text is not readable; render the honest line "Fragment text is not readable via the API yet." Needed: single-skill read including `prompt_fragment`.
 
 No per-agent free-form soul field is designed, because none exists (reader-agents 1c: agent persona/soul DOES NOT EXIST). The layer stack IS the truth, and rendering it faithfully is the design.
@@ -154,7 +158,10 @@ Meta slot (P11): the match count. Async recompute is client-side and instant (al
 **View 1 - "Fulfils these verbs"** (the inverted binding view): table (P35) of verbs where `binding.target_type === "agent" && target_ref === name`. Columns: Verb (mono, `RunLink`-style click opens nothing here; it links to the Router home for that verb), Noun, Consequence (`StatusBadge` from the CONSEQUENCE glossary, high rows amber), Bound (relative time if known, else "-"). Empty view copy: "No verbs are bound to this agent. Binding a verb makes this agent the thing that fulfils it."
 
 Row actions: none destructive (no unbind exists anywhere: deletes DO NOT EXIST, reader-agents 1c; P27 forbids rendering delete affordances until `control.binding.delete` lands). One footer action: **Bind a verb to this agent** (ghost) -> inline reveal (Disclosure, not a modal) containing one EntityPicker (P6, N4) over `GET /v1/capabilities` grouped by noun, consequence badges inline, preview card showing the verb's current binding ("currently runs via adapter `github`") so rebinding is a seen, deliberate act; then an ArmConfirm (N14, tone consequence) restating: "Bind `ticket.triage` to `head-of-engineering`? It currently runs via adapter `github`. Dispatching it will spawn this agent instead." Confirm label "Bind verb".
-Write: `POST /v1/verbs/{verb_id}/binding {target_type:"agent", target_ref:name}` (platform_routes.py:166-177), direct author-gated route. **DEPENDS-BACKEND (PAR-3)**: design against `control.binding.upsert` (P31 registry row "Verb binding"); the direct route is the temporary transport behind the same form. This also fixes debt R5 (agent target was free text; here it is structural: the agent IS the context).
+Write: `control.binding.set {verb_id, target_type:"agent", target_ref:name}` through
+`POST /v1/invoke`. This is a governed capability change and uses PendingHumanCard before the
+approved request is reapplied. The agent is the structural context, so target selection is never
+free text.
 
 **View 2 - "Can call (effective grants)"**: a computed, read-only view with the intro line "What this agent could invoke, computed from its skill patterns: patterns match skills, skills carry grants, grants match verbs." Renders: the effective grant patterns as mono chips (union of matched skills' `tool_grants`), then the resolved verb list grouped by noun with consequence badges, "n verbs (m high consequence)". Honesty footnote (InfoCallout tone info, one per surface, P21 rung 4): "At run time a parent may narrow this further: a worker only ever receives a subset of its parent's authority." (fleet/spawn.py:297-301). Second footnote when relevant: "This view is computed with your grants; verbs outside your own scope are not shown." (the `/v1/capabilities` read is caller-intersected, kernel/registry.py:76-111).
 
@@ -178,9 +185,9 @@ Tier map (P18): Tier 1 = profile card + Skills + Model endpoint; Tier 2 = cost t
 ### 3.6 Section: Budget (read-only burn-down)
 
 Heads: the department budget row from `GET /v1/budgets` (`scope_type:"department", id:<dept>`); CoS: the tier1 budget. Renders the budget meter (section 7) plus the facts line: "12.4 of 20.0 units spent this day - hard stop on" ("hard stop" gets a TermTip: "When spent reaches the limit, work stops instead of overspending."). Workers and personal agents: section renders one muted line: "Budgets are held by departments and the tenant, not by worker profiles."
-Editing: not in this beat. Footer line: "Budgets are set in the org configuration." **DEPENDS-BACKEND (PAR-5)**: a `control.hierarchy.upsert` (or dedicated `control.budget.upsert`) verb; when it lands, this section gains a Disclosure edit with ArmConfirm. Until then no write affordance is rendered.
-
-The current `set_budget` methods are bootstrap/test helpers, not a mutation contract: the method is absent from `Store`, synchronous in `InMemoryStore` (and replaces the running counters), but asynchronous in `PostgresStore` (and preserves counters on conflict). PAR-5 therefore also requires one async store-parity operation with an explicit preserve-versus-reset policy; validation for scope type/id, non-negative limits, and supported windows; server-side scope authorization; and a governed/audited consequence policy. `GET /v1/budgets` and every budget UI remain read-only until those semantics are test-bound for both stores.
+Editing uses the dedicated governed `control.budget.upsert` verb on the Insight budget task. The
+agent slide keeps this meter display-only and links budget policy ownership to that canonical
+surface.
 
 ### 3.7 Section: Work (heads and CoS only)
 
@@ -268,14 +275,14 @@ This is the one flow in this row that is lawfully a wizard, because it writes TW
 **Step 5 - Review and create.** Restates every choice as read-only Field rows grouped by step. Then the two-phase truth, stated plainly inside an InfoCallout tone consequence:
 "Creating a head is two changes:
 1. The agent profile - a governed change. It will pause for a human approval.
-2. The org chart entry - a versioned config change, applied immediately once you confirm.
+2. The org chart entry - a second governed, versioned configuration change.
 The running org picks up new departments when the fleet worker restarts." (api/worker.py:37-46; config/admin.py:37-47 - never claim liveness that does not exist.)
 Primary: **Request head agent** -> `control.capability.upsert` (params: name, runtime pi, supported_skills, max_depth, cost_tier, model_endpoint, is_ephemeral:false).
-- On `ok` OR when the PendingHumanCard resolves approved: the second half unlocks in place: a fresh button **Add to org chart** with ArmConfirm (N14, tone consequence): "Add `legal` with head `head-of-legal` to the org configuration? This writes revision n+1." Confirm -> `PUT /v1/admin/config/hierarchy {value: <current hierarchy with the new tier2 entry appended>}` (platform_routes.py:332-344; read-modify-write from the freshly refetched section to avoid clobbering). Never auto-fired on poll resolution: a human clicks the second write.
+- On `ok` OR when the PendingHumanCard resolves approved: the second half unlocks in place: a fresh button **Add to org chart**. It invokes `control.config.upsert {section:"hierarchy", value:<current hierarchy with the new tier2 entry appended>}` from a freshly refetched section to avoid clobbering. That governed request gets its own PendingHumanCard. Never auto-fire it on the first request's resolution: a human starts the second change.
 - On rejected: denial treatment; "Add to org chart" never unlocks; the draft persists for amendment.
 - Success: "Department `legal` created (config revision n). The head goes live when the fleet worker restarts." + staleness callout pinned on the anchor (8.3) + link "Open `head-of-legal`".
 
-**DEPENDS-BACKEND (PAR-2)**: the hierarchy half must become `control.hierarchy.upsert` (P31 registry; consequence high; params = the section value). The wizard is designed against that verb: when it lands, the second button becomes a second governed invoke with its own PendingHumanCard, and the copy drops "applied immediately". **DEPENDS-BACKEND (ORG-1)**: an org-apply seam (reader-agents item 8): nothing rebuilds the running CoS/heads pump without a worker restart; the honest restart line stays until a reload seam exists.
+**DEPENDS-BACKEND (ORG-1)**: an org-apply seam (reader-agents item 8). Nothing rebuilds the running CoS/heads pump without a worker restart, so the honest restart line stays until a reload seam exists.
 
 ### 5.4 Personal agent create (kind = me)
 
@@ -285,7 +292,12 @@ The 3.9 form in create mode: runtime EntityPicker over pool profiles (default: t
 
 ## 6. Pending-approval reconciliation (P33 symmetry)
 
-`pendingByAgent` is fed two ways: (a) every 202 this session records `{hitl_request_id, agentName}`; (b) on row mount and each PendingHumanCard poll tick, `GET /v1/hitl` rows are scanned for requests whose `context` identifies a `control.capability.upsert` for a known agent name (the context dict rides the request, app.py:392-406). Resolution always reconciles from the server, never component memory alone (P33; the `resolvedHitls` local-map anti-pattern is explicitly not reproduced). A pause started in chat ("make worker-cheap durable") therefore shows the same amber chip on the org chart and the same frozen state on the agent slide; approving from either side converges via the same `POST /v1/hitl/{id}/respond`. **DEPENDS-BACKEND (PAR-7, soft)**: a filterable HITL list (`GET /v1/hitl?verb=control.capability.upsert`) or a guaranteed context shape (`context.verb_id`, `context.params.name`) would make (b) exact instead of best-effort; until then the scan is best-effort and the session map is authoritative for chips.
+`pendingByAgent` is fed two ways: (a) every 202 this session records `{hitl_request_id,
+agentName}`; (b) on row mount and each PendingHumanCard poll tick, `GET /v1/hitl` rows are scanned
+using the structured verb and literal input context returned by the server. Resolution always
+reconciles from the server, never component memory alone. A pause started in chat therefore shows
+the same amber state on the org chart and agent slide; approving from either side converges via
+the same `POST /v1/hitl/{id}/respond`.
 
 ---
 
@@ -322,10 +334,11 @@ The pattern register has no burn-down display; per its own rule this is a fork b
 | Edit agent profile (skills/model/tier/depth) + Request change | `control.capability.upsert` via `POST /v1/invoke`, 202 pending_human path (control_plane.py:64-76; app.py:259-283) | "Give `head-of-engineering` the `writing/*` skills as well and set its depth to 3" | EXISTS (governed) |
 | Create worker profile | `control.capability.upsert` (is_ephemeral true) | "Create a cheap worker profile called `worker-scraper` that can use scraping skills, depth 2" | EXISTS (governed) |
 | Create head, phase 1 (profile) | `control.capability.upsert` (is_ephemeral false) | "Create a legal department head agent on the standard model" | EXISTS (governed) |
-| Create head, phase 2 (org entry) / budget edit | `control.hierarchy.upsert` | "Add the legal department to the org chart" | **DEPENDS-BACKEND PAR-2** (today direct `PUT /v1/admin/config/hierarchy`, platform_routes.py:332-344; chat CANNOT do this today - a named parity gap, flagged in the wizard spec) |
-| Bind a verb to an agent | `control.binding.upsert` | "Make `head-of-engineering` fulfil `ticket.triage`" | **DEPENDS-BACKEND PAR-3** (today direct `POST /v1/verbs/{id}/binding`, platform_routes.py:166-177) |
+| Create head, phase 2 (org entry) | `control.config.upsert {section:"hierarchy"}` | "Add the legal department to the org chart" | EXISTS (governed; runtime still needs restart) |
+| Edit budget policy | `control.budget.upsert` | "Set a daily budget for the legal department" | EXISTS (governed) |
+| Bind a verb to an agent | `control.binding.set` | "Make `head-of-engineering` fulfil `ticket.triage`" | EXISTS (governed) |
 | Configure personal agent | `control.personal_agent.configure` | "Set up my agent as `worker-cheap` with the research skill" | **DEPENDS-BACKEND PAR-4** (today ungoverned `POST /v1/me/agent`, platform_routes.py:524-545; also needs `enabled` + stable id) |
-| Edit department brief (soul seam) | `control.hierarchy.upsert` carrying `tier2[].brief` | "Set the engineering brief to: prefer the internal ticket system" | **DEPENDS-BACKEND SOUL-1** (prompt_stack.py:118-125 seam unpopulated) |
+| Edit department brief (soul seam) | `control.config.upsert` carrying hierarchy `tier2[].brief` | "Set the engineering brief to: prefer the internal ticket system" | **DEPENDS-BACKEND SOUL-1** (prompt_stack.py:118-125 seam unpopulated) |
 | Model endpoint change (from the picker's "manage endpoints" link, out of row scope) | `control.model_endpoint.upsert` (control_plane.py:77-88) | "Route sensitive work to the local endpoint" | EXISTS (governed) |
 | Approve/reject a pause | `POST /v1/hitl/{id}/respond` (app.py:408-427) | inline hitl card in chat / PendingHumanCard inline approval here | EXISTS (one route, both clients, P33) |
 | Any delete (agent, binding, department) | `control.*.delete` | - | DOES NOT EXIST; no delete affordances rendered anywhere on this row (P27/P31) |
@@ -333,18 +346,19 @@ The pattern register has no burn-down display; per its own rule this is a fork b
 
 ByChat (N16, P32) appears on: the anchor header, every SaveBar, both create-form footers, and every empty state. Phrase built from current draft state; prefill via `setComposerPrefill`, navigate `#/chat`, composer focused, never auto-sent.
 
-## 10. Consolidated DEPENDS-BACKEND ledger
+## 10. Backend ledger
 
-- **PAR-2** `control.hierarchy.upsert` (org structure + budgets + brief as one section verb, consequence high, params = section value; note in its spec that it does not rebuild the live org, ORG-1).
-- **PAR-3** `control.binding.upsert`.
+Landed: structured HITL context (PAR-7), live model endpoint reads, live agent capability profiles
+in `GET /v1/capabilities`, governed config writes, governed binding writes, and governed budget
+policy writes.
+
+Remaining dependencies:
+
 - **PAR-4** `control.personal_agent.configure` (accept `enabled`, stable id).
-- **PAR-5** budget editing (rides PAR-2 or `control.budget.upsert`).
 - **PAR-6** runtime registry read.
-- **PAR-7** filterable/typed HITL list for cross-session pending markers (soft).
 - **SOUL-1** hierarchy `brief` -> `compose_system_prompt(department_brief=...)` seam.
 - **SOUL-2** `GET /v1/skills/{id}` including `prompt_fragment` (also unblocks the skill-fragment soul layer).
 - **ORG-1** org-apply/reload seam so hierarchy changes reach the running pump without a worker restart.
-- **CAP-1** (nice-to-have) `GET /v1/capabilities/profiles` listing AgentCapability store rows; until then the config sections are the transport and the anchor states config truth, not store truth, in the staleness callout.
 
 ## 11. Build notes for the implementing engineer
 

@@ -11,6 +11,7 @@ const emptyTurn: NormalizedTurn = {
   hitls: [],
   questions: [],
   steps: [],
+  timeline: [],
   ended: false,
   cancelled: false,
 };
@@ -20,13 +21,13 @@ describe("activityUtils (per-event-type shape, brief sec 13.1)", () => {
     const nodes = buildTimelineNodes({
       messages: [],
       live: emptyTurn,
-      activeAgentColor: "#5E69DD",
+      activeAgentColor: "var(--color-accent-2)",
       activeAgentName: "Head of Engineering",
     });
     const session = nodes[0];
     expect(session.key).toBe("session");
     expect(session.dotSize).toBe(8);
-    expect(session.dotColor).toBe("#3DD3F0");
+    expect(session.dotColor).toBe("var(--color-accent)");
     expect(session.hasAvatar).toBe(false);
     expect(session.labelWeight).toBe(500);
   });
@@ -35,34 +36,34 @@ describe("activityUtils (per-event-type shape, brief sec 13.1)", () => {
     const nodes = buildTimelineNodes({
       messages: [],
       live: emptyTurn,
-      activeAgentColor: "#3DD3F0",
+      activeAgentColor: "var(--color-accent)",
       activeAgentName: "Bolt",
     });
     const pending = nodes[nodes.length - 1];
     expect(pending.key).toBe("pending");
     expect(pending.dotSize).toBe(8);
-    expect(pending.dotColor).toBe("#3DD3F0");
+    expect(pending.dotColor).toBe("var(--color-accent)");
     expect(pending.hasLine).toBe(false);
     expect(pending.hasAvatar).toBeFalsy();
   });
 
-  it("agent action: 12px dot with 2px #04060D border + 20px avatar, 600 weight", () => {
+  it("agent action: 12px semantic dot with a 2px surface border + 20px avatar, 600 weight", () => {
     const live: NormalizedTurn = { ...emptyTurn, runId: "r1", text: "working" };
     const nodes = buildTimelineNodes({
       messages: [],
       live,
-      activeAgentColor: "#5E69DD",
+      activeAgentColor: "var(--color-accent-2)",
       activeAgentName: "Head of Engineering",
     });
     const agent = nodes.find((n) => n.badge === "agent");
     expect(agent).toBeTruthy();
     expect(agent!.dotSize).toBe(12);
-    expect(agent!.dotExtra).toBe("2px solid #04060D");
+    expect(agent!.dotExtra).toBe("2px solid var(--color-bg-base)");
     expect(agent!.hasAvatar).toBe(true);
     expect(agent!.avatarSize).toBe(20);
-    expect(agent!.avatarColor).toBe("#5E69DD");
+    expect(agent!.avatarColor).toBe("var(--color-accent-2)");
     expect(agent!.labelWeight).toBe(600);
-    expect(agent!.labelColor).toBe("#5E69DD");
+    expect(agent!.labelColor).toBe("var(--color-accent-2)");
   });
 
   it("tool call: 7px dot, no avatar, 400 weight, shows receipt id", () => {
@@ -74,7 +75,7 @@ describe("activityUtils (per-event-type shape, brief sec 13.1)", () => {
     const nodes = buildTimelineNodes({
       messages: [],
       live,
-      activeAgentColor: "#3DD3F0",
+      activeAgentColor: "var(--color-accent)",
       activeAgentName: "Bolt",
     });
     const agent = nodes.find((n) => n.badge === "agent")!;
@@ -95,7 +96,7 @@ describe("activityUtils (per-event-type shape, brief sec 13.1)", () => {
     const nodes = buildTimelineNodes({
       messages: [],
       live,
-      activeAgentColor: "#3DD3F0",
+      activeAgentColor: "var(--color-accent)",
       activeAgentName: "Bolt",
     });
     const agent = nodes.find((n) => n.badge === "agent")!;
@@ -118,7 +119,7 @@ describe("activityUtils (per-event-type shape, brief sec 13.1)", () => {
     const nodes = buildTimelineNodes({
       messages: [],
       live,
-      activeAgentColor: "#3DD3F0",
+      activeAgentColor: "var(--color-accent)",
       activeAgentName: "Bolt",
     });
     const agent = nodes.find((n) => n.badge === "agent")!;

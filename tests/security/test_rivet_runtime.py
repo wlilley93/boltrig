@@ -37,7 +37,10 @@ def _ctx() -> InvocationContext:
     )
 
 
-def test_build_runtime_resolves_rivet_agentos():
+def test_build_runtime_resolves_rivet_agentos(monkeypatch):
+    # rivet is a legacy lane (decision 0012): reachable only behind the explicit
+    # rollback opt-in flag.
+    monkeypatch.setenv("BOLTRIG_ENABLE_LEGACY_RUNTIMES", "1")
     rt = build_runtime(
         _cap(),
         lambda _id: _endpoint(),

@@ -39,36 +39,36 @@ export const CATEGORIES: NodeCategory[] = [
     id: "common",
     label: "Common",
     items: [
-      { kind: "trigger", name: "Start", desc: "Workflow entry trigger", color: "#E8B339", icon: "bolt" },
-      { kind: "agent-call", name: "Ask user", desc: "Pause for a governed human answer", color: "#5E69DD", icon: "agent" },
-      { kind: "end", name: "End", desc: "Terminal output", color: "#7E95B0", icon: "end" },
+      { kind: "trigger", name: "Start", desc: "Workflow entry trigger", color: "var(--color-node-trigger)", icon: "bolt" },
+      { kind: "agent-call", name: "Ask user", desc: "Pause for a governed human answer", color: "var(--color-node-agent)", icon: "agent" },
+      { kind: "end", name: "End", desc: "Terminal output", color: "var(--color-node-kernel)", icon: "end" },
     ],
   },
   {
     id: "logic",
     label: "Logic",
     items: [
-      { kind: "conditional", name: "Conditional", desc: "IF/ELSE branch", color: "#3DD3F0", icon: "branch" },
-      { kind: "code", name: "Code", desc: "Run a script", color: "#E8B339", icon: "code" },
-      { kind: "loop", name: "Loop", desc: "Iterate over items", color: "#FF7A45", icon: "loop" },
+      { kind: "conditional", name: "Conditional", desc: "IF/ELSE branch", color: "var(--color-node-kernel)", icon: "branch" },
+      { kind: "code", name: "Code", desc: "Run a script", color: "var(--color-node-kernel)", icon: "code" },
+      { kind: "loop", name: "Loop", desc: "Iterate over items", color: "var(--color-node-kernel)", icon: "loop" },
     ],
   },
   {
     id: "data",
     label: "Data",
     items: [
-      { kind: "knowledge", name: "Knowledge", desc: "RAG retrieval", color: "#3FB984", icon: "book" },
-      { kind: "http", name: "HTTP", desc: "API request", color: "#7C8BFF", icon: "globe" },
-      { kind: "database", name: "Database", desc: "Query / write", color: "#3DD3F0", icon: "cylinder" },
+      { kind: "knowledge", name: "Knowledge", desc: "RAG retrieval", color: "var(--color-node-service)", icon: "book" },
+      { kind: "http", name: "HTTP", desc: "API request", color: "var(--color-node-service)", icon: "globe" },
+      { kind: "database", name: "Database", desc: "Query / write", color: "var(--color-node-service)", icon: "cylinder" },
     ],
   },
   {
     id: "integration",
     label: "Integration",
     items: [
-      { kind: "tool", name: "Tool", desc: "External tool", color: "#FF7A45", icon: "wrench" },
-      { kind: "notify", name: "Notify", desc: "Send notification", color: "#E8B339", icon: "bell" },
-      { kind: "template", name: "Template", desc: "Text transform", color: "#7C8BFF", icon: "template" },
+      { kind: "tool", name: "Tool", desc: "External tool", color: "var(--color-node-service)", icon: "wrench" },
+      { kind: "notify", name: "Notify", desc: "Send notification", color: "var(--color-node-service)", icon: "bell" },
+      { kind: "template", name: "Template", desc: "Text transform", color: "var(--color-node-kernel)", icon: "template" },
     ],
   },
 ];

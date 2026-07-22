@@ -104,6 +104,10 @@ function BudgetPolicyForm({
         <div>
           <strong>Budget policy</strong>
           <p className="ux-hint">Changes pause for human approval before taking effect.</p>
+          <p className="notice warn">
+            Enforcement currently covers spawned agent work at organisation and department scope.
+            Workflow scope and window values are policy metadata; usage resets are operator-triggered.
+          </p>
         </div>
       </div>
       <div className="form__grid budget-policy__grid">
@@ -128,7 +132,10 @@ function BudgetPolicyForm({
             placeholder={scopeType === "workflow" ? "workflow id" : "department id"}
           />
         </Field>
-        <Field label="Window">
+        <Field
+          label="Window tag"
+          hint="Recorded with the policy. Counters reset only when an operator requests Reset usage."
+        >
           <Select
             value={windowName}
             ariaLabel="Budget window"
@@ -263,6 +270,7 @@ function BudgetRow({
 
 export function Budgets() {
   const identity = useIdentity();
+  const canManage = ADMIN_ROLES.has(identity.role);
   const budgets = useFetch(() => api.budgets(), []);
   const list = budgets.data?.budgets ?? [];
   const mutations = useBudgetMutations(budgets.reload);
@@ -272,10 +280,15 @@ export function Budgets() {
     <div className="list-card">
       <div className="list-card__head">
         <h3>Budgets</h3>
-        <button className="btn" onClick={() => budgets.reload()}>Refresh</button>
+        <button
+          className={`btn${canManage ? "" : " btn--primary"}`}
+          onClick={() => budgets.reload()}
+        >
+          {canManage ? "Refresh" : "Refresh budgets"}
+        </button>
       </div>
       <div className="list-card__body">
-        {ADMIN_ROLES.has(identity.role) && (
+        {canManage && (
           <BudgetPolicyForm
             tenant={identity.tenant}
             mutation={mutations.upsert}

@@ -175,7 +175,16 @@ def egress_refusal(url: str | None) -> str | None:
     metadata/loopback always, and every other internal/private address unless the
     host is on the operator allow-list (the sidecar's legitimate kernel-MCP / model
     targets live on a private container network, so a blanket RFC1918 block would
-    break normal runs; the allow-list is the documented, fail-safe escape hatch)."""
+    break normal runs; the allow-list is the documented, fail-safe escape hatch).
+
+    KNOWN RESIDUAL (DNS TOCTOU): this validates the ``getaddrinfo`` answer at
+    check time, but httpx re-resolves the hostname at connect time, so a rebinding
+    DNS answer could pass the check and connect elsewhere. A connect-to-validated-IP
+    fix needs Host/SNI pinning machinery this severed sidecar deliberately does
+    not carry, and Pi is staged-cutover residue (decision 0012), so it is
+    documented rather than built: the real control stays the container/network
+    egress restriction to the kernel MCP face and the model endpoint (module
+    docstring), with this check as defence in depth."""
     if not url:
         return None
     parsed = urlparse(url)

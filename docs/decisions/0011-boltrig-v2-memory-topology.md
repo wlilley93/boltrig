@@ -1,8 +1,13 @@
 # 0011 - Boltrig v2 memory topology
 
-- Status: accepted
+- Status: superseded by 0015
 - Date: 2026-07-09
 - Supersedes: 0008 for Boltrig v2 deployment defaults
+
+> **Supersession note (2026-07-21):** decision 0015 keeps Boltrig's native
+> Postgres/pgvector ledger and index canonical, ships Cognee as the default
+> rebuildable knowledge compiler, and moves Mem0 and Supermemory behind the
+> governed add-on catalogue.
 
 ## Context
 

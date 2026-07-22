@@ -1,5 +1,8 @@
 """Runpod adapter: GPU pod control behind governed verbs."""
 
+import socket
+
+import httpx
 import pytest
 
 from boltrig.adapters.base import Credential
@@ -7,6 +10,7 @@ from boltrig.adapters.builtin.runpod import RunpodAdapter
 from boltrig.models import GrantSet, InvocationContext
 
 T = "acme"
+_PUBLIC_IP = "93.184.216.34"
 
 
 def _ctx():
@@ -15,6 +19,23 @@ def _ctx():
 
 def _cred():
     return Credential(id="RUNPOD_API", kind="api_key", material={"value": "rpa_secret"})
+
+
+@pytest.fixture(autouse=True)
+def _public_dns(monkeypatch):
+    # The base's per-request egress guard resolves the host; keep the test
+    # hermetic by resolving everything to a public IP.
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda host, port=None, *a, **k: [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", (_PUBLIC_IP, port or 0))
+        ],
+    )
+
+
+def _adapter(handler) -> RunpodAdapter:
+    return RunpodAdapter(transport=httpx.MockTransport(handler))
 
 
 @pytest.mark.invariant("FR-HOST-05")
@@ -29,22 +50,27 @@ def test_runpod_adapter_declares_read_and_mutating_verbs():
 async def test_runpod_list_uses_bearer_and_redacts_pod_payload():
     seen = {}
 
-    async def transport(method, path, headers):
-        seen.update({"method": method, "path": path, "headers": headers})
-        return 200, [{"id": "pod1", "name": "jellytot-inference", "desiredStatus": "RUNNING",
-                      "env": {"SECRET": "x"}, "publicIp": "203.0.113.1",
-                      "machine": {"machineId": "m1", "memoryInGb": 80},
-                      "gpu": {"id": "A100", "displayName": "A100 SXM"}}]
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.update({
+            "method": request.method,
+            "path": request.url.path,
+            "authorization": request.headers.get("authorization"),
+        })
+        return httpx.Response(
+            200,
+            json=[{"id": "pod1", "name": "jellytot-inference", "desiredStatus": "RUNNING",
+                   "env": {"SECRET": "x"}, "publicIp": "203.0.113.1",
+                   "machine": {"machineId": "m1", "memoryInGb": 80},
+                   "gpu": {"id": "A100", "displayName": "A100 SXM"}}],
+        )
 
-    result = await RunpodAdapter(transport=transport).execute(
-        "runpod.pod.list", {}, _cred(), _ctx()
-    )
+    result = await _adapter(handler).execute("runpod.pod.list", {}, _cred(), _ctx())
 
     assert result.ok
     assert seen == {
         "method": "GET",
-        "path": "/pods",
-        "headers": {"Authorization": "Bearer rpa_secret"},
+        "path": "/v1/pods",
+        "authorization": "Bearer rpa_secret",
     }
     rendered = repr(result.output)
     assert "SECRET" not in rendered
@@ -57,19 +83,19 @@ async def test_runpod_list_uses_bearer_and_redacts_pod_payload():
 async def test_runpod_start_stop_restart_paths_are_documented_rest_paths():
     seen = []
 
-    async def transport(method, path, headers):
-        seen.append((method, path, headers))
-        return 200, {}
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((request.method, request.url.path))
+        return httpx.Response(200, json={})
 
-    adapter = RunpodAdapter(transport=transport)
+    adapter = _adapter(handler)
     for verb in ("runpod.pod.start", "runpod.pod.stop", "runpod.pod.restart"):
         result = await adapter.execute(verb, {"pod_id": "abc123"}, _cred(), _ctx())
         assert result.ok
 
-    assert [item[:2] for item in seen] == [
-        ("POST", "/pods/abc123/start"),
-        ("POST", "/pods/abc123/stop"),
-        ("POST", "/pods/abc123/restart"),
+    assert seen == [
+        ("POST", "/v1/pods/abc123/start"),
+        ("POST", "/v1/pods/abc123/stop"),
+        ("POST", "/v1/pods/abc123/restart"),
     ]
 
 
@@ -79,3 +105,17 @@ async def test_runpod_missing_credential_fails_closed():
     assert not result.ok
     assert result.error is not None
     assert result.error.error_class.value == "unauthorised"
+
+
+async def test_runpod_error_status_maps_to_typed_error():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, json={})
+
+    result = await _adapter(handler).execute(
+        "runpod.pod.get", {"pod_id": "nope"}, _cred(), _ctx()
+    )
+
+    assert not result.ok
+    assert result.error is not None
+    assert result.error.error_class.value == "not_found"
+    assert not result.error.retryable

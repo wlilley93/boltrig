@@ -6,6 +6,7 @@ import { errText } from "@/panels/shared";
 import { Field, InfoCallout, Select } from "@/panels/ux";
 import { denialText, isDenied, KIND_OPTIONS } from "@/panels/memoryPanel/helpers";
 import { ChipPicker } from "@/panels/uxForm";
+import { ByChat } from "@/panels/uxFlow";
 
 type RememberFormProps = {
   content: string;
@@ -144,8 +145,15 @@ function RememberForm(props: RememberFormProps) {
           disabled={busy}
           onClick={onSubmit}
         >
-          {busy ? "..." : "Remember"}
+          {busy ? "Remembering..." : "Remember"}
         </button>
+        <ByChat
+          phrase={
+            content.trim()
+              ? `Remember this ${kind || "entity"} fact: ${content.trim()}`
+              : "Help me add a scoped fact to memory with its provenance."
+          }
+        />
         {error && <span className="error">{error}</span>}
       </div>
     </div>

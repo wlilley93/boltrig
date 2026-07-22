@@ -11,7 +11,8 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 from boltrig.models.work import work_item_run_id
 from boltrig.observability.model_telemetry import model_telemetry
-from ._shared import audit_authoring, can_author_route, dept_run_ids, scope_depts, scoped_work_items  # noqa: F401
+from boltrig.store.base import DEFAULT_WORK_PAGE, MAX_OBSERVABILITY_PAGE, clamp_work_page
+from ._shared import audit_authoring, can_author_route, scope_depts
 from ._shared import platform_state
 
 _STATUS_VALUES = {"ok", "degraded", "down", "unknown"}
@@ -122,15 +123,18 @@ def _register_cost_routes(app, P, K) -> None:
     @app.get("/v1/cost")
     async def cost(request: Request, k=K, p=P) -> dict:
         depts = scope_depts(p)
-        run_scope = await dept_run_ids(k, p, depts)
-        events = await k.store.audit_query(p.tenant_id, limit=10_000)
+        # Scoped + bounded in the store (SEC-69 idiom): the department/workspace
+        # run-scope predicate and the event workspace filter run inside the
+        # query under a clamped page, not load-then-filter in Python.
+        events = await k.store.audit_query_scoped(
+            p.tenant_id,
+            departments=depts,
+            workspace_id=p.active_workspace_id,
+            limit=MAX_OBSERVABILITY_PAGE,
+        )
         total = 0
         by_actor: dict[str, int] = {}
         for e in events:
-            if not run_scope.permits(e.run_id):
-                continue
-            if not _ws_visible(p, e.workspace_id):
-                continue
             c = e.cost_micros or 0
             total += c
             by_actor[e.actor] = by_actor.get(e.actor, 0) + c
@@ -180,19 +184,19 @@ def _register_model_telemetry_routes(app, P, K) -> None:
         request: Request, limit: int = 50, k=K, p=P
     ) -> dict:
         depts = scope_depts(p)
-        run_scope = await dept_run_ids(k, p, depts)
-        events = await k.store.audit_query(p.tenant_id, limit=10_000)
-        visible = [
-            e for e in events
-            if run_scope.permits(e.run_id, e.parent_run_id)
-            and _ws_visible(p, e.workspace_id)
-        ]
+        events = await k.store.audit_query_scoped(
+            p.tenant_id,
+            departments=depts,
+            workspace_id=p.active_workspace_id,
+            match_parent=True,
+            limit=MAX_OBSERVABILITY_PAGE,
+        )
         return {
             "generated_at": datetime.now(UTC).isoformat(),
             "tenant_id": p.tenant_id,
             "workspace_id": p.active_workspace_id,
             "scope": depts or "all",
-            "models": model_telemetry(visible, limit=limit),
+            "models": model_telemetry(events, limit=limit),
         }
 
 
@@ -205,7 +209,6 @@ def _register_audit_search_routes(app, P, K) -> None:
                            k=K, p=P) -> dict:
         # D5: scoped actor/resource/date filters plus a SecurityEvent stream pivot.
         depts = scope_depts(p)
-        run_scope = await dept_run_ids(k, p, depts)
 
         # Parse once by value; a date-only upper bound includes the whole day.
         def _parse_bound(raw: str | None, *, end_of_day: bool):
@@ -232,6 +235,13 @@ def _register_audit_search_routes(app, P, K) -> None:
             return True
 
         if security:
+            # The security stream carries other users' IPs/user agents: author/admin
+            # only (SEC-33 parity with verify/export); the audit arm stays scoped.
+            if not can_author_route(p):
+                return JSONResponse(
+                    {"status": "denied", "reason": "author_or_admin_required"},
+                    status_code=403,
+                )
             events = await k.store.security_query(
                 p.tenant_id, event_type=event_type, limit=10_000
             )
@@ -252,13 +262,15 @@ def _register_audit_search_routes(app, P, K) -> None:
                              "resource_id": e.resource_id})
             return {"stream": "security", "results": rows[-500:], "scope": depts or "all"}
 
-        events = await k.store.audit_query(p.tenant_id, run_id=run, limit=10_000)
+        events = await k.store.audit_query_scoped(
+            p.tenant_id,
+            departments=depts,
+            workspace_id=p.active_workspace_id,
+            run_id=run,
+            limit=MAX_OBSERVABILITY_PAGE,
+        )
         rows = []
         for e in events:
-            if not run_scope.permits(e.run_id):
-                continue  # SEC-33: another department's runs are not visible
-            if not _ws_visible(p, e.workspace_id):
-                continue
             if actor and e.actor != actor:
                 continue
             if verb and e.verb != verb:
@@ -329,10 +341,39 @@ def _register_audit_integrity_routes(app, P, K) -> None:
 
 def _register_runs_routes(app, P, K) -> None:
     @app.get("/v1/runs")
-    async def runs(request: Request, k=K, p=P) -> dict:
+    async def runs(
+        request: Request,
+        limit: int = DEFAULT_WORK_PAGE,
+        cursor: str | None = None,
+        k=K,
+        p=P,
+    ) -> dict:
         depts = scope_depts(p)
-        run_scope = await dept_run_ids(k, p, depts)
-        items = await scoped_work_items(k, p, depts)
-        return {"runs": [{"run_id": work_item_run_id(w), "work_item": w.id, "intent": w.intent,
-                          "status": w.status.value, "owner": w.owner_member} for w in items
-                         if run_scope.permits(work_item_run_id(w))]}
+        # SEC-69: bounded keyset page, same idiom as /v1/work. The RunScope
+        # visible/hidden predicate (department + workspace, hidden-wins on a
+        # shared run ref) runs INSIDE the store query under the clamped page -
+        # no full work-table load per request. The next cursor is the last
+        # item's id when the page came back full.
+        page = clamp_work_page(limit)
+        items = await k.store.list_run_items_scoped(
+            p.tenant_id,
+            departments=depts,
+            workspace_id=p.active_workspace_id,
+            limit=page,
+            cursor=cursor,
+        )
+        next_cursor = items[-1].id if len(items) == page else None
+        return {
+            "runs": [
+                {
+                    "run_id": work_item_run_id(w),
+                    "work_item": w.id,
+                    "intent": w.intent,
+                    "status": w.status.value,
+                    "owner": w.owner_member,
+                }
+                for w in items
+            ],
+            "limit": page,
+            "next_cursor": next_cursor,
+        }

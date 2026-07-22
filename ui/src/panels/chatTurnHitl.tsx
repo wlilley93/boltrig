@@ -7,6 +7,7 @@ import type { HitlEntry } from "@/panels/chatTurnTypes";
 import { HitlRespond } from "@/panels/approvalsPanel/HitlRespond";
 import { decisionOptions } from "@/panels/approvalsPanel/hitlUtils";
 import { useHitlCard } from "@/panels/approvalsPanel/useHitlCard";
+import { CONSEQUENCE, HITL_TYPE, StatusBadge } from "@/panels/ux";
 
 export function ChatHitlCard({
   entry,
@@ -23,13 +24,20 @@ export function ChatHitlCard({
   );
 
   return (
-    <article className="chat-hitl">
+    <article className={`chat-hitl chat-hitl--${entry.kind}`}>
       <div className="chat-hitl__head">
-        <span className={`badge badge--type badge--type-${entry.kind}`}>
-          {entry.kind}
-        </span>
+        <StatusBadge value={entry.kind} glossary={HITL_TYPE} />
+        {entry.kind === "approval" && (
+          <StatusBadge value="high" glossary={CONSEQUENCE} />
+        )}
+        {entry.verb && <code className="badge badge--verb">{entry.verb}</code>}
         <code className="muted">{entry.hitlRequestId}</code>
       </div>
+      {entry.requestedBy && (
+        <p className="chat-hitl__actor">
+          Requested by <code>{entry.requestedBy}</code>
+        </p>
+      )}
       <p className="chat-hitl__question">{entry.question || "(no question)"}</p>
 
       {resolved ? (

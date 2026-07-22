@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any, Awaitable, Callable
+from urllib.parse import quote_plus
 
 from boltrig.adapters.base import (
     AdapterError,
@@ -166,7 +167,9 @@ class SqlAdapter:
         password = material.get("password") or ""
         port = material.get("port")
         driver = material.get("driver") or self.dialect
-        auth = f"{user}:{password}@" if user else ""
+        # URL-quote the credential material: a password containing '@', ':' or
+        # '/' would otherwise corrupt the DSN's netloc.
+        auth = f"{quote_plus(user)}:{quote_plus(password)}@" if user else ""
         netloc = f"{host}:{port}" if port else host
         return f"{driver}://{auth}{netloc}/{database}"
 

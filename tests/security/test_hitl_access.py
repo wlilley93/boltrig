@@ -131,6 +131,12 @@ def _listed_ids(client: TestClient, token: str) -> set[str]:
     return {request["id"] for request in response.json()["requests"]}
 
 
+def _listed_requests(client: TestClient, token: str) -> list[dict]:
+    response = client.get("/v1/hitl", headers=_headers(token))
+    assert response.status_code == 200
+    return response.json()["requests"]
+
+
 @pytest.mark.security
 @pytest.mark.invariant("SEC-141")
 def test_hitl_list_and_respond_enforce_department_and_workspace_scope():
@@ -187,6 +193,24 @@ def test_hitl_list_and_respond_enforce_department_and_workspace_scope():
     assert allowed.status_code == 200
     assert asyncio.run(kernel.hitl.get(T, request_id)).status == HITLStatus.ANSWERED
     assert fired == [request_id]
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-141")
+def test_hitl_list_projects_the_exact_governed_action_for_visible_reviewers():
+    kernel = asyncio.run(_kernel())
+    client = _client(kernel)
+    request_id = _create_scoped_approval(client)
+
+    request = next(
+        item
+        for item in _listed_requests(client, "marketing-reviewer")
+        if item["id"] == request_id
+    )
+    assert request["run_id"] == "run-marketing-ws2"
+    assert request["verb"] == "ticket.create"
+    assert request["requested_by"] == "requester"
+    assert request["inputs"] == {"title": "marketing deploy"}
 
 
 @pytest.mark.security

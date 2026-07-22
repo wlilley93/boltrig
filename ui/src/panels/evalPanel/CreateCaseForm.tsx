@@ -1,10 +1,24 @@
-import { Field, Select } from "@/panels/ux";
-import { SegmentedV2 } from "@/panels/uxForm";
+import { Field, InfoCallout, Select } from "@/panels/ux";
+import { JsonDisclosure, SegmentedV2 } from "@/panels/uxForm";
+import { ByChat } from "@/panels/uxFlow";
 import { PendingHumanCard } from "@/panels/uxFlow/pendingHumanCard";
 import { ForbiddenGrantsField } from "./ForbiddenGrantsField";
 import type { EvalState } from "./useEvalState";
 
+function objectJsonError(value: string): string | null {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)
+      ? null
+      : "Enter a JSON object.";
+  } catch {
+    return "Enter valid JSON before requesting the change.";
+  }
+}
+
 export function CreateCaseForm({ s }: { s: EvalState }) {
+  const inputError = objectJsonError(s.input);
+  const assertionsError = objectJsonError(s.assertions);
   return (
     <div className="form">
       <div className="form__title">1. Create a case</div>
@@ -31,24 +45,23 @@ export function CreateCaseForm({ s }: { s: EvalState }) {
         </Field>
       </div>
 
-      <Field
-        label="Input"
-        hint="The input passed to the skill or workflow under test, as JSON."
-        example='{"ticket_id": "4821"}'
-      >
-        <textarea className="code" value={s.input} onChange={(e) => s.setInput(e.target.value)} />
-      </Field>
+      <JsonDisclosure
+        value={s.input}
+        onChange={s.setInput}
+        error={inputError}
+        label="Advanced: edit case input as JSON"
+        summaryNote="Defaults to an empty object"
+      />
 
       <ForbiddenGrantsField s={s} />
 
-      <details>
-        <summary className="ux-hint" style={{ cursor: "pointer" }}>
-          Advanced: edit assertions as JSON
-        </summary>
-        <Field label="Assertions (JSON)" hint="The full assertion object. forbidden_grants is the supported key.">
-          <textarea className="code" value={s.assertions} onChange={(e) => s.setAssertions(e.target.value)} />
-        </Field>
-      </details>
+      <JsonDisclosure
+        value={s.assertions}
+        onChange={s.setAssertions}
+        error={assertionsError}
+        label="Advanced: edit assertions as JSON"
+        summaryNote="Forbidden grants are guided above"
+      />
 
       <Field label="Labels" hint="Tags to group cases." example="regression, security">
         <input value={s.labels} onChange={(e) => s.setLabels(e.target.value)} />
@@ -66,14 +79,27 @@ export function CreateCaseForm({ s }: { s: EvalState }) {
         />
       )}
 
+      <InfoCallout tone="consequence">
+        This is a high-consequence change. It will pause for a human approval
+        before it takes effect.
+      </InfoCallout>
+
       <div className="form__actions">
         <button
           className="btn btn--primary"
-          disabled={s.createMutation.busy || s.createMutation.pending !== null}
+          disabled={
+            inputError !== null ||
+            assertionsError !== null ||
+            s.createMutation.busy ||
+            s.createMutation.pending !== null
+          }
           onClick={s.createCase}
         >
-          {s.createMutation.busy ? "Creating..." : "Create case"}
+          {s.createMutation.busy ? "Requesting..." : "Request case change"}
         </button>
+        <ByChat
+          phrase={`Create an evaluation case for ${s.targetRef || `this ${s.targetKind}`} that must not use ${s.forbidden.join(", ") || "forbidden permissions"}.`}
+        />
         {s.createMsg && <span className="ok">{s.createMsg}</span>}
         {s.createError && <span className="error">{s.createError}</span>}
         {s.createMutation.error && <span className="error">{s.createMutation.error}</span>}

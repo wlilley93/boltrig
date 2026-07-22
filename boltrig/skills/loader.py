@@ -24,7 +24,7 @@ import yaml
 
 from boltrig.models import Skill
 
-from .schema import DEFAULT_LOCALE, _as_object_schema, parse_skill
+from .schema import DEFAULT_LOCALE, SkillValidationError, _as_object_schema, parse_skill
 
 
 class SkillNotFound(LookupError):
@@ -57,14 +57,18 @@ async def load_skills_dir(store: Any, tenant_id: str, path: str) -> list[str]:
 async def _chain(store: Any, tenant_id: str, skill_id: str) -> list[Skill]:
     """Load ``skill_id`` and its ``extends`` ancestors, root-first.
 
-    Guards against a cyclic ``extends`` chain via a ``seen`` set.
+    A cyclic ``extends`` chain is a broken library, so it is loud: revisiting a
+    seen id raises :class:`SkillValidationError` rather than silently resolving
+    to a partial chain.
     """
     chain: list[Skill] = []
     seen: set[str] = set()
     current: str | None = skill_id
     while current is not None:
         if current in seen:
-            break  # cycle: stop walking, keep what we have
+            raise SkillValidationError(
+                skill_id, [f"cyclic 'extends' chain revisits '{current}'"]
+            )
         seen.add(current)
         skill = await store.get_skill(tenant_id, current)
         if skill is None:

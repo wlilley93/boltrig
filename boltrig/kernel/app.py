@@ -31,6 +31,7 @@ from boltrig.store.base import DEFAULT_WORK_PAGE, MAX_WORK_PAGE, clamp_work_page
 
 from . import Kernel
 from .hitl_http import list_visible_hitl, respond_to_hitl
+from .web_security import client_ip
 from .work_http import get_visible_work_item, list_visible_work_items, work_item_audit_trail
 
 
@@ -57,9 +58,18 @@ class Principal:
     ip_address: str | None = None
     user_agent: str | None = None
 
-    def context(self, *, run_id=None, parent_run_id=None, depth=0, skills=(), extra=None):
-        trusted_extra = {
-            **dict(extra or {}),
+    def context(
+        self, *, run_id=None, parent_run_id=None, depth=0, skills=(),
+        extra=None, trusted_extra=None,
+    ):
+        # ``extra`` is caller-supplied (a request body's context): reserved
+        # kernel-trusted keys are dropped from it. ``trusted_extra`` is the
+        # server-side stamping channel (memory/knowledge scope derivers) and is
+        # merged verbatim, then the resolver-owned role/scope win last.
+        stamped_extra = {
+            **{k: v for k, v in dict(extra or {}).items()
+               if k not in RESERVED_CONTEXT_KEYS},
+            **dict(trusted_extra or {}),
             "principal_role": self.role,
             "principal_scope": dict(self.scope),
         }
@@ -73,7 +83,7 @@ class Principal:
             actor=self.subject,
             actor_tier=self.actor_tier,
             skills_loaded=tuple(skills),
-            extra=trusted_extra,
+            extra=stamped_extra,
             workspace_id=self.active_workspace_id,
             ip_address=self.ip_address,
             user_agent=self.user_agent,
@@ -83,15 +93,29 @@ class Principal:
 PrincipalResolver = Callable[[Request], Awaitable[Principal]]
 
 
+# Context-extra keys the kernel trusts because they are stamped from server-side
+# state (the resolver's role/scope, the approval gate, the memory/knowledge scope
+# derivers). A caller-supplied value for one of these is silently dropped so a
+# request body can never seed kernel-trusted authority (principal_role/_scope
+# were already overwritten after the merge; this closes the rest of the family).
+RESERVED_CONTEXT_KEYS = frozenset(
+    {
+        "principal_role",
+        "principal_scope",
+        "approved_by",
+        "approval_request_fingerprint",
+        "approval_resource_context",
+        "knowledge_scopes",
+        "memory_scopes",
+    }
+)
+
+
 def _client_ip(request: Request) -> str | None:
     """The caller's client IP for the enriched audit row ([2026] VJS-COUNTY 9, D1).
-    Trust Cloudflare's authoritative client header when present (CF sets it and
-    strips any client-supplied copy); fall back to the TCP peer off-tunnel.
-    X-Forwarded-For is deliberately NOT trusted (spoofable unless behind a known
-    trusted proxy)."""
-    return request.headers.get("cf-connecting-ip") or (
-        request.client.host if request.client else None
-    )
+    Shared with the auth routes via ``web_security.client_ip``: CF-Connecting-IP
+    is honored only behind the tunnel opt-in, else the TCP peer."""
+    return client_ip(request)
 
 
 def _error_envelope(e: BoltrigError) -> dict:
@@ -144,6 +168,16 @@ async def _dev_principal(request: Request) -> Principal:
 
 
 # --- request/response bodies (Pydantic) -------------------------------------
+def _depth_from(raw: Any) -> int:
+    """Caller-supplied spawn depth, clamped: garbage is 0 (never a 500) and a
+    negative depth floors at 0, so a body can never reset the runaway-tree
+    budget (fleet/spawn.py checks ``depth + 1 > max_depth``)."""
+    try:
+        return max(0, int(raw or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
 class InvokeBody(BaseModel):
     noun: str
     verb: str
@@ -318,9 +352,10 @@ def create_app(
             p = await resolver(request)
         # Stamp request provenance for the enriched audit row ([2026] VJS-COUNTY 9,
         # D1). Taken from the request at the door, never from a body field. Behind
-        # the CF tunnel the TCP peer is the tunnel, so trust CF's authoritative
-        # client header when present (CF strips any client-supplied copy), else the
-        # TCP peer. X-Forwarded-For is deliberately NOT trusted (spoofable).
+        # the CF tunnel the TCP peer is the tunnel, so CF's authoritative client
+        # header is honored behind the BOLTRIG_TRUST_CF_CONNECTING_IP opt-in (CF
+        # strips any client-supplied copy), else the TCP peer. X-Forwarded-For is
+        # deliberately NOT trusted (spoofable).
         p.ip_address = _client_ip(request)
         p.user_agent = request.headers.get("user-agent") or None
         # RLS-live: bind this request's tenant so the _RlsPool scopes every DB call
@@ -366,7 +401,7 @@ def create_app(
         ctx = p.context(
             run_id=body.context.get("run_id"),
             parent_run_id=body.context.get("parent_run_id"),
-            depth=int(body.context.get("depth", 0)),
+            depth=_depth_from(body.context.get("depth", 0)),
             skills=body.context.get("skills_loaded", ()),
         )
         try:
@@ -391,7 +426,7 @@ def create_app(
     @app.post("/v1/mcp")
     async def mcp(body: dict, request: Request, k: Kernel = Depends(_get_kernel)) -> JSONResponse:
         # Two ways in, both run the same chokepoint:
-        #  - a run-scoped token (the fleet/sidecar path, Round Two): scopes to a run.
+        #  - a run-scoped token (the fleet/gateway path, Round Two): scopes to a run.
         #  - a user bearer / PAT (US-HEAD-02): scopes to the user's effective grants.
         run_token = request.headers.get("x-boltrig-mcp-token")
         if run_token is None:
@@ -572,7 +607,12 @@ def create_app(
         from boltrig.identity.rbac import departments_for
         from boltrig.models import WorkStatus
 
-        st = WorkStatus(status) if status else None
+        try:
+            st = WorkStatus(status) if status else None
+        except ValueError:
+            return JSONResponse(
+                {"status": "error", "reason": "unknown work status"}, status_code=400
+            )
         # row-level department isolation enforced at the store (US-IAM-02)
         departments = departments_for(p.role, p.scope)
         # M7 / SEC-69: bound the page. The store clamps the limit to MAX_WORK_PAGE
@@ -736,5 +776,24 @@ def create_app(
     from .channel_routes import register_channel_routes
 
     register_channel_routes(app, principal_dep=principal, get_kernel=_get_kernel)
+
+    # Channel gateway links (decision 0003, Phase 2): the session mint (admin)
+    # and the token-gated outbox claim/ack/fail the severed gateway pumps.
+    from .channel_gateway_routes import register_channel_gateway_routes
+
+    register_channel_gateway_routes(app, principal_dep=principal, get_kernel=_get_kernel)
+
+    # Desktop hands (decision 0016, DH-1): the host executor's authenticated pull
+    # surface. The pending-command registry is created once in bootstrap and hung
+    # on the kernel, shared with the desktop adapter; the factory path builds the
+    # kernel on the serving loop, so it is resolved per request, not captured here.
+    from .desktop_routes import register_desktop_routes
+
+    register_desktop_routes(
+        app,
+        principal_dep=principal,
+        get_kernel=_get_kernel,
+        registry=lambda k: getattr(k, "hands_registry", None),
+    )
 
     return app

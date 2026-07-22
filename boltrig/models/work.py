@@ -55,6 +55,18 @@ class WorkItem:
     lease_owner: str | None = None
     lease_expires_at: datetime | None = None
     workspace_id: WorkspaceId | None = None  # originating active workspace
+    # Channel addressing (decision 0003, Phase 2). ``target`` is ROUTING DATA,
+    # never authority: None / "cos" addresses the tier-1 chief of staff (the
+    # default - the CoS routes the item); any other value names a tier-2
+    # subagent/run the item is addressed to. It is resolved at intake from the
+    # channel's config mapping (chat/thread id -> target) or an explicit target
+    # the verified sender supplied; identity stays kernel-authoritative (the
+    # binding rows), this only steers routing.
+    target: str | None = None
+    # The way back for round-trip integrity: {"channel_id", "thread", "sender"}
+    # captured at intake so a reply / run-completion notification returns to the
+    # surface + thread the triggering message came from (SEC-179).
+    reply_route: dict[str, Any] | None = None
 
 
 def work_item_run_id(item: WorkItem) -> RunId:

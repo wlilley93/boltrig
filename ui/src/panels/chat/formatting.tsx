@@ -39,9 +39,9 @@ export function fileExtClass(name: string): string {
 }
 
 export function statusColor(status: "active" | "idle" | "offline"): string {
-  if (status === "active") return "#3FB984";
-  if (status === "idle") return "#F0C059";
-  return "#7E95B0";
+  if (status === "active") return "var(--color-ok)";
+  if (status === "idle") return "var(--color-warn)";
+  return "var(--color-text-muted)";
 }
 
 export function cssVarColor(name: string, value: string): CSSProperties {

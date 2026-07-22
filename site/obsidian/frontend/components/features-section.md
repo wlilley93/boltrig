@@ -1,6 +1,6 @@
 ---
 tags: [frontend, components, content]
-updated: 2026-07-01
+updated: 2026-07-21
 ---
 
 # Features Section
@@ -8,11 +8,10 @@ updated: 2026-07-01
 `src/components/features/features-section.tsx` (exported via
 `src/components/features/index.ts`); content in `src/data/features.ts`.
 
-The post-story **feature catalogue**: six themed groups (governed kernel, agent
-workforce, command and memory, workflows and the work board, open
-interoperability, identity and deployment), each with a one-line hook and 4-5
-capability rows written as buyer outcomes. Mounted in [[../routing|HomeView]]
-after `StoryOverlay`, in normal document flow.
+The post-story **feature catalogue**: six themed groups (operational outcomes,
+control, evidence, experience, extension, and deployment), each with a one-line
+hook and exactly five capability rows written as buyer outcomes. Mounted in
+[[../routing|HomeView]] after `StoryOverlay`, in normal document flow.
 
 Key points:
 
@@ -33,3 +32,21 @@ Key points:
 - **Style**: console look reused from the story chrome: `>` prompt kicker,
   `SCREAMING_SNAKE`-style labels, `▸` row markers, hairline `border-white/10`
   frames, `brain-sky` accents on a black field. Tokens only, no raw hex/px.
+
+## Claim boundaries
+
+The catalogue was re-audited against the engine on 2026-07-21. Copy must describe
+shipped behavior, not a parsed policy field or integration seam. In particular:
+
+- workflow cron specifications are persisted, but automatic cron execution is not wired;
+- budget hard stops currently cover spawned agent work at organisation and department scope;
+- a manual memory fact can omit its source reference;
+- Knowledge currently accepts text, Markdown, and PDF originals; multimodal and
+  structured formats remain later phases;
+- Cognee is bundled and enabled as a rebuildable compiler, while Supermemory and
+  Mem0 require configured external connections before their governed enable action;
+- socket channel delivery without an outbound URL remains a queue seam; and
+- generic MQ, OCR, and file-share drivers remain seams.
+
+`src/data/features.test.ts` protects the six-by-five structure, unique names,
+newly shipped agent-profile/evaluation entries, and the known seam wording.

@@ -24,7 +24,8 @@ describe("nodeTaxonomy", () => {
     const agent = common.items.find((i) => i.kind === "agent-call");
     expect(agent).toBeDefined();
     expect(agent!.name).toBe("Ask user");
-    expect(agent!.color).toBe("#5E69DD");
+    expect(agent!.color).toBe("var(--color-node-agent)");
+    expect(allKinds().some((item) => item.color === "var(--color-consequence-high)")).toBe(false);
   });
 
   it("findKind resolves every known kind", () => {

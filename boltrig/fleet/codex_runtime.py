@@ -131,21 +131,23 @@ class CodexRuntime:
 def build_trusted_codex_runtime(
     codex_config: dict[str, Any] | None, cost_tier: str
 ) -> "Runtime":
-    """Construct the trusted read-only Codex runtime, or degrade to a script run.
+    """Construct the trusted read-only Codex runtime, or a typed unavailable one.
 
     The provider + stack_root are pre-built at the composition root and carried in
     ``codex_config``. Re-assert the dev/prod wall HERE ([2026] VJS-CC-VJS 2, D1) so
     the runtime is structurally unreachable under any production signal, then run
     under the existing ``allow_test_only_runtime`` gate with ``production_ready``
-    left False (D4). Anything short of trusted+wired degrades to ``ScriptRuntime``.
+    left False (D4). Anything short of trusted+wired is an unavailable lane and
+    degrades to ``UnavailableRuntime`` - degrade-marked, never a script echo
+    presented upstream as a real Codex answer (US-FLT-07, decision 0012).
     """
-    from .runtime import ScriptRuntime
+    from .runtime import UnavailableRuntime
 
     cfg = dict(codex_config or {})
     provider = cfg.get("provider")
     stack_root = cfg.get("stack_root")
     if not (cfg.get("trusted") and provider is not None and stack_root is not None):
-        return ScriptRuntime(cost_tier=cost_tier or "cheap")
+        return UnavailableRuntime(requested="codex", cost_tier=cost_tier or "cheap")
     from boltrig.fleet.codex_trusted_wall import require_codex_trusted_posture
     from boltrig.fleet.infrastructure.codex_agent_runtime import CodexAgentRuntime
 

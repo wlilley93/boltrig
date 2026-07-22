@@ -19,6 +19,7 @@ never logged (SEC-05, K-20).
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -283,7 +284,7 @@ class MsGraphAdapter(HttpAdapter):
     async def _document_read(
         self, params: dict[str, Any], client: httpx.AsyncClient, context: InvocationContext
     ) -> Result:
-        url = f"/drives/{params['drive_id']}/items/{params['item_id']}"
+        url = f"/drives/{quote(str(params['drive_id']), safe='')}/items/{quote(str(params['item_id']), safe='')}"
         data = await self.request(client, "GET", url, expected=(200,))
         return Result.success(data)
 
@@ -291,7 +292,7 @@ class MsGraphAdapter(HttpAdapter):
         self, params: dict[str, Any], client: httpx.AsyncClient, context: InvocationContext
     ) -> Result:
         path = str(params["path"]).lstrip("/")
-        url = f"/drives/{params['drive_id']}/items/root:/{path}:/content"
+        url = f"/drives/{quote(str(params['drive_id']), safe='')}/items/root:/{quote(path, safe='/')}:/content"
         content = params["content"]
         raw = content.encode("utf-8") if isinstance(content, str) else content
         headers = {"Content-Type": params.get("content_type", "text/plain")}
@@ -303,7 +304,7 @@ class MsGraphAdapter(HttpAdapter):
     async def _document_update(
         self, params: dict[str, Any], client: httpx.AsyncClient, context: InvocationContext
     ) -> Result:
-        url = f"/drives/{params['drive_id']}/items/{params['item_id']}"
+        url = f"/drives/{quote(str(params['drive_id']), safe='')}/items/{quote(str(params['item_id']), safe='')}"
         patch: dict[str, Any] = dict(params.get("fields") or {})
         if "name" in params:
             patch["name"] = params["name"]
@@ -332,7 +333,7 @@ class MsGraphAdapter(HttpAdapter):
             "saveToSentItems": bool(params.get("save_to_sent", True)),
         }
         sender = params.get("from_user")
-        url = f"/users/{sender}/sendMail" if sender else "/me/sendMail"
+        url = f"/users/{quote(str(sender), safe='')}/sendMail" if sender else "/me/sendMail"
         await self.request(client, "POST", url, json=body, expected=(202,))
         return Result.success({"status": "sent"})
 
@@ -355,14 +356,14 @@ class MsGraphAdapter(HttpAdapter):
         if params.get("body"):
             event["body"] = {"contentType": "HTML", "content": params["body"]}
         owner = params.get("owner")
-        url = f"/users/{owner}/events" if owner else "/me/events"
+        url = f"/users/{quote(str(owner), safe='')}/events" if owner else "/me/events"
         data = await self.request(client, "POST", url, json=event, expected=(201,))
         return Result.success({"id": data.get("id"), "webLink": data.get("webLink")})
 
     async def _chat_post_message(
         self, params: dict[str, Any], client: httpx.AsyncClient, context: InvocationContext
     ) -> Result:
-        url = f"/chats/{params['chat_id']}/messages"
+        url = f"/chats/{quote(str(params['chat_id']), safe='')}/messages"
         body = {
             "body": {
                 "contentType": params.get("content_type", "text"),
@@ -377,7 +378,7 @@ class MsGraphAdapter(HttpAdapter):
     async def _directory_get_user(
         self, params: dict[str, Any], client: httpx.AsyncClient, context: InvocationContext
     ) -> Result:
-        url = f"/users/{params['user_id']}"
+        url = f"/users/{quote(str(params['user_id']), safe='')}"
         query: dict[str, Any] = {}
         select = params.get("select")
         if select:

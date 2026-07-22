@@ -9,7 +9,7 @@ export function HomeScreen() {
     <section className="proto-page proto-home">
       <header className="proto-page__header">
         <div><p className="proto-eyebrow">Wednesday, 15 July</p><h1>Good morning, Will.</h1><p>The organisation is moving. Three things need your attention.</p></div>
-        <div className="proto-header-actions"><span className="proto-env"><i />Development</span><button className="proto-button proto-button--primary" onClick={() => notify("Command sheet opened — try ⌘K in production")}>Ask Bolt</button></div>
+        <div className="proto-header-actions"><span className="proto-env"><i />Development</span><button className="proto-button proto-button--primary" onClick={() => notify("Command sheet opened - try ⌘K in production")}>Ask Bolt</button></div>
       </header>
 
       <div className="proto-briefing">

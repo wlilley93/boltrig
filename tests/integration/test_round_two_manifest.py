@@ -36,14 +36,14 @@ def test_pi_sidecar_sandbox_is_declared_restrictive():
 def test_manifest_preserves_boltrig_v2_stack_sections():
     m = load_manifest(_MANIFEST)
     assert m.section("stack") == {
-        "cockpit": "herdr",
-        "orchestration": "mastra",
+        "cockpit": "boltrig_ui",
+        "orchestration": "boltrig",
         "durability": "hatchet",
-        "runtime_sandbox": "rivet_agentos",
-        "coding_agent": "opencode",
+        "runtime_sandbox": "codex_supervisor",
+        "coding_agent": "codex",
         "browser_automation": "browser_cli",
-        "memory_primary": "mem0",
-        "memory_projection": "cognee",
+        "memory_primary": "pgvector",
+        "knowledge_compiler": "cognee",
         "model_routing": "bifrost",
         "observability": "langfuse",
         "tool_protocol": "mcp_kernel",
@@ -59,11 +59,25 @@ def test_manifest_preserves_boltrig_v2_stack_sections():
 
     memory = m.section("memory")
     assert memory["authority"] == "kernel_ledger"
-    assert memory["primary_projection"] == "mem0"
+    assert memory["primary_projection"] is None
     assert [p["id"] for p in memory["projections"]] == ["mem0", "cognee"]
     assert [p["enabled"] for p in memory["projections"]] == [False, False]
     assert memory["fanout"]["mode"] == "ledger_then_projection"
     assert memory["fanout"]["execution"] == "inline"
+
+    knowledge = m.section("knowledge")
+    assert knowledge["enabled"] is True
+    assert knowledge["vault"]["kind"] == "filesystem"
+    assert [provider["id"] for provider in knowledge["providers"]] == [
+        "cognee",
+        "supermemory",
+        "mem0",
+    ]
+    assert [provider["enabled"] for provider in knowledge["providers"]] == [
+        True,
+        False,
+        False,
+    ]
 
 
 @pytest.mark.invariant("FR-HOST-13")
@@ -94,7 +108,8 @@ def test_checked_in_manifests_preserve_v2_entrypoints(path):
     adapters = {adapter.id for adapter in m.adapters}
     runtimes = {runtime.name: runtime for runtime in m.ephemeral_runtimes}
 
-    assert m.section("stack")["cockpit"] == "herdr"
+    assert m.section("stack")["cockpit"] == "boltrig_ui"
+    assert m.section("stack")["coding_agent"] == "codex"
     assert m.section("stack")["browser_automation"] == "browser_cli"
     assert {"herdr", "browser-cli"} <= adapters
     assert "rivet-worker" in runtimes

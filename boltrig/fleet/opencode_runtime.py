@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from boltrig.config.environment import is_truthy
 from boltrig.models import InvocationContext
 
 from .result import AgentResult
@@ -43,7 +44,7 @@ TokenIssuer = Callable[..., str]
 
 
 def _truthy(value: Any) -> bool:
-    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+    return is_truthy(str(value or ""))
 
 
 def _bounded(value: str, limit: int = _MAX_STDIO) -> str:
@@ -202,8 +203,10 @@ class OpenCodeRuntime:
         )
 
     def _mcp_env(self, context: InvocationContext) -> tuple[dict[str, str], str | None]:
-        extra = dict(context.extra or {})
-        mcp_url = extra.get("opencode_mcp_url") or self.mcp_url
+        # The MCP URL comes ONLY from server config: the run-scoped token minted
+        # below is a credential, so a caller-steered extra['opencode_mcp_url']
+        # would redirect it to an arbitrary host. Staged-cutover residue removed.
+        mcp_url = self.mcp_url
         if not mcp_url:
             return {}, None
         if self._issue is None:
@@ -232,7 +235,10 @@ class OpenCodeRuntime:
             raise ValueError("no_model_endpoint")
 
         extra = dict(context.extra or {})
-        repo_root = extra.get("repo_root") or os.environ.get("BOLTRIG_OPENCODE_DIR")
+        # The agent's working directory is server config only: a caller-steered
+        # extra['repo_root'] (reachable via /v1/spawn body.context) would cwd the
+        # agent into an arbitrary path. Staged-cutover residue removed.
+        repo_root = os.environ.get("BOLTRIG_OPENCODE_DIR")
         if repo_root:
             repo_root = str(Path(str(repo_root)).expanduser())
         attach = self.attach_url or getattr(self.endpoint, "base_url", None)

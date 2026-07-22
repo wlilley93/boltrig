@@ -1,5 +1,5 @@
-import { afterEach, describe, it } from "vitest";
-import { render } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
 import { WorkflowStudio } from "@/panels/studio/WorkflowStudio";
 import { WorkflowForm } from "@/panels/studio/workflow/WorkflowForm";
 import { UpsertWorkflowForm } from "@/panels/studio/workflow/forms/UpsertWorkflowForm";
@@ -20,7 +20,10 @@ const emptyFetchState = {
 };
 
 describe("WorkflowStudio", () => {
-  afterEach(clearApiMocks);
+  afterEach(() => {
+    cleanup();
+    clearApiMocks();
+  });
 
   it("renders without crashing", () => {
     mockApi();
@@ -36,8 +39,10 @@ describe("WorkflowStudio", () => {
     render(<UpsertWorkflowForm onSaved={() => {}} />);
   });
 
-  it("ScheduleForm renders without crashing", () => {
+  it("ScheduleForm states that cron execution is an unwired seam", () => {
     render(<ScheduleForm wfOptions={[]} />);
+    expect(screen.getByText(/Automatic cron execution is not wired/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Save schedule spec" })).toBeTruthy();
   });
 
   it("TriggerForm renders without crashing", () => {

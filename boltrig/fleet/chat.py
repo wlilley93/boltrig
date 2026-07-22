@@ -654,6 +654,16 @@ def build_turn_executor(
         except BoltrigError as exc:
             relay.publish(run_id, {"type": "text_delta", "delta": f"({exc.reason})"})
             item.status = WorkStatus.FAILED
+        except Exception as exc:
+            # A non-Boltrig failure (store, relay, runtime plumbing) would escape to
+            # _safe_exec, which swallows it into a text_delta while the turn's work
+            # item stays IN_FLIGHT forever. Surface it the same way but settle the
+            # item FAILED; only the type name persists (bounded observability, K-20).
+            relay.publish(
+                run_id, {"type": "text_delta", "delta": f"(turn error: {type(exc).__name__})"}
+            )
+            item.status = WorkStatus.FAILED
+            item.result = {"error": type(exc).__name__}
         await kernel.store.update_work_item(item)
 
     return executor

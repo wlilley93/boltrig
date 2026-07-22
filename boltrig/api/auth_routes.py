@@ -35,6 +35,7 @@ from boltrig.identity import (
 from boltrig.identity.invites import hash_invite_token
 from boltrig.identity.passwords import WeakPassword
 from boltrig.identity.sessions import SESSION_TTL_HOURS
+from boltrig.kernel.web_security import client_ip as _client_ip
 from boltrig.identity.totp import (
     CHALLENGE_TTL,
     generate_challenge_token,
@@ -337,10 +338,6 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
             return invalid
         if inv.expires_at is not None and inv.expires_at <= utcnow():
             return invalid
-        # Atomic single-use: only the winner proceeds (D1). A lost race / already
-        # consumed token returns the same generic rejection.
-        if not await k.store.consume_invitation(inv.tenant_id, inv.id):
-            return invalid
 
         email = _norm_email(inv.email)
         existing = await k.store.get_user(inv.tenant_id, email)
@@ -373,6 +370,13 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
         # could manage a targeted workspace and gated org provisioning to superadmin),
         # so accept just materialises what was authorised.
         seated = await _seat_invitee(k, inv, email)
+        # Atomic single-use, consumed LAST (D1): the invite is burned only once the
+        # account + credential + seating actually exist, so a store failure above
+        # never strands a single-use invite with no account. The CAS still prevents
+        # a double-spend; a lost race / already consumed token returns the same
+        # generic rejection.
+        if not await k.store.consume_invitation(inv.tenant_id, inv.id):
+            return invalid
         # Keys-only audit: the invitation id + email (identity), never the password.
         await _audit(k, inv.tenant_id, email, "auth.invite.accept",
                      {"invitation_id": inv.id, "email": email, **seated})
@@ -392,14 +396,12 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
 
         # Behind the Cloudflare tunnel the TCP peer is the tunnel/loopback, so a
         # per-IP bound keyed on it collapses to ONE global bucket (a login-DoS
-        # lever and useless anti-spray). Trust CF's authoritative client header
-        # when present (CF sets it and strips any client-supplied copy); fall back
-        # to the TCP peer off-tunnel. X-Forwarded-For is deliberately NOT trusted
-        # (spoofable unless behind a known trusted proxy).
-        client_ip = (
-            request.headers.get("cf-connecting-ip")
-            or (request.client.host if request.client else "unknown")
-        )
+        # lever and useless anti-spray). The shared helper honors CF's
+        # authoritative client header ONLY behind the BOLTRIG_TRUST_CF_CONNECTING_IP
+        # opt-in (there CF sets it and strips any client-supplied copy); otherwise
+        # the TCP peer. X-Forwarded-For is deliberately NOT trusted (spoofable
+        # unless behind a known trusted proxy).
+        client_ip = _client_ip(request) or "unknown"
         user_agent = request.headers.get("user-agent") or None
         try:
             # Enforce BOTH bounds before touching the credential store (D5).
@@ -559,12 +561,9 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
         # Rate-limit the begin (like verify-enroll/challenge/disable): each call mints
         # + seals a fresh secret and rotates the recovery codes, so an unrated begin
         # lets an authenticated user spam sealed-secret rows and silently invalidate
-        # previously-shown codes. Bound per-identity + per-IP (CF-Connecting-IP, never
-        # the spoofable XFF).
-        client_ip = (
-            request.headers.get("cf-connecting-ip")
-            or (request.client.host if request.client else "unknown")
-        )
+        # previously-shown codes. Bound per-identity + per-IP (CF-Connecting-IP only
+        # behind the tunnel opt-in, never the spoofable XFF).
+        client_ip = _client_ip(request) or "unknown"
         try:
             await k.rate_limiter.enforce(
                 tenant, f"auth.2fa.enroll-begin.ip:{client_ip}", _TFA_RL_IP
@@ -622,10 +621,7 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
         set_current_tenant(tenant)
         code = body.get("code")
         code = code if isinstance(code, str) else ""
-        client_ip = (
-            request.headers.get("cf-connecting-ip")
-            or (request.client.host if request.client else "unknown")
-        )
+        client_ip = _client_ip(request) or "unknown"
         user_agent = request.headers.get("user-agent") or None
         try:
             await k.rate_limiter.enforce(tenant, f"auth.2fa.enroll.ip:{client_ip}", _TFA_RL_IP)
@@ -679,10 +675,7 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
         token = token if isinstance(token, str) else ""
         code = body.get("code")
         code = code if isinstance(code, str) else ""
-        client_ip = (
-            request.headers.get("cf-connecting-ip")
-            or (request.client.host if request.client else "unknown")
-        )
+        client_ip = _client_ip(request) or "unknown"
         user_agent = request.headers.get("user-agent") or None
 
         # D5: the broad per-IP bound first, before any store/crypto work.
@@ -774,10 +767,7 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
         set_current_tenant(tenant)
         code = body.get("code")
         code = code if isinstance(code, str) else ""
-        client_ip = (
-            request.headers.get("cf-connecting-ip")
-            or (request.client.host if request.client else "unknown")
-        )
+        client_ip = _client_ip(request) or "unknown"
         user_agent = request.headers.get("user-agent") or None
         try:
             await k.rate_limiter.enforce(tenant, f"auth.2fa.disable.ip:{client_ip}", _TFA_RL_IP)

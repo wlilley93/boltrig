@@ -40,7 +40,10 @@ def _endpoint(base_url: str | None = "http://127.0.0.1:4096") -> ModelEndpoint:
 
 
 @pytest.mark.invariant("FR-RUN-10")
-def test_build_runtime_resolves_opencode():
+def test_build_runtime_resolves_opencode(monkeypatch):
+    # opencode is a legacy lane (decision 0012): reachable only behind the
+    # explicit rollback opt-in flag.
+    monkeypatch.setenv("BOLTRIG_ENABLE_LEGACY_RUNTIMES", "1")
     rt = build_runtime(_cap(), lambda _id: _endpoint())
     assert isinstance(rt, OpenCodeRuntime)
     assert rt.runtime == "opencode"

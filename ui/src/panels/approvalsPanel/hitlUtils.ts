@@ -50,7 +50,13 @@ export function filterAndSortHitl(
 
 export function renderContext(context: unknown): string | null {
   if (context === null || context === undefined) return null;
-  if (typeof context === "string") return context;
+  if (typeof context === "string") {
+    try {
+      return JSON.stringify(JSON.parse(context), null, 2);
+    } catch {
+      return context;
+    }
+  }
   try {
     return JSON.stringify(context, null, 2);
   } catch {

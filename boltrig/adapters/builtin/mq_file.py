@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import importlib
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from boltrig.adapters.base import AdapterError, ErrorClass
@@ -141,7 +142,13 @@ class FileShareIngestSeam:
             raise SeamUnavailable("binary document requires OCR but ocr_enabled is False")
         return ocr_extract(data)
 
-    @staticmethod
-    def _read(path: str) -> bytes:
-        with open(path, "rb") as handle:
+    def _read(self, path: str) -> bytes:
+        # The seam declares a confined ``root``: resolve the requested path
+        # under it and refuse escapes (an absolute path or a '..' walk) rather
+        # than opening any host path the caller names.
+        root = Path(self.root).resolve()
+        target = (root / path).resolve()
+        if not target.is_relative_to(root):
+            raise ValueError(f"ingest path escapes the configured root: {path!r}")
+        with open(target, "rb") as handle:
             return handle.read()

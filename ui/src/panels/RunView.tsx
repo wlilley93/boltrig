@@ -5,17 +5,40 @@
 // Authz stays server-side: a 404 from auditTree / streamRunEvents renders as a
 // clean "run not found / not in scope" state, never a pre-check.
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { api } from "../api/client";
-import { closeRun, navigate, useRoute } from "../router";
+import { closeRun, navigate, openRun, useRoute } from "../router";
 import { useFetch } from "../useFetch";
 import { useFocusTrap } from "../useFocusTrap";
 import { RunInspector } from "./runView/RunInspector";
 import { useRunStream } from "./runView/useRunStream";
 import { isNotFound } from "./runView/utils";
 
-export function RunDrawer({ runId }: { runId: string }) {
+function runCrumbLabel(runId: string): string {
+  return runId.length > 18 ? `${runId.slice(0, 8)}...${runId.slice(-6)}` : runId;
+}
+
+export function nextRunTrail(
+  current: string[],
+  runId: string | undefined,
+): string[] {
+  if (!runId) return [];
+  if (current[current.length - 1] === runId) return current;
+  const existing = current.indexOf(runId);
+  if (existing >= 0) return current.slice(0, existing + 1);
+  return [...current, runId];
+}
+
+export function RunDrawer({
+  runId,
+  trail = [runId],
+  onSelectRun = openRun,
+}: {
+  runId: string;
+  trail?: string[];
+  onSelectRun?: (runId: string) => void;
+}) {
   const tree = useFetch(() => api.auditTree(runId), [runId]);
   const stream = useRunStream(runId);
 
@@ -80,9 +103,30 @@ export function RunDrawer({ runId }: { runId: string }) {
             </button>
           </div>
         </div>
-        <p className="muted run-inspector-drawer__run-id">
-          run <code>{runId}</code>
-        </p>
+        <nav className="run-trail" aria-label="Run ancestry">
+          {trail.map((trailRunId, index) => {
+            const current = index === trail.length - 1;
+            return (
+              <span className="run-trail__item" key={`${trailRunId}-${index}`}>
+                {index > 0 && <span aria-hidden="true">/</span>}
+                {current ? (
+                  <code aria-current="page" title={trailRunId}>
+                    {runCrumbLabel(trailRunId)}
+                  </code>
+                ) : (
+                  <button
+                    type="button"
+                    className="run-trail__link"
+                    title={`Return to run ${trailRunId}`}
+                    onClick={() => onSelectRun(trailRunId)}
+                  >
+                    {runCrumbLabel(trailRunId)}
+                  </button>
+                )}
+              </span>
+            );
+          })}
+        </nav>
 
         {notFound ? (
           <p className="notice warn run-inspector__not-found">
@@ -103,6 +147,22 @@ export function RunDrawer({ runId }: { runId: string }) {
 // run id is present. key={runId} resets the stream when navigating to a child.
 export function RunView() {
   const route = useRoute();
+  const [trail, setTrail] = useState<string[]>(() =>
+    route.runId ? [route.runId] : [],
+  );
+
+  useEffect(() => {
+    setTrail((current) => nextRunTrail(current, route.runId));
+  }, [route.runId]);
+
   if (!route.runId) return null;
-  return <RunDrawer runId={route.runId} key={route.runId} />;
+  const visibleTrail = nextRunTrail(trail, route.runId);
+  return (
+    <RunDrawer
+      runId={route.runId}
+      trail={visibleTrail}
+      onSelectRun={openRun}
+      key={route.runId}
+    />
+  );
 }

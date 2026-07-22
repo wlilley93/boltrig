@@ -17,16 +17,28 @@ from pathlib import Path
 import asyncpg
 
 from .channels import ChannelStorePG
+from .channel_dedup import ChannelDedupStorePG
+from .channel_outbox import ChannelOutboxStorePG
 from .budget_policy import BudgetPolicyPG
 from .capabilities import CapabilityStorePG
 from .guarded_writes import GuardedWritesPG
 from .idempotency import IdempotencyStorePG
+from .observability_reads import ObservabilityReadsPG
+from .sealing import seal_ref, unseal_ref
 from .work_items import WorkItemReadsPG, work_item_from_row
+from .rows import (
+    _adapter, _ai_config, _anchor, _audit, _binding, _budget, _checkpoint,
+    _conversation, _endpoint, _eval_case, _eval_run, _hitl_req, _hitl_resp,
+    _invitation, _mem_erasure, _mem_fact, _mem_ingestion, _mem_projection,
+    _memory, _message, _notif, _noun, _org, _org_member, _pat, _personal,
+    _revision, _security, _session, _setting, _skill, _summary, _tfa_challenge,
+    _user, _user_totp, _verb, _workflow, _workflow_promotion, _workspace,
+    _workspace_member,
+)
 from boltrig.models import (
-    AdapterHealth, AdapterRecord,
-    ActionType,
+    AdapterRecord,
     AuditEvent, AuditRollupAnchor,
-    Budget, Consequence,
+    Budget,
     ConfigRevision, Conversation,
     ConversationMessage, ConversationStatus,
     ConversationSummary, EvalCase,
@@ -35,7 +47,6 @@ from boltrig.models import (
     MemoryFact,
     MemoryIngestion,
     MemoryProjectionStatus,
-    MessageRole,
     NotificationPref,
     PersonalAccessToken,
     PersonalAgent,
@@ -50,22 +61,15 @@ from boltrig.models import (
     HITLRequest,
     HITLResponse,
     HITLStatus,
-    HITLType,
-    IdempotencyMode,
     ModelEndpoint,
     Noun,
     AI_CONFIG_LEVELS,
     AiConfig,
     Organisation,
     OrgMember,
-    RateLimit,
     SecurityEvent,
-    SecurityEventType,
     Skill,
-    TargetType,
-    PromotionState,
     TenantPermissions,
-    Urgency,
     Verb,
     VerbBinding,
     WORKSPACE_ROLES,
@@ -73,11 +77,9 @@ from boltrig.models import (
     WorkspaceMember,
     WorkflowDefinition,
     WorkflowPromotion,
-    WorkflowSource,
     WorkItem,
 )
 from boltrig.models.errors import SchemaValidationError
-from boltrig.models.work import RunCheckpoint
 
 _SCHEMA = Path(__file__).with_name("schema.sql")
 _RLS = Path(__file__).with_name("rls.sql")
@@ -126,9 +128,6 @@ class _RlsPool:
     async def fetchrow(self, query, *args):
         return await self._scoped("fetchrow", query, *args)
 
-    async def fetchval(self, query, *args):
-        return await self._scoped("fetchval", query, *args)
-
     async def execute(self, query, *args):
         return await self._scoped("execute", query, *args)
 
@@ -159,7 +158,8 @@ async def _init_conn(conn: asyncpg.Connection) -> None:
 
 class PostgresStore(
     BudgetPolicyPG, WorkItemReadsPG, IdempotencyStorePG, GuardedWritesPG,
-    ChannelStorePG, CapabilityStorePG,
+    ChannelStorePG, CapabilityStorePG, ObservabilityReadsPG,
+    ChannelDedupStorePG, ChannelOutboxStorePG,
 ):
     """asyncpg-backed Store. Domain methods live in partial mixins
     (e.g. ``ChannelStorePG``) to keep this file under the structural floor;
@@ -491,8 +491,8 @@ class PostgresStore(
             """INSERT INTO work_items (id, tenant_id, workspace_id, source, source_id, intent, confidence,
                                        convergent, status, owner_member, parent_id, hatchet_run_id,
                                        depth, on_behalf_of, constraints, raw, attempts, degraded,
-                                       result, lease_owner, lease_expires_at)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+                                       result, lease_owner, lease_expires_at, target, reply_route)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
                ON CONFLICT (tenant_id, id) DO UPDATE SET
                  workspace_id=EXCLUDED.workspace_id, source=EXCLUDED.source, source_id=EXCLUDED.source_id, intent=EXCLUDED.intent,
                  confidence=EXCLUDED.confidence, convergent=EXCLUDED.convergent,
@@ -502,15 +502,27 @@ class PostgresStore(
                  constraints=EXCLUDED.constraints, raw=EXCLUDED.raw,
                  attempts=EXCLUDED.attempts, degraded=EXCLUDED.degraded,
                  result=EXCLUDED.result, lease_owner=EXCLUDED.lease_owner,
-                 lease_expires_at=EXCLUDED.lease_expires_at, updated_at=now()""",
+                 lease_expires_at=EXCLUDED.lease_expires_at,
+                 target=EXCLUDED.target, reply_route=EXCLUDED.reply_route, updated_at=now()""",
             w.id, w.tenant_id, w.workspace_id, w.source, w.source_id, w.intent, w.confidence, w.convergent,
             w.status.value, w.owner_member, w.parent_id, w.hatchet_run_id, w.depth,
             w.on_behalf_of, w.constraints, w.raw, w.attempts, w.degraded, w.result,
-            w.lease_owner, w.lease_expires_at,
+            w.lease_owner, w.lease_expires_at, w.target, w.reply_route,
         )
 
     async def update_work_item(self, item: WorkItem):
         await self.create_work_item(item)  # upsert
+
+    async def transition_work_item_status(self, tenant_id, item_id, *, expected, new_status):
+        # Conditional status write (CAS on the guarded status): a concurrent
+        # transition that already moved the row matches 0 rows, so the loser
+        # fails instead of silently overwriting the winner.
+        row = await self._pool.fetchrow(
+            """UPDATE work_items SET status=$4, updated_at=now()
+               WHERE tenant_id=$1 AND id=$2 AND status=$3 RETURNING id""",
+            tenant_id, item_id, expected.value, new_status.value,
+        )
+        return row is not None
 
     async def claim_work_item(self, tenant_id, worker_id, lease_seconds):
         # atomic pending -> in_flight claim with a lease (US-FLT-05): one
@@ -894,7 +906,7 @@ class PostgresStore(
                     )
                 return True
 
-    # --- credential references -------------------------------------------
+    # --- credential references (sealed at rest, SEC-04 - see store/sealing.py) ---
     async def get_credential_ref(self, tenant_id, cred_id):
         row = await self._pool.fetchrow(
             "SELECT data, store, ref FROM credential_refs WHERE tenant_id=$1 AND id=$2",
@@ -902,16 +914,24 @@ class PostgresStore(
         )
         if row is None:
             return None
-        return row["data"] or {"store": row["store"], "ref": row["ref"]}
+        # A falsy-but-present data dict (e.g. a ref cleared to {}) round-trips as
+        # written; only a NULL data column falls back to the store/ref pair.
+        if row["data"] is not None:
+            # Unseal transparently; legacy plaintext rows (no marker) pass through.
+            return unseal_ref(row["data"])
+        return {"store": row["store"], "ref": row["ref"]}
 
     async def set_credential_ref(self, tenant_id, cred_id, ref: dict) -> None:
+        # Seal before persisting: credential_refs.data is ALWAYS an envelope
+        # (ciphertext), never plaintext (SEC-04). The typed store/ref columns keep
+        # the reference metadata (an env var name is not secret material).
         await self._pool.execute(
             """INSERT INTO credential_refs (id, tenant_id, store, ref, data, expires_at)
                VALUES ($1,$2,$3,$4,$5,$6)
                ON CONFLICT (tenant_id, id) DO UPDATE SET
                  store=EXCLUDED.store, ref=EXCLUDED.ref, data=EXCLUDED.data,
                  expires_at=EXCLUDED.expires_at, updated_at=now()""",
-            cred_id, tenant_id, ref.get("store", "env"), ref.get("ref", ""), ref,
+            cred_id, tenant_id, ref.get("store", "env"), ref.get("ref", ""), seal_ref(ref),
             ref.get("expires_at"),
         )
 
@@ -1702,33 +1722,42 @@ class PostgresStore(
         )
 
     async def add_org_member(self, member: OrgMember):
-        await self._pool.execute(
-            """INSERT INTO org_members (tenant_id, user_id, role, created_at)
-               VALUES ($1,$2,$3,$4)
-               ON CONFLICT (tenant_id, user_id) DO UPDATE SET role=EXCLUDED.role""",
-            member.tenant_id, member.user_id, member.role, member.created_at,
-        )
-        # Keep the global email -> orgs INDEX in lockstep ([2026] VJS-COUNTY 11, D1).
-        # identity_orgs is RLS-EXCLUDED (the pre-tenant lookup, keyed by the normalised
-        # email), so this write does not need the bound tenant and is safe under RLS.
-        await self._pool.execute(
-            """INSERT INTO identity_orgs (email, tenant_id, role, created_at)
-               VALUES (lower($1),$2,$3,$4)
-               ON CONFLICT (email, tenant_id) DO UPDATE SET role=EXCLUDED.role""",
-            member.user_id, member.tenant_id, member.role, member.created_at,
-        )
+        # Both writes commit or neither does (base.py's lockstep invariant): a
+        # failure between the org_members row and the identity_orgs index would
+        # otherwise leave a dangling switch candidate.
+        async with self._pool.acquire() as conn:
+            async with conn.transaction():
+                await _apply_guc(conn)  # RLS-live: scope this explicit transaction
+                await conn.execute(
+                    """INSERT INTO org_members (tenant_id, user_id, role, created_at)
+                       VALUES ($1,$2,$3,$4)
+                       ON CONFLICT (tenant_id, user_id) DO UPDATE SET role=EXCLUDED.role""",
+                    member.tenant_id, member.user_id, member.role, member.created_at,
+                )
+                # Keep the global email -> orgs INDEX in lockstep ([2026] VJS-COUNTY 11, D1).
+                # identity_orgs is RLS-EXCLUDED (the pre-tenant lookup, keyed by the normalised
+                # email), so this write does not need the bound tenant and is safe under RLS.
+                await conn.execute(
+                    """INSERT INTO identity_orgs (email, tenant_id, role, created_at)
+                       VALUES (lower($1),$2,$3,$4)
+                       ON CONFLICT (email, tenant_id) DO UPDATE SET role=EXCLUDED.role""",
+                    member.user_id, member.tenant_id, member.role, member.created_at,
+                )
 
     async def remove_org_member(self, tenant_id, user_id):
-        await self._pool.execute(
-            "DELETE FROM org_members WHERE tenant_id=$1 AND user_id=$2",
-            tenant_id, user_id,
-        )
-        # Drop the index pointer too so a revoked membership is no longer a switch
-        # candidate (the resolver also fail-closes on the org_members re-check).
-        await self._pool.execute(
-            "DELETE FROM identity_orgs WHERE email=lower($1) AND tenant_id=$2",
-            user_id, tenant_id,
-        )
+        async with self._pool.acquire() as conn:
+            async with conn.transaction():
+                await _apply_guc(conn)  # RLS-live: scope this explicit transaction
+                await conn.execute(
+                    "DELETE FROM org_members WHERE tenant_id=$1 AND user_id=$2",
+                    tenant_id, user_id,
+                )
+                # Drop the index pointer too so a revoked membership is no longer a switch
+                # candidate (the resolver also fail-closes on the org_members re-check).
+                await conn.execute(
+                    "DELETE FROM identity_orgs WHERE email=lower($1) AND tenant_id=$2",
+                    user_id, tenant_id,
+                )
 
     async def get_org_member(self, tenant_id, user_id):
         # Tenant-scoped single-membership re-auth ([2026] VJS-COUNTY 11, D2).
@@ -1868,158 +1897,6 @@ class PostgresStore(
         )
 
 
-# --- row -> dataclass mappers (None-safe) ---------------------------------
-def _noun(r):
-    return None if r is None else Noun(
-        id=r["id"], tenant_id=r["tenant_id"], description=r["description"] or "",
-        schema=r["schema"] or {},
-    )
-
-
-def _verb(r):
-    if r is None:
-        return None
-    return Verb(
-        id=r["id"], tenant_id=r["tenant_id"], noun_id=r["noun_id"],
-        input_schema=r["input_schema"], output_schema=r["output_schema"],
-        description=r["description"] or "", consequence=Consequence(r["consequence"]),
-        degraded_mode=r["degraded_mode"], identity_mode=r["identity_mode"],
-        idempotency_mode=IdempotencyMode(r["idempotency_mode"]),
-    )
-
-
-def _binding(r):
-    if r is None:
-        return None
-    rl = r["rate_limit"]
-    return VerbBinding(
-        verb_id=r["verb_id"], tenant_id=r["tenant_id"],
-        target_type=TargetType(r["target_type"]), target_ref=r["target_ref"],
-        rate_limit=RateLimit(**rl) if rl else None,
-    )
-
-
-def _adapter(r):
-    if r is None:
-        return None
-    return AdapterRecord(
-        id=r["id"], tenant_id=r["tenant_id"], version=r["version"], runtime=r["runtime"],
-        source=r["source"], module_ref=r["module_ref"], health=AdapterHealth(r["health"]),
-        spec_ref=r["spec_ref"], created_by=r["created_by"], activated=r["activated"],
-    )
-
-
-def _skill(r):
-    if r is None:
-        return None
-    return Skill(
-        id=r["id"], tenant_id=r["tenant_id"], version=r["version"],
-        prompt_fragment=r["prompt_fragment"], tool_grants=list(r["tool_grants"] or []),
-        context_requirements=r["context_requirements"] or {}, extends=r["extends"],
-        locale=r["locale"] or "en",
-        description=(r["description"] if "description" in r else "") or "",
-    )
-
-
-def _workflow(r):
-    if r is None:
-        return None
-    return WorkflowDefinition(
-        id=r["id"], tenant_id=r["tenant_id"], version=r["version"],
-        source=WorkflowSource(r["source"]), definition=r["definition"],
-        intent_tags=list(r["intent_tags"] or []), origin_task=r["origin_task"],
-        workspace_id=r["workspace_id"],
-    )
-
-
-def _workflow_promotion(r):
-    if r is None:
-        return None
-    return WorkflowPromotion(
-        workflow_id=r["workflow_id"], tenant_id=r["tenant_id"],
-        state=PromotionState(r["state"]), score=float(r["score"]),
-        eval_run_id=r["eval_run_id"], updated_at=r["updated_at"],
-    )
-
-
-def _endpoint(r):
-    if r is None:
-        return None
-    return ModelEndpoint(
-        id=r["id"], tenant_id=r["tenant_id"], kind=r["kind"], model=r["model"],
-        base_url=r["base_url"], fallback=r["fallback"], data_class=r["data_class"],
-    )
-
-
-def _checkpoint(r):
-    if r is None:
-        return None
-    return RunCheckpoint(
-        tenant_id=r["tenant_id"], run_id=r["run_id"], step=r["step"], status=r["status"],
-        output=r["output"], hitl_request_id=r["hitl_request_id"], updated_at=r["updated_at"],
-    )
-
-
-def _hitl_req(r):
-    if r is None:
-        return None
-    return HITLRequest(
-        id=r["id"], tenant_id=r["tenant_id"], run_id=r["run_id"], type=HITLType(r["type"]),
-        urgency=Urgency(r["urgency"]), context=r["context"], question=r["question"],
-        status=HITLStatus(r["status"]), work_item_id=r["work_item_id"],
-        options=list(r["options"] or []), assignee=r["assignee"], timeout_at=r["timeout_at"],
-        verb=r["verb"], requested_by=r["requested_by"],
-        requested_on_behalf_of=r["requested_on_behalf_of"], request_fingerprint=r["request_fingerprint"], workspace_id=r["workspace_id"], department_scope=None if r["department_scope"] is None else list(r["department_scope"]),
-    )
-
-def _hitl_resp(r):
-    if r is None:
-        return None
-    return HITLResponse(
-        id=r["id"], request_id=r["request_id"], tenant_id=r["tenant_id"], decision=r["decision"],
-        respondent=r["respondent"], responded_at=r["responded_at"], notes=r["notes"] or "",
-    )
-
-
-def _audit(r):
-    if r is None:
-        return None
-    return AuditEvent(
-        tenant_id=r["tenant_id"], ts=r["ts"], actor=r["actor"],
-        action_type=ActionType(r["action_type"]), status=r["status"], run_id=r["run_id"],
-        parent_run_id=r["parent_run_id"], actor_tier=r["actor_tier"], depth=r["depth"],
-        noun=r["noun"], verb=r["verb"], target_adapter=r["target_adapter"],
-        on_behalf_of=r["on_behalf_of"], latency_ms=r["latency_ms"], tokens_used=r["tokens_used"],
-        cost_micros=r["cost_micros"], skills_loaded=list(r["skills_loaded"] or []),
-        detail=r["detail"] or {},
-        ip_address=r["ip_address"], user_agent=r["user_agent"], resource=r["resource"],
-        resource_id=r["resource_id"], workspace_id=r["workspace_id"],
-        seq=r["seq"], prev_hash=r["prev_hash"], hash=r["hash"],
-    )
-
-
-def _security(r):
-    if r is None:
-        return None
-    return SecurityEvent(
-        tenant_id=r["tenant_id"], ts=r["ts"], event_type=SecurityEventType(r["event_type"]),
-        reason=r["reason"], actor=r["actor"], actor_tier=r["actor_tier"],
-        workspace_id=r["workspace_id"], ip_address=r["ip_address"], user_agent=r["user_agent"],
-        resource=r["resource"], resource_id=r["resource_id"], on_behalf_of=r["on_behalf_of"],
-        detail=r["detail"] or {}, seq=r["seq"], prev_hash=r["prev_hash"], hash=r["hash"],
-    )
-
-
-def _anchor(r):
-    if r is None:
-        return None
-    return AuditRollupAnchor(
-        id=r["id"], tenant_id=r["tenant_id"], workspace_id=r["workspace_id"],
-        seq_start=r["seq_start"], seq_end=r["seq_end"], rollup_root_hash=r["rollup_root_hash"],
-        anchored_at=r["anchored_at"], is_dev_fallback=r["is_dev_fallback"],
-        rfc3161_token=r["rfc3161_token"], kms_signature=r["kms_signature"],
-    )
-
 
 def _like_escape(value: str) -> str:
     """Escape LIKE/ILIKE metacharacters so a user query is a pure substring match
@@ -2028,286 +1905,3 @@ def _like_escape(value: str) -> str:
     search term into a wildcard. This is substring hygiene; injection is already
     foreclosed because the value is a bound parameter, never interpolated."""
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-
-
-def _conversation(r):
-    if r is None:
-        return None
-    return Conversation(
-        id=r["id"], tenant_id=r["tenant_id"], user_id=r["user_id"], title=r["title"],
-        status=ConversationStatus(r["status"]), created_at=r["created_at"],
-        updated_at=r["updated_at"],
-    )
-
-
-def _message(r):
-    if r is None:
-        return None
-    return ConversationMessage(
-        id=r["id"], conversation_id=r["conversation_id"], tenant_id=r["tenant_id"],
-        role=MessageRole(r["role"]), content=r["content"], run_id=r["run_id"],
-        hitl_request_id=r["hitl_request_id"], events=list(r["events"] or []),
-        attachments=list(r["attachments"] or []), superseded_by=r["superseded_by"],
-        created_at=r["created_at"],
-    )
-
-
-def _summary(r):
-    if r is None:
-        return None
-    return ConversationSummary(
-        id=r["id"], conversation_id=r["conversation_id"], tenant_id=r["tenant_id"],
-        up_to_message_id=r["up_to_message_id"], covered_count=r["covered_count"],
-        summary=r["summary"], created_at=r["created_at"],
-    )
-
-
-def _revision(r):
-    if r is None:
-        return None
-    return ConfigRevision(
-        id=r["id"], tenant_id=r["tenant_id"], kind=r["kind"], ref=r["ref"],
-        version=r["version"], payload=r["payload"], actor=r["actor"],
-        created_at=r["created_at"], rolled_back=r["rolled_back"],
-    )
-
-
-def _eval_case(r):
-    if r is None:
-        return None
-    return EvalCase(
-        id=r["id"], tenant_id=r["tenant_id"], target_kind=r["target_kind"],
-        target_ref=r["target_ref"], input=r["input"], assertions=r["assertions"],
-        labels=list(r["labels"] or []),
-    )
-
-
-def _eval_run(r):
-    if r is None:
-        return None
-    return EvalRun(
-        id=r["id"], tenant_id=r["tenant_id"], case_id=r["case_id"], passed=r["passed"],
-        score=r["score"], run_id=r["run_id"], detail=r["detail"] or {},
-        created_at=r["created_at"],
-    )
-
-
-def _notif(r):
-    if r is None:
-        return None
-    return NotificationPref(
-        id=r["id"], tenant_id=r["tenant_id"], scope_kind=r["scope_kind"],
-        scope_ref=r["scope_ref"], event_type=r["event_type"], channel=r["channel"],
-        target=r["target"], enabled=r["enabled"],
-    )
-
-
-def _personal(r):
-    if r is None:
-        return None
-    return PersonalAgent(
-        id=r["id"], tenant_id=r["tenant_id"], user_id=r["user_id"], runtime=r["runtime"],
-        skills=list(r["skills"] or []), enabled=r["enabled"],
-    )
-
-
-def _mem_fact(r):
-    if r is None:
-        return None
-    return MemoryFact(
-        id=r["id"], tenant_id=r["tenant_id"], owner_scope=r["owner_scope"],
-        engine_ref=r["engine_ref"], kind=r["kind"], source_kind=r["source_kind"],
-        source_ref=r["source_ref"], data_class=r["data_class"], content=r["content"] or "",
-        created_at=r["created_at"], redacted=r["redacted"],
-    )
-
-
-def _mem_ingestion(r):
-    if r is None:
-        return None
-    return MemoryIngestion(
-        id=r["id"], tenant_id=r["tenant_id"], source_kind=r["source_kind"],
-        source_ref=r["source_ref"], owner_scope=r["owner_scope"], status=r["status"],
-        hatchet_run_id=r["hatchet_run_id"], facts_added=r["facts_added"],
-        screened=r["screened"], detail=r["detail"] or {}, created_at=r["created_at"],
-    )
-
-
-def _mem_erasure(r):
-    if r is None:
-        return None
-    return MemoryErasure(
-        id=r["id"], tenant_id=r["tenant_id"], requested_by=r["requested_by"],
-        target=r["target"], scope=r["scope"], engine_confirmed=r["engine_confirmed"],
-        transcript_handled=r["transcript_handled"], facts_removed=r["facts_removed"],
-        created_at=r["created_at"], completed_at=r["completed_at"],
-    )
-
-
-def _mem_projection(r):
-    if r is None:
-        return None
-    return MemoryProjectionStatus(
-        id=r["id"], tenant_id=r["tenant_id"], projection_id=r["projection_id"],
-        operation=r["operation"], status=r["status"], fact_id=r["fact_id"],
-        target=r["target"], projection_ref=r["projection_ref"], error=r["error"],
-        created_at=r["created_at"], updated_at=r["updated_at"],
-    )
-
-
-def _user(r):
-    if r is None:
-        return None
-    return User(
-        id=r["id"], tenant_id=r["tenant_id"], email=r["email"],
-        display_name=r["display_name"], groups=list(r["groups"] or []), role=r["role"],
-        scope=r["scope"] or {}, status=r["status"], source=r["source"],
-        source_group=r["source_group"], last_seen_at=r["last_seen_at"],
-        created_at=r["created_at"],
-    )
-
-
-def _pat(r):
-    if r is None:
-        return None
-    return PersonalAccessToken(
-        id=r["id"], tenant_id=r["tenant_id"], user_id=r["user_id"], name=r["name"],
-        token_hash=r["token_hash"], scope=list(r["scope"] or []), created_at=r["created_at"],
-        expires_at=r["expires_at"], last_used_at=r["last_used_at"], revoked=r["revoked"],
-    )
-
-
-def _invitation(r):
-    if r is None:
-        return None
-    return UserInvitation(
-        id=r["id"], tenant_id=r["tenant_id"], email=r["email"],
-        intended_role=r["intended_role"], intended_scope=r["intended_scope"] or {},
-        invited_by=r["invited_by"], created_at=r["created_at"], expires_at=r["expires_at"],
-        status=r["status"],
-        token_hash=(r["token_hash"] if "token_hash" in r.keys() else None),
-        workspace_id=(r["workspace_id"] if "workspace_id" in r.keys() else None),
-        provision_workspace_name=(
-            r["provision_workspace_name"] if "provision_workspace_name" in r.keys() else None
-        ),
-        provision_org_name=(
-            r["provision_org_name"] if "provision_org_name" in r.keys() else None
-        ),
-    )
-
-
-def _setting(r):
-    if r is None:
-        return None
-    return UserSetting(
-        tenant_id=r["tenant_id"], user_id=r["user_id"], key=r["key"], value=r["value"],
-        updated_at=r["updated_at"],
-    )
-
-
-def _session(r):
-    if r is None:
-        return None
-    return UserSession(
-        id=r["id"], tenant_id=r["tenant_id"], user_id=r["user_id"], client=r["client"],
-        created_at=r["created_at"], last_seen_at=r["last_seen_at"], revoked=r["revoked"],
-        token_hash=(r["token_hash"] if "token_hash" in r.keys() else None),
-        expires_at=(r["expires_at"] if "expires_at" in r.keys() else None),
-        csrf_token=(r["csrf_token"] if "csrf_token" in r.keys() else None),
-        active_workspace_id=(
-            r["active_workspace_id"] if "active_workspace_id" in r.keys() else None
-        ),
-        active_org_id=(
-            r["active_org_id"] if "active_org_id" in r.keys() else None
-        ),
-    )
-
-
-def _user_totp(r):
-    if r is None:
-        return None
-    return UserTotp(
-        tenant_id=r["tenant_id"], user_id=r["user_id"], secret_ref=r["secret_ref"],
-        enrolled=r["enrolled"], created_at=r["created_at"], updated_at=r["updated_at"],
-    )
-
-
-def _tfa_challenge(r):
-    if r is None:
-        return None
-    return TwoFactorChallenge(
-        tenant_id=r["tenant_id"], token_hash=r["token_hash"], user_id=r["user_id"],
-        expires_at=r["expires_at"], created_at=r["created_at"],
-    )
-
-
-def _org(r):
-    if r is None:
-        return None
-    return Organisation(
-        id=r["id"], name=r["name"], slug=r["slug"], settings=r["settings"] or {},
-        allow_own_ai_keys=r["allow_own_ai_keys"],
-        require_two_factor=r["require_two_factor"],
-        created_at=r["created_at"], updated_at=r["updated_at"],
-    )
-
-
-def _workspace(r):
-    if r is None:
-        return None
-    return Workspace(
-        id=r["id"], tenant_id=r["tenant_id"], name=r["name"], slug=r["slug"],
-        settings=r["settings"] or {}, status=r["status"],
-        created_at=r["created_at"], updated_at=r["updated_at"],
-    )
-
-
-def _org_member(r):
-    if r is None:
-        return None
-    return OrgMember(
-        user_id=r["user_id"], tenant_id=r["tenant_id"], role=r["role"],
-        created_at=r["created_at"],
-    )
-
-
-def _workspace_member(r):
-    if r is None:
-        return None
-    return WorkspaceMember(
-        user_id=r["user_id"], workspace_id=r["workspace_id"],
-        tenant_id=r["tenant_id"], role=r["role"],
-        permissions=r["permissions"] or {}, created_at=r["created_at"],
-    )
-
-
-def _ai_config(r):
-    if r is None:
-        return None
-    return AiConfig(
-        tenant_id=r["tenant_id"], level=r["level"], scope_id=r["scope_id"],
-        provider=r["provider"], model=r["model"], credential_ref=r["credential_ref"],
-        base_url=r["base_url"],
-        created_at=r["created_at"], updated_at=r["updated_at"],
-    )
-
-
-def _memory(r):
-    if r is None:
-        return None
-    return MemoryItem(
-        id=r["id"], tenant_id=r["tenant_id"], owner_scope=r["owner_scope"], kind=r["kind"],
-        content=r["content"], embedding=r["embedding"], source_ref=r["source_ref"],
-        data_class=r["data_class"], created_at=r["created_at"],
-    )
-
-
-def _budget(r):
-    if r is None:
-        return None
-    return Budget(
-        id=r["id"], tenant_id=r["tenant_id"], scope_type=r["scope_type"],
-        token_limit=r["token_limit"], cost_limit_micros=r["cost_limit_micros"],
-        hard_stop=r["hard_stop"], window=r["window"], spent_tokens=r["spent_tokens"],
-        spent_micros=r["spent_micros"],
-    )

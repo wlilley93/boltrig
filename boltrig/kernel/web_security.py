@@ -45,13 +45,43 @@ _SECURITY_HEADERS = {
 _DEFAULT_MAX_BODY = 1 * 1024 * 1024  # 1 MiB request-body cap (RES-01)
 
 
+def client_ip(request: Request) -> str | None:
+    """The caller's client IP for audit provenance and per-IP rate limits.
+
+    ``CF-Connecting-IP`` is honored ONLY when the deployment opts in with
+    ``BOLTRIG_TRUST_CF_CONNECTING_IP`` (set it only behind the Cloudflare tunnel,
+    where CF sets the header and strips any client-supplied copy); otherwise the
+    header is client-spoofable and the TCP peer is used. X-Forwarded-For is
+    deliberately NEVER trusted (spoofable unless behind a known trusted proxy).
+    """
+    # Lazy: boltrig.config pulls in identity, which imports kernel.app - a
+    # module-level import here would close a cycle.
+    from boltrig.config.environment import is_truthy
+
+    if is_truthy(os.environ.get("BOLTRIG_TRUST_CF_CONNECTING_IP")):
+        cf = request.headers.get("cf-connecting-ip")
+        if cf:
+            return cf
+    return request.client.host if request.client else None
+
+# Per-path body-cap overrides: the Knowledge upload route stages immutable
+# originals up to knowledge.models.MAX_UPLOAD_BYTES (25 MiB) over HTTP (KNO-01),
+# so the global 1 MiB cap would reject every upload above 1 MiB first. The route
+# still enforces its own exact cap; every other path keeps the global limit.
+_PATH_BODY_CAPS = (("/v1/knowledge/uploads/", 25 * 1024 * 1024),)
+
+
 def _csv(value: str | None) -> list[str]:
     return [p.strip() for p in (value or "").split(",") if p.strip()]
 
 
 def _production_signal(env: dict) -> bool:
     """Return True if a production signal is present in the env (IAM-09)."""
-    if (env.get("BOLTRIG_PRODUCTION") or "").strip().lower() in {"1", "true", "yes", "on"}:
+    # Lazy: boltrig.config pulls in identity, which imports kernel.app - a
+    # module-level import here would close a cycle (see client_ip).
+    from boltrig.config.environment import is_truthy
+
+    if is_truthy(env.get("BOLTRIG_PRODUCTION")):
         return True
     for key in ("ENV", "BOLTRIG_ENV", "APP_ENV"):
         if (env.get(key) or "").strip().lower() in {"prod", "production", "staging"}:
@@ -89,16 +119,23 @@ class BodySizeLimitMiddleware:
 
     _BODY_METHODS = frozenset({"POST", "PUT", "PATCH"})
 
+    def _max_for(self, path: str) -> int:
+        for prefix, cap in _PATH_BODY_CAPS:
+            if path.startswith(prefix):
+                return cap
+        return self._max
+
     async def __call__(self, scope, receive, send) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
 
+        max_bytes = self._max_for(scope.get("path") or "")
         headers = dict(scope.get("headers", []))
         cl = headers.get(b"content-length")
         if cl is not None:
             try:
-                if int(cl.decode()) > self._max:
+                if int(cl.decode()) > max_bytes:
                     await self._error(send, 413, "payload_too_large")
                     return
             except ValueError:
@@ -123,7 +160,7 @@ class BodySizeLimitMiddleware:
                 chunk = msg.get("body", b"")
                 chunks.append(chunk)
                 total += len(chunk)
-                if total > self._max:
+                if total > max_bytes:
                     await self._error(send, 413, "payload_too_large")
                     return
                 if not msg.get("more_body", False):

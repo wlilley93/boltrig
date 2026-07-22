@@ -1,14 +1,15 @@
 """The kernel's MCP server face (Round Two, Epic MCP).
 
-Granted verbs are advertised as MCP tools and every ``tools/call`` runs the
+Granted verbs are advertised as MCP tools, adapter-declared knowledge mappings
+are advertised as MCP resources, and every tool or resource read runs the
 unchanged dispatch chokepoint (P2, SEC-26). A connection is scoped by a per-run
 token (skill grants ∩ tenant ceiling), so a run sees and can call only its own
-tools (SEC-23, FR-MCP-02). Credentials are resolved inside the kernel and never
-cross this boundary (SEC-27).
+tools and resources (SEC-23, FR-MCP-02). Credentials are resolved inside the
+kernel and never cross this boundary (SEC-27).
 
-This is a thin JSON-RPC 2.0 face (the MCP wire shape: ``initialize`` /
-``tools/list`` / ``tools/call``); it adds no policy of its own, only translation
-into ``kernel.invoke`` - so the core stays thin (P1) and dep-light.
+This is a thin JSON-RPC 2.0 face (the MCP wire shape: ``initialize``, tools, and
+resources); it adds no policy of its own, only translation into
+``kernel.invoke`` - so the core stays thin (P1) and dep-light.
 """
 
 from __future__ import annotations
@@ -20,6 +21,9 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from urllib.parse import quote, unquote
+
+from boltrig.adapters.base import McpResourceSpec
 
 from boltrig.models import (
     DegradedMode,
@@ -68,7 +72,17 @@ class McpFace:
     def __init__(self, kernel, *, clock: Callable[[], datetime] = utcnow) -> None:
         self._kernel = kernel
         self._tokens: dict[str, RunToken] = {}
+        self._resources: dict[tuple[str, str], tuple[McpResourceSpec, ...]] = {}
         self._clock = clock
+
+    def register_resources(
+        self,
+        tenant_id: str,
+        adapter_id: str,
+        specs: tuple[McpResourceSpec, ...] | list[McpResourceSpec],
+    ) -> None:
+        """Register adapter-declared resource mappings as data."""
+        self._resources[(tenant_id, adapter_id)] = tuple(specs)
 
     @staticmethod
     def _token_key(token: str) -> str:
@@ -112,6 +126,13 @@ class McpFace:
     def is_run_token(self, token: str | None) -> bool:
         """Whether ``token`` is a live run-scoped token (vs a user bearer/PAT)."""
         return self._lookup(token) is not None
+
+    def lookup_run_token(self, token: str | None) -> RunToken | None:
+        """Public read of a live run token record (or None), for non-JSON-RPC
+        surfaces that authenticate over the SAME run-token seam - the channel
+        gateway's outbox links (decision 0003 Phase 2). Same hash-keyed,
+        TTL-bound, revocable registry; no second token scheme."""
+        return self._lookup(token)
 
     def _context(
         self, rt: RunToken, *, ip_address: str | None = None, user_agent: str | None = None
@@ -189,9 +210,12 @@ class McpFace:
         method = request.get("method")
         params = request.get("params") or {}
         if method == "initialize":
+            capabilities: dict = {"tools": {"listChanged": False}}
+            if self._resource_specs(rt.tenant_id):
+                capabilities["resources"] = {"listChanged": False}
             return _ok(rid, {
                 "protocolVersion": _PROTOCOL_VERSION,
-                "capabilities": {"tools": {"listChanged": False}},
+                "capabilities": capabilities,
                 "serverInfo": {"name": "boltrig-kernel", "version": "0.1.0"},
             })
         if method in ("notifications/initialized", "ping"):
@@ -202,7 +226,124 @@ class McpFace:
             return _ok(rid, await self._call_tool(
                 rt, params, ip_address=ip_address, user_agent=user_agent
             ))
+        if method == "resources/list":
+            try:
+                resources = await self._list_resources(
+                    rt, ip_address=ip_address, user_agent=user_agent
+                )
+            except BoltrigError as exc:
+                return _err(rid, -32002, exc.reason)
+            return _ok(rid, {"resources": resources})
+        if method == "resources/read":
+            try:
+                contents = await self._read_resource(
+                    rt,
+                    str(params.get("uri") or ""),
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                )
+            except (BoltrigError, ValueError):
+                return _err(rid, -32002, "resource not found or not permitted")
+            return _ok(rid, {"contents": contents})
         return _err(rid, -32601, f"method not found: {method}")
+
+    def _resource_specs(self, tenant_id: str) -> tuple[McpResourceSpec, ...]:
+        return tuple(
+            spec
+            for (tenant, _adapter), specs in self._resources.items()
+            if tenant == tenant_id
+            for spec in specs
+        )
+
+    async def _visible_resource_specs(
+        self, rt: RunToken
+    ) -> tuple[McpResourceSpec, ...]:
+        permissions = await self._kernel.store.get_tenant_permissions(rt.tenant_id)
+        return tuple(
+            spec
+            for spec in self._resource_specs(rt.tenant_id)
+            if permissions.grants.permits(spec.list_verb)
+            and permissions.grants.permits(spec.read_verb)
+            and rt.grants.permits(spec.list_verb)
+            and rt.grants.permits(spec.read_verb)
+        )
+
+    async def _invoke_resource_verb(
+        self,
+        rt: RunToken,
+        verb: str,
+        params: dict,
+        *,
+        ip_address: str | None,
+        user_agent: str | None,
+    ) -> dict:
+        definition = await self._kernel.store.get_verb(rt.tenant_id, verb)
+        if definition is None:
+            raise ValueError("resource verb is unavailable")
+        return await self._kernel.invoke(
+            definition.noun_id,
+            verb,
+            params,
+            self._context(rt, ip_address=ip_address, user_agent=user_agent),
+        )
+
+    async def _list_resources(
+        self,
+        rt: RunToken,
+        *,
+        ip_address: str | None,
+        user_agent: str | None,
+    ) -> list[dict]:
+        resources: list[dict] = []
+        for spec in await self._visible_resource_specs(rt):
+            output = await self._invoke_resource_verb(
+                rt,
+                spec.list_verb,
+                {"limit": 100},
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+            rows = output.get(spec.collection_key) or []
+            for row in rows if isinstance(rows, list) else []:
+                if not isinstance(row, dict) or not row.get(spec.id_key):
+                    continue
+                resource = {
+                    "uri": spec.uri_prefix + quote(str(row[spec.id_key]), safe=""),
+                    "name": str(row.get(spec.name_key) or row[spec.id_key]),
+                }
+                description = row.get(spec.description_key)
+                if description:
+                    resource["description"] = str(description)
+                resources.append(resource)
+        return resources
+
+    async def _read_resource(
+        self,
+        rt: RunToken,
+        uri: str,
+        *,
+        ip_address: str | None,
+        user_agent: str | None,
+    ) -> list[dict]:
+        for spec in await self._visible_resource_specs(rt):
+            if not uri.startswith(spec.uri_prefix):
+                continue
+            resource_id = unquote(uri[len(spec.uri_prefix):])
+            if not resource_id or "/" in resource_id:
+                break
+            output = await self._invoke_resource_verb(
+                rt,
+                spec.read_verb,
+                {spec.read_id_param: resource_id},
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+            blob = output.get(spec.blob_key)
+            media_type = output.get(spec.media_type_key)
+            if not isinstance(blob, str) or not isinstance(media_type, str):
+                break
+            return [{"uri": uri, "mimeType": media_type, "blob": blob}]
+        raise ValueError("resource not found")
 
     async def _list_tools(self, rt: RunToken) -> list[dict]:
         """Granted-only: tenant ceiling ∩ the run's grants (SEC-23, FR-MCP-02)."""

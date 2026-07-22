@@ -32,7 +32,7 @@ export interface ActivityNode {
   // present and falls back to the uniform treatment otherwise.
   dotSize?: number; // 8 session, 12 agent/delegation, 7 tool, 9 ephemeral, 8 pending
   dotColor?: string; // overrides the tone-driven dot background when set
-  dotExtra?: string; // CSS border string, e.g. "2px solid #04060D" for agent dots
+  dotExtra?: string; // CSS border string using semantic custom properties
   hasLine?: boolean; // bottom connecting line; false suppresses it (pending)
   hasAvatar?: boolean;
   avatarColor?: string;

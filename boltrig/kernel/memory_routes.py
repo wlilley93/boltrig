@@ -29,7 +29,10 @@ def register_memory_routes(app, *, principal_dep, get_kernel) -> None:
         return memory_owner_scopes(p.subject, p.role, p.scope)
 
     def _ctx(p):
-        return p.context(extra={"memory_scopes": _scopes(p)})
+        # Server-derived owner scopes are kernel-trusted: they ride the trusted
+        # stamping channel so the caller-body denylist in Principal.context can
+        # never strip (or spoof) them.
+        return p.context(trusted_extra={"memory_scopes": _scopes(p)})
 
     @app.post("/v1/memory/recall")
     async def recall(body: dict, k=K, p=P) -> JSONResponse:

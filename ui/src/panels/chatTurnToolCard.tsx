@@ -4,7 +4,7 @@
 // additionally carries the full input/output, which the Run drawer expands.
 
 import type { ToolEntry } from "@/panels/chatTurnTypes";
-import { StatusBadge, TOOL_STATUS } from "@/panels/ux";
+import { CONSEQUENCE, StatusBadge, TOOL_STATUS } from "@/panels/ux";
 
 function toolLabel(verb: string): string {
   const clean = verb.replace(/^control\./, "").replace(/\./g, " ");
@@ -17,27 +17,15 @@ function toolStatusClass(status: string): string {
       return "tool-card--ok";
     case "pending":
       return "tool-card--running";
+    case "pending_human":
+    case "paused":
+      return "tool-card--paused";
     case "degraded":
       return "tool-card--degraded";
     case "error":
       return "tool-card--denied";
     default:
       return "tool-card--denied";
-  }
-}
-
-function toolStatusColor(status: string): string {
-  switch (status) {
-    case "ok":
-      return "#3FB984";
-    case "pending":
-      return "#3DD3F0";
-    case "degraded":
-      return "#F5A623";
-    case "error":
-      return "#F0654A";
-    default:
-      return "#F0654A";
   }
 }
 
@@ -59,16 +47,18 @@ export function ToolCard({ tool }: { tool: ToolEntry }) {
   const resultKeys = tool.resultKeys ?? [];
   const hasIo = tool.input !== undefined || tool.output !== undefined;
   const statusClass = toolStatusClass(tool.status);
-  const statusColor = toolStatusColor(tool.status);
 
   const head = (
     <>
       <span
         className="tool-card__dot"
-        style={{ color: statusColor, background: statusColor, boxShadow: "0 0 5px currentColor" }}
         aria-hidden="true"
       />
       <span className="tool-card__label">{toolLabel(tool.verb)}</span>
+      <code className="badge badge--verb">{tool.verb}</code>
+      {tool.consequence && (
+        <StatusBadge value={tool.consequence} glossary={CONSEQUENCE} compact />
+      )}
       <StatusBadge value={tool.status} glossary={TOOL_STATUS} compact />
       <span className="tool-card__time">{tool.status}</span>
       {hasIo && (
@@ -88,13 +78,24 @@ export function ToolCard({ tool }: { tool: ToolEntry }) {
         receipt <span>{tool.callId ?? tool.key}</span>
       </div>
       <div>
-        policy <span>policies approved</span>
+        policy <span>governed through kernel</span>
       </div>
       <div>{tool.status}</div>
+      {tool.input !== undefined && (
+        <div className="tool-card__payload">
+          <span className="tool-card__payload-label">input data</span>
+          <pre className="tool-card__output">
+            {typeof tool.input === "string" ? tool.input : JSON.stringify(tool.input, null, 2)}
+          </pre>
+        </div>
+      )}
       {tool.output !== undefined && (
-        <pre className="tool-card__output">
-          {typeof tool.output === "string" ? tool.output : JSON.stringify(tool.output, null, 2)}
-        </pre>
+        <div className="tool-card__payload">
+          <span className="tool-card__payload-label">output data</span>
+          <pre className="tool-card__output">
+            {typeof tool.output === "string" ? tool.output : JSON.stringify(tool.output, null, 2)}
+          </pre>
+        </div>
       )}
     </div>
   );

@@ -9,6 +9,7 @@ toward lockout; an expired/locked pairing is denied fail-closed.
 """
 
 import asyncio
+import json
 import time
 
 import pytest
@@ -23,6 +24,7 @@ from boltrig.kernel import Kernel
 from boltrig.kernel.app import create_app
 from boltrig.models import GrantSet, TenantPermissions
 from boltrig.store import InMemoryStore
+from boltrig.store.sealing import is_sealed
 from tests.approval import approved_request
 
 T = "acme"
@@ -98,6 +100,42 @@ def test_connect_stores_secret_kernel_side_never_returns_it():
     assert ch.credential_ref is not None
     ref = asyncio.run(store.get_credential_ref(T, ch.credential_ref))
     assert ref == {"secret": SECRET}
+    # ... and AT REST the row is a sealed envelope, never plaintext (SEC-169).
+    raw = store._creds[(T, ch.credential_ref)]
+    assert is_sealed(raw) and SECRET not in json.dumps(raw)
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-01")
+def test_secret_reference_path_signs_end_to_end(monkeypatch):
+    # The doctrine-compliant path: connect with a REFERENCE, so the DB row holds
+    # {store, ref} only and the material lives behind the kernel SecretStore seam
+    # (here: the env store). Ingress resolves it kernel-side at verify time.
+    kernel, store = _kernel()
+    monkeypatch.setenv("BOLTRIG_TEST_WHSEC", SECRET)
+    c = _client(kernel)
+    r = _approved(
+        c, kernel, "POST", "/v1/channels",
+        json={"platform": "webhook", "name": "Ref", "signing_secret_ref": "BOLTRIG_TEST_WHSEC",
+              "config": {"sender_field": "sender"}},
+    )
+    assert r.status_code == 201
+    assert SECRET not in r.text
+    ch_id = r.json()["channel"]
+    ch = asyncio.run(store.get_channel(T, ch_id))
+    ref = asyncio.run(store.get_credential_ref(T, ch.credential_ref))
+    assert ref == {"store": "env", "ref": "BOLTRIG_TEST_WHSEC", "kind": "webhook_signing"}
+
+    _approved(
+        c, kernel, "POST", f"/v1/channels/{ch_id}/bindings",
+        json={"external_user_id": "U1", "subject": "bob", "role": "member"},
+    )
+    payload = {"sender": "U1", "type": "message", "text": "hi", "id": "e1"}
+    # unsigned -> 401; signed with the env-held material -> 202 (work item minted)
+    assert c.post(f"/v1/channels/{ch_id}/inbound", json=payload).status_code == 401
+    r = c.post(f"/v1/channels/{ch_id}/inbound", json=payload, headers=_signed(SECRET, payload))
+    assert r.status_code == 202
+    assert asyncio.run(store.list_work_items(T))
 
 
 @pytest.mark.security

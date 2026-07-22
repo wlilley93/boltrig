@@ -13,7 +13,8 @@ export type RunNodeStatus =
   | "ok"
   | "failed"
   | "error"
-  | "skipped";
+  | "skipped"
+  | "paused";
 
 export type StepNodeData = {
   action: string;

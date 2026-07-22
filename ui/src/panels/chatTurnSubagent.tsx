@@ -20,10 +20,10 @@ export function SubagentCard({
   color?: string;
   onOpenRun?: (runId: string) => void;
 }) {
-  // Resolve identity from the entry, falling back to the palette colour passed
-  // by the parent (SUBAGENT_COLORS by index) and a derived name/initials so no
-  // row shows the old hardcoded "Worker"/"W" (brief sec 6.4).
-  const agentColor = sub.color ?? color ?? "#5E69DD";
+  // Runtime identity remains textual; one semantic palette keeps heterogeneous
+  // providers visually within the same instrument. Name and initials still
+  // come from the event when present.
+  const agentColor = color ?? "var(--color-accent-2)";
   const name = sub.name ?? "Sub-agent";
   const role = sub.role ?? "ephemeral";
   const initials = sub.initials ?? initialsOf(name);

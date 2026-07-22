@@ -119,9 +119,14 @@ async def provision_user(
     """Provision (or refresh) a user on authenticated login (US-USR-01/02).
 
     Resolves the role/scope from the caller's mapped IdP groups; if none match,
-    honours a pending invitation for the verified email; otherwise returns
-    ``None`` (fail-closed - the caller is denied). A previously deactivated user
-    stays deactivated until an admin re-enables them (re-login cannot self-revive).
+    honours a pending, UNEXPIRED invitation for the verified email (consumed
+    atomically, single-use); otherwise returns ``None`` (fail-closed - the
+    caller is denied). A previously provisioned user's stored role / scope /
+    status is authoritative (admin adjustments and deactivations stick,
+    US-USR-03): re-login refreshes presence metadata only, mirroring
+    ``ensure_user_record`` - it never recomputes role/scope over an admin's
+    change, and a deactivated user stays deactivated until an admin re-enables
+    them (re-login cannot self-revive).
     """
     # RLS-live: the tenant is known on entry (from the verified IdP token), and
     # every read/write below (invitations, users) is RLS-scoped. Bind it before
@@ -130,6 +135,19 @@ async def provision_user(
     from boltrig.store.postgres import set_current_tenant
 
     set_current_tenant(tenant_id)
+
+    # A previously provisioned user's stored role / scope / status is
+    # authoritative (admin adjustments stick, US-USR-03): re-login refreshes
+    # presence metadata only, mirroring ensure_user_record.
+    existing = await store.get_user(tenant_id, subject)
+    if existing is not None:
+        existing.last_seen_at = utcnow()
+        existing.groups = list(groups)
+        if email:
+            existing.email = email
+        await store.upsert_user(existing)
+        return existing
+
     role, scope = resolve_role(groups, mappings)
     source = "idp"
     source_group: str | None = None
@@ -138,28 +156,29 @@ async def provision_user(
         inv = await store.find_pending_invitation(tenant_id, email) if email else None
         if inv is None:
             return None  # unmapped and un-invited -> denied (US-USR-01)
+        if inv.expires_at is not None and inv.expires_at <= utcnow():
+            return None  # an EXPIRED invitation confers nothing (accept-invite parity)
+        # Atomic single-use consume (CAS): only the winner is provisioned; a lost
+        # race confers nothing either.
+        if not await store.consume_invitation(tenant_id, inv.id):
+            return None
         role, scope = inv.intended_role, dict(inv.intended_scope)
         source = "invitation"
-        inv.status = "accepted"
-        await store.update_invitation(inv)
     else:
         source_group = _conferring_group(groups, mappings, role)
 
-    existing = await store.get_user(tenant_id, subject)
-    status = existing.status if existing else "active"  # deactivation persists
     user = User(
         id=subject,
         tenant_id=tenant_id,
         email=email,
-        display_name=existing.display_name if existing else None,
         groups=list(groups),
         role=role,
         scope=scope,
-        status=status,
+        status="active",
         source=source,
         source_group=source_group,
         last_seen_at=utcnow(),
-        created_at=existing.created_at if existing else utcnow(),
+        created_at=utcnow(),
     )
     await store.upsert_user(user)
     return user

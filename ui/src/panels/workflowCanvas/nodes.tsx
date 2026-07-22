@@ -1,6 +1,6 @@
 // React Flow node components for the v3 automations canvas (design brief
 // sec 22.3). Step nodes render as a 56x56 square card with a coloured filled
-// icon, status dot, optional high-consequence shield badge, and connection
+// icon, status glyph, optional high-consequence shield badge, and connection
 // ports; the label + a mono config preview sit below the card.
 
 import { Handle, Position, type NodeProps, type NodeTypes } from "@xyflow/react";
@@ -8,13 +8,14 @@ import { DEFAULT_NODE_KIND, findKind } from "./nodeTaxonomy";
 import { NodeIcon, ShieldBadge } from "./nodeIcons";
 import type { RunNodeStatus, StepNodeData, TriggerNodeData } from "./types";
 
-const RUN_COLOR: Record<RunNodeStatus, string> = {
-  pending: "#7E95B0",
-  running: "#3DD3F0",
-  ok: "#3FB984",
-  failed: "#F0654A",
-  error: "#F0654A",
-  skipped: "#4E637E",
+const RUN_GLYPH: Record<RunNodeStatus, string> = {
+  pending: "·",
+  running: "›",
+  ok: "✓",
+  failed: "×",
+  error: "!",
+  skipped: "−",
+  paused: "‖",
 };
 
 function configPreview(d: StepNodeData): string {
@@ -30,38 +31,35 @@ function configPreview(d: StepNodeData): string {
 }
 
 function NodeCard({
-  color,
   icon,
-  selected,
   consequence,
   runStatus,
 }: {
-  color: string;
   icon: string;
-  selected: boolean;
   consequence?: string;
   runStatus?: RunNodeStatus;
 }) {
-  const statusColor = runStatus ? RUN_COLOR[runStatus] : null;
   return (
     <div
-      className="wf3-node__card"
-      style={{ borderColor: selected ? color : "rgba(255,255,255,0.1)" }}
+      className={`wf3-node__card${runStatus ? ` wf3-node__card--${runStatus}` : ""}`}
     >
-      {statusColor && (
+      {runStatus && (
         <span
-          className="wf3-node__status"
-          style={{ background: statusColor, borderColor: "rgba(18,22,34,0.95)" }}
-        />
+          className={`wf3-node__status wf3-node__status--${runStatus}`}
+          aria-label={`Step ${runStatus}`}
+          title={`Step ${runStatus}`}
+        >
+          {RUN_GLYPH[runStatus]}
+        </span>
       )}
       {consequence === "high" && (
         <span className="wf3-node__shield" title="High consequence step">
-          <span className="wf3-node__shield-bg" style={{ background: "#FF7A45" }}>
+          <span className="wf3-node__shield-bg">
             <ShieldBadge size={9} />
           </span>
         </span>
       )}
-      <span className="wf3-node__icon" style={{ color }}>
+      <span className="wf3-node__icon">
         <NodeIcon name={icon} size={21} />
       </span>
       <Handle
@@ -82,15 +80,17 @@ function WorkflowNodeView({ data, selected }: NodeProps) {
   const d = data as StepNodeData;
   const meta = findKind(d.nodeKind) ?? findKind(DEFAULT_NODE_KIND)!;
   return (
-    <div className="wf3-node" data-selected={selected ? "true" : "false"}>
+    <div
+      className="wf3-node"
+      data-selected={selected ? "true" : "false"}
+      style={{ "--wf-node-color": meta.color } as React.CSSProperties}
+    >
       <NodeCard
-        color={meta.color}
         icon={meta.icon}
-        selected={!!selected}
         consequence={d.consequence}
         runStatus={d.runStatus}
       />
-      <div className="wf3-node__label" style={{ color: selected ? meta.color : undefined }}>
+      <div className="wf3-node__label">
         {d.label}
       </div>
       <div className="wf3-node__preview">{configPreview(d)}</div>
@@ -102,11 +102,13 @@ function TriggerNodeView({ data, selected }: NodeProps) {
   const d = data as TriggerNodeData;
   const meta = findKind("trigger")!;
   return (
-    <div className="wf3-node" data-selected={selected ? "true" : "false"}>
+    <div
+      className="wf3-node"
+      data-selected={selected ? "true" : "false"}
+      style={{ "--wf-node-color": meta.color } as React.CSSProperties}
+    >
       <NodeCard
-        color={meta.color}
         icon={meta.icon}
-        selected={!!selected}
       />
       <div className="wf3-node__label">{d.label}</div>
       <div className="wf3-node__preview">{d.triggerType} trigger</div>

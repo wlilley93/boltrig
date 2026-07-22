@@ -14,6 +14,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from boltrig.config.environment import is_truthy
 from boltrig.models import AgentCapability, InvocationContext
 
 
@@ -200,7 +201,7 @@ def build_observability_sink(
         return LangfuseObservabilitySink(client)
     env = os.environ if env is None else env
     enabled = _short(env.get("BOLTRIG_LANGFUSE_ENABLED") or env.get("LANGFUSE_ENABLED"))
-    if enabled.lower() not in {"1", "true", "yes", "on"}:
+    if not is_truthy(enabled):
         return NoopObservabilitySink()
     public_key = _short(env.get("LANGFUSE_PUBLIC_KEY"))
     secret_key = _short(env.get("LANGFUSE_SECRET_KEY"))

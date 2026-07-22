@@ -83,16 +83,47 @@ async def test_live_pid_and_exact_process_identity_cannot_alias_cells() -> None:
 
 @pytest.mark.unit
 async def test_registry_retains_tombstones_and_fails_closed_at_capacity() -> None:
-    registry = ModelProxyProcessRegistry(max_cells=1)
+    """LIVE records fail closed at capacity; tombstones are bounded separately.
+
+    A retained tombstone never consumes LIVE capacity and keeps its identity
+    non-reusable; once the terminal bound is exceeded the OLDEST tombstone is
+    evicted, making only that evicted identity reusable.
+    """
+
+    registry = ModelProxyProcessRegistry(max_cells=1, max_terminal_tombstones=1)
     first = cell_scope()
     await registry.register(first, expected_uid=DEFAULT_UID, expected_gid=DEFAULT_GID)
-    await registry.revoke(first)
+    assert await registry.revoke(first)
 
+    # A retained tombstone does not consume LIVE capacity.
+    second_scope = cell_scope(pid=201, cell_id="cell-2")
+    second = await registry.register(
+        second_scope, expected_uid=DEFAULT_UID, expected_gid=DEFAULT_GID
+    )
+    assert second.state is ModelProxyRegistrationState.LIVE
+
+    # LIVE capacity still fails closed.
     with pytest.raises(ModelProxyPeerRegistryCapacityExceeded):
         await registry.register(
-            cell_scope(pid=201, cell_id="cell-2"),
+            cell_scope(pid=202, cell_id="cell-3"),
             expected_uid=DEFAULT_UID,
             expected_gid=DEFAULT_GID,
+        )
+
+    # A retained tombstone still fails closed on identity reuse.
+    with pytest.raises(ModelProxyCellAlreadyRegistered):
+        await registry.register(first, expected_uid=DEFAULT_UID, expected_gid=DEFAULT_GID)
+
+    # Exceeding the terminal bound evicts the oldest tombstone (``first``);
+    # only that evicted identity becomes reusable, the retained one does not.
+    assert await registry.revoke(second_scope)
+    reincarnation = await registry.register(
+        first, expected_uid=DEFAULT_UID, expected_gid=DEFAULT_GID
+    )
+    assert reincarnation.state is ModelProxyRegistrationState.LIVE
+    with pytest.raises(ModelProxyCellAlreadyRegistered):
+        await registry.register(
+            second_scope, expected_uid=DEFAULT_UID, expected_gid=DEFAULT_GID
         )
 
 

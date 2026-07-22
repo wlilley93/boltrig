@@ -75,6 +75,12 @@ export function useWorkflowApi({
   };
 }
 
+export function createWorkflowRunId(): string {
+  const uuid = globalThis.crypto?.randomUUID?.();
+  if (uuid) return uuid.replace(/-/g, "");
+  return `workflow-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
 async function pickWorkflow(
   w: WorkflowSummary,
   meta: Meta,
@@ -140,7 +146,19 @@ async function runWorkflow(
   }
   meta.setRunError(null);
   meta.setRunResult(null);
-  await mutation.invoke({ workflow_id: id, inputs: {} });
+  const runId = createWorkflowRunId();
+  const invocationContext = { run_id: runId };
+  // Enter the run surface before the request resolves. The browser subscribes
+  // to this run id while execution is in flight, and the same context is kept
+  // through an approval pause and its single-use re-invocation.
+  meta.setRunView({ runId, wfId: id });
+  const result = await mutation.invoke(
+    { workflow_id: id, inputs: {} },
+    invocationContext,
+  );
+  if (result === null || result.status === "denied" || result.status === "error") {
+    meta.setRunView(null);
+  }
 }
 
 function openRunCanvas(meta: Meta) {

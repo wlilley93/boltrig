@@ -31,6 +31,28 @@ GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO boltrig_app;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
   GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO boltrig_app;
 
+-- 1b. The blanket grant above would otherwise let a compromised app role rewrite
+--     or erase the append-only tamper-evident tables (the SEC-16 hash chains).
+--     No code path ever UPDATEs or DELETEs them (a config rollback INSERTS a new
+--     config_revisions row), so strip write-back rights and leave SELECT/INSERT.
+DO $$
+DECLARE
+  t text;
+  append_only text[] := ARRAY[
+    'audit_log', 'security_log', 'config_revisions', 'execution_events'
+  ];
+BEGIN
+  FOREACH t IN ARRAY append_only LOOP
+    IF EXISTS (
+      SELECT 1 FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name = t
+    ) THEN
+      EXECUTE format('REVOKE UPDATE, DELETE ON %I FROM boltrig_app', t);
+    END IF;
+  END LOOP;
+END
+$$;
+
 -- 2. Enable + FORCE RLS with one tenant-isolation policy per tenant-scoped table.
 --    FORCE so even the table owner is bound (defence-in-depth, not only the app
 --    role). USING gates reads/updates/deletes; WITH CHECK gates inserts/updates,
@@ -73,6 +95,10 @@ DECLARE
     'memory_vectors','memory_vector_edges',
     'channel_bindings','channel_pairings','run_checkpoints','fanout_counters',
     'run_cancel_requests',
+    -- Decision 0003 Phase 2: durable intake dedup markers + the socket-class
+    -- outbound hand-off. Both carry a real tenant_id resolved from the VERIFIED
+    -- channel before the write, so the generic tenant_id policy fences them.
+    'channel_deliveries','channel_outbox',
     -- Org -> workspace tenancy ([2026] VJS-COUNTY 8). These three carry a real
     -- tenant_id column, so the generic tenant_id policy binds them. organisations
     -- is handled separately below (its isolation column is id, which IS tenant_id).
@@ -100,7 +126,15 @@ DECLARE
     'grant_lease_cancelled_roots','model_proxy_grants',
     'model_proxy_grant_cancelled_roots','model_proxy_grant_cancelled_phases',
     'model_proxy_grant_cancelled_assignments','model_proxy_grant_cancelled_cells',
-    'capability_attestation_sets','capability_attestation_entries'
+    'capability_attestation_sets','capability_attestation_entries',
+    -- Decision 0015: originals live outside Postgres, but every catalogue,
+    -- access, search, provider, job and projection row remains tenant-fenced.
+    'knowledge_uploads','knowledge_blobs','knowledge_assets',
+    'knowledge_source_occurrences','knowledge_revisions',
+    'knowledge_representations','knowledge_segments','knowledge_embeddings',
+    'knowledge_asset_access',
+    'knowledge_providers','knowledge_projection_statuses','knowledge_jobs',
+    'knowledge_projection_outbox'
   ];
 BEGIN
   FOREACH t IN ARRAY scoped LOOP

@@ -1,0 +1,37 @@
+# Skill library data (S7.4). Adding or editing a skill is data, never code (P1).
+# The governed desktop hands (decision 0016, DH-1): window control on the user's
+# Hyprland desktop, dispatched through the chokepoint and executed by the host-side
+# familiar-hands daemon. Registration of the verbs is opt-in (BOLTRIG_DESKTOP_HANDS=1);
+# this skill only ever narrows what a granted caller can reach, never widens it.
+id: desktop/hands
+version: 1.0.0
+locale: en
+description: See and arrange the user's desktop windows through the governed desktop.* verbs.
+prompt_fragment: |
+  You can see and arrange the user's desktop windows through governed verbs.
+  Choreography:
+  - ALWAYS call desktop.window.list first to resolve live window addresses (class,
+  title, workspace, geometry). Never invent or guess an address, and never reuse an
+  address from an earlier turn without listing again: windows open, close and move.
+  - desktop.window.focus and desktop.workspace.switch are low consequence and apply
+  immediately. desktop.window.move, desktop.window.arrange and desktop.app.launch
+  are HIGH consequence: the run will pause for the user's approval before anything
+  happens. Say plainly what will happen and wait for the outcome; never retry an
+  approval-gated verb in a loop hoping to slip past the gate.
+  - This desktop is a tiling compositor (Hyprland): exact pixel geometry is a
+  request, not a guarantee. A tiled window may reflow instead of landing on your
+  exact rect; the receipt's side_effects carry the honest before/after geometry.
+  Report what ACTUALLY happened from the receipt, not what you asked for.
+  - Prefer arrange (one transaction) over several moves when the user asks for a
+  layout. If the executor reports delivered=false (executor_offline), say the
+  familiar-hands service is not running on the desktop; do not pretend it worked.
+tool_grants:
+  - desktop.window.list
+  - desktop.window.focus
+  - desktop.window.move
+  - desktop.window.arrange
+  - desktop.workspace.switch
+  - desktop.app.launch
+context_requirements:
+  type: object
+  properties: {}

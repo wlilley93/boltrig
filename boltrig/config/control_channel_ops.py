@@ -41,8 +41,23 @@ async def _connect_channel(
         raise ValueError("platform must be a webhook-class + name")
     channel_id = f"ch_{uuid.uuid4().hex[:16]}"
     secret = str(params.get("signing_secret") or "").strip()
+    secret_ref = str(params.get("signing_secret_ref") or "").strip()
     credential_ref = None
-    if secret:
+    if secret_ref:
+        # Doctrine-compliant path: the DB holds a REFERENCE only ({store, ref});
+        # the material lives behind the kernel SecretStore seam (SEC-04/05) and
+        # ingress resolves it kernel-side at verify time.
+        credential_ref = f"cred_{uuid.uuid4().hex[:16]}"
+        await store.set_credential_ref(
+            tenant_id,
+            credential_ref,
+            {"store": "env", "ref": secret_ref, "kind": "webhook_signing"},
+        )
+    elif secret:
+        # Legacy inline path: the material rides in the reference dict and is
+        # envelope-SEALED at rest by the store seam (boltrig/store/sealing.py).
+        # Kept for backward compatibility; new connections should pass
+        # ``signing_secret_ref`` so the DB never even transiently holds the dict.
         credential_ref = f"cred_{uuid.uuid4().hex[:16]}"
         await store.set_credential_ref(tenant_id, credential_ref, {"secret": secret})
     channel = Channel(

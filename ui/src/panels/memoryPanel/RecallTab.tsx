@@ -3,17 +3,18 @@ import { useState } from "react";
 import { api } from "@/api/client";
 import type { MemoryFactView, RecallMode } from "@/api/types";
 import { errText } from "@/panels/shared";
-import { EmptyState, Field, Select } from "@/panels/ux";
+import { EmptyState, Field } from "@/panels/ux";
 import { denialText, isDenied, RECALL_MODE_OPTIONS } from "@/panels/memoryPanel/helpers";
 import { FactCard } from "@/panels/memoryPanel/FactCard";
+import { SegmentedV2, Stepper } from "@/panels/uxForm";
 
 type RecallFormFieldsProps = {
   query: string;
   setQuery: (v: string) => void;
   mode: RecallMode;
   setMode: (v: RecallMode) => void;
-  limit: string;
-  setLimit: (v: string) => void;
+  limit: number;
+  setLimit: (v: number) => void;
   busy: boolean;
   error: string | null;
   onSubmit: () => void;
@@ -26,28 +27,36 @@ function RecallFormFields(props: RecallFormFieldsProps) {
       <div className="form__title">Search your memory</div>
       <Field
         label="What are you looking for?"
+        htmlFor="memory-recall-query"
         hint="A plain-language question or keywords. You only ever see memory you're allowed to (your scope, your departments, the org)."
         example="what does Priya own?"
       >
-        <input value={query} onChange={(e) => setQuery(e.target.value)} />
+        <input
+          id="memory-recall-query"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
       </Field>
       <div className="form__grid">
         <Field
           label="How to search"
           hint="Connections starts from matching facts and follows links to related ones (showing the path). Similarity just finds facts that read like your query."
         >
-          <Select
+          <SegmentedV2
             value={mode}
             ariaLabel="Search mode"
             onChange={(v) => setMode(v === "similarity" ? "similarity" : "graph_completion")}
             options={RECALL_MODE_OPTIONS}
           />
         </Field>
-        <Field label="Max results">
-          <input
+        <Field label="Max results" hint="Choose between 1 and 100 facts.">
+          <Stepper
             value={limit}
-            inputMode="numeric"
-            onChange={(e) => setLimit(e.target.value)}
+            min={1}
+            max={100}
+            unit="facts"
+            ariaLabel="Max results"
+            onChange={setLimit}
           />
         </Field>
       </div>
@@ -94,7 +103,7 @@ function RecallResults({ facts, count }: RecallResultsProps) {
 export function RecallTab() {
   const [query, setQuery] = useState("");
   const [mode, setMode] = useState<RecallMode>("graph_completion");
-  const [limit, setLimit] = useState("20");
+  const [limit, setLimit] = useState(20);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [facts, setFacts] = useState<MemoryFactView[] | null>(null);
@@ -105,7 +114,6 @@ export function RecallTab() {
       setError("A query is required.");
       return;
     }
-    const parsedLimit = Number.parseInt(limit, 10);
     setBusy(true);
     setError(null);
     setFacts(null);
@@ -113,7 +121,7 @@ export function RecallTab() {
       const res = await api.memoryRecall({
         query: query.trim(),
         mode,
-        limit: Number.isFinite(parsedLimit) ? parsedLimit : undefined,
+        limit,
       });
       if (isDenied(res)) {
         setError(denialText(res.reason));

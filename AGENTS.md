@@ -19,10 +19,11 @@ load-bearing, not advisory.
 ## The doctrine (non-negotiable)
 
 - ONE chokepoint. Every external action goes through the kernel dispatcher in the
-  fixed order: resolve verb+binding -> validate params -> grant check -> HITL gate
-  -> rate limit -> idempotency -> resolve credential (inside the kernel only) ->
-  execute -> validate output -> audit (always). Do not add side doors. Do not let
-  a capability reach the network, the DB, or a credential except through a verb.
+  fixed order: resolve verb+binding -> validate params -> grant check ->
+  idempotency claim (completed results replay here) -> HITL gate -> rate limit ->
+  resolve credential (inside the kernel only) -> execute -> validate output ->
+  audit (always). Do not add side doors. Do not let a capability reach the
+  network, the DB, or a credential except through a verb.
 - The kernel implements policy NOWHERE itself. It composes; everything else
   (adapters, skills, workflows, capabilities) loads as DATA. Adding an integration
   changes NO core code. If your change needs a core edit to add a feature, you're
@@ -39,9 +40,13 @@ load-bearing, not advisory.
 
 - Respect the import boundary: `kernel/` and `models/` import nothing from
   `fleet/` or the sidecars. Keep the core free of app- and runtime-specifics.
-- Runtimes are pluggable behind the Runtime protocol (script / hermes / claude-api
-  / pi). Anything new degrades gracefully: no SDK and no key present must not
-  crash - it returns a typed "unavailable" result.
+- Codex is the only target agent runtime (decision 0012). The existing Runtime
+  protocol and Pi/Hermes/Claude-API/OpenCode paths are staged-cutover and rollback
+  residue, not extension targets; do not add product capability to them. Script
+  remains a deterministic non-agent fallback. New Codex integration work must
+  degrade gracefully: an unavailable binary, identity, or supervised cell returns
+  a typed unavailable result rather than crashing or falling through to a side
+  door.
 
 ## The invariant gate (this is how we keep our word)
 
@@ -56,9 +61,9 @@ load-bearing, not advisory.
 ## Honesty about state (we ship a real "implemented vs scaffolded" list)
 
 - Know what is real vs a seam: live Hatchet engine, live IdP, the Bifrost cost
-  gateway, an on-box model, the real Pi loop, and an ordered alembic set are
-  SEAMS. Never describe a seam as wired. If you build against one, say so and keep
-  the docs' honesty section accurate.
+  gateway, an on-box model, the production Codex cutover, and an ordered alembic
+  set are SEAMS. Never describe a seam as wired. If you build against one, say so
+  and keep the docs' honesty section accurate.
 
 ## The streaming contract (for heads / UI-driving apps)
 

@@ -224,3 +224,38 @@ async def test_replay_precedes_rate_limit():
     with pytest.raises(RateLimited):
         await k.invoke("counter", "counter.do", {}, _ctx(), idempotency_key="k-new")
     assert adapter.calls == 1
+
+
+class ResettableCounter:
+    """A rate-limit counter the test can rewind to simulate a new window."""
+
+    def __init__(self) -> None:
+        self.count = 0
+
+    async def incr(self, key: str, window_seconds: int) -> int:
+        self.count += 1
+        return self.count
+
+
+@pytest.mark.kernel
+@pytest.mark.invariant("SEC-15")
+async def test_rate_limited_key_is_released_and_retryable():
+    # A key whose call died at the rate-limit gate is RELEASED, not parked
+    # IN_PROGRESS: once the window passes, the same key retries cleanly instead
+    # of conflicting on the orphaned claim. (The HITL-pending twin of this is
+    # pinned by test_replay_precedes_spent_approval_gate above.)
+    store = InMemoryStore()
+    store.set_tenant_permissions(TenantPermissions(T, GrantSet.of(["*"])))
+    counter = ResettableCounter()
+    k = Kernel(store, counter=counter)
+    adapter = CountingAdapter(rate_limit={"per": "minute", "max": 1, "scope": "tenant"})
+    await k.register_adapter(T, adapter)
+
+    await k.invoke("counter", "counter.do", {}, _ctx(), idempotency_key="k-first")
+    with pytest.raises(RateLimited):
+        await k.invoke("counter", "counter.do", {}, _ctx(), idempotency_key="k-tripped")
+
+    counter.count = 0  # the rate window has passed
+    out = await k.invoke("counter", "counter.do", {}, _ctx(), idempotency_key="k-tripped")
+    assert out == {"n": 2}  # retried and executed, not IdempotencyConflict
+    assert adapter.calls == 2

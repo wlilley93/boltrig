@@ -21,6 +21,7 @@ export interface ToolEntry {
   input?: unknown;
   output?: unknown;
   resultKeys?: string[];
+  consequence?: "low" | "high";
 }
 
 export interface QuestionEntry {
@@ -49,13 +50,25 @@ export interface HitlEntry {
   kind: HITLKind;
   question: string;
   options: string[];
+  verb?: string;
+  requestedBy?: string;
 }
 
 export interface StepEntry {
   stepId: string;
   action: string;
-  status: "running" | "ok" | "failed" | "skipped" | "error";
+  status: "running" | "ok" | "failed" | "skipped" | "paused" | "error";
 }
+
+// Typed transcript entries preserve the arrival order of executable work. A
+// tool result mutates its earlier tool entry in place, while workflow updates
+// share one ordered card whose step rows settle in place.
+export type TimelineEntry =
+  | { kind: "tool"; key: string; entry: ToolEntry }
+  | { kind: "subagent"; key: string; entry: SubagentEntry }
+  | { kind: "hitl"; key: string; entry: HitlEntry }
+  | { kind: "question"; key: string; entry: QuestionEntry }
+  | { kind: "steps"; key: string; entries: StepEntry[] };
 
 export interface NormalizedTurn {
   runId?: string;
@@ -67,6 +80,7 @@ export interface NormalizedTurn {
   hitls: HitlEntry[];
   questions: QuestionEntry[];
   steps: StepEntry[];
+  timeline: TimelineEntry[];
   ended: boolean;
   cancelled: boolean;
 }

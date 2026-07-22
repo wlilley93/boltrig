@@ -90,7 +90,16 @@ class WorkItemStore:
                 f"illegal transition {item.status.value} -> {new_status.value}"
             )
         updated = replace(item, status=new_status)
-        await self._store.update_work_item(updated)
+        # Conditional write (CAS on the status the guard checked): a concurrent
+        # transition that already moved the row wins, and this one fails instead
+        # of silently overwriting it.
+        if not await self._store.transition_work_item_status(
+            tenant, item_id, expected=item.status, new_status=new_status
+        ):
+            raise ValueError(
+                f"transition {item.status.value} -> {new_status.value} lost to a "
+                "concurrent update"
+            )
         return updated
 
     async def write_back_discovered(

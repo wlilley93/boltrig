@@ -8,6 +8,7 @@ audited (SEC-36); headless REST/MCP runs the same chokepoint scoped to the user
 """
 
 import asyncio
+from datetime import timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -98,10 +99,11 @@ def test_invitations_do_not_bypass_idp():
         assert await store.get_user(T, "u1") is None
 
         # an invitation alone grants no access until the invitee authenticates
+        # (a LIVE invitation - provisioning correctly refuses an expired one)
         await store.add_invitation(UserInvitation(
             id="i1", tenant_id=T, email="u2@acme", intended_role="agent",
             intended_scope={"verbs": ["ticket.read"]}, invited_by="admin",
-            expires_at=utcnow()))
+            expires_at=utcnow() + timedelta(days=7)))
         # (still no user row before they log in)
         assert await store.get_user(T, "u2") is None
 

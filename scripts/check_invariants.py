@@ -12,6 +12,9 @@ worth anything if a test pins it. This script makes that mechanical:
       declared in the catalogue (an undeclared invariant);
   (d) print a coverage table and the binding-debt count. Exit 0 only when every
       declared invariant is bound and every marker is declared (debt == 0).
+      Bindings that only execute behind a live service are declared as
+      ``service_gated`` in the catalogue and reported as gated-not-verified, so
+      a permanently skipped test never silently "discharges" an invariant.
 
 Binding debt may only ever decrease: wire the gate into CI so a regression
 (an unbound claim, or a stray marker) turns the build red.
@@ -66,10 +69,17 @@ def _unquote(value: str) -> str:
 
 
 def load_catalogue(path: Path) -> dict[str, dict]:
-    """Parse the controlled invariants.yaml subset (no third-party yaml dep)."""
+    """Parse the controlled invariants.yaml subset (no third-party yaml dep).
+
+    Besides ``description``/``tests`` an entry may declare ``service_gated``: a
+    subset of its tests that only execute behind a service gate (a live Hatchet
+    engine, cognee + LLM env, ...). Those bindings are real, but offline they are
+    gated-not-verified - the gate reports them rather than letting a permanently
+    skipped test silently "discharge" the invariant."""
     data: dict[str, dict] = {}
     current: str | None = None
     in_tests = False
+    in_gated = False
     for raw in path.read_text(encoding="utf-8").splitlines():
         line = raw.rstrip()
         stripped = line.strip()
@@ -77,22 +87,27 @@ def load_catalogue(path: Path) -> dict[str, dict]:
             continue
         indent = len(line) - len(line.lstrip(" "))
         if indent == 0:
-            current, in_tests = None, False  # the top-level "invariants:" key
+            current, in_tests, in_gated = None, False, False  # top-level "invariants:"
             continue
         if indent == 2 and stripped.endswith(":"):
             current = stripped[:-1].strip()
-            data[current] = {"description": "", "tests": []}
-            in_tests = False
+            data[current] = {"description": "", "tests": [], "service_gated": []}
+            in_tests = in_gated = False
             continue
         if indent == 4 and current is not None:
             if stripped.startswith("description:"):
                 data[current]["description"] = _unquote(stripped[len("description:"):])
-                in_tests = False
+                in_tests = in_gated = False
             elif stripped.startswith("tests:"):
-                in_tests = True
+                in_tests, in_gated = True, False
+            elif stripped.startswith("service_gated:"):
+                in_tests, in_gated = False, True
             continue
-        if indent >= 6 and stripped.startswith("- ") and in_tests and current is not None:
-            data[current]["tests"].append(_unquote(stripped[2:]))
+        if indent >= 6 and stripped.startswith("- ") and current is not None:
+            if in_tests:
+                data[current]["tests"].append(_unquote(stripped[2:]))
+            elif in_gated:
+                data[current]["service_gated"].append(_unquote(stripped[2:]))
     return data
 
 
@@ -110,13 +125,19 @@ def main() -> int:
     unbound = sorted(i for i in declared if not markers.get(i))          # claim, no test
     undeclared = sorted(i for i in marked if i not in declared)          # test, no claim
 
-    # Drift: a node id claimed in the catalogue that no marker actually backs.
+    # Drift: a node id claimed in the catalogue that no marker actually backs, or
+    # a service_gated id that is not one of the invariant's declared tests.
     drift: list[str] = []
     for inv_id, meta in catalogue.items():
         real = markers.get(inv_id, set())
         for claimed in meta["tests"]:
             if claimed not in real:
                 drift.append(f"{inv_id}: claims {claimed} but no such marker exists")
+        for gated in meta["service_gated"]:
+            if gated not in meta["tests"]:
+                drift.append(
+                    f"{inv_id}: service_gated {gated} is not one of its declared tests"
+                )
 
     # --- coverage table -----------------------------------------------------
     print("Invariant coverage")
@@ -124,9 +145,20 @@ def main() -> int:
     print(f"{'invariant':<14}{'declared':>10}{'bound':>8}  status")
     print("-" * 64)
     for inv_id in sorted(declared):
-        claimed_n = len(catalogue[inv_id]["tests"])
+        meta = catalogue[inv_id]
+        claimed_n = len(meta["tests"])
         bound_n = len(markers.get(inv_id, set()))
-        status = "ok" if bound_n else "UNBOUND"
+        gated_n = len(meta["service_gated"])
+        if not bound_n:
+            status = "UNBOUND"
+        elif gated_n >= claimed_n:
+            # every binding needs a live service: offline this invariant is
+            # gated-not-verified, not verified.
+            status = "GATED"
+        elif gated_n:
+            status = f"ok ({gated_n} gated)"
+        else:
+            status = "ok"
         print(f"{inv_id:<14}{claimed_n:>10}{bound_n:>8}  {status}")
     print("-" * 64)
 
@@ -150,6 +182,18 @@ def main() -> int:
         print("\nCATALOGUE DRIFT (claimed node ids with no backing marker):")
         for line in drift:
             print(f"  - {line}")
+
+    gated = [
+        (inv_id, node)
+        for inv_id in sorted(declared)
+        for node in catalogue[inv_id]["service_gated"]
+    ]
+    if gated:
+        # A warning, not debt: the binding exists, but it only executes in the
+        # service-gated suites - offline it verifies nothing.
+        print("\nSERVICE-GATED bindings (gated-not-verified offline; run the live suites):")
+        for inv_id, node in gated:
+            print(f"  - {inv_id}  ({node})")
 
     if debt or drift:
         print("\nRESULT: FAIL - binding debt must be zero (and may only decrease).")

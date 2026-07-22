@@ -15,14 +15,23 @@ def test_credential_repr_never_leaks_material():
 
 @pytest.mark.security
 @pytest.mark.invariant("SEC-05")
-async def test_secret_material_never_enters_audit(kernel):
-    # Drive a normal call, then assert no audit detail carries secret-looking text.
+async def test_secret_material_never_enters_audit(kernel, monkeypatch):
+    # Bind a credential with a known secret so the resolver actually runs, then
+    # drive a normal call and assert no audit row carries the resolved material.
+    secret = "sk-cred-isolation-9f8e7d6c5b4a"
+    monkeypatch.setenv("BOLTRIG_TEST_TICKET_SECRET", secret)
+    await kernel.store.set_credential_ref(
+        TENANT, "cred-ticket",
+        {"store": "env", "ref": "BOLTRIG_TEST_TICKET_SECRET", "kind": "api_key"},
+    )
+    kernel.credentials.bind_adapter_credential(TENANT, "memory-tickets", "cred-ticket")
     out = await kernel.invoke(
         "ticket", "ticket.create", {"title": "Fix login"}, make_ctx(["ticket.create"])
     )
     assert "id" in out
     events = await kernel.store.audit_query(TENANT)
     blob = repr([e.detail for e in events])
+    assert secret not in blob
     assert "sk-" not in blob and "token" not in blob.lower()
 
 

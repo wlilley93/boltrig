@@ -1,14 +1,15 @@
 """Real authentication: bearer verification + scoped principal (SEC-01, US-IAM-01/02).
 
-The stub-verifier tests prove the resolver contract offline (no IdP, no authlib):
-an invalid/missing bearer is rejected 401 and a valid token yields a
+The stub-verifier tests prove the resolver contract offline (no IdP): an
+invalid/missing bearer is rejected 401 and a valid token yields a
 correctly-scoped principal. The OidcVerifier round-trip proves real RS256 JWT
-verification when authlib + cryptography are present.
+verification against the authlib stack (a hard dependency).
 """
 
 from __future__ import annotations
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from boltrig.identity.auth import build_principal_resolver
@@ -75,19 +76,8 @@ def test_valid_bearer_yields_scoped_principal():
     assert "ticket.read" in ids and "ticket.create" not in ids  # scoped by the token
 
 
-# --- real RS256 verification (authlib), skipped if the crypto stack is absent --
-def _have_authlib() -> bool:
-    try:
-        import authlib.jose  # noqa: F401
-        import cryptography  # noqa: F401
-
-        return True
-    except Exception:
-        return False
-
-
+# --- real RS256 verification (authlib is a hard dependency) -------------------
 @pytest.mark.security
-@pytest.mark.skipif(not _have_authlib(), reason="authlib + cryptography required")
 async def test_oidc_verifier_accepts_valid_and_rejects_wrong_audience():
     from authlib.jose import jwt
     from cryptography.hazmat.primitives.asymmetric import rsa
@@ -133,8 +123,9 @@ async def test_oidc_verifier_accepts_valid_and_rejects_wrong_audience():
     v = OidcVerifier(issuer, audience, "https://idp.example/jwks", http_client=_Http())
     claims = await v.verify(good)
     assert claims["sub"] == "bob"
-    with pytest.raises(Exception):
+    with pytest.raises(HTTPException) as exc:
         await v.verify(wrong_aud)
+    assert exc.value.status_code == 401
 
 
 # --- M13 / SEC-68: an inert SAML provider must not silently boot --------------

@@ -32,13 +32,13 @@ depends_on = None
 def upgrade() -> None:
     op.execute(
         """
-        ALTER TABLE agent_capabilities
+        ALTER TABLE IF EXISTS agent_capabilities
             ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true
         """
     )
     op.execute(
         """
-        ALTER TABLE agent_capabilities
+        ALTER TABLE IF EXISTS agent_capabilities
             ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'control-plane'
                 CHECK (source IN ('manifest', 'control-plane'))
         """
@@ -47,5 +47,5 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     # Dropping the column drops its inline CHECK with it.
-    op.execute("ALTER TABLE agent_capabilities DROP COLUMN IF EXISTS source")
-    op.execute("ALTER TABLE agent_capabilities DROP COLUMN IF EXISTS is_active")
+    op.execute("ALTER TABLE IF EXISTS agent_capabilities DROP COLUMN IF EXISTS source")
+    op.execute("ALTER TABLE IF EXISTS agent_capabilities DROP COLUMN IF EXISTS is_active")

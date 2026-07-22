@@ -20,6 +20,7 @@ export { Hint } from "./ux/Hint";
 export {
   WORK_STATUS,
   AUDIT_STATUS,
+  MEMORY_INGEST_STATUS,
   HITL_TYPE,
   HITL_URGENCY,
   TOOL_STATUS,

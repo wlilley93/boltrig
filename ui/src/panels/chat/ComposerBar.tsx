@@ -110,7 +110,6 @@ export function ComposerBar(props: ComposerBarProps): JSX.Element {
   return (
     <div
       className={`chat__composer ${streaming ? "chat__composer--thinking" : ""} ${!activeId ? "chat__composer--empty" : ""}`}
-      style={{ borderRadius: 22, boxShadow: "0 4px 20px rgba(0,0,0,0.35)", padding: "7px 7px 7px 10px" }}
     >
       <ComposerMenu
         plusOpen={plusOpen}

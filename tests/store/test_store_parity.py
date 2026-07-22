@@ -28,6 +28,7 @@ from boltrig.models import (
     MemoryFact,
     MemoryProjectionStatus,
     Urgency,
+    WorkItem,
     utcnow,
 )
 from boltrig.store.idempotency_contract import IdempotencyClaimStatus
@@ -498,3 +499,163 @@ async def test_list_workflows_returns_latest_version_per_id_on_both_stores(store
     assert len(rows) == 1
     assert rows[0].version == "2.0.0"
     assert rows[0].definition["name"] == "v2"
+
+
+# --- scoped observability audit reads (SEC-69 bounding, memory/PG parity) ----
+def _wi(
+    item_id: str,
+    *,
+    workspace_id: str | None = None,
+    owner: str = "engineering",
+    hatchet_run_id: str | None = None,
+) -> WorkItem:
+    return WorkItem(
+        id=item_id,
+        tenant_id=T,
+        source="internal",
+        intent=f"intent-{item_id}",
+        confidence=1.0,
+        convergent=True,
+        owner_member=owner,
+        hatchet_run_id=hatchet_run_id,
+        workspace_id=workspace_id,
+    )
+
+
+def _scoped_event(seq: int, run_id: str | None, *, parent=None, workspace=None) -> AuditEvent:
+    e = _event(seq, f"h{seq - 1}" if seq > 1 else None)
+    e.run_id = run_id
+    e.parent_run_id = parent
+    e.workspace_id = workspace
+    return e
+
+
+async def _seed_scoped_audit(store) -> None:
+    for item in (
+        _wi("run-org"),
+        _wi("work-ws1", workspace_id="ws-1", hatchet_run_id="run-ws1"),
+        _wi("work-ws2", workspace_id="ws-2", hatchet_run_id="run-ws2"),
+        _wi("run-collision", workspace_id="ws-2"),
+        _wi("visible-alias", workspace_id="ws-1", hatchet_run_id="run-collision"),
+        _wi("run-sales", owner="sales"),
+    ):
+        await store.create_work_item(item)
+    events = (
+        _scoped_event(1, "run-org"),
+        _scoped_event(2, "run-ws1", parent="run-org"),
+        # the raw id of an item WITH a hatchet run id is not a run ref at all
+        _scoped_event(3, "work-ws1"),
+        _scoped_event(4, "run-ws2"),
+        # one ref owned by BOTH a hidden and a visible item: hidden wins
+        _scoped_event(5, "run-collision"),
+        _scoped_event(6, "run-audit-only"),
+        _scoped_event(7, "run-sales"),
+        # parent folding only matters under match_parent=True
+        _scoped_event(8, "child-run", parent="run-ws1"),
+        _scoped_event(9, "audit-only-2", parent="run-ws2"),
+        _scoped_event(10, "run-org", workspace="ws-1"),
+        _scoped_event(11, "run-org", workspace="ws-2"),
+    )
+    for e in events:
+        await store.audit_append(e)
+
+
+@pytest.mark.store
+@pytest.mark.invariant("SEC-69")
+async def test_audit_query_scoped_pushes_run_scope_into_the_store(store):
+    await _seed_scoped_audit(store)
+
+    # Unrestricted caller in ws-1: org-wide + ws-1 event rows, minus events whose
+    # run ref is owned by a hidden item (ws-2 work, or the colliding alias).
+    rows = await store.audit_query_scoped(T, workspace_id="ws-1")
+    assert [e.seq for e in rows] == [1, 2, 3, 6, 7, 8, 9, 10]
+    # match_parent=True folds parent_run_id into the refs: seq 9's parent is
+    # owned by a hidden ws-2 item, so the hidden ref now denies the event.
+    rows_parent = await store.audit_query_scoped(
+        T, workspace_id="ws-1", match_parent=True
+    )
+    assert [e.seq for e in rows_parent] == [1, 2, 3, 6, 7, 8, 10]
+    # No active workspace: org-wide rows only, and ws-bound work runs are hidden.
+    rows_org = await store.audit_query_scoped(T, workspace_id=None, match_parent=True)
+    assert [e.seq for e in rows_org] == [1, 3, 6, 7]
+
+    # Department-scoped caller: an event needs a ref owned by a VISIBLE item in
+    # its departments; audit-only runs and other departments stay invisible.
+    rows_eng = await store.audit_query_scoped(
+        T, departments=["engineering"], workspace_id="ws-1", match_parent=True
+    )
+    assert [e.seq for e in rows_eng] == [1, 2, 8, 10]
+    rows_eng_np = await store.audit_query_scoped(
+        T, departments=["engineering"], workspace_id="ws-1", match_parent=False
+    )
+    assert [e.seq for e in rows_eng_np] == [1, 2, 10]
+    rows_wide = await store.audit_query_scoped(
+        T, departments=["engineering", "sales"], workspace_id="ws-1", match_parent=True
+    )
+    assert [e.seq for e in rows_wide] == [1, 2, 7, 8, 10]
+    # An empty department scope is fail-closed.
+    assert await store.audit_query_scoped(T, departments=[], workspace_id="ws-1") == []
+
+    # run_id filter composes with the scope (and matches parent_run_id, like
+    # audit_query), the tail limit keeps the NEWEST rows in ascending order.
+    rows_run = await store.audit_query_scoped(T, workspace_id="ws-1", run_id="run-org")
+    assert [e.seq for e in rows_run] == [1, 2, 10]
+    rows_tail = await store.audit_query_scoped(T, workspace_id="ws-1", limit=3)
+    assert [e.seq for e in rows_tail] == [8, 9, 10]
+
+
+@pytest.mark.store
+@pytest.mark.invariant("SEC-69")
+async def test_audit_query_scoped_page_is_clamped(store):
+    from boltrig.store.base import MAX_OBSERVABILITY_PAGE
+
+    # A tenant past the page ceiling is never fully loaded: the read returns the
+    # NEWEST clamped page in ascending order, on both backends.
+    for seq in range(1, MAX_OBSERVABILITY_PAGE + 6):
+        await store.audit_append(_scoped_event(seq, f"r{seq}"))
+    rows = await store.audit_query_scoped(T, limit=MAX_OBSERVABILITY_PAGE + 500)
+    assert len(rows) == MAX_OBSERVABILITY_PAGE
+    assert [e.seq for e in rows] == list(range(6, MAX_OBSERVABILITY_PAGE + 6))
+
+
+@pytest.mark.store
+@pytest.mark.invariant("SEC-69")
+async def test_list_work_items_by_refs_matches_ids_and_hatchet_aliases(store):
+    await store.create_work_item(_wi("i-1", hatchet_run_id="h-1"))
+    await store.create_work_item(_wi("i-2"))
+    other = _wi("i-3")
+    other.tenant_id = "rival"
+    await store.create_work_item(other)
+
+    rows = await store.list_work_items_by_refs(T, ["i-1", "h-1", "i-2", "i-3", "nope"])
+    assert [w.id for w in rows] == ["i-1", "i-2"]
+    assert await store.list_work_items_by_refs(T, []) == []
+
+
+@pytest.mark.store
+@pytest.mark.invariant("SEC-69")
+async def test_list_run_items_scoped_pushes_run_scope_into_the_store(store):
+    await _seed_scoped_audit(store)
+
+    # ws-1 caller: org-wide + ws-1 items, minus any whose run ref is also owned
+    # by a hidden item (visible-alias carries run-collision, which a hidden ws-2
+    # item owns - hidden wins, exactly the old RunScope.permits rule).
+    rows = await store.list_run_items_scoped(T, workspace_id="ws-1")
+    assert [w.id for w in rows] == ["run-org", "run-sales", "work-ws1"]
+    # No active workspace: org-wide items only.
+    rows_org = await store.list_run_items_scoped(T, workspace_id=None)
+    assert [w.id for w in rows_org] == ["run-org", "run-sales"]
+    # A department scope narrows to its own visible items; empty is fail-closed.
+    rows_eng = await store.list_run_items_scoped(
+        T, departments=["engineering"], workspace_id="ws-1"
+    )
+    assert [w.id for w in rows_eng] == ["run-org", "work-ws1"]
+    assert await store.list_run_items_scoped(T, departments=[], workspace_id="ws-1") == []
+
+    # Keyset pages walk the scoped slice in id order with no overlap.
+    page1 = await store.list_run_items_scoped(T, workspace_id="ws-1", limit=2)
+    assert [w.id for w in page1] == ["run-org", "run-sales"]
+    page2 = await store.list_run_items_scoped(
+        T, workspace_id="ws-1", limit=2, cursor=page1[-1].id
+    )
+    assert [w.id for w in page2] == ["work-ws1"]

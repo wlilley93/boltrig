@@ -1,3 +1,4 @@
+import { RunLink } from "@/panels/shared";
 import { EmptyState, Field, Select } from "@/panels/ux";
 import type { EvalState } from "./useEvalState";
 
@@ -33,7 +34,9 @@ export function RunsListCard({ s }: { s: EvalState }) {
           <div className="row-line" key={r.id}>
             <div>
               <code>{r.case_id}</code>
-              <div className="muted">{r.run_id}</div>
+              <div className="muted">
+                {r.run_id ? <RunLink runId={r.run_id} /> : "-"}
+              </div>
             </div>
             <div className="kv">
               <span className={`badge ${r.passed ? "badge--pass" : "badge--fail"}`}>

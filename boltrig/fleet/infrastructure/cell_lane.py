@@ -24,7 +24,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import signal
 import socket
+from collections.abc import Callable
 
 from boltrig.fleet.infrastructure.cell_privilege import per_cell_uid_mode_available
 from boltrig.fleet.infrastructure.cell_process import (
@@ -42,7 +44,7 @@ from boltrig.fleet.infrastructure.codex_cell_policy import PinnedCodexBinary
 class CellLane:
     """Spawn cells under per-cell uids through the privileged spawner."""
 
-    __slots__ = ("_allocator", "_lock", "_sock")
+    __slots__ = ("_allocator", "_lock", "_signal_tasks", "_sock")
 
     def __init__(self, spawner: socket.socket, allocator: CellSlotAllocator) -> None:
         if type(allocator) is not CellSlotAllocator:
@@ -53,6 +55,9 @@ class CellLane:
         # concurrent spawns would interleave and each could adopt the other's
         # descriptors. Serialising here is what makes concurrency safe upstream.
         self._lock = asyncio.Lock()
+        # Strong references to scheduled signal requests, so a fire-and-forget
+        # terminate/kill is never garbage-collected mid-flight.
+        self._signal_tasks: set[asyncio.Task[None]] = set()
 
     def acquire_slot(self) -> CellSlot:
         """Reserve a distinct per-cell uid slot, or refuse.
@@ -74,6 +79,40 @@ class CellLane:
         its cell is still live)."""
 
         self._allocator.release(slot)
+
+    def signaller(self) -> Callable[[int, signal.Signals], None]:
+        """The synchronous signal entry point handed to an adopted cell process.
+
+        ``terminate``/``kill`` on the process protocol are synchronous, so the
+        request is scheduled onto the running loop; the lane lock then serialises
+        it with provision and spawn, and the spawner's ``{'signalled': pid}``
+        reply is drained. Both halves are load-bearing: an unlocked send can
+        interleave with an in-flight request's bytes, and an unread reply is
+        consumed as the answer to the NEXT provision/spawn, desyncing the lane.
+        """
+
+        def _send(pid: int, number: signal.Signals) -> None:
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                return  # no loop to schedule on; the cell is already being torn down
+            task = loop.create_task(self._signal(pid, number))
+            self._signal_tasks.add(task)
+            task.add_done_callback(self._signal_tasks.discard)
+
+        return _send
+
+    async def _signal(self, pid: int, number: signal.Signals) -> None:
+        # Fail-quiet on a dead socket, exactly like the process adapter this
+        # serves: a teardown signal that cannot be delivered must never replace
+        # the real error a supervisor is already handling with a secondary one.
+        payload = json.dumps({"verb": "signal", "pid": pid, "signal": int(number)}).encode()
+        async with self._lock:
+            try:
+                await asyncio.to_thread(self._sock.sendall, payload)
+                await asyncio.to_thread(self._sock.recv, 4096)
+            except OSError:
+                pass
 
     async def provision(
         self,
@@ -156,7 +195,7 @@ class CellLane:
         async with self._lock:
             await asyncio.to_thread(self._sock.sendall, payload)
             pid, stdio = await asyncio.to_thread(receive_spawn_result, self._sock)
-        return await adopt_spawned_cell(pid=pid, stdio=stdio, spawner=self._sock)
+        return await adopt_spawned_cell(pid=pid, stdio=stdio, signaller=self.signaller())
 
 
 __all__ = ["CellLane"]

@@ -169,6 +169,49 @@ invariants:
       - tests/security/test_chat_principal_authority.py::test_a_narrow_caller_never_gets_a_verb_it_lacks_though_the_skill_declares_it
       - tests/security/test_chat_principal_authority.py::test_a_caller_holding_the_verb_still_gets_it
       - tests/security/test_chat_principal_authority.py::test_a_caller_ceiling_wider_than_the_skill_is_bound_by_the_skill
+  SEC-175:
+    description: Channel intake replay dedup is DURABLE - the store row (atomic record-and-check INSERT ON CONFLICT) is the authority across workers and restarts, keyed (tenant, channel, delivery) with a TTL; the process-local set is only a first-tier cache. A message with no stable delivery id (id-less, unsigned) is deduped by CONTENT within a shorter bounded window via a sha256(channel|sender|canonical_body) delivery id riding the same store-backed mechanism - a legit rapid repeat inside the window is dropped, the stated trade-off.
+    tests:
+      - tests/store/test_channel_durability.py::test_record_channel_delivery_is_atomic_and_tenant_scoped
+      - tests/store/test_channel_durability.py::test_record_channel_delivery_honours_the_ttl
+      - tests/security/test_channel_inbound.py::test_idless_redelivery_dedupes_by_content
+      - tests/security/test_channel_inbound.py::test_idless_distinct_bodies_are_not_deduped
+      - tests/security/test_channel_inbound.py::test_idless_redelivery_passes_after_the_content_window
+  SEC-176:
+    description: The channel outbox is a durable single-winner hand-off - leased claim bounded to the caller's channel set, ack/fail compare-and-swapped on the lease owner, exponential backoff on failure, terminal failed at the attempt cap; identical on the memory and Postgres stores.
+    tests:
+      - tests/store/test_channel_durability.py::test_outbox_claim_is_single_winner_and_lease_scoped
+      - tests/store/test_channel_durability.py::test_outbox_claim_honours_channel_set_and_lease_expiry
+      - tests/store/test_channel_durability.py::test_outbox_fail_backs_off_then_terminates
+  SEC-177:
+    description: The channel gateway owns no policy/grants/persistent credential - it re-enters over a run-scoped token from the MCP seam (admin-minted, socket-channels-only, channel-set-bounded, revocable), signs intake with the connect-time secret over the ONE intake route, and the generic adapter proves both links end to end.
+    tests:
+      - tests/security/test_channel_gateway_routes.py::test_session_mint_is_admin_gated_and_socket_only
+      - tests/security/test_channel_gateway_routes.py::test_outbox_links_require_a_sidecar_run_token
+      - tests/security/test_channel_gateway_routes.py::test_outbox_claim_ack_fail_over_the_sidecar_token
+      - tests/security/test_channel_gateway_routes.py::test_socket_intake_uses_the_one_signed_route_with_durable_dedup
+      - tests/security/test_channel_gateway_roundtrip.py::test_generic_adapter_round_trip_against_a_test_kernel
+      - tests/security/test_channel_slack_roundtrip.py::test_slack_adapter_round_trip_against_a_test_kernel
+      - tests/security/test_channel_telegram_roundtrip.py::test_telegram_adapter_round_trip_against_a_test_kernel
+      - tests/security/test_channel_discord_roundtrip.py::test_discord_adapter_round_trip_against_a_test_kernel
+      - tests/security/test_channel_signal_roundtrip.py::test_signal_adapter_round_trip_against_a_test_kernel
+  SEC-178:
+    description: Channel addressing is routing data, not authority - intake resolves the target (explicit sender target, else the channel config chat->target mapping, else the tier-1 CoS default) and stamps it plus the reply route on the work item; identity stays binding-row-authoritative.
+    tests:
+      - tests/security/test_channel_addressing.py::test_intake_defaults_to_the_tier1_chief_of_staff
+      - tests/security/test_channel_addressing.py::test_an_explicit_target_addresses_a_tier2_subagent
+      - tests/security/test_channel_addressing.py::test_the_channel_config_maps_a_chat_to_a_target
+      - tests/security/test_pump_principal_authority.py::test_an_addressed_item_routes_to_its_named_head_not_the_inferred_one
+      - tests/security/test_pump_principal_authority.py::test_an_unknown_target_falls_back_to_the_inferred_route
+  SEC-179:
+    description: Channel notifications round-trip - HITL approval/escalation and run-completion notices enqueue durably to the user's BOUND socket-class surface per notification_prefs, addressed back to the originating thread; no pref, no binding, a disabled pref, or a non-socket channel delivers nothing. A team-scoped pref names a department (the user record's scope['departments']) and resolves to every ACTIVE member, delivered per member through the same binding-gated path - an unbound or deactivated member is excluded.
+    tests:
+      - tests/security/test_channel_notifications.py::test_hitl_approval_reaches_the_bound_surface
+      - tests/security/test_channel_notifications.py::test_no_pref_no_binding_or_disabled_means_no_delivery
+      - tests/security/test_channel_notifications.py::test_run_completion_returns_to_the_originating_thread
+      - tests/security/test_channel_notifications.py::test_direct_enqueue_is_user_scoped_and_event_matched
+      - tests/security/test_channel_notifications.py::test_team_pref_reaches_exactly_the_bound_members
+      - tests/security/test_channel_notifications.py::test_team_pref_disabled_or_memberless_delivers_nothing
   P9:
     description: Backend unavailability degrades gracefully, never crashes (graceful degradation).
     tests:
@@ -286,6 +329,7 @@ invariants:
     tests:
       - tests/security/test_console_overview.py::test_console_overview_requires_authentication
       - tests/security/test_console_overview.py::test_console_overview_is_scoped_bounded_and_redacted
+      - tests/security/test_observability_bounded.py::test_console_overview_batches_hitl_visibility_checks
   FR-OBS-13:
     description: Langfuse is an optional best-effort observability mirror; it runs only after audit persistence, never blocks spawn completion, and emits only bounded metadata without prompts, outputs, URLs, keys, tokens, or identity.
     tests:
@@ -446,16 +490,18 @@ invariants:
       - tests/security/test_cf_access_auth.py::test_member_can_operate_but_not_author
       - tests/security/test_cf_access_auth.py::test_authenticated_but_unmapped_email_is_denied
       - tests/security/test_cf_access_auth.py::test_email_case_and_mapping_are_normalised
-      - tests/security/test_channel_gateway.py::test_bound_sender_resolves_to_its_internal_principal
-      - tests/security/test_channel_gateway.py::test_unbound_sender_is_denied_fail_closed
-      - tests/security/test_channel_gateway.py::test_unknown_tier_binding_is_denied
-      - tests/security/test_channel_gateway.py::test_binding_is_tenant_and_channel_scoped
+      - tests/security/test_channel_principal.py::test_bound_sender_resolves_to_its_internal_principal
+      - tests/security/test_channel_principal.py::test_unbound_sender_is_denied_fail_closed
+      - tests/security/test_channel_principal.py::test_unknown_tier_binding_is_denied
+      - tests/security/test_channel_principal.py::test_binding_is_tenant_and_channel_scoped
+      - tests/security/test_channel_principal.py::test_member_binding_gets_no_wildcard_ceiling
       - tests/security/test_channel_inbound.py::test_signed_inbound_creates_governed_work_item
       - tests/security/test_channel_inbound.py::test_unsigned_inbound_rejected
       - tests/security/test_channel_inbound.py::test_verified_but_unbound_sender_denied
       - tests/security/test_channel_inbound.py::test_unknown_channel_404
       - tests/security/test_channel_governance.py::test_member_cannot_connect_or_pair
       - tests/security/test_channel_governance.py::test_connect_stores_secret_kernel_side_never_returns_it
+      - tests/security/test_channel_governance.py::test_secret_reference_path_signs_end_to_end
       - tests/security/test_channel_governance.py::test_disconnect_removes_channel_and_cascades
       - tests/security/test_channel_governance.py::test_pairing_code_consumes_and_binds_unknown_sender
       - tests/security/test_channel_governance.py::test_wrong_pairing_code_locks_out_after_cap
@@ -465,14 +511,17 @@ invariants:
     tests:
       - tests/store/test_postgres_store.py::test_blocking_pause_survives_restart_and_resumes
   NFR-REL-02:
-    description: An interrupted run resumes from its last checkpoint without re-executing completed steps (a checkpointed step replays its recorded output).
+    description: An interrupted run resumes from its last checkpoint without re-executing completed steps (a checkpointed step replays its recorded output); on the trigger/engine path each step also runs inside its own executor boundary, and a step that completed but whose checkpoint write was lost replays its recorded kernel result via its deterministic per-step idempotency key instead of re-executing side effects.
     tests:
       - tests/integration/test_durable_resume.py::test_interrupted_run_resumes_from_last_checkpoint
+      - tests/integration/test_durable_resume.py::test_trigger_path_combines_step_boundaries_and_checkpoint_resume
+      - tests/integration/test_durable_resume.py::test_completed_step_with_lost_checkpoint_replays_via_idempotency
   NFR-REL-03:
     description: A HITL answer resumes the paused run exactly once - the answer bridge pushes the scoped approval event / requeues the parked work item, and the consume-if-approved CAS lets exactly one gated execution through.
     tests:
       - tests/integration/test_durable_resume.py::test_hitl_answer_resumes_paused_run_exactly_once
       - tests/integration/test_durable_resume.py::test_hitl_answer_requeues_the_parked_work_item
+      - tests/integration/test_durable_resume.py::test_combined_path_hitl_pause_resume_stays_exactly_once
   NFR-REL-04:
     description: Adapter-native failures preserve stable transport semantics instead of collapsing into opaque internal errors - not found, unauthorised, invalid, conflict, and internal failures map to 404, 403, 400, 409, and 502 respectively while the HTTP envelope exposes only the bounded reason code.
     tests:
@@ -496,6 +545,7 @@ invariants:
       - tests/kernel/test_idempotency.py::test_distinct_key_executes_again
       - tests/kernel/test_idempotency.py::test_replay_precedes_spent_approval_gate
       - tests/kernel/test_idempotency.py::test_replay_precedes_rate_limit
+      - tests/kernel/test_idempotency.py::test_rate_limited_key_is_released_and_retryable
       - tests/kernel/test_idempotency.py::test_key_is_bound_to_canonical_request_and_authenticated_identity
       - tests/kernel/test_idempotency.py::test_concurrent_same_key_has_one_execution_owner
       - tests/kernel/test_idempotency.py::test_secret_shaped_success_is_completed_uncacheable_not_persisted
@@ -535,6 +585,9 @@ invariants:
     description: Resolved credential material never enters the audit log.
     tests:
       - tests/security/test_credential_isolation.py::test_secret_material_never_enters_audit
+      - tests/kernel/test_chokepoint_order.py::test_credential_never_resolved_when_the_grant_check_fails
+      - tests/kernel/test_chokepoint_order.py::test_credential_never_resolved_when_the_hitl_gate_pends
+      - tests/kernel/test_chokepoint_order.py::test_credential_never_resolved_when_rate_limited
   FR-MCP-01:
     description: The kernel MCP face lists granted verbs (with schemas) as tools.
     tests:
@@ -557,7 +610,7 @@ invariants:
     tests:
       - tests/security/test_pi_runtime.py::test_build_runtime_resolves_pi
   FR-RUN-02:
-    description: The Pi sidecar receives only the scoped MCP connection + model - no native tools/creds.
+    description: The Pi gateway receives only the scoped MCP connection + model - no native tools/creds.
     tests:
       - tests/security/test_pi_runtime.py::test_sidecar_request_carries_no_tool_credentials
   FR-RUN-03:
@@ -565,7 +618,7 @@ invariants:
     tests:
       - tests/security/test_pi_runtime.py::test_pi_run_tool_call_passes_chokepoint
   FR-RUN-05:
-    description: PiRuntime degrades (never crashes) when the sidecar or model is absent.
+    description: PiRuntime degrades (never crashes) when the gateway or model is absent.
     tests:
       - tests/security/test_pi_runtime.py::test_pi_degrades_without_sidecar
   FR-RUN-06:
@@ -628,7 +681,7 @@ invariants:
       - tests/deploy/test_compose_hardening.py::test_herdr_opencode_clis_ship_inside_first_party_images
       - tests/unit/test_doctor.py::test_production_doctor_rejects_missing_or_personal_herdr_opencode_bins
   SEC-24:
-    description: The Pi sidecar is sandboxed - no native tools, egress only to the kernel + model.
+    description: The Pi gateway is sandboxed - no native tools, egress only to the kernel + model.
     tests:
       - tests/integration/test_round_two_manifest.py::test_pi_sidecar_sandbox_is_declared_restrictive
   SEC-27:
@@ -638,10 +691,11 @@ invariants:
       - tests/security/test_opencode_runtime.py::test_opencode_runs_json_cli_and_keeps_tool_credentials_out
       - tests/security/test_opencode_runtime.py::test_opencode_scopes_mcp_token_to_env_and_revokes
   SEC-28:
-    description: Severability - the kernel and models import nothing from Pi or the sidecar, and the standalone Pi sidecar imports no boltrig package code; the boundary is HTTP/MCP only.
+    description: Severability - the kernel and models import nothing from Pi or the sidecars, and the standalone Pi and channel sidecars import no boltrig package code; the boundary is HTTP/MCP only.
     tests:
       - tests/security/test_severability.py::test_kernel_and_models_have_no_pi_or_sidecar_coupling
       - tests/security/test_severability.py::test_pi_sidecar_imports_no_boltrig_package_code
+      - tests/security/test_severability.py::test_channel_gateway_imports_no_boltrig_package_code
   FR-CONV-04:
     description: Inline HITL and run events stream into a chat turn and are recorded.
     tests:
@@ -706,10 +760,14 @@ invariants:
       - tests/kernel/test_audit_chain.py::test_every_action_is_audited
       - tests/kernel/test_audit_chain.py::test_denied_actions_are_also_audited
       - tests/kernel/test_audit_chain.py::test_concurrent_writes_keep_a_contiguous_verifiable_chain
+      - tests/kernel/test_chokepoint_order.py::test_rate_limited_dispatch_is_audited
+      - tests/kernel/test_chokepoint_order.py::test_schema_invalid_dispatch_is_audited
+      - tests/kernel/test_chokepoint_order.py::test_adapter_exception_dispatch_is_audited
   SEC-21:
     description: Verb params are schema-validated before any dispatch side effect.
     tests:
       - tests/kernel/test_dispatch.py::test_invalid_params_rejected_before_dispatch
+      - tests/kernel/test_chokepoint_order.py::test_out_of_schema_adapter_output_is_rejected
   FR-KER-05:
     description: Per-verb / per-tenant rate limits are enforced at the kernel.
     tests:
@@ -745,6 +803,9 @@ invariants:
     description: A personal access token never escalates (scope ∩ current grants, re-checked) and a deactivated/de-provisioned user's tokens stop working.
     tests:
       - tests/security/test_round_four.py::test_pat_never_escalates_and_dies_with_user
+      - tests/security/test_channel_principal.py::test_provisioned_user_current_grants_cap_the_channel_identity
+      - tests/security/test_channel_principal.py::test_binding_tier_clamps_a_more_privileged_user
+      - tests/security/test_channel_principal.py::test_deactivated_users_channel_identity_dies_with_user
   SEC-35:
     description: Invitations do not bypass the IdP - they pre-stage a role/scope, grant no access until SSO login, and are consumed once.
     tests:
@@ -813,6 +874,12 @@ invariants:
       - tests/integration/test_cognee_engine.py::test_live_remember_recall_roundtrip_with_provenance
       - tests/integration/test_cognee_engine.py::test_live_recall_is_isolated_per_tenant_and_scope
       - tests/integration/test_cognee_engine.py::test_live_forget_erasure_is_real
+    # These bindings only execute behind the cognee live gate (BOLTRIG_COGNEE_LIVE=1
+    # + the cognee package + LLM env) - offline they are gated-not-verified.
+    service_gated:
+      - tests/integration/test_cognee_engine.py::test_live_remember_recall_roundtrip_with_provenance
+      - tests/integration/test_cognee_engine.py::test_live_recall_is_isolated_per_tenant_and_scope
+      - tests/integration/test_cognee_engine.py::test_live_forget_erasure_is_real
   SEC-46:
     description: Conversation continuity is deterministic and append-only (an earlier turn's render is a prefix of a later one) and adds no authority - it composes only persisted text.
     tests:
@@ -865,7 +932,7 @@ invariants:
     tests:
       - tests/integration/test_round_fifteen_bundle.py::test_consumed_mcp_servers_register_inert_pending_review
   SEC-48:
-    description: The Pi sidecar's network egress is enforced by the deploy manifests (sandbox-only, internal in the secure overlay), not merely documented.
+    description: The Pi gateway's network egress is enforced by the deploy manifests (sandbox-only, internal in the secure overlay), not merely documented.
     tests:
       - tests/security/test_round_six.py::test_pi_sidecar_egress_is_enforced_in_manifests
   SEC-49:
@@ -943,9 +1010,10 @@ invariants:
     tests:
       - tests/security/test_round_eleven.py::test_unknown_run_is_404
   FR-EVT-04:
-    description: The interpreter emits a workflow_step event per step (step_id + running/ok/failed/skipped) on the run's stream, bound to one run id so step events, the steps' tool events, and audit cohere.
+    description: The interpreter emits a workflow_step event per step (step_id + running/ok/failed/skipped) and a run-level terminal marker on the caller-bound run stream, so live clients can follow and settle while step events, tool events, and audit cohere.
     tests:
       - tests/integration/test_round_twelve.py::test_interpreter_emits_step_events_on_the_run_stream
+      - tests/integration/test_round_twelve.py::test_caller_run_id_is_the_live_workflow_stream_key
       - tests/integration/test_round_twelve.py::test_skipped_descendant_emits_skipped_step_event
   SEC-58:
     description: Edge/web hardening - the kernel app stamps security headers (HSTS/nosniff/frame-deny/CSP) on every response, validates the Host header, and caps request-body size (WEB-02/03/06, RES-01).
@@ -993,10 +1061,17 @@ invariants:
     tests:
       - tests/security/test_auth.py::test_saml_provider_config_refuses_to_boot
   SEC-69:
-    description: List reads are resource-bounded so no caller can exhaust memory/latency - /v1/work is keyset-paginated with a server-clamped page size, the memory facts/ingestions reads clamp the caller-supplied limit, and a batch memory ingest is capped by item count (M7, M9-memory / SEC-009 DoS-bounding).
+    description: List reads are resource-bounded so no caller can exhaust memory/latency - /v1/work is keyset-paginated with a server-clamped page size, the memory facts/ingestions reads clamp the caller-supplied limit, a batch memory ingest is capped by item count, the observability audit reads (console/cost/telemetry/audit-search) push the department/workspace run scope into the store query under a clamped page instead of loading-then-filtering whole tables, and /v1/runs is keyset-paginated with the RunScope visible/hidden predicate inside the store query (M7, M9-memory / SEC-009 DoS-bounding).
     tests:
       - tests/security/test_dos_bounding.py::test_list_work_is_paginated_and_clamped
       - tests/security/test_dos_bounding.py::test_memory_list_limits_clamped_and_ingest_capped
+      - tests/security/test_observability_bounded.py::test_observability_reads_do_not_load_full_tables
+      - tests/security/test_observability_bounded.py::test_audit_search_stays_department_scoped_via_the_store
+      - tests/security/test_observability_bounded.py::test_runs_listing_is_keyset_paginated_and_bounded
+      - tests/store/test_store_parity.py::test_audit_query_scoped_pushes_run_scope_into_the_store
+      - tests/store/test_store_parity.py::test_audit_query_scoped_page_is_clamped
+      - tests/store/test_store_parity.py::test_list_work_items_by_refs_matches_ids_and_hatchet_aliases
+      - tests/store/test_store_parity.py::test_list_run_items_scoped_pushes_run_scope_into_the_store
   SEC-70:
     description: The durable and sensitive control plane is not LAN-exposed and the DB carries no baked default credential - Hatchet's engine (plaintext gRPC + API), its unauthenticated dashboard, and the sensitive-data local model bind operator ports to 127.0.0.1 in the base compose and are dropped entirely (ports []) by the secure overlay, and POSTGRES_PASSWORD uses the compose required-var form so the stack refuses to start unset while the Hatchet DSN interpolates the password rather than hardcoding boltrig:boltrig (M8/M9).
     tests:
@@ -1005,7 +1080,7 @@ invariants:
       - tests/deploy/test_compose_hardening.py::test_local_model_port_is_loopback_only_and_removed_from_secure_compose
       - tests/deploy/test_compose_hardening.py::test_postgres_password_has_no_literal_default
   SEC-71:
-    description: A scheduled off-box backup ships by default - a profile-gated backup sidecar (so the dev stack is unaffected) atomically pg_dumps the durable state, refuses archives pg_restore cannot parse, optionally encrypts them, creates and verifies a portable SHA-256 sidecar, and copies both files off-box via rclone; a complete run alone updates the freshness marker, any configured remote failure exits PID 1 instead of being swallowed, and missing, malformed, or stale success is unhealthy (M10).
+    description: A scheduled off-box backup ships by default - a profile-gated backup gateway (so the dev stack is unaffected) atomically pg_dumps the durable state, refuses archives pg_restore cannot parse, optionally encrypts them, creates and verifies a portable SHA-256 gateway, and copies both files off-box via rclone; a complete run alone updates the freshness marker, any configured remote failure exits PID 1 instead of being swallowed, and missing, malformed, or stale success is unhealthy (M10).
     tests:
       - tests/deploy/test_compose_hardening.py::test_backup_sidecar_ships_profile_gated
       - tests/deploy/test_backup_scripts.py::test_backup_verifies_dump_checksum_and_remote_pair
@@ -1023,7 +1098,7 @@ invariants:
       - tests/security/test_prompt_injection_hardening.py::test_transcript_history_enveloped_before_spawn
       - tests/security/test_prompt_injection_hardening.py::test_tool_result_wrapped_as_untrusted_envelope
   SEC-73:
-    description: The Pi sidecar POST /run is hardened - it requires a shared-secret bearer (constant-time compare; fail-closed under a production signal when unset), and it egress-guards the caller-supplied mcp.url / model.endpoint, refusing a metadata/loopback/internal target BEFORE any outbound connection, closing an SSRF pivot from the sidecar (M2).
+    description: The Pi gateway POST /run is hardened - it requires a shared-secret bearer (constant-time compare; fail-closed under a production signal when unset), and it egress-guards the caller-supplied mcp.url / model.endpoint, refusing a metadata/loopback/internal target BEFORE any outbound connection, closing an SSRF pivot from the gateway (M2).
     tests:
       - tests/security/test_prompt_injection_hardening.py::test_sidecar_run_requires_auth
       - tests/security/test_prompt_injection_hardening.py::test_sidecar_unconfigured_auth_fails_closed_in_prod
@@ -1369,6 +1444,10 @@ invariants:
     description: The live Hatchet Ultracode parent workflow fans out phase agents through the registered child task seam and persists child/phase checkpoints.
     tests:
       - tests/integration/test_hatchet_live.py::test_live_ultracode_run_fans_out_agent_child_tasks
+    # The only binding lives in the Hatchet-live module (module-skipped without
+    # HATCHET_CLIENT_TOKEN) - offline this invariant is gated-not-verified.
+    service_gated:
+      - tests/integration/test_hatchet_live.py::test_live_ultracode_run_fans_out_agent_child_tasks
   FR-WFL-18:
     description: list_workflows returns exactly one current definition (the latest version) per workflow id, identically on the in-memory and Postgres stores - the durable store collapses versioned rows the same way list_skills/get_skill do, so callers matching a workflow by id never see duplicate or stale versions.
     tests:
@@ -1498,7 +1577,7 @@ invariants:
       - tests/deploy/test_release_images.py::test_release_image_environment_requires_exactly_five_digest_refs
       - tests/deploy/test_release_images.py::test_release_compose_validator_rejects_builds_tags_and_source_mounts
   IAC-002:
-    description: Production Python images, including the standalone Pi sidecar's complete CPython-3.12-resolved transitive graph, consume hash-locked runtime dependencies without invoking an unlocked PEP 517 build environment; the Pi lock has a small direct source, is Dependabot-managed and audited under hash enforcement, and application source runs directly from the read-only image tree.
+    description: Production Python images, including the standalone Pi gateway's complete CPython-3.12-resolved transitive graph, consume hash-locked runtime dependencies without invoking an unlocked PEP 517 build environment; the Pi lock has a small direct source, is Dependabot-managed and audited under hash enforcement, and application source runs directly from the read-only image tree.
     tests:
       - tests/deploy/test_compose_hardening.py::test_python_images_do_not_invoke_unlocked_build_isolation
       - tests/deploy/test_pi_dependency_lock.py::test_pi_sidecar_uses_python312_generated_full_hash_lock
@@ -1639,6 +1718,17 @@ invariants:
       - tests/store/test_store_parity.py::test_audit_tamper_in_the_oldest_page_is_caught
       - tests/store/test_store_parity.py::test_audit_scan_pages_ascending_and_query_keeps_tail
       - tests/store/test_store_parity.py::test_security_verify_and_scan_page_the_whole_chain
+  SEC-169:
+    description: No plaintext credential material rests in the credential store (SEC-04 made true at the store seam, boltrig/store/sealing.py) - every dict written through set_credential_ref (inline TOTP base32, per-org AI key, legacy channel signing secret, or a pure {store, ref} reference) rests as a versioned Fernet envelope {"sealed": "v1", "ct": ...} whose ciphertext carries no plaintext, and get_credential_ref unseals it transparently; a legacy plaintext row (no marker) still reads, a rewrite re-seals it, a wrong key FAILS CLOSED with CredentialResolution, the optional BOLTRIG_SEAL_KEY_PREVIOUS decrypts during rotation while new writes seal under the active key alone, and a missing/default BOLTRIG_SEAL_KEY is FATAL under a production signal while the in-source dev default seals offline.
+    tests:
+      - tests/security/test_credential_sealing.py::test_inline_secret_is_sealed_at_rest_and_unsealed_on_read
+      - tests/security/test_credential_sealing.py::test_reference_dicts_are_sealed_too
+      - tests/security/test_credential_sealing.py::test_legacy_plaintext_row_still_reads
+      - tests/security/test_credential_sealing.py::test_rewrite_reseals_a_legacy_row
+      - tests/security/test_credential_sealing.py::test_a_wrong_key_fails_closed
+      - tests/security/test_credential_sealing.py::test_the_previous_key_decrypts_during_rotation
+      - tests/security/test_credential_sealing.py::test_a_missing_or_default_key_is_fatal_in_production
+      - tests/security/test_credential_sealing.py::test_the_dev_default_seals_offline_and_round_trips
 
   # --- emotion add-on: a fail-safe cosmetic projection over the event stream ---
   EMO-1:
@@ -1664,6 +1754,46 @@ invariants:
     tests:
       - tests/emotion/test_engine.py::test_appraisal_table_is_data_and_mutating_it_changes_behavior
 
+  # --- Codex-native Knowledge fabric (decision 0015) ---
+  KNO-01:
+    description: Knowledge originals are content-addressed and immutable, every derived passage retains a stable revision/segment citation, and every operation enters through a registered dispatcher verb.
+    tests:
+      - tests/knowledge/test_knowledge_service.py::test_original_revision_search_and_context_keep_stable_citations
+      - tests/knowledge/test_knowledge_service.py::test_pdf_ingestion_returns_a_page_stable_citation
+      - tests/knowledge/test_knowledge_service.py::test_knowledge_adapter_runs_the_dispatch_chokepoint
+      - tests/knowledge/test_knowledge_service.py::test_knowledge_verbs_are_grant_enforced_at_the_chokepoint
+      - tests/knowledge/test_knowledge_service.py::test_http_upload_and_search_are_thin_wrappers_over_governed_verbs
+      - tests/knowledge/test_knowledge_service.py::test_http_denies_under_granted_and_cross_workspace_callers
+      - tests/knowledge/test_knowledge_service.py::test_mcp_resource_list_and_read_reuse_governed_asset_verbs
+      - tests/knowledge/test_object_vault.py::test_filesystem_vault_is_content_addressed_and_traversal_safe
+      - tests/knowledge/test_object_vault.py::test_s3_vault_enforces_the_same_digest_prefix_and_erasure_contract
+      - tests/knowledge/test_knowledge_skill.py::test_codex_knowledge_skill_is_read_only_and_requires_citations
+      - tests/knowledge/test_postgres_knowledge.py::test_postgres_knowledge_round_trip_provenance_search_and_erase
+  SEC-KNO-01:
+    description: Knowledge candidates are tenant/workspace/asset-scope filtered before ranking or original-byte access, so a direct id and a semantic query reveal nothing outside the principal's scopes.
+    tests:
+      - tests/knowledge/test_knowledge_service.py::test_retrieval_filters_access_before_returning_any_candidate
+      - tests/knowledge/test_knowledge_service.py::test_caller_supplied_extra_scopes_are_not_authority
+      - tests/knowledge/test_knowledge_service.py::test_org_scope_is_limited_to_the_admin_tiers
+      - tests/knowledge/test_knowledge_service.py::test_http_denies_under_granted_and_cross_workspace_callers
+      - tests/knowledge/test_knowledge_service.py::test_mcp_resource_list_and_read_reuse_governed_asset_verbs
+      - tests/knowledge/test_postgres_knowledge.py::test_postgres_retrieval_filters_access_before_returning_any_candidate
+  KNO-02:
+    description: Cognee is a rebuildable compiler projection; missing or failed compiler configuration is visible but can never roll back or replace the canonical ObjectVault/Postgres commit.
+    tests:
+      - tests/knowledge/test_knowledge_service.py::test_cognee_degradation_never_rolls_back_canonical_ingest
+  KNO-03:
+    description: Asset erasure removes derived segments immediately and removes an original object only after the final canonical revision reference is gone.
+    tests:
+      - tests/knowledge/test_knowledge_service.py::test_erasure_preserves_deduplicated_blob_until_last_reference
+      - tests/knowledge/test_object_vault.py::test_s3_vault_enforces_the_same_digest_prefix_and_erasure_contract
+      - tests/knowledge/test_postgres_knowledge.py::test_postgres_knowledge_round_trip_provenance_search_and_erase
+  KNO-04:
+    description: Cognee is bundled and enabled by default, while Supermemory and Mem0 are disabled governed add-ons whose enablement never changes canonical authority.
+    tests:
+      - tests/knowledge/test_knowledge_service.py::test_cognee_is_default_and_addons_enable_without_becoming_authority
+      - tests/deploy/test_compose_hardening.py::test_knowledge_and_bundled_cognee_have_stack_owned_persistent_storage
+
   # --- wayland add-on: voluntary expression through the chokepoint ---
   WL-3:
     description: Voluntary expression goes through the chokepoint - familiar.express is a registered verb with a binding, a grant check, and an audit row, and the express channel the surface reads is written ONLY by that dispatched handler (no direct agent-to-surface socket).
@@ -1672,3 +1802,15 @@ invariants:
       - tests/security/test_familiar_express.py::test_ungranted_express_is_denied_audited_and_writes_nothing
       - tests/security/test_familiar_express.py::test_bad_gesture_is_rejected_by_the_binding_and_writes_nothing
       - tests/security/test_familiar_express.py::test_a_dispatched_gesture_is_audited
+
+  # --- desktop hands: governed window control through the chokepoint ---
+  DH-1:
+    description: Desktop control goes through the chokepoint with no side door - the only way a window action reaches the host is a granted, schema-bound, audited desktop.* dispatch claimed over the authenticated /v1/hands pull surface; an ungranted or schema-invalid call queues nothing.
+    tests:
+      - tests/security/test_desktop_hands.py::test_granted_focus_dispatches_audits_and_queues
+      - tests/security/test_desktop_hands.py::test_ungranted_desktop_call_is_denied_audited_and_queues_nothing
+      - tests/security/test_desktop_hands.py::test_schema_bad_args_are_rejected_by_the_binding_and_queue_nothing
+      - tests/security/test_desktop_hands.py::test_full_round_trip_receipt_resolves_the_waiting_dispatch
+      - tests/security/test_desktop_hands.py::test_executor_offline_still_dispatches_and_audits
+      - tests/security/test_desktop_hands.py::test_hands_routes_require_the_principal
+      - tests/security/test_desktop_hands.py::test_hands_routes_claim_once_and_record_the_receipt

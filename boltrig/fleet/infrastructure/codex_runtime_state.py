@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import shutil
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from boltrig.fleet.domain import PhaseRef, RuntimeThreadRef
 
@@ -26,6 +29,9 @@ class CodexThreadState:
     actor: CodexRuntimeActor | None = field(default=None, repr=False)
     cleanup_task: asyncio.Task[None] | None = field(default=None, repr=False)
     cleanup_failed: bool = False
+    # The API-owned per-run cell tree (in-process posture only; None per-cell,
+    # where the tree lives in a slot the spawner clears at the next provision).
+    cell_root: Path | None = None
 
     def exact_actor(self) -> CodexRuntimeActor:
         if self.actor is None:
@@ -33,14 +39,31 @@ class CodexThreadState:
         return self.actor
 
 
+async def remove_cell_root(cell_root: Path | None) -> None:
+    """Best-effort removal of a per-run cell tree AFTER its cell is down.
+
+    The path always comes from a layout that ``validate_cell_layout`` proved
+    lives under the stack root. A leftover tree is a disk leak, never a
+    correctness failure, so removal errors are swallowed (P9).
+    """
+
+    if cell_root is None:
+        return
+    with contextlib.suppress(OSError):
+        await asyncio.to_thread(shutil.rmtree, cell_root, ignore_errors=True)
+
+
 async def cleanup_state(state: CodexThreadState) -> None:
     try:
         await state.cell.aclose()
     except BaseException:
         state.cleanup_failed = True
+    await remove_cell_root(state.cell_root)
 
 
-async def cleanup_cell_ignoring_failure(cell: InitializedCodexCell) -> None:
+async def cleanup_cell_ignoring_failure(
+    cell: InitializedCodexCell, *, cell_root: Path | None = None
+) -> None:
     task = asyncio.create_task(cell.aclose())
     try:
         await asyncio.shield(task)
@@ -48,6 +71,7 @@ async def cleanup_cell_ignoring_failure(cell: InitializedCodexCell) -> None:
         await asyncio.gather(task, return_exceptions=True)
     except BaseException:
         pass
+    await remove_cell_root(cell_root)
 
 
 def phase_key(phase: PhaseRef) -> PhaseKey:
@@ -80,6 +104,7 @@ __all__ = [
     "cleanup_cell_ignoring_failure",
     "cleanup_state",
     "phase_key",
+    "remove_cell_root",
     "require_ready_cell",
     "validate_runtime_thread",
 ]

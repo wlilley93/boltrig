@@ -6,7 +6,13 @@ import type {
   ConfigSectionResponse,
 } from "@/api/types";
 import { useFetch, type FetchState } from "@/useFetch";
-import { deniedOf, enrichAgents, readAgentSpecs, type AgentModel } from "@/panels/agents/model";
+import {
+  deniedOf,
+  enrichAgents,
+  mergeCapabilityProfiles,
+  readAgentSpecs,
+  type AgentModel,
+} from "@/panels/agents/model";
 
 export interface AgentsData {
   hierarchy: FetchState<ConfigSectionResponse>;
@@ -36,8 +42,11 @@ export function useAgentsData(): AgentsData {
 
   const denied = deniedOf(hierarchy.data) ?? deniedOf(pool.data);
   const specs = useMemo(
-    () => readAgentSpecs(hierarchy.data, pool.data),
-    [hierarchy.data, pool.data],
+    () => mergeCapabilityProfiles(
+      readAgentSpecs(hierarchy.data, pool.data),
+      caps.data?.agent_capabilities ?? [],
+    ),
+    [hierarchy.data, pool.data, caps.data?.agent_capabilities],
   );
   const agents = useMemo(
     () =>

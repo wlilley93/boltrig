@@ -15,10 +15,10 @@ from pathlib import Path
 from typing import Mapping
 from urllib.parse import parse_qs, urlsplit
 
+from boltrig.config.environment import is_truthy
 from boltrig.config.manifest import FleetManifest, load_manifest
 from boltrig.api.doctor_stack_state import stack_state_checks
 
-_TRUE = {"1", "true", "yes", "on", "y", "t"}
 _PROD_NAMES = {"prod", "production", "staging"}
 _PLACEHOLDERS = {
     "",
@@ -155,16 +155,12 @@ def _add(
     checks.append(DoctorCheck(name=name, status=status, message=message, hint=hint))
 
 
-def _bool(value: str | None) -> bool:
-    return (value or "").strip().lower() in _TRUE
-
-
 def _csv(value: str | None) -> list[str]:
     return [p.strip() for p in (value or "").split(",") if p.strip()]
 
 
 def _production_signal(env: Mapping[str, str]) -> bool:
-    if _bool(env.get("BOLTRIG_PRODUCTION")):
+    if is_truthy(env.get("BOLTRIG_PRODUCTION")):
         return True
     return any((env.get(k) or "").strip().lower() in _PROD_NAMES for k in ("ENV", "BOLTRIG_ENV", "APP_ENV"))
 
@@ -261,7 +257,7 @@ def _check_datastores(env: Mapping[str, str], prod: bool, checks: list[DoctorChe
 
 
 def _check_auth(env: Mapping[str, str], prod: bool, checks: list[DoctorCheck]) -> None:
-    dev_auth = _bool(env.get("BOLTRIG_DEV_AUTH"))
+    dev_auth = is_truthy(env.get("BOLTRIG_DEV_AUTH"))
     oidc_values = [env.get("OIDC_ISSUER"), env.get("OIDC_AUDIENCE"), env.get("OIDC_JWKS_URI")]
     oidc_any = any(oidc_values)
     oidc_all = all(oidc_values) and not any(_weak(v, min_len=3) for v in oidc_values)
@@ -312,6 +308,22 @@ def _check_auth(env: Mapping[str, str], prod: bool, checks: list[DoctorCheck]) -
             "No real auth mode is configured; the kernel will fail closed.",
             "Configure OIDC, Cloudflare Access, or BOLTRIG_AUTH_MODE=session.",
         )
+
+    if session_auth:
+        # The session cookie is the bearer of authority under session auth; the
+        # knob defaults to Secure (settings.py) so only an EXPLICIT opt-out is
+        # flagged here.
+        cookie_secure = env.get("BOLTRIG_SESSION_COOKIE_SECURE")
+        if cookie_secure is not None and not is_truthy(cookie_secure):
+            _add(
+                checks,
+                "fail" if prod else "warn",
+                "session_cookie_secure",
+                "BOLTRIG_SESSION_COOKIE_SECURE is disabled under session auth.",
+                "Session cookies without Secure ride plaintext HTTP; unset the knob or set it true.",
+            )
+        else:
+            _add(checks, "ok", "session_cookie_secure", "Session cookies are Secure.")
 
 
 def _check_edge(env: Mapping[str, str], prod: bool, checks: list[DoctorCheck]) -> None:
@@ -365,7 +377,7 @@ def _check_runtime(
     if manifest is not None:
         runtimes = manifest.section("runtimes")
         pi = runtimes.get("pi") if isinstance(runtimes.get("pi"), dict) else {}
-        manifest_pi = _bool(str(pi.get("enabled", False))) if isinstance(pi, dict) else False
+        manifest_pi = is_truthy(str(pi.get("enabled", False))) if isinstance(pi, dict) else False
 
     sidecar_url = env.get("BOLTRIG_PI_SIDECAR_URL")
     pi_enabled = bool(sidecar_url) or manifest_pi
@@ -374,9 +386,12 @@ def _check_runtime(
     elif sidecar_url:
         _add(checks, "ok", "pi_sidecar_url", "Pi sidecar URL is internal-looking.")
     elif manifest_pi:
+        # Pi is a staged-cutover non-target runtime (decision 0012): a manifest
+        # that still enables it without the sidecar URL is informational, never a
+        # production deploy blocker.
         _add(
             checks,
-            "fail" if prod else "warn",
+            "warn",
             "pi_sidecar_url",
             "Manifest enables Pi but BOLTRIG_PI_SIDECAR_URL is unset; Pi runs will degrade.",
         )
@@ -475,7 +490,7 @@ def _check_model_posture(
                 "Sensitive endpoint base_url is not obviously local/internal.",
             )
 
-    air_gapped = _bool(env.get("AIR_GAPPED")) or manifest.network.air_gapped
+    air_gapped = is_truthy(env.get("AIR_GAPPED")) or manifest.network.air_gapped
     if air_gapped:
         hosted = [
             ep.id
@@ -511,7 +526,7 @@ def _check_model_posture(
 
 def _check_memory_posture(prod: bool, manifest: FleetManifest, checks: list[DoctorCheck]) -> None:
     memory = manifest.section("memory")
-    if not _bool(str(memory.get("enabled", False))):
+    if not is_truthy(str(memory.get("enabled", False))):
         return
     endpoints = {ep.id: ep for ep in manifest.models.endpoints}
     local_ids = {str(v) for v in memory.get("local_endpoints") or []}
@@ -539,7 +554,7 @@ def _check_memory_posture(prod: bool, manifest: FleetManifest, checks: list[Doct
             "memory.engine=local; Boltrig v2 production usually wants Mem0 primary"
             " with Cognee as an optional projection.",
         )
-    if not _bool(str((memory.get("ingest") or {}).get("screen_content", False))):
+    if not is_truthy(str((memory.get("ingest") or {}).get("screen_content", False))):
         _add(checks, "warn", "memory_screening", "Memory ingest content screening is disabled.")
 
 

@@ -125,6 +125,9 @@ class CodexAgentRuntime(AgentRuntime):
                 admission.layout.workspace.as_posix(),
                 policy.model.model_id,
                 leased.evidence_digest(),
+                # Only the in-process posture has an API-owned tree to remove;
+                # a per-cell slot's tree is the spawner's to clear.
+                cell_root=None if admission.slot_provisioned else admission.layout.cell_root,
             )
             actor = CodexRuntimeActor(
                 client=leased.cell.client,
@@ -143,7 +146,14 @@ class CodexAgentRuntime(AgentRuntime):
             if state is not None and state.actor is not None:
                 await state.actor.fail(_terminal_from_exception(error))
             elif leased is not None:
-                await cleanup_cell_ignoring_failure(leased.cell)
+                await cleanup_cell_ignoring_failure(
+                    leased.cell,
+                    cell_root=(
+                        None
+                        if leased.admission.slot_provisioned
+                        else leased.admission.layout.cell_root
+                    ),
+                )
             raise
 
     async def resume_thread(self, thread: RuntimeThreadRef) -> RuntimeThreadRef:

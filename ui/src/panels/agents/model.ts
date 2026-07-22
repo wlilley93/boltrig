@@ -1,4 +1,5 @@
 import type {
+  AgentCapabilityInfo,
   BudgetItem,
   ConfigSectionResponse,
   SkillSummary,
@@ -97,6 +98,27 @@ export function readAgentSpecs(
     .map((item) => specFromRaw(item, "worker"))
     .filter((a): a is AgentSpec => a !== null);
   return [...(chief ? [chief] : []), ...heads, ...workers];
+}
+
+export function mergeCapabilityProfiles(
+  configured: AgentSpec[],
+  profiles: AgentCapabilityInfo[],
+): AgentSpec[] {
+  const merged = new Map(configured.map((agent) => [agent.name, agent]));
+  for (const profile of profiles) {
+    if (merged.has(profile.name)) continue;
+    merged.set(profile.name, {
+      name: profile.name,
+      kind: "worker",
+      runtime: profile.runtime,
+      model_endpoint: profile.model_endpoint ?? undefined,
+      cost_tier: profile.cost_tier,
+      max_depth: profile.max_depth,
+      supported_skills: [...profile.supported_skills],
+      is_ephemeral: profile.is_ephemeral,
+    });
+  }
+  return [...merged.values()];
 }
 
 export function agentColumns(specs: AgentSpec[]): DeckCol[] {

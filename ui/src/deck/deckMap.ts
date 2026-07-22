@@ -43,6 +43,7 @@ const OPS_COLS: ReadonlyArray<{
   { key: "insight", label: "Insight" },
   { key: "eval", label: "Eval" },
   { key: "memory", label: "Memory" },
+  { key: "knowledge", label: "Knowledge" },
   { key: "health", label: "Health" },
   { key: "admin", label: "Admin", gate: (r) => ADMIN_ROLES.has(r) },
   { key: "channels", label: "Channels", gate: (r) => ADMIN_ROLES.has(r) },

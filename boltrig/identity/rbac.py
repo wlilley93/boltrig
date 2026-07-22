@@ -243,6 +243,36 @@ def memory_owner_scopes(user_id: str, role: str, scope: dict[str, Any] | None) -
     return scopes
 
 
+# Roles that administer organisation-wide Knowledge: the console's admin tiers
+# (superadmin/admin, identity/auth.py CF_ACCESS_TIERS) plus the IdP org-admin
+# role. Everyone else is limited to their user/workspace/department scopes.
+KNOWLEDGE_ORG_ROLES: frozenset[str] = frozenset({"superadmin", "admin", "org-admin"})
+
+
+def knowledge_scopes(
+    user_id: str,
+    on_behalf_of: str | None,
+    workspace_id: str | None,
+    role: str,
+    scope: dict[str, Any] | None,
+) -> list[str]:
+    """The Knowledge access scopes a caller may use (SEC-KNO-01), derived
+    server-side from the authenticated principal - never from caller-supplied
+    context keys: their own user (and the user they act on behalf of), the
+    active workspace, the org scope for the admin tiers, and any department in
+    their visibility scope."""
+    scopes = {f"user:{user_id}"}
+    if on_behalf_of:
+        scopes.add(f"user:{on_behalf_of}")
+    if workspace_id:
+        scopes.add(f"workspace:{workspace_id}")
+    if role in KNOWLEDGE_ORG_ROLES:
+        scopes.add("org")
+    for department in (scope or {}).get("departments", []) or []:
+        scopes.add(f"department:{department}")
+    return sorted(scopes)
+
+
 def departments_for(role: str, scope: dict[str, Any] | None) -> list[str] | None:
     """The caller's row-level department scope for work listing (US-IAM-02).
 

@@ -38,6 +38,7 @@ from boltrig.fleet.domain.model_proxy_scope import (
 )
 
 DEFAULT_MAX_REGISTERED_MODEL_PROXY_CELLS = 4_096
+DEFAULT_MAX_RETAINED_MODEL_PROXY_TOMBSTONES = 4_096
 HARD_MAX_REGISTERED_MODEL_PROXY_CELLS = 100_000
 MAX_LINUX_ID = 2**32 - 2
 MAX_REGISTRY_VERSION = 2**63 - 1
@@ -52,7 +53,7 @@ class ModelProxyPeerRegistryError(RuntimeError):
 
 
 class ModelProxyPeerRegistryCapacityExceeded(ModelProxyPeerRegistryError):
-    """Retained registration and terminal state reached its hard bound."""
+    """Live registrations reached the configured live-capacity bound."""
 
 
 class ModelProxyCellAlreadyRegistered(ModelProxyPeerRegistryError):
@@ -115,12 +116,25 @@ class ModelProxyProcessRegistry:
     """Bounded registry with durable logical-cell tombstones.
 
     The supervisor owns this object.  Registrations cannot be updated or
-    reused: a revoked cell remains terminal until the registry is discarded as
-    part of an explicit supervisor restart.
+    reused: a revoked cell remains TERMINAL and its identity non-reusable
+    while its tombstone is retained.  Only LIVE records count against
+    ``max_cells``, which fails closed; tombstones are bounded separately by
+    ``max_terminal_tombstones``, and once a revoke exceeds that bound the
+    OLDEST terminal record (lowest sequence) is evicted, making only that
+    evicted identity reusable again.  Retained state is therefore bounded by
+    ``max_cells + max_terminal_tombstones`` regardless of lifetime cell
+    count, and the registry no longer dies permanently at 4,096 lifetime
+    cells.
     """
 
-    def __init__(self, *, max_cells: int = DEFAULT_MAX_REGISTERED_MODEL_PROXY_CELLS) -> None:
-        self._max_cells = _capacity(max_cells)
+    def __init__(
+        self,
+        *,
+        max_cells: int = DEFAULT_MAX_REGISTERED_MODEL_PROXY_CELLS,
+        max_terminal_tombstones: int = DEFAULT_MAX_RETAINED_MODEL_PROXY_TOMBSTONES,
+    ) -> None:
+        self._max_cells = _capacity("max_cells", max_cells)
+        self._max_terminal_tombstones = _capacity("max_terminal_tombstones", max_terminal_tombstones)
         self._records: dict[LogicalCellKey, ModelProxyProcessRegistration] = {}
         self._exact_processes: dict[ExactProcessKey, LogicalCellKey] = {}
         self._live_pids: dict[LivePidKey, LogicalCellKey] = {}
@@ -147,7 +161,7 @@ class ModelProxyProcessRegistry:
                 raise ModelProxyCellAlreadyRegistered("logical cell is non-reusable")
             if exact in self._exact_processes or live_pid in self._live_pids:
                 raise ModelProxyProcessAlreadyRegistered("process identity is already registered")
-            if len(self._records) >= self._max_cells:
+            if self._live_count() >= self._max_cells:
                 raise ModelProxyPeerRegistryCapacityExceeded("process registry capacity exceeded")
             next_version = _next_version(self._version)
             registration = ModelProxyProcessRegistration(
@@ -178,8 +192,43 @@ class ModelProxyProcessRegistry:
             terminal = replace(current, state=ModelProxyRegistrationState.TERMINAL)
             self._records[logical] = terminal
             self._live_pids.pop((scope.boot_id, scope.pid), None)
+            self._evict_terminal_overflow()
             self._version = next_version
             return True
+
+    def _live_count(self) -> int:
+        return sum(
+            1
+            for record in self._records.values()
+            if record.state is ModelProxyRegistrationState.LIVE
+        )
+
+    def _evict_terminal_overflow(self) -> None:
+        """Drop the oldest terminal tombstones once the terminal bound is exceeded.
+
+        Only TERMINAL records are ever evicted, oldest (lowest sequence) first;
+        an evicted tombstone's logical-cell and exact-process identities become
+        reusable again, while every tombstone still retained keeps failing
+        closed.  LIVE records are never touched.
+        """
+
+        overflow = sum(
+            1
+            for record in self._records.values()
+            if record.state is ModelProxyRegistrationState.TERMINAL
+        ) - self._max_terminal_tombstones
+        if overflow <= 0:
+            return
+        for logical, record in sorted(
+            self._records.items(), key=lambda item: item[1].sequence
+        ):
+            if overflow <= 0:
+                return
+            if record.state is not ModelProxyRegistrationState.TERMINAL:
+                continue
+            del self._records[logical]
+            self._exact_processes.pop(_exact_process_key(record.scope), None)
+            overflow -= 1
 
     async def authorize[T](
         self, scope: ModelProxyCellScope, issue: Callable[[], Awaitable[T]]
@@ -264,9 +313,9 @@ def _linux_id(label: str, value: object) -> int:
     return value
 
 
-def _capacity(value: object) -> int:
+def _capacity(label: str, value: object) -> int:
     if type(value) is not int or not 1 <= value <= HARD_MAX_REGISTERED_MODEL_PROXY_CELLS:
-        raise ValueError("max_cells must be within the hard registry bound")
+        raise ValueError(f"{label} must be within the hard registry bound")
     return value
 
 

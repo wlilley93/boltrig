@@ -37,9 +37,13 @@ export function ScheduleForm({ wfOptions }: WfFormProps) {
 
   return (
     <div className="form">
-      <div className="form__title">Schedule (cron)</div>
+      <div className="form__title">Schedule specification</div>
+      <p className="notice warn">
+        This saves validated cron policy on the workflow. Automatic cron execution is not wired in
+        this build; trigger the workflow explicitly or connect an external scheduler.
+      </p>
       <div className="form__grid">
-        <Field label="Workflow" hint="The workflow to run on a schedule.">
+        <Field label="Workflow" hint="The workflow that will carry this schedule specification.">
           <Select value={schedId} ariaLabel="Workflow" onChange={setSchedId} options={wfOptions} />
         </Field>
         <Field label="When (cron)" hint="A 5-field cron expression, or pick a preset below." example="0 9 * * 1">
@@ -81,7 +85,7 @@ export function ScheduleForm({ wfOptions }: WfFormProps) {
           disabled={mutation.busy || mutation.pending !== null}
           onClick={schedule}
         >
-          {mutation.busy ? "..." : "Schedule"}
+          {mutation.busy ? "Saving..." : "Save schedule spec"}
         </button>
         {(validationError ?? mutation.error) && (
           <span className="error">{validationError ?? mutation.error}</span>

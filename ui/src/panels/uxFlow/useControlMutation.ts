@@ -7,6 +7,7 @@ import { apiReason } from "@/panels/shared";
 export interface PendingControlMutation {
   id: string;
   params: Record<string, unknown>;
+  context?: Record<string, unknown>;
 }
 
 interface ControlMutationOptions {
@@ -22,7 +23,10 @@ export interface ControlMutationState {
   busy: boolean;
   error: string | null;
   pending: PendingControlMutation | null;
-  invoke: (params: Record<string, unknown>) => Promise<InvokeResult | null>;
+  invoke: (
+    params: Record<string, unknown>,
+    context?: Record<string, unknown>,
+  ) => Promise<InvokeResult | null>;
   onPendingApplied: (result: InvokeResult) => void;
   onPendingDenied: (reason: string) => void;
   resetPending: () => void;
@@ -50,14 +54,20 @@ export function useControlMutation({
 
   async function invoke(
     params: Record<string, unknown>,
+    context?: Record<string, unknown>,
   ): Promise<InvokeResult | null> {
     setBusy(true);
     setError(null);
     setPending(null);
     try {
-      const result = await api.invoke({ noun: "control", verb, params });
+      const result = await api.invoke({
+        noun: "control",
+        verb,
+        params,
+        ...(context ? { context } : {}),
+      });
       if (result.status === "pending_human") {
-        setPending({ id: result.hitl_request_id, params });
+        setPending({ id: result.hitl_request_id, params, context });
         return result;
       }
       const reason = rejectedReason(result);

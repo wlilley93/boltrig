@@ -3,10 +3,15 @@
 // until the run-stats endpoint supplies them.
 
 import type { WorkflowRunStat } from "@/api/types";
-const ACCENTS = ["#3DD3F0", "#5E69DD", "#FF7A45", "#3FB984", "#7C8BFF", "#E8B339"];
-const STATUS_READY = "#3FB984";
-const STATUS_DRAFT = "#E8B339";
-const STATUS_LEARNED = "#3DD3F0";
+const ACCENTS = [
+  "var(--color-accent)",
+  "var(--color-accent-2)",
+  "var(--color-node-kernel)",
+  "var(--color-node-service)",
+];
+const STATUS_READY = "var(--color-ok)";
+const STATUS_DRAFT = "var(--color-warn)";
+const STATUS_LEARNED = "var(--color-accent)";
 
 export interface HomeCardStatus {
   label: string;

@@ -6,7 +6,12 @@ import os
 from collections.abc import Mapping
 
 _PRODUCTION_VALUES = frozenset({"prod", "production", "staging"})
-_TRUE_VALUES = frozenset({"1", "true", "yes", "on"})
+_TRUE_VALUES = frozenset({"1", "true", "yes", "on", "y", "t"})
+
+
+def is_truthy(value: str | None) -> bool:
+    """Parse an env-style boolean string ("1"/"true"/"yes"/"on"/"y"/"t", case-insensitive)."""
+    return (value or "").strip().lower() in _TRUE_VALUES
 
 
 def production_signal(env: Mapping[str, str] | None = None) -> str | None:

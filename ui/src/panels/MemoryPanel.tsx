@@ -34,10 +34,15 @@ export function MemoryPanel() {
         how="Recall searches it, Browse lists it, Remember adds a fact, Ingest loads a whole source. You only ever see memory you're allowed to. If memory isn't enabled for your org, the actions report 'memory not enabled'."
       />
 
-      <nav className="subtabs" aria-label="Memory sections">
+      <nav className="subtabs" aria-label="Memory sections" role="tablist">
         {MEMORY_TABS.map((t) => (
           <button
             key={t.id}
+            type="button"
+            id={`memory-tab-${t.id}`}
+            role="tab"
+            aria-selected={sub === t.id}
+            aria-controls={`memory-panel-${t.id}`}
             className={`subtab ${sub === t.id ? "subtab--active" : ""}`}
             onClick={() => setSub(t.id)}
           >
@@ -46,10 +51,16 @@ export function MemoryPanel() {
         ))}
       </nav>
 
-      {sub === "recall" && <RecallTab />}
-      {sub === "browse" && <BrowseTab />}
-      {sub === "remember" && <RememberTab />}
-      {sub === "ingest" && <IngestTab />}
+      <div
+        id={`memory-panel-${sub}`}
+        role="tabpanel"
+        aria-labelledby={`memory-tab-${sub}`}
+      >
+        {sub === "recall" && <RecallTab />}
+        {sub === "browse" && <BrowseTab />}
+        {sub === "remember" && <RememberTab />}
+        {sub === "ingest" && <IngestTab />}
+      </div>
     </section>
   );
 }

@@ -48,6 +48,7 @@ from boltrig.models import (
     UserSetting,
 )
 from boltrig.store import InMemoryStore
+from boltrig.store.sealing import is_sealed
 from tests.approval import approved_request
 from boltrig.store.postgres import set_current_tenant
 
@@ -322,6 +323,9 @@ def test_shared_credential_and_2fa_travel_with_the_identity(monkeypatch):
     assert _run(store.get_user_totp(ORG_B, USER)) is None  # never on the per-org row
     assert totp.secret_ref and totp.secret_ref != secret   # sealed: a ref, not the secret
     assert _run(store.get_credential_ref(REALM, totp.secret_ref)) == {"secret": secret}
+    # At rest the row is a sealed envelope (SEC-169), never the plaintext secret.
+    raw = store._creds[(REALM, totp.secret_ref)]
+    assert is_sealed(raw) and secret not in json.dumps(raw)
 
 
 # --- helper-level checks: the store index + pick_default_org (unit) -----------------

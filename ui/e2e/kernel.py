@@ -22,10 +22,13 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 import uvicorn
 from fastapi import Request
 
-from boltrig.api.bootstrap import build_kernel_async
+from boltrig.api.bootstrap import build_kernel_async, wire_hitl_resume
+from boltrig.fleet import LocalDurableExecutor
+from boltrig.fleet.hatchet_app import register_boltrig_tasks
 from boltrig.fleet.chat import ChatService
 from boltrig.kernel.app import create_app
-from boltrig.models import HITLType, Urgency
+from boltrig.models import HITLType, Urgency, WorkflowDefinition, WorkflowSource
+from boltrig.workflows import WorkflowLibrary
 
 
 def _chat_factory(kernel):
@@ -34,7 +37,21 @@ def _chat_factory(kernel):
     return ChatService(kernel.store, kernel.events, turn_executor=None)
 
 
-app = create_app(kernel_factory=build_kernel_async, chat_factory=_chat_factory)
+async def _kernel_factory():
+    """Wire the deterministic local workflow lane used by the canvas smoke."""
+    kernel = await build_kernel_async()
+    executor = LocalDurableExecutor()
+    register_boltrig_tasks(executor, kernel)
+    wire_hitl_resume(kernel, executor=executor)
+    workflows = WorkflowLibrary(kernel.store, executor=executor, kernel=kernel)
+    control = kernel.loader.peek("default", "control")
+    if control is None:
+        raise RuntimeError("e2e control adapter is not registered")
+    control.set_workflows(workflows)
+    return kernel
+
+
+app = create_app(kernel_factory=_kernel_factory, chat_factory=_chat_factory)
 
 
 @app.post("/v1/_e2e/seed-hitl")
@@ -54,6 +71,36 @@ async def seed_hitl(request: Request) -> dict[str, str]:
         request_fingerprint="e2e-approval-fingerprint",
     )
     return {"id": req.id}
+
+
+@app.post("/v1/_e2e/seed-workflow")
+async def seed_workflow(request: Request) -> dict[str, str]:
+    """Create a deterministic two-step graph for the live-canvas smoke."""
+    workflow = WorkflowDefinition(
+        id="e2e-live-workflow",
+        tenant_id="default",
+        version="1.0.0",
+        source=WorkflowSource.PRECREATED,
+        definition={
+            "steps": [
+                {
+                    "id": "prepare",
+                    "parents": [],
+                    "action": "ticket.create",
+                    "params": {"title": "Prepare release"},
+                },
+                {
+                    "id": "publish",
+                    "parents": ["prepare"],
+                    "action": "ticket.create",
+                    "params": {"title": "Publish release"},
+                },
+            ]
+        },
+        intent_tags=["e2e"],
+    )
+    await request.app.state.kernel.store.upsert_workflow(workflow)
+    return {"id": workflow.id}
 
 
 if __name__ == "__main__":

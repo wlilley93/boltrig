@@ -21,6 +21,7 @@ def register(app, P, K) -> None:
 
     @app.get("/v1/adapters/{adapter_id}/source")
     async def adapter_source(adapter_id: str, request: Request, k=K, p=P) -> JSONResponse:
+        require_author(p)
         adapter = await k.loader.get(p.tenant_id, adapter_id)
         if adapter is None or not hasattr(adapter, "render_source"):
             return JSONResponse({"error": "no_source"}, status_code=404)

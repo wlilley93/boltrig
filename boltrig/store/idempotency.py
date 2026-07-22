@@ -242,7 +242,11 @@ class IdempotencyStorePG:
         )
 
     async def _transition(self, query: str, *args: Any) -> bool:
-        return await self._pool.fetchrow(query, *args) is not None
+        # Bind the tenant explicitly (args[0] is tenant_id in every caller), like
+        # idempotency_claim does: a background caller with no request contextvar
+        # would otherwise fail-close to an empty GUC under RLS after acquiring.
+        async with self.with_tenant(args[0]) as conn:
+            return await conn.fetchrow(query, *args) is not None
 
 
 def _pg_bound(row: Any) -> tuple[Any, ...]:

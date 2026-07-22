@@ -48,7 +48,6 @@ from boltrig.store import Store
 
 from .audit import AuditWriter
 from .adapter_errors import adapter_failure
-from .cost import CostAccountant
 from .credentials import CredentialResolver
 from .grants import GrantChecker
 from .approval_gate import enforce_approval
@@ -143,7 +142,6 @@ class Dispatcher:
         credentials: CredentialResolver,
         audit: AuditWriter,
         hitl: HITLManager,
-        cost: CostAccountant,
         adapter_provider: AdapterProvider,
         agent_invoker: AgentInvoker | None = None,
         blocking_verbs: set[str] | None = None,
@@ -157,7 +155,6 @@ class Dispatcher:
         self._creds = credentials
         self._audit = audit
         self._hitl = hitl
-        self._cost = cost
         self._adapter_provider = adapter_provider
         self._agent_invoker = agent_invoker
         self._blocking_verbs = blocking_verbs or set()
@@ -272,11 +269,11 @@ class Dispatcher:
         except PendingHuman as e:
             status = "pending_human"
             detail = {"hitl_request_id": e.hitl_request_id}
-            # the call paused for a human - surface it on the run stream so the
-            # inline approval card appears where the agent is working.
-            self._emit(context.tenant_id, context.run_id, {"type": "hitl", "verb": verb,
-                                        "call_id": call_id,
-                                        "hitl_request_id": e.hitl_request_id})
+            # Project bounded presentation fields from the canonical HITL request.
+            event = await self._hitl.pending_event(
+                context, e.hitl_request_id, verb, call_id
+            )
+            self._emit(context.tenant_id, context.run_id, event)
             raise
         except DegradedMode:
             status = "degraded"
@@ -406,27 +403,35 @@ class Dispatcher:
 
         await self._idempotency.start(run)
 
-        # 6b. Governed built-in: the "ask the user a question" verb (US-CHAT-12).
-        # It reached here only after passing schema validation + the grant check +
-        # the HITL gate above, so it is fully governed like any verb. Its effect is
-        # to PAUSE: it creates a QUESTION HITL, emits a ``question`` run event and
-        # raises PendingHuman - it never touches an adapter/agent. Handled in-kernel
-        # so it rides the ONE chokepoint and the EXISTING HITL machinery.
-        if verb == QUESTIONS_VERB:
-            await self._ask_user(params, context)
+        # Everything from here to ``complete`` runs with the key IN_PROGRESS: any
+        # raise (the pausing ask-user verb, a definitive adapter failure, an
+        # invalid output) must release the claim like the gate above, never park
+        # it until lease expiry.
+        try:
+            # 6b. Governed built-in: the "ask the user a question" verb (US-CHAT-12).
+            # It reached here only after passing schema validation + the grant check +
+            # the HITL gate above, so it is fully governed like any verb. Its effect is
+            # to PAUSE: it creates a QUESTION HITL, emits a ``question`` run event and
+            # raises PendingHuman - it never touches an adapter/agent. Handled in-kernel
+            # so it rides the ONE chokepoint and the EXISTING HITL machinery.
+            if verb == QUESTIONS_VERB:
+                await self._ask_user(params, context)
 
-        # 7. execute
-        if binding.target_type == TargetType.ADAPTER:
-            output = await self._execute_adapter(verb_def, binding, params, context)
-        elif binding.target_type == TargetType.AGENT:
-            output = await self._execute_agent(verb_def, binding, params, context)
-        else:  # fail-closed on an unknown target type
-            raise BindingNotFound(f"unknown target_type '{binding.target_type}'")
+            # 7. execute
+            if binding.target_type == TargetType.ADAPTER:
+                output = await self._execute_adapter(verb_def, binding, params, context)
+            elif binding.target_type == TargetType.AGENT:
+                output = await self._execute_agent(verb_def, binding, params, context)
+            else:  # fail-closed on an unknown target type
+                raise BindingNotFound(f"unknown target_type '{binding.target_type}'")
 
-        # 8. validate output
-        out_errors = _validate(verb_def.output_schema, output)
-        if out_errors:
-            raise SchemaValidationError(f"invalid output for '{verb}'", out_errors)
+            # 8. validate output
+            out_errors = _validate(verb_def.output_schema, output)
+            if out_errors:
+                raise SchemaValidationError(f"invalid output for '{verb}'", out_errors)
+        except Exception:
+            await self._idempotency.release(run)
+            raise
 
         # 9. complete atomically; secret-shaped output becomes uncacheable.
         await self._idempotency.complete(run, output)

@@ -24,6 +24,7 @@ import type {
   QuestionEntry,
   StepEntry,
   SubagentEntry,
+  TimelineEntry,
   ToolEntry,
 } from "@/panels/chatTurnTypes";
 
@@ -40,6 +41,7 @@ interface Accumulator {
   questions: QuestionEntry[];
   steps: StepEntry[];
   stepIndex: Map<string, StepEntry>;
+  timeline: TimelineEntry[];
 }
 
 export function normalizeEvents(events: ChatEvent[]): NormalizedTurn {
@@ -71,7 +73,7 @@ export function normalizeEvents(events: ChatEvent[]): NormalizedTurn {
         handleQuestion(ev, acc);
         break;
       case "workflow_step":
-        handleWorkflowStep(ev, acc);
+        handleWorkflowStep(ev, i, acc);
         break;
       case "message_end":
         handleMessageEnd(ev, acc);
@@ -80,6 +82,7 @@ export function normalizeEvents(events: ChatEvent[]): NormalizedTurn {
         handleCancelled(ev, acc);
         break;
       case "heartbeat":
+      case "workflow_run":
         break;
     }
   });
@@ -98,6 +101,7 @@ function createAccumulator(): Accumulator {
     questions: [],
     steps: [],
     stepIndex: new Map(),
+    timeline: [],
   };
 }
 
@@ -112,6 +116,7 @@ function buildTurn(acc: Accumulator): NormalizedTurn {
     hitls: acc.hitls,
     questions: acc.questions,
     steps: acc.steps,
+    timeline: acc.timeline,
     ended: acc.ended,
     cancelled: acc.cancelled,
   };
@@ -131,7 +136,7 @@ function handleReasoningDelta(ev: ChatReasoningDelta, acc: Accumulator) {
 }
 
 function handleToolCall(ev: ChatToolCall, index: number, acc: Accumulator) {
-  acc.tools.push({
+  const entry: ToolEntry = {
     key: `t${index}`,
     callId: ev.call_id,
     verb: ev.tool ?? ev.verb ?? "(tool)",
@@ -139,7 +144,10 @@ function handleToolCall(ev: ChatToolCall, index: number, acc: Accumulator) {
     argCount: ev.args_summary?.count,
     input: ev.input,
     status: "pending",
-  });
+    consequence: ev.consequence,
+  };
+  acc.tools.push(entry);
+  acc.timeline.push({ kind: "tool", key: entry.key, entry });
 }
 
 function handleToolResult(ev: ChatToolResult, index: number, acc: Accumulator) {
@@ -157,19 +165,21 @@ function handleToolResult(ev: ChatToolResult, index: number, acc: Accumulator) {
     match.output = ev.output;
     match.resultKeys = resultKeys;
   } else {
-    acc.tools.push({
+    const entry: ToolEntry = {
       key: `t${index}`,
       callId: ev.call_id,
       verb: ev.verb ?? "(tool)",
       status: ev.status,
       output: ev.output,
       resultKeys,
-    });
+    };
+    acc.tools.push(entry);
+    acc.timeline.push({ kind: "tool", key: entry.key, entry });
   }
 }
 
 function handleSubagent(ev: ChatSubagent, index: number, acc: Accumulator) {
-  acc.subagents.push({
+  const entry: SubagentEntry = {
     key: `s${index}`,
     childRunId: ev.child_run_id,
     task: ev.task,
@@ -178,27 +188,65 @@ function handleSubagent(ev: ChatSubagent, index: number, acc: Accumulator) {
     role: ev.role,
     color: ev.color,
     stepCount: ev.step_count,
-  });
+  };
+  acc.subagents.push(entry);
+  acc.timeline.push({ kind: "subagent", key: entry.key, entry });
 }
 
 function handleHitl(ev: ChatHitlEvent, acc: Accumulator) {
-  acc.hitls.push({
+  const kind = ev.kind ?? "approval";
+  if (ev.call_id) {
+    const tool = [...acc.tools].reverse().find((item) => item.callId === ev.call_id);
+    if (tool) {
+      tool.status = "pending_human";
+      if (kind === "approval") tool.consequence = "high";
+    }
+  }
+  if (kind === "question") {
+    if (!acc.questions.some((item) => item.questionId === ev.hitl_request_id)) {
+      const question: QuestionEntry = {
+        questionId: ev.hitl_request_id,
+        prompt: ev.question ?? "The agent needs an answer.",
+        choices: ev.options ?? [],
+      };
+      acc.questions.push(question);
+      acc.timeline.push({ kind: "question", key: `q${question.questionId}`, entry: question });
+    }
+    return;
+  }
+  const entry: HitlEntry = {
     hitlRequestId: ev.hitl_request_id,
-    kind: ev.kind,
-    question: ev.question,
+    kind,
+    question: ev.question ?? "A governed action needs your response.",
     options: ev.options ?? [],
+    verb: ev.verb,
+    requestedBy: ev.requested_by,
+  };
+  acc.hitls.push(entry);
+  acc.timeline.push({
+    kind: "hitl",
+    key: `h${ev.hitl_request_id}`,
+    entry,
   });
 }
 
 function handleQuestion(ev: ChatQuestion, acc: Accumulator) {
-  acc.questions.push({
+  const existing = acc.questions.find((item) => item.questionId === ev.question_id);
+  if (existing) {
+    existing.prompt = ev.prompt;
+    existing.choices = ev.choices ?? [];
+    return;
+  }
+  const entry: QuestionEntry = {
     questionId: ev.question_id,
     prompt: ev.prompt,
     choices: ev.choices ?? [],
-  });
+  };
+  acc.questions.push(entry);
+  acc.timeline.push({ kind: "question", key: `q${ev.question_id}`, entry });
 }
 
-function handleWorkflowStep(ev: ChatWorkflowStep, acc: Accumulator) {
+function handleWorkflowStep(ev: ChatWorkflowStep, index: number, acc: Accumulator) {
   const existing = acc.stepIndex.get(ev.step_id);
   if (existing) {
     existing.status = ev.status;
@@ -210,6 +258,9 @@ function handleWorkflowStep(ev: ChatWorkflowStep, acc: Accumulator) {
       status: ev.status,
     };
     acc.stepIndex.set(ev.step_id, entry);
+    if (acc.steps.length === 0) {
+      acc.timeline.push({ kind: "steps", key: `w${index}`, entries: acc.steps });
+    }
     acc.steps.push(entry);
   }
 }

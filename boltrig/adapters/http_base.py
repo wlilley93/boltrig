@@ -50,7 +50,10 @@ Handler = Callable[
 @dataclass(frozen=True)
 class RetryPolicy:
     """Exponential-backoff retry policy. Only retryable error classes
-    (rate-limited / unavailable) and transport errors are retried (NFR-REL)."""
+    (rate-limited / unavailable) and transport errors are retried (NFR-REL),
+    and only for idempotent verbs (GET/HEAD/OPTIONS) - a mutating call is
+    never re-issued automatically, so a dropped connection cannot duplicate
+    a side effect that actually landed."""
 
     max_attempts: int = 3
     base_delay: float = 0.5
@@ -98,15 +101,18 @@ class _RateLimiter:
     async def acquire(self) -> None:
         if self._max <= 0:
             return
-        async with self._lock:
-            now = time.monotonic()
-            self._evict(now)
-            if len(self._calls) >= self._max:
+        while True:
+            async with self._lock:
+                now = time.monotonic()
+                self._evict(now)
+                if len(self._calls) < self._max:
+                    self._calls.append(now)
+                    return
                 sleep_for = self._window - (now - self._calls[0])
-                if sleep_for > 0:
-                    await asyncio.sleep(sleep_for)
-                self._evict(time.monotonic())
-            self._calls.append(time.monotonic())
+            # Sleep OUTSIDE the lock (holding it would serialise every caller
+            # behind the slowest window), then re-check under the lock.
+            if sleep_for > 0:
+                await asyncio.sleep(sleep_for)
 
     def _evict(self, now: float) -> None:
         while self._calls and now - self._calls[0] > self._window:
@@ -296,6 +302,10 @@ class HttpAdapter:
             raise _HttpFailure(
                 AdapterError(ErrorClass.INVALID, str(exc), retryable=False)
             ) from exc
+        # Only idempotent verbs auto-retry: re-issuing a mutating call after a
+        # transport error or a 5xx can duplicate a side effect that actually
+        # landed (e.g. a dropped connection AFTER a successful email.send).
+        idempotent = method.upper() in {"GET", "HEAD", "OPTIONS"}
         attempt = 0
         while True:
             attempt += 1
@@ -312,14 +322,14 @@ class HttpAdapter:
                 )
             except httpx.HTTPError as exc:
                 error = self._map_transport_error(exc)
-                if attempt < self.retry.max_attempts:
+                if idempotent and attempt < self.retry.max_attempts:
                     await asyncio.sleep(self._backoff(attempt))
                     continue
                 raise _HttpFailure(error) from exc
             if resp.status_code in expected or 200 <= resp.status_code < 300:
                 return self._parse(resp)
             error = self._map_status(resp)
-            if error.retryable and attempt < self.retry.max_attempts:
+            if error.retryable and idempotent and attempt < self.retry.max_attempts:
                 delay = (
                     error.retry_after_seconds
                     if error.retry_after_seconds is not None

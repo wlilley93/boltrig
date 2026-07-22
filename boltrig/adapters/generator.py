@@ -35,6 +35,7 @@ import os
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
+from urllib.parse import quote
 
 from boltrig.adapters.base import AdapterError, Credential, ErrorClass, Result, VerbSpec
 from boltrig.adapters.http_base import Handler, HttpAdapter, RateLimitConfig, RetryPolicy
@@ -159,7 +160,7 @@ class GeneratedAdapter(HttpAdapter):
                 return Result.failure(
                     AdapterError(ErrorClass.INVALID, f"missing path parameter {name}")
                 )
-            path = path.replace("{%s}" % name, str(params[name]))
+            path = path.replace("{%s}" % name, quote(str(params[name]), safe=""))
         query = {name: params[name] for name in op.query_params if name in params}
         headers = {name: str(params[name]) for name in op.header_params if name in params}
         json_body = params.get("body") if op.has_body else None
@@ -244,15 +245,17 @@ class GeneratedAdapter(HttpAdapter):
 
 # --- the generator entrypoint -------------------------------------------------
 def generate_adapter_from_spec(
-    spec: dict[str, Any] | str, *, adapter_id: str
+    spec: dict[str, Any] | str, *, adapter_id: str, allow_local_paths: bool = False
 ) -> GeneratedAdapter:
     """Build a working (but inert) :class:`GeneratedAdapter` from an OpenAPI doc.
 
     ``spec`` may be a parsed dict, an http(s) URL, a file path, or raw JSON/YAML
     text. No LLM is involved; the transform is deterministic and offline-safe
-    (US-ADP-01, SEC-22). The returned adapter is inert until reviewed.
+    (US-ADP-01, SEC-22). The returned adapter is inert until reviewed. A URL is
+    fetched through the egress guard (pinned, no redirects - INJ-02/SEC-61); a
+    local file path requires the explicit ``allow_local_paths`` opt-in.
     """
-    doc = _load_spec(spec)
+    doc = _load_spec(spec, allow_local_paths=allow_local_paths)
     if not isinstance(doc, dict):
         raise ValueError("openapi spec did not parse to a mapping")
 
@@ -288,7 +291,7 @@ def generate_adapter_from_spec(
 
 
 # --- spec loading -------------------------------------------------------------
-def _load_spec(spec: dict[str, Any] | str) -> Any:
+def _load_spec(spec: dict[str, Any] | str, *, allow_local_paths: bool = False) -> Any:
     if isinstance(spec, dict):
         return spec
     if not isinstance(spec, str):
@@ -296,6 +299,13 @@ def _load_spec(spec: dict[str, Any] | str) -> Any:
     if spec.startswith("http://") or spec.startswith("https://"):
         text = _fetch(spec)
     elif "\n" not in spec and len(spec) < 4096 and os.path.exists(spec):
+        if not allow_local_paths:
+            # Reading an arbitrary local path is an explicit opt-in: a spec
+            # string must not silently double as a file read.
+            raise ValueError(
+                "loading an openapi spec from a local file requires "
+                "allow_local_paths=True"
+            )
         with open(spec, "r", encoding="utf-8") as handle:
             text = handle.read()
     else:
@@ -308,11 +318,19 @@ def _load_spec(spec: dict[str, Any] | str) -> Any:
 def _fetch(url: str) -> str:
     import httpx  # lazy
 
+    from boltrig.adapters.egress import EgressBlocked, pinned_sync_client
+
+    # SSRF (INJ-02, CLOUD-03, SEC-61): the fetch goes through the same egress
+    # guard as every other adapter - the target is vetted and the connection
+    # pinned to the audited IP, and redirects are never followed into internal
+    # space. A metadata/internal URL is refused BEFORE any network call.
     try:
-        with httpx.Client(timeout=15.0, follow_redirects=True) as client:
+        with pinned_sync_client(url, timeout=15.0) as client:
             resp = client.get(url)
             resp.raise_for_status()
             return resp.text
+    except EgressBlocked as exc:
+        raise ValueError(f"openapi spec url refused by the egress guard: {exc}") from exc
     except httpx.HTTPError as exc:
         raise ValueError(
             f"could not fetch openapi spec from url ({type(exc).__name__})"

@@ -127,7 +127,15 @@ async def route_to_head(
     own scope claim untrue. Deterministic is not the same thing as correct.
     """
     await store.upsert_checkpoint(item.tenant_id, run_id, "route", "started")
-    department = await cos.route(item, ctx)
+    # Addressed routing (SEC-178): an explicit target from channel intake is routing
+    # data, not authority — it names the department directly when it resolves to a
+    # configured head ("cos" is the tier-1 default: route normally). Anything else
+    # falls through to the CoS's inferred route; grants bind either way.
+    explicit = getattr(item, "target", None)
+    if explicit and explicit != "cos" and explicit in heads:
+        department = explicit
+    else:
+        department = await cos.route(item, ctx)
     head = heads.get(department)
     if head is None:
         log.warning("item %s routed to department %r with no head", item.id, department)

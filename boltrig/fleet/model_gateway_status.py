@@ -9,8 +9,9 @@ from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 from urllib.parse import urlsplit
 
+from boltrig.config.environment import is_truthy
+
 _INTERNAL_HOSTS = {"localhost", "127.0.0.1", "::1", "bifrost", "local-model"}
-_TRUE_VALUES = {"1", "true", "yes", "on", "y", "t"}
 HealthProbe = Callable[[str, float], Awaitable[tuple[str, Mapping[str, Any]]]]
 
 
@@ -45,7 +46,7 @@ def _float_env(env: Mapping[str, str], name: str, default: float) -> float:
 
 
 def _bool_env(env: Mapping[str, str], name: str) -> bool:
-    return str(env.get(name) or "").strip().lower() in _TRUE_VALUES
+    return is_truthy(env.get(name))
 
 
 def _internal_host(host: str | None) -> bool:

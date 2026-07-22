@@ -36,6 +36,7 @@ from .channels import (
     WEBHOOK_PLATFORMS,
     Channel,
     ChannelBinding,
+    ChannelOutboxMessage,
     ChannelPairing,
     transport_for,
 )
@@ -229,6 +230,7 @@ __all__ = [
     "InvocationContext",
     "Channel",
     "ChannelBinding",
+    "ChannelOutboxMessage",
     "ChannelPairing",
     "CHANNEL_PLATFORMS",
     "SOCKET_PLATFORMS",

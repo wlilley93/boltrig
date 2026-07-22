@@ -25,7 +25,7 @@ vi.mock("@/panels/runView/useRunStream", () => ({
 import { api, ApiError } from "@/api/client";
 import type { AuditTreeResponse, ChatEvent } from "@/api/types";
 import { normalizeEvents } from "@/panels/chatTurn";
-import { RunDrawer } from "@/panels/RunView";
+import { nextRunTrail, RunDrawer } from "@/panels/RunView";
 import { RunInspector } from "@/panels/runView/RunInspector";
 import { RunTabs, type RunTabId } from "@/panels/runView/RunTabs";
 import type { RunStream } from "@/panels/runView/useRunStream";
@@ -252,6 +252,32 @@ describe("RunTabs", () => {
 });
 
 describe("RunDrawer", () => {
+  it("keeps a reversible ancestry trail when following child runs", async () => {
+    mockApi({ auditTree: TREE });
+    const selectRun = vi.fn();
+    render(
+      <RunDrawer
+        runId="run-grandchild"
+        trail={["run-parent", "run-child", "run-grandchild"]}
+        onSelectRun={selectRun}
+      />,
+    );
+    await screen.findByRole("heading", { name: "Run overview" });
+
+    fireEvent.click(screen.getByRole("button", { name: "run-parent" }));
+    expect(selectRun).toHaveBeenCalledWith("run-parent");
+    expect(screen.getByText("run-grandchild").getAttribute("aria-current")).toBe("page");
+  });
+
+  it("appends descendants, truncates to ancestors, and clears on close", () => {
+    expect(nextRunTrail(["parent"], "child")).toEqual(["parent", "child"]);
+    expect(nextRunTrail(["parent", "child", "grandchild"], "child")).toEqual([
+      "parent",
+      "child",
+    ]);
+    expect(nextRunTrail(["parent"], undefined)).toEqual([]);
+  });
+
   it("preserves Escape, backdrop and close-button behavior", async () => {
     mockApi({ auditTree: TREE });
     render(<RunDrawer runId="run-parent" />);

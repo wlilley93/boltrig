@@ -72,20 +72,26 @@ def _canonical(event: AuditEvent) -> str:
 def _scrub(detail: dict) -> dict:
     """Bounded-observability scrub (K-20). Any string value carrying a secret or
     identity pattern is replaced by a digest + size + bounded preview, so the
-    audit log can never become an exfiltration surface."""
+    audit log can never become an exfiltration surface. Recurses through nested
+    dicts AND list/tuple values - a secret inside a list-typed detail value is
+    scrubbed too, not passed verbatim."""
     out: dict = {}
     for k, v in detail.items():
-        if isinstance(v, str):
-            if pii.contains_secret(v):
-                digest = hashlib.sha256(v.encode()).hexdigest()[:16]
-                out[k] = {"_scrubbed": True, "digest": digest, "size": len(v)}
-            else:
-                out[k] = v[:_PREVIEW_LEN]
-        elif isinstance(v, dict):
-            out[k] = _scrub(v)
-        else:
-            out[k] = v
+        out[k] = _scrub_value(v)
     return out
+
+
+def _scrub_value(v: Any) -> Any:
+    if isinstance(v, str):
+        if pii.contains_secret(v):
+            digest = hashlib.sha256(v.encode()).hexdigest()[:16]
+            return {"_scrubbed": True, "digest": digest, "size": len(v)}
+        return v[:_PREVIEW_LEN]
+    if isinstance(v, dict):
+        return _scrub(v)
+    if isinstance(v, (list, tuple)):
+        return [_scrub_value(item) for item in v]
+    return v
 
 
 async def verify_chain(

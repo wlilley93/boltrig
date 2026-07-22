@@ -7,6 +7,7 @@ import { channelsApi } from "@/api/domains/channels";
 import { configApi } from "@/api/domains/config";
 import { coreApi } from "@/api/domains/core";
 import { insightApi } from "@/api/domains/insight";
+import { knowledgeApi } from "@/api/domains/knowledge";
 import { meApi } from "@/api/domains/me";
 import { memoryApi } from "@/api/domains/memory";
 import { studioApi } from "@/api/domains/studio";
@@ -18,6 +19,7 @@ export const api = {
   ...configApi,
   ...channelsApi,
   ...insightApi,
+  ...knowledgeApi,
   ...memoryApi,
   ...meApi,
   ...adminUsersApi,

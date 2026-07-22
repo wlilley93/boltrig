@@ -326,7 +326,7 @@ def _register_hitl_run_routes(app, principal_dep, get_kernel) -> None:
         # ONLY a QUESTION HITL - never an approval (those stay on the approvals panel
         # with their human / anti-self-approval checks, SEC-14), so a question can
         # never be laundered into clearing a gated verb.
-        from boltrig.fleet.prompt_stack import wrap_untrusted
+        from boltrig.text_envelope import wrap_untrusted
         from boltrig.models import HITLType
 
         from .hitl_http import visible_hitl_request
@@ -472,8 +472,10 @@ def _register_session_routes(app, principal_dep, get_kernel) -> None:
 
         realm = _session_realm(request, p)
         set_current_tenant(realm)  # sessions live at the realm; bind it for the read
-        sessions = await k.store.list_sessions(realm, p.subject)
-        set_current_tenant(p.tenant_id)  # restore the active tenant
+        try:
+            sessions = await k.store.list_sessions(realm, p.subject)
+        finally:
+            set_current_tenant(p.tenant_id)  # restore the active tenant
         return {"sessions": [
             {"id": s.id, "client": s.client, "revoked": s.revoked,
              "created_at": s.created_at.isoformat() if s.created_at else None,
@@ -487,13 +489,14 @@ def _register_session_routes(app, principal_dep, get_kernel) -> None:
 
         realm = _session_realm(request, p)
         set_current_tenant(realm)  # sessions live at the realm; bind it for the read/write
-        s = await k.store.get_session(realm, session_id)
-        if s is None or s.user_id != p.subject:
-            set_current_tenant(p.tenant_id)
-            return JSONResponse({"status": "error", "reason": "not_found"}, status_code=404)
-        s.revoked = True
-        await k.store.update_session(s)
-        set_current_tenant(p.tenant_id)  # restore the active tenant for the audit
+        try:
+            s = await k.store.get_session(realm, session_id)
+            if s is None or s.user_id != p.subject:
+                return JSONResponse({"status": "error", "reason": "not_found"}, status_code=404)
+            s.revoked = True
+            await k.store.update_session(s)
+        finally:
+            set_current_tenant(p.tenant_id)  # restore the active tenant for the audit
         await _audit(k, p, "session.revoke", {"id": session_id})
         return JSONResponse({"status": "ok", "id": session_id})
 
@@ -541,8 +544,10 @@ def _register_context_routes(app, principal_dep, get_kernel) -> None:
 
         session.active_workspace_id = workspace_id
         set_current_tenant(session.tenant_id)
-        await k.store.update_session(session)
-        set_current_tenant(p.tenant_id)
+        try:
+            await k.store.update_session(session)
+        finally:
+            set_current_tenant(p.tenant_id)
         await _audit(k, p, "session.active_context.switch", {"workspace_id": workspace_id})
         return JSONResponse({"status": "ok", "workspace_id": workspace_id})
 
@@ -575,25 +580,25 @@ def _register_context_routes(app, principal_dep, get_kernel) -> None:
         # unknown org is 404, NO write. Then RE-AUTHORIZE membership against org_members
         # (the authority, not any client hint): a non-member is 403, NO write.
         set_current_tenant(org_id)
-        org = await k.store.get_org(org_id)
-        if org is None:
+        try:
+            org = await k.store.get_org(org_id)
+            if org is None:
+                return JSONResponse({"status": "error", "reason": "not_found"}, status_code=404)
+            member = await k.store.get_org_member(org_id, p.subject)
+            if member is None:
+                return JSONResponse(
+                    {"status": "denied", "reason": "not a member of that org"},
+                    status_code=403,
+                )
+            # Persist the new active org on the session (the resolver re-authorizes it again
+            # on every subsequent request). The session lives at the identity realm, so bind
+            # that realm for the session write; the finally restores the caller's current
+            # active tenant for the audit. Keys-only audit: the org id.
+            session.active_org_id = org_id
+            set_current_tenant(session.tenant_id)
+            await k.store.update_session(session)
+        finally:
             set_current_tenant(p.tenant_id)  # restore the caller's active tenant
-            return JSONResponse({"status": "error", "reason": "not_found"}, status_code=404)
-        member = await k.store.get_org_member(org_id, p.subject)
-        if member is None:
-            set_current_tenant(p.tenant_id)
-            return JSONResponse(
-                {"status": "denied", "reason": "not a member of that org"},
-                status_code=403,
-            )
-        # Persist the new active org on the session (the resolver re-authorizes it again
-        # on every subsequent request). The session lives at the identity realm, so bind
-        # that realm for the session write, then restore the caller's current active
-        # tenant for the audit. Keys-only audit: the org id.
-        session.active_org_id = org_id
-        set_current_tenant(session.tenant_id)
-        await k.store.update_session(session)
-        set_current_tenant(p.tenant_id)
         await _audit(k, p, "session.active_org.switch", {"org_id": org_id})
         return JSONResponse({"status": "ok", "org_id": org_id})
 

@@ -18,6 +18,7 @@ SEC-115     : the governed set-key route is role-scoped - org level is admin-onl
 from __future__ import annotations
 
 import asyncio
+import json
 
 import pytest
 from fastapi.testclient import TestClient
@@ -38,6 +39,7 @@ from boltrig.models import (
     WorkspaceMember,
 )
 from boltrig.store import InMemoryStore
+from boltrig.store.sealing import is_sealed
 from tests.approval import approved_request
 
 T = "acme"
@@ -123,6 +125,8 @@ def test_no_config_tenant_falls_back_to_env_key(monkeypatch):
 
     monkeypatch.delenv("BOLTRIG_OPENAI_API_KEY", raising=False)
     monkeypatch.setenv("OPENAI_API_KEY", "sk-env-default")
+    # openai is a legacy lane (decision 0012): reachable only behind the flag.
+    monkeypatch.setenv("BOLTRIG_ENABLE_LEGACY_RUNTIMES", "1")
     _run(go())
 
 
@@ -145,6 +149,8 @@ def test_spawner_wires_resolved_sealed_key_into_the_runtime(monkeypatch):
         assert rt._api_key() == "sk-user-sealed"  # the sealed key, NOT the env key
 
     monkeypatch.setenv("OPENAI_API_KEY", "sk-env-default")
+    # openai is a legacy lane (decision 0012): reachable only behind the flag.
+    monkeypatch.setenv("BOLTRIG_ENABLE_LEGACY_RUNTIMES", "1")
     _run(go())
 
 
@@ -272,6 +278,9 @@ def test_ai_key_is_sealed_never_returned_or_audited():
     # The key IS retrievable from the sealed credential store (kernel-side only).
     ref = _run(store.get_credential_ref(T, cfg.credential_ref))
     assert ref.get("secret") == secret
+    # At rest the row is a sealed envelope (SEC-169), never the plaintext key.
+    raw = store._creds[(T, cfg.credential_ref)]
+    assert is_sealed(raw) and secret not in json.dumps(raw)
 
     # No audit row carries the raw key.
     events = _run(store.audit_query(T, limit=1000))

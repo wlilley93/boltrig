@@ -93,7 +93,7 @@ function DrawerItem({
     >
       <span
         className="wf3-drawer__item-icon"
-        style={{ background: "rgba(255,255,255,0.05)", color: item.color }}
+        style={{ color: item.color }}
       >
         <NodeIcon name={item.icon} size={18} />
       </span>

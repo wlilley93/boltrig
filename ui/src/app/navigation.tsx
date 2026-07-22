@@ -76,6 +76,7 @@ export const BUILD_NAV: readonly ConsoleNavItem[] = [
     gate: (role) => AUTHOR_ROLES.has(role),
   },
   { id: "memory", label: "Memory", path: "/memory", description: "Recall, sources and retention" },
+  { id: "knowledge", label: "Knowledge", path: "/knowledge", description: "Citable source documents and provider projections" },
   { id: "eval", label: "Evaluations", path: "/eval", description: "Safety and quality evaluations" },
 ];
 
@@ -110,7 +111,7 @@ export const OPERATE_NAV: readonly ConsoleNavItem[] = [
   },
 ];
 
-const BUILD_TABS = new Set(["build", "agents", "automations", "router", "studio", "dev", "memory", "eval"]);
+const BUILD_TABS = new Set(["build", "agents", "automations", "router", "studio", "dev", "knowledge", "memory", "eval"]);
 const OPERATE_TABS = new Set(["operate", "kanban", "approvals", "insight", "health", "channels", "admin"]);
 
 export function visibleItems(items: readonly ConsoleNavItem[], role: string): ConsoleNavItem[] {

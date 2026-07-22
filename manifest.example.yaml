@@ -16,18 +16,18 @@ locale_default: en
 timezone_default: Europe/London
 
 # --- Boltrig v2 chosen stack ------------------------------------------------
-# This is the target architecture map. Some entries are config homes for adapters
-# that are not executable yet; legacy Pi/Hermes-compatible runtimes below stay in
-# the example so the current test/offline boot path remains green.
+# This is the accepted target architecture map. Codex is the agent runtime;
+# legacy Pi/Hermes/OpenCode entries below are staged-cutover fixtures only and
+# are not extension targets (decision 0012).
 stack:
-  cockpit: herdr
-  orchestration: mastra
+  cockpit: boltrig_ui
+  orchestration: boltrig
   durability: hatchet
-  runtime_sandbox: rivet_agentos
-  coding_agent: opencode
+  runtime_sandbox: codex_supervisor
+  coding_agent: codex
   browser_automation: browser_cli
-  memory_primary: mem0
-  memory_projection: cognee
+  memory_primary: pgvector
+  knowledge_compiler: cognee
   model_routing: bifrost
   observability: langfuse
   tool_protocol: mcp_kernel
@@ -90,8 +90,8 @@ models:
 
 # --- hierarchy: durable agent org chart -------------------------------------
 # Current runnable compatibility path: these tier runtimes still use Hermes-
-# compatible names. Boltrig v2 orchestration should be introduced through the
-# `mastra` -> Hatchet -> Rivet/OpenCode seams above, not by expanding Hermes.
+# compatible names. New execution work targets the governed Codex phase lane;
+# this residue remains only until decision 0012's cutover gates pass.
 hierarchy:
   tier1:
     name: chief-of-staff
@@ -428,33 +428,32 @@ notifications:
     budget_alert: { channel: email }
 
 # --- personal agents (Epic PA) - delegated-only -----------------------------
-# Current default uses the Pi compatibility worker. The v2 target is a delegated
-# Rivet AgentOS worker once that adapter is live.
+# Current default remains the Pi rollback worker until the production Codex
+# identity/cutover gate passes. Codex is the only target runtime.
 personal_agents:
   enabled: true
   default_runtime: pi-worker
   default_skills: ["writing/*", "analysis/*"]
 
-# --- memory & knowledge - kernel-governed, opt-in ---------------------------
-# Boltrig v2 uses kernel-led fanout: the Boltrig memory ledger is authoritative,
-# Mem0 is the primary operational recall projection, and Cognee is the optional
-# graph/corpus enrichment projection. `engine: local` plus disabled projections
-# remains the executable offline default; enable Mem0/Cognee per deployment.
+# --- memory - governed interpretation, distinct from source documents --------
+# The Boltrig memory ledger and native engine are authoritative. These legacy
+# projection adapters remain off by default; Cognee's shipped role is configured
+# under `knowledge`, not as the authority for memory.
 memory:
   enabled: true                        # opt-in per installation
   engine: local                        # executable kernel engine: local | vector | pgvector | cognee
   store: postgres                      # reuse the existing Postgres instance
   authority: kernel_ledger             # backends are projections, not authority
-  primary_projection: mem0             # v2 target for ordinary recall
+  primary_projection: null             # native engine is the ordinary recall path
   projections:
     - id: mem0
-      role: primary_recall
+      role: compatibility_memory
       enabled: false                   # set true with mem0ai installed + MEM0_API_KEY
       status: available_adapter
     - id: cognee
-      role: graph_enrichment
-      enabled: false                   # set true with cognee installed + LLM/embedding config
-      status: optional_projection
+      role: legacy_memory_enrichment
+      enabled: false                   # Knowledge owns the shipped Cognee compiler
+      status: compatibility_projection
   fanout:
     mode: ledger_then_projection       # commit once, then write projections
     execution: inline                  # inline | queued; queued uses Hatchet/local executor tasks
@@ -475,3 +474,25 @@ memory:
     max_hops: 4
     max_results: 20
   retention_days: 365
+
+# --- knowledge - canonical sources plus rebuildable provider projections -----
+# Originals and immutable revisions remain in ObjectVault + Postgres/pgvector.
+# Cognee ships on as the rebuildable compiler. Other providers appear in the
+# console catalogue and require one governed enable action after their external
+# connection/credential has been configured.
+knowledge:
+  enabled: true
+  vault:
+    kind: filesystem                   # filesystem | s3
+    # root defaults to the platform's per-user data directory. Set
+    # BOLTRIG_KNOWLEDGE_VAULT for a managed deployment.
+  providers:
+    - id: cognee
+      enabled: true
+    - id: supermemory
+      enabled: false
+    - id: mem0
+      enabled: false
+  cognee:
+    # cognee_root defaults beside the per-user Knowledge data. Set
+    # BOLTRIG_COGNEE_ROOT for a managed deployment.

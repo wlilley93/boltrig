@@ -16,6 +16,7 @@ from typing import Any
 
 from boltrig.models import GrantSet, InvocationContext, TenantIsolation
 
+from .prompt_stack import wrap_untrusted
 from .spawn import build_spawner
 from .ultracode_memory import memory_prompt, recall_memory, remember_run_summary
 
@@ -173,7 +174,18 @@ def _prompt(
     if memory:
         parts.append(f"Scoped memory:\n{memory}")
     if prior:
-        parts.append(f"Prior phase outputs:\n{prior}")
+        # Prior phase outputs are model-generated, hence untrusted: they reach the
+        # next phase's model only inside the M1 envelope, exactly like memory recall
+        # (ultracode_memory.memory_prompt), never as bare prompt text (SEC-72).
+        wrapped = "\n".join(
+            wrap_untrusted(
+                "ultracode.prior_output",
+                str(entry.get("id") or "agent"),
+                str(entry.get("result") or entry),
+            )
+            for entry in prior
+        )
+        parts.append(f"Prior phase outputs:\n{wrapped}")
     return "\n\n".join(parts)
 
 

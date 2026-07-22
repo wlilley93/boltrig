@@ -29,7 +29,8 @@ function RootApp() {
     return () => window.removeEventListener("hashchange", update);
   }, []);
 
-  const prototypeEnabled = import.meta.env.DEV || import.meta.env.VITE_ORG_OS_PROTOTYPE === "1";
+  // D15: the prototype is a local design harness, never a production client.
+  const prototypeEnabled = import.meta.env.DEV;
   if (prototypeEnabled && isPrototypeRoute(hash)) {
     return <React.Suspense fallback={<div className="auth-loading">Opening prototype…</div>}><PrototypeApp /></React.Suspense>;
   }

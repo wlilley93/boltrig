@@ -125,7 +125,7 @@ def test_personal_agent_is_delegated_only():
     # owner with no ticket.create grant configures + invokes a personal agent
     h = _hdr("employee", grants="")
     h["x-boltrig-subject"] = "alice"
-    assert c.post("/v1/me/agent", json={"runtime": "script-worker", "skills": ["risky"]},
+    assert c.post("/v1/me/agent", json={"runtime": "script", "skills": ["risky"]},
                   headers=h).status_code == 200
     res = c.post("/v1/me/agent/invoke", json={"message": "do it"}, headers=h)
     assert res.status_code == 200

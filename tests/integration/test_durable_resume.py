@@ -2,9 +2,12 @@
 
 Everything runs offline via the LocalDurableExecutor: the SAME task bodies the
 Hatchet worker serves (hatchet_app) run inline, a crashy counting fake proves
-checkpoint-resume without re-execution, the answer -> notifier -> scoped-event
-bridge proves the exactly-once resume (the consume_if_approved CAS), and an
-ungranted verb inside a task body fails closed and is audited.
+checkpoint-resume without re-execution, the combined trigger path proves each
+step runs inside its own run_step boundary WITH checkpoints (completed steps
+replay with no new boundary, only the interrupted step re-executes) plus the
+completed-but-uncheckpointed idempotency replay, the answer -> notifier ->
+scoped-event bridge proves the exactly-once resume (the consume_if_approved
+CAS), and an ungranted verb inside a task body fails closed and is audited.
 """
 
 from __future__ import annotations
@@ -153,7 +156,7 @@ async def test_interrupted_run_resumes_from_last_checkpoint():
     await executor.enqueue(TASK_WORKFLOW_RUN, dict(payload))
     assert spy.calls == {"job.one": 1, "job.two": 1, "job.three": 1}
     cps = {c.step: c.status for c in await kernel.store.list_checkpoints(T, run_id)}
-    assert cps == {"s1": "ok", "s2": "ok"}  # the crash left s3 uncheckpointed
+    assert cps == {"wf-crash:s1": "ok", "wf-crash:s2": "ok"}  # the crash left s3 uncheckpointed
 
     # run 2 (the durable engine's re-run): steps 1-2 REPLAY from their
     # checkpoints - the counting spy proves they were not re-dispatched - and
@@ -165,6 +168,168 @@ async def test_interrupted_run_resumes_from_last_checkpoint():
     assert by_id["s1"].get("replayed") is True
     assert by_id["s2"].get("replayed") is True
     assert by_id["s3"]["status"] == "ok" and "replayed" not in by_id["s3"]
+
+
+# --- the combined path: per-step boundaries AND checkpoint-resume --------------
+@pytest.mark.invariant("NFR-REL-02")
+async def test_trigger_path_combines_step_boundaries_and_checkpoint_resume():
+    """The trigger/engine path wires BOTH durability seams: each step
+    dispatches inside its own executor.run_step boundary AND checkpoints.
+    A resume replays completed steps (no re-dispatch, no new boundary) and
+    re-executes only the step that died."""
+    kernel, spy = await _build()
+    spy.crash_once.add("job.three")  # the interruption: step 3 of 3 dies once
+    workflow = _workflow(
+        "wf-combined",
+        [
+            {"id": "s1", "action": "job.one", "params": {}},
+            {"id": "s2", "action": "job.two", "params": {}, "parents": ["s1"]},
+            {"id": "s3", "action": "job.three", "params": {}, "parents": ["s2"]},
+        ],
+    )
+    await kernel.store.upsert_workflow(workflow)
+    executor = LocalDurableExecutor()
+    register_boltrig_tasks(executor, kernel)
+    run_id = uuid.uuid4().hex
+    payload = {
+        "tenant": T,
+        "workflow_id": "wf-combined",
+        "inputs": {},
+        "ctx_envelope": _envelope(run_id),
+        "run_id": run_id,
+        "workflow_snapshot": build_workflow_snapshot(workflow),
+    }
+
+    # run 1 through the queue seam (the trigger path): the task body runs each
+    # step inside its own recorded run_step boundary - not one opaque task.
+    await executor.enqueue(TASK_WORKFLOW_RUN, dict(payload))
+    boundaries = [s.name for s in executor.steps]
+    assert f"task:{TASK_WORKFLOW_RUN}" in boundaries  # the engine's task unit
+    for step_id in ("s1", "s2", "s3"):
+        assert f"workflow:wf-combined:{step_id}" in boundaries
+    assert spy.calls == {"job.one": 1, "job.two": 1, "job.three": 1}
+
+    # run 2 (the engine's re-run) with the same combined wiring: steps 1-2
+    # REPLAY from checkpoints - no re-dispatch and NO new boundary records -
+    # and only the interrupted step re-executes inside a fresh boundary.
+    steps_before = len(executor.steps)
+    record = await run_workflow_body(kernel, dict(payload), executor=executor)
+    assert record["status"] == "completed"
+    assert spy.calls == {"job.one": 1, "job.two": 1, "job.three": 2}
+    new_boundaries = [s.name for s in executor.steps[steps_before:]]
+    assert new_boundaries == ["workflow:wf-combined:s3"]
+    by_id = {s["id"]: s for s in record["steps"]}
+    assert by_id["s1"].get("replayed") is True
+    assert by_id["s2"].get("replayed") is True
+    assert by_id["s3"]["status"] == "ok" and "replayed" not in by_id["s3"]
+
+
+class _DropOnceCheckpointStore(InMemoryStore):
+    """Drops ONE checkpoint write for a named step: the worker died after the
+    step's verb completed but before its checkpoint landed."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.drop_step: str | None = None
+
+    async def upsert_checkpoint(
+        self, tenant_id, run_id, step, status, output=None, hitl_request_id=None
+    ):
+        if self.drop_step == step:
+            self.drop_step = None
+            raise RuntimeError("worker died before the checkpoint write")
+        return await super().upsert_checkpoint(
+            tenant_id, run_id, step, status, output, hitl_request_id
+        )
+
+
+@pytest.mark.invariant("NFR-REL-02")
+async def test_completed_step_with_lost_checkpoint_replays_via_idempotency():
+    """The completed-but-uncheckpointed crash window: the step's verb executed
+    (completing its kernel idempotency record) but the checkpoint write was
+    lost. The resumed run re-dispatches the step and the idempotency layer
+    REPLAYS the recorded result - the verb's side effects never run twice."""
+    store = _DropOnceCheckpointStore()
+    store.set_tenant_permissions(TenantPermissions(T, GrantSet.of(["*"])))
+    kernel = Kernel(store)
+    spy = SpyAdapter()
+    await kernel.register_adapter(T, spy)
+    workflow = _workflow("wf-lost-ck", [{"id": "s1", "action": "job.one", "params": {}}])
+    await store.upsert_workflow(workflow)
+    executor = LocalDurableExecutor()
+    register_boltrig_tasks(executor, kernel)
+    run_id = uuid.uuid4().hex
+    payload = {
+        "tenant": T,
+        "workflow_id": "wf-lost-ck",
+        "inputs": {},
+        "ctx_envelope": _envelope(run_id),
+        "run_id": run_id,
+        "workflow_snapshot": build_workflow_snapshot(workflow),
+    }
+    store.drop_step = "wf-lost-ck:s1"
+
+    # run 1 "dies": the verb executed but the checkpoint write was lost. The
+    # interpreter's P9 guard records the step as errored instead of crashing
+    # the fleet; either way the run is interrupted with s1 uncheckpointed.
+    first = await run_workflow_body(kernel, dict(payload), executor=executor)
+    assert first["status"] == "failed"
+    assert {s["id"]: s for s in first["steps"]}["s1"]["status"] == "error"
+    assert spy.calls == {"job.one": 1}
+    assert await store.list_checkpoints(T, run_id) == []
+
+    # run 2: no checkpoint, so the step re-dispatches - but the idempotency
+    # layer replays the recorded result, so the verb never re-executes.
+    record = await run_workflow_body(kernel, dict(payload), executor=executor)
+    assert record["status"] == "completed"
+    assert spy.calls == {"job.one": 1}  # no double side effects
+    cps = {c.step: c.status for c in await store.list_checkpoints(T, run_id)}
+    assert cps == {"wf-lost-ck:s1": "ok"}  # the checkpoint lands on the re-run
+
+
+@pytest.mark.invariant("NFR-REL-03")
+async def test_combined_path_hitl_pause_resume_stays_exactly_once():
+    """A HITL pause/resume through the COMBINED path (executor boundary +
+    checkpoints + per-step idempotency key) stays exactly-once: the gate held
+    the verb, the resumed run re-invokes with the approval id, and a duplicate
+    resume is a pure checkpoint replay."""
+    kernel, spy = await _build()
+    workflow = _workflow(
+        "wf-gated-combined",
+        [{"id": "g1", "action": "danger.go", "params": {}}],
+    )
+    await kernel.store.upsert_workflow(workflow)
+    executor = LocalDurableExecutor()
+    register_boltrig_tasks(executor, kernel)
+    wire_hitl_resume(kernel, executor=executor)
+    run_id = "run-gated-combined"
+    payload = {
+        "tenant": T,
+        "workflow_id": "wf-gated-combined",
+        "inputs": {},
+        "ctx_envelope": _envelope(run_id),
+        "run_id": run_id,
+        "workflow_snapshot": build_workflow_snapshot(workflow),
+    }
+
+    # the gated step pauses inside its own run_step boundary; the gate held
+    # the verb (SEC-14), nothing executed, and the idempotency claim was
+    # released with the pause so the resume can re-claim it.
+    first = await run_workflow_body(kernel, dict(payload), executor=executor)
+    assert first["status"] == "paused"
+    assert spy.calls.get("danger.go") is None
+    assert any(s.name == "workflow:wf-gated-combined:g1" for s in executor.steps)
+    req = (await kernel.hitl.list_pending(T))[0]
+    await kernel.hitl.answer(T, req.id, "approve", "will@acme")
+
+    # deliver the resume TWICE through the combined path: the CAS lets exactly
+    # one execution through; the second delivery is a pure checkpoint replay.
+    second = await run_workflow_body(kernel, dict(payload), executor=executor)
+    assert second["status"] == "completed"
+    third = await run_workflow_body(kernel, dict(payload), executor=executor)
+    assert third["status"] == "completed"
+    assert spy.calls == {"danger.go": 1}
+    assert {s["id"]: s for s in third["steps"]}["g1"].get("replayed") is True
 
 
 @pytest.mark.invariant("SEC-138")
@@ -243,9 +408,9 @@ async def test_hitl_answer_resumes_paused_run_exactly_once():
     assert first["status"] == "paused"
     assert spy.calls.get("danger.go") is None
     cps = {c.step: c for c in await kernel.store.list_checkpoints(T, run_id)}
-    assert cps["g1"].status == "paused" and cps["g1"].hitl_request_id
+    assert cps["wf-gated:g1"].status == "paused" and cps["wf-gated:g1"].hitl_request_id
     req = (await kernel.hitl.list_pending(T))[0]
-    assert req.id == cps["g1"].hitl_request_id
+    assert req.id == cps["wf-gated:g1"].hitl_request_id
 
     # answer() fires the notifier: the scoped approval event reached the bus
     await kernel.hitl.answer(T, req.id, "approve", "will@acme")

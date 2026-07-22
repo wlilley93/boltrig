@@ -21,7 +21,10 @@ def _ctx(grants=("*",)):
 
 
 @pytest.mark.invariant("FR-RUN-01")
-def test_build_runtime_resolves_pi():
+def test_build_runtime_resolves_pi(monkeypatch):
+    # pi is a legacy lane (decision 0012): reachable only behind the explicit
+    # rollback opt-in flag.
+    monkeypatch.setenv("BOLTRIG_ENABLE_LEGACY_RUNTIMES", "1")
     rt = build_runtime(_cap())
     assert isinstance(rt, PiRuntime) and rt.runtime == "pi"
 

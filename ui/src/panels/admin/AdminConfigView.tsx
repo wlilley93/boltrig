@@ -4,7 +4,7 @@ import type { ConfigRevisionSummary, CredentialRef, InvokeResult } from "../../a
 import { CodeBlock } from "../shared";
 import { InfoCallout } from "../ux";
 import { SchemaFormV2 } from "../uxForm";
-import { ArmConfirm, DiffView, Disclosure, PendingHumanCard, SaveBar } from "../uxFlow";
+import { ArmConfirm, ByChat, DiffView, Disclosure, PendingHumanCard, SaveBar } from "../uxFlow";
 import type { AdminSection } from "./sections";
 import type { AdminPending } from "./useAdminConfig";
 import type { AdminPanelState } from "./useAdminPanel";
@@ -80,6 +80,8 @@ function AdminConfigForm({
             <Disclosure summary="Review changes" changedCount={dirty ? 1 : 0}>
               <DiffView before={baseline} after={form} />
             </Disclosure>
+
+            <ByChat phrase={`Update the ${section.label} configuration to match this draft.`} />
 
             {saveMsg && <p className="ok">{saveMsg}</p>}
             {saveError && <InfoCallout tone="warn">{saveError}</InfoCallout>}

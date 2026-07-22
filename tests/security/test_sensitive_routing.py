@@ -100,7 +100,10 @@ async def test_spawn_blocks_sensitive_on_hosted_capability():
 
 @pytest.mark.security
 @pytest.mark.invariant("SEC-12")
-async def test_sensitive_ignores_external_ai_config_and_routes_local():
+async def test_sensitive_ignores_external_ai_config_and_routes_local(monkeypatch):
+    # openai/claude-api are legacy lanes (decision 0012): enable them explicitly
+    # so the routing assertions exercise the real runtimes.
+    monkeypatch.setenv("BOLTRIG_ENABLE_LEGACY_RUNTIMES", "1")
     # An AI config ([2026] VJS-COUNTY 8, D5) that names an EXTERNAL provider must NOT
     # move sensitive data off the local endpoint: for a sensitive call the config's
     # provider/model/base_url are ignored and the local sensitive endpoint wins

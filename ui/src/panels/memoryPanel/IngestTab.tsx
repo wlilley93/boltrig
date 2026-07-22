@@ -4,8 +4,9 @@ import { api } from "@/api/client";
 import type { MemoryIngestResponse, MemoryIngestionRow } from "@/api/types";
 import { useFetch } from "@/useFetch";
 import { errText } from "@/panels/shared";
-import { Field, Hint, Select } from "@/panels/ux";
+import { Field, Hint, MEMORY_INGEST_STATUS, Select, StatusBadge } from "@/panels/ux";
 import { denialText, isDenied, SOURCE_KIND_OPTIONS } from "@/panels/memoryPanel/helpers";
+import { ByChat } from "@/panels/uxFlow";
 
 type IngestFormProps = {
   sourceKind: string;
@@ -71,8 +72,15 @@ function IngestForm(props: IngestFormProps) {
       </Field>
       <div className="form__actions">
         <button className="btn btn--primary" disabled={busy} onClick={onSubmit}>
-          {busy ? "..." : "Ingest"}
+          {busy ? "Ingesting..." : "Ingest"}
         </button>
+        <ByChat
+          phrase={
+            sourceRef.trim()
+              ? `Load the ${sourceKind} source ${sourceRef.trim()} into memory after screening it.`
+              : `Help me load a screened ${sourceKind} source into memory.`
+          }
+        />
         {error && <span className="error">{error}</span>}
       </div>
       {result && (
@@ -122,27 +130,27 @@ function IngestHistory({ rows, loading, hasData, error, onRefresh }: IngestHisto
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>source_kind</th>
-                  <th>source_ref</th>
-                  <th>owner_scope</th>
-                  <th>status</th>
-                  <th>facts_added</th>
-                  <th>screened</th>
-                  <th>created_at</th>
+                  <th>Source type</th>
+                  <th>Source reference</th>
+                  <th>Owner scope</th>
+                  <th>Status</th>
+                  <th>Facts added</th>
+                  <th>Screened</th>
+                  <th>Created</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row) => (
                   <tr key={row.id}>
-                    <td>{row.source_kind}</td>
+                    <td>{row.source_kind.replace(/_/g, " ")}</td>
                     <td>
                       <code>{row.source_ref || "-"}</code>
                     </td>
-                    <td>{row.owner_scope}</td>
-                    <td>{row.status}</td>
+                    <td><code>{row.owner_scope}</code></td>
+                    <td><StatusBadge value={row.status} glossary={MEMORY_INGEST_STATUS} /></td>
                     <td>{row.facts_added}</td>
                     <td>{row.screened}</td>
-                    <td>{row.created_at ?? "-"}</td>
+                    <td title={row.created_at ?? undefined}>{row.created_at ?? "-"}</td>
                   </tr>
                 ))}
               </tbody>

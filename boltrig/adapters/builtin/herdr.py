@@ -7,62 +7,23 @@ mutating pane/tab operations are audited like any other tool call.
 
 from __future__ import annotations
 
-import asyncio
-import json
 import os
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
 from boltrig.adapters.base import AdapterError, Credential, ErrorClass, Result, VerbSpec
+from boltrig.adapters.builtin.script_base import (
+    base_env,
+    json_or_text as _json_or_text,
+    run_process,
+    schema as _schema,
+)
 from boltrig.models import InvocationContext
 
 CommandRunner = Callable[[list[str]], Awaitable[tuple[int, str, str]]]
 
-_MAX_OUTPUT = 128_000
 _DEFAULT_HOME = "/var/lib/boltrig/herdr"
-_BASE_ENV_KEYS = (
-    "PATH",
-    "LANG",
-    "LC_ALL",
-    "TZ",
-    "SSL_CERT_FILE",
-    "REQUESTS_CA_BUNDLE",
-    "CURL_CA_BUNDLE",
-    "HTTP_PROXY",
-    "HTTPS_PROXY",
-    "NO_PROXY",
-    "http_proxy",
-    "https_proxy",
-    "no_proxy",
-)
-
-
-async def _terminate(proc: asyncio.subprocess.Process) -> None:
-    if proc.returncode is not None:
-        return
-    try:
-        proc.terminate()
-        await asyncio.wait_for(proc.wait(), timeout=2.0)
-    except Exception:
-        if proc.returncode is None:
-            try:
-                proc.kill()
-            except ProcessLookupError:
-                return
-            await proc.wait()
-
-
-def _schema(required: list[str] | None = None, props: dict[str, Any] | None = None) -> dict:
-    return {"type": "object", "properties": props or {}, "required": required or []}
-
-
-def _json_or_text(stdout: str) -> dict[str, Any]:
-    try:
-        data = json.loads(stdout or "{}")
-    except ValueError:
-        return {"text": stdout[:_MAX_OUTPUT]}
-    return data if isinstance(data, dict) else {"value": data}
 
 
 def _stack_env(root: str | None = None) -> dict[str, str]:
@@ -77,7 +38,7 @@ def _stack_env(root: str | None = None) -> dict[str, str]:
 
 
 def _process_env(root: str | None = None) -> dict[str, str]:
-    env = {key: os.environ[key] for key in _BASE_ENV_KEYS if os.environ.get(key)}
+    env = base_env()
     env.update(_stack_env(root))
     return env
 
@@ -141,10 +102,12 @@ class HerdrAdapter:
             argv = self._argv(verb, params)
         except ValueError as exc:
             return Result.failure(AdapterError(ErrorClass.INVALID, str(exc)))
-        code, stdout, stderr = await self._run(argv)
+        code, stdout, _stderr = await self._run(argv)
         if code != 0:
+            # Fixed message: child stderr is never echoed into a Result (it
+            # could carry secrets); only the exit code is reported.
             return Result.failure(
-                AdapterError(ErrorClass.UNAVAILABLE, stderr[:500] or f"herdr exited {code}",
+                AdapterError(ErrorClass.UNAVAILABLE, f"herdr exited {code}",
                              retryable=True)
             )
         return Result.success({"command": argv[1:], "result": _json_or_text(stdout)})
@@ -193,25 +156,12 @@ class HerdrAdapter:
     async def _run(self, argv: list[str]) -> tuple[int, str, str]:
         if self._runner is not None:
             return await self._runner(argv)
-        proc: asyncio.subprocess.Process | None = None
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                *argv,
-                env=_process_env(self._stack_home),
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            out_b, err_b = await asyncio.wait_for(proc.communicate(), self.timeout)
-        except FileNotFoundError:
-            return 127, "", "herdr command not found"
-        except TimeoutError:
-            if proc is not None:
-                await _terminate(proc)
-            return 124, "", "herdr command timed out"
-        return (
-            int(proc.returncode or 0),
-            out_b.decode("utf-8", errors="replace")[:_MAX_OUTPUT],
-            err_b.decode("utf-8", errors="replace")[:_MAX_OUTPUT],
+        return await run_process(
+            argv,
+            env=_process_env(self._stack_home),
+            timeout=self.timeout,
+            missing="herdr command not found",
+            timed_out="herdr command timed out",
         )
 
 

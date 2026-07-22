@@ -17,15 +17,17 @@ work is polish/enhance) vs **open** (IA still in flux, may need a spec + sign-of
 | 1 | **Chat** | Flagship + default landing; the L2 reference client | B+ | settled (full spec exists) | Enhance | Build to the written chat surface spec; streaming/HITL correctness is no-rewrite |
 | 2 | **Automations / Workflow canvas** | Core product loop | B | settled | Enhance | Real run stats already wired; finish run-record fidelity + `flow.loop` UI |
 | 3 | **Approvals (HITL)** | Governance-critical; where D6/D7 live | B- | settled | Enhance | Must render the AMENDMENTS approval contract exactly; smallest tolerance for drift |
-| 4 | **Agent Studio / builder** | Authoring surface for the fleet | B- | open | Restructure (spec first) | IA for defining agents/capabilities/bindings not fully settled |
-| 5 | **Memory panel** | The v2 architectural bet (decision 0011) | C+ | open | Restructure (spec first) | Depends on the Mem0/Cognee fanout landing; provenance IA is new |
-| 6 | **Admin / control-plane** | Operator control | C+ | open | Restructure (spec first) | Fleet/tenant control IA to be proposed |
-| 7 | **Insight + Eval** | Quality/cost observability | C | open | Restructure (spec first) | New surface shape |
-| 8 | **Settings** | Config | B+ | settled (D12/D13) | Polish/Enhance | Recently reworked to a page; hold the line |
-| 9 | Home, Channels, Me, DevConsole, CommandPalette, Router, Registry, Kanban | Secondary | B/B- | settled | Polish/Enhance | Token/consistency/a11y sweeps; no IA changes |
+| 4 | **Agent Studio / builder** | Authoring surface for the fleet | B- | settled (`surfaces/agent-builder.md`) | Enhance | Org-first fleet authoring with one slide per agent |
+| 5 | **Knowledge** | Canonical evidence shared with Codex (decision 0015) | C+ | settled (`surfaces/knowledge.md`) | Enhance | Library first, immutable citations, Cognee as visible rebuildable compiler |
+| 6 | **Memory panel** | Governed interpretation distinct from Knowledge | C+ | settled (`surfaces/memory.md`) | Enhance | Recall-first with provenance on every fact |
+| 7 | **Admin / control-plane** | Operator control | C+ | settled (`surfaces/admin-control-plane.md`) | Enhance | Typed configuration plus task-focused organisation administration |
+| 8 | **Insight + Eval** | Quality/cost observability | C | settled (`surfaces/insight-eval.md`) | Enhance | Observe, investigate, govern spend, then prove behavior |
+| 9 | **Settings** | Config | B+ | settled (D12/D13) | Polish/Enhance | Recently reworked to a page; hold the line |
+| 10 | Home, Channels, Me, DevConsole, CommandPalette, Router, Registry, Kanban | Secondary | B/B- | settled | Polish/Enhance | Token/consistency/a11y sweeps; no IA changes |
 
-**Order of the run:** 1 -> 2 -> 3 first (all *settled*, so Enhance-altitude, no sign-off wall),
-then a spec gate before 4 -> 7 (all *open*). Polish sweep (row 9) can run in parallel any time.
+**Order of the run:** 1 -> 2 -> 3 first, then 4 -> 8 against their ratified surface specs.
+The former spec gate for 4 -> 8 closed on 2026-07-21. Polish sweep (row 10) can run in parallel
+any time.
 
 ## 2. Structure status legend
 - **settled** - information architecture is decided and in a spec/canon. Fable may Polish and
@@ -64,17 +66,18 @@ call is a decisive call + a one-line note. Check the citator first.
 
 Before handing the run to Fable, all green:
 - [x] Ambition mapped -> `docs/PATH-TO-10.md`
-- [x] Locked decisions recorded -> `docs/design/DESIGN-DECISIONS.md` (D1-D11 canon; **D12-D15 await Will's ratify**)
+- [x] Locked decisions recorded -> `docs/design/DESIGN-DECISIONS.md` (D1-D15 canon)
 - [x] No-rewrite list drawn
 - [x] Scorecard + altitude ladder + challenge protocol -> this file
-- [ ] **Will ratifies D12-D15** (four inferred decisions)
+- [x] **D12-D15 resolved and ratified** (D13 revised to preserve the frozen spatial deck)
+- [x] **Open-surface IA settled** for Agent Studio, Knowledge, Memory, Admin, Insight, and Eval
 - [ ] **Tier 0 landed first** - the 234-path working set committed and both gates green, so
       Fable starts from a clean, measurable tree (a Fable run on a red tree measures nothing)
 - [ ] Each surface ask phrased with `fable-safe-prompt` before sending (layer 3)
 
 ## 6. The prime directive handed to Fable
 > Improve surface by surface, top-down by leverage. **Read `DESIGN-DECISIONS.md` first.** Polish
-> and Enhance freely within the IA; for anything on an *open* surface or that touches a
-> CANON-LOCKED row, propose the spec/alternative with its case and wait for sign-off. Never
+> and Enhance freely within the IA; for anything that touches a CANON-LOCKED row, propose the
+> alternative with its case and wait for sign-off. Never
 > rewrite a no-rewrite surface. Land small reviewable diffs. Keep the invariant + structure
 > gates green on every commit. Don't stop to ask on Polish/Enhance; do stop on Restructure.

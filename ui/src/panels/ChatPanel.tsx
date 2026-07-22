@@ -13,7 +13,6 @@ import { CHAT_AGENTS } from "@/panels/chat/constants";
 import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES } from "@/panels/chat/constants";
 import { formatBytes } from "@/panels/chat/attachmentUtils";
 import { Icon } from "@/panels/chat/icons";
-import type { CSSProperties } from "react";
 
 export function ChatPanel(): JSX.Element {
   const chat = useChatPanel();
@@ -74,14 +73,7 @@ export function ChatPanel(): JSX.Element {
         />
 
         {chat.chatSearchOpen && (
-          <div
-            className="chat-header-search"
-            style={{
-              padding: "6px 20px",
-              background: "rgba(8,14,26,0.92)",
-              borderBottom: "1px solid rgba(255,255,255,0.04)",
-            } as CSSProperties}
-          >
+          <div className="chat-header-search">
             <input
               className="chat-header-search__input"
               type="search"

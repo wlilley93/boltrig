@@ -21,6 +21,7 @@ from typing import Any, Mapping
 import yaml
 
 from boltrig.identity.rbac import grants_for_scope
+from boltrig.config.environment import is_truthy
 from boltrig.config.manifest_reconcile import (
     declared_capabilities,
     plan_capability_reconciliation,
@@ -102,9 +103,10 @@ class HierarchyTier:
     """A durable agent in the org chart (tier1 chief-of-staff / tier2 head)."""
 
     name: str
-    # Compatibility default. Boltrig v2 target runtime selection is expressed in
-    # raw stack/mastra/rivet_agentos sections until those adapters are bound.
-    runtime: str = "hermes"
+    # Compatibility default for old manifests. Codex is the only target agent
+    # runtime (decision 0012); an unwired Codex degrades to a deterministic
+    # script run rather than crashing.
+    runtime: str = "codex"
     model_endpoint: str | None = None
     max_depth: int = 3
     supported_skills: tuple[str, ...] = ("*",)
@@ -127,8 +129,9 @@ class EphemeralRuntime:
 
     name: str
     # Compatibility default for old manifests; v2 should name explicit runtime
-    # profiles such as opencode or future rivet_agentos workers.
-    runtime: str = "hermes"
+    # profiles. Codex is the only target agent runtime (decision 0012); an
+    # unwired Codex degrades to a deterministic script run rather than crashing.
+    runtime: str = "codex"
     supported_skills: tuple[str, ...] = ("*",)
     max_depth: int = 2
     cost_tier: str = "cheap"
@@ -301,8 +304,7 @@ class FleetManifest:
     network: NetworkConfig = field(default_factory=NetworkConfig)
     privacy: PrivacyConfig = field(default_factory=PrivacyConfig)
     chat: ChatConfig = field(default_factory=ChatConfig)
-    # Sections surfaced as raw config rather than typed dataclasses (Round Three+:
-    # evaluation/notifications/personal_agents, and Round Five: memory).
+    # Raw config sections include Round Three+, memory, and first-party Knowledge.
     extra: dict[str, Any] = field(default_factory=dict)
 
     def section(self, name: str) -> dict[str, Any]:
@@ -345,7 +347,6 @@ class FleetManifest:
 
 # --- ${ENV} interpolation ---------------------------------------------------
 _VAR = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}")
-_TRUE_VALUES = {"1", "true", "yes", "on", "y", "t"}
 _FALSE_VALUES = {"0", "false", "no", "off", "n", "f"}
 
 
@@ -381,10 +382,9 @@ def _as_bool(value: Any, default: bool = False) -> bool:
         return value
     if isinstance(value, int):
         return value != 0
-    lowered = str(value).strip().lower()
-    if lowered in _TRUE_VALUES:
+    if is_truthy(str(value)):
         return True
-    if lowered in _FALSE_VALUES:
+    if str(value).strip().lower() in _FALSE_VALUES:
         return False
     return default
 
@@ -481,7 +481,7 @@ def _parse_tier(raw: Mapping[str, Any]) -> HierarchyTier:
     skills = raw.get("skills", raw.get("supported_skills", ["*"]))
     return HierarchyTier(
         name=str(raw["name"]),
-        runtime=str(raw.get("runtime", "hermes")),
+        runtime=str(raw.get("runtime", "codex")),
         model_endpoint=raw.get("model_endpoint"),
         max_depth=int(raw.get("max_depth", 3)),
         supported_skills=_as_tuple(skills),
@@ -501,7 +501,7 @@ def _parse_ephemeral(raw: Mapping[str, Any]) -> EphemeralRuntime:
     skills = raw.get("supported_skills", raw.get("skills", ["*"]))
     return EphemeralRuntime(
         name=str(raw["name"]),
-        runtime=str(raw.get("runtime", "hermes")),
+        runtime=str(raw.get("runtime", "codex")),
         supported_skills=_as_tuple(skills),
         max_depth=int(raw.get("max_depth", 2)),
         cost_tier=str(raw.get("cost_tier", "cheap")),
@@ -657,7 +657,7 @@ def load_manifest(path: str, *, env: Mapping[str, str] | None = None) -> FleetMa
         privacy=_parse_privacy(doc.get("privacy") or {}),
         chat=_parse_chat(doc.get("chat") or {}),
         extra={k: doc[k] for k in (
-            "evaluation", "notifications", "personal_agents", "memory",
+            "evaluation", "notifications", "personal_agents", "memory", "knowledge",
             "runtimes", "mcp", "chat", "stack", "mastra", "rivet_agentos",
             "browser_cli", "langfuse", "reconcile",
         ) if k in doc},
@@ -693,7 +693,7 @@ def export_runtime_environment(
         enabled = health.get("enabled")
         if enabled not in (None, "") and "BOLTRIG_MODEL_GATEWAY_HEALTH" not in target:
             target["BOLTRIG_MODEL_GATEWAY_HEALTH"] = (
-                "1" if str(enabled).strip().lower() in {"1", "true", "yes", "on"} else "0"
+                "1" if is_truthy(str(enabled)) else "0"
             )
         path = str(health.get("path") or "").strip()
         if path and "BOLTRIG_MODEL_GATEWAY_HEALTH_PATH" not in target:

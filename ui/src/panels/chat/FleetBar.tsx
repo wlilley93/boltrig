@@ -44,7 +44,7 @@ function buildFleetRows(live: NormalizedTurn, activeAgent: ChatAgent): FleetRowD
       id: sub.childRunId,
       name: `Worker ${i + 1}`,
       role: "ephemeral",
-      color: ["#5E69DD", "#3FB984", "#FF7A45"][i % 3],
+      color: ["var(--color-accent-2)", "var(--color-accent)"][i % 2],
       initials: String(i + 1),
       elapsed: `00:${String(Math.min(59, 12 + i * 7)).padStart(2, "0")}`,
       phase: "executing",

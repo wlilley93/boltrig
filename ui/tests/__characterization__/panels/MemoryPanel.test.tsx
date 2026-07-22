@@ -33,6 +33,8 @@ describe("MemoryPanel", () => {
   it("renders without crashing", () => {
     mockApi();
     render(<MemoryPanel />);
+    expect(screen.getByRole("tab", { name: "Recall" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("radiogroup", { name: "Search mode" })).toBeTruthy();
   });
 
   it("FactCard renders a fact", () => {

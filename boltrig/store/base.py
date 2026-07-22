@@ -16,7 +16,7 @@ from boltrig.models import (
     AiConfig, AuditEvent,
     AuditRollupAnchor, Budget,
     Channel, ChannelBinding,
-    ChannelPairing, ConfigRevision,
+    ChannelOutboxMessage, ChannelPairing, ConfigRevision,
     Conversation, ConversationMessage,
     ConversationSummary, EvalCase,
     EvalRun, HITLRequest,
@@ -69,11 +69,21 @@ DEFAULT_WORK_PAGE = 100
 # a page size but the server caps it, and a batch ingest is capped by item count.
 MAX_MEMORY_LIST = 200
 MAX_INGEST_ITEMS = 100
+# The observability audit reads (console/cost/telemetry/audit-search) push the
+# department/workspace run-scope predicate INTO the query and clamp the page
+# here, so a growing audit table is never pulled into memory wholesale and
+# filtered in Python (same SEC-69 bounding idiom as MAX_WORK_PAGE).
+MAX_OBSERVABILITY_PAGE = 10_000
 
 
 def clamp_work_page(limit: int) -> int:
     """Clamp a caller-supplied work-list page size into [1, MAX_WORK_PAGE]."""
     return max(1, min(int(limit), MAX_WORK_PAGE))
+
+
+def clamp_observability_page(limit: int) -> int:
+    """Clamp an observability audit-read page into [1, MAX_OBSERVABILITY_PAGE]."""
+    return max(1, min(int(limit), MAX_OBSERVABILITY_PAGE))
 
 
 def clamp_memory_list(limit: int) -> int:
@@ -132,6 +142,9 @@ class Store(BudgetPolicyContract, IdempotencyStoreContract, GuardedWritesContrac
         enforce_workspace: bool = False,
     ) -> WorkItem | None: ...
     async def update_work_item(self, item: WorkItem) -> None: ...
+    async def transition_work_item_status(
+        self, tenant_id: str, item_id: str, *, expected: WorkStatus, new_status: WorkStatus
+    ) -> bool: ...
     async def list_work_items(
         self,
         tenant_id: str,
@@ -147,6 +160,26 @@ class Store(BudgetPolicyContract, IdempotencyStoreContract, GuardedWritesContrac
         # ``limit=None`` is the trusted full slice; workspace enforcement keeps an
         # omitted filter distinct from an external org-wide-only ``None`` scope.
         ...
+    # Batch lookup by id OR hatchet_run_id in ONE query - the console prefetch
+    # that keeps per-request HITL visibility checks O(1) queries instead of one
+    # work-item read per pending request. Tenant-scoped (SEC-08).
+    async def list_work_items_by_refs(
+        self, tenant_id: str, refs: list[str]
+    ) -> list[WorkItem]: ...
+    # The /v1/runs listing (SEC-69): the RunScope predicate (department +
+    # enforced-workspace visibility, and the hidden-wins rule that a run ref
+    # owned by ANY out-of-scope item hides the row) is pushed INTO the query
+    # under the same clamped keyset page as list_work_items, instead of loading
+    # the whole work table to compute the scope in Python.
+    async def list_run_items_scoped(
+        self,
+        tenant_id: str,
+        *,
+        departments: list[str] | None = None,
+        workspace_id: str | None = None,
+        limit: int | None = None,
+        cursor: str | None = None,
+    ) -> list[WorkItem]: ...
 
     # atomic pending -> in_flight claim with a lease: one winner per item across
     # concurrent claimers; an expired lease is reclaimable; attempts increments
@@ -199,6 +232,25 @@ class Store(BudgetPolicyContract, IdempotencyStoreContract, GuardedWritesContrac
     async def audit_append(self, event: AuditEvent) -> None: ...
     async def audit_query(
         self, tenant_id: str, run_id: str | None = None, limit: int = 200
+    ) -> list[AuditEvent]: ...
+    # Scoped observability read (console/cost/telemetry/audit-search): the
+    # WorkItem-derived RunScope predicate (visible/hidden run ids by department
+    # + workspace) and the event-row workspace filter are applied INSIDE the
+    # query, before the clamped LIMIT, so the route never loads-then-filters a
+    # tenant-wide slice. ``departments=None`` is the unrestricted (org-admin)
+    # scope; ``workspace_id`` is the caller's ACTIVE workspace (org-wide rows
+    # plus that workspace's rows, fail-closed); ``match_parent`` folds
+    # parent_run_id into the run refs (the two-arg RunScope.permits shape).
+    # Ascending, tail-bounded like audit_query.
+    async def audit_query_scoped(
+        self,
+        tenant_id: str,
+        *,
+        departments: list[str] | None = None,
+        workspace_id: str | None = None,
+        match_parent: bool = False,
+        run_id: str | None = None,
+        limit: int = 200,
     ) -> list[AuditEvent]: ...
     # ascending verification pages (rows with seq > after_seq, oldest first, up to
     # limit): verify() re-derives the WHOLE chain through these (SEC-168).
@@ -255,7 +307,7 @@ class Store(BudgetPolicyContract, IdempotencyStoreContract, GuardedWritesContrac
         self, tenant_id: str, reservations: list[tuple[str, int, int]]
     ) -> bool: ...
 
-    # --- credential references (refs only; never plaintext, SEC-04) ---
+    # --- credential references (sealed at rest; never plaintext, SEC-04) ---
     async def get_credential_ref(self, tenant_id: str, cred_id: str) -> dict[str, Any] | None: ...
 
     # --- Round Three: versioned config, eval, customisation, memory ---
@@ -306,6 +358,28 @@ class Store(BudgetPolicyContract, IdempotencyStoreContract, GuardedWritesContrac
     async def bump_channel_pairing_attempts(
         self, tenant_id: str, pairing_id: str, *, cap: int
     ) -> "ChannelPairing | None": ...
+    # --- Channel durability (decision 0003, Phase 2) -------------------------
+    # Atomic record-and-check replay dedup (M3/SEC-66): True on the FIRST
+    # sighting of (channel, delivery), False on a replay within the TTL window.
+    async def record_channel_delivery(
+        self, tenant_id: str, channel_id: str, delivery_id: str, *, ttl_seconds: int
+    ) -> bool: ...
+    # The durable outbound hand-off for socket-class channels: the kernel
+    # enqueues, the sidecar claims (leased, one winner - mirrors claim_work_item)
+    # and settles with ack (terminal) or fail (backoff retry, terminal at the
+    # attempt cap). ack/fail are CAS'd on the lease owner.
+    async def enqueue_channel_outbox(self, message: "ChannelOutboxMessage") -> None: ...
+    async def claim_channel_outbox(
+        self, tenant_id: str, channel_ids: list[str], worker_id: str,
+        lease_seconds: int, limit: int,
+    ) -> list["ChannelOutboxMessage"]: ...
+    async def ack_channel_outbox(
+        self, tenant_id: str, message_id: str, worker_id: str
+    ) -> bool: ...
+    async def fail_channel_outbox(
+        self, tenant_id: str, message_id: str, worker_id: str, error: str | None,
+        *, max_attempts: int, backoff_seconds: int,
+    ) -> bool: ...
     async def add_memory_item(self, item: MemoryItem) -> None: ...
     async def query_memory(
         self, tenant_id: str, owner_scopes: list[str], kind: str | None = None, limit: int = 20

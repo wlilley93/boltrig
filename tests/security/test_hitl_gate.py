@@ -6,6 +6,7 @@ requester cannot self-approve.
 """
 
 import asyncio
+import json
 
 import pytest
 from fastapi.testclient import TestClient
@@ -33,6 +34,39 @@ async def test_blocking_verb_pauses_for_approval(gated_kernel):
     # a pending request now exists
     pending = await gated_kernel.hitl.list_pending(TENANT)
     assert any(r.id == exc.value.hitl_request_id for r in pending)
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-14")
+async def test_approval_records_literal_inputs_without_storing_secrets(gated_kernel):
+    ctx = make_ctx(
+        ["ticket.create"], actor="alice", actor_tier="human", on_behalf_of="owner"
+    )
+    with pytest.raises(PendingHuman) as exc:
+        await gated_kernel.invoke(
+            "ticket",
+            "ticket.create",
+            {
+                "title": "ship the release",
+                "metadata": {"region": "eu-west", "api_key": "sk-not-stored"},
+            },
+            ctx,
+        )
+
+    request = await gated_kernel.hitl.get(TENANT, exc.value.hitl_request_id)
+    assert request is not None
+    display = json.loads(request.context)
+    assert display == {
+        "inputs": {
+            "metadata": {"api_key": "[redacted]", "region": "eu-west"},
+            "title": "ship the release",
+        },
+        "requested_by": "alice",
+        "requested_on_behalf_of": "owner",
+        "verb": "ticket.create",
+        "version": 1,
+    }
+    assert "sk-not-stored" not in request.context
 
 
 @pytest.mark.security

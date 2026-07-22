@@ -33,6 +33,7 @@ from boltrig.kernel import Kernel
 from boltrig.kernel.app import create_app
 from boltrig.models import GrantSet, Organisation, TenantPermissions, User
 from boltrig.store import InMemoryStore
+from boltrig.store.sealing import is_sealed
 
 T = "default"
 OWNER = "owner@example.io"
@@ -106,6 +107,10 @@ def test_totp_secret_is_sealed_never_plaintext_or_audited(monkeypatch):
     # there is no plaintext secret column on the identity row.
     ref = _run(store.get_credential_ref(T, totp.secret_ref))
     assert ref == {"secret": secret}
+    # At rest the row is a sealed envelope (SEC-169) - the base32 secret never
+    # rests in the store as plaintext.
+    raw = store._creds[(T, totp.secret_ref)]
+    assert is_sealed(raw) and secret not in json.dumps(raw)
     user = _run(store.get_user(T, OWNER))
     assert secret not in json.dumps(user.__dict__, default=str)
 

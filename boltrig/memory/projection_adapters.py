@@ -11,14 +11,13 @@ import json
 import os
 from typing import Any
 
+from boltrig.config.environment import is_truthy
 from boltrig.models import InvocationContext
 
 from .cognee import CogneeEngine
 from .engine import EngineFact
 from .projections import MemoryProjectionFanout, ProjectionRecallHit, ProjectionResult
 from .projection_queue import QueuedMemoryProjectionFanout, is_queued_projection_mode
-
-_TRUE_VALUES = {"1", "true", "yes", "on", "y", "t"}
 
 
 def _entity_id(tenant_id: str, owner_scope: str) -> str:
@@ -30,7 +29,7 @@ def _as_bool(value: Any, default: bool = False) -> bool:
         return default
     if isinstance(value, bool):
         return value
-    return str(value).strip().lower() in _TRUE_VALUES
+    return is_truthy(str(value))
 
 
 async def _maybe_await(value):

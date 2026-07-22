@@ -7,16 +7,17 @@ import type { NormalizedTurn } from "@/panels/chatTurn";
 import { normalizeEvents } from "@/panels/chatTurn";
 
 export function toolTone(status: string): string {
-  if (status === "ok") return "#3FB984";
-  if (status === "pending" || status === "running") return "#3DD3F0";
-  return "#F0654A";
+  if (status === "ok") return "var(--color-ok)";
+  if (status === "pending" || status === "running") return "var(--color-run-running)";
+  if (status === "pending_human" || status === "paused") return "var(--color-consequence-high)";
+  return "var(--color-down)";
 }
 
 // Per-event-type constants (brief sec 13.1, lines 354-363).
-const CYAN = "#3DD3F0";
-const MUTED = "#7E95B0"; // --text-muted
-const DELEGATION_COLOR = "#5E69DD"; // tier-2 handoff accent (accent-2)
-const DOT_BORDER_AGENT = "2px solid #04060D"; // punches the dot off the avatar
+const CYAN = "var(--color-accent)";
+const MUTED = "var(--color-text-muted)";
+const DELEGATION_COLOR = "var(--color-accent-2)";
+const DOT_BORDER_AGENT = "2px solid var(--color-bg-base)";
 const DOT_BORDER_EPHEMERAL = `2px solid ${MUTED}`;
 
 function initialsOf(name: string): string {

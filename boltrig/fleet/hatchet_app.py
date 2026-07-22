@@ -11,8 +11,11 @@ durability backbone:
   * ``boltrig-work-item`` - the pump's claimed-item body by id. The worker
     process owns a kernel + org pump (mirroring api/worker.py); the engine
     re-runs the body on a crash (US-EXE-02).
-  * ``boltrig-workflow-run`` - the workflow interpreter with checkpoint-resume
-    (NFR-REL-02). A HITL pause durable-waits for the scoped approval event and
+  * ``boltrig-workflow-run`` - the workflow interpreter with BOTH durability
+    seams wired: each step dispatches inside an ``executor.run_step`` boundary
+    AND checkpoint-resume is active (NFR-REL-02), with a deterministic per-step
+    idempotency key closing the completed-but-uncheckpointed crash window
+    (SEC-15). A HITL pause durable-waits for the scoped approval event and
     re-enters the interpreter, which replays checkpointed steps and hands the
     paused step its approval id, so the kernel CAS executes the gated verb
     exactly once (NFR-REL-03, SEC-14).
@@ -57,6 +60,7 @@ from .hatchet_ultracode import (
     register_hatchet_ultracode_tasks,
     register_local_ultracode_tasks,
 )
+from .workers import HatchetExecutor
 
 log = logging.getLogger("boltrig.fleet.hatchet_app")
 
@@ -193,11 +197,21 @@ async def invoke_task_body(kernel: Any, payload: dict[str, Any]) -> dict[str, An
     )
 
 
-async def run_workflow_body(kernel: Any, payload: dict[str, Any]) -> dict[str, Any]:
-    """Run a stored workflow through the interpreter with the checkpoint seam
-    (NFR-REL-02): completed steps replay from checkpoints, a HITL pause is
-    checkpointed with its request id, and a resume re-invokes the paused step
-    with that approval id (the CAS makes execution exactly-once, NFR-REL-03)."""
+async def run_workflow_body(
+    kernel: Any, payload: dict[str, Any], *, executor: Any | None = None
+) -> dict[str, Any]:
+    """Run a stored workflow through the interpreter with BOTH durability
+    seams wired (NFR-REL-02): each step dispatches inside its own
+    ``executor.run_step`` boundary AND the checkpoint seam replays completed
+    steps, so a re-run never re-dispatches them. A HITL pause is checkpointed
+    with its request id, and a resume re-invokes the paused step with that
+    approval id (the CAS makes execution exactly-once, NFR-REL-03). What the
+    per-step boundary itself guarantees depends on the executor: recorded
+    bookkeeping on the local fallback, an honest pass-through on
+    ``HatchetExecutor`` today (the SDK exposes no durable child-step API) -
+    there the engine's whole-task retry plus checkpoints plus the per-step
+    idempotency keys are the recovery story. ``executor=None`` keeps the
+    legacy inline shape for direct callers."""
     from boltrig.workflows.interpreter import run_workflow_definition
     from boltrig.workflows.snapshot import workflow_from_snapshot
 
@@ -215,6 +229,7 @@ async def run_workflow_body(kernel: Any, payload: dict[str, Any]) -> dict[str, A
         wf,
         dict(payload.get("inputs") or {}),
         ctx,
+        executor=executor,
         run_id=payload.get("run_id"),
         store=kernel.store,
     )
@@ -240,7 +255,8 @@ def register_boltrig_tasks(executor: Any, kernel: Any, pump: Any | None = None) 
         return await invoke_task_body(kernel, payload)
 
     async def _workflow_run(payload: dict[str, Any]) -> dict[str, Any]:
-        return await run_workflow_body(kernel, payload)
+        # The combined path: per-step run_step boundaries AND checkpoints.
+        return await run_workflow_body(kernel, payload, executor=executor)
 
     register(TASK_INVOKE, _invoke)
     register(TASK_WORKFLOW_RUN, _workflow_run)
@@ -262,7 +278,8 @@ async def _default_bootstrap() -> dict[str, Any]:
     wiring, not a module-scope fleet -> api dependency. HITL answers recorded
     through this kernel requeue parked work items (NFR-REL-03)."""
     from boltrig.api.bootstrap import _find_manifest, build_kernel_async, wire_hitl_resume
-    from boltrig.config import load_manifest
+    from boltrig.api.codex_execution import build_codex_execution_stack
+    from boltrig.config import load_manifest, load_settings
 
     from .pump import build_org
     from .spawn import build_spawner
@@ -275,7 +292,11 @@ async def _default_bootstrap() -> dict[str, Any]:
             manifest = load_manifest(manifest_path)
         except Exception as exc:  # a broken manifest degrades to the default org (P9)
             log.warning("manifest load failed (%s); using the default org", exc)
-    pump = build_org(kernel, build_spawner(kernel), manifest)
+    pump = build_org(
+        kernel, build_spawner(kernel), manifest,
+        # Codex shadow root admission (SEC-172): None when BOLTRIG_CODEX_LEDGER off.
+        codex_execution=build_codex_execution_stack(load_settings(), kernel.store),
+    )
     wire_hitl_resume(kernel, pump=pump)
     return {"kernel": kernel, "pump": pump}
 
@@ -326,7 +347,9 @@ def build_hatchet_app(
     )
     async def workflow_run(inp: WorkflowRunInput, ctx: DurableContext) -> dict:
         res = await _resources()
-        record = await run_workflow_body(res["kernel"], inp.model_dump())
+        # run_step is an honest pass-through today (its docstring says why).
+        executor = HatchetExecutor(hatchet)
+        record = await run_workflow_body(res["kernel"], inp.model_dump(), executor=executor)
         waits = 0
         while record.get("status") == "paused":
             # Durable pause: block until the approval event for THIS run arrives
@@ -345,7 +368,7 @@ def build_hatchet_app(
             )
             # Re-enter the interpreter: checkpointed steps replay, the paused
             # step re-invokes with its approval id (CAS exactly-once, NFR-REL-03).
-            record = await run_workflow_body(res["kernel"], inp.model_dump())
+            record = await run_workflow_body(res["kernel"], inp.model_dump(), executor=executor)
         return record
 
     memory_workflows = register_hatchet_memory_projection_task(hatchet, _resources)

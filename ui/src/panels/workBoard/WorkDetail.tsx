@@ -49,7 +49,7 @@ export function WorkDetail({ itemId }: { itemId: string }) {
               <DetailField label="Owner">{data.item.owner_member || "Unassigned"}</DetailField>
               <DetailField label="Source">{data.item.source || "Unknown"}</DetailField>
               <DetailField label="Confidence">{data.item.confidence == null ? "Unknown" : `${Math.round(data.item.confidence * 100)}%`}</DetailField>
-              <DetailField label="Convergent">{data.item.convergent ? "Yes — settles on one answer" : "No — open-ended"}</DetailField>
+              <DetailField label="Convergent">{data.item.convergent ? "Yes - settles on one answer" : "No - open-ended"}</DetailField>
               <DetailField label="Parent">{data.item.parent_id ? <button className="entity-link" onClick={() => navigate(`/kanban/${data.item.parent_id}`)}>{data.item.parent_id}</button> : "Root item"}</DetailField>
               <DetailField label="On behalf of">{data.item.on_behalf_of || "Not delegated"}</DetailField>
               <DetailField label="Run">{data.item.hatchet_run_id ? <RunLink runId={data.item.hatchet_run_id} /> : "Not started"}</DetailField>

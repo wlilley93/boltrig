@@ -65,7 +65,7 @@ The gaps are:
   HITL delivery, and test messages.
 - No profile-bound routing for native site chat or OpenAI-compatible clients.
 - No channel trigger wiring from workflow canvas trigger nodes to real channels.
-- No persistent channel sidecar framework for Slack Socket Mode, Discord,
+- No persistent channel gateway framework for Slack Socket Mode, Discord,
   WhatsApp/Baileys, Signal, Telegram long-poll, or mailbox pollers.
 - No channel delivery receipts/dead-letter view in the console.
 - No complete compatibility facade for Opbox/Hermes-style AG-UI and `/v1`
@@ -114,19 +114,19 @@ states where it should land so future work does not reopen the gateway question.
 | Generic signed webhook | Webhook/request-response | Kernel channel gateway | Channel ref plus inbound route policy | C4 |
 | MS Teams webhook/MS Graph | Webhook/request-response | Kernel channel gateway | Channel ref, binding strategy, card/render policy | C4 |
 | Slack Events API | Webhook/request-response | Kernel channel gateway | Channel ref, signing secret, thread binding policy | C4 |
-| Slack Socket Mode | Persistent socket | Supervised channel sidecar | Channel ref, sidecar health, same profile policy | C5 |
-| Discord gateway | Persistent socket | Supervised channel sidecar | Channel ref, guild/channel routing policy | C5 |
+| Slack Socket Mode | Persistent socket | Supervised channel gateway | Channel ref, gateway health, same profile policy | C5 |
+| Discord gateway | Persistent socket | Supervised channel gateway | Channel ref, guild/channel routing policy | C5 |
 | Discord interactions webhook | Webhook/request-response | Kernel channel gateway | Channel ref, interaction response policy | C4 or C5 |
 | Telegram webhook mode | Webhook/request-response | Kernel channel gateway | Channel ref, chat-id binding policy | C4 |
-| Telegram long-poll | Persistent poller | Supervised channel sidecar | Channel ref, poller health, same profile policy | C5 |
+| Telegram long-poll | Persistent poller | Supervised channel gateway | Channel ref, poller health, same profile policy | C5 |
 | Email via MS Graph/Gmail webhook | Webhook/request-response where available | Kernel channel gateway | Mailbox/channel ref, sender binding, attachment policy | C4 |
-| Email via IMAP/POP poller | Persistent poller | Supervised channel sidecar | Mailbox ref, dedupe and reply-thread policy | C5 |
+| Email via IMAP/POP poller | Persistent poller | Supervised channel gateway | Mailbox ref, dedupe and reply-thread policy | C5 |
 | Outbound SMTP/email | Outbound adapter/`channel.send` | Kernel adapter through channel gateway | Outbound policy and HITL default | C4 |
 | SMS via Twilio-style webhook | Webhook/request-response | Kernel channel gateway | Phone-number ref, sender binding, short-message policy | C4 |
 | WhatsApp Cloud API webhook | Webhook/request-response | Kernel channel gateway | Business-account ref, template/send policy | C4 |
-| WhatsApp/Baileys | Persistent connection | Supervised channel sidecar | Channel ref, device/session health | C5 |
-| Signal | Persistent connection | Supervised channel sidecar | Channel ref, account/session health | C5 |
-| Voice call webhooks | Webhook/request-response plus media session | Kernel route for control events; sidecar for realtime media | Phone-number ref, transcript and approval policy | C5 or later |
+| WhatsApp/Baileys | Persistent connection | Supervised channel gateway | Channel ref, device/session health | C5 |
+| Signal | Persistent connection | Supervised channel gateway | Channel ref, account/session health | C5 |
+| Voice call webhooks | Webhook/request-response plus media session | Kernel route for control events; gateway for realtime media | Phone-number ref, transcript and approval policy | C5 or later |
 | Browser push | Outbound notification surface | Notification service/channel gateway | Human notification preference, not agent inbound by default | C6 |
 | In-app notifications | Native Boltrig notifications | Boltrig kernel/UI | Human notification preference, not external channel | C6 |
 | Pager/PagerDuty-style alerting | Outbound webhook/API | Kernel adapter/`channel.send` | Escalation policy only unless inbound is enabled | C6 |
@@ -211,7 +211,7 @@ Fields:
 - `transport_class`: `native`, `http_stream`, `webhook`, `persistent`,
   `outbound_only`
 - `gateway_of_record`: service identifier such as `boltrig-host-agent`,
-  `boltrig-kernel`, `channel-sidecar-slack`, or `legacy-hermes`
+  `boltrig-kernel`, `channel-gateway-slack`, or `legacy-hermes`
 - `mode`: `off`, `shadow`, `canary`, `owning`, `rollback`
 - `status`: `draft`, `ready`, `degraded`, `disabled`
 - `config`: non-secret metadata
@@ -309,7 +309,7 @@ It should evolve from connection CRUD to channel operations:
 - Channel list with platform, transport class, status, enabled, gateway of
   record, last inbound, last outbound, binding count, dead-letter count.
 - Connect wizard for webhook/request-response channels.
-- Sidecar enrollment wizard for persistent channels once sidecars exist.
+- Gateway enrollment wizard for persistent channels once sidecars exist.
 - Sender bindings and pairing codes.
 - Test inbound payload with signature verification.
 - Test outbound `channel.send` with full HITL result rendering.
@@ -367,7 +367,7 @@ The guided setup should be profile-first but resource-aware.
    - webhook callback URL reachable
    - signature secret stored
    - platform challenge passed
-   - sidecar healthy for persistent channels
+   - gateway healthy for persistent channels
 5. Decide ownership mode:
    - off
    - shadow, no ack/send/mutate/retry
@@ -634,17 +634,17 @@ Exit gate:
 
 Deliverables:
 
-- Sidecar framework with health, leases, backoff, replay cursor, and run-scoped
+- Gateway framework with health, leases, backoff, replay cursor, and run-scoped
   kernel re-entry.
-- Slack Socket Mode sidecar if Slack requires it.
-- Discord gateway sidecar if Discord is in scope.
-- Telegram long-poll sidecar if webhook mode is unavailable.
+- Slack Socket Mode gateway if Slack requires it.
+- Discord gateway gateway if Discord is in scope.
+- Telegram long-poll gateway if webhook mode is unavailable.
 - WhatsApp/Baileys and Signal only after security review.
 - Mailbox poller only if webhook mail is insufficient.
 
 Exit gate:
 
-- Sidecar cannot hold policy, direct credentials beyond injected channel secrets,
+- Gateway cannot hold policy, direct credentials beyond injected channel secrets,
   or bypass kernel grants/audit.
 
 ### C6 - Omnichannel HITL and notifications
@@ -774,7 +774,7 @@ Migration tests:
 - [ ] `COMMS-PROFILE-20`: Productize Slack Events API channel if selected.
 - [ ] `COMMS-PROFILE-21`: Productize email webhook or mailbox-poller channel after channel choice.
 - [ ] `COMMS-PROFILE-22`: Productize SMS/Twilio channel after channel choice.
-- [ ] `COMMS-PROFILE-23`: Build persistent sidecar framework before Slack Socket/Discord/WhatsApp/Signal.
+- [ ] `COMMS-PROFILE-23`: Build persistent gateway framework before Slack Socket/Discord/WhatsApp/Signal.
 - [ ] `COMMS-PROFILE-24`: Add workflow trigger binding for channel/webhook triggers.
 - [ ] `COMMS-PROFILE-25`: Add unified HITL delivery policy across site, host, and external channels.
 - [ ] `COMMS-PROFILE-26`: Add runbook section for rollback per surface.

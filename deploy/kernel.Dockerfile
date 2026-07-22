@@ -145,7 +145,9 @@ RUN useradd --create-home --uid 10001 boltrig && \
         /var/lib/boltrig/herdr/home \
         /var/lib/boltrig/herdr/config \
         /var/lib/boltrig/herdr/data \
-        /var/lib/boltrig/herdr/state
+        /var/lib/boltrig/herdr/state \
+        /var/lib/boltrig/knowledge \
+        /var/lib/boltrig/cognee
 # [2026] VJS-CC-VJS 7 J3. The entrypoint privilege-separates when, and ONLY when,
 # the kernel reports uid 0 with a non-empty permitted set. Everywhere else it
 # execs the command it was given and gets out of the way, verified byte-identical

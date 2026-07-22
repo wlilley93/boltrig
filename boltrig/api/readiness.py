@@ -12,6 +12,7 @@ import os
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
+from boltrig.config.environment import is_truthy
 from boltrig.kernel import Kernel
 
 from .readiness_control import (
@@ -19,11 +20,13 @@ from .readiness_control import (
     control_plane_check,
 )
 
-EXPECTED_ALEMBIC_HEAD = "0033_capability_source_active"
+EXPECTED_ALEMBIC_HEAD = "0036_channel_addressing"
 
-_TRUE_VALUES = {"1", "true", "yes", "on", "y", "t"}
 _PRODUCTION_NAMES = {"prod", "production", "staging"}
-_STACK_TOOL_IDS = frozenset({"herdr", "opencode", "browser-cli"})
+# The tools /readyz requires. Codex is the only target agent runtime (decision
+# 0012): opencode is staged-cutover residue - still reported by the stack-tool
+# status snapshot when deployed, but never readiness-GATING.
+_STACK_TOOL_IDS = frozenset({"herdr", "browser-cli"})
 
 PostgresProbe = Callable[[], Awaitable[tuple[bool, tuple[str, ...]]]]
 RedisProbe = Callable[[str, float], Awaitable[bool]]
@@ -31,16 +34,12 @@ HerdrProbe = Callable[[Mapping[str, str], float], Awaitable[bool]]
 FleetReceiptProbe = Callable[[str, str, float, float, bytes], Awaitable[tuple[bool, str]]]
 
 
-def _truthy(value: str | None) -> bool:
-    return str(value or "").strip().lower() in _TRUE_VALUES
-
-
 def _configured(value: str | None) -> bool:
     return bool(str(value or "").strip())
 
 
 def _production(env: Mapping[str, str]) -> bool:
-    if _truthy(env.get("BOLTRIG_PRODUCTION")):
+    if is_truthy(env.get("BOLTRIG_PRODUCTION")):
         return True
     return any(
         str(env.get(name) or "").strip().lower() in _PRODUCTION_NAMES
@@ -275,7 +274,7 @@ class ReadinessService:
         )
         live_health = "not_required"
         stack_reason = None if tool_ok else "posture_failed"
-        if tool_ok and (_production(env) or _truthy(env.get("BOLTRIG_REQUIRE_STACK_TOOL_HEALTH"))):
+        if tool_ok and (_production(env) or is_truthy(env.get("BOLTRIG_REQUIRE_STACK_TOOL_HEALTH"))):
             live_ok, live_reason = await self._stack_tool_live_check(env, timeout_s)
             tool_ok = live_ok
             live_health = "ok" if live_ok else "failed"
@@ -368,8 +367,8 @@ class ReadinessService:
 
     async def _hatchet_check(self, env: Mapping[str, str], timeout_s: float) -> dict[str, Any]:
         enabled = (
-            _truthy(env.get("BOLTRIG_HATCHET_HEALTH"))
-            or _truthy(env.get("BOLTRIG_REQUIRE_DURABLE"))
+            is_truthy(env.get("BOLTRIG_HATCHET_HEALTH"))
+            or is_truthy(env.get("BOLTRIG_REQUIRE_DURABLE"))
             or _configured(env.get("HATCHET_CLIENT_TOKEN"))
         )
         if not enabled:
@@ -394,6 +393,6 @@ class ReadinessService:
 
     @staticmethod
     def _model_gateway_enabled(env: Mapping[str, str]) -> bool:
-        return _truthy(env.get("BOLTRIG_MODEL_GATEWAY_HEALTH")) or _configured(
+        return is_truthy(env.get("BOLTRIG_MODEL_GATEWAY_HEALTH")) or _configured(
             env.get("BOLTRIG_MODEL_GATEWAY_HEALTH_URL")
         )

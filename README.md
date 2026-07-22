@@ -8,6 +8,10 @@ permanent agent fleet that spawns ephemeral workers to get work done. Boltrig is
 a clean-room reference implementation of the "Hermes Fleet" SRS (the kernel
 doctrine: one dispatch chokepoint, stable nouns and verbs, everything-as-data).
 
+> **Runtime direction (2026-07-21):** Codex is the only target agent runtime
+> under decision 0012. Pi, Hermes, OpenCode, and related paths remain staged
+> cutover and rollback residue until the production Codex gates pass.
+
 The kernel core is implemented and tested with the Python suite, opt-in Postgres
 and live-adapter legs, and a machine-checked binding-invariant gate at debt 0.
 Persistence (Postgres), real OIDC auth, sensitive->local model routing, and
@@ -32,6 +36,25 @@ model) are seams (see "Implemented vs scaffolded" below).
    verb to a concrete adapter or agent via a binding. The agent never learns
    which concrete system sits behind a verb (`boltrig/kernel/registry.py`,
    `boltrig/models/registry.py`).
+
+## Citable Knowledge for Codex
+
+The first-party Knowledge extension stores canonical text, Markdown, and PDF
+originals in a filesystem or S3-compatible ObjectVault, with identity,
+revisions, source occurrences, permission scopes, passages, full-text search,
+and pgvector embeddings in Postgres. Every result carries an immutable revision
+and segment citation.
+
+Cognee is bundled and enabled as a rebuildable knowledge compiler. If its model
+configuration is absent or unhealthy, the canonical commit remains successful
+and the provider reports degraded. Supermemory and Mem0 are disabled governed
+catalogue add-ons; enabling them never changes canonical authority and they need
+their credential-backed external connection before processing data.
+
+Codex receives the read-only `knowledge/retrieval` skill plus granted
+`knowledge.*` MCP tools and `boltrig://knowledge/assets/{id}` resources. MCP
+resource list/read calls still invoke the registered verbs through the complete
+dispatcher and audit path.
 
 ## Governance: the doctrine and the consolidation ruling
 
@@ -58,8 +81,9 @@ See `docs/decisions/0002-nankle-consolidation-ruling.md`.
 Three additions sit on the same thin core (the dispatch sequence is unchanged):
 
 - **MCP server face** (`boltrig/kernel/mcp.py`, `POST /v1/mcp`): granted verbs are
-  advertised as MCP tools over a run-scoped token; every `tools/call` runs the
-  full chokepoint. Any MCP-capable runtime drives the fleet with no bespoke glue.
+  advertised as MCP tools and adapter-declared resources over a run-scoped token;
+  every call runs the full chokepoint. Any MCP-capable client can use the same
+  governed surface without bespoke glue.
 - **Pi sidecar runtime** (`boltrig/fleet/pi_runtime.py` + `services/pi_sidecar/`):
   a `pi` capability runs through a sandboxed sidecar whose only tools are the
   run's granted verbs over MCP (no native tools, no credentials, SEC-24/27); it
@@ -76,7 +100,7 @@ See `docs/DEFINITION-OF-DONE-round-two.md`.
 
 ```bash
 python -m venv .venv
-.venv/bin/pip install -e ".[durable,inference]"
+.venv/bin/pip install -e ".[durable,inference,cognee]"
 .venv/bin/pip install pytest pytest-asyncio aiosqlite ruff==0.15.20 \
   mypy==2.1.0 types-jsonschema==4.26.0.20260518
 
@@ -176,6 +200,11 @@ through bindings, and dispatches them through the same chokepoint. No file under
   data is blocked from non-local endpoints and the misroute is audited (SEC-12).
 - **Durable HITL pause** (NFR-REL-01): a blocking pause survives a restart and
   resumes on approval over Postgres.
+- **Knowledge first slice**: bounded text/Markdown/PDF upload, filesystem and
+  S3-compatible ObjectVault implementations, Postgres/pgvector catalogue and
+  search, source/embedding provenance, stable citations, governed HTTP/MCP
+  tools and resources, Codex skill, provider catalogue, UI, and reference-safe
+  erasure.
 
 **Real, but with external seams** (the code is here; the live leg needs its
 service or credentials to exercise):
@@ -193,6 +222,10 @@ service or credentials to exercise):
   local OpenAI-compatible endpoint for sensitive data; it needs a model + (for
   vLLM) a GPU, or swap in Ollama for CPU. (The routing guard that *requires* it
   for sensitive data is done.)
+- **Cognee model configuration.** Cognee ships in the first-party image and is
+  enabled as a Knowledge compiler, but compilation reports degraded until an
+  approved LLM and embedding configuration is available. Canonical Knowledge
+  does not depend on that live leg.
 - **Schema management.** `schema.sql` remains the idempotent first-boot schema for
   fresh stacks; the ordered Alembic set under `migrations/versions/` carries
   production upgrades through `make migrate`.
@@ -201,7 +234,7 @@ service or credentials to exercise):
 
 ```
 boltrig/        kernel, models, store, adapters, fleet, skills, workflows,
-               work, identity, config, observability
+               knowledge, work, identity, config, observability
 ui/            React console (Router, Kanban, Approvals)
 site/          Next.js site + lightweight console overview
 libraries/     skills + workflows + prompts (data, not code)

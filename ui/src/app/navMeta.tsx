@@ -16,6 +16,7 @@ export const HINT: Record<string, string> = {
   insight: "Cost, audit and runs (scoped)",
   eval: "No-escalation evaluation harness",
   memory: "Recall, browse, remember and ingest (scoped)",
+  knowledge: "Citable originals, search and rebuildable providers",
   admin: "Manifest config, history, credentials",
   me: "Personal agent, prefs and memory",
   runs: "Trace live and completed work",
@@ -49,7 +50,7 @@ export const ICON: Record<string, ReactNode> = {
     <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" opacity="0.85"><rect x="3" y="14" width="5" height="5" rx="1" /><rect x="16" y="4" width="5" height="5" rx="1" /><rect x="16" y="15" width="5" height="5" rx="1" /><path d="M8 16.5h3.5M11.5 16.5V7H16" fill="none" stroke="currentColor" strokeWidth="1.5" /></svg>
   ),
   dev: (
-    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" opacity="0.85"><rect x="4" y="5" width="16" height="14" rx="1.5" /><path d="M8 10l2.5 2L8 14M13.5 14H16" fill="none" stroke="#04060D" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" opacity="0.85"><rect x="4" y="5" width="16" height="14" rx="1.5" /><path d="M8 10l2.5 2L8 14M13.5 14H16" fill="none" stroke="var(--color-text-oncolor)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
   ),
   chat: (
     <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" opacity="0.85"><path d="M5 3h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-4 4V5a2 2 0 0 1 2-2z" /></svg>
@@ -64,16 +65,19 @@ export const ICON: Record<string, ReactNode> = {
     <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" opacity="0.85"><rect x="3" y="3" width="5" height="18" rx="1.5" /><rect x="10" y="3" width="5" height="13" rx="1.5" /><rect x="17" y="3" width="5" height="9" rx="1.5" /></svg>
   ),
   approvals: (
-    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" opacity="0.85"><path d="M12 2L4 6v6c0 5.5 3.4 8.5 8 11 4.6-2.5 8-5.5 8-11V6l-8-4z" /><path d="M9 12l2 2 4-4" fill="none" stroke="#04060D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" opacity="0.85"><path d="M12 2L4 6v6c0 5.5 3.4 8.5 8 11 4.6-2.5 8-5.5 8-11V6l-8-4z" /><path d="M9 12l2 2 4-4" fill="none" stroke="var(--color-text-oncolor)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
   ),
   insight: (
     <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" opacity="0.85"><rect x="6" y="12" width="4" height="8" rx="1" /><rect x="12" y="7" width="4" height="13" rx="1" /><rect x="18" y="14" width="4" height="6" rx="1" /><path d="M2 20h22" fill="none" stroke="currentColor" strokeWidth="1.5" /></svg>
   ),
   eval: (
-    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" opacity="0.85"><rect x="5" y="3" width="14" height="18" rx="1.5" /><path d="M9 10l2 2 4-4" fill="none" stroke="#04060D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" opacity="0.85"><rect x="5" y="3" width="14" height="18" rx="1.5" /><path d="M9 10l2 2 4-4" fill="none" stroke="var(--color-text-oncolor)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
   ),
   memory: (
     <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" opacity="0.85"><ellipse cx="12" cy="6" rx="8" ry="4" /><path d="M4 6v5c0 2.2 3.6 4 8 4s8-1.8 8-4V6" fill="none" stroke="currentColor" strokeWidth="1.5" /><path d="M4 11v5c0 2.2 3.6 4 8 4s8-1.8 8-4v-5" fill="none" stroke="currentColor" strokeWidth="1.5" /></svg>
+  ),
+  knowledge: (
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 3h10l4 4v14H5z" /><path d="M15 3v5h4M8 12h8M8 16h6" /><circle cx="17.5" cy="17.5" r="3.5" fill="var(--color-bg-card)" /><path d="M20 20l2 2" /></svg>
   ),
   admin: (
     <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" opacity="0.85"><circle cx="9" cy="8" r="2.5" /><circle cx="15" cy="16" r="2.5" /><path d="M4 8h4.5M13.5 16H20M9 10.5v7M15 6.5v7" fill="none" stroke="currentColor" strokeWidth="1.5" /></svg>

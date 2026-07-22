@@ -164,7 +164,7 @@ export const workers: EphemeralWorker[] = [
 ];
 
 export const workItems: WorkItem[] = [
-  { id: "work-142", title: "Synthesize design-partner interviews", goalId: "goal-beta", projectId: "project-evidence", owner: "agent-research", worker: "worker-a19f", status: "in-flight", priority: "high", due: "Today", aligned: true, artifact: "Evidence digest — Week 29" },
+  { id: "work-142", title: "Synthesize design-partner interviews", goalId: "goal-beta", projectId: "project-evidence", owner: "agent-research", worker: "worker-a19f", status: "in-flight", priority: "high", due: "Today", aligned: true, artifact: "Evidence digest - Week 29" },
   { id: "work-143", title: "Verify off-box restore drill", goalId: "goal-readiness", projectId: "project-runtime", owner: "agent-operations", status: "blocked", priority: "urgent", due: "18 Jul", dependency: "Production backup credentials", aligned: true },
   { id: "work-144", title: "Review public beta narrative", goalId: "goal-beta", projectId: "project-evidence", owner: "agent-product", status: "awaiting-human", priority: "high", due: "Tomorrow", aligned: true },
   { id: "work-145", title: "Triage unsorted feedback", owner: "agent-product", status: "pending", priority: "normal", due: "22 Jul", aligned: false },

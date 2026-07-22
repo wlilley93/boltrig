@@ -130,7 +130,7 @@ def test_skill_and_personal_routes_cannot_spoof_principal_authority():
     _assert_trusted(capture.context)
 
     configured = client.post(
-        "/v1/me/agent", json={"runtime": "pi-worker", "skills": []}, headers=headers
+        "/v1/me/agent", json={"runtime": "script", "skills": []}, headers=headers
     )
     assert configured.status_code == 200
     personal = client.post(

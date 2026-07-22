@@ -36,7 +36,7 @@ import {
 function HitlCard({ req, onAnswered }: { req: HITLRequest; onAnswered: () => void }) {
   const h = useHitlCard(req, onAnswered);
   const ctx = renderContext(req.context);
-  const runId = runFromContext(req.context);
+  const runId = req.run_id ?? runFromContext(req.context);
   const options = decisionOptions(req.type, req.options);
   const isApproval = req.type === "approval";
 
@@ -53,6 +53,36 @@ function HitlCard({ req, onAnswered }: { req: HITLRequest; onAnswered: () => voi
         {req.question || "A pending human request needs your response."}
       </p>
 
+      {(req.requested_by || req.verb) && (
+        <dl className="hitl-card__action">
+          {req.requested_by && (
+            <div>
+              <dt>Requested by</dt>
+              <dd><code>{req.requested_by}</code></dd>
+            </div>
+          )}
+          {req.requested_on_behalf_of && (
+            <div>
+              <dt>On behalf of</dt>
+              <dd><code>{req.requested_on_behalf_of}</code></dd>
+            </div>
+          )}
+          {req.verb && (
+            <div>
+              <dt>Exact verb</dt>
+              <dd><code>{req.verb}</code></dd>
+            </div>
+          )}
+        </dl>
+      )}
+
+      {isApproval && req.inputs !== undefined && req.inputs !== null ? (
+        <div className="hitl-card__inputs">
+          <p>Literal inputs</p>
+          <pre>{renderContext(req.inputs)}</pre>
+        </div>
+      ) : null}
+
       {req.work_item_id ? (
         <p className="ux-hint">
           Work item: <code className="mono">{req.work_item_id}</code>
@@ -67,7 +97,7 @@ function HitlCard({ req, onAnswered }: { req: HITLRequest; onAnswered: () => voi
 
       {ctx ? (
         <details className="hitl-card__context">
-          <summary className="ux-hint" style={{ cursor: "pointer" }}>
+          <summary className="ux-hint">
             Full details
           </summary>
           <pre>{ctx}</pre>

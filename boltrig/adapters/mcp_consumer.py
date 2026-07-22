@@ -20,7 +20,14 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from boltrig.adapters.base import AdapterError, Credential, ErrorClass, Result, VerbSpec
+from boltrig.adapters.base import (
+    AdapterError,
+    Credential,
+    ErrorClass,
+    Result,
+    VerbSpec,
+    bearer_token,
+)
 from boltrig.models import CredentialResolution, InvocationContext
 
 # rpc(request: dict) -> response: dict  (a JSON-RPC round-trip to the MCP server)
@@ -38,22 +45,6 @@ class _McpFailure(Exception):
     def __init__(self, error: AdapterError) -> None:
         super().__init__(error.message)
         self.error = error
-
-
-def _bearer(credential: Credential | None) -> str | None:
-    """The MCP bearer carried by kernel-resolved credential material, or None.
-
-    Mirrors the runpod adapter's material convention; the material itself is
-    never logged or returned (SEC-05), only this derived header value.
-    """
-    if credential is None:
-        return None
-    material = credential.material or {}
-    for key in ("token", "api_key", "value"):
-        value = material.get(key)
-        if value:
-            return str(value)
-    return None
 
 
 class McpConsumerAdapter:
@@ -88,7 +79,7 @@ class McpConsumerAdapter:
         """
         resp = await self._call(
             {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}},
-            _bearer(credential),
+            bearer_token(credential),
         )
         tools = (resp.get("result") or {}).get("tools", [])
         self._specs = [
@@ -118,6 +109,10 @@ class McpConsumerAdapter:
             return await self._execute(verb, params, credential)
         except _McpFailure as failure:
             return Result.failure(failure.error)
+        except Exception as exc:  # a bad adapter must never crash the kernel (US-ADP-06)
+            return Result.failure(
+                AdapterError(ErrorClass.INTERNAL, f"adapter error: {type(exc).__name__}")
+            )
 
     async def _execute(
         self, verb: str, params: dict, credential: Credential | None
@@ -129,14 +124,14 @@ class McpConsumerAdapter:
         # The kernel-resolved credential is the ONLY bearer source: no instance
         # token, so rotation and per-run scoping are live and a missing
         # credential fails closed rather than posting an empty bearer.
-        if self._rpc is None and _bearer(credential) is None:
+        if self._rpc is None and bearer_token(credential) is None:
             return Result.failure(
                 AdapterError(ErrorClass.UNAUTHORISED, "mcp credential missing")
             )
         resp = await self._call(
             {"jsonrpc": "2.0", "id": 2, "method": "tools/call",
              "params": {"name": verb, "arguments": params}},
-            _bearer(credential),
+            bearer_token(credential),
         )
         result = resp.get("result") or {}
         boltrig = result.get("_boltrig") or {}
@@ -144,7 +139,19 @@ class McpConsumerAdapter:
             return Result.failure(
                 AdapterError(ErrorClass.INVALID, boltrig.get("reason") or "mcp tool error")
             )
-        return Result.success(boltrig.get("output") or {})
+        output = boltrig.get("output")
+        if output is None:
+            # A non-Boltrig MCP server returns the standard content array, not a
+            # _boltrig envelope: fall back to mapping its text blocks into output.
+            texts = [
+                block["text"]
+                for block in result.get("content") or []
+                if isinstance(block, dict)
+                and block.get("type") == "text"
+                and isinstance(block.get("text"), str)
+            ]
+            output = {"text": "\n".join(texts)} if texts else {}
+        return Result.success(output)
 
     async def health(self) -> str:
         return "ok" if self._specs else "unknown"

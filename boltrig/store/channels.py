@@ -65,7 +65,8 @@ class ChannelStorePG:
                ON CONFLICT (id) DO UPDATE SET
                  platform=EXCLUDED.platform, name=EXCLUDED.name, transport=EXCLUDED.transport,
                  credential_ref=EXCLUDED.credential_ref, config=EXCLUDED.config,
-                 unpaired_behavior=EXCLUDED.unpaired_behavior, enabled=EXCLUDED.enabled""",
+                 unpaired_behavior=EXCLUDED.unpaired_behavior, enabled=EXCLUDED.enabled
+               WHERE channels.tenant_id = EXCLUDED.tenant_id""",
             channel.id, channel.tenant_id, channel.platform, channel.name, channel.transport,
             channel.credential_ref, channel.config, channel.unpaired_behavior, channel.enabled,
             channel.created_at,
@@ -178,7 +179,12 @@ class ChannelStoreMem:
     """Channel methods for ``InMemoryStore`` (uses ``self._channels`` etc.)."""
 
     async def upsert_channel(self, channel):
-        self._channels[channel.id] = channel
+        # Same-tenant upsert only (mirrors the PG ON CONFLICT ... WHERE tenant
+        # predicate): a conflicting id from another tenant is a no-op, never a
+        # re-key of credential_ref/config across the tenant boundary.
+        existing = self._channels.get(channel.id)
+        if existing is None or existing.tenant_id == channel.tenant_id:
+            self._channels[channel.id] = channel
 
     async def get_channel(self, tenant_id, channel_id):
         c = self._channels.get(channel_id)
@@ -247,15 +253,18 @@ class ChannelStoreMem:
         return True
 
     async def get_pending_pairing_for_sender(self, tenant_id, channel_id, external_user_id):
-        for p in self._chan_pairings.values():
+        matches = [
+            p
+            for p in self._chan_pairings.values()
             if (
                 p.tenant_id == tenant_id
                 and p.channel_id == channel_id
                 and p.external_user_id == external_user_id
                 and p.status == "pending"
-            ):
-                return p
-        return None
+            )
+        ]
+        # Newest first, matching the PG ORDER BY created_at DESC LIMIT 1.
+        return max(matches, key=lambda p: p.created_at, default=None)
 
     async def bump_channel_pairing_attempts(self, tenant_id, pairing_id, *, cap):
         p = self._chan_pairings.get((tenant_id, pairing_id))

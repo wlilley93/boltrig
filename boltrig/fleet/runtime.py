@@ -16,6 +16,7 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING, Any, Callable, Protocol, runtime_checkable
 
+from boltrig.config.environment import is_truthy
 from boltrig.models import InvocationContext
 
 from .result import AgentResult
@@ -68,6 +69,25 @@ def runtime_for_provider(provider: str | None) -> str | None:
     if not provider:
         return None
     return _PROVIDER_RUNTIME.get(provider.strip().lower())
+
+
+# Decision 0012: Codex is the only target agent runtime and script stays the
+# deterministic non-agent fallback. Every other lane (hermes / openai /
+# claude-api / pi / opencode / rivet) is staged-cutover rollback residue: it is
+# reachable only when the operator explicitly opts in with
+# BOLTRIG_ENABLE_LEGACY_RUNTIMES (default OFF). With the flag unset, requesting
+# a legacy lane returns the typed unavailable result instead of reaching the
+# lane; with it set, dispatch is byte-for-byte what it was (rollback-ability).
+LEGACY_RUNTIMES_ENV = "BOLTRIG_ENABLE_LEGACY_RUNTIMES"
+_LEGACY_RUNTIME_KINDS = frozenset(
+    {"hermes", "openai", "claude-api", "pi", "opencode", "rivet", "rivet_agentos", "rivet-agentos"}
+)
+
+
+def _legacy_runtimes_enabled() -> bool:
+    """The legacy-lane opt-in, read LIVE (not at import) so tests and dynamic
+    config honour a flag set after import."""
+    return is_truthy(os.environ.get(LEGACY_RUNTIMES_ENV))
 
 
 def _first_env(names: tuple[str, ...]) -> str | None:
@@ -145,6 +165,31 @@ class ScriptRuntime:
             summary=f"script run by {context.actor} (depth {context.depth})",
             tokens_used=0,
             cost_micros=0,
+        )
+
+
+class UnavailableRuntime(ScriptRuntime):
+    """The deterministic fallback for a runtime Boltrig cannot provide.
+
+    An unknown capability runtime, a legacy lane gated off by
+    ``BOLTRIG_ENABLE_LEGACY_RUNTIMES`` (decision 0012), or a trusted lane that
+    is not wired still must not crash a run (P9), but a stand-in echo is never
+    presented upstream as a real run: the result is degrade-marked under the
+    REQUESTED runtime's name (US-FLT-07; an unavailable runtime returns a typed
+    unavailable result, never a silent side door). A capability that actually
+    asks for 'script' keeps the plain, non-degraded ScriptRuntime.
+    """
+
+    def __init__(self, *, requested: str, cost_tier: str = "cheap") -> None:
+        super().__init__(cost_tier=cost_tier)
+        self._requested = requested
+
+    async def run(
+        self, prompt: str, context: InvocationContext, *, tools: list[str]
+    ) -> AgentResult:
+        """A typed unavailable result, never an unmarked echo."""
+        return AgentResult.degrade(
+            runtime=self._requested, reason="runtime_unavailable", prompt=prompt
         )
 
 
@@ -379,40 +424,19 @@ def _result_from_chat(
     )
 
 
-def build_runtime(
+def _build_legacy_runtime(
+    kind: str,
     capability: AgentCapability,
-    endpoint_lookup: EndpointLookup | None = None,
     *,
-    pi_config: dict[str, Any] | None = None,
-    opencode_config: dict[str, Any] | None = None,
-    rivet_config: dict[str, Any] | None = None,
-    codex_config: dict[str, Any] | None = None,
-    api_key: str | None = None,
-    runtime_override: str | None = None,
-    endpoint_override: "ModelEndpoint | None" = None,
+    endpoint: "ModelEndpoint | None",
+    api_key: str | None,
+    pi_config: dict[str, Any] | None,
+    opencode_config: dict[str, Any] | None,
+    rivet_config: dict[str, Any] | None,
 ) -> Runtime:
-    """Select the runtime implementation for a capability (P4, US-FLT-04, US-RUN-01).
-
-    Dispatch is by ``capability.runtime``. The model endpoint (if any) is resolved
-    through ``endpoint_lookup`` so the model is pinned by data. ``pi_config`` supplies
-    the Pi sidecar wiring; ``opencode_config`` the OpenCode scoped-MCP callbacks.
-    Unknown runtimes fall back to ScriptRuntime.
-
-    ``api_key`` is the resolved per-org/workspace/user AI key ([2026] VJS-COUNTY 8,
-    D5): a network runtime uses it instead of the env-configured provider key; None
-    falls back to the env key so an existing single-tenant deploy is unchanged.
-
-    ``runtime_override`` / ``endpoint_override`` carry the model/provider ROUTING an
-    ai_config selects (D5): a known provider's mapped runtime kind + endpoint win over
-    ``capability.runtime`` and the lookup. Both default to None (dispatch EXACTLY as
-    before), the spawner only passes a KNOWN override, and never routes sensitive data
-    this way (SEC-12).
-    """
-    endpoint: ModelEndpoint | None = endpoint_override
-    if endpoint is None and capability.model_endpoint and endpoint_lookup is not None:
-        endpoint = endpoint_lookup(capability.model_endpoint)
-
-    kind = runtime_override or capability.runtime
+    """Construct a legacy lane. Reached ONLY when the decision-0012 opt-in flag
+    (``BOLTRIG_ENABLE_LEGACY_RUNTIMES``) is set; otherwise ``build_runtime``
+    returns the typed unavailable result without ever landing here."""
     if kind == "hermes":
         return HermesRuntime(
             endpoint=endpoint, cost_tier=capability.cost_tier, api_key=api_key
@@ -440,17 +464,78 @@ def build_runtime(
         return OpenCodeRuntime(
             endpoint=endpoint, cost_tier=capability.cost_tier or "standard", **cfg
         )
+    # rivet / rivet_agentos / rivet-agentos
+    from .rivet_runtime import RivetAgentOSRuntime
+
+    cfg = dict(rivet_config or {})
+    cfg.setdefault("agentos_url", None)
+    return RivetAgentOSRuntime(
+        endpoint=endpoint, cost_tier=capability.cost_tier or "standard", **cfg
+    )
+
+
+def build_runtime(
+    capability: AgentCapability,
+    endpoint_lookup: EndpointLookup | None = None,
+    *,
+    pi_config: dict[str, Any] | None = None,
+    opencode_config: dict[str, Any] | None = None,
+    rivet_config: dict[str, Any] | None = None,
+    codex_config: dict[str, Any] | None = None,
+    api_key: str | None = None,
+    runtime_override: str | None = None,
+    endpoint_override: "ModelEndpoint | None" = None,
+) -> Runtime:
+    """Select the runtime implementation for a capability (P4, US-FLT-04, US-RUN-01).
+
+    Dispatch is by ``capability.runtime``. The model endpoint (if any) is resolved
+    through ``endpoint_lookup`` so the model is pinned by data. ``pi_config`` supplies
+    the Pi sidecar wiring; ``opencode_config`` the OpenCode scoped-MCP callbacks.
+    Unknown runtimes fall back to a degrade-marked deterministic runtime.
+
+    ``api_key`` is the resolved per-org/workspace/user AI key ([2026] VJS-COUNTY 8,
+    D5): a network runtime uses it instead of the env-configured provider key; None
+    falls back to the env key so an existing single-tenant deploy is unchanged.
+
+    ``runtime_override`` / ``endpoint_override`` carry the model/provider ROUTING an
+    ai_config selects (D5): a known provider's mapped runtime kind + endpoint win over
+    ``capability.runtime`` and the lookup. Both default to None (dispatch EXACTLY as
+    before), the spawner only passes a KNOWN override, and never routes sensitive data
+    this way (SEC-12).
+
+    Legacy lanes (everything except codex and the script family) are gated behind
+    ``BOLTRIG_ENABLE_LEGACY_RUNTIMES`` (decision 0012, default OFF): with the flag
+    unset the resolved legacy kind - whether from ``capability.runtime`` or an
+    override - returns an ``UnavailableRuntime`` instead of the lane.
+    """
+    endpoint: ModelEndpoint | None = endpoint_override
+    if endpoint is None and capability.model_endpoint and endpoint_lookup is not None:
+        endpoint = endpoint_lookup(capability.model_endpoint)
+
+    kind = runtime_override or capability.runtime
+    if kind in _LEGACY_RUNTIME_KINDS:
+        if not _legacy_runtimes_enabled():
+            # Gated-off legacy lane (decision 0012): the typed unavailable result,
+            # degrade-marked under the REQUESTED lane's name, never the lane itself.
+            return UnavailableRuntime(
+                requested=kind, cost_tier=capability.cost_tier or "cheap"
+            )
+        return _build_legacy_runtime(
+            kind,
+            capability,
+            endpoint=endpoint,
+            api_key=api_key,
+            pi_config=pi_config,
+            opencode_config=opencode_config,
+            rivet_config=rivet_config,
+        )
     if kind == "codex":  # trusted read-only Codex; wall re-asserted in builder (D1)
         from .codex_runtime import build_trusted_codex_runtime
 
         return build_trusted_codex_runtime(codex_config, capability.cost_tier)
-    if kind in {"rivet", "rivet_agentos", "rivet-agentos"}:
-        from .rivet_runtime import RivetAgentOSRuntime
-
-        cfg = dict(rivet_config or {})
-        cfg.setdefault("agentos_url", None)
-        return RivetAgentOSRuntime(
-            endpoint=endpoint, cost_tier=capability.cost_tier or "standard", **cfg
-        )
-    # 'script' / 'python-script' / 'go-binary' / anything unknown -> deterministic.
-    return ScriptRuntime(cost_tier=capability.cost_tier or "cheap")
+    if kind in {"script", "python-script", "go-binary"}:
+        # The deterministic non-agent fallback a capability actually asked for.
+        return ScriptRuntime(cost_tier=capability.cost_tier or "cheap")
+    # Anything unknown: deterministic, but honestly degrade-marked rather than
+    # an echo presented upstream as a real run (US-FLT-07).
+    return UnavailableRuntime(requested=kind, cost_tier=capability.cost_tier or "cheap")

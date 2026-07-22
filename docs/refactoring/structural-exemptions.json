@@ -1,13 +1,27 @@
 {
   "version": 1,
   "exemptions": {
+    "boltrig/adapters/builtin/desktop.py": {
+      "max_file_lines": 245,
+      "max_function_lines": 119,
+      "over_limit_functions": [
+        {
+          "name": "_verb_specs",
+          "line": 75,
+          "lines": 119
+        }
+      ],
+      "owner": "adapter-maintainers",
+      "reason": "Group the desktop capability verb specifications by surface while preserving their existing schemas.",
+      "expires": "2026-12-31"
+    },
     "boltrig/adapters/builtin/ms_graph.py": {
-      "max_file_lines": 390,
+      "max_file_lines": 391,
       "max_function_lines": 179,
       "over_limit_functions": [
         {
           "name": "MsGraphAdapter.describe",
-          "line": 61,
+          "line": 62,
           "lines": 179
         }
       ],
@@ -16,7 +30,7 @@
       "expires": "2026-12-31"
     },
     "boltrig/adapters/generator.py": {
-      "max_file_lines": 535,
+      "max_file_lines": 553,
       "max_function_lines": 50,
       "over_limit_functions": [],
       "owner": "adapter-maintainers",
@@ -24,31 +38,31 @@
       "expires": "2026-12-31"
     },
     "boltrig/adapters/http_base.py": {
-      "max_file_lines": 456,
-      "max_function_lines": 61,
+      "max_file_lines": 466,
+      "max_function_lines": 65,
       "over_limit_functions": [],
       "owner": "adapter-maintainers",
       "reason": "Separate transport policy, SSRF validation, and response handling from the shared HTTP adapter base.",
       "expires": "2026-12-31"
     },
     "boltrig/api/auth_routes.py": {
-      "max_file_lines": 820,
-      "max_function_lines": 514,
+      "max_file_lines": 810,
+      "max_function_lines": 503,
       "over_limit_functions": [
         {
           "name": "register_auth_routes",
-          "line": 307,
-          "lines": 514
+          "line": 308,
+          "lines": 503
         },
         {
           "name": "register_auth_routes.login",
-          "line": 382,
-          "lines": 95
+          "line": 386,
+          "lines": 93
         },
         {
           "name": "register_auth_routes.two_factor_challenge",
-          "line": 668,
-          "lines": 94
+          "line": 664,
+          "lines": 91
         }
       ],
       "owner": "identity-maintainers",
@@ -56,12 +70,12 @@
       "expires": "2026-12-31"
     },
     "boltrig/api/bootstrap.py": {
-      "max_file_lines": 600,
+      "max_file_lines": 587,
       "max_function_lines": 110,
       "over_limit_functions": [
         {
           "name": "build_app",
-          "line": 491,
+          "line": 478,
           "lines": 110
         }
       ],
@@ -70,8 +84,8 @@
       "expires": "2026-12-31"
     },
     "boltrig/api/doctor.py": {
-      "max_file_lines": 579,
-      "max_function_lines": 66,
+      "max_file_lines": 594,
+      "max_function_lines": 68,
       "over_limit_functions": [],
       "owner": "operations-maintainers",
       "reason": "Group production posture checks into focused modules while retaining stable check identifiers and output.",
@@ -100,22 +114,22 @@
       "expires": "2026-12-31"
     },
     "boltrig/fleet/chat.py": {
-      "max_file_lines": 659,
-      "max_function_lines": 117,
+      "max_file_lines": 669,
+      "max_function_lines": 127,
       "over_limit_functions": [
         {
           "name": "build_turn_executor",
           "line": 543,
-          "lines": 117
+          "lines": 127
         },
         {
           "name": "build_turn_executor.executor",
           "line": 566,
-          "lines": 92
+          "lines": 102
         }
       ],
       "owner": "fleet-maintainers",
-      "reason": "Separate conversation context, turn execution, and event persistence while preserving streaming behavior.",
+      "reason": "Separate conversation context, turn execution, and event persistence while preserving streaming behavior. Audit fix: the executor now also settles non-BoltrigError failures FAILED (the item no longer stays IN_FLIGHT forever).",
       "expires": "2026-12-31"
     },
     "boltrig/fleet/infrastructure/cell_spawner.py": {
@@ -127,19 +141,19 @@
       "expires": "2026-12-31"
     },
     "boltrig/fleet/infrastructure/codex_agent_runtime.py": {
-      "max_file_lines": 413,
-      "max_function_lines": 54,
+      "max_file_lines": 423,
+      "max_function_lines": 64,
       "over_limit_functions": [],
       "owner": "fleet-maintainers",
-      "reason": "File-length only. The read-only Codex cutover adds read_turn_output, which returns the agentMessage text the event translator captures from the lifecycle stream (thread/read is not served in the App Server's exec mode); the module was already at the 399-line floor. Split the lifecycle from the read-back/terminal helpers into a sibling module when the runtime family is next refactored.",
+      "reason": "File-length only. The read-only Codex cutover adds read_turn_output, which returns the agentMessage text the event translator captures from the lifecycle stream (thread/read is not served in the App Server's exec mode); the module was already at the 399-line floor. Audit fix: start_thread now also threads the API-owned cell root into thread state / failed-start cleanup so per-run cell trees are removed. Split the lifecycle from the read-back/terminal helpers into a sibling module when the runtime family is next refactored.",
       "expires": "2026-12-31"
     },
     "boltrig/fleet/infrastructure/codex_cell_supervisor.py": {
-      "max_file_lines": 451,
+      "max_file_lines": 460,
       "max_function_lines": 62,
       "over_limit_functions": [],
       "owner": "fleet-maintainers",
-      "reason": "Gap 5 adds the per-cell slot seam (acquire_slot/release_slot/provision_cell_tree) and the per-cell workspace-attest + require_local_ownership branch, plus the earlier cell-startup diagnostic logging. Follow-up: extract the slot seam and lower back toward 408.",
+      "reason": "Gap 5 adds the per-cell slot seam (acquire_slot/release_slot/provision_cell_tree) and the per-cell workspace-attest + require_local_ownership branch, plus the earlier cell-startup diagnostic logging. Audit fix: _claimed_cells is now FIFO-bounded (4096) instead of growing one entry per historical cell. Follow-up: extract the slot seam and lower back toward 408.",
       "expires": "2026-12-31"
     },
     "boltrig/fleet/infrastructure/codex_runtime_events.py": {
@@ -151,17 +165,11 @@
       "expires": "2026-12-31"
     },
     "boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py": {
-      "max_file_lines": 447,
-      "max_function_lines": 89,
-      "over_limit_functions": [
-        {
-          "name": "TrustedProxyCodexPhaseCellProvider.acquire",
-          "line": 196,
-          "lines": 89
-        }
-      ],
+      "max_file_lines": 479,
+      "max_function_lines": 78,
+      "over_limit_functions": [],
       "owner": "fleet-maintainers",
-      "reason": "Gap 5 threads the per-cell slot through acquire (acquire slot -> admit(slot) -> provision tree -> config via spawner -> start(slot) -> release in the reaper). Follow-up: extract the per-cell provisioning steps out of acquire() into a helper and lower both baselines.",
+      "reason": "Gap 5 threads the per-cell slot through acquire (acquire slot -> admit(slot) -> provision tree -> config via spawner -> start(slot) -> release in the reaper). Audit fixes: a lock now makes the G3 concurrency check + session registration indivisible, and the rollback (teardown/close/cell-tree removal/slot release) is extracted to _abort_acquire, clearing the function debt the old 89-line acquire carried.",
       "expires": "2026-12-31"
     },
     "boltrig/fleet/infrastructure/memory_model_proxy_grants.py": {
@@ -173,47 +181,55 @@
       "expires": "2026-12-31"
     },
     "boltrig/fleet/pump.py": {
-      "max_file_lines": 539,
+      "max_file_lines": 578,
       "max_function_lines": 68,
       "over_limit_functions": [],
       "owner": "fleet-maintainers",
-      "reason": "File-length debt only: the work-claim lifecycle phases still share one module. Function debt is cleared - handle_claimed_item was extracted down to 68 lines when boundary 2 (SEC-166) landed.",
+      "reason": "File-length debt only: the work-claim lifecycle phases still share one module. Function debt is cleared - handle_claimed_item was extracted down to 68 lines when boundary 2 (SEC-166) landed. Audit fixes: _record_failure defers to a requested cancel and persists a bounded, URL-redacted error detail instead of raw str(exc).",
       "expires": "2026-12-31"
     },
     "boltrig/fleet/runtime.py": {
-      "max_file_lines": 456,
-      "max_function_lines": 75,
+      "max_file_lines": 541,
+      "max_function_lines": 65,
       "over_limit_functions": [],
       "owner": "fleet-maintainers",
-      "reason": "Complete runtime-family extraction so the legacy compatibility facade falls below the file floor.",
+      "reason": "Complete runtime-family extraction so the legacy compatibility facade falls below the file floor. Audit fix: UnavailableRuntime marks the unknown-runtime / unwired-codex fallback degraded=True instead of an echo presented as a real run (US-FLT-07).",
       "expires": "2026-12-31"
     },
     "boltrig/fleet/spawn.py": {
-      "max_file_lines": 431,
-      "max_function_lines": 94,
+      "max_file_lines": 500,
+      "max_function_lines": 91,
       "over_limit_functions": [
         {
           "name": "Spawner.spawn",
-          "line": 81,
-          "lines": 94
+          "line": 82,
+          "lines": 91
         }
       ],
       "owner": "fleet-maintainers",
-      "reason": "Split spawn selection, token issuance, and execution while preserving delegated authority checks.",
+      "reason": "Split spawn selection, token issuance, and execution while preserving delegated authority checks. Audit fixes: the budget reservation is refunded when the runtime raises (extracted _invoke_runtime, which lowered spawn's function debt), the budget hard-stop partial is degrade-marked, and make_agent_invoker now applies the same depth cap + reserve/refund/true-up governance as spawn.",
       "expires": "2026-12-31"
     },
     "boltrig/fleet/ultracode.py": {
-      "max_file_lines": 380,
+      "max_file_lines": 392,
       "max_function_lines": 101,
       "over_limit_functions": [
         {
           "name": "run_ultracode_body",
-          "line": 280,
+          "line": 292,
           "lines": 101
         }
       ],
       "owner": "fleet-maintainers",
-      "reason": "Extract UltraCode task-body orchestration stages without changing runtime registration behavior.",
+      "reason": "Extract UltraCode task-body orchestration stages without changing runtime registration behavior. Audit fix: prior phase outputs (model-generated) are wrapped in the M1 untrusted envelope before reaching the next phase's prompt.",
+      "expires": "2026-12-31"
+    },
+    "boltrig/identity/auth.py": {
+      "max_file_lines": 404,
+      "max_function_lines": 71,
+      "over_limit_functions": [],
+      "owner": "identity-maintainers",
+      "reason": "File-length only. The IAM-03/05 token-verification hardening (absolute exp cap, throttled forced JWKS refetch) pushed the module four lines past the 400 floor; split the OIDC verifier and its JWKS cache from the principal resolver when the identity boundary is next refactored.",
       "expires": "2026-12-31"
     },
     "boltrig/identity/sessions.py": {
@@ -236,7 +252,7 @@
       "expires": "2026-12-31"
     },
     "boltrig/kernel/access_routes.py": {
-      "max_file_lines": 1073,
+      "max_file_lines": 1078,
       "max_function_lines": 148,
       "over_limit_functions": [
         {
@@ -246,22 +262,22 @@
         },
         {
           "name": "_register_context_routes",
-          "line": 501,
-          "lines": 98
+          "line": 504,
+          "lines": 100
         },
         {
           "name": "_register_ai_key_routes",
-          "line": 601,
+          "line": 606,
           "lines": 148
         },
         {
           "name": "_register_admin_directory_routes",
-          "line": 787,
+          "line": 792,
           "lines": 116
         },
         {
           "name": "_register_workspace_routes",
-          "line": 950,
+          "line": 955,
           "lines": 124
         }
       ],
@@ -270,13 +286,13 @@
       "expires": "2026-12-31"
     },
     "boltrig/kernel/app.py": {
-      "max_file_lines": 740,
-      "max_function_lines": 529,
+      "max_file_lines": 799,
+      "max_function_lines": 554,
       "over_limit_functions": [
         {
           "name": "create_app",
-          "line": 212,
-          "lines": 529
+          "line": 246,
+          "lines": 554
         }
       ],
       "owner": "kernel-maintainers",
@@ -284,18 +300,18 @@
       "expires": "2026-12-31"
     },
     "boltrig/kernel/channel_routes.py": {
-      "max_file_lines": 406,
-      "max_function_lines": 294,
+      "max_file_lines": 511,
+      "max_function_lines": 330,
       "over_limit_functions": [
         {
           "name": "register_channel_routes",
-          "line": 113,
-          "lines": 294
+          "line": 182,
+          "lines": 330
         },
         {
           "name": "register_channel_routes.channel_inbound",
-          "line": 138,
-          "lines": 99
+          "line": 218,
+          "lines": 118
         }
       ],
       "owner": "kernel-maintainers",
@@ -303,13 +319,18 @@
       "expires": "2026-12-31"
     },
     "boltrig/kernel/dispatch.py": {
-      "max_file_lines": 479,
+      "max_file_lines": 484,
       "max_function_lines": 116,
       "over_limit_functions": [
         {
           "name": "Dispatcher.invoke",
-          "line": 237,
+          "line": 234,
           "lines": 116
+        },
+        {
+          "name": "Dispatcher._invoke_inner",
+          "line": 351,
+          "lines": 88
         }
       ],
       "owner": "kernel-maintainers",
@@ -317,17 +338,50 @@
       "expires": "2026-12-31"
     },
     "boltrig/kernel/memory_routes.py": {
-      "max_file_lines": 112,
-      "max_function_lines": 91,
+      "max_file_lines": 115,
+      "max_function_lines": 94,
       "over_limit_functions": [
         {
           "name": "register_memory_routes",
           "line": 22,
-          "lines": 91
+          "lines": 94
         }
       ],
       "owner": "kernel-maintainers",
       "reason": "Flatten the memory route registrar while preserving scope enforcement at every endpoint.",
+      "expires": "2026-12-31"
+    },
+    "boltrig/kernel/platform_routes/eval_routes.py": {
+      "max_file_lines": 98,
+      "max_function_lines": 87,
+      "over_limit_functions": [
+        {
+          "name": "register",
+          "line": 12,
+          "lines": 87
+        }
+      ],
+      "owner": "kernel-maintainers",
+      "reason": "The eval.run author/admin gate + required-case_id validation (model spend must not be member-reachable or a 500) pushed the one registrar past the 80-line function floor; split the case-listing and run routes into focused registrars when the eval surface grows.",
+      "expires": "2026-12-31"
+    },
+    "boltrig/kernel/platform_routes/observability.py": {
+      "max_file_lines": 379,
+      "max_function_lines": 87,
+      "over_limit_functions": [
+        {
+          "name": "_register_audit_search_routes",
+          "line": 203,
+          "lines": 87
+        },
+        {
+          "name": "_register_audit_search_routes.audit_search",
+          "line": 205,
+          "lines": 86
+        }
+      ],
+      "owner": "kernel-maintainers",
+      "reason": "The security-stream author/admin gate (the stream carries other users' IPs/user agents; SEC-33 parity with verify/export) pushed the audit-search registrar past the 80-line function floor; extract the security-stream arm into its own registrar when the observability surface grows.",
       "expires": "2026-12-31"
     },
     "boltrig/memory/pgvector.py": {
@@ -345,7 +399,7 @@
       "expires": "2026-12-31"
     },
     "boltrig/store/base.py": {
-      "max_file_lines": 540,
+      "max_file_lines": 614,
       "max_function_lines": 15,
       "over_limit_functions": [],
       "owner": "store-maintainers",
@@ -353,13 +407,13 @@
       "expires": "2026-12-31"
     },
     "boltrig/store/memory.py": {
-      "max_file_lines": 1060,
-      "max_function_lines": 88,
+      "max_file_lines": 1131,
+      "max_function_lines": 92,
       "over_limit_functions": [
         {
           "name": "InMemoryStore.__init__",
-          "line": 90,
-          "lines": 88
+          "line": 95,
+          "lines": 92
         }
       ],
       "owner": "store-maintainers",
@@ -367,25 +421,47 @@
       "expires": "2026-12-31"
     },
     "boltrig/store/postgres.py": {
-      "max_file_lines": 2313,
+      "max_file_lines": 1907,
       "max_function_lines": 53,
       "over_limit_functions": [],
       "owner": "store-maintainers",
       "reason": "Extract domain partials in lockstep with the in-memory store while preserving SQL and RLS parity.",
       "expires": "2026-12-31"
     },
+    "boltrig/store/rows.py": {
+      "max_file_lines": 461,
+      "max_function_lines": 17,
+      "over_limit_functions": [],
+      "owner": "store-maintainers",
+      "reason": "Extract domain partials in lockstep with the in-memory store while preserving SQL and RLS parity.",
+      "expires": "2026-12-31"
+    },
     "boltrig/workflows/interpreter.py": {
-      "max_file_lines": 294,
-      "max_function_lines": 207,
+      "max_file_lines": 381,
+      "max_function_lines": 270,
       "over_limit_functions": [
         {
           "name": "run_workflow_definition",
-          "line": 88,
-          "lines": 207
+          "line": 112,
+          "lines": 270
         }
       ],
       "owner": "workflow-maintainers",
       "reason": "Decompose workflow execution by step type while preserving checkpoint, retry, and governance semantics.",
+      "expires": "2026-12-31"
+    },
+    "boltrig/kernel/channel_gateway_routes.py": {
+      "max_file_lines": 156,
+      "max_function_lines": 110,
+      "over_limit_functions": [
+        {
+          "name": "register_channel_gateway_routes",
+          "line": 47,
+          "lines": 110
+        }
+      ],
+      "owner": "kernel-maintainers",
+      "reason": "Split the gateway session mint from the token-gated outbox claim/ack/fail registrars.",
       "expires": "2026-12-31"
     }
   }

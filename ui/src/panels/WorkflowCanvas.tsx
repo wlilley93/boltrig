@@ -49,14 +49,30 @@ export function WorkflowCanvas({
   onBack?: () => void;
 }) {
   const ctx = useWorkflowCanvas(routeWfId);
+  const pendingRun = ctx.apiActions.runMutation.pending;
+  const pendingRunCard = pendingRun ? (
+    <PendingHumanCard
+      hitlRequestId={pendingRun.id}
+      noun="control"
+      verb="control.workflow.execute"
+      sentParams={pendingRun.params}
+      invocationContext={pendingRun.context}
+      onApplied={ctx.apiActions.runMutation.onPendingApplied}
+      onDenied={ctx.apiActions.runMutation.onPendingDenied}
+      onReset={ctx.apiActions.runMutation.resetPending}
+    />
+  ) : null;
 
   if (ctx.meta.runView) {
     return (
-      <WorkflowRunCanvas
-        runId={ctx.meta.runView.runId}
-        wfId={ctx.meta.runView.wfId}
-        onBack={() => ctx.meta.setRunView(null)}
-      />
+      <div className="stack">
+        {pendingRunCard}
+        <WorkflowRunCanvas
+          runId={ctx.meta.runView.runId}
+          wfId={ctx.meta.runView.wfId}
+          onBack={() => ctx.meta.setRunView(null)}
+        />
+      </div>
     );
   }
 
@@ -76,17 +92,7 @@ export function WorkflowCanvas({
         onUndo={ctx.graph.undo}
         onRedo={ctx.graph.redo}
       />
-      {ctx.apiActions.runMutation.pending && (
-        <PendingHumanCard
-          hitlRequestId={ctx.apiActions.runMutation.pending.id}
-          noun="control"
-          verb="control.workflow.execute"
-          sentParams={ctx.apiActions.runMutation.pending.params}
-          onApplied={ctx.apiActions.runMutation.onPendingApplied}
-          onDenied={ctx.apiActions.runMutation.onPendingDenied}
-          onReset={ctx.apiActions.runMutation.resetPending}
-        />
-      )}
+      {pendingRunCard}
       <ReactFlowProvider>
         <CanvasSurface ctx={ctx} />
       </ReactFlowProvider>
@@ -143,7 +149,7 @@ function CanvasSurface({ ctx }: { ctx: Ctx }) {
       >
         <Background
           variant={BackgroundVariant.Dots}
-          color="rgba(61,211,240,0.08)"
+          color="var(--dot-color)"
           gap={24}
           size={2}
         />

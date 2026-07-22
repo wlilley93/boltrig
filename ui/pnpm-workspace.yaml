@@ -1,5 +1,8 @@
 allowBuilds:
   esbuild: true
+overrides:
+  brace-expansion@<2.0.0: 1.1.16
+  brace-expansion@>=2.0.0 <3.0.0: 2.1.2
 # pnpm 10/11 moved build-script approval here (out of package.json's "pnpm" key).
 # esbuild ships a postinstall that compiles its native binary; approve it so
 # `pnpm install` / `pnpm run build` work in CI and the Docker image.

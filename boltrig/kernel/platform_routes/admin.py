@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
-from boltrig.models import BoltrigError
 from boltrig.kernel.control_routes import dispatch_control_route
 from ._shared import can_author_route, platform_state, require_author
 
@@ -36,9 +35,10 @@ def register(app, P, K) -> None:
             if pending is not None:
                 return pending
             return JSONResponse({"status": "ok", **(output or {})})
-        except (BoltrigError, ValueError) as e:
-            code = getattr(e, "status_code", 400)
-            return JSONResponse({"status": "error", "reason": str(e)}, status_code=code)
+        except ValueError:
+            # BoltrigError propagates to the central handler (canonical envelope);
+            # a bare ValueError never leaks internal text as the client reason.
+            return JSONResponse({"status": "error", "reason": "invalid config"}, status_code=400)
 
     @app.get("/v1/admin/config/{section}/history")
     async def config_history(section: str, request: Request, p=P) -> JSONResponse:
@@ -67,9 +67,8 @@ def register(app, P, K) -> None:
             if pending is not None:
                 return pending
             return JSONResponse({"status": "ok", **(output or {})})
-        except (BoltrigError, ValueError) as e:
-            code = getattr(e, "status_code", 400)
-            return JSONResponse({"status": "error", "reason": str(e)}, status_code=code)
+        except ValueError:
+            return JSONResponse({"status": "error", "reason": "invalid config"}, status_code=400)
 
     @app.post("/v1/admin/config/export")
     async def config_export(request: Request, p=P) -> JSONResponse:

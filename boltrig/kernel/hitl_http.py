@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from fastapi import HTTPException
@@ -16,6 +17,14 @@ from .hitl_response_auth import (
 
 
 def _request_row(request: Any) -> dict[str, Any]:
+    inputs = None
+    if request.type == HITLType.APPROVAL and isinstance(request.context, str):
+        try:
+            display_context = json.loads(request.context)
+        except (TypeError, ValueError):
+            display_context = None
+        if isinstance(display_context, dict):
+            inputs = display_context.get("inputs")
     return {
         "id": request.id,
         "type": request.type.value,
@@ -25,6 +34,11 @@ def _request_row(request: Any) -> dict[str, Any]:
         "options": request.options,
         "work_item_id": request.work_item_id,
         "status": request.status.value,
+        "run_id": request.run_id,
+        "verb": request.verb,
+        "requested_by": request.requested_by,
+        "requested_on_behalf_of": request.requested_on_behalf_of,
+        "inputs": inputs,
     }
 
 
@@ -68,7 +82,7 @@ async def respond_to_hitl(
         raise HTTPException(status_code=404, detail="unknown request")
     await authorize_hitl_response(kernel, principal, request)
     if request.type != HITLType.APPROVAL:
-        from boltrig.fleet.prompt_stack import wrap_untrusted
+        from boltrig.text_envelope import wrap_untrusted
 
         decision = wrap_untrusted("hitl_response", principal.subject, decision)
     response = await kernel.hitl.answer(

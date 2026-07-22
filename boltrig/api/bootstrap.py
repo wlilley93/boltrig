@@ -13,14 +13,16 @@ import logging
 import os
 
 from boltrig.config import apply_manifest, load_manifest, load_settings, production_signal
+from boltrig.config.environment import is_truthy
 from boltrig.fleet import make_agent_invoker, make_app_spawner
+from boltrig.knowledge import register_knowledge
 from boltrig.kernel import Kernel
+from boltrig.memory.bootstrap import register_memory as _register_memory
 from boltrig.store import InMemoryStore, Store
 
 log = logging.getLogger("boltrig.bootstrap")
 
 _DEFAULT_TENANT = "default"
-_TRUE_VALUES = {"1", "true", "yes", "on", "y", "t"}
 _MANIFEST_CANDIDATES = (
     "/app/manifest.yaml",
     "manifest.yaml",
@@ -41,14 +43,6 @@ def _find(paths) -> str | None:
         if p and os.path.exists(p):
             return p
     return None
-
-
-def _as_bool(value, default: bool = False) -> bool:
-    if value is None or value == "":
-        return default
-    if isinstance(value, bool):
-        return value
-    return str(value).strip().lower() in _TRUE_VALUES
 
 
 def _wire_memory_projection_executor(kernel: Kernel, tenant_id: str, executor) -> None:
@@ -75,7 +69,7 @@ async def build_store() -> Store:
         # first-boot bootstrap (for example Postgres' initdb mount). This is true
         # with or without RLS, otherwise a non-RLS production process could bypass
         # migration ordering merely by restarting.
-        rls = os.environ.get("BOLTRIG_RLS", "").lower() in ("1", "true", "yes")
+        rls = is_truthy(os.environ.get("BOLTRIG_RLS"))
         log.info("DATABASE_URL set; using durable PostgresStore (rls=%s)", rls)
         return await PostgresStore.connect(
             settings.database_url, apply_schema=False, rls=rls
@@ -98,58 +92,34 @@ async def _seed_default(kernel: Kernel) -> None:
         await res
     await kernel.register_adapter(_DEFAULT_TENANT, build_tickets())
     await kernel.register_adapter(_DEFAULT_TENANT, build_familiar())  # familiar.express (WL-3)
+    if _desktop_hands_enabled():
+        await _register_desktop_hands(kernel, _DEFAULT_TENANT)
     await _register_control_plane(kernel, _DEFAULT_TENANT)
     await _register_web_fetch(kernel, _DEFAULT_TENANT, {})
     await _register_skill_shelf(kernel, _DEFAULT_TENANT)
     await _register_channel_send(kernel, _DEFAULT_TENANT)
+    # Knowledge is default-OFF for manifest-less boots (symmetry with memory);
+    # the demo seed opts in explicitly so the demo tenant keeps its vault.
+    await register_knowledge(kernel, _DEFAULT_TENANT, {"enabled": True})
 
 
-async def _register_memory(kernel: Kernel, tenant_id: str, memory_cfg) -> None:
-    """Register the memory subsystem when the manifest opts in (Round Five).
+def _desktop_hands_enabled() -> bool:
+    """The desktop-hands add-on is OPT-IN (decision 0016, DH-1): the governed desktop.* verbs
+    and the /v1/hands pull surface exist only when the operator turns the add-on on
+    (BOLTRIG_DESKTOP_HANDS=1) AND installs the host executor. Default OFF: a kernel that does
+    not drive a desktop must not even advertise the capability."""
+    return is_truthy(os.environ.get("BOLTRIG_DESKTOP_HANDS"))
 
-    The engine is adopted, not built: ``local`` is the dev/offline reference,
-    ``cognee`` is the production seam. memory.* verbs run the chokepoint via the
-    MemoryAdapter, which is the kernel-side isolation boundary (SEC-40)."""
-    if not memory_cfg or not _as_bool(memory_cfg.get("enabled")):
-        return
-    from boltrig.memory.adapter import build_memory_adapter
-    from boltrig.memory.projection_adapters import build_memory_projection_fanout
 
-    engine_kind = memory_cfg.get("engine", "local")
-    if engine_kind == "cognee":
-        # The flag-on graph upgrade (adopted, not built) - see boltrig/memory/cognee.py.
-        from boltrig.memory.cognee import CogneeEngine
+async def _register_desktop_hands(kernel: Kernel, tenant_id: str) -> None:
+    """Register the governed desktop-hands verbs (decision 0016, DH-1). desktop.*
+    runs the chokepoint like any verb; the handler only enqueues a command into
+    the shared HandsRegistry for the host executor to pull - registering it does
+    NOT grant it (the tenant ceiling + caller grants still decide)."""
+    from boltrig.adapters.builtin.desktop import build as build_desktop
 
-        engine = CogneeEngine(memory_cfg)
-    elif engine_kind == "pgvector":
-        # Native vector recall persisted to this Postgres + pgvector (MEM-ENG-02).
-        # The embedder is model-backed when the manifest configures one (route
-        # sensitive embedding to a local endpoint, SEC-43); offline default hashes.
-        from boltrig.memory import build_embedder
-        from boltrig.memory.pgvector import PgVectorMemoryEngine
-
-        dsn = memory_cfg.get("database_url") or os.environ.get("DATABASE_URL", "")
-        engine = PgVectorMemoryEngine(dsn, build_embedder(memory_cfg))
-    elif engine_kind == "vector":
-        # In-process native vector recall (offline reference; same semantics).
-        from boltrig.memory import build_embedder
-        from boltrig.memory.vector import VectorMemoryEngine
-
-        engine = VectorMemoryEngine(build_embedder(memory_cfg))
-    else:
-        from boltrig.memory import LocalMemoryEngine
-
-        engine = LocalMemoryEngine()
-    projections = build_memory_projection_fanout(kernel.store, memory_cfg)
-    adapter = build_memory_adapter(
-        engine, kernel.store, audit=kernel.audit, config=memory_cfg, projections=projections
-    )
-    await kernel.register_adapter(tenant_id, adapter)
-    log.info(
-        "memory subsystem enabled (engine=%s, projections=%s)",
-        memory_cfg.get("engine", "local"),
-        bool(projections),
-    )
+    await kernel.register_adapter(tenant_id, build_desktop(kernel.hands_registry))
+    log.info("desktop hands verbs registered (governed host window control)")
 
 
 async def _register_control_plane(kernel: Kernel, tenant_id: str) -> None:
@@ -225,6 +195,7 @@ async def _register_consumed_mcp(kernel: Kernel, tenant_id: str, mcp_cfg) -> Non
 async def _seed_from_manifest(kernel: Kernel, manifest) -> None:
     await apply_manifest(kernel, manifest)
     await _register_memory(kernel, manifest.tenant_id, manifest.section("memory"))
+    await register_knowledge(kernel, manifest.tenant_id, manifest.section("knowledge"))
     await _register_control_plane(kernel, manifest.tenant_id)
     await _register_skill_shelf(kernel, manifest.tenant_id)
     await _register_channel_send(kernel, manifest.tenant_id)
@@ -232,6 +203,9 @@ async def _seed_from_manifest(kernel: Kernel, manifest) -> None:
         # desktop-only: the same box that publishes the phenotype accepts voluntary gestures (WL-3).
         from boltrig.adapters.builtin.familiar import build as build_familiar
         await kernel.register_adapter(manifest.tenant_id, build_familiar())
+    if _desktop_hands_enabled():
+        # governed hands on the desktop host (DH-1), only when the add-on is turned on
+        await _register_desktop_hands(kernel, manifest.tenant_id)
     await _register_consumed_mcp(kernel, manifest.tenant_id, manifest.section("mcp"))
     net = manifest.network
     await _register_web_fetch(kernel, manifest.tenant_id, {
@@ -317,6 +291,15 @@ async def _harvest_hitl_signal(kernel: Kernel, request) -> None:
         log.debug("HITL reuse-signal harvest failed; continuing", exc_info=True)
 
 
+def _attach_hands_registry(kernel: Kernel) -> None:
+    """Create the ONE pending desktop-command registry (decision 0016, DH-1) and
+    hang it on the kernel so the desktop adapter (seed) and the /v1/hands pull
+    routes (app.py) share the same instance."""
+    from boltrig.kernel.hands_registry import HandsRegistry
+
+    kernel.hands_registry = HandsRegistry()
+
+
 async def build_kernel_async() -> Kernel:
     """Construct and fully wire a Kernel (store, adapters, capabilities, invoker).
 
@@ -331,10 +314,14 @@ async def build_kernel_async() -> Kernel:
     if manifest_path:
         manifest = load_manifest(manifest_path)
         kernel = Kernel(store, blocking_verbs=manifest.blocking_verbs())
+        if _desktop_hands_enabled():
+            _attach_hands_registry(kernel)
         await _seed_from_manifest(kernel, manifest)
         log.info("booted from manifest %s (tenant %s)", manifest_path, manifest.tenant_id)
     else:
         kernel = Kernel(store)
+        if _desktop_hands_enabled():
+            _attach_hands_registry(kernel)
         await _seed_default(kernel)
         log.info("no manifest found; booted minimal demo tenant '%s'", _DEFAULT_TENANT)
 

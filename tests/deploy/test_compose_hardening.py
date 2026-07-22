@@ -198,6 +198,25 @@ def test_herdr_opencode_state_roots_are_owned_by_service_user_in_images():
     assert "/var/lib/boltrig/opencode/state" in fleet_dockerfile
 
 
+@pytest.mark.invariant("KNO-04")
+def test_knowledge_and_bundled_cognee_have_stack_owned_persistent_storage():
+    kernel = _base()["services"]["kernel"]
+    environment = kernel["environment"]
+    mounts = " ".join(str(mount) for mount in kernel.get("volumes", ()))
+    dockerfile = _text("deploy/kernel.Dockerfile")
+    lock = _text("requirements-lock.txt")
+
+    assert environment["BOLTRIG_KNOWLEDGE_VAULT"].endswith(
+        "/var/lib/boltrig/knowledge}"
+    )
+    assert environment["BOLTRIG_COGNEE_ROOT"].endswith("/var/lib/boltrig/cognee}")
+    assert "knowledge_data:/var/lib/boltrig/knowledge" in mounts
+    assert "cognee_data:/var/lib/boltrig/cognee" in mounts
+    assert "/var/lib/boltrig/knowledge" in dockerfile
+    assert "/var/lib/boltrig/cognee" in dockerfile
+    assert "cognee==" in lock
+
+
 @pytest.mark.security
 @pytest.mark.invariant("FR-HOST-11")
 def test_browser_cli_state_roots_are_stack_owned():

@@ -13,6 +13,7 @@ import { HomePanel } from "@/panels/HomePanel";
 import { HealthPanel } from "@/panels/HealthPanel";
 import { InsightPanel } from "@/panels/InsightPanel";
 import { KanbanPanel } from "@/panels/KanbanPanel";
+import { KnowledgePanel } from "@/panels/KnowledgePanel";
 import { MemoryPanel } from "@/panels/MemoryPanel";
 import { MePanel } from "@/panels/MePanel";
 import { RouterPanel } from "@/panels/RouterPanel";
@@ -56,6 +57,7 @@ const OPS_PANELS: Record<string, PanelFactory> = {
   insight: () => <InsightPanel />,
   eval: () => <EvalPanel />,
   memory: () => <MemoryPanel />,
+  knowledge: () => <KnowledgePanel />,
   health: () => <HealthPanel />,
   admin: () => <AdminPanel />,
   channels: () => <ChannelsPanel />,

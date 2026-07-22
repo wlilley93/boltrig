@@ -37,6 +37,13 @@ def _ctx() -> InvocationContext:
     return InvocationContext(tenant_id=T, grants=GrantSet.of(["*"]), actor="head")
 
 
+@pytest.fixture(autouse=True)
+def _legacy_runtimes(monkeypatch):
+    # This file exercises the hermes lane specifically; hermes is legacy rollback
+    # residue (decision 0012), reachable only behind the explicit opt-in flag.
+    monkeypatch.setenv("BOLTRIG_ENABLE_LEGACY_RUNTIMES", "1")
+
+
 @pytest.mark.invariant("US-FLT-07")
 async def test_spawn_without_runtime_is_marked_degraded_and_audited():
     kernel = _kernel_hermes_only()

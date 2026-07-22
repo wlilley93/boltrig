@@ -156,6 +156,7 @@ describe("governed control mutations", () => {
           noun="control"
           verb="control.test.change"
           sentParams={{ resource_id: "resource-1", enabled: true }}
+          invocationContext={{ run_id: "workflow-run-1" }}
           onApplied={onApplied}
         />
       </DeckSlideContext.Provider>,
@@ -168,6 +169,8 @@ describe("governed control mutations", () => {
     await waitFor(() => expect(onApplied).toHaveBeenCalledTimes(1));
     expect(firstKey).toMatch(/^phc-/);
     expect(invoke.mock.calls[1]?.[0].idempotency_key).toBe(firstKey);
+    expect(invoke.mock.calls[0]?.[0].context).toEqual({ run_id: "workflow-run-1" });
+    expect(invoke.mock.calls[1]?.[0].context).toEqual({ run_id: "workflow-run-1" });
   });
 
   it("lets a terminal approval outcome return a locked form to editing", async () => {
@@ -210,7 +213,7 @@ describe("governed control mutations", () => {
     fireEvent.change(screen.getByPlaceholderText("0 9 * * 1"), {
       target: { value: "0 9 * * 1" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Schedule" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save schedule spec" }));
 
     await screen.findByText("Paused for approval");
     expect(api.invoke).toHaveBeenCalledWith({

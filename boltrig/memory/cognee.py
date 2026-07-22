@@ -57,6 +57,7 @@ from __future__ import annotations
 import hashlib
 import os
 import re
+import threading
 from typing import Any
 
 from boltrig.kernel.pii import contains_secret
@@ -64,6 +65,7 @@ from boltrig.kernel.pii import contains_secret
 from .engine import EngineFact, RecallHit, signal_delta
 
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
+_COGNEE_IMPORT_LOCK = threading.Lock()
 
 
 def _slug(value: str, max_len: int = 24) -> str:
@@ -84,13 +86,28 @@ def _item_payload(item: Any) -> tuple[str, float | None]:
 
 
 def _require_cognee() -> Any:
-    try:
-        import cognee
-    except ImportError as exc:  # pragma: no cover - exercised via monkeypatched import
-        raise RuntimeError(
-            "CogneeEngine requires the 'cognee' package (pip install 'boltrig[cognee]'). "
-            "Memory engines are ADOPTED, not built (MEM-ENG-01)."
-        ) from exc
+    # Cognee imports python-dotenv and may otherwise load the host repository's
+    # ambient .env into os.environ. A projection library must never activate
+    # unrelated Boltrig process settings or ingest undelegated credentials. The
+    # documented python-dotenv kill switch prevents the load; the snapshot is a
+    # defence-in-depth cleanup for any other import-time mutation.
+    with _COGNEE_IMPORT_LOCK:
+        before = dict(os.environ)
+        os.environ["PYTHON_DOTENV_DISABLED"] = "1"
+        try:
+            import cognee
+        except ImportError as exc:  # pragma: no cover - exercised via monkeypatched import
+            raise RuntimeError(
+                "CogneeEngine requires the 'cognee' package "
+                "(pip install 'boltrig[cognee]'). Memory engines are ADOPTED, "
+                "not built (MEM-ENG-01)."
+            ) from exc
+        finally:
+            for key in set(os.environ) - set(before):
+                os.environ.pop(key, None)
+            for key, value in before.items():
+                if os.environ.get(key) != value:
+                    os.environ[key] = value
     return cognee
 
 
@@ -108,18 +125,21 @@ class CogneeEngine:
         self.health_reason: str | None = None
 
     # --- configuration -------------------------------------------------------
-    def _apply_env(self, cognee: Any) -> None:
-        """Map the manifest config onto cognee's env names (already-set env wins),
-        and point cognee's data/system roots at ``cognee_root`` when given. Runs
-        once, before cognee's cached settings are first read."""
-        if self._env_applied:
-            return
+    def _prime_env(self) -> None:
+        """Expose only explicitly configured Cognee model settings before import."""
         for section, prefix in (("llm", "LLM"), ("embedding", "EMBEDDING")):
             block = self._config.get(section) or {}
             for key in ("provider", "model", "endpoint", "api_key", "dimensions"):
                 value = block.get(key)
                 if value is not None:
                     os.environ.setdefault(f"{prefix}_{key.upper()}", str(value))
+
+    def _apply_env(self, cognee: Any) -> None:
+        """Map the manifest config onto cognee's env names (already-set env wins),
+        and point cognee's data/system roots at ``cognee_root`` when given. Runs
+        once, before cognee's cached settings are first read."""
+        if self._env_applied:
+            return
         root = self._config.get("cognee_root")
         if root:
             cognee.config.data_root_directory(str(root))
@@ -127,6 +147,7 @@ class CogneeEngine:
         self._env_applied = True
 
     def _ready(self) -> Any:
+        self._prime_env()
         cognee = _require_cognee()
         self._apply_env(cognee)
         return cognee
@@ -307,11 +328,10 @@ class CogneeEngine:
         """'down' + reason when cognee is unimportable; 'degraded' + reason when it
         is importable but no LLM is configured (cognify would fail); else 'ok'."""
         try:
-            import cognee  # noqa: F401
+            self._ready()
         except Exception as exc:
             self.health_reason = f"cognee not importable: {exc}"
             return "down"
-        self._apply_env(cognee)
         llm_cfg = self._config.get("llm") or {}
         provider = os.environ.get("LLM_PROVIDER") or llm_cfg.get("provider") or "openai"
         api_key = os.environ.get("LLM_API_KEY") or llm_cfg.get("api_key")

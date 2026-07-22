@@ -262,3 +262,61 @@ async def test_an_unroutable_department_parks_instead_of_running_under_another_h
     assert not await kernel.store.list_work_items(T, parent_id=item.id)  # nothing ran
     pending = await kernel.store.list_pending_hitl(T)
     assert any(r.work_item_id == item.id for r in pending)
+
+
+# --- SEC-178: an addressed item routes to its named head -------------------
+@pytest.mark.security
+@pytest.mark.invariant("SEC-178")
+async def test_an_addressed_item_routes_to_its_named_head_not_the_inferred_one():
+    """A work item carrying an explicit ``target`` (channel addressing) is routed
+    to that head directly - the CoS's inferred route is never consulted. The
+    target is routing data, not authority: grants still bind at the chokepoint."""
+    kernel = await _kernel()
+    await _seat(kernel, "will", {"verbs": [RISKY_VERB]})
+    spawner = build_spawner(kernel)
+
+    class _MisroutingCoS:
+        async def route(self, item, context):
+            raise AssertionError("cos.route must not be consulted for an addressed item")
+
+    head = DepartmentHead(DEPT, ["risky"], [], 32, spawner=spawner, store=kernel.store)
+    pump = WorkPump(kernel, spawner, _MisroutingCoS(), {DEPT: head})
+
+    item = _item(on_behalf_of="will", target=DEPT)
+    await kernel.store.create_work_item(item)
+    assert await pump.run_once(T) is True
+
+    done = await kernel.store.get_work_item(T, item.id)
+    assert done is not None
+    assert done.owner_member == DEPT
+    assert done.status == WorkStatus.DONE
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-178")
+async def test_an_unknown_target_falls_back_to_the_inferred_route():
+    """A target that names no configured head (and the tier-1 default "cos") is
+    not an addressing escape hatch: the CoS routes as usual."""
+    kernel = await _kernel()
+    await _seat(kernel, "will", {"verbs": [RISKY_VERB]})
+    spawner = build_spawner(kernel)
+
+    class _RecordingCoS:
+        def __init__(self):
+            self.consulted = 0
+
+        async def route(self, item, context):
+            self.consulted += 1
+            return DEPT
+
+    cos = _RecordingCoS()
+    head = DepartmentHead(DEPT, ["risky"], [], 32, spawner=spawner, store=kernel.store)
+    pump = WorkPump(kernel, spawner, cos, {DEPT: head})
+
+    for target in ("cos", "no-such-department"):
+        item = _item(on_behalf_of="will", target=target)
+        await kernel.store.create_work_item(item)
+        assert await pump.run_once(T) is True
+        done = await kernel.store.get_work_item(T, item.id)
+        assert done is not None and done.status == WorkStatus.DONE
+    assert cos.consulted == 2  # both fell through to the inferred route

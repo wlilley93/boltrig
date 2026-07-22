@@ -11,10 +11,14 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 
 from .channels import ChannelStoreMem
+from .channel_dedup import ChannelDedupStoreMem
+from .channel_outbox import ChannelOutboxStoreMem
 from .budget_policy import BudgetPolicyMem
 from .capabilities import CapabilityStoreMem
 from .guarded_writes import GuardedWritesMem
 from .idempotency import IdempotencyStoreMem
+from .observability_reads import ObservabilityReadsMem
+from .sealing import seal_ref, unseal_ref
 from .work_items import WorkItemReadsMem
 from boltrig.models import (
     AdapterRecord,
@@ -24,6 +28,7 @@ from boltrig.models import (
     Budget,
     Channel,
     ChannelBinding,
+    ChannelOutboxMessage,
     ChannelPairing,
     ConfigRevision,
     Conversation,
@@ -81,11 +86,11 @@ def _norm_email_key(value) -> str:
 
 
 class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
-                    GuardedWritesMem, ChannelStoreMem, CapabilityStoreMem):
+                    GuardedWritesMem, ChannelStoreMem, CapabilityStoreMem,
+                    ObservabilityReadsMem, ChannelDedupStoreMem,
+                    ChannelOutboxStoreMem):
     """In-memory Store (offline + test). Domain methods live in partial mixins
     (e.g. ``ChannelStoreMem``), composed here for one public method surface."""
-
-    """A complete, async, dict-backed Store. Satisfies ``store.base.Store``."""
 
     def __init__(self) -> None:
         self._nouns: dict[tuple[str, str], Noun] = {}
@@ -93,9 +98,9 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
         self._bindings: dict[tuple[str, str], VerbBinding] = {}
         self._perms: dict[str, TenantPermissions] = {}
         self._adapters: dict[tuple[str, str], AdapterRecord] = {}
-        self._skills: dict[tuple[str, str], Skill] = {}
+        self._skills: dict[tuple[str, str, str], Skill] = {}
         self._caps: dict[tuple[str, str], AgentCapability] = {}
-        self._workflows: dict[tuple[str, str], WorkflowDefinition] = {}
+        self._workflows: dict[tuple[str, str, str], WorkflowDefinition] = {}
         self._workflow_promotions: dict[tuple[str, str], WorkflowPromotion] = {}
         # Design brief 22.1: workflow run records (observability-only). Keyed by
         # (tenant_id, run_id) - one row per execute. Read aggregated by
@@ -151,6 +156,10 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
         self._channels: dict[str, Channel] = {}
         self._chan_bindings: dict[tuple[str, str], ChannelBinding] = {}
         self._chan_pairings: dict[tuple[str, str], ChannelPairing] = {}
+        # Phase 2 durability: replay-dedup markers keyed (tenant, channel,
+        # delivery) -> expiry, and the socket-class outbound hand-off.
+        self._chan_deliveries: dict[tuple[str, str, str], datetime] = {}
+        self._chan_outbox: dict[tuple[str, str], ChannelOutboxMessage] = {}
         # Beat 3: durable delegation (checkpoints keyed (tenant, run, step),
         # fan-out counters keyed (tenant, tree, counter)).
         self._checkpoints: dict[tuple[str, str, str], RunCheckpoint] = {}
@@ -220,19 +229,37 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
         return [a for (t, _), a in self._adapters.items() if t == tenant_id]
 
     async def upsert_skill(self, skill):
-        self._skills[(skill.tenant_id, skill.id)] = skill
+        # Versioned like Postgres (PK tenant+id+version): every version is kept.
+        self._skills[(skill.tenant_id, skill.id, skill.version)] = skill
 
     async def get_skill(self, tenant_id, skill_id):
-        return self._skills.get((tenant_id, skill_id))
+        # Latest version (mirrors the PG ORDER BY version DESC LIMIT 1).
+        versions = [
+            s for (t, i, _), s in self._skills.items() if t == tenant_id and i == skill_id
+        ]
+        return max(versions, key=lambda s: s.version, default=None)
 
     async def list_skills(self, tenant_id):
-        return [s for (t, _), s in self._skills.items() if t == tenant_id]
+        # Latest version per skill id for the tenant (the shelf), mirroring the
+        # PG DISTINCT ON (id) ... ORDER BY id, version DESC.
+        latest: dict[str, Skill] = {}
+        for (t, sid, _), s in self._skills.items():
+            if t == tenant_id and (sid not in latest or s.version > latest[sid].version):
+                latest[sid] = s
+        return list(latest.values())
 
     async def upsert_workflow(self, wf):
-        self._workflows[(wf.tenant_id, wf.id)] = wf
+        # Versioned like Postgres (PK tenant+id+version): every version is kept.
+        self._workflows[(wf.tenant_id, wf.id, wf.version)] = wf
 
     async def list_workflows(self, tenant_id):
-        return [w for (t, _), w in self._workflows.items() if t == tenant_id]
+        # Latest version per workflow id (the shelf), mirroring list_skills and
+        # the PG DISTINCT ON (id) ... ORDER BY id, version DESC.
+        latest: dict[str, WorkflowDefinition] = {}
+        for (t, wid, _), w in self._workflows.items():
+            if t == tenant_id and (wid not in latest or w.version > latest[wid].version):
+                latest[wid] = w
+        return list(latest.values())
 
     async def upsert_workflow_promotion(self, promotion):
         self._workflow_promotions[(promotion.tenant_id, promotion.workflow_id)] = promotion
@@ -245,12 +272,11 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
 
     # --- workflow run records (design brief 22.1, observability-only) -------
     async def record_workflow_run(self, tenant_id, workflow_id, run_id, status):
-        # Insert/replace on the run_id PK. ``started_at`` stamps on first insert and
-        # survives a replace, matching the postgres ON CONFLICT DO NOTHING shape.
+        # Insert-only on the run_id PK, matching the postgres ON CONFLICT DO
+        # NOTHING: a re-record keeps the first status and started_at.
         key = (tenant_id, run_id)
-        existing = self._workflow_runs.get(key)
-        started = existing[2] if existing is not None else utcnow()
-        self._workflow_runs[key] = (workflow_id, status, started)
+        if key not in self._workflow_runs:
+            self._workflow_runs[key] = (workflow_id, status, utcnow())
 
     async def list_workflow_run_ids(self, tenant_id, workflow_id, limit=100):
         rows = [
@@ -299,6 +325,16 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
 
     async def update_work_item(self, item):
         self._work[(item.tenant_id, item.id)] = item
+
+    async def transition_work_item_status(self, tenant_id, item_id, *, expected, new_status):
+        # Conditional status write (mirrors the PG UPDATE ... WHERE status=$):
+        # no await between the check and the write, so it is atomic on the
+        # single-threaded event loop; a moved row fails the CAS.
+        item = self._work.get((tenant_id, item_id))
+        if item is None or item.status != expected:
+            return False
+        item.status = new_status
+        return True
 
     async def claim_work_item(self, tenant_id, worker_id, lease_seconds):
         # atomic pending -> in_flight claim with a lease (US-FLT-05): no await between
@@ -362,7 +398,14 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
 
     # --- hitl ---
     async def create_hitl_request(self, req):
-        self._hitl[(req.tenant_id, req.id)] = req
+        # PG is ON CONFLICT (tenant_id, id) DO UPDATE SET status: a conflicting
+        # id keeps the original row and only adopts the new status.
+        key = (req.tenant_id, req.id)
+        existing = self._hitl.get(key)
+        if existing is not None:
+            existing.status = req.status
+        else:
+            self._hitl[key] = req
 
     async def get_hitl_request(self, tenant_id, req_id):
         return self._hitl.get((tenant_id, req_id))
@@ -380,10 +423,13 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
         return req
 
     async def get_hitl_response(self, tenant_id, request_id):
-        for resp in self._hitl_resp.values():
-            if resp.tenant_id == tenant_id and resp.request_id == request_id:
-                return resp
-        return None
+        matches = [
+            resp
+            for resp in self._hitl_resp.values()
+            if resp.tenant_id == tenant_id and resp.request_id == request_id
+        ]
+        # Newest first, matching the PG ORDER BY responded_at DESC LIMIT 1.
+        return max(matches, key=lambda r: r.responded_at, default=None)
 
     async def consume_hitl(self, tenant_id, request_id):
         # atomic ANSWERED -> CONSUMED (single-use). No await between the check and
@@ -531,16 +577,19 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
             )
         return True
 
-    # --- credential references ---
+    # --- credential references (sealed at rest, SEC-04 - see store/sealing.py) ---
     async def get_credential_ref(self, tenant_id, cred_id):
-        return self._creds.get((tenant_id, cred_id))
+        ref = self._creds.get((tenant_id, cred_id))
+        # Unseal transparently; legacy plaintext rows (no marker) pass through.
+        return unseal_ref(ref) if ref is not None else None
 
     async def set_credential_ref(self, tenant_id: str, cred_id: str, ref: dict) -> None:
-        self._creds[(tenant_id, cred_id)] = ref
+        self._creds[(tenant_id, cred_id)] = seal_ref(ref)
 
     # --- conversations ---
     async def create_conversation(self, conv):
-        self._convs[(conv.tenant_id, conv.id)] = conv
+        # Insert-if-absent (mirrors the PG ON CONFLICT (tenant_id, id) DO NOTHING).
+        self._convs.setdefault((conv.tenant_id, conv.id), conv)
 
     async def get_conversation(self, tenant_id, conv_id):
         return self._convs.get((tenant_id, conv_id))
@@ -579,7 +628,10 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
         matches: list[tuple] = []
         for conv in self._owned_conversations(tenant_id, user_id):
             snippet = None
-            if not needle or (conv.title and needle in conv.title.casefold()):
+            # An empty needle still requires a non-NULL title (mirrors the PG
+            # ILIKE '%%' semantics: a NULL title never matches, it can only
+            # surface via a live message-content hit below).
+            if conv.title is not None and needle in conv.title.casefold():
                 matches.append((conv, None))
                 continue
             for m in self._messages.get(conv.id, []):
@@ -599,7 +651,11 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
         self._convs[(conv.tenant_id, conv.id)] = conv
 
     async def add_message(self, message):
-        self._messages.setdefault(message.conversation_id, []).append(message)
+        # Insert-if-absent on (tenant_id, id) (mirrors the PG ON CONFLICT DO
+        # NOTHING): a replayed message id is a no-op, never a duplicate row.
+        msgs = self._messages.setdefault(message.conversation_id, [])
+        if not any(m.tenant_id == message.tenant_id and m.id == message.id for m in msgs):
+            msgs.append(message)
 
     async def list_messages(self, tenant_id, conv_id):
         return [m for m in self._messages.get(conv_id, []) if m.tenant_id == tenant_id]
@@ -770,7 +826,8 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
 
     # --- personal access tokens (PAT, SEC-34) ---
     async def add_pat(self, pat):
-        self._pats[(pat.tenant_id, pat.id)] = pat
+        # Insert-if-absent (mirrors the PG ON CONFLICT (tenant_id, id) DO NOTHING).
+        self._pats.setdefault((pat.tenant_id, pat.id), pat)
 
     async def get_pat(self, tenant_id, pat_id):
         return self._pats.get((tenant_id, pat_id))
@@ -790,11 +847,17 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
         return [p for (t, _), p in self._pats.items() if t == tenant_id and p.user_id == user_id]
 
     async def update_pat(self, pat):
-        self._pats[(pat.tenant_id, pat.id)] = pat
+        # Narrow writer (mirrors the PG UPDATE): only last_used_at + revoked are
+        # ever written back; a missing row is a no-op, never an insert.
+        existing = self._pats.get((pat.tenant_id, pat.id))
+        if existing is not None:
+            existing.last_used_at = pat.last_used_at
+            existing.revoked = pat.revoked
 
     # --- invitations (US-USR-02) ---
     async def add_invitation(self, inv):
-        self._invites[(inv.tenant_id, inv.id)] = inv
+        # Insert-if-absent (mirrors the PG ON CONFLICT (tenant_id, id) DO NOTHING).
+        self._invites.setdefault((inv.tenant_id, inv.id), inv)
 
     async def get_invitation(self, tenant_id, inv_id):
         return self._invites.get((tenant_id, inv_id))
@@ -804,10 +867,13 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
 
     async def find_pending_invitation(self, tenant_id, email):
         target = email.strip().lower()
-        for (t, _), inv in self._invites.items():
-            if t == tenant_id and inv.status == "pending" and inv.email.strip().lower() == target:
-                return inv
-        return None
+        matches = [
+            inv
+            for (t, _), inv in self._invites.items()
+            if t == tenant_id and inv.status == "pending" and inv.email.strip().lower() == target
+        ]
+        # Newest first, matching the PG ORDER BY created_at DESC LIMIT 1.
+        return max(matches, key=lambda i: i.created_at, default=None)
 
     async def find_invitation_by_token_hash(self, tenant_id, token_hash):
         # First-party invite ([2026] VJS-COUNTY 7, D1): match a still-pending
@@ -836,7 +902,11 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
         return True
 
     async def update_invitation(self, inv):
-        self._invites[(inv.tenant_id, inv.id)] = inv
+        # Narrow writer (mirrors the PG UPDATE): only status is ever written
+        # back; a missing row is a no-op, never an insert.
+        existing = self._invites.get((inv.tenant_id, inv.id))
+        if existing is not None:
+            existing.status = inv.status
 
     # --- first-party password credentials ([2026] VJS-COUNTY 7, D4) ---
     async def set_password_credential(self, tenant_id, user_id, password_hash):
@@ -897,7 +967,8 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
 
     # --- sessions (SET-70) ---
     async def add_session(self, session):
-        self._sessions[(session.tenant_id, session.id)] = session
+        # Insert-if-absent (mirrors the PG ON CONFLICT (tenant_id, id) DO NOTHING).
+        self._sessions.setdefault((session.tenant_id, session.id), session)
 
     async def list_sessions(self, tenant_id, user_id):
         return [

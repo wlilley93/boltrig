@@ -224,3 +224,46 @@ def pinned_async_client(
     original URL (host preserved) - only the TCP target is pinned."""
     _host, vetted_ip = resolve_and_vet(url, config)
     return pinned_async_client_for_ip(vetted_ip, inner_backend=inner_backend, **client_kwargs)
+
+
+def _pinned_sync_backend(pinned_ip: str, inner: Any | None = None) -> Any:
+    """The sync counterpart of :func:`_pinned_backend` (H2/SEC-61), for callers
+    that must use a synchronous ``httpx.Client`` (e.g. spec loading, which runs
+    outside the dispatch path)."""
+    import httpcore
+
+    base = inner if inner is not None else httpcore.SyncBackend()
+
+    class _PinnedSyncBackend(httpcore.SyncBackend):  # type: ignore[misc]
+        def connect_tcp(  # noqa: D401
+            self, host, port, timeout=None, local_address=None, socket_options=None
+        ):
+            return base.connect_tcp(
+                pinned_ip, port, timeout=timeout,
+                local_address=local_address, socket_options=socket_options,
+            )
+
+        def connect_unix_socket(self, *args: Any, **kwargs: Any):
+            return base.connect_unix_socket(*args, **kwargs)
+
+        def sleep(self, seconds: float) -> None:
+            return base.sleep(seconds)
+
+    return _PinnedSyncBackend()
+
+
+def pinned_sync_client(
+    url: str, config: dict[str, Any] | None = None, *, inner_backend: Any | None = None, **client_kwargs: Any
+) -> Any:
+    """Vet ``url`` and return a synchronous ``httpx.Client`` pinned to the audited
+    IP - the sync counterpart of :func:`pinned_async_client` (H2/SEC-61).
+    ``follow_redirects`` is forced False (a 30x must not be chased into internal
+    space). Raise :class:`EgressBlocked` if the egress guard refuses."""
+    import httpx
+
+    _host, vetted_ip = resolve_and_vet(url, config)
+    transport = httpx.HTTPTransport()
+    transport._pool._network_backend = _pinned_sync_backend(vetted_ip, inner_backend)
+    client_kwargs["follow_redirects"] = False
+    client_kwargs["transport"] = transport
+    return httpx.Client(**client_kwargs)

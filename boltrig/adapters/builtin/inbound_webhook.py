@@ -21,7 +21,9 @@ signing secret is configured a timestamp is therefore REQUIRED (a signed request
 without one is refused), and the replay-window check (ADP-08 / SEC-63) still
 applies on top. A stable delivery id (an explicit id in the payload, else the
 signature) lets the ingress dedup replays so a repeat never mints a second work
-item; see :func:`is_duplicate_delivery`.
+item; see :func:`is_duplicate_delivery`. A message with NO stable id (id-less
+and unsigned) is deduped by CONTENT within a shorter bounded window instead of
+not at all; see :func:`content_delivery_id`.
 
 Note: an HMAC is strictly a function of exact bytes. Where the caller can supply
 the raw request body it should HMAC that. Here we receive a decoded payload, so
@@ -83,40 +85,107 @@ def expected_signature(secret: str, body: bytes) -> str:
     return hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
 
 
-# --- Delivery dedup (M3 / SEC-66): a bounded, TTL-scoped seen-set --------------
+# --- Delivery dedup (M3 / SEC-66): durable store-backed record-and-check -----
 # A replayed request carries a valid signature (nothing forged), so the signature
 # check alone cannot stop a second ingest. We dedup on a stable delivery id keyed
-# by (channel_id, delivery_id) within a short window. This is a PROCESS-LOCAL set,
-# matching the existing in-adapter lockout pattern (pairing attempts): it is a
-# real improvement (a single-process replay no longer double-ingests) but does
-# NOT dedup across worker processes/restarts. Durable, store-backed dedup (a
-# seen-delivery marker row keyed by (channel, delivery_id)) is the follow-on;
-# the channel store has no such primitive today.
+# by (channel_id, delivery_id) within a short window. The AUTHORITY is the store
+# (decision 0003 Phase 2): ``store.record_channel_delivery`` is an atomic
+# record-and-check, so dedup holds across worker processes and restarts. The
+# bounded PROCESS-LOCAL set below survives only as a first-tier cache: a hot
+# replay in the same process is refused without a store round-trip, and a local
+# marker is armed only after the store recorded the first sighting.
 _SEEN_TTL_SECONDS = 600
 _seen_deliveries: dict[tuple[str, str], float] = {}
 
+# Content-hash fallback (SEC-175): a message with NO stable delivery id (no
+# explicit id in the payload, unsigned so no signature to reuse) is deduped by
+# CONTENT within a shorter, bounded window. The synthesised id hashes
+# ``channel_id | sender | canonical_body`` and carries a prefix so
+# ``is_duplicate_delivery`` applies the shorter TTL to it. The trade-off,
+# stated plainly: a LEGIT rapid repeat of the identical message from the same
+# sender inside the window is dropped as a replay - the price of deduping a
+# delivery we cannot name.
+_CONTENT_SEEN_TTL_SECONDS = 300
+_CONTENT_ID_PREFIX = "content:"
 
-def is_duplicate_delivery(
+
+def content_delivery_id(
+    channel_id: str | None, sender: str | None, body: bytes
+) -> str:
+    """Synthesise a stable delivery id for a message that carries none (SEC-175).
+
+    sha256 over ``channel_id | sender | canonical_body``: a redelivery of the
+    identical body from the same sender on the same channel hashes to the same
+    id, so the EXISTING store-backed dedup can refuse it. ``body`` is the
+    canonical JSON form from :func:`canonical_body`."""
+    digest = hashlib.sha256(
+        b"|".join(
+            (
+                (channel_id or "").encode("utf-8"),
+                (sender or "").encode("utf-8"),
+                body,
+            )
+        )
+    ).hexdigest()
+    return f"{_CONTENT_ID_PREFIX}{digest}"
+
+
+def _fallback_delivery_id(
+    payload: dict[str, Any], channel_id: str | None, sender: str | None
+) -> str:
+    """The content-hash delivery id for a message with no stable handle: the
+    given sender, else the payload's own ``sender``/``from`` field."""
+    if sender is None:
+        raw_sender = payload.get("sender") or payload.get("from")
+        sender = str(raw_sender) if raw_sender is not None else None
+    return content_delivery_id(channel_id, sender, canonical_body(payload))
+
+
+def _locally_seen(channel_id: str, delivery_id: str, *, now: float) -> bool:
+    """First-tier cache check: True if this process armed a live marker."""
+    key = (str(channel_id), str(delivery_id))
+    # opportunistic eviction of expired markers (keeps the set bounded)
+    for stale in [k for k, exp in _seen_deliveries.items() if exp <= now]:
+        del _seen_deliveries[stale]
+    return key in _seen_deliveries
+
+
+async def is_duplicate_delivery(
+    store,
+    tenant_id: str,
     channel_id: str,
     delivery_id: str,
     *,
     ttl_seconds: int = _SEEN_TTL_SECONDS,
     now: float | None = None,
 ) -> bool:
-    """Check-and-set: record ``(channel_id, delivery_id)`` as seen and return True
-    if it was already seen within the TTL window (i.e. this is a replay).
+    """Record ``(channel_id, delivery_id)`` and return True if it was already
+    seen within the TTL window (i.e. this is a replay).
 
-    The first sighting returns False and arms the marker; a repeat within the
-    window returns True so the caller can skip creating a second work item
-    (M3/SEC-66)."""
+    The durable store row is the record-and-check authority (M3/SEC-66): the
+    first sighting returns False and arms both tiers; a repeat within the window
+    returns True so the caller can skip creating a second work item - on any
+    worker, after any restart. The process-local set is only a cache in front
+    of that authority: a local hit short-circuits the store call, a local miss
+    defers to the store.
+
+    A content-synthesised id (``content:``-prefixed, see
+    :func:`content_delivery_id`) rides the SAME mechanism under the shorter
+    ``_CONTENT_SEEN_TTL_SECONDS`` window, whatever ``ttl_seconds`` was passed."""
     current = now if now is not None else utcnow().timestamp()
-    key = (str(channel_id), str(delivery_id))
-    # opportunistic eviction of expired markers (keeps the set bounded)
-    for stale in [k for k, exp in _seen_deliveries.items() if exp <= current]:
-        del _seen_deliveries[stale]
-    if key in _seen_deliveries:
+    if _locally_seen(channel_id, delivery_id, now=current):
         return True
-    _seen_deliveries[key] = current + ttl_seconds
+    ttl = (
+        _CONTENT_SEEN_TTL_SECONDS
+        if str(delivery_id).startswith(_CONTENT_ID_PREFIX)
+        else ttl_seconds
+    )
+    recorded = await store.record_channel_delivery(
+        tenant_id, channel_id, delivery_id, ttl_seconds=ttl
+    )
+    if not recorded:
+        return True  # the store already holds a live marker: a replay
+    _seen_deliveries[(str(channel_id), str(delivery_id))] = current + ttl
     return False
 
 
@@ -175,6 +244,8 @@ def verify_and_normalise(
     *,
     replay_window_seconds: int = 300,
     now: float | None = None,
+    channel_id: str | None = None,
+    sender: str | None = None,
 ) -> dict[str, Any]:
     """Authenticate and validate an inbound webhook, returning a normalised
     work-item candidate (US-ADP-05).
@@ -182,7 +253,9 @@ def verify_and_normalise(
     Raises :class:`WebhookValidationError` for a malformed payload and
     :class:`WebhookAuthError` for a failed signature, a missing signature, or a
     stale (replayed) request outside the timestamp window (ADP-08).
-    """
+
+    ``channel_id``/``sender`` scope the content-hash fallback delivery id; the
+    signed ingress path never needs it (a signature IS the stable id)."""
     if not isinstance(payload, dict):
         raise WebhookValidationError("webhook payload must be a JSON object")
 
@@ -228,9 +301,13 @@ def verify_and_normalise(
     )
     external_id_str = str(external_id) if external_id is not None else None
     # A stable delivery id for dedup (M3/SEC-66): an explicit id the payload carries
-    # if present, otherwise the signature itself (a signed replay reuses it). None
-    # means we have no stable handle, so the caller cannot (and does not) dedup.
+    # if present, otherwise the signature itself (a signed replay reuses it).
     delivery = external_id_str or signature_hex
+    if delivery is None:
+        # No stable delivery id (an id-less, unsigned message): dedup by CONTENT
+        # within a bounded window (SEC-175) instead of not at all. The trade-off,
+        # stated plainly: a legit rapid repeat inside the window is dropped too.
+        delivery = _fallback_delivery_id(payload, channel_id, sender)
     return {
         "source": str(source),
         "type": str(event_type),

@@ -42,6 +42,36 @@ describe("ApprovalsPanel", () => {
     });
   });
 
+  it("shows the exact governed action and literal inputs before approval", async () => {
+    mockApi({
+      hitl: {
+        requests: [{
+          id: "approval-rich",
+          type: "approval",
+          urgency: "blocking",
+          question: "Approve ticket.create?",
+          options: ["approve", "reject"],
+          run_id: "run-approval",
+          verb: "ticket.create",
+          requested_by: "agent:release",
+          requested_on_behalf_of: "will",
+          inputs: { title: "Ship the release", api_key: "[redacted]" },
+        }],
+      },
+    });
+
+    render(<ApprovalsPanel />);
+    await screen.findByText("Approve ticket.create?");
+
+    expect(screen.getByText("ticket.create")).toBeTruthy();
+    expect(screen.getByText("agent:release")).toBeTruthy();
+    expect(screen.getByText("will")).toBeTruthy();
+    expect(screen.getByText("Literal inputs")).toBeTruthy();
+    expect(screen.getByText(/Ship the release/)).toBeTruthy();
+    expect(screen.getByText(/\[redacted\]/)).toBeTruthy();
+    expect(screen.getByText("run-approval")).toBeTruthy();
+  });
+
   it("orders blocking decisions first and filters by type and urgency", async () => {
     mockApi({
       hitl: {

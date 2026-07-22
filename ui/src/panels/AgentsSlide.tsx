@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 import { api } from "../api/client";
 import type { DeckCol } from "../deck/Deck";
@@ -6,7 +6,8 @@ import { navigate } from "../router";
 import { useFetch } from "../useFetch";
 import { ByChat, CoachMark } from "./uxFlow";
 import { EmptyState, FetchError, InfoCallout, PageIntro } from "./ux";
-import { agentColumns, deniedOf, readAgentSpecs } from "./agents/model";
+import { agentColumns, deniedOf, mergeCapabilityProfiles, readAgentSpecs } from "./agents/model";
+import { AgentCreateCard } from "./agentsSlide/AgentCreateCard";
 import { AgentCounts } from "./agentsSlide/AgentCounts";
 import { OrgChart } from "./agentsSlide/OrgChart";
 import { SelectedAgentDetails } from "./agentsSlide/SelectedAgentDetails";
@@ -15,14 +16,19 @@ import { useAgentsData } from "./agentsSlide/useAgentsData";
 export function useAgentDeckCols(): DeckCol[] {
   const hierarchy = useFetch(() => api.getConfig("hierarchy"), []);
   const pool = useFetch(() => api.getConfig("ephemeral_runtimes"), []);
+  const caps = useFetch(() => api.capabilities(), []);
   return useMemo(() => {
     if (deniedOf(hierarchy.data) || deniedOf(pool.data)) return [];
-    return agentColumns(readAgentSpecs(hierarchy.data, pool.data));
-  }, [hierarchy.data, pool.data]);
+    return agentColumns(mergeCapabilityProfiles(
+      readAgentSpecs(hierarchy.data, pool.data),
+      caps.data?.agent_capabilities ?? [],
+    ));
+  }, [hierarchy.data, pool.data, caps.data?.agent_capabilities]);
 }
 
 export function AgentsSlide() {
   const d = useAgentsData();
+  const [creating, setCreating] = useState(false);
 
   return (
     <section className="panel ag-slide">
@@ -36,11 +42,10 @@ export function AgentsSlide() {
             <ByChat phrase="Show me the agent org, their skills, and the worker pool." />
             <button
               type="button"
-              className="btn btn--primary"
-              onClick={() => navigate("/studio")}
-              title="Agent creation is a governed capability write. The full guided creator lands with the capability registry read."
+              className={`btn${creating ? "" : " btn--primary"}`}
+              onClick={() => setCreating((value) => !value)}
             >
-              New agent
+              {creating ? "Close creator" : "New agent"}
             </button>
             <button type="button" className="btn" onClick={d.refresh}>
               Refresh
@@ -48,6 +53,18 @@ export function AgentsSlide() {
           </>
         }
       />
+
+      {creating && (
+        <AgentCreateCard
+          existing={d.agents}
+          onCancel={() => setCreating(false)}
+          onCreated={(name) => {
+            d.setSelected(name);
+            d.refresh();
+            setCreating(false);
+          }}
+        />
+      )}
 
       <CoachMark id="boltrig.coach.agents-org">
         Each card is an agent profile. Select one to see live facts, or open it

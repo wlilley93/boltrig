@@ -1,5 +1,6 @@
-"""Channel HTTP surface (decision 0003, Phase 1: the webhook / request-response
-class in-kernel).
+"""Channel HTTP surface (decision 0003: the webhook / request-response class
+in-kernel; the socket class re-enters over the severed gateway at the SAME
+intake route - Phase 2 skeleton).
 
 Two kinds of route:
   - Management (admin-gated, authenticated by the normal principal): list the
@@ -36,7 +37,7 @@ from boltrig.models import (
 )
 from boltrig.work.normalise import normalise
 
-from .channel_gateway import CHANNEL_TIERS, resolve_channel_principal
+from .channel_principal import CHANNEL_TIERS, resolve_channel_principal
 from .control_routes import dispatch_control_route
 
 # The pairing flow (decision 0003): one-time codes are short, human-transcribable,
@@ -59,6 +60,74 @@ INBOUND_RL_PER_SENDER = RateLimit(per="minute", max=30, scope="verb")
 def _hash_code(code: str) -> str:
     """The at-rest representation of a pairing code: sha256, never plaintext."""
     return hashlib.sha256(code.encode("utf-8")).hexdigest()
+
+
+async def _channel_secret(kernel, ref: dict | None) -> str | None:
+    """Resolve a channel's webhook signing secret from its credential ref row.
+
+    Doctrine: the app DB holds REFERENCES only - a ``{store, ref}`` row resolved
+    through the kernel's SecretStore seam (SEC-04/05). A legacy inline
+    ``{"secret": ...}`` row (written before the reference path existed) is still
+    honored so already-connected channels keep working; new connections should
+    carry a reference."""
+    if not ref:
+        return None
+    if ref.get("ref"):
+        try:
+            material = await kernel.credentials.fetch_material(ref)
+        except Exception:  # an unresolvable reference fails closed below
+            return None
+        return material.get("secret") or material.get("value")
+    return ref.get("secret")
+
+
+# Addressing (decision 0003, Phase 2): which agent a channel message is routed
+# TO. This is routing DATA, never authority - identity stays kernel-authoritative
+# via the binding rows; the target only steers which agent picks the item up.
+# Resolution order (first hit wins):
+#   1. an explicit ``target`` the VERIFIED sender put on the message (custom
+#      surfaces - the desktop familiar, hey-nabu, sites - address directly);
+#   2. the channel's config mapping ``addressing.routes`` (chat/thread id ->
+#      target), so a platform chat can be pinned to a subagent;
+#   3. ``addressing.default_target`` on the channel, else "cos" (the tier-1
+#      chief of staff - today's behaviour, so unconfigured channels are unchanged).
+# A target is a short slug; anything longer/else is ignored (fail to default,
+# never to an error - a malformed address must not drop a verified message).
+DEFAULT_TARGET = "cos"
+_TARGET_FIELDS = ("chat", "thread", "channel", "chat_id", "thread_id")
+
+
+def _clean_target(value) -> str | None:
+    """A target slug or None: short, safe-charset routing data."""
+    import re
+
+    slug = str(value or "").strip()
+    return slug if re.fullmatch(r"[A-Za-z0-9._:-]{1,64}", slug) else None
+
+
+def _resolve_addressing(ch, body: dict) -> tuple[str, dict]:
+    """Resolve (target, reply_route) for an inbound message.
+
+    The reply_route is the way BACK for round-trip integrity (SEC-179): the
+    channel, thread and sender the triggering message came from, so a reply or
+    a run-completion notification returns to the same surface/thread."""
+    addressing = (ch.config or {}).get("addressing") or {}
+    thread_field = addressing.get("thread_field")
+    thread_id = ""
+    for field_name in ([thread_field] if thread_field else []) + [
+        f for f in _TARGET_FIELDS if f != thread_field
+    ]:
+        value = body.get(field_name)
+        if value is not None and str(value).strip():
+            thread_id = str(value).strip()
+            break
+    target = _clean_target(body.get("target"))
+    if target is None and thread_id:
+        target = _clean_target((addressing.get("routes") or {}).get(thread_id))
+    if target is None:
+        target = _clean_target(addressing.get("default_target")) or DEFAULT_TARGET
+    reply_route = {"channel_id": ch.id, "thread": thread_id or None, "sender": None}
+    return target, reply_route
 
 
 async def _audit(kernel, p, verb: str, detail: dict, status: str = "ok") -> None:
@@ -111,10 +180,21 @@ async def _consume_pairing(kernel, channel, external_user_id, code) -> bool:
 
 
 def register_channel_routes(app, *, principal_dep, get_kernel) -> None:
-    from boltrig.identity.rbac import can_author
+    from boltrig.identity.rbac import _role_rank, can_author
 
     P = Depends(principal_dep)
     K = Depends(get_kernel)
+
+    def _role_clamp(p, role: str) -> JSONResponse | None:
+        """Role-rank clamp (parity with access_routes._reject_escalation, SEC-102):
+        no principal may bind an external sender to a channel role ranked above
+        its own - an admin must not mint a superadmin channel identity."""
+        if _role_rank(role) < _role_rank(p.role):
+            return JSONResponse(
+                {"status": "denied", "reason": "cannot bind a role ranked above your own"},
+                status_code=403,
+            )
+        return None
 
     @app.get("/v1/channels")
     async def list_channels(k=K, p=P) -> JSONResponse:
@@ -136,16 +216,25 @@ def register_channel_routes(app, *, principal_dep, get_kernel) -> None:
 
     @app.post("/v1/channels/{channel_id}/inbound")
     async def channel_inbound(channel_id: str, body: dict, request: Request, k=K) -> JSONResponse:
-        # 1. resolve the channel by its unguessable id (tenant comes from HERE)
+        # 1. resolve the channel by its unguessable id (tenant comes from HERE).
+        # ONE intake path for BOTH transport classes (decision 0003): webhook
+        # platforms call this directly; a socket-class event reaches the same
+        # route via the severed gateway, which signs with the same connect-time
+        # secret the kernel resolves below - nothing built for Phase 1 changes.
         ch = await k.store.get_channel_by_id(channel_id)
-        if ch is None or not ch.enabled or ch.transport != "webhook":
+        if ch is None or not ch.enabled or ch.transport not in ("webhook", "socket"):
             return JSONResponse({"error": "unknown_channel"}, status_code=404)
 
-        # 2. resolve the signing secret kernel-side (SEC-05), never from the body
-        secret = None
+        # 2. resolve the signing secret kernel-side (SEC-05), never from the body.
+        # Fail CLOSED when the channel has no resolvable secret: without one the
+        # signature check is skipped entirely and intake would proceed on the
+        # unguessable channel id alone.
+        ref = None
         if ch.credential_ref:
             ref = await k.store.get_credential_ref(ch.tenant_id, ch.credential_ref)
-            secret = (ref or {}).get("secret")
+        secret = await _channel_secret(k, ref)
+        if not secret:
+            return JSONResponse({"error": "channel_misconfigured"}, status_code=503)
 
         # 3. verify the signature at the edge, before acting on the body. The
         # verified candidate carries the delivery id used for replay dedup (M3).
@@ -207,20 +296,29 @@ def register_channel_routes(app, *, principal_dep, get_kernel) -> None:
 
         # 7. replay dedup BEFORE minting a work item (M3): a captured signed request
         # replays with a genuine signature, so the signature check cannot stop the
-        # second ingest. Skip it here on a stable delivery id. Note: process-local
-        # (matches the pairing-lockout pattern); durable store-backed dedup is the
-        # follow-on. Placed after sender resolution so only would-be intakes are
-        # marked, never a rejected/unpaired request.
+        # second ingest. Skip it here on a stable delivery id. The store is the
+        # record-and-check AUTHORITY (decision 0003 Phase 2): dedup holds across
+        # workers and restarts; the process-local set is only a first-tier cache.
+        # Placed after sender resolution so only would-be intakes are marked,
+        # never a rejected/unpaired request. A message with NO stable delivery id
+        # still cannot be deduped (honest gap: it is ingested on every replay).
         delivery = candidate.get("delivery_id")
-        if delivery and is_duplicate_delivery(ch.id, str(delivery)):
+        if delivery and await is_duplicate_delivery(
+            k.store, ch.tenant_id, ch.id, str(delivery)
+        ):
             return JSONResponse(
                 {"status": "duplicate", "reason": "delivery already ingested"},
                 status_code=200,
             )
 
-        # 8. normalise -> a work-item intake (the CoS routes it), tenant-scoped
+        # 8. normalise -> a work-item intake (the CoS routes it), tenant-scoped.
+        # The item carries the ADDRESSING (decision 0003 Phase 2): the resolved
+        # target (tier-1 CoS by default, a named tier-2 subagent/run when the
+        # message addresses one) and the reply route for round-trip delivery.
         item = normalise(body, source=ch.platform, tenant_id=ch.tenant_id)
         item.on_behalf_of = principal.subject
+        item.target, item.reply_route = _resolve_addressing(ch, body)
+        item.reply_route["sender"] = external_user_id
         await k.store.create_work_item(item)
 
         # 9. audit the intake as the resolved principal (audit-always)
@@ -229,7 +327,8 @@ def register_channel_routes(app, *, principal_dep, get_kernel) -> None:
                 tenant_id=ch.tenant_id, ts=utcnow(), actor=principal.subject,
                 actor_tier="human", action_type=ActionType.TOOL_CALL, noun="channel",
                 verb="channel.inbound", status="ok",
-                detail={"channel": ch.id, "work_item": item.id, "platform": ch.platform},
+                detail={"channel": ch.id, "work_item": item.id, "platform": ch.platform,
+                        "target": item.target},
             )
         )
         return JSONResponse({"status": "ok", "work_item": item.id}, status_code=202)
@@ -325,6 +424,9 @@ def register_channel_routes(app, *, principal_dep, get_kernel) -> None:
                 {"status": "error", "reason": "external_user_id + subject + valid role required"},
                 status_code=400,
             )
+        escalated = _role_clamp(p, role)
+        if escalated is not None:
+            return escalated
         try:
             ttl = int(body.get("ttl_minutes") or PAIR_TTL_MINUTES)
         except (TypeError, ValueError):
@@ -362,6 +464,9 @@ def register_channel_routes(app, *, principal_dep, get_kernel) -> None:
                 {"status": "error", "reason": "external_user_id + subject + valid role required"},
                 status_code=400,
             )
+        escalated = _role_clamp(p, role)
+        if escalated is not None:
+            return escalated
         params = {"channel_id": channel_id, "external_user_id": external_user_id,
                   "subject": subject, "role": role}
         output, pending = await dispatch_control_route(

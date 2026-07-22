@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+import json
 from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from typing import Any
@@ -23,8 +24,48 @@ from .hitl import (
     canonical_approval_value,
     hitl_scope_fields,
 )
+from .idempotency import secret_shaped, sensitive_key
 
 AdapterProvider = Callable[[str, str], Awaitable[Adapter | None]]
+
+
+def _approval_display_value(value: Any) -> Any:
+    """Return approval context that is faithful but never a secret store."""
+    if isinstance(value, dict):
+        return {
+            str(key): (
+                "[redacted]"
+                if sensitive_key(key)
+                else _approval_display_value(item)
+            )
+            for key, item in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        return [_approval_display_value(item) for item in value]
+    return "[redacted]" if secret_shaped(value) else value
+
+
+def _approval_display_context(
+    *, verb: str, params: dict[str, Any], context: InvocationContext,
+    resource_context: Any,
+) -> str:
+    """Serialise the exact governed action for the authorised approver."""
+    payload = {
+        "version": 1,
+        "requested_by": context.actor,
+        "requested_on_behalf_of": context.on_behalf_of,
+        "verb": verb,
+        "inputs": _approval_display_value(canonical_approval_value(params)),
+    }
+    if resource_context is not None:
+        payload["resource_context"] = _approval_display_value(resource_context)
+    return json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    )
 
 
 async def _resource_context(
@@ -66,6 +107,12 @@ async def enforce_approval(
             context=context,
             resource_context=resource,
         )
+        display_context = _approval_display_context(
+            verb=verb,
+            params=params,
+            context=context,
+            resource_context=resource,
+        )
     except (TypeError, ValueError) as exc:
         raise BoltrigError("approval context is not canonical JSON") from exc
     approved_by = (
@@ -80,8 +127,8 @@ async def enforce_approval(
             tenant_id=context.tenant_id,
             run_id=context.run_id or "",
             type=HITLType.APPROVAL,
-            question=f"Approve {verb} ?",
-            context=f"{context.actor} requests {verb}",
+            question=f"Approve {verb}?",
+            context=display_context,
             options=["approve", "reject"],
             verb=verb,
             requested_by=context.actor,

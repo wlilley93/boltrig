@@ -73,7 +73,10 @@ def _install_fake_httpx(monkeypatch, payload: dict, seen: dict):
 
 
 @pytest.mark.invariant("FR-RUN-06")
-def test_build_runtime_resolves_openai():
+def test_build_runtime_resolves_openai(monkeypatch):
+    # openai is a legacy lane (decision 0012): reachable only behind the
+    # explicit rollback opt-in flag.
+    monkeypatch.setenv("BOLTRIG_ENABLE_LEGACY_RUNTIMES", "1")
     rt = build_runtime(_cap())
     assert isinstance(rt, OpenAiRuntime) and rt.runtime == "openai"
 

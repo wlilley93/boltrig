@@ -55,6 +55,12 @@ class Channel:
     # app credentials) - never plaintext, never returned to an agent.
     credential_ref: str | None = None
     # policy-as-data: allowed_chats, home_channel, dm behaviour overrides, etc.
+    # Addressing (Phase 2, routing data - never authority):
+    #   config["addressing"] = {
+    #     "default_target": "cos",              # tier-1 chief of staff (default)
+    #     "routes": {"<chat/thread id>": "<target>"},  # pin a chat to a subagent
+    #     "thread_field": "chat",               # body field holding the chat id
+    #   }
     config: dict[str, Any] = field(default_factory=dict)
     unpaired_behavior: str = "reject"  # reject | ignore | pair
     enabled: bool = True
@@ -75,6 +81,33 @@ class ChannelBinding:
     subject: UserId  # the internal Boltrig subject this sender acts as
     role: str  # the console tier the sender operates at (member | admin | superadmin)
     created_at: datetime | None = None
+
+
+@dataclass
+class ChannelOutboxMessage:
+    """A durable outbound delivery for a socket-class channel (decision 0003,
+    Phase 2). The kernel enqueues; the severed sidecar claims (leased, one
+    winner), delivers to the platform over its held connection, then acks
+    (terminal) or fails (retry with backoff, terminal after the attempt cap).
+    Tenant-scoped (RLS); the payload carries no credential - platform secrets
+    are injected into the sidecar at connect time, never stored here."""
+
+    id: str
+    tenant_id: TenantId
+    channel_id: str
+    # the send: {"text", "target", ...} - ``target`` is the thread/route key the
+    # platform adapter delivers to (a chat/thread id); it is what round-trip
+    # integrity hangs on: a notification enqueued for an intake-originated run
+    # carries the originating thread here (SEC-179).
+    payload: dict[str, Any]
+    status: str = "pending"  # pending | in_flight | delivered | failed
+    attempts: int = 0
+    lease_owner: str | None = None  # the claiming sidecar's token lease id
+    lease_expires_at: datetime | None = None
+    next_attempt_at: datetime | None = None  # retry backoff gate (None = due now)
+    last_error: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
 
 @dataclass

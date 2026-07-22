@@ -33,6 +33,7 @@ from starlette.routing import Route
 
 from boltrig.fleet.domain.model_proxy_grant import StoredModelProxyGrant
 from boltrig.fleet.infrastructure.model_proxy_tool_ceiling import (
+    MAX_MODEL_CALL_BODY_BYTES,
     ToolCallStreamGuard,
     ToolCeilingViolation,
     enforce_tool_ceiling,
@@ -170,7 +171,7 @@ class PerCellModelProxyServer:
             # The cell's tool ceiling is enforced HERE, not trusted to the
             # runtime's own config: Codex 0.144.3 cannot suppress its built-in
             # tools, and this proxy is the one point every model call traverses.
-            body = enforce_tool_ceiling(await request.body(), self._allowed_tools)
+            body = enforce_tool_ceiling(await _capped_body(request), self._allowed_tools)
         except ToolCeilingViolation:
             return JSONResponse({"error": "tool_ceiling"}, status_code=400)
         headers = {
@@ -233,6 +234,33 @@ class PerCellModelProxyServer:
 def _content_type(upstream: httpx.Response) -> str:
     raw = upstream.headers.get("content-type")
     return raw.split(";", 1)[0].strip() if raw else "application/json"
+
+
+async def _capped_body(request: Request) -> bytes:
+    """Read the request body under the hard verifiable cap.
+
+    Mirrors the codebase's body-cap idiom (BodySizeLimitMiddleware): a declared
+    over-cap Content-Length is refused up front, then the body is STREAMED and
+    counted so a chunked over-cap body is rejected as soon as it crosses the cap
+    rather than fully buffered - a hostile cell cannot memory-pressure the API
+    over loopback. The over-cap refusal is a ToolCeilingViolation: a body we
+    cannot afford to buffer is a body whose tool set we cannot verify."""
+    declared = request.headers.get("content-length")
+    if declared is not None:
+        try:  # ToolCeilingViolation subclasses ValueError: keep the raise outside.
+            declared_bytes = int(declared)
+        except ValueError as error:
+            raise ToolCeilingViolation("model-call body has a bad content-length") from error
+        if declared_bytes > MAX_MODEL_CALL_BODY_BYTES:
+            raise ToolCeilingViolation("model-call body exceeds the verifiable size cap")
+    chunks: list[bytes] = []
+    total = 0
+    async for chunk in request.stream():
+        chunks.append(chunk)
+        total += len(chunk)
+        if total > MAX_MODEL_CALL_BODY_BYTES:
+            raise ToolCeilingViolation("model-call body exceeds the verifiable size cap")
+    return b"".join(chunks)
 
 
 def _bound_port(server: uvicorn.Server) -> int:

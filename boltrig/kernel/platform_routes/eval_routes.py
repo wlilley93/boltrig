@@ -49,10 +49,17 @@ def register(app, P, K) -> None:
 
     @app.post("/v1/eval/run")
     async def run_eval(body: dict, request: Request, k=K, p=P) -> JSONResponse:
+        # Drives model spend, so it sits on the same author/admin boundary as case
+        # creation; a missing case_id is a client error, never a 500.
+        require_author(p)
+        case_id = body.get("case_id")
+        if not case_id:
+            return JSONResponse({"status": "error", "reason": "case_id is required"},
+                                status_code=400)
         runner = platform_state(request).get("eval")
         if runner is None:
             return JSONResponse({"error": "eval_unavailable"}, status_code=503)
-        case = await k.store.get_eval_case(p.tenant_id, body["case_id"])
+        case = await k.store.get_eval_case(p.tenant_id, case_id)
         if case is None:
             return JSONResponse({"error": "no_such_case"}, status_code=404)
         run = await runner.run_case(case, grants=p.grants, actor=p.subject)  # under caller grants
@@ -62,7 +69,7 @@ def register(app, P, K) -> None:
             k,
             p,
             "eval.run",
-            {"case_id": body["case_id"], "run_id": run.run_id, "passed": run.passed},
+            {"case_id": case_id, "run_id": run.run_id, "passed": run.passed},
         )
         return JSONResponse(
             {

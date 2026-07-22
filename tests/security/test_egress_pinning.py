@@ -67,7 +67,7 @@ async def test_egress_rejects_dns_rebind_between_check_and_connect(monkeypatch):
     monkeypatch.setattr(httpcore.AnyIOBackend, "connect_tcp", _spy_connect(connected))
 
     adapter = build_web_fetch_adapter({})
-    with pytest.raises(Exception):
+    with pytest.raises(_Sentinel):  # the connect spy is the only way this call fails
         await adapter.execute("web.fetch", {"url": "http://rebind.attacker.test/"}, None, _ctx())
 
     assert connected, "no connection attempt was made"
@@ -93,7 +93,7 @@ async def test_pinned_client_uses_vetted_ip_and_preserves_host(monkeypatch):
     req = client.build_request("GET", "https://good.example.com/path")
     assert req.headers["host"] == "good.example.com"
     async with client:
-        with pytest.raises(Exception):
+        with pytest.raises(_Sentinel):  # the connect spy is the only way this call fails
             await client.get("https://good.example.com/path")
     assert connected == [_PUBLIC]
 

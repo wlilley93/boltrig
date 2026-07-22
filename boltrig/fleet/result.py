@@ -7,6 +7,7 @@ uniformly. It is a frozen dataclass: a result is a fact, not mutable state.
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -69,13 +70,18 @@ class AgentResult:
         Returns ``ok=True`` so a parent tree keeps running, with ``degraded=True``
         as the first-class marker (US-FLT-07) and the degrade reason carried in
         ``output["_degraded"]`` exactly like the kernel's adapter-degrade path
-        (kept for back-compat consumers of the payload).
+        (kept for back-compat consumers of the payload). The prompt is NEVER
+        embedded verbatim - it is the full composed prompt (skill fragments +
+        task), returned to callers and persisted on work-item results - so the
+        output carries only its sha256 digest and byte length for correlation.
         """
+        prompt_bytes = prompt.encode("utf-8")
         return cls(
             ok=True,
             output={
                 "_degraded": {"runtime": runtime, "reason": reason},
-                "prompt": prompt,
+                "prompt_sha256": hashlib.sha256(prompt_bytes).hexdigest(),
+                "prompt_bytes": len(prompt_bytes),
             },
             summary=summary or f"degraded ({runtime}: {reason})",
             degraded=True,

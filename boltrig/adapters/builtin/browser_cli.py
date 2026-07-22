@@ -8,8 +8,6 @@ Arbitrary Python is intentionally not exposed as a verb.
 
 from __future__ import annotations
 
-import asyncio
-import ipaddress
 import json
 import os
 from collections.abc import Awaitable, Callable, Mapping
@@ -18,6 +16,13 @@ from typing import Any
 from urllib.parse import urlparse
 
 from boltrig.adapters.base import AdapterError, Credential, ErrorClass, Result, VerbSpec
+from boltrig.adapters.builtin.script_base import (
+    base_env,
+    json_or_text as _json_or_text,
+    run_process,
+    schema as _schema,
+)
+from boltrig.adapters.egress import EgressBlocked, assert_egress_allowed
 from boltrig.models import InvocationContext
 
 CommandRunner = Callable[
@@ -25,25 +30,9 @@ CommandRunner = Callable[
     Awaitable[tuple[int, str, str]],
 ]
 
-_MAX_OUTPUT = 128_000
 _DEFAULT_TIMEOUT = 60.0
 _DEFAULT_HOME = "/var/lib/boltrig/browser-cli"
 _PRIVATE_HOSTS = {"localhost", "localhost.localdomain"}
-_BASE_ENV_KEYS = (
-    "PATH",
-    "LANG",
-    "LC_ALL",
-    "TZ",
-    "SSL_CERT_FILE",
-    "REQUESTS_CA_BUNDLE",
-    "CURL_CA_BUNDLE",
-    "HTTP_PROXY",
-    "HTTPS_PROXY",
-    "NO_PROXY",
-    "http_proxy",
-    "https_proxy",
-    "no_proxy",
-)
 _CLOUD_POLICY_STACK = {"stack", "stack-owned", "stack_owned"}
 _CLOUD_POLICY_DISABLED = {"", "0", "false", "no", "off", "disabled", "none"}
 _STACK_CLOUD_ENV = {
@@ -52,33 +41,6 @@ _STACK_CLOUD_ENV = {
     "BOLTRIG_BROWSER_CLOUD_PROJECT_ID": ("BROWSER_USE_PROJECT_ID",),
     "BOLTRIG_BROWSER_CLOUD_TEAM_ID": ("BROWSER_USE_TEAM_ID",),
 }
-
-
-async def _terminate(proc: asyncio.subprocess.Process) -> None:
-    if proc.returncode is not None:
-        return
-    try:
-        proc.terminate()
-        await asyncio.wait_for(proc.wait(), timeout=2.0)
-    except Exception:
-        if proc.returncode is None:
-            try:
-                proc.kill()
-            except ProcessLookupError:
-                return
-            await proc.wait()
-
-
-def _schema(required: list[str] | None = None, props: dict[str, Any] | None = None) -> dict:
-    return {"type": "object", "properties": props or {}, "required": required or []}
-
-
-def _json_or_text(stdout: str) -> dict[str, Any]:
-    try:
-        data = json.loads(stdout or "{}")
-    except ValueError:
-        return {"text": stdout[:_MAX_OUTPUT]}
-    return data if isinstance(data, dict) else {"value": data}
 
 
 def _csv(value: str | None) -> tuple[str, ...]:
@@ -138,12 +100,15 @@ class BrowserCliAdapter:
             argv, stdin, env = self._command(verb, params)
         except ValueError as exc:
             return Result.failure(AdapterError(ErrorClass.INVALID, str(exc)))
-        code, stdout, stderr = await self._run(argv, stdin, env)
+        code, stdout, _stderr = await self._run(argv, stdin, env)
         if code != 0:
+            # Fixed message: child stderr is attacker-influenceable output and
+            # is never echoed into a Result (it could carry secrets or UI
+            # red herrings); only the exit code is reported.
             return Result.failure(
                 AdapterError(
                     ErrorClass.UNAVAILABLE,
-                    stderr[:500] or f"browser CLI exited {code}",
+                    f"browser CLI exited {code}",
                     retryable=True,
                 )
             )
@@ -181,40 +146,19 @@ class BrowserCliAdapter:
     ) -> tuple[int, str, str]:
         if self._runner is not None:
             return await self._runner(argv, stdin, extra_env)
-        env = _process_env(extra_env)
-        proc: asyncio.subprocess.Process | None = None
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                *argv,
-                stdin=asyncio.subprocess.PIPE if stdin is not None else None,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                env=env,
-            )
-            out_b, err_b = await asyncio.wait_for(
-                proc.communicate(stdin.encode() if stdin is not None else None),
-                self.timeout,
-            )
-        except FileNotFoundError:
-            return 127, "", "browser-use command not found"
-        except TimeoutError:
-            if proc is not None:
-                await _terminate(proc)
-            return 124, "", "browser-use command timed out"
-        return (
-            int(proc.returncode or 0),
-            out_b.decode("utf-8", errors="replace")[:_MAX_OUTPUT],
-            err_b.decode("utf-8", errors="replace")[:_MAX_OUTPUT],
+        return await run_process(
+            argv,
+            stdin=stdin,
+            env=_process_env(extra_env),
+            timeout=self.timeout,
+            missing="browser-use command not found",
+            timed_out="browser-use command timed out",
         )
 
 
 def _process_env(extra_env: dict[str, str]) -> dict[str, str]:
     root = Path(os.environ.get("BOLTRIG_BROWSER_CLI_HOME") or _DEFAULT_HOME)
-    env = {
-        key: os.environ[key]
-        for key in _BASE_ENV_KEYS
-        if os.environ.get(key)
-    } | {
+    env = base_env() | {
         "HOME": str(root / "home"),
         "XDG_CONFIG_HOME": str(root / "config"),
         "XDG_DATA_HOME": str(root / "data"),
@@ -277,11 +221,13 @@ def _validate_url(raw: str, allowed_domains: tuple[str, ...]) -> str:
     if host in _PRIVATE_HOSTS or host.endswith(".localhost"):
         raise ValueError("localhost browser navigation is not allowed")
     try:
-        ip = ipaddress.ip_address(host)
-    except ValueError:
-        ip = None
-    if ip is not None and (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved):
-        raise ValueError("private network browser navigation is not allowed")
+        # The shared egress guard (INJ-02/SEC-61): refuses unspecified /
+        # multicast / link-local / reserved literal IPs AND any hostname that
+        # resolves to internal space - a hand-rolled literal-IP check misses
+        # both (e.g. http://0.0.0.0/).
+        assert_egress_allowed(raw)
+    except EgressBlocked as exc:
+        raise ValueError(str(exc)) from exc
     if allowed_domains and not any(host == domain or host.endswith(f".{domain}") for domain in allowed_domains):
         raise ValueError("domain is not allowed for browser navigation")
     return raw

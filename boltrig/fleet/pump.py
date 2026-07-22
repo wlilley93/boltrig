@@ -22,6 +22,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 import uuid
 from typing import TYPE_CHECKING, Any
 
@@ -64,6 +65,21 @@ DEFAULT_SPAWN_BUDGET = 32
 # from (Phase 3, US-WFL-03): today the pump learns from any outcome that already
 # carries a GENERATED definition (proven by the wiring test).
 GENERATED_WORKFLOW_KEY = "generated_workflow"
+
+# Transport-layer errors (httpx, asyncpg) can embed request URLs / DSNs - internal
+# hosts, credentials - in str(exc), and a FAILED item's result is caller-visible.
+_URL_RE = re.compile(r"\b[A-Za-z][A-Za-z0-9+.-]*://\S*")
+_MAX_ERROR_DETAIL = 200
+
+
+def _error_detail(exc: Exception) -> str:
+    """A bounded, infrastructure-free error note for a FAILED item's result.
+
+    URLs are redacted and the note truncated, mirroring the codex infra's posture
+    of carrying only type names across a trust boundary (the type name itself is
+    always kept separately in ``error``)."""
+
+    return _URL_RE.sub("[url]", str(exc))[:_MAX_ERROR_DETAIL]
 
 
 def outcome_score(terminal_status: str, degraded: bool) -> dict[str, Any]:
@@ -304,6 +320,7 @@ class WorkPump:
             output={"spawned": outcome.get("spawned", 0), "degraded": item.degraded},
         )
         await self._reflect(item, run_id, WorkStatus.DONE.value)
+        await self._notify_terminal(item)
         return item
 
     async def requeue(self, tenant_id: str, item_id: str) -> WorkItem | None:
@@ -346,6 +363,14 @@ class WorkPump:
         retry: the next claim picks the item up and counts again.
         """
         run_id = item.hatchet_run_id or item.id
+        # If a cancel landed - whether or not handle_claimed_item's finally already
+        # settled it - the cancel wins over the failure record: a PENDING/FAILED
+        # write here would resurrect a run that was durably CANCELLED (or leave a
+        # just-cancelled item with no terminal state at all). ``_cancel`` is
+        # idempotent, so re-running it never double-writes ([2026] VJS-COUNTY 6, D1/D4).
+        if await self._store.is_run_cancel_requested(item.tenant_id, run_id):
+            await self._cancel(item, run_id)
+            return
         will_retry = item.attempts < self.max_attempts
         if will_retry:
             item.status = WorkStatus.PENDING
@@ -355,7 +380,7 @@ class WorkPump:
             item.status = WorkStatus.FAILED
             item.result = {
                 "error": type(exc).__name__,
-                "detail": str(exc),
+                "detail": _error_detail(exc),
                 "attempts": item.attempts,
             }
             self._stamp_outcome(item, WorkStatus.FAILED.value)
@@ -366,6 +391,7 @@ class WorkPump:
         )
         if not will_retry:  # reflect only on the terminal failure, not each retry
             await self._reflect(item, run_id, WorkStatus.FAILED.value)
+            await self._notify_terminal(item)
 
     async def _context_for(self, item: WorkItem, run_id: str) -> InvocationContext:
         """The item's execution context, capped to the requesting principal (SEC-164)."""
@@ -426,6 +452,19 @@ class WorkPump:
             )
         )
         await self._reflect(item, run_id, WorkStatus.CANCELLED.value)
+        await self._notify_terminal(item)
+
+    async def _notify_terminal(self, item: WorkItem) -> None:
+        """Notify a channel-originated item's human of its terminal state (SEC-179).
+
+        Best-effort (P9): a notifier fault never changes the item's outcome. No-op
+        for items without a human origin or a reply route (non-channel sources)."""
+        try:
+            from boltrig.kernel.channel_notify import notify_work_item_result
+
+            await notify_work_item_result(self._store, item)
+        except Exception:
+            log.warning("terminal notify failed for item %s", item.id, exc_info=True)
 
     # --- learning loop (Phase 3, US-WFL-03/06/07) ---------------------------------
     def _stamp_outcome(self, item: WorkItem, terminal_status: str) -> None:
@@ -496,6 +535,7 @@ def build_org(
     executor: Any = None,
     max_attempts: int = DEFAULT_MAX_ATTEMPTS,
     lease_seconds: int = DEFAULT_LEASE_SECONDS,
+    codex_execution: CodexExecutionStack | None = None,
 ) -> WorkPump:
     """Build the live org (CoS + heads + pump) from the manifest hierarchy (P7).
 
@@ -504,6 +544,8 @@ def build_org(
     ``supported_skills`` patterns describe capabilities, not loadable skill ids, so only
     concrete entries become the head's ``domain_skills``. No hierarchy (or no manifest)
     degrades to a minimal default org - one CoS over one general head - never a crash (P9).
+    ``codex_execution`` is the Codex shadow root admission stack (SEC-172), built by
+    the api composition root; None (the default) means off, no admit.
     """
     departments: list[Department] = []
     heads: dict[str, Any] = {}
@@ -529,11 +571,8 @@ def build_org(
             spawner=spawner, store=kernel.store,
         )
     chief = ChiefOfStaff(kernel, departments)
-    # Codex shadow root admission (SEC-172) at the construction site: off => None => no admit.
-    from boltrig.api.codex_execution import build_codex_execution_stack
-    from boltrig.config import load_settings
     return WorkPump(
         kernel, spawner, chief, heads, executor,
         max_attempts=max_attempts, lease_seconds=lease_seconds,
-        codex_execution=build_codex_execution_stack(load_settings(), kernel.store),
+        codex_execution=codex_execution,
     )

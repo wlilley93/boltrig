@@ -16,6 +16,7 @@ wrapped into a minimal ADF document by :func:`_adf`.
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -218,7 +219,7 @@ class JiraAdapter(HttpAdapter):
     async def _ticket_read(
         self, params: dict[str, Any], client: httpx.AsyncClient, context: InvocationContext
     ) -> Result:
-        url = f"{_API}/issue/{params['key']}"
+        url = f"{_API}/issue/{quote(str(params['key']), safe='')}"
         query: dict[str, Any] = {}
         fields = params.get("fields")
         if fields:
@@ -240,7 +241,7 @@ class JiraAdapter(HttpAdapter):
     async def _ticket_update(
         self, params: dict[str, Any], client: httpx.AsyncClient, context: InvocationContext
     ) -> Result:
-        url = f"{_API}/issue/{params['key']}"
+        url = f"{_API}/issue/{quote(str(params['key']), safe='')}"
         fields: dict[str, Any] = dict(params.get("fields") or {})
         if params.get("summary"):
             fields["summary"] = params["summary"]
@@ -280,7 +281,7 @@ class JiraAdapter(HttpAdapter):
     async def _ticket_comment(
         self, params: dict[str, Any], client: httpx.AsyncClient, context: InvocationContext
     ) -> Result:
-        url = f"{_API}/issue/{params['key']}/comment"
+        url = f"{_API}/issue/{quote(str(params['key']), safe='')}/comment"
         data = await self.request(
             client, "POST", url, json={"body": _adf(params["body"])}, expected=(201,)
         )

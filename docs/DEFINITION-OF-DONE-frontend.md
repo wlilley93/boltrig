@@ -25,7 +25,7 @@ architecture is:
 | **Home** | A scoped operational pulse over runtime/component status, recent runs, work in flight, pending decisions, cost/budget pressure, degraded activity, and recent model routing. Every summary links to its owning surface. |
 | **Chat** | Persistent scoped conversations with structured streaming, tool and sub-agent activity, inline questions/HITL, stop/reconnect behavior, and conversation management. Structured events are rendered as events, not rewritten as fictional prose. |
 | **Runs** | Search/filter over visible work-backed runs plus a global deep-linked inspector for summary, live timeline, execution tree, tools, approvals when present, and bounded audit context. Out-of-scope and unknown ids are indistinguishable. |
-| **Build** | Agents, Workflows, Registry, Integrations/Studio, Memory, and Evaluations. Authoring uses caller-scoped discovery and real contracts. Unsupported workflow/code capabilities are not advertised. |
+| **Build** | Agents, Workflows, Registry, Integrations/Studio, Knowledge, Memory, and Evaluations. Authoring uses caller-scoped discovery and real contracts. Unsupported workflow/code capabilities are not advertised. |
 | **Operate** | Hierarchical Work queue, explicit Approvals/requests, Audit & costs, deep Health/readiness, Channels, and Admin. Role gating improves navigation; the server remains authoritative. |
 
 Settings is a utility page outside the five operating zones. The global
@@ -81,6 +81,7 @@ The browser-console slice is implementation-complete only when all of these are 
 | Registry/router | Caller-scoped noun/verb/binding view and server noun filtering | Role/scope and filter regression coverage |
 | Workflows | Real workflow list/stats/runs, safe node taxonomy, governed publish/schedule/trigger paths, truthful Chat handoff | Draft/publish/run, destructive confirm, and live-run scenarios |
 | Integrations/Studio | Skills, router authoring, adapter source/review/activation, bounded MCP registration, workflow authoring | Two-person adapter activation and no-credential-browser-payload scenarios |
+| Knowledge | Text/Markdown/PDF originals, immutable citations, search, governed provider state, reference-safe erasure | Scope, citation, MCP-resource, degradation, and erasure regression coverage |
 | Memory | Browse/remember/forget/erase with structured provenance and arm/confirm | Scope/provenance/erasure regression coverage |
 | Audit & costs | Scoped audit search, attributable spend/budgets, run links, bounded details | Filter/export/budget boundary and forbidden-state scenarios |
 | Health/Admin/Channels | Readiness and dependency posture plus role-gated governed administration | Fail-closed readiness and role/scope browser scenarios |

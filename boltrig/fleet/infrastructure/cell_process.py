@@ -27,10 +27,9 @@ is gone, which is what the transport actually branches on. Reporting a fabricate
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 import signal
-import socket
+from collections.abc import Callable
 
 from boltrig.fleet.infrastructure.codex_stdio_transport import CodexStdin
 from boltrig.fleet.infrastructure.cell_spawner import (
@@ -44,7 +43,7 @@ _EXITED = -1
 class SpawnedCellProcess:
     """A ``ManagedCodexProcess`` over a cell the privileged spawner created."""
 
-    __slots__ = ("_closed", "_pidfd", "_returncode", "_sock", "pid", "stderr", "stdin", "stdout")
+    __slots__ = ("_closed", "_pidfd", "_returncode", "_signaller", "pid", "stderr", "stdin", "stdout")
 
     # Declared with the protocol's own optional types rather than the narrower
     # concrete ones. ManagedCodexProcess attributes are invariant, so a stricter
@@ -62,14 +61,14 @@ class SpawnedCellProcess:
         stdin: asyncio.StreamWriter,
         stdout: asyncio.StreamReader,
         stderr: asyncio.StreamReader,
-        spawner: socket.socket,
+        signaller: Callable[[int, signal.Signals], None],
         pidfd: int,
     ) -> None:
         self.pid = pid
         self.stdin = stdin
         self.stdout = stdout
         self.stderr = stderr
-        self._sock = spawner
+        self._signaller = signaller
         self._pidfd = pidfd
         self._returncode: int | None = None
         self._closed = False
@@ -86,7 +85,12 @@ class SpawnedCellProcess:
         return self._returncode
 
     async def wait(self) -> int:
-        """Block until the cell exits, using the pidfd rather than the spawner."""
+        """Block until the cell exits, using the pidfd rather than the spawner.
+
+        Once exit is observed the pidfd has served its only purpose, so it is
+        closed here: the lane's teardown paths all converge on ``wait`` and a
+        handle nobody closes otherwise leaks one fd per adopted cell.
+        """
 
         if self._returncode is not None:
             return self._returncode
@@ -98,6 +102,7 @@ class SpawnedCellProcess:
         finally:
             loop.remove_reader(self._pidfd)
         self._returncode = _EXITED
+        self.close()
         return _EXITED
 
     def terminate(self) -> None:
@@ -109,19 +114,16 @@ class SpawnedCellProcess:
     def _signal(self, number: signal.Signals) -> None:
         """Ask the spawner to signal the cell; the API cannot do it itself.
 
-        Fail-quiet on a dead socket or an already-exited cell. A supervisor
-        tearing a cell down is usually already handling a failure, and raising
-        here would replace the real error with a secondary one.
+        The request goes through the lane's signaller, which serialises it with
+        provision/spawn under the lane lock and drains the spawner's
+        ``{'signalled': pid}`` reply - an unread reply would be consumed as the
+        answer to the NEXT lane request and desync the protocol, and an
+        unlocked send could interleave with an in-flight spawn's bytes.
         """
 
         if self._closed or number not in ALLOWED_SIGNALS:
             return
-        try:
-            self._sock.sendmsg(
-                [json.dumps({"verb": "signal", "pid": self.pid, "signal": int(number)}).encode()]
-            )
-        except OSError:
-            pass
+        self._signaller(self.pid, number)
 
     def close(self) -> None:
         if self._closed:
@@ -139,7 +141,7 @@ def _resolve(waiter: asyncio.Future[None]) -> None:
 
 
 async def adopt_spawned_cell(
-    *, pid: int, stdio: tuple[int, int, int], spawner: socket.socket
+    *, pid: int, stdio: tuple[int, int, int], signaller: Callable[[int, signal.Signals], None]
 ) -> SpawnedCellProcess:
     """Wrap a spawner-created cell in the process surface the supervisor expects.
 
@@ -165,7 +167,7 @@ async def adopt_spawned_cell(
         stdin=writer,
         stdout=await _reader(loop, stdio[1]),
         stderr=await _reader(loop, stdio[2]),
-        spawner=spawner,
+        signaller=signaller,
         pidfd=pidfd,
     )
 

@@ -44,8 +44,8 @@ class RuntimeResolver:
         self._kernel = kernel
         self._sensitive_endpoint_id = sensitive_endpoint_id
         # Trusted read-only Codex provider config, injected from the api composition
-        # root ([2026] VJS-CC-VJS 2). None (the default) => the codex runtime degrades
-        # to ScriptRuntime exactly as before (off by default = total no-op).
+        # root ([2026] VJS-CC-VJS 2). None (the default) => the codex runtime is a
+        # degrade-marked unavailable lane (off by default = total no-op).
         self._codex = codex_config
         self._pi = {
             "sidecar_url": os.environ.get("BOLTRIG_PI_SIDECAR_URL") or None,
@@ -200,7 +200,7 @@ class RuntimeResolver:
         provider-routing target: an ai_config ``runtime_override == "codex"`` must
         never select it, so (unlike the opencode/rivet lanes) this never triggers on
         the override. None when the capability is not a codex runtime, or when no
-        provider was injected (off by default = no-op -> ScriptRuntime).
+        provider was injected (off by default = no-op -> unavailable lane).
         """
         if capability.runtime != "codex":
             return None
