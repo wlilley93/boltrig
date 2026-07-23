@@ -14,6 +14,12 @@ tools"). That assertion was unenforced on the wire; this module makes it true.
 The per-cell loopback proxy is the only point both sides must traverse, so the
 ceiling is applied there rather than trusted to the runtime's own config.
 
+The ceiling is a SET, not a flag: the kernel-tools lane
+(``codex_kernel_tools_phase``) compiles the run's granted verbs into exact
+Codex wire names (``mcp__boltrig__*``) at admission, and the same enforcement
+then offers exactly those tools and no more - built-ins stay stripped either
+way, and a boltrig verb outside the run's grants is stripped like any other.
+
 Fail-closed: a body we cannot parse is a body whose tool set we cannot verify, so
 it is rejected rather than forwarded.
 """

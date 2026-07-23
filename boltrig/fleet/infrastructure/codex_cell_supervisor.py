@@ -27,6 +27,7 @@ from .codex_cell_policy import (
     normalized_absolute_path,
     sanitized_environment,
     validate_cell_layout,
+    validated_environment_additions,
     verify_pinned_binary,
 )
 from .codex_stdio_transport import (
@@ -235,6 +236,7 @@ class CodexCellSupervisor:
         arguments: tuple[str, ...],
         slot: CellSlot | None = None,
         on_spawned: OnCellSpawned | None = None,
+        environment_additions: dict[str, str] | None = None,
     ) -> InitializedCodexCell:
         # Under per-cell uids the cell tree is owned by the cell uid (2000N) in its
         # slot, which the API cannot traverse; those ownership checks were performed
@@ -248,6 +250,14 @@ class CodexCellSupervisor:
         # unpinned App Server, and an argv minted for another cell is refused here
         # rather than discovered when the helper fetches the wrong bearer.
         pinned = validate_app_server_arguments(arguments, cell_id=admitted.cell_id)
+        # Validated up front, before anything is provisioned: the kernel-tools
+        # lane's ONLY addition is the run-scoped MCP bearer env var; anything
+        # else fails closed here rather than reaching execve.
+        additions = (
+            None
+            if environment_additions is None
+            else validated_environment_additions(environment_additions)
+        )
         await self._attest_workspace(admitted, per_cell=per_cell)
         await self._claim(admitted.phase_id, admitted.cell_id)
         process: ManagedCodexProcess | None = None
@@ -257,7 +267,7 @@ class CodexCellSupervisor:
             if self._binary_path.is_relative_to(admitted.cell_root):
                 raise CodexCellPolicyError("Codex binary must be outside the mutable cell root")
             binary = await self._verify_binary()
-            process = await self._spawn(binary, admitted, pinned, slot)
+            process = await self._spawn(binary, admitted, pinned, slot, additions)
             if on_spawned is not None:
                 # Earliest instant the pid exists; every failure below reaps it.
                 await asyncio.wait_for(on_spawned(process.pid), self._startup_timeout)
@@ -350,8 +360,13 @@ class CodexCellSupervisor:
         layout: CodexCellLayout,
         arguments: tuple[str, ...],
         slot: CellSlot | None = None,
+        environment_additions: dict[str, str] | None = None,
     ) -> ManagedCodexProcess:
         environment = sanitized_environment(layout, self._auth)
+        if environment_additions is not None:
+            # Re-validated at merge time: the base keys always win on a collision
+            # (the validator already refuses one), and the base is never mutated.
+            environment = {**environment, **validated_environment_additions(environment_additions)}
         try:
             if self._cell_lane is not None:  # J1: per-cell uid, via the spawner
                 if slot is None:

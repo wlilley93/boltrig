@@ -12,10 +12,12 @@ from boltrig.fleet.domain.skill_attestation import SkillAttestationPlan
 
 from . import codex_protocol as wire
 from .codex_app_server import CodexAppServerClient
+from .codex_kernel_tools_phase import codex_mcp_wire_name
 from .codex_runtime_admission import (
     CodexRuntimeAdmissionError,
     QuarantinedCodexPreflightReceipt,
 )
+from .codex_runtime_config_toml import CODEX_MCP_SERVER_NAME
 from .skill_discovery import attest_skills_list, force_reload_params
 
 MCP_STATUS_PAGE_LIMIT = 128
@@ -23,6 +25,14 @@ DEFAULT_PREFLIGHT_TOTAL_TIMEOUT_SECONDS = 10.0
 MAX_PREFLIGHT_TOTAL_TIMEOUT_SECONDS = 30.0
 _SKILL_REQUIRED_KEYS = frozenset({"description", "enabled", "name", "path", "scope"})
 _SKILL_OPTIONAL_KEYS = frozenset({"dependencies", "interface", "shortDescription"})
+_MCP_SERVER_REQUIRED_KEYS = frozenset(
+    {"authStatus", "name", "resourceTemplates", "resources", "tools"}
+)
+_MCP_SERVER_OPTIONAL_KEYS = frozenset({"serverInfo"})
+_MCP_TOOL_REQUIRED_KEYS = frozenset({"inputSchema", "name"})
+_MCP_TOOL_OPTIONAL_KEYS = frozenset(
+    {"_meta", "annotations", "description", "icons", "outputSchema", "title"}
+)
 
 
 class QuarantinedCodexPreflightProbe:
@@ -157,6 +167,104 @@ def _attest_empty_mcp_inventory(payload: dict[str, object]) -> None:
         raise CodexRuntimeAdmissionError("Codex MCP inventory is not empty")
 
 
+def _attest_kernel_tools_mcp_inventory(
+    payload: dict[str, object], expected_tools: frozenset[str]
+) -> None:
+    """The kernel-tools lane's inventory is EXACTLY the kernel's own face.
+
+    One server, named ``boltrig``, bearer-token auth (the run-scoped token the
+    config names by env var), no resources, and every advertised tool within
+    the admitted wire-name ceiling (mapped through the same
+    ``codex_mcp_wire_name`` the ceiling was compiled with). Anything else - a
+    second server, a missing one, another auth shape, a tool outside the
+    ceiling - fails closed.
+    """
+
+    root = _exact_keys(payload, frozenset({"data"}), frozenset({"nextCursor"}))
+    data = _exact_list(root["data"])
+    if len(data) != 1 or root.get("nextCursor") is not None:
+        raise CodexRuntimeAdmissionError("Codex kernel-tools MCP inventory is not exact")
+    server = _exact_keys(data[0], _MCP_SERVER_REQUIRED_KEYS, _MCP_SERVER_OPTIONAL_KEYS)
+    if server["name"] != CODEX_MCP_SERVER_NAME or server["authStatus"] != "bearerToken":
+        raise CodexRuntimeAdmissionError("Codex kernel-tools MCP server is not the kernel face")
+    if _exact_list(server["resources"]) or _exact_list(server["resourceTemplates"]):
+        raise CodexRuntimeAdmissionError("Codex kernel-tools MCP server advertises resources")
+    tools = server["tools"]
+    if type(tools) is not dict:
+        raise CodexRuntimeAdmissionError("Codex kernel-tools MCP tools are malformed")
+    for tool_name, tool in tools.items():
+        if type(tool_name) is not str or codex_mcp_wire_name(tool_name) not in expected_tools:
+            raise CodexRuntimeAdmissionError("Codex MCP tool is outside the admitted ceiling")
+        _exact_keys(tool, _MCP_TOOL_REQUIRED_KEYS, _MCP_TOOL_OPTIONAL_KEYS)
+
+
+class KernelToolsCodexPreflightProbe:
+    """The kernel-tools lane's quarantined probes (skills, hooks, ONE MCP face).
+
+    Identical in shape to :class:`QuarantinedCodexPreflightProbe` except the
+    MCP inventory attestation: the lane's one declared server must be present
+    and exact. The receipt records ``observed_mcp_server_count=1``;
+    ``AdmittedCodexCell`` binds that count to the admission's lane.
+    """
+
+    def __init__(
+        self,
+        expected_tools: tuple[str, ...],
+        *,
+        total_timeout_seconds: float = DEFAULT_PREFLIGHT_TOTAL_TIMEOUT_SECONDS,
+    ) -> None:
+        if type(expected_tools) is not tuple or any(
+            type(item) is not str for item in expected_tools
+        ):
+            raise TypeError("expected kernel tools must be an exact tuple of strings")
+        self._expected_tools = frozenset(expected_tools)
+        if type(total_timeout_seconds) not in {int, float}:
+            raise TypeError("preflight timeout must be a finite positive number")
+        timeout = float(total_timeout_seconds)
+        if not math.isfinite(timeout) or not 0 < timeout <= MAX_PREFLIGHT_TOTAL_TIMEOUT_SECONDS:
+            raise ValueError("preflight timeout is outside its bounded range")
+        self._total_timeout = timeout
+
+    async def probe(
+        self,
+        client: CodexAppServerClient,
+        plan: SkillAttestationPlan,
+    ) -> QuarantinedCodexPreflightReceipt:
+        if type(client) is not CodexAppServerClient:
+            raise TypeError("client must be an exact CodexAppServerClient")
+        if type(plan) is not SkillAttestationPlan:
+            raise TypeError("plan must be an exact SkillAttestationPlan")
+        try:
+            async with asyncio.timeout(self._total_timeout):
+                _require_ready(client)
+                skill_payload = await _call(client, "skills/list", force_reload_params(plan))
+                _validate_skills_shape(skill_payload)
+                skill_attestation = await asyncio.to_thread(
+                    attest_skills_list,
+                    skill_payload,
+                    plan,
+                )
+                mcp_payload = await _call(
+                    client,
+                    "mcpServerStatus/list",
+                    {"detail": "toolsAndAuthOnly", "limit": MCP_STATUS_PAGE_LIMIT},
+                )
+                _attest_kernel_tools_mcp_inventory(mcp_payload, self._expected_tools)
+                hook_payload = await _call(
+                    client,
+                    "hooks/list",
+                    {"cwds": [plan.workspace_path]},
+                )
+                _attest_empty_hooks(hook_payload, plan.workspace_path)
+                await _attest_no_queued_notifications(client)
+                _require_ready(client)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            raise CodexRuntimeAdmissionError("Codex quarantined preflight failed") from None
+        return QuarantinedCodexPreflightReceipt(skill_attestation, observed_mcp_server_count=1)
+
+
 def _attest_empty_hooks(payload: dict[str, object], workspace: str) -> None:
     root = _exact_keys(payload, frozenset({"data"}))
     data = _exact_list(root["data"])
@@ -210,6 +318,7 @@ async def _attest_no_queued_notifications(client: CodexAppServerClient) -> None:
 
 __all__ = [
     "DEFAULT_PREFLIGHT_TOTAL_TIMEOUT_SECONDS",
+    "KernelToolsCodexPreflightProbe",
     "MAX_PREFLIGHT_TOTAL_TIMEOUT_SECONDS",
     "MCP_STATUS_PAGE_LIMIT",
     "QuarantinedCodexPreflightProbe",

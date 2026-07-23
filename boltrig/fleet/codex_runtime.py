@@ -21,7 +21,8 @@ from __future__ import annotations
 import contextlib
 import logging
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol
 
 from pathlib import Path
@@ -37,14 +38,66 @@ from boltrig.fleet.domain import (
     RuntimeThreadRef,
     RuntimeTurnRef,
 )
+from boltrig.fleet.infrastructure.codex_kernel_tool_scope import (
+    CodexKernelToolScope,
+    CodexKernelToolScopeRegistry,
+)
+from boltrig.fleet.infrastructure.codex_kernel_tools_phase import (
+    codex_mcp_wire_name,
+    kernel_tools_thread_spec,
+    validated_kernel_tool_names,
+)
 from boltrig.fleet.infrastructure.codex_read_only_phase import read_only_thread_spec
+from boltrig.fleet.infrastructure.codex_runtime_config_policy import (
+    CodexRuntimeConfigError,
+    validate_mcp_server_url,
+)
 from boltrig.fleet.ports.runtime import RuntimeThreadSpec, RuntimeTurnSpec
-from boltrig.models import InvocationContext
+from boltrig.models import GrantSet, InvocationContext
 from boltrig.models.execution_scope import OrganisationUserRef
 
 from .result import AgentResult
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_KERNEL_TOOLS_TOKEN_TTL_SECONDS = 3600
+
+# issue_token(tenant_id, grants, *, run_id, actor, skills, ...) -> token (the
+# same McpFace.issue_run_token seam pi/opencode/rivet mint from, SEC-23).
+TokenIssuer = Callable[..., str]
+# compile_tool_ceiling(tenant_id, grants) -> the run's effective verb ids
+# (tenant ceiling ∩ run grants - exactly the kernel MCP tools/list derivation,
+# FR-MCP-02). Injected at the composition seam; the runtime holds no store.
+ToolCeilingCompiler = Callable[[str, GrantSet], Awaitable[tuple[str, ...]]]
+
+
+@dataclass(frozen=True, repr=False, slots=True)
+class CodexKernelToolWiring:
+    """The kernel-tools lane's injected seams; carries NO secret material."""
+
+    issue_token: TokenIssuer
+    revoke_token: Callable[[str], None]
+    compile_tool_ceiling: ToolCeilingCompiler
+    mcp_url: str
+    registry: CodexKernelToolScopeRegistry
+    ttl_seconds: int = DEFAULT_KERNEL_TOOLS_TOKEN_TTL_SECONDS
+
+    def __post_init__(self) -> None:
+        if not callable(self.issue_token) or not callable(self.revoke_token):
+            raise TypeError("kernel tool wiring token callables are required")
+        if not callable(self.compile_tool_ceiling):
+            raise TypeError("kernel tool wiring requires a tool ceiling compiler")
+        try:
+            validate_mcp_server_url(self.mcp_url)
+        except CodexRuntimeConfigError as error:
+            raise ValueError(str(error)) from None
+        if type(self.registry) is not CodexKernelToolScopeRegistry:
+            raise TypeError("registry must be an exact CodexKernelToolScopeRegistry")
+        if type(self.ttl_seconds) is not int or not 1 <= self.ttl_seconds <= 3600:
+            raise ValueError("kernel tool token TTL must be between 1 and 3600 seconds")
+
+    def __repr__(self) -> str:
+        return "CodexKernelToolWiring(redacted=True)"
 
 
 class CodexPhaseLifecycle(Protocol):
@@ -74,10 +127,14 @@ class CodexRuntime:
         *,
         stack_root: Path,
         cost_tier: str = "standard",
+        kernel_tools: CodexKernelToolWiring | None = None,
     ) -> None:
+        if kernel_tools is not None and type(kernel_tools) is not CodexKernelToolWiring:
+            raise TypeError("kernel_tools must be an exact CodexKernelToolWiring")
         self._lifecycle = lifecycle
         self._stack_root = stack_root
         self.cost_tier = cost_tier
+        self._kernel_tools = kernel_tools
 
     async def run(
         self, prompt: str, context: InvocationContext, *, tools: list[str]
@@ -90,9 +147,73 @@ class CodexRuntime:
             return AgentResult.degrade(
                 runtime=self.runtime, reason="no_read_only_phase_scope", prompt=prompt
             )
-        spec = read_only_thread_spec(
-            _mint_assignment(context, run_id, workspace_id), self._stack_root
+        assignment = _mint_assignment(context, run_id, workspace_id)
+        if self._kernel_tools is not None:
+            return await self._run_kernel_tools(prompt, context, assignment)
+        return await self._run_phase(
+            prompt, read_only_thread_spec(assignment, self._stack_root)
         )
+
+    async def _run_kernel_tools(
+        self, prompt: str, context: InvocationContext, assignment: PhaseAssignmentRef
+    ) -> AgentResult:
+        """The tool-enabled lane: the cell's only tools are the kernel's MCP face.
+
+        Mints a run-scoped kernel MCP token scoped to EXACTLY this run's grants
+        (the pi idiom), compiles the run's effective tool set as Codex wire
+        names, and registers both for the provider to consume at provisioning.
+        The token is revoked and the scope discarded in ``finally``, whether the
+        phase ran, failed, or never started.
+        """
+
+        wiring = self._kernel_tools
+        assert wiring is not None
+        token: str | None = None
+        try:
+            verb_ids = await wiring.compile_tool_ceiling(context.tenant_id, context.grants)
+            tools = validated_kernel_tool_names(
+                tuple({codex_mcp_wire_name(verb_id) for verb_id in verb_ids})
+            )
+            token = wiring.issue_token(
+                context.tenant_id,
+                context.grants,
+                run_id=context.run_id,
+                actor=context.actor,
+                skills=context.skills_loaded,
+                workspace_id=context.workspace_id,
+                on_behalf_of=context.on_behalf_of,
+                extra=dict(context.extra),
+                ttl_seconds=wiring.ttl_seconds,
+            )
+            wiring.registry.register(
+                CodexKernelToolScope(
+                    assignment_id=assignment.assignment_id,
+                    mcp_url=wiring.mcp_url,
+                    tools=tools,
+                    token=token,
+                )
+            )
+            return await self._run_phase(
+                prompt, kernel_tools_thread_spec(assignment, self._stack_root)
+            )
+        except Exception as error:
+            # Same contract as the read-only lane: degrade, never raise into the
+            # caller, and carry only a cause tag - never token material.
+            logger.exception(
+                "codex kernel-tools turn failed for run %s", context.run_id
+            )
+            return AgentResult.degrade(
+                runtime=self.runtime,
+                reason=f"codex_turn_failed:{type(error).__name__}",
+                prompt=prompt,
+            )
+        finally:
+            wiring.registry.discard(assignment.assignment_id)
+            if token is not None:
+                with contextlib.suppress(Exception):
+                    wiring.revoke_token(token)
+
+    async def _run_phase(self, prompt: str, spec: RuntimeThreadSpec) -> AgentResult:
         text = ""
         thread: RuntimeThreadRef | None = None
         try:
@@ -108,7 +229,9 @@ class CodexRuntime:
             # A degrade must never swallow the cause: a silent codex_turn_failed is
             # unactionable in ops. Log the full traceback and carry a short cause
             # tag in the reason so the failure is visible on the wire and in logs.
-            logger.exception("codex read-only turn failed for run %s", run_id)
+            logger.exception(
+                "codex read-only turn failed for run %s", spec.assignment.phase.root_run_id
+            )
             cause = type(error).__name__
             return AgentResult.degrade(
                 runtime=self.runtime,
@@ -140,6 +263,12 @@ def build_trusted_codex_runtime(
     left False (D4). Anything short of trusted+wired is an unavailable lane and
     degrades to ``UnavailableRuntime`` - degrade-marked, never a script echo
     presented upstream as a real Codex answer (US-FLT-07, decision 0012).
+
+    The kernel-tools lane (``kernel_tools`` marker set by the resolver for a
+    ``runtime: codex`` capability with ``supported_skills: '*'``) additionally
+    requires the run-scoped-token + tool-ceiling seams; a capability that asks
+    for tool use without the full wiring is an unavailable lane, never a silent
+    downgrade to read-only reasoning (US-FLT-07).
     """
     from .runtime import UnavailableRuntime
 
@@ -150,12 +279,31 @@ def build_trusted_codex_runtime(
         return UnavailableRuntime(requested="codex", cost_tier=cost_tier or "cheap")
     from boltrig.fleet.codex_trusted_wall import require_codex_trusted_posture
     from boltrig.fleet.infrastructure.codex_agent_runtime import CodexAgentRuntime
+    from boltrig.fleet.infrastructure.codex_trusted_proxy_provider import (
+        TrustedProxyCodexPhaseCellProvider,
+    )
 
     require_codex_trusted_posture()
+    kernel_tools: CodexKernelToolWiring | None = None
+    if cfg.get("kernel_tools"):
+        if type(provider) is not TrustedProxyCodexPhaseCellProvider:
+            return UnavailableRuntime(requested="codex", cost_tier=cost_tier or "cheap")
+        try:
+            kernel_tools = CodexKernelToolWiring(
+                issue_token=cfg.get("issue_token"),
+                revoke_token=cfg.get("revoke_token"),
+                compile_tool_ceiling=cfg.get("compile_tool_ceiling"),
+                mcp_url=cfg.get("mcp_url"),
+                registry=provider.kernel_tool_scopes,
+                ttl_seconds=int(cfg.get("mcp_token_ttl_seconds") or DEFAULT_KERNEL_TOOLS_TOKEN_TTL_SECONDS),
+            )
+        except (TypeError, ValueError):
+            return UnavailableRuntime(requested="codex", cost_tier=cost_tier or "cheap")
     return CodexRuntime(
         CodexAgentRuntime(provider, allow_test_only_runtime=True),
         stack_root=stack_root,
         cost_tier=cost_tier or "standard",
+        kernel_tools=kernel_tools,
     )
 
 
@@ -190,4 +338,10 @@ def _mint_assignment(
     return PhaseAssignmentRef(phase=phase, assignment_id=f"{run_id}-codex-assignment")
 
 
-__all__ = ["CodexPhaseLifecycle", "CodexRuntime", "build_trusted_codex_runtime"]
+__all__ = [
+    "CodexKernelToolWiring",
+    "CodexPhaseLifecycle",
+    "CodexRuntime",
+    "DEFAULT_KERNEL_TOOLS_TOKEN_TTL_SECONDS",
+    "build_trusted_codex_runtime",
+]

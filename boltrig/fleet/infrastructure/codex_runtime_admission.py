@@ -31,6 +31,12 @@ from .codex_cell_policy import (
     CodexCellLayout,
 )
 from .codex_cell_supervisor import CodexCellSupervisor, InitializedCodexCell
+from .codex_kernel_tools_phase import (
+    KERNEL_TOOLS_PROFILE_NAME,
+    KERNEL_TOOLS_PROFILE_VERSION,
+    CodexKernelToolsError,
+    validated_kernel_tool_names,
+)
 from .codex_runtime_config_argv import CODEX_APP_SERVER_BASE_ARGUMENTS
 from .skill_artifacts import SanitizedWorkspaceProjection
 
@@ -111,10 +117,14 @@ class QuarantinedCodexPreflightReceipt:
         if (
             type(self.observed_mcp_server_count) is not int
             or type(self.observed_hook_count) is not int
-            or self.observed_mcp_server_count != 0
+            or not 0 <= self.observed_mcp_server_count <= 1
             or self.observed_hook_count != 0
         ):
             raise CodexRuntimeAdmissionError("quarantined external inventory must be empty")
+        # The ONLY tolerated non-empty MCP inventory is the kernel-tools lane's one
+        # server (the kernel's own face). AdmittedCodexCell binds the count to the
+        # admission's lane, so a read-only admission can never carry a server and a
+        # kernel-tools admission can never attest one it did not declare.
         if self.protocol_version != CODEX_CLI_VERSION:
             raise CodexRuntimeAdmissionError("quarantined receipt uses another protocol")
         if self.protocol_bundle_digest != CODEX_PROTOCOL_BUNDLE_DIGEST:
@@ -152,6 +162,13 @@ class CodexPhaseAdmission:
     skill_plan: SkillAttestationPlan
     developer_instructions: str
     provisioned_policy_digest: str
+    # The kernel-tools lane's exact per-run tool ceiling as Codex WIRE names
+    # (``mcp__boltrig__*``). Empty (the default) is the read-only lane. These do
+    # NOT travel through the domain birth policy's ``enabled_tools``: governed
+    # catalogue names cannot represent wire names, and kernel tools are not
+    # Codex runtime tools - they are governed at the kernel chokepoint. The
+    # per-cell model proxy derives its ceiling from exactly this tuple.
+    kernel_tools: tuple[str, ...] = ()
     # True when the cell tree lives in a per-cell-uid slot provisioned cell-uid-side
     # by the spawner (VJS-CC-VJS 7 J2). Lets validate_admission relax the exact
     # workspace-path token (the slot is dynamic) to a slot-shape check, while every
@@ -161,7 +178,16 @@ class CodexPhaseAdmission:
     def __post_init__(self) -> None:
         _validate_admission_types(self)
         _validate_instruction_text(self.developer_instructions)
+        kernel_tools = _validated_admission_kernel_tools(self.kernel_tools)
+        object.__setattr__(self, "kernel_tools", kernel_tools)
         policy = self.compilation.policy
+        if kernel_tools and (policy.profile.name, policy.profile.version) != (
+            KERNEL_TOOLS_PROFILE_NAME,
+            KERNEL_TOOLS_PROFILE_VERSION,
+        ):
+            raise CodexRuntimeAdmissionError(
+                "kernel tools require the kernel-tools profile"
+            )
         if self.layout.phase_id != self.assignment.phase.phase_id:
             raise CodexRuntimeAdmissionError("cell phase does not match the assignment")
         if (
@@ -199,6 +225,15 @@ class AdmittedCodexCell:
         if type(self.quarantined_preflight) is not QuarantinedCodexPreflightReceipt:
             raise TypeError("preflight must be an exact QuarantinedCodexPreflightReceipt")
         _validate_initialized_cell(self.admission, self.cell)
+        # Bind the observed MCP inventory to the admitted lane: the read-only
+        # lane must have observed ZERO servers, the kernel-tools lane exactly
+        # ONE (the kernel's own face). A lane carrying a server it never
+        # declared - or declaring one that never came up - fails closed here.
+        expected_mcp = 1 if self.admission.kernel_tools else 0
+        if self.quarantined_preflight.observed_mcp_server_count != expected_mcp:
+            raise CodexRuntimeAdmissionError(
+                "observed MCP inventory does not match the admitted lane"
+            )
         plan = self.admission.skill_plan
         proof = self.quarantined_preflight.skill_attestation
         if (
@@ -231,7 +266,10 @@ class AdmittedCodexCell:
 
 class CodexPhaseAdmissionSource(Protocol):
     async def admit(
-        self, assignment: PhaseAssignmentRef, slot: "CellSlot | None" = None
+        self,
+        assignment: PhaseAssignmentRef,
+        slot: "CellSlot | None" = None,
+        kernel_tools: tuple[str, ...] = (),
     ) -> CodexPhaseAdmission: ...
 
 
@@ -281,6 +319,13 @@ class SupervisedCodexPhaseCellProvider:
         except BaseException:
             await _cleanup_ignoring_failure(cell.aclose)
             raise
+
+
+def _validated_admission_kernel_tools(value: object) -> tuple[str, ...]:
+    try:
+        return validated_kernel_tool_names(value)
+    except CodexKernelToolsError as error:
+        raise CodexRuntimeAdmissionError(str(error)) from None
 
 
 def _validate_admission_types(value: CodexPhaseAdmission) -> None:

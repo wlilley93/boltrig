@@ -201,10 +201,47 @@ class RuntimeResolver:
         never select it, so (unlike the opencode/rivet lanes) this never triggers on
         the override. None when the capability is not a codex runtime, or when no
         provider was injected (off by default = no-op -> unavailable lane).
+
+        A capability with ``supported_skills: ['*']`` selects the kernel-tools
+        lane (real tool use through the kernel's MCP face); anything narrower
+        keeps the read-only analysis lane. The marker carries the SAME
+        run-scoped-token + revocation idiom pi/opencode/rivet use
+        (``kernel.mcp.issue_run_token``), the kernel MCP endpoint, and the
+        tool-ceiling compiler (the kernel MCP tools/list derivation), so the
+        adapter needs no store or kernel handle of its own.
         """
         if capability.runtime != "codex":
             return None
-        return self._codex
+        if self._codex is None:
+            return None
+        cfg = dict(self._codex)
+        cfg["kernel_tools"] = "*" in (capability.supported_skills or [])
+        cfg["issue_token"] = self._kernel.mcp.issue_run_token
+        cfg["revoke_token"] = self._kernel.mcp.revoke
+        cfg["mcp_url"] = (
+            os.environ.get("BOLTRIG_CODEX_MCP_URL")
+            or os.environ.get("BOLTRIG_MCP_URL")
+            or "http://kernel:8000/v1/mcp"
+        )
+        cfg["compile_tool_ceiling"] = self._compile_codex_tool_ceiling
+        return cfg
+
+    async def _compile_codex_tool_ceiling(
+        self, tenant_id: str, grants: Any
+    ) -> tuple[str, ...]:
+        """The run's effective kernel tool set: tenant ceiling ∩ run grants.
+
+        Byte-for-byte the kernel MCP face's ``tools/list`` derivation
+        (FR-MCP-02), so the admission-compiled proxy ceiling and the tools the
+        kernel will actually advertise to the cell are the same set.
+        """
+        permissions = await self._kernel.store.get_tenant_permissions(tenant_id)
+        verbs = await self._kernel.store.list_verbs(tenant_id)
+        return tuple(
+            verb.id
+            for verb in verbs
+            if permissions.grants.permits(verb.id) and grants.permits(verb.id)
+        )
 
     def _opencode_config(
         self, capability: AgentCapability, runtime_override: str | None

@@ -226,6 +226,19 @@ invariants:
     tests:
       - tests/security/test_channel_xai_voice_roundtrip.py::test_voice_adapter_round_trip_against_a_test_kernel
       - tests/security/test_channel_xai_voice_roundtrip.py::test_server_side_tool_config_is_rejected_at_init
+  SEC-184:
+    description: The kernel-tools Codex lane gives a walled cell REAL tool use through exactly one new path - a per-run [mcp_servers.boltrig] entry pointing at the kernel's MCP face with a RUN-SCOPED token (the McpFace seam, never a credential) delivered only as a child-process env var (never the config file, never argv, never a repr). The admission compiles the cell's tool ceiling from the run's grants (tenant ceiling ∩ run grants) as exact Codex wire names (mcp__boltrig__*), and the per-cell model proxy offers exactly that set - built-ins and unlisted boltrig verbs are stripped on the request and truncated on the response stream - while the kernel chokepoint still grant-checks every call (defence in depth). Everything else stays read-only: sandbox read-only, approval_policy never, no native tools/subagents, and the read-only analysis lane renders byte-identically.
+    tests:
+      - tests/integration/test_codex_kernel_tools_mcp.py::test_the_ceiling_compiler_and_the_mcp_face_derive_one_tool_set
+      - tests/integration/test_codex_kernel_tools_mcp.py::test_the_proxy_offers_exactly_the_granted_wire_names
+      - tests/integration/test_codex_kernel_tools_mcp.py::test_the_response_stream_holds_the_same_ceiling
+      - tests/integration/test_codex_kernel_tools_mcp.py::test_a_grant_denied_verb_dies_at_the_chokepoint_regardless
+      - tests/unit/test_codex_kernel_tools_lane.py::test_kernel_tools_run_mints_scopes_and_revokes_the_run_token
+      - tests/unit/test_codex_kernel_tools_lane.py::test_kernel_tools_run_revokes_and_discards_on_failure
+      - tests/unit/test_codex_kernel_tools_lane.py::test_admission_carries_the_exact_wire_name_ceiling
+      - tests/unit/test_codex_kernel_tools_lane.py::test_preflight_mcp_count_is_bound_to_the_admitted_lane
+      - tests/unit/test_codex_runtime_config_mcp.py::test_the_token_never_reaches_the_config_receipt_repr_or_argv
+      - tests/unit/test_codex_runtime_config_mcp.py::test_mcp_tamper_cannot_match_its_receipt
   SEC-181:
     description: Secure input - a chat.ask_user question with secure:true + a bounded purpose label is schema-validated as a pair (secure requires purpose; purpose only with secure) and marked on the HITL request, the question/hitl run events and the list projection for consumers, but its ANSWER never enters the run - the shared answer path seals the value through the credential seam as a run+purpose-scoped credential (run:<run_id>:<purpose>, envelope-sealed at rest with no plaintext in the raw store row) and records the enveloped REFERENCE (credential:run/<run_id>/<purpose>) as the decision, so the resume wiring replays the reference and the value appears in no answer response body, run event, or audit row (not even its length). A verb param carrying the reference is resolved to the material INSIDE the kernel at the dispatch resolve-credential stage (the adapter receives the material; agent/context/events/audit only ever carried the reference), and resolution FAILS CLOSED (CredentialResolution) for another run, a run-less context, an unsealed purpose, a tampered row, or a foreign credential under a run: id. A non-secure ask_user is byte-for-byte the old behaviour, and the documented run-settle sweep removes exactly the finished run's secure credentials.
     tests:

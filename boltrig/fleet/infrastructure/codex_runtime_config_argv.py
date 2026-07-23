@@ -36,6 +36,7 @@ import re
 from collections.abc import Mapping
 
 from boltrig.fleet.infrastructure.codex_runtime_config_toml import (
+    CODEX_MCP_SERVER_NAME,
     CODEX_MODEL_PROVIDER_ID,
     CODEX_RUNTIME_DISABLED_FEATURES,
     CODEX_RUNTIME_PROVIDER_NAME,
@@ -54,7 +55,7 @@ _OVERRIDE_FLAG = "-c"
 # emitting a path whose parse we have not verified.
 _BARE_KEY = re.compile(r"[A-Za-z0-9_-]+\Z")
 _KEY_PATH = re.compile(r"[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*\Z")
-_PINNED_SCALAR_KEYS = 8
+_PINNED_SCALAR_KEYS = 10
 MAX_APP_SERVER_ARGUMENTS = len(CODEX_APP_SERVER_BASE_ARGUMENTS) + 2 * (
     _PINNED_SCALAR_KEYS + len(CODEX_RUNTIME_DISABLED_FEATURES)
 )
@@ -85,6 +86,8 @@ def _pinned_assignments(
     socket_name: str,
     proxy_port: int,
     features: Mapping[str, bool],
+    mcp_server_url: str | None = None,
+    mcp_bearer_env_var: str | None = None,
 ) -> tuple[tuple[str, str], ...]:
     """The exact key/value pairs H5 pins, in the renderer's own order."""
 
@@ -102,6 +105,19 @@ def _pinned_assignments(
             _toml_array(("--cell-id", cell_id, "--socket", socket_name)),
         ),
     ]
+    if mcp_server_url is not None or mcp_bearer_env_var is not None:
+        if type(mcp_server_url) is not str or type(mcp_bearer_env_var) is not str:
+            raise CodexAppServerArgumentError("MCP argv pins must be paired")
+        # Pin the kernel-tools MCP leaves too: a rewritten per-cell config cannot
+        # repoint the boltrig server at another endpoint nor rename the bearer
+        # env var. The TOKEN is never here - argv is world-readable to a sibling.
+        server = f"mcp_servers.{CODEX_MCP_SERVER_NAME}"
+        assignments.extend(
+            (
+                (f"{server}.url", _toml_string(mcp_server_url)),
+                (f"{server}.bearer_token_env_var", _toml_string(mcp_bearer_env_var)),
+            )
+        )
     assignments.extend(
         (f"features.{name}", "true" if features[name] else "false")
         for name in sorted(features)
@@ -116,6 +132,8 @@ def codex_app_server_arguments(
     socket_name: str,
     proxy_port: int,
     features: Mapping[str, bool] = CODEX_RUNTIME_DISABLED_FEATURES,
+    mcp_server_url: str | None = None,
+    mcp_bearer_env_var: str | None = None,
 ) -> tuple[str, ...]:
     """Derive the complete pinned argv for one cell from that cell's own record.
 
@@ -134,6 +152,10 @@ def codex_app_server_arguments(
         or not 1 <= proxy_port <= 65535
     ):
         raise CodexAppServerArgumentError("pinned argv inputs are not printable ASCII")
+    if mcp_server_url is not None and not _printable_ascii(mcp_server_url):
+        raise CodexAppServerArgumentError("pinned argv inputs are not printable ASCII")
+    if mcp_bearer_env_var is not None and not _printable_ascii(mcp_bearer_env_var):
+        raise CodexAppServerArgumentError("pinned argv inputs are not printable ASCII")
     if not isinstance(features, Mapping) or any(
         type(name) is not str or type(value) is not bool
         for name, value in features.items()
@@ -148,6 +170,8 @@ def codex_app_server_arguments(
         socket_name=socket_name,
         proxy_port=proxy_port,
         features=features,
+        mcp_server_url=mcp_server_url,
+        mcp_bearer_env_var=mcp_bearer_env_var,
     ):
         if _KEY_PATH.fullmatch(key) is None:
             raise CodexAppServerArgumentError("pinned argv key path is not canonical")

@@ -39,6 +39,16 @@ is not available either (``docs/findings/2026-07-20-codex-home-writability.md``)
 G3 stays open on facts, not on an assumed necessity.
 Read-only reasoning cutover only; write/effects are separately court-gated
 (PR8, D6).
+
+The kernel-tools lane (codex_kernel_tools_phase): a capability with
+``supported_skills: '*'`` provisions the SAME walled cell plus exactly one new
+capability - an ``[mcp_servers.boltrig]`` entry pointing at the kernel's MCP
+face, its bearer a run-scoped kernel token delivered ONLY as a child env var
+(never the config file, never argv), and its tool ceiling the admission-compiled
+wire names the model proxy enforces. Sandbox, approval plane, attestation and
+the single-cell G3 posture are unchanged; the lane hands the scope over through
+``kernel_tool_scopes``, a bounded pop-once registry the adapter registers into
+and ``_acquire_cell`` consumes.
 """
 
 from __future__ import annotations
@@ -81,6 +91,17 @@ from boltrig.fleet.infrastructure.codex_runtime_admission import (
     CodexPhaseAdmissionSource,
     CodexPreflightProbe,
     CodexRuntimeAdmissionError,
+    QuarantinedCodexPreflightReceipt,
+)
+from boltrig.fleet.infrastructure.codex_kernel_tool_scope import (
+    CodexKernelToolScope,
+    CodexKernelToolScopeRegistry,
+)
+from boltrig.fleet.infrastructure.codex_runtime_config_toml import (
+    CODEX_MCP_BEARER_ENV_VAR,
+)
+from boltrig.fleet.infrastructure.codex_runtime_preflight import (
+    KernelToolsCodexPreflightProbe,
 )
 from boltrig.fleet.infrastructure.codex_runtime_state import remove_cell_root
 from boltrig.fleet.infrastructure.codex_runtime_config import CodexReasoningEffort
@@ -115,6 +136,20 @@ class _TrustedSession:
     holder: GenerationHolder
     reaper: asyncio.Task[None]
     slot: "CellSlot | None" = None
+
+
+def _kernel_tools_environment(
+    kernel_scope: CodexKernelToolScope | None,
+) -> dict[str, str] | None:
+    """The run-scoped MCP bearer as the child's ONLY environment addition.
+
+    Never the config file (G3: sibling-writable), never argv (world-readable to
+    a sibling); the read-only lane passes None and spawns byte-identically.
+    """
+
+    if kernel_scope is None:
+        return None
+    return {CODEX_MCP_BEARER_ENV_VAR: kernel_scope.token}
 
 
 def _per_cell_tree_dirs(layout: CodexCellLayout) -> list[dict[str, object]]:
@@ -193,6 +228,11 @@ class TrustedProxyCodexPhaseCellProvider:
             stack_root=stack_root, env=env
         )
         self._sessions: dict[str, _TrustedSession] = {}
+        # The kernel-tools lane hand-off: the adapter (which holds the run's
+        # grants) registers one redacted scope per assignment; ``_acquire_cell``
+        # pops it. Always present but empty on the read-only lane, which never
+        # registers anything and is byte-identical to before.
+        self._kernel_tool_scopes = CodexKernelToolScopeRegistry()
         # G3 admission is check-then-register: without a lock two concurrent
         # acquires both pass _require_admissible_concurrency before either
         # registers, provisioning the forbidden two-cell state. The lock makes
@@ -212,6 +252,12 @@ class TrustedProxyCodexPhaseCellProvider:
             self._require_admissible_concurrency()
             return await self._acquire_cell(assignment)
 
+    @property
+    def kernel_tool_scopes(self) -> CodexKernelToolScopeRegistry:
+        """The registry the adapter registers a run's kernel-tools scope into."""
+
+        return self._kernel_tool_scopes
+
     async def _acquire_cell(self, assignment: PhaseAssignmentRef) -> AdmittedCodexCell:
         # Per-cell uids: reserve this cell's slot (distinct uid + kernel-owned tree)
         # up front, so admission, config and argv all use the slot's paths. None in
@@ -220,22 +266,21 @@ class TrustedProxyCodexPhaseCellProvider:
         # releases on any failure (reaper_started tracks the handover).
         slot = self._supervisor.acquire_slot()
         reaper_started = False
-        admission = await self._source.admit(assignment, slot)
-        if type(admission) is not CodexPhaseAdmission or admission.assignment != assignment:
-            raise CodexRuntimeAdmissionError("admission source returned another assignment")
+        # A registered run scope selects the kernel-tools admission (pop-once).
+        kernel_scope = self._kernel_tool_scopes.take(assignment.assignment_id)
+        admission = await self._admit_for_lane(assignment, slot, kernel_scope)
         holder = GenerationHolder(self._generation)
         proxy: PerCellModelProxyServer | None = None
         cell: InitializedCodexCell | None = None
         scope: ModelProxyCellScope | None = None
         ingress: CodexTrustedIngress | None = None
         try:
-            # The ceiling is the compiled policy's effective tools, which admission
-            # requires to be empty on the quarantined read-only lane. Deriving it
-            # here (rather than hard-coding empty) means the PR8 write phase widens
-            # by policy, never by editing the proxy.
-            proxy = await self._start_proxy(
-                holder, frozenset(admission.compilation.policy.enabled_tools)
-            )
+            # The ceiling is the admission-compiled effective tools: empty on the
+            # read-only lane, the admission's kernel-tools wire names on the
+            # tool-enabled lane. It widens by admission, never by proxy edit.
+            ceiling = frozenset(admission.kernel_tools)
+            ceiling |= frozenset(admission.compilation.policy.enabled_tools)
+            proxy = await self._start_proxy(holder, ceiling)
             model_id = admission.compilation.policy.model.model_id
             layout = admission.layout
             # The socket path is derived from the (pre-start) cell id, so the helper
@@ -255,6 +300,7 @@ class TrustedProxyCodexPhaseCellProvider:
                 socket_name=socket_name,
                 slot=slot,
                 tree_dirs=_per_cell_tree_dirs(layout) if slot is not None else [],
+                kernel_scope=kernel_scope,
             )
             ingress = self._build_ingress()
             issuer = self._build_issuer(model_id, holder)
@@ -276,13 +322,14 @@ class TrustedProxyCodexPhaseCellProvider:
             # App Server is unregistered. A cell that fails to register is reaped
             # by the supervisor and never handed out.
             cell = await self._supervisor.start(
-                admission.layout, arguments=arguments, slot=slot, on_spawned=register_spawned
+                admission.layout, arguments=arguments, slot=slot, on_spawned=register_spawned,
+                environment_additions=_kernel_tools_environment(kernel_scope),
             )
             if scope is None:
                 # start() only returns once on_spawned succeeded, so this cannot
                 # happen; fail closed rather than hand out an unregistered cell.
                 raise CodexRuntimeAdmissionError("cell started without a registered scope")
-            preflight = await self._probe.probe(cell.client, admission.skill_plan)
+            preflight = await self._probe_for_lane(admission, kernel_scope, cell)
             admitted = AdmittedCodexCell(admission, cell, preflight)
             self._register_session(cell, proxy, scope, ingress, holder, slot)
             reaper_started = True
@@ -314,6 +361,45 @@ class TrustedProxyCodexPhaseCellProvider:
         # registered; before that, this failure path returns it to the pool.
         if not reaper_started:
             self._supervisor.release_slot(slot)
+
+    async def _admit_for_lane(
+        self,
+        assignment: PhaseAssignmentRef,
+        slot: CellSlot | None,
+        kernel_scope: CodexKernelToolScope | None,
+    ) -> CodexPhaseAdmission:
+        """Admit the assignment on the lane its scope (or its absence) selects."""
+
+        if kernel_scope is not None and kernel_scope.assignment_id != assignment.assignment_id:
+            raise CodexRuntimeAdmissionError("kernel tool scope does not match the assignment")
+        if kernel_scope is None:
+            admission = await self._source.admit(assignment, slot)
+        else:
+            admission = await self._source.admit(
+                assignment, slot, kernel_tools=kernel_scope.tools
+            )
+        if type(admission) is not CodexPhaseAdmission or admission.assignment != assignment:
+            raise CodexRuntimeAdmissionError("admission source returned another assignment")
+        return admission
+
+    async def _probe_for_lane(
+        self,
+        admission: CodexPhaseAdmission,
+        kernel_scope: CodexKernelToolScope | None,
+        cell: InitializedCodexCell,
+    ) -> QuarantinedCodexPreflightReceipt:
+        """The lane's preflight: read-only empty-inventory, or the ONE kernel face.
+
+        The tool-enabled probe attests the declared MCP server came up exact
+        (bearer auth, no resources, tools within the admitted ceiling); the
+        read-only probe is untouched.
+        """
+
+        if kernel_scope is None:
+            return await self._probe.probe(cell.client, admission.skill_plan)
+        return await KernelToolsCodexPreflightProbe(admission.kernel_tools).probe(
+            cell.client, admission.skill_plan
+        )
 
     def _build_ingress(self) -> CodexTrustedIngress:
         return CodexTrustedIngress(
@@ -374,6 +460,7 @@ class TrustedProxyCodexPhaseCellProvider:
         socket_name: str,
         slot: CellSlot | None = None,
         tree_dirs: list[dict[str, object]] | None = None,
+        kernel_scope: CodexKernelToolScope | None = None,
     ) -> tuple[str, ...]:
         """Write the cell's config.toml and return the argv pinning the same values.
 
@@ -382,6 +469,9 @@ class TrustedProxyCodexPhaseCellProvider:
         cell-uid slot, so the tree AND the config are handed to the spawner in ONE
         provision (the child clears the slot once, creates the dirs, then writes
         config.toml 0600) - a second provision would re-clear the freshly made tree.
+
+        The kernel-tools lane renders the one ``[mcp_servers.boltrig]`` entry
+        (url + bearer env var NAME); the token itself never enters this file.
         """
 
         composed = render_trusted_config(
@@ -395,6 +485,8 @@ class TrustedProxyCodexPhaseCellProvider:
             policy_digest=model_policy_digest(model_id, self._reasoning_effort),
             reasoning_effort=self._reasoning_effort,
             proxy_port=proxy_port,
+            mcp_server_url=None if kernel_scope is None else kernel_scope.mcp_url,
+            mcp_bearer_env_var=None if kernel_scope is None else CODEX_MCP_BEARER_ENV_VAR,
         )
         if slot is not None:
             await self._supervisor.provision_cell_tree(

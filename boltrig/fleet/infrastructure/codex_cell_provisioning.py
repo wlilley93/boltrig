@@ -22,7 +22,7 @@ from pathlib import Path
 
 from boltrig.fleet.application.birth_policies import compile_birth_policy
 from boltrig.fleet.domain import PhaseAssignmentRef
-from boltrig.fleet.domain.profile_policy import BirthPolicyRequest
+from boltrig.fleet.domain.profile_policy import BirthPolicyRequest, StaticRoleProfile
 from boltrig.fleet.domain.profile_policy_values import NativeSubagentLimits
 from boltrig.fleet.domain.skill_attestation import SkillAttestationPlan
 
@@ -43,6 +43,11 @@ from .codex_read_only_phase import (
     read_only_cell_root,
     read_only_static_profile,
 )
+from .codex_kernel_tools_phase import (
+    KERNEL_TOOLS_INSTRUCTIONS,
+    kernel_tools_static_profile,
+    validated_kernel_tool_names,
+)
 from .codex_runtime_admission import (
     CodexPhaseAdmission,
     CodexWorkspaceProjectionBinding,
@@ -51,6 +56,22 @@ from .skill_artifacts import SanitizedWorkspaceProjection
 
 _CELL_DIR_MODE = 0o700
 _WORKSPACE_MODE = 0o500
+
+
+def _lane_profile(
+    model_id: str, kernel_tools: tuple[str, ...]
+) -> tuple[StaticRoleProfile, str]:
+    """The one profile/instructions pair for the admitted lane.
+
+    An empty ceiling is the read-only lane (byte-identical to before); a
+    non-empty one is the kernel-tools lane, whose only tools are the kernel's
+    MCP face (the domain policy stays tool-free either way - kernel tools are
+    not Codex runtime tools).
+    """
+
+    if kernel_tools:
+        return kernel_tools_static_profile(model_id), KERNEL_TOOLS_INSTRUCTIONS
+    return read_only_static_profile(model_id), READ_ONLY_INSTRUCTIONS
 
 
 class ProvisioningCodexPhaseAdmissionSource:
@@ -63,17 +84,24 @@ class ProvisioningCodexPhaseAdmissionSource:
         self._model_id = model_id
 
     async def admit(
-        self, assignment: PhaseAssignmentRef, slot: CellSlot | None = None
+        self,
+        assignment: PhaseAssignmentRef,
+        slot: CellSlot | None = None,
+        kernel_tools: tuple[str, ...] = (),
     ) -> CodexPhaseAdmission:
         if type(assignment) is not PhaseAssignmentRef:
             raise TypeError("assignment must be an exact PhaseAssignmentRef")
-        return await asyncio.to_thread(self._provision, assignment, slot)
+        tools = validated_kernel_tool_names(kernel_tools)
+        return await asyncio.to_thread(self._provision, assignment, slot, tools)
 
     def _provision(
-        self, assignment: PhaseAssignmentRef, slot: CellSlot | None = None
+        self,
+        assignment: PhaseAssignmentRef,
+        slot: CellSlot | None = None,
+        kernel_tools: tuple[str, ...] = (),
     ) -> CodexPhaseAdmission:
         if slot is not None:
-            return self._provision_per_cell(assignment, slot)
+            return self._provision_per_cell(assignment, slot, kernel_tools)
         cell_id = read_only_cell_id(assignment)
         cell_root = read_only_cell_root(self._stack_root, assignment)
         workspace = cell_root / "workspace"
@@ -103,7 +131,7 @@ class ProvisioningCodexPhaseAdmissionSource:
             accounting.file_count,
             accounting.total_bytes,
         )
-        profile = read_only_static_profile(self._model_id)
+        profile, instructions = _lane_profile(self._model_id, kernel_tools)
         compilation = compile_birth_policy(
             BirthPolicyRequest(
                 profile.pin,
@@ -131,13 +159,17 @@ class ProvisioningCodexPhaseAdmissionSource:
             compilation,
             (),
             SkillAttestationPlan(workspace.as_posix(), (), generation=1),
-            READ_ONLY_INSTRUCTIONS,
+            instructions,
             compilation.policy.digest(),
+            kernel_tools=kernel_tools,
         )
 
 
     def _provision_per_cell(
-        self, assignment: PhaseAssignmentRef, slot: CellSlot
+        self,
+        assignment: PhaseAssignmentRef,
+        slot: CellSlot,
+        kernel_tools: tuple[str, ...] = (),
     ) -> CodexPhaseAdmission:
         """Assemble a slot-rooted admission WITHOUT touching the filesystem.
 
@@ -164,7 +196,7 @@ class ProvisioningCodexPhaseAdmissionSource:
             EMPTY_WORKSPACE_FILE_COUNT,
             EMPTY_WORKSPACE_TOTAL_BYTES,
         )
-        profile = read_only_static_profile(self._model_id)
+        profile, instructions = _lane_profile(self._model_id, kernel_tools)
         compilation = compile_birth_policy(
             BirthPolicyRequest(
                 profile.pin,
@@ -193,8 +225,9 @@ class ProvisioningCodexPhaseAdmissionSource:
             compilation,
             (),
             SkillAttestationPlan(workspace.as_posix(), (), generation=1),
-            READ_ONLY_INSTRUCTIONS,
+            instructions,
             compilation.policy.digest(),
+            kernel_tools=kernel_tools,
             slot_provisioned=True,
         )
 

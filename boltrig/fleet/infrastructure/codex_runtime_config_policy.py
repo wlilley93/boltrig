@@ -6,6 +6,7 @@ import posixpath
 import re
 import tomllib
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from .skill_config import MAX_SKILL_CONFIG_BYTES, REVIEWED_SYSTEM_SKILLS_0_144_3
 
@@ -15,6 +16,12 @@ _SHA256 = re.compile(r"sha256:[0-9a-f]{64}\Z")
 # The abstract ingress name, in the "@name" argv convention. Printable ASCII by
 # construction, so it survives TOML rendering and execve unchanged.
 _ABSTRACT_SOCKET = re.compile(r"@boltrig-mp-[0-9a-f]{32}\Z")
+# The kernel MCP endpoint the cell's one server points at, and the env var its
+# run-scoped bearer travels in. Both are lexical contracts: the url must be a
+# credential-free http(s) URL (no userinfo, query, or fragment - a bearer in a
+# URL would be a credential in a file), the env var a bounded shell-style name.
+_MCP_BEARER_ENV_VAR = re.compile(r"[A-Z][A-Z0-9_]{0,63}\Z")
+MAX_MCP_SERVER_URL_LENGTH = 512
 
 
 class CodexRuntimeConfigError(ValueError):
@@ -103,6 +110,49 @@ def validate_ingress_socket_name(value: object) -> str:
     if type(value) is not str or _ABSTRACT_SOCKET.fullmatch(value) is None:
         raise CodexRuntimeConfigError("ingress socket must be an abstract @boltrig-mp-<hex> name")
     return value
+
+
+def validate_mcp_server_url(value: object) -> str:
+    """Validate the kernel MCP endpoint a kernel-tools cell connects to.
+
+    http(s) only, bounded printable ASCII, and NO credential-bearing or
+    ambiguous parts: userinfo, query, and fragment are refused outright, so the
+    rendered config can never smuggle a bearer into a URL. The endpoint is the
+    operator-pinned kernel face (default ``http://kernel:8000/v1/mcp``); the
+    cell never influences it (the leaf is argv-pinned, and a rewritten config
+    leaf loses to the argv pin).
+    """
+
+    if type(value) is not str or not 1 <= len(value) <= MAX_MCP_SERVER_URL_LENGTH:
+        raise CodexRuntimeConfigError("MCP server url is absent or unbounded")
+    if any(ord(character) < 0x20 or ord(character) > 0x7E for character in value):
+        raise CodexRuntimeConfigError("MCP server url must be printable ASCII")
+    parsed = urlsplit(value)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise CodexRuntimeConfigError("MCP server url must be an http(s) URL with a host")
+    if parsed.username is not None or parsed.password is not None:
+        raise CodexRuntimeConfigError("MCP server url must not carry credentials")
+    if parsed.query or parsed.fragment:
+        raise CodexRuntimeConfigError("MCP server url must not carry a query or fragment")
+    return value
+
+
+def validate_mcp_bearer_env_var(value: object) -> str:
+    """Validate the env var NAME the run-scoped MCP bearer travels in."""
+
+    if type(value) is not str or _MCP_BEARER_ENV_VAR.fullmatch(value) is None:
+        raise CodexRuntimeConfigError("MCP bearer env var must be a bounded NAME")
+    return value
+
+
+def validate_optional_mcp_server(
+    url: object, bearer_env_var: object
+) -> tuple[str | None, str | None]:
+    """The MCP server pair is both-present or both-absent, never half-wired."""
+
+    if url is None and bearer_env_var is None:
+        return None, None
+    return validate_mcp_server_url(url), validate_mcp_bearer_env_var(bearer_env_var)
 
 
 def validate_receipt_paths(

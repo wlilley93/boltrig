@@ -31,6 +31,7 @@ from .codex_runtime_config_policy import (
     validate_ingress_socket_name,
     validate_digest,
     validate_model_id,
+    validate_optional_mcp_server,
     validate_receipt_paths,
     validated_runtime_skill_entries,
     validated_skill_fragment,
@@ -102,6 +103,12 @@ class CodexRuntimeConfigRequest:
     skill_config_fragment: bytes
     skill_inventory_digest: str
     surface_attestations: tuple[CodexRuntimeSurfaceAttestation, ...] = ()
+    # The kernel-tools lane ONLY: the kernel's MCP face and the env var NAME its
+    # run-scoped bearer travels in. Both None (the default) is the read-only
+    # lane and renders byte-identically to before. The token itself is NEVER a
+    # config value - it is delivered in the child environment at spawn time.
+    mcp_server_url: str | None = None
+    mcp_bearer_env_var: str | None = None
 
     def __post_init__(self) -> None:
         _validate_request(self)
@@ -126,6 +133,7 @@ def _validate_request(request: CodexRuntimeConfigRequest) -> None:
         raise CodexRuntimeConfigError("proxy port must be between 1 and 65535")
     validate_digest("skill inventory digest", request.skill_inventory_digest)
     _surface_attestations(request.surface_attestations)
+    validate_optional_mcp_server(request.mcp_server_url, request.mcp_bearer_env_var)
 
 
 def _snapshot_request(
@@ -147,6 +155,8 @@ def _snapshot_request(
         skill_config_fragment=request.skill_config_fragment,
         skill_inventory_digest=request.skill_inventory_digest,
         surface_attestations=request.surface_attestations,
+        mcp_server_url=request.mcp_server_url,
+        mcp_bearer_env_var=request.mcp_bearer_env_var,
     )
 
 
@@ -168,6 +178,11 @@ class CodexRuntimeConfigReceipt:
     skill_entries_digest: str
     skill_inventory_digest: str
     surface_attestations: tuple[CodexRuntimeSurfaceAttestation, ...]
+    # The kernel-tools lane's MCP pair (None on the read-only lane). Carried on
+    # the receipt so the re-render comparison binds them: a config whose MCP
+    # server or bearer env var was rewritten cannot match its receipt.
+    mcp_server_url: str | None = None
+    mcp_bearer_env_var: str | None = None
     config_version: int = CODEX_RUNTIME_CONFIG_VERSION
     codex_cli_version: str = CODEX_RUNTIME_CLI_VERSION
     provider_id: str = CODEX_MODEL_PROVIDER_ID
@@ -195,6 +210,8 @@ class CodexRuntimeConfigReceipt:
             socket_name=self.socket_name,
             proxy_port=self.proxy_port,
             features=CODEX_RUNTIME_DISABLED_FEATURES,
+            mcp_server_url=self.mcp_server_url,
+            mcp_bearer_env_var=self.mcp_bearer_env_var,
         )
 
     def matches(self, config_toml: str) -> bool:
@@ -236,6 +253,7 @@ def _validate_receipt(receipt: CodexRuntimeConfigReceipt) -> None:
     validate_digest("model auth helper digest", receipt.helper_sha256)
     validate_digest("skill entries digest", receipt.skill_entries_digest)
     validate_digest("skill inventory digest", receipt.skill_inventory_digest)
+    validate_optional_mcp_server(receipt.mcp_server_url, receipt.mcp_bearer_env_var)
     if receipt.surface_attestations != _surface_attestations(receipt.surface_attestations):
         raise CodexRuntimeConfigError("receipt surface attestations are not canonical")
     exact = (
@@ -293,6 +311,8 @@ class ComposedCodexRuntimeConfig:
             provider_id=self.receipt.provider_id,
             skill_entries=skill_entries,
             skill_entries_digest=self.receipt.skill_entries_digest,
+            mcp_server_url=self.receipt.mcp_server_url,
+            mcp_bearer_env_var=self.receipt.mcp_bearer_env_var,
         ):
             raise CodexRuntimeConfigError("runtime config and receipt metadata are inconsistent")
 
@@ -328,6 +348,8 @@ def compose_codex_runtime_config(
         proxy_port=snapshot.proxy_port,
         features=CODEX_RUNTIME_DISABLED_FEATURES,
         skill_entries=entries,
+        mcp_server_url=snapshot.mcp_server_url,
+        mcp_bearer_env_var=snapshot.mcp_bearer_env_var,
     )
     encoded = config_toml.encode("ascii", errors="strict")
     if len(encoded) > MAX_CODEX_RUNTIME_CONFIG_BYTES:
@@ -348,6 +370,8 @@ def compose_codex_runtime_config(
         skill_entries_digest=canonical_skill_entries_digest(entries),
         skill_inventory_digest=snapshot.skill_inventory_digest,
         surface_attestations=attestations,
+        mcp_server_url=snapshot.mcp_server_url,
+        mcp_bearer_env_var=snapshot.mcp_bearer_env_var,
     )
     return ComposedCodexRuntimeConfig(config_toml, receipt)
 

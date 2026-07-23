@@ -154,11 +154,11 @@
       "expires": "2026-12-31"
     },
     "boltrig/fleet/infrastructure/codex_cell_supervisor.py": {
-      "max_file_lines": 460,
-      "max_function_lines": 62,
+      "max_file_lines": 475,
+      "max_function_lines": 71,
       "over_limit_functions": [],
       "owner": "fleet-maintainers",
-      "reason": "Gap 5 adds the per-cell slot seam (acquire_slot/release_slot/provision_cell_tree) and the per-cell workspace-attest + require_local_ownership branch, plus the earlier cell-startup diagnostic logging. Audit fix: _claimed_cells is now FIFO-bounded (4096) instead of growing one entry per historical cell. Follow-up: extract the slot seam and lower back toward 408.",
+      "reason": "Gap 5 adds the per-cell slot seam (acquire_slot/release_slot/provision_cell_tree) and the per-cell workspace-attest + require_local_ownership branch, plus the earlier cell-startup diagnostic logging. Audit fix: _claimed_cells is now FIFO-bounded (4096) instead of growing one entry per historical cell. Follow-up: extract the slot seam and lower back toward 408. Kernel-tools lane: start/_spawn accept validated per-cell environment additions (the run-scoped MCP bearer delivery); validation runs before any provisioning side effect.",
       "expires": "2026-12-31"
     },
     "boltrig/fleet/infrastructure/codex_runtime_events.py": {
@@ -170,11 +170,11 @@
       "expires": "2026-12-31"
     },
     "boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py": {
-      "max_file_lines": 479,
-      "max_function_lines": 78,
+      "max_file_lines": 571,
+      "max_function_lines": 79,
       "over_limit_functions": [],
       "owner": "fleet-maintainers",
-      "reason": "Gap 5 threads the per-cell slot through acquire (acquire slot -> admit(slot) -> provision tree -> config via spawner -> start(slot) -> release in the reaper). Audit fixes: a lock now makes the G3 concurrency check + session registration indivisible, and the rollback (teardown/close/cell-tree removal/slot release) is extracted to _abort_acquire, clearing the function debt the old 89-line acquire carried.",
+      "reason": "Gap 5 threads the per-cell slot through acquire (acquire slot -> admit(slot) -> provision tree -> config via spawner -> start(slot) -> release in the reaper). Audit fixes: a lock now makes the G3 concurrency check + session registration indivisible, and the rollback (teardown/close/cell-tree removal/slot release) is extracted to _abort_acquire, clearing the function debt the old 89-line acquire carried. Kernel-tools lane: the pop-once scope take, lane-aware admit/preflight (extracted to _admit_for_lane/_probe_for_lane), the mcp server config render, and the env-only bearer delivery (_kernel_tools_environment). Follow-up: split the lane branches into a collaborator and lower back.",
       "expires": "2026-12-31"
     },
     "boltrig/fleet/infrastructure/memory_model_proxy_grants.py": {
@@ -467,6 +467,22 @@
       ],
       "owner": "kernel-maintainers",
       "reason": "Split the gateway session mint from the token-gated outbox claim/ack/fail registrars.",
+      "expires": "2026-12-31"
+    },
+    "boltrig/fleet/infrastructure/codex_cell_policy.py": {
+      "max_file_lines": 435,
+      "max_function_lines": 56,
+      "over_limit_functions": [],
+      "owner": "fleet-maintainers",
+      "reason": "Kernel-tools lane: validated_environment_additions (the bounded extend-never-override env contract the run-scoped MCP bearer travels in) lives beside sanitized_environment, whose base keys it must know. Follow-up: extract the environment builders to their own module and drop below 400.",
+      "expires": "2026-12-31"
+    },
+    "boltrig/fleet/infrastructure/codex_runtime_admission.py": {
+      "max_file_lines": 437,
+      "max_function_lines": 32,
+      "over_limit_functions": [],
+      "owner": "fleet-maintainers",
+      "reason": "Kernel-tools lane: CodexPhaseAdmission carries the exact per-run wire-name ceiling (kernel_tools) with fail-closed validation, the preflight receipt admits the one kernel MCP server, and AdmittedCodexCell binds the observed inventory to the admitted lane. Follow-up: split the admission value objects from the provider protocols and drop below 400.",
       "expires": "2026-12-31"
     }
   }

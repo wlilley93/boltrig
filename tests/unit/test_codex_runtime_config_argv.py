@@ -164,9 +164,13 @@ def test_an_argv_minted_for_another_cell_is_refused() -> None:
 
 @pytest.mark.unit
 def test_an_over_long_argv_is_refused() -> None:
-    padded = _arguments() + ("-c", "features.hooks=false")
+    padded = _arguments(
+        mcp_server_url="http://kernel:8000/v1/mcp",
+        mcp_bearer_env_var="BOLTRIG_CODEX_MCP_RUN_TOKEN",
+    )
+    assert len(padded) == MAX_APP_SERVER_ARGUMENTS  # the fullest lawful argv
     with pytest.raises(CodexAppServerArgumentError):
-        validate_app_server_arguments(padded)
+        validate_app_server_arguments(padded + ("-c", "features.hooks=false"))
 
 
 @pytest.mark.unit

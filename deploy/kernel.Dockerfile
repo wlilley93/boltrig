@@ -136,6 +136,37 @@ RUN apt-get update && apt-get install -y --no-install-recommends bubblewrap && \
 # ~300MB every time.
 COPY boltrig/ /app/boltrig/
 
+# Boltrig v2 Codex App Server runtime: the pinned Codex CLI, mirrored from
+# deploy/fleet.Dockerfile (decision 0012). The chat spawner runs codex cells
+# in THIS container (the compose kernel service already carries the cell
+# posture: uid 0 + SETUID/SETGID, the codex-cells tmpfs, the kernel-entrypoint
+# spawner). Keep the version/sha in lockstep with the fleet Dockerfile.
+ARG CODEX_VERSION=0.144.3
+ARG CODEX_SHA256=37e6f5953f191b04f7b62cb07dae90f51d0947ad89f0355665b421fbde28700b
+RUN set -eux; \
+    if [ "${TARGETARCH:-amd64}" != "amd64" ]; then \
+        echo "codex ${CODEX_VERSION} is amd64-only; skipping on ${TARGETARCH:-unknown}"; \
+    else \
+        url="https://github.com/openai/codex/releases/download/rust-v${CODEX_VERSION}/codex-x86_64-unknown-linux-musl.tar.gz"; \
+        python -c 'import sys, urllib.request; urllib.request.urlretrieve(sys.argv[1], "/tmp/codex.tgz")' "$url"; \
+        tar -xzf /tmp/codex.tgz -C /tmp codex-x86_64-unknown-linux-musl; \
+        printf '%s  %s\n' "$CODEX_SHA256" /tmp/codex-x86_64-unknown-linux-musl | sha256sum -c -; \
+        install -D -m 0755 /tmp/codex-x86_64-unknown-linux-musl /opt/boltrig/codex/codex; \
+        rm -f /tmp/codex.tgz /tmp/codex-x86_64-unknown-linux-musl; \
+        /opt/boltrig/codex/codex --version; \
+    fi
+ENV BOLTRIG_CODEX_BIN=/opt/boltrig/codex/codex
+
+# The per-cell auth helper and the cell-invariant managed config, root-owned on
+# the read-only rootfs (mirrors the fleet image).
+COPY deploy/codex/model_auth_helper /opt/boltrig/codex/model_auth_helper
+RUN chown 0:0 /opt/boltrig/codex/model_auth_helper && \
+    chmod 0555 /opt/boltrig/codex/model_auth_helper
+ENV BOLTRIG_CODEX_AUTH_HELPER=/opt/boltrig/codex/model_auth_helper
+COPY deploy/codex/managed_config.toml /etc/codex/managed_config.toml
+RUN chown 0:0 /etc/codex/managed_config.toml && \
+    chmod 0444 /etc/codex/managed_config.toml
+
 # Run as an unprivileged user (INF-01 defence in depth). The app reads /app + the
 # read-only mounts and writes nothing to disk (logs go to stdout); the compose
 # runs the container read-only with a tmpfs for /tmp.

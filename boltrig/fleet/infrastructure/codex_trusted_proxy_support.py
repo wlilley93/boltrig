@@ -237,6 +237,8 @@ def render_trusted_config(
     policy_digest: str,
     reasoning_effort: CodexReasoningEffort,
     proxy_port: int,
+    mcp_server_url: str | None = None,
+    mcp_bearer_env_var: str | None = None,
 ) -> ComposedCodexRuntimeConfig:
     """Render the exact read-only config.toml pointing at the loopback proxy (D6).
 
@@ -244,6 +246,10 @@ def render_trusted_config(
     ``responses``, and the provider auth is the SHARED root-owned helper proved by
     ``assert_cell_isolation_boundary`` ([2026] VJS-CC-VJS 5 G2), never a file this
     process wrote into the cell root; the per-cell values travel on ``auth.args``.
+
+    The kernel-tools lane additionally renders ONE ``[mcp_servers.boltrig]``
+    entry (url + bearer env var NAME only); the run-scoped token itself is
+    delivered in the child environment, never in this file.
     """
 
     fragment = _system_skill_fragment(codex_home)
@@ -260,6 +266,8 @@ def render_trusted_config(
         proxy_port=proxy_port,
         skill_config_fragment=fragment,
         skill_inventory_digest=_sha256_prefixed(fragment),
+        mcp_server_url=mcp_server_url,
+        mcp_bearer_env_var=mcp_bearer_env_var,
     )
     return compose_codex_runtime_config(request)
 

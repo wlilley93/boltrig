@@ -14,6 +14,13 @@ CODEX_MODEL_PROVIDER_ID = "boltrig_model_proxy"
 # written out twice and hoped to match ([2026] VJS-CC-VJS 6 H5).
 CODEX_RUNTIME_PROVIDER_NAME = "Boltrig per-cell model proxy"
 CODEX_RUNTIME_WIRE_API = "responses"
+# The ONE MCP server a kernel-tools cell may carry: the kernel's own MCP face.
+# The server name is part of the model-facing tool names (``mcp__boltrig__*``),
+# so it is a fixed constant, never a per-run value. The bearer travels ONLY in
+# the named environment variable at spawn time - never in this file, never on
+# argv (see codex_kernel_tool_scope).
+CODEX_MCP_SERVER_NAME = "boltrig"
+CODEX_MCP_BEARER_ENV_VAR = "BOLTRIG_CODEX_MCP_RUN_TOKEN"
 _PROVIDER_FIELDS = (
     "name",
     "base_url",
@@ -140,11 +147,30 @@ def _feature_lines(features: Mapping[str, bool], *, apps_enabled: bool) -> list[
             "",
             "[apps._default]",
             f"enabled = {_boolean(apps_enabled)}",
-            "",
-            "[mcp_servers]",
         )
     )
     return lines
+
+
+def _mcp_lines(mcp_server_url: str | None, mcp_bearer_env_var: str | None) -> list[str]:
+    """The ``[mcp_servers]`` section: empty, or exactly the kernel's own face.
+
+    The read-only lane renders the bare empty table (byte-identical to before).
+    The kernel-tools lane renders ONE server entry pointing at the kernel's
+    ``POST /v1/mcp``; the bearer is named by ENV VAR only, so the run-scoped
+    token never lands in this file.
+    """
+
+    if mcp_server_url is None and mcp_bearer_env_var is None:
+        return ["", "[mcp_servers]"]
+    if type(mcp_server_url) is not str or type(mcp_bearer_env_var) is not str:
+        raise ValueError("MCP server url and bearer env var must be paired strings")
+    return [
+        "",
+        f"[mcp_servers.{CODEX_MCP_SERVER_NAME}]",
+        f"url = {_string(mcp_server_url)}",
+        f"bearer_token_env_var = {_string(mcp_bearer_env_var)}",
+    ]
 
 
 def _skill_lines(entries: tuple[tuple[str, bool], ...]) -> list[str]:
@@ -198,6 +224,8 @@ def _render_codex_runtime_config(
     proxy_port: int,
     features: Mapping[str, bool],
     skill_entries: tuple[tuple[str, bool], ...],
+    mcp_server_url: str | None = None,
+    mcp_bearer_env_var: str | None = None,
 ) -> str:
     """Render one complete ASCII TOML document from validated values."""
 
@@ -206,6 +234,7 @@ def _render_codex_runtime_config(
     lines = _root_lines(model_id=model_id, reasoning_effort=reasoning_effort)
     lines.extend(_policy_lines(agents_enabled=agents_enabled))
     lines.extend(_feature_lines(features, apps_enabled=apps_enabled))
+    lines.extend(_mcp_lines(mcp_server_url, mcp_bearer_env_var))
     lines.extend(_skill_lines(skill_entries))
     lines.extend(
         _provider_lines(
@@ -261,6 +290,8 @@ def runtime_config_matches_receipt(
     provider_id: str,
     skill_entries: tuple[tuple[str, bool], ...],
     skill_entries_digest: str,
+    mcp_server_url: str | None = None,
+    mcp_bearer_env_var: str | None = None,
 ) -> bool:
     """Check every receipt claim represented by the rendered TOML contract."""
 
@@ -280,11 +311,15 @@ def runtime_config_matches_receipt(
         proxy_port=proxy_port,
         features=CODEX_RUNTIME_DISABLED_FEATURES,
         skill_entries=parsed_entries,
+        mcp_server_url=mcp_server_url,
+        mcp_bearer_env_var=mcp_bearer_env_var,
     )
     return config_toml == expected
 
 
 __all__ = [
+    "CODEX_MCP_BEARER_ENV_VAR",
+    "CODEX_MCP_SERVER_NAME",
     "CODEX_MODEL_PROVIDER_ID",
     "CODEX_RUNTIME_DISABLED_FEATURES",
     "CODEX_RUNTIME_PROVIDER_CONTRACT_DIGEST",

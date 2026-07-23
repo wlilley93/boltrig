@@ -6,6 +6,7 @@ import hashlib
 import os
 import posixpath
 import pwd
+import re
 import stat
 from dataclasses import dataclass
 from pathlib import Path
@@ -393,3 +394,42 @@ def sanitized_environment(
             raise CodexCellPolicyError("auth must be supervisor-managed Codex auth")
         auth.add_to(environment)
     return environment
+
+
+_ENV_ADDITION_KEY = re.compile(r"[A-Z][A-Z0-9_]{0,63}\Z")
+MAX_ENVIRONMENT_ADDITIONS = 8
+MAX_ENVIRONMENT_ADDITION_VALUE_BYTES = 4096
+
+
+def validated_environment_additions(value: object) -> dict[str, str]:
+    """Validate per-cell env additions (the kernel-tools MCP bearer delivery).
+
+    The base environment is fixed by ``sanitized_environment``; additions may
+    EXTEND it but never override it - a caller that could rename CODEX_HOME or
+    PATH would control the cell's config and binary resolution. Keys are
+    bounded ``NAME``-style identifiers (the one in-tree use is
+    ``BOLTRIG_CODEX_MCP_RUN_TOKEN``), values bounded printable ASCII without
+    NUL/newline so the rendered environ block stays well-formed. The VALUE is a
+    secret in exactly one case (the run token): callers must never log the
+    merged environment.
+    """
+
+    if type(value) is not dict:
+        raise CodexCellPolicyError("environment additions must be an exact dict")
+    if len(value) > MAX_ENVIRONMENT_ADDITIONS:
+        raise CodexCellPolicyError("environment additions exceed the bound")
+    base_keys = {"CODEX_HOME", "HOME", "LANG", "LC_ALL", "PATH", "CODEX_ACCESS_TOKEN"}
+    result: dict[str, str] = {}
+    for key, item in value.items():
+        if type(key) is not str or _ENV_ADDITION_KEY.fullmatch(key) is None:
+            raise CodexCellPolicyError("environment addition key is invalid")
+        if key in base_keys:
+            raise CodexCellPolicyError("environment additions never override the base")
+        if (
+            type(item) is not str
+            or not 1 <= len(item) <= MAX_ENVIRONMENT_ADDITION_VALUE_BYTES
+            or any(ord(character) < 0x20 or ord(character) > 0x7E for character in item)
+        ):
+            raise CodexCellPolicyError("environment addition value is invalid")
+        result[key] = item
+    return result
