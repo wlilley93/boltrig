@@ -18,6 +18,7 @@ from boltrig.fleet.domain import (
 
 from . import codex_protocol as wire
 from .codex_cell_policy import CODEX_CLI_VERSION
+from .codex_runtime_config_toml import CODEX_MCP_SERVER_NAME
 from .codex_runtime_event_state import (
     CodexRuntimeProtocolError,
     NativeObservationState,
@@ -84,6 +85,27 @@ def is_runtime_invalidation(method: str) -> bool:
     """Return whether a notification invalidates quarantined phase evidence."""
 
     return method in _INVALIDATION_METHODS
+
+
+def is_kernel_tools_mcp_startup_update(notification: wire.NotificationMessage) -> bool:
+    """Whether an invalidation-class notification is the ONE the kernel-tools
+    lane expects: the admitted ``boltrig`` MCP server reaching a live state.
+
+    The preflight attested the inventory (exactly this server, bearer auth, no
+    resources, tools within the admitted ceiling), so its startup updates carry
+    no new evidence. Anything else stays fatal: another server's update, a
+    failure/cancellation of ours (the tool path died - the turn must degrade),
+    or any other invalidation method. The server name itself is argv-pinned, so
+    a rewritten per-cell config cannot borrow it (VJS-CC-VJS 6 H5).
+    """
+
+    if notification.method != "mcpServer/startupStatus/updated":
+        return False
+    params = notification.params.to_mapping()
+    return (
+        params.get("name") == CODEX_MCP_SERVER_NAME
+        and params.get("status") in {"starting", "ready"}
+    )
 
 
 class CodexEventTranslator:
@@ -408,5 +430,6 @@ def _method_digest(method: str) -> str:
 __all__ = [
     "CodexEventTranslator",
     "CodexRuntimeProtocolError",
+    "is_kernel_tools_mcp_startup_update",
     "is_runtime_invalidation",
 ]

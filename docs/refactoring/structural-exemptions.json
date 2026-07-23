@@ -146,11 +146,11 @@
       "expires": "2026-12-31"
     },
     "boltrig/fleet/infrastructure/codex_agent_runtime.py": {
-      "max_file_lines": 423,
-      "max_function_lines": 64,
+      "max_file_lines": 435,
+      "max_function_lines": 72,
       "over_limit_functions": [],
       "owner": "fleet-maintainers",
-      "reason": "File-length only. The read-only Codex cutover adds read_turn_output, which returns the agentMessage text the event translator captures from the lifecycle stream (thread/read is not served in the App Server's exec mode); the module was already at the 399-line floor. Audit fix: start_thread now also threads the API-owned cell root into thread state / failed-start cleanup so per-run cell trees are removed. Split the lifecycle from the read-back/terminal helpers into a sibling module when the runtime family is next refactored.",
+      "reason": "File-length only. The read-only Codex cutover adds read_turn_output, which returns the agentMessage text the event translator captures from the lifecycle stream (thread/read is not served in the App Server's exec mode); the module was already at the 399-line floor. Audit fix: start_thread now also threads the API-owned cell root into thread state / failed-start cleanup so per-run cell trees are removed. Split the lifecycle from the read-back/terminal helpers into a sibling module when the runtime family is next refactored. Kernel-tools lane: start_thread passes the lane-aware benign-invalidation predicate to the actor.",
       "expires": "2026-12-31"
     },
     "boltrig/fleet/infrastructure/codex_cell_supervisor.py": {
@@ -162,19 +162,19 @@
       "expires": "2026-12-31"
     },
     "boltrig/fleet/infrastructure/codex_runtime_events.py": {
-      "max_file_lines": 412,
+      "max_file_lines": 435,
       "max_function_lines": 49,
       "over_limit_functions": [],
       "owner": "fleet-maintainers",
-      "reason": "File-length only. The read-only Codex cutover adds the agentMessage read-back capture (the translator records the latest agentMessage text for read_turn_output because thread/read is not served in the App Server exec mode) while events() stays content-free; the module was already at the 400-line floor. Split the item/turn lifecycle translation from the native-observation tripwire into a sibling module when the runtime family is next refactored.",
+      "reason": "File-length only. The read-only Codex cutover adds the agentMessage read-back capture (the translator records the latest agentMessage text for read_turn_output because thread/read is not served in the App Server exec mode) while events() stays content-free; the module was already at the 400-line floor. Split the item/turn lifecycle translation from the native-observation tripwire into a sibling module when the runtime family is next refactored. Kernel-tools lane: is_kernel_tools_mcp_startup_update (the one benign invalidation-class notification, bound to the argv-pinned boltrig server name).",
       "expires": "2026-12-31"
     },
     "boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py": {
-      "max_file_lines": 571,
+      "max_file_lines": 577,
       "max_function_lines": 79,
       "over_limit_functions": [],
       "owner": "fleet-maintainers",
-      "reason": "Gap 5 threads the per-cell slot through acquire (acquire slot -> admit(slot) -> provision tree -> config via spawner -> start(slot) -> release in the reaper). Audit fixes: a lock now makes the G3 concurrency check + session registration indivisible, and the rollback (teardown/close/cell-tree removal/slot release) is extracted to _abort_acquire, clearing the function debt the old 89-line acquire carried. Kernel-tools lane: the pop-once scope take, lane-aware admit/preflight (extracted to _admit_for_lane/_probe_for_lane), the mcp server config render, and the env-only bearer delivery (_kernel_tools_environment). Follow-up: split the lane branches into a collaborator and lower back.",
+      "reason": "Gap 5 threads the per-cell slot through acquire (acquire slot -> admit(slot) -> provision tree -> config via spawner -> start(slot) -> release in the reaper). Audit fixes: a lock now makes the G3 concurrency check + session registration indivisible, and the rollback (teardown/close/cell-tree removal/slot release) is extracted to _abort_acquire, clearing the function debt the old 89-line acquire carried. Kernel-tools lane: the pop-once scope take, lane-aware admit/preflight (extracted to _admit_for_lane/_probe_for_lane), the mcp server config render, and the env-only bearer delivery (_kernel_tools_environment). Follow-up: split the lane branches into a collaborator and lower back. Empty-ceiling scopes now fail closed at admission (the live lane-mismatch fix).",
       "expires": "2026-12-31"
     },
     "boltrig/fleet/infrastructure/memory_model_proxy_grants.py": {
@@ -291,13 +291,13 @@
       "expires": "2026-12-31"
     },
     "boltrig/kernel/app.py": {
-      "max_file_lines": 813,
-      "max_function_lines": 568,
+      "max_file_lines": 830,
+      "max_function_lines": 570,
       "over_limit_functions": [
         {
           "name": "create_app",
-          "line": 246,
-          "lines": 568
+          "line": 261,
+          "lines": 570
         }
       ],
       "owner": "kernel-maintainers",
@@ -478,7 +478,7 @@
       "expires": "2026-12-31"
     },
     "boltrig/fleet/infrastructure/codex_runtime_admission.py": {
-      "max_file_lines": 437,
+      "max_file_lines": 438,
       "max_function_lines": 32,
       "over_limit_functions": [],
       "owner": "fleet-maintainers",

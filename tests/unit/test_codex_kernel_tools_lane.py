@@ -17,7 +17,9 @@ import pytest
 
 from boltrig.fleet.codex_runtime import CodexKernelToolWiring, CodexRuntime
 from boltrig.fleet.domain import (
+    OrganisationUserRef,
     PhaseAssignmentRef,
+    PhaseRef,
     RuntimeEvent,
     RuntimeEventKind,
     RuntimeThreadRef,
@@ -42,8 +44,9 @@ from boltrig.fleet.infrastructure.codex_kernel_tool_scope import (
 from boltrig.fleet.infrastructure.codex_kernel_tools_phase import (
     KERNEL_TOOLS_INSTRUCTIONS,
     KERNEL_TOOLS_PROFILE_NAME,
-    codex_mcp_wire_name,
+    codex_mcp_tool_name,
     kernel_tools_static_profile,
+    kernel_tools_thread_spec,
 )
 from boltrig.fleet.infrastructure.codex_runtime_admission import (
     AdmittedCodexCell,
@@ -69,7 +72,7 @@ from .codex_runtime_fakes import (
 )
 
 _MCP_URL = "http://kernel:8000/v1/mcp"
-_TOOLS = ("mcp__boltrig__ticket_read", "mcp__boltrig__jira_create")
+_TOOLS = ("ticket_read", "jira_create")
 
 
 def _kernel_tools_admission(
@@ -153,10 +156,9 @@ def _misprofiled_admission() -> CodexPhaseAdmission:
 @pytest.mark.parametrize(
     "tools",
     [
-        ("ticket_read",),  # not a wire name
-        ("mcp__other__ticket_read",),  # another server
-        ("mcp__boltrig__a", "mcp__boltrig__a"),  # duplicate
-        ("mcp__boltrig__bad.name",),  # unsanitized
+        ("tool_a", "tool_a"),  # duplicate
+        ("bad.name",),  # unsanitized
+        ("has space",),
     ],
 )
 def test_admission_refuses_a_malformed_ceiling(tools: tuple[str, ...]) -> None:
@@ -406,8 +408,8 @@ async def test_kernel_tools_run_registers_the_scope_before_start() -> None:
     assert scope.mcp_url == _MCP_URL
     # The ceiling is the run's effective verbs as exact Codex wire names.
     assert scope.tools == (
-        codex_mcp_wire_name("jira.create"),
-        codex_mcp_wire_name("ticket.read"),
+        codex_mcp_tool_name("jira.create"),
+        codex_mcp_tool_name("ticket.read"),
     )
     assert scope.token == "run-token-secret"
     assert "run-token-secret" not in repr(scope)
@@ -464,6 +466,33 @@ async def test_read_only_run_never_touches_the_kernel_tools_seams() -> None:
     result = await runtime.run("hi", _context(), tools=[])
     assert result.ok is True
     assert getattr(lifecycle.spec, "profile").name == "codex-read-only"
+
+
+async def test_empty_ceiling_falls_back_to_read_only_without_a_token(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A '*' run with NO effective verbs must not provision a tools cell.
+
+    The live failure this pins: an empty scope would render the boltrig MCP
+    server into the cell config while the admission declares the read-only
+    lane, and the two MUST always agree. The fallback runs the plain read-only
+    phase, mints no token, registers no scope, and warns observably.
+    """
+    tokens = _RecordingTokens()
+    registry = CodexKernelToolScopeRegistry()
+    lifecycle = _FakeLifecycle()
+    runtime = CodexRuntime(
+        lifecycle,  # type: ignore[arg-type]
+        stack_root=Path("/stack"),
+        kernel_tools=_wiring(tokens, registry, verb_ids=()),
+    )
+    with caplog.at_level("WARNING", logger="boltrig.fleet.codex_runtime"):
+        result = await runtime.run("hi", _context(), tools=[])
+    assert result.ok is True
+    assert getattr(lifecycle.spec, "profile").name == "codex-read-only"
+    assert tokens.issued == [] and tokens.revoked == []
+    assert len(registry) == 0
+    assert any("no effective tools" in record.message for record in caplog.records)
 
 
 # --- provider: config write, ceiling derivation, scope hand-off --------------
@@ -621,4 +650,189 @@ async def test_provider_take_is_pop_once_and_assignment_keyed(tmp_path: Path) ->
     assert registry.take("assignment-a") is not None
     assert registry.take("assignment-a") is None
     assert registry.take("assignment-b") is None
+
+
+async def test_provider_refuses_an_empty_ceiling_scope(tmp_path: Path) -> None:
+    """A scope whose ceiling is EMPTY must fail closed at admission.
+
+    The runtime filters the empty case into the read-only lane, so reaching
+    admission with an empty scope is a programming error: admitting it would
+    render an MCP server the admission does not declare (the live mismatch).
+    """
+    provider = _provider(tmp_path)
+    assignment = _assignment_for("empty")
+    empty_scope = CodexKernelToolScope(
+        assignment_id=assignment.assignment_id,
+        mcp_url=_MCP_URL,
+        tools=(),
+        token="run-token-secret",
+    )
+    with pytest.raises(CodexRuntimeAdmissionError, match="kernel tool scope"):
+        await provider._admit_for_lane(assignment, None, empty_scope)
+
+
+# --- the lane-aware MCP startup invalidation ---------------------------------
+
+from boltrig.fleet.infrastructure.codex_protocol import (  # noqa: E402
+    NotificationMessage,
+)
+from boltrig.fleet.infrastructure.codex_runtime_events import (  # noqa: E402
+    is_kernel_tools_mcp_startup_update,
+)
+from boltrig.fleet.domain import CanonicalJSON  # noqa: E402
+
+
+def _mcp_update(name: str, status: str) -> NotificationMessage:
+    return NotificationMessage(
+        "mcpServer/startupStatus/updated",
+        CanonicalJSON.from_mapping({"name": name, "status": status}),
+    )
+
+
+@pytest.mark.parametrize("status", ["starting", "ready"])
+def test_boltrig_mcp_startup_update_is_benign(status: str) -> None:
+    assert is_kernel_tools_mcp_startup_update(_mcp_update("boltrig", status)) is True
+
+
+@pytest.mark.parametrize(
+    "notification",
+    [
+        _mcp_update("boltrig", "failed"),  # our tool path died: fatal
+        _mcp_update("boltrig", "cancelled"),
+        _mcp_update("attacker", "ready"),  # any other server: fatal
+        NotificationMessage("skills/changed", CanonicalJSON.empty_mapping()),
+    ],
+)
+def test_other_invalidation_updates_stay_fatal(notification: NotificationMessage) -> None:
+    assert is_kernel_tools_mcp_startup_update(notification) is False
+
+
+async def test_kernel_tools_thread_survives_the_boltrig_startup_update() -> None:
+    from boltrig.fleet.infrastructure.codex_agent_runtime import CodexAgentRuntime
+    from boltrig.fleet.infrastructure.codex_runtime_admission import AdmittedCodexCell
+
+    from .codex_runtime_fakes import (
+        FakeCellProvider,
+        fake_cell,
+        preflight_receipt,
+    )
+
+    admission_value = _kernel_tools_admission()
+    fake = fake_cell(admission_value)
+    receipt = preflight_receipt(admission_value)
+    leased = AdmittedCodexCell(
+        admission_value,
+        fake.initialized,
+        type(receipt)(receipt.skill_attestation, observed_mcp_server_count=1),
+    )
+    runtime = CodexAgentRuntime(FakeCellProvider(leased), allow_test_only_runtime=True)
+    spec = kernel_tools_thread_spec(admission_value.assignment, Path("/stack"))
+    # The fake layout workspace is the admitted one; the spec must match it.
+    spec = type(spec)(
+        assignment=spec.assignment,
+        profile=spec.profile,
+        skills=spec.skills,
+        working_directory=admission_value.layout.workspace.as_posix(),
+    )
+    thread = await runtime.start_thread(spec)
+    # The lane's one MCP server reports live state DURING the thread: benign here.
+    await fake.client.notify(
+        "mcpServer/startupStatus/updated", {"name": "boltrig", "status": "ready"}
+    )
+    await runtime.close_thread(thread)
+    assert thread.thread_id == "thread-1"
+
+
+async def test_read_only_thread_still_fails_on_any_mcp_startup_update() -> None:
+    from boltrig.fleet.infrastructure.codex_agent_runtime import CodexAgentRuntime
+
+    from .codex_runtime_fakes import FakeCellProvider, leased_cell, thread_spec
+
+    admission_value = admission()
+    leased, fake = leased_cell(admission_value)
+    runtime = CodexAgentRuntime(FakeCellProvider(leased), allow_test_only_runtime=True)
+    await fake.client.notify("mcpServer/startupStatus/updated", {"name": "boltrig", "status": "ready"})
+
+    with pytest.raises(Exception, match="invalidated|not active|closed"):
+        await runtime.start_thread(thread_spec(admission_value))
+
+
+# --- the wall's (b) posture at the provider boundary --------------------------
+
+import boltrig.fleet.codex_trusted_wall as _wall  # noqa: E402
+
+from boltrig.fleet.codex_trusted_wall import CodexTrustedPostureError  # noqa: E402
+
+_SESSION_ENV = {
+    "BOLTRIG_CODEX_TRUSTED": "1",
+    "BOLTRIG_AUTH_MODE": "session",
+    "BOLTRIG_CODEX_AUTH_HELPER": _TEST_SHARED_HELPER,
+}
+
+
+class _SentinelError(RuntimeError):
+    pass
+
+
+class _SentinelSource:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def admit(self, assignment: object, slot: object = None) -> object:
+        self.calls += 1
+        raise _SentinelError("the wall let acquire through to admission")
+
+
+def _session_provider(tmp_path: Path, source: object) -> TrustedProxyCodexPhaseCellProvider:
+    store = MemoryModelProxyGrantStore()
+    registry = ModelProxyProcessRegistry()
+    return TrustedProxyCodexPhaseCellProvider(
+        source=source,  # type: ignore[arg-type]
+        supervisor=CodexCellSupervisor(binary=_CODEX_BIN, auth=None),
+        probe=_NullProbe(),
+        broker=PhaseScopedModelProxyGrantBroker(store),
+        grant_store=store,
+        registry=registry,
+        attestor=LinuxModelProxyPeerAttestor(registry),
+        stack_root=tmp_path,
+        upstream_base_url="http://gateway/v1",
+        upstream_key="KERNEL-ONLY-KEY",
+        http_client=httpx.AsyncClient(),
+        env=dict(_SESSION_ENV),
+    )
+
+
+@pytest.mark.invariant("SEC-185")
+async def test_acquire_admits_session_auth_under_the_attested_posture(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = _SentinelSource()
+    provider = _session_provider(tmp_path, source)
+    monkeypatch.setattr(_wall, "per_cell_uid_mode_available", lambda env=None: True)
+    with pytest.raises(_SentinelError):
+        await provider.acquire(_assignment_for("b-posture"))
+    assert source.calls == 1  # the wall passed and admission ran
+
+
+@pytest.mark.invariant("SEC-185")
+async def test_acquire_refuses_session_auth_without_per_cell_uids(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = _SentinelSource()
+    provider = _session_provider(tmp_path, source)
+    monkeypatch.setattr(_wall, "per_cell_uid_mode_available", lambda env=None: False)
+    with pytest.raises(CodexTrustedPostureError, match="ingress posture"):
+        await provider.acquire(_assignment_for("a-posture"))
+    assert source.calls == 0  # fail-closed BEFORE any admit or bearer mint
+
+
+def _assignment_for(suffix: str) -> PhaseAssignmentRef:
+    principal = OrganisationUserRef(tenant_id="tenant-1", user_id="user-1")
+    phase = PhaseRef(
+        root_run_id=f"run-{suffix}",
+        phase_id=f"run-{suffix}-codex",
+        principal=principal,
+        workspace_id="ws-1",
+    )
+    return PhaseAssignmentRef(phase=phase, assignment_id=f"run-{suffix}-codex-assignment")
 

@@ -23,7 +23,7 @@ import httpx
 import pytest
 
 from boltrig.adapters.builtin.memory_tickets import build as build_tickets
-from boltrig.fleet.infrastructure.codex_kernel_tools_phase import codex_mcp_wire_name
+from boltrig.fleet.infrastructure.codex_kernel_tools_phase import codex_mcp_tool_name
 from boltrig.fleet.infrastructure.codex_model_proxy_server import (
     PerCellModelProxyServer,
 )
@@ -33,7 +33,7 @@ from boltrig.models import GrantSet, TenantPermissions
 from boltrig.store import InMemoryStore
 
 T = "acme"
-_ALLOWED_WIRE = codex_mcp_wire_name("ticket.read")
+_ALLOWED_WIRE = codex_mcp_tool_name("ticket.read")
 
 
 async def _kernel() -> Kernel:
@@ -90,6 +90,14 @@ async def test_the_ceiling_compiler_and_the_mcp_face_derive_one_tool_set() -> No
 
 @pytest.mark.invariant("SEC-184")
 async def test_the_proxy_offers_exactly_the_granted_wire_names() -> None:
+    """The real 0.144.3 payload shape: the boltrig server is ONE namespace entry.
+
+    Verified live against the pinned binary: codex offers
+    ``{"type": "namespace", "name": "mcp__boltrig", "tools": [...]}`` with the
+    verbs as nested function tools. The proxy must keep the namespace with
+    ONLY the granted nested tools, strip every built-in, and drop any other
+    namespace outright.
+    """
     captured: dict[str, Any] = {}
     proxy = await _proxy(captured, frozenset({_ALLOWED_WIRE}))
     port = await proxy.start()
@@ -104,15 +112,67 @@ async def test_the_proxy_offers_exactly_the_granted_wire_names() -> None:
                         "tools": [
                             {"type": "function", "name": "exec_command"},
                             {"type": "function", "name": _ALLOWED_WIRE},
-                            {"type": "function", "name": codex_mcp_wire_name("jira.create")},
+                            {
+                                "type": "namespace",
+                                "name": "mcp__boltrig",
+                                "description": "Tools in the mcp__boltrig namespace.",
+                                "tools": [
+                                    {"type": "function", "name": _ALLOWED_WIRE},
+                                    {
+                                        "type": "function",
+                                        "name": codex_mcp_tool_name("jira.create"),
+                                    },
+                                ],
+                            },
+                            {
+                                "type": "namespace",
+                                "name": "mcp__attacker",
+                                "tools": [{"type": "function", "name": _ALLOWED_WIRE}],
+                            },
                         ],
                     }
                 ).encode(),
             )
         assert resp.status_code == 200
         sent = json.loads(captured["body"].decode())
-        names = [tool["name"] for tool in sent["tools"]]
-        assert names == [_ALLOWED_WIRE]  # the allowed verb survives, nothing else
+        top = [(tool.get("type"), tool.get("name")) for tool in sent["tools"]]
+        assert top == [("function", _ALLOWED_WIRE), ("namespace", "mcp__boltrig")]
+        nested = [tool["name"] for tool in sent["tools"][1]["tools"]]
+        assert nested == [_ALLOWED_WIRE]  # the granted verb survives, nothing else
+    finally:
+        await proxy.aclose()
+
+
+async def test_a_namespace_emptied_by_the_ceiling_is_dropped() -> None:
+    captured: dict[str, Any] = {}
+    proxy = await _proxy(captured, frozenset({_ALLOWED_WIRE}))
+    port = await proxy.start()
+    try:
+        async with httpx.AsyncClient() as caller:
+            resp = await caller.post(
+                f"http://127.0.0.1:{port}/v1/responses",
+                headers={"authorization": "Bearer cell-bearer"},
+                content=json.dumps(
+                    {
+                        "input": "hi",
+                        "tools": [
+                            {
+                                "type": "namespace",
+                                "name": "mcp__boltrig",
+                                "tools": [
+                                    {
+                                        "type": "function",
+                                        "name": codex_mcp_tool_name("jira.create"),
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ).encode(),
+            )
+        assert resp.status_code == 200
+        sent = json.loads(captured["body"].decode())
+        assert "tools" not in sent  # nothing survived, so no tools key at all
     finally:
         await proxy.aclose()
 

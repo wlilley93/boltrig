@@ -1,6 +1,7 @@
-"""Composition-root factory for the trusted read-only Codex runtime.
+"""Composition-root factory for the trusted Codex runtime.
 
-This is the trusted read-only Codex composition ([2026] VJS-CC-VJS 2). The heavy
+This is the trusted Codex composition ([2026] VJS-CC-VJS 2; the two lawful
+postures are defined in decision 0017). The heavy
 provider (``TrustedProxyCodexPhaseCellProvider``) imports the fleet
 ``infrastructure`` layer and ``httpx``, which the architecture gate
 (``scripts/check_architecture.py``) forbids ``boltrig/fleet/*`` from reaching
@@ -12,7 +13,7 @@ same boundary for the same reason).
 Off by default = a total no-op: with ``BOLTRIG_CODEX_TRUSTED`` unset (or the
 binary / stack root unconfigured) ``build_trusted_codex_config`` returns ``None``,
 ``RuntimeResolver._codex_config`` returns ``None``, and ``build_runtime`` degrades
-the ``codex`` runtime to ``ScriptRuntime`` exactly as before. The dev/prod wall is
+the ``codex`` runtime to ``ScriptRuntime`` exactly as before. The posture wall is
 re-asserted again at ``acquire`` and inside ``build_trusted_codex_runtime`` (both
 call ``require_codex_trusted_posture``); returning a live provider only when
 ``codex_trusted`` is set is the first of those gates.

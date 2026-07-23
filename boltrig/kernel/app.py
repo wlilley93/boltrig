@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 from boltrig.models import (
@@ -123,6 +123,21 @@ def _error_envelope(e: BoltrigError) -> dict:
     an error. Every transport surface returns this shape so a client parses one
     envelope, never per-route variants."""
     return {"status": "denied" if e.status_code == 403 else "error", "reason": e.reason}
+
+
+def _mcp_wire_response(body: dict, result: dict) -> Response:
+    """The streamable-HTTP answer for one JSON-RPC message.
+
+    A JSON-RPC NOTIFICATION (no ``id``) must NOT get a JSON-RPC response frame:
+    the streamable-HTTP contract is 202 with an empty body. Returning
+    ``{"id": null, "result": {}}`` - the old behaviour - is a protocol violation
+    that strict clients (Codex's rmcp worker) treat as a fatal transport error,
+    killing the whole MCP connection. pi/opencode tolerated it; Codex does not.
+    Request-shaped messages (with an ``id``) keep the 200 JSON body unchanged.
+    """
+    if isinstance(body, dict) and body.get("id") is None:
+        return Response(status_code=202)
+    return JSONResponse(result)
 
 
 async def _dev_principal(request: Request) -> Principal:
@@ -439,11 +454,13 @@ def create_app(
         # at the SAME depth as a human action.
         ip, ua = _client_ip(request), (request.headers.get("user-agent") or None)
         if run_token is not None:
-            return JSONResponse(await k.mcp.handle(run_token, body, ip_address=ip, user_agent=ua))
+            result = await k.mcp.handle(run_token, body, ip_address=ip, user_agent=ua)
+            return _mcp_wire_response(body, result)
         # user-authenticated MCP: resolve the caller (PAT or configured resolver)
         # and advertise/scope tools to their effective grants (no weak path, SEC-37).
         p = await principal(request)
-        return JSONResponse(await k.mcp.handle_user(p, body, ip_address=ip, user_agent=ua))
+        result = await k.mcp.handle_user(p, body, ip_address=ip, user_agent=ua)
+        return _mcp_wire_response(body, result)
 
     @app.post("/v1/chat")
     async def chat(body: ChatBody, request: Request, p: Principal = Depends(principal)):

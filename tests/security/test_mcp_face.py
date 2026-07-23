@@ -125,3 +125,30 @@ def test_mcp_http_route():
     r = client.post("/v1/mcp", json=_req("tools/list"), headers={"x-boltrig-mcp-token": tok})
     assert r.status_code == 200
     assert any(t["name"] == "ticket.read" for t in r.json()["result"]["tools"])
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-184")
+def test_mcp_notification_gets_202_with_no_body():
+    """A JSON-RPC notification is never answered with a response frame.
+
+    Strict streamable-HTTP clients (Codex's rmcp worker) treat a response to
+    ``notifications/initialized`` - with a null id - as a fatal transport error
+    and kill the whole MCP connection; that was the live codex-lane failure.
+    """
+    k = asyncio.run(_kernel())
+    tok = k.mcp.issue_run_token(T, GrantSet.of(["ticket.read"]))
+    client = TestClient(create_app(k))
+    note = client.post(
+        "/v1/mcp",
+        json={"jsonrpc": "2.0", "method": "notifications/initialized"},
+        headers={"x-boltrig-mcp-token": tok},
+    )
+    assert note.status_code == 202
+    assert not note.content
+    # A request-shaped message (an id) keeps its 200 JSON-RPC body.
+    ping = client.post(
+        "/v1/mcp", json=_req("ping"), headers={"x-boltrig-mcp-token": tok}
+    )
+    assert ping.status_code == 200
+    assert ping.json()["result"] == {}

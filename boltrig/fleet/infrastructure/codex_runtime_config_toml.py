@@ -15,7 +15,7 @@ CODEX_MODEL_PROVIDER_ID = "boltrig_model_proxy"
 CODEX_RUNTIME_PROVIDER_NAME = "Boltrig per-cell model proxy"
 CODEX_RUNTIME_WIRE_API = "responses"
 # The ONE MCP server a kernel-tools cell may carry: the kernel's own MCP face.
-# The server name is part of the model-facing tool names (``mcp__boltrig__*``),
+# The server name is part of the model-facing tool namespace (``mcp__boltrig``),
 # so it is a fixed constant, never a per-run value. The bearer travels ONLY in
 # the named environment variable at spawn time - never in this file, never on
 # argv (see codex_kernel_tool_scope).

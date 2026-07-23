@@ -44,12 +44,13 @@ class Settings:
     # on it is constructed and parked on app.state.platform, but nothing calls it
     # yet: wiring an admit() into the live path is a later, court-gated PR.
     codex_ledger: bool = False  # BOLTRIG_CODEX_LEDGER=1 -> construct the inert stack
-    # Trusted single-tenant read-only Codex runtime ([2026] VJS-CC-VJS 2). Opt-in:
+    # Trusted Codex runtime ([2026] VJS-CC-VJS 2; postures in decision 0017). Opt-in:
     # BOLTRIG_CODEX_TRUSTED=1 selects the loopback-proxy Codex runtime that mints a
-    # per-cell bearer from the child's real process identity WITHOUT SO_PEERCRED, for
-    # a single trusted operator only. Lawful ONLY when hard-walled from production
-    # (see require_codex_trusted_posture): it requires dev_auth AND refuses under any
-    # production signal or real ingress posture. Off by default = never constructed.
+    # per-cell bearer from the child's real process identity. Lawful under EITHER
+    # posture (require_codex_trusted_posture): (a) single trusted operator (dev auth,
+    # no real ingress), or (b) per-cell uids with SO_PEERCRED uid attestation
+    # enforced, under which session login may coexist. Any production/staging signal
+    # refuses under both. Off by default = never constructed.
     codex_trusted: bool = False  # BOLTRIG_CODEX_TRUSTED=1 -> trusted Codex runtime
     # Wiring for the trusted read-only Codex runtime ([2026] VJS-CC-VJS 2). These are
     # inert unless codex_trusted is set: the composition-root factory

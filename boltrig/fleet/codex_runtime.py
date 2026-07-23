@@ -43,7 +43,7 @@ from boltrig.fleet.infrastructure.codex_kernel_tool_scope import (
     CodexKernelToolScopeRegistry,
 )
 from boltrig.fleet.infrastructure.codex_kernel_tools_phase import (
-    codex_mcp_wire_name,
+    codex_mcp_tool_name,
     kernel_tools_thread_spec,
     validated_kernel_tool_names,
 )
@@ -172,8 +172,23 @@ class CodexRuntime:
         try:
             verb_ids = await wiring.compile_tool_ceiling(context.tenant_id, context.grants)
             tools = validated_kernel_tool_names(
-                tuple({codex_mcp_wire_name(verb_id) for verb_id in verb_ids})
+                tuple({codex_mcp_tool_name(verb_id) for verb_id in verb_ids})
             )
+            if not tools:
+                # A tool-enabled capability whose run holds NO effective verbs
+                # (e.g. a chat turn whose role loads no skills) has no MCP face
+                # to offer. Run the plain read-only phase - exactly what the
+                # legacy lanes did with empty grants - rather than provisioning
+                # a cell whose config advertises a server its admission does
+                # not declare. Observable, never silent.
+                logger.warning(
+                    "codex kernel-tools run %s has no effective tools; "
+                    "falling back to the read-only phase",
+                    context.run_id,
+                )
+                return await self._run_phase(
+                    prompt, read_only_thread_spec(assignment, self._stack_root)
+                )
             token = wiring.issue_token(
                 context.tenant_id,
                 context.grants,

@@ -370,7 +370,13 @@ class TrustedProxyCodexPhaseCellProvider:
     ) -> CodexPhaseAdmission:
         """Admit the assignment on the lane its scope (or its absence) selects."""
 
-        if kernel_scope is not None and kernel_scope.assignment_id != assignment.assignment_id:
+        if kernel_scope is not None and (
+            kernel_scope.assignment_id != assignment.assignment_id or not kernel_scope.tools
+        ):
+            # An EMPTY ceiling is never admitted as a tools lane: the config
+            # would advertise an MCP server the admission does not declare, and
+            # the two must always agree. The adapter filters this case into the
+            # read-only lane, so an empty scope here is a programming error.
             raise CodexRuntimeAdmissionError("kernel tool scope does not match the assignment")
         if kernel_scope is None:
             admission = await self._source.admit(assignment, slot)

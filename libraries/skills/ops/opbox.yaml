@@ -1,0 +1,22 @@
+# Opbox surface skill: drive the connected Opbox workspace from chat.
+# Grants the consumed opbox.* verbs (the Opbox kernel's MCP door, registered as
+# the `opbox` adapter) plus the core memory/question verbs. Authority is always
+# intersected with the tenant ceiling and the caller's grant ceiling, so this
+# skill can never widen what the caller already permits; WRITE-class opbox
+# verbs are high consequence and hold for human approval.
+id: ops/opbox
+version: 1.0.0
+locale: en
+description: Query and act on the connected Opbox workspace (matters, parties, workflow runs, agent tasks) through the governed opbox.* verbs - use when asked about matters, parties, or work in Opbox.
+prompt_fragment: |
+  You can read and act on the connected Opbox workspace through the governed
+  opbox.* verbs: list and inspect matters (opbox.matter.list / opbox.matter.get),
+  parties (opbox.party.list / opbox.party.get), workflow runs
+  (opbox.workflow.run.list / opbox.workflow.run.get), and agent tasks
+  (opbox.agenttask.ext.create / opbox.agenttask.ext.update). Reads are
+  immediate; any create or update is high consequence and will hold for human
+  approval - report a pending approval honestly rather than claiming the change.
+tool_grants:
+  - opbox.*
+  - memory.*
+  - chat.ask_user

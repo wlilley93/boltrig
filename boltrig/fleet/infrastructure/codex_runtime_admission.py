@@ -162,8 +162,9 @@ class CodexPhaseAdmission:
     skill_plan: SkillAttestationPlan
     developer_instructions: str
     provisioned_policy_digest: str
-    # The kernel-tools lane's exact per-run tool ceiling as Codex WIRE names
-    # (``mcp__boltrig__*``). Empty (the default) is the read-only lane. These do
+    # The kernel-tools lane's exact per-run tool ceiling as Codex NESTED tool
+    # names (the sanitized verb ids the ``mcp__boltrig`` namespace carries).
+    # Empty (the default) is the read-only lane. These do
     # NOT travel through the domain birth policy's ``enabled_tools``: governed
     # catalogue names cannot represent wire names, and kernel tools are not
     # Codex runtime tools - they are governed at the kernel chokepoint. The

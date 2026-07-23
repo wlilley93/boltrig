@@ -25,7 +25,11 @@ from .codex_runtime_actor import (
     CodexRuntimeTerminal,
 )
 from .codex_runtime_admission import AdmittedCodexCell, CodexPhaseCellProvider
-from .codex_runtime_events import CodexEventTranslator, CodexRuntimeProtocolError
+from .codex_runtime_events import (
+    CodexEventTranslator,
+    CodexRuntimeProtocolError,
+    is_kernel_tools_mcp_startup_update,
+)
 from .codex_runtime_state import (
     CodexThreadState,
     PhaseKey,
@@ -134,6 +138,14 @@ class CodexAgentRuntime(AgentRuntime):
                 translator=translator,
                 on_terminal=lambda _actor, terminal: self._retire(state, terminal),
                 max_buffered_events=self._max_buffered_events,
+                # The kernel-tools lane expects exactly the admitted boltrig MCP
+                # server's live-state startup updates; every other invalidation
+                # method (and any other server) stays fatal, read-only included.
+                benign_invalidation=(
+                    is_kernel_tools_mcp_startup_update
+                    if admission.kernel_tools
+                    else None
+                ),
             )
             state.actor = actor
             await self._activate(spec.assignment.phase, state)

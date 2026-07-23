@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
@@ -12,6 +13,8 @@ from . import codex_protocol as wire
 from .codex_app_server import CodexAppServerClient
 from .codex_runtime_event_state import CodexRuntimeProtocolError
 from .codex_runtime_events import CodexEventTranslator, is_runtime_invalidation
+
+logger = logging.getLogger(__name__)
 
 MAX_BUFFERED_RUNTIME_EVENTS = 256
 MAX_DEFERRED_NOTIFICATIONS = 64
@@ -36,6 +39,23 @@ TerminalCallback = Callable[
 ]
 
 
+def _redacted_marker(notification: wire.NotificationMessage) -> str:
+    """A bounded, content-free marker for an invalidating notification.
+
+    Only the MCP startup update's server name + state are surfaced (both are
+    config-derived, never model or user content); every other method degrades
+    to its name alone. Params are never logged wholesale.
+    """
+
+    if notification.method == "mcpServer/startupStatus/updated":
+        try:
+            params = notification.params.to_mapping()
+            return f"name={params.get('name')!r} status={params.get('status')!r}"
+        except Exception:
+            return "unparseable"
+    return "method-only"
+
+
 class CodexRuntimeActor:
     """Own the sole post-preflight notification reader and bounded event queue."""
 
@@ -46,12 +66,16 @@ class CodexRuntimeActor:
         translator: CodexEventTranslator,
         on_terminal: TerminalCallback,
         max_buffered_events: int,
+        benign_invalidation: Callable[[wire.NotificationMessage], bool] | None = None,
     ) -> None:
         if not 1 <= max_buffered_events <= MAX_BUFFERED_RUNTIME_EVENTS:
             raise ValueError("runtime event buffer is outside its bound")
+        if benign_invalidation is not None and not callable(benign_invalidation):
+            raise TypeError("benign_invalidation must be a predicate or None")
         self._client = client
         self._translator = translator
         self._on_terminal = on_terminal
+        self._benign_invalidation = benign_invalidation
         self._events: asyncio.Queue[RuntimeEvent] = asyncio.Queue(max_buffered_events)
         self._checkpoints: asyncio.Queue[asyncio.Future[None]] = asyncio.Queue(
             MAX_PUMP_CHECKPOINTS
@@ -285,6 +309,23 @@ class CodexRuntimeActor:
                 return False
             try:
                 if is_runtime_invalidation(notification.method):
+                    if (
+                        self._benign_invalidation is not None
+                        and self._benign_invalidation(notification)
+                    ):
+                        # The lane's expected MCP startup update: the preflight
+                        # already attested the exact inventory, so this carries
+                        # no new evidence - and it is not a lifecycle event, so
+                        # it is never translated into the ledger.
+                        return True
+                    # A fatal invalidation must be diagnosable without leaking
+                    # content: log the method and a bounded redacted marker, so
+                    # ops can tell a hostile change from a lane misconfiguration.
+                    logger.warning(
+                        "codex runtime invalidation: method=%s marker=%s",
+                        notification.method,
+                        _redacted_marker(notification),
+                    )
                     raise CodexRuntimeProtocolError(
                         "Codex quarantined runtime evidence was invalidated"
                     )

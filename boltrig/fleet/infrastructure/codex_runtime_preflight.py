@@ -12,7 +12,7 @@ from boltrig.fleet.domain.skill_attestation import SkillAttestationPlan
 
 from . import codex_protocol as wire
 from .codex_app_server import CodexAppServerClient
-from .codex_kernel_tools_phase import codex_mcp_wire_name
+from .codex_kernel_tools_phase import codex_mcp_tool_name
 from .codex_runtime_admission import (
     CodexRuntimeAdmissionError,
     QuarantinedCodexPreflightReceipt,
@@ -175,7 +175,7 @@ def _attest_kernel_tools_mcp_inventory(
     One server, named ``boltrig``, bearer-token auth (the run-scoped token the
     config names by env var), no resources, and every advertised tool within
     the admitted wire-name ceiling (mapped through the same
-    ``codex_mcp_wire_name`` the ceiling was compiled with). Anything else - a
+    ``codex_mcp_tool_name`` the ceiling was compiled with). Anything else - a
     second server, a missing one, another auth shape, a tool outside the
     ceiling - fails closed.
     """
@@ -193,7 +193,7 @@ def _attest_kernel_tools_mcp_inventory(
     if type(tools) is not dict:
         raise CodexRuntimeAdmissionError("Codex kernel-tools MCP tools are malformed")
     for tool_name, tool in tools.items():
-        if type(tool_name) is not str or codex_mcp_wire_name(tool_name) not in expected_tools:
+        if type(tool_name) is not str or codex_mcp_tool_name(tool_name) not in expected_tools:
             raise CodexRuntimeAdmissionError("Codex MCP tool is outside the admitted ceiling")
         _exact_keys(tool, _MCP_TOOL_REQUIRED_KEYS, _MCP_TOOL_OPTIONAL_KEYS)
 

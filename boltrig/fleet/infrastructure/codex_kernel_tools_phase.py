@@ -14,16 +14,18 @@ drift:
   * the fixed kernel-tools ``ProfileRef`` (no NATIVE tools - the domain birth
     policy stays tool-free, because kernel tools are not Codex runtime tools and
     are governed at the kernel chokepoint, not by the runtime),
-  * the per-run tool ceiling as exact Codex WIRE names (``mcp__boltrig__*``),
-    which travel on ``CodexPhaseAdmission.kernel_tools`` rather than through the
-    domain's ``enabled_tools`` - governed catalogue names cannot represent them
-    (they carry uppercase and the ``mcp__`` double underscore), and
+  * the per-run tool ceiling as exact Codex NESTED tool names (the sanitized
+    verb ids the ``mcp__boltrig`` namespace carries), which travel on
+    ``CodexPhaseAdmission.kernel_tools`` rather than through the domain's
+    ``enabled_tools`` - governed catalogue names cannot represent them
+    (they carry uppercase), and
   * the exact ``RuntimeThreadSpec`` the adapter sends.
 
 The wire-name rule REPLICATES Codex 0.144.3's ``sanitize_responses_api_tool_name``
-(verified against the tagged source): the model-facing name is
-``mcp__<server>__<tool>`` with every character outside ``[a-zA-Z0-9_]`` replaced
-by ``_``. The per-cell model proxy holds its ceiling in exactly these names, so
+(verified live against the pinned binary): codex offers the server as ONE
+``{"type": "namespace", "name": "mcp__boltrig"}`` entry whose nested function
+tools are the verb ids with every character outside ``[a-zA-Z0-9_]`` replaced by
+``_``. The per-cell model proxy holds its ceiling in exactly these names, so
 what the admission compiles is byte-identical to what the wire carries.
 """
 
@@ -79,40 +81,51 @@ KERNEL_TOOLS_INSTRUCTIONS = (
 # rather than silently truncating the ceiling.
 MAX_KERNEL_TOOLS = 128
 MAX_KERNEL_TOOL_NAME_LENGTH = 128
-_WIRE_NAME = re.compile(r"mcp__boltrig__[A-Za-z0-9_]+\Z")
+_WIRE_NAME = re.compile(r"[A-Za-z0-9_]+\Z")
+
+# The model-facing NAMESPACE the server appears under in the Responses payload
+# (verified live against the pinned 0.144.3 binary): codex exposes the server as
+# ``{"type": "namespace", "name": "mcp__boltrig", "tools": [...]}`` with the
+# individual verbs as nested function tools named by ``codex_mcp_tool_name``.
+CODEX_MCP_NAMESPACE_NAME = f"mcp__{CODEX_MCP_SERVER_NAME}"
 
 
 class CodexKernelToolsError(ValueError):
     """A kernel-tools lane value is not an exact, bounded, canonical value."""
 
 
-def codex_mcp_wire_name(verb_id: str) -> str:
-    """The exact Codex 0.144.3 model-facing name for a kernel MCP tool.
+def _sanitize(value: str) -> str:
+    """Replicate Codex 0.144.3's ``sanitize_responses_api_tool_name`` exactly."""
 
-    Replicates ``sanitize_responses_api_tool_name`` over
-    ``mcp__<server>__<tool>``: ASCII alphanumerics and ``_`` survive, every
-    other character becomes ``_`` (case is preserved). The proxy ceiling, the
-    admission and the preflight attestation all derive names through this one
-    function so the three can never disagree about the mapping.
-    """
-
-    if type(verb_id) is not str or not verb_id:
-        raise CodexKernelToolsError("kernel tool verb id must be a non-empty string")
-    raw = f"mcp__{CODEX_MCP_SERVER_NAME}__{verb_id}"
     return "".join(
         character
         if character.isascii() and (character.isalnum() or character == "_")
         else "_"
-        for character in raw
+        for character in value
     )
+
+
+def codex_mcp_tool_name(verb_id: str) -> str:
+    """The exact model-facing NESTED tool name for a kernel verb.
+
+    Verified live against the pinned binary: inside the ``mcp__boltrig``
+    namespace the verb ``knowledge.search`` appears as the nested function tool
+    ``knowledge_search`` - the sanitizer applied to the raw verb id, with no
+    prefix. The proxy ceiling, the admission and the preflight attestation all
+    derive names through this one function so they can never disagree.
+    """
+
+    if type(verb_id) is not str or not verb_id:
+        raise CodexKernelToolsError("kernel tool verb id must be a non-empty string")
+    return _sanitize(verb_id)
 
 
 def validated_kernel_tool_names(values: object) -> tuple[str, ...]:
     """Canonicalize the per-run wire-name ceiling, fail-closed.
 
-    Exact tuple of exact strings, each a bounded ``mcp__boltrig__*`` wire name,
-    unique and sorted, within the count bound. Anything else is refused: the
-    ceiling is a security value, so a malformed one is never "cleaned up".
+    Exact tuple of exact strings, each a bounded nested tool name, unique and
+    sorted, within the count bound. Anything else is refused: the ceiling is a
+    security value, so a malformed one is never "cleaned up".
     """
 
     if type(values) is not tuple or any(type(item) is not str for item in values):
@@ -181,6 +194,7 @@ def kernel_tools_static_profile(model_id: str) -> StaticRoleProfile:
 
 
 __all__ = [
+    "CODEX_MCP_NAMESPACE_NAME",
     "KERNEL_TOOLS_INSTRUCTIONS",
     "KERNEL_TOOLS_PROFILE",
     "KERNEL_TOOLS_PROFILE_NAME",
@@ -188,7 +202,7 @@ __all__ = [
     "MAX_KERNEL_TOOLS",
     "MAX_KERNEL_TOOL_NAME_LENGTH",
     "CodexKernelToolsError",
-    "codex_mcp_wire_name",
+    "codex_mcp_tool_name",
     "kernel_tools_cell_id",
     "kernel_tools_cell_root",
     "kernel_tools_static_profile",

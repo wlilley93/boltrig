@@ -348,50 +348,6 @@ services:
               count: all
               capabilities: ["gpu"]
 
-  pi-sidecar:
-    # Round Two: the Pi reasoning gateway (Epic RUN). Sandboxed: it has no native
-    # tools and reaches ONLY the kernel MCP face + the model endpoint (SEC-24).
-    # It is not internet-facing (no published ports).
-    #
-    # Egress is ENFORCED, not just documented (Round Six gap 3.3, SEC-48): the
-    # gateway sits on the `sandbox` network ONLY, so it can reach the kernel (its
-    # MCP face) but NOT postgres/redis/the other services on `default`. The secure
-    # overlay (deploy/compose.secure.yml) flips `sandbox` to internal: true, which
-    # removes arbitrary internet egress entirely - in that posture the model must
-    # be local (the `local` profile model on `sandbox`) or routed via the proxy.
-    networks:
-      - sandbox
-    <<: *app-hardening
-    build:
-      context: ./services/pi_sidecar
-      dockerfile: Dockerfile
-    image: boltrig/pi-sidecar:0.1.0
-    restart: unless-stopped
-    environment:
-      # M2 (SEC-73): the shared /run bearer. Unset = dev-open (fail-closed only
-      # under a production signal). The fleet-worker (env_file: .env) must carry
-      # the SAME PI_SIDECAR_TOKEN so PiRuntime presents it. See .env.example.
-      PI_SIDECAR_TOKEN: ${PI_SIDECAR_TOKEN:-}
-      PI_SIDECAR_EGRESS_ALLOW: ${PI_SIDECAR_EGRESS_ALLOW:-kernel,bifrost,local-model}
-      # Pass the prod signals the gateway's fail-closed auth checks (it reads
-      # these directly, mirroring the kernel), so an unset token fails closed
-      # in prod but stays open in dev.
-      BOLTRIG_ENV: ${BOLTRIG_ENV:-}
-      BOLTRIG_PRODUCTION: ${BOLTRIG_PRODUCTION:-}
-    expose:
-      - "8090"
-    depends_on:
-      kernel:
-        condition: service_healthy
-    healthcheck:
-      test:
-        - CMD-SHELL
-        - python -c "import urllib.request; urllib.request.urlopen('http://localhost:8090/health')" || exit 1
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-
   channel-gateway:
     # Decision 0003, Phase 2: the severed terminator for the socket channel
     # class (Slack/Discord/Telegram/WhatsApp/Signal + the reference generic
@@ -464,6 +420,52 @@ services:
       - signal_cli_data:/home/.local/share/signal-cli
     expose:
       - "8080"
+
+  pi-sidecar:
+    # Round Two: the Pi reasoning gateway (Epic RUN). Sandboxed: it has no native
+    # tools and reaches ONLY the kernel MCP face + the model endpoint (SEC-24).
+    # It is not internet-facing (no published ports).
+    #
+    # Egress is ENFORCED, not just documented (Round Six gap 3.3, SEC-48): the
+    # gateway sits on the `sandbox` network ONLY, so it can reach the kernel (its
+    # MCP face) but NOT postgres/redis/the other services on `default`. The secure
+    # overlay (deploy/compose.secure.yml) flips `sandbox` to internal: true, which
+    # removes arbitrary internet egress entirely - in that posture the model must
+    # be local (the `local` profile model on `sandbox`) or routed via the proxy.
+    networks:
+      - sandbox
+    <<: *app-hardening
+    build:
+      context: ./services/pi_sidecar
+      dockerfile: Dockerfile
+    image: boltrig/pi-sidecar:0.1.0
+    profiles: ["legacy"]
+    restart: unless-stopped
+    environment:
+      # M2 (SEC-73): the shared /run bearer. Unset = dev-open (fail-closed only
+      # under a production signal). The fleet-worker (env_file: .env) must carry
+      # the SAME PI_SIDECAR_TOKEN so PiRuntime presents it. See .env.example.
+      PI_SIDECAR_TOKEN: ${PI_SIDECAR_TOKEN:-}
+      PI_SIDECAR_EGRESS_ALLOW: ${PI_SIDECAR_EGRESS_ALLOW:-kernel,bifrost,local-model}
+      # Pass the prod signals the gateway's fail-closed auth checks (it reads
+      # these directly, mirroring the kernel), so an unset token fails closed
+      # in prod but stays open in dev.
+      BOLTRIG_ENV: ${BOLTRIG_ENV:-}
+      BOLTRIG_PRODUCTION: ${BOLTRIG_PRODUCTION:-}
+    expose:
+      - "8090"
+    depends_on:
+      kernel:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - python -c "import urllib.request; urllib.request.urlopen('http://localhost:8090/health')" || exit 1
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
 
   whatsapp-bridge:
     # WhatsApp via Baileys (decision 0003, Phase 2): the Node bridge is a

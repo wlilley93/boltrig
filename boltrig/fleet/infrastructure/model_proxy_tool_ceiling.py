@@ -16,9 +16,14 @@ ceiling is applied there rather than trusted to the runtime's own config.
 
 The ceiling is a SET, not a flag: the kernel-tools lane
 (``codex_kernel_tools_phase``) compiles the run's granted verbs into exact
-Codex wire names (``mcp__boltrig__*``) at admission, and the same enforcement
-then offers exactly those tools and no more - built-ins stay stripped either
-way, and a boltrig verb outside the run's grants is stripped like any other.
+Codex nested tool names at admission, and the same enforcement then offers
+exactly those tools and no more - built-ins stay stripped either way, and a
+boltrig verb outside the run's grants is stripped like any other. Verified
+live against the pinned binary: the kernel's MCP server appears in the payload
+as ONE ``{"type": "namespace", "name": "mcp__boltrig"}`` entry whose NESTED
+function tools carry the ceiling's names, so namespace entries are filtered by
+their contents (the namespace itself survives only while a granted tool
+remains inside it), not just by their top-level name.
 
 Fail-closed: a body we cannot parse is a body whose tool set we cannot verify, so
 it is rejected rather than forwarded.
@@ -28,6 +33,8 @@ from __future__ import annotations
 
 import json
 import re
+
+from .codex_kernel_tools_phase import CODEX_MCP_NAMESPACE_NAME
 
 # The Responses API names a tool call by this item type; the SSE frames that carry
 # one always contain it, so it is the cheapest exact marker to scan a stream for.
@@ -72,8 +79,16 @@ def enforce_tool_ceiling(body: bytes, allowed: frozenset[str]) -> bytes:
     declared = payload.get("tools")
     if not isinstance(declared, list):
         raise ToolCeilingViolation("model-call tools is not a list")
-    kept = [tool for tool in declared if _tool_name(tool) in allowed]
-    if len(kept) == len(declared):
+    kept: list[object] = []
+    changed = False
+    for tool in declared:
+        surviving = _filter_tool(tool, allowed)
+        if surviving is None:
+            changed = True
+        else:
+            changed = changed or surviving is not tool
+            kept.append(surviving)
+    if not changed:
         return body
     if kept:
         payload["tools"] = kept
@@ -81,6 +96,33 @@ def enforce_tool_ceiling(body: bytes, allowed: frozenset[str]) -> bytes:
         payload.pop("tools", None)
         payload.pop("tool_choice", None)
     return json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+
+
+def _filter_tool(tool: object, allowed: frozenset[str]) -> object | None:
+    """The surviving form of one top-level tool entry, or None if dropped.
+
+    Function and built-in tools are kept by name, exactly as before. A
+    ``namespace`` entry survives ONLY as a filtered copy: it must be the
+    boltrig kernel namespace and at least one nested tool must be within the
+    ceiling. Any other namespace, and any namespace emptied by the filter, is
+    dropped - an entry we cannot name can never match the ceiling.
+    """
+
+    if not isinstance(tool, dict):
+        return None
+    if tool.get("type") == "namespace":
+        if tool.get("name") != CODEX_MCP_NAMESPACE_NAME:
+            return None
+        nested = tool.get("tools")
+        if not isinstance(nested, list):
+            return None
+        kept_nested = [item for item in nested if _tool_name(item) in allowed]
+        if not kept_nested:
+            return None
+        if len(kept_nested) == len(nested):
+            return tool
+        return {**tool, "tools": kept_nested}
+    return tool if _tool_name(tool) in allowed else None
 
 
 class ToolCallStreamGuard:
@@ -128,9 +170,28 @@ class ToolCallStreamGuard:
                 name = match.group(1).decode("utf-8")
             except UnicodeDecodeError:
                 return False
-            if name not in self._allowed:
+            if not self._name_allowed(name):
                 return False
         return True
+
+    def _name_allowed(self, name: str) -> bool:
+        """Whether a called tool name maps to EXACTLY one ceiling entry.
+
+        Codex may call a namespaced tool either by its bare nested name or by a
+        namespace-qualified form (``mcp__boltrig/<name>``,
+        ``mcp__boltrig.<name>``, ``mcp__boltrig__<name>``); every qualifier
+        stripped here is the pinned boltrig namespace ONLY, so a qualified name
+        can never smuggle a tool from another namespace, and a bare name can
+        never match a verb outside the ceiling.
+        """
+
+        if name in self._allowed:
+            return True
+        for separator in ("/", ".", "__"):
+            prefix = f"{CODEX_MCP_NAMESPACE_NAME}{separator}"
+            if name.startswith(prefix) and name[len(prefix):] in self._allowed:
+                return True
+        return False
 
 
 def _tool_name(tool: object) -> str | None:
