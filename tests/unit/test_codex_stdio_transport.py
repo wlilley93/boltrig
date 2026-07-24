@@ -6,11 +6,52 @@ import pytest
 
 from boltrig.fleet.infrastructure import codex_protocol as wire
 from boltrig.fleet.infrastructure.codex_stdio_transport import (
+    STDERR_TAIL_BYTES,
     STDIO_STREAM_LIMIT,
     CodexProcessExitedError,
     CodexStdioTransport,
+    classify_codex_stderr,
 )
 from tests.unit.codex_process_fakes import FakeProcess
+
+
+def test_classify_codex_stderr_reports_labels_only_never_content() -> None:
+    """The teardown classifier surfaces codex's own stage tokens as stable labels
+    and NEVER any surrounding text (which could carry echoed tool arguments)."""
+    tail = (
+        b"2026 codex_core::tools: unsupported call for mcp__boltrig args={\"secret\":\"x\"}\n"
+        b"item/tool/requestUserInput questions=[...]\n"
+    )
+    labels = classify_codex_stderr(tail)
+    assert labels == ("approval-requested", "tool-call-unsupported")
+    # Content-free: no fragment of the (potentially sensitive) line survives.
+    joined = "".join(labels)
+    assert "secret" not in joined and "mcp__boltrig" not in joined and "questions" not in joined
+
+
+def test_classify_codex_stderr_is_empty_for_ordinary_output() -> None:
+    assert classify_codex_stderr(b"") == ()
+    assert classify_codex_stderr(b"just some ordinary INFO logging with no markers\n") == ()
+
+
+def test_classify_codex_stderr_flags_a_rust_panic() -> None:
+    assert classify_codex_stderr(b"thread 'main' panicked at 'boom'") == ("panic", "thread-panic")
+
+
+async def test_stderr_tail_is_bounded_and_keeps_the_most_recent() -> None:
+    """A chatty cell cannot grow the tail without bound: only the most-recent
+    STDERR_TAIL_BYTES survive, so an early marker is trimmed and a late one kept."""
+    process = FakeProcess()
+    transport = make_transport(process)
+    process.feed_stderr(b"unsupported call EARLY\n")
+    process.feed_stderr(b"x" * (STDERR_TAIL_BYTES + 4096))
+    process.feed_stderr(b"thread 'main' panicked LATE\n")
+    process.exit(0)
+    await transport.wait_stderr_drained()
+
+    markers = transport.stderr_markers
+    assert "thread-panic" in markers  # the recent marker survives
+    assert "tool-call-unsupported" not in markers  # the early one was trimmed out
 
 
 def make_transport(

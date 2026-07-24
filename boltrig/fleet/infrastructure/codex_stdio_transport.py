@@ -4,13 +4,53 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 import math
 from typing import Protocol, cast
 
 from . import codex_protocol as wire
 
+logger = logging.getLogger(__name__)
+
 STDIO_STREAM_LIMIT = wire.MAX_LINE_BYTES
 STDERR_CHUNK_BYTES = 16 * 1024
+# The bounded in-memory tail of the cell's stderr kept for a CONTENT-FREE
+# diagnostic classification on teardown. It is never logged verbatim (codex
+# stderr can carry tool arguments = user content); only the matched marker
+# LABELS below are surfaced, mirroring the redaction discipline the runtime
+# actor uses for invalidation markers. The tail is capped so a chatty cell
+# cannot grow it without bound.
+STDERR_TAIL_BYTES = 16 * 1024
+# Allowlist of codex's OWN static diagnostic tokens -> a stable content-free
+# label. Each key is an internal codex log string, never user content, so
+# reporting that it APPEARED (not the line it appeared on) leaks nothing while
+# telling ops which stage the cell reached before it degraded. Kept tight on
+# purpose: broad words (e.g. "error") could match a user argument echoed by
+# codex, so only unambiguously-codex-internal fragments are listed.
+_CODEX_STDERR_MARKERS: tuple[tuple[str, str], ...] = (
+    ("unsupported call", "tool-call-unsupported"),
+    ("request_user_input", "approval-requested"),
+    ("requestUserInput", "approval-requested"),
+    ("execution_started", "tool-execution-started"),
+    ("tool call completed", "tool-call-completed"),
+    ("thread 'main'", "thread-panic"),
+    ("panicked", "panic"),
+)
+
+
+def classify_codex_stderr(tail: bytes) -> tuple[str, ...]:
+    """Content-free diagnostic labels for a codex stderr tail.
+
+    Scans ONLY for the allowlisted codex-internal tokens and returns their
+    stable labels, sorted and de-duplicated. Never returns any surrounding
+    text, so a tail that happens to contain user content (tool arguments codex
+    echoed) cannot leak through this classification.
+    """
+    if not tail:
+        return ()
+    text = tail.decode("utf-8", errors="replace")
+    found = {label for token, label in _CODEX_STDERR_MARKERS if token in text}
+    return tuple(sorted(found))
 
 
 class CodexProcessExitedError(wire.CodexTransportError):
@@ -97,8 +137,9 @@ class CodexStdioTransport:
         self._write_lock = asyncio.Lock()
         self._close_lock = asyncio.Lock()
         self._closed = False
+        self._stderr_tail = bytearray()
         self._stderr_task = asyncio.create_task(
-            self._discard_stderr(), name=f"codex-stderr-drain-{process.pid}"
+            self._drain_stderr(), name=f"codex-stderr-drain-{process.pid}"
         )
 
     @property
@@ -194,18 +235,46 @@ class CodexStdioTransport:
                 self._kill()
                 with contextlib.suppress(Exception):
                     await self._wait_for_exit(self._kill_timeout)
+            # Surface the content-free stderr classification once the tail is final
+            # (never raises - a diagnostic must not turn a clean close into a failure).
+            with contextlib.suppress(Exception):
+                self._log_stderr_diagnostics()
             if failure:
                 raise wire.CodexTransportError("Codex process cleanup did not complete cleanly")
             self._closed = True
 
-    async def _discard_stderr(self) -> None:
+    @property
+    def stderr_markers(self) -> tuple[str, ...]:
+        """Content-free diagnostic labels for the captured stderr tail (K-20)."""
+        return classify_codex_stderr(bytes(self._stderr_tail))
+
+    async def _drain_stderr(self) -> None:
+        # Drain stderr (so the pipe never blocks the child) while KEEPING a bounded
+        # tail for a content-free teardown classification. The tail is trimmed to
+        # its cap on each chunk, so memory stays bounded regardless of volume.
         try:
-            while await self._stderr.read(STDERR_CHUNK_BYTES):
-                pass
+            while chunk := await self._stderr.read(STDERR_CHUNK_BYTES):
+                self._stderr_tail += chunk
+                if len(self._stderr_tail) > STDERR_TAIL_BYTES:
+                    del self._stderr_tail[:-STDERR_TAIL_BYTES]
         except asyncio.CancelledError:
             raise
         except Exception:
             return
+
+    def _log_stderr_diagnostics(self) -> None:
+        # Surface WHICH codex-internal stage the cell reached before teardown -
+        # labels only, never a stderr line - so a degraded cell is diagnosable
+        # without the prior handovers' "cause swallowed before the log" gap and
+        # without leaking tool arguments codex may have echoed (K-20).
+        markers = self.stderr_markers
+        code = self._process.returncode
+        if markers or (code not in (0, None)):
+            logger.warning(
+                "codex cell teardown: returncode=%s stderr_markers=%s",
+                code,
+                list(markers),
+            )
 
     async def _close_stdin(self) -> bool:
         try:
