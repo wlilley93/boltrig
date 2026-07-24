@@ -111,11 +111,24 @@ class GrantSet:
         """Tenant ∩ skill grants. Allows must be permitted by BOTH; denies union.
 
         This is how an ephemeral's effective grants are computed: a skill cannot
-        widen authority beyond what the tenant permits (US-IAM-04).
+        widen authority beyond what the tenant permits (US-IAM-04). A wildcard on
+        this side survives against an exact-verb ceiling as the ceiling's own
+        entries the wildcard covers - narrowing the wildcard, never widening past
+        either side (a PAT scope of exact verbs no longer silently drops a skill's
+        ``opbox.*``/``memory.*`` patterns).
         """
-        allow = tuple(p for p in self.allow if other.permits_pattern(p))
+        allow: list[str] = []
+        for pattern in self.allow:
+            if other.permits_pattern(pattern):
+                allow.append(pattern)
+            elif pattern.endswith(".*"):
+                allow.extend(
+                    entry
+                    for entry in other.allow
+                    if entry != "*" and _matches(pattern, entry) and entry not in allow
+                )
         deny = tuple(set(self.deny) | set(other.deny))
-        return GrantSet(allow=allow, deny=deny)
+        return GrantSet(allow=tuple(allow), deny=deny)
 
     def permits_pattern(self, pattern: str) -> bool:
         """Whether this set would permit everything a pattern could match.

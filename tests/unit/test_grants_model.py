@@ -41,3 +41,24 @@ def test_deny_dominates_allow():
 def test_star_is_tenant_wide():
     g = GrantSet.of(["*"])
     assert g.permits("anything.at.all")
+
+
+@pytest.mark.unit
+def test_intersect_expands_a_skill_wildcard_against_an_exact_verb_ceiling():
+    # US-IAM-04: a PAT's exact-verb scope must not silently drop a skill's
+    # wildcard grants - the wildcard narrows to the ceiling's covered entries.
+    skill = GrantSet.of(allow=["opbox.*", "memory.*", "chat.ask_user"])
+    ceiling = GrantSet.of(allow=["chat.ask_user", "opbox.matter.list", "memory.remember", "jira.read"])
+    effective = skill.intersect(ceiling)
+    assert set(effective.allow) == {"chat.ask_user", "opbox.matter.list", "memory.remember"}
+    # never widens past either side
+    assert "jira.read" not in effective.allow
+    assert "opbox.matter.get" not in effective.allow
+
+
+@pytest.mark.unit
+def test_intersect_keeps_existing_exact_and_wildcard_shapes():
+    assert GrantSet.of(allow=["opbox.matter.list"]).intersect(GrantSet.of(allow=["opbox.*"])).allow == ("opbox.matter.list",)
+    assert GrantSet.of(allow=["opbox.*"]).intersect(GrantSet.of(allow=["opbox.*"])).allow == ("opbox.*",)
+    assert GrantSet.of(allow=["opbox.*"]).intersect(GrantSet.of(allow=["*"])).allow == ("opbox.*",)
+    assert GrantSet.of(allow=["jira.*"]).intersect(GrantSet.of(allow=["opbox.matter.list"])).allow == ()
