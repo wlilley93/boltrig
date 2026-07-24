@@ -100,12 +100,58 @@ def _select_registration(
         for registration in registrations:
             if _registration_matches_process(registration, process):
                 matches.append((registration, depth))
-    if len(matches) != 1:
+    if len(matches) > 1:
+        # Two registered App Servers in one chain: genuinely ambiguous. Effectively
+        # impossible in the single-cell posture, so almost always the >1 case is a
+        # test or a registry leak, NOT the cold-cell failure below.
         raise ModelProxyPeerAncestryError("peer ancestry is ambiguous")
+    if not matches:
+        # The common cold-cell failure is ZERO matches, which the old overloaded
+        # "ambiguous" message hid. Name the STRUCTURAL near-miss field (never a
+        # value - the reason is content-free and safe to log) so a cold-cell reject
+        # is self-diagnosing rather than a mystery.
+        raise ModelProxyPeerAncestryError(
+            f"peer ancestry has no registered ancestor ({_zero_match_reason(chain, registrations)})"
+        )
     registration, depth = matches[0]
     if not _path_obeys_cell_policy(chain[: depth + 1], registration):
         raise ModelProxyPeerAncestryError("peer path policy mismatch")
     return registration, depth
+
+
+def _zero_match_reason(
+    chain: tuple[CapturedLinuxProcess, ...],
+    registrations: tuple[ModelProxyProcessRegistration, ...],
+) -> str:
+    """A content-free descriptor of WHY no ancestor matched, for the server log.
+
+    Reports only the first differing STRUCTURAL field of a strong-identity
+    near-miss (an ancestor whose pid + start-ticks + boot equal a registration's,
+    so it IS the registered App Server, but a policy field drifted) - never any
+    value. When no ancestor even shares the strong identity, the App Server is not
+    in the captured ancestry at all (reparent, the depth bound, or a pid-namespace
+    boundary). This turns the intermittent cold-cell reject into a named cause.
+    """
+    for process in chain[1:]:
+        for registration in registrations:
+            scope = registration.scope
+            if not (
+                scope.pid == process.pid
+                and scope.pid_start_ticks == process.start_ticks
+                and scope.boot_id == process.boot_id
+            ):
+                continue
+            if scope.pid_namespace_inode != process.pid_namespace_inode:
+                return "registered process present but pid namespace differs"
+            if scope.cgroup_identity_digest != process.cgroup_identity_digest:
+                return "registered process present but cgroup identity differs (post-registration cgroup move)"
+            if (
+                registration.expected_uid != process.uid
+                or registration.expected_gid != process.gid
+            ):
+                return "registered process present but uid/gid differs"
+            return "registered process present but a strong-identity field differs"
+    return "no registered process in the captured ancestry (reparent, depth bound, or pid-namespace boundary)"
 
 
 def _peer_matches_helper(helper: CapturedLinuxProcess, credentials: PeerCredentials) -> bool:

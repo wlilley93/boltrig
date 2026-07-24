@@ -218,6 +218,49 @@ async def test_pid_start_tick_reuse_and_proc_toctou_are_rejected(
 
 
 @pytest.mark.unit
+async def test_zero_match_cold_cell_names_cgroup_drift_for_the_server_log() -> None:
+    """The intermittent cold-cell reject (the App Server IS in the ancestry but its
+    cgroup drifted after registration) raises a NAMED reason, not the overloaded
+    'ambiguous', so the server-side log pins the cause. Content-free: the reason
+    names the structural field only, never a value."""
+    from boltrig.fleet.infrastructure.model_proxy_peer_ancestry import (
+        ModelProxyPeerAncestryError,
+        attest_peer_ancestry,
+    )
+
+    registry = ModelProxyProcessRegistry()
+    await _register(registry)  # pid=200 registered with the DEFAULT cgroup digest
+    snapshot = await registry.snapshot_live()
+    reader = ScriptedProcReader()
+    install_process(reader, pid=300, parent_pid=200, start_ticks=30_000)
+    # Same strong identity (pid+start_ticks+boot) but a cgroup moved post-register.
+    install_process(
+        reader, pid=200, parent_pid=50, start_ticks=20_000, cgroup="0::/moved-slice"
+    )
+    with pytest.raises(ModelProxyPeerAncestryError, match="cgroup identity differs"):
+        attest_peer_ancestry(reader, _handle(), snapshot.registrations, 1)
+
+
+@pytest.mark.unit
+async def test_zero_match_names_a_missing_ancestor_when_not_in_the_chain() -> None:
+    """When no ancestor even shares the strong identity, the reason says the App
+    Server is absent from the captured ancestry (reparent / depth / pid-ns)."""
+    from boltrig.fleet.infrastructure.model_proxy_peer_ancestry import (
+        ModelProxyPeerAncestryError,
+        attest_peer_ancestry,
+    )
+
+    registry = ModelProxyProcessRegistry()
+    await _register(registry, pid=999, start_ticks=99_000)  # not in the chain below
+    snapshot = await registry.snapshot_live()
+    reader = ScriptedProcReader()
+    install_process(reader, pid=300, parent_pid=200, start_ticks=30_000)
+    install_process(reader, pid=200, parent_pid=50, start_ticks=20_000)
+    with pytest.raises(ModelProxyPeerAncestryError, match="no registered process in the captured ancestry"):
+        attest_peer_ancestry(reader, _handle(), snapshot.registrations, 1)
+
+
+@pytest.mark.unit
 async def test_cycle_and_two_registered_ancestors_are_rejected() -> None:
     cycle_registry = ModelProxyProcessRegistry()
     await _register(cycle_registry)
