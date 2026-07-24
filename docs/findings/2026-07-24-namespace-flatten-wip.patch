@@ -1,0 +1,115 @@
+diff --git a/boltrig/fleet/infrastructure/model_proxy_tool_ceiling.py b/boltrig/fleet/infrastructure/model_proxy_tool_ceiling.py
+index c2d2286..483c9a8 100644
+--- a/boltrig/fleet/infrastructure/model_proxy_tool_ceiling.py
++++ b/boltrig/fleet/infrastructure/model_proxy_tool_ceiling.py
+@@ -48,6 +48,13 @@ _STREAM_TAIL_BYTES = 512
+ # unbounded body can never be forwarded unverified.
+ MAX_MODEL_CALL_BODY_BYTES = 32 * 1024 * 1024
+ 
++# When the boltrig MCP namespace is flattened for a gateway that cannot carry a
++# namespace tool, each nested verb is renamed ``mcp__boltrig__<verb>``: codex
++# maps a namespaced MCP call back to its server by this qualified form (a bare
++# ``<verb>`` is an "unsupported call"), and ``_name_allowed`` already strips this
++# exact ``__`` separator to recheck the bare verb against the ceiling.
++_NAMESPACE_CALL_SEPARATOR = "__"
++
+ 
+ class ToolCeilingViolation(ValueError):
+     """A model-call body could not be verified against the cell's tool ceiling."""
+@@ -80,15 +87,15 @@ def enforce_tool_ceiling(body: bytes, allowed: frozenset[str]) -> bytes:
+     if not isinstance(declared, list):
+         raise ToolCeilingViolation("model-call tools is not a list")
+     kept: list[object] = []
+-    changed = False
++    seen: set[str] = set()
+     for tool in declared:
+-        surviving = _filter_tool(tool, allowed)
+-        if surviving is None:
+-            changed = True
+-        else:
+-            changed = changed or surviving is not tool
++        for surviving in _surviving_tools(tool, allowed):
++            name = _tool_name(surviving)
++            if name is None or name in seen:
++                continue
++            seen.add(name)
+             kept.append(surviving)
+-    if not changed:
++    if kept == declared:
+         return body
+     if kept:
+         payload["tools"] = kept
+@@ -98,31 +105,55 @@ def enforce_tool_ceiling(body: bytes, allowed: frozenset[str]) -> bytes:
+     return json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+ 
+ 
+-def _filter_tool(tool: object, allowed: frozenset[str]) -> object | None:
+-    """The surviving form of one top-level tool entry, or None if dropped.
+-
+-    Function and built-in tools are kept by name, exactly as before. A
+-    ``namespace`` entry survives ONLY as a filtered copy: it must be the
+-    boltrig kernel namespace and at least one nested tool must be within the
+-    ceiling. Any other namespace, and any namespace emptied by the filter, is
+-    dropped - an entry we cannot name can never match the ceiling.
++def _surviving_tools(tool: object, allowed: frozenset[str]) -> list[object]:
++    """The top-level tools one declared entry contributes after the ceiling.
++
++    A function / built-in survives as itself iff its name is within the ceiling.
++
++    The boltrig kernel NAMESPACE is FLATTENED: its ceiling-kept nested function
++    tools are spread as individual top-level function tools. Codex 0.144.3
++    presents an MCP server as ONE ``{"type": "namespace", "name": "mcp__boltrig",
++    "tools": [...]}`` entry, but a gateway that translates the Responses API to a
++    provider with no namespace concept (here bifrost -> the Anthropic-shaped
++    z.ai endpoint) COLLAPSES that whole namespace into a single opaque tool
++    named ``mcp__boltrig`` - so the model never sees the individual verbs and
++    calls the namespace itself with empty arguments. Presenting the SAME
++    ceiling-kept set as flat function tools survives that translation with NO
++    change to WHICH verbs are allowed: the ceiling (and the response-side
++    ``ToolCallStreamGuard``, which already accepts the bare nested names) is
++    unchanged - only the wire SHAPE the gateway receives. Each nested entry is
++    already an exact function-tool object (``{type, name, description,
++    parameters, strict}``), so no per-tool reshaping is needed.
++
++    Any other namespace, and any entry we cannot name, contributes nothing - an
++    entry we cannot name can never match the ceiling.
+     """
+ 
+     if not isinstance(tool, dict):
+-        return None
++        return []
+     if tool.get("type") == "namespace":
+         if tool.get("name") != CODEX_MCP_NAMESPACE_NAME:
+-            return None
++            return []
+         nested = tool.get("tools")
+         if not isinstance(nested, list):
+-            return None
+-        kept_nested = [item for item in nested if _tool_name(item) in allowed]
+-        if not kept_nested:
+-            return None
+-        if len(kept_nested) == len(nested):
+-            return tool
+-        return {**tool, "tools": kept_nested}
+-    return tool if _tool_name(tool) in allowed else None
++            return []
++        flattened: list[object] = []
++        for item in nested:
++            name = _tool_name(item)
++            if name is None or name not in allowed or not isinstance(item, dict):
++                continue
++            # Flatten AND qualify: the model must see a flat tool (so the
++            # gateway cannot collapse the namespace), but codex maps a nested
++            # MCP call back to its server by the qualified name
++            # ``mcp__boltrig__<verb>`` - a bare ``<verb>`` is an "unsupported
++            # call" to codex. The response guard's ``_name_allowed`` already
++            # strips this exact prefix to recheck the bare name against the
++            # ceiling, so the ceiling is unchanged; only the wire name is.
++            flattened.append(
++                {**item, "name": f"{CODEX_MCP_NAMESPACE_NAME}{_NAMESPACE_CALL_SEPARATOR}{name}"}
++            )
++        return flattened
++    return [tool] if _tool_name(tool) in allowed else []
+ 
+ 
+ class ToolCallStreamGuard:
