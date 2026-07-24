@@ -52,15 +52,31 @@ authority basis = Principal authorisation, human checkpoint = the authorising me
 
 ## Post-publish wiring (unblocks once published)
 
-1. **boltrig console** (`ui/`): add `@wlilley93/boltrig-web-sdk` as a dep; re-point
-   `src/api/types.ts`, `src/panels/chatTurnTypes.ts`, `src/panels/chatTurnNormalizer.ts`
-   to re-export the package subpaths; delete `tests/drift.test.ts` (obsolete once
-   the copies are gone); gate `tsc && vite build && vitest`. The published dep is
-   in every Docker build context, so this fixes the `context: ./ui` break that
-   blocks a sibling-alias approach today.
-2. **opbox** (`opbox-frontend/src/lib/ai/boltrig-frames.ts`, `boltrig-chat.ts`):
-   add the dep and re-back the boltrig frame handling on the shared union +
-   reducer, so opbox renders the boltrig turn identically to the console.
+1. **boltrig console** (`ui/`): DONE (commit 3547712). `src/api/types.ts`,
+   `src/panels/chatTurnTypes.ts`, `src/panels/chatTurnNormalizer.ts` are now thin
+   re-exports of the package subpaths; the ~2100 duplicated lines are gone; the
+   drift guard is retired. GitHub Packages needs auth even to read a public
+   package, so the central build mounts a token-bearing `.npmrc` as a BuildKit
+   secret (`gh_npmrc`); release/demo overlays `build: !reset null` and pull the
+   pinned image, so tenants never build. Gates green: tsc, vite build, 244
+   vitest, `docker build --secret`, `docker compose build ui`.
+
+2. **opbox** — DECISION: keep the translation adapter; do NOT hard-depend for a
+   type. `opbox-frontend/src/lib/ai/boltrig-frames.ts` is a deliberately
+   defensive parser (`translateBoltrigFrame(raw: unknown)` + runtime type-guards)
+   that maps boltrig frames onto opbox's OWN `StreamEvent` union for opbox's own
+   renderers (tool cards, agent tree, approval/question cards). That is correct
+   layering at a legitimate UI boundary, not a duplication of boltrig's source of
+   truth: opbox already cites this package's `types.ts` as "the shape of record".
+   Making opbox import the package would only type-annotate a defensive parser
+   (no behaviour change, weak compile-time benefit) at the cost of pulling the
+   GitHub Packages + build-secret machinery into the PRODUCTION opbox image build
+   (npm ci) - a poor cost/value/risk trade. The published package is the canonical
+   contract opbox translates against; a hard dependency is deferred until opbox has
+   a HIGH-value need (e.g. the SDK grows run/roster/cost client helpers that opbox
+   surfaces would otherwise duplicate - a larger Phase-3 program, not a mechanical
+   step). Consolidation-over-fragmentation is satisfied: one canonical published
+   contract, consumed directly by the console and translated-against by opbox.
 
 ## Release receipt (VJS-ACT 6 s6) — @wlilley93/boltrig-web-sdk@0.1.0
 
