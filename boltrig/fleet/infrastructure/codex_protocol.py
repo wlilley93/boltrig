@@ -322,3 +322,29 @@ def encode_notification(message: NotificationMessage, *, max_bytes: int = MAX_LI
         "params": message.params.to_mapping(),
     }
     return _encode(value, max_bytes=max_bytes)
+
+
+def encode_response(message: ResponseMessage, *, max_bytes: int = MAX_LINE_BYTES) -> str:
+    """Encode a client->server RESPONSE to a server-initiated request.
+
+    Codex's App Server can initiate a request to the client (e.g.
+    ``item/tool/requestUserInput``, a per-tool-call approval); the client answers
+    by writing a response keyed to the SAME ``id``. The envelope mirrors the
+    decoder's contract (:func:`_decode_object`): exactly ``{"id","result"}`` or
+    ``{"id","error"}``, ``jsonrpc`` omitted. ``ResponseMessage.__post_init__``
+    already guarantees exactly one of result/error is set.
+    """
+    _request_id(message.request_id)
+    value: dict[str, JSONValue]
+    if message.error is not None:
+        error: dict[str, JSONValue] = {
+            "code": message.error.code,
+            "message": message.error.message,
+        }
+        if message.error.data is not None:
+            error["data"] = message.error.data.to_value()
+        value = {"id": message.request_id, "error": error}
+    else:
+        assert message.result is not None  # guaranteed by __post_init__
+        value = {"id": message.request_id, "result": message.result.to_mapping()}
+    return _encode(value, max_bytes=max_bytes)

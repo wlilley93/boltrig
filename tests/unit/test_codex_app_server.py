@@ -33,6 +33,32 @@ def test_jsonl_codec_omits_jsonrpc_and_preserves_unknown_notifications() -> None
     assert unknown.params.to_mapping() == {"version": 2}
 
 
+def test_encode_response_answers_a_server_request_and_round_trips() -> None:
+    """A client->server RESPONSE keyed to the inbound id: the exact envelope Codex
+    expects when we answer item/tool/requestUserInput (id + result, no jsonrpc)."""
+    result = CanonicalJSON.from_mapping({"answers": {"q1": {"answers": ["Approve"]}}})
+    line = wire.encode_response(wire.ResponseMessage(request_id=0, result=result))
+
+    assert line == '{"id":0,"result":{"answers":{"q1":{"answers":["Approve"]}}}}'
+    assert "jsonrpc" not in line and "\n" not in line
+    decoded = wire.decode_message(line)
+    assert isinstance(decoded, wire.ResponseMessage)
+    assert decoded.request_id == 0
+    assert decoded.result is not None
+    assert decoded.result.to_value() == {"answers": {"q1": {"answers": ["Approve"]}}}
+
+
+def test_encode_response_carries_an_error_envelope() -> None:
+    """The error arm: refuse a server request with {id, error}, jsonrpc omitted."""
+    msg = wire.ResponseMessage(request_id=3, error=wire.RemoteErrorData(code=-32601, message="no"))
+    line = wire.encode_response(msg)
+
+    assert line == '{"error":{"code":-32601,"message":"no"},"id":3}'
+    decoded = wire.decode_message(line)
+    assert isinstance(decoded, wire.ResponseMessage) and decoded.error is not None
+    assert decoded.error.code == -32601
+
+
 @pytest.mark.parametrize(
     "line",
     [

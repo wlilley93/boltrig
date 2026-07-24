@@ -484,6 +484,14 @@
       "owner": "fleet-maintainers",
       "reason": "Kernel-tools lane: CodexPhaseAdmission carries the exact per-run wire-name ceiling (kernel_tools) with fail-closed validation, the preflight receipt admits the one kernel MCP server, and AdmittedCodexCell binds the observed inventory to the admitted lane. Follow-up: split the admission value objects from the provider protocols and drop below 400.",
       "expires": "2026-12-31"
+    },
+    "boltrig/fleet/infrastructure/codex_client_support.py": {
+      "max_file_lines": 422,
+      "max_function_lines": 31,
+      "over_limit_functions": [],
+      "owner": "fleet-maintainers",
+      "reason": "Add BoundedWriter.send_response so the App Server client can ANSWER a server-initiated request (codex item/tool/requestUserInput MCP-tool approval), deduped with send_notification via _send_untracked. No function exceeds the limit; the file crosses 400 by the new tracker-free response path.",
+      "expires": "2026-12-31"
     }
   }
 }

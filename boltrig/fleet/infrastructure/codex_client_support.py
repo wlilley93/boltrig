@@ -198,6 +198,28 @@ class BoundedWriter:
             self._lock.release()
 
     async def send_notification(self, method: str, line: str, deadline: float) -> None:
+        # A notification is unsolicited and untracked (no id); on timeout Codex
+        # models it as request_id 0.
+        await self._send_untracked(line, deadline, method=method, request_id=0)
+
+    async def send_response(self, request_id: int, line: str, deadline: float) -> None:
+        """Write a client->server RESPONSE to a server-initiated request.
+
+        A response is UNSOLICITED from our side and keyed to the INBOUND
+        ``request_id``, so - unlike ``send_request`` - it never touches the
+        correlation tracker (that maps OUR outbound ids). The deadline is the
+        server-request's own answer deadline, not the client-request timeout.
+        """
+        await self._send_untracked(line, deadline, method="response", request_id=request_id)
+
+    async def _send_untracked(
+        self, line: str, deadline: float, *, method: str, request_id: int
+    ) -> None:
+        """Serialize one frame under the lock within ``deadline``, tracker-free.
+
+        Shared by ``send_notification`` and ``send_response``: both write a frame
+        that is not one of OUR outbound requests, so neither adjusts the
+        correlation tracker (only ``send_request`` does)."""
         try:
             acquire_timeout = self.remaining(deadline)
             await asyncio.wait_for(self._lock.acquire(), acquire_timeout)
@@ -209,7 +231,7 @@ class BoundedWriter:
         except asyncio.CancelledError:
             raise
         except TimeoutError:
-            raise wire.RequestTimeoutError(method=method, request_id=0) from None
+            raise wire.RequestTimeoutError(method=method, request_id=request_id) from None
         except Exception:
             raise wire.CodexTransportError("failed to write to Codex line transport") from None
 
