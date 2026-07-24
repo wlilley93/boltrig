@@ -42,35 +42,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("worker", help="start a fleet worker")
 
-    p_init = sub.add_parser("initiate", help="seat the founding OWNER (invite-only)")
-    p_init.add_argument("--email", required=True, help="the owner's email (their login id)")
-    p_init.add_argument(
-        "--password", default=None,
-        help="owner password (else BOLTRIG_INIT_PASSWORD, else an interactive prompt)",
-    )
-    p_init.add_argument(
-        "--tenant", default=None,
-        help="tenant to seat the owner in (default: BOLTRIG_SESSION_TENANT or 'default')",
-    )
-    p_init.add_argument(
-        "--org-name", default=None,
-        help="the founding organisation's display name (default: 'Boltrig')",
-    )
-    p_init.add_argument(
-        "--workspace-name", default=None,
-        help="the founding workspace's display name (default: the org name)",
-    )
-
-    p_setpw = sub.add_parser(
-        "set-password",
-        help="set/reset an EXISTING user's first-party password (SSO -> session bridge)",
-    )
-    p_setpw.add_argument("--email", required=True, help="the existing user's email")
-    p_setpw.add_argument(
-        "--password", default=None,
-        help="new password (else BOLTRIG_INIT_PASSWORD, else an interactive prompt)",
-    )
-    p_setpw.add_argument("--tenant", default=None, help="tenant (default: session tenant)")
+    _add_identity_parsers(sub)
 
     sub.add_parser("smoke", help="offline in-process smoke test")
     sub.add_parser("check-invariants", help="run the invariant-binding gate")
@@ -107,6 +79,59 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser("version", help="print version")
 
     return parser
+
+
+def _add_identity_parsers(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """The tenant-scoped identity/admin commands (initiate, set-password, mint-token).
+
+    Grouped out of ``_build_parser`` so the router stays small; each is a
+    box-level operation (needs shell on the host) capped at the user's grants."""
+    p_init = sub.add_parser("initiate", help="seat the founding OWNER (invite-only)")
+    p_init.add_argument("--email", required=True, help="the owner's email (their login id)")
+    p_init.add_argument(
+        "--password", default=None,
+        help="owner password (else BOLTRIG_INIT_PASSWORD, else an interactive prompt)",
+    )
+    p_init.add_argument(
+        "--tenant", default=None,
+        help="tenant to seat the owner in (default: BOLTRIG_SESSION_TENANT or 'default')",
+    )
+    p_init.add_argument(
+        "--org-name", default=None,
+        help="the founding organisation's display name (default: 'Boltrig')",
+    )
+    p_init.add_argument(
+        "--workspace-name", default=None,
+        help="the founding workspace's display name (default: the org name)",
+    )
+
+    p_setpw = sub.add_parser(
+        "set-password",
+        help="set/reset an EXISTING user's first-party password (SSO -> session bridge)",
+    )
+    p_setpw.add_argument("--email", required=True, help="the existing user's email")
+    p_setpw.add_argument(
+        "--password", default=None,
+        help="new password (else BOLTRIG_INIT_PASSWORD, else an interactive prompt)",
+    )
+    p_setpw.add_argument("--tenant", default=None, help="tenant (default: session tenant)")
+
+    p_mint = sub.add_parser(
+        "mint-token",
+        help="mint a Personal Access Token for an EXISTING user (box-level twin of POST /v1/me/tokens)",
+    )
+    p_mint.add_argument("--email", required=True, help="the existing user's email")
+    p_mint.add_argument("--name", required=True, help="a label for the token")
+    p_mint.add_argument(
+        "--scope", default=None,
+        help="comma-separated grant patterns (default: the user's own grants); "
+             "narrowed to what the user actually holds",
+    )
+    p_mint.add_argument(
+        "--ttl-days", type=int, default=None,
+        help="lifetime in days (clamped to the PAT max; default if unset)",
+    )
+    p_mint.add_argument("--tenant", default=None, help="tenant (default: session tenant)")
 
 
 def _add_chat_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -163,6 +188,36 @@ def _add_chat_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -
     )
 
 
+def _dispatch_identity(args: argparse.Namespace) -> int | None:
+    """The tenant-scoped identity/admin commands, or None if not one of them.
+
+    Grouped so each resolves the tenant the same way (flag, else the session
+    tenant, else ``default``) and ``_dispatch`` stays a thin router."""
+    if args.cmd not in ("initiate", "set-password", "mint-token"):
+        return None
+    from boltrig.config import load_settings
+
+    tenant = args.tenant or load_settings().session_tenant or "default"
+    if args.cmd == "initiate":
+        from .initiate import initiate
+
+        return initiate(
+            args.email, password=args.password, tenant=tenant,
+            org_name=args.org_name, workspace_name=args.workspace_name,
+        )
+    if args.cmd == "set-password":
+        from .initiate import set_password
+
+        return set_password(args.email, password=args.password, tenant=tenant)
+    # mint-token
+    from .mint_token import mint_token
+
+    scope = [s for s in (args.scope or "").split(",") if s.strip()] or None
+    return mint_token(
+        args.email, tenant=tenant, name=args.name, scope=scope, ttl_days=args.ttl_days,
+    )
+
+
 def _dispatch(args: argparse.Namespace) -> int:
     if args.cmd == "version":
         print(__version__)
@@ -177,23 +232,9 @@ def _dispatch(args: argparse.Namespace) -> int:
 
         worker_main()
         return 0
-    if args.cmd == "initiate":
-        from boltrig.config import load_settings
-
-        from .initiate import initiate
-
-        tenant = args.tenant or load_settings().session_tenant or "default"
-        return initiate(
-            args.email, password=args.password, tenant=tenant,
-            org_name=args.org_name, workspace_name=args.workspace_name,
-        )
-    if args.cmd == "set-password":
-        from boltrig.config import load_settings
-
-        from .initiate import set_password
-
-        tenant = args.tenant or load_settings().session_tenant or "default"
-        return set_password(args.email, password=args.password, tenant=tenant)
+    identity = _dispatch_identity(args)
+    if identity is not None:
+        return identity
     if args.cmd in ("smoke", "check-invariants"):
         script = _repo_script("smoke.py" if args.cmd == "smoke" else "check_invariants.py")
         if not script:
