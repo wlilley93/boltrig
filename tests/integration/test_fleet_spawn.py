@@ -357,3 +357,32 @@ async def test_observability_sink_runs_after_audit_persist(monkeypatch):
 
     assert res["status"] == "ok"
     assert seen == [1]
+
+
+@pytest.mark.invariant("US-FLT-04")
+async def test_subagent_open_is_settled_by_subagent_end_frame(monkeypatch):
+    """G3 (SDK-CONTRACT §5): a subagent open frame is paired with a subagent_end
+    carrying the SAME child_run_id on the SAME parent relay, so a consumer's
+    delegation tree settles instead of rendering the child RUNNING forever."""
+    kernel = await _kernel_with_caps()
+    published: list[tuple[str, dict]] = []
+    real_publish = kernel.events.publish
+
+    def capture(tenant_id, stream_id, event):
+        published.append((stream_id, event))
+        return real_publish(tenant_id, stream_id, event)
+
+    monkeypatch.setattr(kernel.events, "publish", capture)
+    spawner = build_spawner(kernel)
+    parent = InvocationContext(
+        tenant_id=T, run_id="parent-run", grants=GrantSet.of(["*"]),
+        actor="head", extra={"epic_id": "ENG-441"},
+    )
+    res = await spawner.spawn(T, "decompose epic", ["analysis/decompose"], {}, parent)
+
+    opens = [e for sid, e in published if sid == "parent-run" and e.get("type") == "subagent"]
+    ends = [e for sid, e in published if sid == "parent-run" and e.get("type") == "subagent_end"]
+    assert len(opens) == 1 and len(ends) == 1
+    # paired to the SAME child run id the open announced
+    assert opens[0]["child_run_id"] == res["run_id"] == ends[0]["child_run_id"]
+    assert ends[0]["status"] in {"ok", "degraded"}

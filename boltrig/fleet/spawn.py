@@ -204,17 +204,30 @@ class Spawner:
 
         A run that never happened must not keep its reservation: the full estimate
         is refunded (delta = -estimate) so a raised runtime cannot leak budget
-        against the tenant's hard stop (FR-COST-03)."""
+        against the tenant's hard stop (FR-COST-03).
+
+        Delegation-tree completeness (G3, SDK-CONTRACT §5): whenever a ``subagent``
+        open frame is published (``context.run_id`` set), a paired ``subagent_end``
+        settle frame is published for the SAME ``child_run_id`` on the SAME parent
+        relay - on the success return AND on a runtime raise - so a consumer never
+        renders the child RUNNING forever."""
+        opened = False
         try:
             runtime = await self._runtime_for(tenant_id, capability, context)
             model_route = getattr(runtime, "model_route", None)
             if context.run_id:
                 self._publish_subagent_event(context, task, skills, run_id, capability)
+                opened = True
             started = time.monotonic()
             result = await runtime.run(
                 self._compose_prompt(merged_prompt, task), child_ctx, tools=list(child_grants.allow)
             )
         except Exception:
+            if opened:
+                # The child opened but the runtime raised: settle its node as
+                # errored (G3) BEFORE the reservation refund + re-raise, so the
+                # tree flips out of RUNNING even on a failed spawn.
+                self._publish_subagent_end_event(context, run_id, "error")
             with contextlib.suppress(Exception):
                 await self._kernel.cost.reconcile(
                     tenant_id, scope_ids=scope_ids,
@@ -222,6 +235,11 @@ class Spawner:
                 )
             raise
         latency_ms = int((time.monotonic() - started) * 1000)
+        if opened:
+            # Symmetric completion (G3): status mirrors the spawn audit/return
+            # derivation (spawn.py `status=`), so the node settles ok/degraded/error.
+            status = "degraded" if result.degraded else "ok" if result.ok else "error"
+            self._publish_subagent_end_event(context, run_id, status)
         return result, model_route, latency_ms
 
     def _child_context(
@@ -277,6 +295,32 @@ class Spawner:
                     "skills": list(skills),
                     "child_run_id": run_id,
                     "capability": capability.name,
+                },
+            )
+        except Exception:
+            pass
+
+    def _publish_subagent_end_event(
+        self,
+        context: InvocationContext,
+        run_id: str,
+        status: str,
+    ) -> None:
+        """Settle a delegated child on the parent relay (G3, SDK-CONTRACT §5).
+
+        The paired terminal of ``_publish_subagent_event``: published on the SAME
+        stream (parent ``context.run_id``) and carrying the SAME ``child_run_id``
+        as the open frame, so a consumer flips exactly that tree node from RUNNING
+        to its terminal state. ``status`` is one of ok|degraded|error (mirroring
+        the spawn audit/return status). Best-effort, exactly like the open: a relay
+        failure never breaks the turn."""
+        try:
+            self._kernel.events.publish(
+                context.tenant_id, context.run_id,
+                {
+                    "type": "subagent_end",
+                    "child_run_id": run_id,
+                    "status": status,
                 },
             )
         except Exception:
