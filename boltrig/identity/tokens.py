@@ -110,6 +110,17 @@ async def resolve_pat_principal(store: Any, secret: str) -> Principal | None:
 
     effective = GrantSet.of(allow=list(pat.scope)).intersect(current_grants_for_user(user))
 
+    # A PAT is the headless-client credential, but it carries no session and so no
+    # active workspace - which leaves a PAT-driven chat turn with no workspace
+    # scope, degrading the read-only Codex phase (no_read_only_phase_scope). When
+    # the user belongs to EXACTLY ONE workspace the choice is unambiguous, so bind
+    # it here (they are a member, so this confers nothing new). With zero or many
+    # memberships it stays None - fail-closed - and the caller must name the
+    # workspace explicitly (the frontend-SDK's per-request override, SEC-34-safe
+    # because it is re-authorized against membership at use time).
+    workspaces = await store.list_workspaces_for_user(pat.tenant_id, user.id)
+    active_workspace_id = workspaces[0].id if len(workspaces) == 1 else None
+
     pat.last_used_at = utcnow()
     await store.update_pat(pat)
 
@@ -120,4 +131,5 @@ async def resolve_pat_principal(store: Any, secret: str) -> Principal | None:
         role=user.role,
         actor_tier="human",
         scope=user.scope,
+        active_workspace_id=active_workspace_id,
     )

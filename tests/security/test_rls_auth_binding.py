@@ -14,11 +14,38 @@ import pytest
 
 from boltrig.identity.provisioning import provision_user
 from boltrig.identity.tokens import mint_pat, resolve_pat_principal
-from boltrig.models import GrantSet, RoleMapping, User, utcnow
+from boltrig.models import (
+    GrantSet,
+    RoleMapping,
+    User,
+    Workspace,
+    WorkspaceMember,
+    utcnow,
+)
 from boltrig.store import InMemoryStore
 from boltrig.store.postgres import _current_tenant, set_current_tenant
 
 TENANT = "acme"
+
+
+async def _seed_workspace(store, ws_id: str, user_id: str) -> None:
+    now = utcnow()
+    await store.create_workspace(
+        Workspace(id=ws_id, tenant_id=TENANT, name=ws_id, slug=ws_id,
+                  created_at=now, updated_at=now)
+    )
+    await store.add_workspace_member(
+        WorkspaceMember(user_id=user_id, workspace_id=ws_id, tenant_id=TENANT,
+                        role="member", created_at=now)
+    )
+
+
+async def _resolve_owner_pat(store, user):
+    pat, secret = await mint_pat(
+        store, tenant_id=TENANT, user_id=user.id, name="ci",
+        requested_scope=None, user_grants=GrantSet.of(allow=["*"]),
+    )
+    return await resolve_pat_principal(store, secret)
 
 
 def _seed_user() -> User:
@@ -67,6 +94,39 @@ async def test_pat_resolution_binds_tenant_before_the_owner_read():
 
     assert p is not None and p.tenant_id == TENANT
     assert seen == [TENANT]  # bound BEFORE the owner read, not None
+    set_current_tenant(None)
+
+
+@pytest.mark.security
+async def test_pat_binds_the_sole_workspace_as_active(monkeypatch):
+    """A headless PAT with exactly one membership gets that workspace as active,
+    so a PAT-driven chat turn has the scope the read-only Codex phase needs."""
+    store = InMemoryStore()
+    set_current_tenant(TENANT)
+    user = _seed_user()
+    await store.upsert_user(user)
+    await _seed_workspace(store, "ws_only", user.id)
+    p = await _resolve_owner_pat(store, user)
+    assert p is not None and p.active_workspace_id == "ws_only"
+    set_current_tenant(None)
+
+
+@pytest.mark.security
+async def test_pat_with_ambiguous_membership_stays_unscoped(monkeypatch):
+    """Zero or many memberships -> no active workspace (fail-closed): the caller
+    must name it explicitly, never an arbitrary pick."""
+    store = InMemoryStore()
+    set_current_tenant(TENANT)
+    user = _seed_user()
+    await store.upsert_user(user)
+    # none first
+    p_none = await _resolve_owner_pat(store, user)
+    assert p_none is not None and p_none.active_workspace_id is None
+    # then two -> still None
+    await _seed_workspace(store, "ws_a", user.id)
+    await _seed_workspace(store, "ws_b", user.id)
+    p_many = await _resolve_owner_pat(store, user)
+    assert p_many is not None and p_many.active_workspace_id is None
     set_current_tenant(None)
 
 
