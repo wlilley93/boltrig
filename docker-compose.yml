@@ -269,6 +269,12 @@ services:
     build:
       context: ./ui
       dockerfile: Dockerfile
+      secrets:
+        # Token-bearing .npmrc so `pnpm install` can read @wlilley93/boltrig-web-sdk
+        # (the shared UI-SDK) from GitHub Packages, which requires auth even for a
+        # public package. Only the CENTRAL build needs this; release/demo overlays
+        # `build: !reset null` and pull the pinned image, so tenants never build.
+        - gh_npmrc
     image: boltrig/ui:0.1.0
     restart: unless-stopped
     ports:
@@ -570,6 +576,13 @@ networks:
   # forces Pi to route model traffic through the sandbox peers (bifrost/local-model).
   sandbox:
     driver: bridge
+
+secrets:
+  # Build-only secret for the central `ui` image build (see ui.build.secrets).
+  # Provide a user .npmrc carrying `//npm.pkg.github.com/:_authToken=<read:packages token>`.
+  # Defaults to a gitignored .secrets/gh_npmrc; override with GH_NPMRC_FILE.
+  gh_npmrc:
+    file: ${GH_NPMRC_FILE:-./.secrets/gh_npmrc}
 
 volumes:
   pgdata:

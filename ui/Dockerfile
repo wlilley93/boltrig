@@ -7,8 +7,14 @@ RUN corepack enable
 
 # Install with pnpm (the dev package manager) from the frozen lockfile, so the
 # image is built from the SAME dependency graph developers run - reproducible.
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-RUN pnpm install --frozen-lockfile --ignore-scripts && pnpm rebuild esbuild
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+# The committed .npmrc points the @wlilley93 scope at GitHub Packages (the shared
+# UI-SDK source of truth). GitHub Packages requires auth even to READ a public
+# package, so builds mount a token-bearing user .npmrc as a BuildKit secret
+# (id=gh_npmrc); pnpm merges it with the project .npmrc. Uses a read:packages
+# token - no new credential class. Dev host installs use ~/.npmrc directly.
+RUN --mount=type=secret,id=gh_npmrc,target=/root/.npmrc \
+    pnpm install --frozen-lockfile --ignore-scripts && pnpm rebuild esbuild
 
 COPY . .
 RUN pnpm run build

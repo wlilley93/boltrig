@@ -12,6 +12,9 @@ importers:
 
   .:
     dependencies:
+      '@wlilley93/boltrig-web-sdk':
+        specifier: 0.1.0
+        version: 0.1.0
       '@xyflow/react':
         specifier: ^12.11.1
         version: 12.11.1(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -645,6 +648,10 @@ packages:
 
   '@vitest/utils@3.2.6':
     resolution: {integrity: sha512-lI23nIs4bnT3T8NIoh+vFaz5s2/DdP0Jgt2jxwgWljvwn82cLJtyi/If+fjFyoLMGIOz0U/fKvWE0d4jsNQEfg==}
+
+  '@wlilley93/boltrig-web-sdk@0.1.0':
+    resolution: {integrity: sha512-1Ewjhtw36m4VEmCNUJ/CAEzs+0qeFdcvDEUoQAstIaNGTMdMhnc6kvDtEKOu1LoMe8CN6RlOBkeQBaiJuWPMUw==, tarball: https://npm.pkg.github.com/download/@wlilley93/boltrig-web-sdk/0.1.0/a0ddeb22d11bff40a96fefd97ffc14e0f96a4699}
+    engines: {node: '>=20'}
 
   '@xyflow/react@12.11.1':
     resolution: {integrity: sha512-L+zBoLGSXham0MnlY8QqjfR7/C5JNw0zxkaey5aZ5XmCgJBAdH4+WRIu8CR40d3l/BdU635V6YbhBK1jMo8/6Q==}
@@ -2065,6 +2072,8 @@ snapshots:
       '@vitest/pretty-format': 3.2.6
       loupe: 3.2.1
       tinyrainbow: 2.0.0
+
+  '@wlilley93/boltrig-web-sdk@0.1.0': {}
 
   '@xyflow/react@12.11.1(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:

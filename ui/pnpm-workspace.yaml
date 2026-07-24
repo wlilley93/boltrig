@@ -8,3 +8,5 @@ overrides:
 # `pnpm install` / `pnpm run build` work in CI and the Docker image.
 onlyBuiltDependencies:
   - esbuild
+minimumReleaseAgeExclude:
+  - '@wlilley93/boltrig-web-sdk@0.1.0'

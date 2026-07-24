@@ -50,3 +50,4 @@ ui/node_modules/
 # Local per-box compose override (desktop orb phenotype handoff etc.) - never committed.
 docker-compose.override.yml
 backups/
+.secrets/
