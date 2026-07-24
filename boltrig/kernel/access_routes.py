@@ -348,9 +348,17 @@ def _register_hitl_run_routes(app, principal_dep, get_kernel) -> None:
         else:
             audit_detail["answer_len"] = outcome["answer_len"]
         await _audit(k, p, "hitl.question.answer", audit_detail)
-        return JSONResponse({"status": "ok", "question_id": question_id,
-                             "response_id": outcome["response_id"],
-                             "run_id": outcome["run_id"]})
+        response_body = {
+            "status": "ok",
+            "question_id": question_id,
+            "response_id": outcome["response_id"],
+            "run_id": outcome["run_id"],
+        }
+        # GAP G5: echo the ?since resume cursor when present so the caller can skip
+        # the already-seen backlog on the continuation follow-stream.
+        if outcome.get("resume_since") is not None:
+            response_body["resume_since"] = outcome["resume_since"]
+        return JSONResponse(response_body)
 
     @app.post("/v1/runs/{run_id}/cancel")
     async def cancel_run(run_id: str, request: Request, k=K, p=P) -> JSONResponse:

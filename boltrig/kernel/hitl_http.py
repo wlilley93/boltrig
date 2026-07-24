@@ -74,17 +74,36 @@ async def visible_hitl_request(
     return request, item
 
 
+def _run_cursor(kernel: Any, tenant_id: str, run_id: str | None) -> int | None:
+    """The run relay's current max seq (GAP G5), or None when there is no live
+    relay / run to resume. Captured the instant BEFORE a decision fires the resume
+    lane, it is the cursor a caller passes as ?since=<seq> to /v1/runs/{id}/events so
+    the continuation stream skips the already-seen backlog. Fail-safe: any error (or
+    a kernel with no relay) yields None, and the caller simply omits the cursor - the
+    consumer then falls back to replaying the whole backlog (today's behavior)."""
+    events = getattr(kernel, "events", None)
+    if events is None or not run_id:
+        return None
+    try:
+        return int(events.max_seq(tenant_id, run_id))
+    except Exception:  # noqa: BLE001 - the cursor is an optimization, never load-bearing
+        return None
+
+
 async def respond_to_hitl(
     kernel: Any,
     principal: Any,
     request_id: str,
     decision: str,
     notes: str,
-) -> dict[str, str]:
+) -> dict[str, Any]:
     request = await kernel.hitl.get(principal.tenant_id, request_id)
     if request is None:
         raise HTTPException(status_code=404, detail="unknown request")
     sole_author_exempt = await authorize_hitl_response(kernel, principal, request)
+    # GAP G5: capture the run-relay cursor BEFORE answer() fires the resume lane, so
+    # everything the resume publishes lands at a seq strictly greater than it.
+    resume_since = _run_cursor(kernel, principal.tenant_id, request.run_id)
     if request.type != HITLType.APPROVAL:
         from boltrig.text_envelope import wrap_untrusted
 
@@ -107,7 +126,13 @@ async def respond_to_hitl(
                 detail={"hitl_request_id": request.id, "verb": request.verb},
             )
         )
-    result = {"status": "answered", "response_id": response.id}
+    result: dict[str, Any] = {"status": "answered", "response_id": response.id}
+    if request.run_id:
+        result["run_id"] = request.run_id
+    if resume_since is not None:
+        # Presence is the ?since capability signal: an older kernel omits it and the
+        # caller falls back to marker-scanning the full backlog.
+        result["resume_since"] = resume_since
     if sole_author_exempt:
         result["sole_author_exemption"] = True
     return result
@@ -159,6 +184,9 @@ async def answer_hitl_question(
         # recorded and replayed into the run (M1 / SEC-72).
         wrapped = wrap_untrusted("user_answer", principal.subject, text)
         answer_len = len(text)
+    # GAP G5: capture the run-relay cursor just BEFORE answer() fires the resume
+    # lane, so the continuation stream can ?since-skip the already-seen backlog.
+    resume_since = _run_cursor(kernel, principal.tenant_id, req.run_id)
     resp = await kernel.hitl.answer(
         principal.tenant_id, request_id, wrapped, principal.subject
     )
@@ -168,4 +196,6 @@ async def answer_hitl_question(
         "run_id": req.run_id,
         "secure": bool(getattr(req, "secure", False)),
         "answer_len": answer_len,
+        # None when there is no live relay for this run; the route omits it then.
+        "resume_since": resume_since,
     }

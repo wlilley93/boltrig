@@ -759,6 +759,7 @@ def create_app(
         run_id: str,
         request: Request,
         follow: int = 0,
+        since: int | None = None,
         k: Kernel = Depends(_get_kernel),
         p: Principal = Depends(principal),
     ):
@@ -772,16 +773,29 @@ def create_app(
         if rows is None:
             return JSONResponse({"error": "unknown_run"}, status_code=404)
 
+        # ?since=<seq> (GAP G5): skip the backlog the caller has already seen and
+        # replay only events published AFTER that cursor. A HITL continuation passes
+        # the `resume_since` the respond/answer decision returned (the relay seq
+        # captured the instant before the resume lane fired), so the stream yields
+        # only the post-decision segment instead of the whole retained backlog.
+        # `since` only narrows what is REPLAYED to an already-authorized caller
+        # (visibility was fully enforced above); it can never widen what a run
+        # exposes. A missing/negative value means "no cursor" (replay everything -
+        # today's behavior), so an older client is unaffected.
+        cursor = since if (since is not None and since >= 0) else None
+
         if not follow:
             # Snapshot: the events emitted so far, then end (historical inspection).
             async def snapshot():
-                for event in k.events.snapshot(p.tenant_id, run_id):
+                for event in k.events.snapshot(p.tenant_id, run_id, since=cursor):
                     yield f"data: {json.dumps(event)}\n\n"
 
             return StreamingResponse(snapshot(), media_type="text/event-stream")
 
         async def live():  # backlog (re-attach) then live until the run closes
-            async for event in k.events.subscribe(p.tenant_id, run_id, replay=True):
+            async for event in k.events.subscribe(
+                p.tenant_id, run_id, replay=True, since=cursor
+            ):
                 yield f"data: {json.dumps(event)}\n\n"
 
         return StreamingResponse(live(), media_type="text/event-stream")
