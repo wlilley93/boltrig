@@ -75,6 +75,60 @@ it how to select a nested verb when calling `mcp__boltrig`.
    form on the response stream (`ToolCallStreamGuard` already parses call names,
    so the machinery is there).
 
+## Session 2 addendum (2026-07-24 pm): codex-side facts, via its own stderr
+
+Captured the codex app-server's stderr (the transport normally discards it;
+temporarily teed it) with `RUST_LOG=codex_core::tools=trace,codex_core::mcp=trace`
+injected via the cell env, flatten WIP applied. Decisive facts:
+
+- **The MCP connection WORKS end to end.** codex logs
+  `add_mcp_runtime_tools{direct_mcp_tool_count=57 deferred_mcp_tool_count=0}` -
+  codex connected to `kernel:8000/v1/mcp`, ran tools/list, and registered ALL
+  57 boltrig verbs in its tool router. So the run-token bearer reaches codex and
+  authenticates (this RETIRES the lingering doubt about token delivery - it is
+  fully working; the empty `/proc/environ` is codex capturing the token before
+  its sandbox re-exec, exactly as hypothesised). The reason no `/v1/mcp` CALL
+  (tools/call) shows during a turn is purely that the routing below fails before
+  codex ever forwards one; tools/list at cell startup DID hit the door.
+- **The failure is purely name routing**, from codex itself:
+  `codex_core::tools::router: error=unsupported call: mcp__boltrig__opbox_matter_list`.
+  Both the bare `opbox_matter_list` AND the `mcp__boltrig__<verb>` qualified form
+  are "unsupported call". codex registered the tools from the kernel's tools/list,
+  where the kernel advertises each by its RAW dotted `v.id` (`opbox.matter.list`,
+  `boltrig/kernel/mcp.py:353`), which codex sanitises to `opbox_matter_list` for
+  the model-facing nested name - yet codex's router won't accept that name once
+  the tool is presented flat.
+- **Charset wall:** Anthropic tool names must match `^[a-zA-Z0-9_-]{1,64}$`, so a
+  `.` or `/` separator (the other two forms `_name_allowed` checks) cannot even
+  survive to the model over the z.ai/Anthropic path. Only `__` is expressible,
+  and codex rejects it. So "flatten + rename to codex's key" cannot be completed
+  without knowing codex's exact router key, which is codex-internal (needs codex
+  source or a captured WORKING namespaced call, which GLM can't produce because
+  of the collapse - a chicken-and-egg).
+
+## Two candidate fixes (neither a quick win; both scoped for a future session)
+
+1. **Response-side reconstruction.** Keep request-side flattening (proven to make
+   the model emit a real named call). On the RESPONSE stream, rewrite the model's
+   flat function-call back into the namespaced form codex's router expects. Blocked
+   on the same unknown: codex's exact expected namespaced-call shape. Cracking it
+   needs codex source for `codex_core::tools::router` / `mcp_tool_exposure`, or a
+   reference capture of a working codex+MCP call against a Responses-native model.
+
+2. **Change bifrost's provider so there is NO namespace-collapsing translation.**
+   The collapse exists ONLY because bifrost's `zai` provider is
+   `base_provider_type: anthropic` (`https://api.z.ai/api/anthropic`) and Anthropic
+   has no namespace concept. z.ai also exposes an OpenAI-compatible endpoint
+   (`https://api.z.ai/api/paas/v4`). Re-point/duplicate the provider as an
+   `openai`-type base and codex's namespace may pass through with a less-lossy (or
+   no) translation, letting codex's OWN name mapping work end to end - no proxy
+   rename at all. HIGHER BLAST: bifrost is the shared gateway for ALL model traffic
+   on this box (read-only Codex lane AND the main org chat), so this must be a NEW
+   provider/route tested in isolation first, not an in-place edit of the live one,
+   and needs the z.ai key validated against the OpenAI endpoint. This is the more
+   promising path if it holds, because it removes the root cause instead of
+   working around it.
+
 ## Governance note
 
 This is the per-cell model-proxy - our translation layer, the VJS-CC-VJS 4
