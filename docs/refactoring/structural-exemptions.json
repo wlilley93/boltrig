@@ -114,27 +114,27 @@
       "expires": "2026-12-31"
     },
     "boltrig/fleet/chat.py": {
-      "max_file_lines": 784,
-      "max_function_lines": 142,
+      "max_file_lines": 807,
+      "max_function_lines": 144,
       "over_limit_functions": [
         {
           "name": "ChatService.handle_turn",
-          "line": 310,
-          "lines": 142
+          "line": 317,
+          "lines": 144
         },
         {
           "name": "build_turn_executor",
-          "line": 658,
-          "lines": 127
+          "line": 669,
+          "lines": 139
         },
         {
           "name": "build_turn_executor.executor",
-          "line": 681,
-          "lines": 102
+          "line": 692,
+          "lines": 114
         }
       ],
       "owner": "fleet-maintainers",
-      "reason": "Separate conversation context, turn execution, and event persistence while preserving streaming behavior. Audit fix: the executor now also settles non-BoltrigError failures FAILED (the item no longer stays IN_FLIGHT forever). US-CHAT-15: handle_turn now also runs the mid-run steer queue (queue-vs-drive decision, sequential drain turns on one stream).",
+      "reason": "Separate conversation context, turn execution, and event persistence while preserving streaming behavior. Audit fix: the executor now also settles non-BoltrigError failures FAILED (the item no longer stays IN_FLIGHT forever). US-CHAT-15: handle_turn now also runs the mid-run steer queue (queue-vs-drive decision, sequential drain turns on one stream). Parity passthrough (2026): handle_turn/build_turn_executor thread the caller's clamped on_behalf_bearer, sealed per-run for the opbox adapter before any verb dispatch.",
       "expires": "2026-12-31"
     },
     "boltrig/fleet/infrastructure/cell_spawner.py": {
@@ -291,17 +291,17 @@
       "expires": "2026-12-31"
     },
     "boltrig/kernel/app.py": {
-      "max_file_lines": 830,
-      "max_function_lines": 570,
+      "max_file_lines": 839,
+      "max_function_lines": 571,
       "over_limit_functions": [
         {
           "name": "create_app",
-          "line": 261,
-          "lines": 570
+          "line": 269,
+          "lines": 571
         }
       ],
       "owner": "kernel-maintainers",
-      "reason": "Extract application middleware and route-family wiring while preserving dependency ownership and ordering.",
+      "reason": "Extract application middleware and route-family wiring while preserving dependency ownership and ordering. Parity passthrough (2026): ChatBody carries the optional on_behalf_bearer forwarded to the spawner.",
       "expires": "2026-12-31"
     },
     "boltrig/kernel/channel_routes.py": {
@@ -324,7 +324,7 @@
       "expires": "2026-12-31"
     },
     "boltrig/kernel/dispatch.py": {
-      "max_file_lines": 507,
+      "max_file_lines": 519,
       "max_function_lines": 116,
       "over_limit_functions": [
         {
@@ -339,7 +339,7 @@
         }
       ],
       "owner": "kernel-maintainers",
-      "reason": "Extract dispatch phases behind private typed helpers while retaining the single governed chokepoint. SEC-181 secure input added the run-scoped param resolution at the credential stage and the secure-question marker.",
+      "reason": "Extract dispatch phases behind private typed helpers while retaining the single governed chokepoint. SEC-181 secure input added the run-scoped param resolution at the credential stage and the secure-question marker. Parity passthrough (2026): _execute_adapter overrides the static adapter credential with a per-run sealed bearer when present.",
       "expires": "2026-12-31"
     },
     "boltrig/kernel/memory_routes.py": {
