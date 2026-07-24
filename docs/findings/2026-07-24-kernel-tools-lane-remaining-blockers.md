@@ -69,6 +69,54 @@ confirms the single registration without proving ancestry). The real fix is to
 make the ancestry walk deterministic for the codex cell's process tree, or to
 re-attest by a non-ancestry signal. Separate subsystem from the tool lane.
 
+## Blocker A - the answer schema is now KNOWN (recovered from the pinned binary)
+
+The `requestUserInput` request/answer types are not in the pinned schema bundle
+(experimental API), but the pinned binary emits its own types:
+
+```
+docker exec boltrig-fleet-worker-1 sh -c \
+  'D=$(mktemp -d); /opt/boltrig/codex/codex app-server generate-ts --out "$D"; \
+   cat "$D"/v2/ToolRequestUserInput*.ts'
+```
+
+Authoritative types (codex 0.144.3):
+- Request `item/tool/requestUserInput` params: `{threadId, turnId, itemId,
+  questions[], autoResolutionMs: number|null}`; each question `{id, header,
+  question, isOther, isSecret, options: {label, description}[]|null}`.
+- **Response result: `{answers: {[questionId]: {answers: string[]}}}`** — echo the
+  chosen option `label`(s) per question id (match the approve option from
+  `params.options`; do NOT hardcode "Accept"). Envelope `{"id":<int>,"result":{...}}`,
+  `jsonrpc` OMITTED.
+- `autoResolutionMs`: codex auto-resolves if the client does not answer in time, so
+  a human HITL wait can exceed it — a real constraint on the design.
+
+Implementation seam (agent Option 1): add `wire.encode_response` +
+`BoundedWriter.send_response`, replace the `else: raise
+UnexpectedServerRequestError` at `codex_app_server.py:343-344` with dispatch to an
+injected `server_request_handler` (run as a task so the reader never blocks). The
+one genuine design challenge: boltrig's existing HITL PAUSES+REQUEUES the run
+(durable, cross-process), but this approval is MID-TURN while the App Server is
+synchronously blocked in the fleet-worker and the answer arrives at the kernel API
+process — so "route into HITL" needs a NEW synchronous waiter + a cross-process
+answer signal (Redis pubsub keyed by run_id, or poll the HITL store). Bridge key:
+codex `turnId` ↔ boltrig `run_id`.
+
+## Blocker C (new) - a PAT carries no workspace, so headless chat can't reach codex
+
+`resolve_pat_principal` (`boltrig/identity/tokens.py:116-123`) builds the Principal
+with no `active_workspace_id`. `/v1/chat` passes `p.active_workspace_id`
+(`kernel/app.py:485`) straight through, so a PAT-driven chat turn has NO workspace
+scope and the read-only Codex phase degrades with `no_read_only_phase_scope`
+(`kernel/app.py:178-181`) — a DIFFERENT degradation than A/B, which means a PAT
+alone cannot exercise the tool lane end-to-end. The session/frontend path sets the
+workspace from the session; PATs (the headless-client credential, and the
+frontend-SDK's own client credential) cannot today. Fix options: derive the
+workspace from the user's membership when unambiguous, store a workspace on the
+PAT, or let the chat body/header carry an explicit workspace_id (the SDK will want
+the last regardless). This blocks the `mint-token`-driven lane verification and is
+squarely part of the frontend-SDK "headless client" story.
+
 ## End-to-end status
 
 `POST /v1/chat "use opbox.matter.list"` will still return `degraded` until A and
