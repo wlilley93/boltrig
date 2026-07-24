@@ -52,8 +52,34 @@ export class VerbError extends Error {
   }
 }
 
+/** Resolved caller identity for a per-user (on-behalf-of) bearer, populated by
+ * the optional `resolveIdentity` hook (see BoltrigMcpServerOptions); null on the
+ * static-token path. Free-form beyond the documented fields so an app can carry
+ * whatever its executor needs (workspace, role, active addons, ...). (GAP G1) */
+export interface VerbIdentity {
+  /** The presented per-user bearer (an opbox-kernel session bearer, etc). */
+  bearer: string;
+  workspaceId?: string;
+  actorId?: string;
+  role?: string;
+  [k: string]: unknown;
+}
+
+/** Per-call context passed to a verb handler as an OPTIONAL second argument.
+ * Handlers that only accept `params` are unaffected (the arg is ignored). */
+export interface VerbContext {
+  /** The presented bearer. */
+  bearer: string;
+  /** The resolved caller identity, or null on the static-token path. */
+  identity: VerbIdentity | null;
+}
+
 export type VerbHandler = (
   params: Record<string, unknown>,
+  /** Optional per-call context (bearer + resolved identity). Present only when
+   * the server was created with a `resolveIdentity` hook; older single-arg
+   * handlers ignore it. Additive - does not break existing handlers. (GAP G1) */
+  ctx?: VerbContext,
 ) => unknown | Promise<unknown>;
 
 export interface VerbDef {
@@ -84,6 +110,16 @@ export interface BoltrigMcpServerOptions {
    * internet-facing; the kernel reaches it over the local/private network. */
   host?: string;
   port?: number;
+  /** Optional per-user auth hook (GAP G1). When provided, the server AUTHORIZES
+   * a call by resolving the presented bearer to an identity (instead of the
+   * static tokenEnv compare) and passes {bearer, identity} to each verb handler
+   * as its second arg - so a per-user (on-behalf-of) bearer reaches the handler
+   * with parity, the way opbox's bespoke verb sidecar does by hand. Return null
+   * to reject. When OMITTED, the server keeps today's exact static-token
+   * behaviour (100% backward compatible). tokenEnv stays required at startup
+   * (fail-closed) either way; the static compare is simply not used on the hook
+   * path. The hook must never log the bearer. */
+  resolveIdentity?: (bearer: string) => VerbIdentity | null | Promise<VerbIdentity | null>;
 }
 
 export interface BoltrigMcpServer {
@@ -199,9 +235,19 @@ export async function createBoltrigMcpServer(
       return err(rid, -32600, "invalid JSON-RPC request");
     }
     // Defense in depth behind the kernel's own credential seam: every method
-    // (including initialize/tools/list) requires the bearer. -32001 mirrors
-    // the kernel face's invalid-token error (kernel/mcp.py:169).
-    if (bearer === null || !tokenMatches(bearer, expectedToken as string)) {
+    // (including initialize/tools/list) requires auth. -32001 mirrors the kernel
+    // face's invalid-token error (kernel/mcp.py:169). With a resolveIdentity hook
+    // (GAP G1) auth is per-user - resolve the presented bearer to an identity and
+    // carry it into the handler; otherwise the default static-token compare
+    // (unchanged) with no per-call ctx.
+    let ctx: VerbContext | undefined;
+    if (options.resolveIdentity) {
+      const identity = bearer !== null ? await options.resolveIdentity(bearer) : null;
+      if (bearer === null || identity === null) {
+        return err(rid, -32001, "unauthorized", 401);
+      }
+      ctx = { bearer, identity };
+    } else if (bearer === null || !tokenMatches(bearer, expectedToken as string)) {
       return err(rid, -32001, "unauthorized", 401);
     }
     const method = req.method;
@@ -244,7 +290,7 @@ export async function createBoltrigMcpServer(
         return ok(rid, toolResultError("error", "arguments must be an object"));
       }
       try {
-        const output = await verb.handler(args as Record<string, unknown>);
+        const output = await verb.handler(args as Record<string, unknown>, ctx);
         return ok(rid, toolResultOk(output));
       } catch (exc) {
         if (exc instanceof VerbError) {

@@ -143,6 +143,11 @@ async function* streamLines(body: ReadableStream<Uint8Array>): AsyncGenerator<st
 export interface StreamTurnOptions extends KernelRequestOptions {
   message: string;
   conversationId?: string;
+  /** A per-user on-behalf-of bearer (an app-kernel session bearer). When set it
+   * rides in the turn body as `on_behalf_bearer`, which boltrig seals per-run and
+   * mints into the app adapter's credential so a chat-driven app verb runs under
+   * THIS user's grants. Optional; omit for the PAT-only identity. (GAP G2) */
+  onBehalfBearer?: string;
 }
 
 /**
@@ -154,6 +159,7 @@ export async function* streamTurn(opts: StreamTurnOptions): AsyncGenerator<ChatE
   const doFetch = opts.fetch ?? (fetch as unknown as FetchLike);
   const body: Record<string, unknown> = { message: opts.message };
   if (opts.conversationId) body.conversation_id = opts.conversationId;
+  if (opts.onBehalfBearer) body.on_behalf_bearer = opts.onBehalfBearer;
   let resp: Awaited<ReturnType<FetchLike>>;
   try {
     resp = await doFetch(`${opts.server.replace(/\/+$/, "")}/v1/chat`, {

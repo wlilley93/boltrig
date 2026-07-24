@@ -7,6 +7,8 @@ export {
   type BoltrigMcpServerOptions,
   type VerbDef,
   type VerbHandler,
+  type VerbContext,
+  type VerbIdentity,
 } from "./server.js";
 
 export {
