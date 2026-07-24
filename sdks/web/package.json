@@ -1,23 +1,49 @@
 {
-  "name": "boltrig-web-sdk",
-  "private": true,
+  "name": "@wlilley93/boltrig-web-sdk",
+  "private": false,
   "version": "0.1.0",
   "type": "module",
   "description": "Framework-agnostic UI SDK core for Boltrig frontends: the ChatEvent frame union + the shared normalizeEvents turn reducer, so opbox and the boltrig console render identical chat/run data. Extracted from the console (ui/src/api + panels).",
   "license": "UNLICENSED",
-  "repository": { "type": "git", "url": "https://github.com/wlilley93/boltrig.git", "directory": "sdks/web" },
-  "keywords": ["boltrig", "chat", "sse", "ui-sdk", "source-of-truth"],
-  "engines": { "node": ">=20" },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wlilley93/boltrig.git",
+    "directory": "sdks/web"
+  },
+  "keywords": [
+    "boltrig",
+    "chat",
+    "sse",
+    "ui-sdk",
+    "source-of-truth"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "sideEffects": false,
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
   "exports": {
-    ".": { "types": "./dist/src/index.d.ts", "import": "./dist/src/index.js" },
-    "./types": { "types": "./dist/src/types.d.ts", "import": "./dist/src/types.js" },
-    "./chatTurnTypes": { "types": "./dist/src/chatTurnTypes.d.ts", "import": "./dist/src/chatTurnTypes.js" },
-    "./chatTurnNormalizer": { "types": "./dist/src/chatTurnNormalizer.d.ts", "import": "./dist/src/chatTurnNormalizer.js" }
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    },
+    "./types": {
+      "types": "./dist/src/types.d.ts",
+      "import": "./dist/src/types.js"
+    },
+    "./chatTurnTypes": {
+      "types": "./dist/src/chatTurnTypes.d.ts",
+      "import": "./dist/src/chatTurnTypes.js"
+    },
+    "./chatTurnNormalizer": {
+      "types": "./dist/src/chatTurnNormalizer.d.ts",
+      "import": "./dist/src/chatTurnNormalizer.js"
+    }
   },
-  "files": ["dist/src"],
+  "files": [
+    "dist/src"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -25,5 +51,11 @@
     "prepare": "npm run build",
     "prepublishOnly": "npm run build"
   },
-  "devDependencies": { "@types/node": "24.10.1", "typescript": "5.6.3" }
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "typescript": "5.6.3"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  }
 }

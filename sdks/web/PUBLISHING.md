@@ -61,3 +61,12 @@ authority basis = Principal authorisation, human checkpoint = the authorising me
 2. **opbox** (`opbox-frontend/src/lib/ai/boltrig-frames.ts`, `boltrig-chat.ts`):
    add the dep and re-back the boltrig frame handling on the shared union +
    reducer, so opbox renders the boltrig turn identically to the console.
+
+## Release receipt (VJS-ACT 6 s6) — @wlilley93/boltrig-web-sdk@0.1.0
+
+- release id: `@wlilley93/boltrig-web-sdk@0.1.0`
+- registry: GitHub Packages (`https://npm.pkg.github.com`)
+- integrity: `sha512-1Ewjhtw36m4VE...keQBaiJuWPMUw==` (shasum a0ddeb22)
+- authority basis: Principal authorisation (in-session, this turn)
+- human checkpoint: authorising decision "Authorise, publish now"
+- released by: Lexby (agent), engineer capacity
