@@ -57,16 +57,21 @@ fi
 say "3/5 bifrost model-call status (most recent)"
 curl -sS -m 8 "$BIFROST_URL/api/logs?limit=3" 2>/dev/null | python3 -c '
 import sys, json
-try: d=json.load(sys.stdin)
-except Exception: print("  (bifrost logs unavailable)"); sys.exit()
-items=d.get("logs") or d.get("data") or d.get("items") or (d if isinstance(d,list) else [])
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    print("  (bifrost logs unavailable)"); sys.exit()
+items = d.get("logs") or d.get("data") or d.get("items") or (d if isinstance(d, list) else [])
 for it in items[:3]:
-    if not isinstance(it,dict): continue
-    ed=it.get("error_details") or {}
-    err=(ed.get("error") or {}) if isinstance(ed,dict) else {}
-    print(f"  status={it.get(\"status\")} model={it.get(\"model\")} latency={it.get(\"latency\")}ms "
-          f"err={err.get(\"type\")}:{err.get(\"message\")}" if err else
-          f"  status={it.get(\"status\")} model={it.get(\"model\")} latency={it.get(\"latency\")}ms")
+    if not isinstance(it, dict):
+        continue
+    ed = it.get("error_details") or {}
+    err = (ed.get("error") or {}) if isinstance(ed, dict) else {}
+    detail = ""
+    if err:
+        detail = "  err={}:{}".format(err.get("type"), err.get("message"))
+    print("  status={} model={} latency={}ms{}".format(
+        it.get("status"), it.get("model"), it.get("latency"), detail))
 '
 
 say "4/5 codex cell teardown markers (content-free, from the fleet-worker log)"

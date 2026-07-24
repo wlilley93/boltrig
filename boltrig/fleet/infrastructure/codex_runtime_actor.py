@@ -233,6 +233,17 @@ class CodexRuntimeActor:
                 self._terminal_event.set()
                 self._wake_checkpoints_locked()
         if won:
+            # Surface the FIRST terminal cause (content-free: the category and the
+            # static message are our own strings - "Codex notification pump
+            # failed", a protocol-rule string, or the redacted ancestry reason -
+            # never model or user content). Without this the pump-failure terminal
+            # was silent, which is why prior handovers could not tell a pump crash
+            # (e.g. an unhandled server request) from a benign end-of-turn.
+            logger.warning(
+                "codex runtime terminal: category=%s cause=%s",
+                terminal.category,
+                terminal.message,
+            )
             await self._on_terminal(self, terminal)
 
     def raise_if_terminal(self) -> None:
