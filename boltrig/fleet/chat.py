@@ -22,6 +22,7 @@ import asyncio
 import base64
 import binascii
 import contextlib
+import os
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import TYPE_CHECKING, Any
@@ -64,6 +65,12 @@ TurnExecutor = Callable[..., Awaitable[Any]]
 Summariser = Callable[[list[ConversationMessage]], Awaitable[str]]
 
 _SCOPED_ROLES = {"org-admin", "compliance"}  # may read others' threads (SEC-25)
+
+# The adapter a chat turn's ``on_behalf_bearer`` (the permission-parity
+# passthrough) is sealed for. The bearer IS that adapter's downstream credential
+# (the opbox-kernel session bearer), so it is scoped to exactly that adapter and
+# never leaks to any other. Overridable for a differently-named integration.
+_OBO_ADAPTER_ID = os.environ.get("BOLTRIG_OBO_ADAPTER_ID", "opbox")
 
 
 def _project_chat_event(event: dict[str, Any]) -> dict[str, Any]:
@@ -318,6 +325,7 @@ class ChatService:
         grants: GrantSet | None = None,
         attachments: list[dict[str, Any]] | None = None,
         workspace_id: str | None = None, scope: dict[str, Any] | None = None,
+        on_behalf_bearer: str | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         # Enforce the attachment caps FIRST ([2026] VJS-COUNTY 3, D3): an over-cap
         # turn is refused whole before ANY side effect - before a new conversation is
@@ -406,6 +414,7 @@ class ChatService:
                 async for event in self._drive(
                     tenant_id, user_id, conv.id, run_id, turn_message, role, grants,
                     turn_records, workspace_id=workspace_id, scope=scope,
+                    on_behalf_bearer=on_behalf_bearer,
                 ):
                     # Heartbeats are transport keepalives (US-CHAT-11), not turn content:
                     # stream them but never persist them on the turn's event record.
@@ -504,6 +513,7 @@ class ChatService:
     async def _drive(
         self, tenant_id, user_id, conv_id, run_id, message, role, grants,
         attachments=None, *, heartbeat=True, workspace_id=None, scope=None,
+        on_behalf_bearer=None,
     ):
         if self._exec is None:
             yield {"type": "text_delta", "delta": "(no runtime configured)"}
@@ -516,6 +526,7 @@ class ChatService:
                 tenant_id=tenant_id, user_id=user_id, conversation_id=conv_id,
                 run_id=run_id, message=message, role=role, grants=grants,
                 attachments=attachments or [], workspace_id=workspace_id, scope=scope,
+                on_behalf_bearer=on_behalf_bearer,
             )
         )
         # SSE keepalive (US-CHAT-11): a relay-pump task feeds a local queue; the
@@ -679,7 +690,8 @@ def build_turn_executor(
     chat_cfg = chat_config if chat_config is not None else ChatConfig()
 
     async def executor(*, tenant_id, user_id, role, grants, conversation_id,
-                       run_id, message, relay, attachments=None, workspace_id=None, scope=None):
+                       run_id, message, relay, attachments=None, workspace_id=None, scope=None,
+                       on_behalf_bearer=None):
         # Bare-turn authority is manifest data under a caller ceiling ([2026]
         # VJS-COUNTY 1): chat.skills_by_role selects the role's skill set
         # (default_skills when unmapped); a missing skill is skipped (fail-closed).
@@ -696,6 +708,17 @@ def build_turn_executor(
             owner_member="chief-of-staff", hatchet_run_id=run_id, on_behalf_of=user_id, workspace_id=workspace_id,
         )
         await kernel.store.create_work_item(item)
+        # Permission-parity passthrough: seal the caller's clamped external bearer
+        # for the opbox adapter for the life of THIS run, BEFORE any verb dispatch.
+        # Dispatch (``_execute_adapter``) re-mints it into the adapter credential so
+        # a downstream opbox-kernel call enforces the caller's grants, not the
+        # adapter's static service token. Absent => static credential (fail-safe).
+        # Kernel-only + run-scoped: never enters params/events/audit, swept on
+        # terminal, and unresolvable by any other run or adapter.
+        if on_behalf_bearer:
+            await kernel.credentials.seal_run_scoped_adapter_bearer(
+                tenant_id, run_id, _OBO_ADAPTER_ID, on_behalf_bearer
+            )
         # Shadow Codex root admission (SEC-170); None=>flag off=>no-op (execution-neutral, fail-open).
         if codex_execution is not None:
             await codex_execution.shadow_admit(tenant_id, workspace_id, run_id)

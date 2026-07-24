@@ -35,11 +35,24 @@ RUN_SCOPED_CRED_PREFIX = "run:"
 # Marker on the sealed row so an unrelated credential that happens to sit under
 # a ``run:`` id is never resolvable as a secure-input reference.
 _SECURE_ANSWER_KIND = "secure_answer"
+# Marker on the sealed row for a per-turn, per-run ADAPTER BEARER (the parity
+# passthrough: a caller's clamped external bearer sealed for one adapter for the
+# life of one run). DELIBERATELY DISTINCT from _SECURE_ANSWER_KIND so this value
+# is NEVER resolvable through ``resolve_run_scoped_params`` - it is only ever
+# resolved into the adapter ``credential`` arg at dispatch, never substituted
+# into a verb param (an agent could otherwise coax the bearer into an output).
+_ADAPTER_BEARER_KIND = "adapter_bearer"
 
 
 def run_scoped_cred_id(run_id: str, purpose: str) -> str:
     """The credential_refs id a secure answer is sealed under."""
     return f"{RUN_SCOPED_CRED_PREFIX}{run_id}:{purpose}"
+
+
+def adapter_bearer_cred_id(run_id: str, adapter_id: str) -> str:
+    """The credential_refs id a per-run adapter bearer is sealed under. Distinct
+    ``adapter_bearer:`` segment keeps it out of the secure-answer keyspace."""
+    return f"{RUN_SCOPED_CRED_PREFIX}{run_id}:adapter_bearer:{adapter_id}"
 
 
 def parse_run_scoped_ref(value: Any) -> tuple[str, str] | None:
@@ -194,6 +207,68 @@ class CredentialResolver:
         if parsed is None:
             return params
         return await self._resolve_run_scoped(tenant_id, parsed[0], parsed[1], run_id)
+
+    # --- Per-run adapter bearer (parity passthrough) -------------------------
+
+    async def seal_run_scoped_adapter_bearer(
+        self, tenant_id: str, run_id: str, adapter_id: str, token: str
+    ) -> None:
+        """Seal a caller-supplied external bearer for ONE adapter for the life of
+        ONE run (the permission-parity passthrough).
+
+        The chat turn threads the caller's clamped external bearer (e.g. the
+        opbox-kernel session bearer, already clamped to min(agent,user)) here at
+        turn start; ``resolve_run_scoped_credential`` re-mints it into the
+        adapter ``credential`` arg at dispatch (``_execute_adapter``), so the
+        downstream service enforces the CALLER's grants, not the adapter's static
+        service token. The value goes straight through the sealed credential seam
+        (envelope-sealed at rest, SEC-04); it is never returned, logged, or
+        audited, and - unlike a secure answer - it is never resolvable into a verb
+        param (distinct kind). Swept with the run's other refs on terminal
+        (``sweep_run_scoped``), fail-closed to the same run until then."""
+        if not run_id or not adapter_id or not token:
+            raise CredentialResolution(
+                "a run-scoped adapter bearer requires a run id, an adapter id and a token"
+            )
+        await self._store.set_credential_ref(
+            tenant_id,
+            adapter_bearer_cred_id(run_id, adapter_id),
+            {
+                "kind": _ADAPTER_BEARER_KIND,
+                "run_id": run_id,
+                "adapter_id": adapter_id,
+                "value": token,
+            },
+        )
+
+    async def resolve_run_scoped_credential(
+        self, tenant_id: str, run_id: str | None, adapter_id: str
+    ) -> Credential | None:
+        """Resolve a per-run adapter bearer to a ``Credential`` for this adapter,
+        or ``None`` when none is sealed (so dispatch falls back to the adapter's
+        static credential - the fail-safe that keeps dev/non-passthrough tenants
+        unchanged).
+
+        FAIL CLOSED like the secure-answer path: only a genuine adapter-bearer row
+        whose embedded run/adapter match exactly qualifies; a foreign row under a
+        ``run:`` id, a scope mismatch, or a missing run id resolves to ``None``."""
+        if not run_id or not adapter_id:
+            return None
+        ref = await self._store.get_credential_ref(
+            tenant_id, adapter_bearer_cred_id(run_id, adapter_id)
+        )
+        if (
+            not isinstance(ref, dict)
+            or ref.get("kind") != _ADAPTER_BEARER_KIND
+            or ref.get("run_id") != run_id
+            or ref.get("adapter_id") != adapter_id
+        ):
+            return None
+        return Credential(
+            id=adapter_bearer_cred_id(run_id, adapter_id),
+            kind="api_key",
+            material={"token": ref["value"]},
+        )
 
     async def sweep_run_scoped(self, tenant_id: str, run_id: str) -> int:
         """Delete every run-scoped secure-input credential of a finished run.

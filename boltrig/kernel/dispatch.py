@@ -464,6 +464,18 @@ class Dispatcher:
         credential = await self._creds.resolve_for_adapter(
             context.tenant_id, binding.target_ref
         )
+        # Permission-parity passthrough: when the chat turn sealed a per-run bearer
+        # for THIS adapter (keyed by run id + target_ref), it overrides the static
+        # service credential for this call so the downstream service enforces the
+        # CALLER's grants (min(agent,user)-clamped), not the adapter's own token.
+        # Adapter-scoped and run-scoped by construction; absent => static fallback
+        # (dev / non-passthrough tenants are unchanged). Kernel-only: the bearer is
+        # minted straight into the credential arg, never into params/events/audit.
+        override = await self._creds.resolve_run_scoped_credential(
+            context.tenant_id, context.run_id, binding.target_ref
+        )
+        if override is not None:
+            credential = override
         # SEC-181: at this same resolve-credential stage, a param carrying a
         # run-scoped credential REFERENCE (a secure ask_user answer) is resolved
         # to its material INSIDE the kernel - the adapter receives the material

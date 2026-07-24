@@ -92,6 +92,26 @@ def test_chat_http_streams_sse():
     assert len(convs) == 1
 
 
+def test_chat_accepts_on_behalf_bearer_and_stays_compatible_with_legacy_executor():
+    # The optional permission-parity passthrough field is accepted by ChatBody and
+    # threaded through handle_turn; the legacy _stub_executor signature predates it,
+    # so the turn-executor compat filter must DROP it rather than pass an unexpected
+    # keyword (backward-compat with older injected executors).
+    store, relay = InMemoryStore(), EventRelay()
+    chat = ChatService(store, relay, turn_executor=_stub_executor(
+        [{"type": "text_delta", "delta": "hi there"}]
+    ))
+    client = TestClient(create_app(Kernel(store), chat_service=chat))
+    hdr = {"x-boltrig-tenant": T, "x-boltrig-subject": "alice", "x-boltrig-role": "engineer"}
+    r = client.post(
+        "/v1/chat",
+        json={"message": "hello", "on_behalf_bearer": "opbox-clamped-bearer-xyz"},
+        headers=hdr,
+    )
+    assert r.status_code == 200
+    assert "message_start" in r.text and "hi there" in r.text and "message_end" in r.text
+
+
 async def _seed_conv(store, cid, user, title):
     from datetime import timedelta
 

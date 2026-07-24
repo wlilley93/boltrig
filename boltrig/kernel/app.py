@@ -221,6 +221,14 @@ class ChatBody(BaseModel):
     # {name, media_type, data (base64)}. Caps are enforced fail-closed at intake
     # from ChatConfig; an over-cap turn is refused whole before anything persists.
     attachments: list[dict[str, Any]] = Field(default_factory=list)
+    # OPTIONAL permission-parity passthrough: a caller's clamped external bearer
+    # (e.g. the opbox-kernel session bearer, already clamped to min(agent,user))
+    # that the fleet seals per-run for the opbox adapter, so a downstream service
+    # call enforces the CALLER's grants rather than the adapter's static service
+    # token. Absent => today's behaviour (static adapter credential). This is a
+    # CALLER-supplied downstream credential, NOT an identity override: the PAT's
+    # user is still the chatter and every spawn is still ceilinged by their grants.
+    on_behalf_bearer: str | None = None
 
 
 # Spawner seam: the fleet attaches an async (principal, body) -> dict callable.
@@ -479,6 +487,7 @@ def create_app(
             message=body.message,
             conversation_id=body.conversation_id,
             attachments=body.attachments,
+            on_behalf_bearer=body.on_behalf_bearer,
         )
         # RBAC / access errors happen before the first event and propagate to the
         # central exception handler (canonical envelope) - the stream hasn't begun.

@@ -6,7 +6,11 @@ import inspect
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-_SCOPE_KWARGS = frozenset({"scope", "workspace_id"})
+# Newer-than-legacy optional kwargs: passed through when the injected executor
+# declares them, dropped for a legacy signature that predates them (so an older
+# executor never chokes on an unexpected keyword). ``on_behalf_bearer`` is the
+# permission-parity passthrough (2026); scope/workspace_id predate it.
+_OPTIONAL_KWARGS = frozenset({"scope", "workspace_id", "on_behalf_bearer"})
 _KEYWORD_KINDS = frozenset(
     {
         inspect.Parameter.POSITIONAL_OR_KEYWORD,
@@ -15,17 +19,17 @@ _KEYWORD_KINDS = frozenset(
 )
 
 
-def _supported_scope_kwargs(executor: Callable[..., Awaitable[Any]]) -> frozenset[str]:
-    """Return new scope kwargs an injected executor can accept safely."""
+def _supported_optional_kwargs(executor: Callable[..., Awaitable[Any]]) -> frozenset[str]:
+    """Return the optional kwargs an injected executor can accept safely."""
     try:
         parameters = inspect.signature(executor).parameters
     except (TypeError, ValueError):
-        return _SCOPE_KWARGS
+        return _OPTIONAL_KWARGS
     if any(p.kind == inspect.Parameter.VAR_KEYWORD for p in parameters.values()):
-        return _SCOPE_KWARGS
+        return _OPTIONAL_KWARGS
     return frozenset(
         name
-        for name in _SCOPE_KWARGS
+        for name in _OPTIONAL_KWARGS
         if (parameter := parameters.get(name)) is not None and parameter.kind in _KEYWORD_KINDS
     )
 
@@ -40,7 +44,7 @@ async def invoke_turn_executor(
     if executor is None:
         raise RuntimeError("turn executor is unavailable")
     call_kwargs = {"relay": relay, **kwargs}
-    supported = _supported_scope_kwargs(executor)
-    for name in _SCOPE_KWARGS - supported:
+    supported = _supported_optional_kwargs(executor)
+    for name in _OPTIONAL_KWARGS - supported:
         call_kwargs.pop(name, None)
     return await executor(**call_kwargs)

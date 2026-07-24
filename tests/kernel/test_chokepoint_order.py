@@ -122,6 +122,15 @@ class RecordingResolver:
             tenant_id, params, run_id=run_id
         )
 
+    async def resolve_run_scoped_credential(self, tenant_id, run_id, adapter_id):
+        # The per-run adapter-bearer override (permission-parity passthrough)
+        # resolves at the same stage as resolve_for_adapter; it is an OVERRIDE of
+        # the adapter credential, not an additional resolution, so it too passes
+        # through uncounted (and is None absent a sealed bearer, as here).
+        return await self._inner.resolve_run_scoped_credential(
+            tenant_id, run_id, adapter_id
+        )
+
 
 def _recording(k: Kernel) -> RecordingResolver:
     rec = RecordingResolver(k.credentials)
