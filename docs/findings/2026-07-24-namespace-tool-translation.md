@@ -129,6 +129,57 @@ injected via the cell env, flatten WIP applied. Decisive facts:
    promising path if it holds, because it removes the root cause instead of
    working around it.
 
+## Session 3 addendum (2026-07-24 eve): the OpenAI-endpoint path, and why config alone can't finish it
+
+Chased candidate 2 (route codex through z.ai's OpenAI endpoint to avoid the
+Anthropic namespace collapse). Findings, in order:
+
+- **z.ai's OpenAI *coding* endpoint works and GLM calls flat function tools
+  correctly.** `https://api.z.ai/api/coding/paas/v4/chat/completions` with the
+  GLM Coding Plan key returns 200 and, given flat `{type:function}` tools,
+  returns `tool_calls:[opbox_matter_list]` - no collapse. (The general
+  `.../paas/v4` endpoint 401s / 429s "insufficient balance"; the coding plan
+  covers the anthropic + `coding/paas/v4` endpoints only.)
+- **Set up an isolated bifrost provider `zai-oai`** (base_provider_type openai,
+  base_url the coding endpoint, `request_path_overrides.chat_completion` set to
+  the full z.ai URL because bifrost otherwise appends `/v1/chat/completions` ->
+  `/v4/v1/...` 404). Direct chat + tool calls THROUGH bifrost to `zai-oai` work.
+- **But codex 0.144.3 REQUIRES `wire_api = "responses"`** - it hard-errors at
+  startup on `wire_api = "chat"`: *"`wire_api = "chat"` is no longer supported...
+  set `wire_api = "responses"`"* (github.com/openai/codex/discussions/7782). So
+  codex only ever speaks the Responses API and always builds the namespace tool.
+- **Bifrost's openai-format provider proxies `/v1/responses` NATIVELY** (z.ai
+  coding has no `/responses` -> `/v4/v1/responses` 404) and does NOT down-convert
+  Responses->ChatCompletions. Bifrost CAN do that down-conversion for NATIVE
+  chat-only providers (the Cerebras case, bifrost issue #1708), but **custom
+  providers only accept `openai` or `anthropic` wire formats** ("BaseProviderType
+  must be a standard provider" for anything else). So this pinned bifrost cannot
+  be configured to translate codex's Responses -> z.ai's ChatCompletions.
+- **Clean domain fix found + reverted:** `ExactModelPolicy.model_id` used
+  `governed_name` (no slash), while `validate_model_id` (codex config) already
+  permits the `provider/model` form bifrost addressing needs. Reverted to keep
+  main pristine, but this inconsistency is a real prerequisite for any
+  provider-explicit routing (`BOLTRIG_CODEX_MODEL=zai-oai/glm-4.6`) and should be
+  landed with a test when the full path is unblocked.
+
+**Net for the fix.** Config alone can't finish it with the current
+bifrost + z.ai combination. The remaining paths, all bigger than a config tweak:
+1. **Build Responses<->ChatCompletions translation in our own per-cell proxy**
+   (flatten the namespace to flat function tools for the OpenAI chat endpoint,
+   map the model's flat tool_call back to codex's expected Responses form). Full
+   control, but still faces the session-2 unknown: codex's exact expected
+   Responses function_call form for a namespaced tool. That unknown is now
+   narrower - codex registers the 57 tools fine; only the return-path form is
+   unknown - but it still needs codex source or a captured working call.
+2. **Upgrade/replace the gateway** with one that down-converts Responses->
+   ChatCompletions for a chat-only OpenAI endpoint (newer bifrost may expose a
+   chat-only custom-provider type; the Cerebras native path already does this).
+3. **Point codex at a provider that natively serves the OpenAI Responses API**
+   (real OpenAI, or any Responses-native endpoint) - needs a key/account.
+
+The isolated `zai-oai` bifrost provider was deleted at session end; the Anthropic
+`zai` provider is untouched and the box is back to its known-good state.
+
 ## Governance note
 
 This is the per-cell model-proxy - our translation layer, the VJS-CC-VJS 4
