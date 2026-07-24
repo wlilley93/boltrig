@@ -142,7 +142,37 @@ to A vs B vs a stream-processor defect, rather than re-guessed. This is a real g
 (flagged twice across handovers), so it should be built as shippable observability,
 not throwaway debug.
 
-## End-to-end status
+## RESOLVED - the lane works end to end (2026-07-24)
+
+After blocker A was implemented ([2026] VJS-COUNTY 12: answer codex's
+item/tool/requestUserInput by admitting to the kernel gate; `e70ba6f`) and
+deployed, a live PAT-driven turn drove a governed `opbox.matter.list` call all the
+way through and returned the REAL data:
+
+  "There are 3 matters in the Opbox workspace: 1. Acme Holdings - incorporation
+   (MAT-1001) OPEN; 2. Beta Trust - annual filing (MAT-1002) ON_HOLD; 3. boltrig
+   shadow proof (default-1003) OPEN"
+
+NOT degraded. bifrost: glm-4.6 success. No pump crash, no attestation failure, no
+teardown markers. The three real matter ids exist only behind the actual verb, so
+this is definitive proof the tool executed through the governed dispatch chokepoint
+(ceiling on the model-proxy + kernel.invoke grant-check + audit).
+
+The full chain that had to line up: namespace flatten+reattach (codex resolves the
+tool) -> blocker C PAT workspace scope (the turn reaches codex) -> blocker A
+approval admit-to-kernel (codex's approval is answered, the tool executes, the
+kernel governs). All landed and deployed.
+
+### Blocker B (attestation) status: monitored, not a hard blocker
+
+B did NOT fire on the successful runs (bifrost saw the model call succeed, which
+requires a valid bearer, so attestation passed). It remains INTERMITTENT. The
+diagnosability is now in place (named zero-match causes + the runtime terminal
+cause is logged), so the next time B fires the exact cause (cgroup drift vs
+reparent vs pid-ns) will be captured rather than swallowed. The actual fix is
+deferred until that evidence lands, so a security check is not weakened on a guess.
+
+## End-to-end status (historical, pre-fix)
 
 `POST /v1/chat "use opbox.matter.list"` will still return `degraded` until A and
 B are resolved: B blocks model auth on a cold cell, and A blocks the tool
