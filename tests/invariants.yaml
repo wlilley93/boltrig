@@ -21,6 +21,26 @@
 # are Boltrig-local (from the SRS) and never restate a K-*.
 
 invariants:
+  CODEX-APPROVAL-1:
+    description: An inbound codex server-initiated request (its per-tool-call item/tool/requestUserInput approval) is answered on a side task and NEVER terminates the single-reader notification pump ([2026] VJS-COUNTY 12; AGENTS.md graceful degradation).
+    tests:
+      - tests/unit/test_codex_app_server.py::test_a_tool_approval_is_answered_explicitly_and_the_pump_survives
+      - tests/unit/test_codex_app_server.py::test_an_unhandled_server_request_is_refused_typed_and_never_crashes_the_pump
+  CODEX-APPROVAL-2:
+    description: The codex approval handler ADMITS every prompted tool call to the kernel identically - it never inspects the verb's consequence or duplicates the dispatch.py:406 gate - so it can never drift from the kernel, which remains the sole governing locus.
+    tests:
+      - tests/unit/test_codex_server_request_handler.py::test_the_handler_makes_no_gating_decision_so_it_cannot_drift
+  CODEX-APPROVAL-3:
+    description: A codex tool approval is answered EXPLICITLY and promptly (an approve response written to the wire), never left to codex's autoResolutionMs timer to substitute for a decision.
+    tests:
+      - tests/unit/test_codex_app_server.py::test_a_tool_approval_is_answered_explicitly_and_the_pump_survives
+  CODEX-APPROVAL-4:
+    description: The approve label is read from codex's OWN offered options (never hardcoded); a missing or ambiguous approve option fails closed with a typed error rather than a fabricated approval, and the handler never auto-denies a call before the kernel gate.
+    tests:
+      - tests/unit/test_codex_server_request_handler.py::test_a_tool_approval_is_admitted_with_codex_own_label
+      - tests/unit/test_codex_server_request_handler.py::test_the_answer_label_is_read_from_offered_options_not_hardcoded
+      - tests/unit/test_codex_server_request_handler.py::test_no_approve_option_fails_closed_with_an_error
+      - tests/unit/test_codex_server_request_handler.py::test_an_ambiguous_approve_option_fails_closed
   FR-ARC-01:
     description: Thin orchestration has a build-red accidental-dependency gate - direct imports and common dynamic-import forms in domain, ports, and application code may point only to their declared inward layers and the standard library.
     tests:

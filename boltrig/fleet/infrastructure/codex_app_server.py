@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
+import logging
+from collections.abc import Awaitable, Callable
 from typing import TypeVar
 
 from boltrig.fleet.domain import CanonicalJSON, JSONValue
@@ -10,7 +11,15 @@ from boltrig.fleet.domain import CanonicalJSON, JSONValue
 from . import codex_client_support as support
 from . import codex_protocol as wire
 
+logger = logging.getLogger(__name__)
+
 _ResultT = TypeVar("_ResultT")
+
+# A handler for a codex SERVER-INITIATED request: given the request, produce the
+# response we write back. Injected at the composition root so the protocol client
+# does not hard-code an approval policy ([2026] VJS-COUNTY 12). When absent, a
+# server request is refused with a typed error - never a pump crash.
+ServerRequestHandler = Callable[[wire.RequestMessage], Awaitable[wire.ResponseMessage]]
 
 
 class CodexAppServerClient:
@@ -29,6 +38,7 @@ class CodexAppServerClient:
         max_notification_bytes: int = 4 * 1024 * 1024,
         response_history: int = 512,
         max_tombstones: int = 256,
+        server_request_handler: ServerRequestHandler | None = None,
     ) -> None:
         self._request_timeout = support.validate_client_settings(
             (client_name, client_title, client_version),
@@ -62,6 +72,8 @@ class CodexAppServerClient:
         self._allocation_lock = asyncio.Lock()
         self._reader_task: asyncio.Task[None] | None = None
         self._transport_closed = False
+        self._server_request_handler = server_request_handler
+        self._server_request_tasks: set[asyncio.Task[None]] = set()
 
     @property
     def state(self) -> wire.ClientState:
@@ -273,7 +285,17 @@ class CodexAppServerClient:
             self._failure_event.set()
             self._tracker.fail_all(closed)
             await support.stop_task(self._reader_task)
+            await self._drain_server_request_tasks()
         await self._close_transport()
+
+    async def _drain_server_request_tasks(self) -> None:
+        """Cancel and await any in-flight server-request answers on close."""
+        tasks = list(self._server_request_tasks)
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     async def _call(
         self,
@@ -341,7 +363,13 @@ class CodexAppServerClient:
                 elif isinstance(message, wire.NotificationMessage):
                     self._notifications.put(message, len(line.encode("utf-8")))
                 else:
-                    raise wire.UnexpectedServerRequestError()
+                    # A server-initiated request (e.g. codex's per-tool-call
+                    # item/tool/requestUserInput approval) is ANSWERED on a side
+                    # task so the single reader never blocks; it must NEVER crash
+                    # the pump ([2026] VJS-COUNTY 12, and AGENTS.md graceful
+                    # degradation). Absent a handler it is refused with a typed
+                    # error, not a terminal.
+                    self._dispatch_server_request(message)
         except asyncio.CancelledError:
             raise
         except wire.CodexAppServerError as exc:
@@ -353,6 +381,39 @@ class CodexAppServerClient:
         pending = self._tracker.receive(response)
         if pending is not None and not pending.future.done():
             pending.future.set_result(response)
+
+    def _dispatch_server_request(self, request: wire.RequestMessage) -> None:
+        task = asyncio.create_task(
+            self._answer_server_request(request),
+            name=f"codex-server-request-{request.request_id}",
+        )
+        self._server_request_tasks.add(task)
+        task.add_done_callback(self._server_request_tasks.discard)
+
+    async def _answer_server_request(self, request: wire.RequestMessage) -> None:
+        try:
+            if self._server_request_handler is not None:
+                response = await self._server_request_handler(request)
+            else:
+                response = wire.ResponseMessage(
+                    request_id=request.request_id,
+                    error=wire.RemoteErrorData(
+                        code=-32601, message="server requests are not handled"
+                    ),
+                )
+            line = wire.encode_response(response)
+            await self._writer.send_response(
+                request.request_id, line, self._writer.deadline()
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            # Answering must never crash the pump: a failed write leaves the
+            # request unanswered (codex auto-resolves it on its own timer), which
+            # is strictly better than a terminal. Content-free: only the id.
+            logger.warning(
+                "codex server-request answer failed (id=%s)", request.request_id
+            )
 
     def _validate(self, callback: Callable[[], _ResultT]) -> _ResultT:
         try:

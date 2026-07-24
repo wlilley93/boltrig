@@ -154,11 +154,11 @@
       "expires": "2026-12-31"
     },
     "boltrig/fleet/infrastructure/codex_cell_supervisor.py": {
-      "max_file_lines": 475,
-      "max_function_lines": 71,
+      "max_file_lines": 480,
+      "max_function_lines": 75,
       "over_limit_functions": [],
       "owner": "fleet-maintainers",
-      "reason": "Gap 5 adds the per-cell slot seam (acquire_slot/release_slot/provision_cell_tree) and the per-cell workspace-attest + require_local_ownership branch, plus the earlier cell-startup diagnostic logging. Audit fix: _claimed_cells is now FIFO-bounded (4096) instead of growing one entry per historical cell. Follow-up: extract the slot seam and lower back toward 408. Kernel-tools lane: start/_spawn accept validated per-cell environment additions (the run-scoped MCP bearer delivery); validation runs before any provisioning side effect.",
+      "reason": "Gap 5 adds the per-cell slot seam (acquire_slot/release_slot/provision_cell_tree) and the per-cell workspace-attest + require_local_ownership branch, plus the earlier cell-startup diagnostic logging. Audit fix: _claimed_cells is now FIFO-bounded (4096) instead of growing one entry per historical cell. Follow-up: extract the slot seam and lower back toward 408. Kernel-tools lane: start/_spawn accept validated per-cell environment additions (the run-scoped MCP bearer delivery); validation runs before any provisioning side effect. [2026] VJS-COUNTY 12: the App Server client is constructed with the server_request_handler (codex approval -> admit-to-kernel).",
       "expires": "2026-12-31"
     },
     "boltrig/fleet/infrastructure/codex_runtime_events.py": {
@@ -491,6 +491,14 @@
       "over_limit_functions": [],
       "owner": "fleet-maintainers",
       "reason": "Add BoundedWriter.send_response so the App Server client can ANSWER a server-initiated request (codex item/tool/requestUserInput MCP-tool approval), deduped with send_notification via _send_untracked. No function exceeds the limit; the file crosses 400 by the new tracker-free response path.",
+      "expires": "2026-12-31"
+    },
+    "boltrig/fleet/infrastructure/codex_app_server.py": {
+      "max_file_lines": 461,
+      "max_function_lines": 49,
+      "over_limit_functions": [],
+      "owner": "fleet-maintainers",
+      "reason": "Answer codex server-initiated requests ([2026] VJS-COUNTY 12): a ServerRequestHandler seam, _dispatch_server_request + _answer_server_request (side-task, never crashes the pump), and _drain_server_request_tasks on close. No function exceeds the limit; the file crosses 400 by the new response path.",
       "expires": "2026-12-31"
     }
   }

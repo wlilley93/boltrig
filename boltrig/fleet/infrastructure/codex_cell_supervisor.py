@@ -11,6 +11,7 @@ from typing import cast
 
 from . import codex_protocol as wire
 from .codex_app_server import CodexAppServerClient
+from .codex_server_request_handler import answer_server_request
 from .cell_lane import CellLane
 from .cell_slots import CellSlot
 from .codex_runtime_config_argv import validate_app_server_arguments
@@ -276,6 +277,10 @@ class CodexCellSupervisor:
                 transport,
                 client_version=CODEX_CLI_VERSION,
                 request_timeout=self._initialize_timeout,
+                # Answer codex's server-initiated requests (its per-tool-call
+                # item/tool/requestUserInput approval) by admitting the call to the
+                # kernel gate, never crashing the pump ([2026] VJS-COUNTY 12).
+                server_request_handler=answer_server_request,
             )
             receipt = await asyncio.wait_for(client.initialize(), self._initialize_timeout)
             metadata = self._metadata(receipt, process, binary, admitted)

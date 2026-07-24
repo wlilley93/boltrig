@@ -326,18 +326,74 @@ async def test_resume_read_and_steer_reject_wrong_correlated_entity_ids(
 
 
 @pytest.mark.invariant("SEC-150")
-async def test_server_request_failure_is_generic_and_sanitized(
+@pytest.mark.invariant("CODEX-APPROVAL-1")
+@pytest.mark.invariant("CODEX-APPROVAL-3")
+async def test_a_tool_approval_is_answered_explicitly_and_the_pump_survives(
     client_factory: ClientFactory,
 ) -> None:
+    """[2026] VJS-COUNTY 12: codex's item/tool/requestUserInput is ANSWERED
+    explicitly (an approve response written to the wire, never left to codex's
+    autoResolutionMs timer), and the single-reader pump keeps running."""
+    from boltrig.fleet.infrastructure.codex_server_request_handler import (
+        answer_server_request,
+    )
+
+    client, transport = client_factory(server_request_handler=answer_server_request)
+    await initialize(client, transport)
+    await transport.receive({
+        "id": 7, "method": "item/tool/requestUserInput",
+        "params": {
+            "threadId": "t", "turnId": "u", "itemId": "call_9",
+            "questions": [{
+                "id": "mcp_tool_call_approval_call_9", "header": "Approve app tool call?",
+                "question": 'Allow the boltrig MCP server to run tool "opbox.matter.list"?',
+                "isOther": False, "isSecret": False,
+                "options": [{"label": "Approve", "description": "run"},
+                            {"label": "Decline", "description": "no"}],
+            }],
+            "autoResolutionMs": None,
+        },
+    })
+
+    # The pump survives (no crash, no notification), and an explicit approve
+    # response for id 7 was written back to codex.
+    with pytest.raises(TimeoutError):
+        await client.next_notification(timeout=0.2)
+    assert client.state is not wire.ClientState.FAILED
+    written: list[str] = []
+    while not transport.sent.empty():
+        written.append(transport.sent.get_nowait())
+    approve = [line for line in written if '"id":7' in line and '"result"' in line]
+    assert approve, "an explicit approve response must be written for the tool approval"
+    assert '"Approve"' in approve[0]
+
+
+@pytest.mark.invariant("CODEX-APPROVAL-1")
+async def test_an_unhandled_server_request_is_refused_typed_and_never_crashes_the_pump(
+    client_factory: ClientFactory,
+) -> None:
+    """[2026] VJS-COUNTY 12 + AGENTS.md graceful degradation: a server-initiated
+    request must be ANSWERED with a typed error (absent a handler), not raise
+    UnexpectedServerRequestError and crash the single-reader pump. Neither the
+    peer method nor its params may leak into the response."""
     client, transport = client_factory()
     await initialize(client, transport)
     peer_method = "approval/request/SECRET"
     await transport.receive({"id": 50, "method": peer_method, "params": {"token": "SECRET"}})
 
-    with pytest.raises(wire.UnexpectedServerRequestError) as caught:
+    # The pump SURVIVES: no notification arrives, and it does NOT raise the old
+    # UnexpectedServerRequestError - it simply times out with nothing to deliver.
+    with pytest.raises(TimeoutError):
         await client.next_notification(timeout=0.2)
-    assert peer_method not in str(caught.value)
-    assert "SECRET" not in str(caught.value)
+    assert client.state is not wire.ClientState.FAILED
+
+    # A typed error response was written back, keyed to the same id, leaking
+    # neither the peer method nor its params.
+    written: list[str] = []
+    while not transport.sent.empty():
+        written.append(transport.sent.get_nowait())
+    assert any('"id":50' in line and '"error"' in line for line in written)
+    assert all("SECRET" not in line and peer_method not in line for line in written)
 
 
 @pytest.mark.parametrize(

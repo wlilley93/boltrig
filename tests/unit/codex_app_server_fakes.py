@@ -111,6 +111,7 @@ async def client_factory() -> AsyncIterator[ClientFactory]:
         max_notification_bytes: int = 4096,
         response_history: int = 8,
         max_tombstones: int = 8,
+        server_request_handler: object = None,
     ) -> tuple[CodexAppServerClient, FakeLineTransport]:
         transport = FakeLineTransport()
         client = CodexAppServerClient(
@@ -121,6 +122,7 @@ async def client_factory() -> AsyncIterator[ClientFactory]:
             max_notification_bytes=max_notification_bytes,
             response_history=response_history,
             max_tombstones=max_tombstones,
+            server_request_handler=server_request_handler,
         )
         clients.append(client)
         return client, transport
