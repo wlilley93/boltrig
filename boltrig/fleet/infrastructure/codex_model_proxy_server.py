@@ -35,7 +35,7 @@ from starlette.routing import Route
 from boltrig.fleet.domain.model_proxy_grant import StoredModelProxyGrant
 from boltrig.fleet.infrastructure.model_proxy_tool_ceiling import (
     MAX_MODEL_CALL_BODY_BYTES,
-    ToolCallStreamGuard,
+    CodexResponseStreamProcessor,
     ToolCeilingViolation,
     enforce_tool_ceiling,
 )
@@ -207,31 +207,34 @@ class PerCellModelProxyServer:
         )
 
     async def _guarded_stream(self, upstream: httpx.Response) -> AsyncIterator[bytes]:
-        """Relay the upstream body, holding the ceiling on the way back too.
+        """Relay the upstream body, holding the ceiling and bridging the namespace.
 
         Stripping tools from the REQUEST bounds what the model is offered; it does
         not bound what the gateway returns. An unsolicited ``function_call`` in the
         response would still be executed by the App Server, conferring a capability
-        by a path that never crossed the request ceiling. On a violation the relay
-        STOPS: status and headers are already with the cell, so truncation is the
-        only fail-closed move left, and a truncated stream is strictly better than a
-        complete one carrying a tool call.
+        by a path that never crossed the request ceiling. The processor also
+        reattaches the ``mcp__boltrig`` namespace onto each in-ceiling call (the
+        request was flattened, so the gateway returns a bare name Codex cannot
+        resolve). On a violation the relay STOPS: status and headers are already
+        with the cell, so truncation is the only fail-closed move left, and a
+        truncated stream is strictly better than a complete one carrying a barred
+        tool call.
         """
 
-        guard = ToolCallStreamGuard(self._allowed_tools)
-        async for chunk in upstream.aiter_raw():
-            try:
-                guard.inspect(chunk)
-            except ToolCeilingViolation as exc:
-                # Fail-closed truncation is correct either way; logging just makes
-                # an otherwise-silent truncation diagnosable (was this ever hit,
-                # and was the ceiling this run held ({self._allowed_tools}) the
-                # reason). Never logs stream content, only the static reason.
-                logger.warning(
-                    "model proxy response stream truncated (tool ceiling): %s", exc
-                )
-                return
-            yield chunk
+        processor = CodexResponseStreamProcessor(self._allowed_tools)
+        try:
+            async for chunk in upstream.aiter_raw():
+                yield processor.feed(chunk)
+            yield processor.finish()
+        except ToolCeilingViolation as exc:
+            # Fail-closed truncation is correct either way; logging just makes an
+            # otherwise-silent truncation diagnosable (was this ever hit, and was
+            # the ceiling this run held the reason). Never logs stream content,
+            # only the static reason.
+            logger.warning(
+                "model proxy response stream truncated (tool ceiling): %s", exc
+            )
+            return
 
     async def _reject_safe(self, token: str) -> bool:
         """Verify the bearer, treating any verifier error as a rejection."""

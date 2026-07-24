@@ -1,9 +1,20 @@
-"""The model-call tool ceiling: what the cell may be offered, enforced on the wire.
+"""The model-call tool ceiling: what the cell may be offered + how the MCP
+namespace is bridged, enforced on the wire.
 
-Codex 0.144.3 offers exec_command/write_stdin/update_plan/request_user_input/
-view_image on every turn and config.toml cannot suppress them, so the quarantined
-read-only lane's "no effective tools" assertion is only true if the proxy makes it
-true. These cases pin that behaviour.
+Two jobs live in this one chokepoint (VJS-CC-VJS 4):
+
+1. Codex 0.144.3 offers exec_command/write_stdin/update_plan/request_user_input/
+   view_image on every turn and config.toml cannot suppress them, so the
+   quarantined read-only lane's "no effective tools" assertion is only true if the
+   proxy makes it true.
+2. Codex presents the kernel MCP server as ONE ``{"type":"namespace",
+   "name":"mcp__boltrig","tools":[...]}`` entry, which a namespace-blind gateway
+   collapses into a single opaque tool. ``enforce_tool_ceiling`` FLATTENS the
+   namespace on the request (nested verbs spread as top-level function tools) and
+   :class:`CodexResponseStreamProcessor` REATTACHES ``namespace="mcp__boltrig"``
+   onto each returned ``function_call`` so Codex's strict ToolName match resolves.
+
+These cases pin both behaviours.
 """
 
 from __future__ import annotations
@@ -12,9 +23,12 @@ import json
 
 import pytest
 
+from boltrig.fleet.infrastructure.codex_kernel_tools_phase import (
+    CODEX_MCP_NAMESPACE_NAME,
+)
 from boltrig.fleet.infrastructure.model_proxy_tool_ceiling import (
     MAX_MODEL_CALL_BODY_BYTES,
-    ToolCallStreamGuard,
+    CodexResponseStreamProcessor,
     ToolCeilingViolation,
     enforce_tool_ceiling,
 )
@@ -27,9 +41,20 @@ _CODEX_TOOLS = [
     {"type": "function", "name": "view_image"},
 ]
 
+# The kernel MCP namespace entry as Codex presents it: nested verbs are bare
+# sanitized function tools (``opbox.matter.list`` -> ``opbox_matter_list``).
+_NESTED = [
+    {"type": "function", "name": "opbox_matter_list", "description": "list", "parameters": {}},
+    {"type": "function", "name": "knowledge_search", "description": "search", "parameters": {}},
+]
+_NAMESPACE = {"type": "namespace", "name": CODEX_MCP_NAMESPACE_NAME, "tools": _NESTED}
+
 
 def _body(payload: object) -> bytes:
     return json.dumps(payload).encode("utf-8")
+
+
+# --- request-side ceiling on Codex built-ins --------------------------------
 
 
 def test_an_empty_ceiling_strips_every_codex_builtin_tool() -> None:
@@ -56,7 +81,7 @@ def test_a_granted_tool_survives_and_the_rest_are_removed() -> None:
 
 
 def test_an_untouched_body_is_returned_byte_identical() -> None:
-    """No tools to strip means no re-serialisation, so nothing else can drift."""
+    """No tools to change means no re-serialisation, so nothing else can drift."""
 
     body = _body({"input": "hi"})
     assert enforce_tool_ceiling(body, frozenset()) is body
@@ -80,6 +105,52 @@ def test_a_builtin_tool_is_named_by_its_type_when_it_has_no_name() -> None:
     body = _body({"input": "hi", "tools": [{"type": "web_search"}]})
     assert enforce_tool_ceiling(body, frozenset({"web_search"})) is body
     assert "tools" not in json.loads(enforce_tool_ceiling(body, frozenset()))
+
+
+# --- request-side MCP namespace flatten -------------------------------------
+
+
+def test_the_mcp_namespace_is_flattened_to_top_level_function_tools() -> None:
+    """A namespace-blind gateway collapses the namespace; flattening spreads its
+    ceiling-kept verbs as ordinary top-level function tools it forwards intact."""
+
+    allowed = frozenset({"opbox_matter_list", "knowledge_search"})
+    result = json.loads(enforce_tool_ceiling(_body({"input": "hi", "tools": [_NAMESPACE]}), allowed))
+    assert result["tools"] == _NESTED  # spread as-is, bare-named, no namespace wrapper
+    assert all(t["type"] == "function" for t in result["tools"])
+
+
+def test_flatten_keeps_only_ceiling_verbs_from_the_namespace() -> None:
+    allowed = frozenset({"opbox_matter_list"})
+    result = json.loads(enforce_tool_ceiling(_body({"input": "hi", "tools": [_NAMESPACE]}), allowed))
+    assert [t["name"] for t in result["tools"]] == ["opbox_matter_list"]
+
+
+def test_an_empty_ceiling_strips_the_whole_namespace() -> None:
+    """The read-only lane: no verb from the namespace survives."""
+
+    result = json.loads(enforce_tool_ceiling(_body({"input": "hi", "tools": [_NAMESPACE]}), frozenset()))
+    assert "tools" not in result
+
+
+def test_a_foreign_namespace_contributes_nothing() -> None:
+    """Only the pinned boltrig namespace is flattened; any other is dropped whole."""
+
+    foreign = {"type": "namespace", "name": "mcp__other", "tools": _NESTED}
+    allowed = frozenset({"opbox_matter_list", "knowledge_search"})
+    result = json.loads(enforce_tool_ceiling(_body({"input": "hi", "tools": [foreign]}), allowed))
+    assert "tools" not in result
+
+
+def test_flatten_dedupes_a_verb_offered_both_bare_and_namespaced() -> None:
+    bare = {"type": "function", "name": "opbox_matter_list", "description": "list", "parameters": {}}
+    allowed = frozenset({"opbox_matter_list"})
+    body = _body({"input": "hi", "tools": [bare, _NAMESPACE]})
+    result = json.loads(enforce_tool_ceiling(body, allowed))
+    assert [t["name"] for t in result["tools"]] == ["opbox_matter_list"]
+
+
+# --- request-side fail-closed guards ----------------------------------------
 
 
 def test_an_unparseable_body_is_refused_rather_than_forwarded() -> None:
@@ -106,37 +177,83 @@ def test_a_non_object_json_body_is_forwarded_unchanged() -> None:
     assert enforce_tool_ceiling(body, frozenset()) is body
 
 
-def test_the_stream_guard_refuses_an_unsolicited_tool_call() -> None:
-    """Exclusivity limb (c): the gateway must not confer a tool we never offered."""
+# --- response-side namespace reattach + ceiling enforcement -----------------
 
-    guard = ToolCallStreamGuard(frozenset())
-    guard.inspect(b'data: {"type":"response.output_text.delta","delta":"hi"}\n\n')
+
+def _event(item: dict) -> bytes:
+    frame = {"type": "response.output_item.added", "item": item}
+    return b"data: " + json.dumps(frame).encode("utf-8") + b"\n\n"
+
+
+def test_a_returned_function_call_gets_the_namespace_reattached() -> None:
+    """The request was flattened, so the model returns a bare name Codex cannot
+    resolve; the processor reattaches ``mcp__boltrig`` for the strict match."""
+
+    processor = CodexResponseStreamProcessor(frozenset({"opbox_matter_list"}))
+    out = processor.feed(_event({"type": "function_call", "name": "opbox_matter_list", "arguments": "{}"}))
+    out += processor.finish()
+    payload = json.loads(out.split(b"data: ", 1)[1].split(b"\n\n", 1)[0])
+    call = payload["item"]
+    assert call["name"] == "opbox_matter_list"
+    assert call["namespace"] == CODEX_MCP_NAMESPACE_NAME
+
+
+def test_a_returned_call_outside_the_ceiling_is_refused() -> None:
+    """Enforcement runs on the response too: the gateway must not confer a tool we
+    never offered (an unsolicited function_call would still be executed)."""
+
+    processor = CodexResponseStreamProcessor(frozenset({"opbox_matter_list"}))
     with pytest.raises(ToolCeilingViolation):
-        guard.inspect(
-            b'data: {"type":"response.output_item.added","item":'
-            b'{"type":"function_call","name":"exec_command"}}\n\n'
-        )
+        processor.feed(_event({"type": "function_call", "name": "exec_command", "arguments": "{}"}))
 
 
-def test_the_stream_guard_sees_a_marker_split_across_chunks() -> None:
-    """A chunk boundary must not be a way through the guard."""
-
-    guard = ToolCallStreamGuard(frozenset())
-    guard.inspect(b'data: {"item":{"type":"functio')
+def test_an_empty_ceiling_refuses_any_returned_call() -> None:
+    processor = CodexResponseStreamProcessor(frozenset())
     with pytest.raises(ToolCeilingViolation):
-        guard.inspect(b'n_call","name":"exec_command"}}')
+        processor.feed(_event({"type": "function_call", "name": "opbox_matter_list", "arguments": "{}"}))
 
 
-def test_the_stream_guard_allows_a_granted_tool_and_bars_the_rest() -> None:
-    """PR8's write phase widens by policy here too, not by disabling the guard."""
+def test_an_already_qualified_call_is_accepted_and_bared() -> None:
+    """Defensive: a namespace-qualified return maps back to its bare ceiling verb."""
 
-    guard = ToolCallStreamGuard(frozenset({"update_plan"}))
-    guard.inspect(b'{"item":{"type":"function_call","name":"update_plan"}}')
+    processor = CodexResponseStreamProcessor(frozenset({"opbox_matter_list"}))
+    qualified = f"{CODEX_MCP_NAMESPACE_NAME}__opbox_matter_list"
+    out = processor.feed(_event({"type": "function_call", "name": qualified, "arguments": "{}"}))
+    out += processor.finish()
+    call = json.loads(out.split(b"data: ", 1)[1].split(b"\n\n", 1)[0])["item"]
+    assert call["name"] == "opbox_matter_list"
+    assert call["namespace"] == CODEX_MCP_NAMESPACE_NAME
+
+
+def test_ordinary_text_events_pass_through_byte_for_byte() -> None:
+    processor = CodexResponseStreamProcessor(frozenset({"opbox_matter_list"}))
+    event = b'data: {"type":"response.output_text.delta","delta":"hi"}\n\n'
+    assert processor.feed(event) == event
+    assert processor.finish() == b""
+
+
+def test_a_function_call_split_across_chunks_is_reassembled_and_rewritten() -> None:
+    """A chunk boundary inside the frame must not defeat the rewrite."""
+
+    processor = CodexResponseStreamProcessor(frozenset({"opbox_matter_list"}))
+    event = _event({"type": "function_call", "name": "opbox_matter_list", "arguments": "{}"})
+    split = len(event) // 2
+    out = processor.feed(event[:split]) + processor.feed(event[split:]) + processor.finish()
+    call = json.loads(out.split(b"data: ", 1)[1].split(b"\n\n", 1)[0])["item"]
+    assert call["namespace"] == CODEX_MCP_NAMESPACE_NAME
+
+
+def test_a_stream_ending_mid_tool_call_event_is_refused() -> None:
+    """A trailing fragment still carrying a tool-call marker cannot be verified
+    whole, so it is refused rather than relayed unchecked."""
+
+    processor = CodexResponseStreamProcessor(frozenset({"opbox_matter_list"}))
+    processor.feed(b'data: {"item":{"type":"function_call","name":"opbox_matter_list"')
     with pytest.raises(ToolCeilingViolation):
-        guard.inspect(b'{"item":{"type":"function_call","name":"exec_command"}}')
+        processor.finish()
 
 
-def test_the_stream_guard_passes_ordinary_text() -> None:
-    guard = ToolCallStreamGuard(frozenset())
-    for chunk in (b'data: {"object":"response",', b'"output":[{"type":"message"}]}'):
-        guard.inspect(chunk)
+def test_a_done_frame_ends_the_stream_cleanly() -> None:
+    processor = CodexResponseStreamProcessor(frozenset())
+    assert processor.feed(b"data: [DONE]\n\n") == b"data: [DONE]\n\n"
+    assert processor.finish() == b""

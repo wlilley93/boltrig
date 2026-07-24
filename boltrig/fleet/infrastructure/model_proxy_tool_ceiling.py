@@ -1,4 +1,5 @@
-"""Enforce a cell's tool ceiling on the model-call wire (the one chokepoint).
+"""Enforce a cell's tool ceiling on the model-call wire, and bridge Codex's MCP
+tool namespace across a gateway that cannot carry it (the one chokepoint).
 
 Codex 0.144.3 offers its built-in tools (``exec_command``, ``write_stdin``,
 ``update_plan``, ``request_user_input``, ``view_image``) on every turn, and
@@ -6,42 +7,48 @@ Codex 0.144.3 offers its built-in tools (``exec_command``, ``write_stdin``,
 ``web_search`` and ``experimental_request_user_input``. So a cell configured
 ``approval_policy = "never"`` would hand the model an unapproved shell inside the
 kernel container, and any shell child - being a descendant of the App Server -
-also satisfies the ancestry attestation on the bearer ingress.
+also satisfies the ancestry attestation on the bearer ingress. The per-cell
+loopback proxy is the only point both sides must traverse, so the ceiling is
+applied here rather than trusted to the runtime's own config. Fail-closed: a body
+we cannot parse is a body whose tool set we cannot verify, so it is rejected.
 
-Admission already asserts the quarantined Codex lane has NO effective tools
-(``codex_runtime_admission``: "quarantined runtime cannot attest effective
-tools"). That assertion was unenforced on the wire; this module makes it true.
-The per-cell loopback proxy is the only point both sides must traverse, so the
-ceiling is applied there rather than trusted to the runtime's own config.
+The MCP-namespace bridge (why this module also rewrites, not just filters):
+Codex presents the kernel's MCP server to the model as ONE Responses entry
+``{"type":"namespace","name":"mcp__boltrig","tools":[<function tools>]}``. A
+gateway that translates the Responses API to a provider with no namespace concept
+(here Bifrost -> the Anthropic-shaped z.ai endpoint) COLLAPSES that whole
+namespace into a single opaque ``mcp__boltrig`` tool, so the model never sees the
+individual verbs. This module FLATTENS the namespace on the request - it spreads
+the ceiling-kept nested function tools as ordinary top-level function tools, which
+the gateway forwards intact and the model can call by name.
 
-The ceiling is a SET, not a flag: the kernel-tools lane
-(``codex_kernel_tools_phase``) compiles the run's granted verbs into exact
-Codex nested tool names at admission, and the same enforcement then offers
-exactly those tools and no more - built-ins stay stripped either way, and a
-boltrig verb outside the run's grants is stripped like any other. Verified
-live against the pinned binary: the kernel's MCP server appears in the payload
-as ONE ``{"type": "namespace", "name": "mcp__boltrig"}`` entry whose NESTED
-function tools carry the ceiling's names, so namespace entries are filtered by
-their contents (the namespace itself survives only while a granted tool
-remains inside it), not just by their top-level name.
-
-Fail-closed: a body we cannot parse is a body whose tool set we cannot verify, so
-it is rejected rather than forwarded.
+Flattening alone is not enough, because Codex resolves the returned call by a
+STRICT ``ToolName{name, namespace}`` match (codex-rs: ``tools/router.rs`` builds
+``ToolName::new(namespace, name)`` from the response ``function_call`` item, whose
+``namespace`` is a distinct field - ``protocol/src/models.rs``; the boltrig verbs
+register as ``ToolName::namespaced("mcp__boltrig", "<verb>")`` -
+``codex-mcp/src/tools.rs``). A flat ``function_call`` with no ``namespace`` field
+is an "unsupported call". So :class:`CodexResponseStreamProcessor` reattaches
+``namespace = "mcp__boltrig"`` onto every in-ceiling ``function_call`` item on the
+response stream. Both edits change only the wire SHAPE; the ceiling (which verbs
+are allowed, built-ins stripped) is unchanged - this stays inside VJS-CC-VJS 4.
 """
 
 from __future__ import annotations
 
 import json
-import re
 
 from .codex_kernel_tools_phase import CODEX_MCP_NAMESPACE_NAME
 
-# The Responses API names a tool call by this item type; the SSE frames that carry
-# one always contain it, so it is the cheapest exact marker to scan a stream for.
+# The Responses API tool-call item type; SSE frames that carry one contain it, so
+# it is the cheapest exact marker to decide whether an event needs inspection.
 _FUNCTION_CALL_MARKER = b"function_call"
-_NAME_FIELD = re.compile(rb'"name"\s*:\s*"([^"]*)"')
-# A tail long enough that a marker or a name split across two chunks is still seen.
-_STREAM_TAIL_BYTES = 512
+# SSE events are terminated by a blank line.
+_EVENT_DELIMITER = b"\n\n"
+# The separators Codex may use between the namespace and a nested tool name if the
+# model ever returns a qualified call; every prefix stripped is the pinned boltrig
+# namespace ONLY, so a qualified name can never smuggle a tool from elsewhere.
+_NAMESPACE_SEPARATORS = ("/", ".", "__")
 
 # A model-call body we cannot parse is one whose tool set we cannot check. The
 # cap is generous (a full read-only context is well under it) and exists so an
@@ -54,12 +61,14 @@ class ToolCeilingViolation(ValueError):
 
 
 def enforce_tool_ceiling(body: bytes, allowed: frozenset[str]) -> bytes:
-    """Return ``body`` with every tool outside ``allowed`` removed.
+    """Return ``body`` with the tool set flattened + narrowed to the ceiling.
 
     An empty body passes through (a GET carries no tool set). Any other body must
-    be JSON we can parse, or it is refused. When the surviving tool list is empty
-    the ``tools`` key is dropped entirely, along with ``tool_choice``, so the
-    upstream sees a plain reasoning call rather than an empty-tools edge case.
+    be JSON we can parse, or it is refused. The boltrig MCP namespace is flattened
+    into its ceiling-kept nested function tools (spread to the top level); function
+    / built-in tools survive only if their name is in the ceiling. When nothing
+    survives the ``tools`` key is dropped entirely, along with ``tool_choice``, so
+    the upstream sees a plain reasoning call rather than an empty-tools edge case.
     """
 
     if type(body) is not bytes:
@@ -80,15 +89,15 @@ def enforce_tool_ceiling(body: bytes, allowed: frozenset[str]) -> bytes:
     if not isinstance(declared, list):
         raise ToolCeilingViolation("model-call tools is not a list")
     kept: list[object] = []
-    changed = False
+    seen: set[str] = set()
     for tool in declared:
-        surviving = _filter_tool(tool, allowed)
-        if surviving is None:
-            changed = True
-        else:
-            changed = changed or surviving is not tool
+        for surviving in _surviving_tools(tool, allowed):
+            name = _tool_name(surviving)
+            if name is None or name in seen:
+                continue
+            seen.add(name)
             kept.append(surviving)
-    if not changed:
+    if kept == declared:
         return body
     if kept:
         payload["tools"] = kept
@@ -98,100 +107,171 @@ def enforce_tool_ceiling(body: bytes, allowed: frozenset[str]) -> bytes:
     return json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
 
 
-def _filter_tool(tool: object, allowed: frozenset[str]) -> object | None:
-    """The surviving form of one top-level tool entry, or None if dropped.
+def _surviving_tools(tool: object, allowed: frozenset[str]) -> list[object]:
+    """The top-level tools one declared entry contributes after the ceiling.
 
-    Function and built-in tools are kept by name, exactly as before. A
-    ``namespace`` entry survives ONLY as a filtered copy: it must be the
-    boltrig kernel namespace and at least one nested tool must be within the
-    ceiling. Any other namespace, and any namespace emptied by the filter, is
-    dropped - an entry we cannot name can never match the ceiling.
+    A function / built-in survives as itself iff its name is in the ceiling. The
+    boltrig kernel NAMESPACE is FLATTENED: its ceiling-kept nested function tools
+    (already exact function-tool objects: ``{type, name, description, parameters,
+    strict}``) are spread as individual top-level function tools, so a gateway
+    without a namespace concept cannot collapse them. Any other namespace, and any
+    entry we cannot name, contributes nothing.
     """
 
     if not isinstance(tool, dict):
-        return None
+        return []
     if tool.get("type") == "namespace":
         if tool.get("name") != CODEX_MCP_NAMESPACE_NAME:
-            return None
+            return []
         nested = tool.get("tools")
         if not isinstance(nested, list):
-            return None
-        kept_nested = [item for item in nested if _tool_name(item) in allowed]
-        if not kept_nested:
-            return None
-        if len(kept_nested) == len(nested):
-            return tool
-        return {**tool, "tools": kept_nested}
-    return tool if _tool_name(tool) in allowed else None
+            return []
+        return [item for item in nested if _tool_name(item) in allowed]
+    return [tool] if _tool_name(tool) in allowed else []
 
 
-class ToolCallStreamGuard:
-    """Hold the ceiling on the RESPONSE stream, not only the request.
+class CodexResponseStreamProcessor:
+    """Enforce the ceiling on the RESPONSE and reattach the MCP namespace.
 
-    ``enforce_tool_ceiling`` bounds what the model is OFFERED. It does not bound
-    what comes back: a gateway that returns a ``function_call`` for a tool we
-    stripped would still be executed by the App Server, which never needed to be
-    offered the tool at all. [2026] VJS-CC-VJS 4's exclusivity limb asks whether
-    the capability can be conferred by ANY path that misses the chokepoint, and an
-    unsolicited tool call in the response is exactly such a path.
+    ``enforce_tool_ceiling`` bounds what the model is OFFERED; it does not bound
+    what comes back. An unsolicited ``function_call`` in the response would still
+    be executed by the App Server, conferring a capability by a path that never
+    crossed the request ceiling ([2026] VJS-CC-VJS 4). So every returned
+    ``function_call`` item is checked against the ceiling and a call outside it
+    truncates the stream (fail-closed: status and headers are already with the
+    cell, so truncation is the only move left). When the ceiling is empty (the
+    read-only lane) ANY function call is a violation.
 
-    The stream is scanned as it passes, with a sliding tail so a marker split
-    across two chunks is still seen. On a violation the caller must stop relaying:
-    a truncated response is the fail-closed outcome, because by then the status and
-    headers have already gone to the cell and no error status is available.
+    On top of enforcement it BRIDGES the namespace: because the request was
+    flattened, the model returns a bare-named ``function_call`` with no
+    ``namespace`` field, which Codex cannot resolve. This processor sets the
+    item's ``name`` to the bare verb and its ``namespace`` to ``mcp__boltrig`` so
+    Codex's ``ToolName{name, namespace}`` match succeeds. Nothing else in the
+    event is touched; events without a ``function_call`` marker pass through
+    byte-for-byte.
 
-    When the ceiling is empty (the read-only lane) the test is exact and needs no
-    name parsing: ANY function call at all is a violation.
+    The stream is reassembled into whole SSE events (``\\n\\n``-delimited) so an
+    item whose JSON straddles chunk boundaries is rewritten intact.
     """
 
-    __slots__ = ("_allowed", "_tail")
+    __slots__ = ("_allowed", "_buffer")
 
     def __init__(self, allowed: frozenset[str]) -> None:
         if type(allowed) is not frozenset:
             raise TypeError("allowed must be an exact frozenset")
         self._allowed = allowed
-        self._tail = b""
+        self._buffer = b""
 
-    def inspect(self, chunk: bytes) -> None:
-        """Raise :class:`ToolCeilingViolation` if the chunk carries a barred call."""
+    def feed(self, chunk: bytes) -> bytes:
+        """Consume a raw response chunk; return the processed bytes to relay.
+
+        Raises :class:`ToolCeilingViolation` on an out-of-ceiling call or an
+        unparseable tool-call event - the caller stops relaying (fail-closed).
+        """
 
         if type(chunk) is not bytes:
             raise TypeError("chunk must be exact bytes")
-        window = self._tail + chunk
-        if _FUNCTION_CALL_MARKER in window:
-            if not self._allowed or not self._named_calls_are_allowed(window):
-                raise ToolCeilingViolation("upstream returned a tool call outside the ceiling")
-        # Keep enough tail that a marker or name split across chunks is still seen.
-        self._tail = window[-_STREAM_TAIL_BYTES:]
+        self._buffer += chunk
+        out = bytearray()
+        while True:
+            index = self._buffer.find(_EVENT_DELIMITER)
+            if index < 0:
+                break
+            event = self._buffer[: index + len(_EVENT_DELIMITER)]
+            self._buffer = self._buffer[index + len(_EVENT_DELIMITER) :]
+            out += self._process_event(event)
+        return bytes(out)
 
-    def _named_calls_are_allowed(self, window: bytes) -> bool:
-        for match in _NAME_FIELD.finditer(window):
+    def finish(self) -> bytes:
+        """Flush the trailing partial event at stream end.
+
+        A trailing fragment that still carries a tool-call marker cannot be
+        verified whole, so it is refused rather than relayed unchecked.
+        """
+
+        rest = self._buffer
+        self._buffer = b""
+        if _FUNCTION_CALL_MARKER in rest:
+            raise ToolCeilingViolation("response stream ended mid tool-call event")
+        return rest
+
+    def _process_event(self, event: bytes) -> bytes:
+        if _FUNCTION_CALL_MARKER not in event:
+            return event
+        try:
+            text = event.decode("utf-8")
+        except UnicodeDecodeError as error:
+            raise ToolCeilingViolation("response event was not UTF-8") from error
+        changed = False
+        lines = text.split("\n")
+        for position, line in enumerate(lines):
+            carriage = line.endswith("\r")
+            core = line[:-1] if carriage else line
+            if not core.startswith("data:"):
+                continue
+            payload = core[len("data:") :].lstrip()
+            if not payload or payload == "[DONE]":
+                continue
             try:
-                name = match.group(1).decode("utf-8")
-            except UnicodeDecodeError:
-                return False
-            if not self._name_allowed(name):
-                return False
+                document = json.loads(payload)
+            except json.JSONDecodeError as error:
+                raise ToolCeilingViolation("response data frame is not parseable JSON") from error
+            if self._bridge_function_calls(document):
+                rewritten = "data: " + json.dumps(
+                    document, ensure_ascii=False, separators=(",", ":")
+                )
+                lines[position] = rewritten + ("\r" if carriage else "")
+                changed = True
+        if not changed:
+            return event
+        return "\n".join(lines).encode("utf-8")
+
+    def _bridge_function_calls(self, node: object) -> bool:
+        """Enforce + reattach the namespace on every ``function_call`` in ``node``.
+
+        Returns whether ``node`` was mutated. Raises on an out-of-ceiling call.
+        """
+
+        changed = False
+        if isinstance(node, dict):
+            if node.get("type") == "function_call":
+                changed = self._bridge_one_call(node) or changed
+            for value in node.values():
+                changed = self._bridge_function_calls(value) or changed
+        elif isinstance(node, list):
+            for item in node:
+                changed = self._bridge_function_calls(item) or changed
+        return changed
+
+    def _bridge_one_call(self, call: dict) -> bool:
+        name = call.get("name")
+        if not isinstance(name, str) or not name:
+            # A nameless placeholder frame is not an executable call; leave it be.
+            return False
+        bare = self._bare_verb(name)
+        if bare is None:
+            raise ToolCeilingViolation("upstream returned a tool call outside the ceiling")
+        if call.get("name") == bare and call.get("namespace") == CODEX_MCP_NAMESPACE_NAME:
+            return False
+        call["name"] = bare
+        call["namespace"] = CODEX_MCP_NAMESPACE_NAME
         return True
 
-    def _name_allowed(self, name: str) -> bool:
-        """Whether a called tool name maps to EXACTLY one ceiling entry.
+    def _bare_verb(self, name: str) -> str | None:
+        """The bare ceiling verb a returned call maps to, or None if barred.
 
-        Codex may call a namespaced tool either by its bare nested name or by a
-        namespace-qualified form (``mcp__boltrig/<name>``,
-        ``mcp__boltrig.<name>``, ``mcp__boltrig__<name>``); every qualifier
-        stripped here is the pinned boltrig namespace ONLY, so a qualified name
-        can never smuggle a tool from another namespace, and a bare name can
-        never match a verb outside the ceiling.
+        Accepts the bare name (the flattened form the model is offered) or, defensively,
+        a namespace-qualified form; every accepted qualifier is the pinned boltrig
+        namespace only.
         """
 
         if name in self._allowed:
-            return True
-        for separator in ("/", ".", "__"):
+            return name
+        for separator in _NAMESPACE_SEPARATORS:
             prefix = f"{CODEX_MCP_NAMESPACE_NAME}{separator}"
-            if name.startswith(prefix) and name[len(prefix):] in self._allowed:
-                return True
-        return False
+            if name.startswith(prefix) and name[len(prefix) :] in self._allowed:
+                return name[len(prefix) :]
+        return None
 
 
 def _tool_name(tool: object) -> str | None:
@@ -212,7 +292,7 @@ def _tool_name(tool: object) -> str | None:
 
 __all__ = [
     "MAX_MODEL_CALL_BODY_BYTES",
-    "ToolCallStreamGuard",
+    "CodexResponseStreamProcessor",
     "ToolCeilingViolation",
     "enforce_tool_ceiling",
 ]
