@@ -6,7 +6,6 @@ import pytest
 
 from boltrig.fleet.infrastructure import codex_protocol as wire
 from boltrig.fleet.infrastructure.codex_stdio_transport import (
-    STDERR_TAIL_BYTES,
     STDIO_STREAM_LIMIT,
     CodexProcessExitedError,
     CodexStdioTransport,
@@ -38,20 +37,32 @@ def test_classify_codex_stderr_flags_a_rust_panic() -> None:
     assert classify_codex_stderr(b"thread 'main' panicked at 'boom'") == ("panic", "thread-panic")
 
 
-async def test_stderr_tail_is_bounded_and_keeps_the_most_recent() -> None:
-    """A chatty cell cannot grow the tail without bound: only the most-recent
-    STDERR_TAIL_BYTES survive, so an early marker is trimmed and a late one kept."""
+async def test_stderr_markers_accumulate_and_survive_high_volume() -> None:
+    """Markers are accumulated across the WHOLE stderr (not a bounded tail), so no
+    marker is lost to volume: an early marker and a late one both survive even with
+    lots of noise between them, and only the small label set is retained."""
     process = FakeProcess()
     transport = make_transport(process)
     process.feed_stderr(b"unsupported call EARLY\n")
-    process.feed_stderr(b"x" * (STDERR_TAIL_BYTES + 4096))
+    process.feed_stderr(b"x" * (128 * 1024))  # far more than any tail cap
     process.feed_stderr(b"thread 'main' panicked LATE\n")
     process.exit(0)
     await transport.wait_stderr_drained()
 
     markers = transport.stderr_markers
-    assert "thread-panic" in markers  # the recent marker survives
-    assert "tool-call-unsupported" not in markers  # the early one was trimmed out
+    assert "tool-call-unsupported" in markers  # early marker NOT lost (Finding 2)
+    assert "thread-panic" in markers  # and the late one
+
+
+async def test_a_marker_split_across_stderr_chunks_is_still_caught() -> None:
+    """A token straddling two reads is bridged by the carry, so it is not missed."""
+    process = FakeProcess()
+    transport = make_transport(process)
+    process.feed_stderr(b"prefix requestUser")  # first half of requestUserInput
+    process.feed_stderr(b"Input more\n")  # second half in the next chunk
+    process.exit(0)
+    await transport.wait_stderr_drained()
+    assert "approval-requested" in transport.stderr_markers
 
 
 def make_transport(

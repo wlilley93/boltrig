@@ -198,6 +198,29 @@ def test_a_returned_function_call_gets_the_namespace_reattached() -> None:
     assert call["namespace"] == CODEX_MCP_NAMESPACE_NAME
 
 
+def test_a_crlf_delimited_stream_is_reassembled_and_reattached() -> None:
+    """A gateway/provider using CRLF blank-line terminators (\\r\\n\\r\\n, which
+    contains no \\n\\n) must not silently break the lane: the event is still
+    reassembled and the namespace reattached, and a plain-text CRLF event before
+    it passes through intact."""
+
+    processor = CodexResponseStreamProcessor(frozenset({"opbox_matter_list"}))
+    text = b'data: {"type":"response.output_text.delta","delta":"hi"}\r\n\r\n'
+    call = (
+        b"data: "
+        + json.dumps({"type": "response.output_item.added",
+                      "item": {"type": "function_call", "name": "opbox_matter_list", "arguments": "{}"}}).encode()
+        + b"\r\n\r\n"
+    )
+    out = processor.feed(text) + processor.feed(call) + processor.finish()
+    assert text in out  # the text event survives byte-for-byte
+    # the function_call event was found (despite CRLF) and got the namespace
+    rewritten = out.split(b"data: ", 2)[2]
+    item = json.loads(rewritten.split(b"\r\n\r\n", 1)[0])["item"]
+    assert item["name"] == "opbox_matter_list"
+    assert item["namespace"] == CODEX_MCP_NAMESPACE_NAME
+
+
 def test_a_returned_call_outside_the_ceiling_is_refused() -> None:
     """Enforcement runs on the response too: the gateway must not confer a tool we
     never offered (an unsolicited function_call would still be executed)."""

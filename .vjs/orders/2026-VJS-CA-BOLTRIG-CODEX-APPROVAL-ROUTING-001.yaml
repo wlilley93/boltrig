@@ -1,0 +1,88 @@
+id: 2026-VJS-CA-BOLTRIG-CODEX-APPROVAL-ROUTING-001
+court: appeal
+jurisdiction: default
+repo_code: null
+status: binding
+issue: appeal_of_county_12_low_class_veto_and_s2_treatment
+appeal_from: 2026-VJS-CC-BOLTRIG-CODEX-APPROVAL-ROUTING-001
+holding: |
+  Court of Appeal (three judges, s.18 odd bench) on the two certified questions of
+  [2026] VJS-COUNTY 12. Q1 (LOW-class human veto) AFFIRMED UNANIMOUSLY (3-0): the
+  LOW / non-blocking verb class need NOT receive a human veto derived from codex's
+  per-tool-call requestUserInput prompt. The binary gate at dispatch.py:406 is a
+  DELIBERATE ENACTED CALIBRATION with two express per-verb DATA levers to escalate
+  (consequence: HIGH / blocking_verbs), not a gap the court must plug; codex's
+  uniform calibration-blind prompt is the weakest evidence of required governance
+  and cannot be the SOURCE of a governing veto (the VJS-PC 20 cardinality error); a
+  LOW verb is governed (schema/grant/idempotency/rate-limit/audit), just not
+  human-vetoed by deliberate design; the handler's approve is governance-neutral by
+  construction (it admits, does not execute; derive-don't-store holds nothing to
+  drift from); a codex-derived LOW veto is technically unavailable (pre-forward, no
+  kernel decision yet exists to derive from, and the kernel by calibration issues
+  none) and could only be a forbidden codex-side interface gate. Q2 (S-2 treatment)
+  VARIED 2-1 but the OUTCOME and off-ramp AFFIRMED UNANIMOUSLY: the flat "partially
+  ultra vires" is stronger than S-2 warrants; S-2 requires CONSTRUCTION-TO-VALIDITY
+  first - a Principal directive must be given a lawful construction where its words
+  fairly bear one before any part is declared ultra vires. "Route into HITL, not
+  auto-approve" is HONOURED ON A CONFORMING CONSTRUCTION ("subject tool-calls to
+  boltrig's HITL rather than blind-approving"); only a rejected hyper-literal
+  reading (a mandatory synchronous human veto on EVERY LOW read, sourced from
+  codex's interface prompt) would conflict, and any ultra vires characterisation
+  attaches at most to that rejected reading. THE DEPLOYED [2026] VJS-COUNTY 12 ORDER
+  AND ALL CODE STAND AFFIRMED - not one line changes.
+directives:
+- id: A1
+  actor: lexby
+  must: leave_the_deployed_county_12_order_and_code_unchanged_the_appeal_affirms_it_no_engineering_consequence_flows
+  when: null
+- id: A2
+  actor: lexby
+  must: record_the_q2_declaratory_variation_the_principal_directive_is_honoured_on_a_conforming_construction_not_partially_ultra_vires_the_ultra_vires_label_attaches_only_to_the_rejected_hyper_literal_reading
+  when: null
+- id: A3
+  actor: lexby
+  must: obiter_commended_not_ordered_run_a_periodic_calibration_audit_of_the_LOW_verb_roster_against_genuinely_effect_bearing_verbs_escalating_any_misclassified_verb_by_DATA_consequence_high_or_blocking_verbs
+  when: null
+forbidden:
+- change_deployed_behaviour_or_code_on_the_strength_of_this_appeal
+- treat_partially_ultra_vires_as_an_operative_primary_holding_against_the_principal_directive
+- read_the_principal_directive_to_compel_a_codex_side_per_LOW_call_human_gate
+exceptions: |
+  VJS-PC 20 "on all fours": the panel splits 2-1 (Marchmont LJ + LJ-3 on all fours;
+  LJ-2 distinguishable-in-KIND but the ratio extends and controls). Result
+  unaffected - all three agree PC 20's interface-not-executor ratio governs and
+  compels affirmance. LJ-2's narrower reasoning (a per-call human SAFETY approval is
+  a different kind of control than runtime/egress cardinality; enter an adjacent
+  sibling ratio) is preserved as the citator's caution against over-reading PC 20 to
+  suppress interface prompts that ARE a sole safety control.
+supersedes: []
+source_opinion: |
+  Full three-judge panel delivered (Marchmont LJ / LJ-1 leading statutory
+  calibration; LJ-2 leading precedent; LJ-3 leading the constitutional S-2
+  question). Q2 partial dissent (LJ-2 alone) would AFFIRM the First Instance S-2
+  treatment outright; the difference is framing not substance (LJ-2 reaches the
+  identical result by treating the ultra vires finding as already confined to the
+  un-read-down residue). Narrowest-common-ground ratio on Q2: the directive is
+  honoured on a conforming construction; "partially ultra vires" does not stand as a
+  primary holding. Full opinions in the workflow transcript
+  wf_f7a5b15b-dc7 (subagents/workflows).
+runtime_summary: |
+  Appeal AFFIRMS the deployed codex-approval Order. LOW verbs still admit to the
+  kernel with no synchronous human veto (by calibration, not defect); HIGH/blocking
+  still hit the durable kernel HITL; to add a LOW-class veto, recalibrate as data
+  (consequence: HIGH / blocking_verbs), never a codex-side gate. Q2: the Principal's
+  "route into HITL" directive is HONOURED on a conforming construction (construction-
+  to-validity before any ultra vires finding) - not partially void. Obiter: run a
+  periodic LOW-roster calibration audit. No code change.
+further_appeal: |
+  Leave to appeal to the Supreme Council REFUSED: Q1 unanimous with no governance
+  defect and no live stakes; Q2 unanimous on outcome, the 2-1 split declaratory-only.
+  Reservation: the S-2 METHODOLOGY question (partial-ultra-vires vs construction-to-
+  validity-plus-reservation for a directive that conflicts only on a maximal reading)
+  is genuinely constitutional and this court settles it for boltrig (construction-to-
+  validity first; ultra vires as last resort); a future matter with OPERATIVE stakes
+  (a directive whose lawful construction is genuinely unavailable) would be a proper
+  occasion for the apex.
+created_at: 2026-07-24T18:15:00Z
+citation: '[2026] VJS-APPEAL 1'
+assent_source: adversarial_court_of_appeal_judgment

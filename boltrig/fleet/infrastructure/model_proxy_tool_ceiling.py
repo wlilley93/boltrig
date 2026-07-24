@@ -43,8 +43,12 @@ from .codex_kernel_tools_phase import CODEX_MCP_NAMESPACE_NAME
 # The Responses API tool-call item type; SSE frames that carry one contain it, so
 # it is the cheapest exact marker to decide whether an event needs inspection.
 _FUNCTION_CALL_MARKER = b"function_call"
-# SSE events are terminated by a blank line.
-_EVENT_DELIMITER = b"\n\n"
+# An SSE event is terminated by a blank line. The current upstream (bifrost) uses
+# LF, but the wire spec permits CRLF, and a gateway/provider change to CRLF must
+# not silently break the lane: a ``\r\n\r\n`` frame contains no ``\n\n`` substring,
+# so without this the whole response would buffer, never emit, and the tool call
+# would be lost. We therefore split on EITHER terminator, taking the earliest.
+_EVENT_DELIMITERS = (b"\r\n\r\n", b"\n\n")
 # The separators Codex may use between the namespace and a nested tool name if the
 # model ever returns a qualified call; every prefix stripped is the pinned boltrig
 # namespace ONLY, so a qualified name can never smuggle a tool from elsewhere.
@@ -174,13 +178,32 @@ class CodexResponseStreamProcessor:
         self._buffer += chunk
         out = bytearray()
         while True:
-            index = self._buffer.find(_EVENT_DELIMITER)
+            index, delimiter_len = self._next_event_end()
             if index < 0:
                 break
-            event = self._buffer[: index + len(_EVENT_DELIMITER)]
-            self._buffer = self._buffer[index + len(_EVENT_DELIMITER) :]
+            event = self._buffer[: index + delimiter_len]
+            self._buffer = self._buffer[index + delimiter_len :]
             out += self._process_event(event)
         return bytes(out)
+
+    def _next_event_end(self) -> tuple[int, int]:
+        """The earliest event terminator in the buffer as ``(index, length)``.
+
+        Splits on the FIRST of any accepted blank-line terminator (LF or CRLF), so
+        a mixed or CRLF stream can never hide a completed event behind an unmatched
+        ``\\n\\n`` search. ``(-1, 0)`` when no whole event is buffered yet.
+        """
+        best_index = -1
+        best_len = 0
+        for delimiter in _EVENT_DELIMITERS:
+            found = self._buffer.find(delimiter)
+            if found < 0:
+                continue
+            if best_index < 0 or found < best_index or (
+                found == best_index and len(delimiter) > best_len
+            ):
+                best_index, best_len = found, len(delimiter)
+        return best_index, best_len
 
     def finish(self) -> bytes:
         """Flush the trailing partial event at stream end.

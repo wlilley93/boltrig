@@ -14,13 +14,12 @@ logger = logging.getLogger(__name__)
 
 STDIO_STREAM_LIMIT = wire.MAX_LINE_BYTES
 STDERR_CHUNK_BYTES = 16 * 1024
-# The bounded in-memory tail of the cell's stderr kept for a CONTENT-FREE
-# diagnostic classification on teardown. It is never logged verbatim (codex
-# stderr can carry tool arguments = user content); only the matched marker
-# LABELS below are surfaced, mirroring the redaction discipline the runtime
-# actor uses for invalidation markers. The tail is capped so a chatty cell
-# cannot grow it without bound.
-STDERR_TAIL_BYTES = 16 * 1024
+# The cell's stderr is scanned for a CONTENT-FREE diagnostic classification on
+# teardown, never logged verbatim (codex stderr can carry tool arguments = user
+# content); only the matched marker LABELS below are surfaced, mirroring the
+# redaction discipline the runtime actor uses for invalidation markers. The
+# matched labels are accumulated (not the bytes), so memory is O(labels) however
+# chatty the cell, and no marker is lost to a chunk boundary.
 # Allowlist of codex's OWN static diagnostic tokens -> a stable content-free
 # label. Each key is an internal codex log string, never user content, so
 # reporting that it APPEARED (not the line it appeared on) leaks nothing while
@@ -36,6 +35,10 @@ _CODEX_STDERR_MARKERS: tuple[tuple[str, str], ...] = (
     ("thread 'main'", "thread-panic"),
     ("panicked", "panic"),
 )
+# The longest allowlisted token, in bytes: a marker can straddle a chunk (or trim)
+# boundary, so classification carries this many trailing bytes forward to the next
+# chunk to catch a token split across the seam.
+_MAX_MARKER_BYTES = max(len(token.encode("utf-8")) for token, _ in _CODEX_STDERR_MARKERS)
 
 
 def classify_codex_stderr(tail: bytes) -> tuple[str, ...]:
@@ -137,7 +140,7 @@ class CodexStdioTransport:
         self._write_lock = asyncio.Lock()
         self._close_lock = asyncio.Lock()
         self._closed = False
-        self._stderr_tail = bytearray()
+        self._stderr_markers: set[str] = set()
         self._stderr_task = asyncio.create_task(
             self._drain_stderr(), name=f"codex-stderr-drain-{process.pid}"
         )
@@ -245,18 +248,22 @@ class CodexStdioTransport:
 
     @property
     def stderr_markers(self) -> tuple[str, ...]:
-        """Content-free diagnostic labels for the captured stderr tail (K-20)."""
-        return classify_codex_stderr(bytes(self._stderr_tail))
+        """Content-free diagnostic labels seen anywhere in the cell's stderr (K-20)."""
+        return tuple(sorted(self._stderr_markers))
 
     async def _drain_stderr(self) -> None:
-        # Drain stderr (so the pipe never blocks the child) while KEEPING a bounded
-        # tail for a content-free teardown classification. The tail is trimmed to
-        # its cap on each chunk, so memory stays bounded regardless of volume.
+        # Drain stderr (so the pipe never blocks the child) while ACCUMULATING the
+        # content-free marker set. Classifying+accumulating per chunk (rather than
+        # keeping a bounded byte tail and classifying it once) means memory stays
+        # O(number of distinct labels) AND no marker is lost to a trim/chunk
+        # boundary: a small carry (the longest token) bridges the seam between
+        # chunks so a token split across two reads is still matched.
+        carry = b""
         try:
             while chunk := await self._stderr.read(STDERR_CHUNK_BYTES):
-                self._stderr_tail += chunk
-                if len(self._stderr_tail) > STDERR_TAIL_BYTES:
-                    del self._stderr_tail[:-STDERR_TAIL_BYTES]
+                window = carry + chunk
+                self._stderr_markers.update(classify_codex_stderr(window))
+                carry = window[-_MAX_MARKER_BYTES:]
         except asyncio.CancelledError:
             raise
         except Exception:
