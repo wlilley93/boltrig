@@ -86,7 +86,18 @@ class WorkItemReadsMem:
         return out
 
     async def list_run_items_scoped(
-        self, tenant_id, *, departments=None, workspace_id=None, limit=None, cursor=None
+        self,
+        tenant_id,
+        *,
+        departments=None,
+        workspace_id=None,
+        owner=None,
+        on_behalf_of=None,
+        label=None,
+        source=None,
+        external_ref=None,
+        limit=None,
+        cursor=None,
     ):
         items = [w for (tenant, _), w in self._work.items() if tenant == tenant_id]
         allowed = None if departments is None else set(departments)
@@ -99,6 +110,22 @@ class WorkItemReadsMem:
         # hides every item carrying that ref, visible aliases included.
         hidden = {work_item_run_id(w) for w in items if not _visible(w)}
         out = [w for w in items if _visible(w) and work_item_run_id(w) not in hidden]
+
+        # G7 owner/label/external-ref filters. Applied AFTER hidden-wins so they
+        # can only REMOVE rows from the already-scoped set - never resurrect a
+        # hidden alias. `label` is a literal case-insensitive substring of the
+        # intent (parity with the PG ILIKE ... ESCAPE below); `external_ref`
+        # matches the opaque source_id.
+        label_needle = label.lower() if label else None
+        out = [
+            w
+            for w in out
+            if (owner is None or w.owner_member == owner)
+            and (on_behalf_of is None or w.on_behalf_of == on_behalf_of)
+            and (source is None or w.source == source)
+            and (external_ref is None or w.source_id == external_ref)
+            and (label_needle is None or label_needle in (w.intent or "").lower())
+        ]
         out.sort(key=lambda w: w.id)
         if cursor is not None:
             out = [w for w in out if w.id > cursor]
@@ -179,7 +206,18 @@ class WorkItemReadsPG:
         return [work_item_from_row(row) for row in rows]
 
     async def list_run_items_scoped(
-        self, tenant_id, *, departments=None, workspace_id=None, limit=None, cursor=None
+        self,
+        tenant_id,
+        *,
+        departments=None,
+        workspace_id=None,
+        owner=None,
+        on_behalf_of=None,
+        label=None,
+        source=None,
+        external_ref=None,
+        limit=None,
+        cursor=None,
     ):
         args: list[Any] = [tenant_id]
         # V(item): the visible-item predicate - department scope plus the
@@ -202,6 +240,28 @@ class WorkItemReadsPG:
             " AND COALESCE(h.hatchet_run_id, h.id) = COALESCE(w.hatchet_run_id, w.id)"
             f" AND NOT COALESCE(({visible_sql}), false))"
         )
+        # G7 owner/label/external-ref filters. These qualify the OUTER row (w.)
+        # ONLY - never the hidden-alias subquery - so a filter can only NARROW
+        # the already-scoped, hidden-wins-deduped set, never widen it.
+        if owner is not None:
+            args.append(owner)
+            clauses.append(f"w.owner_member = ${len(args)}")
+        if on_behalf_of is not None:
+            args.append(on_behalf_of)
+            clauses.append(f"w.on_behalf_of = ${len(args)}")
+        if source is not None:
+            args.append(source)
+            clauses.append(f"w.source = ${len(args)}")
+        if external_ref is not None:
+            args.append(external_ref)
+            clauses.append(f"w.source_id = ${len(args)}")
+        if label is not None:
+            # Literal substring (parity with the in-memory store): escape the
+            # LIKE metacharacters so a user-supplied % / _ / \ is matched
+            # literally, not as a wildcard.
+            needle = label.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            args.append(f"%{needle}%")
+            clauses.append(f"w.intent ILIKE ${len(args)} ESCAPE '\\'")
         if cursor is not None:
             args.append(cursor)
             clauses.append(f"w.id > ${len(args)}")

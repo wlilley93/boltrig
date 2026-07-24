@@ -42,6 +42,21 @@ class RunEventStore(Protocol):
         enforce_workspace: bool = False,
     ) -> list[WorkItem]: ...
 
+    async def list_run_items_scoped(
+        self,
+        tenant_id: str,
+        *,
+        departments: list[str] | None = None,
+        workspace_id: str | None = None,
+        owner: str | None = None,
+        on_behalf_of: str | None = None,
+        label: str | None = None,
+        source: str | None = None,
+        external_ref: str | None = None,
+        limit: int | None = None,
+        cursor: str | None = None,
+    ) -> list[WorkItem]: ...
+
 
 def _workspace_visible(principal: RunEventPrincipal, row: AuditEvent) -> bool:
     active = principal.active_workspace_id
@@ -154,3 +169,110 @@ async def visible_audit_tree_events(
     if not own_rows_exist:
         known = any(row.parent_run_id == root_run_id for row in visible)
     return visible if known else None
+
+
+def build_run_topology(items: list[WorkItem], root_item: WorkItem) -> dict[str, Any]:
+    """Assemble the subagent roster tree from an ALREADY-VISIBLE item slice.
+
+    Parent links are WorkItem.parent_id (id -> parent id); each node exposes the
+    durable run identity ``work_item_run_id``. Only items present in ``items``
+    (the caller-scoped slice) can appear, so a hidden descendant is structurally
+    absent and a hidden parent link is reported as ``parent_run_id: null``.
+    Cycle-guarded like the audit-tree assembler.
+    """
+    by_id: dict[str, WorkItem] = {item.id: item for item in items}
+    # Guarantee the root is present even if a clamp dropped it from the slice.
+    by_id.setdefault(root_item.id, root_item)
+    children_of: dict[str, list[str]] = {}
+    for item in by_id.values():
+        if item.parent_id is not None and item.parent_id in by_id:
+            children_of.setdefault(item.parent_id, []).append(item.id)
+    for kids in children_of.values():
+        kids.sort()
+
+    def node(item_id: str, seen: frozenset[str]) -> dict[str, Any]:
+        item = by_id[item_id]
+        base: dict[str, Any] = {
+            "run_id": work_item_run_id(item),
+            "work_item": item.id,
+            "parent_run_id": (
+                work_item_run_id(by_id[item.parent_id])
+                if item.parent_id is not None and item.parent_id in by_id
+                else None
+            ),
+            "member": item.owner_member,
+            "task": item.intent,
+            "status": item.status.value,
+            "depth": item.depth,
+            "source": item.source,
+            "external_ref": item.source_id,
+            "on_behalf_of": item.on_behalf_of,
+            "attempts": item.attempts,
+            "degraded": item.degraded,
+        }
+        if item_id in seen:
+            return {**base, "children": [], "cycle": True}
+        seen = seen | {item_id}
+        base["children"] = [
+            node(child_id, seen) for child_id in children_of.get(item_id, [])
+        ]
+        return base
+
+    return {"root": node(root_item.id, frozenset())}
+
+
+async def visible_run_topology(
+    store: RunEventStore,
+    principal: RunEventPrincipal,
+    root_run_id: str,
+    *,
+    max_nodes: int = 5000,
+) -> dict[str, Any] | None:
+    """Reconstruct the durable subagent topology under a root run, or None.
+
+    The root is gated exactly like visible_audit_tree_events (workspace-enforced
+    resolve + department owner check); a hidden/unknown root returns None (404).
+
+    The descendant slice is walked by the WorkItem parent/child link, level by
+    level, with the SAME dept + enforced-workspace visibility the /v1/work
+    children route uses (``store.list_work_items(parent_id=..., departments=...,
+    workspace_id=..., enforce_workspace=True)``). A hidden descendant is
+    structurally absent (its parent link is never followed for it), so the roster
+    can never expose a run the caller could not see. ``max_nodes`` is a real node
+    budget (BFS stops once reached) - NOT a single tenant-wide id-ordered page,
+    which would silently clamp to MAX_WORK_PAGE and omit a root's real children.
+    """
+    departments = departments_for(principal.role, principal.scope)
+    root_item = await store.get_work_item_by_run_id(principal.tenant_id, root_run_id)
+    if root_item is None:
+        return None
+    root_item = await visible_work_item_by_run(store, principal, root_run_id)
+    if root_item is None:
+        return None
+    if departments is not None and root_item.owner_member not in set(departments):
+        return None
+
+    # BFS the root's SUBTREE by parent link. Each level is fetched under the
+    # caller's dept + enforced-workspace scope; the ``collected`` set is the
+    # cycle/DAG re-entry guard, and the node budget bounds an adversarial forest.
+    collected: dict[str, WorkItem] = {root_item.id: root_item}
+    frontier: list[str] = [root_item.id]
+    while frontier and len(collected) < max_nodes:
+        parent_id = frontier.pop()
+        children = await store.list_work_items(
+            principal.tenant_id,
+            parent_id=parent_id,
+            departments=departments,
+            workspace_id=principal.active_workspace_id,
+            enforce_workspace=True,
+            limit=max_nodes,
+        )
+        for child in children:
+            if child.id in collected:
+                continue
+            collected[child.id] = child
+            frontier.append(child.id)
+            if len(collected) >= max_nodes:
+                break
+
+    return build_run_topology(list(collected.values()), root_item)

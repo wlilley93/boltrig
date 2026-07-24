@@ -345,6 +345,11 @@ def _register_runs_routes(app, P, K) -> None:
         request: Request,
         limit: int = DEFAULT_WORK_PAGE,
         cursor: str | None = None,
+        owner: str | None = None,
+        on_behalf_of: str | None = None,
+        label: str | None = None,
+        source: str | None = None,
+        external_ref: str | None = None,
         k=K,
         p=P,
     ) -> dict:
@@ -354,11 +359,23 @@ def _register_runs_routes(app, P, K) -> None:
         # shared run ref) runs INSIDE the store query under the clamped page -
         # no full work-table load per request. The next cursor is the last
         # item's id when the page came back full.
+        #
+        # G7 filters (owner/on_behalf_of/label/source/external_ref) NARROW the
+        # already-scoped set inside the same query - they can only remove rows,
+        # never widen visibility. `external_ref` matches the GENERIC opaque
+        # source_id column (WorkItem.source + source_id), NOT any opbox matter
+        # mirror: opbox stamps source='opbox', source_id=<matterId> at intake so
+        # it can list a matter's runs without boltrig knowing what a matter is.
         page = clamp_work_page(limit)
         items = await k.store.list_run_items_scoped(
             p.tenant_id,
             departments=depts,
             workspace_id=p.active_workspace_id,
+            owner=owner,
+            on_behalf_of=on_behalf_of,
+            label=label,
+            source=source,
+            external_ref=external_ref,
             limit=page,
             cursor=cursor,
         )
@@ -371,9 +388,35 @@ def _register_runs_routes(app, P, K) -> None:
                     "intent": w.intent,
                     "status": w.status.value,
                     "owner": w.owner_member,
+                    "on_behalf_of": w.on_behalf_of,
+                    "source": w.source,
+                    "external_ref": w.source_id,
                 }
                 for w in items
             ],
             "limit": page,
             "next_cursor": next_cursor,
+            "filters": {
+                "owner": owner,
+                "on_behalf_of": on_behalf_of,
+                "label": label,
+                "source": source,
+                "external_ref": external_ref,
+            },
         }
+
+    @app.get("/v1/runs/{run_id}/topology", response_model=None)
+    async def run_topology(run_id: str, request: Request, k=K, p=P) -> JSONResponse | dict:
+        # G7 roster/subagent-topology: the durable CoS -> heads -> workers tree
+        # under a root run, reconstructed from the WorkItem parent/child forest
+        # (the live `subagent` chat frame is unbounded and settles no completion,
+        # so it cannot be the roster source). Same strict dept + enforced-
+        # workspace + hidden-wins visibility as the run list and audit tree: the
+        # root must be visible and only visible descendants attach, so a hidden
+        # parent is never revived by a visible child.
+        from boltrig.kernel.run_access import visible_run_topology
+
+        tree = await visible_run_topology(k.store, p, run_id)
+        if tree is None:
+            return JSONResponse({"error": "unknown_run"}, status_code=404)
+        return tree

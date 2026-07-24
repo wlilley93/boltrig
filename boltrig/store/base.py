@@ -184,6 +184,11 @@ class Store(BudgetPolicyContract, IdempotencyStoreContract, GuardedWritesContrac
         *,
         departments: list[str] | None = None,
         workspace_id: str | None = None,
+        owner: str | None = None,
+        on_behalf_of: str | None = None,
+        label: str | None = None,
+        source: str | None = None,
+        external_ref: str | None = None,
         limit: int | None = None,
         cursor: str | None = None,
     ) -> list[WorkItem]: ...
