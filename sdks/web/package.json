@@ -1,0 +1,16 @@
+{
+  "name": "boltrig-web-sdk",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Framework-agnostic UI SDK core for Boltrig frontends: the ChatEvent frame union + the shared normalizeEvents turn reducer, so opbox and the boltrig console render identical chat/run data. Extracted from the console (ui/src/api + panels).",
+  "engines": { "node": ">=20" },
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && node --test \"dist/tests/*.test.js\""
+  },
+  "devDependencies": { "@types/node": "24.10.1", "typescript": "5.6.3" }
+}
