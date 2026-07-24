@@ -117,6 +117,31 @@ PAT, or let the chat body/header carry an explicit workspace_id (the SDK will wa
 the last regardless). This blocks the `mint-token`-driven lane verification and is
 squarely part of the frontend-SDK "headless client" story.
 
+## Live test (2026-07-24, after C + namespace fix deployed)
+
+A real PAT-driven turn (`mint-token` + C giving the workspace scope) now REACHES
+the codex model call: it spawned an `ops/opbox` subagent and hit z.ai. Bifrost's
+own log shows the `glm-4.6` `responses_stream` call ran ~5.2s then failed with
+`status_code: 499, {"type":"request_cancelled","message":"client disconnected"}`,
+and the turn returned `degraded (codex: codex_empty_output)`.
+
+So the client (our per-cell proxy <- codex) tore the stream down mid-response. The
+cause is one of: (a) `CodexResponseStreamProcessor` raising `ToolCeilingViolation`
+and truncating (but NO truncation warning was logged, arguing against this), (b)
+codex closing its connection to our proxy after receiving a tool call and then
+hitting the approval/pump blocker (A), or (c) the attestation reject (B) tearing
+the cell down. Bifrost does not log the offered tools array or the streamed
+response body, and the codex cell's own cause is swallowed at the current log
+level - the SAME wall the prior handover hit.
+
+**Next diagnostic (prerequisite for A/B):** add PERMANENT, bounded cell-level
+observability - capture the codex cell's stderr to a ring buffer surfaced at
+WARNING when a cell degrades, and ensure the model-proxy truncation + attestation
+warnings actually reach the fleet-worker log. Only then can the 499 be attributed
+to A vs B vs a stream-processor defect, rather than re-guessed. This is a real gap
+(flagged twice across handovers), so it should be built as shippable observability,
+not throwaway debug.
+
 ## End-to-end status
 
 `POST /v1/chat "use opbox.matter.list"` will still return `degraded` until A and
