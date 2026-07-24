@@ -1,0 +1,95 @@
+id: 2026-VJS-CC-BOLTRIG-CODEX-APPROVAL-ROUTING-001
+court: county
+jurisdiction: default
+repo_code: null
+status: binding
+issue: codex_item_tool_requestUserInput_reconciliation_with_boltrig_hitl
+holding: |
+  The governing locus for tool-call authorization is the kernel dispatcher reached
+  through /v1/mcp (mcp.py -> dispatch.py:406, SEC-26/SEC-14). codex's per-tool-call
+  item/tool/requestUserInput is an INTERFACE control point, not a governing one. It
+  must ALWAYS be answered (never left to crash the notification pump), and its answer
+  must be DERIVED from boltrig's own calibrated governance, never invented as an
+  independent parallel human gate. Disposition is a HYBRID: unify-by-derivation in
+  form, defer-in-mechanism. For the LOW / non-blocking class the calibration
+  (dispatch.py:406) deliberately omits a human veto, so the derived answer is
+  approve and kernel grant-check + audit remain the sole governance (VJS-PC 20
+  locus-not-cardinality on all fours for this class). For the HIGH / blocking class
+  the client answers approve ONLY to admit the call to the kernel, where the durable,
+  param-bound human HITL is the real veto; codex asks pre-forward, so deriving from a
+  not-yet-existent kernel decision would deadlock, making admit-to-kernel the fail-safe
+  derivation. A human veto for the LOW class is deliberately omitted; the doctrine-
+  honoring way to add one is to recalibrate the verb as DATA (consequence: HIGH or
+  manifest blocking_verbs), never a codex-side gate.
+directives:
+- id: D1
+  actor: lexby
+  must: handle_inbound_server_initiated_requests_via_encode_response_send_response_dispatched_to_a_handler_answered_within_deadline_unknown_request_degrades_typed_never_a_pump_terminal
+  when: null
+- id: D2
+  actor: lexby
+  must: expose_the_dispatch_406_gating_predicate_consequence_high_or_verb_in_blocking_verbs_as_ONE_shared_function_so_codex_answer_and_the_kernel_gate_can_never_drift
+  when: null
+- id: D3
+  actor: lexby
+  must: for_a_LOW_nonblocking_verb_answer_approve_with_the_approve_label_read_from_codex_offered_options_never_hardcoded_governance_stays_kernel_grantcheck_plus_audit
+  when: null
+- id: D4
+  actor: lexby
+  must: for_a_HIGH_blocking_verb_answer_approve_only_to_admit_the_call_to_the_kernel_where_the_durable_param_bound_human_hitl_is_the_real_veto_never_a_timer_defaulted_approval_substituting_for_it
+  when: null
+- id: D5
+  actor: lexby
+  must: validate_the_approve_label_is_present_and_unambiguous_in_offered_options_else_answer_the_error_arm_fail_closed_especially_for_high_never_auto_deny_a_low_call_before_the_gate
+  when: null
+- id: D6
+  actor: lexby
+  must: pin_invariants_requestUserInput_never_terminates_the_pump_answer_predicate_is_the_shared_406_function_high_never_timer_approved_label_from_offered_options_missing_ambiguous_fails_closed
+  when: null
+forbidden:
+- crash_the_notification_pump_on_an_inbound_server_request
+- build_a_bespoke_codex_side_parallel_human_gate_that_adjudicates_authorization_beside_kernel_invoke
+- force_a_fresh_human_veto_on_the_LOW_class_by_default
+- hardcode_the_approve_label_instead_of_reading_codex_offered_options
+- reimplement_the_dispatch_406_predicate_separately_allowing_drift
+- for_a_HIGH_verb_let_codex_autoResolutionMs_timer_stand_in_for_the_human_gate
+exceptions: |
+  Contingency: should the pinned binary's ordering ever be POST-forward (a kernel HITL
+  already exists when codex asks), the handler must instead BLOCK on the kernel decision
+  via the fleet-side resume_notifier seam (or store poll) keyed by run_id/hitl_request_id
+  (kernel emits, fleet subscribes, honoring P1), deriving approve->approve-label,
+  deny->error/deny-label, and failing CLOSED (error/deny) on autoResolutionMs expiry for
+  a HIGH/blocking verb.
+supersedes: []
+source_opinion: |
+  First Instance judgment, delivered on a symmetric case file with two adversarial
+  advocates (defer-to-the-real-gate; unify-into-HITL) and no access to the engineer's
+  preference. Decisive verified fact: the kernel HITL gate is SELECTIVE
+  (dispatch.py:406 gates only HIGH-consequence or blocking-listed verbs; the Consequence
+  enum is binary LOW/HIGH, models/registry.py). VJS-PC 20 (locus-not-cardinality) held
+  on all fours for the LOW class, distinguishable/first-impression for the HIGH class
+  (a human pre-act veto is a different KIND of control than runtime/egress cardinality)
+  but the HIGH result is compelled by the deadlock/liveness analysis and the superiority
+  of the durable param-bound kernel HITL. S-2: the Principal directive "route into HITL,
+  not auto-approve" is FOLLOWED in substance (real decisions route to the durable kernel
+  HITL; codex's answer is that decision's faithful image) and held PARTIALLY ULTRA VIRES
+  only insofar as a literal reading would force a fresh human veto on the whole LOW class,
+  colliding with the calibrated selective gate, PC 20, and the anti-side-door doctrine;
+  the constructive off-ramp is data recalibration. Permission to appeal GRANTED but
+  CONFINED to two questions (whether the LOW class must receive a codex-derived human
+  veto notwithstanding the dispatch.py:406 calibration; and the S-2 ultra vires treatment);
+  DENIED on the pump-crash fix (settled by graceful-degradation doctrine) and the HIGH-class
+  admit-to-kernel derivation (compelled). The Order stands and must be built pending any appeal.
+runtime_summary: |
+  Answer codex's item/tool/requestUserInput, never crash the pump. Derive the answer from
+  the SAME predicate the kernel uses (dispatch.py:406: consequence==HIGH or verb in
+  blocking_verbs), exposed as one shared function. LOW verb -> approve (label read from
+  codex's offered options), governance stays kernel grant-check + audit, no human veto by
+  design. HIGH/blocking verb -> approve only to admit the call to the kernel, where the
+  durable param-bound HITL is the real veto; never a timer-defaulted approval. Missing or
+  ambiguous approve label -> error arm, fail closed. Never auto-deny a LOW call. To add a
+  human veto on a LOW verb, recalibrate it as data (consequence: HIGH or blocking_verbs),
+  not a codex-side gate. Pin all four properties as invariants.
+created_at: 2026-07-24T17:30:00Z
+citation: '[2026] VJS-COUNTY 12'
+assent_source: adversarial_first_instance_judgment
