@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Protocol
 
@@ -42,6 +43,8 @@ from boltrig.fleet.infrastructure.model_proxy_tool_ceiling import (
 _LOOPBACK = "127.0.0.1"
 _METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH"]
 _START_TIMEOUT_SECONDS = 5.0
+
+logger = logging.getLogger(__name__)
 
 # Verify a presented bearer against the grant store. Returns True only for an
 # active, non-expired grant; any error or miss is a reject. Injected so the
@@ -219,7 +222,14 @@ class PerCellModelProxyServer:
         async for chunk in upstream.aiter_raw():
             try:
                 guard.inspect(chunk)
-            except ToolCeilingViolation:
+            except ToolCeilingViolation as exc:
+                # Fail-closed truncation is correct either way; logging just makes
+                # an otherwise-silent truncation diagnosable (was this ever hit,
+                # and was the ceiling this run held ({self._allowed_tools}) the
+                # reason). Never logs stream content, only the static reason.
+                logger.warning(
+                    "model proxy response stream truncated (tool ceiling): %s", exc
+                )
                 return
             yield chunk
 

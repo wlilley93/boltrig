@@ -13,6 +13,7 @@ supervisor-owned App Server pidfd atomically with its own decision.
 from __future__ import annotations
 
 import asyncio
+import logging
 from concurrent.futures import ThreadPoolExecutor
 import math
 import threading
@@ -36,6 +37,8 @@ DEFAULT_MODEL_PROXY_ATTESTATION_TIMEOUT_SECONDS = 1.0
 HARD_MAX_MODEL_PROXY_ATTESTATION_TIMEOUT_SECONDS = 5.0
 DEFAULT_MAX_CONCURRENT_PEER_CAPTURES = 4
 HARD_MAX_CONCURRENT_PEER_CAPTURES = 16
+
+logger = logging.getLogger(__name__)
 
 
 class ModelProxyPeerAttestationError(RuntimeError):
@@ -91,7 +94,15 @@ class LinuxModelProxyPeerAttestor:
             return await self._attest_reserved(loop, peer_socket)
         except asyncio.CancelledError:
             raise
-        except Exception:
+        except Exception as exc:
+            # Logged here, server-side only, never on the wire: the public
+            # failure below stays the generic message so no worker exception,
+            # traceback, proc value, or future is ever attached as context for
+            # the caller. The reason is our own static exception text (never
+            # peer-supplied data), so logging it cannot leak attacker content.
+            logger.warning(
+                "model proxy peer attestation rejected: %s: %s", type(exc).__name__, exc
+            )
             failed = True
         # Raise outside the handler so no worker exception, traceback, proc
         # value, or future remains attached as context to the public failure.

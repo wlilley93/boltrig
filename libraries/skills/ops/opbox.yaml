@@ -1,9 +1,16 @@
 # Opbox surface skill: drive the connected Opbox workspace from chat.
-# Grants the consumed opbox.* verbs (the Opbox kernel's MCP door, registered as
-# the `opbox` adapter) plus the core memory/question verbs. Authority is always
-# intersected with the tenant ceiling and the caller's grant ceiling, so this
-# skill can never widen what the caller already permits; WRITE-class opbox
-# verbs are high consequence and hold for human approval.
+# Grants the curated opbox verbs this skill's prompt actually names, plus the
+# core memory/question verbs. A blanket `opbox.*` was the original grant, but
+# Opbox emplacement registered its FULL kernel MCP door under the `opbox.`
+# namespace (633 verbs and counting) - a wildcard grant expands against every
+# one of them at tool-ceiling compile time (boltrig/fleet/runtime_resolver.py
+# _compile_codex_tool_ceiling), blowing straight through
+# codex_kernel_tools_phase.MAX_KERNEL_TOOLS (128) and degrading every Codex
+# kernel-tools turn with CodexKernelToolsError("kernel tools exceed the
+# attestation bound"). Authority is always intersected with the tenant ceiling
+# and the caller's grant ceiling, so this skill can never widen what the
+# caller already permits; WRITE-class opbox verbs are high consequence and
+# hold for human approval.
 id: ops/opbox
 version: 1.0.0
 locale: en
@@ -17,6 +24,13 @@ prompt_fragment: |
   immediate; any create or update is high consequence and will hold for human
   approval - report a pending approval honestly rather than claiming the change.
 tool_grants:
-  - opbox.*
+  - opbox.matter.list
+  - opbox.matter.get
+  - opbox.party.list
+  - opbox.party.get
+  - opbox.workflow.run.list
+  - opbox.workflow.run.get
+  - opbox.agenttask.ext.create
+  - opbox.agenttask.ext.update
   - memory.*
   - chat.ask_user

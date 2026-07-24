@@ -25,6 +25,7 @@ the later provider-swap beat.
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import socket
 from collections.abc import Awaitable, Callable
@@ -39,6 +40,8 @@ from .linux_peer_process_handle import (
     accept_model_proxy_unix_peer,
 )
 from .model_proxy_peer_attestation import LinuxModelProxyPeerAttestor
+
+logger = logging.getLogger(__name__)
 
 # Injected by the composition (never the real broker in tests): given the attested
 # cell scope, return the raw bearer bytes to deliver to that exact peer.
@@ -186,9 +189,11 @@ class PeerAttestationUnixListener:
             await self._deliver(peer, bearer)
         except asyncio.CancelledError:
             raise
-        except Exception:
-            # Fail-closed: drop this peer, write nothing, keep serving.
-            pass
+        except Exception as exc:
+            # Fail-closed: drop this peer, write nothing, keep serving. Logging the
+            # reason is safe: attestation/issuer failures carry static messages, never
+            # peer-supplied data, so this cannot leak attacker-controlled content.
+            logger.warning("model proxy peer dropped: %s: %s", type(exc).__name__, exc)
         finally:
             peer.close()
 
