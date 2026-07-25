@@ -163,6 +163,34 @@ tool) -> blocker C PAT workspace scope (the turn reaches codex) -> blocker A
 approval admit-to-kernel (codex's approval is answered, the tool executes, the
 kernel governs). All landed and deployed.
 
+### Re-verified on a clean rebuild (2026-07-25)
+
+Re-ran `scripts/lane-smoke.sh` against a freshly built + recreated kernel and
+fleet-worker (main at `40fc648`, so including the CRLF/marker hardening the
+earlier verification ran without). Same real answer, not degraded, three
+`glm-4.6` bifrost calls all `success`.
+
+The DEFINITIVE evidence is the audit log, not the reply text (a plausible reply
+could in principle be recalled from memory):
+
+```
+select ts, actor, verb, status from audit_log where ts > now() - interval '25 minutes';
+2026-07-25 06:34:15+00 | worker-cheap | opbox.matter.list | ok
+```
+
+The governed verb was dispatched through the kernel chokepoint and audited. Note
+that `POST /v1/mcp` does NOT appear in the kernel access log for a successful
+turn - the door is not reached over the container's HTTP listener - so the audit
+row, not the access log, is the check to run when confirming this lane.
+
+Two carried-over open issues from `HANDOVER-2026-07-23.md` close on this run:
+- **#2 (`BOLTRIG_CODEX_MCP_RUN_TOKEN` presence in the cell env unconfirmed)** -
+  confirmed transitively and conclusively: the tool executed through the MCP
+  door, which the cell cannot reach without the run token.
+- **#3 (admission mismatch "observed MCP inventory does not match the admitted
+  lane")** - it was to be re-opened only if it recurred with a live tool set. It
+  did not recur on a live tool set. Closed.
+
 ### Blocker B (attestation) status: monitored, not a hard blocker
 
 B did NOT fire on the successful runs (bifrost saw the model call succeed, which
