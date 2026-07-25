@@ -1,14 +1,21 @@
 # Dev override: run the kernel as the single-tenant / in-process Codex posture.
 #
 # The committed docker-compose.yml targets the per-cell-uid (multi-tenant) posture
-# (user "0:0" + cap_add SETUID/SETGID + per-slot tmpfs), which is the goal but is
-# BLOCKED on the Gap 5 provisioning reconciliation
-# (docs/findings/2026-07-20-per-cell-uid-product-path-gaps.md). Until Gap 5 lands,
-# this override runs the kernel directly as uid 10001, so kernel-entrypoint.py takes
-# the passthrough path (per_cell_uid_mode_available() is False at a non-root uid, an
-# empty permitted set), and the Codex supervisor uses the proven in-process spawn
-# that provisions an API-owned cell tree it can write. Single-tenant is the safe
-# one-cell posture VJS-CC-VJS 5 established; concurrent multi-tenant needs Gap 5.
+# (user "0:0" + cap_add SETUID/SETGID + per-slot tmpfs). This override runs the kernel
+# directly as uid 10001 instead, so kernel-entrypoint.py takes the passthrough path
+# (per_cell_uid_mode_available() is False at a non-root uid, an empty permitted set)
+# and the Codex supervisor uses the in-process spawn that provisions an API-owned cell
+# tree it can write. Single-tenant is the safe one-cell posture VJS-CC-VJS 5 established.
+#
+# THIS IS A SINGLE-TENANT DEV CONVENIENCE, NOT THE DEFAULT. Do NOT apply it to a
+# multi-tenant or client deployment. This header used to say the per-cell-uid posture
+# was "BLOCKED on Gap 5"; Gap 5 CLOSED 2026-07-21 (see the finding doc, which records
+# a real per-cell Codex turn answering under it), so that warning is retired. It cost
+# a client an outage: CV ran a compose predating the posture, and because the trusted
+# wall admits ONLY the single-operator dev posture (BOLTRIG_DEV_AUTH=1 with no real
+# ingress) or kernel-attested per-cell uids, a real session-auth tenant fell through
+# both and every turn died with CodexTrustedPostureError - i.e. no agent runtime at
+# all. A multi-tenant deployment needs the committed posture, not this override.
 #
 # Apply on the dev box:
 #   docker compose -f docker-compose.yml -f docker-compose.override.yml \
