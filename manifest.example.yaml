@@ -95,7 +95,7 @@ models:
 hierarchy:
   tier1:
     name: chief-of-staff
-    runtime: hermes
+    runtime: codex
     model_endpoint: standard
     max_depth: 4
     supported_skills: ["*"]
@@ -107,7 +107,7 @@ hierarchy:
   tier2:
     - name: head-of-engineering
       department: engineering
-      runtime: hermes
+      runtime: codex
       model_endpoint: standard
       max_depth: 3
       supported_skills: ["analysis/*", "integration/*"]
@@ -118,32 +118,29 @@ hierarchy:
         window: daily
     - name: head-of-marketing
       department: marketing
-      runtime: hermes
+      runtime: codex
       model_endpoint: standard
       max_depth: 3
       supported_skills: ["writing/*", "analysis/*"]
       cost_tier: standard
 
 # --- ephemeral runtimes: short-lived child agents the fleet spawns -----------
-# `pi-worker` remains a compatibility sandbox path until the Rivet AgentOS
-# adapter is bound. New v2 non-coding/tool agents should target Rivet AgentOS.
+# Every DEFAULT lane targets `codex`, the only wired governed leaf runtime
+# (decision 0012). `rivet-worker` / `opencode-worker` are retained UNWIRED so a
+# non-Codex leaf stays re-wirable as a quarantine fallback ([2026] VJS-PC 20
+# cond.1) - do not point a default at one. A default on a retired lane is not a
+# soft failure: the runtime gate returns UnavailableRuntime, so every run degrades
+# with "runtime_unavailable" while the stack reports healthy on every surface.
 ephemeral_runtimes:
   - name: worker-cheap
-    runtime: hermes
+    runtime: codex
     model_endpoint: standard
     supported_skills: ["*"]
     max_depth: 2
     cost_tier: cheap
   - name: worker-sensitive
-    runtime: hermes
+    runtime: codex
     model_endpoint: local-sensitive
-    supported_skills: ["*"]
-    max_depth: 2
-    cost_tier: standard
-  # Round Two: a Pi-backed ephemeral runtime (Epic RUN)
-  - name: pi-worker
-    runtime: pi
-    model_endpoint: standard
     supported_skills: ["*"]
     max_depth: 2
     cost_tier: standard
@@ -292,16 +289,12 @@ privacy:
 
 # === Round Two compatibility additions (S9) =================================
 
-# --- runtime sidecars: Pi compatibility sandbox path (Epic RUN) --------------
+# --- runtime sidecars -------------------------------------------------------
 runtimes:
+  # RETIRED from the roster (decision 0012). Declared disabled rather than deleted
+  # so the multi-runtime routing seam stays live per [2026] VJS-PC 20 cond.(1).
   pi:
-    enabled: true
-    sidecar_url: http://pi-sidecar:8090
-    model_endpoint: standard                 # pins Pi's model via the endpoints above
-    max_steps: 12                            # per-run reasoning/tool-call cap
-    sandbox:
-      network_allow: [kernel_mcp, model_endpoint]   # nothing else (SEC-24)
-      native_tools: false                    # no Pi filesystem/bash/network tools
+    enabled: false
 
   # --- model gateway (Round Six gap 3.2) - cost/cache routing for STANDARD data.
   # When base_url is set, standard (non-sensitive) conversation traffic is routed
@@ -443,7 +436,7 @@ notifications:
 # identity/cutover gate passes. Codex is the only target runtime.
 personal_agents:
   enabled: true
-  default_runtime: pi-worker
+  default_runtime: codex-worker
   default_skills: ["writing/*", "analysis/*"]
 
 # --- memory - governed interpretation, distinct from source documents --------
