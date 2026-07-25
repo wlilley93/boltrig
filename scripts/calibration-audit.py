@@ -39,6 +39,35 @@ _SIDE_EFFECT_TOKENS = (
 _TOKEN_RE = re.compile(r"(?:^|[._-])(" + "|".join(_SIDE_EFFECT_TOKENS) + r")(?:$|[._-])")
 
 
+async def _split_by_locus(store, tenant: str, candidates: list) -> tuple[list, list]:
+    """Split candidates by WHERE the governing chokepoint sits.
+
+    A verb bound to a FIRST-PARTY adapter (source='builtin'/'generated') has
+    boltrig as its only gate: a LOW there really is ungated, and it is the
+    finding LJ-2 was worried about. A verb consumed from another system's app
+    server (an MCP consumer, e.g. opbox) is governed at THAT system's kernel on
+    the per-run clamped bearer, so `[2026] VJS-PC 20` (governance is defined by
+    the ENFORCING chokepoint's locus, not the cardinality of gates) and
+    `[2026] CC-OPBOX 1` (domain lives on its own SoR kernel) put its calibration
+    there, not here. Duplicating that gate at boltrig would be a check standing
+    BESIDE the record rather than derived from it. Reported separately so a
+    correct-by-design LOW never reads as a defect.
+
+    Unknown provenance is reported as sole-chokepoint: the audit fails toward
+    asking a human, not toward silence.
+    """
+    adapters = {a.id: a for a in await store.list_adapters(tenant)}
+    sole, foreign = [], []
+    for verb in candidates:
+        binding = await store.get_binding(tenant, verb.id)
+        record = adapters.get(binding.target_ref) if binding is not None else None
+        source = getattr(record, "source", None)
+        module = getattr(record, "module_ref", "") or ""
+        consumed = source == "mcp" or module.endswith("mcp_consumer")
+        (foreign if consumed else sole).append(verb)
+    return sole, foreign
+
+
 async def _run(tenant: str) -> int:
     from boltrig.api.bootstrap import build_store
     from boltrig.config import load_settings
@@ -78,12 +107,23 @@ async def _run(tenant: str) -> int:
             print("  no LOW verbs with side-effect-suggesting names outside the "
                   "blocking list. Calibration looks sane.")
             return 0
-        print(f"  {len(candidates)} LOW verb(s) whose NAME suggests a side effect - "
-              "REVIEW whether each should be HIGH / blocking:")
-        for v in sorted(candidates, key=lambda x: x.id):
-            print(f"    - {v.id}")
-        print("  To gate one: set its consequence: HIGH, or add it to "
-              "manifest.hitl.blocking_verbs (data recalibration, no code).")
+        sole, foreign = await _split_by_locus(store, tenant, candidates)
+        if sole:
+            print(f"  {len(sole)} LOW verb(s) where BOLTRIG IS THE SOLE CHOKEPOINT and "
+                  "the name suggests a side effect - REVIEW whether each should be "
+                  "HIGH / blocking:")
+            for v in sorted(sole, key=lambda x: x.id):
+                print(f"    - {v.id}")
+            print("  To gate one: set its consequence: HIGH, or add it to "
+                  "manifest.hitl.blocking_verbs (data recalibration, no code).")
+        if foreign:
+            print(f"  {len(foreign)} further LOW verb(s) are governed at a FOREIGN "
+                  "SoR locus (a consumed app's own kernel), so boltrig LOW is correct "
+                  "by [2026] VJS-PC 20 (locus-not-cardinality) + CC-OPBOX 1 - gating "
+                  "them here would duplicate a check beside the record, not derive "
+                  "from it. Informational only:")
+            for v in sorted(foreign, key=lambda x: x.id):
+                print(f"    . {v.id}")
         return 0
     finally:
         close = getattr(store, "close", None)

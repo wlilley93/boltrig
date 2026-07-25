@@ -41,6 +41,48 @@ now HIGH in the store and the audit's HIGH count went 582 -> 584.
 **Run it on every tenant that has the adapter registered after changing a
 builtin's VerbSpec**, or the code and the gate disagree.
 
+## Fleet propagation (all three stores)
+
+The drift was present on every deployment, because it dates from whenever each
+tenant first registered the builtin:
+
+| store | route taken | result |
+| --- | --- | --- |
+| beelink dev (`boltrig`) | `resync-builtin-verbs.py` through the seam | HIGH |
+| jellytot-prod CV (`cvboltrig`, GHCR 0.3.0) | same, over an SSH tunnel | HIGH |
+| jellytot-prod boltrig.io (`boltrig`, local 0.1.0) | targeted UPDATE (see below) | HIGH |
+
+The boltrig.io stack is six days old and its schema PREDATES `verbs.idempotency_mode`,
+so today's code cannot read it (`KeyError: 'idempotency_mode'` out of
+`store/rows.py::_verb`). Pointing new code at an old-schema store is the exact
+db-push/kernel-wipe class of hazard, so the seam was NOT forced there: only the
+one drifted column was set, and the next image roll re-registers the same values
+as a no-op. Those two verbs had never been dispatched on that stack
+(`dispatch_count=0`), so the change could not disturb a live flow.
+
+Rolling the prod IMAGES so the code fix (and the rest of today's work) reaches
+those boxes is a separate, Principal-gated action and has not been done.
+
+## Not every LOW is a defect: the audit now splits by locus
+
+Running the audit against CV first surfaced `opbox.remove_member` and
+`opbox.update_member_role` at LOW, which LOOKS like the same finding and is not.
+Those verbs are consumed from opbox's app server; opbox gates them at its OWN
+kernel (autonomy level 2, enforced on the per-run clamped runBearer,
+`[2026] CC-OPBOX 115`). `[2026] VJS-PC 20` holds governance is defined by the
+ENFORCING chokepoint's LOCUS, not the cardinality of gates, and
+`[2026] CC-OPBOX 1` puts a domain's calibration on its own SoR kernel - so a
+boltrig-side gate there would be a check standing BESIDE the record rather than
+derived from it. Their LOW is correct, and NO change was made to the client
+tenant's data.
+
+`scripts/calibration-audit.py` now encodes that distinction: it resolves each
+candidate's binding to its adapter and reports first-party (boltrig is the sole
+chokepoint) separately from consumed (governed at a foreign SoR locus,
+informational). Unknown provenance is reported as sole-chokepoint, so the audit
+fails toward asking a human. Both stores now report only the one justified LOW
+(`ticket.create`, the in-memory demo adapter).
+
 ## The open fork (not decided)
 
 Should boot RECONSTRUCT builtin adapter rows from their `module_ref` (a builtin
