@@ -318,6 +318,7 @@ def test_challenge_is_rate_limited_constant_time_and_audited(monkeypatch):
 
 
 @pytest.mark.security
+@pytest.mark.invariant("SEC-130")
 def test_the_window_is_fixed_not_sliding(monkeypatch):
     """The 5/min bound is 5 per CALENDAR minute, not 5 per any rolling minute.
 

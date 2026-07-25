@@ -70,17 +70,17 @@
       "expires": "2026-12-31"
     },
     "boltrig/api/bootstrap.py": {
-      "max_file_lines": 665,
+      "max_file_lines": 673,
       "max_function_lines": 110,
       "over_limit_functions": [
         {
           "name": "build_app",
-          "line": 556,
+          "line": 564,
           "lines": 110
         }
       ],
       "owner": "platform-maintainers",
-      "reason": "Split dependency construction and runtime wiring into typed bootstrap stages without changing startup order.",
+      "reason": "Split dependency construction and runtime wiring into typed bootstrap stages without changing startup order. 2026-07-25: +8 lines to wire the SHARED rate-limit counter from REDIS_URL. RedisCounter was constructed nowhere, so every bound was per-process and per-boot while three places in the record asserted Redis ([2026] VJS-CC-BOLTRIG-RATE-LIMIT-WINDOW-001 D1/D3/D7).",
       "expires": "2026-12-31"
     },
     "boltrig/api/doctor.py": {

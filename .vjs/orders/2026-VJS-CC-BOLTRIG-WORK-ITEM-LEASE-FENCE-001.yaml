@@ -1,0 +1,83 @@
+id: 2026-VJS-CC-BOLTRIG-WORK-ITEM-LEASE-FENCE-001
+court: county
+jurisdiction: default
+repo_code: boltrig
+status: binding
+issue: work_item_lease_fence
+holding: |
+  Option A is adopted, narrowed and corrected. The Store contract gains a
+  CONDITIONAL work-item write, fenced by the backend in the SAME statement as the
+  update, against the lease tuple (lease_owner, lease_expires_at) MINTED AT CLAIM
+  TIME and carried to the writing body, returning whether it wrote.
+
+  The fence value must NOT be re-read by the body. `_still_leased` failed because
+  it compared against the body's own read, and a CAS whose expected tuple is
+  re-derived at body start inherits the identical defect. The token is captured
+  from the claim result and carried on the enqueue payload.
+
+  The case file's premise that InMemoryStore "cannot express it" is REJECTED as
+  stated: that store already implements owner-fenced conditional settles, an
+  owner-token CAS and a status CAS. The real obstacle is narrower, and is itself a
+  parity defect: the memory store hands back the LIVE row, while Postgres already
+  returns a fresh object. Making the memory store copy-on-read is a parity REPAIR,
+  not a change to the parity design.
+
+  Option B is rejected as a SUBSTITUTE and admitted as mitigation. A monotonic
+  terminal write leaves two non-terminal writes clobbering `attempts` and `result`,
+  and renewal reduces how often a long step loses its lease but cannot supply the
+  missing predicate: a paused or partitioned worker stops renewing while still
+  running, which is precisely the overlap case.
+
+  An owner-equality fence on the pump's own worker id is refused as positively
+  wrong: the durable lane runs the body in a different process under a different
+  id, so it would refuse every legitimate durable write.
+directives:
+- id: D1
+  actor: lexby
+  must: add_a_conditional_work_item_write_to_the_store_protocol_returning_whether_it_wrote_fenced_on_a_caller_supplied_lease_tuple_in_both_backends
+  when: null
+- id: D2
+  actor: lexby
+  must: mint_the_fence_token_at_claim_and_carry_it_on_the_enqueue_payload_including_through_hatchet_app_work_item_task_body_which_today_rebuilds_the_payload_from_two_keys_and_would_silently_drop_it_with_a_lossless_round_tripping_encoding
+  when: null
+- id: D3
+  actor: lexby
+  must: route_every_write_to_an_existing_claimed_row_through_the_fenced_write_and_dispose_expressly_of_hitl_expiry_park_expired_item_and_of_requeue_whose_exclusion_rests_on_its_being_a_deliberate_human_reset_not_on_an_absent_lease_since_a_parked_row_still_carries_a_stale_claim_tuple
+  when: null
+- id: D4
+  actor: lexby
+  must: narrow_the_duplicate_child_and_notification_window_with_a_pre_persist_check_while_stating_in_terms_that_this_is_best_effort_and_not_a_fence_because_child_rows_cannot_be_made_atomic_with_a_parent_predicate
+  when: null
+- id: D5
+  actor: lexby
+  must: make_a_losing_fenced_write_a_no_op_plus_a_warning_never_a_raise_since_an_exception_would_reach_record_failure_and_re_open_the_item
+  when: null
+- id: D6
+  actor: lexby
+  must: stop_inmemorystore_sharing_a_live_work_item_object_with_callers_across_all_seventeen_create_or_update_call_sites_not_the_eleven_first_counted
+  when: null
+- id: D7
+  actor: lexby
+  must: add_a_seeded_failure_parity_test_and_run_it_with_boltrig_test_database_url_set_showing_the_postgres_parameter_passed_not_skipped_before_recording_the_work_as_landed
+  when: null
+- id: D8
+  actor: lexby
+  must: never_swallow_a_cancel_whose_fenced_write_is_refused_no_consume_or_delete_may_be_added_on_that_path_and_the_refusal_must_be_logged
+  when: null
+- id: D9
+  actor: lexby
+  must: record_that_the_change_makes_the_record_single_writer_and_does_not_make_execution_exactly_once_and_extend_that_honesty_prohibition_to_the_duplicate_child_window
+  when: null
+forbidden: null
+exceptions: null
+supersedes: []
+source_opinion: docs/vjs/2026-VJS-CC-BOLTRIG-WORK-ITEM-LEASE-FENCE-001-opinion.md
+runtime_summary: |
+  A store-level conditional write, fenced on the claim-time lease tuple, in both
+  backends. Not a re-read in the pump: that shape was tried and defeated. The
+  memory store becomes copy-on-read, which is a parity repair rather than a new
+  divergence. Records the limit honestly: single-writer on the RECORD, not
+  exactly-once execution, and the duplicate-child window is narrowed rather than
+  closed.
+created_at: 2026-07-25T17:31:00Z
+assent_source: standing_bounded_assent

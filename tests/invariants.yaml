@@ -893,9 +893,24 @@ invariants:
       - tests/kernel/test_dispatch.py::test_invalid_params_rejected_before_dispatch
       - tests/kernel/test_chokepoint_order.py::test_out_of_schema_adapter_output_is_rejected
   FR-KER-05:
-    description: Per-verb / per-tenant rate limits are enforced at the kernel.
+    description: >-
+      Per-verb / per-tenant rate limits are enforced at the kernel, on a SHARED
+      counter. The production backend is Redis, wired from REDIS_URL at the
+      composition root and handed to the Kernel, so a bound survives a restart and
+      holds across processes; the in-memory counter is the documented dev/test
+      backend and production readiness independently requires Redis, so a
+      deployment that reached the fallback is already failing its readiness gate
+      loudly. The two backends admit and refuse the identical sequence: an
+      unexercised second backend is not evidence, which is exactly how RedisCounter
+      came to be asserted by the record while being constructed nowhere, leaving
+      every bound per-process and per-boot
+      ([2026] VJS-CC-BOLTRIG-RATE-LIMIT-WINDOW-001, D1/D3/D4/D7).
     tests:
       - tests/kernel/test_ratelimit_degraded.py::test_rate_limit_enforced
+      - tests/security/test_rate_limit_backend.py::test_a_configured_redis_url_yields_a_shared_counter_not_the_in_process_one
+      - tests/security/test_rate_limit_backend.py::test_the_composition_root_passes_the_shared_counter_to_the_kernel
+      - tests/security/test_rate_limit_backend.py::test_both_backends_admit_and_refuse_the_identical_sequence
+      - tests/security/test_rate_limit_backend.py::test_the_shared_counter_survives_a_kernel_restart
   FR-COST-02:
     description: A hard-stop budget halts before exceeding; a soft budget records overage only.
     tests:
@@ -1676,9 +1691,10 @@ invariants:
     tests:
       - tests/security/test_two_factor.py::test_org_required_two_factor_forces_enrollment_only
   SEC-130:
-    description: The challenge is rate-limited, constant-time / non-enumerating, and audited - an unknown challenge and a valid challenge with a wrong code return the byte-identical generic failure and status, a failed challenge is audited keys-only and raises a two_factor_challenge_failed SecurityEvent signal (enroll begin/activate are audited too), and the per-identity bound (5/min) trips the 6th wrong attempt with 429 while a miss does not consume the challenge.
+    description: The challenge is rate-limited, constant-time / non-enumerating, and audited - an unknown challenge and a valid challenge with a wrong code return the byte-identical generic failure and status, a failed challenge is audited keys-only and raises a two_factor_challenge_failed SecurityEvent signal (enroll begin/activate are audited too), and the per-identity bound trips the 6th wrong attempt with 429 within one fixed calendar minute while a miss does not consume the challenge. Stated exactly: the window is a FIXED epoch-aligned calendar minute, not a sliding one, so six attempts straddling a boundary are ALL admitted (up to 10 in an arbitrarily short span) while the sustained rate stays 5/min - a deliberate trade ruled on in [2026] VJS-CC-BOLTRIG-RATE-LIMIT-WINDOW-001 and pinned by test_the_window_is_fixed_not_sliding, so this invariant may not be read as promising a hard instantaneous ceiling.
     tests:
       - tests/security/test_two_factor.py::test_challenge_is_rate_limited_constant_time_and_audited
+      - tests/security/test_two_factor.py::test_the_window_is_fixed_not_sliding
 
 
   # --- Cross-tenant identity ([2026] VJS-COUNTY 11) --------------------------

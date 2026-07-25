@@ -17,6 +17,7 @@ from boltrig.config.environment import is_truthy
 from boltrig.fleet import make_agent_invoker, make_app_spawner
 from boltrig.knowledge import register_knowledge
 from boltrig.kernel import Kernel
+from boltrig.kernel.ratelimit import build_counter
 from boltrig.memory.bootstrap import register_memory as _register_memory
 from boltrig.store import InMemoryStore, Store
 
@@ -363,11 +364,18 @@ async def build_kernel_async() -> Kernel:
     hard before building anything; create_app keeps its own idempotent call."""
     refuse_default_audit_key_in_prod()
     store = await build_store()
+    # FR-KER-05: the SHARED rate-limit counter. Without this the kernel silently
+    # fell back to a per-process, per-boot in-memory counter while the record
+    # asserted Redis in three places, so a restart reset every bound and a second
+    # worker would have multiplied each by N
+    # ([2026] VJS-CC-BOLTRIG-RATE-LIMIT-WINDOW-001, D1/D3/D7).
+    counter = build_counter(os.environ.get("REDIS_URL"))
     manifest_path = _find_manifest()
     if manifest_path:
         manifest = load_manifest(manifest_path)
         kernel = Kernel(
             store,
+            counter=counter,
             blocking_verbs=manifest.blocking_verbs(),
             approval_timeout_seconds=manifest.hitl.approval_timeout_seconds,
         )
@@ -376,7 +384,7 @@ async def build_kernel_async() -> Kernel:
         await _seed_from_manifest(kernel, manifest)
         log.info("booted from manifest %s (tenant %s)", manifest_path, manifest.tenant_id)
     else:
-        kernel = Kernel(store)
+        kernel = Kernel(store, counter=counter)
         if _desktop_hands_enabled():
             _attach_hands_registry(kernel)
         await _seed_default(kernel)

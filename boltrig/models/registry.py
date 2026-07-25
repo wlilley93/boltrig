@@ -65,7 +65,21 @@ class Verb:
 
 @dataclass(frozen=True)
 class RateLimit:
-    """A per-verb / per-tenant rate-limit policy (FR-KER-05)."""
+    """A per-verb / per-tenant rate-limit policy (FR-KER-05).
+
+    ``max`` is per FIXED CALENDAR window, not per sliding one. A configured 5/min
+    therefore admits up to 10 within an arbitrarily short span that straddles a
+    minute boundary, while the SUSTAINED rate stays at the configured value. That
+    is a deliberate trade rather than an oversight
+    ([2026] VJS-CC-BOLTRIG-RATE-LIMIT-WINDOW-001), and it is written here, at the
+    point of configuration, so nobody has to read the counter to know what the
+    number they are choosing actually delivers.
+
+    Do not configure against this as if it were a hard instantaneous ceiling. If a
+    surface ever needs one (an external quota with a penalty for overshoot, a
+    lockout threshold, an irreversible spend where 2x is material), that is the
+    evidence the judgment names for renewing the application for a sliding window.
+    """
 
     per: str  # 'minute' | 'hour'
     max: int

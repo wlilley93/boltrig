@@ -1,0 +1,65 @@
+id: SUBMISSION-2026-07-25-170357
+court_requested: county
+jurisdiction: default
+question: Closing the work-item lease race needs a conditional write evaluated by the database, because a read-then-write check in the pump cannot fix a read-then-write race. Adding one changes the store contract, and InMemoryStore cannot express it while it hands callers the live row. Extend the contract and make the memory store copy-on-read, or bound the damage another way?
+facts: |
+  # A store-level CAS, or another way to bound lease double-execution
+
+  Filed on own motion. Symmetric, no preference.
+
+  ## Established facts
+
+  Nothing renews a work-item lease. `claim_work_item` reclaims any item whose lease
+  expired, which is deliberate (US-FLT-05, how a crashed worker's item returns), so
+  a step outrunning `lease_seconds` (300) is handed to a SECOND executor while the
+  first still runs.
+
+  Every pump state write is `update_work_item`, on Postgres an unconditional
+  full-row upsert writing status, attempts, lease_owner and result from the caller's
+  snapshot, with no owner and no status predicate. The loser overwrites the winner's
+  terminal record and rolls `attempts` back. The repo already holds
+  `transition_work_item_status`, a CAS whose comment reads "the loser fails instead
+  of silently overwriting the winner"; the pump does not use it, and the sibling
+  channel-outbox queue DOES fence its claims.
+
+  ## Why no smallest change is available
+
+  An owner-equality fence is positively wrong: the durable lane claims under the
+  API pump's worker id and runs the body in another process under a different one,
+  so it would refuse every legitimate durable write.
+
+  A read-then-write `_still_leased` helper was authored and defeated: a reviewer
+  applied it and reproduced the original defect. An unfenced sibling write in
+  `authority.py:146` hits the same row in the same handler; the fence sat after
+  child persistence, so the loser still created a duplicate child; and decisively,
+  it proves "the lease is unchanged since THIS BODY'S read", not "this body holds
+  the lease". Two bodies reading the same tuple both pass, which is the steady state
+  of the duplicate-enqueue path, not a narrow race.
+
+  ## Option A: a store-level CAS
+
+  `update_work_item(..., if_lease=(owner, expires_at)) -> bool`, backed by
+  `UPDATE ... WHERE lease_owner=$ AND lease_expires_at=$`. Correct by construction
+  on Postgres.
+
+  Cost: it changes the store contract, so both stores must honour it, and
+  `InMemoryStore` cannot today because it hands callers the LIVE row, so a
+  memory-side comparison compares an object with itself. Copy-on-read touches every
+  caller that mutates a returned row in place.
+
+  ## Option B: bound the damage without a fence
+
+  Renew the lease mid-step, shorten the window, or make the terminal write monotonic
+  (refuse to move a row backwards out of a settled status, the shape already shipped
+  for the sibling defect, needing no new store primitive).
+
+  Cost: manages the race rather than removing it, and leaves attempts/result
+  clobbering possible between two non-terminal writes.
+
+  ## Citator
+
+  Nothing addresses the store contract, conditional writes, or what parity obliges
+  when one backend can express a primitive the other cannot.
+requested_order: TBD
+private_boundary: local
+word_count: 471

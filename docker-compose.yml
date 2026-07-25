@@ -10,7 +10,10 @@
 #
 # Services:
 #   postgres          durable state (SRS S6 / boltrig/store/schema.sql)
-#   redis             rate-limit + ephemeral counters (FR-KER-05)
+#   redis             rate-limit + ephemeral counters (FR-KER-05). This is the
+#                     SHARED counter, wired from REDIS_URL: without it each
+#                     kernel process counts alone and every bound resets on
+#                     restart. Was true only on paper until 2026-07-25.
 #   kernel            the dispatch chokepoint HTTP surface (P2)
 #   fleet-worker      the fleet runtime + durable workers (Epics F/G)
 #   hatchet-engine    optional durable execution engine (US-FLT-06, seam)

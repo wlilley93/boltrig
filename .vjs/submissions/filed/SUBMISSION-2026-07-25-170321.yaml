@@ -1,0 +1,65 @@
+id: SUBMISSION-2026-07-25-170321
+court_requested: county
+jurisdiction: default
+question: Boltrig's rate limiter enforces a FIXED epoch-aligned window, so a bound documented and configured as 5/min admits up to 10 attempts in an arbitrarily short span across a bucket boundary. Should the limiter become a sliding window (enforcing the bound it advertises), or should the fixed window stand as a deliberate cost trade with the boundary burst recorded as a known property?
+facts: |
+  # Fixed vs sliding window in the rate limiter
+
+  Filed on own motion. Symmetric, no preference.
+
+  ## How it surfaced
+
+  CI was red on a commit touching neither the limiter nor the route:
+  `test_challenge_is_rate_limited_constant_time_and_audited` asserts the 6th wrong
+  2FA code returns 429, and got 401. It then passed 25/25 locally.
+
+  ## Established facts
+
+  `boltrig/kernel/ratelimit.py` buckets on `int(time.time() // window_seconds)`, a
+  FIXED window aligned to the epoch, in both `InMemoryCounter` and `RedisCounter`.
+  Six attempts straddling a minute boundary land 5 in one bucket and 1 in the next,
+  so the sixth is admitted. Reproduced deterministically with a pinned clock: six
+  wrong 2FA codes inside 110ms, ALL accepted; the same six wholly inside one window
+  trip 429 on the sixth as documented.
+
+  `auth_routes.py:77-78` sets 5/min per identity and 30/min per IP, used by the 2FA
+  challenge, enrolment and disable routes. The same limiter serves every
+  rate-limited verb at the dispatch chokepoint.
+
+  ## Option A: move to a sliding window
+
+  The config says 5/min and the route comment says the 6th trips. A control
+  admitting up to twice its configured maximum does not enforce what the code says,
+  and it sits on the authentication second factor.
+
+  Cost: the `Counter` protocol stores one integer per key; a sliding window stores a
+  timestamp per hit, which on a flooded public endpoint is memory amplification
+  unless additionally capped. Capping means changing the protocol to carry `max` and
+  rewriting the Redis implementation (a sorted set with ZREMRANGEBYSCORE/ZCARD in
+  place of INCR/EXPIRE), changing production behaviour on EVERY rate-limited path.
+
+  ## Option B: keep the fixed window
+
+  "5 per calendar minute" is a defensible reading of 5/min, and a fixed window is
+  the standard cheap implementation. The delta on the concrete surface is small: 10
+  rather than 5 guesses against a six-digit TOTP is immaterial, and the per-IP bound
+  still applies.
+
+  Cost: the advertised and delivered bounds differ by 2x, visible only to someone
+  who reads the counter implementation.
+
+  ## What has already been done
+
+  No change to the limiter. The flaky test now pins the clock so it asserts the
+  documented bound deterministically, and `test_the_window_is_fixed_not_sliding`
+  asserts the boundary burst explicitly, so the property is recorded and any move to
+  a sliding window breaks a test that says what changed.
+
+  ## Citator
+
+  No ruling in the lawpack or `.vjs/orders/` touches rate limiting, window
+  algorithms, or the standard for a security control that under-delivers its
+  configured bound. S-11(c) does not dispose of it.
+requested_order: TBD
+private_boundary: local
+word_count: 465

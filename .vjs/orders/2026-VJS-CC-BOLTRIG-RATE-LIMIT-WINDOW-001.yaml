@@ -1,0 +1,70 @@
+id: 2026-VJS-CC-BOLTRIG-RATE-LIMIT-WINDOW-001
+court: county
+jurisdiction: default
+repo_code: boltrig
+status: binding
+issue: rate_limit_window_and_backend
+holding: |
+  The FIXED epoch-aligned window in boltrig/kernel/ratelimit.py STANDS. The
+  algorithm is not the defect: it is rate-correct over sustained time, only the
+  instantaneous burst doubles, and on every surface the limiter guards that
+  doubling is immaterial (5/min per identity against a six-digit TOTP with a
+  five-minute challenge TTL; the channel intake bounds are spend throttles whose
+  sustained rate is preserved). It stands ON CONDITION that the delivered bound is
+  recorded where limits are CONFIGURED and pinned by a test that names it.
+
+  Option A, a sliding window, is REFUSED ON THE EVIDENCE, not in principle. Both
+  costs the case file assigned to it failed verification and the refusal does not
+  rest on them: a rejecting limiter need never hold more than `max` timestamps per
+  key (this repo already has that bounded pattern in adapters/http_base.py), and
+  rewriting RedisCounter changed no production behaviour because nothing
+  constructed it.
+
+  Verification also found a LARGER defect the case file did not disclose and on
+  which neither side was heard: RedisCounter was constructed nowhere, so every
+  bound was per-process and per-boot while the module docstring, docker-compose.yml
+  and the production readiness check all asserted Redis. That is disposed of in the
+  directives as a discovered breach, and the limbs of the ratio addressing it bind
+  only so far as an unheard point can.
+directives:
+- id: D1
+  actor: lexby
+  must: wire_the_shared_counter_or_stop_claiming_one_the_record_may_not_name_a_backend_no_production_path_constructs
+  when: before_this_matter_closes
+- id: D3
+  actor: lexby
+  must: rediscounter_may_not_remain_both_unwired_and_untested_either_a_production_path_constructs_it_and_a_test_exercises_it_or_the_class_is_deleted
+  when: before_this_matter_closes
+- id: D4
+  actor: lexby
+  must: pin_backend_parity_the_two_counters_must_admit_and_refuse_the_identical_sequence_an_unexercised_backend_is_not_evidence
+  when: if_both_counters_exist
+- id: D5
+  actor: lexby
+  must: state_the_fixed_calendar_window_and_its_2x_burst_in_the_ratelimit_dataclass_docstring_where_limits_are_configured
+  when: before_this_matter_closes
+- id: D6
+  actor: lexby
+  must: amend_sec_130_so_it_no_longer_asserts_a_bound_the_limiter_does_not_deliver
+  when: before_this_matter_closes
+- id: D7
+  actor: lexby
+  must: wire_a_shared_cross_process_counter_into_the_composition_root_or_gate_the_deployment_to_one_worker
+  when: before_this_matter_closes
+- id: D8
+  actor: lexby
+  must: keep_the_boundary_burst_test_bound_to_a_declared_invariant_so_a_move_to_a_sliding_window_breaks_a_mechanical_check_not_a_comment
+  when: continuing
+forbidden: null
+exceptions: null
+supersedes: []
+source_opinion: docs/vjs/2026-VJS-CC-BOLTRIG-RATE-LIMIT-WINDOW-001-opinion.md
+runtime_summary: |
+  Fixed window stands, conditionally. Sliding window refused on the evidence, with
+  the renewal test named. The unwired Redis counter is a discovered breach and is
+  closed: the counter is now built from REDIS_URL at the composition root and
+  handed to the Kernel, both backends are pinned to agree, the window semantics are
+  stated at the configuration site, and SEC-130 and FR-KER-05 no longer assert a
+  bound the limiter does not deliver.
+created_at: 2026-07-25T17:31:00Z
+assent_source: standing_bounded_assent
