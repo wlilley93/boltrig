@@ -46,6 +46,19 @@ worker), and neither has ever run before, so these are not regressions - they ar
 simply unexamined. They are NOT blocked on a Principal-supplied credential, and
 they deserve their own investigation rather than being folded into a gate repair.
 
+## Per-cell-uid gates: NOW VERIFIED
+
+`tests/integration/test_per_cell_uid_gates.py` skips unless `docker` is present
+AND `BOLTRIG_PER_CELL_IMAGE` names a built kernel image. Nothing external was
+missing; the image just has to be named:
+
+    BOLTRIG_PER_CELL_IMAGE=boltrig/kernel:0.1.0 \
+      .venv/bin/python -m pytest -q tests/integration/test_per_cell_uid_gates.py
+
+**3 passed.** These assert the VJS-CC-VJS 7 posture (uid 0 with CAP_SETUID/SETGID
+only, dropping to a per-cell uid) against a real container, and they had never
+been run.
+
 ## MEM-ENG-03 (live Cognee): blocked on a Principal-supplied credential
 
 `tests/integration/test_cognee_engine.py` needs `BOLTRIG_COGNEE_LIVE=1`, the
