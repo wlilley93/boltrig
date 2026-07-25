@@ -149,7 +149,9 @@ class Spawner:
         if model_route and isinstance(result.output, dict):
             result.output.setdefault("model_route", _public_model_route(model_route))
 
-        await self._true_up_cost(tenant_id, scope_ids, capability, tokens_est, micros_est, result)
+        # The PRICED cost (see _true_up_cost), never result.cost_micros.
+        cost_micros = await self._true_up_cost(
+            tenant_id, scope_ids, capability, tokens_est, micros_est, result)
         await self._audit_spawn(
             tenant_id,
             context,
@@ -158,7 +160,7 @@ class Spawner:
             run_id,
             status=("degraded" if result.degraded else "ok" if result.ok else "error"),
             tokens=result.tokens_used,
-            cost=result.cost_micros,
+            cost=cost_micros,
             model_route=model_route,
             latency_ms=latency_ms,
         )
@@ -170,7 +172,7 @@ class Spawner:
             "summary": result.summary,
             "output": result.output,
             "tokens_used": result.tokens_used,
-            "cost_micros": result.cost_micros,
+            "cost_micros": cost_micros,
             "new_work_items": list(result.new_work_items),
             "effective_grants": list(child_grants.allow),
         }
@@ -342,7 +344,17 @@ class Spawner:
         tokens_est: int,
         micros_est: int,
         result: AgentResult,
-    ) -> None:
+    ) -> int:
+        """Reconcile the budget reservation against real usage and RETURN what the
+        run actually cost.
+
+        The priced figure has to come back: a runtime reports TOKENS, not money
+        (pricing is the tenant's per-model/tier rate, which only the accountant
+        knows), so `result.cost_micros` stays 0 for every runtime that does not
+        price itself. This method already computed the real number and then dropped
+        it, so the budget was trued up correctly while the audit tree and the spawn
+        return recorded a cost of zero - a tenant could spend and still read as free.
+        """
         actual_tokens = int(result.tokens_used or 0)
         priced_model: str | None = None
         if capability.model_endpoint and self._kernel.cost.has_prices:
@@ -359,6 +371,7 @@ class Spawner:
             delta_tokens=actual_tokens - tokens_est,
             delta_micros=actual_micros - micros_est,
         )
+        return actual_micros
 
     def _compose_prompt(self, merged_prompt: str, task: str) -> str:
         if merged_prompt:

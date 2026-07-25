@@ -92,3 +92,75 @@ async def test_a_malformed_usage_report_does_not_corrupt_the_bill(bad):
         ]
     )
     assert tokens == 0
+
+
+# --- tokens -> micros: the second half of the same break -------------------
+# Reporting tokens is only half the job. `_true_up_cost` priced them correctly for
+# the BUDGET and then dropped the number, while the audit tree and the spawn return
+# read `result.cost_micros` - which a runtime never sets, because a runtime reports
+# usage and the accountant prices it. So a tenant could spend and still read as free.
+
+
+async def test_true_up_returns_the_priced_cost_not_the_runtimes_zero():
+    from boltrig.fleet.result import AgentResult
+    from boltrig.fleet.spawn import Spawner
+
+    class _Cost:
+        has_prices = False
+
+        def price(self, tokens, cost_tier, *, model=None):
+            return price_micros(tokens, cost_tier, model=model)
+
+        async def reconcile(self, *a, **k):
+            return None
+
+    class _Kernel:
+        cost = _Cost()
+        store = None
+
+    class _Capability:
+        model_endpoint = None
+        cost_tier = "cheap"
+
+    spawner = Spawner.__new__(Spawner)
+    spawner._kernel = _Kernel()
+
+    # A runtime that reported real usage but priced nothing (every runtime today).
+    result = AgentResult.succeeded(output={}, summary="", tokens_used=11912)
+    assert result.cost_micros == 0, "runtimes do not price themselves"
+
+    priced = await spawner._true_up_cost(
+        "t", ["tenant"], _Capability(), 0, 0, result
+    )
+    assert priced == price_micros(11912, "cheap")
+    assert priced > 0, "a run that consumed 11912 tokens must not record as free"
+
+
+async def test_a_zero_token_run_is_genuinely_free():
+    """No usage reported => no charge. The fix must not invent spend either."""
+    from boltrig.fleet.result import AgentResult
+    from boltrig.fleet.spawn import Spawner
+
+    class _Cost:
+        has_prices = False
+
+        def price(self, tokens, cost_tier, *, model=None):
+            return price_micros(tokens, cost_tier, model=model)
+
+        async def reconcile(self, *a, **k):
+            return None
+
+    class _Kernel:
+        cost = _Cost()
+        store = None
+
+    class _Capability:
+        model_endpoint = None
+        cost_tier = "cheap"
+
+    spawner = Spawner.__new__(Spawner)
+    spawner._kernel = _Kernel()
+    priced = await spawner._true_up_cost(
+        "t", ["tenant"], _Capability(), 0, 0, AgentResult.succeeded(output={}, summary="")
+    )
+    assert priced == 0
