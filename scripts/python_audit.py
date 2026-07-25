@@ -30,6 +30,22 @@ from pathlib import Path
 _LEDGER = Path(__file__).resolve().parents[1] / "docs" / "security" / "accepted-advisories.json"
 
 
+def _check_expiry(entry: dict, ident: str, today: date, expired: list[str]) -> bool:
+    """Append to ``expired`` when the entry is past its date. True when live."""
+    raw = str(entry.get("expires") or "").strip()
+    try:
+        expires = date.fromisoformat(raw)
+    except ValueError:
+        expired.append(f"{ident}: unreadable expires={raw!r}")
+        return False
+    if expires < today:
+        expired.append(
+            f"{ident} ({entry.get('package')}) expired {raw}, owner={entry.get('owner')}"
+        )
+        return False
+    return True
+
+
 def _load(today: date) -> tuple[list[str], list[str]]:
     """Return (ignored ids, expired descriptions) from the ledger."""
     if not _LEDGER.exists():
@@ -39,24 +55,19 @@ def _load(today: date) -> tuple[list[str], list[str]]:
     expired: list[str] = []
     for entry in entries:
         ident = str(entry.get("id") or "").strip()
-        if not ident:
+        # One ledger for every ecosystem so expiries are reviewed in a single
+        # place, but only Python entries mean anything to pip-audit. An npm entry
+        # is enforced where pnpm reads it (site/pnpm-workspace.yaml auditConfig);
+        # its expiry is still checked below, so it cannot rot unnoticed.
+        if not ident or str(entry.get("ecosystem") or "python") != "python":
+            _check_expiry(entry, ident, today, expired)
             continue
-        raw = str(entry.get("expires") or "").strip()
-        try:
-            expires = date.fromisoformat(raw)
-        except ValueError:
-            expired.append(f"{ident}: unreadable expires={raw!r}")
-            continue
-        if expires < today:
-            expired.append(
-                f"{ident} ({entry.get('package')}) expired {raw}, "
-                f"owner={entry.get('owner')}"
-            )
-        else:
+        if _check_expiry(entry, ident, today, expired):
             ignored.append(ident)
             print(
-                f"  accepted: {ident} {entry.get('package')}=={entry.get('version')} "
-                f"until {raw} (owner {entry.get('owner')})"
+                f"  accepted: {ident} {entry.get('package')}=="
+                f"{entry.get('version')} until {entry.get('expires')} "
+                f"(owner {entry.get('owner')})"
             )
     return ignored, expired
 

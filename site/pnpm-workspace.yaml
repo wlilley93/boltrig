@@ -2,7 +2,27 @@ allowBuilds:
   esbuild: true
   sharp: true
   unrs-resolver: true
+# Smallest explicit upgrades that close current high advisories. These pins had
+# gone STALE: they were set for earlier advisories and sat BELOW the versions the
+# latest ones require (brace-expansion needed >=5.0.8, postcss >=8.5.18). Re-check
+# on every audit failure and drop an entry once the puller adopts a fixed release.
 overrides:
+  # Per-major, NOT a blanket '>=5.0.8': minimatch@3 calls the 1.x braceExpand
+  # API, so forcing 5.x into it throws at lint time. Each line is pinned to the
+  # highest release that exists on it.
   brace-expansion@<2.0.0: 1.1.16
   brace-expansion@>=2.0.0 <3.0.0: 2.1.2
-  postcss: 8.5.16
+  brace-expansion@>=5.0.0: '>=5.0.8'
+  postcss: '>=8.5.18'
+  sharp: '>=0.35.0'
+
+# Accepted advisory, recorded in docs/security/accepted-advisories.json with its
+# reachability, owner, EXPIRY (2026-10-23) and compensating control. Ignored here
+# because there is no fixed release on the lines that need it: brace-expansion
+# 1.x ends at 1.1.16 and 2.x at 2.1.2, the fix ships only in 5.0.8, and
+# minimatch@3 cannot use the 5.x API. The 5.x line IS pinned to the fix above, so
+# only the legacy lint/test-tooling paths remain. Closing this needs the pullers
+# to move off minimatch@3. Remove this the moment they do.
+auditConfig:
+  ignoreGhsas:
+    - GHSA-mh99-v99m-4gvg

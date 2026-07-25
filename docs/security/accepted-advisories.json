@@ -17,7 +17,20 @@
       "no_fix_available": true,
       "reachability": "Transitive, via cognee only (diskcache is not a direct dependency). The advisory is arbitrary code execution through DiskCache's default pickle serialization, and it requires WRITE access to the cache directory. Boltrig gives cognee a dedicated named volume at BOLTRIG_COGNEE_ROOT (/var/lib/boltrig/cognee) inside a container whose root filesystem is read_only, and nothing but the kernel process writes there. The cache directory is never shared between tenants and is never attacker-writable over any request path, so an actor able to exploit this already holds code execution inside the container.",
       "compensating_control": "Dedicated per-stack named volume (not a shared or world-writable path); read_only root filesystem with only /tmp writable (x-app-hardening); the knowledge subsystem is default-OFF and only reaches cognee when a manifest explicitly enables it.",
-      "reason": "No fixed release exists upstream: pip-audit reports the advisory with an empty fix-versions list. Re-check at expiry and take the fix the moment python-diskcache publishes one."
+      "reason": "No fixed release exists upstream: pip-audit reports the advisory with an empty fix-versions list. Re-check at expiry and take the fix the moment python-diskcache publishes one.",
+      "ecosystem": "python"
+    },
+    {
+      "id": "GHSA-mh99-v99m-4gvg",
+      "package": "brace-expansion",
+      "version": "1.1.16, 2.1.2",
+      "owner": "site-maintainers",
+      "expires": "2026-10-23",
+      "no_fix_available": true,
+      "reachability": "Build/lint tooling only, never the shipped site bundle. The 1.x and 2.x lines reach the tree solely through minimatch@3 under eslint and @vitest/coverage-v8. The advisory is a denial of service via unbounded brace expansion, which requires processing an attacker-controlled glob pattern; the only patterns fed to these tools are authored in-repo (eslint config and test globs), so no served request can reach it.",
+      "compensating_control": "The 5.x line IS pinned to the fixed 5.0.8 via a per-major override, so every dependency that can take the fix has it. Only the two legacy lines, which have no fixed release, remain.",
+      "reason": "No fixed release exists on the 1.x or 2.x lines: 1.x ends at 1.1.16 and 2.x at 2.1.2, and the fix ships only in 5.0.8, whose API minimatch@3 cannot use (forcing it throws at lint time). Closing this needs the PULLERS to move off minimatch@3, not a version pin. Re-check at expiry.",
+      "ecosystem": "npm"
     }
   ]
 }
