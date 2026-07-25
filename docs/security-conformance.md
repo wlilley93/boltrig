@@ -23,7 +23,7 @@ The honest implemented-vs-scaffolded map for the two security-hardening specs
 | **KEY** (secrets) | **BUILT + SEAM** | KEY-02 references-only at rest (built), KEY-03 secrets never in audit/agent/client (SEC-05). SEAM: KEY-01 external secret manager (Vault/KMS - deploy), KEY-05/07/08 rotation/scanning/no-defaults (ops/CI). |
 | **DATA** (privacy) | **BUILT + SEAM** | DATA-04 PII redaction + sensitive->local (SEC-12), DATA-05 tamper-evident hash-chained audit (SEC-19/20), DATA-03 tenant isolation (SEC-09), DATA-07 retention/erasure (built). SEAM: DATA-01/02 TLS-everywhere + encryption-at-rest (deploy overlay), DATA-06 tested restore (ops). |
 | **ADP** (adapters) | **BUILT + HARDENED** | ADP-02 credential confinement (SEC-05), ADP-04 generated-adapter review gate (SEC-22), ADP-10 high-consequence marking (SEC-39), ADP-09 MCP-consumer isolation. HARDENED: ADP-03 per-adapter metadata egress block (SEC-61), ADP-08 webhook replay window (SEC-63). |
-| **SUP** (supply chain) | **SEAM** | SUP-01/02/03/04 pinned+hash-locked deps, SCA, SBOM, signing; SUP-06 the CI gate must run - **GitHub Actions is billing-blocked (Principal action)**. All CI/ops. |
+| **SUP** (supply chain) | **PARTIAL + SEAM** | SUP-01/02/03/04 pinned+hash-locked deps, SCA, SBOM, signing. SUP-06 the CI gate RUNS: hosted Actions execute on every push (verified 2026-07-25 - the earlier "GitHub Actions is billing-blocked" note was stale and was excusing this whole family). `ci.yml` and `security.yml` are green as of that date. SEAM: making them REQUIRED branch-protection checks, and artifact signing/admission, remain ops. |
 | **INF** (infra) | **HARDENED + SEAM** | HARDENED (Round 17, SEC-64): INF-01 hardened containers - non-root images + read-only rootfs + cap_drop ALL + no-new-privileges + pids/mem limits on kernel/fleet/pi-sidecar (deploy-lint bound; runtime start needs a live docker host - ops). SEAM: INF-03 network segmentation (sandbox net exists, SEC-48), INF-05 least-priv DB role + RLS (next code+deploy round). |
 | **DET** (detection) | **PARTIAL + SEAM** | DET-01 security-event logging via the audit log (built); DET-03/04/05 anomaly alerting, IR playbooks, periodic pen-test - ops/SIEM (seam). |
 
@@ -39,7 +39,7 @@ The honest implemented-vs-scaffolded map for the two security-hardening specs
 | **UPLOAD** (ingestion) | **PARTIAL + HARDENED** | UPLOAD-05 identifier normalization HARDENED (SEC-62); UPLOAD-02 spec-fetch SSRF reuses the egress guard (SEC-61); ADP-04 generated-artefact gate (SEC-22). SEAM: UPLOAD-01 magic-byte content validation, UPLOAD-04 malware scanning. |
 | **APIX** (API surface) | **PARTIAL** | APIX-02 upstream-untrusted (output-schema validation, SEC-21) + APIX-05 error hygiene (built). SEAM: APIX-01 surface inventory/versioning, APIX-03 bulk-extraction limits. |
 | **TEN** (multi-tenancy) | **BUILT + SEAM** | TEN-01 code isolation (SEC-09, hostile-tenant tested) + DB-enforced isolation (SEC-65: FORCE RLS policies + the non-bypassing `boltrig_app` role, `boltrig/store/rls.sql`, bound by an integration test). SEAM: the per-method `with_tenant` retrofit + per-tenant quotas (TEN-03). |
-| **PIPE** (CI/CD) | **SEAM** | Hardened pipeline, keyless deploy, artifact signing/admission, required gates - all CI/ops; the billing block is the live blocker. |
+| **PIPE** (CI/CD) | **PARTIAL + SEAM** | The pipeline RUNS and gates on every push (there is no billing block; that claim was stale as of 2026-07-25). SEAM: keyless deploy, artifact signing/admission, and making the gates REQUIRED in branch protection - all ops. |
 | **CONV** (conversation/memory) | **BUILT** | CONV-01/02 poisoning screen at ingestion (SEC-42), CONV-03 scope-controlled retrieval (SEC-40), CONV-04 residency (SEC-43), CONV-05 conversation confidentiality (SEC-25). |
 | **PRIV** (privacy/provider) | **PARTIAL + SEAM** | PRIV-04 retention/erasure + PRIV-05 PII minimisation/redaction (built); PRIV-03 audit-access control (scope-filtered). SEAM: PRIV-01 DPIA/data-flow map, PRIV-02 provider zero-retention contracts (legal/ops). |
 | **IDP** (federation/PAM) | **PARTIAL + HARDENED** | IDP-01 single issuer + per-service audience (auth, hardened with SEC-59); IDP-02 claim-mapping is change-controlled config. SEAM: IDP-04 break-glass PAM, IDP-05 de-provisioning propagation (IdP/ops). |
@@ -60,8 +60,11 @@ egress guard module (`boltrig/adapters/egress.py`) and constant-time PAT compare
   egress, WAF/DDoS, Defender/Sentinel - needs an Azure subscription + IaC.
 - **Host:** CIS baseline, rootless/user-ns containers, bastion, auditd - host/ops.
 - **CI/CD (SUP/PIPE):** pinned/hash-locked deps + SCA + secret/image scan + SBOM +
-  signing + required gates; **the GitHub Actions billing block is the live blocker
-  (Principal)**.
+  signing + required gates. The hosted pipeline RUNS and gates every push - the
+  "GitHub Actions billing block" recorded here was stale, and while it stood it
+  excused this whole family from review. Verified 2026-07-25; both workflows green.
+  The live residue is ops: artifact signing/admission and making the gates
+  REQUIRED in branch protection.
 - **Container hardening (INF-01):** DONE (Round 17, SEC-64) - non-root images +
   read-only/cap-drop/no-new-privileges/limits in the manifests, deploy-lint bound;
   the only residue is exercising it on a live docker host (ops).
