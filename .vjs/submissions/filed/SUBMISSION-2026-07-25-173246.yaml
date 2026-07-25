@@ -1,0 +1,61 @@
+id: SUBMISSION-2026-07-25-173246
+court_requested: county
+jurisdiction: default
+question: Self-filed under ACT-003:s5. In the rate-limit case file I put two costs against a sliding window; the bench checked and both were false, and the second concealed a larger defect the court then had to find for me.
+facts: |
+  # Breach self-filing: a case file that argued from costs I had not checked
+
+  Filed on own motion under ACT-003:s5. No remedy sought beyond making the work
+  good, which is done.
+
+  ## What I got wrong
+
+  In SUBMISSION-2026-07-25-170321 I put two costs against a sliding-window rate
+  limiter and invited the court to weigh them:
+
+  1. "A sliding window stores a timestamp per hit, which on a flooded public
+     endpoint is memory amplification."
+  2. "Rewriting the Redis implementation changes production behaviour on EVERY
+     rate-limited path."
+
+  The bench checked both and both are FALSE. A rejecting limiter never needs to hold
+  more than `max` timestamps per key, and this repository already contains exactly
+  that bounded pattern in `adapters/http_base.py`, which I did not look at. And
+  rewriting `RedisCounter` would have changed no production behaviour whatsoever,
+  because nothing constructs it: the class was dead.
+
+  The second is the worse one. Had I verified it I would have found, before filing,
+  that every rate limit was per-process and per-boot while three places in the record
+  asserted Redis. Instead the court found it while checking my arithmetic.
+
+  ## The standard, and the gap
+
+  The engagement raises the duty to all reasonable endeavours, and S-3 makes me
+  advocate as well as engineer. An advocate may argue a side. An advocate may not
+  put facts to a court without checking them, and a symmetric case file is worth
+  nothing if the costs on one arm are invented. The bench is entitled to treat the
+  file as evidence; I made it unreliable evidence.
+
+  The root cause is the one I self-filed earlier the same day over the audit key: I
+  reasoned from the code in front of me rather than from what the system runs. There
+  I compared a guard against an in-source constant instead of the value the project
+  ships. Here I costed a change against a class nothing constructs.
+
+  ## Remedy, performed
+
+  The false costs are corrected on the face of the recorded opinion, so the record
+  does not carry my error forward. The larger defect the error concealed is fixed:
+  the shared counter is wired, both backends are pinned to agree, and a bound is
+  proven to survive a restart. The judgment's refusal of the sliding window rests on
+  the guarded surfaces, not on either false cost.
+
+  ## The lesson worth keeping
+
+  Before putting a cost to the court, verify that the thing the cost attaches to
+  still exists and is used. "This would be expensive to change" is a claim about the
+  code that RUNS, and is checkable in one grep. What made this recoverable at all is
+  that the bench was directed to verify the case file rather than accept it; that
+  instruction must stay on every future convening.
+requested_order: TBD
+private_boundary: local
+word_count: 493
