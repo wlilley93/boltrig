@@ -21,7 +21,7 @@ def _client():
     store.set_tenant_permissions(TenantPermissions(T, GrantSet.of(["*"])))
     store.set_tenant_permissions(TenantPermissions(OTHER, GrantSet.of(["*"])))
     store.set_budget(
-        Budget(id="tenant", tenant_id=T, scope_type="tenant", token_limit=1000,
+        Budget(id=T, tenant_id=T, scope_type="tenant", token_limit=1000,
                spent_tokens=250, cost_limit_micros=5_000_000, spent_micros=1_000_000)
     )
     store.set_budget(
@@ -29,7 +29,7 @@ def _client():
                spent_tokens=100)
     )
     # a different tenant's budget must never appear in T's view
-    store.set_budget(Budget(id="tenant", tenant_id=OTHER, scope_type="tenant", token_limit=9))
+    store.set_budget(Budget(id=OTHER, tenant_id=OTHER, scope_type="tenant", token_limit=9))
     k = Kernel(store)
     return TestClient(create_app(k, platform={}))
 
@@ -43,9 +43,9 @@ def test_budgets_are_tenant_isolated_with_burndown():
     c = _client()
     body = c.get("/v1/budgets", headers=_h()).json()
     ids = {b["id"] for b in body["budgets"]}
-    assert "tenant" in ids and "wf-onboarding" in ids
-    # the other tenant's "tenant" budget (limit 9) is not leaked - ours has limit 1000
-    tb = next(b for b in body["budgets"] if b["id"] == "tenant")
+    assert T in ids and "wf-onboarding" in ids
+    # the other tenant's own tenant-scope budget (limit 9) is not leaked - ours has limit 1000
+    tb = next(b for b in body["budgets"] if b["id"] == T)
     assert tb["token_limit"] == 1000 and tb["spent_tokens"] == 250
     assert tb["cost_limit_micros"] == 5_000_000 and tb["spent_micros"] == 1_000_000
     assert tb["hard_stop"] is True

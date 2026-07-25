@@ -61,6 +61,14 @@ class RunToken:
     # action. None = no active workspace. Additive with a None default.
     workspace_id: str | None = None
     on_behalf_of: str | None = None
+    # The run that DELEGATED to this one. A chat turn never calls a verb itself: it
+    # spawns a worker, and the worker's cell reaches back through this MCP face, so
+    # every verb a chat turn causes is dispatched under the CHILD run id. Without
+    # the parent recorded here a run-level event - most importantly the HITL PAUSE -
+    # is published only to the child's stream, which no client follows, so a write
+    # correctly held for approval was invisible to the person who asked for it.
+    # Additive with a None default: a run with no parent is unchanged.
+    parent_run_id: str | None = None
     extra: dict = field(default_factory=dict)
     issued_at: datetime = field(default_factory=utcnow)
     expires_at: datetime | None = None
@@ -102,7 +110,8 @@ class McpFace:
     # --- token lifecycle (issued by the fleet per run) ---
     def issue_run_token(
         self, tenant_id: str, grants: GrantSet, *, run_id=None, actor="ephemeral",
-        skills=(), workspace_id=None, on_behalf_of=None, extra=None, ttl_seconds=300,
+        skills=(), workspace_id=None, on_behalf_of=None, parent_run_id=None,
+        extra=None, ttl_seconds=300,
     ) -> str:
         if (
             isinstance(ttl_seconds, bool)
@@ -115,7 +124,8 @@ class McpFace:
         self._tokens[self._token_key(token)] = RunToken(
             lease_id=uuid.uuid4().hex, tenant_id=tenant_id, grants=grants, run_id=run_id,
             actor=actor, skills=tuple(skills), workspace_id=workspace_id,
-            on_behalf_of=on_behalf_of, extra=dict(extra or {}),
+            on_behalf_of=on_behalf_of, parent_run_id=parent_run_id,
+            extra=dict(extra or {}),
             issued_at=now, expires_at=now + timedelta(seconds=ttl_seconds),
         )
         return token
@@ -144,7 +154,8 @@ class McpFace:
             tenant_id=rt.tenant_id, grants=rt.grants, actor=rt.actor,
             actor_tier="ephemeral", run_id=rt.run_id, skills_loaded=rt.skills,
             workspace_id=rt.workspace_id, ip_address=ip_address, user_agent=user_agent,
-            on_behalf_of=rt.on_behalf_of, extra=dict(rt.extra),
+            on_behalf_of=rt.on_behalf_of, parent_run_id=rt.parent_run_id,
+            extra=dict(rt.extra),
         )
 
     # --- JSON-RPC dispatch ---

@@ -84,7 +84,7 @@ async def test_budget_trued_up_to_actual_after_run(monkeypatch):
     # easy to read: after the run it must equal the ACTUAL usage, not the estimate.
     kernel = await _kernel_with_caps()
     kernel.store.set_budget(
-        Budget(id="tenant", tenant_id=T, scope_type="tenant",
+        Budget(id=T, tenant_id=T, scope_type="tenant",
                cost_limit_micros=10_000_000, hard_stop=True)
     )
     spawner = build_spawner(kernel)
@@ -96,7 +96,7 @@ async def test_budget_trued_up_to_actual_after_run(monkeypatch):
     monkeypatch.setattr(spawner, "_runtime_for", high_runtime_for)
     res = await spawner.spawn(T, "decompose epic", ["analysis/decompose"], {}, _ctx())
     assert res["tokens_used"] == 9000
-    b = await kernel.store.get_budget(T, "tenant")
+    b = await kernel.store.get_budget(T, T)
     # ledger == ACTUAL (9000 tokens x 1 micro), not the tiny char-count estimate.
     assert b.spent_tokens == 9000
     assert b.spent_micros == 9000
@@ -110,7 +110,7 @@ async def test_budget_trued_up_to_actual_after_run(monkeypatch):
     long_task = "x" * 4000  # estimate ~ 1000 tokens, far above the 5-token actual
     res2 = await spawner.spawn(T, long_task, ["analysis/decompose"], {}, _ctx())
     assert res2["tokens_used"] == 5
-    b2 = await kernel.store.get_budget(T, "tenant")
+    b2 = await kernel.store.get_budget(T, T)
     # the second run added exactly its ACTUAL 5 tokens/micros on top of the first
     # run's trued 9000 - the inflated estimate was refunded down to the actual.
     assert b2.spent_tokens == 9005
@@ -124,7 +124,7 @@ async def test_degraded_run_refunds_the_estimate(monkeypatch):
     # true-up must refund the whole estimate so the ledger returns to zero.
     kernel = await _kernel_with_caps()
     kernel.store.set_budget(
-        Budget(id="tenant", tenant_id=T, scope_type="tenant",
+        Budget(id=T, tenant_id=T, scope_type="tenant",
                cost_limit_micros=10_000, hard_stop=True)
     )
     spawner = build_spawner(kernel)
@@ -144,7 +144,7 @@ async def test_degraded_run_refunds_the_estimate(monkeypatch):
     res = await spawner.spawn(T, "decompose epic", ["analysis/decompose"], {}, _ctx())
     assert res["degraded"] is True
     assert res["tokens_used"] == 0
-    b = await kernel.store.get_budget(T, "tenant")
+    b = await kernel.store.get_budget(T, T)
     # the reserved estimate was fully refunded - a no-op run costs nothing.
     assert b.spent_tokens == 0
     assert b.spent_micros == 0
@@ -193,3 +193,36 @@ async def test_model_price_from_config_overrides_tier_default(tmp_path):
     path.write_text(manifest_yaml, encoding="utf-8")
     m = load_manifest(str(path))
     assert m.models.prices == {"gpt-5-turbo": 3}
+
+
+@pytest.mark.security
+@pytest.mark.invariant("FR-COST-03")
+async def test_the_manifest_seeded_tenant_budget_is_actually_debited(monkeypatch):
+    """The tenant budget must be found under the id the MANIFEST seeds it with.
+
+    Every fixture above hand-seeds the tenant budget, which is exactly why the suite
+    could not catch the real defect: `spawn` reserved against the literal scope id
+    "tenant" while `_seed_tier_budgets` writes the row under the TENANT ID, and
+    `control.budget.upsert` refuses to create a tenant-scope row under any other id.
+    `get_budget` therefore returned None and reserve/reconcile treated the scope as
+    unmetered - the hard-stop cap could never fire and the ledger stayed at zero
+    however much the tenant spent. This test seeds it the way the manifest does.
+    """
+    kernel = await _kernel_with_caps()
+    kernel.store.set_budget(
+        Budget(id=T, tenant_id=T, scope_type="tenant",
+               cost_limit_micros=10_000_000, hard_stop=True)
+    )
+    spawner = build_spawner(kernel)
+
+    async def runtime_for(tenant_id, capability, context=None):
+        return _FakeRuntime(tokens=4321, cost_micros=0)
+
+    monkeypatch.setattr(spawner, "_runtime_for", runtime_for)
+    await spawner.spawn(T, "decompose epic", ["analysis/decompose"], {}, _ctx())
+
+    budget = await kernel.store.get_budget(T, T)
+    assert budget is not None, "the manifest-seeded tenant budget must be the one reserved against"
+    # 'cheap' prices at 1 micro/token, so the ledger reads straight through.
+    assert budget.spent_tokens == 4321, "the tenant ledger must record real spend, not zero"
+    assert budget.spent_micros == 4321

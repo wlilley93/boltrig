@@ -47,6 +47,21 @@ log = logging.getLogger(__name__)
 _PUBLIC_ROUTE_KEYS = {"profile", "provider", "model", "runtime", "tier"}
 
 
+def _budget_scope_ids(tenant_id: str, department: Any | None) -> list[str]:
+    """The budget scopes one spawn is metered against.
+
+    The TENANT budget's scope id IS the tenant id. That is the convention
+    everywhere else, and ``control.budget.upsert`` REFUSES to create a tenant-scope
+    row under any other id ("tenant budget must target the active organisation",
+    config/control_budget.py). Reserving against the literal string ``"tenant"``
+    matched no row, so ``get_budget`` returned None and reserve/reconcile treated
+    the scope as UNMETERED: the tenant's hard-stop cap could never fire and its
+    spend ledger stayed at zero however much it spent. The DEPARTMENT leg was
+    always correct - the manifest seeds it under the department name.
+    """
+    return [tenant_id, *([str(department)] if department else [])]
+
+
 def _estimate(task: str, prompt: str, skills: list[str], cost_tier: str) -> tuple[int, int]:
     """Deterministic pre-run token/cost estimate for budget reservation."""
     chars = len(task) + len(prompt) + sum(len(skill) for skill in skills)
@@ -119,7 +134,7 @@ class Spawner:
         merged_prompt = "\n\n".join(merged.prompt_fragments)
         run_id = uuid.uuid4().hex
         tokens_est, micros_est = _estimate(task, merged_prompt, skills, capability.cost_tier)
-        scope_ids = ["tenant", *([str(prefer["department"])] if prefer.get("department") else [])]
+        scope_ids = _budget_scope_ids(tenant_id, prefer.get("department"))
         try:
             await kernel.cost.reserve(
                 tenant_id, scope_ids=scope_ids, tokens=tokens_est, micros=micros_est
@@ -570,7 +585,7 @@ def make_agent_invoker(kernel: Kernel) -> AgentInvoker:
                     f"depth {child_depth} exceeds max_depth {cap.max_depth} "
                     f"for capability '{cap.name}'"
                 )
-            scope_ids = ["tenant"]
+            scope_ids = _budget_scope_ids(context.tenant_id, None)
             tokens_est, micros_est = _estimate(prompt, "", [], cap.cost_tier)
             await kernel.cost.reserve(
                 context.tenant_id, scope_ids=scope_ids, tokens=tokens_est, micros=micros_est

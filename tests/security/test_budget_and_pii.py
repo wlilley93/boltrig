@@ -28,7 +28,7 @@ async def test_budget_hard_stop_halts_before_exceeding(kernel):
 async def test_reserve_is_all_or_nothing_across_scopes(kernel):
     # tenant has headroom; the department is already at its hard-stop limit.
     kernel.store.set_budget(
-        Budget(id="tenant", tenant_id=TENANT, scope_type="tenant",
+        Budget(id=TENANT, tenant_id=TENANT, scope_type="tenant",
                cost_limit_micros=10_000, hard_stop=True)
     )
     kernel.store.set_budget(
@@ -36,9 +36,9 @@ async def test_reserve_is_all_or_nothing_across_scopes(kernel):
                cost_limit_micros=100, spent_micros=100, hard_stop=True)
     )
     with pytest.raises(BudgetExceeded):
-        await kernel.cost.reserve(TENANT, ["tenant", "dept:eng"], tokens=0, micros=50)
+        await kernel.cost.reserve(TENANT, [TENANT, "dept:eng"], tokens=0, micros=50)
     # the tenant budget (processed first) must NOT have been debited - reserve on none.
-    tb = await kernel.store.get_budget(TENANT, "tenant")
+    tb = await kernel.store.get_budget(TENANT, TENANT)
     assert tb.spent_micros == 0
 
 
