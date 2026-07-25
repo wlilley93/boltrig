@@ -36,7 +36,7 @@ RELEASE_VALIDATE_IMAGES_ENV ?= tests/fixtures/release-images.env
 RELEASE_PROFILES ?= --profile backup
 
 .DEFAULT_GOAL := help
-.PHONY: help up down logs test lint architecture structure codex-protocol typecheck check python-quality ui-install ui-quality site-install site-quality ui-e2e compose-validate release-validate release-up doctor-fixture migration-parity python-audit sast iac-scan secret-scan actionlint security-source quality live-check lockfile-policy dependency-audit smoke invariants doctor migrate secure-up backup backup-schedule restore
+.PHONY: help gate-status up down logs test lint architecture structure codex-protocol typecheck check python-quality ui-install ui-quality site-install site-quality ui-e2e compose-validate release-validate release-up doctor-fixture migration-parity python-audit sast iac-scan secret-scan actionlint security-source quality live-check lockfile-policy dependency-audit smoke invariants doctor migrate secure-up backup backup-schedule restore
 
 help: ## List the available targets
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -79,6 +79,9 @@ codex-protocol: ## Verify the exact checked-in stable Codex App Server protocol 
 
 typecheck: ## Module-by-module strict mypy gate (see [tool.mypy])
 	$(PY) -m mypy
+
+gate-status: ## Is the gate on the default branch actually green right now?
+	@./scripts/gate-status.sh
 
 check: invariants lint architecture structure codex-protocol typecheck test ## Run the local Python gates CI enforces
 
