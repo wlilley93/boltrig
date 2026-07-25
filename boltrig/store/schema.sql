@@ -931,7 +931,13 @@ CREATE TABLE IF NOT EXISTS workspace_members (
     role          TEXT NOT NULL DEFAULT 'member',
     permissions   JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-    PRIMARY KEY (workspace_id, user_id)
+    -- tenant_id is part of the KEY, not merely a column. workspace ids are unique
+    -- only WITHIN an org (see the workspaces PK above) and provisioning mints the
+    -- same id `ws_default` for every org, so a (workspace_id, user_id) key
+    -- collides across orgs BY CONSTRUCTION: one org's membership upsert would
+    -- land on another org's row and silently rewrite that user's role there.
+    -- Migration 0038.
+    PRIMARY KEY (tenant_id, workspace_id, user_id)
 );
 CREATE INDEX IF NOT EXISTS workspace_members_user_idx
     ON workspace_members (tenant_id, user_id);

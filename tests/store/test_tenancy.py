@@ -132,6 +132,57 @@ async def test_get_workspace_member_is_tenant_scoped(store):
     assert await store.get_workspace_member(T, "ws1", "nobody") is None
 
 
+@pytest.mark.security
+@pytest.mark.invariant("SEC-111")
+async def test_a_membership_write_cannot_reach_another_orgs_workspace(store):
+    """Two orgs, the SAME workspace id, the same user - a real configuration.
+
+    Provisioning mints the same workspace id (`ws_default`) for every org and
+    `workspaces` is keyed (tenant_id, id), so this collision is guaranteed rather
+    than hypothetical. `workspace_members` used to be keyed (workspace_id,
+    user_id), so org B's upsert hit ON CONFLICT against org A's row and ran the
+    DO UPDATE arm: it rewrote that user's ROLE inside ORG A, while org B's own
+    membership never materialised. RLS would have made it an error instead, but
+    RLS is opt-in and was unset on every deployment. Migration 0038.
+    """
+    other = "other-org"
+    for org in (T, other):
+        await store.create_org(Organisation(id=org, name=org, slug=org))
+        await store.create_workspace(
+            Workspace(id="ws_default", tenant_id=org, name="Default", slug=f"d-{org}")
+        )
+
+    await store.add_workspace_member(
+        WorkspaceMember(user_id="u1", workspace_id="ws_default", tenant_id=T, role="owner")
+    )
+    # Org B adds the same user to ITS workspace, at a lower role.
+    await store.add_workspace_member(
+        WorkspaceMember(
+            user_id="u1", workspace_id="ws_default", tenant_id=other, role="member"
+        )
+    )
+
+    # Org A's role is UNTOUCHED by org B's write.
+    a = await store.get_workspace_member(T, "ws_default", "u1")
+    assert a is not None and a.role == "owner", "org B's write reached org A's row"
+    # And org B genuinely has its own membership, rather than silently none.
+    b = await store.get_workspace_member(other, "ws_default", "u1")
+    assert b is not None and b.role == "member"
+
+    # Both list views stay within their own org.
+    assert [(m.tenant_id, m.role) for m in await store.list_workspace_members(T, "ws_default")] == [
+        (T, "owner")
+    ]
+    assert [
+        (m.tenant_id, m.role) for m in await store.list_workspace_members(other, "ws_default")
+    ] == [(other, "member")]
+
+    # Removing org B's membership must not remove org A's.
+    await store.remove_workspace_member(other, "ws_default", "u1")
+    assert await store.get_workspace_member(T, "ws_default", "u1") is not None
+    assert await store.get_workspace_member(other, "ws_default", "u1") is None
+
+
 async def test_update_org_and_workspace(store):
     await store.create_org(Organisation(id=T, name="Acme", slug="acme"))
     org = await store.get_org(T)

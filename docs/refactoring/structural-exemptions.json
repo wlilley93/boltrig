@@ -413,12 +413,12 @@
     },
     "boltrig/store/memory.py": {
       "max_file_lines": 1168,
-      "max_function_lines": 92,
+      "max_function_lines": 97,
       "over_limit_functions": [
         {
           "name": "InMemoryStore.__init__",
           "line": 95,
-          "lines": 92
+          "lines": 97
         }
       ],
       "owner": "store-maintainers",

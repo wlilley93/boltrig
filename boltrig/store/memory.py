@@ -173,7 +173,12 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
         self._orgs: dict[str, Organisation] = {}
         self._workspaces: dict[tuple[str, str], Workspace] = {}
         self._org_members: dict[tuple[str, str], OrgMember] = {}
-        self._workspace_members: dict[tuple[str, str], WorkspaceMember] = {}
+        # Keyed by (tenant_id, workspace_id, user_id). tenant_id is NOT optional:
+        # workspace ids are unique only WITHIN an org (workspaces PK is
+        # (tenant_id, id)) and provisioning mints the SAME id `ws_default` for
+        # every org, so a (workspace_id, user_id) key collides across tenants by
+        # construction and one org's membership write lands on another's row.
+        self._workspace_members: dict[tuple[str, str, str], WorkspaceMember] = {}
         # [2026] VJS-COUNTY 11, D1: the global email -> orgs membership INDEX. Keyed by
         # the normalised email (NOT tenant-fenced): email -> {tenant_id: role}. It is
         # the pre-tenant lookup login reads to enumerate an email's orgs; kept in
@@ -1111,34 +1116,29 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
                 f"invalid workspace role: {member.role!r}",
                 errors=[f"role must be one of {sorted(WORKSPACE_ROLES)}"],
             )
-        self._workspace_members[(member.workspace_id, member.user_id)] = member
+        self._workspace_members[(member.tenant_id, member.workspace_id, member.user_id)] = member
 
     async def remove_workspace_member(self, tenant_id, workspace_id, user_id):
-        m = self._workspace_members.get((workspace_id, user_id))
-        if m is not None and m.tenant_id == tenant_id:
-            self._workspace_members.pop((workspace_id, user_id), None)
+        self._workspace_members.pop((tenant_id, workspace_id, user_id), None)
 
     async def list_workspace_members(self, tenant_id, workspace_id):
         return [
             m
-            for (w, _), m in self._workspace_members.items()
-            if w == workspace_id and m.tenant_id == tenant_id
+            for (t, w, _), m in self._workspace_members.items()
+            if t == tenant_id and w == workspace_id
         ]
 
     async def get_workspace_member(self, tenant_id, workspace_id, user_id):
         # Tenant-scoped single-membership lookup (D11): only return the row when it
         # is inside the bound tenant, else None (fail-closed, never crosses tenants).
-        m = self._workspace_members.get((workspace_id, user_id))
-        if m is not None and m.tenant_id == tenant_id:
-            return m
-        return None
+        return self._workspace_members.get((tenant_id, workspace_id, user_id))
 
     async def list_workspaces_for_user(self, tenant_id, user_id):
         # Tenant-scoped: only workspaces in the bound tenant whose id the user is a
         # member of. Never crosses a tenant boundary.
         out = []
-        for (w, u), m in self._workspace_members.items():
-            if u == user_id and m.tenant_id == tenant_id:
+        for (t, w, u), _m in self._workspace_members.items():
+            if t == tenant_id and u == user_id:
                 ws = self._workspaces.get((tenant_id, w))
                 if ws is not None:
                     out.append(ws)

@@ -1861,7 +1861,7 @@ class PostgresStore(
             """INSERT INTO workspace_members
                (workspace_id, user_id, tenant_id, role, permissions, created_at)
                VALUES ($1,$2,$3,$4,$5,$6)
-               ON CONFLICT (workspace_id, user_id) DO UPDATE SET
+               ON CONFLICT (tenant_id, workspace_id, user_id) DO UPDATE SET
                  role=EXCLUDED.role, permissions=EXCLUDED.permissions""",
             member.workspace_id, member.user_id, member.tenant_id, member.role,
             member.permissions, member.created_at,
