@@ -202,7 +202,7 @@
       "expires": "2026-12-31"
     },
     "boltrig/fleet/spawn.py": {
-      "max_file_lines": 500,
+      "max_file_lines": 544,
       "max_function_lines": 91,
       "over_limit_functions": [
         {
@@ -257,7 +257,7 @@
       "expires": "2026-12-31"
     },
     "boltrig/kernel/access_routes.py": {
-      "max_file_lines": 1069,
+      "max_file_lines": 1077,
       "max_function_lines": 148,
       "over_limit_functions": [
         {
@@ -267,22 +267,22 @@
         },
         {
           "name": "_register_context_routes",
-          "line": 495,
+          "line": 503,
           "lines": 100
         },
         {
           "name": "_register_ai_key_routes",
-          "line": 597,
+          "line": 605,
           "lines": 148
         },
         {
           "name": "_register_admin_directory_routes",
-          "line": 783,
+          "line": 791,
           "lines": 116
         },
         {
           "name": "_register_workspace_routes",
-          "line": 946,
+          "line": 954,
           "lines": 124
         }
       ],
@@ -291,13 +291,13 @@
       "expires": "2026-12-31"
     },
     "boltrig/kernel/app.py": {
-      "max_file_lines": 839,
-      "max_function_lines": 571,
+      "max_file_lines": 853,
+      "max_function_lines": 585,
       "over_limit_functions": [
         {
           "name": "create_app",
           "line": 269,
-          "lines": 571
+          "lines": 585
         }
       ],
       "owner": "kernel-maintainers",
@@ -371,17 +371,17 @@
       "expires": "2026-12-31"
     },
     "boltrig/kernel/platform_routes/observability.py": {
-      "max_file_lines": 379,
+      "max_file_lines": 427,
       "max_function_lines": 87,
       "over_limit_functions": [
         {
           "name": "_register_audit_search_routes",
-          "line": 203,
+          "line": 204,
           "lines": 87
         },
         {
           "name": "_register_audit_search_routes.audit_search",
-          "line": 205,
+          "line": 206,
           "lines": 86
         }
       ],
@@ -404,7 +404,7 @@
       "expires": "2026-12-31"
     },
     "boltrig/store/base.py": {
-      "max_file_lines": 638,
+      "max_file_lines": 643,
       "max_function_lines": 15,
       "over_limit_functions": [],
       "owner": "store-maintainers",

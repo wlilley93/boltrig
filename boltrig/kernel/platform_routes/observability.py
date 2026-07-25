@@ -104,6 +104,7 @@ def register(app, P, K) -> None:
     _register_audit_search_routes(app, P, K)
     _register_audit_integrity_routes(app, P, K)
     _register_runs_routes(app, P, K)
+    _register_run_topology_routes(app, P, K)
 
 
 def _register_status_routes(app, P, K) -> None:
@@ -339,6 +340,20 @@ def _register_audit_integrity_routes(app, P, K) -> None:
                                          "on_behalf_of": e.on_behalf_of} for e in events]})
 
 
+def _run_row(w) -> dict:
+    """One /v1/runs row. `external_ref` is the GENERIC opaque source_id."""
+    return {
+        "run_id": work_item_run_id(w),
+        "work_item": w.id,
+        "intent": w.intent,
+        "status": w.status.value,
+        "owner": w.owner_member,
+        "on_behalf_of": w.on_behalf_of,
+        "source": w.source,
+        "external_ref": w.source_id,
+    }
+
+
 def _register_runs_routes(app, P, K) -> None:
     @app.get("/v1/runs")
     async def runs(
@@ -381,19 +396,7 @@ def _register_runs_routes(app, P, K) -> None:
         )
         next_cursor = items[-1].id if len(items) == page else None
         return {
-            "runs": [
-                {
-                    "run_id": work_item_run_id(w),
-                    "work_item": w.id,
-                    "intent": w.intent,
-                    "status": w.status.value,
-                    "owner": w.owner_member,
-                    "on_behalf_of": w.on_behalf_of,
-                    "source": w.source,
-                    "external_ref": w.source_id,
-                }
-                for w in items
-            ],
+            "runs": [_run_row(w) for w in items],
             "limit": page,
             "next_cursor": next_cursor,
             "filters": {
@@ -405,6 +408,8 @@ def _register_runs_routes(app, P, K) -> None:
             },
         }
 
+
+def _register_run_topology_routes(app, P, K) -> None:
     @app.get("/v1/runs/{run_id}/topology", response_model=None)
     async def run_topology(run_id: str, request: Request, k=K, p=P) -> JSONResponse | dict:
         # G7 roster/subagent-topology: the durable CoS -> heads -> workers tree

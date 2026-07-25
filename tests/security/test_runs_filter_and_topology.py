@@ -73,7 +73,6 @@ async def _seed() -> Kernel:
 @pytest.mark.invariant("SEC-69")
 async def test_run_filters_narrow_within_the_visibility_fence():
     kernel = await _seed()
-    admin = _principal(role="org-admin", workspace=None)
 
     # source='opbox' keeps the three opbox items; the internal grandchild drops.
     opbox = await kernel.store.list_run_items_scoped(T, source="opbox")

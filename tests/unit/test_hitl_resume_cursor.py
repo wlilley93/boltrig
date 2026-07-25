@@ -8,7 +8,9 @@ from boltrig.kernel.hitl_http import respond_to_hitl
 
 class _Req:
     def __init__(self, run_id):
-        self.id = "req-1"; self.run_id = run_id; self.type = HITLType.APPROVAL
+        self.id = "req-1"
+        self.run_id = run_id
+        self.type = HITLType.APPROVAL
         self.verb = "row.update"
 
 
@@ -34,7 +36,10 @@ class _Kernel:
 
 
 class _P:
-    tenant_id = "t1"; subject = "u1"; actor_tier = "human"; on_behalf_of = None
+    tenant_id = "t1"
+    subject = "u1"
+    actor_tier = "human"
+    on_behalf_of = None
 
 
 def _async(v):
@@ -45,7 +50,8 @@ def _async(v):
 
 @pytest.mark.asyncio
 async def test_respond_returns_pre_resume_cursor(monkeypatch):
-    relay = EventRelay(); run = "run-1"
+    relay = EventRelay()
+    run = "run-1"
     relay.publish("t1", run, {"type": "text_delta", "delta": "hi"})      # seq 1
     relay.publish("t1", run, {"type": "tool_call", "call_id": "c1"})       # seq 2
     relay.publish("t1", run, {"type": "hitl", "hitl_request_id": "req-1"}) # seq 3 (marker)
