@@ -43,6 +43,12 @@ export interface SubagentEntry {
   initials?: string;
   color?: string;
   stepCount?: number;
+  /**
+   * Settled by the paired `subagent_end` frame (G3), matched on `childRunId`.
+   * `undefined` means still running - which is also what an un-upgraded kernel
+   * that emits no settle frame honestly reports.
+   */
+  status?: "running" | "ok" | "degraded" | "error";
 }
 
 export interface HitlEntry {

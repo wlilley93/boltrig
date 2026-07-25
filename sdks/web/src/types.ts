@@ -431,6 +431,40 @@ export interface ChatWorkflowRun {
   status: "completed" | "failed" | "paused";
 }
 
+/**
+ * The paired settle for a `subagent` open frame (G3). The kernel emits it on the
+ * SAME parent relay with the SAME `child_run_id`, so a consumer upserts by that id
+ * and the delegation node flips RUNNING -> DONE/FAILED instead of gaining a
+ * duplicate row.
+ *
+ * This union omitted it, so the console silently dropped a frame the kernel emits
+ * and opbox already handles: the same delegation settled in one frontend and span
+ * forever in the other - exactly the drift a shared contract exists to prevent.
+ * An un-upgraded kernel emits no `subagent_end`, so a node simply stays running,
+ * which is an honest reflection of what that kernel reports.
+ */
+export interface ChatSubagentEnd {
+  type: "subagent_end";
+  child_run_id: string;
+  status: "ok" | "degraded" | "error";
+}
+
+/** A steer queued behind the in-flight turn (US-CHAT-13). Carries no turn content. */
+export interface ChatSteerQueued {
+  type: "steer_queued";
+  run_id?: string;
+  conversation_id?: string;
+  message_id?: string;
+}
+
+/** A queued steer being consumed as its own run. Carries no turn content. */
+export interface ChatSteerConsumed {
+  type: "steer_consumed";
+  run_id?: string;
+  conversation_id?: string;
+  message_id?: string;
+}
+
 export type ChatEvent =
   | ChatMessageStart
   | ChatTextDelta
@@ -438,6 +472,9 @@ export type ChatEvent =
   | ChatToolCall
   | ChatToolResult
   | ChatSubagent
+  | ChatSubagentEnd
+  | ChatSteerQueued
+  | ChatSteerConsumed
   | ChatHitlEvent
   | ChatQuestion
   | ChatHeartbeat

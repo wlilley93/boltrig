@@ -13,6 +13,7 @@ import type {
   ChatQuestion,
   ChatReasoningDelta,
   ChatSubagent,
+  ChatSubagentEnd,
   ChatTextDelta,
   ChatToolCall,
   ChatToolResult,
@@ -66,6 +67,9 @@ export function normalizeEvents(events: ChatEvent[]): NormalizedTurn {
       case "subagent":
         handleSubagent(ev, i, acc);
         break;
+      case "subagent_end":
+        handleSubagentEnd(ev, acc);
+        break;
       case "hitl":
         handleHitl(ev, acc);
         break;
@@ -83,6 +87,11 @@ export function normalizeEvents(events: ChatEvent[]): NormalizedTurn {
         break;
       case "heartbeat":
       case "workflow_run":
+      // Steers carry no turn CONTENT - they are queue lifecycle. Listed
+      // explicitly so the union stays exhaustive and a future frame cannot be
+      // dropped by silence.
+      case "steer_queued":
+      case "steer_consumed":
         break;
     }
   });
@@ -191,6 +200,21 @@ function handleSubagent(ev: ChatSubagent, index: number, acc: Accumulator) {
   };
   acc.subagents.push(entry);
   acc.timeline.push({ kind: "subagent", key: entry.key, entry });
+}
+
+/**
+ * Settle a delegation node (G3). Matched on `child_run_id`, NOT on arrival order,
+ * and it MUTATES the existing entry rather than pushing a new one - the entry is
+ * shared by reference with the timeline, so the rendered node flips in place
+ * instead of the tree gaining a duplicate row.
+ *
+ * A settle for an unknown child is ignored: it means the open frame was never
+ * seen (a resumed stream that starts after it), and inventing a node for a
+ * delegation we never saw begin would render a task with no description.
+ */
+function handleSubagentEnd(ev: ChatSubagentEnd, acc: Accumulator) {
+  const entry = [...acc.subagents].reverse().find((s) => s.childRunId === ev.child_run_id);
+  if (entry) entry.status = ev.status;
 }
 
 function handleHitl(ev: ChatHitlEvent, acc: Accumulator) {
