@@ -431,6 +431,18 @@ def refuse_default_audit_key_in_prod(env: dict | None = None) -> None:
             f"({signal}). The audit chain is forgeable without a secret key (K-19). "
             "Set a strong BOLTRIG_AUDIT_HMAC_KEY."
         )
+    if not key or key == "dev-insecure-audit-key":
+        # No production signal, so this is not fatal - but the 2026-07-02 audit
+        # called H3 "silently defaults", and the silence is the part that makes it
+        # dangerous. Nothing sets a production signal by default (compose emits an
+        # empty BOLTRIG_PRODUCTION), so a real deployment can reach here and run a
+        # hash chain keyed by a public constant in this repository, believing the
+        # audit log is tamper-evident. Say so, every boot.
+        log.warning(
+            "audit chain is using the IN-SOURCE default HMAC key: it is NOT "
+            "tamper-evident. Anyone with this repository can forge the chain. "
+            "Set BOLTRIG_AUDIT_HMAC_KEY (and a production signal) before trusting it."
+        )
 
 
 def select_principal_resolver():

@@ -17,6 +17,8 @@ from __future__ import annotations
 
 import time
 
+import logging
+
 import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
@@ -216,6 +218,26 @@ async def test_worker_boot_refuses_default_audit_key_under_prod_signal(monkeypat
     monkeypatch.setenv("BOLTRIG_SEAL_KEY", "a-real-seal-key")
     kernel = await build_kernel_async()
     assert kernel is not None
+
+
+@pytest.mark.invariant("K-19")
+def test_default_audit_key_warns_loudly_when_there_is_no_production_signal(caplog):
+    """H3 was titled "silently defaults", and the silence is the dangerous part.
+
+    Nothing sets a production signal by default (compose emits an empty
+    BOLTRIG_PRODUCTION), so a real deployment can boot on the in-source key and
+    believe its audit chain is tamper-evident. Not fatal without the signal, but
+    it must never be quiet."""
+    from boltrig.api.bootstrap import refuse_default_audit_key_in_prod
+
+    with caplog.at_level(logging.WARNING, logger="boltrig.bootstrap"):
+        refuse_default_audit_key_in_prod({"BOLTRIG_AUDIT_HMAC_KEY": "dev-insecure-audit-key"})
+    assert "NOT" in caplog.text and "tamper-evident" in caplog.text
+
+    caplog.clear()
+    with caplog.at_level(logging.WARNING, logger="boltrig.bootstrap"):
+        refuse_default_audit_key_in_prod({"BOLTRIG_AUDIT_HMAC_KEY": "a-real-secret"})
+    assert caplog.text == ""  # a real key is silent
 
 
 # --------------------------------------------------------------------------- #
