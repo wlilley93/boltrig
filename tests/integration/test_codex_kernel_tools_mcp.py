@@ -94,12 +94,20 @@ async def test_the_proxy_offers_exactly_the_granted_wire_names() -> None:
 
     Verified live against the pinned binary: codex offers
     ``{"type": "namespace", "name": "mcp__boltrig", "tools": [...]}`` with the
-    verbs as nested function tools. The proxy must keep the namespace with
-    ONLY the granted nested tools, strip every built-in, and drop any other
-    namespace outright.
+    verbs as nested function tools. Since the namespace bridge (`0402911`) the
+    proxy FLATTENS that namespace - it spreads the ceiling-kept nested tools as
+    top-level function tools, because the gateway downstream has no namespace
+    concept and would otherwise collapse the whole namespace into one opaque
+    tool. So the wire must carry the granted verb as a FLAT function tool, with
+    the namespace entry itself gone, every built-in stripped, the non-granted
+    nested verb dropped, and any other namespace dropped outright (an attacker
+    namespace must not smuggle a granted name back in).
     """
     captured: dict[str, Any] = {}
-    proxy = await _proxy(captured, frozenset({_ALLOWED_WIRE}))
+    smuggled = codex_mcp_tool_name("ticket.write")
+    # BOTH verbs are inside the ceiling, so the only thing that can drop the
+    # second one is WHERE it was offered - the foreign namespace.
+    proxy = await _proxy(captured, frozenset({_ALLOWED_WIRE, smuggled}))
     port = await proxy.start()
     try:
         async with httpx.AsyncClient() as caller:
@@ -111,7 +119,6 @@ async def test_the_proxy_offers_exactly_the_granted_wire_names() -> None:
                         "input": "hi",
                         "tools": [
                             {"type": "function", "name": "exec_command"},
-                            {"type": "function", "name": _ALLOWED_WIRE},
                             {
                                 "type": "namespace",
                                 "name": "mcp__boltrig",
@@ -127,7 +134,7 @@ async def test_the_proxy_offers_exactly_the_granted_wire_names() -> None:
                             {
                                 "type": "namespace",
                                 "name": "mcp__attacker",
-                                "tools": [{"type": "function", "name": _ALLOWED_WIRE}],
+                                "tools": [{"type": "function", "name": smuggled}],
                             },
                         ],
                     }
@@ -136,9 +143,14 @@ async def test_the_proxy_offers_exactly_the_granted_wire_names() -> None:
         assert resp.status_code == 200
         sent = json.loads(captured["body"].decode())
         top = [(tool.get("type"), tool.get("name")) for tool in sent["tools"]]
-        assert top == [("function", _ALLOWED_WIRE), ("namespace", "mcp__boltrig")]
-        nested = [tool["name"] for tool in sent["tools"][1]["tools"]]
-        assert nested == [_ALLOWED_WIRE]  # the granted verb survives, nothing else
+        # FLAT and ceiling-only: the granted verb reaches the wire as a top-level
+        # function even though it was only ever offered nested (proves the
+        # flatten), the built-in and the non-granted nested verb are gone, no
+        # namespace entry survives, and the foreign namespace could not smuggle
+        # an otherwise-granted verb through.
+        assert top == [("function", _ALLOWED_WIRE)]
+        assert not any(tool.get("type") == "namespace" for tool in sent["tools"])
+        assert smuggled not in {tool.get("name") for tool in sent["tools"]}
     finally:
         await proxy.aclose()
 
