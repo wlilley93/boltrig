@@ -1,0 +1,76 @@
+id: SUBMISSION-2026-07-25-141900
+court_requested: county
+jurisdiction: default
+kind: design-fork
+question: 'Boltrig''s rate limiter enforces a FIXED epoch-aligned window, so a bound documented and configured as "5/min" admits up to 10 attempts in an arbitrarily short span across a bucket boundary. Should the limiter become a sliding window (enforcing the bound it advertises), or should the fixed window stand as a deliberate cost trade with the boundary burst recorded as a known property? First impression: no precedent on rate limiting in the citator.'
+facts: |
+  # Fixed window vs sliding window in the rate limiter
+
+  ## How this surfaced
+
+  Not by design review. `ci.yml` was red on a commit that touched neither the
+  limiter nor the route, on
+  `tests/security/test_two_factor.py::test_challenge_is_rate_limited_constant_time_and_audited`:
+  `assert codes[5] == 429` got 401. It then passed 25 out of 25 runs locally, which
+  is the signature of a timing-dependent property rather than test noise.
+
+  The mechanism is not in doubt. `boltrig/kernel/ratelimit.py` computes its bucket
+  as `int(time.time() // window_seconds)` - a fixed window aligned to the epoch, in
+  both `InMemoryCounter` and `RedisCounter`. Six attempts that straddle a minute
+  boundary land 5 in one bucket and 1 in the next, so the sixth is admitted.
+  Reproduced deterministically by pinning the clock: six wrong 2FA codes inside
+  110 milliseconds, ALL accepted; the same six wholly inside one window trip 429 on
+  the sixth as documented.
+
+  ## Why it is a fork and not a bug fix
+
+  The two answers are both defensible, which is why I am not deciding it.
+
+  FOR SLIDING. The limiter's own configuration says `RateLimit(per="minute",
+  max=5)` and the route comment says "the per-identity bound (5/min) trips on the
+  6th wrong attempt". A control that admits twice its configured maximum does not
+  enforce what the code says it enforces, and this sits on the authentication
+  second factor, login, and enrolment. The project's posture elsewhere is
+  fail-closed and "the gate must tell the truth"; a security bound that is
+  advertised at 5 and delivered at up to 10 is the same species of comfortable
+  inaccuracy this month's work exists to remove.
+
+  AGAINST SLIDING. A fixed window is the standard cheap implementation and "5 per
+  calendar minute" is a defensible reading of 5/min. It is one integer per key;
+  a sliding window stores a timestamp per hit, which on a flooded public
+  endpoint is memory amplification unless it is additionally capped - and capping
+  means changing the `Counter` protocol to carry `max`, touching the Redis
+  implementation (a sorted set with ZREMRANGEBYSCORE/ZREMRANGEBYRANK/ZCARD in
+  place of INCR/EXPIRE) and therefore production behaviour on every rate-limited
+  path, not only the auth ones. The security delta on the concrete surface is
+  small: 10 rather than 5 guesses against a six-digit TOTP is immaterial.
+
+  ## What I have already done, and its limits
+
+  I did NOT change the limiter. I fixed the flake truthfully: the test now pins the
+  clock, so it asserts the documented bound deterministically instead of asserting
+  a coincidence, and I added `test_the_window_is_fixed_not_sliding`, which asserts
+  the 2x boundary burst explicitly so the property is written down and so any move
+  to a sliding window breaks a test that says what changed.
+
+  That is deliberately the minimum. It removes the false red from the gate and
+  makes the real behaviour legible, and it settles nothing about whether the
+  behaviour is right. I record plainly that documenting a weaker-than-advertised
+  security bound and moving on is exactly the kind of comforting non-fix the
+  standing goal criticises, which is why it goes to the court rather than into a
+  work-log line.
+
+  ## Citator
+
+  Checked before filing. No ruling in the lawpack or in `.vjs/orders/` touches rate
+  limiting, window algorithms, or the standard for a security control that
+  under-delivers its configured bound. Nothing is on all fours, so S-11(c) does not
+  dispose of it.
+
+  ## Evidence
+
+  - `boltrig/kernel/ratelimit.py` (`int(self._now() // window_seconds)`, both counters)
+  - `boltrig/api/auth_routes.py:77-78` (`_TFA_RL_IDENTITY` 5/min, `_TFA_RL_IP` 30/min)
+    and the challenge/enroll/disable enforcement sites
+  - `tests/security/test_two_factor.py::test_the_window_is_fixed_not_sliding`
+  - the red CI run on a Markdown-adjacent commit, and 25/25 green locally
