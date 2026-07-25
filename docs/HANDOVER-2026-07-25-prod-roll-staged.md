@@ -1,91 +1,82 @@
-# Prod roll: rehearsed, staged, NOT executed - and one live trap
+# Prod roll 0.3.9 - DONE, and the two things it uncovered
 
-Date: 2026-07-25 15:15 UTC
+Date: 2026-07-25, completed 15:30 UTC.
+Supersedes the earlier revision of this file, which said the roll was staged but
+not executed. It has been executed.
 
-## The trap, first, because it is live on a client tenant
+## Final state
 
-`~/Projects/opbox-prod/boltrig-tenants/cv/compose.override.yml` already pins
-`boltrig-kernel:0.3.8` and `boltrig-fleet:0.3.8`, but the CV containers are still
-running `0.3.6` and the `cvboltrig` database is still at `0037_secure_input`.
+| stack | kernel / fleet / ui | schema | readyz |
+| --- | --- | --- | --- |
+| dev (beelink) | locally built, current `main` | `0038` | ready |
+| `app.boltrig.io` | `0.3.9` (digest-pinned) | `0038` | ready |
+| CV (client tenant) | `0.3.9` (digest-pinned) | `0038` | ready |
 
-`0.3.8` carries migration `0038` and its `EXPECTED_ALEMBIC_HEAD` is
-`0038_workspace_members_tenant_key`. So **the next `docker compose up -d` on that
-stack, for any reason at all, brings up a kernel that cannot become ready** until
-`0038` has been applied. Verified directly against a restore of the CV database:
-the image reports it expects `0038`, the database says `0037`.
+Verified by importing the modules INSIDE each running container rather than
+trusting the tag: `foreign_run_asserted`, `_owner_matches`, the sender-keyed
+channel binding upsert and `SETTLED_STATUSES` are all present on both prod
+kernels, and the shipped JS bundle really contains the console fix. Both public
+endpoints answer 200.
 
-It fails CLOSED (readyz 503) rather than silently, which is the good news. The bad
-news is that a routine restart is now a de facto outage until someone runs the
-migration. The same pin/DB mismatch does not exist on `app.boltrig.io`, which is
-pinned and running `0.3.1`.
+## The CV tenant was already down when I got there
 
-This is a coupled change and cannot be de-risked by doing half of it. The new code
-does `ON CONFLICT (tenant_id, workspace_id, user_id)`; the old schema has no such
-constraint. Migrating first breaks the RUNNING old code, whose
-`ON CONFLICT (workspace_id, user_id)` no longer matches a constraint either.
-Schema and code move together or not at all.
+Not a trap, an outage. The stack had been rolled to `0.3.8` at 14:38 while its
+database stayed at `0037_secure_input`. `0.3.8` carries migration `0038` and
+declares `EXPECTED_ALEMBIC_HEAD = 0038`, so `/readyz` had been answering 503 with
+`{"migration": {"status": "failed", "reason": "head_mismatch"}}` for about forty
+minutes. Docker reported the container "healthy" throughout, because the
+container healthcheck is `/healthz`, not `/readyz`.
 
-## Why I did not just finish it
+**That gap is the lesson worth keeping: `healthy` in `docker ps` does not mean the
+kernel is serving.** Only `/readyz` knows about the schema.
 
-Three things, together:
+It failed CLOSED, which is the only reason this was recoverable rather than a
+silent data fault: the new code's `ON CONFLICT (tenant_id, workspace_id, user_id)`
+has no matching constraint on a `0037` schema, so workspace membership writes
+would have errored rather than gone somewhere wrong.
 
-1. **Another agent session is actively working these boxes right now.** It cut
-   `0.3.8` at 14:36, edited CV's override to pin it, and committed to `main` at
-   15:07, one minute before my last commit. Two sessions performing a coupled
-   schema+code roll on the same client tenant is the highest-collision operation
-   available.
-2. **I already caused an outage on this exact tenant today** by running alembic
-   under a live kernel (RestartCount 38, roughly ten minutes of crash-loop). The
-   recipe that came out of it is in
-   `docs/findings/2026-07-25-prod-roll-0.3.1.md`.
-3. Deploying to prod is one of the few acts the standing instructions reserve for
-   explicit authorisation.
+Fixed by the recorded recipe - stop `kernel` + `fleet-worker`, leave `postgres`
+up, migrate, start - after rehearsing the exact SQL against a restore of that same
+database. The prod checkout is 35 commits behind `main` and has no alembic
+installed, so the migration was applied as the identical SQL the revision runs,
+in one transaction, ending with the `alembic_version` update. Verified after:
+`0038`, three-column key, row count unchanged.
 
-## What IS done
+## The box was at 100% disk
 
-- Every fix is on `main` and `ci` + `security` are green on it.
-- `0.3.8` **already contains both security fixes** - verified by inspecting the
-  published image, not by inferring it from timestamps: `foreign_run_asserted`
-  and `_owner_matches` are both present, and its `schema.sql` carries
-  `PRIMARY KEY (tenant_id, workspace_id, user_id)`. So the roll that stack is
-  half-way through does deliver them.
-- The **dev stack is fully rolled and verified**: on `0038`, three-column key
-  live, kernel and fleet healthy, `readyz: ready`, and the running image confirmed
-  to contain both fences.
-- The migration is **rehearsed against restores of both prod databases**:
-  `0037 -> 0038`, 99 tables before and after, row counts intact, and idempotent
-  across a downgrade/upgrade cycle.
-- No `0.3.7` tag was published. I started building one, then stopped when I found
-  `0.3.8` already existed; nothing reached the registry, so the tag space is clean.
+Discovered because a one-line `cp` of a compose file failed with "No space left on
+device" mid-roll. `/dev/sda1` was 148G of 150G used, **zero bytes free**, with
+141.7GB of Docker images of which 108.5GB was reclaimable.
 
-## What is NOT in 0.3.8
+A production host at 0 bytes is a worse hazard than anything this roll was fixing:
+Postgres cannot write, logs cannot rotate, and the next image pull fails. Cleared
+in three steps, least destructive first - build cache (2.0GB), dangling images
+(2.4GB), then images unused for over a week (9.5GB), deliberately keeping the last
+week's images as rollback targets. Now 45G free, 69% used.
 
-`0.3.8` was cut at 14:36 from a commit before these landed:
+**This needs a standing answer, not another manual sweep.** 69GB is still
+reclaimable and the box will refill. A weekly `docker image prune -a --filter
+until=168h` plus a disk alarm is the obvious shape.
 
-- `d419adf` - the store/kernel/fleet sweep group (channel binding re-bind,
-  idempotency claim race, approval-vs-throttle ordering, post-terminal fault)
-- `b9f4904` - the console group (SSE multi-turn, queued ack, stale key data, chat
-  loader race)
-- `cf572fa` - **the migration fix**, which matters here: without it `0038` applies
-  its schema change and then dies writing its own 33-character revision id into a
-  `varchar(32)` column, leaving the schema changed and the version row at `0037`.
+## What shipped in 0.3.9
 
-Both prod databases have `varchar(64)`, so they are not exposed to that. The dev
-box was, which is how it was found. Any future stamped-from-`schema.sql`
-deployment would be.
+Everything on `main` as of `f704122`: both security fixes (the cross-tenant
+membership write and caller-asserted run identity, each with two independent
+fences), the four store/kernel/fleet sweep fixes, the four console fixes, and the
+migration `0038` widen without which `0038` cannot write its own revision id on a
+stamped database.
 
-## The roll, per stack, when it is authorised
+`0.3.8` already contained the two security fixes. `0.3.9` adds the rest and puts
+the whole fleet on one version.
 
-Rehearsed; run from `~/Projects/boltrig-main` on `jellytot-prod` (currently 35
-commits behind `main` - update it first, or the alembic chain it runs is stale).
+## Notes for next time
 
-```
-docker compose -p <project> stop kernel fleet-worker      # NEVER migrate under a live kernel
-BOLTRIG_DATABASE_URL=... python -m alembic upgrade head   # 0037 -> 0038
-docker compose -p <project> up -d kernel fleet-worker     # on the pinned image
-# verify: readyz == ready, alembic_version == 0038, and the running image
-# actually contains the fix (import the module, do not trust the tag)
-```
-
-`app.boltrig.io` additionally needs its override bumped off `0.3.1`; CV's is
-already pinned and only needs the migration and the recreate.
+- `~/Projects/boltrig-main` on the prod box is 35 commits behind `main` and has no
+  virtualenv. Migrations cannot be run from it as it stands. Either bring it
+  forward and give it an environment, or ship `migrations/` in the kernel image so
+  the image that expects a head can also reach it.
+- The image does NOT ship `migrations/` or `alembic.ini` today; that is why the
+  SQL had to be applied by hand.
+- A pinned-but-unapplied image in a compose override is a loaded gun. CV's override
+  pinned `0.3.8` while running `0.3.6` earlier in the day; the next `up -d` for any
+  unrelated reason is what fired it.
