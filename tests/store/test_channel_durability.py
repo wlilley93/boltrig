@@ -69,6 +69,12 @@ def _msg(mid: str, channel_id: str, *, tenant: str = T) -> ChannelOutboxMessage:
 @pytest.mark.invariant("SEC-175")
 async def test_record_channel_delivery_is_atomic_and_tenant_scoped(store):
     await _channel(store, "ch-1")
+    # ch-2 must EXIST: channel_deliveries.channel_id REFERENCES channels(id), so
+    # a marker for an unregistered channel is rejected by Postgres and is not a
+    # state the product can reach either (channel_inbound resolves the channel
+    # and 404s before any dedup write). The in-memory store enforces no FK, which
+    # is why an unseeded ch-2 passed there and failed only on [postgres].
+    await _channel(store, "ch-2")
     # first sighting records; a replay within the window is refused - on BOTH
     # stores, so dedup holds across processes, not just in one memory space
     assert await store.record_channel_delivery(T, "ch-1", "d-1", ttl_seconds=600) is True

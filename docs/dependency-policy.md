@@ -15,7 +15,15 @@ hand-edited.
   checkout/image; CI and production images never invoke PEP 517 build isolation.
 - The UI and site use the `pnpm@11.5.0` version declared in each `package.json`.
   `pnpm-lock.yaml` is the only accepted JavaScript lockfile; do not commit
-  `package-lock.json` or `yarn.lock`.
+  `package-lock.json` or `yarn.lock`. `make lockfile-policy` enforces this and
+  names its single exemption inline: `services/channel_gateway/whatsapp_bridge`
+  stays on npm because its `baileys` dependency is git-hosted, runs build scripts
+  on install, and itself pulls `libsignal` over git. pnpm 11 refuses each by
+  default (`allowBuilds`, `blockExoticSubdeps`), so converting it would mean
+  disabling two supply-chain protections to satisfy a lockfile-FORMAT rule. That
+  package therefore gets no `pnpm audit` coverage and must be audited by hand
+  whenever it is touched. The check fails if the exempt file disappears, so the
+  exemption cannot rot.
 - CI and container builds install with `--frozen-lockfile`. A stale lockfile is a
   hard failure.
 - Optional tool runtimes keep isolated hash-locked inputs under `deploy/`; they
@@ -53,7 +61,13 @@ For every dependency change:
 5. For Python/container changes, rebuild the affected image and run its smoke
    test before release.
 6. Record any accepted advisory with reachability, owner, expiry, and compensating
-   control. Expired exceptions fail the release review.
+   control. Expired exceptions fail the release review. This is now machine
+   enforced: entries live in `docs/security/accepted-advisories.json` and
+   `make python-audit` runs through `scripts/python_audit.py`, which passes each
+   live entry to pip-audit as `--ignore-vuln`, prints the accepted set so a green
+   audit still says what it is not checking, and FAILS on an expired or
+   unparseable entry before the audit runs. Accept an advisory only when there is
+   no fixed upstream release; when a fix exists, take the fix.
 
 Typical JavaScript refresh commands are:
 

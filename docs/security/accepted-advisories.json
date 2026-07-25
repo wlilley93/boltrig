@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "_comment": [
+    "Advisories accepted under docs/dependency-policy.md 'Required verification' item 6:",
+    "every entry carries reachability, owner, expiry and a compensating control, and an",
+    "EXPIRED entry fails the audit rather than silently continuing to suppress. Accept an",
+    "advisory ONLY when there is no fixed upstream release; if a fix exists, take the fix.",
+    "Enforced by scripts/python_audit.py, invoked from `make python-audit`."
+  ],
+  "accepted": [
+    {
+      "id": "PYSEC-2026-2447",
+      "package": "diskcache",
+      "version": "5.6.3",
+      "owner": "memory-maintainers",
+      "expires": "2026-10-23",
+      "no_fix_available": true,
+      "reachability": "Transitive, via cognee only (diskcache is not a direct dependency). The advisory is arbitrary code execution through DiskCache's default pickle serialization, and it requires WRITE access to the cache directory. Boltrig gives cognee a dedicated named volume at BOLTRIG_COGNEE_ROOT (/var/lib/boltrig/cognee) inside a container whose root filesystem is read_only, and nothing but the kernel process writes there. The cache directory is never shared between tenants and is never attacker-writable over any request path, so an actor able to exploit this already holds code execution inside the container.",
+      "compensating_control": "Dedicated per-stack named volume (not a shared or world-writable path); read_only root filesystem with only /tmp writable (x-app-hardening); the knowledge subsystem is default-OFF and only reaches cognee when a manifest explicitly enables it.",
+      "reason": "No fixed release exists upstream: pip-audit reports the advisory with an empty fix-versions list. Re-check at expiry and take the fix the moment python-diskcache publishes one."
+    }
+  ]
+}

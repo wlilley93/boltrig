@@ -2,6 +2,12 @@
 # overrides are API-compatible and are exercised by the image smoke test. Drop
 # each line as soon as upstream adopts an equal or newer fixed version.
 aiohttp==3.14.1
-pypdf==6.13.3
+# 6.13.3 was itself an override, and upstream has since disclosed four more
+# advisories against it (CVE-2026-59935/59936/59937/59938, fixed across
+# 6.14.0-6.14.2). Taking the highest fixed release closes all four.
+pypdf==6.14.2
 click==8.3.3
 pillow==12.3.0
+# browser-use resolves mcp 1.26.0, which carries PYSEC-2026-3481/3482 (fixed
+# 1.27.2) and PYSEC-2026-3483 (fixed 1.28.1). 1.28.1 closes all three.
+mcp==1.28.1

@@ -118,13 +118,15 @@ compose-validate: ## Validate base and secure Compose configurations
 	$(PY) scripts/validate_release_images.py $(RELEASE_VALIDATE_IMAGES_ENV)
 	BOLTRIG_ENV_FILE=$(COMPOSE_VALIDATE_ENV) \
 		POSTGRES_PASSWORD=$(COMPOSE_VALIDATE_POSTGRES_PASSWORD) \
-		$(COMPOSE) --env-file $(COMPOSE_VALIDATE_ENV) --profile backup --profile local \
+		$(COMPOSE) --env-file $(COMPOSE_VALIDATE_ENV) \
+		--profile backup --profile local --profile legacy \
 		--env-file $(RELEASE_VALIDATE_IMAGES_ENV) \
 		-f docker-compose.yml -f deploy/compose.release.yml config --format json \
 		| $(PY) scripts/validate_release_compose.py
 	BOLTRIG_ENV_FILE=$(COMPOSE_VALIDATE_ENV) \
 		POSTGRES_PASSWORD=$(COMPOSE_VALIDATE_POSTGRES_PASSWORD) \
-		$(COMPOSE) --env-file $(COMPOSE_VALIDATE_ENV) --profile backup --profile local \
+		$(COMPOSE) --env-file $(COMPOSE_VALIDATE_ENV) \
+		--profile backup --profile local --profile legacy \
 		--env-file $(RELEASE_VALIDATE_IMAGES_ENV) \
 		-f docker-compose.yml -f deploy/compose.release.yml \
 		-f deploy/compose.secure.yml config --format json \
@@ -155,8 +157,11 @@ migration-parity: ## Compare Alembic head with schema.sql on disposable PostgreS
 	scripts/with_test_postgres.sh $(PY) -m pytest -q tests/integration/test_migration_parity.py
 
 python-audit: ## Audit every shipped Python dependency graph
-	$(PY) -m pip_audit --strict --progress-spinner off --require-hashes \
-		-r requirements-lock.txt
+	# Via the wrapper, not pip_audit directly: it enforces the EXPIRY on
+	# docs/security/accepted-advisories.json (dependency-policy item 6), so an
+	# accepted advisory cannot outlive its review, and it prints what is being
+	# suppressed so a green audit still says what it is not checking.
+	$(PY) scripts/python_audit.py requirements-lock.txt
 	$(PY) -m pip install --dry-run --no-deps --require-hashes \
 		-r deploy/browser-cli-requirements.txt
 	$(PY) -m pip_audit --strict --progress-spinner off --no-deps --disable-pip \
@@ -185,10 +190,23 @@ security-source: python-audit sast iac-scan secret-scan actionlint ## Run SCA, S
 
 quality: python-quality ui-quality site-quality compose-validate doctor-fixture ui-e2e migration-parity security-source ## Run the complete local release gate
 
-lockfile-policy: ## Enforce pnpm as the only JavaScript package manager
-	@locks="$$(git ls-files '*yarn.lock' '*package-lock.json')"; \
+# The ONE npm-locked package, and why it is not pnpm. The whatsapp bridge depends
+# on `baileys`, a GIT-HOSTED package that both runs build scripts on install and
+# itself pulls `libsignal` over git. pnpm 11 refuses each by default (allowBuilds,
+# blockExoticSubdeps), so converting it would mean switching OFF two supply-chain
+# protections to satisfy a lockfile-FORMAT rule - strictly worse than leaving this
+# one package on npm. Exempt, not forgotten: it ships behind the `channels`
+# profile and receives NO `pnpm audit` coverage, so audit it by hand whenever the
+# bridge is next touched.
+LOCKFILE_POLICY_EXEMPT := services/channel_gateway/whatsapp_bridge/package-lock.json
+
+lockfile-policy: ## Enforce pnpm as the JavaScript package manager (one recorded exemption)
+	@locks="$$(git ls-files '*yarn.lock' '*package-lock.json' | grep -vxF '$(LOCKFILE_POLICY_EXEMPT)' || true)"; \
 		test -z "$$locks" || { echo "unsupported JavaScript lockfiles:"; echo "$$locks"; exit 1; }
-	@test -f ui/pnpm-lock.yaml -a -f site/pnpm-lock.yaml
+	@test -f '$(LOCKFILE_POLICY_EXEMPT)' || { \
+		echo "stale exemption: $(LOCKFILE_POLICY_EXEMPT) no longer exists;"; \
+		echo "drop it from LOCKFILE_POLICY_EXEMPT in the Makefile"; exit 1; }
+	@test -f ui/pnpm-lock.yaml -a -f site/pnpm-lock.yaml -a -f sdks/node/pnpm-lock.yaml
 
 dependency-audit: lockfile-policy ## Fail on high/critical UI and site dependency advisories
 	cd ui && pnpm audit --audit-level=high

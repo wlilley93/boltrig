@@ -104,8 +104,15 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
+      # The target shells out to the release validators via $(PY), which defaults
+      # to .venv/bin/python and does not exist on a bare runner - that was an
+      # exit-127 "command not found", not a Compose error. Both validators are
+      # stdlib-only, so an interpreter is enough; no dependency install needed.
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
       - name: Validate base and secure Compose configurations
-        run: make compose-validate
+        run: make compose-validate PY=python
 
   # One required branch-protection check. Each parallel job invokes the same
   # component target used by `make quality`; this aggregator fails unless every

@@ -10,6 +10,9 @@ on:
 
 permissions:
   contents: read
+  # Read-only, and only the ui image build uses it: pnpm needs it to fetch
+  # @wlilley93/boltrig-web-sdk from GitHub Packages during `docker build`.
+  packages: read
 
 concurrency:
   group: security-${{ github.workflow }}-${{ github.ref }}
@@ -104,11 +107,36 @@ jobs:
         with:
           persist-credentials: false
 
+      # The ui image installs @wlilley93/boltrig-web-sdk from GitHub Packages and
+      # mounts a token-bearing .npmrc as the BuildKit secret `gh_npmrc`. The
+      # compose build declares that secret, but this job calls `docker build`
+      # directly and so must supply it itself, otherwise `pnpm install
+      # --frozen-lockfile` fails to authenticate and the image build exits 1.
+      # GITHUB_TOKEN with `packages: read` is sufficient: same owner, no new
+      # credential class. Written to the runner-only workspace and removed after.
+      - name: Provide the GitHub Packages read token to the build
+        if: matrix.image == 'ui'
+        env:
+          GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          umask 077
+          printf '//npm.pkg.github.com/:_authToken=%s\n' "$GH_PACKAGES_TOKEN" > "$RUNNER_TEMP/gh_npmrc"
+
       - name: Build image
         env:
           BUILD_CONTEXT: ${{ matrix.context }}
           DOCKERFILE: ${{ matrix.dockerfile }}
-        run: docker build --pull --file "$DOCKERFILE" --tag "$IMAGE_REF" "$BUILD_CONTEXT"
+        run: |
+          secret_args=()
+          if [ -f "$RUNNER_TEMP/gh_npmrc" ]; then
+            secret_args=(--secret "id=gh_npmrc,src=$RUNNER_TEMP/gh_npmrc")
+          fi
+          DOCKER_BUILDKIT=1 docker build --pull "${secret_args[@]}" \
+            --file "$DOCKERFILE" --tag "$IMAGE_REF" "$BUILD_CONTEXT"
+
+      - name: Remove the build token
+        if: always()
+        run: rm -f "$RUNNER_TEMP/gh_npmrc"
 
       - name: Record complete high and critical vulnerability report
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
