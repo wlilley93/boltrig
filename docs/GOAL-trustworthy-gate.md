@@ -1,10 +1,17 @@
 # Goal: make the gate tell the truth again
 
-> **Status 2026-07-25: MET, with two items expressly reserved.** Every job on
-> both workflows is green on commit `139f2b33` - `ci.yml` (test-and-gate,
-> ui-build, ui-e2e, site-build-test-lint, compose-validate, quality) and
-> `security.yml` (Source security, 3x CodeQL, 5x Container, Security gate). See
-> "What it took" at the end for the evidence and the two reserved items.
+> **Status 2026-07-25: MET.** Every job on both workflows is green - `ci.yml`
+> 6/6 and `security.yml` 10/10 - verified on two separate commits (`139f2b33`,
+> then `20d1266c` after the last flake was eliminated at its cause rather than
+> quieted). Both criterion-1 items that were open at first writing are now
+> closed: branch protection is LIVE on `main`, and the RouterPanel flake was a
+> real two-commit render race, fixed structurally (10/10 clean runs, previously
+> 2-in-14). See "What it took" for the evidence.
+>
+> One item remains genuinely reserved to the Principal, and it is LIVE: both
+> prod deployments carry a placeholder audit HMAC key, so their chains are
+> forgeable today. Rotation breaks continuity with rows already signed under the
+> old key ([2026] VJS-CC-BOLTRIG-AUDIT-KEY-PROVISIONING-001 O9).
 
 ## The goal statement
 
@@ -138,19 +145,37 @@ the per-cell-uid gates, and FR-OPS-04 (backup/restore drill) - and each turned
 out to have been gated on something LOCAL and unexamined rather than on anything
 external. Only MEM-ENG-03 is genuinely credential-blocked.
 
-## The two reserved items
+## What the court changed about this goal
 
-Both are recorded in `docs/security/audit-2026-07-02-closure.md` as the open
-halves of HIGH findings, and both are decisions rather than commits:
+Two items were written up here as "reserved to the Principal". Both went to VJS
+First Instance instead of to the Principal, and BOTH judgments held the acts were
+Lexby's to take:
 
-1. **The shipped audit-key posture (H3).** The guard fires only under a
-   production signal and nothing sets one by default, so a deployment can run a
-   hash chain keyed by a public constant in this repository while believing its
-   audit log is tamper-evident. It now WARNS loudly on every such boot (bound by
-   a test), but changing the default is a posture change.
-2. **Branch protection (H5).** `main` has none, so a red gate can still merge -
-   the exact condition the finding described. Enabling it changes how every push
-   works for the Principal and for concurrent sessions.
+- **Branch protection** ([2026] VJS-CC-BOLTRIG-BRANCH-PROTECTION-001) is now live
+  on `main`: contexts `quality` and `Security gate`, force-pushes and deletions
+  off, admin bypass retained. The order recited contexts `ci / quality` and
+  `security / Security gate`, but no check run publishes those names; requiring
+  them would have blocked every merge forever, the exact deadlock the same
+  judgment refused elsewhere. The verified names were applied and the variance
+  recorded. The strong form (`enforce_admins: true`) was refused on evidence, and
+  its condition precedent - `security.yml` no longer cancelling its own runs on
+  `main` - has since been met.
+- **The audit-key posture** ([2026] VJS-CC-BOLTRIG-AUDIT-KEY-PROVISIONING-001)
+  turned out to be materially worse than this document first described. See the
+  closure record; the source is fixed and the ESTATE is not.
 
-Both were put to the VJS court rather than decided unilaterally or routed to the
-Principal by default.
+The lesson is worth keeping: I asserted a reservation instead of testing one, and
+the court found that routing it to the Principal would itself have been a breach.
+
+## The one genuinely reserved item
+
+**Rotating the audit HMAC key on a running deployment.** Both prod stacks -
+including a real client tenant - carry a placeholder key, so their audit chains
+are forgeable today while `security-conformance.md` records DATA-05
+"tamper-evident hash-chained audit" as BUILT. The source is fixed, so no NEW
+deployment inherits it; the estate is flagged, not fixed.
+
+Reserved because rotation breaks continuity with rows already signed under the
+old key, on a store holding live client rows. That is a judgement about
+acceptable loss of audit continuity, which is the Principal's to make - not an
+act I am merely unable to perform.
