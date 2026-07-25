@@ -197,6 +197,10 @@ class CodexRuntime:
                 skills=context.skills_loaded,
                 workspace_id=context.workspace_id,
                 on_behalf_of=context.on_behalf_of,
+                # So a verb this cell dispatches can publish its HITL pause to the
+                # parent (chat) stream, not only to this child run's - see the
+                # PendingHuman branch in kernel/dispatch.py.
+                parent_run_id=context.parent_run_id,
                 extra=dict(context.extra),
                 ttl_seconds=wiring.ttl_seconds,
             )

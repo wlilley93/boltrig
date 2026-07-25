@@ -187,6 +187,26 @@ class Dispatcher:
             detail={"verb": verb},
         )
 
+    async def _emit_pause(
+        self, context: Any, hitl_request_id: str, verb: str, call_id: str
+    ) -> None:
+        """Publish a HITL pause to this run AND to the run that delegated to it.
+
+        A pause has to reach the person who asked for the thing being paused. A chat
+        turn never calls a verb itself: it spawns a worker whose cell reaches back
+        through the MCP face, so the dispatch runs under the CHILD run id while the
+        chat client follows the ROOT stream. Publishing only to ``context.run_id``
+        put the pause on a stream nobody follows - the turn simply ended and the user
+        was told, in prose, that something was "pending human approval", with nothing
+        to approve. Mirrors how a delegation's subagent/subagent_end frames are
+        published to the parent relay.
+        """
+        event = await self._hitl.pending_event(context, hitl_request_id, verb, call_id)
+        self._emit(context.tenant_id, context.run_id, event)
+        parent = getattr(context, "parent_run_id", None)
+        if parent and parent != context.run_id:
+            self._emit(context.tenant_id, parent, event)
+
     def _emit(self, tenant_id: str, run_id: str | None, event: dict[str, Any]) -> None:
         """Publish a run event, fail-safe. Only when a relay is wired and the call
         belongs to a run; a publish error is swallowed so observability can never
@@ -284,10 +304,7 @@ class Dispatcher:
             status = "pending_human"
             detail = {"hitl_request_id": e.hitl_request_id}
             # Project bounded presentation fields from the canonical HITL request.
-            event = await self._hitl.pending_event(
-                context, e.hitl_request_id, verb, call_id
-            )
-            self._emit(context.tenant_id, context.run_id, event)
+            await self._emit_pause(context, e.hitl_request_id, verb, call_id)
             raise
         except DegradedMode:
             status = "degraded"

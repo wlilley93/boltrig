@@ -324,22 +324,22 @@
       "expires": "2026-12-31"
     },
     "boltrig/kernel/dispatch.py": {
-      "max_file_lines": 519,
-      "max_function_lines": 116,
+      "max_file_lines": 536,
+      "max_function_lines": 113,
       "over_limit_functions": [
         {
           "name": "Dispatcher.invoke",
-          "line": 248,
-          "lines": 116
+          "line": 268,
+          "lines": 113
         },
         {
           "name": "Dispatcher._invoke_inner",
-          "line": 365,
+          "line": 382,
           "lines": 88
         }
       ],
       "owner": "kernel-maintainers",
-      "reason": "Extract dispatch phases behind private typed helpers while retaining the single governed chokepoint. SEC-181 secure input added the run-scoped param resolution at the credential stage and the secure-question marker. Parity passthrough (2026): _execute_adapter overrides the static adapter credential with a per-run sealed bearer when present.",
+      "reason": "Extract dispatch phases behind private typed helpers while retaining the single governed chokepoint. SEC-181 secure input added the run-scoped param resolution at the credential stage and the secure-question marker. Parity passthrough (2026): _execute_adapter overrides the static adapter credential with a per-run sealed bearer when present. 2026-07-25: +17 lines for _emit_pause, which publishes a HITL pause to the run that DELEGATED to this one as well as to this one. A chat turn never calls a verb itself, so the dispatch runs under the child run id while the client follows the root stream - the pause landed on a stream nobody follows and a write held for approval was invisible to the person who asked. Extracting it LOWERED Dispatcher.invoke from 116 to 113 lines, so the function ratchet ratchets down with this change.",
       "expires": "2026-12-31"
     },
     "boltrig/kernel/memory_routes.py": {
