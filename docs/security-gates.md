@@ -1,7 +1,27 @@
 # Security gates
 
-Boltrig has two stable CI checks intended for branch protection: `ci / quality`
-and `security / Security gate`. Both must be successful before merge.
+Boltrig has two stable CI aggregator checks, and as of 2026-07-25 they ARE
+required on `main` ([2026] VJS-CC-BOLTRIG-BRANCH-PROTECTION-001, Order 2). The
+protection contexts are the check-run names `quality` and `Security gate` - NOT
+the `ci / quality` form this document previously recited, which no check run
+publishes; requiring a context nothing reports would block every merge forever.
+
+State the control's ACTUAL scope, because the previous sentence ("Both must be
+successful before merge") was untrue while the protection endpoint returned 404,
+and later overstated it:
+
+- Required on pull requests, and for every NON-ADMIN actor - including
+  `release.yml`'s `GITHUB_TOKEN` and Dependabot.
+- `enforce_admins` is FALSE, so the sole admin retains a bypass. This is
+  deliberate and was refused as a strong-form order for now: `security.yml` sets
+  `cancel-in-progress`, so at the current push cadence a run on `main` is often
+  cancelled rather than failed, and admin enforcement would produce a gate with
+  no lawful path through it.
+- `strict` is FALSE, so a branch need not be rebased onto the tip to merge.
+
+Conditions for tightening to `enforce_admins: true` are recorded in that order:
+stop cancelling in-progress runs on `main`, then ten consecutive uncancelled
+green pushes.
 
 The security workflow enforces:
 

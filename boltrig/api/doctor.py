@@ -19,19 +19,15 @@ from boltrig.config.environment import is_truthy
 from boltrig.config.manifest import FleetManifest, load_manifest
 from boltrig.api.doctor_stack_state import stack_state_checks
 
+# [2026] VJS-CC-BOLTRIG-AUDIT-KEY-PROVISIONING-001 O2: ONE placeholder predicate,
+# shared with the bootstrap audit-key guard and the readiness-receipt key, so the
+# three sites cannot disagree about what counts as a placeholder again.
+from boltrig.config.weak_secrets import (
+    PLACEHOLDER_FRAGMENTS as _PLACEHOLDER_FRAGMENTS,
+    is_weak_secret as _is_weak_secret,
+)
+
 _PROD_NAMES = {"prod", "production", "staging"}
-_PLACEHOLDERS = {
-    "",
-    "change_me",
-    "changeme",
-    "change-me",
-    "change-me-to-a-long-random-secret",
-    "replace",
-    "replace-me",
-    "secret",
-    "password",
-}
-_PLACEHOLDER_FRAGMENTS = ("CHANGE_ME", "REPLACE", "example.com", "your-org")
 _LOCAL_HOSTS = {
     "localhost",
     "127.0.0.1",
@@ -166,10 +162,7 @@ def _production_signal(env: Mapping[str, str]) -> bool:
 
 
 def _weak(value: str | None, *, min_len: int = 24) -> bool:
-    raw = (value or "").strip()
-    if raw.lower() in _PLACEHOLDERS:
-        return True
-    return len(raw) < min_len or any(fragment in raw for fragment in _PLACEHOLDER_FRAGMENTS)
+    return _is_weak_secret(value, min_len=min_len)
 
 
 def _host(url: str | None) -> str | None:

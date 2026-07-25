@@ -422,16 +422,25 @@ def refuse_default_audit_key_in_prod(env: dict | None = None) -> None:
     hard, mirroring refuse_dev_auth_in_prod."""
     import os
 
+    from boltrig.config.weak_secrets import is_placeholder_secret
+
     e = env if env is not None else os.environ
     signal = production_signal(e)
     key = e.get("BOLTRIG_AUDIT_HMAC_KEY")
-    if signal is not None and (not key or key == "dev-insecure-audit-key"):
+    # [2026] VJS-CC-BOLTRIG-AUDIT-KEY-PROVISIONING-001. This used to compare
+    # against the IN-SOURCE default and blank only, so the value .env.example
+    # actually shipped (change-me-to-a-long-random-secret) tripped NEITHER this
+    # fatal nor the warning below. A deployment following the documented
+    # `cp .env.example .env` therefore ran the audit chain keyed by a public
+    # constant in this repository while reporting itself tamper-evident. The
+    # shared predicate knows every placeholder the project has ever shipped.
+    if signal is not None and is_placeholder_secret(key):
         raise RuntimeError(
             f"FATAL: BOLTRIG_AUDIT_HMAC_KEY is unset/default with a production signal "
             f"({signal}). The audit chain is forgeable without a secret key (K-19). "
             "Set a strong BOLTRIG_AUDIT_HMAC_KEY."
         )
-    if not key or key == "dev-insecure-audit-key":
+    if is_placeholder_secret(key):
         # No production signal, so this is not fatal - but the 2026-07-02 audit
         # called H3 "silently defaults", and the silence is the part that makes it
         # dangerous. Nothing sets a production signal by default (compose emits an

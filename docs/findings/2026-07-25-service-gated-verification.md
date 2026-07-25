@@ -37,6 +37,35 @@ resolves only INSIDE the compose network; from the host the SDK fails with
 the host/port makes the suite runnable without joining the network. Allow ~6
 minutes; these legs really drive workflow runs.
 
+## Do NOT point the live suite at the dev database (a hypothesis that FAILED)
+
+Recording this because it is a plausible-sounding idea that the evidence refutes,
+and the next person will otherwise try it too.
+
+`test_live_workflow_run_pauses_on_gated_step` fails against the throwaway
+`boltrig_test` with `checkpoints not ready within 150s: {}` - an empty dict,
+meaning no checkpoint was written at all. The obvious inference is that the store
+is empty, so the verb the step expects to gate on (`channel.send`, HIGH, which
+DOES exist in the dev database) is absent, and the run cannot pause on it.
+
+That inference is wrong, or at least incomplete. Re-run against the seeded dev
+database, **all four legs fail** - worse than the two that pass against the
+throwaway one. So the empty store is not the cause, and something about running
+against the live database actively breaks legs that otherwise pass. A likely
+contributor: the dev stack's own `fleet-worker` container is subscribed to the
+same Hatchet tenant, so it competes with the worker the test spawns for the same
+tasks. That is a hypothesis and it has NOT been verified.
+
+Scoreboard, so the next attempt starts from facts:
+
+| store | result |
+| --- | --- |
+| throwaway `boltrig_test` | 2 passed, 2 failed |
+| seeded dev `boltrig` | 0 passed, 4 failed |
+
+The FR-WFL-17 binding passes in the first configuration, which is what the
+invariant needs. The remaining legs want their own investigation.
+
 ## FR-WFL-17's siblings: 2 of 4 legs still fail, cause not yet established
 
 `test_live_workflow_run_pauses_on_gated_step` and
@@ -59,6 +88,14 @@ missing; the image just has to be named:
 only, dropping to a per-cell uid) against a real container, and they had never
 been run.
 
+## FR-OPS-04 (backup/restore drill): NOW VERIFIED
+
+`tests/integration/test_backup_restore.py` skips without
+`BOLTRIG_TEST_DATABASE_URL` AND docker. Both are available on the dev box, so it
+was never blocked - only unrun. **1 passed**: a real dump restored into a fresh
+pinned PostgreSQL container. `docs/PATH-TO-10.md` lists the restore drill as
+outstanding release work; it now has evidence.
+
 ## MEM-ENG-03 (live Cognee): blocked on a Principal-supplied credential
 
 `tests/integration/test_cognee_engine.py` needs `BOLTRIG_COGNEE_LIVE=1`, the
@@ -68,7 +105,14 @@ is the Principal's to supply. Named here so it is not mistaken for neglect.
 
 ## The broader lesson
 
-The invariant gate's SERVICE-GATED list is not a fixed set of impossibilities. At
-least one entry was gated on a subsystem that was quietly broken rather than on
-anything external, and it stayed that way because "service-gated" reads like a
-closed question. Re-test the list when the underlying service changes.
+The invariant gate's SERVICE-GATED list is not a fixed set of impossibilities.
+Three of the four entries examined here turned out to be gated on something
+LOCAL and unexamined rather than on anything external:
+
+- FR-WFL-17 was gated on Hatchet, which was quietly broken fleet-wide.
+- The per-cell-uid gates only needed an env var naming an image that already existed.
+- The backup/restore drill only needed a DSN and docker, both present.
+
+Only MEM-ENG-03 is genuinely credential-blocked. "Service-gated" reads like a
+closed question, which is exactly why these sat unexamined; re-test the list
+whenever the underlying service changes, and prefer checking to assuming.

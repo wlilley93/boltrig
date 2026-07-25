@@ -26,8 +26,16 @@ _CLOCK_SKEW_SECONDS = 5.0
 
 def receipt_signing_key(env: Mapping[str, str]) -> bytes | None:
     """Derive a purpose-separated receipt key from the deployment audit key."""
+    # [2026] VJS-CC-BOLTRIG-AUDIT-KEY-PROVISIONING-001 O3. Blank was the only
+    # rejected value, so a PLACEHOLDER key (the string .env.example ships) yielded
+    # a perfectly well-formed signing key and readiness receipts were signed with
+    # a public constant - a receipt anyone with this repository could forge, which
+    # is indistinguishable from no receipt at all. Reject every placeholder, not
+    # just the empty string.
+    from boltrig.config.weak_secrets import is_placeholder_secret
+
     raw = str(env.get("BOLTRIG_AUDIT_HMAC_KEY") or "").strip()
-    if not raw:
+    if is_placeholder_secret(raw):
         return None
     return hmac.new(
         raw.encode("utf-8"),

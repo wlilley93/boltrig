@@ -9,6 +9,15 @@ covered it" is not a closure record, which is why this file exists.
 **Result: 3 of 5 closed with evidence (H1, H2, H4). 2 partially closed (H3, H5),
 with the exact remainder named below.**
 
+Both partial findings were put to the VJS court rather than decided unilaterally
+or routed to the Principal by default, and BOTH judgments held the acts were
+Lexby's to take: [2026] VJS-CC-BOLTRIG-BRANCH-PROTECTION-001 and
+[2026] VJS-CC-BOLTRIG-AUDIT-KEY-PROVISIONING-001. The first corrected an error of
+law in an earlier revision of this very file. The second found the H3 hole to be
+materially worse than this record first described. Both are recorded below at the
+control's true scope, because a ledger entry claiming more than the control
+delivers is the failure mode this whole exercise exists to remove.
+
 ## H1 - HITL null-verb approval bypass: CLOSED
 
 `consume_if_approved` no longer skips the verb match on a null verb or accepts a
@@ -48,22 +57,40 @@ worker paths are guarded, not just `create_app`. Bound by
 which really boots the worker path under `BOLTRIG_PRODUCTION=1` and asserts it
 raises. Marked `K-19`.
 
-**Still open, and it matters:** the guard only fires when a production signal is
-set, and nothing sets one by default.
+**The hole was WORSE than this record first stated.** My own first pass said the
+guard was correct but "never armed by default". Putting the question to the court
+([2026] VJS-CC-BOLTRIG-AUDIT-KEY-PROVISIONING-001) established that the guard did
+not even recognise the value the project SHIPS. It compared against the in-source
+default (`dev-insecure-audit-key`) and blank only, while `.env.example` carried
+`change-me-to-a-long-random-secret`. A deployment following the documented
+`cp .env.example .env` therefore tripped NEITHER the fatal NOR the warning. A
+guard that misses the value its own project ships is worse than no guard, because
+it reassures. Two further defects fell out of the same root:
 
-1. `boltrig/kernel/audit.py:25` still reads the key at import time with an
-   in-source fallback: `os.environ.get("BOLTRIG_AUDIT_HMAC_KEY", "dev-insecure-audit-key")`.
-   The audit asked for this to be settings-driven into `AuditWriter`;
-   `AuditWriter.__init__` still takes only `store`.
-2. `docker-compose.yml` emits `BOLTRIG_ENV: ${BOLTRIG_ENV:-}` and
-   `BOLTRIG_PRODUCTION: ${BOLTRIG_PRODUCTION:-}` - empty by default.
+- `boltrig/api/doctor.py` already KNEW that string was a placeholder, so two
+  predicates disagreed and the gap between them was the hole (O2).
+- `boltrig/fleet/stack_tool_receipts.py::receipt_signing_key` rejected only blank,
+  so a placeholder key produced a well-formed signing key and readiness receipts
+  were signed with a public constant - forgeable by anyone with this repository,
+  which is worth no more than no receipt (O3).
 
-Together these mean a real deployment that never sets the signal boots happily on
-a hash-chain key that is a public constant in this repository, which makes the
-audit log's tamper-evidence decorative rather than real. The guard is not wrong;
-it is simply never armed by default. Closing this needs a decision on the shipped
-posture (default the signal on, or make the key mandatory with an explicit
-opt-out for offline dev), so it is recorded rather than changed unilaterally.
+**Source default CORRECTED** (O1, O2, O3, O6): `.env.example` now ships the key
+BLANK, so it cannot be copied verbatim into a real deployment; all three
+consumers ask one shared predicate (`boltrig/config/weak_secrets.py`) that knows
+every placeholder this repo has ever shipped; and
+`tests/security/test_audit_key_provisioning.py` pins the property at each site,
+including a test that fails if `.env.example` ever ships a value again.
+
+**ESTATE REMEDIATION OPEN, and it is live.** Both prod deployments were checked
+and BOTH carry a placeholder audit key - `boltrig-tenants/cv/boltrig.env` (a real
+client tenant) and `boltrig-tenants/boltrig-io.env`. Their audit chains are
+forgeable today, while `security-conformance.md` records DATA-05 "tamper-evident
+hash-chained audit" as BUILT. The dev box has a real 64-character key.
+
+Rotation on a running deployment is **RESERVED TO THE PRINCIPAL** (O9): rotating
+breaks continuity with rows already signed under the old key, and CV holds live
+client rows. So the source is fixed and the estate is not; do not record H3 as
+closed until the estate is remediated.
 
 ## H4 - Budget hard-stop lost under concurrency: CLOSED
 
@@ -95,11 +122,32 @@ The audit also recorded that CI is **not** billing-blocked "contrary to the repo
 docs". That contradiction persisted for three more weeks;
 `docs/security-conformance.md` has now been corrected.
 
-**Still open:** `repos/:owner/:repo/branches/main/protection` returns
-`404 Branch not protected`. Nothing requires the gate to be green before a commit
-lands on main, which is the condition the finding described. Making these checks
-required is the remaining half, and it changes how everyone pushes to this repo,
-so it belongs to the Principal rather than to a passing commit.
+**PARTIALLY CLOSED**, at the control's true scope, stated verbatim so the ledger
+claims no more than the control delivers:
+
+Branch protection is now enabled on `main`
+([2026] VJS-CC-BOLTRIG-BRANCH-PROTECTION-001, Order 2). Contexts `quality` and
+`Security gate` are required; `allow_force_pushes` and `allow_deletions` are
+false. It binds pull requests and every NON-ADMIN actor, including `release.yml`'s
+`GITHUB_TOKEN` and Dependabot. `enforce_admins` is FALSE, so the sole admin
+retains a bypass, and `strict` is false. That is why this is PARTIALLY closed and
+must not be recorded as closed.
+
+The strong form was refused on the evidence, not for want of authority:
+`security.yml` sets `cancel-in-progress`, so at the current push cadence a run on
+`main` is frequently cancelled rather than failed, and admin enforcement would
+create a gate with no lawful path through it. Conditions for renewing that
+application are in Order 4 of the same judgment.
+
+**Correction of an error of law in an earlier revision of this file.** This
+section previously said making the checks required "belongs to the Principal
+rather than to a passing commit". That was wrong, and the court corrected it
+(Order 7). Enabling branch protection here is not reserved to the Principal: it
+needs no credential Lexby lacks, it is undone by a single reversing API call that
+destroys no data, and it is neither a release nor a destructive act. It is
+governed work, and routing it to the Principal would itself have been a breach.
+Permission to appeal the jurisdictional limb was granted on the court's own
+motion.
 
 ## What this record does not cover
 
