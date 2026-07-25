@@ -43,7 +43,7 @@ def price_micros(
     cost_tier: str,
     *,
     model: str | None = None,
-    prices: Mapping[str, int] | None = None,
+    prices: Mapping[str, float] | None = None,
 ) -> int:
     """Cost in micros for a run of ``tokens`` tokens (FR-COST-04, audit M14).
 
@@ -51,13 +51,22 @@ def price_micros(
     price for ``model`` we fall back to the ``cost_tier`` default, so behaviour is
     unchanged when no prices are configured. Pure data lookup - no provider name
     ever appears in the logic. Tokens are floored at 0 (a negative usage report is
-    never a credit)."""
-    rate: int | None = None
+    never a credit).
+
+    THE RATE MAY BE FRACTIONAL. It used to be coerced with ``int(rate)``, so the
+    finest price expressible was 1 micro/token = $1.00 per million - and every real
+    model we route to is cheaper than that. Configuring an honest rate therefore
+    made billing WORSE, not better: 0.35 truncated to 0 and the model priced as
+    FREE, which is why the tier fallback had never been replaced. The product is
+    rounded (not truncated) because always flooring would systematically under-bill
+    by up to a micro per run. Micros stay the integer STORAGE unit; only the rate
+    gained precision."""
+    rate: float | None = None
     if prices is not None and model is not None:
         rate = prices.get(model)
     if rate is None:
         rate = _TIER_MICROS_PER_TOKEN.get(cost_tier, 5)
-    return max(0, int(tokens)) * int(rate)
+    return max(0, round(max(0, int(tokens)) * float(rate)))
 
 
 class CostAccountant:
@@ -66,7 +75,7 @@ class CostAccountant:
         store: Store,
         alert: AlertFn | None = None,
         *,
-        prices: Mapping[str, int] | None = None,
+        prices: Mapping[str, float] | None = None,
     ) -> None:
         self._store = store
         self._alert = alert
@@ -76,7 +85,7 @@ class CostAccountant:
         self._prices: dict[str, int] = dict(prices or {})
 
     # --- pricing (policy-as-data, FR-COST-04) ---------------------------------
-    def set_prices(self, prices: Mapping[str, int]) -> None:
+    def set_prices(self, prices: Mapping[str, float]) -> None:
         """Install the per-model price table (manifest seeding, apply_manifest)."""
         self._prices = dict(prices or {})
 

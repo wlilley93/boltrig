@@ -106,11 +106,11 @@
       "expires": "2026-12-31"
     },
     "boltrig/config/manifest.py": {
-      "max_file_lines": 845,
+      "max_file_lines": 854,
       "max_function_lines": 56,
       "over_limit_functions": [],
       "owner": "configuration-maintainers",
-      "reason": "Split manifest models, validation, and application into section-oriented modules with round-trip parity.",
+      "reason": "Split manifest models, validation, and application into section-oriented modules with round-trip parity. 2026-07-25: +9 lines so a per-model price keeps sub-micro precision. int(rate) on the way in was half of a two-part bug (price_micros int()-ed it again): every model we route to costs LESS than 1 micro/token, so an honest rate like 0.35 truncated to 0 and the model billed FREE - configuring real prices was strictly worse than the tier fallback, which is why no deployment had ever configured them.",
       "expires": "2026-12-31"
     },
     "boltrig/fleet/chat.py": {

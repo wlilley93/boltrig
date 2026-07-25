@@ -85,7 +85,9 @@ class ModelsConfig:
     # micros per token. A model listed here is charged at its real price; a model
     # absent here falls back to its capability's cost-tier default. Replaces static
     # tier micros as the source of truth for cost accounting.
-    prices: Mapping[str, int] = field(default_factory=dict)
+    # Micros per token, FRACTIONAL: every model we route to is cheaper than
+    # 1 micro/token ($1.00/M), so an integer rate could not express any of them.
+    prices: Mapping[str, float] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -452,10 +454,17 @@ def _parse_models(raw: Mapping[str, Any], tenant_id: str) -> ModelsConfig:
     # Per-model price table (FR-COST-04): {model_name: micros_per_token}. Values
     # are coerced to int; a malformed entry is dropped rather than failing load, so
     # a bad price never blocks boot (the model just falls back to its tier default).
-    prices: dict[str, int] = {}
+    prices: dict[str, float] = {}
     for name, rate in (raw.get("prices") or {}).items():
         try:
-            prices[str(name)] = int(rate)
+            # FLOAT, not int. Coercing here was the other half of the same bug as
+            # price_micros: an honest rate like 0.35 micros/token ($0.35 per million)
+            # truncated to 0 and priced the model FREE, so a deployment that tried to
+            # configure real prices billed nothing. A NEGATIVE rate is dropped - a
+            # price must never become a credit.
+            parsed = float(rate)
+            if parsed >= 0:
+                prices[str(name)] = parsed
         except (TypeError, ValueError):
             continue
     return ModelsConfig(

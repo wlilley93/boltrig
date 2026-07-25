@@ -226,3 +226,49 @@ async def test_the_manifest_seeded_tenant_budget_is_actually_debited(monkeypatch
     # 'cheap' prices at 1 micro/token, so the ledger reads straight through.
     assert budget.spent_tokens == 4321, "the tenant ledger must record real spend, not zero"
     assert budget.spent_micros == 4321
+
+
+@pytest.mark.security
+@pytest.mark.invariant("FR-COST-04")
+def test_a_sub_micro_price_is_not_free():
+    """Every model we route to costs LESS than 1 micro/token ($1.00 per million).
+
+    The rate used to be coerced with `int(rate)`, so an honest price like 0.35
+    truncated to 0 and the model billed as FREE - configuring real prices made
+    billing strictly worse than leaving the tier fallback in place, which is why
+    no deployment had ever configured them.
+    """
+    from boltrig.kernel.cost import price_micros
+
+    # Cerebras gpt-oss-120b: $0.35/M in, $0.75/M out => 0.35-0.75 micros/token.
+    assert price_micros(1_000_000, "cheap", model="m", prices={"m": 0.35}) == 350_000
+    assert price_micros(11_936, "cheap", model="m", prices={"m": 0.75}) == 8952
+    # An integer rate is unchanged.
+    assert price_micros(1_000, "cheap", model="m", prices={"m": 9}) == 9_000
+    # And the tier fallback still applies when the model has no configured price.
+    assert price_micros(1_000, "cheap") == 1_000
+
+
+@pytest.mark.security
+@pytest.mark.invariant("FR-COST-04")
+def test_a_price_never_becomes_a_credit():
+    from boltrig.kernel.cost import price_micros
+
+    assert price_micros(1_000, "cheap", model="m", prices={"m": -5}) == 0
+    assert price_micros(-1_000, "cheap", model="m", prices={"m": 0.5}) == 0
+
+
+@pytest.mark.security
+@pytest.mark.invariant("FR-COST-04")
+def test_the_manifest_parser_keeps_sub_micro_precision():
+    """The parser was the other half of the same bug: it int()-ed the rate on the
+    way in, so even a corrected price_micros would have received 0."""
+    from boltrig.config.manifest import _parse_models
+
+    models = _parse_models(
+        {"prices": {"cheap-model": 0.35, "dear-model": 9, "bad": "x", "neg": -1}}, "t"
+    )
+    assert models.prices["cheap-model"] == 0.35
+    assert models.prices["dear-model"] == 9
+    assert "bad" not in models.prices, "a malformed rate is dropped, never billed"
+    assert "neg" not in models.prices, "a negative rate must never become a credit"
