@@ -31,13 +31,18 @@ import os
 import signal
 from collections.abc import Callable
 
-from boltrig.fleet.infrastructure.codex_stdio_transport import CodexStdin
+from boltrig.fleet.infrastructure.codex_stdio_transport import (
+    EXIT_STATUS_UNKNOWN,
+    CodexStdin,
+)
 from boltrig.fleet.infrastructure.cell_spawner import (
     ALLOWED_SIGNALS,
     CellSpawnerError,
 )
 
-_EXITED = -1
+# One definition of "exited, status unknown", shared with the transport that
+# has to decide whether a teardown is worth a warning.
+_EXITED = EXIT_STATUS_UNKNOWN
 
 
 class SpawnedCellProcess:

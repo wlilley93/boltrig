@@ -14,6 +14,13 @@ logger = logging.getLogger(__name__)
 
 STDIO_STREAM_LIMIT = wire.MAX_LINE_BYTES
 STDERR_CHUNK_BYTES = 16 * 1024
+# An ADOPTED cell is reaped by the privileged spawner, not by us, so waiting on
+# its pidfd can observe THAT it exited but never its real wait status. This
+# sentinel means exactly "exited, status unknown" and is the NORMAL value for a
+# clean cell teardown - so on its own it must never read as a failure, or every
+# healthy turn would emit a teardown warning and train operators to ignore the
+# one signal that is there to make a degraded cell diagnosable.
+EXIT_STATUS_UNKNOWN = -1
 # The cell's stderr is scanned for a CONTENT-FREE diagnostic classification on
 # teardown, never logged verbatim (codex stderr can carry tool arguments = user
 # content); only the matched marker LABELS below are surfaced, mirroring the
@@ -276,7 +283,7 @@ class CodexStdioTransport:
         # without leaking tool arguments codex may have echoed (K-20).
         markers = self.stderr_markers
         code = self._process.returncode
-        if markers or (code not in (0, None)):
+        if markers or (code not in (0, None, EXIT_STATUS_UNKNOWN)):
             logger.warning(
                 "codex cell teardown: returncode=%s stderr_markers=%s",
                 code,

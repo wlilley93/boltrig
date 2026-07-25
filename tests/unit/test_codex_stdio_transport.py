@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 
 import pytest
 
 from boltrig.fleet.infrastructure import codex_protocol as wire
 from boltrig.fleet.infrastructure.codex_stdio_transport import (
+    EXIT_STATUS_UNKNOWN,
     STDIO_STREAM_LIMIT,
     CodexProcessExitedError,
     CodexStdioTransport,
@@ -194,3 +196,30 @@ async def test_cancelling_close_still_kills_and_reaps_the_owned_process() -> Non
 
 def test_subprocess_stream_limit_is_the_exact_protocol_allocation_bound() -> None:
     assert STDIO_STREAM_LIMIT == wire.MAX_LINE_BYTES
+
+
+async def test_a_clean_adopted_cell_teardown_is_not_warned_about(caplog) -> None:
+    """An adopted cell is reaped by the spawner, so its status is ALWAYS the
+    unknown sentinel. A clean teardown must therefore stay quiet - otherwise
+    every healthy turn warns and the degraded-cell signal is worthless."""
+    process = FakeProcess()
+    transport = make_transport(process)
+    process.exit(EXIT_STATUS_UNKNOWN)
+    with caplog.at_level(logging.WARNING):
+        await transport.aclose()
+    assert "codex cell teardown" not in caplog.text
+
+
+async def test_a_marker_still_warns_even_on_the_unknown_status(caplog) -> None:
+    """The sentinel silences the STATUS, never the diagnosis: a cell that hit a
+    codex-internal marker is still surfaced, labels only."""
+    process = FakeProcess()
+    transport = make_transport(process)
+    process.feed_stderr(b"thread 'main' panicked at 'boom'\n")
+    process.exit(EXIT_STATUS_UNKNOWN)
+    await transport.wait_stderr_drained()
+    with caplog.at_level(logging.WARNING):
+        await transport.aclose()
+    assert "codex cell teardown" in caplog.text
+    assert "thread-panic" in caplog.text
+    assert "boom" not in caplog.text  # labels only, never the line
