@@ -1,5 +1,11 @@
 # Goal: make the gate tell the truth again
 
+> **Status 2026-07-25: MET, with two items expressly reserved.** Every job on
+> both workflows is green on commit `139f2b33` - `ci.yml` (test-and-gate,
+> ui-build, ui-e2e, site-build-test-lint, compose-validate, quality) and
+> `security.yml` (Source security, 3x CodeQL, 5x Container, Security gate). See
+> "What it took" at the end for the evidence and the two reserved items.
+
 ## The goal statement
 
 **Restore boltrig's verification apparatus to the point where a green result is
@@ -84,3 +90,67 @@ Concretely, for this goal:
 - A closure claim needs a pointer to the code and the test that closes it. The
   2026-07-02 audit is in this goal precisely because "later rounds imply it was
   handled" is not a closure record.
+
+---
+
+## What it took (closed 2026-07-25)
+
+Six red jobs reduced to five root causes, only one of which was a genuine code
+defect. Each fix uncovered the next previously-masked step, because failures were
+sequential inside the same make targets.
+
+**Defects the dark gate was hiding.** Two, both Postgres-only, both invisible to
+a fully green local run:
+
+1. `channel_deliveries.channel_id REFERENCES channels(id)` - a test never seeded
+   its channel. The in-memory store enforces no FK, so it passed everywhere
+   except `[postgres]`.
+2. `claim_channel_outbox` returned claims in ARBITRARY order. The inner SELECT
+   orders by `created_at` to choose which rows to claim, but Postgres defines no
+   ordering for `RETURNING`, so the outbox handed back the right messages in the
+   wrong order while the module, its in-memory twin and the test all documented
+   "oldest first". For a channel outbox feeding Slack/Discord/Telegram that is
+   user-visible message reordering. It had been presenting as a ~1-in-10 "flake".
+
+**Infrastructure causes.** Lockfile drift (two npm lockfiles violating the
+pnpm-only policy); `$(PY)` resolving to a non-existent `.venv` on a bare runner
+(the exit-127 that read as a Compose error); a release validator that was right
+while its invocation had gone stale after `pi-sidecar` moved behind the `legacy`
+profile; and GitHub Packages auth missing from every job running `pnpm install`,
+not just the image build.
+
+**Security debt.** Four dependency overrides had gone STALE - pinned for older
+advisories and sitting BELOW what current ones required, including an SSRF in
+`next` itself. `pypdf` 6.13.3 -> 6.14.2 and `mcp` 1.26.0 -> 1.28.1 closed 7
+advisories; the ui image's alpine base closed 4 more. Where no upstream fix
+exists, advisories are now ACCEPTED under an expiring, machine-enforced ledger
+(`docs/security/accepted-advisories.json` + `scripts/python_audit.py`, which
+fails on an expired entry and prints what it suppresses) rather than by an
+un-expiring ignore flag. `.trivyignore.yaml` was also never WIRED to the
+vulnerability scan, so any entry there had been silently ignored.
+
+**Verification recovered.** With `BOLTRIG_TEST_DATABASE_URL` pointed at a
+throwaway database the suite goes 2354 passed/172 skipped -> 2525 passed/16
+skipped: ~156 tests, including the RLS fence-drift guard, migration parity,
+tenancy and store parity, had run in exactly one place. Three service-gated
+invariants were verified for the first time - FR-WFL-17 (live Hatchet),
+the per-cell-uid gates, and FR-OPS-04 (backup/restore drill) - and each turned
+out to have been gated on something LOCAL and unexamined rather than on anything
+external. Only MEM-ENG-03 is genuinely credential-blocked.
+
+## The two reserved items
+
+Both are recorded in `docs/security/audit-2026-07-02-closure.md` as the open
+halves of HIGH findings, and both are decisions rather than commits:
+
+1. **The shipped audit-key posture (H3).** The guard fires only under a
+   production signal and nothing sets one by default, so a deployment can run a
+   hash chain keyed by a public constant in this repository while believing its
+   audit log is tamper-evident. It now WARNS loudly on every such boot (bound by
+   a test), but changing the default is a posture change.
+2. **Branch protection (H5).** `main` has none, so a red gate can still merge -
+   the exact condition the finding described. Enabling it changes how every push
+   works for the Principal and for concurrent sessions.
+
+Both were put to the VJS court rather than decided unilaterally or routed to the
+Principal by default.
