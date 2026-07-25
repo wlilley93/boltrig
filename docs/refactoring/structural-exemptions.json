@@ -202,17 +202,17 @@
       "expires": "2026-12-31"
     },
     "boltrig/fleet/spawn.py": {
-      "max_file_lines": 544,
+      "max_file_lines": 602,
       "max_function_lines": 91,
       "over_limit_functions": [
         {
           "name": "Spawner.spawn",
-          "line": 82,
+          "line": 86,
           "lines": 91
         }
       ],
       "owner": "fleet-maintainers",
-      "reason": "Split spawn selection, token issuance, and execution while preserving delegated authority checks. Audit fixes: the budget reservation is refunded when the runtime raises (extracted _invoke_runtime, which lowered spawn's function debt), the budget hard-stop partial is degrade-marked, and make_agent_invoker now applies the same depth cap + reserve/refund/true-up governance as spawn.",
+      "reason": "Split spawn selection, token issuance, and execution while preserving delegated authority checks. Audit fixes: the budget reservation is refunded when the runtime raises (extracted _invoke_runtime, which lowered spawn's function debt), the budget hard-stop partial is degrade-marked, and make_agent_invoker now applies the same depth cap + reserve/refund/true-up governance as spawn. 2026-07-25: +58 lines for _inherit_adapter_bearer, which carries the run-scoped permission-parity bearer across the delegation boundary. The chat turn seals it against the ROOT run id but never calls a verb itself, so the dispatch under the CHILD run id missed the seal and fell back to the adapter's static credential - every parity-dependent verb call was rejected downstream. Spawner.spawn itself is UNCHANGED at 91 lines (the line number moved only because of the new module logger); the growth is the helper and its docstring, which records the failure so the seam is not re-broken.",
       "expires": "2026-12-31"
     },
     "boltrig/fleet/ultracode.py": {

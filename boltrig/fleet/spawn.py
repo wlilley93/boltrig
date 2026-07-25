@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import contextlib
 import json
+import logging
+import os
 import time
 import uuid
 from typing import TYPE_CHECKING, Any, Awaitable, Callable
@@ -39,6 +41,8 @@ if TYPE_CHECKING:
     from boltrig.kernel import Kernel
     from boltrig.kernel.app import Principal, SpawnBody
     from boltrig.kernel.dispatch import AgentInvoker
+
+log = logging.getLogger(__name__)
 
 _PUBLIC_ROUTE_KEYS = {"profile", "provider", "model", "runtime", "tier"}
 
@@ -212,6 +216,10 @@ class Spawner:
         relay - on the success return AND on a runtime raise - so a consumer never
         renders the child RUNNING forever."""
         opened = False
+        # The delegation boundary is also where the permission-parity seal has to
+        # cross: see _inherit_adapter_bearer for why the child cannot use the seal
+        # the chat turn wrote against the ROOT run id.
+        await self._inherit_adapter_bearer(tenant_id, context.run_id, run_id)
         try:
             runtime = await self._runtime_for(tenant_id, capability, context)
             model_route = getattr(runtime, "model_route", None)
@@ -356,6 +364,56 @@ class Spawner:
         if merged_prompt:
             return f"{merged_prompt}\n\nTask:\n{task}"
         return f"Task:\n{task}"
+
+    async def _inherit_adapter_bearer(
+        self, tenant_id: str, parent_run_id: str | None, child_run_id: str
+    ) -> None:
+        """Carry a run-scoped adapter bearer from the spawning run to its child.
+
+        The permission-parity passthrough has to survive DELEGATION. The chat turn
+        seals the caller's clamped external bearer against the ROOT run id, but a
+        chat turn never calls a verb itself: it spawns an ephemeral worker, and the
+        dispatch happens under the CHILD's run id, which is what
+        ``resolve_run_scoped_credential`` is keyed by. Without this the child misses
+        the seal, silently falls back to the adapter's static credential, and every
+        parity-dependent verb call is rejected downstream (observed end to end on the
+        opbox door as ``adapter_unauthorised``, with the agent honestly reporting it
+        had no authorised tools).
+
+        Re-sealing for the child is a PROPAGATION, not a widening: the same bearer,
+        already clamped to min(agent,user), for the same adapter, for a run that is
+        part of the same turn on behalf of the same person. Each run holds its own
+        ref, so ``sweep_run_scoped`` still clears it on that run's terminal and the
+        fail-closed scoping is unchanged - a foreign run still resolves to None.
+
+        Best-effort by construction: when no
+        bearer is sealed (every dev / non-passthrough tenant) this is a no-op and
+        dispatch keeps using the adapter's static credential exactly as before, so
+        the change is execution-neutral for anyone not using the parity seam. A
+        failure here must never take down a spawn that would otherwise succeed - the
+        worst case is the pre-existing behaviour, a fallback to the static credential.
+        """
+        if not parent_run_id:
+            return
+        adapter_id = os.environ.get("BOLTRIG_OBO_ADAPTER_ID", "opbox")
+        try:
+            inherited = await self._kernel.credentials.resolve_run_scoped_credential(
+                tenant_id, parent_run_id, adapter_id
+            )
+            if inherited is None:
+                return
+            token = (inherited.material or {}).get("token")
+            if not token:
+                return
+            await self._kernel.credentials.seal_run_scoped_adapter_bearer(
+                tenant_id, child_run_id, adapter_id, token
+            )
+        except Exception:  # noqa: BLE001 - never fail a spawn on the parity path
+            log.warning(
+                "could not carry the run-scoped adapter bearer for '%s' to the child "
+                "run; it will fall back to the adapter's static credential",
+                adapter_id,
+            )
 
     async def _audit_spawn(
         self,
