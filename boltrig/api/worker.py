@@ -14,6 +14,7 @@ import logging
 import os
 
 from boltrig.config import load_manifest, load_settings
+from boltrig.store import Store
 from boltrig.fleet import (
     anchor_interval_from_env,
     build_org,
@@ -31,7 +32,7 @@ log = logging.getLogger("boltrig.worker")
 _POLL_SECONDS = 5.0
 
 
-def _start_hitl_expiry_janitor(store) -> "asyncio.Task[None] | None":
+def _start_hitl_expiry_janitor(store: Store) -> "asyncio.Task[None] | None":
     """Start the HITL expiry janitor (SEC-14), or None when disabled.
 
     On an interval the janitor transitions every overdue PENDING request to
