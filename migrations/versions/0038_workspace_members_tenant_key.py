@@ -42,6 +42,33 @@ depends_on = None
 # search_path, so a hardcoded `public.` resolves to NULL there and the whole
 # block silently returns having done nothing. That is how the parity gate
 # caught an earlier draft of this migration.
+# Widen alembic's own bookkeeping column FIRST, and it is not housekeeping: this
+# revision's id is 33 characters, and a database whose ``alembic_version`` was
+# created when the chain's longest id still fit in 32 has ``varchar(32)``. Alembic
+# writes the new id AFTER ``upgrade()`` returns, so the whole migration succeeds
+# and then dies on
+#   StringDataRightTruncation: value too long for type character varying(32)
+# leaving the schema changed and the version row still reading 0037. A fresh
+# install is unaffected (alembic sizes the column from the longest id in the
+# chain, so it gets 64), and so is any deployment that WALKED the chain, because
+# 0015_invitation_workspace_provision is 35 characters and would have hit this
+# first. It bites the deployments that were bootstrapped from schema.sql and
+# STAMPED, which is how the dev box was built - found by rehearsing this migration
+# against a restore of it rather than by reading the code.
+_WIDEN_VERSION_TABLE = """
+DO $$
+BEGIN
+    IF to_regclass('alembic_version') IS NOT NULL AND EXISTS (
+        SELECT 1 FROM information_schema.columns
+         WHERE table_name = 'alembic_version'
+           AND column_name = 'version_num'
+           AND character_maximum_length < 64
+    ) THEN
+        ALTER TABLE alembic_version ALTER COLUMN version_num TYPE varchar(64);
+    END IF;
+END $$;
+"""
+
 _UP = """
 DO $$
 DECLARE
@@ -103,6 +130,7 @@ END $$;
 
 
 def upgrade() -> None:
+    op.execute(_WIDEN_VERSION_TABLE)
     op.execute(_UP)
 
 
