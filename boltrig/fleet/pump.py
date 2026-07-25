@@ -62,6 +62,14 @@ DEFAULT_MAX_ATTEMPTS = 3
 DEFAULT_LEASE_SECONDS = 300
 DEFAULT_SPAWN_BUDGET = 32
 
+# The end states an attempt can durably reach. Once the row holds one of these the
+# attempt is OVER: boltrig/work/store.py gives DONE and CANCELLED no outgoing
+# transition at all, and FAILED / AWAITING_HUMAN move again only on a human
+# re-queue (``WorkPump.requeue``).
+SETTLED_STATUSES = frozenset(
+    {WorkStatus.DONE, WorkStatus.FAILED, WorkStatus.CANCELLED, WorkStatus.AWAITING_HUMAN}
+)
+
 # The key under which a step's outcome may carry a synthesised workflow to learn
 # from (Phase 3, US-WFL-03): today the pump learns from any outcome that already
 # carries a GENERATED definition (proven by the wiring test).
@@ -458,6 +466,21 @@ class WorkPump:
         # idempotent, so re-running it never double-writes ([2026] VJS-COUNTY 6, D1/D4).
         if await self._store.is_run_cancel_requested(item.tenant_id, run_id):
             await self._cancel(item, run_id)
+            return
+        # The same reasoning one step wider. A fault raised AFTER the attempt already
+        # reached its end state durably is a fault in the post-terminal step, not in
+        # the work: ``_settle`` writes DONE and only then upserts its execute
+        # checkpoint, and the addressed-workflow path writes DONE and only then
+        # writes an audit row that can hit the UNIQUE(tenant_id, seq) backstop. Both
+        # land here with a settled row. Re-queueing then is the done -> pending
+        # transition the work-item guard forbids outright, and it re-runs the WHOLE
+        # item: every effect, every follow-on child, a second time.
+        settled = await self._store.get_work_item(item.tenant_id, item.id)
+        if settled is not None and settled.status in SETTLED_STATUSES:
+            log.warning(
+                "work item %s faulted after settling as %s; not re-opening it (%s)",
+                item.id, settled.status.value, type(exc).__name__,
+            )
             return
         will_retry = item.attempts < self.max_attempts
         if will_retry:

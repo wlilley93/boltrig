@@ -39,8 +39,8 @@ T = "acme"
 DEPT = "engineering"
 
 
-def _kernel() -> Kernel:
-    store = InMemoryStore()
+def _kernel(store: InMemoryStore | None = None) -> Kernel:
+    store = store if store is not None else InMemoryStore()
     store.set_tenant_permissions(TenantPermissions(T, GrantSet.of(["*"])))
     return Kernel(store)
 
@@ -206,6 +206,54 @@ async def test_cap_breach_escalates_to_a_human_and_requeue_restores_it():
     assert requeued.status == WorkStatus.PENDING
     assert requeued.attempts == 0
 
+
+# --- US-EXE-06(b): a fault AFTER the terminal write never re-opens the item ---
+@pytest.mark.invariant("US-EXE-06")
+async def test_a_fault_after_the_terminal_write_never_reopens_a_settled_item():
+    """``_settle`` commits DONE and only THEN writes the execute checkpoint, so a
+    store fault on that second write (a reset connection, a statement timeout, or on
+    the addressed-workflow path the audit row hitting the UNIQUE(tenant_id, seq)
+    backstop) lands in the retry handler with the row already terminal. Re-queueing
+    it there is the done -> pending transition the work-item guard forbids, and the
+    whole item runs again - every external effect and every follow-on child."""
+
+    class _FaultOnceOnTheDoneCheckpoint(InMemoryStore):
+        """Loses the ('execute','done') checkpoint write exactly once - the same
+        crash window ``_DropOnceCheckpointStore`` models for the workflow lane."""
+
+        def __init__(self) -> None:
+            super().__init__()
+            self.faulted = False
+
+        async def upsert_checkpoint(
+            self, tenant_id, run_id, step, status, output=None, hitl_request_id=None
+        ):
+            if (step, status) == ("execute", "done") and not self.faulted:
+                self.faulted = True
+                raise RuntimeError("checkpoint write lost")
+            return await super().upsert_checkpoint(
+                tenant_id, run_id, step, status, output, hitl_request_id
+            )
+
+    store = _FaultOnceOnTheDoneCheckpoint()
+    kernel = _kernel(store)
+    await _add_script_cap(kernel)
+    pump = _pump(kernel)
+    item = _item("fix the login bug")
+    await store.create_work_item(item)
+
+    assert await pump.run_once(T) is True
+    assert store.faulted is True  # the post-terminal fault really fired
+
+    after = await store.get_work_item(T, item.id)
+    assert after.status == WorkStatus.DONE, (
+        "a fault AFTER the DONE write re-opened a settled work item: _record_failure "
+        "wrote PENDING over a terminal status"
+    )
+    assert after.result["outcome"]["terminal_status"] == "done"
+    # and the item is not handed straight back out for a full second execution
+    assert await pump.run_once(T) is False
+    assert len(await store.list_work_items(T, parent_id=item.id)) == 1
 
 # --- US-EXE-07: the shared store CAS caps fan-out across pump instances -------
 @pytest.mark.invariant("US-EXE-07")

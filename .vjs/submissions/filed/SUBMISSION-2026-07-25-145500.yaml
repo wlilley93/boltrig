@@ -1,0 +1,65 @@
+id: SUBMISSION-2026-07-25-145500
+court_requested: county
+jurisdiction: default
+kind: design-fork
+question: 'Closing the work-item lease race needs a CONDITIONAL write evaluated by the database (a store-level CAS), because a read-then-write check in the pump cannot fix a read-then-write race - this was tried and defeated under review. Adding one means changing the store contract and therefore both stores, and InMemoryStore cannot express it while it hands callers the live row object rather than a snapshot. So: extend the store contract with a conditional work-item write and make InMemoryStore copy-on-read to support it, or leave the lease unfenced and bound the damage another way (shorten the window, renew leases, make the terminal write idempotent)? First impression: no precedent on the store contract or on memory/PG parity obligations.'
+facts: |
+  # A conditional work-item write, or another way to bound lease double-execution
+
+  Full technical record in `docs/findings/2026-07-25-work-item-lease-has-no-fence.md`.
+  Summary of what is established:
+
+  - Nothing renews a work-item lease, so a step outrunning `lease_seconds` (300) is
+    handed to a second executor while the first still runs. That reclaim is
+    deliberate (US-FLT-05); the unfenced WRITE is not.
+  - Every pump state write is an unconditional full-row upsert with no owner and no
+    status predicate, so the loser overwrites the winner's terminal record and rolls
+    `attempts` back. The repo already has a CAS helper whose comment says "the loser
+    fails instead of silently overwriting the winner"; the pump does not use it, and
+    the sibling channel-outbox queue DOES fence its claims.
+
+  ## Why this is a fork and not a bug fix
+
+  I do not have a lawful smallest-change here. The obvious owner-equality fence is
+  positively wrong (the durable lane legitimately writes from a different process
+  under a different worker id). The next attempt, a `_still_leased` re-read, was
+  applied by an independent reviewer who then reproduced the original defect with
+  it in place: an unfenced sibling write in `authority.py`, a fence placed after
+  child persistence, and - the one that decides it - the helper proves only "the
+  lease is unchanged since THIS BODY'S read", not "this body holds the lease". Two
+  bodies that read the same tuple both pass, which is the STEADY STATE of the
+  duplicate-enqueue path, not a narrow race.
+
+  So the choice is genuinely open:
+
+  A. **Store-level CAS.** `update_work_item(..., if_lease=(owner, expires_at)) ->
+     bool`, backed by `UPDATE ... WHERE ... AND lease_owner=$ AND
+     lease_expires_at=$`. Correct by construction on Postgres. Cost: it changes the
+     store contract, and `InMemoryStore` cannot honour it today because it hands
+     callers the LIVE row, so a memory-side comparison compares an object with
+     itself. Making the memory store copy-on-read is a real change to the two-store
+     parity design and touches every caller that mutates a returned row in place -
+     which, given this month's `workspace_members` finding, is exactly the kind of
+     shared-mutable-state assumption that has already produced one live defect.
+
+  B. **Bound the damage without a fence.** Renew the lease mid-step, shorten the
+     window, or make the terminal write idempotent/monotonic (refuse to move a row
+     backwards out of a settled status, which is the shape of the #6 fix that just
+     shipped and which needs no new store primitive). Cheaper and parity-neutral,
+     but it manages the race rather than removing it, and it leaves
+     `attempts`/`result` clobbering possible between two non-terminal writes.
+
+  ## What I have already done
+
+  Shipped only the half that is genuinely closed: a fault raised after the attempt
+  settled durably no longer re-opens the item (`SETTLED_STATUSES` guard in
+  `_record_failure`), seeded-failure verified. I did NOT ship the lease fence, and
+  I did not record #4 as fixed, because a fence that a reviewer defeated by running
+  it would be a claim the code does not support.
+
+  ## Citator
+
+  Checked. Nothing in `.vjs/orders/` or the lawpack addresses the store contract,
+  conditional writes, or what memory/Postgres parity obliges when one backend can
+  express a primitive the other cannot. Not on all fours with anything, so S-11(c)
+  does not dispose of it.

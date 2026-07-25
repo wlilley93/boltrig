@@ -15,6 +15,8 @@ Host-class contract:
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from boltrig.models import Channel, ChannelBinding, ChannelPairing
 
 
@@ -96,12 +98,20 @@ class ChannelStorePG:
         )
 
     async def upsert_channel_binding(self, binding):
+        # Keyed on the SENDER, not the surrogate id: every caller mints a fresh
+        # cb_<uuid> (channel_routes._self_onboard / _consume_pairing,
+        # control_channel_ops._bind_channel), so an id-arbitrated upsert never
+        # sees its own conflict arm and a re-bind hit channel_bindings_sender_idx
+        # (UNIQUE (tenant_id, channel_id, external_user_id)) instead - a 500 with
+        # the single-use pairing code already burned. The id is carried over so
+        # the id handed back to the caller is the id the row actually holds
+        # (unbind resolves by it); created_at stays first-bound, as elsewhere.
         await self._pool.execute(
             """INSERT INTO channel_bindings
                  (id, tenant_id, channel_id, platform, external_user_id, subject, role, created_at)
                VALUES ($1,$2,$3,$4,$5,$6,$7,COALESCE($8, now()))
-               ON CONFLICT (tenant_id, id) DO UPDATE SET
-                 subject=EXCLUDED.subject, role=EXCLUDED.role""",
+               ON CONFLICT (tenant_id, channel_id, external_user_id) DO UPDATE SET
+                 id=EXCLUDED.id, subject=EXCLUDED.subject, role=EXCLUDED.role""",
             binding.id, binding.tenant_id, binding.channel_id, binding.platform,
             binding.external_user_id, binding.subject, binding.role, binding.created_at,
         )
@@ -209,6 +219,31 @@ class ChannelStoreMem:
                 self._chan_pairings.pop(k, None)
 
     async def upsert_channel_binding(self, binding):
+        # Mirrors the PG ON CONFLICT (tenant_id, channel_id, external_user_id)
+        # arm: a sender has ONE binding row, so a re-bind under a fresh id
+        # REPLACES it (keeping the first-bound created_at) rather than stacking a
+        # second row beside it - the reader below returns the first match, so a
+        # duplicate would silently keep serving the stale subject/role, i.e. an
+        # ignored demotion. Rows stay keyed by id for delete_channel_binding.
+        # The PRIMARY KEY first, BEFORE anything is removed. Postgres refuses an id
+        # already held by a different sender and changes nothing; without this the
+        # twin would accept it, and the replace below would have deleted the
+        # incoming sender's own row on the way - so a refusal in one store and a
+        # silent unbind of somebody else in the other. Unreachable while every
+        # caller mints a fresh uuid, but the memory store is what the channel
+        # security tests run on, and the twin quietly disagreeing with Postgres is
+        # exactly how this defect was made in the first place.
+        held = self._chan_bindings.get((binding.tenant_id, binding.id))
+        if held is not None and held.external_user_id != binding.external_user_id:
+            raise ValueError(
+                f"channel binding id {binding.id!r} is already held by a different sender"
+            )
+        existing = await self.get_channel_binding(
+            binding.tenant_id, binding.channel_id, binding.external_user_id
+        )
+        if existing is not None:
+            del self._chan_bindings[(existing.tenant_id, existing.id)]
+            binding = replace(binding, created_at=existing.created_at)
         self._chan_bindings[(binding.tenant_id, binding.id)] = binding
 
     async def get_channel_binding(self, tenant_id, channel_id, external_user_id):

@@ -654,6 +654,7 @@ invariants:
       - tests/kernel/test_idempotency.py::test_secret_shaped_success_is_completed_uncacheable_not_persisted
       - tests/store/test_store_parity.py::test_idempotency_claim_is_bound_single_owner_and_replayable
       - tests/store/test_store_parity.py::test_idempotency_expiry_reclaims_only_before_execution
+      - tests/store/test_postgres_store.py::test_claim_survives_a_release_between_the_insert_and_the_reread
   FR-EXE-03:
     description: Recursion depth is bounded - a spawn past the capability max depth is refused.
     tests:
@@ -845,11 +846,12 @@ invariants:
     tests:
       - tests/security/test_budget_and_pii.py::test_pii_redaction
   SEC-14:
-    description: High-consequence / blocking verbs pause for human approval and cannot be bypassed - an approval is single-use and bound to the exact tenant, verb, canonical params, authenticated/delegated initiator, and mutable resource snapshot; only an explicitly authorised assigned human independent of the direct/delegated requester may answer it; and a spent (consumed) approval FAILS LOUDLY with a typed 409 rather than silently re-pending, so a retry after a successful consume can never loop on fresh 202s. Channel-native /approve|/deny replies at intake run through the SAME respond authorization (fail-closed for a non-approver, a self-approver, or an unbound sender, and a replayed command can never re-answer), and a channel /answer can feed a QUESTION back but can never be laundered into clearing a gated verb - the approval/question separation holds on every surface. Approval timeouts are recorded AND enforced: the gate stamps every request it raises with the manifest's hitl.approval_timeout_seconds (threaded manifest -> Kernel -> HITLManager at construction, never read ad hoc); LAZILY, an overdue request refuses an answer with a typed 409 and transitions to TIMED_OUT, and a stale (answered-but-unconsumed) approval past its deadline can never authorise an execution (the gate re-pends for a fresh human decision); and a worker-side sweep janitor (BOLTRIG_HITL_EXPIRY_INTERVAL, store-only, engine-independent, fail-safe per tenant) expires only overdue PENDING requests and settles the linked AWAITING_HUMAN work item at the neutral terminal CANCELLED - never a silent success, never an automatic re-queue loop.
+    description: High-consequence / blocking verbs pause for human approval and cannot be bypassed - an approval is single-use and bound to the exact tenant, verb, canonical params, authenticated/delegated initiator, and mutable resource snapshot; only an explicitly authorised assigned human independent of the direct/delegated requester may answer it; and a spent (consumed) approval FAILS LOUDLY with a typed 409 rather than silently re-pending, so a retry after a successful consume can never loop on fresh 202s - and conversely a trip at the kernel RATE-LIMIT gate never spends one, because on a leg carrying an approval the throttle is enforced BEFORE the gate consumes it, so a throttled call leaves its approval ANSWERED and re-usable and the adapter never ran. That is the rate-limit gate specifically and not every pre-execution refusal: an idempotency conflict, a missing adapter and a run-scoped credential failure all still raise after the consume. Channel-native /approve|/deny replies at intake run through the SAME respond authorization (fail-closed for a non-approver, a self-approver, or an unbound sender, and a replayed command can never re-answer), and a channel /answer can feed a QUESTION back but can never be laundered into clearing a gated verb - the approval/question separation holds on every surface. Approval timeouts are recorded AND enforced: the gate stamps every request it raises with the manifest's hitl.approval_timeout_seconds (threaded manifest -> Kernel -> HITLManager at construction, never read ad hoc); LAZILY, an overdue request refuses an answer with a typed 409 and transitions to TIMED_OUT, and a stale (answered-but-unconsumed) approval past its deadline can never authorise an execution (the gate re-pends for a fresh human decision); and a worker-side sweep janitor (BOLTRIG_HITL_EXPIRY_INTERVAL, store-only, engine-independent, fail-safe per tenant) expires only overdue PENDING requests and settles the linked AWAITING_HUMAN work item at the neutral terminal CANCELLED - never a silent success, never an automatic re-queue loop.
     tests:
       - tests/security/test_hitl_gate.py::test_blocking_verb_pauses_for_approval
       - tests/security/test_hitl_gate.py::test_resumes_after_approval
       - tests/security/test_hitl_gate.py::test_approval_is_single_use
+      - tests/security/test_hitl_gate.py::test_rate_limited_gated_call_does_not_spend_the_approval
       - tests/security/test_hitl_gate.py::test_approval_is_verb_bound_and_single_use
       - tests/security/test_hitl_gate.py::test_respond_rejects_agent_and_self_approval
       - tests/security/test_hitl_gate.py::test_respond_requires_verb_authority_assignee_and_delegation_separation
@@ -1977,3 +1979,22 @@ invariants:
       - tests/security/test_run_scoped_adapter_bearer.py::test_a_bystander_quoting_the_run_id_cannot_read_a_secure_answer
       - tests/security/test_run_scoped_adapter_bearer.py::test_a_child_run_cannot_launder_a_strangers_bearer
       - tests/security/test_run_scoped_adapter_bearer.py::test_an_unowned_seal_is_refused_at_the_door
+
+  # --- a channel sender has exactly one binding row ---
+  SEC-187:
+    description: >-
+      A channel sender's binding is keyed by the SENDER, not by the surrogate row
+      id. Every writer mints a fresh cb_<uuid>, so an id-arbitrated upsert never
+      reaches its own conflict arm: on Postgres a re-bind hit the UNIQUE
+      (tenant_id, channel_id, external_user_id) index and 500'd with the single-use
+      pairing code already burned, while the memory twin stacked a second row that
+      the resolver never returned, so a demotion or re-subject was silently
+      discarded. A re-bind now REPLACES that sender's one row on both stores,
+      keeping the first-bound created_at and reporting the id the row actually
+      holds. The key is scoped: another sender, the same sender on another channel,
+      and the same pair under another tenant are all distinct rows. Re-using an id
+      another sender already holds is refused by BOTH stores with the table
+      unchanged, so the twin cannot accept what Postgres rejects.
+    tests:
+      - tests/store/test_channel_durability.py::test_rebinding_a_sender_replaces_that_senders_one_row
+      - tests/store/test_channel_durability.py::test_a_binding_id_held_by_another_sender_is_refused_on_both_stores

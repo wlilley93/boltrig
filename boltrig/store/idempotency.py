@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import copy
+import logging
 from datetime import timedelta
 from typing import Any
 
 from boltrig.models import utcnow
 
 from .idempotency_contract import IdempotencyClaim, IdempotencyClaimStatus
+
+log = logging.getLogger(__name__)
 
 
 def _bound(
@@ -118,6 +121,17 @@ def _owned(record: dict[str, Any] | None, owner_token: str, status: str) -> bool
     )
 
 
+# A conflicting claim can lose the row it is about to re-read. ON CONFLICT DO
+# NOTHING takes no lock on the row it conflicted with, so under READ COMMITTED a
+# concurrent idempotency_release (dispatch takes one whenever a gate rejects
+# before start) can delete and commit between the INSERT and the FOR UPDATE
+# re-read, and the re-read then matches nothing. The key is free again at that
+# point, so re-run the insert instead of reading back a vanished row - the memory
+# twin, whose claim never awaits between its dict read and write, has no such
+# window and returns ACQUIRED in exactly this situation.
+_CLAIM_ATTEMPTS = 3
+
+
 class IdempotencyStorePG:
     async def idempotency_claim(
         self,
@@ -135,31 +149,48 @@ class IdempotencyStorePG:
     ):
         bound = (actor, on_behalf_of, workspace_id, noun, verb, request_hash)
         async with self.with_tenant(tenant_id) as conn:
-            inserted = await conn.fetchrow(
-                """INSERT INTO idempotency_keys
-                     (tenant_id, key, actor, on_behalf_of, workspace_id, noun, verb,
-                      request_hash, status, owner_token, lease_expires_at)
-                   VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'claimed',$9,
-                           now() + $10::int * interval '1 second')
-                   ON CONFLICT (tenant_id, key) DO NOTHING RETURNING key""",
-                tenant_id,
-                key,
-                *bound,
-                owner_token,
-                max(0, lease_seconds),
+            for _ in range(_CLAIM_ATTEMPTS):
+                inserted = await conn.fetchrow(
+                    """INSERT INTO idempotency_keys
+                         (tenant_id, key, actor, on_behalf_of, workspace_id, noun, verb,
+                          request_hash, status, owner_token, lease_expires_at)
+                       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'claimed',$9,
+                               now() + $10::int * interval '1 second')
+                       ON CONFLICT (tenant_id, key) DO NOTHING RETURNING key""",
+                    tenant_id,
+                    key,
+                    *bound,
+                    owner_token,
+                    max(0, lease_seconds),
+                )
+                if inserted is not None:
+                    return IdempotencyClaim(IdempotencyClaimStatus.ACQUIRED)
+                row = await conn.fetchrow(
+                    """SELECT *, lease_expires_at <= now() AS lease_expired
+                         FROM idempotency_keys
+                        WHERE tenant_id=$1 AND key=$2 FOR UPDATE""",
+                    tenant_id,
+                    key,
+                )
+                if row is None:
+                    continue  # released under us: the key is free, so re-run the insert
+                if _pg_bound(row) != bound:
+                    return IdempotencyClaim(IdempotencyClaimStatus.MISMATCH)
+                return await self._existing_claim(
+                    conn, row, tenant_id, key, owner_token, lease_seconds
+                )
+            # Lost that race on every attempt. Answer contended rather than hand out
+            # a claim we never wrote - but say so, loudly. For an HTTP caller this is
+            # just a retry; inside a workflow the interpreter catches the resulting
+            # IdempotencyConflict and re-invokes with NO key at all, so a key that is
+            # in fact FREE becomes a silently dropped idempotency guarantee. Whatever
+            # produces this needs to be visible, not inferred from a duplicate effect.
+            log.warning(
+                "idempotency claim for key %r lost the insert/re-read race %d times; "
+                "answering in_progress on a key that may be free",
+                key, _CLAIM_ATTEMPTS,
             )
-            if inserted is not None:
-                return IdempotencyClaim(IdempotencyClaimStatus.ACQUIRED)
-            row = await conn.fetchrow(
-                """SELECT *, lease_expires_at <= now() AS lease_expired
-                     FROM idempotency_keys
-                    WHERE tenant_id=$1 AND key=$2 FOR UPDATE""",
-                tenant_id,
-                key,
-            )
-            if _pg_bound(row) != bound:
-                return IdempotencyClaim(IdempotencyClaimStatus.MISMATCH)
-            return await self._existing_claim(conn, row, tenant_id, key, owner_token, lease_seconds)
+            return IdempotencyClaim(IdempotencyClaimStatus.IN_PROGRESS)
 
     async def _existing_claim(
         self,

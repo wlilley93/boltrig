@@ -13,13 +13,18 @@ from fastapi.testclient import TestClient
 
 from boltrig.kernel.app import create_app
 from boltrig.kernel.hitl import approval_request_fingerprint
+from boltrig.kernel.ratelimit import RateLimiter
 from boltrig.models import (
     HITLRequest,
     HITLStateConflict,
     HITLStatus,
     HITLType,
     PendingHuman,
+    RateLimit,
+    RateLimited,
+    TargetType,
     Urgency,
+    VerbBinding,
 )
 from tests.conftest import TENANT, _build_kernel, make_ctx
 
@@ -110,6 +115,61 @@ async def test_approval_is_single_use(gated_kernel):
             approval_id=req_id,
         )
     assert await gated_kernel.hitl.list_pending(TENANT) == []
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-14")
+async def test_rate_limited_gated_call_does_not_spend_the_approval():
+    # The throttle is a PRE-EXECUTION kernel refusal: the adapter provably never
+    # ran, so the human approval must survive it and stay usable on the retry that
+    # RateLimited's retry_after invites. Spending it first left the caller holding
+    # a CONSUMED approval and a 409 claiming "its invocation already ran" about a
+    # high-consequence action that never happened.
+    k, _ = await _build_kernel(blocking_verbs={"ticket.create"})
+    await k.store.upsert_binding(
+        VerbBinding(
+            verb_id="ticket.create",
+            tenant_id=TENANT,
+            target_type=TargetType.ADAPTER,
+            target_ref="memory-tickets",
+            rate_limit=RateLimit(per="minute", max=1, scope="tenant"),
+        )
+    )
+
+    async def approved(title: str) -> str:
+        with pytest.raises(PendingHuman) as pend:
+            await k.invoke(
+                "ticket", "ticket.create", {"title": title}, make_ctx(["ticket.create"])
+            )
+        req_id = pend.value.hitl_request_id
+        await k.hitl.answer(TENANT, req_id, "approve", "lead@acme")
+        return req_id
+
+    first = await approved("one")
+    await k.invoke(
+        "ticket", "ticket.create", {"title": "one"}, make_ctx(["ticket.create"]),
+        approval_id=first,
+    )  # burns the window's only token
+
+    second = await approved("two")
+    with pytest.raises(RateLimited):
+        await k.invoke(
+            "ticket", "ticket.create", {"title": "two"}, make_ctx(["ticket.create"]),
+            approval_id=second,
+        )
+    held = await k.hitl.get(TENANT, second)
+    assert held is not None
+    assert held.status == HITLStatus.ANSWERED, (
+        "the rate-limit gate spent the human approval for a call that never "
+        "executed; the retry is now met with 'its invocation already ran'"
+    )
+
+    k.dispatcher._rate = RateLimiter()  # the rate window has passed
+    out = await k.invoke(
+        "ticket", "ticket.create", {"title": "two"}, make_ctx(["ticket.create"]),
+        approval_id=second,
+    )
+    assert out["status"] == "open"
 
 
 @pytest.mark.security

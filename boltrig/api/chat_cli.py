@@ -187,20 +187,6 @@ async def stream_turn(
         async with client.stream(
             "POST", f"{server}/v1/chat", json=body, headers={"Authorization": f"Bearer {token}"}
         ) as resp:
-            # 202 is an ACCEPTANCE, not a failure: the conversation already had a
-            # turn in flight, so the message was durably queued as a steer and is
-            # answered as the next turn on that stream (US-CHAT-15). Reporting it
-            # as "request failed (HTTP 202)" tells the user their message was lost
-            # when it was not. There is no stream to read on this path.
-            if resp.status_code == 202:
-                yield {
-                    "type": "queued",
-                    "detail": (
-                        "queued behind the turn already running on this conversation; "
-                        "the reply lands on that turn"
-                    ),
-                }
-                return
             if resp.status_code != 200:
                 raise ChatCliError(_http_error(resp.status_code, await resp.aread()))
             async for event in parse_sse(resp.aiter_lines()):

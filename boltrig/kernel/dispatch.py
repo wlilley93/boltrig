@@ -8,7 +8,9 @@ and audited at the end regardless of outcome:
     grant check              (GrantMissing, SEC-07)
     idempotency replay       (SEC-15)
     consequence/HITL gate    (PendingHuman, SEC-14 - cannot be bypassed)
-    rate limit               (RateLimited, FR-KER-05)
+    rate limit               (RateLimited, FR-KER-05 - runs AHEAD of the gate on
+                              the leg that spends an approval, so a throttle trip
+                              never burns a human authorisation)
     resolve credential       (inside kernel only, SEC-05)
     execute adapter | agent  (degrade on UNAVAILABLE, P9)
     validate output          (SchemaValidationError)
@@ -421,13 +423,36 @@ class Dispatcher:
 
         # 5. consequence / HITL gate (SEC-14) - cannot be bypassed by an agent
         gated = verb_def.consequence == Consequence.HIGH or verb in self._blocking_verbs
+        # 6. rate limit (FR-KER-05). The gate SPENDS the approval it is handed
+        # (atomic ANSWERED -> CONSUMED, single-use) and nothing can hand it back,
+        # so on the leg that carries one the throttle must decide FIRST: a
+        # RateLimited raised after the consume burns a human authorisation for a
+        # call the adapter provably never saw, and the retry that retry_after
+        # invites is then met with "its invocation already ran".
+        #
+        # The name is CARRIES, not spends. A stale, unanswered or bogus approval_id
+        # takes this branch too, and enforce_approval then re-pends it - so such a
+        # call now costs a rate token while only pending for a human. That is the
+        # accepted trade, stated rather than glossed: an approval id is single-use
+        # and unrecoverable, a rate token refills within the minute, and nothing
+        # can tell the two apart until the gate has already spent one.
+        #
+        # This does NOT make the whole pre-execution path approval-safe, and the
+        # invariant is worded to match: _idempotency.start (IdempotencyConflict), a
+        # missing adapter (DegradedMode) and run-scoped credential resolution
+        # (CredentialResolution) all still raise after the consume. Only the
+        # rate-limit gate moves.
+        carries_approval = gated and approval_id is not None
         try:
+            if carries_approval:
+                await self._rate.enforce(tenant, verb, binding.rate_limit)
             if gated:
                 context = await enforce_approval(
                     self._hitl, self._adapter_provider, binding,
                     noun, verb, params, context, approval_id,
                 )
-            await self._rate.enforce(tenant, verb, binding.rate_limit)
+            if not carries_approval:
+                await self._rate.enforce(tenant, verb, binding.rate_limit)
         except Exception:
             await self._idempotency.release(run)
             raise

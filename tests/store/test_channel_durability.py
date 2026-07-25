@@ -1,6 +1,6 @@
 """Channel durability store parity (decision 0003, Phase 2): the durable
-replay-dedup markers and the socket-class outbound hand-off behave IDENTICALLY
-on the in-memory and Postgres stores.
+replay-dedup markers, the socket-class outbound hand-off and the sender's
+binding row behave IDENTICALLY on the in-memory and Postgres stores.
 
 Same parametrized-backend idiom as test_store_parity.py: the memory backend
 runs everywhere; the postgres backend runs when BOLTRIG_TEST_DATABASE_URL is
@@ -13,7 +13,7 @@ import os
 
 import pytest
 
-from boltrig.models import Channel, ChannelOutboxMessage
+from boltrig.models import Channel, ChannelBinding, ChannelOutboxMessage
 
 DSN = os.environ.get("BOLTRIG_TEST_DATABASE_URL")
 T = "acme"
@@ -61,6 +61,15 @@ def _msg(mid: str, channel_id: str, *, tenant: str = T) -> ChannelOutboxMessage:
     return ChannelOutboxMessage(
         id=mid, tenant_id=tenant, channel_id=channel_id,
         payload={"text": f"body-{mid}", "target": "C1"},
+    )
+
+
+def _binding(
+    bid: str, channel_id: str, sender: str, subject: str, role: str, *, tenant: str = T
+) -> ChannelBinding:
+    return ChannelBinding(
+        id=bid, tenant_id=tenant, channel_id=channel_id, platform="slack",
+        external_user_id=sender, subject=subject, role=role,
     )
 
 
@@ -156,3 +165,67 @@ async def test_outbox_fail_backs_off_then_terminates(store):
     assert await store.fail_channel_outbox(
         T, "m-1", "stranger", "x", max_attempts=3, backoff_seconds=1
     ) is False
+
+
+# --- the sender's binding row -------------------------------------------------
+@pytest.mark.store
+@pytest.mark.invariant("SEC-187")
+async def test_rebinding_a_sender_replaces_that_senders_one_row(store):
+    await _channel(store, "ch-1")
+    await store.upsert_channel_binding(_binding("cb-1", "ch-1", "U-1", "alice", "member"))
+    # Every writer mints a FRESH cb_ id, so the re-bind must key on the SENDER:
+    # id-keyed, Postgres never reaches its conflict arm and raises against
+    # channel_bindings_sender_idx (500, one-time pairing code already burned)
+    # while memory stacks a second row the reader never returns.
+    await store.upsert_channel_binding(_binding("cb-2", "ch-1", "U-1", "bob", "admin"))
+
+    rows = await store.list_channel_bindings(T, "ch-1")
+    assert [(r.id, r.subject, r.role) for r in rows] == [("cb-2", "bob", "admin")], (
+        "a re-bind must REPLACE the sender's one binding row, not stack a duplicate "
+        "beside it"
+    )
+    resolved = await store.get_channel_binding(T, "ch-1", "U-1")
+    assert (resolved.id, resolved.subject, resolved.role) == ("cb-2", "bob", "admin"), (
+        "the resolver still reads the STALE binding after a re-bind: the sender keeps "
+        "the old subject/role, so a demotion or re-subject is silently discarded"
+    )
+    # ...and the sender key is scoped: another sender, or the same sender on
+    # another channel, is a DIFFERENT row, never collapsed into the one above.
+    await _channel(store, "ch-2")
+    await store.upsert_channel_binding(_binding("cb-3", "ch-1", "U-2", "carol", "member"))
+    await store.upsert_channel_binding(_binding("cb-4", "ch-2", "U-1", "dave", "member"))
+    assert len(await store.list_channel_bindings(T, "ch-1")) == 2
+    assert len(await store.list_channel_bindings(T, "ch-2")) == 1
+    # tenant_id leads both the sender index and the primary key, and the whole
+    # arbiter change hangs on that column, so pin it rather than assume it.
+    await _channel(store, "ch-1", tenant="other")
+    await store.upsert_channel_binding(
+        _binding("cb-5", "ch-1", "U-1", "erin", "member", tenant="other")
+    )
+    assert len(await store.list_channel_bindings("other", "ch-1")) == 1
+    assert len(await store.list_channel_bindings(T, "ch-1")) == 2
+
+
+@pytest.mark.store
+@pytest.mark.invariant("SEC-187")
+async def test_a_binding_id_held_by_another_sender_is_refused_on_both_stores(store):
+    """The fix's OWN failure mode, pinned in the twin as well as in Postgres.
+
+    Re-using an id that another sender holds violates the primary key. Postgres
+    raises and changes nothing; the memory store used to accept it AND delete the
+    other sender's row on the way, silently unbinding a third party. That is the
+    same memory-cannot-reproduce-Postgres trap this whole defect was made of.
+    """
+    await _channel(store, "ch-1")
+    await store.upsert_channel_binding(_binding("cb-1", "ch-1", "U-1", "alice", "member"))
+    await store.upsert_channel_binding(_binding("cb-2", "ch-1", "U-2", "bob", "member"))
+
+    with pytest.raises(Exception):
+        await store.upsert_channel_binding(
+            _binding("cb-2", "ch-1", "U-1", "mallory", "admin")
+        )
+    rows = {r.id: r.external_user_id for r in await store.list_channel_bindings(T, "ch-1")}
+    assert rows == {"cb-1": "U-1", "cb-2": "U-2"}, (
+        "a rejected id-steal still mutated the table: another sender's binding was "
+        "deleted or overwritten"
+    )

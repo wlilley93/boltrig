@@ -8,6 +8,7 @@ reconnect (restart), and that apply_manifest's async seed path works.
 
 from __future__ import annotations
 
+import contextlib
 import inspect
 import os
 from dataclasses import replace
@@ -29,6 +30,7 @@ from boltrig.models import (
     WorkStatus,
 )
 from boltrig.store import InMemoryStore
+from boltrig.store.idempotency_contract import IdempotencyClaimStatus
 
 DSN = os.environ.get("BOLTRIG_TEST_DATABASE_URL")
 _pg = pytest.mark.skipif(not DSN, reason="set BOLTRIG_TEST_DATABASE_URL for Postgres tests")
@@ -214,3 +216,95 @@ async def test_blocking_pause_survives_restart_and_resumes():
         assert out["status"] == "open"  # resumed to completion after approval
     finally:
         await store2.close()
+
+
+class _ReleaseOnConflict:
+    """Connection proxy that commits an idempotency_release from an independent
+    connection the instant a claim's INSERT conflicts - i.e. exactly in the window
+    between the ON CONFLICT DO NOTHING and the FOR UPDATE re-read."""
+
+    def __init__(self, conn, release):
+        self._conn = conn
+        self._release = release
+        self.fired = False
+        # The connection the release ran on. The race only exists because
+        # idempotency_release re-enters with_tenant and so takes a SECOND pooled
+        # connection; if with_tenant ever becomes nesting-aware and hands back the
+        # caller's, the DELETE would join this transaction, the re-read would still
+        # find nothing, and this test would keep passing while proving nothing.
+        self.release_conn_id: int | None = None
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+    async def fetchrow(self, query, *args):
+        row = await self._conn.fetchrow(query, *args)
+        if not self.fired and row is None and query.lstrip().startswith("INSERT"):
+            self.fired = True
+            await self._release()
+        return row
+
+
+@_pg
+@pytest.mark.store
+@pytest.mark.invariant("SEC-15")
+async def test_claim_survives_a_release_between_the_insert_and_the_reread():
+    """A key released mid-claim is re-acquired, not read back as a vanished row.
+
+    ON CONFLICT DO NOTHING takes no lock on the row it conflicted with, so under
+    READ COMMITTED a concurrent release (dispatch takes one whenever a gate rejects
+    before start) can commit between the INSERT and the FOR UPDATE re-read, which
+    then matches nothing. The key is free at that point, so Postgres must answer
+    ACQUIRED like the in-memory twin does instead of raising on a None row.
+    """
+    store = await _fresh_pg()
+    try:
+        args = dict(
+            actor="agent",
+            on_behalf_of=None,
+            workspace_id=None,
+            noun="ticket",
+            verb="ticket.create",
+            request_hash="request",
+            lease_seconds=60,
+        )
+        held = await store.idempotency_claim(T, "k", owner_token="owner-1", **args)
+        assert held.status == IdempotencyClaimStatus.ACQUIRED
+        released: list[bool] = []
+        real_with_tenant = store.with_tenant
+        proxies: list[_ReleaseOnConflict] = []
+
+        @contextlib.asynccontextmanager
+        async def racing(tenant_id):
+            proxy: _ReleaseOnConflict | None = None
+
+            async def release():
+                async with real_with_tenant(tenant_id) as other:
+                    if proxy is not None:
+                        proxy.release_conn_id = id(other)
+                released.append(await store.idempotency_release(T, "k", "owner-1"))
+
+            async with real_with_tenant(tenant_id) as conn:
+                proxy = _ReleaseOnConflict(conn, release)
+                proxies.append(proxy)
+                yield proxy
+
+        store.with_tenant = racing
+        try:
+            claim = await store.idempotency_claim(T, "k", owner_token="owner-2", **args)
+        finally:
+            # del, not reassign: assigning the bound method back leaves a permanent
+            # instance attribute holding a reference cycle instead of unshadowing.
+            del store.with_tenant
+        assert released == [True]  # the release really did commit inside the window
+        racer = next(p for p in proxies if p.fired)
+        assert racer.release_conn_id is not None and racer.release_conn_id != id(racer._conn), (
+            "the release ran on the claim's own connection, so this no longer "
+            "reproduces the cross-connection race it exists to pin"
+        )
+        assert claim.status == IdempotencyClaimStatus.ACQUIRED, (
+            "a key released between the INSERT and the FOR UPDATE re-read must be "
+            "re-acquired, not read back as a vanished row"
+        )
+    finally:
+        await store.close()

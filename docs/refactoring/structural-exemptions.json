@@ -186,11 +186,11 @@
       "expires": "2026-12-31"
     },
     "boltrig/fleet/pump.py": {
-      "max_file_lines": 674,
+      "max_file_lines": 697,
       "max_function_lines": 78,
       "over_limit_functions": [],
       "owner": "fleet-maintainers",
-      "reason": "File-length debt only: the work-claim lifecycle phases still share one module. SEC-178 addressed-workflow execution added _run_addressed_workflow (the workflow: target honoring branch); handle_claimed_item grew to 78 lines with the mirrored boundary-1 cancel refresh. Audit fixes: _record_failure defers to a requested cancel and persists a bounded, URL-redacted error detail instead of raw str(exc).",
+      "reason": "File-length debt only: the work-claim lifecycle phases still share one module. SEC-178 addressed-workflow execution added _run_addressed_workflow (the workflow: target honoring branch); handle_claimed_item grew to 78 lines with the mirrored boundary-1 cancel refresh. Audit fixes: _record_failure defers to a requested cancel and persists a bounded, URL-redacted error detail instead of raw str(exc). 2026-07-25: +23 lines for the SETTLED_STATUSES guard, so a fault raised AFTER the attempt settled durably cannot re-open it and re-run the whole item (docs/findings/2026-07-25-work-item-lease-has-no-fence.md).",
       "expires": "2026-12-31"
     },
     "boltrig/fleet/runtime.py": {
@@ -324,22 +324,22 @@
       "expires": "2026-12-31"
     },
     "boltrig/kernel/dispatch.py": {
-      "max_file_lines": 536,
+      "max_file_lines": 561,
       "max_function_lines": 113,
       "over_limit_functions": [
         {
           "name": "Dispatcher.invoke",
-          "line": 268,
+          "line": 270,
           "lines": 113
         },
         {
           "name": "Dispatcher._invoke_inner",
-          "line": 382,
-          "lines": 88
+          "line": 384,
+          "lines": 111
         }
       ],
       "owner": "kernel-maintainers",
-      "reason": "Extract dispatch phases behind private typed helpers while retaining the single governed chokepoint. SEC-181 secure input added the run-scoped param resolution at the credential stage and the secure-question marker. Parity passthrough (2026): _execute_adapter overrides the static adapter credential with a per-run sealed bearer when present. 2026-07-25: +17 lines for _emit_pause, which publishes a HITL pause to the run that DELEGATED to this one as well as to this one. A chat turn never calls a verb itself, so the dispatch runs under the child run id while the client follows the root stream - the pause landed on a stream nobody follows and a write held for approval was invisible to the person who asked. Extracting it LOWERED Dispatcher.invoke from 116 to 113 lines, so the function ratchet ratchets down with this change.",
+      "reason": "Extract dispatch phases behind private typed helpers while retaining the single governed chokepoint. SEC-181 secure input added the run-scoped param resolution at the credential stage and the secure-question marker. Parity passthrough (2026): _execute_adapter overrides the static adapter credential with a per-run sealed bearer when present. 2026-07-25: +17 lines for _emit_pause, which publishes a HITL pause to the run that DELEGATED to this one as well as to this one. A chat turn never calls a verb itself, so the dispatch runs under the child run id while the client follows the root stream - the pause landed on a stream nobody follows and a write held for approval was invisible to the person who asked. Extracting it LOWERED Dispatcher.invoke from 116 to 113 lines, so the function ratchet ratchets down with this change. 2026-07-25: +25 lines to enforce the rate limit BEFORE the approval gate on a leg carrying an approval id, so a throttle trip cannot burn a single-use human authorisation; most of it is the comment recording which pre-execution refusals are still NOT approval-safe.",
       "expires": "2026-12-31"
     },
     "boltrig/kernel/memory_routes.py": {
