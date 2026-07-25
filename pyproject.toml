@@ -54,7 +54,7 @@ dev = [
     # 2026-VJS-CC-BOLTRIG-UI-TEST-HARNESS-001): a dev-only, deterministic, exact
     # version so the gate is reproducible across the fleet and CI. No new ruling
     # is needed - the pin + gate follows that precedent directly.
-    "mypy==2.1.0",
+    "mypy==2.3.0",
     # Third-party stubs for jsonschema (dispatch.py's Draft202012Validator). Pinned
     # exactly for the same reason; the stub is what lets the chokepoint be strict
     # without a blanket type: ignore.
