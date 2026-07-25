@@ -34,7 +34,19 @@ def test_no_default_lane_targets_a_retired_runtime(manifest_path):
     the tenant's agent dead on arrival. rivet/opencode capabilities are retained
     UNWIRED so a non-Codex leaf stays re-wirable ([2026] VJS-PC 20 cond.1), so this
     checks the lanes that are actually DEFAULTED to, not every declared capability.
+
+    ``manifest.yaml`` is the ACTIVE manifest of whatever checkout this runs in and
+    is gitignored - a deployment artifact, not a repo file - so that leg is a local
+    pre-flight and is skipped where there is none. It ran green locally and failed
+    only in CI, which is the same shape as every other defect this week: a check
+    that passes because of something present on one machine.
+
+    Skipped loudly rather than quietly dropped, because the TEMPLATE leg is the one
+    that guards new tenants and always runs; nobody should read a green CI as
+    evidence that some box's live manifest was checked.
     """
+    if not Path(manifest_path).exists():
+        pytest.skip(f"{manifest_path} absent (gitignored active manifest); template leg still runs")
     m = load_manifest(manifest_path)
     defaulted = [m.hierarchy.tier1, *m.hierarchy.tier2] if m.hierarchy.tier1 else list(m.hierarchy.tier2)
     defaulted += [rt for rt in m.ephemeral_runtimes if rt.name.startswith("worker-")]
