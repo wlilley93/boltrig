@@ -234,6 +234,11 @@ class CodexRuntime:
 
     async def _run_phase(self, prompt: str, spec: RuntimeThreadSpec) -> AgentResult:
         text = ""
+        # Held outside the try so a degrade can still report what the turn consumed
+        # before it failed: the provider was paid whether or not we got a usable
+        # answer out of it.
+        tokens_used = 0
+        usage_seen: list[int] = []
         thread: RuntimeThreadRef | None = None
         try:
             thread = await self._lifecycle.start_thread(spec)
@@ -242,7 +247,9 @@ class CodexRuntime:
                     thread=thread, prompt=prompt, client_message_id=uuid.uuid4().hex
                 )
             )
-            tokens_used = await _drain_until_complete(self._lifecycle.events(thread))
+            tokens_used = await _drain_until_complete(
+                self._lifecycle.events(thread), usage_seen
+            )
             text = await self._lifecycle.read_turn_output(thread)
         except Exception as error:
             # A degrade must never swallow the cause: a silent codex_turn_failed is
@@ -256,14 +263,23 @@ class CodexRuntime:
                 runtime=self.runtime,
                 reason=f"codex_turn_failed:{cause}",
                 prompt=prompt,
+                # Whatever the turn had already consumed before it died. The
+                # provider was paid for it either way.
+                tokens_used=usage_seen[-1] if usage_seen else 0,
             )
         finally:
             if thread is not None:
                 with contextlib.suppress(Exception):
                     await self._lifecycle.close_thread(thread)
         if not text:
+            # The model ran and consumed tokens, it just produced nothing usable.
+            # Reporting 0 here (as this did) made a paid-for turn record as free and
+            # handed the tenant a full budget refund for spend that really happened.
             return AgentResult.degrade(
-                runtime=self.runtime, reason="codex_empty_output", prompt=prompt
+                runtime=self.runtime,
+                reason="codex_empty_output",
+                prompt=prompt,
+                tokens_used=tokens_used,
             )
         # Report what the turn consumed so the fleet can price it. `cost_micros` is
         # left to the accountant, which applies the tenant's own per-model/tier rate
@@ -332,7 +348,9 @@ def build_trusted_codex_runtime(
     )
 
 
-async def _drain_until_complete(events: AsyncIterator[RuntimeEvent]) -> int:
+async def _drain_until_complete(
+    events: AsyncIterator[RuntimeEvent], seen: list[int] | None = None
+) -> int:
     """Consume the lifecycle stream until the turn completes (the completion
     signal, not the content source), returning the tokens the turn reported.
 
@@ -340,14 +358,21 @@ async def _drain_until_complete(events: AsyncIterator[RuntimeEvent]) -> int:
     the LAST report before completion wins (Codex's `total` is cumulative for the
     thread). Zero when the runtime reported nothing - which is the honest answer,
     and is what the fleet used to bill unconditionally for every Codex turn because
-    the usage notification was being discarded upstream. A terminal stream raises
-    and the caller degrades."""
+    the usage notification was being discarded upstream.
+
+    ``seen`` is the caller's sink for usage observed SO FAR. A terminal stream
+    raises and the caller degrades, and a raise discards this function's locals -
+    so without the sink a turn that consumed real tokens and then died reported
+    zero, and the tenant was refunded for spend the provider had already taken.
+    """
     tokens = 0
     async for event in events:
         if event.kind is RuntimeEventKind.TOKEN_USAGE:
             reported = event.payload.to_mapping().get("total_tokens")
             if type(reported) is int and reported > 0:
                 tokens = reported
+                if seen is not None:
+                    seen.append(reported)
         elif event.kind is RuntimeEventKind.TURN_COMPLETED:
             return tokens
     return tokens

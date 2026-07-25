@@ -63,7 +63,13 @@ class AgentResult:
 
     @classmethod
     def degrade(
-        cls, *, runtime: str, reason: str, prompt: str = "", summary: str = ""
+        cls,
+        *,
+        runtime: str,
+        reason: str,
+        prompt: str = "",
+        summary: str = "",
+        tokens_used: int = 0,
     ) -> AgentResult:
         """A clearly-marked degraded result (no SDK / no key / backend down, P9).
 
@@ -74,6 +80,14 @@ class AgentResult:
         embedded verbatim - it is the full composed prompt (skill fragments +
         task), returned to callers and persisted on work-item results - so the
         output carries only its sha256 digest and byte length for correlation.
+
+        ``tokens_used`` exists because a degrade is not the same as a free run. A
+        model can be called, consume its tokens and THEN produce an unusable answer
+        (the empty-output case) - the provider has already been paid. Defaulting it
+        to 0 and having no way to say otherwise meant every degraded run recorded as
+        costing nothing, and the budget was refunded in full, so a tenant could burn
+        real money on failing turns and never see it. Callers pass what the runtime
+        actually reported; a degrade that genuinely knows nothing still passes 0.
         """
         prompt_bytes = prompt.encode("utf-8")
         return cls(
@@ -85,4 +99,5 @@ class AgentResult:
             },
             summary=summary or f"degraded ({runtime}: {reason})",
             degraded=True,
+            tokens_used=max(0, int(tokens_used or 0)),
         )

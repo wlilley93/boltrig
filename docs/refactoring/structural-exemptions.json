@@ -508,6 +508,14 @@
       "owner": "kernel-maintainers",
       "reason": "2026-07-25: +6 lines to carry parent_run_id on the run token, so a verb dispatched inside a delegated cell can publish its HITL PAUSE to the parent run's stream. Without it the pause reached only the child stream, which no client follows, and a write correctly held for approval was invisible to the person who asked for it.",
       "expires": "2026-12-31"
+    },
+    "boltrig/fleet/codex_runtime.py": {
+      "max_file_lines": 409,
+      "max_function_lines": 77,
+      "over_limit_functions": [],
+      "owner": "fleet-maintainers",
+      "reason": "2026-07-25: +9 lines to carry token usage onto the DEGRADE path. A model can be called, consume its tokens and then produce an unusable answer - the provider is paid either way - but AgentResult.degrade had no way to say so, so every degraded run recorded as free AND was refunded in full. The growth is the usage sink (a raise discards the drain's locals, so the caller keeps what was seen) and the two degrade sites that now report it. No function exceeds the 80-line limit; this is a file-size exemption only.",
+      "expires": "2026-12-31"
     }
   }
 }

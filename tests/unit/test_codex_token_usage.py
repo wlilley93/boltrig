@@ -164,3 +164,50 @@ async def test_a_zero_token_run_is_genuinely_free():
         "t", ["tenant"], _Capability(), 0, 0, AgentResult.succeeded(output={}, summary="")
     )
     assert priced == 0
+
+
+# --- a degraded run is not a free run --------------------------------------
+# A model can be called, consume its tokens and THEN produce an unusable answer.
+# The provider has already been paid. `AgentResult.degrade` had no way to say so,
+# so every degraded run recorded as costing nothing AND was refunded in full -
+# a tenant could burn real money on failing turns and never see it.
+
+
+def test_degrade_carries_what_the_turn_consumed():
+    from boltrig.fleet.result import AgentResult
+
+    r = AgentResult.degrade(
+        runtime="codex", reason="codex_empty_output", prompt="p", tokens_used=4321
+    )
+    assert r.degraded is True
+    assert r.tokens_used == 4321
+    assert price_micros(r.tokens_used, "cheap") > 0, "a paid-for turn must not price as free"
+
+
+def test_a_degrade_that_knows_nothing_still_reports_zero():
+    from boltrig.fleet.result import AgentResult
+
+    r = AgentResult.degrade(runtime="codex", reason="no_scope", prompt="p")
+    assert r.tokens_used == 0, "the fix must not invent spend either"
+
+
+def test_degrade_floors_a_nonsense_count():
+    from boltrig.fleet.result import AgentResult
+
+    assert AgentResult.degrade(runtime="c", reason="r", tokens_used=-9).tokens_used == 0
+
+
+async def test_usage_seen_survives_a_stream_that_raises():
+    """A raise discards the drain's locals, so without the caller's sink a turn
+    that consumed real tokens and then died reported zero."""
+    seen: list[int] = []
+
+    async def exploding():
+        yield _Event(RuntimeEventKind.TOKEN_USAGE, {"total_tokens": 777})
+        raise RuntimeError("stream died mid-turn")
+
+    try:
+        await _drain_until_complete(exploding(), seen)
+    except RuntimeError:
+        pass
+    assert seen and seen[-1] == 777, "the caller must still know what was consumed"
