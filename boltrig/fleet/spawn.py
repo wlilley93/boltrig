@@ -236,7 +236,9 @@ class Spawner:
         # The delegation boundary is also where the permission-parity seal has to
         # cross: see _inherit_adapter_bearer for why the child cannot use the seal
         # the chat turn wrote against the ROOT run id.
-        await self._inherit_adapter_bearer(tenant_id, context.run_id, run_id)
+        await self._inherit_adapter_bearer(
+            tenant_id, context.run_id, run_id, context.on_behalf_of
+        )
         try:
             runtime = await self._runtime_for(tenant_id, capability, context)
             model_route = getattr(runtime, "model_route", None)
@@ -394,7 +396,11 @@ class Spawner:
         return f"Task:\n{task}"
 
     async def _inherit_adapter_bearer(
-        self, tenant_id: str, parent_run_id: str | None, child_run_id: str
+        self,
+        tenant_id: str,
+        parent_run_id: str | None,
+        child_run_id: str,
+        owner: str | None,
     ) -> None:
         """Carry a run-scoped adapter bearer from the spawning run to its child.
 
@@ -421,12 +427,15 @@ class Spawner:
         failure here must never take down a spawn that would otherwise succeed - the
         worst case is the pre-existing behaviour, a fallback to the static credential.
         """
-        if not parent_run_id:
+        # The child inherits only what the SAME owner sealed on the parent, and
+        # re-seals it to that same owner: delegation carries a user's authority
+        # down their own run tree, it never launders it into somebody else's.
+        if not parent_run_id or not owner:
             return
         adapter_id = os.environ.get("BOLTRIG_OBO_ADAPTER_ID", "opbox")
         try:
             inherited = await self._kernel.credentials.resolve_run_scoped_credential(
-                tenant_id, parent_run_id, adapter_id
+                tenant_id, parent_run_id, adapter_id, owner
             )
             if inherited is None:
                 return
@@ -434,7 +443,7 @@ class Spawner:
             if not token:
                 return
             await self._kernel.credentials.seal_run_scoped_adapter_bearer(
-                tenant_id, child_run_id, adapter_id, token
+                tenant_id, child_run_id, adapter_id, token, owner
             )
         except Exception:  # noqa: BLE001 - never fail a spawn on the parity path
             log.warning(
@@ -536,6 +545,16 @@ def make_app_spawner(
     envelope = {"run_id", "parent_run_id", "depth", "skills_loaded"}
 
     async def app_spawner(principal: Principal, body: SpawnBody) -> dict[str, Any]:
+        # SEC-186, and it matters more here than at /v1/invoke: an unchecked
+        # parent_run_id would launder a stranger's sealed bearer into a run the
+        # caller owns outright (see _inherit_adapter_bearer). Same status and
+        # wording as the sibling fence in kernel/hitl_http.py.
+        from fastapi import HTTPException
+
+        from boltrig.kernel.run_access import foreign_run_asserted
+
+        if await foreign_run_asserted(kernel.store, principal, body.context):
+            raise HTTPException(status_code=403, detail="not your run")
         extra = {key: value for key, value in body.context.items() if key not in envelope}
         ctx = principal.context(
             run_id=body.context.get("run_id"),

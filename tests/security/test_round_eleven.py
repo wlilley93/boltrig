@@ -133,9 +133,13 @@ async def test_department_scoped_user_can_read_visible_work_run_events():
     )
     assert scoped.status_code == 200
     assert any("tool_call" in f for f in _frames(scoped.text))
-    # First lookup distinguishes an audit-only run from a hidden WorkItem; the
-    # second applies the caller's workspace filter to that known WorkItem.
-    assert store.run_lookup_calls == ["run-eng", "run-eng"]
+    # The first lookup belongs to the POST above, not to the read: the write door
+    # checks the body-supplied run id is not somebody else's before dispatching
+    # (SEC-186). Of the read's two, the first distinguishes an audit-only run from
+    # a hidden WorkItem and the second applies the caller's workspace filter to
+    # that known WorkItem. The count is pinned to keep the read path off a
+    # per-frame lookup, and all three are still one-per-request.
+    assert store.run_lookup_calls == ["run-eng", "run-eng", "run-eng"]
     assert store.work_list_calls == 0
 
 

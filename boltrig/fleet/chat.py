@@ -717,7 +717,7 @@ def build_turn_executor(
         # terminal, and unresolvable by any other run or adapter.
         if on_behalf_bearer:
             await kernel.credentials.seal_run_scoped_adapter_bearer(
-                tenant_id, run_id, _OBO_ADAPTER_ID, on_behalf_bearer
+                tenant_id, run_id, _OBO_ADAPTER_ID, on_behalf_bearer, user_id
             )
         # Shadow Codex root admission (SEC-170); None=>flag off=>no-op (execution-neutral, fail-open).
         if codex_execution is not None:

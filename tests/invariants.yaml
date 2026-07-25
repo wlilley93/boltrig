@@ -1947,3 +1947,33 @@ invariants:
       - tests/security/test_desktop_hands.py::test_executor_offline_still_dispatches_and_audits
       - tests/security/test_desktop_hands.py::test_hands_routes_require_the_principal
       - tests/security/test_desktop_hands.py::test_hands_routes_claim_once_and_record_the_receipt
+
+  # --- a caller may not assert somebody else's run id ---
+  SEC-186:
+    description: >-
+      Run identity is not caller-assertable. The write doors (POST /v1/invoke,
+      POST /v1/spawn) take run_id/parent_run_id from the request body, and the
+      dispatcher acts on that value - it publishes the call's tool_call/tool_result
+      frames to that run's stream, binds any ask_user HITL to it, and resolves
+      run-scoped credentials under it. A caller naming a run whose work item is
+      owned (on_behalf_of) by another user is refused 403 "not your run" before
+      any dispatch, using the same predicate the read paths already enforce
+      (visible_run_events, cancel_run, answer_hitl_question). Existence is checked
+      without the workspace fence, so a caller in another workspace cannot scope
+      the run into the permissive "no such run" branch. A run with no work item,
+      or a work item with no on_behalf_of, impersonates nobody and stays usable as
+      a correlation label. Independently of any door, every run-scoped seal records
+      the identity it belongs to and resolves ONLY for that identity: a bystander
+      quoting a live run id gets None for a sealed adapter bearer and
+      CredentialResolution for a secure answer, a child spawn cannot launder a
+      stranger's bearer into a run the caller owns, and sealing without an owner
+      is refused outright.
+    tests:
+      - tests/security/test_asserted_run_ownership.py::test_invoke_refuses_a_run_id_belonging_to_another_user
+      - tests/security/test_asserted_run_ownership.py::test_invoke_still_admits_the_runs_own_owner_and_an_unowned_run
+      - tests/security/test_asserted_run_ownership.py::test_spawn_refuses_a_parent_run_belonging_to_another_user
+      - tests/security/test_asserted_run_ownership.py::test_the_fence_is_not_scoped_away_by_a_foreign_workspace
+      - tests/security/test_run_scoped_adapter_bearer.py::test_a_bystander_quoting_the_run_id_cannot_borrow_the_bearer
+      - tests/security/test_run_scoped_adapter_bearer.py::test_a_bystander_quoting_the_run_id_cannot_read_a_secure_answer
+      - tests/security/test_run_scoped_adapter_bearer.py::test_a_child_run_cannot_launder_a_strangers_bearer
+      - tests/security/test_run_scoped_adapter_bearer.py::test_an_unowned_seal_is_refused_at_the_door

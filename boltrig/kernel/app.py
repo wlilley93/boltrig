@@ -421,6 +421,13 @@ def create_app(
         k: Kernel = Depends(_get_kernel),
         p: Principal = Depends(principal),
     ) -> JSONResponse:
+        # SEC-186: the body may not name somebody else's run. See run_access.
+        from .run_access import foreign_run_asserted
+
+        if await foreign_run_asserted(k.store, p, body.context):
+            return JSONResponse(
+                {"status": "denied", "reason": "not your run"}, status_code=403
+            )
         ctx = p.context(
             run_id=body.context.get("run_id"),
             parent_run_id=body.context.get("parent_run_id"),

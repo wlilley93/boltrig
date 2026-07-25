@@ -489,7 +489,7 @@ class Dispatcher:
         # (dev / non-passthrough tenants are unchanged). Kernel-only: the bearer is
         # minted straight into the credential arg, never into params/events/audit.
         override = await self._creds.resolve_run_scoped_credential(
-            context.tenant_id, context.run_id, binding.target_ref
+            context.tenant_id, context.run_id, binding.target_ref, context.on_behalf_of
         )
         if override is not None:
             credential = override
@@ -500,7 +500,7 @@ class Dispatcher:
         # audit only ever held the reference. Scoped: another run's or purpose's
         # reference fails closed (CredentialResolution).
         resolved_params = await self._creds.resolve_run_scoped_params(
-            context.tenant_id, params, run_id=context.run_id
+            context.tenant_id, params, run_id=context.run_id, owner=context.on_behalf_of
         )
         result: Result = await adapter.execute(verb_def.id, resolved_params, credential, context)
         if result.ok:

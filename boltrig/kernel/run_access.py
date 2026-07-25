@@ -74,6 +74,65 @@ async def visible_work_item_by_run(
     )
 
 
+class AssertingPrincipal(Protocol):
+    tenant_id: str
+    subject: str
+
+
+async def asserted_run_is_foreign(
+    store: RunEventStore, principal: AssertingPrincipal, run_id: str | None
+) -> bool:
+    """True when the caller asserted a run id that belongs to somebody else.
+
+    The write doors (``POST /v1/invoke``, ``POST /v1/spawn``) let the request
+    body name the run its work executes under. That string is not decoration: it
+    is the id the dispatcher publishes ``tool_call``/``tool_result`` frames
+    against and the id ``_ask_user`` binds a new HITL to, so an unchecked one
+    lets a same-tenant bystander write into a stranger's run. Every READ path
+    already fences this (``visible_run_events``, ``cancel_run``,
+    ``answer_hitl_question`` at ``hitl_http.py``, all on the work item's
+    ``on_behalf_of``); the write doors did not, and this closes that asymmetry
+    with the same predicate they use.
+
+    Deliberately narrow, so it denies impersonation without breaking the run id's
+    long-standing second job as a free correlation label:
+
+    * A run with no work item is owned by nobody, so asserting it impersonates
+      nobody. It also confers nothing: run-scoped credentials are additionally
+      bound to their sealing owner (``kernel/credentials.py``), so an invented
+      run id resolves no material.
+    * A work item with no ``on_behalf_of`` is an internal/system item that no
+      user owns; there is no owner to impersonate.
+
+    Existence is checked WITHOUT the workspace fence on purpose. Scoping the
+    lookup would report a run in another workspace as "no such run" and then
+    admit it under the first allowance above, which is exactly backwards: the
+    further away the caller is from the run, the less they should be trusted to
+    name it.
+    """
+    if not run_id:
+        return False
+    item = await store.get_work_item_by_run_id(principal.tenant_id, run_id)
+    if item is None or not item.on_behalf_of:
+        return False
+    return item.on_behalf_of != principal.subject
+
+
+async def foreign_run_asserted(
+    store: RunEventStore, principal: AssertingPrincipal, context: dict[str, Any]
+) -> bool:
+    """``asserted_run_is_foreign`` over both run ids a request body can carry.
+
+    ``parent_run_id`` is the same claim one level up and is fenced identically:
+    a spawn naming a stranger's run as its parent inherits that run's sealed
+    adapter bearer (``fleet/spawn.py::_inherit_adapter_bearer``).
+    """
+    for key in ("run_id", "parent_run_id"):
+        if await asserted_run_is_foreign(store, principal, context.get(key)):
+            return True
+    return False
+
+
 async def visible_run_events(
     store: RunEventStore,
     principal: RunEventPrincipal,

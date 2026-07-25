@@ -31,7 +31,15 @@ from boltrig.identity import build_session_resolver, hash_password
 from boltrig.identity.totp import hash_recovery_code, normalize_recovery_code
 from boltrig.kernel import Kernel
 from boltrig.kernel.app import create_app
-from boltrig.models import GrantSet, Organisation, TenantPermissions, User
+from boltrig.kernel.ratelimit import InMemoryCounter, RateLimiter
+from boltrig.models import (
+    GrantSet,
+    Organisation,
+    RateLimit,
+    RateLimited,
+    TenantPermissions,
+    User,
+)
 from boltrig.store import InMemoryStore
 from boltrig.store.sealing import is_sealed
 
@@ -286,6 +294,18 @@ def test_challenge_is_rate_limited_constant_time_and_audited(monkeypatch):
 
     # Rate limit: the per-identity bound (5/min) trips on the 6th wrong attempt with
     # 429. A miss does NOT consume the challenge, so the same token stays usable.
+    #
+    # The clock is pinned for the duration, and that is not test hygiene - it is
+    # the difference between asserting the documented bound and asserting a
+    # coincidence. The counter's window is a FIXED epoch-aligned bucket
+    # (kernel/ratelimit.py: int(time.time() // 60)), so six attempts that straddle
+    # a minute boundary land 5 in one bucket and 1 in the next and the sixth
+    # returns 401, not 429. Unpinned, this assertion fails whenever the run
+    # crosses a second-59 boundary; that is exactly how it failed in CI while
+    # passing 25/25 locally. See test_the_window_is_fixed_not_sliding below for
+    # the boundary behaviour itself, which is a property of the limiter and is
+    # asserted deliberately rather than left to chance.
+    monkeypatch.setattr(InMemoryCounter, "_now", lambda self: 1_800_000_030.0)
     k2, app2, store2 = _app()
     _run(_seat_owner(store2))
     e2 = TestClient(app2)
@@ -295,6 +315,36 @@ def test_challenge_is_rate_limited_constant_time_and_audited(monkeypatch):
     codes = [app_post(app2, ch, "222222").status_code for _ in range(6)]
     assert codes[:5] == [401, 401, 401, 401, 401]
     assert codes[5] == 429
+
+
+@pytest.mark.security
+def test_the_window_is_fixed_not_sliding(monkeypatch):
+    """The 5/min bound is 5 per CALENDAR minute, not 5 per any rolling minute.
+
+    Recorded because it is load-bearing and was previously implicit: an attacker
+    who times attempts across a bucket boundary gets 2x the configured max in an
+    arbitrarily short span (here 10 in 110ms). For the 2FA challenge that is not
+    material against a six-digit code, and the cheap fixed window is the
+    deliberate trade. It is written down so the next person reads a property
+    rather than discovering a surprise, and so that a change to a sliding window
+    breaks a test that says what changed.
+    """
+    counter = InMemoryCounter()
+    times = iter([59.90, 59.92, 59.94, 59.96, 59.98, 60.01])
+    monkeypatch.setattr(
+        InMemoryCounter, "_now", lambda self: 1_800_000_000.0 + next(times)
+    )
+    limiter = RateLimiter(counter=counter)
+    limit = RateLimit(per="minute", max=5, scope="verb")
+
+    allowed = 0
+    for _ in range(6):
+        try:
+            _run(limiter.enforce("acme", "auth.2fa.challenge.id:alice", limit))
+            allowed += 1
+        except RateLimited:
+            pass
+    assert allowed == 6, "six attempts straddling a boundary are all admitted"
 
 
 def app_post(app, challenge_token, code):

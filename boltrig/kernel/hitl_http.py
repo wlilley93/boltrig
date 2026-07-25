@@ -175,7 +175,7 @@ async def answer_hitl_question(
         # transits no code path that logs, audits, or echoes it. answer_len is
         # None here: even the LENGTH of a secure value is a leak.
         reference = await kernel.credentials.seal_run_scoped_value(
-            principal.tenant_id, req.run_id, req.secure_purpose, text
+            principal.tenant_id, req.run_id, req.secure_purpose, text, principal.subject
         )
         wrapped = wrap_untrusted("user_answer", principal.subject, reference)
         answer_len: int | None = None

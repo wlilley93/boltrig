@@ -55,6 +55,30 @@ def adapter_bearer_cred_id(run_id: str, adapter_id: str) -> str:
     return f"{RUN_SCOPED_CRED_PREFIX}{run_id}:adapter_bearer:{adapter_id}"
 
 
+def _owner_matches(ref: dict, context_owner: str | None) -> bool:
+    """Whether this sealed row belongs to the identity now asking for it.
+
+    The run id was once the whole fence here, on the reasoning that a run id is
+    server-minted and therefore trustworthy. It is not: the write doors let the
+    request body name the run (``POST /v1/invoke``, ``POST /v1/spawn``), so a
+    same-tenant caller could quote a stranger's run id and be handed that
+    stranger's sealed material - the reference's run id and the "context" run id
+    it was compared against both came from the same attacker-controlled request,
+    so they always agreed. The doors now refuse a foreign run id
+    (``kernel/run_access.py``), and this is the second, independent fence at the
+    resolver itself: whatever any future door decides to trust, the material only
+    resolves for the identity it was sealed for.
+
+    Fail closed on both sides. A row sealed before this fence existed carries no
+    ``owner`` and resolves for nobody; run-scoped rows are swept at run terminal
+    and live only for the length of a run, so that costs at most the in-flight
+    runs at deploy time - a secure answer must be re-asked, and a passthrough
+    bearer falls back to the adapter's static credential, which is the documented
+    behaviour when no bearer is sealed."""
+    owner = ref.get("owner")
+    return bool(owner) and bool(context_owner) and owner == context_owner
+
+
 def parse_run_scoped_ref(value: Any) -> tuple[str, str] | None:
     """Parse a ``credential:run/<run_id>/<purpose>`` reference, else ``None``.
 
@@ -130,7 +154,7 @@ class CredentialResolver:
     # --- SEC-181: run-scoped secure input ------------------------------------
 
     async def seal_run_scoped_value(
-        self, tenant_id: str, run_id: str, purpose: str, value: str
+        self, tenant_id: str, run_id: str, purpose: str, value: str, owner: str
     ) -> str:
         """Seal a secure question's answer as a run+purpose-scoped credential
         and return the REFERENCE string the run carries in its place.
@@ -139,11 +163,17 @@ class CredentialResolver:
         (``set_credential_ref`` envelope-seals it at rest, SEC-04); it is never
         returned, logged, or audited by this path. The caller records the
         returned reference (enveloped) as the answer, so the resume wiring
-        replays the reference, never the value."""
+        replays the reference, never the value.
+
+        ``owner`` is the user this material belongs to (the answering principal),
+        and it is REQUIRED. See ``_owner_matches`` for why the run id alone is
+        not a sufficient fence."""
         if not run_id or not purpose:
             raise CredentialResolution(
                 "a secure answer requires both a run id and a purpose"
             )
+        if not owner:
+            raise CredentialResolution("a secure answer requires an owning identity")
         await self._store.set_credential_ref(
             tenant_id,
             run_scoped_cred_id(run_id, purpose),
@@ -151,19 +181,25 @@ class CredentialResolver:
                 "kind": _SECURE_ANSWER_KIND,
                 "run_id": run_id,
                 "purpose": purpose,
+                "owner": owner,
                 "value": value,
             },
         )
         return f"{RUN_SCOPED_REF_PREFIX}{run_id}/{purpose}"
 
     async def _resolve_run_scoped(
-        self, tenant_id: str, run_id: str, purpose: str, context_run_id: str | None
+        self,
+        tenant_id: str,
+        run_id: str,
+        purpose: str,
+        context_run_id: str | None,
+        context_owner: str | None,
     ) -> Any:
         """Resolve one parsed reference to its material, FAIL CLOSED: only the
-        SAME run may resolve it, only a genuine secure-answer row whose embedded
-        run/purpose match the reference exactly qualifies (a tampered id or a
-        foreign credential under a ``run:`` id never resolves), and a missing
-        row resolves to nothing."""
+        SAME run AND the SAME owner may resolve it, only a genuine secure-answer
+        row whose embedded run/purpose match the reference exactly qualifies (a
+        tampered id or a foreign credential under a ``run:`` id never resolves),
+        and a missing row resolves to nothing."""
         if not context_run_id or run_id != context_run_id:
             raise CredentialResolution(
                 "run-scoped credential reference does not belong to this run"
@@ -180,10 +216,14 @@ class CredentialResolver:
             raise CredentialResolution(
                 "run-scoped credential reference is unknown or scope-mismatched"
             )
+        if not _owner_matches(ref, context_owner):
+            raise CredentialResolution(
+                "run-scoped credential reference does not belong to this caller"
+            )
         return ref["value"]
 
     async def resolve_run_scoped_params(
-        self, tenant_id: str, params: Any, *, run_id: str | None
+        self, tenant_id: str, params: Any, *, run_id: str | None, owner: str | None
     ) -> Any:
         """Return a copy of ``params`` with every run-scoped credential
         REFERENCE string replaced by its material (SEC-181).
@@ -191,27 +231,33 @@ class CredentialResolver:
         Called at the dispatch resolve-credential stage, immediately before the
         adapter executes: the agent, the run context, the events and the audit
         only ever carried the reference. Resolution is scoped - a reference from
-        another run or purpose fails closed (``CredentialResolution``). Values
-        that are not references pass through unchanged."""
+        another run, purpose or owner fails closed (``CredentialResolution``).
+        Values that are not references pass through unchanged."""
         if isinstance(params, dict):
             return {
-                key: await self.resolve_run_scoped_params(tenant_id, item, run_id=run_id)
+                key: await self.resolve_run_scoped_params(
+                    tenant_id, item, run_id=run_id, owner=owner
+                )
                 for key, item in params.items()
             }
         if isinstance(params, (list, tuple)):
             return [
-                await self.resolve_run_scoped_params(tenant_id, item, run_id=run_id)
+                await self.resolve_run_scoped_params(
+                    tenant_id, item, run_id=run_id, owner=owner
+                )
                 for item in params
             ]
         parsed = parse_run_scoped_ref(params)
         if parsed is None:
             return params
-        return await self._resolve_run_scoped(tenant_id, parsed[0], parsed[1], run_id)
+        return await self._resolve_run_scoped(
+            tenant_id, parsed[0], parsed[1], run_id, owner
+        )
 
     # --- Per-run adapter bearer (parity passthrough) -------------------------
 
     async def seal_run_scoped_adapter_bearer(
-        self, tenant_id: str, run_id: str, adapter_id: str, token: str
+        self, tenant_id: str, run_id: str, adapter_id: str, token: str, owner: str
     ) -> None:
         """Seal a caller-supplied external bearer for ONE adapter for the life of
         ONE run (the permission-parity passthrough).
@@ -225,10 +271,17 @@ class CredentialResolver:
         (envelope-sealed at rest, SEC-04); it is never returned, logged, or
         audited, and - unlike a secure answer - it is never resolvable into a verb
         param (distinct kind). Swept with the run's other refs on terminal
-        (``sweep_run_scoped``), fail-closed to the same run until then."""
+        (``sweep_run_scoped``), fail-closed to the same run until then.
+
+        ``owner`` is the user whose downstream authority this bearer carries, and
+        it is REQUIRED. See ``_owner_matches``."""
         if not run_id or not adapter_id or not token:
             raise CredentialResolution(
                 "a run-scoped adapter bearer requires a run id, an adapter id and a token"
+            )
+        if not owner:
+            raise CredentialResolution(
+                "a run-scoped adapter bearer requires an owning identity"
             )
         await self._store.set_credential_ref(
             tenant_id,
@@ -237,12 +290,13 @@ class CredentialResolver:
                 "kind": _ADAPTER_BEARER_KIND,
                 "run_id": run_id,
                 "adapter_id": adapter_id,
+                "owner": owner,
                 "value": token,
             },
         )
 
     async def resolve_run_scoped_credential(
-        self, tenant_id: str, run_id: str | None, adapter_id: str
+        self, tenant_id: str, run_id: str | None, adapter_id: str, owner: str | None
     ) -> Credential | None:
         """Resolve a per-run adapter bearer to a ``Credential`` for this adapter,
         or ``None`` when none is sealed (so dispatch falls back to the adapter's
@@ -250,8 +304,9 @@ class CredentialResolver:
         unchanged).
 
         FAIL CLOSED like the secure-answer path: only a genuine adapter-bearer row
-        whose embedded run/adapter match exactly qualifies; a foreign row under a
-        ``run:`` id, a scope mismatch, or a missing run id resolves to ``None``."""
+        whose embedded run/adapter match exactly qualifies AND whose owner is this
+        caller; a foreign row under a ``run:`` id, a scope mismatch, an owner
+        mismatch, or a missing run id resolves to ``None``."""
         if not run_id or not adapter_id:
             return None
         ref = await self._store.get_credential_ref(
@@ -262,6 +317,7 @@ class CredentialResolver:
             or ref.get("kind") != _ADAPTER_BEARER_KIND
             or ref.get("run_id") != run_id
             or ref.get("adapter_id") != adapter_id
+            or not _owner_matches(ref, owner)
         ):
             return None
         return Credential(

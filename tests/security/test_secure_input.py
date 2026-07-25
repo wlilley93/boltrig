@@ -86,9 +86,18 @@ class SpyAdapter:
         return "ok"
 
 
-def _ctx(grants: list[str], *, run_id: str | None = "r1") -> InvocationContext:
+# The run this material was sealed for belongs to a user, and only that user
+# resolves it (credentials._owner_matches). "alice" is the owner the HTTP leg
+# of these tests answers as, so the direct-kernel contexts use it too.
+OWNER = "alice"
+
+
+def _ctx(
+    grants: list[str], *, run_id: str | None = "r1", owner: str | None = OWNER
+) -> InvocationContext:
     return InvocationContext(
-        tenant_id=T, grants=GrantSet.of(grants), actor="agent", run_id=run_id
+        tenant_id=T, grants=GrantSet.of(grants), actor="agent", run_id=run_id,
+        on_behalf_of=owner,
     )
 
 
@@ -196,7 +205,7 @@ def test_secure_answer_is_sealed_and_the_run_carries_only_the_reference():
 @pytest.mark.invariant("SEC-181")
 async def test_reference_resolves_to_material_at_dispatch_events_keep_reference():
     store, k, spy = await _kernel()
-    reference = await k.credentials.seal_run_scoped_value(T, "r1", PURPOSE, SECRET)
+    reference = await k.credentials.seal_run_scoped_value(T, "r1", PURPOSE, SECRET, OWNER)
     assert reference == REFERENCE
 
     out = await k.invoke("spy", "spy.send", {
@@ -222,7 +231,7 @@ async def test_reference_resolves_to_material_at_dispatch_events_keep_reference(
 @pytest.mark.invariant("SEC-181")
 async def test_cross_run_and_cross_purpose_resolution_fails_closed():
     store, k, spy = await _kernel()
-    await k.credentials.seal_run_scoped_value(T, "r1", PURPOSE, SECRET)
+    await k.credentials.seal_run_scoped_value(T, "r1", PURPOSE, SECRET, OWNER)
 
     # a reference from ANOTHER run never resolves in this run
     with pytest.raises(CredentialResolution):
@@ -267,9 +276,9 @@ async def test_cross_run_and_cross_purpose_resolution_fails_closed():
 @pytest.mark.invariant("SEC-181")
 async def test_sweep_removes_only_the_finished_runs_secure_credentials():
     store, k, spy = await _kernel()
-    await k.credentials.seal_run_scoped_value(T, "r1", PURPOSE, SECRET)
-    await k.credentials.seal_run_scoped_value(T, "r1", "second-purpose", "v2")
-    await k.credentials.seal_run_scoped_value(T, "r2", PURPOSE, "other-run")
+    await k.credentials.seal_run_scoped_value(T, "r1", PURPOSE, SECRET, OWNER)
+    await k.credentials.seal_run_scoped_value(T, "r1", "second-purpose", "v2", OWNER)
+    await k.credentials.seal_run_scoped_value(T, "r2", PURPOSE, "other-run", OWNER)
 
     assert await k.credentials.sweep_run_scoped(T, "r1") == 2
     # r1's references are gone: resolution now fails closed
