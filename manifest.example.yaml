@@ -81,17 +81,45 @@ models:
   default: standard
   # Sensitive-classified data is routed to the on-box endpoint (never egresses).
   sensitive_endpoint: local-sensitive
-  # Per-model price table (policy-as-data, FR-COST-04 / audit M14): micros per
-  # token. A model listed here is charged at its real price for budgets and the
-  # post-run cost true-up; a model absent here falls back to its capability's
-  # cost-tier default. Replaces static tier micros as the accounting source.
-  prices:
-    claude-sonnet-4-6: 9
+  # --- per-model price table (policy-as-data, FR-COST-04 / audit M14) --------
+  # The rate table cost accounting bills from: a model listed here is charged at
+  # its real price for budget reservations and the post-run true-up.
+  #
+  # UNIT: MICROS PER TOKEN, and the rate is a FLOAT - a fraction is the NORMAL
+  # case. A micro is $0.000001, so micros-per-token and dollars-per-1M-tokens are
+  # the SAME NUMBER: ($P per 1,000,000 tokens) / $0.000001 = P micros/token.
+  #     $0.35 per 1M tokens -> 0.35      $3.00 per 1M -> 3.0      $15 per 1M -> 15
+  # Do NOT round to an integer. 0.35 written as 0 prices that model FREE and the
+  # tenant's cost ledger silently stays empty.
+  #
+  # The KEY is the endpoint's `model:` string above (what the runtime reports),
+  # NOT the endpoint id - the `standard` endpoint is priced under its model name.
+  # The kernel meters ONE token count per run (no input/output split), so use a
+  # blended rate rather than the input-only price.
+  #
+  # LEAVING THIS UNSET IS NOT NEUTRAL. With no entry for a model, cost falls back
+  # to the capability's cost_tier default (boltrig/kernel/cost.py):
+  #     cheap = 1, standard = 5, expensive = 25 micros/token
+  # i.e. $1 / $5 / $25 per 1M tokens - far above real inference prices. An
+  # unpriced deployment therefore systematically OVER-BILLS and trips its
+  # hard-stop budgets early, and nothing errors, so it shows up on the invoice.
+  #
+  # No rate ships as a default: the real number is your provider contract, so it
+  # has to be set per deployment. Uncomment one line per model you actually route
+  # to and replace the illustrative figures with your contracted rates:
+  # prices:
+  #   claude-sonnet-4-6: 3.0             # e.g. $3.00 per 1M tokens
+  #   Qwen/Qwen2.5-7B-Instruct: 0.0      # self-hosted: no per-token charge
+  prices: {}   # EMPTY = every model on the cost-tier fallback above. Fill this in.
 
 # --- hierarchy: durable agent org chart -------------------------------------
-# Current runnable compatibility path: these tier runtimes still use Hermes-
-# compatible names. New execution work targets the governed Codex phase lane;
-# this residue remains only until decision 0012's cutover gates pass.
+# Every tier lane below is on the governed Codex runtime (`runtime: codex`,
+# decision 0012). The Hermes-compatible naming residue is GONE from this file.
+# Tier lanes are always REACHABLE, so do NOT reintroduce a retired runtime here
+# (pi, hermes, openai, claude-api, opencode, rivet_agentos): the runtime gate
+# returns UnavailableRuntime at dispatch and every run degrades while the stack
+# still reports healthy. Retired names are permitted ONLY on UNWIRED capabilities
+# ([2026] VJS-PC 20 cond.1), never on a default or reachable lane.
 hierarchy:
   tier1:
     name: chief-of-staff
@@ -432,8 +460,12 @@ notifications:
     budget_alert: { channel: email }
 
 # --- personal agents (Epic PA) - delegated-only -----------------------------
-# Current default remains the Pi rollback worker until the production Codex
-# identity/cutover gate passes. Codex is the only target runtime.
+# The default is `codex-worker`. NOTE: `default_runtime:` names a CAPABILITY under
+# ephemeral_runtimes, NOT a runtime - `codex-worker` resolves to `runtime: codex`.
+# The Pi rollback worker is retired and is no longer the default; the cutover has
+# passed. Anything judging this field (a lint, a guard, a reviewer) must resolve it
+# through ephemeral_runtimes before judging its runtime - reading `default_runtime`
+# as a runtime literal is a false positive.
 personal_agents:
   enabled: true
   default_runtime: codex-worker
