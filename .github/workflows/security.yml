@@ -181,6 +181,10 @@ jobs:
           severity: HIGH,CRITICAL
           exit-code: "1"
           timeout: 10m
+          # Honour the recorded, EXPIRING accepted-advisory list. Without this the
+          # file is only consulted for misconfigurations and every vulnerability
+          # entry is silently ignored.
+          trivyignores: .trivyignore.yaml
 
   security:
     name: Security gate

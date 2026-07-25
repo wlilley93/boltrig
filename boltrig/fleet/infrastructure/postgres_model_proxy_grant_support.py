@@ -214,7 +214,9 @@ async def insert_grant(conn: asyncpg.Connection, grant: StoredModelProxyGrant) -
     phase = assignment.phase
     root = phase.root
     await conn.execute(
-        f"INSERT INTO model_proxy_grants ({GRANT_COLS}) VALUES "
+        # The interpolated name is a module-level column-list constant, never
+        # input, and every value is an asyncpg $n parameter.
+        f"INSERT INTO model_proxy_grants ({GRANT_COLS}) VALUES "  # nosec B608
         "($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,"
         "$21,$22,$23,$24,$25,$26,$27,$28)",
         grant.grant_id,

@@ -15,3 +15,18 @@ misconfigurations:
       Frontend engineering owns the nginx-unprivileged migration; the secure
       overlay removes the direct host port and the digest-pinned runtime serves
       only the generated static build through its fixed nginx configuration.
+
+vulnerabilities:
+  - id: GHSA-hrxh-6v49-42gf
+    paths:
+      - usr/local/bin/rclone
+    expired_at: 2026-10-23
+    statement: >-
+      google.golang.org/grpc v1.80.0 vendored inside the upstream rclone binary;
+      fixed in grpc 1.82.1, but no rclone release carries it - v1.74.4 IS the
+      latest upstream release, so there is nothing to upgrade to. The advisory
+      covers xDS RBAC and HTTP/2 handling in gRPC servers; the backup image runs
+      rclone only as a CLIENT in a fixed backup loop, serves no gRPC, publishes
+      no ports, and never uses xDS service-mesh configuration. Recorded in
+      docs/security/accepted-advisories.json; drop this the moment rclone ships
+      a build with grpc >= 1.82.1.

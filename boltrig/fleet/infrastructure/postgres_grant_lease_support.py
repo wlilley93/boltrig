@@ -186,7 +186,9 @@ async def insert_lease(conn: asyncpg.Connection, stored: StoredGrantLease) -> No
     binding = stored.binding
     authority = stored.authority_snapshot
     await conn.execute(
-        f"INSERT INTO grant_leases ({LEASE_COLS}) VALUES "
+        # The interpolated name is a module-level column-list constant, never
+        # input, and every value is an asyncpg $n parameter.
+        f"INSERT INTO grant_leases ({LEASE_COLS}) VALUES "  # nosec B608
         "($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)",
         stored.lease_id,
         binding.tenant_id,

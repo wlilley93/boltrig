@@ -103,7 +103,9 @@ async def insert_set(
 ) -> None:
     binding = attestations.binding
     await conn.execute(
-        f"INSERT INTO capability_attestation_sets ({SET_COLS}) "
+        # The interpolated name is a module-level column-list constant, never
+        # input, and every value is an asyncpg $n parameter.
+        f"INSERT INTO capability_attestation_sets ({SET_COLS}) "  # nosec B608
         "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
         *binding_params(binding),
         attestations.authority_evaluation_id,
@@ -115,7 +117,9 @@ async def insert_set(
     )
     if attestations.attestations:
         await conn.executemany(
-            f"INSERT INTO capability_attestation_entries ({ENTRY_COLS}) "
+            # The interpolated name is a module-level column-list constant, never
+            # input, and every value is an asyncpg $n parameter.
+            f"INSERT INTO capability_attestation_entries ({ENTRY_COLS}) "  # nosec B608
             "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
             [
                 (
