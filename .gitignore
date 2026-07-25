@@ -39,6 +39,9 @@ site/coverage/
 node_modules/
 ui/dist/
 ui/node_modules/
+# sdks/web installs its deps as a SYMLINK, and `node_modules/` (trailing slash)
+# only matches real directories - so the symlink needs its own entry.
+sdks/web/node_modules
 *.tsbuildinfo
 
 # --- editors / os ---
