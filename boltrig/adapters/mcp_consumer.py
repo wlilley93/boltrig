@@ -205,7 +205,16 @@ class McpConsumerAdapter:
                     verb_id=verb_id,
                     noun_id=self.id,  # one noun per consumed server (opbox.*)
                     input_schema=t.get("inputSchema", {}),
-                    output_schema={"type": "object"},
+                    # An MCP tool returns arbitrary JSON - an array, a string and a
+                    # number are all legal results. Asserting `{"type": "object"}`
+                    # here rejected every list-shaped tool at OUTPUT validation with
+                    # `invalid output for '<verb>'`, long after the call had already
+                    # succeeded downstream: opbox's `list_matters` really did return
+                    # the caller's matters and the kernel then threw the answer away.
+                    # Honour the server's own `outputSchema` when it declares one,
+                    # otherwise accept any JSON rather than inventing a constraint
+                    # the protocol does not make.
+                    output_schema=t.get("outputSchema") or {},
                     description=t.get("description", ""),
                     consequence=_consequence_hint(t),
                 )
