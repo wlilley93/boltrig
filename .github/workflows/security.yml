@@ -16,7 +16,19 @@ permissions:
 
 concurrency:
   group: security-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # NEVER cancel on the default branch. This is a required status check, so a
+  # cancelled run on `main` is indistinguishable from a failed one: the ref is
+  # left with no successful evidence and nothing can merge against it. Observed
+  # repeatedly on 2026-07-25 - a rapid push cadence cancelled four consecutive
+  # security runs, and the check appeared broken when it had simply never been
+  # allowed to finish. Cancelling is still right on PRs and topic branches, where
+  # superseding a run wastes nothing that any gate depends on.
+  #
+  # Condition precedent (a) of [2026] VJS-CC-BOLTRIG-BRANCH-PROTECTION-001 Order
+  # 4: enforce_admins: true cannot lawfully be ordered while a required check
+  # cancels itself on the guarded ref, because that gate would have no path
+  # through it.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   source-security:
