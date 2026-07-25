@@ -162,11 +162,11 @@
       "expires": "2026-12-31"
     },
     "boltrig/fleet/infrastructure/codex_runtime_events.py": {
-      "max_file_lines": 435,
+      "max_file_lines": 482,
       "max_function_lines": 49,
       "over_limit_functions": [],
       "owner": "fleet-maintainers",
-      "reason": "File-length only. The read-only Codex cutover adds the agentMessage read-back capture (the translator records the latest agentMessage text for read_turn_output because thread/read is not served in the App Server exec mode) while events() stays content-free; the module was already at the 400-line floor. Split the item/turn lifecycle translation from the native-observation tripwire into a sibling module when the runtime family is next refactored. Kernel-tools lane: is_kernel_tools_mcp_startup_update (the one benign invalidation-class notification, bound to the argv-pinned boltrig server name).",
+      "reason": "File-length only. The read-only Codex cutover adds the agentMessage read-back capture (the translator records the latest agentMessage text for read_turn_output because thread/read is not served in the App Server exec mode) while events() stays content-free; the module was already at the 400-line floor. Split the item/turn lifecycle translation from the native-observation tripwire into a sibling module when the runtime family is next refactored. Kernel-tools lane: is_kernel_tools_mcp_startup_update (the one benign invalidation-class notification, bound to the argv-pinned boltrig server name). 2026-07-25: +47 lines to translate `thread/tokenUsage/updated`, which Codex uses to report what a turn consumed and which was previously dropped as UNKNOWN - so the fleet priced every Codex turn at zero tokens and a tenant's cost ledger stayed empty however much it spent. The growth is the translator branch, its guard against billing a foreign thread's usage, and a floored-int helper.",
       "expires": "2026-12-31"
     },
     "boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py": {

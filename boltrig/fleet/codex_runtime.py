@@ -238,7 +238,7 @@ class CodexRuntime:
                     thread=thread, prompt=prompt, client_message_id=uuid.uuid4().hex
                 )
             )
-            await _drain_until_complete(self._lifecycle.events(thread))
+            tokens_used = await _drain_until_complete(self._lifecycle.events(thread))
             text = await self._lifecycle.read_turn_output(thread)
         except Exception as error:
             # A degrade must never swallow the cause: a silent codex_turn_failed is
@@ -261,8 +261,14 @@ class CodexRuntime:
             return AgentResult.degrade(
                 runtime=self.runtime, reason="codex_empty_output", prompt=prompt
             )
+        # Report what the turn consumed so the fleet can price it. `cost_micros` is
+        # left to the accountant, which applies the tenant's own per-model/tier rate
+        # (`price_micros`); the runtime's job is to report usage honestly, not to
+        # price it.
         return AgentResult.succeeded(
-            output={"runtime": "codex_app_server", "text": text}, summary=text[:256]
+            output={"runtime": "codex_app_server", "text": text},
+            summary=text[:256],
+            tokens_used=tokens_used,
         )
 
 
@@ -322,13 +328,25 @@ def build_trusted_codex_runtime(
     )
 
 
-async def _drain_until_complete(events: AsyncIterator[RuntimeEvent]) -> None:
+async def _drain_until_complete(events: AsyncIterator[RuntimeEvent]) -> int:
     """Consume the lifecycle stream until the turn completes (the completion
-    signal, not the content source). A terminal stream raises and the caller
-    degrades."""
+    signal, not the content source), returning the tokens the turn reported.
+
+    Usage arrives on its own notification, mid-turn and possibly more than once, so
+    the LAST report before completion wins (Codex's `total` is cumulative for the
+    thread). Zero when the runtime reported nothing - which is the honest answer,
+    and is what the fleet used to bill unconditionally for every Codex turn because
+    the usage notification was being discarded upstream. A terminal stream raises
+    and the caller degrades."""
+    tokens = 0
     async for event in events:
-        if event.kind is RuntimeEventKind.TURN_COMPLETED:
-            return
+        if event.kind is RuntimeEventKind.TOKEN_USAGE:
+            reported = event.payload.to_mapping().get("total_tokens")
+            if type(reported) is int and reported > 0:
+                tokens = reported
+        elif event.kind is RuntimeEventKind.TURN_COMPLETED:
+            return tokens
+    return tokens
 
 
 def _mint_assignment(

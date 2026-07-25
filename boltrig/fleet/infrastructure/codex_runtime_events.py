@@ -56,6 +56,10 @@ _LIFECYCLE_METHODS = frozenset(
         "item/started",
         "thread/closed",
         "thread/started",
+        # Codex reports what a turn consumed here and NOWHERE else. Left out of this
+        # set it fell through to UNKNOWN and the numbers were discarded, so the fleet
+        # priced every Codex turn at zero tokens.
+        "thread/tokenUsage/updated",
         "turn/completed",
         "turn/started",
         "warning",
@@ -206,6 +210,8 @@ class CodexEventTranslator:
             return self._thread_started(params)
         if notification.method == "thread/closed":
             return self._thread_closed(params)
+        if notification.method == "thread/tokenUsage/updated":
+            return self._token_usage(params)
         if notification.method in {"turn/started", "turn/completed"}:
             return self._turn_event(notification.method, params)
         if notification.method in {"item/started", "item/completed"}:
@@ -246,6 +252,37 @@ class CodexEventTranslator:
         return self._event(
             RuntimeEventKind.UNKNOWN,
             payload={"observation": "native_thread_closed"},
+        )
+
+    def _token_usage(self, params: Mapping[str, JSONValue]) -> RuntimeEvent:
+        """Carry what the turn consumed onto the normalized event stream.
+
+        Codex reports usage ONLY here (`thread/tokenUsage/updated`, a
+        `ThreadTokenUsage` of `last` + `total` breakdowns). It arrives mid-turn and
+        can arrive repeatedly, so the consumer takes the LAST one it sees before
+        `turn/completed` - `total` is cumulative for the thread, which is what a
+        run should be billed for.
+
+        A usage report from a foreign thread is an observation, not this run's
+        spend, and must never be billed here.
+        """
+        thread_id = _identifier("thread id", params.get("threadId"))
+        usage = _mapping(params, "tokenUsage")
+        total = usage.get("total")
+        if not isinstance(total, dict):
+            raise CodexRuntimeProtocolError("token usage total is invalid")
+        if thread_id != self._thread.thread_id:
+            return self._event(
+                RuntimeEventKind.UNKNOWN,
+                payload={"observation": "native_token_usage"},
+            )
+        return self._event(
+            RuntimeEventKind.TOKEN_USAGE,
+            payload={
+                "total_tokens": _non_negative_int(total.get("totalTokens")),
+                "input_tokens": _non_negative_int(total.get("inputTokens")),
+                "output_tokens": _non_negative_int(total.get("outputTokens")),
+            },
         )
 
     def _turn_event(self, method: str, params: Mapping[str, JSONValue]) -> RuntimeEvent:
@@ -404,6 +441,16 @@ def _identifier(label: str, value: object) -> str:
     if type(value) is not str or _IDENTIFIER.fullmatch(value) is None:
         raise CodexRuntimeProtocolError(f"{label} is invalid")
     return value
+
+
+def _non_negative_int(value: object) -> int:
+    """A usage count, floored at 0. A missing or non-integer count reads as 0
+    rather than raising: a malformed usage report must not fail an otherwise good
+    turn, it must only fail to bill for what it could not describe. bool is
+    excluded explicitly (it is an int subclass in Python)."""
+    if type(value) is not int:
+        return 0
+    return max(0, value)
 
 
 def _mapping(value: Mapping[str, JSONValue], key: str) -> dict[str, JSONValue]:

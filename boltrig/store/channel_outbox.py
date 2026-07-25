@@ -60,20 +60,29 @@ class ChannelOutboxStorePG:
         # claim. RETURNING tells us what we won.
         if not channel_ids:
             return []
+        # The inner ORDER BY chooses WHICH rows to claim (oldest first). It does
+        # NOT order the result: Postgres defines no ordering for RETURNING, so the
+        # claim handed back the right messages in an arbitrary order while both
+        # this module and the in-memory twin document "oldest first". For a
+        # channel outbox that is user-visible message reordering, so the CTE
+        # re-imposes the documented order on the way out.
         rows = await self._pool.fetch(
-            """UPDATE channel_outbox
-               SET status='in_flight', lease_owner=$2,
-                   lease_expires_at=now() + make_interval(secs => $3),
-                   attempts=attempts+1, updated_at=now()
-               WHERE tenant_id=$1 AND id IN (
-                 SELECT id FROM channel_outbox
-                 WHERE tenant_id=$1 AND channel_id = ANY($4::text[])
-                   AND ((status='pending'
-                         AND (next_attempt_at IS NULL OR next_attempt_at <= now()))
-                        OR (status='in_flight' AND lease_expires_at < now()))
-                 ORDER BY created_at LIMIT $5 FOR UPDATE SKIP LOCKED
+            """WITH claimed AS (
+                 UPDATE channel_outbox
+                 SET status='in_flight', lease_owner=$2,
+                     lease_expires_at=now() + make_interval(secs => $3),
+                     attempts=attempts+1, updated_at=now()
+                 WHERE tenant_id=$1 AND id IN (
+                   SELECT id FROM channel_outbox
+                   WHERE tenant_id=$1 AND channel_id = ANY($4::text[])
+                     AND ((status='pending'
+                           AND (next_attempt_at IS NULL OR next_attempt_at <= now()))
+                          OR (status='in_flight' AND lease_expires_at < now()))
+                   ORDER BY created_at LIMIT $5 FOR UPDATE SKIP LOCKED
+                 )
+                 RETURNING *
                )
-               RETURNING *""",
+               SELECT * FROM claimed ORDER BY created_at, id""",
             tenant_id, worker_id, float(lease_seconds), list(channel_ids), limit,
         )
         return [_outbox_message(r) for r in rows]

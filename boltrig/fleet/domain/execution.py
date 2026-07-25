@@ -108,6 +108,11 @@ class RuntimeEventKind(str, Enum):
     ITEM_UPDATED = "item.updated"
     ITEM_COMPLETED = "item.completed"
     APPROVAL_REQUESTED = "approval.requested"
+    # The runtime reporting what a turn actually consumed. Without this the fleet
+    # has no usage signal at all from the sole agent runtime, so `price_micros`
+    # prices every turn at zero tokens and a tenant's cost ledger stays empty
+    # however much it spends.
+    TOKEN_USAGE = "turn.token_usage"
     TURN_COMPLETED = "turn.completed"
     WARNING = "runtime.warning"
     ERROR = "runtime.error"
