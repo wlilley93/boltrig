@@ -787,9 +787,14 @@ invariants:
       - tests/deploy/test_compose_hardening.py::test_herdr_opencode_clis_ship_inside_first_party_images
       - tests/unit/test_doctor.py::test_production_doctor_rejects_missing_or_personal_herdr_opencode_bins
   SEC-24:
-    description: The Pi gateway is sandboxed - no native tools, egress only to the kernel + model.
+    description: >-
+      The Pi gateway is sandboxed - no native tools, egress only to the kernel +
+      model. pi is RETIRED from the roster (decision 0012) but the routing seam
+      stays live and re-wirable ([2026] VJS-PC 20 cond.1), so this invariant is
+      not dead law: it binds the day anyone flips it back on, and the test asserts
+      both halves (retired now, restrictive if re-enabled).
     tests:
-      - tests/integration/test_round_two_manifest.py::test_pi_sidecar_sandbox_is_declared_restrictive
+      - tests/integration/test_round_two_manifest.py::test_pi_is_retired_and_stays_restrictive_if_ever_re_wired
   SEC-27:
     description: No tool credential is ever sent to Pi or OpenCode - only model access and run-scoped MCP tokens.
     tests:
