@@ -43,3 +43,21 @@ targetRules = ["generic-api-key"]
 paths = ['''^tests/security/test_channel_governance\.py$''']
 regexTarget = "line"
 regexes = ['''whsec_gov_123''']
+
+[[allowlists]]
+description = "Channel roundtrip signing-secret fixtures"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = [
+  '''^tests/security/test_channel_discord_roundtrip\.py$''',
+  '''^tests/security/test_channel_gateway_roundtrip\.py$''',
+  '''^tests/security/test_channel_signal_roundtrip\.py$''',
+  '''^tests/security/test_channel_telegram_roundtrip\.py$''',
+  '''^tests/security/test_channel_xai_voice_roundtrip\.py$''',
+]
+regexTarget = "line"
+# The exact literals, not a wildcard: each is the per-test HMAC signing secret the
+# roundtrip drives the gateway with. Naming them keeps the exception as narrow as
+# every other one here - a real credential appearing in these files would still
+# be caught.
+regexes = ['''(?:discord|signal|telegram|voice)roundtrip_123|roundtripsec_123''']
