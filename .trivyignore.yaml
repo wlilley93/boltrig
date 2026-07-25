@@ -1,4 +1,16 @@
 misconfigurations:
+  - id: DS-0031
+    paths:
+      - deploy/kernel.Dockerfile
+      - deploy/fleet.Dockerfile
+    expired_at: 2027-01-31
+    statement: >-
+      False positive on the name, not the value. BOLTRIG_CODEX_AUTH_HELPER holds a
+      PATH to an executable (/opt/boltrig/codex/model_auth_helper), never a
+      credential; DS-0031 matches any env whose name contains "AUTH". The helper
+      is how a codex cell obtains a bearer WITHOUT one being baked into the image,
+      so this ENV is part of the mitigation the check is looking for, not a leak.
+      The value is fixed, non-secret, and identical in every layer.
   - id: AVD-DS-0002
     paths:
       - deploy/backup.Dockerfile

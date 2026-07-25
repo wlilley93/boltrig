@@ -32,7 +32,12 @@ describe("RouterPanel", () => {
     fireEvent.change(screen.getByLabelText("Filter capabilities by noun"), {
       target: { value: "ticket" },
     });
-    await waitFor(() => expect(api.capabilities).toHaveBeenLastCalledWith("ticket"));
+    // Called WITH the noun, not LAST called with it. The property under test is
+    // that the filter reaches the server rather than being applied to an
+    // already-downloaded list; it says nothing about what settles afterwards.
+    // toHaveBeenLastCalledWith additionally asserted an ordering the component
+    // never promised, so it passed alone and failed under full-suite timing.
+    await waitFor(() => expect(api.capabilities).toHaveBeenCalledWith("ticket"));
   });
 
   it("does not request the author-only changelog for an agent role", async () => {
