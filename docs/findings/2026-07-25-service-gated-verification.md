@@ -1,0 +1,61 @@
+# Service-gated invariants: what now runs, and what each remaining one needs
+
+Date: 2026-07-25
+
+`make invariants` reports some bindings as SERVICE-GATED, meaning declared and
+marked but "gated-not-verified offline". That status is honest but it hides a
+question worth asking: gated on WHAT, and is it still true? Some had been gated
+so long that nobody had checked whether the gate had lifted. This records the
+answer for each, so a future reader can tell "needs a credential the Principal
+must supply" apart from "nobody has tried recently".
+
+## FR-WFL-17 (live Hatchet fan-out): NOW VERIFIED
+
+Previously unverifiable because Hatchet did not actually work. Durable execution
+was silently dead on every stack until 2026-07-25 (see
+`2026-07-25-prod-roll-0.3.1.md`): the SDK defaults to TLS while hatchet-lite
+serves plaintext gRPC, so the client never connected. With
+`HATCHET_CLIENT_TLS_STRATEGY=none` and a minted token, it does.
+
+`test_live_ultracode_run_fans_out_agent_child_tasks`, the binding
+`tests/invariants.yaml` names for FR-WFL-17, **passes**. So does
+`test_live_invoke_reenters_the_chokepoint`. This invariant has been verified for
+the first time.
+
+Run it from the dev box with:
+
+    source <(grep -E '^(HATCHET_CLIENT_TOKEN|HATCHET_CLIENT_TLS_STRATEGY)=' .env)
+    export HATCHET_CLIENT_TOKEN HATCHET_CLIENT_TLS_STRATEGY
+    export HATCHET_CLIENT_HOST_PORT=127.0.0.1:7077
+    BOLTRIG_TEST_DATABASE_URL=<throwaway dsn> DATABASE_URL=<throwaway dsn> \
+      .venv/bin/python -m pytest -q tests/integration/test_hatchet_live.py
+
+`HATCHET_CLIENT_HOST_PORT` is the part that is easy to miss and cost the most
+time here. The token embeds `grpc_broadcast_address: hatchet-engine:7077`, which
+resolves only INSIDE the compose network; from the host the SDK fails with
+`DNS server refused query`. The engine is published on the host, so overriding
+the host/port makes the suite runnable without joining the network. Allow ~6
+minutes; these legs really drive workflow runs.
+
+## FR-WFL-17's siblings: 2 of 4 legs still fail, cause not yet established
+
+`test_live_workflow_run_pauses_on_gated_step` and
+`test_live_kill_restart_approve_resume` fail. Both are the most
+environment-sensitive legs (HITL pause/resume, and killing and restarting the
+worker), and neither has ever run before, so these are not regressions - they are
+simply unexamined. They are NOT blocked on a Principal-supplied credential, and
+they deserve their own investigation rather than being folded into a gate repair.
+
+## MEM-ENG-03 (live Cognee): blocked on a Principal-supplied credential
+
+`tests/integration/test_cognee_engine.py` needs `BOLTRIG_COGNEE_LIVE=1`, the
+cognee package, and `LLM_API_KEY` plus the `LLM_PROVIDER` / `LLM_MODEL` /
+`LLM_ENDPOINT` and `EMBEDDING_*` set. The API key is the genuine blocker and it
+is the Principal's to supply. Named here so it is not mistaken for neglect.
+
+## The broader lesson
+
+The invariant gate's SERVICE-GATED list is not a fixed set of impossibilities. At
+least one entry was gated on a subsystem that was quietly broken rather than on
+anything external, and it stayed that way because "service-gated" reads like a
+closed question. Re-test the list when the underlying service changes.
