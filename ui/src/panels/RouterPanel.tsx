@@ -7,7 +7,7 @@
 // Flow Capability plane: noun -> verb -> binding). Both share these fetches; the
 // resolveHealth / badge helpers below are exported so the canvas reuses them.
 
-import { Suspense, lazy, useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useMemo, useRef, useState } from "react";
 
 import { api } from "../api/client";
 import type { AdapterHealth, HealthResponse, VerbInfo } from "../api/types";
@@ -145,15 +145,26 @@ export function RouterPanel() {
   const health = useFetch(() => api.health(), [], 15000, { paused: !active });
   // "list" is the safe default; "tree" is the visual Capability plane.
   const [view, setView] = useState<RouterView>("list");
-  const [nounOptions, setNounOptions] = useState<string[]>([]);
-
-  useEffect(() => {
-    if (nounFilter || !caps.data) return;
-    setNounOptions(
-      [...new Set(caps.data.verbs.map((verb) => verb.noun || "(unspecified)"))]
+  // Derived during RENDER, not stored from an effect. As stored state written by
+  // a useEffect, the option list committed one React pass AFTER the verb rows it
+  // came from, so there was a window in which the verbs were painted and the
+  // filter still held only "All nouns". Anything selecting a noun in that window
+  // hits a <select> with no matching <option>: the DOM snaps the value back to
+  // "", React reports onChange("") and the filter silently does nothing. Deriving
+  // it here makes the options commit in the SAME paint as the verbs, closing the
+  // window for good rather than for one caller.
+  //
+  // `unfiltered` retains the last UNFILTERED verb set, because once a noun is
+  // chosen the server returns only that slice - recomputing from it would strand
+  // the user on a one-entry list with no way back.
+  const unfiltered = useRef<VerbInfo[] | null>(null);
+  if (!nounFilter && caps.data) unfiltered.current = caps.data.verbs;
+  const nounOptions = useMemo(
+    () =>
+      [...new Set((unfiltered.current ?? []).map((verb) => verb.noun || "(unspecified)"))]
         .sort((a, b) => a.localeCompare(b)),
-    );
-  }, [caps.data, nounFilter]);
+    [caps.data, nounFilter],
+  );
 
   const grouped = useMemo(() => {
     const verbs = caps.data?.verbs ?? [];

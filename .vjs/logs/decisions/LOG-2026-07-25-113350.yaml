@@ -1,0 +1,13 @@
+id: LOG-2026-07-25-113350
+time: 2026-07-25T11:33:50.721617289+00:00
+actor: lexby
+kind: security-control-decision
+issue: boltrig-branch-protection-and-audit-key-provisioning
+decision: 'Enabled branch protection on wlilley93/boltrig main (contexts "quality" and "Security gate", strict false, enforce_admins false, force-push and deletion off) per [2026] VJS-CC-BOLTRIG-BRANCH-PROTECTION-001 Order 2. Applied the VERIFIED check-run names, not the "ci / quality" form the order recited: no check run publishes those, so requiring them would have blocked every merge forever - the exact deadlock Order 3 refused. Separately corrected the audit-key guard, which compared against the in-source default and blank ONLY and therefore missed change-me-to-a-long-random-secret, the value .env.example actually shipped: blanked that file, consolidated three consumers onto one shared placeholder predicate, and closed the readiness-receipt bypass.'
+basis:
+- '[2026] VJS-CC-BOLTRIG-BRANCH-PROTECTION-001 Orders 1-9'
+- '[2026] VJS-CC-BOLTRIG-AUDIT-KEY-PROVISIONING-001 Orders O1-O11'
+risk: medium
+reversibility: easy
+court_required: true
+why: 'A guard that misses the value its own project ships is worse than no guard, because it reassures. Both forks were first-impression and went to the court rather than to the Principal; both judgments held the acts were mine to take, and the first corrected an error of law in my own closure record. Where an order recites a fact that verification contradicts, follow the order SUBSTANCE with corrected particulars and record the variance, rather than executing a literal that would defeat the order purpose.'

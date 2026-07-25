@@ -1,0 +1,68 @@
+id: SUBMISSION-2026-07-25-113430
+court_requested: county
+jurisdiction: default
+kind: breach-self-filing
+question: 'Self-filed under ACT-003:s5 (duty of reasonable skill and care). Three defects in my own work on the audit-key control, all discovered by the court rather than by me, and one error of law in a record I authored. No remedy is sought beyond making the work good, which has been done; filed so the record is complete and the pattern is learnable.'
+facts: |
+  # Breach self-filing: the audit-key control and a misstatement of law
+
+  Filed on my own motion under ACT-003:s5. No blame is sought and none is owed; the
+  duty is to make the work good, and the work is good. This exists because a
+  breach nobody records is a breach nobody learns from.
+
+  ## What I got wrong
+
+  1. **An insufficient guard, reported as sufficient.** I found that
+     `refuse_default_audit_key_in_prod` fired only under a production signal that
+     nothing sets by default, added a warning, and recorded H3 as "the guard is
+     not wrong; it is simply never armed by default". That understated it. The
+     guard compared against the IN-SOURCE default (`dev-insecure-audit-key`) and
+     blank only, while `.env.example` shipped
+     `change-me-to-a-long-random-secret`. The documented `cp .env.example .env`
+     therefore produced a deployment that tripped NEITHER the fatal NOR the
+     warning I had just written. I tested my warning against the code default and
+     never against the value the project ships.
+
+  2. **A second predicate I did not look for.** `api/doctor.py` already knew that
+     exact string was a placeholder. Two predicates disagreed and the gap between
+     them WAS the hole. Had I grepped for an existing answer before writing a new
+     comparison, I would have found it.
+
+  3. **A bypass I did not trace.** `stack_tool_receipts.receipt_signing_key`
+     rejected only blank, so a placeholder key yielded a well-formed signing key
+     and readiness receipts were signed with a public constant. I changed one
+     consumer of the key without enumerating the others.
+
+  4. **An error of law.** In `docs/security/audit-2026-07-02-closure.md` I wrote
+     that making CI checks required "belongs to the Principal rather than to a
+     passing commit". That was wrong. The court held the act is not reserved, and
+     that routing it to the Principal would itself have been a breach. I asserted
+     a reservation instead of testing one.
+
+  ## Standard and the gap
+
+  The engagement raises the duty to all reasonable endeavours. A reasonable
+  engineer fixing a "silently defaults" finding tests the guard against every
+  value the project ships, not only the one in the code. The common root of (1),
+  (2) and (3) is the same: I verified a change against the site I was editing
+  rather than against the system the change is supposed to protect.
+
+  ## Remedy, already performed
+
+  `.env.example` ships the key blank; one shared predicate
+  (`boltrig/config/weak_secrets.py`) serves all three consumers; the receipt
+  bypass is closed; 19 tests pin the property, including one that fails if
+  `.env.example` ever ships a value again. The closure record now states the
+  hole's true size and the branch-protection correction.
+
+  ## Not remedied, and why
+
+  Both prod deployments carry a placeholder audit key, including a live client
+  tenant. Rotation on a running deployment is reserved to the Principal
+  ([2026] VJS-CC-BOLTRIG-AUDIT-KEY-PROVISIONING-001 O9) because it breaks
+  continuity with rows already signed. The estate is flagged, not fixed.
+
+  ## The learnable pattern
+
+  Test a guard against the artefact the project SHIPS, not the constant in the
+  source. And before adding a predicate, search for the one that already exists.

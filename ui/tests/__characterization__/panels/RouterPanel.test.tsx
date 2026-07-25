@@ -27,7 +27,14 @@ describe("RouterPanel", () => {
       capabilityChangelog: { changes: [] },
     });
     render(<RouterPanel />);
-    await screen.findByText("ticket.read");
+    // Wait for the OPTION, not just the verb row. Firing `change` at a <select>
+    // that has no matching <option> is a silent no-op: the DOM snaps the value
+    // back to "" and React reports onChange(""), so the filter never reaches the
+    // server and the assertion below can never pass. The panel now commits the
+    // options with the verbs, so this is belt and braces - but a test whose
+    // arrange step can silently not-happen is a test that reports timing as a
+    // product failure.
+    await screen.findByRole("option", { name: "ticket" });
 
     fireEvent.change(screen.getByLabelText("Filter capabilities by noun"), {
       target: { value: "ticket" },
