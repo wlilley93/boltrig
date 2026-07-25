@@ -54,6 +54,14 @@ down: ## Stop the stack (keep the postgres volume)
 logs: ## Tail logs for every service (SERVICE=kernel to scope it)
 	$(COMPOSE) logs -f $(SERVICE)
 
+# WITHOUT BOLTRIG_TEST_DATABASE_URL this skips ~156 tests, including the RLS
+# fence-drift guard, migration parity, tenancy and store parity - they run only
+# against a real Postgres. For a long time CI was the ONLY place that happened,
+# which is how a Postgres-only foreign-key defect survived a green local suite.
+# Point it at a THROWAWAY database, never one a running stack serves from; these
+# tests write. On the dev box:
+#   psql -h <pg> -U boltrig -d postgres -c 'CREATE DATABASE boltrig_test;'
+#   make test BOLTRIG_TEST_DATABASE_URL=postgresql://boltrig:<pw>@<pg>:5432/boltrig_test
 test: ## Run the test suite (set BOLTRIG_TEST_DATABASE_URL to also run the Postgres tests)
 	$(PY) -m pytest -q
 
