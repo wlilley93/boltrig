@@ -74,10 +74,11 @@ invariants:
     tests:
       - tests/security/test_mcp_face.py::test_run_tokens_are_hashed_expiring_and_immediately_revocable
   SEC-150:
-    description: The first Codex App Server client admits only the pinned stable omitted-jsonrpc protocol over a bounded local transport, hard-enforces a read-only sandbox with local approvals disabled, binds lifecycle responses to exact requested identifiers and policy, rejects every untyped server request fail closed, and never exposes peer payloads in errors.
+    description: The first Codex App Server client admits only the pinned stable omitted-jsonrpc protocol over a bounded local transport, hard-enforces a read-only sandbox with local approvals disabled, binds lifecycle responses to exact requested identifiers and policy, answers ONLY the one typed server request it handles (the per-tool-call approval, admitted to the kernel gate - [2026] VJS-COUNTY 12) and refuses every other server request fail closed, and never exposes peer payloads in errors.
     tests:
       - tests/unit/test_codex_app_server.py::test_read_only_lifecycle_uses_exact_monotonic_stable_shapes
-      - tests/unit/test_codex_app_server.py::test_server_request_failure_is_generic_and_sanitized
+      - tests/unit/test_codex_app_server.py::test_an_unhandled_server_request_is_refused_typed_and_never_crashes_the_pump
+      - tests/unit/test_codex_server_request_handler.py::test_the_error_arm_carries_no_request_params
   SEC-151:
     description: Effective runtime authority is the exact scope-bound intersection of the parent grant, profile ceiling, selected-skill requirements, workspace policy, and current durable approval state; no skill, approval, prompt, message, or mismatched tenant/workspace policy may widen it.
     tests:

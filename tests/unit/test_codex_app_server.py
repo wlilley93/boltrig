@@ -368,6 +368,7 @@ async def test_a_tool_approval_is_answered_explicitly_and_the_pump_survives(
     assert '"Approve"' in approve[0]
 
 
+@pytest.mark.invariant("SEC-150")
 @pytest.mark.invariant("CODEX-APPROVAL-1")
 async def test_an_unhandled_server_request_is_refused_typed_and_never_crashes_the_pump(
     client_factory: ClientFactory,

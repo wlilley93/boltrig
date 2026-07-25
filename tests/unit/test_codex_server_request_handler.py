@@ -127,6 +127,7 @@ async def test_a_duplicate_approve_label_is_not_ambiguous() -> None:
     assert response.result.to_value()["answers"]["mcp_tool_call_approval_call_1"]["answers"] == ["Approve"]
 
 
+@pytest.mark.invariant("SEC-150")
 async def test_the_error_arm_carries_no_request_params() -> None:
     # A refusal must not echo any of codex's params back on the wire.
     req = _approval([{"label": "Decline", "description": "SECRETDESC"}])

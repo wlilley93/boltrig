@@ -118,6 +118,9 @@ class MsGraphAdapter(HttpAdapter):
                 output_schema=_DRIVE_ITEM_OUT,
                 description="Upload a small file to a drive path",
                 rate_limit=write_rl,
+                # Writes into the customer's drive (see the guard in
+                # tests/security/test_builtin_write_verbs_are_gated.py).
+                consequence="high",
             ),
             VerbSpec(
                 verb_id="document.update",
@@ -135,6 +138,7 @@ class MsGraphAdapter(HttpAdapter):
                 output_schema=_DRIVE_ITEM_OUT,
                 description="Update a drive item's metadata",
                 rate_limit=write_rl,
+                consequence="high",
             ),
             VerbSpec(
                 verb_id="email.send",
