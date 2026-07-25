@@ -176,6 +176,19 @@ export async function* streamTurn(opts: StreamTurnOptions): AsyncGenerator<ChatE
       `cannot reach the kernel at ${opts.server} (${exc instanceof Error ? exc.name : "error"}) - is the stack running?`,
     );
   }
+  // 202 is an ACCEPTANCE, not a failure: the conversation already had a turn in
+  // flight, so the message was durably queued as a steer and is answered as the
+  // next turn on that stream (US-CHAT-15). Falling through to the branch below
+  // would report "request failed (HTTP 202)" for a message that was accepted.
+  // There is no stream on this path, so the generator ends after the ack.
+  if (resp.status === 202) {
+    yield {
+      type: "queued",
+      detail:
+        "queued behind the turn already running on this conversation; the reply lands on that turn",
+    } as ChatEvent;
+    return;
+  }
   if (resp.status !== 200) {
     let payload: Record<string, unknown> = {};
     try {

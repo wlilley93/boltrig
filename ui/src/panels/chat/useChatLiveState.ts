@@ -13,6 +13,11 @@ export interface ChatLiveState {
   setStopped: Setter<boolean>;
   streamError: string | null;
   setStreamError: Setter<string | null>;
+  // A neutral outcome worth telling the user about that is NOT a failure.
+  // Kept apart from streamError because that channel renders in error styling
+  // under a hardcoded "Stream interrupted:" prefix.
+  notice: string | null;
+  setNotice: Setter<string | null>;
   resolvedHitls: Record<string, string>;
   setResolvedHitls: Setter<Record<string, string>>;
 }
@@ -22,6 +27,7 @@ export function useChatLiveState(): ChatLiveState {
   const [streaming, setStreaming] = useState(false);
   const [stopped, setStopped] = useState(false);
   const [streamError, setStreamError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [resolvedHitls, setResolvedHitls] = useState<Record<string, string>>({});
 
   return {
@@ -33,6 +39,8 @@ export function useChatLiveState(): ChatLiveState {
     setStopped,
     streamError,
     setStreamError,
+    notice,
+    setNotice,
     resolvedHitls,
     setResolvedHitls,
   };

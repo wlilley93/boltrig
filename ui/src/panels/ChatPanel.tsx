@@ -138,6 +138,7 @@ export function ChatPanel(): JSX.Element {
           speech={chat.speech}
           stopped={chat.stopped}
           streamError={chat.streamError}
+          notice={chat.notice}
           onWatchAgain={chat.watchAgain}
           onReconnect={chat.reconnect}
           showJump={chat.showJump}

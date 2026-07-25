@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 
 import { saveAppearanceLocal, loadAppearance } from "@/appearance";
 import { saveReadAloud } from "@/voice";
@@ -30,17 +30,45 @@ export interface ChatActions extends ChatStreamActions {
 }
 
 function useLoadConversation(state: ChatPanelState): (id: string) => void {
+  // Monotonic request id, the same guard useConversationRail and useFetch use:
+  // transcript fetches take no abort signal, so two loads (a rail click landing
+  // on top of finalizeSend's reload, or two fast rail clicks) can resolve out of
+  // order. Without this the older response wins and paints one conversation's
+  // messages while activeId, and therefore the composer, points at another.
+  //
+  // Recency alone is NOT enough, and the gap is reachable. useRegenerateAction
+  // awaits a real model turn and only then reloads, using the conversation id its
+  // render-time closure captured. Click another conversation while a regenerate
+  // is in flight (nothing disables the rail during one) and the regenerate's
+  // reload is issued LAST - so a monotonic guard SANCTIONS it, and the old
+  // conversation repaints under the new one's id with no error shown. So the
+  // fetched id must also still be the one the pane is on, read from a ref because
+  // the closure's copy is stale by then.
+  const seq = useRef(0);
   return useCallback(async (id: string) => {
+    // Bail BEFORE touching any state, not after the await. A load that turns the
+    // spinner on and is then disowned by the guard below leaves it on forever,
+    // because the request that would have cleared it is the one being ignored.
+    if (id !== state.activeIdRef.current) return;
+    const mine = ++seq.current;
+    // Both halves are load-bearing. The id check catches a slow load for a
+    // conversation the pane has left; the sequence check catches two loads for
+    // the SAME conversation resolving out of order, where the id check cannot
+    // tell them apart and the older snapshot would win.
+    const current = (): boolean => mine === seq.current && id === state.activeIdRef.current;
     state.setMsgsLoading(true);
     state.setMsgsError(null);
     try {
       const res = await api.conversation(id);
-      if (!state.alive.current) return;
+      if (!state.alive.current || !current()) return;
       state.setMessages(res.messages);
     } catch (err) {
-      if (state.alive.current) state.setMsgsError(apiReason(err));
+      if (state.alive.current && current()) state.setMsgsError(apiReason(err));
     } finally {
-      if (state.alive.current) state.setMsgsLoading(false);
+      // Clear the spinner whenever THIS load is still the newest, even if the
+      // pane has since moved on: the mover turns it back on for its own load, and
+      // gating this on the id too is how it gets stuck.
+      if (state.alive.current && mine === seq.current) state.setMsgsLoading(false);
     }
   }, [state]);
 }
@@ -65,6 +93,12 @@ function useConversationSelectionActions(
       state.setClearIndex(null);
       state.setCompacted(false);
       state.setActiveId(id);
+      // Drop the outgoing transcript before the new one is fetched, the way
+      // newConversation does. ChatMessages only shows its spinner while
+      // messages is empty, so a load that fails (403 after a scope change, 404
+      // after a delete elsewhere, a dropped connection) would otherwise leave
+      // the previous conversation's messages on screen under the error line.
+      state.setMessages([]);
       void loadConversation(id);
     },
     [state, loadConversation],

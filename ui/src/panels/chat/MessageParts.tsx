@@ -161,6 +161,11 @@ export function LiveBubble({
 interface StatusOverlaysProps {
   stopped: boolean;
   streamError: string | null;
+  // A neutral outcome that is not a failure and must not read as one. The
+  // streamError channel hardcodes "Stream interrupted:" in error styling, so
+  // routing a durably-accepted message through it would tell the user something
+  // broke when nothing did.
+  notice: string | null;
   liveRunId: string | null;
   showJump: boolean;
   onWatchAgain: () => void;
@@ -171,6 +176,7 @@ interface StatusOverlaysProps {
 export function StatusOverlays({
   stopped,
   streamError,
+  notice,
   liveRunId,
   showJump,
   onWatchAgain,
@@ -179,6 +185,15 @@ export function StatusOverlays({
 }: StatusOverlaysProps): JSX.Element {
   return (
     <>
+      {notice && (
+        <div className="chat__stopped">
+          <span>{notice}</span>
+          <button className="btn btn--ghost" onClick={() => void onReconnect()}>
+            Refresh transcript
+          </button>
+        </div>
+      )}
+
       {stopped && (
         <div className="chat__stopped">
           <span>Stopped watching. The agent may still be finishing on the server.</span>

@@ -1,7 +1,7 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
-import { ApiError } from "@/api/client";
+import { api, ApiError } from "@/api/client";
 import type { WorkItem } from "@/api/types";
 import { KanbanPanel } from "@/panels/KanbanPanel";
 import { WorkDetail } from "@/panels/workBoard/WorkDetail";
@@ -126,5 +126,74 @@ describe("WorkDetail", () => {
     mockApi({ workDetail: Promise.reject(new ApiError(404, "not found", { error: "not_found" })) });
     render(<WorkDetail itemId="hidden" />);
     expect(await screen.findByText("Work item not found or not in your visibility scope.")).toBeTruthy();
+  });
+
+  // KanbanPanel renders <WorkDetail itemId={detailId} /> with no key, so a
+  // /kanban/A -> /kanban/B hash change (a child row, the Parent link) swaps the
+  // prop on a LIVE instance. useFetch must drop the payload it holds for A, or A's
+  // id, owner, on-behalf-of and scoped audit trail keep rendering under B's URL -
+  // permanently when B fails, because the error path never clears data.
+  it("drops the previous item's record when itemId changes to one that is out of scope", async () => {
+    mockApi({});
+    vi.spyOn(api, "workDetail").mockImplementation(async (id: string) => {
+      if (id !== "goal-1") throw new ApiError(404, "not found", { error: "not_found" });
+      return {
+        item: { ...ITEMS[0], on_behalf_of: "will" },
+        children: [ITEMS[1]],
+        audit: [{
+          ts: "2026-07-15T10:00:00Z",
+          actor: "ops.agent",
+          actor_tier: "member",
+          noun: "ticket",
+          verb: "update",
+          status: "ok",
+          detail: { changed: true },
+        }],
+      } as never;
+    });
+
+    const view = render(<WorkDetail itemId="goal-1" />);
+    await screen.findByText("goal-1");
+
+    view.rerender(<WorkDetail itemId="hidden" />);
+    await screen.findByText("Work item not found or not in your visibility scope.");
+
+    for (const text of ["goal-1", "will", "ticket.update"]) {
+      expect(
+        screen.queryByText(text),
+        `stale key data: goal-1's record (${text}) is still rendered as the answer for "hidden"`,
+      ).toBeNull();
+    }
+  });
+
+  // The reverse transition, and it pins the other half of the fix. Clearing only
+  // `data` leaves the previous key's ERROR standing, so a valid new item renders
+  // "not in your visibility scope" for the whole duration of its own request -
+  // the same defect on the error field. Asserted while the new request is still
+  // in flight, because that is the only window in which the stale error shows.
+  it("drops the previous item's error while the new item is still loading", async () => {
+    mockApi({});
+    let release: (() => void) | null = null;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.spyOn(api, "workDetail").mockImplementation(async (id: string) => {
+      if (id !== "goal-1") throw new ApiError(404, "not found", { error: "not_found" });
+      await held;
+      return { item: ITEMS[0], children: [], audit: [] } as never;
+    });
+
+    const view = render(<WorkDetail itemId="hidden" />);
+    await screen.findByText("Work item not found or not in your visibility scope.");
+
+    view.rerender(<WorkDetail itemId="goal-1" />);
+    await screen.findByText("Loading work item...");
+    expect(
+      screen.queryByText("Work item not found or not in your visibility scope."),
+      "stale key error: hidden's 404 is still the answer for goal-1",
+    ).toBeNull();
+
+    release?.();
+    await screen.findByText("goal-1");
   });
 });

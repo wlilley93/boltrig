@@ -87,6 +87,7 @@ function useSendAction(
 
     state.setInput("");
     state.setStreamError(null);
+    state.setNotice(null);
     state.setAttachError(null);
     state.setStopped(false);
     state.setPendingUser(text);
@@ -101,7 +102,22 @@ function useSendAction(
     state.abortRef.current = ctrl;
 
     try {
-      await streamChat(req, handleStreamEvent(state, ctrl), ctrl.signal);
+      const queued = await streamChat(req, handleStreamEvent(state, ctrl), ctrl.signal);
+      // A steer queued behind an in-flight turn (US-CHAT-15) is acked with a 202
+      // and NO stream, so nothing rendered here: unannounced, the send is
+      // indistinguishable from a turn that completed with no reply. The message
+      // is durable (the reload below shows it) and is answered as the next turn
+      // on the in-flight stream, which this client is not the one watching.
+      //
+      // Announced as a NOTICE, not a streamError: nothing was interrupted and
+      // nothing failed, and streamError renders in error styling under a
+      // hardcoded "Stream interrupted:" prefix.
+      if (queued && state.alive.current) {
+        state.setNotice(
+          "Queued behind the turn already running on this conversation. The reply lands on that turn; refresh the transcript to see it.",
+        );
+        if (queued.conversation_id) state.pendingConvId.current = queued.conversation_id;
+      }
       await finalizeSend(state, rail, loadConversation);
     } catch (err) {
       if (!state.alive.current) return;

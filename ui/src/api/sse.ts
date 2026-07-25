@@ -29,10 +29,48 @@ export class StreamIdleError extends ApiError {
 // so a live-but-quiet turn is not falsely tripped.
 const STREAM_IDLE_MS = 120_000;
 
-// Terminal events that end an SSE turn. Seeing one lets us close the reader
-// eagerly instead of waiting on the socket's own (possibly buffered) close.
-function isTerminalEvent(ev: ChatEvent): boolean {
+// A run's event stream carries exactly ONE turn, and a followed relay stays open
+// until the run closes, so a terminal event is what settles it: seeing one lets
+// us close the reader eagerly instead of waiting on the socket's own (possibly
+// buffered) close.
+function isRunStreamEnd(ev: ChatEvent): boolean {
   return ev.type === "message_end" || ev.type === "cancelled";
+}
+
+// POST /v1/chat does NOT end at a turn boundary. When a steer was queued behind
+// the caller's turn (US-CHAT-15) the kernel drains it as a SECOND turn on the
+// SAME response - steer_consumed, a fresh message_start, the whole turn - after
+// the first message_end. Closing there dropped that turn AND killed it: the
+// response generator is what drives the drain, so cancelling the reader cancels
+// the steered turn before its reply is persisted. Running to the server's close
+// also stops racing the FIRST turn's persist, which the kernel does AFTER
+// yielding message_end.
+//
+// `cancelled` still ends this stream eagerly, and not because the server is
+// about to close - precisely because it is NOT. ChatService.cancel only
+// publishes the frame and closes the relay; the spawn keeps running and _drive's
+// finally awaits it, so the response can stay open for the rest of the turn.
+// Without the eager close the Stop button hangs until the underlying spawn
+// finishes, or trips a bogus StreamIdleError on a turn the user deliberately
+// stopped. Do not delete this as redundant.
+//
+// What this does NOT fix: on the cancel path the client disconnect cancels the
+// response task at the trailing message_end, so handle_turn's add_message for
+// the partial reply never runs and a stopped turn's text is still absent from
+// the reloaded transcript. That is pre-existing, and it is not closed here.
+function isChatStreamEnd(ev: ChatEvent): boolean {
+  return ev.type === "cancelled";
+}
+
+// The 202 ack POST /v1/chat returns INSTEAD of a stream when this conversation
+// already has a turn in flight: the message is durably queued as a steer and is
+// answered as the next turn on the in-flight stream, so this caller gets no
+// stream of its own (US-CHAT-15).
+export interface ChatQueuedAck {
+  status: "queued";
+  conversation_id: string | null;
+  message_id: string | null;
+  run_id: string | null;
 }
 
 // Race a single reader.read() against the idle window. On timeout the reader is
@@ -54,13 +92,17 @@ async function readWithIdleTimeout(
 }
 
 // The shared SSE pump: read frames delimited by a blank line, buffering partial
-// frames across chunks, dispatch each parsed ChatEvent, and close cleanly on a
-// terminal event (message_end / cancelled) or the server's own stream close. An
-// idle-timeout guard bounds a dead stream; an AbortSignal cancels immediately.
+// frames across chunks, dispatch each parsed ChatEvent, and close cleanly on the
+// caller's stream-end event or the server's own stream close. Which events end a
+// stream is per-endpoint (isChatStreamEnd / isRunStreamEnd): closing the reader
+// tears the connection down, so an endpoint that keeps going past a turn boundary
+// must not be cut short. An idle-timeout guard bounds a dead stream; an
+// AbortSignal cancels immediately.
 async function pumpSse(
   res: Response,
   onEvent: (event: ChatEvent) => void,
   idleMs: number,
+  isEnd: (ev: ChatEvent) => boolean,
 ): Promise<void> {
   const reader = res.body!.getReader();
   const decoder = new TextDecoder();
@@ -78,7 +120,7 @@ async function pumpSse(
         const frame = buffer.slice(0, idx);
         buffer = buffer.slice(idx + 2);
         const ev = emitFrame(frame, onEvent);
-        if (ev && isTerminalEvent(ev)) {
+        if (ev && isEnd(ev)) {
           terminated = true;
           break;
         }
@@ -101,13 +143,18 @@ async function pumpSse(
 // POST /v1/chat is a Server-Sent Events stream: each `data:` line is one JSON
 // ChatEvent. onEvent is called once per parsed event; pass an AbortSignal to
 // cancel (the partial result still persists kernel-side and can be re-fetched
-// via conversation()). The stream closes cleanly on message_end / cancelled and
-// is bounded by an idle-timeout guard so a dead stream never hangs the UI.
+// via conversation()). The stream may carry MORE than one turn (a queued steer is
+// drained onto it), so it runs to the server's own close - or to `cancelled` -
+// bounded by an idle-timeout guard so a dead stream never hangs the UI.
+//
+// Resolves null when a turn streamed, or the ChatQueuedAck when the kernel queued
+// the message behind an in-flight turn instead of streaming one. A caller that
+// ignores the ack renders a queued message as a turn that completed with no reply.
 export async function streamChat(
   body: ChatRequest,
   onEvent: (event: ChatEvent) => void,
   signal?: AbortSignal,
-): Promise<void> {
+): Promise<ChatQueuedAck | null> {
   const headers: Record<string, string> = {
     ...identityHeaders(),
     ...csrfHeaders("POST"),
@@ -133,13 +180,38 @@ export async function streamChat(
     throw new ApiError(res.status, `POST /v1/chat -> ${res.status}`, parsed);
   }
 
-  await pumpSse(res, onEvent, STREAM_IDLE_MS);
+  // A 202 is a queued ack, not an event stream (see ChatQueuedAck). It is `ok`
+  // and it has a body, so the guard above waves it through: branch BEFORE the
+  // pump, which would find no `data:` line in that JSON, dispatch nothing, and
+  // resolve exactly like a turn that produced no reply.
+  if (res.status === 202) {
+    const parsed = ((await parseBody(res)) ?? {}) as Record<string, unknown>;
+    // Gate on the body, not the status. 202 is not reserved to this ack: the
+    // kernel already returns it for a pending_human pause and for an empty-bodied
+    // MCP notification, and the SDK contract says any high-consequence route may
+    // honestly answer 202. Coercing every 202 into "queued" would report one of
+    // those as a queued steer. Anything else is loud.
+    if (parsed.status !== "queued") {
+      throw new ApiError(res.status, `POST /v1/chat -> unexpected 202`, parsed);
+    }
+    const text = (v: unknown): string | null => (typeof v === "string" ? v : null);
+    return {
+      status: "queued",
+      conversation_id: text(parsed.conversation_id),
+      message_id: text(parsed.message_id),
+      run_id: text(parsed.run_id),
+    };
+  }
+
+  await pumpSse(res, onEvent, STREAM_IDLE_MS, isChatStreamEnd);
+  return null;
 }
 
 // Subscribe to a run's event stream (Round Eleven, the Run drawer / live canvas).
 // follow=false (default) yields the current snapshot then ends; follow=true keeps
 // streaming live until the run closes. Same SSE frame format + hardening as
-// streamChat (clean terminal close, idle-timeout guard). Because the kernel relay
+// streamChat (idle-timeout guard), closing eagerly on a run-stream terminal event
+// (a run carries one turn, unlike /v1/chat). Because the kernel relay
 // replays a run's events on subscribe, this doubles as the reconnect/replay path.
 export async function streamRunEvents(
   runId: string,
@@ -168,7 +240,7 @@ export async function streamRunEvents(
   }
   // A snapshot (follow=false) ends on the server's stream close, so keep the idle
   // guard for the live-follow case only; a snapshot without a heartbeat is fine.
-  await pumpSse(res, onEvent, opts.follow ? STREAM_IDLE_MS : 0);
+  await pumpSse(res, onEvent, opts.follow ? STREAM_IDLE_MS : 0, isRunStreamEnd);
 }
 
 // Parse one SSE frame and dispatch its ChatEvent. Returns the parsed event (or

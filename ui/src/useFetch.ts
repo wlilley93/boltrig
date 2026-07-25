@@ -80,9 +80,17 @@ export function useFetch<T>(
 
   useEffect(() => {
     active.current = true;
-    // `load` identity changes only when deps change (or first mount): the data we
-    // hold is for the previous query, so re-show the initial loading state.
+    // `load` identity changes only when deps change (or first mount): what we
+    // hold answers the PREVIOUS query, so drop it along with any failure it
+    // carried. Clearing the ref alone is not enough - panels gate the initial
+    // spinner on `loading && !data`, so a retained payload suppresses the spinner
+    // AND keeps rendering the old key's record under the new key, permanently if
+    // the new request fails (the catch above never clears data). That is how one
+    // work item's owner, children and audit trail got shown as another's.
     hasData.current = false;
+    setData(null);
+    setError(null);
+    setErrorStatus(null);
     void load();
     return () => {
       active.current = false;

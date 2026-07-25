@@ -44,6 +44,7 @@ interface ChatMessagesProps {
   speech: Speech;
   stopped: boolean;
   streamError: string | null;
+  notice: string | null;
   onWatchAgain: () => void;
   onReconnect: () => void;
   showJump: boolean;
@@ -154,7 +155,7 @@ export function ChatMessages(props: ChatMessagesProps): JSX.Element {
     );
   }
 
-  const { slideActive, streaming, stopped, streamError, showJump, onWatchAgain, onReconnect, onJumpToLatest, onMessagesScroll, messagesRef } = props;
+  const { slideActive, streaming, stopped, streamError, notice, showJump, onWatchAgain, onReconnect, onJumpToLatest, onMessagesScroll, messagesRef } = props;
 
   return (
     <div
@@ -169,6 +170,7 @@ export function ChatMessages(props: ChatMessagesProps): JSX.Element {
       <StatusOverlays
         stopped={stopped}
         streamError={streamError}
+        notice={notice}
         liveRunId={live.runId ?? null}
         showJump={showJump}
         onWatchAgain={onWatchAgain}

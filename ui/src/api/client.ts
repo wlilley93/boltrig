@@ -3,4 +3,5 @@
 
 export { ApiError } from "@/api/transport";
 export { StreamIdleError, streamChat, streamRunEvents } from "@/api/sse";
+export type { ChatQueuedAck } from "@/api/sse";
 export { api } from "@/api/api";
