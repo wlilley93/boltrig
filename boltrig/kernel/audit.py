@@ -25,6 +25,63 @@ from . import pii
 _HMAC_KEY = os.environ.get("BOLTRIG_AUDIT_HMAC_KEY", "dev-insecure-audit-key").encode()
 _PREVIEW_LEN = 256
 
+# ── Key epochs: rotation without destroying the history you rotated away from ─────────────
+# The chain is re-derived from seq 1 under ONE key, so rotating BOLTRIG_AUDIT_HMAC_KEY made
+# every pre-rotation row fail verification for good. Observed live on the Classical Visas
+# tenant 2026-07-26: its key was the shipped `.env.example` placeholder, so the chain was
+# forgeable by anyone with the repo; re-keying it was plainly right, and it cost verification
+# of all 111 prior rows.
+#
+# That cost is the real defect, because it prices rotation at "lose your history" and so
+# argues for never rotating a LEAKED key. It also destroys signal: a permanently failing
+# verify is indistinguishable from tampering, and a check that always fails is one people
+# learn to ignore.
+#
+# An epoch fixes both. A retired key is kept for VERIFICATION ONLY and is bounded by the seq
+# at which it was retired: a row below that boundary may verify under it, a row at or above
+# it may not. The bound is load-bearing, not bookkeeping - without it, anyone holding a
+# retired key (and here one of them is a PUBLIC constant) could append new rows that verify
+# perfectly. Writes always use the current key; only reads consult the epochs.
+#
+#   BOLTRIG_AUDIT_HMAC_RETIRED="<retired_at_seq>:<key>[,<retired_at_seq>:<key>...]"
+#
+# Unset => one key, exactly the previous behaviour.
+_RETIRED_ENV = "BOLTRIG_AUDIT_HMAC_RETIRED"
+
+
+def _retired_epochs() -> list[tuple[int, bytes]]:
+    """[(retired_at_seq, key)] oldest boundary first; malformed entries are ignored.
+
+    Parsed per verification rather than at import so a rotation is picked up without a
+    restart, and so a test can set it. Ignoring a malformed entry is the fail-safe
+    direction: the row then falls through to the current key and fails honestly, which is
+    the pre-epoch behaviour - never a silent accept.
+    """
+    raw = os.environ.get(_RETIRED_ENV, "").strip()
+    if not raw:
+        return []
+    epochs: list[tuple[int, bytes]] = []
+    for part in raw.split(","):
+        boundary, _, key = part.strip().partition(":")
+        if not key or not boundary.strip().isdigit():
+            continue
+        epochs.append((int(boundary.strip()), key.encode()))
+    return sorted(epochs, key=lambda e: e[0])
+
+
+def _key_for_seq(seq: int | None, epochs: list[tuple[int, bytes]]) -> bytes:
+    """The ONE key a row at ``seq`` is allowed to verify under.
+
+    The first epoch whose boundary the row predates wins; a row at or after every boundary
+    belongs to the live key. Exactly one key per row - never "try them all" - so a retired
+    key can only ever vouch for the range it actually sealed.
+    """
+    if seq is not None:
+        for boundary, key in epochs:
+            if seq < boundary:
+                return key
+    return _HMAC_KEY
+
 
 def _canonical(event: AuditEvent) -> str:
     """A stable serialisation of the fields the hash covers.
@@ -112,12 +169,16 @@ async def verify_chain(
     prev: str | None = None
     after = 0
     page = max(1, page_size)
+    # Resolved once per verification, not per row: a rotation cannot move mid-scan, and the
+    # bound must be the same for every row or the answer depends on when it was read.
+    epochs = _retired_epochs()
     while True:
         events = await scan(tenant_id, after, page)
         if not events:
             return (True, None)
         for e in events:
-            expected = hmac.new(_HMAC_KEY, canonical(e).encode(), hashlib.sha256).hexdigest()
+            key = _key_for_seq(e.seq, epochs)
+            expected = hmac.new(key, canonical(e).encode(), hashlib.sha256).hexdigest()
             if e.prev_hash != prev or e.hash != expected:
                 return (False, e.seq)
             prev = e.hash
