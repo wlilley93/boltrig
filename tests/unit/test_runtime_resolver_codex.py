@@ -117,3 +117,99 @@ async def test_compile_codex_tool_ceiling_is_tenant_ceiling_intersect_run_grants
         "tenant-1", GrantSet.of(["ticket.read", "ticket.write"])
     )
     assert ceiling == ("ticket.read",)
+
+
+# --------------------------------------------------------------------------- #
+# The model that served the call is part of the record (Test 4: "at what cost"
+# is unverifiable without "by which model" - pricing is keyed BY model).
+#
+# Observed live on cvboltrig: 14 agent_spawn rows carrying token AND cost figures
+# and ZERO rows anywhere naming a model, because model_route was populated only
+# when a model PROFILE applied. The ordinary path audited {runtime, capability}
+# and left the model silent.
+# --------------------------------------------------------------------------- #
+from boltrig.fleet.runtime_resolver import served_model_route  # noqa: E402
+from boltrig.models import ModelEndpoint  # noqa: E402
+
+
+def _endpoint(**kw) -> ModelEndpoint:
+    base = dict(
+        id="cerebras", tenant_id="tenant-1", kind="openai",
+        model="gpt-oss-120b", data_class="standard",
+    )
+    base.update(kw)
+    return ModelEndpoint(**base)
+
+
+def test_the_served_model_and_provider_are_recorded():
+    assert served_model_route(_endpoint()) == {
+        "model": "gpt-oss-120b",
+        "provider": "openai",
+    }
+
+
+def test_no_endpoint_says_nothing_rather_than_saying_empty():
+    # None, not {} - a reader must be able to tell "nothing resolved" from an
+    # answer, and an empty dict in the audit reads like one.
+    assert served_model_route(None) is None
+
+
+def test_an_endpoint_with_no_model_says_nothing():
+    assert served_model_route(_endpoint(model="")) is None
+
+
+def test_the_route_never_carries_a_base_url():
+    # The audit detail is bounded (K-20); a base_url is infrastructure, and the
+    # existing spawn test already asserts no base_url reaches the event.
+    route = served_model_route(_endpoint(base_url="http://bifrost.internal/v1"))
+    assert route is not None
+    assert "base_url" not in route
+    assert "bifrost.internal" not in repr(route)
+
+
+# --- the WIRING, not just the function -------------------------------------- #
+# served_model_route being correct proves nothing if resolve never calls it. That
+# is the same unwired-claim shape this fix exists to close, so it gets its own
+# test rather than an exemption.
+
+class _StoreWithEndpoint:
+    def __init__(self, endpoint: ModelEndpoint | None) -> None:
+        self._endpoint = endpoint
+
+    async def get_model_endpoint(self, tenant_id: str, endpoint_id: str | None):
+        return self._endpoint
+
+
+class _KernelWithStore(_FakeKernel):
+    def __init__(self, endpoint: ModelEndpoint | None) -> None:
+        super().__init__()
+        self.store = _StoreWithEndpoint(endpoint)
+        self.audit = None
+
+
+def _cap_with_endpoint() -> AgentCapability:
+    cap = _capability("script")
+    return replace_capability(cap, model_endpoint="cerebras")
+
+
+def replace_capability(cap: AgentCapability, **kw) -> AgentCapability:
+    from dataclasses import replace as _replace
+
+    return _replace(cap, **kw)
+
+
+async def test_resolve_records_the_served_model_with_no_profile_in_play():
+    """The ordinary path: no model profile, so the fallback is the ONLY thing that
+    can name the model. Before this fix the runtime carried no model_route at all
+    and the spawn audited {runtime, capability} with the model silent."""
+    resolver = RuntimeResolver(_KernelWithStore(_endpoint()))
+    runtime = await resolver.runtime_for("tenant-1", _cap_with_endpoint(), None)
+    route = getattr(runtime, "model_route", None)
+    assert route is not None, "resolve did not record the model that served the call"
+    assert route["model"] == "gpt-oss-120b"
+
+
+async def test_resolve_says_nothing_when_no_endpoint_resolves():
+    resolver = RuntimeResolver(_KernelWithStore(None))
+    runtime = await resolver.runtime_for("tenant-1", _capability("script"), None)
+    assert getattr(runtime, "model_route", None) is None

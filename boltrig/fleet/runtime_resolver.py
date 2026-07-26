@@ -15,6 +15,30 @@ from .model_router import select_model_endpoint
 from .runtime import Runtime, build_runtime, runtime_for_provider
 
 
+def served_model_route(endpoint: ModelEndpoint | None) -> dict[str, str] | None:
+    """The model that ACTUALLY served a call, for the audit record.
+
+    Extracted rather than inlined so the fallback is testable on its own: reaching it through a
+    full ``resolve`` means standing up a kernel, an MCP face and a gateway, which is why the gap it
+    fills went unnoticed in the first place.
+
+    Never carries a base_url or a key - only the two facts a reader needs, and both are already on
+    ``_PUBLIC_ROUTE_KEYS``. Returns None when there is genuinely nothing to say, so a caller can
+    tell "no endpoint resolved" from "an endpoint with no model", rather than recording an empty
+    dict that reads like an answer.
+    """
+    if endpoint is None:
+        return None
+    model = getattr(endpoint, "model", None)
+    if not model:
+        return None
+    route = {"model": str(model)}
+    provider = getattr(endpoint, "kind", None)
+    if provider:
+        route["provider"] = str(provider)
+    return route
+
+
 def _routed_endpoint(tenant_id: str, base: ModelEndpoint | None, resolution: Any) -> ModelEndpoint:
     """Apply an AI-config provider/model/base-url selection to an endpoint."""
     model = resolution.model or (base.model if base is not None else "")
@@ -125,6 +149,22 @@ class RuntimeResolver:
             runtime_override=runtime_override,
             endpoint_override=endpoint_override,
         )
+        # The model that actually served the call belongs in the record, not only when a model
+        # PROFILE happened to apply. Until now `model_route` was populated ONLY on the profile
+        # path, so an ordinary spawn audited `{runtime, capability}` and named no model at all -
+        # observed live on cvboltrig: 14 agent_spawn rows carrying token AND cost figures, and
+        # ZERO rows anywhere mentioning a model.
+        #
+        # That is not a missing nicety. Cost is priced BY model (the rate card is keyed
+        # `gpt-oss-120b`), so without it nobody can re-derive 4315 micros from the record - the
+        # cost figure becomes an assertion rather than a checkable one - and a regulator asking
+        # "which model decided this" has no answer at all. Derived from the RESOLVED endpoint, so
+        # it reports what was actually routed to rather than what was configured somewhere.
+        #
+        # A profile route still wins: it carries the richer {profile, tier, ...} attribution and is
+        # the more specific fact. This only fills the silence.
+        if model_route is None:
+            model_route = served_model_route(endpoint)
         if model_route:
             setattr(runtime, "model_route", model_route)
         return runtime

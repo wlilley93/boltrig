@@ -231,7 +231,16 @@ def test_model_profile_is_ignored_for_sensitive_data(monkeypatch):
         assert rt.runtime == "openai"
         assert rt.endpoint.model == "local-sensitive"
         assert rt.endpoint.base_url == "http://local/v1"
-        assert not hasattr(rt, "model_route")
+        # This was `assert not hasattr(rt, "model_route")` - a PROXY for "no profile was
+        # applied", which held only because the route was populated on the profile path alone.
+        # The served model is now always recorded (it belongs in the audit, and it belongs there
+        # MOST for sensitive data - "which model saw this" is the whole question), so the proxy no
+        # longer tracks the property. Assert the property itself, which is strictly stronger than
+        # the absence check it replaces: the route names the LOCAL endpoint, and the external
+        # profile model appears NOWHERE in it.
+        assert rt.model_route == {"model": "local-sensitive", "provider": "vllm"}
+        assert "claude-remote" not in repr(rt.model_route)
+        assert "external" not in repr(rt.model_route)
 
     _run(go())
 
