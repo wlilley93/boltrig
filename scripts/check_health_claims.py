@@ -69,6 +69,9 @@ from datetime import date
 from pathlib import Path
 from urllib.parse import urlsplit
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from scan_guard import require_scanned  # noqa: E402
+
 ROOT = Path(__file__).resolve().parents[1]
 EXEMPTIONS = ROOT / "docs" / "refactoring" / "health-claim-exemptions.json"
 
@@ -208,7 +211,10 @@ def parse_services(path: Path) -> dict[str, dict]:
 def compose_files() -> list[Path]:
     found = sorted((ROOT / "deploy").glob("compose*.yml"))
     base = ROOT / "docker-compose.yml"
-    return ([base] if base.exists() else []) + found
+    manifests = ([base] if base.exists() else []) + found
+    # Scanning zero manifests would make "every health signal consults readiness"
+    # vacuously true, which is the reading a truncated checkout produces.
+    return list(require_scanned(manifests, "compose manifests to check healthchecks in"))
 
 
 # --------------------------------------------------------------------------- #

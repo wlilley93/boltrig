@@ -77,7 +77,11 @@ import ast
 import json
 import re
 import sys
+from datetime import date
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from scan_guard import require_scanned  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "boltrig"
@@ -219,8 +223,52 @@ def _collect(sources: dict[Path, str]) -> tuple[dict, dict, set[str], set[str]]:
     return classes, functions, referenced, exported
 
 
+def load_allow(path: Path) -> tuple[dict[str, str], list[str]]:
+    """Load the waivers, refusing any that cannot be held to.
+
+    Each entry needs an OWNER, a REASON and an EXPIRY, exactly as
+    structural-exemptions.json and health-claim-exemptions.json do. They had none
+    of the three when this file was created earlier the same day, which made every
+    waiver eternal and unowned - the shape this whole programme exists to remove,
+    in the file that waives this programme's own gate. An expired or unowned
+    waiver is a failure, not a pass.
+    """
+    if not path.exists():
+        return {}, []
+    data = json.loads(path.read_text(encoding="utf-8")).get("allow", {})
+    allow: dict[str, str] = {}
+    problems: list[str] = []
+    today = date.today()
+    for name, entry in sorted(data.items()):
+        if not isinstance(entry, dict):
+            problems.append(f"{name}: waiver must be an object with owner/reason/expires")
+            continue
+        if not str(entry.get("reason", "")).strip():
+            problems.append(f"{name}: waiver gives no reason (a blank waiver is a blank claim)")
+            continue
+        if not str(entry.get("owner", "")).strip():
+            problems.append(f"{name}: waiver names no owner")
+            continue
+        expires = str(entry.get("expires", "")).strip()
+        if not expires:
+            problems.append(f"{name}: waiver has no expiry, so it never comes back")
+            continue
+        try:
+            if date.fromisoformat(expires) < today:
+                problems.append(f"{name}: waiver expired on {expires}; renew it or fix the claim")
+                continue
+        except ValueError:
+            problems.append(f"{name}: expires={expires!r} is not an ISO date")
+            continue
+        allow[name] = str(entry["reason"])
+    return allow, problems
+
+
 def main() -> int:
-    files = sorted(p for p in SRC.rglob("*.py") if "__pycache__" not in p.parts)
+    files = list(require_scanned(
+        sorted(p for p in SRC.rglob("*.py") if "__pycache__" not in p.parts),
+        "Python sources under boltrig/", minimum=50,
+    ))
     sources = {p: p.read_text(encoding="utf-8") for p in files}
 
     classes, functions, referenced, exported = _collect(sources)
@@ -249,9 +297,12 @@ def main() -> int:
         if p.exists():
             prose.append((extra, p.read_text(encoding="utf-8")))
 
-    allow: dict[str, str] = {}
-    if ALLOW_FILE.exists():
-        allow = json.loads(ALLOW_FILE.read_text(encoding="utf-8")).get("allow", {})
+    allow, waiver_problems = load_allow(ALLOW_FILE)
+    if waiver_problems:
+        print("FAIL: the waiver file waives nothing it can be held to.\n")
+        for problem in waiver_problems:
+            print(f"  - {problem}")
+        return 1
 
     findings: list[tuple[str, str, str, str]] = []
     for name, (kind, path) in sorted(unwired.items()):

@@ -12,8 +12,10 @@ The gate (the K-29 / K-30 ratchet) fails the build if:
   (an undeclared invariant), or
 - the catalogue claims a test node id that no marker actually backs (drift).
 
-Binding debt may only ever decrease. Today: **250 declared, debt 0** (500 bound
-test node ids), per `python scripts/check_invariants.py`. `tests/invariants.yaml`
+Binding debt may only ever decrease. Today: **331 declared, debt 0** (1032 bound
+test node ids), per `python scripts/check_invariants.py` - which is the number to
+trust, because this line is prose and has been wrong before (it read 250/500 on
+2026-07-26, when the gate reported 331). `tests/invariants.yaml`
 is the authoritative, machine-checked list; the table below is the curated
 human-readable view and highlights the core kernel set plus each round's new
 guarantees (it does not restate every id - the yaml does).
@@ -376,6 +378,7 @@ on read. Legacy plaintext rows keep reading; any rewrite re-seals.
 | **NFR-MNT-03** | Every reference the record makes resolves: each repo path, pytest node id, `make` target and boltrig env var named in prose points at something that exists, so renaming or deleting a thing breaks every record that names it. | `tests/unit/test_claim_gates.py::test_every_reference_the_record_makes_still_resolves` |
 | **NFR-MNT-04** | No gate input is unreached and no release-gate component is unrun: every compose manifest is validated, and every `quality` prerequisite runs in a CI workflow. | `tests/unit/test_claim_gates.py::test_every_compose_manifest_and_release_component_is_actually_reached` |
 | **NFR-MNT-05** | No first-party service reports healthy while unable to serve, or is recorded as unable to tell with an owner, a reason and an expiry. A blank, unowned or expired waiver is itself a failure. | `tests/unit/test_claim_gates.py` (five tests) |
+| **NFR-MNT-06** | A gate cannot pass by looking at nothing: every tree scan in `scripts/` declares a floor and fails when it finds fewer. And a waiver cannot outlive anyone: every unwired-claims entry carries an owner, a reason and an expiry. | `tests/unit/test_claim_gates.py` (three tests) |
 
 > **SEC-188 was SEC-169.** The id was minted twice - 2026-07-17 for the RLS
 > fence-drift guard, then again 2026-07-22 for credential-at-rest sealing. Both

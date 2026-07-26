@@ -314,3 +314,21 @@ def test_webhook_replay_window():
             payload, {"x-signature": f"t={stale},v1={stale_sig}"},
             secret, now=fresh,
         )
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-61")
+def test_the_metadata_guard_refuses_a_host_that_does_not_resolve(monkeypatch):
+    """It used to ALLOW one, which is fail-open on an SSRF guard.
+
+    ``resolve_host`` returns [] when getaddrinfo raises, and every other caller in
+    egress.py treats that as a refusal. This one iterated the list, so zero
+    addresses meant zero checks and the function returned None - permitted. The
+    one guard whose entire subject is the cloud-metadata endpoint was the one that
+    opened when DNS failed, which anyone able to arrange a SERVFAIL could cause.
+    """
+    from boltrig.adapters import egress
+
+    monkeypatch.setattr(egress, "resolve_host", lambda host: [])
+    with pytest.raises(egress.EgressBlocked):
+        egress.assert_no_metadata_egress("http://whatever.example/")

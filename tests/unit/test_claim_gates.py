@@ -95,3 +95,55 @@ def test_the_repositorys_own_waivers_are_well_formed(tmp_path, monkeypatch) -> N
     assert set(valid) == {"kernel", "fleet-worker"}
     for name, entry in valid.items():
         assert entry["expires"], f"{name}: an open debt with no expiry never comes back"
+
+
+# --- the gates' own floors ----------------------------------------------------
+@pytest.mark.invariant("NFR-MNT-06")
+def test_a_scan_that_finds_nothing_is_a_failure_not_a_pass() -> None:
+    """Every gate here globs a tree. An empty glob has no offenders, so it prints
+    PASS having verified nothing - one directory rename, one sparse checkout, one
+    narrow build context away, and green means "could not look"."""
+    from scripts import scan_guard
+
+    assert scan_guard.require_scanned([1, 2], "things") == [1, 2]
+    with pytest.raises(SystemExit) as raised:
+        scan_guard.require_scanned([], "compose manifests under deploy/")
+    assert raised.value.code == 1
+
+    with pytest.raises(SystemExit):
+        scan_guard.require_scanned([1], "sources", minimum=50)
+
+
+@pytest.mark.invariant("NFR-MNT-06")
+def test_the_unwired_waiver_file_can_be_held_to(tmp_path, monkeypatch) -> None:
+    """A waiver with no owner or no expiry is eternal and unowned, which is the
+    shape this programme exists to remove - and this file had neither until the
+    day after it was written."""
+    from scripts import check_unwired_claims
+
+    def _write(entry: dict) -> Path:
+        path = tmp_path / "allow.json"
+        path.write_text(json.dumps({"allow": {"thing": entry}}), encoding="utf-8")
+        return path
+
+    good = {"owner": "x-maintainers", "expires": "2099-12-31", "reason": "a real one"}
+    allow, problems = check_unwired_claims.load_allow(_write(good))
+    assert problems == [] and allow == {"thing": "a real one"}
+
+    for missing, word in (
+        ({**good, "owner": " "}, "owner"),
+        ({**good, "reason": ""}, "reason"),
+        ({k: v for k, v in good.items() if k != "expires"}, "expiry"),
+        ({**good, "expires": "2020-01-01"}, "expired"),
+    ):
+        allow, problems = check_unwired_claims.load_allow(_write(missing))
+        assert allow == {} and any(word in p for p in problems), (missing, problems)
+
+
+@pytest.mark.invariant("NFR-MNT-06")
+def test_the_repositorys_own_unwired_waivers_are_well_formed() -> None:
+    from scripts import check_unwired_claims
+
+    allow, problems = check_unwired_claims.load_allow(check_unwired_claims.ALLOW_FILE)
+    assert problems == []
+    assert allow, "the waiver file exists, so it should hold waivers"

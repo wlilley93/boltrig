@@ -28,6 +28,9 @@ import re
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from scan_guard import require_scanned  # noqa: E402
+
 ROOT = Path(__file__).resolve().parent.parent
 TESTS_DIR = ROOT / "tests"
 CATALOGUE = TESTS_DIR / "invariants.yaml"
@@ -45,7 +48,9 @@ def _node_id(path: Path, test_name: str) -> str:
 def scan_markers() -> dict[str, set[str]]:
     """Map each invariant id to the set of test node ids that carry its marker."""
     found: dict[str, set[str]] = {}
-    for path in sorted(TESTS_DIR.rglob("test_*.py")):
+    for path in require_scanned(
+        sorted(TESTS_DIR.rglob("test_*.py")), "test modules under tests/", minimum=50
+    ):
         pending: list[str] = []
         for line in path.read_text(encoding="utf-8").splitlines():
             marker = _MARKER_RE.search(line)

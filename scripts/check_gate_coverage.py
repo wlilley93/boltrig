@@ -59,6 +59,9 @@ import re
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from scan_guard import require_scanned  # noqa: E402
+
 ROOT = Path(__file__).resolve().parents[1]
 MAKEFILE = ROOT / "Makefile"
 WORKFLOWS = ROOT / ".github" / "workflows"
@@ -153,7 +156,8 @@ def compose_manifests() -> list[str]:
     base = ROOT / "docker-compose.yml"
     if base.exists():
         found.add("docker-compose.yml")
-    return sorted(found)
+    # No manifests means "every manifest is validated" passes having checked none.
+    return list(require_scanned(sorted(found), "compose manifests under deploy/"))
 
 
 # --------------------------------------------------------------------------- #

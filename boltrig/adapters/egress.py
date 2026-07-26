@@ -81,7 +81,16 @@ def assert_no_metadata_egress(url: str) -> None:
     host = parsed.hostname
     if not host:
         return
-    for ip in resolve_host(host):
+    addresses = resolve_host(host)
+    # An empty list means the host DID NOT RESOLVE - `resolve_host` returns [] on
+    # OSError - and every other caller in this module treats that as a refusal.
+    # This one used to iterate it, so an unresolvable host ran the loop body zero
+    # times and was ALLOWED: fail-open, on the one guard whose whole subject is the
+    # cloud-metadata endpoint. It was reachable by anyone who could arrange a
+    # SERVFAIL for a name the caller was about to fetch.
+    if not addresses:
+        raise EgressBlocked("egress refused: host did not resolve (CLOUD-03)")
+    for ip in addresses:
         if is_metadata_ip(ip):
             raise EgressBlocked(
                 f"egress refused: target resolves to a cloud-metadata/link-local "

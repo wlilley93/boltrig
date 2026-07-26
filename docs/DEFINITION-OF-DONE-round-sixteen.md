@@ -27,9 +27,11 @@ controls are NOT claimed as built - they are seams, tracked honestly in
   (ENV/BOLTRIG_ENV/APP_ENV=prod|staging or BOLTRIG_PRODUCTION=1) - not a warning.
 - **SEC-61 - shared egress/SSRF guard (INJ-02 / CLOUD-03).** `boltrig/adapters/egress.py`
   consolidates the SSRF/policy logic (web.fetch now re-exports it - one source of
-  truth) and adds `assert_no_metadata_egress`, applied in `http_base.request` so
-  EVERY HTTP adapter refuses a cloud-metadata / link-local target - closing the
-  SSRF -> IMDS managed-identity-token-theft path.
+  truth) and adds `assert_no_metadata_egress`. Corrected 2026-07-26: it is NOT
+  applied in `http_base.request`, which calls `assert_egress_allowed` - a strict
+  superset check, so the SSRF -> IMDS managed-identity-token-theft path is closed,
+  by a different function than this line named. `assert_no_metadata_egress` has no
+  production caller at all.
 - **SEC-62 - identifier normalization (UPLOAD-05 / AZ-02).** `models/grants.py`
   NFKC-normalises and charset-restricts ids at the grant-match boundary, so a
   Unicode homoglyph / zero-width / non-canonical verb id can never match a grant.

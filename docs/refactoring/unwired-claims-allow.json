@@ -8,14 +8,39 @@
     "Added 2026-07-26, after the Tier 0 claim inventory ran the function check for the",
     "first time. Of the nine names it found, four were real defects and were fixed",
     "(sweep_run_scoped and consume_if_approved's prose, and run_retention_forever,",
-    "which nothing had ever started). These five are the remainder."
+    "which nothing had ever started). These five are the remainder.",
+    "2026-07-26: entries gained owner/expires, matching structural-exemptions.json and health-claim-exemptions.json. They had neither, which made every one an ETERNAL SILENT waiver - the shape this whole programme exists to remove, in the file that waives its own gate."
   ],
   "allow": {
-    "accept_once": "The single-shot attestation seam, kept for tests/integration/test_model_proxy_peer_listener_live.py. The production accept loop is `serve`, wired at fleet/infrastructure/codex_trusted_proxy_ingress.py:306, and the module docstring already says so rather than claiming otherwise.",
-    "consume": "Gate false positive. The code-quoted ``mcp.consume`` in api/bootstrap.py is a MANIFEST YAML KEY, not KafkaSeam.consume; the gate's dotted-prefix rule cannot tell a config path from a symbol. The function itself is a self-declaring driver seam that raises SeamUnavailable (adapters/builtin/mq_file.py:11), which is an honest unimplemented, not a false claim.",
-    "execute_write": "The write half of the per-call `_Db` handed to SQL adapter handlers. The intended caller is a subclass handler (`SqlHandler`), including out-of-repo adapters; the only in-repo subclass is deliberately write_allowed=False (adapters/builtin/crm_sql.py:41). Noted separately: the write path has no test, so sql_base.py's read/write-scope refusal is unpinned.",
-    "list_all_capabilities": "The unfiltered admin/audit read, mandated by .vjs/logs/decisions/LOG-2026-07-17-120214.yaml and deliberately kept OFF the routing path (list_capabilities is the active-only read the router uses). Exercised by tests/integration/test_manifest_reconciliation.py; the admin surface that would consume it is not built yet.",
-    "push": "A method of `InternalQueueAdapter`, which IS exported (boltrig/work/__init__.py) as the reference queue adapter for source integrations to copy. It is deliberately not on the `QueueAdapter` protocol, so it is outside the production contract by design rather than missing from it.",
-    "sweep_run_scoped": "The unguarded run-scoped credential primitive. Kept, but it must NEVER be used at a run terminal: an unguarded delete of the whole run: prefix destroys a held write's sealed call, which is the record decision 0018 replays from. The terminal sweep is `sweep_run_credentials_if_settled` (kernel/held_call.py), and the prose that used to name this function was corrected on 2026-07-26."
+    "accept_once": {
+      "owner": "fleet-maintainers",
+      "expires": "2026-12-31",
+      "reason": "The single-shot attestation seam, kept for tests/integration/test_model_proxy_peer_listener_live.py. The production accept loop is `serve`, wired at fleet/infrastructure/codex_trusted_proxy_ingress.py:306, and the module docstring already says so rather than claiming otherwise."
+    },
+    "consume": {
+      "owner": "adapter-maintainers",
+      "expires": "2026-12-31",
+      "reason": "Gate false positive. The code-quoted ``mcp.consume`` in api/bootstrap.py is a MANIFEST YAML KEY, not KafkaSeam.consume; the gate's dotted-prefix rule cannot tell a config path from a symbol. The function itself is a self-declaring driver seam that raises SeamUnavailable (adapters/builtin/mq_file.py:11), which is an honest unimplemented, not a false claim."
+    },
+    "execute_write": {
+      "owner": "adapter-maintainers",
+      "expires": "2026-12-31",
+      "reason": "The write half of the per-call `_Db` handed to SQL adapter handlers. The intended caller is a subclass handler (`SqlHandler`), including out-of-repo adapters; the only in-repo subclass is deliberately write_allowed=False (adapters/builtin/crm_sql.py:41). Noted separately: the write path has no test, so sql_base.py's read/write-scope refusal is unpinned."
+    },
+    "list_all_capabilities": {
+      "owner": "store-maintainers",
+      "expires": "2026-12-31",
+      "reason": "The unfiltered admin/audit read, mandated by .vjs/logs/decisions/LOG-2026-07-17-120214.yaml and deliberately kept OFF the routing path (list_capabilities is the active-only read the router uses). Exercised by tests/integration/test_manifest_reconciliation.py; the admin surface that would consume it is not built yet."
+    },
+    "push": {
+      "owner": "fleet-maintainers",
+      "expires": "2026-12-31",
+      "reason": "A method of `InternalQueueAdapter`, which IS exported (boltrig/work/__init__.py) as the reference queue adapter for source integrations to copy. It is deliberately not on the `QueueAdapter` protocol, so it is outside the production contract by design rather than missing from it."
+    },
+    "sweep_run_scoped": {
+      "owner": "kernel-maintainers",
+      "expires": "2026-12-31",
+      "reason": "The unguarded run-scoped credential primitive. Kept, but it must NEVER be used at a run terminal: an unguarded delete of the whole run: prefix destroys a held write's sealed call, which is the record decision 0018 replays from. The terminal sweep is `sweep_run_credentials_if_settled` (kernel/held_call.py), and the prose that used to name this function was corrected on 2026-07-26."
+    }
   }
 }

@@ -1801,6 +1801,12 @@ invariants:
       - tests/unit/test_claim_gates.py::test_a_waiver_with_no_owner_is_itself_a_failure
       - tests/unit/test_claim_gates.py::test_an_expired_waiver_stops_waiving
       - tests/unit/test_claim_gates.py::test_the_repositorys_own_waivers_are_well_formed
+  NFR-MNT-06:
+    description: 'A gate cannot pass by looking at nothing, and a waiver cannot outlive anyone - every tree scan in scripts/ declares a floor and FAILS when it finds fewer (an empty glob has no offenders, so a truncated checkout or a narrow build context turns "could not look" into green), and every entry in the unwired-claims waiver file carries an owner, a reason and an expiry, with a blank, unowned or expired waiver a failure in itself.'
+    tests:
+      - tests/unit/test_claim_gates.py::test_a_scan_that_finds_nothing_is_a_failure_not_a_pass
+      - tests/unit/test_claim_gates.py::test_the_unwired_waiver_file_can_be_held_to
+      - tests/unit/test_claim_gates.py::test_the_repositorys_own_unwired_waivers_are_well_formed
   SEC-138:
     description: 'A governed action executes only against the exact resource state that was approved - a queued workflow runs its digest-checked approved snapshot (tampering and cross-workspace replay are rejected), a missing mutable resource fails before any approval is created, and resource drift between the HITL gate and adapter execution fails closed while still consuming the single-use approval.'
     tests:
