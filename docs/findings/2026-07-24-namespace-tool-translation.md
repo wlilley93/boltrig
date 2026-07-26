@@ -222,7 +222,31 @@ Responses API, which is what `unsupported call: <name>` is complaining about. Th
 must be reconstructed from a single `name` string somewhere, and that reconstruction is
 the thing still unknown.
 
-**Next diagnostic, unchanged in priority:** capture the codex App Server's STDERR during a
-turn. `CodexStdioTransport` reads it and does not surface it, and codex almost certainly
-logs its tool registry alongside `unsupported call`. That is now the only cheap source of
-the mapping, since the schema has given up everything it can.
+**Correction, same day, and it retracts the step above.** Two things were wrong with
+"capture the stderr":
+
+1. **It was obsolete.** The mapping was found and the fix SHIPPED on 2026-07-24, in
+   `0402911 feat(proxy): bridge Codex's MCP tool namespace across the gateway`, which is on
+   main. `model_proxy_tool_ceiling.py` documents it from the codex-rs source: codex resolves
+   a returned call by a strict `ToolName{name, namespace}` match (`tools/router.rs`, with
+   `namespace` a distinct field in `protocol/src/models.rs`), boltrig verbs register as
+   `ToolName::namespaced("mcp__boltrig", "<verb>")`, and a flat `function_call` with no
+   `namespace` is therefore an unsupported call. `CodexResponseStreamProcessor` reattaches
+   `namespace = "mcp__boltrig"` on the response stream. That is the (namespace, bare-name)
+   pair the schema reading above predicted, confirmed from the other end.
+
+2. **It was the wrong method.** `CodexStdioTransport` does NOT discard stderr. It scans it
+   against an allowlist of codex-internal tokens and surfaces only content-free LABELS -
+   `unsupported call` is already in that allowlist as `tool-call-unsupported` - because
+   codex stderr can carry tool arguments, i.e. user content. Logging it verbatim to read a
+   tool name would break a deliberate redaction discipline for a debugging convenience.
+   Anyone still needing the raw mapping should reproduce it in a sandbox with the pinned
+   codex binary and a toy MCP server, where no user content exists to leak.
+
+**What is still open, and it is a different question from the one this document opened
+with.** A tenant provisioned from scratch on 2026-07-26, running kernel 0.4.x - which
+contains `0402911` - still degraded with `codex_empty_output` on a GLM-keyed turn
+(`opbox-prod/docs/H1-REHEARSAL-2026-07-26.md`, run `204b1ccc`). So either the bridge does
+not cover that path, or there is a second cause wearing the same symptom. Whoever picks
+this up should start from that run rather than from the namespace collapse, which is
+fixed.
