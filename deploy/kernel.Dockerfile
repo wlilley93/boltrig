@@ -43,12 +43,19 @@ ENV REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt \
 # DEP-001: install from a frozen, hash-verified lockfile instead of mutable
 # ranges. The lockfile is generated from pyproject.toml with `uv pip compile`.
 COPY pyproject.toml requirements-lock.txt /app/
-# --retries/--timeout are not belt-and-braces: a wheel whose download is TRUNCATED
-# fails the hash check, and pip's default of 5 quick retries gives up on a slow or
-# lossy link. The 58MB lancedb wheel killed this build twice on a 300kB/s
-# connection, each time reported as "THESE PACKAGES DO NOT MATCH THE HASHES" -
-# wording that points at tampering when the real cause is a dropped connection.
-# The hash contract is unchanged; only the patience is.
+# --retries/--timeout help a link that DROPS or stalls. They do NOT help the
+# failure that prompted them, and the first version of this comment claimed they
+# did: when a large wheel is TRUNCATED - the server closes early and pip considers
+# the download complete - the hash check fails immediately and pip does not retry,
+# because from its point of view nothing went wrong with the transfer. Three
+# builds died that way on a lossy 300kB/s link, each reporting "THESE PACKAGES DO
+# NOT MATCH THE HASHES ... someone may have tampered with them", which sends the
+# reader hunting for an attack. Measured: the same wheels download intact outside
+# Docker on the same box, twice, matching the pin.
+#
+# So these flags stay because they are correct for connection errors, and the real
+# answer to truncation is to build somewhere the link holds. The hash contract is
+# unchanged either way; only the patience is.
 RUN pip install --require-hashes --retries 10 --timeout 60 -r /app/requirements-lock.txt
 
 # Boltrig v2 cockpit runtime: ship Herdr with the stack, not from a developer
