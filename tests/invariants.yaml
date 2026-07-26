@@ -1238,6 +1238,8 @@ invariants:
       - tests/unit/test_prompt_stack.py::test_wrap_untrusted_envelopes_and_neutralises_breakout
       - tests/security/test_prompt_injection_hardening.py::test_transcript_history_enveloped_before_spawn
       - tests/security/test_prompt_injection_hardening.py::test_tool_result_wrapped_as_untrusted_envelope
+      - tests/unit/test_prompt_stack.py::test_an_invisible_character_cannot_forge_an_envelope_delimiter
+      - tests/unit/test_prompt_stack.py::test_the_defang_leaves_ordinary_text_alone
   SEC-73:
     description: 'The Pi gateway POST /run is hardened - it requires a shared-secret bearer (constant-time compare; fail-closed under a production signal when unset), and it egress-guards the caller-supplied mcp.url / model.endpoint, refusing a metadata/loopback/internal target BEFORE any outbound connection, closing an SSRF pivot from the gateway (M2).'
     tests:

@@ -14,9 +14,19 @@ from __future__ import annotations
 
 import re
 
+# The gap a forged delimiter may hide in: whitespace, AND the invisible format
+# characters that are not whitespace to Python. `\s` does not match U+200B, so
+# "<\u200buntrusted>" walked straight through the defang until 2026-07-26 - and a
+# zero-width space is precisely the character an attacker reaches for, because the
+# model reading the prompt sees "<untrusted>" and the regex saw something else.
+# U+00A0 and U+2028 were already covered (Python counts them as whitespace); the
+# zero-width family and the BOM were not.
+_TAG_GAP = r"[\s\u00ad\u200b-\u200f\u2060-\u2064\ufeff]*"
 # Matches the '<' that begins an <untrusted...> or </untrusted...> tag (any case,
-# tolerant of whitespace after '<' or '</'), so we can defang it inside content.
-_UNTRUSTED_TAG_RE = re.compile(r"<(?=\s*/?\s*untrusted\b)", re.IGNORECASE)
+# tolerant of any such gap after '<' or '</'), so we can defang it inside content.
+_UNTRUSTED_TAG_RE = re.compile(
+    rf"<(?={_TAG_GAP}/?{_TAG_GAP}untrusted\b)", re.IGNORECASE
+)
 # Attribute values are labels, not data: strip anything that could close the tag.
 _ATTR_UNSAFE_RE = re.compile(r'[<>"\r\n]')
 
