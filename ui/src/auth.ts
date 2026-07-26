@@ -22,7 +22,11 @@ export type AuthStatus =
   | "checking"
   | "authenticated"
   | "unauthenticated"
-  | "enroll_required";
+  | "enroll_required"
+  // Still holding the credential typed at `boltrig initiate` ([2026] VJS-COUNTY 8,
+  // D7). The resolver clamps the session to the rotation surface; the gate renders
+  // the change-password screen.
+  | "password_change_required";
 
 interface AuthState {
   status: AuthStatus;
@@ -95,6 +99,17 @@ export async function probeSession(): Promise<void> {
       set({ status: "enroll_required" });
       return;
     }
+    // The forced-rotation clamp ([2026] VJS-COUNTY 8, D7), same shape. Caught here
+    // as well as at login because the clamp is evaluated on EVERY request: a
+    // session that was fine a moment ago is clamped the instant the flag is set.
+    if (
+      err instanceof ApiError &&
+      err.status === 403 &&
+      isPasswordChangeRequired(err.body)
+    ) {
+      set({ status: "password_change_required" });
+      return;
+    }
     set({ status: "unauthenticated", user: null });
   }
 }
@@ -106,6 +121,20 @@ function isEnrollmentRequired(body: unknown): boolean {
     body !== null &&
     (body as { detail?: string }).detail === "two_factor_enrollment_required"
   );
+}
+
+// The resolver's rotation clamp answers 403 with {detail:"password_change_required"}.
+function isPasswordChangeRequired(body: unknown): boolean {
+  return (
+    typeof body === "object" &&
+    body !== null &&
+    (body as { detail?: string }).detail === "password_change_required"
+  );
+}
+
+// Called when login returns password_change_required, or a probe was clamped.
+export function markPasswordChangeRequired(): void {
+  set({ status: "password_change_required" });
 }
 
 // Called when the gate needs to force enrollment (login returned

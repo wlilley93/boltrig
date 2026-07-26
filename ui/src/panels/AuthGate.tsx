@@ -13,6 +13,7 @@ import type { ReactNode } from "react";
 
 import { probeSession, useAuth } from "@/auth";
 import { AcceptInvitePage } from "@/panels/AuthGate/AcceptInvitePage";
+import { ChangePasswordPage } from "@/panels/AuthGate/ChangePasswordPage";
 import { EnrollFlow } from "@/panels/AuthGate/EnrollFlow";
 import { LoginPage } from "@/panels/AuthGate/LoginPage";
 import { useRoute } from "@/router";
@@ -44,6 +45,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
     );
   }
   if (status === "unauthenticated") return <LoginPage />;
+  if (status === "password_change_required") return <ChangePasswordPage />;
   if (status === "enroll_required") return <EnrollFlow />;
   return <>{children}</>;
 }
