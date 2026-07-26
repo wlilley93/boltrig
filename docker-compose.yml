@@ -173,14 +173,35 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    # The container health signal consults READINESS, not liveness. It probed
+    # /healthz until 2026-07-26, and /healthz knows nothing about the schema: on
+    # 2026-07-25 a client tenant sat at /readyz 503 on an unapplied migration head
+    # for about forty minutes while `docker ps` reported this container healthy the
+    # whole time. Nothing in the orchestration layer could see the outage.
+    #
+    # Rehearsed on dev before the change, rather than argued:
+    #   * schema head forced to 0037 -> health UNHEALTHY, while /healthz kept
+    #     answering 200. That is the incident, caught.
+    #   * hatchet-engine stopped      -> health UNHEALTHY. Real new coupling, and
+    #     accepted: durable execution is a REQUIRED readiness check, so a kernel
+    #     without it is genuinely not ready. Cost: channel-gateway and pi-sidecar
+    #     carry depends_on: kernel: service_healthy, so they will not START during
+    #     a hatchet outage. A running one is not restarted - compose does not act
+    #     on unhealthy by itself.
+    #   * fleet-worker stopped        -> NO effect. The stack-tool receipt is
+    #     cached in Redis with a TTL, so a short worker outage does not flip it.
+    #     This was the coupling the deferral was written around; it is not real.
+    #
+    # start_period is 60s because readiness waits on postgres, redis, the control
+    # plane and the hatchet probe, which is a slower true than a liveness ping.
     healthcheck:
       test:
         - CMD-SHELL
-        - python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')" || exit 1
+        - python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/readyz')" || exit 1
       interval: 30s
       timeout: 5s
       retries: 5
-      start_period: 20s
+      start_period: 60s
 
   fleet-worker:
     build:

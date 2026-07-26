@@ -61,7 +61,13 @@ logs: ## Tail logs for every service (SERVICE=kernel to scope it)
 # Point it at a THROWAWAY database, never one a running stack serves from; these
 # tests write. On the dev box:
 #   psql -h <pg> -U boltrig -d postgres -c 'CREATE DATABASE boltrig_test;'
-#   make test BOLTRIG_TEST_DATABASE_URL=postgresql://boltrig:<pw>@<pg>:5432/boltrig_test
+#   make test BOLTRIG_TEST_DATABASE_URL="$$(scripts/test-dsn.sh)"
+# scripts/test-dsn.sh DERIVES the address from Docker rather than remembering it.
+# The dev container publishes no host port and its compose-network IP changes on
+# every restart, which has twice produced ~137 connection errors that read like
+# real failures. Do not reach for 127.0.0.1:5432 instead: on a box like this one
+# that is a DIFFERENT Postgres, and pointing the store suite at the wrong server
+# is the kind of mistake that only fails loudly by luck.
 test: ## Run the test suite (set BOLTRIG_TEST_DATABASE_URL to also run the Postgres tests)
 	$(PY) -m pytest -q
 

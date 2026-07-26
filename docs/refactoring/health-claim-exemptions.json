@@ -5,21 +5,16 @@
     "an entry with no reason, no owner, or a past expiry is itself a failure, because a",
     "stale waiver is another claim nobody checks.",
     "",
-    "Both entries below are OPEN DEBT, not settled design. The incident they describe",
-    "has already happened: on 2026-07-25 a client tenant sat at /readyz 503 for about",
-    "forty minutes on an unapplied schema head while `docker ps` reported the kernel",
-    "healthy the whole time. Nothing in the orchestration layer could see it.",
-    "",
-    "They are exemptions and not fixes because pointing the kernel healthcheck at",
-    "/readyz is a live-deployment behaviour change with its own blast radius, and it",
-    "is not one to make in the same commit as the gate that found it."
+    "2026-07-26: the KERNEL waiver is GONE - not renewed, discharged. Its healthcheck now",
+    "probes /readyz. The deferral was written around a coupling that measurement showed is",
+    "not real: stopping the fleet-worker does NOT flip the kernel unhealthy, because the",
+    "stack-tool receipt is cached in Redis. What IS real is hatchet - stopping the engine",
+    "does flip it - and that was accepted, because durable execution is a required",
+    "readiness check and a kernel without it genuinely is not ready. Rehearsed on dev",
+    "first: forcing the schema head to 0037 made the container unhealthy while /healthz",
+    "kept answering 200, which is the 2026-07-25 client outage reproduced and caught."
   ],
   "exemptions": {
-    "kernel": {
-      "owner": "platform-maintainers",
-      "expires": "2026-09-30",
-      "reason": "The healthcheck probes /healthz (liveness) while the app also serves /readyz. Moving it is the correct fix and is deliberately deferred: /readyz consults the Alembic head AND the fleet's signed stack-tool receipt AND the Hatchet probe, so a dead fleet-worker or an unconfigured signing key would flip the kernel unhealthy, and channel-gateway plus pi-sidecar carry `depends_on: service_healthy` on it - the change alters what that dependency means. It needs a deployment window and a rehearsal against a real tenant, not a green gate. Until then this waiver states the exposure plainly: this healthcheck cannot detect the outage that has already happened once."
-    },
     "fleet-worker": {
       "owner": "fleet-maintainers",
       "expires": "2026-09-30",
