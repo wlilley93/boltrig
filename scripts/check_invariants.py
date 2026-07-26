@@ -61,10 +61,21 @@ def scan_markers() -> dict[str, set[str]]:
     return found
 
 
+class CatalogueError(Exception):
+    """The catalogue is malformed in a way that would silently lose a claim."""
+
+
 def _unquote(value: str) -> str:
+    """Undo the YAML scalar quoting used by the catalogue.
+
+    A YAML single-quoted scalar escapes a literal apostrophe by DOUBLING it, so
+    unquoting has to undo that or 84 of the 326 descriptions read back wrong.
+    Descriptions are single-quoted (they carry colons and hashes, which a plain
+    scalar cannot); node ids stay plain."""
     value = value.strip()
     if len(value) >= 2 and value[0] in "\"'" and value[-1] == value[0]:
-        return value[1:-1]
+        inner = value[1:-1]
+        return inner.replace("''", "'") if value[0] == "'" else inner
     return value
 
 
@@ -75,7 +86,15 @@ def load_catalogue(path: Path) -> dict[str, dict]:
     subset of its tests that only execute behind a service gate (a live Hatchet
     engine, cognee + LLM env, ...). Those bindings are real, but offline they are
     gated-not-verified - the gate reports them rather than letting a permanently
-    skipped test silently "discharge" the invariant."""
+    skipped test silently "discharge" the invariant.
+
+    A REPEATED invariant id raises. This reader used to let the later block
+    overwrite the earlier one, and PyYAML's own duplicate-key handling is the
+    same silent last-wins; SEC-169 was minted twice (2026-07-17 for the RLS
+    fence-drift guard, 2026-07-22 for credential-at-rest sealing) and the RLS
+    declaration was evicted from the catalogue, from this gate's coverage table
+    and from docs/invariants.md for four months without one check going red. A
+    catalogue whose whole job is to make claims fail loudly must not eat one."""
     data: dict[str, dict] = {}
     current: str | None = None
     in_tests = False
@@ -91,6 +110,11 @@ def load_catalogue(path: Path) -> dict[str, dict]:
             continue
         if indent == 2 and stripped.endswith(":"):
             current = stripped[:-1].strip()
+            if current in data:
+                raise CatalogueError(
+                    f"duplicate invariant id {current!r} in "
+                    f"{path.name}: the second block would silently evict the first"
+                )
             data[current] = {"description": "", "tests": [], "service_gated": []}
             in_tests = in_gated = False
             continue
@@ -117,7 +141,11 @@ def main() -> int:
         return 1
 
     markers = scan_markers()
-    catalogue = load_catalogue(CATALOGUE)
+    try:
+        catalogue = load_catalogue(CATALOGUE)
+    except CatalogueError as exc:
+        print(f"FAIL: {exc}", file=sys.stderr)
+        return 1
 
     declared = set(catalogue)
     marked = set(markers)

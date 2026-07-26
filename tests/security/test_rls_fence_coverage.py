@@ -71,7 +71,7 @@ def _with_database(url: str, database: str) -> str:
 
 
 @_pg
-@pytest.mark.invariant("SEC-169")
+@pytest.mark.invariant("SEC-188")
 async def test_every_tenant_table_is_rls_fenced_or_documented_excluded() -> None:
     source_url = normalize_dsn(DSN or "")
     database = f"boltrig_rls_fence_{uuid.uuid4().hex}"

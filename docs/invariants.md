@@ -371,6 +371,16 @@ on read. Legacy plaintext rows keep reading; any rewrite re-seals.
 | Invariant | Meaning | Bound test(s) |
 | --- | --- | --- |
 | **SEC-169** | No plaintext credential material rests in the credential store - writes rest as a sealed envelope, reads unseal transparently, legacy rows still read, a wrong key fails closed, rotation decrypts via the previous key, and a missing/default key is fatal in production but seals offline. | `tests/security/test_credential_sealing.py` (all eight tests) |
+| **SEC-188** | No tenant table drifts outside the RLS fence: against a real Postgres with `schema.sql` + the `rls.sql` overlay applied, every table carrying a `tenant_id` is either RLS-fenced (FORCE row security plus a `tenant_isolation` policy) or in the documented exclusion set, so a future tenant table that lands unfenced fails the build. | `tests/security/test_rls_fence_coverage.py::test_every_tenant_table_is_rls_fenced_or_documented_excluded` |
+| **NFR-MNT-02** | The invariant catalogue carries its own claim: `tests/invariants.yaml` parses under a real YAML parser, the gate's stdlib reader reproduces that parser's answer exactly, and a repeated invariant id is refused rather than resolved last-wins. | `tests/unit/test_invariant_catalogue.py` (all three tests) |
+
+> **SEC-188 was SEC-169.** The id was minted twice - 2026-07-17 for the RLS
+> fence-drift guard, then again 2026-07-22 for credential-at-rest sealing. Both
+> the gate's reader and PyYAML resolve a repeated key last-wins, so the RLS
+> declaration was evicted from the catalogue, from the coverage table and from
+> this page, and nothing went red. Sealing keeps SEC-169 (it is cited from six
+> other files and from this map); the fence guard is renumbered. `NFR-MNT-02`
+> exists so the same eviction cannot happen again.
 
 ## How a new invariant is added
 
