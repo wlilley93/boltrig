@@ -23,11 +23,6 @@
       "expires": "2026-11-30",
       "reason": "Not code-testable and correctly so: it is a PRINCIPAL GATE on a live cutover or an external credential. Nothing in this repository can decide whether the Principal has given the go, and a test that claimed to would be the false claim this gate exists to stop. Enforced by the deploy record, not by CI."
     },
-    "CHAT-ATTACHMENTS-001:D6": {
-      "owner": "chat-maintainers",
-      "expires": "2026-11-30",
-      "reason": "A directive about the RECORD rather than a behaviour: it orders a docstring, an honesty doc or an amended invariant description to say a particular thing. Bindable by asserting the text, which is exactly the shape of this programme, and not yet done."
-    },
     "CODEX-APPROVAL-ROUTING-001:A1": {
       "owner": "codex-maintainers",
       "expires": "2026-11-30",
@@ -55,53 +50,13 @@
     },
     "ORG-WORKSPACE-TENANCY-001:D7": {
       "owner": "identity-maintainers",
-      "expires": "2026-11-30",
-      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names BESIDE the order, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10; it needs the directive read against each test to be honest rather than decorative."
+      "expires": "2026-09-30",
+      "reason": "NOT a labelling gap - HALF THIS DIRECTIVE IS NOT IMPLEMENTED, and that was found by trying to bind it. D7 has two halves. The first, seeding the founding superadmin into a default org plus workspace, IS built and cites the directive at boltrig/api/initiate.py:104. The second, 'force a password rotation before prod exposure so a weak seed admin is never the live prod gate', is NOT: there is no must_change_password on User, no rotation flag, and nothing in the login path that compels a change. What exists instead is a different control - initiate calls validate_password_strength, so a weak seed password is refused at seeding time, and `boltrig set-password` allows a MANUAL rotation. That addresses the same hazard by another route, which is why this is recorded as an open divergence rather than a silent one, with a shorter expiry than the rest. Deciding whether the strength check satisfies D7 or whether forced rotation must be built is a matter for the court, not for whoever next edits this file."
     },
     "ORG-WORKSPACE-TENANCY-001:D9": {
       "owner": "identity-maintainers",
       "expires": "2026-11-30",
-      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
-    },
-    "RATE-LIMIT-WINDOW-001:D5": {
-      "owner": "kernel-maintainers",
-      "expires": "2026-11-30",
-      "reason": "A directive about the RECORD rather than a behaviour: it orders a docstring, an honesty doc or an amended invariant description to say a particular thing. Bindable by asserting the text, which is exactly the shape of this programme, and not yet done."
-    },
-    "RATE-LIMIT-WINDOW-001:D6": {
-      "owner": "kernel-maintainers",
-      "expires": "2026-11-30",
-      "reason": "A directive about the RECORD rather than a behaviour: it orders a docstring, an honesty doc or an amended invariant description to say a particular thing. Bindable by asserting the text, which is exactly the shape of this programme, and not yet done."
-    },
-    "UI-TEST-HARNESS-001:D1": {
-      "owner": "ui-maintainers",
-      "expires": "2026-11-30",
-      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
-    },
-    "UI-TEST-HARNESS-001:D2": {
-      "owner": "ui-maintainers",
-      "expires": "2026-11-30",
-      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
-    },
-    "UI-TEST-HARNESS-001:D4": {
-      "owner": "ui-maintainers",
-      "expires": "2026-11-30",
-      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
-    },
-    "UI-TEST-HARNESS-001:D5": {
-      "owner": "ui-maintainers",
-      "expires": "2026-11-30",
-      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
-    },
-    "WORK-ITEM-LEASE-FENCE-001:D3": {
-      "owner": "fleet-maintainers",
-      "expires": "2026-11-30",
-      "reason": "Misclassified as a behaviour directive on the first baseline; corrected. D3 orders every write to a CLAIMED row routed through the fenced write, which tests/fleet/test_lease_fence.py does prove - but it also orders express DISPOSAL of hitl_expiry._park_expired_item and of requeue, whose exclusion rests on requeue being a deliberate human reset rather than an absent lease. That disposal is recorded in a production docstring (boltrig/fleet/pump.py:459), not in a test, so what is unbound is the RECORD half. Bindable by asserting the docstring says it, which is the shape of this programme and not yet done."
-    },
-    "WORK-ITEM-LEASE-FENCE-001:D9": {
-      "owner": "fleet-maintainers",
-      "expires": "2026-11-30",
-      "reason": "A directive about the RECORD rather than a behaviour: it orders a docstring, an honesty doc or an amended invariant description to say a particular thing. Bindable by asserting the text, which is exactly the shape of this programme, and not yet done."
+      "reason": "A DELIVERY-PROCESS directive, not a property of the running system: 'copy only the opbox auth/tenancy core, never its domain models, and deliver in phases, reconciling with COUNTY 7'. Two of its three clauses are about how the work was sequenced and are spent - the phases happened and the reconciliation with COUNTY 7 is what the first-party auth tests now prove. The durable clause is 'never its domain models', which an architecture check could bind by asserting no opbox domain model reaches this tree. That check is not written, and inventing a keyword list for it without reading the opbox model surface would produce a test that passes for the wrong reason."
     }
   }
 }
