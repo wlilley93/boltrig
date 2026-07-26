@@ -136,6 +136,26 @@ RUN apt-get update && apt-get install -y --no-install-recommends bubblewrap && \
 # ~300MB every time.
 COPY boltrig/ /app/boltrig/
 
+# The `boltrig` console script this project DECLARES in pyproject [project.scripts].
+# It was declared and never installed: dependencies come from requirements-lock.txt under
+# --require-hashes and the package itself is copied in rather than pip-installed, so no
+# entry point was ever generated. `docker exec <kernel> boltrig initiate` therefore failed
+# with "executable file not found in $PATH" on every shipped tag including the one
+# production runs, which meant genesis-boltrig.sh could not seat a founding owner or mint
+# an admin PAT - i.e. NO TENANT COULD BE FOUNDED. Found by running provisioning for real
+# on 2026-07-26 (opbox-prod/docs/H1-REHEARSAL-2026-07-26.md).
+#
+# Written explicitly rather than by `pip install .`, which would put the package outside
+# the hash-pinned install and weaken the --require-hashes contract for one console script.
+RUN printf '%s\n' \
+      '#!/usr/local/bin/python3' \
+      'import sys' \
+      'from boltrig.api.cli import main' \
+      'sys.exit(main())' \
+      > /usr/local/bin/boltrig \
+ && chmod 0755 /usr/local/bin/boltrig \
+ && /usr/local/bin/boltrig --help >/dev/null
+
 # Boltrig v2 Codex App Server runtime: the pinned Codex CLI, mirrored from
 # deploy/fleet.Dockerfile (decision 0012). The chat spawner runs codex cells
 # in THIS container (the compose kernel service already carries the cell
