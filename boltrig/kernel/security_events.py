@@ -27,7 +27,7 @@ import uuid
 from boltrig.models import AuditEvent, AuditRollupAnchor, SecurityEvent, utcnow
 from boltrig.store import Store
 
-from .audit import _HMAC_KEY, _scrub, verify_chain
+from .audit import _HMAC_KEY, _scrub, key_in_force_at, verify_chain
 
 # Whether an external anchoring credential is configured. When absent (the
 # default), the anchorer writes a LOCAL dev-fallback anchor and leaves the
@@ -143,15 +143,23 @@ class SecurityWriter:
             pass
 
 
-def segment_root_hash(events: list[AuditEvent]) -> str:
+def segment_root_hash(events: list[AuditEvent], key: bytes | None = None) -> str:
     """The deterministic rollup root over a contiguous audit-chain segment (D4).
 
     A single HMAC over the ordered per-row hashes of the segment. Because each
     row hash already chains in every field of that row (SEC-16), a digest over the
     row hashes covers the whole segment: rewriting any row in the range changes
     its hash, which changes the root. Recomputing this over the same seq range on
-    read is how the verify endpoint confirms an anchor still matches."""
-    mac = hmac.new(_HMAC_KEY, b"boltrig-audit-rollup-v1", hashlib.sha256)
+    read is how the verify endpoint confirms an anchor still matches.
+
+    ``key`` is the audit HMAC key that seals this segment, and callers MUST pass
+    ``key_in_force_at(seq_end)`` rather than take the default. This used to have no
+    parameter at all and always used the live key, so the FIRST key rotation made every
+    pre-rotation anchor un-verifiable: on Classical Visas `/v1/audit/verify` returned
+    `chain_intact: true` beside `anchor_intact: false, intact: false` - reporting a broken
+    audit over an intact one. The default is retained only so an un-migrated caller keeps the
+    old behaviour instead of crashing."""
+    mac = hmac.new(key or _HMAC_KEY, b"boltrig-audit-rollup-v1", hashlib.sha256)
     for e in events:
         mac.update((e.hash or "").encode())
         mac.update(b"\x1e")  # record separator so concatenation is unambiguous
@@ -182,16 +190,16 @@ class AuditAnchorer:
             events = [e for e in events if e.workspace_id == workspace_id]
         if not events:
             return None
-        prior = await self._store.latest_audit_anchor(
-            tenant_id, workspace_id=workspace_id
-        )
+        prior = await self._store.latest_audit_anchor(tenant_id, workspace_id=workspace_id)
         floor = prior.seq_end if prior else 0
         segment = [e for e in events if (e.seq or 0) > floor]
         if not segment:
             return None
         seq_start = segment[0].seq or 0
         seq_end = segment[-1].seq or 0
-        root = segment_root_hash(segment)
+        # The key in force at the segment's newest row - the SAME resolution the verify side
+        # uses, so write and read agree by construction across a rotation.
+        root = segment_root_hash(segment, key=key_in_force_at(seq_end))
         # LOCAL dev-fallback: flagged, no external call. The RFC3161 TSA token +
         # KMS signature are left NULL - wiring them to a live external service is a
         # Principal dependency (see _TSA_URL_ENV / _KMS_KEY_ENV above).
@@ -216,15 +224,15 @@ class AuditAnchorer:
         """Recompute the root over the anchored segment and compare to the stored
         anchor. Returns (matches, anchor). No anchor -> (True, None) (nothing to
         contradict). A mismatch means the segment was rewritten after anchoring."""
-        anchor = await self._store.latest_audit_anchor(
-            tenant_id, workspace_id=workspace_id
-        )
+        anchor = await self._store.latest_audit_anchor(tenant_id, workspace_id=workspace_id)
         if anchor is None:
             return (True, None)
         events = await self._store.audit_query(tenant_id, limit=1_000_000)
         if workspace_id is not None:
             events = [e for e in events if e.workspace_id == workspace_id]
-        segment = [
-            e for e in events if anchor.seq_start <= (e.seq or 0) <= anchor.seq_end
-        ]
-        return (segment_root_hash(segment) == anchor.rollup_root_hash, anchor)
+        segment = [e for e in events if anchor.seq_start <= (e.seq or 0) <= anchor.seq_end]
+        return (
+            segment_root_hash(segment, key=key_in_force_at(anchor.seq_end))
+            == anchor.rollup_root_hash,
+            anchor,
+        )

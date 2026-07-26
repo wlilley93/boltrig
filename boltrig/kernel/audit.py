@@ -83,6 +83,23 @@ def _key_for_seq(seq: int | None, epochs: list[tuple[int, bytes]]) -> bytes:
     return _HMAC_KEY
 
 
+def key_in_force_at(seq: int | None) -> bytes:
+    """The audit HMAC key that sealed - and therefore verifies - anything covering row ``seq``.
+
+    Public because the ROLLUP ANCHOR (kernel/security_events.py) is keyed by the same secret and
+    needs the same epoch answer. It did not have it, and that was a live defect: rotating the key
+    on Classical Visas left the chain verifying row by row while `/v1/audit/verify` reported
+    `anchor_intact: false`, so the endpoint said the audit was broken over an audit that was
+    perfectly intact. A verifier that cries wolf after every rotation trains an operator to
+    ignore it, which is worse than not having one.
+
+    Both the WRITE and the READ side must call this with the segment's ``seq_end`` so they agree
+    by construction. Anchoring a range that predates a boundary therefore seals with the retired
+    key - which is not a new weakness, because those rows' own hashes are already under it.
+    """
+    return _key_for_seq(seq, _retired_epochs())
+
+
 def _canonical(event: AuditEvent) -> str:
     """A stable serialisation of the fields the hash covers.
 

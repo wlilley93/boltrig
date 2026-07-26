@@ -21,8 +21,18 @@ import hmac
 
 import pytest
 
+import dataclasses
+from datetime import datetime, timezone
+
 from boltrig.kernel import audit as audit_mod
-from boltrig.kernel.audit import _key_for_seq, _retired_epochs, verify_chain
+from boltrig.kernel.audit import (
+    _key_for_seq,
+    _retired_epochs,
+    key_in_force_at,
+    verify_chain,
+)
+from boltrig.kernel.security_events import AuditAnchorer, segment_root_hash
+from boltrig.models import AuditRollupAnchor
 
 
 class _Row:
@@ -147,6 +157,118 @@ def test_epochs_are_ordered_and_the_earliest_boundary_wins(monkeypatch):
     monkeypatch.setenv("BOLTRIG_AUDIT_HMAC_RETIRED", "9:second,4:first")
     epochs = _retired_epochs()
     assert epochs == [(4, b"first"), (9, b"second")]
-    assert _key_for_seq(1, epochs) == b"first"    # oldest segment
-    assert _key_for_seq(5, epochs) == b"second"   # middle segment
-    assert _key_for_seq(9, epochs) == NEW         # live segment
+    assert _key_for_seq(1, epochs) == b"first"  # oldest segment
+    assert _key_for_seq(5, epochs) == b"second"  # middle segment
+    assert _key_for_seq(9, epochs) == NEW  # live segment
+
+
+# ── the ROLLUP ANCHOR, which the first version of this work missed ──────────────────────────
+
+# Found live on Classical Visas AFTER the epoch shipped: `/v1/audit/verify` returned
+#   chain_intact: true, security_chain_intact: true, anchor_intact: FALSE, intact: FALSE
+# over an audit that was perfectly intact. `segment_root_hash` MACs the segment with the same
+# audit secret and took no key at all - it always used the live one - so the rotation left the
+# rows verifying row-by-row while the anchor over them could not. A verifier that cries wolf
+# after every rotation trains an operator to ignore it, which is worse than not having one.
+
+
+@dataclasses.dataclass
+class _Ev:
+    """The two fields the anchor path reads off an audit row."""
+
+    seq: int
+    hash: str
+    workspace_id: str | None = None
+
+
+class _AnchorStore:
+    """Only the two methods AuditAnchorer.verify_latest calls."""
+
+    def __init__(self, events, anchor):
+        self._events, self._anchor = events, anchor
+
+    async def audit_query(self, _tenant, limit=0):
+        return list(self._events)
+
+    async def latest_audit_anchor(self, _tenant, workspace_id=None):
+        return self._anchor
+
+
+def _anchored(events, root: str) -> _AnchorStore:
+    return _AnchorStore(
+        events,
+        AuditRollupAnchor(
+            id="a1",
+            tenant_id="t",
+            workspace_id=None,
+            seq_start=events[0].seq,
+            seq_end=events[-1].seq,
+            rollup_root_hash=root,
+            anchored_at=datetime(2026, 7, 26, tzinfo=timezone.utc),
+            is_dev_fallback=True,
+            rfc3161_token=None,
+            kms_signature=None,
+        ),
+    )
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-16")
+async def test_an_anchor_sealed_before_a_rotation_still_verifies_after_it(monkeypatch):
+    """THE live failure. The anchor covers 1-3; the key was rotated at seq 4."""
+    events = [_Ev(1, "h1"), _Ev(2, "h2"), _Ev(3, "h3")]
+    root = segment_root_hash(events, key=OLD)  # sealed while OLD was in force
+
+    monkeypatch.setattr(audit_mod, "_HMAC_KEY", NEW)
+    monkeypatch.setenv("BOLTRIG_AUDIT_HMAC_RETIRED", f"4:{OLD.decode()}")
+
+    ok, anchor = await AuditAnchorer(_anchored(events, root)).verify_latest("t")
+    assert ok, "a pre-rotation anchor must still verify, or rotating means losing it"
+    assert anchor is not None
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-16")
+async def test_without_the_epoch_the_same_anchor_reports_a_broken_audit(monkeypatch):
+    """The control: exactly the state Classical Visas was in - intact chain, false alarm."""
+    events = [_Ev(1, "h1"), _Ev(2, "h2"), _Ev(3, "h3")]
+    root = segment_root_hash(events, key=OLD)
+
+    monkeypatch.setattr(audit_mod, "_HMAC_KEY", NEW)
+    monkeypatch.delenv("BOLTRIG_AUDIT_HMAC_RETIRED", raising=False)
+
+    ok, _ = await AuditAnchorer(_anchored(events, root)).verify_latest("t")
+    assert not ok
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-16")
+async def test_the_anchor_still_catches_a_rewritten_row_across_the_rotation(monkeypatch):
+    """The epoch widens WHICH key verifies an anchor - never whether it must verify.
+
+    Without this the fix would be indistinguishable from deleting the check.
+    """
+    events = [_Ev(1, "h1"), _Ev(2, "h2"), _Ev(3, "h3")]
+    root = segment_root_hash(events, key=OLD)
+
+    monkeypatch.setattr(audit_mod, "_HMAC_KEY", NEW)
+    monkeypatch.setenv("BOLTRIG_AUDIT_HMAC_RETIRED", f"4:{OLD.decode()}")
+    events[1].hash = "h2-REWRITTEN"
+
+    ok, _ = await AuditAnchorer(_anchored(events, root)).verify_latest("t")
+    assert not ok, "a rewritten row inside the anchored range must still break the anchor"
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-16")
+def test_the_anchor_resolves_its_key_from_its_newest_row(monkeypatch):
+    """Write and read must agree by construction, so both resolve on ``seq_end``.
+
+    An anchor is sealed by whatever key covers the newest row it contains: below the
+    boundary that is the retired key, at or above it the live one.
+    """
+    monkeypatch.setattr(audit_mod, "_HMAC_KEY", NEW)
+    monkeypatch.setenv("BOLTRIG_AUDIT_HMAC_RETIRED", f"4:{OLD.decode()}")
+    assert key_in_force_at(3) == OLD
+    assert key_in_force_at(4) == NEW
+    assert key_in_force_at(None) == NEW
