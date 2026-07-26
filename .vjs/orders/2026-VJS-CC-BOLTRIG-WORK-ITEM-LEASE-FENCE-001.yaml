@@ -81,3 +81,11 @@ runtime_summary: |
   closed.
 created_at: 2026-07-25T17:31:00Z
 assent_source: standing_bounded_assent
+implementation_status: DISCHARGED
+implementation_note: |
+  All nine directives implemented 2026-07-25/26 (efd6380, 290c793, 3afe370).
+  D7 run against a real Postgres with BOLTRIG_TEST_DATABASE_URL set: 2626
+  passed, 16 skipped, the postgres parameter passed and not skipped. The
+  discharge record, including the one residual race the order did not ask to be
+  closed, is in the opinion under 'Discharge record (2026-07-26)'.
+

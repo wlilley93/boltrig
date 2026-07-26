@@ -136,3 +136,31 @@ comment, commit message or finding may describe child suppression as fenced.
 That correction matters more than it looks. The whole reason this matter reached
 the court is that a fence which does not fence was nearly shipped under a name
 that said it did.
+
+---
+
+## Discharge record (2026-07-26)
+
+All nine directives are implemented and the order is discharged. Where a
+directive was satisfied by stating a limit rather than by removing it, that is
+recorded here, because a discharge that overstates itself would be the same
+defect this matter is about.
+
+| D | Where | Note |
+| --- | --- | --- |
+| D1 | `boltrig/store/{base,postgres,memory}.py` | `update_work_item_if_leased`, the predicate in the same statement as the update in both backends |
+| D2 | `boltrig/fleet/lease_token.py`, `pump.run_once` | Minted at claim, carried on the enqueue payload; the expiry round-trips via isoformat/fromisoformat, which preserves microseconds and offset - the fence compares for equality, so a lossy encoding would fail CLOSED |
+| D3 | `pump.py` (5 sites), `hitl_expiry.py`, `pump.requeue` | Both exclusions disposed of in terms. `requeue` is unfenced because a human re-queue is an authorised RESET, **not** because a parked row has no lease - it still carries the stale claim tuple. `_park_expired_item` cannot be fenced: the sweeper never claimed the item |
+| D4 | `pump.persist_new_work_items` | NARROWED, and labelled as narrowed everywhere it appears. Closing it needs `UNIQUE(parent_id, intent)`, a schema change |
+| D5 | `lease_token.write` | No-op plus a warning; an exception would reach `_record_failure` and re-open a settled item |
+| D6 | `boltrig/store/memory.py`, `work_items.py` | Copy-on-read across all seventeen sites |
+| D7 | `tests/store/test_store_parity.py`, `tests/fleet/test_lease_fence.py` | Run with `BOLTRIG_TEST_DATABASE_URL` set against a real Postgres: 2626 passed, 16 skipped, the postgres parameter passed and not skipped |
+| D8 | `lease_token.write`, `pump._cancel` | A refused cancel is logged; the prohibition on adding any consume-or-delete to that path is stated at both ends |
+| D9 | `boltrig/store/base.py`, `lease_token.py` | Recorded AT the contract, which is where a later reader would upgrade "single-writer" into "exactly-once" |
+
+**One thing the discharge does not claim.** `_park_expired_item`'s real predicate
+is a status read-then-write, so a human who re-queues an item in the same instant
+the expiry sweeper fires can still have it cancelled underneath them. The order
+did not ask for that to be closed and it is not closed. It is written down at the
+site rather than left for the next person to rediscover, which is the most this
+discharge is entitled to say about it.
