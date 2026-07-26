@@ -1,0 +1,15 @@
+id: PERMIT-1785088755
+route_id: ROUTE-20260726-175915
+actor: lexby
+scope: null
+obligations:
+- id: OBL-LOG-001
+  kind: decision_log
+  required: true
+  due: before_commit
+  description: Write a decision log for this material implementation decision
+expires_at: 2026-07-27T17:59:15.074368439+00:00
+status: closed
+self_issued: true
+meaning: 'agent-routed self-issue: records that the actor took the front door (ACT-007 local-sovereign invocation); NOT an external authority''s approval. It cannot satisfy a check reserved to the Sovereign (assent) or to a constituted bench (an order).'
+intent_digest: sha256:a1c19934216ec82d59d45cc86f33d451aa2fb745f49f2c86ef37e3410c8e1594
