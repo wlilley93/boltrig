@@ -404,15 +404,15 @@
       "expires": "2026-12-31"
     },
     "boltrig/store/base.py": {
-      "max_file_lines": 643,
+      "max_file_lines": 658,
       "max_function_lines": 15,
       "over_limit_functions": [],
       "owner": "store-maintainers",
-      "reason": "Split the store protocol into domain protocols while preserving one composed compatibility contract.",
+      "reason": "Split the store protocol into domain protocols while preserving one composed compatibility contract. 2026-07-26: the conditional lease-fenced work-item write and the copy-on-read parity repair ([2026] VJS-CC-BOLTRIG-WORK-ITEM-LEASE-FENCE-001 D1/D6). The memory store previously handed callers the LIVE row, so any conditional write compared a stored object against itself and always agreed.",
       "expires": "2026-12-31"
     },
     "boltrig/store/memory.py": {
-      "max_file_lines": 1168,
+      "max_file_lines": 1198,
       "max_function_lines": 97,
       "over_limit_functions": [
         {
@@ -422,15 +422,15 @@
         }
       ],
       "owner": "store-maintainers",
-      "reason": "Extract domain partials in lockstep with PostgreSQL while preserving complete store parity.",
+      "reason": "Extract domain partials in lockstep with PostgreSQL while preserving complete store parity. 2026-07-26: the conditional lease-fenced work-item write and the copy-on-read parity repair ([2026] VJS-CC-BOLTRIG-WORK-ITEM-LEASE-FENCE-001 D1/D6). The memory store previously handed callers the LIVE row, so any conditional write compared a stored object against itself and always agreed.",
       "expires": "2026-12-31"
     },
     "boltrig/store/postgres.py": {
-      "max_file_lines": 1961,
+      "max_file_lines": 2002,
       "max_function_lines": 53,
       "over_limit_functions": [],
       "owner": "store-maintainers",
-      "reason": "Extract domain partials in lockstep with the in-memory store while preserving SQL and RLS parity.",
+      "reason": "Extract domain partials in lockstep with the in-memory store while preserving SQL and RLS parity. 2026-07-26: the conditional lease-fenced work-item write and the copy-on-read parity repair ([2026] VJS-CC-BOLTRIG-WORK-ITEM-LEASE-FENCE-001 D1/D6). The memory store previously handed callers the LIVE row, so any conditional write compared a stored object against itself and always agreed.",
       "expires": "2026-12-31"
     },
     "boltrig/store/rows.py": {

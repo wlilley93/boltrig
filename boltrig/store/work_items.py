@@ -7,11 +7,32 @@ from typing import Any
 from boltrig.models import WorkItem, WorkStatus
 from boltrig.models.work import work_item_run_id
 
+from dataclasses import replace
+
 from .base import clamp_work_page
 from .workspace_scope import (
     append_work_workspace_clause,
     work_item_workspace_visible,
 )
+
+
+def _detached(item):
+    """A caller-owned COPY of a stored work item.
+
+    The memory store used to hand back the LIVE object, so a caller mutating a
+    returned row changed the store with no write call, and any conditional write
+    would compare a stored object against itself and always agree. Postgres has
+    always returned a fresh object built by ``work_item_from_row``, so this is a
+    parity REPAIR, not a new divergence
+    ([2026] VJS-CC-BOLTRIG-WORK-ITEM-LEASE-FENCE-001 D6).
+
+    ``replace`` with no changes is a shallow copy: the dataclass fields are rebound
+    onto a new object, which is what the fence needs (it compares scalars). Nested
+    dicts like ``constraints``/``raw``/``result`` stay shared, matching how the
+    Postgres row decoder also yields fresh containers per read only at the top
+    level. Callers must not mutate those in place either way.
+    """
+    return replace(item) if item is not None else None
 
 
 class WorkItemReadsMem:
@@ -21,7 +42,7 @@ class WorkItemReadsMem:
         item = self._work.get((tenant_id, item_id))
         if item is None:
             return None
-        return item if work_item_workspace_visible(item, workspace_id, enforce_workspace) else None
+        return _detached(item) if work_item_workspace_visible(item, workspace_id, enforce_workspace) else None
 
     async def get_work_item_by_run_id(
         self, tenant_id, run_id, workspace_id=None, enforce_workspace=False
@@ -29,11 +50,11 @@ class WorkItemReadsMem:
         direct = self._work.get((tenant_id, run_id))
         if direct is not None:
             return (
-                direct
+                _detached(direct)
                 if work_item_workspace_visible(direct, workspace_id, enforce_workspace)
                 else None
             )
-        return next(
+        return _detached(next(
             (
                 item
                 for (tenant, _), item in self._work.items()
@@ -42,7 +63,7 @@ class WorkItemReadsMem:
                 and work_item_workspace_visible(item, workspace_id, enforce_workspace)
             ),
             None,
-        )
+        ))
 
     async def list_work_items(
         self,
@@ -72,7 +93,8 @@ class WorkItemReadsMem:
         out.sort(key=lambda item: item.id)
         if cursor is not None:
             out = [item for item in out if item.id > cursor]
-        return out[: clamp_work_page(limit)] if limit is not None else out
+        page = out[: clamp_work_page(limit)] if limit is not None else out
+        return [_detached(w) for w in page]
 
     async def list_work_items_by_refs(self, tenant_id, refs):
         wanted = set(refs)
@@ -83,7 +105,7 @@ class WorkItemReadsMem:
             and (item.id in wanted or item.hatchet_run_id in wanted)
         ]
         out.sort(key=lambda item: item.id)
-        return out
+        return [_detached(w) for w in out]
 
     async def list_run_items_scoped(
         self,
@@ -129,7 +151,8 @@ class WorkItemReadsMem:
         out.sort(key=lambda w: w.id)
         if cursor is not None:
             out = [w for w in out if w.id > cursor]
-        return out[: clamp_work_page(limit)] if limit is not None else out
+        page = out[: clamp_work_page(limit)] if limit is not None else out
+        return [_detached(w) for w in page]
 
 
 class WorkItemReadsPG:

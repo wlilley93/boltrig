@@ -149,6 +149,21 @@ class Store(BudgetPolicyContract, IdempotencyStoreContract, GuardedWritesContrac
         enforce_workspace: bool = False,
     ) -> WorkItem | None: ...
     async def update_work_item(self, item: WorkItem) -> None: ...
+    # Conditional work-item write ([2026] VJS-CC-BOLTRIG-WORK-ITEM-LEASE-FENCE-001
+    # D1). Writes only if the row still carries the lease the caller was GIVEN AT
+    # CLAIM, and returns whether it wrote. The predicate is evaluated by the
+    # backend in the same statement as the update: a read-then-write check in the
+    # caller cannot decide a read-then-write race. The expected tuple must be the
+    # one minted at claim and carried to the writing body, never one that body
+    # re-read - a CAS whose expectation is re-derived at body start has the same
+    # defect as no CAS at all.
+    async def update_work_item_if_leased(
+        self,
+        item: WorkItem,
+        *,
+        lease_owner: str | None,
+        lease_expires_at: datetime | None,
+    ) -> bool: ...
     async def transition_work_item_status(
         self, tenant_id: str, item_id: str, *, expected: WorkStatus, new_status: WorkStatus
     ) -> bool: ...

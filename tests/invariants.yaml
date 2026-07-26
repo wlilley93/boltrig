@@ -323,11 +323,27 @@ invariants:
       - tests/integration/test_fleet_spawn.py::test_cheapest_capable_runtime_chosen
       - tests/integration/test_fleet_spawn.py::test_preferred_capability_chosen_when_capable
   US-FLT-05:
-    description: A pending work item is claimed exactly once across concurrent claimers and an expired lease is reclaimable (attempts increments per claim).
+    description: >-
+      A pending work item is claimed exactly once across concurrent claimers and an
+      expired lease is reclaimable (attempts increments per claim). Reclaim is
+      deliberate, but nothing renews a lease, so a step that outruns lease_seconds
+      is handed to a SECOND executor while the first still runs. A write to a
+      claimed row is therefore FENCED by the backend, in the same statement as the
+      update, against the lease tuple minted AT CLAIM and carried to the writing
+      body: the loser's write is refused, so it can neither overwrite the winner's
+      terminal record nor roll `attempts` back. The expected tuple may never be one
+      the body re-read - a read-then-write check cannot decide a read-then-write
+      race. Both backends honour it identically, which requires the memory store to
+      hand back COPIES: while it returned the live row a caller's object could BE
+      the stored object and every comparison trivially agreed
+      ([2026] VJS-CC-BOLTRIG-WORK-ITEM-LEASE-FENCE-001 D1/D6/D7).
     tests:
       - tests/store/test_durable_delegation.py::test_pending_item_claimed_exactly_once_concurrently
       - tests/store/test_durable_delegation.py::test_expired_lease_is_reclaimable_and_attempts_increment
       - tests/store/test_durable_delegation.py::test_claim_is_tenant_scoped_and_skips_unclaimable
+      - tests/store/test_store_parity.py::test_a_worker_that_lost_its_lease_cannot_overwrite_the_winner
+      - tests/store/test_store_parity.py::test_the_lease_holder_can_still_write
+      - tests/store/test_store_parity.py::test_a_read_does_not_hand_back_the_stored_row
   US-FLT-06:
     description: A filed work item completes through the org - the pump claims it, the Chief of Staff routes it, a department head decomposes and spawns child work items, the results join onto the parent, and the status walks pending -> in_flight -> done with the steps checkpointed and the spawns audited.
     tests:

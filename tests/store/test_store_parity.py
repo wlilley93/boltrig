@@ -14,6 +14,7 @@ single-use HITL consume CAS, and newest-first list ordering.
 from __future__ import annotations
 
 import os
+from dataclasses import replace
 from datetime import timedelta
 
 import pytest
@@ -29,6 +30,7 @@ from boltrig.models import (
     MemoryProjectionStatus,
     Urgency,
     WorkItem,
+    WorkStatus,
     utcnow,
 )
 from boltrig.store.idempotency_contract import IdempotencyClaimStatus
@@ -731,3 +733,95 @@ async def test_adapter_lifecycle_deletes_are_idempotent_and_tenant_scoped(store)
     assert await store.get_noun("rival", "ticket") is not None
     assert await store.get_adapter("rival", "ext-mcp") is not None
     assert (await store.get_credential_ref("rival", "ext-mcp-mcp-token")) is not None
+
+
+# --- the work-item lease fence (D1/D6/D7) -----------------------------------
+# [2026] VJS-CC-BOLTRIG-WORK-ITEM-LEASE-FENCE-001. Nothing renews a work-item
+# lease, so a step that outruns lease_seconds is handed to a SECOND executor while
+# the first still runs. Every pump write was an unconditional full-row upsert with
+# no owner and no status predicate, so the loser overwrote the winner's terminal
+# record and rolled `attempts` back.
+#
+# The fence has to be evaluated by the backend, in the same statement as the
+# update, against the tuple minted AT CLAIM. A read-then-write check in the caller
+# cannot decide a read-then-write race: that shape was authored, and a reviewer
+# applied it and reproduced the original defect.
+
+
+async def _leased_item(store, item_id: str = "w-lease"):
+    await store.create_work_item(WorkItem(
+        id=item_id, tenant_id=T, source="internal", intent="long step",
+        confidence=1.0, convergent=True, status=WorkStatus.PENDING,
+        owner_member="engineering",
+    ))
+    claimed = await store.claim_work_item(T, "worker-a", 300)
+    assert claimed is not None and claimed.id == item_id
+    return claimed
+
+
+@pytest.mark.store
+@pytest.mark.invariant("US-FLT-05")
+async def test_a_worker_that_lost_its_lease_cannot_overwrite_the_winner(store):
+    """The defect itself, on both backends. Body A claims, its lease expires, body
+    B reclaims and settles; A's late write must be REFUSED, not applied."""
+    claimed = await _leased_item(store)
+    a_owner, a_expiry = claimed.lease_owner, claimed.lease_expires_at
+
+    # The lease lapses and a rival reclaims. attempts goes 1 -> 2.
+    expired = replace(claimed, lease_expires_at=utcnow() - timedelta(seconds=1))
+    await store.update_work_item(expired)
+    rival = await store.claim_work_item(T, "worker-b", 300)
+    assert rival is not None and rival.lease_owner == "worker-b"
+    assert rival.attempts == 2
+
+    # The rival settles the item.
+    await store.update_work_item(replace(
+        rival, status=WorkStatus.DONE, result={"who": "winner"},
+        lease_owner=None, lease_expires_at=None,
+    ))
+
+    # Body A, still running, now writes its stale snapshot fenced on the tuple it
+    # was GIVEN at claim. It must not land.
+    wrote = await store.update_work_item_if_leased(
+        replace(claimed, status=WorkStatus.DONE, result={"who": "loser"}),
+        lease_owner=a_owner, lease_expires_at=a_expiry,
+    )
+    assert wrote is False, "the loser's write was applied over the winner's record"
+
+    final = await store.get_work_item(T, "w-lease")
+    assert final.result == {"who": "winner"}
+    assert final.status == WorkStatus.DONE
+    assert final.attempts == 2, "attempts was rolled back by a stale writer"
+
+
+@pytest.mark.store
+@pytest.mark.invariant("US-FLT-05")
+async def test_the_lease_holder_can_still_write(store):
+    """The fence must not refuse the legitimate writer, which is the failure mode
+    an owner-equality fence would have had on the durable lane."""
+    claimed = await _leased_item(store, "w-holder")
+    wrote = await store.update_work_item_if_leased(
+        replace(claimed, status=WorkStatus.DONE, result={"ok": True}),
+        lease_owner=claimed.lease_owner, lease_expires_at=claimed.lease_expires_at,
+    )
+    assert wrote is True
+    final = await store.get_work_item(T, "w-holder")
+    assert final.status == WorkStatus.DONE and final.result == {"ok": True}
+
+
+@pytest.mark.store
+@pytest.mark.invariant("US-FLT-05")
+async def test_a_read_does_not_hand_back_the_stored_row(store):
+    """D6, and the reason the fence is meaningful at all. If a read returns the
+    LIVE row, the caller's object IS the stored object, every comparison trivially
+    agrees, and the fence above would pass while fencing nothing. Postgres has
+    always copied; the memory store did not, and that divergence was the real
+    obstacle the case file mis-described as 'InMemoryStore cannot express it'."""
+    await _leased_item(store, "w-detach")
+    first = await store.get_work_item(T, "w-detach")
+    first.result = {"mutated": "without a write call"}
+
+    second = await store.get_work_item(T, "w-detach")
+    assert second.result != {"mutated": "without a write call"}, (
+        "the store handed back its live row: a caller mutated it with no write"
+    )

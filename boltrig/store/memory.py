@@ -337,11 +337,39 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
         return [ep for (t, _), ep in self._endpoints.items() if t == tenant_id]
 
     # --- work items ---
+    # Store a COPY, and hand back copies on read (see work_items._detached). The
+    # store used to alias the caller's object in both directions, so a caller
+    # mutating a row after writing it changed the store with no write call, and a
+    # conditional write would compare a stored object against itself and always
+    # agree. Postgres has never aliased; this is the parity repair
+    # ([2026] VJS-CC-BOLTRIG-WORK-ITEM-LEASE-FENCE-001 D6).
     async def create_work_item(self, item):
-        self._work[(item.tenant_id, item.id)] = item
+        self._work[(item.tenant_id, item.id)] = replace(item)
 
     async def update_work_item(self, item):
-        self._work[(item.tenant_id, item.id)] = item
+        self._work[(item.tenant_id, item.id)] = replace(item)
+
+    async def update_work_item_if_leased(self, item, *, lease_owner, lease_expires_at):
+        """Write ONLY if the stored row still carries the lease the caller was
+        given; return whether it wrote (D1).
+
+        Mirrors the Postgres UPDATE ... WHERE lease_owner=$ AND lease_expires_at=$.
+        No await between the compare and the write, so it is atomic on the
+        single-threaded loop, the same argument transition_work_item_status and
+        claim_work_item already rely on.
+
+        The comparison is against the STORED row, which is only meaningful because
+        the store no longer hands callers that row: before the copy-on-read repair
+        the caller's `item` could BE the stored object and every comparison would
+        trivially pass.
+        """
+        stored = self._work.get((item.tenant_id, item.id))
+        if stored is None:
+            return False
+        if stored.lease_owner != lease_owner or stored.lease_expires_at != lease_expires_at:
+            return False
+        self._work[(item.tenant_id, item.id)] = replace(item)
+        return True
 
     async def transition_work_item_status(self, tenant_id, item_id, *, expected, new_status):
         # Conditional status write (mirrors the PG UPDATE ... WHERE status=$):
@@ -372,7 +400,9 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
             item.lease_owner = worker_id
             item.lease_expires_at = now + timedelta(seconds=lease_seconds)
             item.attempts += 1
-            return item
+            # A copy: the claimer must not hold the stored object, or its own
+            # later mutations would land in the store unwritten.
+            return replace(item)
         return None
 
     async def try_increment_fanout(self, tenant_id, tree_id, counter, n, cap):

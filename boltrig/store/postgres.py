@@ -12,6 +12,7 @@ from __future__ import annotations
 import contextlib
 import contextvars
 import json
+from datetime import datetime
 from pathlib import Path
 
 import asyncpg
@@ -533,6 +534,46 @@ class PostgresStore(
 
     async def update_work_item(self, item: WorkItem):
         await self.create_work_item(item)  # upsert
+
+    async def update_work_item_if_leased(
+        self, item: WorkItem, *, lease_owner: str | None, lease_expires_at: datetime | None
+    ) -> bool:
+        """Write the row ONLY if it still carries the lease the caller was given.
+
+        Returns True if it wrote, False if the lease moved. The predicate is
+        evaluated HERE, by the party that serialises the write, in the same
+        statement ([2026] VJS-CC-BOLTRIG-WORK-ITEM-LEASE-FENCE-001 D1). That is the
+        whole point: a read-then-write check in the caller cannot decide a
+        read-then-write race, which is why the earlier `_still_leased` helper was
+        defeated by a reviewer who applied it and reproduced the original defect.
+
+        The expected tuple must be the one MINTED AT CLAIM and carried to this
+        body, never one the body re-read. A CAS whose expectation is re-derived at
+        body start inherits the identical defect.
+
+        Deliberately a distinct method rather than a keyword on update_work_item,
+        so a call site that must be fenced is greppable and an unfenced write to a
+        claimed row is visible in review.
+        """
+        row = await self._pool.fetchrow(
+            """UPDATE work_items SET
+                 workspace_id=$3, source=$4, source_id=$5, intent=$6, confidence=$7,
+                 convergent=$8, status=$9, owner_member=$10, parent_id=$11,
+                 hatchet_run_id=$12, depth=$13, on_behalf_of=$14, constraints=$15,
+                 raw=$16, attempts=$17, degraded=$18, result=$19, lease_owner=$20,
+                 lease_expires_at=$21, target=$22, reply_route=$23, updated_at=now()
+               WHERE tenant_id=$1 AND id=$2
+                 AND lease_owner IS NOT DISTINCT FROM $24
+                 AND lease_expires_at IS NOT DISTINCT FROM $25
+               RETURNING id""",
+            item.tenant_id, item.id, item.workspace_id, item.source, item.source_id,
+            item.intent, item.confidence, item.convergent, item.status.value,
+            item.owner_member, item.parent_id, item.hatchet_run_id, item.depth,
+            item.on_behalf_of, item.constraints, item.raw, item.attempts,
+            item.degraded, item.result, item.lease_owner, item.lease_expires_at,
+            item.target, item.reply_route, lease_owner, lease_expires_at,
+        )
+        return row is not None
 
     async def transition_work_item_status(self, tenant_id, item_id, *, expected, new_status):
         # Conditional status write (CAS on the guarded status): a concurrent
