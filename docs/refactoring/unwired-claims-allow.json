@@ -41,6 +41,11 @@
       "owner": "kernel-maintainers",
       "expires": "2026-12-31",
       "reason": "The unguarded run-scoped credential primitive. Kept, but it must NEVER be used at a run terminal: an unguarded delete of the whole run: prefix destroys a held write's sealed call, which is the record decision 0018 replays from. The terminal sweep is `sweep_run_credentials_if_settled` (kernel/held_call.py), and the prose that used to name this function was corrected on 2026-07-26."
+    },
+    "WorkflowPromoter": {
+      "owner": "workflow-maintainers",
+      "expires": "2026-10-31",
+      "reason": "CONSTRUCTED AND PARKED, not wired. api/bootstrap.py builds it into app.state.platform under \"promoter\"; no reader looks up that key (readers use admin/eval/spawner/status/workflows), so `evaluate` runs only from tests/security/test_self_improvement_competence.py. Its SEC-29 grant ceiling is CORRECT - the initiator's grants are intersected at the spawn seam - and currently vacuous, because the path never runs. Waived rather than deleted because eval-gated promotion is a decided design ([2026] VJS-COUNTY 5) awaiting the product decision of WHEN promotion runs. A shorter expiry than the others on purpose: this one is a decision waiting to be made, not a seam for an external caller."
     }
   }
 }

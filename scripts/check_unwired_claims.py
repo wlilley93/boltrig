@@ -62,6 +62,17 @@ docstring that writes ``sweep_run_scoped`` is naming a symbol, and only that is
 a claim. A qualified prefix counts too - ``db.execute_write`` names
 execute_write.
 
+WHAT IT CHECKS, PART 3 - CONSTRUCTED BUT NEVER INVOKED (2026-07-26). Between the
+two rules above sits an object that IS built, is parked where a caller could
+reach it, and whose methods nobody calls. Part 1 passes because the class is
+constructed; part 2 passes because the method's name is a common word that some
+unrelated code also uses. WorkflowPromoter is the live case: constructed into
+app.state.platform under "promoter", a key no reader ever looks up, so its
+`evaluate` runs only from tests and the SEC-29 grant ceiling it enforces is
+correct and vacuous. So an advertised, constructed class NONE of whose public
+methods are referenced is reported. Measured across 285 classes with public
+methods: two hits, one of them a Protocol the type filter already excludes.
+
 WHAT IT DOES NOT CHECK. It cannot know whether a claim is TRUE, only whether the
 thing it names is reached. A function with one caller in a lane that never runs
 still passes here - that is the honest limit, and it is still the difference
@@ -140,9 +151,10 @@ def _claim_pattern(name: str) -> re.Pattern[str]:
     return re.compile(rf"``[\w.]*{e}``|`[\w.]*{e}`|:(?:func|meth|attr):`[^`]*{e}`")
 
 
-def _collect(sources: dict[Path, str]) -> tuple[dict, dict, set[str], set[str]]:
-    """Return (classes defined, functions defined, every referenced name, __all__)."""
+def _collect(sources: dict[Path, str]) -> tuple[dict, dict, dict, set[str], set[str]]:
+    """Return (classes, their public methods, functions, referenced names, __all__)."""
     classes: dict[str, Path] = {}
+    class_methods: dict[str, set[str]] = {}
     functions: dict[str, Path] = {}
     referenced: set[str] = set()
     exported: set[str] = set()
@@ -182,6 +194,14 @@ def _collect(sources: dict[Path, str]) -> tuple[dict, dict, set[str], set[str]]:
             if isinstance(node, ast.ClassDef):
                 if not _is_type_not_mechanism(node):
                     classes.setdefault(node.name, path)
+                    public = {
+                        b.name
+                        for b in node.body
+                        if isinstance(b, ast.FunctionDef | ast.AsyncFunctionDef)
+                        and not b.name.startswith("_")
+                    }
+                    if public:
+                        class_methods.setdefault(node.name, set()).update(public)
                 referenced |= _base_names(node)
             elif isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
                 name = node.name
@@ -220,7 +240,7 @@ def _collect(sources: dict[Path, str]) -> tuple[dict, dict, set[str], set[str]]:
                             if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
                                 exported.add(elt.value)
 
-    return classes, functions, referenced, exported
+    return classes, class_methods, functions, referenced, exported
 
 
 def load_allow(path: Path) -> tuple[dict[str, str], list[str]]:
@@ -271,7 +291,7 @@ def main() -> int:
     ))
     sources = {p: p.read_text(encoding="utf-8") for p in files}
 
-    classes, functions, referenced, exported = _collect(sources)
+    classes, class_methods, functions, referenced, exported = _collect(sources)
 
     unwired: dict[str, tuple[str, Path]] = {}
     for name, path in classes.items():
@@ -280,6 +300,23 @@ def main() -> int:
     for name, path in functions.items():
         if name not in referenced and name not in exported and name not in unwired:
             unwired[name] = ("function", path)
+    # CONSTRUCTED BUT NEVER INVOKED. The class rule asks "is it built?" and the
+    # function rule asks "is this name used anywhere?". Between them sits an object
+    # that IS built, is parked somewhere a caller could reach, and whose methods
+    # nobody calls - and it slips through because the class is constructed and its
+    # method name is a common word some unrelated code also uses.
+    #
+    # WorkflowPromoter is the live case: constructed at api/bootstrap.py into
+    # app.state.platform under "promoter", a key no reader looks up, so its
+    # `evaluate` runs only from tests. Its SEC-29 grant ceiling is correct and
+    # vacuous. Measured across 285 classes with public methods, this rule reports
+    # two, one of which the Protocol filter above already excludes.
+    for name, methods in class_methods.items():
+        if name in unwired or name not in referenced:
+            continue  # not built, or already reported as an unwired class
+        if methods & referenced or methods & exported:
+            continue  # something calls at least one of its methods
+        unwired[name] = ("constructed but never invoked", classes[name])
 
     if not unwired:
         print("PASS: every name the record uses is reached somewhere.")

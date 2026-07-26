@@ -159,7 +159,14 @@ async def test_dispatch_outcomes_are_identical_with_and_without_the_emotion_rela
 @pytest.mark.invariant("EMO-1")
 def test_no_kernel_module_imports_the_emotion_package() -> None:
     offenders: list[str] = []
-    for path in sorted(_KERNEL_DIR.rglob("*.py")):
+    # An empty glob has no offenders, so "emotion is strictly downstream" would be
+    # true of a directory that is not there. EMO-1 is a boundary; a boundary that
+    # inspected nothing has not held, it has been skipped.
+    kernel_files = sorted(_KERNEL_DIR.rglob("*.py"))
+    assert len(kernel_files) > 10, (
+        f"scanned nothing meaningful: {_KERNEL_DIR} yielded {len(kernel_files)} files"
+    )
+    for path in kernel_files:
         if path == _KERNEL_DIR / "__init__.py":
             continue  # the ONE sanctioned seam: the relay factory import
         tree = ast.parse(path.read_text(encoding="utf-8"))

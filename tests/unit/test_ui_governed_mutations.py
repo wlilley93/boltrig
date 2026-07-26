@@ -33,8 +33,17 @@ def test_high_control_mutations_render_the_pending_human_contract() -> None:
         for verb in verbs:
             assert verb in source, f"{relative} does not surface {verb} pending state"
 
+    # The named files above are read individually, so a wholesale-missing panels
+    # tree errors before here - but a PARTIAL move (panels relocated while those
+    # few stay) leaves this glob short and the bypass ratchet below vacuous, since
+    # no source means no forbidden call found.
+    panel_files = list(PANELS.rglob("*.ts*"))
+    assert len(panel_files) >= len(callsites), (
+        f"scanned nothing meaningful: {PANELS} yielded {len(panel_files)} files for "
+        f"{len(callsites)} named callsites - the bypass check below would pass empty"
+    )
     panel_source = "\n".join(
-        path.read_text(encoding="utf-8") for path in PANELS.rglob("*.ts*")
+        path.read_text(encoding="utf-8") for path in panel_files
     )
     bypass_calls = (
         "api.upsertSkill(",

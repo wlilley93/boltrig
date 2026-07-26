@@ -36,9 +36,19 @@ _FORBIDDEN_PI = re.compile(
 
 
 def _python_files() -> list[pathlib.Path]:
+    """Every scoped source file, with a FLOOR.
+
+    An empty glob yields no offenders, so this test would pass having read
+    nothing - and "no estate-coupling imports" would be true the way it is true
+    of an empty directory. One rename of boltrig/kernel is all it takes. Each
+    scope must exist and must contain something.
+    """
     files: list[pathlib.Path] = []
     for scope in _SCOPED:
-        files.extend(scope.rglob("*.py"))
+        assert scope.is_dir(), f"scanned nothing: {scope} does not exist"
+        found = list(scope.rglob("*.py"))
+        assert found, f"scanned nothing: {scope} holds no Python"
+        files.extend(found)
     return files
 
 
@@ -131,7 +141,14 @@ def test_foundation_layers_do_not_depend_upward():
         pattern = re.compile(
             r"^\s*(?:from|import)\s+boltrig\.(" + "|".join(forbidden) + r")\b"
         )
-        for path in (_ROOT / layer).rglob("*.py"):
+        # _LAYER_RULES is keyed by directory NAME, so a renamed layer silently
+        # drops its own rule and this loop reads zero files for it - a boundary
+        # that stops being enforced without anything going red.
+        layer_root = _ROOT / layer
+        assert layer_root.is_dir(), f"scanned nothing: layer {layer} does not exist"
+        paths = list(layer_root.rglob("*.py"))
+        assert paths, f"scanned nothing: layer {layer} holds no Python"
+        for path in paths:
             for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
                 if pattern.match(line):
                     offenders.append(f"{path}:{n}: {line.strip()}")
