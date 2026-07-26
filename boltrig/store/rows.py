@@ -313,6 +313,12 @@ def _user(r):
         scope=r["scope"] or {}, status=r["status"], source=r["source"],
         source_group=r["source_group"], last_seen_at=r["last_seen_at"],
         created_at=r["created_at"],
+        # `.get`-style read, not r["..."]: a database that has not yet run 0039
+        # has no such column, and a KeyError here would take down every user read
+        # rather than the one feature the column serves ([2026] VJS-COUNTY 8, D7).
+        must_change_password=bool(
+            r["must_change_password"] if "must_change_password" in r.keys() else False
+        ),
     )
 
 

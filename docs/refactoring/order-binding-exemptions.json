@@ -48,11 +48,6 @@
       "expires": "2026-11-30",
       "reason": "Not code-testable and correctly so: it is a PRINCIPAL GATE on a live cutover or an external credential. Nothing in this repository can decide whether the Principal has given the go, and a test that claimed to would be the false claim this gate exists to stop. Enforced by the deploy record, not by CI."
     },
-    "ORG-WORKSPACE-TENANCY-001:D7": {
-      "owner": "identity-maintainers",
-      "expires": "2026-09-30",
-      "reason": "NOT a labelling gap - HALF THIS DIRECTIVE IS NOT IMPLEMENTED, and that was found by trying to bind it. D7 has two halves. The first, seeding the founding superadmin into a default org plus workspace, IS built and cites the directive at boltrig/api/initiate.py:104. The second, 'force a password rotation before prod exposure so a weak seed admin is never the live prod gate', is NOT: there is no must_change_password on User, no rotation flag, and nothing in the login path that compels a change. What exists instead is a different control - initiate calls validate_password_strength, so a weak seed password is refused at seeding time, and `boltrig set-password` allows a MANUAL rotation. That addresses the same hazard by another route, which is why this is recorded as an open divergence rather than a silent one, with a shorter expiry than the rest. Deciding whether the strength check satisfies D7 or whether forced rotation must be built is a matter for the court, not for whoever next edits this file."
-    },
     "ORG-WORKSPACE-TENANCY-001:D9": {
       "owner": "identity-maintainers",
       "expires": "2026-11-30",

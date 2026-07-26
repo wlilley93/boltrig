@@ -53,6 +53,16 @@ _ENROLLMENT_ONLY_ALLOWED = frozenset({
     "/v1/auth/logout",
 })
 
+# Forced-rotation clamp ([2026] VJS-COUNTY 8, D7). Same shape and the same
+# reasoning as the enrollment clamp above: an account still carrying its
+# PROVISIONING credential reaches the change-password surface and nothing else.
+# Checked every request, not just at login, so a flag set while a session is live
+# takes effect on the very next call.
+_PASSWORD_CHANGE_ONLY_ALLOWED = frozenset({
+    "/v1/auth/change-password",
+    "/v1/auth/logout",
+})
+
 
 def _prefix() -> str:
     return "boltrig_sess_"
@@ -300,6 +310,16 @@ def build_session_resolver(tenant_id: str) -> PrincipalResolver:
                 presented, session.csrf_token
             ):
                 raise HTTPException(status_code=403, detail="csrf token missing or invalid")
+
+        # Forced-rotation clamp ([2026] VJS-COUNTY 8, D7). An account whose credential
+        # is still the one typed at `boltrig initiate` may reach the change-password
+        # surface and logout, nothing else. This runs BEFORE the 2FA clamp and needs
+        # no store read of its own - the flag is already on the user row loaded above -
+        # so it costs nothing on the overwhelmingly common path where it is False.
+        if user.must_change_password and (
+            request.url.path not in _PASSWORD_CHANGE_ONLY_ALLOWED
+        ):
+            raise HTTPException(status_code=403, detail="password_change_required")
 
         # Two-factor enrollment-only clamp ([2026] VJS-COUNTY 10, D4). If the org
         # requires 2FA and this user has NOT activated a factor, the ONLY surfaces they

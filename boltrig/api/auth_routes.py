@@ -16,6 +16,7 @@ or the session secret (D8, K-20).
 
 from __future__ import annotations
 
+
 from fastapi import Depends, Request
 from fastapi.responses import JSONResponse
 
@@ -32,6 +33,7 @@ from boltrig.identity import (
     verify_dummy,
     verify_password,
 )
+from boltrig.api.auth_password_routes import register_password_routes
 from boltrig.identity.invites import hash_invite_token
 from boltrig.identity.passwords import WeakPassword
 from boltrig.identity.sessions import SESSION_TTL_HOURS
@@ -308,6 +310,9 @@ async def _two_factor_state(k, tenant: str, user: User) -> tuple[bool, bool]:
 def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
     K = Depends(get_kernel)
     P = Depends(principal_dep)
+
+    # The rotation surface lives in its own module (see auth_password_routes).
+    register_password_routes(app, principal_dep=principal_dep, get_kernel=get_kernel)
 
     @app.post("/v1/auth/accept-invite")
     async def accept_invite(body: dict, k=K) -> JSONResponse:

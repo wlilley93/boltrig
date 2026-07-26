@@ -728,6 +728,8 @@ CREATE TABLE IF NOT EXISTS users (
     source_group  TEXT,                             -- the IdP group that conferred the role
     last_seen_at  TIMESTAMPTZ,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- Forced rotation of a PROVISIONING credential ([2026] VJS-COUNTY 8, D7).
+    must_change_password BOOLEAN NOT NULL DEFAULT FALSE,
     PRIMARY KEY (tenant_id, id)
 );
 CREATE INDEX IF NOT EXISTS users_email_idx ON users (tenant_id, email);

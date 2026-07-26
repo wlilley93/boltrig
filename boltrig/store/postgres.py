@@ -1426,15 +1426,18 @@ class PostgresStore(
     async def upsert_user(self, u: User):
         await self._pool.execute(
             """INSERT INTO users (id, tenant_id, email, display_name, groups, role, scope,
-                                  status, source, source_group, last_seen_at, created_at)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+                                  status, source, source_group, last_seen_at, created_at,
+                                  must_change_password)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
                ON CONFLICT (tenant_id, id) DO UPDATE SET
                  email=EXCLUDED.email, display_name=EXCLUDED.display_name,
                  groups=EXCLUDED.groups, role=EXCLUDED.role, scope=EXCLUDED.scope,
                  status=EXCLUDED.status, source=EXCLUDED.source,
-                 source_group=EXCLUDED.source_group, last_seen_at=EXCLUDED.last_seen_at""",
+                 source_group=EXCLUDED.source_group, last_seen_at=EXCLUDED.last_seen_at,
+                 must_change_password=EXCLUDED.must_change_password""",
             u.id, u.tenant_id, u.email, u.display_name, u.groups, u.role, u.scope,
             u.status, u.source, u.source_group, u.last_seen_at, u.created_at,
+            u.must_change_password,
         )
 
     async def get_user(self, tenant_id, user_id):

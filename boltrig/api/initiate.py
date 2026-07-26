@@ -24,6 +24,8 @@ a partial unique index or an advisory lock.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import asyncio
 import getpass
 import inspect
@@ -97,6 +99,11 @@ async def _run(
             id=email, tenant_id=tenant, email=email, role=_OWNER_ROLE,
             scope={"all": True}, status="active", source="initiate",
             last_seen_at=now, created_at=now,
+            # D7: this credential was typed at provisioning time, so it is in a
+            # shell history and usually in a runbook too. It must not survive as
+            # the live prod gate; the resolver clamps this account to the
+            # change-password surface until it is rotated.
+            must_change_password=True,
         )
         await store.upsert_user(user)
         await store.set_password_credential(tenant, email, hash_password(password))
@@ -203,6 +210,10 @@ async def _run_set_password(email: str, password: str, tenant: str) -> int:
                   file=sys.stderr)
             return 3
         await store.set_password_credential(tenant, email, hash_password(password))
+        # Rotating the credential IS the rotation D7 requires, so this discharges
+        # the flag - otherwise the operator path out of the clamp would not be one.
+        if user.must_change_password:
+            await store.upsert_user(replace(user, must_change_password=False))
         await AuditWriter(store).write(
             AuditEvent(
                 tenant_id=tenant, ts=utcnow(), actor=email, actor_tier="human",

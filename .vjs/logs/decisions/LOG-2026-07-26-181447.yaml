@@ -1,0 +1,12 @@
+id: LOG-2026-07-26-181447
+time: 2026-07-26T18:14:47.722770735+00:00
+actor: lexby
+kind: implementation-decision
+issue: org-workspace-d7-forced-rotation
+decision: 'Built forced password rotation for the initiate-seeded founding superadmin: a must_change_password flag set only by initiate, a resolver clamp to the change-password surface checked every request, and POST /v1/auth/change-password requiring the current password. Cleared by rotating via the CLI or the route.'
+basis:
+- '[2026] VJS-COUNTY 8 D7'
+risk: medium
+reversibility: easy
+court_required: false
+why: D7's second half was never implemented and the order-binding gate could not bind it. validate_password_strength stops a WEAK seed password but not a PROVISIONING one surviving as the live credential - it has been in a shell history and usually a runbook. Migration 0039 is additive and defaults FALSE, so every existing user is untouched and the live blast radius is zero; the flag is a property of the seeding flow, not a retroactive policy.

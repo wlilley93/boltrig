@@ -46,27 +46,27 @@
       "expires": "2026-12-31"
     },
     "boltrig/api/auth_routes.py": {
-      "max_file_lines": 810,
-      "max_function_lines": 503,
+      "max_file_lines": 815,
+      "max_function_lines": 506,
       "over_limit_functions": [
         {
           "name": "register_auth_routes",
-          "line": 308,
-          "lines": 503
+          "line": 310,
+          "lines": 506
         },
         {
           "name": "register_auth_routes.login",
-          "line": 386,
+          "line": 391,
           "lines": 93
         },
         {
           "name": "register_auth_routes.two_factor_challenge",
-          "line": 664,
+          "line": 669,
           "lines": 91
         }
       ],
       "owner": "identity-maintainers",
-      "reason": "Extract login, invitation, session, and two-factor route groups while retaining one authentication boundary.",
+      "reason": "Extract login, invitation, session, and two-factor route groups while retaining one authentication boundary. 2026-07-26: +5 lines only - the COUNTY 8 D7 rotation route was put in auth_password_routes.py rather than here, so this file gained an import and a registrar call instead of ~75 lines of handler.",
       "expires": "2026-12-31"
     },
     "boltrig/api/bootstrap.py": {
@@ -92,17 +92,17 @@
       "expires": "2026-12-31"
     },
     "boltrig/api/initiate.py": {
-      "max_file_lines": 233,
-      "max_function_lines": 91,
+      "max_file_lines": 244,
+      "max_function_lines": 96,
       "over_limit_functions": [
         {
           "name": "_run",
-          "line": 59,
-          "lines": 91
+          "line": 61,
+          "lines": 96
         }
       ],
       "owner": "platform-maintainers",
-      "reason": "Extract initiation orchestration phases without changing request validation or execution semantics. 2026-07-26: +11 lines recording a KNOWN LIMIT in the module docstring - the \"refusing to run twice\" guard is a read-then-write with no uniqueness on one owner per tenant, so two concurrent runs with different emails both seat a superadmin. Placed in the docstring rather than inside _run precisely so the note does not grow the function it describes; _run is unchanged at 91 lines and only its line number moved.",
+      "reason": "Extract initiation orchestration phases without changing request validation or execution semantics. 2026-07-26: +11 lines recording a KNOWN LIMIT in the module docstring - the \"refusing to run twice\" guard is a read-then-write with no uniqueness on one owner per tenant, so two concurrent runs with different emails both seat a superadmin. Placed in the docstring rather than inside _run precisely so the note does not grow the function it describes; _run is unchanged at 91 lines and only its line number moved. 2026-07-26: +5 lines to flag the seeded account for forced rotation ([2026] VJS-COUNTY 8, D7) - the seeding path is the flag's only producer.",
       "expires": "2026-12-31"
     },
     "boltrig/config/manifest.py": {
@@ -238,22 +238,22 @@
       "expires": "2026-12-31"
     },
     "boltrig/identity/sessions.py": {
-      "max_file_lines": 359,
-      "max_function_lines": 113,
+      "max_file_lines": 379,
+      "max_function_lines": 123,
       "over_limit_functions": [
         {
           "name": "build_session_resolver",
-          "line": 247,
-          "lines": 113
+          "line": 257,
+          "lines": 123
         },
         {
           "name": "build_session_resolver.resolver",
-          "line": 258,
-          "lines": 100
+          "line": 268,
+          "lines": 110
         }
       ],
       "owner": "identity-maintainers",
-      "reason": "Separate session resolution and cross-tenant membership rebinding while retaining fail-closed identity semantics.",
+      "reason": "Separate session resolution and cross-tenant membership rebinding while retaining fail-closed identity semantics. 2026-07-26: +the COUNTY 8 D7 forced-rotation flag. A persisted field has to touch the row mapper, the upsert and the resolver clamp; the growth is the minimum a persisted field costs, and the route it serves was put in its own module (auth_password_routes.py) rather than added to auth_routes.",
       "expires": "2026-12-31"
     },
     "boltrig/kernel/access_routes.py": {
@@ -426,19 +426,19 @@
       "expires": "2026-12-31"
     },
     "boltrig/store/postgres.py": {
-      "max_file_lines": 1977,
+      "max_file_lines": 1980,
       "max_function_lines": 53,
       "over_limit_functions": [],
       "owner": "store-maintainers",
-      "reason": "Extract domain partials in lockstep with the in-memory store while preserving SQL and RLS parity. 2026-07-26: the conditional lease-fenced work-item write and the copy-on-read parity repair ([2026] VJS-CC-BOLTRIG-WORK-ITEM-LEASE-FENCE-001 D1/D6). The memory store previously handed callers the LIVE row, so any conditional write compared a stored object against itself and always agreed. 2026-07-26: consume_budget deleted. It had had no caller since reserve_budgets_atomic replaced it (FR-COST-05), while six docstrings across these three files still anchored their semantics on it - the Tier 0 claim inventory found it by asking which named mechanisms nothing reaches.",
+      "reason": "Extract domain partials in lockstep with the in-memory store while preserving SQL and RLS parity. 2026-07-26: the conditional lease-fenced work-item write and the copy-on-read parity repair ([2026] VJS-CC-BOLTRIG-WORK-ITEM-LEASE-FENCE-001 D1/D6). The memory store previously handed callers the LIVE row, so any conditional write compared a stored object against itself and always agreed. 2026-07-26: consume_budget deleted. It had had no caller since reserve_budgets_atomic replaced it (FR-COST-05), while six docstrings across these three files still anchored their semantics on it - the Tier 0 claim inventory found it by asking which named mechanisms nothing reaches. 2026-07-26: +the COUNTY 8 D7 forced-rotation flag. A persisted field has to touch the row mapper, the upsert and the resolver clamp; the growth is the minimum a persisted field costs, and the route it serves was put in its own module (auth_password_routes.py) rather than added to auth_routes.",
       "expires": "2026-12-31"
     },
     "boltrig/store/rows.py": {
-      "max_file_lines": 462,
+      "max_file_lines": 468,
       "max_function_lines": 17,
       "over_limit_functions": [],
       "owner": "store-maintainers",
-      "reason": "Extract domain partials in lockstep with the in-memory store while preserving SQL and RLS parity.",
+      "reason": "Extract domain partials in lockstep with the in-memory store while preserving SQL and RLS parity. 2026-07-26: +the COUNTY 8 D7 forced-rotation flag. A persisted field has to touch the row mapper, the upsert and the resolver clamp; the growth is the minimum a persisted field costs, and the route it serves was put in its own module (auth_password_routes.py) rather than added to auth_routes.",
       "expires": "2026-12-31"
     },
     "boltrig/workflows/interpreter.py": {

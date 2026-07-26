@@ -28,6 +28,13 @@ class User:
     source_group: str | None = None  # the IdP group that conferred the role (US-USR-04)
     last_seen_at: datetime | None = None
     created_at: datetime = field(default_factory=utcnow)
+    # Forced password rotation ([2026] VJS-COUNTY 8, D7). True means the credential
+    # on this account is a PROVISIONING one - typed at `boltrig initiate`, and so
+    # present in a shell history, a runbook or an operator's clipboard - and must be
+    # rotated before the account can reach anything. Defaults FALSE so every user
+    # that already exists is untouched: this is about the seeding flow, not a
+    # retroactive policy on live accounts.
+    must_change_password: bool = False
 
 
 @dataclass
