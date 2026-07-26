@@ -50,6 +50,15 @@ jobs:
         run: python -m pip install --require-hashes -r requirements-dev-lock.txt
       - name: Python quality gate (invariants, lint, strict types, Postgres, coverage)
         run: make python-quality PY=python
+      # `make quality` calls itself "the complete local release gate", and these two
+      # of its components ran in NO workflow until 2026-07-26: the Alembic-head vs
+      # schema.sql parity check and the secure-posture doctor fixture were local-only,
+      # so the aggregate was complete on one developer's machine and not in CI.
+      # scripts/check_gate_coverage.py now keeps that honest.
+      - name: Migration parity (Alembic head vs schema.sql)
+        run: make migration-parity PY=python
+      - name: Secure production-doctor fixture
+        run: make doctor-fixture PY=python
 
   ui-build:
     runs-on: ubuntu-24.04

@@ -40,5 +40,10 @@ parallel, controlled drift) binds as conditions.
 Breach of any condition converts the licence and routes Boltrig to governed-subtree
 consolidation under `agent-kernel-doctrine/reference-implementations/python-fastapi/boltrig/`.
 
-The full order and opinion live in the VJS register:
-`.vjs/court/orders/2026-VJS-CC-NANKLE-CONSOLIDATION-001.yaml` (+ `-opinion.md`).
+The full order and opinion are NOT held in this repository, and never have been.
+`.vjs/court/orders/` has never existed here - only `.vjs/court/convenings/` - and no
+file matching the citation exists in the VJS register either. This document is the
+only record of the ruling on disk. It is cited as binding in three places
+(`docs/ARCHITECTURE.md`, `docs/invariants.md` as the canonical source of every `K-*`
+id, and here), so the gap is worth naming rather than papering over: whether an order
+nobody can produce still binds is a question for the court, not for this file.

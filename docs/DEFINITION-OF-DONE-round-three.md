@@ -17,7 +17,7 @@ Round Three adds routes, services, data, and UI only.
 - [x] **done** Skills, nouns, verbs, bindings, adapters and workflows are authored
   through `/v1` routes that persist library/manifest data and record a
   `ConfigRevision`; nothing is code-generated into the running image.
-  `boltrig/kernel/platform_routes.py`, `boltrig/config/admin.py`,
+  `boltrig/kernel/platform_routes/`, `boltrig/config/admin.py`,
   `boltrig/models/platform.py`.
 - [x] **done** Admin config edits round-trip: an org-setting change versions,
   rolls back, and re-exports to a loadable manifest (C1).
@@ -76,7 +76,7 @@ Round Three adds routes, services, data, and UI only.
 
 - [x] **done** Cost rollups, an audit search (filterable by actor/verb), an audit
   export, and a runs list are exposed behind the scope filter (FR-OBS-01/02).
-  `boltrig/kernel/platform_routes.py`.
+  `boltrig/kernel/platform_routes/`.
 
 ## Operational maturity
 

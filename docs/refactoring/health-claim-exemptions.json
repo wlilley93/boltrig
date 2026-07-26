@@ -1,0 +1,29 @@
+{
+  "_comment": [
+    "Services whose container health signal cannot go red for a real outage, recorded",
+    "rather than quietly tolerated. scripts/check_health_claims.py enforces the shape:",
+    "an entry with no reason, no owner, or a past expiry is itself a failure, because a",
+    "stale waiver is another claim nobody checks.",
+    "",
+    "Both entries below are OPEN DEBT, not settled design. The incident they describe",
+    "has already happened: on 2026-07-25 a client tenant sat at /readyz 503 for about",
+    "forty minutes on an unapplied schema head while `docker ps` reported the kernel",
+    "healthy the whole time. Nothing in the orchestration layer could see it.",
+    "",
+    "They are exemptions and not fixes because pointing the kernel healthcheck at",
+    "/readyz is a live-deployment behaviour change with its own blast radius, and it",
+    "is not one to make in the same commit as the gate that found it."
+  ],
+  "exemptions": {
+    "kernel": {
+      "owner": "platform-maintainers",
+      "expires": "2026-09-30",
+      "reason": "The healthcheck probes /healthz (liveness) while the app also serves /readyz. Moving it is the correct fix and is deliberately deferred: /readyz consults the Alembic head AND the fleet's signed stack-tool receipt AND the Hatchet probe, so a dead fleet-worker or an unconfigured signing key would flip the kernel unhealthy, and channel-gateway plus pi-sidecar carry `depends_on: service_healthy` on it - the change alters what that dependency means. It needs a deployment window and a rehearsal against a real tenant, not a green gate. Until then this waiver states the exposure plainly: this healthcheck cannot detect the outage that has already happened once."
+    },
+    "fleet-worker": {
+      "owner": "fleet-maintainers",
+      "expires": "2026-09-30",
+      "reason": "The probe is `python -c \"import boltrig\"`, which proves the interpreter can import a module and nothing else - not that the pump is claiming work, not that it can reach the store. It is exempt rather than fixed because `python -m boltrig.api.worker` serves no HTTP at all, so there is no readiness endpoint to point at; inventing a requirement it cannot satisfy would make the gate a lie in the other direction. It is not exempt from the GOAL: it already publishes a signed, short-lived stack-tool receipt to Redis that the kernel's /readyz consumes, so the real fix is a `boltrig fleet health` command that reads that receipt and exits non-zero when it is stale or absent."
+    }
+  }
+}

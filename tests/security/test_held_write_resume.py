@@ -501,3 +501,44 @@ async def test_a_chat_turn_retires_the_bearer_it_sealed():
     assert await kernel.credentials.resolve_run_scoped_credential(
         TENANT, turn.id, "opbox", "alice"
     ) is None, "the turn's sealed bearer outlived the turn"
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-14")
+async def test_a_resumed_held_write_reaches_the_adapter_with_the_callers_bearer():
+    """The defect that made the FIRST live acceptance attempt fail, locked down.
+
+    On cvboltrig the approval reached CONSUMED and the held call was re-invoked, and
+    the comment still was not posted: the adapter received the STATIC service
+    credential instead of the caller's, and the opbox door answered
+    `adapter_unauthorised`. So `consumed` is NOT by itself proof the write happened,
+    and I nearly reported it as one. What actually carries the approver's authority
+    downstream is the run-scoped bearer resolved at dispatch, and nothing asserted
+    it survived the pause and reached the adapter on the RESUMED call. Now it does.
+    """
+    kernel, adapter, _chat = await _chat_lane()
+    # sealed against the CELL run, because the resume replays the sealed context and
+    # `resolve_run_scoped_credential` keys on that context's run id, not the root's
+    await kernel.credentials.seal_run_scoped_adapter_bearer(
+        TENANT, "some-other-run", adapter.id, "caller-bearer-xyz", "alice"  # SEEDED
+    )
+    seen: dict[str, object] = {}
+    original = adapter.execute
+
+    async def _capture(verb, params, credential, context):
+        seen["credential"] = credential
+        return await original(verb, params, credential, context)
+
+    adapter.execute = _capture
+    request_id = await _pause(kernel)
+    assert "credential" not in seen, "the gate must hold it before any adapter call"
+
+    await kernel.hitl.answer(TENANT, request_id, "approve", "boss@acme")
+
+    assert (await kernel.hitl.get(TENANT, request_id)).status == HITLStatus.CONSUMED
+    credential = seen.get("credential")
+    assert credential is not None, "the resumed write reached the adapter with NO credential"
+    assert credential.material["token"] == "caller-bearer-xyz", (
+        "the resumed write ran under the static service credential instead of the "
+        "approver's authority - that is the adapter_unauthorised failure"
+    )

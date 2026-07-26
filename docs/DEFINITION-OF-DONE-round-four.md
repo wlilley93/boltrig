@@ -39,7 +39,7 @@ and one MCP entry path only.
   studio tests).
 - [x] **done** A verb authored with a destructive / outbound name defaults to
   high-consequence, so the HITL gate engages by default; an explicit choice is
-  honoured. `boltrig/kernel/platform_routes.py` (`safe_consequence`),
+  honoured. `boltrig/kernel/platform_routes/` (`safe_consequence`),
   `tests/security/test_round_four.py::test_authored_verbs_safe_by_default`
   (SEC-39, US-RTR-02/04).
 
@@ -54,7 +54,7 @@ and one MCP entry path only.
   `::test_headless_parity_no_weak_path` (SEC-34, SEC-37, US-HEAD-01/02/04).
 - [x] **done** Connection details and copy-paste client snippets are available in
   Settings. `/v1/me/connections`, the Developer & Connections section of
-  `ui/src/panels/SettingsPanel.tsx` (SET-41/HEAD-03).
+  the settings surface (SET-41/HEAD-03; the single `SettingsPanel.tsx` has since been split up).
 
 ## 4. Mobile
 
@@ -74,7 +74,7 @@ and one MCP entry path only.
   UI setting has an API equivalent with identical authorization (SET-03); org
   config edits version, roll back and export to a manifest (the Round Three Admin
   Console, hosted here). `boltrig/kernel/access_routes.py`,
-  `ui/src/panels/SettingsPanel.tsx`,
+  the settings surface (since split out of a single `SettingsPanel.tsx`),
   `tests/security/test_round_four.py::test_settings_changes_are_authz_checked_and_audited`
   (SEC-36, SET-00..03).
 - [x] **done** No unauthenticated path exposes tokens or connection details; mobile

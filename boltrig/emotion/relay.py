@@ -1,6 +1,6 @@
 """Emotion relay: the affective side-channel tapped off the kernel's event stream.
 
-Supersedes ``boltrig/observability/orb_presence.py``. Every run event already fans out
+Supersedes the old orb-presence writer, which the same commit deleted. Every run event already fans out
 through ONE chokepoint, ``EventRelay.publish``, so a subclass overriding that method sees
 the kernel's full live state without touching any publish call site. Matched events are
 appraised into a per-tenant :class:`EmotionEngine` (pure math, ``boltrig/emotion/engine.py``)

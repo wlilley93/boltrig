@@ -36,7 +36,7 @@ RELEASE_VALIDATE_IMAGES_ENV ?= tests/fixtures/release-images.env
 RELEASE_PROFILES ?= --profile backup
 
 .DEFAULT_GOAL := help
-.PHONY: help gate-status up down logs test lint architecture structure codex-protocol unwired-claims typecheck check python-quality ui-install ui-quality site-install site-quality ui-e2e compose-validate release-validate release-up doctor-fixture migration-parity python-audit sast iac-scan secret-scan actionlint security-source quality live-check lockfile-policy dependency-audit smoke invariants doctor migrate secure-up backup backup-schedule restore
+.PHONY: help gate-status up down logs test lint architecture structure codex-protocol unwired-claims prose-references gate-coverage health-claims typecheck check python-quality ui-install ui-quality site-install site-quality ui-e2e compose-validate release-validate release-up doctor-fixture migration-parity python-audit sast iac-scan secret-scan actionlint security-source quality live-check lockfile-policy dependency-audit smoke invariants doctor migrate secure-up backup backup-schedule restore
 
 help: ## List the available targets
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -80,6 +80,15 @@ codex-protocol: ## Verify the exact checked-in stable Codex App Server protocol 
 unwired-claims: ## Fail when the record names a mechanism no production path constructs
 	$(PY) scripts/check_unwired_claims.py
 
+prose-references: ## Every path, test id, make target and env var named in prose must resolve
+	$(PY) scripts/check_prose_references.py
+
+gate-coverage: ## Every compose manifest is validated and every `quality` component runs in CI
+	$(PY) scripts/check_gate_coverage.py
+
+health-claims: ## No service may report healthy while unable to serve
+	$(PY) scripts/check_health_claims.py
+
 typecheck: ## Module-by-module strict mypy gate (see [tool.mypy])
 	$(PY) -m mypy
 
@@ -88,7 +97,7 @@ gate-status: ## Is the gate on the default branch actually green right now?
 
 check: invariants lint architecture structure codex-protocol unwired-claims typecheck test ## Run the local Python gates CI enforces
 
-python-quality: invariants lint architecture structure codex-protocol unwired-claims typecheck ## Run Python tests on Postgres with coverage enforcement
+python-quality: invariants lint architecture structure codex-protocol unwired-claims prose-references gate-coverage health-claims typecheck ## Run Python tests on Postgres with coverage enforcement
 	scripts/with_test_postgres.sh $(PY) -m pytest -q \
 		--cov=boltrig --cov-report=term:skip-covered --cov-report=xml \
 		--cov-fail-under=$(COVERAGE_MIN)
@@ -129,6 +138,19 @@ compose-validate: ## Validate base and secure Compose configurations
 	BOLTRIG_ENV_FILE=$(COMPOSE_VALIDATE_ENV) \
 		POSTGRES_PASSWORD=$(COMPOSE_VALIDATE_POSTGRES_PASSWORD) \
 		$(COMPOSE) -f docker-compose.yml -f deploy/compose.secure.yml config --quiet
+	# The dev / in-process / opbox-link overlays. They reached NO validation step
+	# until 2026-07-26, while compose.dev.yml is what genesis.sh and dev-up.sh
+	# actually run - a broken one would have been found by a developer, not a gate.
+	# They use !override and !reset, so only `docker compose config` can read them.
+	BOLTRIG_ENV_FILE=$(COMPOSE_VALIDATE_ENV) \
+		POSTGRES_PASSWORD=$(COMPOSE_VALIDATE_POSTGRES_PASSWORD) \
+		$(COMPOSE) -f docker-compose.yml -f deploy/compose.dev.yml config --quiet
+	BOLTRIG_ENV_FILE=$(COMPOSE_VALIDATE_ENV) \
+		POSTGRES_PASSWORD=$(COMPOSE_VALIDATE_POSTGRES_PASSWORD) \
+		$(COMPOSE) -f docker-compose.yml -f deploy/compose.inprocess.yml config --quiet
+	BOLTRIG_ENV_FILE=$(COMPOSE_VALIDATE_ENV) \
+		POSTGRES_PASSWORD=$(COMPOSE_VALIDATE_POSTGRES_PASSWORD) \
+		$(COMPOSE) -f docker-compose.yml -f deploy/compose.opbox-link.yml config --quiet
 	$(PY) scripts/validate_release_images.py $(RELEASE_VALIDATE_IMAGES_ENV)
 	BOLTRIG_ENV_FILE=$(COMPOSE_VALIDATE_ENV) \
 		POSTGRES_PASSWORD=$(COMPOSE_VALIDATE_POSTGRES_PASSWORD) \

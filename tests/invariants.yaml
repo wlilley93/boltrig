@@ -1784,6 +1784,22 @@ invariants:
       - tests/unit/test_invariant_catalogue.py::test_the_invariant_catalogue_is_the_yaml_its_name_claims
       - tests/unit/test_invariant_catalogue.py::test_the_gates_stdlib_reader_agrees_with_a_real_yaml_parser
       - tests/unit/test_invariant_catalogue.py::test_a_repeated_invariant_id_is_refused_rather_than_eaten
+  NFR-MNT-03:
+    description: 'Every reference the record makes resolves - each repo path, pytest node id, ``make`` target and boltrig environment variable named in prose (boltrig/, docs/, README, Makefile, .env.example, compose, .vjs orders, scripts/) points at something that exists, so renaming or deleting a thing breaks every record that names it instead of leaving a citation that reads true and is not. Negated, past-tense and imperative references are exempt in the historical record but NOT in live source under boltrig/, which describes what runs now.'
+    tests:
+      - tests/unit/test_claim_gates.py::test_every_reference_the_record_makes_still_resolves
+  NFR-MNT-04:
+    description: 'No gate input is unreached and no release-gate component is unrun - every docker-compose manifest in the tree is an input to some `docker compose config` validation step, and every prerequisite of the `quality` aggregate (directly or transitively) appears in a CI workflow run line, so an aggregate that calls itself the complete release gate cannot skip its own parts.'
+    tests:
+      - tests/unit/test_claim_gates.py::test_every_compose_manifest_and_release_component_is_actually_reached
+  NFR-MNT-05:
+    description: 'No first-party service reports healthy while unable to serve - a container healthcheck whose application also exposes a readiness endpoint must consult readiness rather than liveness, and a service that genuinely cannot (no HTTP surface) is recorded in docs/refactoring/health-claim-exemptions.json with an OWNER, a REASON and an EXPIRY; a waiver that is blank, unowned or expired is itself a gate failure, because a stale waiver is another claim nobody checks.'
+    tests:
+      - tests/unit/test_claim_gates.py::test_no_service_reports_healthy_while_unable_to_serve
+      - tests/unit/test_claim_gates.py::test_a_waiver_with_no_reason_is_itself_a_failure
+      - tests/unit/test_claim_gates.py::test_a_waiver_with_no_owner_is_itself_a_failure
+      - tests/unit/test_claim_gates.py::test_an_expired_waiver_stops_waiving
+      - tests/unit/test_claim_gates.py::test_the_repositorys_own_waivers_are_well_formed
   SEC-138:
     description: 'A governed action executes only against the exact resource state that was approved - a queued workflow runs its digest-checked approved snapshot (tampering and cross-workspace replay are rejected), a missing mutable resource fails before any approval is created, and resource drift between the HITL gate and adapter execution fails closed while still consuming the single-use approval.'
     tests:

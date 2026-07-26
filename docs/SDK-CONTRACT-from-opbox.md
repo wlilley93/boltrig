@@ -13,7 +13,7 @@ Boltrig is the agent-of-record UNDER apps. Two SDKs sit either side of the kerne
 - UI SDK (frontend): being built now. A client library exposing every boltrig primitive so a frontend
   renders runs/chats/HITL/cost/etc. The reference implementation already exists inside the boltrig
   console at `ui/src/api/` (`transport.ts`, `sse.ts`, `types.ts`, `domains/*.ts`, `api.ts`) plus the
-  turn reducer `ui/src/panels/chat/chatTurnNormalizer.ts` + `chatTurnTypes.ts`. The UI SDK is the
+  turn reducer `ui/src/panels/chatTurnNormalizer.ts` + `chatTurnTypes.ts`. The UI SDK is the
   extraction/generalization of that console client into a framework-agnostic package.
 
 ---
@@ -81,7 +81,7 @@ stream). The persisted `ChatMessage` shape mirrors 1.2 (`ui/src/api/types.ts:259
 ### 1.2 The SSE frame model (the streaming contract, the heart of the UI SDK)
 
 ONE `ChatEvent` union is emitted by BOTH `POST /v1/chat` and `GET /v1/runs/{id}/events` and reduced by
-ONE reducer (`ui/src/panels/chat/chatTurnNormalizer.ts:normalizeEvents`). Reference union at
+ONE reducer (`ui/src/panels/chatTurnNormalizer.ts:normalizeEvents`). Reference union at
 `ui/src/api/types.ts:434-447`. Frames are `data:`-delimited JSON, blank-line framed, terminal on
 `message_end`/`cancelled`; `heartbeat` and `[DONE]` are dropped, never dispatched
 (`ui/src/api/sse.ts:177-201`). Idle guard `STREAM_IDLE_MS=120_000`.

@@ -47,7 +47,7 @@ the implementation is real after the wording is narrowed to its shipped boundary
 | 16 | Console chat | Verified | `boltrig/fleet/chat.py`, `tests/integration/test_chat.py`, `ui/e2e/chat.spec.ts` |
 | 17 | Headless engine | Verified | `boltrig/kernel/app.py`, `boltrig/kernel/mcp.py`, `tests/kernel/test_app.py` |
 | 18 | MCP in and out | Verified | `boltrig/kernel/mcp.py`, `boltrig/adapters/mcp_consumer.py`, `tests/integration/test_mcp_consumer.py` |
-| 19 | Signed channel intake | Verified | `boltrig/kernel/channel_routes.py`, `tests/security/test_channel_inbound.py`, `tests/security/test_channel_gateway.py` |
+| 19 | Signed channel intake | Verified | `boltrig/kernel/channel_routes.py`, `tests/security/test_channel_inbound.py`, `tests/security/test_channel_gateway_routes.py`, `tests/security/test_channel_gateway_roundtrip.py` |
 | 20 | Governed outbound | Bounded | `boltrig/adapters/builtin/channel_send.py`, `tests/security/test_channel_send.py` |
 | 21 | Deployment bundles | Verified | `boltrig/config/manifest.py`, `docs/extension-contract.md`, `tests/integration/test_round_fifteen_bundle.py` |
 | 22 | Live authoring | Verified | `boltrig/config/control_plane.py`, `tests/security/test_control_plane_parity.py`, `ui/tests/__characterization__/panels/governedControlMutations.test.tsx` |
