@@ -37,6 +37,21 @@ regexTarget = "line"
 regexes = ['''(?:sk|rk)_live_51H8xAbCdEfGhIjKlMnOpQrSt''']
 
 [[allowlists]]
+# HISTORY ONLY. The working tree no longer contains this value: the fleet-health
+# fixture key is now an obviously-fake string, like every other fixture here. But
+# `make secret-scan` scans the full commit history, and this literal is in
+# fdbe6f6 - 64 random hex characters, written as a test key and completely
+# indistinguishable from a real HMAC key, which is exactly why the scanner was
+# right to stop it. Rewriting a pushed main to erase it would cost more than it
+# is worth, so it is named here, exactly, and nothing else is suppressed.
+description = "Fleet-health receipt fixture key (removed from HEAD, still in fdbe6f6)"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = ['''^tests/unit/test_fleet_health\.py$''']
+regexTarget = "line"
+regexes = ['''b9f2c1a4e7d38650f1c2b3a4958d6e7f0a1b2c3d4e5f60718293a4b5c6d7e8f9''']
+
+[[allowlists]]
 description = "Webhook signature verification fixture"
 condition = "AND"
 targetRules = ["generic-api-key"]

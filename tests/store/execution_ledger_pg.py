@@ -24,8 +24,6 @@ from boltrig.fleet.infrastructure.postgres_execution_ledger import PostgresExecu
 from tests.unit.execution_ledger_fixtures import CLOCK_NOW
 
 ROOT = Path(__file__).resolve().parents[2]
-# The ledger's own creating migration. Everything from here to head is replayed.
-_LEDGER_ORIGIN = "0026_execution_ledger"
 DSN = os.environ.get("BOLTRIG_TEST_DATABASE_URL")
 pg_only = pytest.mark.skipif(
     not DSN, reason="set BOLTRIG_TEST_DATABASE_URL for Postgres tests"
@@ -100,18 +98,39 @@ def _revision_chain() -> list[str]:
 
 
 def ddl() -> str:
-    """The execution-ledger schema exactly as a deployment builds it.
+    """The schema exactly as a deployment builds it: the WHOLE chain, in order.
 
-    Every migration from the ledger's own creation to the current head is executed
-    in revision order, derived from the chain rather than listed here, so a new
-    migration is included the moment it ships and this fixture cannot drift behind
-    the schema it claims to prove the adapter against.
+    Every shipped migration is executed in revision order, derived from the chain
+    rather than listed here, so a new migration is included the moment it ships
+    and this fixture cannot drift behind the schema it claims to prove the adapter
+    against.
+
+    It used to start at the ledger's own creating migration (0026) on the
+    reasonable-sounding grounds that earlier ones build tables the ledger does not
+    use. They do - but later ones do not confine themselves to ledger tables:
+    0035_channel_durability alters `channels`, created back at 0019, so replaying
+    0026..head against an empty database raises `relation "channels" does not
+    exist` and every test in this file errors in setup.
+
+    That was invisible for two reasons at once. A long-lived local test database
+    already had `channels` from earlier full-chain runs, and in CI the outcome
+    depended on whether test_migration_parity.py (which applies the whole chain)
+    happened to be ordered first - so the suite was green until pytest-randomly
+    dealt a different order. A partial replay is not "as a deployment builds it"
+    in any case; a deployment runs the chain from the beginning, and so does this.
     """
 
-    chain = _revision_chain()
-    start = chain.index(_LEDGER_ORIGIN)
-    statements: list[str] = []
-    for revision in chain[start:]:
+    # Alembic creates its own bookkeeping table before it runs the first
+    # migration, so a deployment always has it and 0015 can widen it unguarded.
+    # This fixture replays the migrations' SQL directly, with no alembic in the
+    # loop, so it has to stand that precondition up itself - as alembic builds it,
+    # VARCHAR(32), which 0015 then widens to 64 exactly as it does in production.
+    statements: list[str] = [
+        "CREATE TABLE IF NOT EXISTS alembic_version ("
+        "version_num VARCHAR(32) NOT NULL, "
+        "CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num))"
+    ]
+    for revision in _revision_chain():
         statements.extend(migration_sql(revision))
     return ";\n".join(statements)
 

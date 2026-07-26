@@ -31,7 +31,12 @@ from boltrig.fleet.stack_tool_receipts import (
 
 pytestmark = pytest.mark.security
 
-REAL_KEY = "b9f2c1a4e7d38650f1c2b3a4958d6e7f0a1b2c3d4e5f60718293a4b5c6d7e8f9"
+# Any value `is_placeholder_secret` does not reject will do - the receipt key is
+# HMAC-derived from it, so length and entropy are the deployment's business, not
+# this test's. It reads as a fixture on purpose: the first version of this line
+# was 64 random hex characters, which is indistinguishable from a real HMAC key
+# and duly tripped the repository's own secret scanner.
+REAL_KEY = "fleet-health-fixture-signing-key-not-a-real-secret"
 
 
 async def _check(**env: str) -> tuple[int, str]:
