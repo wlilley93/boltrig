@@ -188,3 +188,41 @@ change WHICH verbs are allowed (the ceiling set is identical, built-ins still
 stripped, response still guarded), so it is engineering within the established
 boundary, not a new security fork. Keep the ceiling tests green and add flatten
 + round-trip coverage when the return-path form is nailed.
+
+
+## Diagnostic 2 answered from the pinned schema (2026-07-26)
+
+The doc asked whether a nested call is `{name: <bare>}`, `{name: mcp__boltrig,
+arguments:{tool:<bare>}}`, or something else. The pinned schema settles it, and it
+**refutes the leading hypothesis above**.
+
+`DynamicToolCallThreadItem` in
+`schemas/codex/0.144.3/codex_app_server_protocol.v2.schemas.json`:
+
+```
+required: ["arguments", "id", "status", "tool", "type"]
+  tool:      {"type": "string"}                 # the BARE name, e.g. opbox_matter_list
+  namespace: {"type": ["string", "null"]}       # e.g. mcp__boltrig
+  arguments: true                               # the TOOL's own arguments
+```
+
+`tool` and `namespace` are **separate fields**. Codex does not model a namespaced call as
+a name-mangled single string, and it does not model it as the namespace called as a unit
+with an argument selecting the verb. The nested verb keeps its own bare name and its own
+arguments; the namespace travels beside it.
+
+So the hypothesis that "flattening is the wrong axis" is wrong: the model is not meant to
+call `mcp__boltrig` with a selector. GLM calling `mcp__boltrig` with `{}` was a genuine
+collapse after all, exactly as the original framing said.
+
+**What this does NOT settle**, and the honest limit of reading a schema: this is how codex
+REPRESENTS the call in its own App Server protocol, i.e. what it emits on the thread. It
+does not tell us the wire name codex expects to receive back from the model over the
+Responses API, which is what `unsupported call: <name>` is complaining about. The pair
+must be reconstructed from a single `name` string somewhere, and that reconstruction is
+the thing still unknown.
+
+**Next diagnostic, unchanged in priority:** capture the codex App Server's STDERR during a
+turn. `CodexStdioTransport` reads it and does not surface it, and codex almost certainly
+logs its tool registry alongside `unsupported call`. That is now the only cheap source of
+the mapping, since the schema has given up everything it can.
