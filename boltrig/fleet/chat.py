@@ -28,6 +28,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
 from boltrig.config.manifest import ChatConfig
+from boltrig.kernel.held_call import sweep_run_credentials_if_settled
 from boltrig.models import (
     EMPTY_GRANTS,
     Conversation,
@@ -71,6 +72,29 @@ _SCOPED_ROLES = {"org-admin", "compliance"}  # may read others' threads (SEC-25)
 # (the opbox-kernel session bearer), so it is scoped to exactly that adapter and
 # never leaks to any other. Overridable for a differently-named integration.
 _OBO_ADAPTER_ID = os.environ.get("BOLTRIG_OBO_ADAPTER_ID", "opbox")
+
+
+async def _settle_turn(
+    kernel: Any, item: WorkItem, tenant_id: str, run_id: str
+) -> None:
+    """Persist the turn's terminal state, then retire what the run sealed.
+
+    One function because they are one event. The chat lane settles its OWN work
+    item rather than through the pump, and the pump's terminal hook was the only
+    caller of ``sweep_run_scoped`` - so a chat turn never swept anything, and the
+    caller's clamped external bearer rested in ``credential_refs`` for the life of
+    the database (observed on the live Classical Visas tenant: one row per turn
+    plus one per delegated child, none ever deleted).
+
+    Guarded, because while the gate holds a write BOTH the bearer and the sealed
+    call must outlive the turn or the approved write can never be replayed
+    (decision 0018, Order 6(i)); ``settle_held_call`` performs the deferred sweep
+    when the hold resolves. Best-effort on the sweep alone: hygiene must never
+    cost us the settle, which is the record.
+    """
+    await kernel.store.update_work_item(item)
+    with contextlib.suppress(Exception):  # a sweep fault is the pre-existing leak
+        await sweep_run_credentials_if_settled(kernel.store, tenant_id, run_id)
 
 
 def _project_chat_event(event: dict[str, Any]) -> dict[str, Any]:
@@ -827,6 +851,6 @@ def build_turn_executor(
             )
             item.status = WorkStatus.FAILED
             item.result = {"error": type(exc).__name__}
-        await kernel.store.update_work_item(item)
+        await _settle_turn(kernel, item, tenant_id, run_id)
 
     return executor

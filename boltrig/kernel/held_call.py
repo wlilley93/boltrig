@@ -261,6 +261,56 @@ async def held_write_is_waiting(
     return bool(held) and not other
 
 
+async def any_held_call_paused(store: Store, tenant_id: str, run_id: str) -> bool:
+    """Whether ANY held call is still paused on this run, whichever request it is.
+
+    The request-agnostic form of ``held_write_is_waiting``, and the question a
+    RUN-terminal has to ask: a terminal knows its run, never which approval might
+    still be outstanding on it. Both rows answer it - the root's real hold and the
+    delegated child's pointer row are each ``held:``-prefixed and ``paused`` - so
+    either end of a delegated call reports its own tree correctly.
+    """
+    if not run_id or not callable(getattr(store, "list_checkpoints", None)):
+        return False
+    for checkpoint in await store.list_checkpoints(tenant_id, run_id):
+        if checkpoint.status == HELD_PAUSED and is_held_step(checkpoint.step):
+            return True
+    return False
+
+
+async def sweep_run_credentials_if_settled(
+    store: Store, tenant_id: str, run_id: str
+) -> int:
+    """Retire a finished run's sealed credentials, unless a held write still needs them.
+
+    The lifecycle every run terminal must use, because ``delete_credential_refs_for_run``
+    deletes the WHOLE ``run:<id>:`` prefix - the parity bearer AND the sealed held
+    call. So an unguarded sweep at a run terminal would destroy the very record
+    decision 0018 replays from, and the approved write could then never be carried
+    out (Order 6(i) would refuse it as unreadable). Guarded, the rule is simply:
+    a run's secrets live exactly as long as something can legitimately replay
+    under that run, and not one moment longer.
+
+    The gap this closes: ``sweep_run_scoped``'s only caller was the org pump, but
+    the parity bearer is sealed exclusively by the CHAT lane (``chat.py``), which
+    settles its own work item directly and never reaches that hook - and a
+    delegated child has no work item at all, so nothing could ever sweep it. Both
+    ends leaked a live, caller-clamped external bearer for the life of the
+    database.
+
+    Best-effort by construction: hygiene must never change a turn's outcome (P9),
+    so callers treat a failure here as nothing more than the pre-existing leak.
+    """
+    if not run_id:
+        return 0
+    deleter = getattr(store, "delete_credential_refs_for_run", None)
+    if not callable(deleter):
+        return 0
+    if await any_held_call_paused(store, tenant_id, run_id):
+        return 0
+    return await store.delete_credential_refs_for_run(tenant_id, run_id)
+
+
 async def held_run_id(
     store: Store, tenant_id: str, run_id: str, request_id: str
 ) -> str:
@@ -334,3 +384,13 @@ async def settle_held_call(
         await store.delete_credential_ref(
             tenant_id, held_call_cred_id(root, request_id)
         )
+    # The hold is retired, so nothing can legitimately replay under these runs any
+    # more - which means the run terminal that SKIPPED its sweep while this write
+    # was paused (the chat turn's, and the delegated child's) now falls due. Doing
+    # it here covers every terminal outcome at once, because every one of them
+    # already routes through this function: redeemed, declined, refused as
+    # unreadable, and timed out (hitl_expiry._retire_held_call). Both ends of a
+    # delegated call, since each sealed its own bearer. The guard re-checks, so a
+    # SECOND hold still paused on the same run keeps its seal alive.
+    for run in runs:
+        await sweep_run_credentials_if_settled(store, tenant_id, run)

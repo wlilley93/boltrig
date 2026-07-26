@@ -289,6 +289,18 @@ dropped explicitly on consume, on HITLStateConflict, and by the existing expiry 
 transitions to TIMED_OUT. PROOF FROM THE RECORD: for a run whose approvals are all terminal,
 `credential_refs` holds no `held_call` row.
 
+EXTENDED 2026-07-26 (not part of the original ruling; recorded here because a reader checking the
+sweep will look at this Order). Order 7 correctly observed that the chat lane never calls
+`sweep_run_scoped`, and scoped the remedy to the held-call seal because that was the matter before
+the bench. The SAME absent hook was also leaking the permission-parity ADAPTER BEARER, which was
+not in issue here: 29 live rows on cvboltrig, one per turn plus one per delegated child, none ever
+deleted. Verified from the record and closed under the rule "a run's secrets live exactly as long
+as something can legitimately replay under that run" - which is Order 7's own reasoning applied to
+the other thing the run sealed. See `docs/findings/2026-07-26-run-scoped-bearer-never-swept.md`.
+Note for anyone touching this: the sweep MUST stay guarded, because
+`delete_credential_refs_for_run` deletes the whole `run:<id>:` prefix and would otherwise destroy
+the very seal Orders 4 and 6(i) depend on.
+
 ### Order 8
 
 ORDER 8 (acceptance, and the only proof this bench will accept). The fix is proved from the

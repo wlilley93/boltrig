@@ -26,6 +26,7 @@ import re
 import uuid
 from typing import TYPE_CHECKING, Any
 
+from boltrig.kernel.held_call import sweep_run_credentials_if_settled
 from boltrig.models import (
     ActionType,
     AuditEvent,
@@ -581,7 +582,15 @@ class WorkPump:
             log.warning("terminal notify failed for item %s", item.id, exc_info=True)
         if self._kernel is not None:
             try:  # SEC-181: run-scoped secure-input refs die with the run
-                await self._kernel.credentials.sweep_run_scoped(item.tenant_id, run_id)
+                # Guarded, because this deletes the WHOLE run: prefix - including a
+                # held write's sealed call. An item can reach terminal (cancelled,
+                # failed) while the gate still holds one of its writes, and sweeping
+                # then would destroy the record decision 0018 replays from, turning
+                # an approved write into Order 6(i)'s refusal. Skipping is self-
+                # healing: settle_held_call sweeps when the hold resolves.
+                await sweep_run_credentials_if_settled(
+                    self._kernel.store, item.tenant_id, run_id
+                )
             except Exception:
                 log.warning("secure-input sweep failed for run %s", run_id, exc_info=True)
 

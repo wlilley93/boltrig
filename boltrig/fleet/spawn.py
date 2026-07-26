@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
 from boltrig.adapters.base import AdapterError, ErrorClass, Result
 from boltrig.kernel.cost import price_micros
+from boltrig.kernel.held_call import sweep_run_credentials_if_settled
 from boltrig.models import (
     ActionType,
     AgentCapability,
@@ -260,6 +261,7 @@ class Spawner:
                     tenant_id, scope_ids=scope_ids,
                     delta_tokens=-tokens_est, delta_micros=-micros_est,
                 )
+            await self._retire_child_credentials(tenant_id, run_id)
             raise
         latency_ms = int((time.monotonic() - started) * 1000)
         if opened:
@@ -267,6 +269,7 @@ class Spawner:
             # derivation (spawn.py `status=`), so the node settles ok/degraded/error.
             status = "degraded" if result.degraded else "ok" if result.ok else "error"
             self._publish_subagent_end_event(context, run_id, status)
+        await self._retire_child_credentials(tenant_id, run_id)
         return result, model_route, latency_ms
 
     def _child_context(
@@ -326,6 +329,36 @@ class Spawner:
             )
         except Exception:
             pass
+
+    async def _retire_child_credentials(self, tenant_id: str, run_id: str) -> None:
+        """Retire the bearer this child inherited, at the child's run terminal.
+
+        Called from the SAME two exits as ``_publish_subagent_end_event`` (the
+        runtime raise and the success return) and for the same reason: those are
+        the two ways a child run ends, so a terminal wired to only one of them
+        leaks on the other.
+
+        Necessary because a delegated child has NO work item, so the pump's
+        terminal hook - the only caller of ``sweep_run_scoped`` - can never fire
+        for it. ``_inherit_adapter_bearer`` re-seals the caller's bearer under the
+        CHILD run id, so without this every delegated turn left a second live
+        bearer at rest forever (observed live: one root row plus one child row per
+        turn, none ever deleted).
+
+        Guarded by ``sweep_run_credentials_if_settled``: when the gate held a
+        write, the resume replays under the CHILD's context and therefore needs
+        this exact bearer, so the seal must outlive the child. Best-effort (P9),
+        exactly like the inherit that created it: hygiene never fails a spawn.
+        """
+        try:
+            await sweep_run_credentials_if_settled(
+                self._kernel.store, tenant_id, run_id
+            )
+        except Exception:  # noqa: BLE001 - a sweep fault is the pre-existing leak
+            log.warning(
+                "could not retire the run-scoped credentials of child run '%s'",
+                run_id, exc_info=True,
+            )
 
     def _publish_subagent_end_event(
         self,

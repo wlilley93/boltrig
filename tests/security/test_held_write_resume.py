@@ -20,9 +20,14 @@ from datetime import timedelta
 import pytest
 
 from boltrig.api.bootstrap import wire_hitl_resume
-from boltrig.fleet.chat import ChatService
+from boltrig.fleet.chat import ChatService, build_turn_executor
 from boltrig.kernel.credentials import held_call_cred_id
-from boltrig.kernel.held_call import HELD_STEP_PREFIX
+from boltrig.kernel.held_call import (
+    HELD_STEP_PREFIX,
+    any_held_call_paused,
+    settle_held_call,
+    sweep_run_credentials_if_settled,
+)
 from boltrig.kernel.hitl_expiry import expire_tenant_once
 from boltrig.models import (
     ActionType,
@@ -323,3 +328,176 @@ async def test_rejecting_declines_cleanly_instead_of_asking_again():
     # THE DISCRIMINATOR: exactly one pause on the record, not a second ask.
     pending = [r for r in _tool_calls(kernel) if r.status == "pending_human"]
     assert len(pending) == 1, f"a reject must not re-pend; got {len(pending)} pauses"
+
+
+# --- Order 7 extended: a run's secrets outlive the turn only while a hold does --
+#
+# The live gap these cover (Classical Visas, 2026-07-26): `sweep_run_scoped`'s only
+# caller was the org pump, but the permission-parity bearer is sealed exclusively by
+# the CHAT lane, which settles its own work item directly and never reaches that
+# hook - and a delegated child has no work item at all, so nothing could ever sweep
+# it. Both ends leaked a live caller-clamped external bearer for the life of the
+# database: 29 rows on the live tenant, one root plus one child per turn, oldest a
+# day old, none ever deleted.
+#
+# The rule the fix installs: a run's secrets live exactly as long as something can
+# legitimately replay under that run, and not one moment longer.
+
+
+def _bearer(kernel, run_id: str, owner: str = "alice"):
+    return kernel.credentials.resolve_run_scoped_credential(TENANT, run_id, "opbox", owner)
+
+
+async def _seal_bearer(kernel, run_id: str, token: str = "tok-abc") -> None:
+    await kernel.credentials.seal_run_scoped_adapter_bearer(
+        TENANT, run_id, "opbox", token, "alice"
+    )
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-181")
+async def test_a_paused_hold_keeps_the_run_secrets_its_own_resume_needs():
+    """The guard, in the direction that MATTERS: a run terminal falling due while
+    the gate holds a write must not sweep.
+
+    `delete_credential_refs_for_run` deletes the whole `run:<id>:` prefix, so an
+    unguarded sweep takes the parity bearer AND the sealed call with it - and the
+    approved write could then never be carried out at all (Order 6(i) would refuse
+    it as unreadable). The control at the end of this test is the seeded failure:
+    it performs the UNGUARDED delete and shows both records die.
+    """
+    kernel, _adapter, _chat = await _chat_lane()
+    await _seal_bearer(kernel, CELL_RUN)
+    request_id = await _pause(kernel)
+
+    # Both run terminals fall due here (the chat turn ends, the child returns)
+    # while the approval is still outstanding. Neither may sweep.
+    assert await sweep_run_credentials_if_settled(kernel.store, TENANT, CELL_RUN) == 0
+    assert await sweep_run_credentials_if_settled(kernel.store, TENANT, ROOT_RUN) == 0
+
+    # The resume replays under the CHILD's context, so it is the CHILD's bearer
+    # that has to survive - the exact thing an `adapter_unauthorised` resume lacks.
+    credential = await _bearer(kernel, CELL_RUN)
+    assert credential is not None and credential.material["token"] == "tok-abc"
+    assert await kernel.store.get_credential_ref(
+        TENANT, held_call_cred_id(ROOT_RUN, request_id)
+    ) is not None
+
+    # SEEDED FAILURE / control: this is what an unguarded sweep does. If the guard
+    # were absent, the two assertions above would fail exactly like this.
+    await kernel.store.delete_credential_refs_for_run(TENANT, ROOT_RUN)
+    await kernel.store.delete_credential_refs_for_run(TENANT, CELL_RUN)
+    assert await _bearer(kernel, CELL_RUN) is None
+    assert await kernel.store.get_credential_ref(
+        TENANT, held_call_cred_id(ROOT_RUN, request_id)
+    ) is None
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-181")
+async def test_settling_the_hold_retires_the_bearer_the_turn_sealed():
+    """The deferred sweep: once the hold is gone, the skipped run terminal falls due.
+
+    Both ends, because a delegated call seals a bearer under each.
+    """
+    kernel, _adapter, _chat = await _chat_lane()
+    await _seal_bearer(kernel, ROOT_RUN)
+    await _seal_bearer(kernel, CELL_RUN)
+    request_id = await _pause(kernel)
+    assert await _bearer(kernel, CELL_RUN) is not None  # held: still alive
+
+    await settle_held_call(kernel.store, TENANT, CELL_RUN, request_id)
+
+    for run in (ROOT_RUN, CELL_RUN):
+        assert await _bearer(kernel, run) is None, f"{run} bearer outlived its hold"
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-181")
+async def test_a_second_paused_hold_keeps_the_run_alive():
+    """Settling ONE hold must not sweep a run another hold is still waiting on."""
+    kernel, _adapter, _chat = await _chat_lane()
+    await _seal_bearer(kernel, ROOT_RUN)
+    first = await _pause(kernel, "first comment")
+    second = await _pause(kernel, "second comment")
+    assert first != second
+
+    await settle_held_call(kernel.store, TENANT, CELL_RUN, first)
+
+    assert await _bearer(kernel, ROOT_RUN) is not None, "the second hold still needs it"
+    assert await kernel.store.get_credential_ref(
+        TENANT, held_call_cred_id(ROOT_RUN, second)
+    ) is not None
+
+    await settle_held_call(kernel.store, TENANT, CELL_RUN, second)
+    assert await _bearer(kernel, ROOT_RUN) is None, "the last hold settled; sweep falls due"
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-181")
+async def test_a_run_with_no_hold_is_swept_at_its_terminal():
+    """The ordinary turn - no approval anywhere - retires its bearer immediately."""
+    kernel, _adapter, _chat = await _chat_lane()
+    await _seal_bearer(kernel, ROOT_RUN)
+
+    assert await any_held_call_paused(kernel.store, TENANT, ROOT_RUN) is False
+    assert await sweep_run_credentials_if_settled(kernel.store, TENANT, ROOT_RUN) == 1
+    assert await _bearer(kernel, ROOT_RUN) is None
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-181")
+async def test_both_ends_of_a_delegated_call_report_their_own_hold():
+    """`any_held_call_paused` answers from either end: the root carries the real
+    hold, the child a pointer row, and each terminal only knows its own run."""
+    kernel, _adapter, _chat = await _chat_lane()
+    request_id = await _pause(kernel)
+
+    assert await any_held_call_paused(kernel.store, TENANT, ROOT_RUN) is True
+    assert await any_held_call_paused(kernel.store, TENANT, CELL_RUN) is True
+    assert await any_held_call_paused(kernel.store, TENANT, "some-other-run") is False
+
+    await settle_held_call(kernel.store, TENANT, CELL_RUN, request_id)
+    assert await any_held_call_paused(kernel.store, TENANT, ROOT_RUN) is False
+    assert await any_held_call_paused(kernel.store, TENANT, CELL_RUN) is False
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-181")
+async def test_a_chat_turn_retires_the_bearer_it_sealed():
+    """End to end on the lane that actually leaked.
+
+    The turn seals the caller's clamped bearer before any dispatch and must have
+    retired it by the time the turn is terminal. The mid-turn probe is what makes
+    this discriminate: asserting only that the bearer is gone afterwards would
+    pass just as happily if the turn had never sealed one.
+    """
+    kernel, _adapter, _chat = await _chat_lane()
+    seen: dict[str, object] = {}
+
+    class _StubSpawner:
+        async def spawn(self, tenant_id, task, skills, prefer, context, **kwargs):
+            seen["mid_turn"] = await kernel.credentials.resolve_run_scoped_credential(
+                TENANT, context.run_id, "opbox", "alice"
+            )
+            return {"summary": "did it"}
+
+    chat = ChatService(
+        kernel.store, kernel.events,
+        turn_executor=build_turn_executor(kernel, _StubSpawner(), continuity=False),
+    )
+    _ = [
+        event
+        async for event in chat.handle_turn(
+            tenant_id=TENANT, user_id="alice", role="member",
+            message="do the thing", on_behalf_bearer="tok-xyz",
+        )
+    ]
+
+    assert seen["mid_turn"] is not None, "the turn must seal the caller's bearer"
+    turn = next(
+        i for i in await kernel.store.list_work_items(TENANT) if i.parent_id is None
+    )
+    assert await kernel.credentials.resolve_run_scoped_credential(
+        TENANT, turn.id, "opbox", "alice"
+    ) is None, "the turn's sealed bearer outlived the turn"

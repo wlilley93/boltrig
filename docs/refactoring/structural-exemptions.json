@@ -114,27 +114,27 @@
       "expires": "2026-12-31"
     },
     "boltrig/fleet/chat.py": {
-      "max_file_lines": 832,
+      "max_file_lines": 856,
       "max_function_lines": 144,
       "over_limit_functions": [
         {
           "name": "ChatService.handle_turn",
-          "line": 321,
+          "line": 345,
           "lines": 144
         },
         {
           "name": "build_turn_executor",
-          "line": 694,
+          "line": 718,
           "lines": 139
         },
         {
           "name": "build_turn_executor.executor",
-          "line": 717,
+          "line": 741,
           "lines": 114
         }
       ],
       "owner": "fleet-maintainers",
-      "reason": "Separate conversation context, turn execution, and event persistence while preserving streaming behavior. Audit fix: the executor now also settles non-BoltrigError failures FAILED (the item no longer stays IN_FLIGHT forever). US-CHAT-15: handle_turn now also runs the mid-run steer queue (queue-vs-drive decision, sequential drain turns on one stream). Parity passthrough (2026): handle_turn/build_turn_executor thread the caller's clamped on_behalf_bearer, sealed per-run for the opbox adapter before any verb dispatch. 2026-07-26 (decision 0018): a write held for human approval is now RECORDED at the pause - a human approved opbox.add_comment in a chat turn, the request sat ANSWERED forever and the comment was never posted, because nothing anywhere held the CALL. ChatService gained resume_held_write, a thin sibling to regenerate_turn that replays the recorded CALL (fleet/held_write_resume.py) rather than the model; no existing function grew by a line.",
+      "reason": "Separate conversation context, turn execution, and event persistence while preserving streaming behavior. Audit fix: the executor now also settles non-BoltrigError failures FAILED (the item no longer stays IN_FLIGHT forever). US-CHAT-15: handle_turn now also runs the mid-run steer queue (queue-vs-drive decision, sequential drain turns on one stream). Parity passthrough (2026): handle_turn/build_turn_executor thread the caller's clamped on_behalf_bearer, sealed per-run for the opbox adapter before any verb dispatch. 2026-07-26 (decision 0018): a write held for human approval is now RECORDED at the pause - a human approved opbox.add_comment in a chat turn, the request sat ANSWERED forever and the comment was never posted, because nothing anywhere held the CALL. ChatService gained resume_held_write, a thin sibling to regenerate_turn that replays the recorded CALL (fleet/held_write_resume.py) rather than the model; no existing function grew by a line. 2026-07-26 (credential lifecycle): +24 lines for _settle_turn, extracted rather than inlined so no over-limit function grows (executor is UNCHANGED at 114 lines; only line numbers moved). The chat lane settles its own work item and never reached the pump's terminal hook, which was the ONLY caller of sweep_run_scoped, so a turn's sealed permission-parity bearer was never retired: 29 live rows on the Classical Visas tenant, one per turn plus one per delegated child, oldest a day old, none ever deleted.",
       "expires": "2026-12-31"
     },
     "boltrig/fleet/infrastructure/cell_spawner.py": {
@@ -186,11 +186,11 @@
       "expires": "2026-12-31"
     },
     "boltrig/fleet/pump.py": {
-      "max_file_lines": 697,
+      "max_file_lines": 706,
       "max_function_lines": 78,
       "over_limit_functions": [],
       "owner": "fleet-maintainers",
-      "reason": "File-length debt only: the work-claim lifecycle phases still share one module. SEC-178 addressed-workflow execution added _run_addressed_workflow (the workflow: target honoring branch); handle_claimed_item grew to 78 lines with the mirrored boundary-1 cancel refresh. Audit fixes: _record_failure defers to a requested cancel and persists a bounded, URL-redacted error detail instead of raw str(exc). 2026-07-25: +23 lines for the SETTLED_STATUSES guard, so a fault raised AFTER the attempt settled durably cannot re-open it and re-run the whole item (docs/findings/2026-07-25-work-item-lease-has-no-fence.md).",
+      "reason": "File-length debt only: the work-claim lifecycle phases still share one module. SEC-178 addressed-workflow execution added _run_addressed_workflow (the workflow: target honoring branch); handle_claimed_item grew to 78 lines with the mirrored boundary-1 cancel refresh. Audit fixes: _record_failure defers to a requested cancel and persists a bounded, URL-redacted error detail instead of raw str(exc). 2026-07-25: +23 lines for the SETTLED_STATUSES guard, so a fault raised AFTER the attempt settled durably cannot re-open it and re-run the whole item (docs/findings/2026-07-25-work-item-lease-has-no-fence.md). 2026-07-26 (credential lifecycle): +9 lines routing the terminal sweep through sweep_run_credentials_if_settled. The unguarded sweep deleted the whole run: prefix, including a held write's sealed call, so an item reaching terminal while the gate still held one of its writes destroyed the record decision 0018 replays from.",
       "expires": "2026-12-31"
     },
     "boltrig/fleet/runtime.py": {
@@ -202,17 +202,17 @@
       "expires": "2026-12-31"
     },
     "boltrig/fleet/spawn.py": {
-      "max_file_lines": 658,
+      "max_file_lines": 691,
       "max_function_lines": 93,
       "over_limit_functions": [
         {
           "name": "Spawner.spawn",
-          "line": 101,
+          "line": 102,
           "lines": 93
         }
       ],
       "owner": "fleet-maintainers",
-      "reason": "Split spawn selection, token issuance, and execution while preserving delegated authority checks. Audit fixes: the budget reservation is refunded when the runtime raises (extracted _invoke_runtime, which lowered spawn's function debt), the budget hard-stop partial is degrade-marked, and make_agent_invoker now applies the same depth cap + reserve/refund/true-up governance as spawn. 2026-07-25: +58 lines for _inherit_adapter_bearer, which carries the run-scoped permission-parity bearer across the delegation boundary. The chat turn seals it against the ROOT run id but never calls a verb itself, so the dispatch under the CHILD run id missed the seal and fell back to the adapter's static credential - every parity-dependent verb call was rejected downstream. Spawner.spawn itself is UNCHANGED at 91 lines (the line number moved only because of the new module logger); the growth is the helper and its docstring, which records the failure so the seam is not re-broken. 2026-07-25 (cost): _true_up_cost now RETURNS the priced cost and spawn records that instead of result.cost_micros. A runtime reports tokens, not money - pricing is the tenant's per-model/tier rate that only the accountant knows - so result.cost_micros was 0 for every run while the budget was trued up correctly: a tenant could spend and still read as free in the audit tree. 2026-07-25 (budget scope): +15 lines for _budget_scope_ids, extracted rather than inlined so Spawner.spawn does NOT grow (still 93; only its line number moved). The tenant budget's scope id is the tenant id, but spawn reserved against the literal string \"tenant\", so get_budget found no row and the scope was silently unmetered: the hard-stop cap could never fire and the ledger stayed at zero. The docstring records it at the derivation site. SEC-186 (2026-07-25): the same fence on /v1/spawn, plus threading the sealing owner through _inherit_adapter_bearer so a child cannot inherit a bearer sealed by someone else. 2026-07-25 (input/output split): +9 lines in _true_up_cost (36 -> 45), which now passes the runtime's reported input/output split to the accountant so each leg is priced at its own rate. Spawner.spawn is UNCHANGED at 93 lines and still starts at line 101.",
+      "reason": "Split spawn selection, token issuance, and execution while preserving delegated authority checks. Audit fixes: the budget reservation is refunded when the runtime raises (extracted _invoke_runtime, which lowered spawn's function debt), the budget hard-stop partial is degrade-marked, and make_agent_invoker now applies the same depth cap + reserve/refund/true-up governance as spawn. 2026-07-25: +58 lines for _inherit_adapter_bearer, which carries the run-scoped permission-parity bearer across the delegation boundary. The chat turn seals it against the ROOT run id but never calls a verb itself, so the dispatch under the CHILD run id missed the seal and fell back to the adapter's static credential - every parity-dependent verb call was rejected downstream. Spawner.spawn itself is UNCHANGED at 91 lines (the line number moved only because of the new module logger); the growth is the helper and its docstring, which records the failure so the seam is not re-broken. 2026-07-25 (cost): _true_up_cost now RETURNS the priced cost and spawn records that instead of result.cost_micros. A runtime reports tokens, not money - pricing is the tenant's per-model/tier rate that only the accountant knows - so result.cost_micros was 0 for every run while the budget was trued up correctly: a tenant could spend and still read as free in the audit tree. 2026-07-25 (budget scope): +15 lines for _budget_scope_ids, extracted rather than inlined so Spawner.spawn does NOT grow (still 93; only its line number moved). The tenant budget's scope id is the tenant id, but spawn reserved against the literal string \"tenant\", so get_budget found no row and the scope was silently unmetered: the hard-stop cap could never fire and the ledger stayed at zero. The docstring records it at the derivation site. SEC-186 (2026-07-25): the same fence on /v1/spawn, plus threading the sealing owner through _inherit_adapter_bearer so a child cannot inherit a bearer sealed by someone else. 2026-07-25 (input/output split): +9 lines in _true_up_cost (36 -> 45), which now passes the runtime's reported input/output split to the accountant so each leg is priced at its own rate. Spawner.spawn is UNCHANGED at 93 lines and still starts at line 101. 2026-07-26 (credential lifecycle): +33 lines for _retire_child_credentials, called from the SAME two exits as _publish_subagent_end_event because those are the two ways a child run ends. A delegated child has NO work item, so the pump's terminal hook could never sweep the bearer _inherit_adapter_bearer re-seals under the CHILD run id. Spawner.spawn is UNCHANGED at 93 lines (the call sites are in _invoke_runtime, which stays under the limit); only its line number moved.",
       "expires": "2026-12-31"
     },
     "boltrig/fleet/ultracode.py": {
