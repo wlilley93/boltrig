@@ -13,6 +13,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
 from boltrig.config.environment import is_truthy
+from boltrig.fleet.model_gateway import gateway_posture
 from boltrig.kernel import Kernel
 
 from .readiness_control import (
@@ -261,11 +262,12 @@ class ReadinessService:
             }
         except Exception:
             failed = _check("failed", required=True, reason="probe_failed")
-            gateway_enabled = self._model_gateway_enabled(env)
+            posture, posture_reason = gateway_posture(env)
+            armed = posture == "enabled"
             gateway = _check(
-                "failed" if gateway_enabled else "disabled",
-                required=gateway_enabled,
-                reason="probe_failed" if gateway_enabled else "health_check_disabled",
+                "failed" if armed else posture,
+                required=armed,
+                reason="probe_failed" if armed else posture_reason,
             )
             return failed, gateway
 
@@ -274,7 +276,9 @@ class ReadinessService:
         )
         live_health = "not_required"
         stack_reason = None if tool_ok else "posture_failed"
-        if tool_ok and (_production(env) or is_truthy(env.get("BOLTRIG_REQUIRE_STACK_TOOL_HEALTH"))):
+        if tool_ok and (
+            _production(env) or is_truthy(env.get("BOLTRIG_REQUIRE_STACK_TOOL_HEALTH"))
+        ):
             live_ok, live_reason = await self._stack_tool_live_check(env, timeout_s)
             tool_ok = live_ok
             live_health = "ok" if live_ok else "failed"
@@ -290,9 +294,12 @@ class ReadinessService:
             live_health=live_health,
         )
 
-        gateway_enabled = self._model_gateway_enabled(env)
-        if not gateway_enabled:
-            gateway = _check("disabled", required=False, reason="health_check_disabled")
+        posture, posture_reason = gateway_posture(env)
+        if posture != "enabled":
+            # "unchecked" rather than "disabled" when a gateway IS configured but no probe is armed:
+            # disabled reads as "this stack uses no gateway", which is a different fact and the one
+            # that stops an operator looking. `required` is unchanged - see gateway_posture.
+            gateway = _check(posture, required=False, reason=posture_reason)
         else:
             component = components.get("bifrost", {})
             metadata = component.get("metadata", {})
@@ -389,10 +396,4 @@ class ReadinessService:
             "ok" if alive else "failed",
             required=True,
             reason=None if alive else "probe_failed",
-        )
-
-    @staticmethod
-    def _model_gateway_enabled(env: Mapping[str, str]) -> bool:
-        return is_truthy(env.get("BOLTRIG_MODEL_GATEWAY_HEALTH")) or _configured(
-            env.get("BOLTRIG_MODEL_GATEWAY_HEALTH_URL")
         )

@@ -21,8 +21,11 @@ behaves exactly as before.
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
 from dataclasses import replace
 from datetime import timedelta
+
+from boltrig.config.environment import is_truthy
 
 from boltrig.models import ModelEndpoint, utcnow
 
@@ -115,3 +118,39 @@ def apply_gateway(
         return endpoint
     pinned_model = binding.bind(conversation_id, endpoint.model)
     return replace(endpoint, base_url=gateway_url, model=pinned_model)
+
+
+# ── readiness posture ────────────────────────────────────────────────────────────────────────────
+# Lives here rather than in api/readiness.py because the question is "what IS the gateway's state",
+# which belongs to the gateway module, not to the thing that reports it - and because readiness.py
+# was at the structure ratchet's 400-line limit, so a branch could not be added there without
+# booking new debt to avoid a refactor.
+
+#: The env var that puts the gateway in the REQUEST PATH. Distinct from the two health opt-ins.
+GATEWAY_URL_ENV = "BOLTRIG_MODEL_GATEWAY_URL"
+#: The opt-ins that arm an actual health PROBE of the gateway.
+GATEWAY_HEALTH_ENVS = ("BOLTRIG_MODEL_GATEWAY_HEALTH", "BOLTRIG_MODEL_GATEWAY_HEALTH_URL")
+
+
+def gateway_posture(env: Mapping[str, str]) -> tuple[str, str | None]:
+    """The gateway's readiness `(status, reason)` when no probe is armed.
+
+    THE DEFECT THIS EXISTS TO FIX (found on Classical Visas, 2026-07-26). Readiness keyed the
+    gateway check on the health OPT-INS alone, so a stack with
+    ``BOLTRIG_MODEL_GATEWAY_URL=http://bifrost:8080/v1`` - every agent turn routing through it -
+    reported ``model_gateway: "disabled"`` and read **ready** with bifrost face-down.
+
+    ``disabled`` is indistinguishable from "this stack uses no model gateway", so an operator
+    reading it concludes there is nothing to check. The true state is "there IS one, and nothing is
+    watching it" - a different fact, and the one that would explain the outage.
+
+    ``required`` is deliberately NOT changed here. Promoting a configured gateway to required is a
+    deployment-contract change (it would flip live stacks to not_ready on a bifrost blip and change
+    what orchestration does with them), and belongs to whoever owns that contract. This changes what
+    the record SAYS, never what it decides.
+    """
+    if any(is_truthy(env.get(k)) or (env.get(k) or "").strip() for k in GATEWAY_HEALTH_ENVS):
+        return ("enabled", None)
+    if (env.get(GATEWAY_URL_ENV) or "").strip():
+        return ("unchecked", "configured_but_health_check_disabled")
+    return ("disabled", "health_check_disabled")
