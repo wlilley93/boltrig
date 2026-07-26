@@ -92,17 +92,17 @@
       "expires": "2026-12-31"
     },
     "boltrig/api/initiate.py": {
-      "max_file_lines": 222,
+      "max_file_lines": 233,
       "max_function_lines": 91,
       "over_limit_functions": [
         {
           "name": "_run",
-          "line": 48,
+          "line": 59,
           "lines": 91
         }
       ],
       "owner": "platform-maintainers",
-      "reason": "Extract initiation orchestration phases without changing request validation or execution semantics.",
+      "reason": "Extract initiation orchestration phases without changing request validation or execution semantics. 2026-07-26: +11 lines recording a KNOWN LIMIT in the module docstring - the \"refusing to run twice\" guard is a read-then-write with no uniqueness on one owner per tenant, so two concurrent runs with different emails both seat a superadmin. Placed in the docstring rather than inside _run precisely so the note does not grow the function it describes; _run is unchanged at 91 lines and only its line number moved.",
       "expires": "2026-12-31"
     },
     "boltrig/config/manifest.py": {

@@ -176,6 +176,12 @@ class SqlAdapter:
     async def _run(
         self, dsn: str, sql: str, params: dict[str, Any], write: bool
     ) -> dict[str, Any]:
+        # UNPINNED, and said so where the control lives. Nothing in tests/ mentions
+        # `write_allowed` or `execute_write`, and the only in-repo subclass
+        # (builtin/crm_sql.py) is deliberately read-scoped, so this refusal has
+        # never been exercised by anything - not once, in either direction. It is
+        # the read/write-scope boundary this module advertises at the top of the
+        # file, and a boundary no test attacks is a boundary on trust.
         if write and not self.write_allowed:
             raise _SqlFailure(
                 AdapterError(

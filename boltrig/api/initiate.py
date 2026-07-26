@@ -9,6 +9,17 @@ the tenant it exits non-zero without touching anything, so a second run can neve
 mint a second founder or reset the first owner's password. The password is read
 from ``--password``, else ``BOLTRIG_INIT_PASSWORD``, else an interactive prompt; it
 is hashed with argon2id and stored apart from the identity row, never logged.
+
+KNOWN LIMIT - the "refusing to run twice" guard is a read-then-write. It lists
+users, decides, then upserts, with no transaction spanning the two and no
+uniqueness on "at most one owner-tier user per tenant" (`id` IS the email, and
+schema.sql gives users a PRIMARY KEY (tenant_id, id) plus a NON-unique email
+index). Two runs started concurrently with DIFFERENT emails therefore both read
+an empty list and both seat a superadmin. The SEQUENTIAL refusal is real and is
+tested, including the different-email case - which is precisely what makes the
+race look covered. Accepted rather than closed: running this at all needs shell
+on the host, the boundary this command already sits behind, and closing it wants
+a partial unique index or an advisory lock.
 """
 
 from __future__ import annotations
