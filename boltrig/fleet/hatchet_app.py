@@ -206,8 +206,19 @@ async def run_workflow_body(
 
 async def work_item_task_body(pump: Any, payload: dict[str, Any]) -> dict[str, Any]:
     """Run the pump's one claimed-item body by id (US-FLT-06). The pump path
-    itself dispatches through the chokepoint, so governance holds (FR-EXE-06)."""
-    await pump._run_item_payload({"tenant_id": payload["tenant_id"], "item_id": payload["item_id"]})
+    itself dispatches through the chokepoint, so governance holds (FR-EXE-06).
+
+    The payload is forwarded WHOLE. It used to be rebuilt from tenant_id and
+    item_id, which silently discarded every other key: anything the enqueuing side
+    put on it reached the local lane and vanished on the durable one, with no error
+    and no log, so the two lanes quietly disagreed about what the body was given.
+
+    That is not hypothetical. It is the carriage
+    [2026] VJS-CC-BOLTRIG-WORK-ITEM-LEASE-FENCE-001 D2 needs for the claim-time
+    lease token, and a court clerk found the drop by reading this line rather than
+    by anything failing. Forward the payload and let the body choose what it reads.
+    """
+    await pump._run_item_payload(dict(payload))
     return {"handled": True, "item_id": payload["item_id"]}
 
 
