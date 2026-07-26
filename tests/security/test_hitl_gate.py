@@ -15,6 +15,7 @@ from boltrig.kernel.app import create_app
 from boltrig.kernel.hitl import approval_request_fingerprint
 from boltrig.kernel.ratelimit import RateLimiter
 from boltrig.models import (
+    ApprovalNotHoldable,
     HITLRequest,
     HITLStateConflict,
     HITLStatus,
@@ -487,3 +488,58 @@ async def test_rejection_does_not_execute(gated_kernel):
             "ticket", "ticket.create", {"title": "x"}, make_ctx(["ticket.create"]),
             approval_id=req_id,
         )
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-14")
+async def test_a_gated_verb_on_a_lane_with_no_redeemer_mints_nothing():
+    """The anti-regression guard for decision 0018's subsidiary holding.
+
+    The ground truth: a human approved ``opbox.add_comment`` inside a chat turn,
+    the request reached ANSWERED and never CONSUMED, and the comment was never
+    posted - an approval instrument minted on a lane with nothing able to claim
+    it. The gate that mints must be able to NAME the redeemer from the record, so
+    that state cannot be reached rather than being repaired once.
+
+    This drives the SHIPPED gate through the SHIPPED chokepoint. The lane is made
+    redeemer-less the only way it honestly can be - a store that cannot record the
+    pause, so no held call could ever be replayed from it - and the assertion is
+    on the ``hitl_requests`` rows themselves: delete the gate and this test fails,
+    because the call pauses with a request nothing could redeem.
+    """
+    k, _ = await _build_kernel(blocking_verbs={"ticket.create"})
+
+    class UnrecordableStore:
+        """The kernel's store with the held-call seams taken away."""
+
+        def __init__(self, inner):
+            self._inner = inner
+
+        def __getattr__(self, name):
+            if name in {"upsert_checkpoint", "list_checkpoints", "set_credential_ref"}:
+                raise AttributeError(name)
+            return getattr(self._inner, name)
+
+    inner = k.store
+    k.dispatcher._store = UnrecordableStore(inner)
+
+    with pytest.raises(ApprovalNotHoldable) as refused:
+        await k.invoke(
+            "ticket", "ticket.create", {"title": "x"},
+            make_ctx(["ticket.create"], run_id="orphan-run"),
+        )
+    assert refused.value.verb == "ticket.create"
+    assert refused.value.status_code == 409
+    # nothing was created: no request to answer, so no answer to strand
+    assert await k.hitl.list_pending(TENANT) == []
+    assert inner._hitl == {}
+
+    # and the guard is not simply refusing everything: the same verb on a lane
+    # that CAN hold the write still pauses for a human exactly as before.
+    k.dispatcher._store = inner
+    with pytest.raises(PendingHuman):
+        await k.invoke(
+            "ticket", "ticket.create", {"title": "x"},
+            make_ctx(["ticket.create"], run_id="held-run"),
+        )
+    assert len(await k.hitl.list_pending(TENANT)) == 1

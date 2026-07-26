@@ -10,6 +10,7 @@ from typing import Any
 
 from boltrig.adapters.base import Adapter
 from boltrig.models import (
+    ApprovalNotHoldable,
     BoltrigError,
     HITLStateConflict,
     HITLStatus,
@@ -20,6 +21,7 @@ from boltrig.models import (
     VerbBinding,
 )
 
+from .held_call import name_redeemer
 from .hitl import (
     HITLManager,
     approval_request_fingerprint,
@@ -87,6 +89,25 @@ async def _resource_context(
     return await value if inspect.isawaitable(value) else value
 
 
+async def _require_redeemer(store: Any, verb: str, context: InvocationContext) -> None:
+    """Refuse to MINT an approval no lane could ever redeem (decision 0018, Order 5).
+
+    The ground truth this exists for: a human approved ``opbox.add_comment`` inside
+    a chat turn at 11:41:52, the request sat ANSWERED forever, and the comment was
+    never posted - the instrument was minted on a lane with no claimant. The gate
+    that mints must be able to NAME the redeemer from the record
+    (``held_call.name_redeemer``), so the unclaimable state is structurally
+    impossible rather than fixed once. Nothing is created on refusal: no request
+    row, no seal, no checkpoint.
+    """
+    if await name_redeemer(store, context) is None:
+        raise ApprovalNotHoldable(
+            f"'{verb}' is high-consequence and this run cannot hold an approval: "
+            "nothing here could redeem it, so none was created",
+            verb,
+        )
+
+
 async def enforce_approval(
     hitl: HITLManager,
     provider: AdapterProvider,
@@ -96,6 +117,8 @@ async def enforce_approval(
     params: dict[str, Any],
     context: InvocationContext,
     approval_id: str | None,
+    *,
+    store: Any = None,
 ) -> InvocationContext:
     """Return an approval-stamped context or raise a newly bound pause."""
     try:
@@ -137,6 +160,7 @@ async def enforce_approval(
                     f"approval '{approval_id}' was already consumed; "
                     "its invocation already ran"
                 )
+        await _require_redeemer(store, verb, context)
         request = await hitl.create(
             tenant_id=context.tenant_id,
             run_id=context.run_id or "",

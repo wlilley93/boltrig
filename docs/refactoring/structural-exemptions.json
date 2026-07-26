@@ -70,17 +70,17 @@
       "expires": "2026-12-31"
     },
     "boltrig/api/bootstrap.py": {
-      "max_file_lines": 673,
-      "max_function_lines": 110,
+      "max_file_lines": 735,
+      "max_function_lines": 87,
       "over_limit_functions": [
         {
           "name": "build_app",
-          "line": 564,
-          "lines": 110
+          "line": 649,
+          "lines": 87
         }
       ],
       "owner": "platform-maintainers",
-      "reason": "Split dependency construction and runtime wiring into typed bootstrap stages without changing startup order. 2026-07-25: +8 lines to wire the SHARED rate-limit counter from REDIS_URL. RedisCounter was constructed nowhere, so every bound was per-process and per-boot while three places in the record asserted Redis ([2026] VJS-CC-BOLTRIG-RATE-LIMIT-WINDOW-001 D1/D3/D7).",
+      "reason": "Split dependency construction and runtime wiring into typed bootstrap stages without changing startup order. 2026-07-25: +8 lines to wire the SHARED rate-limit counter from REDIS_URL. RedisCounter was constructed nowhere, so every bound was per-process and per-boot while three places in the record asserted Redis ([2026] VJS-CC-BOLTRIG-RATE-LIMIT-WINDOW-001 D1/D3/D7). 2026-07-26 (decision 0018): a write held for human approval is now RECORDED at the pause - a human approved opbox.add_comment in a chat turn, the request sat ANSWERED forever and the comment was never posted, because nothing anywhere held the CALL. The chat factory was EXTRACTED into _build_chat_wiring so the answer bridge can reach the SAME ChatService the SSE routes use (the relay is per-Kernel and in-process), which lowered build_app from 110 to 87 lines - the function ratchet ratchets down with this change.",
       "expires": "2026-12-31"
     },
     "boltrig/api/doctor.py": {
@@ -114,27 +114,27 @@
       "expires": "2026-12-31"
     },
     "boltrig/fleet/chat.py": {
-      "max_file_lines": 807,
+      "max_file_lines": 832,
       "max_function_lines": 144,
       "over_limit_functions": [
         {
           "name": "ChatService.handle_turn",
-          "line": 317,
+          "line": 321,
           "lines": 144
         },
         {
           "name": "build_turn_executor",
-          "line": 669,
+          "line": 694,
           "lines": 139
         },
         {
           "name": "build_turn_executor.executor",
-          "line": 692,
+          "line": 717,
           "lines": 114
         }
       ],
       "owner": "fleet-maintainers",
-      "reason": "Separate conversation context, turn execution, and event persistence while preserving streaming behavior. Audit fix: the executor now also settles non-BoltrigError failures FAILED (the item no longer stays IN_FLIGHT forever). US-CHAT-15: handle_turn now also runs the mid-run steer queue (queue-vs-drive decision, sequential drain turns on one stream). Parity passthrough (2026): handle_turn/build_turn_executor thread the caller's clamped on_behalf_bearer, sealed per-run for the opbox adapter before any verb dispatch.",
+      "reason": "Separate conversation context, turn execution, and event persistence while preserving streaming behavior. Audit fix: the executor now also settles non-BoltrigError failures FAILED (the item no longer stays IN_FLIGHT forever). US-CHAT-15: handle_turn now also runs the mid-run steer queue (queue-vs-drive decision, sequential drain turns on one stream). Parity passthrough (2026): handle_turn/build_turn_executor thread the caller's clamped on_behalf_bearer, sealed per-run for the opbox adapter before any verb dispatch. 2026-07-26 (decision 0018): a write held for human approval is now RECORDED at the pause - a human approved opbox.add_comment in a chat turn, the request sat ANSWERED forever and the comment was never posted, because nothing anywhere held the CALL. ChatService gained resume_held_write, a thin sibling to regenerate_turn that replays the recorded CALL (fleet/held_write_resume.py) rather than the model; no existing function grew by a line.",
       "expires": "2026-12-31"
     },
     "boltrig/fleet/infrastructure/cell_spawner.py": {
@@ -324,22 +324,22 @@
       "expires": "2026-12-31"
     },
     "boltrig/kernel/dispatch.py": {
-      "max_file_lines": 561,
+      "max_file_lines": 599,
       "max_function_lines": 113,
       "over_limit_functions": [
         {
           "name": "Dispatcher.invoke",
-          "line": 270,
+          "line": 308,
           "lines": 113
         },
         {
           "name": "Dispatcher._invoke_inner",
-          "line": 384,
+          "line": 422,
           "lines": 111
         }
       ],
       "owner": "kernel-maintainers",
-      "reason": "Extract dispatch phases behind private typed helpers while retaining the single governed chokepoint. SEC-181 secure input added the run-scoped param resolution at the credential stage and the secure-question marker. Parity passthrough (2026): _execute_adapter overrides the static adapter credential with a per-run sealed bearer when present. 2026-07-25: +17 lines for _emit_pause, which publishes a HITL pause to the run that DELEGATED to this one as well as to this one. A chat turn never calls a verb itself, so the dispatch runs under the child run id while the client follows the root stream - the pause landed on a stream nobody follows and a write held for approval was invisible to the person who asked. Extracting it LOWERED Dispatcher.invoke from 116 to 113 lines, so the function ratchet ratchets down with this change. 2026-07-25: +25 lines to enforce the rate limit BEFORE the approval gate on a leg carrying an approval id, so a throttle trip cannot burn a single-use human authorisation; most of it is the comment recording which pre-execution refusals are still NOT approval-safe.",
+      "reason": "Extract dispatch phases behind private typed helpers while retaining the single governed chokepoint. SEC-181 secure input added the run-scoped param resolution at the credential stage and the secure-question marker. Parity passthrough (2026): _execute_adapter overrides the static adapter credential with a per-run sealed bearer when present. 2026-07-25: +17 lines for _emit_pause, which publishes a HITL pause to the run that DELEGATED to this one as well as to this one. A chat turn never calls a verb itself, so the dispatch runs under the child run id while the client follows the root stream - the pause landed on a stream nobody follows and a write held for approval was invisible to the person who asked. Extracting it LOWERED Dispatcher.invoke from 116 to 113 lines, so the function ratchet ratchets down with this change. 2026-07-25: +25 lines to enforce the rate limit BEFORE the approval gate on a leg carrying an approval id, so a throttle trip cannot burn a single-use human authorisation; most of it is the comment recording which pre-execution refusals are still NOT approval-safe. 2026-07-26 (decision 0018): a write held for human approval is now RECORDED at the pause - a human approved opbox.add_comment in a chat turn, the request sat ANSWERED forever and the comment was never posted, because nothing anywhere held the CALL. The pause branch now calls _hold_pause, an EXTRACTED helper that emits the pause and writes the durable held-call record, so Dispatcher.invoke stays at 113 lines and neither over-limit function grew.",
       "expires": "2026-12-31"
     },
     "boltrig/kernel/memory_routes.py": {
@@ -502,11 +502,11 @@
       "expires": "2026-12-31"
     },
     "boltrig/kernel/mcp.py": {
-      "max_file_lines": 406,
-      "max_function_lines": 52,
+      "max_file_lines": 422,
+      "max_function_lines": 53,
       "over_limit_functions": [],
       "owner": "kernel-maintainers",
-      "reason": "2026-07-25: +6 lines to carry parent_run_id on the run token, so a verb dispatched inside a delegated cell can publish its HITL PAUSE to the parent run's stream. Without it the pause reached only the child stream, which no client follows, and a write correctly held for approval was invisible to the person who asked for it.",
+      "reason": "2026-07-25: +6 lines to carry parent_run_id on the run token, so a verb dispatched inside a delegated cell can publish its HITL PAUSE to the parent run's stream. Without it the pause reached only the child stream, which no client follows, and a write correctly held for approval was invisible to the person who asked for it. 2026-07-26 (decision 0018): _call_tool gained a branch for ApprovalNotHoldable, so a cell refused an unholdable approval is told what happened and what to do instead rather than being handed a request id that was never created.",
       "expires": "2026-12-31"
     },
     "boltrig/fleet/codex_runtime.py": {

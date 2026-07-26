@@ -26,6 +26,7 @@ from urllib.parse import quote, unquote
 from boltrig.adapters.base import McpResourceSpec
 
 from boltrig.models import (
+    ApprovalNotHoldable,
     DegradedMode,
     GrantSet,
     InvocationContext,
@@ -390,6 +391,21 @@ class McpFace:
                 "content": [{"type": "text", "text": f"pending approval: {e.hitl_request_id}"}],
                 "isError": True,
                 "_boltrig": {"status": "pending_human", "hitl_request_id": e.hitl_request_id},
+            }
+        except ApprovalNotHoldable as e:
+            # The cell asked for a high-consequence action on a run that could not
+            # hold an approval, so NO request was created. Handing back a bare
+            # reason would leave the cell waiting on an id that does not exist -
+            # which is the shape of the defect this refusal exists to prevent - so
+            # say what happened and what to do instead.
+            return {
+                "content": [{"type": "text", "text": (
+                    f"cannot request approval for {e.verb} here: this run cannot "
+                    "hold one, so nothing was submitted. Ask the person you are "
+                    "working with to run it, or raise it where it can be held."
+                )}],
+                "isError": True,
+                "_boltrig": {"status": "not_holdable", "reason": e.reason, "verb": e.verb},
             }
         except DegradedMode as e:
             return {

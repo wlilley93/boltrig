@@ -53,6 +53,7 @@ from .adapter_errors import adapter_failure
 from .credentials import CredentialResolver
 from .grants import GrantChecker
 from .approval_gate import enforce_approval
+from .held_call import record_held_call
 from .hitl import HITLManager, hitl_scope_fields
 from .idempotency import (
     IdempotencyCoordinator,
@@ -209,6 +210,43 @@ class Dispatcher:
         if parent and parent != context.run_id:
             self._emit(context.tenant_id, parent, event)
 
+    async def _hold_pause(
+        self,
+        context: InvocationContext,
+        exc: PendingHuman,
+        noun: str,
+        verb: str,
+        params: dict[str, Any],
+        call_id: str,
+    ) -> None:
+        """Announce the pause AND make it durable (decision 0018, Order 2).
+
+        The announcement alone was the whole of it, and that is how a human could
+        approve a write that then never happened: the approval was recorded and
+        nothing anywhere held the CALL, so nothing could replay it. The record
+        written here - a ``held:`` checkpoint on the root run plus the sealed
+        canonical call - is what the answer bridge replays under the SAME run
+        identity, which is what makes the approval fingerprint match and the
+        ANSWERED -> CONSUMED CAS the only thing that decides exactly-once.
+
+        Unlike the event emit above, a failure here is NOT swallowed: the relay is
+        observability, this is the record the approved write is replayed from.
+
+        Only an APPROVAL is held. The other pause raised here is the ask-user
+        QUESTION, which has no held WRITE to replay - re-invoking it would simply
+        ask again - and sealing its params would put a plain question's inputs
+        under a secret kind for no one to redeem (SEC-181).
+        """
+        await self._emit_pause(context, exc.hitl_request_id, verb, call_id)
+        request = await self._hitl.get(context.tenant_id, exc.hitl_request_id)
+        if request is None or request.type != HITLType.APPROVAL:
+            return
+        await record_held_call(
+            self._store, context,
+            noun=noun, verb=verb, params=params,
+            request_id=exc.hitl_request_id, call_id=call_id,
+        )
+
     def _emit(self, tenant_id: str, run_id: str | None, event: dict[str, Any]) -> None:
         """Publish a run event, fail-safe. Only when a relay is wired and the call
         belongs to a run; a publish error is swallowed so observability can never
@@ -305,8 +343,8 @@ class Dispatcher:
         except PendingHuman as e:
             status = "pending_human"
             detail = {"hitl_request_id": e.hitl_request_id}
-            # Project bounded presentation fields from the canonical HITL request.
-            await self._emit_pause(context, e.hitl_request_id, verb, call_id)
+            # Announce the pause, and RECORD it so the approved call can be replayed.
+            await self._hold_pause(context, e, noun, verb, params, call_id)
             raise
         except DegradedMode:
             status = "degraded"
@@ -449,7 +487,7 @@ class Dispatcher:
             if gated:
                 context = await enforce_approval(
                     self._hitl, self._adapter_provider, binding,
-                    noun, verb, params, context, approval_id,
+                    noun, verb, params, context, approval_id, store=self._store,
                 )
             if not carries_approval:
                 await self._rate.enforce(tenant, verb, binding.rate_limit)

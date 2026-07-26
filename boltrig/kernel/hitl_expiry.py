@@ -41,6 +41,7 @@ from boltrig.models import WorkStatus
 from boltrig.store import Store
 
 from .channel_notify import enqueue_user_notification
+from .held_call import settle_held_call
 from .hitl import request_timed_out
 
 log = logging.getLogger("boltrig.kernel.hitl_expiry")
@@ -102,6 +103,21 @@ async def _park_expired_item(store: Store, req: Any) -> None:
     await store.update_work_item(item)
 
 
+async def _retire_held_call(store: Store, req: Any) -> None:
+    """Drop the seal of a write held by a request that has just timed out.
+
+    The chat lane never calls ``sweep_run_scoped`` (its only caller is the org
+    lane), so a held call whose approval expires unanswered would otherwise leave
+    its sealed params behind for the life of the database. A request with no held
+    write is a no-op. Fail-safe: the recorded expiry is the truth (P9)."""
+    if not req.run_id:
+        return
+    try:
+        await settle_held_call(store, req.tenant_id, req.run_id, req.id)
+    except Exception:  # noqa: BLE001 - hygiene must never break the sweep
+        log.warning("held-call seal could not be dropped on expiry", exc_info=True)
+
+
 async def _notify_expired(store: Store, req: Any) -> None:
     """Best-effort channel notice that the request expired unanswered (SEC-179).
     Fail-safe, mirroring HITLManager._notify_request."""
@@ -132,6 +148,7 @@ async def expire_tenant_once(store: Store, tenant_id: str) -> int:
             continue
         expired += 1
         await _park_expired_item(store, req)
+        await _retire_held_call(store, req)
         await _notify_expired(store, req)
         log.info(
             "hitl expiry: request=%s tenant=%s timed out (work_item=%s)",

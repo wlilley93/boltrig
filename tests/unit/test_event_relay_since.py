@@ -58,3 +58,45 @@ def test_forget_resets_seq_state():
     r.forget(TENANT, RUN)
     assert r.max_seq(TENANT, RUN) == 0
     assert r.snapshot(TENANT, RUN) == []
+
+
+@pytest.mark.asyncio
+async def test_reopen_lets_a_closed_stream_carry_a_continuation():
+    # A chat turn closes its stream when it ends, and subscribe() returns
+    # IMMEDIATELY for a closed key - so a write held for a human decision and
+    # resumed minutes later would publish into a stream no new subscriber could
+    # read (decision 0018, Order 3).
+    r = EventRelay()
+    r.publish(TENANT, RUN, {"type": "text_delta", "delta": "before"})
+    r.close(TENANT, RUN)
+
+    closed = r.subscribe(TENANT, RUN, replay=False)
+    with pytest.raises(StopAsyncIteration):
+        await closed.__anext__()  # today's behaviour: nothing can be delivered
+
+    r.reopen(TENANT, RUN)
+    live = r.subscribe(TENANT, RUN, replay=True)
+    assert (await live.__anext__())["delta"] == "before"  # the subscriber attaches
+    r.publish(TENANT, RUN, {"type": "text_delta", "delta": "after"})
+    assert (await live.__anext__())["delta"] == "after"
+    r.close(TENANT, RUN)
+    with pytest.raises(StopAsyncIteration):
+        await live.__anext__()
+
+
+def test_reopen_keeps_the_backlog_and_never_rewinds_the_seq():
+    # Monotonicity across a resumption is what makes a ?since=<seq> cursor safe:
+    # a resumed stream must never re-issue a seq a live cursor already passed.
+    r = EventRelay()
+    r.publish(TENANT, RUN, {"type": "text_delta", "delta": "before"})
+    r.close(TENANT, RUN)
+    r.reopen(TENANT, RUN)
+    assert r.max_seq(TENANT, RUN) == 1
+    r.publish(TENANT, RUN, {"type": "text_delta", "delta": "after"})
+    assert r.max_seq(TENANT, RUN) == 2
+    assert [e["delta"] for e in r.snapshot(TENANT, RUN)] == ["before", "after"]
+    assert [e["delta"] for e in r.snapshot(TENANT, RUN, since=1)] == ["after"]
+
+
+def test_reopen_of_an_unknown_stream_is_a_no_op():
+    EventRelay().reopen(TENANT, "never-seen")  # never raises

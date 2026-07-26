@@ -42,6 +42,15 @@ _SECURE_ANSWER_KIND = "secure_answer"
 # resolved into the adapter ``credential`` arg at dispatch, never substituted
 # into a verb param (an agent could otherwise coax the bearer into an output).
 _ADAPTER_BEARER_KIND = "adapter_bearer"
+# Marker on the sealed row for a HELD CALL: the canonical {noun, verb, params,
+# ctx} of a write the HITL gate paused, sealed so the approved call can later be
+# replayed from the RECORD (decision 0018, Order 1). DELIBERATELY DISTINCT from
+# _SECURE_ANSWER_KIND for the same reason as the bearer above, and here the
+# danger is sharper: a held call carries the cell's OWN pending write verbatim,
+# so under the secure-answer kind a later param of the shape
+# ``credential:run/<run_id>/held_call:<request_id>`` would resolve straight back
+# into a verb param and hand the cell its own held write to exfiltrate.
+HELD_CALL_KIND = "held_call"
 
 
 def run_scoped_cred_id(run_id: str, purpose: str) -> str:
@@ -53,6 +62,12 @@ def adapter_bearer_cred_id(run_id: str, adapter_id: str) -> str:
     """The credential_refs id a per-run adapter bearer is sealed under. Distinct
     ``adapter_bearer:`` segment keeps it out of the secure-answer keyspace."""
     return f"{RUN_SCOPED_CRED_PREFIX}{run_id}:adapter_bearer:{adapter_id}"
+
+
+def held_call_cred_id(run_id: str, request_id: str) -> str:
+    """The credential_refs id a gate-held call is sealed under. Distinct
+    ``held_call:`` segment keeps it out of the secure-answer keyspace."""
+    return f"{RUN_SCOPED_CRED_PREFIX}{run_id}:held_call:{request_id}"
 
 
 def _owner_matches(ref: dict, context_owner: str | None) -> bool:

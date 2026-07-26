@@ -40,7 +40,11 @@ from .channels import (
     ChannelPairing,
     transport_for,
 )
-from .context import InvocationContext
+from .context import (
+    InvocationContext,
+    context_from_envelope,
+    context_to_envelope,
+)
 from .conversation import (
     Conversation,
     ConversationMessage,
@@ -132,6 +136,7 @@ from .platform import (
 )
 from .errors import (
     AdapterFailure,
+    ApprovalNotHoldable,
     BindingNotFound,
     BudgetExceeded,
     ContextRequirementsUnmet,
@@ -228,6 +233,8 @@ __all__ = [
     "WorkspaceId",
     "utcnow",
     "InvocationContext",
+    "context_from_envelope",
+    "context_to_envelope",
     "Channel",
     "ChannelBinding",
     "ChannelOutboxMessage",
@@ -314,6 +321,7 @@ __all__ = [
     "PersonalAgent",
     "BoltrigError",
     "AdapterFailure",
+    "ApprovalNotHoldable",
     "SchemaValidationError",
     "BindingNotFound",
     "GrantMissing",

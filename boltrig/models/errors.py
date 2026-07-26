@@ -134,6 +134,25 @@ class NetworkPolicyViolation(BoltrigError):
     reason = "network_policy_violation"
 
 
+class ApprovalNotHoldable(BoltrigError):
+    """A gated verb was dispatched on a lane that could not redeem its approval.
+
+    The subsidiary holding of decision 0018: an approval instrument must never be
+    minted on a lane with no redeemer. The live defect it prevents is on the
+    record - a human approved ``opbox.add_comment`` inside a chat turn, the
+    request sat ANSWERED forever because nothing could claim it, and the comment
+    was never posted. A pause that cannot be recorded is refused BEFORE the
+    request is created, so the answerable-but-unclaimable state cannot exist.
+    """
+
+    status_code = 409
+    reason = "approval_not_holdable"
+
+    def __init__(self, message: str, verb: str) -> None:
+        super().__init__(message)
+        self.verb = verb
+
+
 # --- Control-flow signals (carry a payload; not failures) ---------------------
 class PendingHuman(BoltrigError):
     """Execution paused for a human decision (HITL gate, US-HIL-01).

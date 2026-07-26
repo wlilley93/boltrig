@@ -277,20 +277,24 @@ async def _seed_from_manifest(kernel: Kernel, manifest) -> None:
             log.warning("skill load failed: %s", exc)
 
 
-def wire_hitl_resume(kernel: Kernel, *, executor=None, pump=None) -> None:
-    """Bridge a HITL answer to the durable lane (Beat 5, NFR-REL-03).
+def wire_hitl_resume(
+    kernel: Kernel, *, executor=None, pump=None, resume_held_write=None
+) -> None:
+    """Bridge a HITL answer to the lane that can act on it (Beat 5, NFR-REL-03).
 
     On answer: push the scoped approval event (resumes a durable workflow-run
-    waiting on the request's run) and requeue the request's AWAITING_HUMAN work
-    item back to PENDING. Both legs are independent, fail-safe and optional -
+    waiting on the request's run), requeue the request's AWAITING_HUMAN work
+    item back to PENDING, and replay a HELD WRITE if one is waiting on this run
+    (decision 0018). All three legs are independent, fail-safe and optional -
     an API-only deployment has no pump, an offline one records events on the
-    local executor (P9). The kernel side only sees the injected callable; it
+    local executor (P9). The kernel side only sees the injected callables; it
     never imports the fleet (P1). Exactly-once execution of the gated verb is
     the CAS's job (SEC-14), so a duplicate notification is harmless.
     """
     from boltrig.fleet.hatchet_app import APPROVAL_EVENT_KEY
 
     async def _on_answer(request) -> None:
+        await _resume_held_write_route(kernel, resume_held_write, request)
         if executor is not None and request.run_id:
             try:
                 resp = await kernel.store.get_hitl_response(request.tenant_id, request.id)
@@ -311,6 +315,35 @@ def wire_hitl_resume(kernel: Kernel, *, executor=None, pump=None) -> None:
         await _harvest_hitl_signal(kernel, request)
 
     kernel.hitl.set_resume_notifier(_on_answer)
+
+
+async def _resume_held_write_route(kernel: Kernel, resume, request) -> None:
+    """The answer bridge's third route: replay a write held on THIS run.
+
+    Fires only for an APPROVAL whose run carries a ``held:``-prefixed paused
+    checkpoint, which is what makes it mutually exclusive with the durable route
+    above: a run the interpreter holds records its own paused checkpoint for the
+    step, and ``held_write_is_waiting`` stands down when another lane has claimed
+    the same request. Two claimants would race the ANSWERED -> CONSUMED CAS and
+    the loser would report a conflict about a write that did happen.
+
+    Injected as a callable exactly like ``executor`` and ``pump`` so the kernel
+    still never imports the fleet (P1). Fail-safe (P9): the answer stands, and
+    the approval is left claimable, if the replay itself faults.
+    """
+    from boltrig.kernel.held_call import held_write_is_waiting
+    from boltrig.models import HITLType
+
+    if resume is None or request.type != HITLType.APPROVAL or not request.run_id:
+        return
+    try:
+        if not await held_write_is_waiting(
+            kernel.store, request.tenant_id, request.run_id, request.id
+        ):
+            return
+        await resume(request.tenant_id, request.run_id, request.id)
+    except Exception:  # the recorded answer is the truth; a replay fault never voids it
+        log.warning("held-write resume failed", exc_info=True)
 
 
 async def _harvest_hitl_signal(kernel: Kernel, request) -> None:
@@ -561,18 +594,19 @@ def _build_shared_codex_config() -> "dict[str, object] | None":
     )
 
 
-def build_app():
-    """Build the FastAPI app for uvicorn (target: boltrig.api.asgi:app).
+def _build_chat_wiring(codex_config):
+    """Return ``(chat_factory, resume_held_write)`` sharing ONE ChatService.
 
-    The kernel is built by the app lifespan on the serving loop (not here), so
-    loop-bound resources like the asyncpg pool attach to uvicorn's loop."""
+    The two are built together because the HITL answer bridge has to reach the
+    SAME service the SSE routes use: the event relay is per-Kernel and
+    in-process, so a held write replayed anywhere else would publish its
+    continuation into a stream the browser cannot subscribe to (decision 0018).
+    Late-bound through a holder rather than by call order, so it does not matter
+    which factory the app lifespan runs first."""
     from boltrig.fleet import build_spawner
     from boltrig.fleet.chat import ChatService, build_turn_executor
-    from boltrig.kernel.app import create_app
 
-    # Trusted read-only Codex built ONCE and shared by every spawner (see
-    # _build_shared_codex_config). None when off, keeping every path byte-identical.
-    codex_config = _build_shared_codex_config()
+    holder = {}
 
     def chat_factory(kernel):
         from boltrig.api.codex_execution import build_codex_execution_stack
@@ -587,7 +621,7 @@ def build_app():
             except Exception:
                 pass
         settings = load_settings()
-        return ChatService(
+        service = ChatService(
             kernel.store, kernel.events,
             turn_executor=build_turn_executor(
                 kernel, build_spawner(kernel, codex_config=codex_config), chat_config=chat_cfg,
@@ -597,7 +631,33 @@ def build_app():
             # The same ChatConfig carries the attachment caps ([2026] VJS-COUNTY 3);
             # ChatService enforces them fail-closed at intake.
             chat_config=chat_cfg,
+            # The ONE chokepoint a held write is replayed through (decision 0018).
+            kernel=kernel,
         )
+        holder["service"] = service
+        return service
+
+    async def resume_held_write(tenant_id, run_id, hitl_request_id):
+        service = holder.get("service")
+        if service is None:
+            return None
+        return await service.resume_held_write(tenant_id, run_id, hitl_request_id)
+
+    return chat_factory, resume_held_write
+
+
+def build_app():
+    """Build the FastAPI app for uvicorn (target: boltrig.api.asgi:app).
+
+    The kernel is built by the app lifespan on the serving loop (not here), so
+    loop-bound resources like the asyncpg pool attach to uvicorn's loop."""
+    from boltrig.fleet import build_spawner
+    from boltrig.kernel.app import create_app
+
+    # Trusted read-only Codex built ONCE and shared by every spawner (see
+    # _build_shared_codex_config). None when off, keeping every path byte-identical.
+    codex_config = _build_shared_codex_config()
+    chat_factory, resume_held_write = _build_chat_wiring(codex_config)
 
     def platform_factory(kernel):
         # Round Three studios/admin/eval ride existing services (C2)
@@ -633,7 +693,9 @@ def build_app():
             _wire_memory_projection_executor(kernel, tenant, executor)
         except Exception:  # task registration must never break boot (P9)
             log.warning("boltrig task registration failed", exc_info=True)
-        wire_hitl_resume(kernel, executor=executor)
+        wire_hitl_resume(
+            kernel, executor=executor, resume_held_write=resume_held_write
+        )
         admin = AdminConfig(kernel.store, tenant_id=tenant, path=manifest_path)
         workflows = WorkflowLibrary(kernel.store, executor=executor, kernel=kernel)
         # Share the ONE services with their governed control verbs so route and

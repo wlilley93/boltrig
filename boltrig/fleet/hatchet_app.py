@@ -47,7 +47,12 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from boltrig.models import GrantSet, InvocationContext, TenantIsolation
+from boltrig.models import (
+    InvocationContext,
+    TenantIsolation,
+    context_from_envelope,
+    context_to_envelope,
+)
 
 from .hatchet_memory import (
     TASK_MEMORY_PROJECTION,
@@ -131,46 +136,10 @@ except Exception:  # offline / no [durable] extra: keep the module import-safe
 
 
 # --- the context envelope (pure data across the queue) -------------------------
-def context_to_envelope(ctx: InvocationContext) -> dict[str, Any]:
-    """Serialise an :class:`InvocationContext` to a JSON-safe dict. A task input
-    carries this envelope instead of the object so the queue holds pure data."""
-    return {
-        "tenant_id": ctx.tenant_id,
-        "run_id": ctx.run_id,
-        "parent_run_id": ctx.parent_run_id,
-        "depth": ctx.depth,
-        "on_behalf_of": ctx.on_behalf_of,
-        "workspace_id": ctx.workspace_id,
-        "ip_address": ctx.ip_address,
-        "user_agent": ctx.user_agent,
-        "grants": {"allow": list(ctx.grants.allow), "deny": list(ctx.grants.deny)},
-        "actor": ctx.actor,
-        "actor_tier": ctx.actor_tier,
-        "skills_loaded": list(ctx.skills_loaded),
-        "extra": dict(ctx.extra),
-    }
-
-
-def context_from_envelope(env: dict[str, Any]) -> InvocationContext:
-    """Reconstruct the :class:`InvocationContext` a task body re-enters the
-    chokepoint with. The envelope only ever narrows to what it carries; missing
-    fields take the fail-closed defaults (empty grants, ephemeral tier)."""
-    grants = env.get("grants") or {}
-    return InvocationContext(
-        tenant_id=env["tenant_id"],
-        run_id=env.get("run_id"),
-        parent_run_id=env.get("parent_run_id"),
-        depth=int(env.get("depth", 0)),
-        on_behalf_of=env.get("on_behalf_of"),
-        workspace_id=env.get("workspace_id"),
-        ip_address=env.get("ip_address"),
-        user_agent=env.get("user_agent"),
-        grants=GrantSet.of(list(grants.get("allow") or []), list(grants.get("deny") or [])),
-        actor=env.get("actor", "unknown"),
-        actor_tier=env.get("actor_tier", "ephemeral"),
-        skills_loaded=tuple(env.get("skills_loaded") or ()),
-        extra=dict(env.get("extra") or {}),
-    )
+# Re-exported from boltrig.models (this module's public names are unchanged): the
+# codec moved beside the model when a THIRD lane began replaying a context it did
+# not build (the held-write resume, decision 0018). Three private copies is how one
+# lane silently drops an authority-bearing field the approval fingerprint binds.
 
 
 def _fence(payload_tenant: str, ctx: InvocationContext) -> None:

@@ -51,6 +51,9 @@ class TenantEventRelay:
     def close(self, stream_id: str) -> None:
         self._relay.close(self._tenant_id, stream_id)
 
+    def reopen(self, stream_id: str) -> None:
+        self._relay.reopen(self._tenant_id, stream_id)
+
     def subscribe(
         self, stream_id: str, *, replay: bool = True, since: int | None = None
     ) -> AsyncIterator[dict[str, Any]]:
@@ -128,6 +131,21 @@ class EventRelay:
             q.put_nowait(_SENTINEL)
         while len(self._closed) > self._max_closed:
             self.forget(*next(iter(self._closed)))
+
+    def reopen(self, tenant_id: str, stream_id: str) -> None:
+        """Re-open a closed stream so a continuation can be published to it.
+
+        A chat turn closes its stream when the turn ends (``chat._safe_exec``), and
+        ``subscribe`` returns IMMEDIATELY for a closed key - so a write held for a
+        human decision, resumed minutes later, would publish its result into a
+        stream no new subscriber could ever read from. Dropping the key from
+        ``_closed`` is the whole operation: the backlog stays (a client that
+        re-attaches still gets what it missed), and ``_seq`` is deliberately NOT
+        touched - per-stream monotonicity across a resumption is what keeps a
+        ``?since=<seq>`` cursor safe, so a resumed stream must never re-issue a seq
+        a live cursor has already passed.
+        """
+        self._closed.pop(self._key(tenant_id, stream_id), None)
 
     async def subscribe(
         self,

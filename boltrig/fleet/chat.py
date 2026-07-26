@@ -227,10 +227,14 @@ class ChatService:
         turn_executor: TurnExecutor | None = None,
         chat_config: ChatConfig | None = None,
         summariser: Summariser | None = None,
+        kernel=None,
     ) -> None:
         self._store = store
         self._relay = relay
         self._exec = turn_executor
+        # The ONE chokepoint a held write is replayed through (decision 0018).
+        # Optional: a service built without it simply cannot resume a held write.
+        self._kernel = kernel
         # The attachment caps live on ChatConfig ([2026] VJS-COUNTY 3); absent a
         # manifest the fail-closed defaults (conservative, non-zero) apply.
         self._cfg = chat_config if chat_config is not None else ChatConfig()
@@ -641,6 +645,27 @@ class ChatService:
         # superseded old reply is filtered out of the covered set (SEC exclusion).
         await self._maybe_compact(tenant_id, conversation_id)
         return new_message, last_assistant.id
+
+    async def resume_held_write(
+        self, tenant_id: str, run_id: str, hitl_request_id: str
+    ) -> dict[str, Any]:
+        """Carry out the write a human approved, on the turn that asked for it
+        (decision 0018, Order 4).
+
+        Sibling to ``regenerate_turn`` and deliberately unlike it: regenerate
+        re-runs the MODEL, this re-runs the recorded CALL. A chat turn is
+        synchronous and has already ended by the time a human approves, so
+        nothing was left listening and an approved write was simply never made -
+        the live defect this closes. The write happens BEFORE any model work and
+        is never gated by it; narration carries no authority.
+        """
+        if self._kernel is None:
+            return {"status": "skipped", "reason": "no_kernel"}
+        from .held_write_resume import resume_held_write
+
+        return await resume_held_write(
+            self._kernel, self._store, self._relay, tenant_id, run_id, hitl_request_id
+        )
 
     async def cancel(self, tenant_id: str, run_id: str) -> None:
         """End a live chat turn's SSE stream cleanly on a server-side cancel
