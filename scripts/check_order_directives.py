@@ -15,9 +15,18 @@ while the order still reads `binding`. That already happened once in a
 neighbouring form: an order pointed at a renamed test (the SEC-24 drift) and sat
 red for ninety minutes because a rename could not break anything.
 
-WHAT COUNTS AS BOUND. A test file that names the ORDER (by id, by citation, or by
-the distinctive tail of its id) and names the DIRECTIVE id as a word. That pairing
-is deliberately strict in one direction and loose in the other:
+WHAT COUNTS AS BOUND. A test that names the DIRECTIVE id as a word within
+PROXIMITY_LINES of a line naming the ORDER (by id, by citation, or by the
+distinctive tail of its id). The proximity matters and was learned the hard way:
+the first version accepted the two anywhere in the same FILE, and the gate's own
+new test file - which names six orders and, between them, directives D1, D5, D6
+and D8 - immediately cross-matched, reporting a rate-limit directive bound by a
+line about cancellation. Re-measured, whole-file matching had been counting 57
+directives bound where same-line-or-adjacent counts 36. The gate that measures
+debt is the last place an over-count is tolerable, so it reports the smaller,
+true number.
+
+That pairing is deliberately strict in one direction and loose in the other:
 
   - strict: the mention must be in tests/, not in boltrig/. A comment in
     production code saying "D4 requires this" is the claim, not the enforcement.
@@ -59,6 +68,14 @@ ROOT = Path(__file__).resolve().parents[1]
 ORDERS = ROOT / ".vjs" / "orders"
 TESTS = ROOT / "tests"
 EXEMPTIONS = ROOT / "docs" / "refactoring" / "order-binding-exemptions.json"
+
+# How far a directive id may sit from the line naming its order. Zero would be
+# defensible and is nearly right - almost every real binding writes them together,
+# `# --- SEC-97 / COUNTY 7 D1: ...` - but a wrapped comment or a docstring that
+# puts the citation on one line and the directives on the next is normal English,
+# not evasion. Two lines admits that and nothing else: it changes the count by
+# exactly the seven bindings that wrap, and re-admits no cross-match.
+PROXIMITY_LINES = 2
 
 # Read with an indentation scanner rather than a YAML parser, for the same reason
 # check_invariants.py and check_health_claims.py do: these gates ship stdlib-only
@@ -197,11 +214,27 @@ def main() -> int:
             continue
         orders_checked += 1
         keys = order_keys(order)
-        naming = [p for p, text in sources.items() if any(k in text for k in keys)]
+        # Line numbers, not just files: the directive has to sit NEXT TO its order.
+        naming: dict[Path, list[int]] = {}
+        for p, text in sources.items():
+            at = [
+                i
+                for i, line in enumerate(text.splitlines())
+                if any(k in line for k in keys)
+            ]
+            if at:
+                naming[p] = at
         short = order["id"].split("BOLTRIG-")[-1]
         for directive in order["directives"]:
             word = re.compile(rf"(?<![\w-]){re.escape(directive)}(?![\w-])")
-            hits = [p for p in naming if word.search(sources[p])]
+            hits = [
+                p
+                for p, at in naming.items()
+                if any(
+                    word.search(line) and any(abs(i - j) <= PROXIMITY_LINES for j in at)
+                    for i, line in enumerate(sources[p].splitlines())
+                )
+            ]
             key = f"{short}:{directive}"
             if hits:
                 bound.append((short, directive, hits[0].relative_to(ROOT).as_posix()))

@@ -58,7 +58,7 @@ def _set_cookies_insecure(monkeypatch):
     monkeypatch.setenv("BOLTRIG_SESSION_COOKIE_SECURE", "0")
 
 
-# --- SEC-97 / COUNTY 7 D1: invite-only, no self-signup, single-use tokens ------
+# --- SEC-97 / [2026] VJS-COUNTY 7 D1: invite-only, no self-signup, single-use -------
 @pytest.mark.security
 @pytest.mark.invariant("SEC-97")
 def test_invite_only_no_self_signup_and_single_use(monkeypatch):
@@ -101,7 +101,7 @@ def test_invite_only_no_self_signup_and_single_use(monkeypatch):
     assert replay.status_code == 400
 
 
-# --- SEC-98 / COUNTY 7 D4: argon2id, non-reversible, never logged --------------
+# --- SEC-98 / [2026] VJS-COUNTY 7 D4: argon2id, non-reversible, never logged --------
 @pytest.mark.security
 @pytest.mark.invariant("SEC-98")
 def test_password_is_hashed_non_reversible_and_never_logged(monkeypatch):
@@ -135,7 +135,7 @@ def test_password_is_hashed_non_reversible_and_never_logged(monkeypatch):
     assert secret not in blob
 
 
-# --- SEC-99 / COUNTY 7 D5: login rate-limited, constant-time, non-enumerating --
+# --- SEC-99 / [2026] VJS-COUNTY 7 D5: rate-limited, constant-time, non-enumerating --
 @pytest.mark.security
 @pytest.mark.invariant("SEC-99")
 def test_login_is_rate_limited_and_non_enumerating(monkeypatch):
@@ -169,8 +169,8 @@ def test_login_is_rate_limited_and_non_enumerating(monkeypatch):
     assert codes[5] == 429
 
 
-# --- SEC-100 / COUNTY 7 D2+D6: session cookie httpOnly/Secure/SameSite, bounded,
-#     revocable - D2's logout revocation and D6's cookie posture are one surface
+# --- SEC-100 / [2026] VJS-COUNTY 7 D2+D6: session cookie httpOnly/Secure/SameSite,
+#     bounded, revocable - D2's logout revocation and D6's cookie posture, one surface
 @pytest.mark.security
 @pytest.mark.invariant("SEC-100")
 def test_session_cookie_is_httponly_secure_bounded_and_revocable(monkeypatch):
@@ -203,9 +203,9 @@ def test_session_cookie_is_httponly_secure_bounded_and_revocable(monkeypatch):
     assert c.get("/v1/me/sessions").status_code == 401
 
 
-# --- SEC-101 / COUNTY 7 D3+D8: resolver fail-closed, CSRF on mutating cookie
-#     requests - the session resolver that replaced the CF Access one, and the
-#     one chokepoint every auth action routes through
+# --- SEC-101 / [2026] VJS-COUNTY 7 D3+D8: resolver fail-closed, CSRF on mutating
+#     cookie requests - the session resolver that replaced the CF Access one, and
+#     the one chokepoint every auth action routes through
 @pytest.mark.security
 @pytest.mark.invariant("SEC-101")
 def test_resolver_fail_closed_and_csrf_protected(monkeypatch):
@@ -264,7 +264,7 @@ def test_initiate_is_idempotent_and_refuses_twice(monkeypatch):
     assert rc3 != 0
 
 
-# --- COUNTY 7 D9: the directive that is about the RECORD -------------------------
+# --- [2026] VJS-COUNTY 7 D9: the directive that is about the RECORD ----------------
 @pytest.mark.security
 def test_every_first_party_auth_invariant_is_declared_in_the_catalogue():
     """D9 orders the five behaviours PINNED as invariants with debt staying zero.

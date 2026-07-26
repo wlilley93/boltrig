@@ -96,7 +96,7 @@ def _enroll(client, csrf):
     return secret, codes
 
 
-# --- SEC-126 / COUNTY 10 D1: the TOTP secret is sealed, never plaintext/audited --
+# --- SEC-126 / [2026] VJS-COUNTY 10 D1: the TOTP secret is sealed, never plaintext ---
 @pytest.mark.security
 @pytest.mark.invariant("SEC-126")
 def test_totp_secret_is_sealed_never_plaintext_or_audited(monkeypatch):
@@ -133,7 +133,7 @@ def test_totp_secret_is_sealed_never_plaintext_or_audited(monkeypatch):
     assert again.status_code == 400  # already enabled; no re-reveal
 
 
-# --- SEC-127 / COUNTY 10 D2: recovery codes hashed + single-use, never a bypass --
+# --- SEC-127 / [2026] VJS-COUNTY 10 D2: recovery codes hashed, single-use, no bypass -
 @pytest.mark.security
 @pytest.mark.invariant("SEC-127")
 def test_recovery_codes_are_hashed_and_single_use(monkeypatch):
@@ -182,7 +182,7 @@ def test_recovery_codes_are_hashed_and_single_use(monkeypatch):
         assert normalize_recovery_code(code) not in blob
 
 
-# --- SEC-128 / COUNTY 10 D3: fail-closed, between password-verify and session ----
+# --- SEC-128 / [2026] VJS-COUNTY 10 D3: fail-closed, between password and session ---
 @pytest.mark.security
 @pytest.mark.invariant("SEC-128")
 def test_challenge_is_fail_closed_between_password_and_session(monkeypatch):
@@ -226,7 +226,7 @@ def test_challenge_is_fail_closed_between_password_and_session(monkeypatch):
     assert unknown.status_code == 401
 
 
-# --- SEC-129 / COUNTY 10 D4: org require_two_factor forces enrollment-only -------
+# --- SEC-129 / [2026] VJS-COUNTY 10 D4: org require_two_factor forces enrollment ----
 @pytest.mark.security
 @pytest.mark.invariant("SEC-129")
 def test_org_required_two_factor_forces_enrollment_only(monkeypatch):
@@ -266,7 +266,7 @@ def test_org_required_two_factor_forces_enrollment_only(monkeypatch):
     assert clamped.json()["detail"] == "two_factor_enrollment_required"
 
 
-# --- SEC-130 / COUNTY 10 D5: rate-limited, constant-time, audited keys-only ------
+# --- SEC-130 / [2026] VJS-COUNTY 10 D5: rate-limited, constant-time, audited --------
 @pytest.mark.security
 @pytest.mark.invariant("SEC-130")
 def test_challenge_is_rate_limited_constant_time_and_audited(monkeypatch):
@@ -357,7 +357,7 @@ def app_post(app, challenge_token, code):
     )
 
 
-# --- COUNTY 10 D6/D7: the two directives that are about the RECORD ---------------
+# --- [2026] VJS-COUNTY 10 D6/D7: the two directives that are about the RECORD -------
 # The other five directives are behaviours and are proved above. These two are
 # claims about how the factor is depended on and declared, which nothing checked:
 # the order said "surface the TOTP library dependency and pin it" and "pin
