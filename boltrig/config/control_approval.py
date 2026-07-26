@@ -7,7 +7,7 @@ from typing import Any
 from boltrig.models import AdapterFailure, InvocationContext
 from boltrig.workflows.snapshot import workflow_snapshot_digest
 
-from .control_rehydrate import rehydratable
+from .control_rehydrate import consumer_spec, rehydratable
 
 _WORKFLOW_ACTIONS = frozenset(
     {
@@ -134,7 +134,7 @@ async def _store_adapter_view(
                 }
             )
     verbs.sort(key=lambda item: item["id"])
-    return {
+    view = {
         "adapter": {
             "id": record.id,
             "version": record.version,
@@ -144,6 +144,24 @@ async def _store_adapter_view(
             "verbs": verbs,
         }
     }
+    # SEC-61's waiver is justified by THIS approval: control_specs.py says the
+    # internal-egress flag "is always human-approved before any call" because
+    # registration is inert until the SEC-22 review gate. The approver was never
+    # shown it. `control.adapter.activate` takes only {adapter_id}, so the
+    # approval payload was an id, and this view emitted id/version/runtime/
+    # source/activated/verbs - no url, no allow_internal. A human was asked to
+    # approve "adapter mcp-x" and had no way to learn it would be permitted to
+    # reach 169.254.169.254.
+    #
+    # Adding them here does two things at once: the reviewer sees the waiver, and
+    # because this dict IS the approval fingerprint, a row whose url or flag
+    # changes between the pend and the apply no longer matches an approval given
+    # for the old value.
+    spec = consumer_spec(getattr(record, "spec_ref", None))
+    if spec.get("url") is not None or spec.get("allow_internal"):
+        view["adapter"]["target_url"] = spec.get("url")
+        view["adapter"]["allow_internal_egress"] = bool(spec.get("allow_internal"))
+    return view
 
 
 async def _adapter_context(

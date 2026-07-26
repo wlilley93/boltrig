@@ -215,8 +215,23 @@ def check_repository(root: Path = ROOT) -> Report:
         for path in sorted(layer_root.rglob("*.py")):
             checked += 1
             violations.extend(_scan_file(path, root, layer))
+    # A missing kernel root is a VIOLATION, not a reason to skip. This used to be
+    # a bare `if kernel_root.is_dir():` with no else, four lines below a loop that
+    # correctly emits one for exactly the same condition - so relocating or
+    # renaming boltrig/kernel would have made the whole _KERNEL_FORBIDDEN
+    # deny-list evaporate while the gate printed "architecture boundary clean".
+    # The asymmetry inside one function is what gives it away as unintentional.
     kernel_root = root.joinpath(*_KERNEL_ROOT)
-    if kernel_root.is_dir():
+    if not kernel_root.is_dir():
+        violations.append(
+            Violation(
+                kernel_root.relative_to(root).as_posix(),
+                1,
+                "kernel",
+                "required kernel root is missing, so its deny-list checked nothing",
+            )
+        )
+    else:
         for path in sorted(kernel_root.rglob("*.py")):
             checked += 1
             violations.extend(_scan_kernel_file(path, root))

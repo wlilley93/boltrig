@@ -332,3 +332,75 @@ async def test_a_second_activation_resyncs_idempotently(monkeypatch):
     assert create is not None and create.input_schema == _TOOLS[0]["inputSchema"]
     binding = await k.store.get_binding(T, "ext-mcp.ticket.close")
     assert binding is not None and binding.target_ref == "ext-mcp"
+
+
+# --- SEC-61: the internal-egress waiver, attacked rather than used -----------
+@pytest.mark.security
+@pytest.mark.invariant("SEC-61")
+async def test_an_internal_targeted_server_cannot_be_called_before_a_human_approves(
+    monkeypatch,
+):
+    """SEC-61's strongest sentence, bound at last.
+
+    `mcp_transport.py` says allow_internal "must never be set for an
+    agent-influenced URL", and `control_specs.py` justifies the waiver by saying
+    registration is inert until the SEC-22 review gate so "the flag is always
+    human-approved before any call". Three tests were bound to SEC-61 and all
+    three USED the waiver - none asserted the sentence. `control.mcp_server.
+    register` is consequence=low, so an agent holding that grant CAN register an
+    internal-targeted server; the whole protection is that it cannot be CALLED.
+    So that is what this attacks.
+    """
+    k = await _kernel()
+    monkeypatch.setenv("MCP_TOK", "server-bearer")
+    out = await k.invoke(
+        "control",
+        "control.mcp_server.register",
+        {
+            "id": "imds-mcp",
+            "url": "http://169.254.169.254/mcp",
+            "credential_ref": "MCP_TOK",
+            "allow_internal": True,
+        },
+        _ctx(["*"]),
+    )
+    assert out["activated"] is False, "an internal target must land INERT"
+
+    # The verbs are not published, so there is nothing to dispatch: the server
+    # cannot be reached at all while it is unapproved.
+    assert [v for v in await k.store.list_verbs(T) if v.id.startswith("imds")] == []
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-61")
+async def test_the_approver_is_shown_the_internal_egress_waiver(monkeypatch):
+    """The reviewer must be able to SEE what they are approving.
+
+    `control.adapter.activate` takes only {adapter_id}, so the approval payload
+    is an id. The resource fingerprint beside it carried
+    id/version/runtime/source/activated/verbs and NOT the url or the flag - so
+    the human whose approval the waiver rests on was never told the adapter would
+    be permitted to reach a link-local address. Because this dict is also the
+    unchanged-approval fingerprint, carrying the url and flag means an approval
+    given for one target cannot be spent on another.
+    """
+    from boltrig.config.control_approval import _store_adapter_view
+
+    k = await _kernel()
+    monkeypatch.setenv("MCP_TOK", "server-bearer")
+    await k.invoke(
+        "control",
+        "control.mcp_server.register",
+        {
+            "id": "imds-mcp",
+            "url": "http://169.254.169.254/mcp",
+            "credential_ref": "MCP_TOK",
+            "allow_internal": True,
+        },
+        _ctx(["*"]),
+    )
+    record = await k.store.get_adapter(T, "imds-mcp")
+    view = await _store_adapter_view(k.store, record, _ctx(["*"]))
+
+    assert view["adapter"]["target_url"] == "http://169.254.169.254/mcp"
+    assert view["adapter"]["allow_internal_egress"] is True

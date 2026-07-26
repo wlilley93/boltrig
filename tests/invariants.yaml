@@ -1173,6 +1173,8 @@ invariants:
       - tests/security/test_adapter_lifecycle.py::test_a_pre_flag_plain_url_row_rehydrates_with_the_guarded_default
       - tests/adapters/test_mcp_consumer_adapter.py::test_an_internal_server_is_refused_without_the_reviewed_waiver
       - tests/adapters/test_mcp_consumer_adapter.py::test_an_internal_server_connects_with_the_reviewed_waiver
+      - tests/security/test_mcp_consumer_activation.py::test_an_internal_targeted_server_cannot_be_called_before_a_human_approves
+      - tests/security/test_mcp_consumer_activation.py::test_the_approver_is_shown_the_internal_egress_waiver
   SEC-62:
     description: 'A Unicode-confusable or non-canonical verb id can never match a grant - matching is NFKC-normalised and restricted to a safe identifier charset (UPLOAD-05 / AZ-02).'
     tests:
