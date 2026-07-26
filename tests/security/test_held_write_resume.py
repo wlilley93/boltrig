@@ -520,7 +520,7 @@ async def test_a_resumed_held_write_reaches_the_adapter_with_the_callers_bearer(
     # sealed against the CELL run, because the resume replays the sealed context and
     # `resolve_run_scoped_credential` keys on that context's run id, not the root's
     await kernel.credentials.seal_run_scoped_adapter_bearer(
-        TENANT, "some-other-run", adapter.id, "caller-bearer-xyz", "alice"  # SEEDED
+        TENANT, CELL_RUN, adapter.id, "caller-bearer-xyz", "alice"
     )
     seen: dict[str, object] = {}
     original = adapter.execute
