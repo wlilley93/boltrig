@@ -147,3 +147,30 @@ def test_the_repositorys_own_unwired_waivers_are_well_formed() -> None:
     allow, problems = check_unwired_claims.load_allow(check_unwired_claims.ALLOW_FILE)
     assert problems == []
     assert allow, "the waiver file exists, so it should hold waivers"
+
+
+@pytest.mark.invariant("NFR-MNT-06")
+def test_the_operators_shell_cannot_colour_a_test() -> None:
+    """No product-behaviour variable survives into a test from the launching shell.
+
+    33 modules under boltrig/ read os.environ at CALL time, so an exported
+    BOLTRIG_PRODUCTION or DATABASE_URL silently decides which branch a test takes.
+    A test named "refuses under a production signal" can then pass because the
+    SHELL set the signal. Neither the pass nor the reason appears in the output.
+
+    Run `BOLTRIG_PRODUCTION=1 pytest tests/unit/test_claim_gates.py` to see this
+    fail with the autouse fence in tests/conftest.py disabled, and pass with it on.
+    """
+    import os
+
+    from tests.conftest import _ENV_KEEP, _ENV_STRIP_EXACT, _ENV_STRIP_PREFIXES
+
+    leaked = sorted(
+        name for name in os.environ
+        if name not in _ENV_KEEP
+        and (name.startswith(_ENV_STRIP_PREFIXES) or name in _ENV_STRIP_EXACT)
+    )
+    assert leaked == [], (
+        f"the launching shell reached the test: {leaked}. Either the fence in "
+        "tests/conftest.py stopped covering these, or a new prefix needs adding."
+    )

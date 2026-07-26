@@ -354,9 +354,27 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--codex",
         type=Path,
-        help="also verify this exact installed Codex binary and its generated stable schema",
+        default=_codex_from_env(),
+        help=(
+            "also verify this exact installed Codex binary and its generated stable "
+            "schema (defaults to $BOLTRIG_CODEX_BINARY)"
+        ),
     )
     return parser
+
+
+def _codex_from_env() -> Path | None:
+    """The binary to verify, from BOLTRIG_CODEX_BINARY.
+
+    `verify_codex_cli` - the sha256 pin on the actual Codex executable - ran in NO
+    gate until 2026-07-26. `make codex-protocol` never passed --codex, so the
+    binary leg was reachable only by a human typing the flag, and the gate still
+    printed "Codex protocol pin clean (repository)" and exited 0. That reads as a
+    pass of the whole check. An env default gives CI and the container a way to
+    run it without a human remembering, and the summary below now states which
+    legs actually ran."""
+    raw = os.environ.get("BOLTRIG_CODEX_BINARY", "").strip()
+    return Path(raw) if raw else None
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -368,7 +386,17 @@ def main(argv: list[str] | None = None) -> int:
     except ProtocolPinError as exc:
         print(f"Codex protocol pin check failed: {exc}", file=sys.stderr)
         return 1
-    scope = "repository and installed CLI" if args.codex is not None else "repository"
+    if args.codex is None:
+        print(
+            "NOT VERIFIED: the installed Codex BINARY was not checked against its "
+            "sha256 pin.\n"
+            "  Only the repository pin was verified. Set BOLTRIG_CODEX_BINARY (or "
+            "pass --codex)\n"
+            "  to a path where the pinned CLI is present - the kernel image, or a "
+            "dev box.",
+            file=sys.stderr,
+        )
+    scope = "repository and installed CLI" if args.codex is not None else "repository ONLY"
     print(
         f"Codex protocol pin clean ({scope}): "
         f"version={verification.pin.version}, target={verification.pin.target}, "

@@ -126,6 +126,54 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
 
 
 
+# --- the operator's shell does not get a vote ---------------------------------
+#
+# 33 modules under boltrig/ read os.environ at CALL time, so a variable exported
+# in the shell that launched pytest silently changes which branch a test takes. A
+# test named "refuses under a production signal" can pass because the SHELL set
+# the signal, and a test that asserts a fail-closed default can pass because the
+# default was never in play. Neither failure is visible in the output; both make
+# the suite a fact about a terminal.
+#
+# So product-behaviour variables are stripped for the duration of every test.
+# monkeypatch restores them afterwards, and a test that wants one sets it itself -
+# which is the point: the value under test becomes part of the test rather than
+# part of the environment.
+#
+# KEPT, deliberately: the variables that select which tests RUN rather than how
+# the product behaves. Stripping BOLTRIG_TEST_DATABASE_URL would skip the entire
+# Postgres surface; stripping the live-service tokens would skip the live legs and
+# report them as unverified, which is true but useless. HATCHET_CLIENT_TOKEN is
+# the honest edge - it is read by readiness AND gates the live tests, and it is
+# kept, so a shell that exports it can still colour a readiness test. That one is
+# named rather than hidden.
+_ENV_STRIP_PREFIXES = (
+    "BOLTRIG_", "POSTGRES_", "HATCHET_", "LLM_", "BACKUP_", "EMBEDDING_", "PG",
+)
+_ENV_STRIP_EXACT = frozenset({"DATABASE_URL", "REDIS_URL", "ENV", "APP_ENV"})
+_ENV_KEEP = frozenset({
+    "BOLTRIG_TEST_DATABASE_URL",
+    "BOLTRIG_ALLOW_UNVERIFIED_POSTGRES",
+    "BOLTRIG_ALLOW_UNVERIFIED_RATELIMIT",
+    "BOLTRIG_PER_CELL_IMAGE",
+    "BOLTRIG_LIVE_SMOKE",
+    "BOLTRIG_COGNEE_LIVE",
+    "BOLTRIG_CODEX_01443_SMOKE_BINARY",
+    "BOLTRIG_CODEX_BINARY",
+    "BOLTRIG_MODEL_GATEWAY_URL",
+    "HATCHET_CLIENT_TOKEN",
+})
+
+
+@pytest.fixture(autouse=True)
+def _hermetic_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in list(os.environ):
+        if name in _ENV_KEEP:
+            continue
+        if name.startswith(_ENV_STRIP_PREFIXES) or name in _ENV_STRIP_EXACT:
+            monkeypatch.delenv(name, raising=False)
+
+
 def make_ctx(grants: list[str], *, run_id: str = "run-1", depth: int = 0, **kw) -> InvocationContext:
     return InvocationContext(
         tenant_id=TENANT,
