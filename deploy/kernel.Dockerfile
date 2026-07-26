@@ -43,7 +43,13 @@ ENV REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt \
 # DEP-001: install from a frozen, hash-verified lockfile instead of mutable
 # ranges. The lockfile is generated from pyproject.toml with `uv pip compile`.
 COPY pyproject.toml requirements-lock.txt /app/
-RUN pip install --require-hashes -r /app/requirements-lock.txt
+# --retries/--timeout are not belt-and-braces: a wheel whose download is TRUNCATED
+# fails the hash check, and pip's default of 5 quick retries gives up on a slow or
+# lossy link. The 58MB lancedb wheel killed this build twice on a 300kB/s
+# connection, each time reported as "THESE PACKAGES DO NOT MATCH THE HASHES" -
+# wording that points at tampering when the real cause is a dropped connection.
+# The hash contract is unchanged; only the patience is.
+RUN pip install --require-hashes --retries 10 --timeout 60 -r /app/requirements-lock.txt
 
 # Boltrig v2 cockpit runtime: ship Herdr with the stack, not from a developer
 # workstation. Pinned release asset + sha256; override all three args together
