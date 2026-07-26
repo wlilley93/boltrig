@@ -28,7 +28,12 @@ from pathlib import Path
 
 import pytest
 
-from scripts import check_gate_coverage, check_health_claims, check_prose_references
+from scripts import (
+    check_gate_coverage,
+    check_health_claims,
+    check_order_directives,
+    check_prose_references,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -184,3 +189,36 @@ def test_the_operators_shell_cannot_colour_a_test() -> None:
         f"the launching shell reached the test: {leaked}. Either the fence in "
         "tests/conftest.py stopped covering these, or a new prefix needs adding."
     )
+
+
+# --- the order-binding gate --------------------------------------------------
+@pytest.mark.invariant("NFR-MNT-03")
+def test_every_binding_court_directive_is_bound_or_recorded(capsys) -> None:
+    assert check_order_directives.main() == 0, capsys.readouterr().out
+
+
+@pytest.mark.invariant("NFR-MNT-03")
+def test_the_order_readers_shortcut_agrees_with_a_real_yaml_parser() -> None:
+    """The gate ships stdlib-only and reads orders with an indentation scanner.
+
+    That shortcut is only safe while it AGREES with the parser it is standing in
+    for. The invariant catalogue is the cautionary case: it was read by a regex
+    reader for months and did not actually parse as the YAML its name claimed.
+    So the shortcut is held to PyYAML's answer on every real order in the tree,
+    not on a fixture, because a fixture would only prove the reader agrees with
+    itself.
+    """
+    import yaml
+
+    paths = sorted(check_order_directives.ORDERS.glob("*.yaml"))
+    assert paths, "scanned nothing: no order files to compare readers on"
+    for path in paths:
+        truth = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        mine = check_order_directives.parse_order(path)
+        assert mine["id"] == (truth.get("id") or ""), path.name
+        assert mine["status"] == (truth.get("status") or ""), path.name
+        assert mine["citation"] == str(truth.get("citation") or ""), path.name
+        expected = [str(d.get("id")) for d in (truth.get("directives") or [])]
+        assert mine["directives"] == expected, (
+            f"{path.name}: stdlib reader saw {mine['directives']}, YAML saw {expected}"
+        )

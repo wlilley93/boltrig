@@ -1,0 +1,242 @@
+{
+  "_comment": [
+    "Binding court directives that no test names, from scripts/check_order_directives.py.",
+    "This file waives COURT ORDERS, so it is held to a higher bar than the other exemption",
+    "files, not a lower one: every entry names an owner, an expiry, and a reason that says",
+    "WHICH KIND of unbound this is and what binding it would take. 'It is fine' is not a",
+    "reason.",
+    "Baselined 2026-07-26, when the gate first ran: 102 binding directives, 57 already bound",
+    "by a test naming both the order and the directive, 45 recorded here. The number may only",
+    "go down - that is the whole point of writing it down.",
+    "Three of the classes below are bindable work that has not been done. One is not: a",
+    "Principal gate on a live cutover cannot be decided by CI, and a test claiming otherwise",
+    "would be precisely the false claim this gate exists to catch."
+  ],
+  "allow": {
+    "AUDIT-DEPTH-001:D8": {
+      "owner": "kernel-maintainers",
+      "expires": "2026-11-30",
+      "reason": "Not code-testable and correctly so: it is a PRINCIPAL GATE on a live cutover or an external credential. Nothing in this repository can decide whether the Principal has given the go, and a test that claimed to would be the false claim this gate exists to stop. Enforced by the deploy record, not by CI."
+    },
+    "CHAT-ATTACHMENTS-001:D1": {
+      "owner": "chat-maintainers",
+      "expires": "2026-11-30",
+      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
+    },
+    "CHAT-ATTACHMENTS-001:D2": {
+      "owner": "chat-maintainers",
+      "expires": "2026-11-30",
+      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
+    },
+    "CHAT-ATTACHMENTS-001:D5": {
+      "owner": "chat-maintainers",
+      "expires": "2026-11-30",
+      "reason": "A 'pin invariants ...' directive. It orders the order's OWN behaviours declared in tests/invariants.yaml with binding debt zero, which the invariants gate half-enforces already (every DECLARED invariant is bound). What is missing is the other half - that these particular ones are declared at all - and that is a real test, of the shape now written for COUNTY 7 D9 and COUNTY 10 D7. Deferred only because each needs its own invariant list read off the order."
+    },
+    "CHAT-ATTACHMENTS-001:D6": {
+      "owner": "chat-maintainers",
+      "expires": "2026-11-30",
+      "reason": "A directive about the RECORD rather than a behaviour: it orders a docstring, an honesty doc or an amended invariant description to say a particular thing. Bindable by asserting the text, which is exactly the shape of this programme, and not yet done."
+    },
+    "CHAT-REGENERATE-001:D1": {
+      "owner": "chat-maintainers",
+      "expires": "2026-11-30",
+      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
+    },
+    "CHAT-REGENERATE-001:D2": {
+      "owner": "chat-maintainers",
+      "expires": "2026-11-30",
+      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
+    },
+    "CHAT-REGENERATE-001:D3": {
+      "owner": "chat-maintainers",
+      "expires": "2026-11-30",
+      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
+    },
+    "CHAT-REGENERATE-001:D4": {
+      "owner": "chat-maintainers",
+      "expires": "2026-11-30",
+      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
+    },
+    "CHAT-REGENERATE-001:D5": {
+      "owner": "chat-maintainers",
+      "expires": "2026-11-30",
+      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
+    },
+    "CHAT-REGENERATE-001:D6": {
+      "owner": "chat-maintainers",
+      "expires": "2026-11-30",
+      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
+    },
+    "CHAT-REGENERATE-001:D7": {
+      "owner": "chat-maintainers",
+      "expires": "2026-11-30",
+      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
+    },
+    "CHAT-REGENERATE-001:D8": {
+      "owner": "chat-maintainers",
+      "expires": "2026-11-30",
+      "reason": "A 'pin invariants ...' directive. It orders the order's OWN behaviours declared in tests/invariants.yaml with binding debt zero, which the invariants gate half-enforces already (every DECLARED invariant is bound). What is missing is the other half - that these particular ones are declared at all - and that is a real test, of the shape now written for COUNTY 7 D9 and COUNTY 10 D7. Deferred only because each needs its own invariant list read off the order."
+    },
+    "CODEX-APPROVAL-ROUTING-001:A1": {
+      "owner": "codex-maintainers",
+      "expires": "2026-11-30",
+      "reason": "An appellate directive with no engineering consequence by its own terms - the appeal affirms the deployed order, varies the record, or is expressly obiter ('commended not ordered'). There is nothing for a test to bind to; binding one would misrepresent obiter as ratio."
+    },
+    "CODEX-APPROVAL-ROUTING-001:A2": {
+      "owner": "codex-maintainers",
+      "expires": "2026-11-30",
+      "reason": "An appellate directive with no engineering consequence by its own terms - the appeal affirms the deployed order, varies the record, or is expressly obiter ('commended not ordered'). There is nothing for a test to bind to; binding one would misrepresent obiter as ratio."
+    },
+    "CODEX-APPROVAL-ROUTING-001:A3": {
+      "owner": "codex-maintainers",
+      "expires": "2026-11-30",
+      "reason": "An appellate directive with no engineering consequence by its own terms - the appeal affirms the deployed order, varies the record, or is expressly obiter ('commended not ordered'). There is nothing for a test to bind to; binding one would misrepresent obiter as ratio."
+    },
+    "CODEX-APPROVAL-ROUTING-001:D1": {
+      "owner": "codex-maintainers",
+      "expires": "2026-11-30",
+      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
+    },
+    "CODEX-APPROVAL-ROUTING-001:D2": {
+      "owner": "codex-maintainers",
+      "expires": "2026-11-30",
+      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
+    },
+    "CODEX-APPROVAL-ROUTING-001:D3": {
+      "owner": "codex-maintainers",
+      "expires": "2026-11-30",
+      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
+    },
+    "CODEX-APPROVAL-ROUTING-001:D4": {
+      "owner": "codex-maintainers",
+      "expires": "2026-11-30",
+      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
+    },
+    "CODEX-APPROVAL-ROUTING-001:D5": {
+      "owner": "codex-maintainers",
+      "expires": "2026-11-30",
+      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
+    },
+    "CODEX-APPROVAL-ROUTING-001:D6": {
+      "owner": "codex-maintainers",
+      "expires": "2026-11-30",
+      "reason": "A 'pin invariants ...' directive. It orders the order's OWN behaviours declared in tests/invariants.yaml with binding debt zero, which the invariants gate half-enforces already (every DECLARED invariant is bound). What is missing is the other half - that these particular ones are declared at all - and that is a real test, of the shape now written for COUNTY 7 D9 and COUNTY 10 D7. Deferred only because each needs its own invariant list read off the order."
+    },
+    "CROSS-TENANT-IDENTITY-001:D2": {
+      "owner": "identity-maintainers",
+      "expires": "2026-11-30",
+      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
+    },
+    "CROSS-TENANT-IDENTITY-001:D3": {
+      "owner": "identity-maintainers",
+      "expires": "2026-11-30",
+      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
+    },
+    "CROSS-TENANT-IDENTITY-001:D4": {
+      "owner": "identity-maintainers",
+      "expires": "2026-11-30",
+      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
+    },
+    "CROSS-TENANT-IDENTITY-001:D5": {
+      "owner": "identity-maintainers",
+      "expires": "2026-11-30",
+      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
+    },
+    "CROSS-TENANT-IDENTITY-001:D6": {
+      "owner": "identity-maintainers",
+      "expires": "2026-11-30",
+      "reason": "A 'pin invariants ...' directive. It orders the order's OWN behaviours declared in tests/invariants.yaml with binding debt zero, which the invariants gate half-enforces already (every DECLARED invariant is bound). What is missing is the other half - that these particular ones are declared at all - and that is a real test, of the shape now written for COUNTY 7 D9 and COUNTY 10 D7. Deferred only because each needs its own invariant list read off the order."
+    },
+    "FIRST-PARTY-AUTH-001:D10": {
+      "owner": "identity-maintainers",
+      "expires": "2026-11-30",
+      "reason": "Not code-testable and correctly so: it is a PRINCIPAL GATE on a live cutover or an external credential. Nothing in this repository can decide whether the Principal has given the go, and a test that claimed to would be the false claim this gate exists to stop. Enforced by the deploy record, not by CI."
+    },
+    "ORG-WORKSPACE-TENANCY-001:D10": {
+      "owner": "identity-maintainers",
+      "expires": "2026-11-30",
+      "reason": "Not code-testable and correctly so: it is a PRINCIPAL GATE on a live cutover or an external credential. Nothing in this repository can decide whether the Principal has given the go, and a test that claimed to would be the false claim this gate exists to stop. Enforced by the deploy record, not by CI."
+    },
+    "ORG-WORKSPACE-TENANCY-001:D8": {
+      "owner": "identity-maintainers",
+      "expires": "2026-11-30",
+      "reason": "A 'pin invariants ...' directive. It orders the order's OWN behaviours declared in tests/invariants.yaml with binding debt zero, which the invariants gate half-enforces already (every DECLARED invariant is bound). What is missing is the other half - that these particular ones are declared at all - and that is a real test, of the shape now written for COUNTY 7 D9 and COUNTY 10 D7. Deferred only because each needs its own invariant list read off the order."
+    },
+    "ORG-WORKSPACE-TENANCY-001:D9": {
+      "owner": "identity-maintainers",
+      "expires": "2026-11-30",
+      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
+    },
+    "RATE-LIMIT-WINDOW-001:D5": {
+      "owner": "kernel-maintainers",
+      "expires": "2026-11-30",
+      "reason": "A directive about the RECORD rather than a behaviour: it orders a docstring, an honesty doc or an amended invariant description to say a particular thing. Bindable by asserting the text, which is exactly the shape of this programme, and not yet done."
+    },
+    "RATE-LIMIT-WINDOW-001:D6": {
+      "owner": "kernel-maintainers",
+      "expires": "2026-11-30",
+      "reason": "A directive about the RECORD rather than a behaviour: it orders a docstring, an honesty doc or an amended invariant description to say a particular thing. Bindable by asserting the text, which is exactly the shape of this programme, and not yet done."
+    },
+    "RATE-LIMIT-WINDOW-001:D8": {
+      "owner": "kernel-maintainers",
+      "expires": "2026-11-30",
+      "reason": "A 'pin invariants ...' directive. It orders the order's OWN behaviours declared in tests/invariants.yaml with binding debt zero, which the invariants gate half-enforces already (every DECLARED invariant is bound). What is missing is the other half - that these particular ones are declared at all - and that is a real test, of the shape now written for COUNTY 7 D9 and COUNTY 10 D7. Deferred only because each needs its own invariant list read off the order."
+    },
+    "SELF-IMPROVEMENT-AUTHORITY-001:D1": {
+      "owner": "workflow-maintainers",
+      "expires": "2026-11-30",
+      "reason": "A 'pin invariants ...' directive. It orders the order's OWN behaviours declared in tests/invariants.yaml with binding debt zero, which the invariants gate half-enforces already (every DECLARED invariant is bound). What is missing is the other half - that these particular ones are declared at all - and that is a real test, of the shape now written for COUNTY 7 D9 and COUNTY 10 D7. Deferred only because each needs its own invariant list read off the order."
+    },
+    "SELF-IMPROVEMENT-AUTHORITY-001:D2": {
+      "owner": "workflow-maintainers",
+      "expires": "2026-11-30",
+      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
+    },
+    "SELF-IMPROVEMENT-AUTHORITY-001:D3": {
+      "owner": "workflow-maintainers",
+      "expires": "2026-11-30",
+      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
+    },
+    "SELF-IMPROVEMENT-AUTHORITY-001:D4": {
+      "owner": "workflow-maintainers",
+      "expires": "2026-11-30",
+      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
+    },
+    "SERVER-SIDE-CANCEL-001:D2": {
+      "owner": "kernel-maintainers",
+      "expires": "2026-11-30",
+      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
+    },
+    "SERVER-SIDE-CANCEL-001:D6": {
+      "owner": "kernel-maintainers",
+      "expires": "2026-11-30",
+      "reason": "A 'pin invariants ...' directive. It orders the order's OWN behaviours declared in tests/invariants.yaml with binding debt zero, which the invariants gate half-enforces already (every DECLARED invariant is bound). What is missing is the other half - that these particular ones are declared at all - and that is a real test, of the shape now written for COUNTY 7 D9 and COUNTY 10 D7. Deferred only because each needs its own invariant list read off the order."
+    },
+    "UI-TEST-HARNESS-001:D1": {
+      "owner": "ui-maintainers",
+      "expires": "2026-11-30",
+      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
+    },
+    "UI-TEST-HARNESS-001:D2": {
+      "owner": "ui-maintainers",
+      "expires": "2026-11-30",
+      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
+    },
+    "UI-TEST-HARNESS-001:D4": {
+      "owner": "ui-maintainers",
+      "expires": "2026-11-30",
+      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
+    },
+    "UI-TEST-HARNESS-001:D5": {
+      "owner": "ui-maintainers",
+      "expires": "2026-11-30",
+      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
+    },
+    "WORK-ITEM-LEASE-FENCE-001:D9": {
+      "owner": "fleet-maintainers",
+      "expires": "2026-11-30",
+      "reason": "A directive about the RECORD rather than a behaviour: it orders a docstring, an honesty doc or an amended invariant description to say a particular thing. Bindable by asserting the text, which is exactly the shape of this programme, and not yet done."
+    }
+  }
+}

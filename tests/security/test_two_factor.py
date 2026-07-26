@@ -22,6 +22,8 @@ stays green).
 
 import asyncio
 import json
+import pathlib
+import re
 
 import pyotp
 import pytest
@@ -94,7 +96,7 @@ def _enroll(client, csrf):
     return secret, codes
 
 
-# --- SEC-126: the TOTP secret is sealed, never plaintext/audited/returned --------
+# --- SEC-126 / COUNTY 10 D1: the TOTP secret is sealed, never plaintext/audited --
 @pytest.mark.security
 @pytest.mark.invariant("SEC-126")
 def test_totp_secret_is_sealed_never_plaintext_or_audited(monkeypatch):
@@ -131,7 +133,7 @@ def test_totp_secret_is_sealed_never_plaintext_or_audited(monkeypatch):
     assert again.status_code == 400  # already enabled; no re-reveal
 
 
-# --- SEC-127: recovery codes hashed + single-use, a fallback not a bypass --------
+# --- SEC-127 / COUNTY 10 D2: recovery codes hashed + single-use, never a bypass --
 @pytest.mark.security
 @pytest.mark.invariant("SEC-127")
 def test_recovery_codes_are_hashed_and_single_use(monkeypatch):
@@ -180,7 +182,7 @@ def test_recovery_codes_are_hashed_and_single_use(monkeypatch):
         assert normalize_recovery_code(code) not in blob
 
 
-# --- SEC-128: the challenge is fail-closed, between password and session ---------
+# --- SEC-128 / COUNTY 10 D3: fail-closed, between password-verify and session ----
 @pytest.mark.security
 @pytest.mark.invariant("SEC-128")
 def test_challenge_is_fail_closed_between_password_and_session(monkeypatch):
@@ -224,7 +226,7 @@ def test_challenge_is_fail_closed_between_password_and_session(monkeypatch):
     assert unknown.status_code == 401
 
 
-# --- SEC-129: org require_two_factor forces enrollment-only ---------------------
+# --- SEC-129 / COUNTY 10 D4: org require_two_factor forces enrollment-only -------
 @pytest.mark.security
 @pytest.mark.invariant("SEC-129")
 def test_org_required_two_factor_forces_enrollment_only(monkeypatch):
@@ -264,7 +266,7 @@ def test_org_required_two_factor_forces_enrollment_only(monkeypatch):
     assert clamped.json()["detail"] == "two_factor_enrollment_required"
 
 
-# --- SEC-130: the challenge is rate-limited, constant-time, audited -------------
+# --- SEC-130 / COUNTY 10 D5: rate-limited, constant-time, audited keys-only ------
 @pytest.mark.security
 @pytest.mark.invariant("SEC-130")
 def test_challenge_is_rate_limited_constant_time_and_audited(monkeypatch):
@@ -353,3 +355,56 @@ def app_post(app, challenge_token, code):
         "/v1/auth/2fa/challenge",
         json={"challenge_token": challenge_token, "code": code},
     )
+
+
+# --- COUNTY 10 D6/D7: the two directives that are about the RECORD ---------------
+# The other five directives are behaviours and are proved above. These two are
+# claims about how the factor is depended on and declared, which nothing checked:
+# the order said "surface the TOTP library dependency and pin it" and "pin
+# invariants ... debt zero", and both were true only for as long as nobody edited
+# the two files that decide them.
+@pytest.mark.security
+def test_the_totp_library_is_a_surfaced_and_hash_pinned_dependency():
+    """D6. Offline verification is the whole reason Option C was rejected, so the
+    library IS the second factor's availability. A floating or unhashed pin is a
+    login-path supply-chain hole, and `pyotp` appearing in neither file would mean
+    the factor rides on something nobody declared."""
+    root = pathlib.Path(__file__).resolve().parents[2]
+    declared = (root / "pyproject.toml").read_text(encoding="utf-8")
+    assert re.search(r'^\s*"pyotp[><=~]', declared, re.MULTILINE), (
+        "pyotp is not a surfaced dependency in pyproject.toml"
+    )
+    lock = (root / "requirements-lock.txt").read_text(encoding="utf-8")
+    lines = lock.splitlines()
+    starts = [i for i, line in enumerate(lines) if line.startswith("pyotp==")]
+    assert starts, "pyotp is not pinned to an exact version in requirements-lock.txt"
+    # ONLY this entry's own continuation lines. The first version of this read a
+    # fixed 400-character window after the match, which runs straight into the
+    # NEXT package - so deleting pyotp's hashes left it passing on pyparsing's.
+    # An entry ends at the next line that starts in column zero.
+    start = starts[0]
+    end = next(
+        (i for i in range(start + 1, len(lines)) if lines[i][:1] not in {" ", "\t", ""}),
+        len(lines),
+    )
+    entry = lines[start:end]
+    assert any("--hash=sha256:" in line for line in entry), (
+        f"{lines[start]} is pinned but carries no hash of its own: an exact "
+        f"version without a digest still admits a substituted artefact. Read: {entry}"
+    )
+
+
+@pytest.mark.security
+def test_every_second_factor_invariant_is_declared_in_the_catalogue():
+    """D7. The directive orders the five behaviours PINNED as invariants with
+    binding debt zero. The gate proves every declared invariant is bound; nothing
+    proved these five were declared at all, so deleting a declaration would have
+    taken its enforcement with it and left every other check green."""
+    root = pathlib.Path(__file__).resolve().parents[2]
+    catalogue = (root / "tests" / "invariants.yaml").read_text(encoding="utf-8")
+    missing = [
+        inv
+        for inv in ("SEC-126", "SEC-127", "SEC-128", "SEC-129", "SEC-130")
+        if f"\n  {inv}:" not in catalogue
+    ]
+    assert not missing, f"second-factor invariants absent from the catalogue: {missing}"

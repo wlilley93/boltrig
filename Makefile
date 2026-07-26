@@ -36,7 +36,7 @@ RELEASE_VALIDATE_IMAGES_ENV ?= tests/fixtures/release-images.env
 RELEASE_PROFILES ?= --profile backup
 
 .DEFAULT_GOAL := help
-.PHONY: help gate-status up down logs test lint architecture structure codex-protocol unwired-claims prose-references refresh-canon-citations gate-coverage health-claims typecheck check python-quality ui-install ui-quality site-install site-quality ui-e2e compose-validate release-validate release-up doctor-fixture migration-parity python-audit sast iac-scan secret-scan actionlint security-source quality live-check lockfile-policy dependency-audit smoke invariants doctor migrate secure-up backup backup-schedule restore
+.PHONY: help gate-status up down logs test lint architecture structure codex-protocol unwired-claims prose-references refresh-canon-citations gate-coverage health-claims order-directives typecheck check python-quality ui-install ui-quality site-install site-quality ui-e2e compose-validate release-validate release-up doctor-fixture migration-parity python-audit sast iac-scan secret-scan actionlint security-source quality live-check lockfile-policy dependency-audit smoke invariants doctor migrate secure-up backup backup-schedule restore
 
 help: ## List the available targets
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -102,6 +102,9 @@ gate-coverage: ## Every compose manifest is validated and every `quality` compon
 health-claims: ## No service may report healthy while unable to serve
 	$(PY) scripts/check_health_claims.py
 
+order-directives: ## Every binding court directive is bound to a test or recorded
+	$(PY) scripts/check_order_directives.py
+
 typecheck: ## Module-by-module strict mypy gate (see [tool.mypy])
 	$(PY) -m mypy
 
@@ -110,7 +113,7 @@ gate-status: ## Is the gate on the default branch actually green right now?
 
 check: invariants lint architecture structure codex-protocol unwired-claims typecheck test ## Run the local Python gates CI enforces
 
-python-quality: invariants lint architecture structure codex-protocol unwired-claims prose-references gate-coverage health-claims typecheck ## Run Python tests on Postgres with coverage enforcement
+python-quality: invariants lint architecture structure codex-protocol unwired-claims prose-references gate-coverage health-claims order-directives typecheck ## Run Python tests on Postgres with coverage enforcement
 	scripts/with_test_postgres.sh $(PY) -m pytest -q \
 		--cov=boltrig --cov-report=term:skip-covered --cov-report=xml \
 		--cov-fail-under=$(COVERAGE_MIN)

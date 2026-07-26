@@ -92,7 +92,7 @@ exactly-once.
 
 ## Where it stands (2026-07-26)
 
-Six gates now run in `make python-quality`, so they are in `ci/test-and-gate` and
+Ten gates now run in `make python-quality`, so they are in `ci/test-and-gate` and
 a claim cannot drift past them silently. Each was written because of a defect
 that had already shipped, and each found more on its first run.
 
@@ -101,9 +101,10 @@ that had already shipped, and each found more on its first run.
 | `unwired-claims` | A class or function the record names that no production path reaches | `RedisCounter`. Then, once extended to functions: `run_retention_forever` (see below), `sweep_run_scoped` (7 records, "its only caller is the org pump", true count zero), `consume_if_approved` (the dispatch gate calls something else), `consume_budget` (superseded, 6 docstrings still anchored on it) |
 | `prose-references` | Every repo path, test node id, `make` target and env var named in prose | 12 broken references, including a founding ruling cited as binding whose register entry has never existed in this repository's history |
 | `gate-coverage` | Every compose manifest is validated; every `quality` component runs in CI | `migration-parity` and `doctor-fixture` ran in no CI job; three compose overlays reached no validation step, including the one `genesis.sh` runs |
-| `health-claims` | No service reports healthy while unable to serve | The kernel and fleet-worker, both now recorded as open debt with an owner and an expiry |
+| `health-claims` | No service reports healthy while unable to serve | The kernel and fleet-worker. **Both are now fixed and the exemption file is empty**: the kernel probes `/readyz`, and `boltrig fleet-health` reads back the signed receipt the worker publishes, proven red on production for a forged key and an unreachable Redis. Extending the gate to admit a readiness COMMAND (derived: the subcommand must be dispatched, and its module must read the same evidence the `/readyz` handler reads) found two wrong versions of that rule before the right one |
 | `structure` | File and function length, as an expiring ratchet | Pre-existing; it caught two of this week's own changes |
 | `invariants` | Every declared invariant is bound and every marker declared | The catalogue had silently eaten a whole invariant to a duplicate id, and had never parsed as the YAML its name claims |
+| `order-directives` | Every directive of a `status: binding` court order is named by a test | 102 binding directives; **only 36 were bound by anything**. Extending the scan to the UI suite found 4 more that pytest could never have bound. Two orders were then bound properly (COUNTY 7 and COUNTY 10, 16 directives) and the remaining 45 are baselined with owners and expiries |
 
 The single worst find is the measure of why the goal exists. **Right-to-erasure
 had never run.** `run_retention_forever` had zero callers - no compose service, no
@@ -115,9 +116,25 @@ for the mechanism is not a test for the wiring**, and every gate above exists to
 tell those two apart.
 
 What remains: Tier 1 is partly done (the load-bearing claims found so far are
-bound; the inventory's UNVERIFIED column is not worked through). Tier 3's
-`BOLTRIG_TEST_DATABASE_URL` case is closed - a run that skips the Postgres family
-now ends non-zero - but the family itself is not enumerated.
+bound; the inventory's UNVERIFIED column is not worked through). **Tier 3 is
+closed**: the family is now enumerated in `tests/conftest.py` as two lists, one
+BLOCKING (a run that skips the Postgres or shared-rate-limit family ends non-zero)
+and one LOUD (a run that could not reach a live service says so, by name, at the
+end), and the three vacuous globs each carry a floor that fails when the scan
+reads nothing.
+
+Tier 3 also produced the sharpest instance of the whole premise since retention.
+`pytest-randomly`, installed to convert latent order-dependence into a failure,
+found on its first real outing that the durable-ledger schema fixture **had never
+once built what a deployment builds**. It claimed, in its own docstring, to build
+"the execution-ledger schema exactly as a deployment builds it" and to be
+incapable of drifting; it replayed the migration chain from 0026, and
+`0035_channel_durability` alters a table created at 0019, so against an empty
+database it had ALWAYS failed. Two different accidents kept supplying the missing
+table: a long-lived local test database that already had it, and a test ordering
+in which the module that applies the whole chain happened to run first. Same
+shape as the other eleven, and found the same way. See
+`docs/findings/2026-07-26-fleet-worker-health-signal.md`.
 
 ## What this is NOT
 
