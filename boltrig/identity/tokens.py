@@ -19,7 +19,7 @@ from typing import Any
 from boltrig.kernel.app import Principal
 from boltrig.models import GrantSet, PersonalAccessToken, utcnow
 
-from .provisioning import current_grants_for_user
+from .provisioning import effective_grants_for_request
 
 PAT_PREFIX = "boltrig_pat_"
 # A sane maximum lifetime (PAT-03: required, bounded expiry).
@@ -108,18 +108,31 @@ async def resolve_pat_principal(store: Any, secret: str) -> Principal | None:
     if user is None or user.status != "active":
         return None  # de-provisioned / deactivated -> token stops working
 
-    effective = GrantSet.of(allow=list(pat.scope)).intersect(current_grants_for_user(user))
-
     # A PAT is the headless-client credential, but it carries no session and so no
     # active workspace - which leaves a PAT-driven chat turn with no workspace
     # scope, degrading the read-only Codex phase (no_read_only_phase_scope). When
     # the user belongs to EXACTLY ONE workspace the choice is unambiguous, so bind
-    # it here (they are a member, so this confers nothing new). With zero or many
-    # memberships it stays None - fail-closed - and the caller must name the
-    # workspace explicitly (the frontend-SDK's per-request override, SEC-34-safe
-    # because it is re-authorized against membership at use time).
+    # it here. With zero or many memberships it stays None - fail-closed.
     workspaces = await store.list_workspaces_for_user(pat.tenant_id, user.id)
     active_workspace_id = workspaces[0].id if len(workspaces) == 1 else None
+
+    # SEC-34 / SEC-109. The grants are narrowed by the ACTIVE WORKSPACE's role
+    # ceiling, exactly as the session path does (identity/sessions.py). Until
+    # 2026-07-26 this line read ``current_grants_for_user(user)`` - the ORG grants,
+    # un-narrowed - while the block above bound an active workspace anyway, on the
+    # reasoning that "they are a member, so this confers nothing new". Membership
+    # as a VIEWER confers less, and that was the hole: a user who is a viewer in
+    # their only workspace was refused a write verb through the browser session and
+    # granted it through a PAT, in the same workspace, on the same account. The
+    # workspace ceiling was enforced on the cookie path and not on the bearer path,
+    # so minting a token from the documented POST /v1/me/tokens route escalated.
+    #
+    # It survived because the workspace-grant tests bind SEC-108/109/110 directly at
+    # effective_grants_for_request and narrow_grants_to_workspace, and never drive a
+    # PAT - a control tested at the function it lives in, on the one path that did
+    # not call it.
+    user_grants = await effective_grants_for_request(store, user, active_workspace_id)
+    effective = GrantSet.of(allow=list(pat.scope)).intersect(user_grants)
 
     pat.last_used_at = utcnow()
     await store.update_pat(pat)

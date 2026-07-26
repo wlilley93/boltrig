@@ -1508,6 +1508,7 @@ invariants:
     description: 'A viewer in a workspace cannot perform a write verb their org role would otherwise allow (D11 read-only ceiling) - narrow_grants_to_workspace for the viewer role keeps only the base allow-patterns that authorise a concrete read action (wildcards collapse, fail-closed), so a caller whose org grants include a write verb (or ticket.*) is denied that write verb at the chokepoint while retaining their explicit read grants.'
     tests:
       - tests/security/test_workspace_grants.py::test_viewer_cannot_write_but_keeps_reads
+      - tests/security/test_workspace_grants.py::test_a_viewers_pat_cannot_do_what_their_session_is_refused
   SEC-110:
     description: 'A caller with NO active workspace keeps their FULL org grants unchanged (D11 backward-compat, the critical rule) - effective_grants_for_request returns exactly current_grants_for_user when active_workspace_id is None (every existing single-tenant deploy and the backfilled default org with no workspaces), and also when the caller is not a member of the active workspace it applies no narrowing (fail-closed to the org ceiling, never widening).'
     tests:

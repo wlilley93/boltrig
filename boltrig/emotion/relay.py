@@ -12,7 +12,8 @@ must never break a run.
 Threading ground truth: ``publish`` always runs on the asyncio loop thread, so ``_react``
 is pure math and dict ops under one lock. All steady-state file I/O happens on the daemon
 publisher thread: the phenotype file every ``publish_interval`` seconds and the tenant
-state file every 20th tick, both written atomically (tmp + ``os.replace``). The single
+state file every 20th tick, both written atomically (a UNIQUE tmp + ``os.replace``,
+never a fixed tmp name - see ``_write_json``). The single
 READ of the persisted state file happens once at construction, before any traffic.
 
 Enablement is environmental, not configured: ``BOLTRIG_EMOTION=0`` force-disables,
@@ -22,9 +23,11 @@ PATH (i.e. this is the desktop box). Prod containers get the plain relay.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import shutil
+import tempfile
 import threading
 import time
 from collections.abc import Mapping, Sequence
@@ -182,11 +185,39 @@ class EmotionRelay(EventRelay):
 
     @staticmethod
     def _write_json(path: Path, payload: Mapping[str, object]) -> None:
-        """Atomic write: tmp file in the same directory, then ``os.replace``."""
+        """Atomic write: a UNIQUE tmp in the same directory, then ``os.replace``.
+
+        ``os.replace`` is atomic; writing into a FIXED, predictable tmp name is
+        not, and until 2026-07-26 this used ``path.name + ".tmp"``. Two things
+        broke the precondition that made the claim true. Every ``Kernel`` builds
+        its own relay and its own publisher thread, while the paths are per-USER
+        (``XDG_RUNTIME_DIR``), not per-process - so a restart overlapping the old
+        container, or a second kernel in the same process tree, gives two writers
+        one filename. And docker-compose.override.yml bind-mounts that runtime dir
+        from a host directory it documents as 0777.
+
+        Together those make the fixed name worse than a torn file: any other
+        principal can pre-create it as a SYMLINK, and ``write_text`` opens
+        O_CREAT|O_WRONLY|O_TRUNC and follows it - an arbitrary-file-write primitive
+        as the kernel's uid, with the resulting JSONDecodeError swallowed on read.
+
+        ``mkstemp`` is immune to both (O_CREAT|O_EXCL, unique, 0600). The chmod is
+        deliberate: the relay writes as the kernel uid and the desktop surface
+        reads as another, so the published file must stay world-readable. This is
+        the shape ``adapters/builtin/familiar.py`` already used for the sibling
+        channel - the two writers now agree.
+        """
         path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_name(path.name + ".tmp")
-        tmp.write_text(json.dumps(payload), encoding="utf-8")
-        os.replace(tmp, path)
+        fd, tmp = tempfile.mkstemp(prefix=f".{path.name}-", dir=str(path.parent))
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                handle.write(json.dumps(payload))
+            os.chmod(tmp, 0o644)
+            os.replace(tmp, path)
+        except BaseException:
+            with contextlib.suppress(OSError):
+                os.unlink(tmp)
+            raise
 
 
 def _enabled() -> bool:

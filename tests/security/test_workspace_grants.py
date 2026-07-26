@@ -166,3 +166,49 @@ async def test_non_member_active_workspace_applies_no_narrowing():
     eff = await effective_grants_for_request(store, user, WS)
     assert (eff.allow, eff.deny) == (org.allow, org.deny)
     assert eff.permits("control.workflow.upsert")
+
+
+# --- SEC-109 on the BEARER path: the hole the direct tests could not see ------
+@pytest.mark.security
+@pytest.mark.invariant("SEC-109")
+async def test_a_viewers_pat_cannot_do_what_their_session_is_refused():
+    """The escalation that shipped: the workspace ceiling was applied on the cookie
+    path and not on the bearer path.
+
+    Every other test in this file binds the rule at ``effective_grants_for_request``
+    or at ``narrow_grants_to_workspace`` - the functions the rule lives in. The PAT
+    resolver did not call either of them; it intersected the token's scope with the
+    UN-NARROWED org grants while separately binding the user's single workspace as
+    active. So the same human, in the same workspace, was refused a write verb
+    through the browser and granted it through a token minted from the documented
+    POST /v1/me/tokens route.
+
+    A control tested only at the function it lives in says nothing about the path
+    that never calls it, which is why this drives the resolver end to end.
+    """
+    from boltrig.identity.tokens import mint_pat, resolve_pat_principal
+
+    scope = {"verbs": ["ticket.create", "ticket.read"]}
+    store, user = await _store_with_member("viewer", user_scope=scope)
+
+    # The org grants really do allow the write - that is what makes this an
+    # escalation rather than a token that never had the authority.
+    org = current_grants_for_user(user)
+    assert org.permits("ticket.create")
+
+    # Mint at the ceiling the session path would compute, as the route does.
+    session_grants = await effective_grants_for_request(store, user, WS)
+    assert not session_grants.permits("ticket.create"), "the viewer ceiling must bite"
+    _, secret = await mint_pat(
+        store, tenant_id=T, user_id=user.id, name="cc",
+        requested_scope=["ticket.create", "ticket.read"], user_grants=org,
+    )
+
+    principal = await resolve_pat_principal(store, secret)
+    assert principal is not None
+    assert principal.active_workspace_id == WS, "the single membership is bound active"
+    assert not principal.grants.permits("ticket.create"), (
+        "a viewer's PAT performed a write their session is refused, in the same "
+        "workspace, on the same account"
+    )
+    assert principal.grants.permits("ticket.read"), "reads must still work"

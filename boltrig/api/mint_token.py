@@ -5,9 +5,19 @@ first-party identity drive the kernel API (chat, tool stream, HITL) without an
 interactive session, which is what a headless client or a live smoke test needs.
 Running it needs shell on the host, so it is trusted at the box boundary and does
 not require a CSRF-guarded session - but it is NOT a privilege escalation: the
-token is capped at the user's CURRENT grants (``current_grants_for_user``) exactly
-as the route is, and the runtime re-check in ``resolve_pat_principal`` re-applies
-that cap at use time even if the user's grants later shrink.
+token is capped at the user's CURRENT ORG grants (``current_grants_for_user``),
+and the runtime re-check in ``resolve_pat_principal`` re-applies a cap at use time
+even if the user's grants later shrink.
+
+The mint cap is deliberately stated as the ORG cap and no longer as "exactly as
+the route is", which it never was. The route resolves through the session, so its
+cap is the org grants NARROWED by the active workspace role; this has no session
+and no active workspace, so it cannot compute that ceiling at mint time. The
+difference used to be load-bearing - a viewer got a write-capable token here and a
+read-only one from the route - and is not any more, because
+``resolve_pat_principal`` now applies the workspace ceiling at USE time on both
+paths. A token minted here can therefore be broader on paper than it will ever be
+in effect, which is the safe direction, and is why the wording matters.
 
 It never creates an identity or a grant: the user must already exist (mirrors
 ``set-password``). The secret is printed ONCE and only its sha256 is stored; the
