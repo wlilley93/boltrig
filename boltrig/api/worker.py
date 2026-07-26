@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from typing import Any
 
 from boltrig.config import load_manifest, load_settings
 from boltrig.store import Store
@@ -20,7 +21,10 @@ from boltrig.fleet import (
     build_org,
     build_spawner,
     register_workers,
+    retention_days_from_manifest,
+    retention_interval_from_env,
     run_anchor_forever,
+    run_retention_forever,
 )
 
 from .bootstrap import _DEFAULT_TENANT, _find_manifest, build_kernel_async
@@ -56,6 +60,59 @@ def _start_hitl_expiry_janitor(store: Store) -> "asyncio.Task[None] | None":
     return asyncio.create_task(
         run_hitl_expiry_forever(store, interval=interval),
         name="hitl-expiry-janitor",
+    )
+
+
+def _start_anchor_janitor(store: Store, anchorer: Any) -> "asyncio.Task[None] | None":
+    """Start the audit-rollup anchor janitor (COUNTY 9 D4), or None when disabled.
+
+    On an interval it seals every tenant's un-anchored audit-chain tail so a
+    verifier can prove a segment was not rewritten. A worker-side loop (there is
+    no native Hatchet cron seam), independent of the durable engine so it runs the
+    same on Hatchet or the local fallback, and it never crashes boot (P9). Off
+    when BOLTRIG_AUDIT_ANCHOR_INTERVAL is <= 0; conservative daily default. Held
+    in a name so the task is not garbage-collected mid-flight."""
+    interval = anchor_interval_from_env()
+    if interval <= 0:
+        log.info("audit-anchor janitor disabled (interval<=0)")
+        return None
+    log.info("audit-anchor janitor live (interval=%ss)", interval)
+    return asyncio.create_task(
+        run_anchor_forever(store, anchorer, interval=interval),
+        name="audit-anchor-janitor",
+    )
+
+
+def _start_retention_janitor(
+    store: Store, tenant: str, manifest: Any
+) -> "asyncio.Task[None] | None":
+    """Start the retention janitor (M11 / SEC-74), or None when disabled.
+
+    It belongs here because for as long as it existed it belonged NOWHERE. Its own
+    docstring told the reader to schedule it with a cron or a small entrypoint, and
+    nothing ever did: no compose service, no Makefile target, no deploy unit, no
+    ``__main__``. So ``purge_closed_conversations`` had never once run in a
+    deployment, while docs/security-conformance.md recorded DATA-07 and PRIV-04 as
+    BUILT and SEC-74 claimed a deleted conversation no longer sat in Postgres
+    indefinitely. A DELETE soft-closes the thread; without this loop the body and
+    every message stay there for good.
+
+    Same shape as the anchor and HITL-expiry janitors: store-only,
+    engine-independent, never crashes boot (P9). Off when
+    BOLTRIG_RETENTION_INTERVAL is <= 0 - and the worker says which it did, so
+    "off" is a decision on the record rather than the silence it used to be."""
+    interval = retention_interval_from_env()
+    if interval <= 0:
+        log.info("retention janitor disabled (interval<=0)")
+        return None
+    days = retention_days_from_manifest(manifest)
+    log.info(
+        "retention janitor live (tenant=%s, window=%sd, interval=%ss)",
+        tenant, days, interval,
+    )
+    return asyncio.create_task(
+        run_retention_forever(store, tenant, days, interval=interval),
+        name="retention-janitor",
     )
 
 
@@ -105,24 +162,12 @@ async def _run() -> None:
         log.info("fleet stack-tool heartbeat live (tenant=%s)", tenant)
     else:
         log.info("fleet stack-tool heartbeat disabled (REDIS_URL not configured)")
-    # The periodic audit-rollup anchor janitor (COUNTY 9 D4): on an interval it
-    # seals every tenant's un-anchored audit-chain tail so a verifier can prove a
-    # segment was not rewritten. A worker-side loop (the codebase has no native
-    # Hatchet cron seam), independent of the durable engine so it runs the same on
-    # Hatchet or the local fallback - it never crashes boot (P9). Off when the
-    # interval knob (BOLTRIG_AUDIT_ANCHOR_INTERVAL) is <= 0; conservative daily
-    # default. Held in a name so the task is not garbage-collected mid-flight.
-    anchor_interval = anchor_interval_from_env()
-    anchor_task: asyncio.Task[None] | None = None
-    if anchor_interval > 0:
-        anchor_task = asyncio.create_task(
-            run_anchor_forever(kernel.store, kernel.anchorer, interval=anchor_interval)
-        )
-        log.info("audit-anchor janitor live (interval=%ss)", anchor_interval)
-    else:
-        log.info("audit-anchor janitor disabled (interval<=0)")
+    # The audit-rollup anchor janitor (COUNTY 9 D4).
+    anchor_task = _start_anchor_janitor(kernel.store, kernel.anchorer)
     # The HITL expiry janitor (SEC-14) alongside the anchor janitor.
     expiry_task = _start_hitl_expiry_janitor(kernel.store)
+    # The retention janitor (M11 / SEC-74 right-to-erasure), same shape again.
+    retention_task = _start_retention_janitor(kernel.store, tenant, manifest)
     try:
         await pump.run_forever(tenant, interval=_POLL_SECONDS)
     finally:
@@ -132,10 +177,14 @@ async def _run() -> None:
             expiry_task.cancel()
         if stack_health_task is not None:
             stack_health_task.cancel()
+        if retention_task is not None:
+            retention_task.cancel()
         # Gather the cancelled tasks so none is destroyed while pending (an
         # ungathered anchor janitor also leaves an unsealed anchor tail).
         pending = [
-            t for t in (anchor_task, expiry_task, stack_health_task) if t is not None
+            t
+            for t in (anchor_task, expiry_task, stack_health_task, retention_task)
+            if t is not None
         ]
         if pending:
             await asyncio.gather(*pending, return_exceptions=True)

@@ -339,7 +339,7 @@ class Spawner:
         leaks on the other.
 
         Necessary because a delegated child has NO work item, so the pump's
-        terminal hook - the only caller of ``sweep_run_scoped`` - can never fire
+        terminal hook (``sweep_run_credentials_if_settled``, pump.py) - can never fire
         for it. ``_inherit_adapter_bearer`` re-seals the caller's bearer under the
         CHILD run id, so without this every delegated turn left a second live
         bearer at rest forever (observed live: one root row plus one child row per
@@ -459,7 +459,7 @@ class Spawner:
         Re-sealing for the child is a PROPAGATION, not a widening: the same bearer,
         already clamped to min(agent,user), for the same adapter, for a run that is
         part of the same turn on behalf of the same person. Each run holds its own
-        ref, so ``sweep_run_scoped`` still clears it on that run's terminal and the
+        ref, so ``sweep_run_credentials_if_settled`` still clears it on that run's terminal and the
         fail-closed scoping is unchanged - a foreign run still resolves to None.
 
         Best-effort by construction: when no

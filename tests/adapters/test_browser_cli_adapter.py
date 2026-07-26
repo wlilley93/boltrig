@@ -11,6 +11,28 @@ from boltrig.models import GrantSet, InvocationContext
 T = "acme"
 
 
+@pytest.fixture(autouse=True)
+def _hermetic_dns(monkeypatch):
+    """Resolve example.com without asking the machine's resolver.
+
+    These tests exercise the EGRESS POLICY - allow-list, blocked domains,
+    non-routable targets - and none of that needs live DNS. Without this they
+    were env-dependent in both directions: they passed on a box whose resolver
+    was healthy and failed with "egress refused: host did not resolve" whenever
+    getaddrinfo was slow or unavailable, which is what happened twice under full
+    suite load on 2026-07-26. A test that fails because of the network is not
+    telling you anything about the code.
+
+    The guard itself still runs: a public address is returned, so the
+    non-routable / internal-address branch is evaluated exactly as before. Tests
+    that need a different answer patch over this one.
+    """
+    monkeypatch.setattr(
+        "boltrig.adapters.egress.resolve_host",
+        lambda host: ["93.184.216.34"],
+    )
+
+
 def _ctx():
     return InvocationContext(tenant_id=T, grants=GrantSet.of(["*"]), actor="tester")
 

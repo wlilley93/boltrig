@@ -311,7 +311,7 @@ class HITLManager:
     async def _fire_resume(self, tenant_id: str, request_id: str) -> None:
         """Fire the resume notifier with the answered request, fail-safe (P9):
         the recorded answer is the truth; a notifier fault never voids it. The
-        durable resume itself is exactly-once via ``consume_if_approved``, so a
+        durable resume itself is exactly-once via ``consume_approved_by``, so a
         duplicate or lost notification is safe (NFR-REL-03)."""
         if self._resume_notifier is None:
             return
@@ -327,8 +327,9 @@ class HITLManager:
 
     async def is_approved(self, tenant_id: str, request_id: str) -> bool:
         """True iff the request was answered with an approving decision (read-only;
-        does NOT consume). The dispatch gate uses ``consume_if_approved`` instead so
-        an approval is single-use and verb-bound (SEC-14)."""
+        does NOT consume). The dispatch gate uses ``consume_approved_by``
+        instead (via ``approval_gate.enforce_approval``) so an approval is
+        single-use and verb-bound (SEC-14)."""
         req = await self._store.get_hitl_request(tenant_id, request_id)
         if req is None or req.status != HITLStatus.ANSWERED:
             return False

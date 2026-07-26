@@ -563,31 +563,12 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
     async def list_budgets(self, tenant_id):
         return [b for (t, _), b in self._budgets.items() if t == tenant_id]
 
-    async def consume_budget(self, tenant_id, scope_id, tokens, micros):
-        """Reserve budget. Returns False (without spending) if a hard-stop budget
-        would be exceeded; True otherwise. The read-modify-write has no await
-        between steps, so it is atomic under cooperative scheduling."""
-        b = self._budgets.get((tenant_id, scope_id))
-        if b is None:
-            return True  # no budget configured for this scope -> unmetered
-        new_tokens = b.spent_tokens + max(0, tokens)
-        new_micros = b.spent_micros + max(0, micros)
-        over = (b.token_limit is not None and new_tokens > b.token_limit) or (
-            b.cost_limit_micros is not None and new_micros > b.cost_limit_micros
-        )
-        if over and b.hard_stop:
-            return False
-        self._budgets[(tenant_id, scope_id)] = replace(
-            b, spent_tokens=new_tokens, spent_micros=new_micros
-        )
-        return True
-
     async def reconcile_budget(self, tenant_id, scope_id, delta_tokens, delta_micros):
         """Post-run cost true-up (FR-COST-03): apply a SIGNED delta to the scope,
         each accumulator floored at 0. No hard-stop gate (this corrects a call that
         already ran). No budget row for the scope -> no-op. The read-modify-write
         has no await between steps, so it is atomic under cooperative scheduling
-        (mirrors consume_budget)."""
+        (the same rule the reserve applies)."""
         b = self._budgets.get((tenant_id, scope_id))
         if b is None:
             return  # no budget configured for this scope -> unmetered
@@ -602,7 +583,7 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
         all-or-nothing debit across every scope in ``reservations``. Compute every
         debit first; if ANY hard-stop scope lacks headroom, apply NONE and return
         False; otherwise apply them all and return True. A scope with no budget row
-        is a no-op (unmetered), mirroring consume_budget. The whole compute-then-apply
+        is a no-op (unmetered). The whole compute-then-apply
         has no await between steps, so it is atomic under cooperative scheduling - two
         concurrent reserves can never interleave into a partial debit."""
         # Aggregate per scope so a scope named twice is locked and debited once

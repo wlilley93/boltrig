@@ -1243,11 +1243,13 @@ invariants:
       - tests/security/test_prompt_injection_hardening.py::test_sidecar_unconfigured_auth_fails_closed_in_prod
       - tests/security/test_prompt_injection_hardening.py::test_sidecar_refuses_metadata_endpoint
   SEC-74:
-    description: 'Closed conversations are hard-purged past retention (right-to-erasure) - the retention worker HARD-DELETES a CLOSED conversation and all its messages once its close/update timestamp is older than the retention cutoff, leaves open or recently-closed threads intact, is tenant-scoped, and never touches the tamper-evident audit log (audit is exempt) so DELETE /v1/me/conversations no longer leaves the body in Postgres indefinitely (M11).'
+    description: 'Closed conversations are hard-purged past retention (right-to-erasure) - the retention worker HARD-DELETES a CLOSED conversation and all its messages once its close/update timestamp is older than the retention cutoff, leaves open or recently-closed threads intact, is tenant-scoped, and never touches the tamper-evident audit log (audit is exempt) so DELETE /v1/me/conversations no longer leaves the body in Postgres indefinitely (M11) - and, since 2026-07-26, the fleet worker actually STARTS that janitor (BOLTRIG_RETENTION_INTERVAL), which nothing had ever done: the purge was tested by hand while no deployment ran it.'
     tests:
       - tests/store/test_retention_purge.py::test_closed_conversation_body_is_hard_purged_after_retention
       - tests/store/test_retention_purge.py::test_retention_purge_is_tenant_scoped
       - tests/store/test_retention_purge.py::test_purge_runs_select_and_deletes_in_one_transaction
+      - tests/fleet/test_worker_janitors.py::test_the_fleet_worker_starts_the_retention_janitor
+      - tests/fleet/test_worker_janitors.py::test_the_retention_janitor_is_off_only_when_someone_turns_it_off
   # --- Beat 3.5: control-plane verb parity (appended as one block) -----------
   SEC-75:
     description: 'Every supported console mutation is implemented once as a governed control.* verb and compatibility routes invoke that same chokepoint. The complete surface covers skills, nouns, verbs, bindings, adapters, MCP registration, workflows, config rollback, users, invitations, and notification routing; high-blast operations are HITL-held, low-blast inert/personal operations still receive schema/grant/rate/audit enforcement, workspace scope is preserved, durable triggers carry the authenticated context, and one-time invitation tokens are redacted from run events.'

@@ -17,6 +17,11 @@ from .anchor import (
     run_anchor_forever,
     run_anchor_sweep,
 )
+from .retention import (
+    retention_days_from_manifest,
+    retention_interval_from_env,
+    run_retention_forever,
+)
 from .chief_of_staff import ChiefOfStaff, Department
 from .department_head import DepartmentHead
 from .pump import WorkPump, build_org
@@ -67,4 +72,7 @@ __all__ = [
     "run_anchor_sweep",
     "run_anchor_forever",
     "anchor_interval_from_env",
+    "run_retention_forever",
+    "retention_interval_from_env",
+    "retention_days_from_manifest",
 ]

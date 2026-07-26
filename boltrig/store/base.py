@@ -318,14 +318,11 @@ class Store(BudgetPolicyContract, IdempotencyStoreContract, GuardedWritesContrac
     # --- budgets ---
     async def get_budget(self, tenant_id: str, scope_id: str) -> Budget | None: ...
     async def list_budgets(self, tenant_id: str) -> list[Budget]: ...
-    async def consume_budget(
-        self, tenant_id: str, scope_id: str, tokens: int, micros: int
-    ) -> bool: ...
     # Post-run cost true-up (FR-COST-03, audit M14): apply a SIGNED delta to the
     # scope's accumulators atomically (FOR UPDATE in postgres, under the lock in
-    # memory), each floored at 0. Unlike consume_budget this never gates on the
+    # memory), each floored at 0. Unlike a reserve this never gates on the
     # hard stop - it corrects the ledger for a call that already ran. A scope with
-    # no budget row is a no-op (unmetered), mirroring consume_budget.
+    # no budget row is a no-op (unmetered), the same as a reserve.
     async def reconcile_budget(
         self, tenant_id: str, scope_id: str, delta_tokens: int, delta_micros: int
     ) -> None: ...
@@ -338,9 +335,11 @@ class Store(BudgetPolicyContract, IdempotencyStoreContract, GuardedWritesContrac
     # scope_id, so concurrent reserves on overlapping scopes cannot deadlock) and
     # re-checks each hard stop under the lock; memory applies the same semantics
     # under its no-await lock. A scope with no budget row is a no-op (unmetered),
-    # mirroring consume_budget. This closes the partial-debit window the old
-    # per-scope consume_budget loop left open: scope A debited, scope B refuses,
-    # A stays charged for a call that never ran.
+    # This closes the partial-debit window the retired per-scope debit loop left
+    # open: scope A debited, scope B refuses, A stays charged for a call that never
+    # ran. That loop (``consume_budget``) is gone as of 2026-07-26 - it had had no
+    # caller since reserve_budgets_atomic replaced it, while six docstrings across
+    # the three store files still anchored their semantics on it.
     async def reserve_budgets_atomic(
         self, tenant_id: str, reservations: list[tuple[str, int, int]]
     ) -> bool: ...

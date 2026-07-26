@@ -286,7 +286,7 @@ class CredentialResolver:
         (envelope-sealed at rest, SEC-04); it is never returned, logged, or
         audited, and - unlike a secure answer - it is never resolvable into a verb
         param (distinct kind). Swept with the run's other refs on terminal
-        (``sweep_run_scoped``), fail-closed to the same run until then.
+        (``sweep_run_credentials_if_settled``), fail-closed to the same run until then.
 
         ``owner`` is the user whose downstream authority this bearer carries, and
         it is REQUIRED. See ``_owner_matches``."""

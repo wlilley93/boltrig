@@ -878,36 +878,11 @@ class PostgresStore(
         """Compatibility alias; new callers use upsert_budget_policy."""
         await self.upsert_budget_policy(b)
 
-    async def consume_budget(self, tenant_id, scope_id, tokens, micros):
-        async with self._pool.acquire() as conn:
-            async with conn.transaction():
-                await _apply_guc(conn)  # RLS-live: scope this explicit transaction
-                row = await conn.fetchrow(
-                    """SELECT token_limit, cost_limit_micros, hard_stop, spent_tokens, spent_micros
-                       FROM budgets WHERE tenant_id=$1 AND id=$2 FOR UPDATE""",
-                    tenant_id, scope_id,
-                )
-                if row is None:
-                    return True  # unmetered
-                new_tokens = row["spent_tokens"] + max(0, tokens)
-                new_micros = row["spent_micros"] + max(0, micros)
-                over = (row["token_limit"] is not None and new_tokens > row["token_limit"]) or (
-                    row["cost_limit_micros"] is not None and new_micros > row["cost_limit_micros"]
-                )
-                if over and row["hard_stop"]:
-                    return False
-                await conn.execute(
-                    """UPDATE budgets SET spent_tokens=$3, spent_micros=$4, updated_at=now()
-                       WHERE tenant_id=$1 AND id=$2""",
-                    tenant_id, scope_id, new_tokens, new_micros,
-                )
-                return True
-
     async def reconcile_budget(self, tenant_id, scope_id, delta_tokens, delta_micros):
         """Post-run cost true-up (FR-COST-03, audit M14): apply a SIGNED delta to
         the scope's accumulators atomically (FOR UPDATE), each floored at 0. No
         hard-stop gate - this corrects the ledger for a call that already ran. No
-        budget row -> no-op (unmetered), mirroring consume_budget."""
+        budget row -> no-op (unmetered), the same rule the reserve applies."""
         async with self._pool.acquire() as conn:
             async with conn.transaction():
                 await _apply_guc(conn)  # RLS-live: scope this explicit transaction
@@ -936,7 +911,7 @@ class PostgresStore(
         BEFORE issuing any UPDATE, so the (write-empty) transaction commits nothing -
         no partial debit. Only when every scope has headroom do we apply all debits
         and return True. A scope with no budget row is a no-op (unmetered), mirroring
-        consume_budget."""
+        a reserve."""
         # Aggregate per scope (a scope named twice is locked + debited once, its
         # amounts summed). Negative amounts floor to 0 (a refund is reconcile's job).
         agg: dict[str, tuple[int, int]] = {}

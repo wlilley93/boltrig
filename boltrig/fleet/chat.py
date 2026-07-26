@@ -81,7 +81,7 @@ async def _settle_turn(
 
     One function because they are one event. The chat lane settles its OWN work
     item rather than through the pump, and the pump's terminal hook was the only
-    caller of ``sweep_run_scoped`` - so a chat turn never swept anything, and the
+    caller of the terminal sweep - so a chat turn never swept anything, and the
     caller's clamped external bearer rested in ``credential_refs`` for the life of
     the database (observed on the live Classical Visas tenant: one row per turn
     plus one per delegated child, none ever deleted).

@@ -291,7 +291,8 @@ async def sweep_run_credentials_if_settled(
     a run's secrets live exactly as long as something can legitimately replay
     under that run, and not one moment longer.
 
-    The gap this closes: ``sweep_run_scoped``'s only caller was the org pump, but
+    The gap this closes: ``sweep_run_scoped`` was written as the org pump's hook and
+    was never wired anywhere, but
     the parity bearer is sealed exclusively by the CHAT lane (``chat.py``), which
     settles its own work item directly and never reaches that hook - and a
     delegated child has no work item at all, so nothing could ever sweep it. Both
@@ -361,7 +362,7 @@ async def settle_held_call(
     """Retire a held call: drop the seal and mark its checkpoints spent.
 
     Called on every terminal transition of the request (redeemed, refused,
-    conflicted, timed out). The chat lane never calls ``sweep_run_scoped`` - its
+    conflicted, timed out). The chat lane never called the org lane's sweep - its
     only caller is the org lane - so without this the seal outlives its run. The
     checkpoints flip out of ``paused`` in the same breath so a duplicate delivery
     finds nothing to replay and re-enters the chokepoint not at all.

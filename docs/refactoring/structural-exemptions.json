@@ -404,15 +404,15 @@
       "expires": "2026-12-31"
     },
     "boltrig/store/base.py": {
-      "max_file_lines": 666,
+      "max_file_lines": 665,
       "max_function_lines": 15,
       "over_limit_functions": [],
       "owner": "store-maintainers",
-      "reason": "Split the store protocol into domain protocols while preserving one composed compatibility contract. 2026-07-26: the conditional lease-fenced work-item write and the copy-on-read parity repair ([2026] VJS-CC-BOLTRIG-WORK-ITEM-LEASE-FENCE-001 D1/D6). The memory store previously handed callers the LIVE row, so any conditional write compared a stored object against itself and always agreed. 2026-07-26: +8 comment lines for D9 of the same order, which requires the honest limit to be recorded AT the contract: the fence makes the RECORD single-writer and does NOT make execution exactly-once. A worker that lost its lease is still running; the fence only stops it landing its answer on the winner's. Recorded here rather than in a doc because the place a later reader would upgrade \"single-writer\" into \"exactly-once\" is this declaration.",
+      "reason": "Split the store protocol into domain protocols while preserving one composed compatibility contract. 2026-07-26: the conditional lease-fenced work-item write and the copy-on-read parity repair ([2026] VJS-CC-BOLTRIG-WORK-ITEM-LEASE-FENCE-001 D1/D6). The memory store previously handed callers the LIVE row, so any conditional write compared a stored object against itself and always agreed. 2026-07-26: +8 comment lines for D9 of the same order, which requires the honest limit to be recorded AT the contract: the fence makes the RECORD single-writer and does NOT make execution exactly-once. A worker that lost its lease is still running; the fence only stops it landing its answer on the winner's. Recorded here rather than in a doc because the place a later reader would upgrade \"single-writer\" into \"exactly-once\" is this declaration. 2026-07-26: consume_budget deleted. It had had no caller since reserve_budgets_atomic replaced it (FR-COST-05), while six docstrings across these three files still anchored their semantics on it - the Tier 0 claim inventory found it by asking which named mechanisms nothing reaches.",
       "expires": "2026-12-31"
     },
     "boltrig/store/memory.py": {
-      "max_file_lines": 1198,
+      "max_file_lines": 1179,
       "max_function_lines": 97,
       "over_limit_functions": [
         {
@@ -422,15 +422,15 @@
         }
       ],
       "owner": "store-maintainers",
-      "reason": "Extract domain partials in lockstep with PostgreSQL while preserving complete store parity. 2026-07-26: the conditional lease-fenced work-item write and the copy-on-read parity repair ([2026] VJS-CC-BOLTRIG-WORK-ITEM-LEASE-FENCE-001 D1/D6). The memory store previously handed callers the LIVE row, so any conditional write compared a stored object against itself and always agreed.",
+      "reason": "Extract domain partials in lockstep with PostgreSQL while preserving complete store parity. 2026-07-26: the conditional lease-fenced work-item write and the copy-on-read parity repair ([2026] VJS-CC-BOLTRIG-WORK-ITEM-LEASE-FENCE-001 D1/D6). The memory store previously handed callers the LIVE row, so any conditional write compared a stored object against itself and always agreed. 2026-07-26: consume_budget deleted. It had had no caller since reserve_budgets_atomic replaced it (FR-COST-05), while six docstrings across these three files still anchored their semantics on it - the Tier 0 claim inventory found it by asking which named mechanisms nothing reaches.",
       "expires": "2026-12-31"
     },
     "boltrig/store/postgres.py": {
-      "max_file_lines": 2002,
+      "max_file_lines": 1977,
       "max_function_lines": 53,
       "over_limit_functions": [],
       "owner": "store-maintainers",
-      "reason": "Extract domain partials in lockstep with the in-memory store while preserving SQL and RLS parity. 2026-07-26: the conditional lease-fenced work-item write and the copy-on-read parity repair ([2026] VJS-CC-BOLTRIG-WORK-ITEM-LEASE-FENCE-001 D1/D6). The memory store previously handed callers the LIVE row, so any conditional write compared a stored object against itself and always agreed.",
+      "reason": "Extract domain partials in lockstep with the in-memory store while preserving SQL and RLS parity. 2026-07-26: the conditional lease-fenced work-item write and the copy-on-read parity repair ([2026] VJS-CC-BOLTRIG-WORK-ITEM-LEASE-FENCE-001 D1/D6). The memory store previously handed callers the LIVE row, so any conditional write compared a stored object against itself and always agreed. 2026-07-26: consume_budget deleted. It had had no caller since reserve_budgets_atomic replaced it (FR-COST-05), while six docstrings across these three files still anchored their semantics on it - the Tier 0 claim inventory found it by asking which named mechanisms nothing reaches.",
       "expires": "2026-12-31"
     },
     "boltrig/store/rows.py": {

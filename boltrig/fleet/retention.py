@@ -18,28 +18,30 @@ Shape mirrors the delegation pump (:class:`boltrig.fleet.pump.WorkPump`): a
 (P9). "Now" is injected, never read from a wall clock inside the store layer, so
 the cutoff is testable and this carries no Date.now-style nondeterminism.
 
-Not wired into any live process by default (like the backup sidecar, SEC-71):
-schedule it with a small entrypoint or a cron / systemd timer, e.g.
+WIRED, as of 2026-07-26, into the fleet worker (``boltrig/api/worker.py``)
+alongside the anchor and HITL-expiry janitors, on ``BOLTRIG_RETENTION_INTERVAL``.
 
-    import asyncio
-    from boltrig.api.bootstrap import build_kernel_async, _DEFAULT_TENANT, _find_manifest
-    from boltrig.config import load_manifest
-    from boltrig.fleet.retention import run_retention_forever, retention_days_from_manifest
+It was not, for as long as it has existed, and the module said so in a docstring
+that told the reader to "schedule it with a small entrypoint or a cron / systemd
+timer" - which nothing ever did. No compose service, no Makefile target, no
+deploy unit, no ``__main__``. Meanwhile ``docs/security-conformance.md`` recorded
+DATA-07 and PRIV-04 retention/erasure as BUILT, and SEC-74 claimed that
+``DELETE /v1/me/conversations`` "no longer leaves the body in Postgres
+indefinitely" while its three tests drove ``run_retention_once`` by hand. In every
+shipped deployment ``purge_closed_conversations`` had never once been called: a
+user who asked for erasure got ``status=CLOSED`` and their conversation body and
+every message stayed in the database for good.
 
-    async def _main():
-        kernel = await build_kernel_async()
-        manifest = load_manifest(_find_manifest()) if _find_manifest() else None
-        tenant = manifest.tenant_id if manifest else _DEFAULT_TENANT
-        days = retention_days_from_manifest(manifest)
-        await run_retention_forever(kernel.store, tenant, days)
-
-    asyncio.run(_main())
+The cited precedent did not hold either. The backup sidecar it compares itself to
+ships a Dockerfile, a script, a profile-gated compose service, a Makefile target,
+an operator doc and eight pinned tests. This shipped a docstring snippet.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
@@ -50,6 +52,24 @@ log = logging.getLogger("boltrig.fleet.retention")
 DEFAULT_RETENTION_DAYS = 30
 # Idle sleep between sweeps in the forever loop - a janitor, not a hot loop.
 DEFAULT_INTERVAL_SECONDS = 3600.0
+# The knob, mirroring BOLTRIG_AUDIT_ANCHOR_INTERVAL and BOLTRIG_HITL_EXPIRY_INTERVAL:
+# <= 0 disables the janitor, and the fleet worker says which it did at boot.
+INTERVAL_ENV = "BOLTRIG_RETENTION_INTERVAL"
+
+
+def retention_interval_from_env() -> float:
+    """The configured sweep interval (seconds), or :data:`DEFAULT_INTERVAL_SECONDS`.
+
+    Mirrors ``anchor_interval_from_env``: a malformed value falls back to the
+    default; a value <= 0 is honoured as "disabled" and returned as-is."""
+    raw = os.environ.get(INTERVAL_ENV)
+    if raw is None or not raw.strip():
+        return DEFAULT_INTERVAL_SECONDS
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        log.warning("%s=%r is not a number; using the default", INTERVAL_ENV, raw)
+        return DEFAULT_INTERVAL_SECONDS
 
 
 def _utcnow() -> datetime:

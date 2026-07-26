@@ -119,7 +119,7 @@ async def _park_expired_item(store: Store, req: Any) -> None:
 async def _retire_held_call(store: Store, req: Any) -> None:
     """Drop the seal of a write held by a request that has just timed out.
 
-    The chat lane never calls ``sweep_run_scoped`` (its only caller is the org
+    The chat lane never called the org lane's terminal sweep (its only caller is the org
     lane), so a held call whose approval expires unanswered would otherwise leave
     its sealed params behind for the life of the database. A request with no held
     write is a no-op. Fail-safe: the recorded expiry is the truth (P9)."""
