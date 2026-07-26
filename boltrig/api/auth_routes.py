@@ -488,8 +488,8 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
         if session is not None:
             session.revoked = True
             # A session lives at the identity realm (session.tenant_id), which differs
-            # from the ACTIVE org (p.tenant_id) for a multi-org identity ([2026] VJS-
-            # COUNTY 11). Bind the realm for the RLS-scoped session write so the revoke
+            # from the ACTIVE org (p.tenant_id) for a multi-org identity
+            # ([2026] VJS-COUNTY 11). Bind the realm for the RLS-scoped write so the revoke
             # lands, then restore the active tenant for the audit.
             set_current_tenant(session.tenant_id)
             await k.store.update_session(session)

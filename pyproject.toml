@@ -66,6 +66,18 @@ dev = [
     # same analyzers rather than whatever a developer happens to have globally.
     "pip-audit==2.10.1",
     "bandit==1.9.4",
+    # An in-process Redis, so the SHARED rate-limit counter is exercised without a
+    # server. It was reachable here only as a transitive of the optional `cognee`
+    # extra and was absent from requirements-dev-lock.txt, which is what CI
+    # installs - so `pytest.importorskip("fakeredis")` skipped the whole file in
+    # CI, silently. The test that never ran is
+    # tests/security/test_rate_limit_backend.py::
+    # test_the_shared_counter_survives_a_kernel_restart: the direct regression for
+    # the defect this project's goal document opens with, a kernel restart
+    # resetting the 2FA brute-force bound because RedisCounter was constructed
+    # nowhere. A regression test for the headline defect, passing on the author's
+    # box and skipping in CI, is the defect wearing the costume of its own fix.
+    "fakeredis>=2.26",
 ]
 
 [project.scripts]

@@ -13,69 +13,117 @@ from boltrig.store import InMemoryStore
 
 TENANT = "acme"
 
-# --- The Postgres precondition is not allowed to be silent ------------------
+# --- No precondition is allowed to be silent --------------------------------
 #
-# ~156 tests run only against a real Postgres: the RLS fence-drift guard, store
-# parity, migration parity, tenancy. Without BOLTRIG_TEST_DATABASE_URL they SKIP,
-# and pytest still ends "N passed" in green. For a long time CI was the only
-# place that surface ran at all, which is how a Postgres-only foreign-key defect
-# lived through green local suite after green local suite.
+# A skip is a fine mechanism. A skip nobody is told about is the failure, and this
+# suite has now been bitten twice by the same shape:
 #
-# A skip is a fine mechanism; a skip nobody is told about is the failure. So a
-# run that skipped this family ends NON-ZERO with a banner naming what it did not
-# check. Setting BOLTRIG_ALLOW_UNVERIFIED_POSTGRES=1 restores the old behaviour,
-# because sometimes you genuinely want the offline subset - but then it is a
-# choice on the record rather than an accident, which is the whole difference.
-_PRECONDITION_ENV = "BOLTRIG_TEST_DATABASE_URL"
-_OPT_OUT_ENV = "BOLTRIG_ALLOW_UNVERIFIED_POSTGRES"
-_unverified: set[str] = set()
+#   * ~156 Postgres tests - the RLS fence-drift guard, store parity, migration
+#     parity, tenancy - skipped without BOLTRIG_TEST_DATABASE_URL while pytest
+#     still ended "N passed" in green. A Postgres-only foreign-key defect lived
+#     through green local suite after green local suite.
+#   * tests/security/test_rate_limit_backend.py skipped in CI because `fakeredis`
+#     was reachable only as a transitive of the optional cognee extra and was
+#     absent from requirements-dev-lock.txt, which is what CI installs. The test
+#     that therefore never ran in CI is the direct regression for the defect this
+#     project's goal document opens with: a kernel restart resetting the 2FA
+#     brute-force bound because RedisCounter was constructed nowhere. A regression
+#     test for the headline defect, green on the author's box and skipped in CI,
+#     is that defect wearing the costume of its own fix.
+#
+# So every skip whose precondition a developer or CI COULD satisfy is either
+# fatal or, at minimum, said out loud at the end of the run.
+#
+# BLOCKING - the run ends non-zero. These are satisfiable anywhere: a database
+# URL, or a package the dev lock now pins, so absence means a broken environment
+# rather than a missing service. Each has its own opt-out so declining is a
+# decision on the record instead of an accident.
+_BLOCKING: tuple[tuple[str, str, str], ...] = (
+    (
+        "BOLTRIG_TEST_DATABASE_URL",
+        "BOLTRIG_ALLOW_UNVERIFIED_POSTGRES",
+        "the RLS fence, store parity, migration parity and tenancy",
+    ),
+    (
+        "fakeredis",
+        "BOLTRIG_ALLOW_UNVERIFIED_RATELIMIT",
+        "the SHARED rate-limit counter, including that it survives a restart",
+    ),
+)
+
+# LOUD - reported, never silent, but not fatal: these need a live external service
+# or a built image, and no environment variable conjures one. What is forbidden is
+# the run ENDING without saying they did not happen.
+_LOUD: tuple[tuple[str, str], ...] = (
+    ("BOLTRIG_PER_CELL_IMAGE", "the per-cell UID escalation gates (J7/J9)"),
+    ("HATCHET_CLIENT_TOKEN", "the live durable-engine legs"),
+    ("BOLTRIG_COGNEE_LIVE", "the live knowledge-graph legs"),
+    ("BOLTRIG_LIVE_SMOKE", "the live adapter reads"),
+    ("BOLTRIG_CODEX_01443_SMOKE_BINARY", "the codex cell smoke and tool-ceiling legs"),
+)
+
+_skipped: dict[str, set[str]] = {}
 
 
 def pytest_runtest_logreport(report: pytest.TestReport) -> None:
-    if report.skipped and _PRECONDITION_ENV in str(report.longrepr):
-        _unverified.add(report.nodeid)
+    if not report.skipped:
+        return
+    reason = str(report.longrepr)
+    for token, _, _ in _BLOCKING:
+        if token in reason:
+            _skipped.setdefault(token, set()).add(report.nodeid)
+    for token, _ in _LOUD:
+        if token in reason:
+            _skipped.setdefault(token, set()).add(report.nodeid)
+
+
+def _blocking_unverified() -> list[tuple[str, str, str, int]]:
+    out = []
+    for token, opt_out, what in _BLOCKING:
+        nodes = _skipped.get(token)
+        if nodes and not os.environ.get(opt_out):
+            out.append((token, opt_out, what, len(nodes)))
+    return out
 
 
 def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:  # noqa: ANN001
-    if not _unverified:
+    if not _skipped:
         return
-    count = len(_unverified)
-    noun = "test" if count == 1 else "tests"
-    if os.environ.get(_OPT_OUT_ENV):
-        terminalreporter.write_line(
-            f"NOT VERIFIED: {count} Postgres-backed {noun} skipped "
-            f"({_OPT_OUT_ENV} is set, so this run is green anyway).",
-            yellow=True,
-        )
-        return
-    terminalreporter.write_line("")
-    terminalreporter.write_line(
-        f"UNVERIFIED: {count} {noun} never ran - {_PRECONDITION_ENV} is not set.",
-        red=True,
-        bold=True,
-    )
-    terminalreporter.write_line(
-        "  This suite did NOT check the RLS fence, store parity, migration "
-        "parity or tenancy.",
-        red=True,
-    )
-    terminalreporter.write_line(
-        "  Point it at a THROWAWAY database (these tests write), never one a "
-        "running stack serves:",
-        red=True,
-    )
-    terminalreporter.write_line(
-        f"    {_PRECONDITION_ENV}=postgresql://boltrig:<pw>@<host>:5432/boltrig_test",
-        red=True,
-    )
-    terminalreporter.write_line(
-        f"  To accept an offline run deliberately: {_OPT_OUT_ENV}=1", red=True
-    )
+    write = terminalreporter.write_line
+    blocking = _blocking_unverified()
+
+    if blocking:
+        write("")
+        for token, opt_out, what, count in blocking:
+            write(
+                f"UNVERIFIED: {count} test(s) never ran - {token} is unavailable.",
+                red=True, bold=True,
+            )
+            write(f"  This suite did NOT check {what}.", red=True)
+            write(f"  To accept that deliberately: {opt_out}=1", red=True)
+
+    loud = [
+        (token, what, len(_skipped[token]))
+        for token, what in _LOUD
+        if token in _skipped
+    ]
+    accepted = [
+        (token, what, len(_skipped[token]))
+        for token, opt_out, what in _BLOCKING
+        if token in _skipped and os.environ.get(opt_out)
+    ]
+    if loud or accepted:
+        write("")
+        write("NOT VERIFIED by this run (needs a live service or a built image):",
+              yellow=True)
+        for token, what, count in loud + accepted:
+            write(f"  {count:>3} test(s)  {what}  [{token}]", yellow=True)
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
-    if _unverified and not os.environ.get(_OPT_OUT_ENV) and exitstatus == 0:
+    if exitstatus == 0 and _blocking_unverified():
         session.exitstatus = pytest.ExitCode.TESTS_FAILED
+
 
 
 def make_ctx(grants: list[str], *, run_id: str = "run-1", depth: int = 0, **kw) -> InvocationContext:

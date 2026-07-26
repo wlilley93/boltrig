@@ -230,6 +230,33 @@ ALLOW: dict[tuple[str, str], str] = {
         "An illustrative example of PROJECT content - a tenant's own skill file - "
         "inside a yaml fence. This repository does not and should not ship it."
     ),
+    ("*", "[2026] VJS-CC-BOLTRIG-BRANCH-PROTECTION-001"): (
+        "A County Court judgment (Orders 1-9) that WAS given and was never written "
+        "to .vjs/orders/. Its substance is in .vjs/logs/decisions/"
+        "LOG-2026-07-25-113350.yaml, which records the acts taken on its authority - "
+        "branch protection on wlilley93/boltrig main. Allow-listed rather than "
+        "reconstructed: writing an order file from a log summary would invent "
+        "particulars nobody issued, which is worse than a citation that cannot be "
+        "produced. Self-filed as a breach; see docs/findings/"
+        "2026-07-26-orders-relied-on-but-never-filed.md."
+    ),
+    ("*", "[2026] VJS-CC-BOLTRIG-AUDIT-KEY-PROVISIONING-001"): (
+        "The same defect and the same day (Orders O1-O11), recorded in the same "
+        "decision log. The acts taken on its authority were real security changes: "
+        "the audit-key guard compared against the in-source default only and missed "
+        "the placeholder .env.example actually shipped. See the finding above."
+    ),
+    ("*", "[2026] VJS-CC NANKLE-CONSOLIDATION 001"): (
+        "The founding ruling under which this repository exists at all, cited as "
+        "BINDING by README.md, docs/ARCHITECTURE.md and docs/invariants.md - the "
+        "last as the canonical source of every K-* invariant id. No file matching it "
+        "has ever existed in this repository's history (`.vjs/court/` has only ever "
+        "held convenings/), and none is in the canon register either. "
+        "docs/decisions/0002-nankle-consolidation-ruling.md is the only record on "
+        "disk and now says so. Whether an order nobody can produce still binds is a "
+        "question for the court, not for an allowlist; this entry keeps the gate "
+        "honest about the gap rather than hiding it."
+    ),
     ("*", "HATCHET_CLIENT_HOST_PORT"): (
         "A hatchet-python SDK variable, not a boltrig knob. The findings doc names it "
         "in an operator repro for pointing a live test at a running engine, and the "
@@ -513,6 +540,82 @@ def iter_prose_files() -> list[Path]:
     return keep
 
 
+# A citation as a human writes it: "[2026] VJS-CC-BOLTRIG-RATE-LIMIT-WINDOW-001",
+# "[2026] VJS-COUNTY 6", "[2026] VJS-CC NANKLE-CONSOLIDATION 001", optionally
+# followed by a directive token (D1, O3, J5) which is part of the order, not of
+# its identity.
+# A citation may WRAP across two comment lines mid-token - auth_routes.py:491
+# splits "[2026] VJS-COUNTY 11" after the hyphen - so one continuation line is
+# rejoined. The first cut missed that and reported a bare "[2026] VJS".
+_CITATION_RE = re.compile(
+    r"\[(?:19|20)\d{2}\]\s+VJS[A-Z0-9 -]*"
+    r"(?:-[ \t]*\n[ \t]*#?[ \t]*[A-Z0-9][A-Z0-9 -]*)?"
+)
+
+# Registers to resolve against. Orders are FEDERATED - a subscriber repo cites
+# canon rulings it does not hold - so both are searched, and a citation resolving
+# in either is resolved. Searching only the local register would report every
+# canon citation as missing, which is how a gate teaches people to ignore it.
+ORDER_REGISTERS = (
+    ROOT / ".vjs",
+    Path.home() / "Projects" / "vibe-justice-system" / ".vjs",
+)
+
+
+def _normalise_citation(raw: str) -> str:
+    """Collapse whitespace and drop trailing punctuation. Nothing else."""
+    joined = re.sub(r"-[ \t]*\n[ \t]*#?[ \t]*", "-", raw)
+    return " ".join(joined.split()).rstrip(".,;:-").strip()
+
+
+def _citation_resolves(cite: str, filed: set[str]) -> bool:
+    """Does any filed order answer to this citation, or to a prefix of it?
+
+    Trailing tokens are ambiguous by construction: in "[2026] VJS-COUNTY 6" the 6
+    IS the order's identity, while in "[2026] VJS-CC-X-001 D1" the D1 names a
+    directive WITHIN the order. Neither can be told from the other by shape, so
+    rather than guess with a regex - the first cut did, and stripped the 001 off
+    NANKLE-CONSOLIDATION 001 - this tries the whole citation first and then drops
+    one trailing token at a time. A citation resolves if the order does; a
+    directive that does not exist inside it is beyond what this gate can see.
+    """
+    parts = cite.split()
+    while len(parts) > 1:
+        if " ".join(parts) in filed:
+            return True
+        parts.pop()
+    return False
+
+
+def filed_order_citations() -> set[str]:
+    """Every citation an order in either register answers to.
+
+    Read WITHOUT a yaml parser (stdlib only): an order file carries `id:` and,
+    for orders renumbered out of the old COUNTY series, a `citation:` holding the
+    human form. Both are identities of the same order, so both count.
+    """
+    known: set[str] = set()
+    for register in ORDER_REGISTERS:
+        if not register.is_dir():
+            continue  # canon not checked out beside this repo: local-only resolution
+        for path in register.rglob("*.yaml"):
+            if "orders" not in path.parts:
+                continue
+            for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+                key, _, value = line.partition(":")
+                if key.strip() not in {"id", "citation"}:
+                    continue
+                value = value.strip().strip("'\"")
+                if not value:
+                    continue
+                known.add(_normalise_citation(value))
+                # `id: 2026-VJS-CC-X-001` is cited in prose as `[2026] VJS-CC-X-001`.
+                head, _, rest = value.partition("-")
+                if head.isdigit() and rest:
+                    known.add(_normalise_citation(f"[{head}] {rest}"))
+    return known
+
+
 def main() -> int:
     files = iter_prose_files()
     targets = makefile_targets()
@@ -521,7 +624,8 @@ def main() -> int:
     test_defs: dict[Path, set[str]] = {}
 
     findings: list[tuple[str, str, str, str]] = []  # kind, where, reference, why
-    checked = {"path": 0, "node-id": 0, "make": 0, "env": 0}
+    filed_orders = filed_order_citations()
+    checked = {"path": 0, "node-id": 0, "make": 0, "env": 0, "order": 0}
 
     for path in files:
         rel = path.relative_to(ROOT).as_posix()
@@ -580,6 +684,27 @@ def main() -> int:
                              "no such target in the Makefile")
                         )
 
+            # --- 5: VJS order citations --------------------------------------
+            # An order is the only thing in this system that BINDS, so a citation
+            # nobody can produce is the most expensive unresolved reference there
+            # is. Three were live when this rule was written:
+            # BRANCH-PROTECTION-001 (Orders 1-9) and AUDIT-KEY-PROVISIONING-001
+            # (Orders O1-O11) were relied on to change security controls on a live
+            # repository and neither order was ever filed; NANKLE-CONSOLIDATION 001
+            # is cited as the canonical source of every K-* invariant id and has
+            # never existed in this repository's history.
+            for m in _CITATION_RE.finditer(text):
+                cite = _normalise_citation(m.group(0))
+                checked["order"] += 1
+                if excused(m.start(), m.end()):
+                    continue
+                if _citation_resolves(cite, filed_orders):
+                    continue
+                findings.append(
+                    ("order", f"{rel}:{unit.line_of(m.start())}", cite,
+                     "no filed order carries this citation")
+                )
+
             # --- 4: environment variables ------------------------------------
             for m in _ENV_RE.finditer(text):
                 name = m.group(1)
@@ -601,7 +726,16 @@ def main() -> int:
     exempted = 0
     for kind, where, ref, why in findings:
         file_part = where.rsplit(":", 1)[0]
-        if (file_part, ref) in ALLOW or ("*", ref) in ALLOW:
+        # An order citation is exempted by its ORDER, not by each directive of it:
+        # allow-listing "...-001" must cover "...-001 O1", "...-001 O3" and the rest,
+        # or one waiver needs an entry per directive and stops being readable.
+        candidates = [ref]
+        if kind == "order":
+            parts = ref.split()
+            while len(parts) > 1:
+                parts.pop()
+                candidates.append(" ".join(parts))
+        if any((file_part, c) in ALLOW or ("*", c) in ALLOW for c in candidates):
             exempted += 1
             continue
         key = (kind, where, ref)
