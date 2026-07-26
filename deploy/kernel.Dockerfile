@@ -147,9 +147,15 @@ COPY boltrig/ /app/boltrig/
 #
 # Written explicitly rather than by `pip install .`, which would put the package outside
 # the hash-pinned install and weaken the --require-hashes contract for one console script.
+# `sys.path.insert` is load-bearing, not defensive. For a SCRIPT, Python puts the
+# script's own directory on sys.path - /usr/local/bin - never the working
+# directory, so the first cut imported nothing and the build died on its own smoke
+# test with ModuleNotFoundError: No module named 'boltrig'. The package lives at
+# /app/boltrig (COPY above), and WORKDIR being /app does not help a script.
 RUN printf '%s\n' \
       '#!/usr/local/bin/python3' \
       'import sys' \
+      'sys.path.insert(0, "/app")' \
       'from boltrig.api.cli import main' \
       'sys.exit(main())' \
       > /usr/local/bin/boltrig \
