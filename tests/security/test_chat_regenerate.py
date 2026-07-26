@@ -45,7 +45,8 @@ async def _seed_turn(store, relay, reply="first answer", user="alice"):
     return conv, msgs
 
 
-# --- SEC-81: append-plus-supersede, frozen prior reply ----------------------
+# --- SEC-81 / [2026] VJS-COUNTY 4 D1+D2+D3: append-plus-supersede on a new run id,
+#     the marker write sets superseded_by and nothing else, prior reply frozen ------
 
 @pytest.mark.security
 @pytest.mark.invariant("SEC-81")
@@ -95,7 +96,8 @@ async def test_marker_write_sets_only_superseded_by():
             tuple(map(tuple, (e.items() for e in after.events))), after.created_at) == snap
 
 
-# --- SEC-82: continuity excludes superseded, prefix-stable ------------------
+# --- SEC-82 / [2026] VJS-COUNTY 4 D4: the continuity composer filters superseded
+#     messages and the render stays deterministic for the rest ---------------------
 
 @pytest.mark.security
 @pytest.mark.invariant("SEC-82")
@@ -121,7 +123,8 @@ def test_continuity_excludes_superseded_and_is_prefix_stable():
     assert compose_turn_task(full, "ask one") == render_transcript([u1, a_new])
 
 
-# --- SEC-83: owner-only, last-message-only, keys-only audit -----------------
+# --- SEC-83 / [2026] VJS-COUNTY 4 D5+D6+D7: owner-only fail-closed, last assistant
+#     message only, and a keys-only audit event on the marker write ----------------
 
 def _client_with_seeded_turn(owner="alice", reply="first answer"):
     store, relay = InMemoryStore(), EventRelay()

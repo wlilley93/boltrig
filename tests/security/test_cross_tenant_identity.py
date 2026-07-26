@@ -118,7 +118,8 @@ class _FakeRequest:
         self.state = SimpleNamespace()
 
 
-# --- SEC-131: the resolver binds + rebinds RLS to the session's active org ----------
+# --- SEC-131 / [2026] VJS-COUNTY 11 D3: every request is bound to exactly ONE active
+#     tenant, and the resolver rebinds RLS to it on each request --------------------
 @pytest.mark.security
 @pytest.mark.invariant("SEC-131")
 def test_resolver_binds_the_request_to_the_session_active_org(monkeypatch):
@@ -167,7 +168,8 @@ def test_resolver_binds_the_request_to_the_session_active_org(monkeypatch):
     set_current_tenant(None)
 
 
-# --- SEC-132: the org switch is membership-re-authorized + no cross-org read --------
+# --- SEC-132 / [2026] VJS-COUNTY 11 D2: the session carries the active org and
+#     workspace, and a switch is re-authorized against org_members - no cross-org read
 @pytest.mark.security
 @pytest.mark.invariant("SEC-132")
 def test_org_switch_is_reauthorized_and_no_cross_org_read(monkeypatch):
@@ -227,7 +229,8 @@ def test_org_switch_is_reauthorized_and_no_cross_org_read(monkeypatch):
     assert c.get("/v1/me/settings").status_code == 401
 
 
-# --- SEC-133: a provisioned-org invitee gets a usable login in the new org ----------
+# --- SEC-133 / [2026] VJS-COUNTY 11 D4: provisioning by invite creates the invitee's
+#     user row and membership, so the login it promises actually works --------------
 @pytest.mark.security
 @pytest.mark.invariant("SEC-133")
 def test_provisioned_org_invitee_gets_a_usable_login(monkeypatch):
@@ -282,7 +285,8 @@ def test_provisioned_org_invitee_gets_a_usable_login(monkeypatch):
     assert me.json()["profile"]["role"] == "superadmin"
 
 
-# --- SEC-134: the shared credential + 2FA travel with the identity, held once -------
+# --- SEC-134 / [2026] VJS-COUNTY 11 D5: the shared credential stays sealed and 2FA
+#     travels with the IDENTITY, not the per-org row --------------------------------
 @pytest.mark.security
 @pytest.mark.invariant("SEC-134")
 def test_shared_credential_and_2fa_travel_with_the_identity(monkeypatch):

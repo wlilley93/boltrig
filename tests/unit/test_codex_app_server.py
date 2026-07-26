@@ -331,7 +331,7 @@ async def test_resume_read_and_steer_reject_wrong_correlated_entity_ids(
 async def test_a_tool_approval_is_answered_explicitly_and_the_pump_survives(
     client_factory: ClientFactory,
 ) -> None:
-    """[2026] VJS-COUNTY 12: codex's item/tool/requestUserInput is ANSWERED
+    """[2026] VJS-COUNTY 12 D1+D3: codex's item/tool/requestUserInput is ANSWERED
     explicitly (an approve response written to the wire, never left to codex's
     autoResolutionMs timer), and the single-reader pump keeps running."""
     from boltrig.fleet.infrastructure.codex_server_request_handler import (

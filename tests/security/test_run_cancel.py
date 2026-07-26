@@ -95,7 +95,9 @@ def _pump(store, head, cos=None) -> WorkPump:
     return WorkPump(store, None, cos or _SpyCoS(head.name), {head.name: head})
 
 
-# --- SEC-85: owner-only, fail-closed, audited route + clean stream ----------
+# --- SEC-85 / [2026] VJS-COUNTY 6 D2+D5: POST /v1/runs/{run_id}/cancel is owner-only
+#     and fail-closed, mirroring the rename and regenerate routes, and the signal is
+#     written through the chokepoint keyed by run id, audited ----------------------
 
 def _client():
     store = InMemoryStore()
@@ -170,7 +172,9 @@ async def test_chat_cancel_closes_the_run_stream():
     assert any(e.get("type") == "cancelled" for e in got)
 
 
-# --- SEC-86: cooperative only, never mid-adapter -----------------------------
+# --- SEC-86 / [2026] VJS-COUNTY 6 D3+D4: the signal is checked at the step chokepoint
+#     boundary and stops BEFORE the next verb, never mid-adapter-call, and CANCELLED
+#     is written in a finally so the terminal state is durable --------------------
 
 @pytest.mark.security
 @pytest.mark.invariant("SEC-86")

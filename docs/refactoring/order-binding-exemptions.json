@@ -18,80 +18,15 @@
     "would be precisely the false claim this gate exists to catch."
   ],
   "allow": {
-    "AUDIT-DEPTH-001:D1": {
-      "owner": "kernel-maintainers",
-      "expires": "2026-11-30",
-      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names BESIDE the order, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10; it needs the directive read against each test to be honest rather than decorative."
-    },
-    "AUDIT-DEPTH-001:D2": {
-      "owner": "kernel-maintainers",
-      "expires": "2026-11-30",
-      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names BESIDE the order, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10; it needs the directive read against each test to be honest rather than decorative."
-    },
-    "AUDIT-DEPTH-001:D6": {
-      "owner": "kernel-maintainers",
-      "expires": "2026-11-30",
-      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names BESIDE the order, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10; it needs the directive read against each test to be honest rather than decorative."
-    },
-    "AUDIT-DEPTH-001:D7": {
-      "owner": "kernel-maintainers",
-      "expires": "2026-11-30",
-      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names BESIDE the order, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10; it needs the directive read against each test to be honest rather than decorative."
-    },
     "AUDIT-DEPTH-001:D8": {
       "owner": "kernel-maintainers",
       "expires": "2026-11-30",
       "reason": "Not code-testable and correctly so: it is a PRINCIPAL GATE on a live cutover or an external credential. Nothing in this repository can decide whether the Principal has given the go, and a test that claimed to would be the false claim this gate exists to stop. Enforced by the deploy record, not by CI."
     },
-    "CHAT-ATTACHMENTS-001:D1": {
-      "owner": "chat-maintainers",
-      "expires": "2026-11-30",
-      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
-    },
-    "CHAT-ATTACHMENTS-001:D2": {
-      "owner": "chat-maintainers",
-      "expires": "2026-11-30",
-      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
-    },
-    "CHAT-ATTACHMENTS-001:D3": {
-      "owner": "chat-maintainers",
-      "expires": "2026-11-30",
-      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names BESIDE the order, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10; it needs the directive read against each test to be honest rather than decorative."
-    },
-    "CHAT-ATTACHMENTS-001:D4": {
-      "owner": "chat-maintainers",
-      "expires": "2026-11-30",
-      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names BESIDE the order, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10; it needs the directive read against each test to be honest rather than decorative."
-    },
     "CHAT-ATTACHMENTS-001:D6": {
       "owner": "chat-maintainers",
       "expires": "2026-11-30",
       "reason": "A directive about the RECORD rather than a behaviour: it orders a docstring, an honesty doc or an amended invariant description to say a particular thing. Bindable by asserting the text, which is exactly the shape of this programme, and not yet done."
-    },
-    "CHAT-REGENERATE-001:D2": {
-      "owner": "chat-maintainers",
-      "expires": "2026-11-30",
-      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
-    },
-    "CHAT-REGENERATE-001:D3": {
-      "owner": "chat-maintainers",
-      "expires": "2026-11-30",
-      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
-    },
-    "CHAT-REGENERATE-001:D4": {
-      "owner": "chat-maintainers",
-      "expires": "2026-11-30",
-      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
-    },
-    "CHAT-REGENERATE-001:D6": {
-      "owner": "chat-maintainers",
-      "expires": "2026-11-30",
-      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
-    },
-    "CHAT-REGENERATE-001:D7": {
-      "owner": "chat-maintainers",
-      "expires": "2026-11-30",
-      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
     },
     "CODEX-APPROVAL-ROUTING-001:A1": {
       "owner": "codex-maintainers",
@@ -108,60 +43,10 @@
       "expires": "2026-11-30",
       "reason": "An appellate directive with no engineering consequence by its own terms - the appeal affirms the deployed order, varies the record, or is expressly obiter ('commended not ordered'). There is nothing for a test to bind to; binding one would misrepresent obiter as ratio."
     },
-    "CODEX-APPROVAL-ROUTING-001:D1": {
-      "owner": "codex-maintainers",
-      "expires": "2026-11-30",
-      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
-    },
-    "CODEX-APPROVAL-ROUTING-001:D2": {
-      "owner": "codex-maintainers",
-      "expires": "2026-11-30",
-      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
-    },
-    "CODEX-APPROVAL-ROUTING-001:D3": {
-      "owner": "codex-maintainers",
-      "expires": "2026-11-30",
-      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
-    },
-    "CODEX-APPROVAL-ROUTING-001:D4": {
-      "owner": "codex-maintainers",
-      "expires": "2026-11-30",
-      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
-    },
-    "CODEX-APPROVAL-ROUTING-001:D5": {
-      "owner": "codex-maintainers",
-      "expires": "2026-11-30",
-      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
-    },
-    "CROSS-TENANT-IDENTITY-001:D2": {
-      "owner": "identity-maintainers",
-      "expires": "2026-11-30",
-      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
-    },
-    "CROSS-TENANT-IDENTITY-001:D3": {
-      "owner": "identity-maintainers",
-      "expires": "2026-11-30",
-      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
-    },
-    "CROSS-TENANT-IDENTITY-001:D4": {
-      "owner": "identity-maintainers",
-      "expires": "2026-11-30",
-      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
-    },
-    "CROSS-TENANT-IDENTITY-001:D5": {
-      "owner": "identity-maintainers",
-      "expires": "2026-11-30",
-      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
-    },
     "FIRST-PARTY-AUTH-001:D10": {
       "owner": "identity-maintainers",
       "expires": "2026-11-30",
       "reason": "Not code-testable and correctly so: it is a PRINCIPAL GATE on a live cutover or an external credential. Nothing in this repository can decide whether the Principal has given the go, and a test that claimed to would be the false claim this gate exists to stop. Enforced by the deploy record, not by CI."
-    },
-    "FIRST-PARTY-AUTH-001:D7": {
-      "owner": "identity-maintainers",
-      "expires": "2026-11-30",
-      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names BESIDE the order, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10; it needs the directive read against each test to be honest rather than decorative."
     },
     "ORG-WORKSPACE-TENANCY-001:D10": {
       "owner": "identity-maintainers",
@@ -188,41 +73,6 @@
       "expires": "2026-11-30",
       "reason": "A directive about the RECORD rather than a behaviour: it orders a docstring, an honesty doc or an amended invariant description to say a particular thing. Bindable by asserting the text, which is exactly the shape of this programme, and not yet done."
     },
-    "SELF-IMPROVEMENT-AUTHORITY-001:D2": {
-      "owner": "workflow-maintainers",
-      "expires": "2026-11-30",
-      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
-    },
-    "SELF-IMPROVEMENT-AUTHORITY-001:D3": {
-      "owner": "workflow-maintainers",
-      "expires": "2026-11-30",
-      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
-    },
-    "SELF-IMPROVEMENT-AUTHORITY-001:D4": {
-      "owner": "workflow-maintainers",
-      "expires": "2026-11-30",
-      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
-    },
-    "SERVER-SIDE-CANCEL-001:D2": {
-      "owner": "kernel-maintainers",
-      "expires": "2026-11-30",
-      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names by directive id, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10 in this same commit; it needs the directive read against each test to be honest rather than decorative."
-    },
-    "SERVER-SIDE-CANCEL-001:D3": {
-      "owner": "kernel-maintainers",
-      "expires": "2026-11-30",
-      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names BESIDE the order, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10; it needs the directive read against each test to be honest rather than decorative."
-    },
-    "SERVER-SIDE-CANCEL-001:D4": {
-      "owner": "kernel-maintainers",
-      "expires": "2026-11-30",
-      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names BESIDE the order, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10; it needs the directive read against each test to be honest rather than decorative."
-    },
-    "SERVER-SIDE-CANCEL-001:D5": {
-      "owner": "kernel-maintainers",
-      "expires": "2026-11-30",
-      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names BESIDE the order, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10; it needs the directive read against each test to be honest rather than decorative."
-    },
     "UI-TEST-HARNESS-001:D1": {
       "owner": "ui-maintainers",
       "expires": "2026-11-30",
@@ -246,7 +96,7 @@
     "WORK-ITEM-LEASE-FENCE-001:D3": {
       "owner": "fleet-maintainers",
       "expires": "2026-11-30",
-      "reason": "A behaviour directive whose enforcement almost certainly EXISTS - the order has a dedicated test file that names it - but which no test names BESIDE the order, so a rename or deletion of the enforcing test would not break anything. Binding is a labelling pass over that file, of the kind done for COUNTY 7 and COUNTY 10; it needs the directive read against each test to be honest rather than decorative."
+      "reason": "Misclassified as a behaviour directive on the first baseline; corrected. D3 orders every write to a CLAIMED row routed through the fenced write, which tests/fleet/test_lease_fence.py does prove - but it also orders express DISPOSAL of hitl_expiry._park_expired_item and of requeue, whose exclusion rests on requeue being a deliberate human reset rather than an absent lease. That disposal is recorded in a production docstring (boltrig/fleet/pump.py:459), not in a test, so what is unbound is the RECORD half. Bindable by asserting the docstring says it, which is the shape of this programme and not yet done."
     },
     "WORK-ITEM-LEASE-FENCE-001:D9": {
       "owner": "fleet-maintainers",

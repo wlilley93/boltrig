@@ -239,7 +239,8 @@ def test_resolver_fail_closed_and_csrf_protected(monkeypatch):
     assert c2.get("/v1/me/sessions").status_code == 401
 
 
-# --- D7: `boltrig initiate` seats one owner and refuses to run twice ----------
+# --- [2026] VJS-COUNTY 7 D7: `boltrig initiate` seats the founding OWNER and the
+#     whole flow stays invite-only - it refuses to run twice, no open self-signup --
 @pytest.mark.security
 def test_initiate_is_idempotent_and_refuses_twice(monkeypatch):
     from boltrig.api import initiate as initiate_mod

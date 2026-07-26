@@ -69,7 +69,7 @@ async def test_the_answer_label_is_read_from_offered_options_not_hardcoded() -> 
 
 @pytest.mark.invariant("CODEX-APPROVAL-2")
 async def test_the_handler_makes_no_gating_decision_so_it_cannot_drift() -> None:
-    """[2026] VJS-COUNTY 12: the handler ADMITS every prompted call to the kernel
+    """[2026] VJS-COUNTY 12 D2+D4: the handler ADMITS every prompted call to the kernel
     identically - it never inspects the verb's consequence or duplicates the
     dispatch.py:406 gate - so it can never drift from the kernel, which stays the
     sole governing locus. A LOW read and a HIGH delete get the same admit answer;
@@ -93,6 +93,9 @@ async def test_the_handler_makes_no_gating_decision_so_it_cannot_drift() -> None
     assert low_ans == high_ans == {"answers": ["Approve"]}
 
 
+# [2026] VJS-COUNTY 12 D5: the approve label must be PRESENT and UNAMBIGUOUS in
+# codex's offered options, or the handler answers the error arm and fails closed -
+# guessing a label is how a HIGH call gets admitted on a wrong answer.
 @pytest.mark.invariant("CODEX-APPROVAL-4")
 async def test_no_approve_option_fails_closed_with_an_error() -> None:
     offered = [{"label": "Decline", "description": "no"}, {"label": "Abort", "description": "no"}]

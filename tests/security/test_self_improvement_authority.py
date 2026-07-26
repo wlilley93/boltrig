@@ -34,6 +34,9 @@ _AUTHORITY_BEARING = {
 }
 
 
+# [2026] VJS-COUNTY 5 D2+D4: every learned, generated or reflected artifact flows
+# through the ONE dispatch chokepoint, so a workflow's provenance can never be read
+# as an authority signal - promotion may change ranking, never the ceiling.
 @pytest.mark.security
 @pytest.mark.invariant("SEC-84")
 def test_workflow_definition_carries_no_authority_field():
@@ -74,6 +77,8 @@ async def test_learn_from_success_changes_only_provenance():
     assert saved and saved[0] is learned
 
 
+# [2026] VJS-COUNTY 5 D3: reflection writes go through the chokepoint memory verb, so
+# the scope, secret and injection screens always run - the verb takes no authority.
 @pytest.mark.security
 @pytest.mark.invariant("SEC-84")
 def test_memory_improve_verb_takes_no_authority_argument():

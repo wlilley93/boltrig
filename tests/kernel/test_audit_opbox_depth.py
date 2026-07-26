@@ -33,7 +33,9 @@ def _human_ctx() -> InvocationContext:
 
 
 # --------------------------------------------------------------------------- #
-# SEC-124  additive: old rows canonicalise (and verify) exactly as before
+# SEC-124  [2026] VJS-COUNTY 9 D1: ip_address, user_agent, resource, resource_id and
+#          workspace_id are ADDITIVE - old rows canonicalise and verify exactly as
+#          before, which is what let the migration backfill null and stay green
 # --------------------------------------------------------------------------- #
 @pytest.mark.kernel
 @pytest.mark.invariant("SEC-124")
@@ -70,7 +72,9 @@ async def test_new_fields_are_additive_old_rows_unchanged(kernel):
 
 
 # --------------------------------------------------------------------------- #
-# SEC-120  MCP-initiated row is enriched to the same depth as a human row
+# SEC-120  [2026] VJS-COUNTY 9 D2+D6: an MCP-initiated row carries the caller's
+#          identity, org/workspace and ip/ua at the SAME depth as a human action,
+#          and no secret reaches any row (K-20)
 # --------------------------------------------------------------------------- #
 @pytest.mark.kernel
 @pytest.mark.invariant("SEC-120")
@@ -102,7 +106,9 @@ async def test_mcp_action_is_audited_at_the_same_depth_as_a_human_action(kernel)
 
 
 # --------------------------------------------------------------------------- #
-# SEC-122  rollup anchor root == recompute over the segment; dev-fallback flagged
+# SEC-122  [2026] VJS-COUNTY 9 D7: the rollup anchor root equals a recompute over the
+#          segment and the dev fallback is FLAGGED, so a local anchor can never be
+#          mistaken for a real RFC3161 one
 # --------------------------------------------------------------------------- #
 @pytest.mark.kernel
 @pytest.mark.invariant("SEC-122")

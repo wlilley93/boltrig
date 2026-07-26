@@ -53,7 +53,9 @@ async def _run(chat, **kw):
         pass
 
 
-# --- D3: fail-closed cap enforcement, nothing persisted ---------------------
+# --- SEC-79 / [2026] VJS-COUNTY 3 D2+D3: caps are typed ChatConfig data with nonzero
+#     code defaults the manifest may only TIGHTEN, enforced fail-closed with nothing
+#     persisted on an over-cap turn --------------------------------------------------
 
 @pytest.mark.security
 @pytest.mark.invariant("SEC-79")
@@ -117,7 +119,9 @@ def test_manifest_can_only_tighten_caps_never_loosen():
     assert tighten.max_total_attachment_bytes == DEFAULT_MAX_TOTAL_ATTACHMENT_BYTES
 
 
-# --- D4: content reaches the model only as data -----------------------------
+# --- SEC-80 / [2026] VJS-COUNTY 3 D1+D4: attachments ride the existing message path
+#     (the attachments jsonb field), and content reaches the model only as enveloped
+#     data - a non-text attachment never enters the task ----------------------------
 
 def _executor_capturing_task(store):
     captured: list[str] = []
