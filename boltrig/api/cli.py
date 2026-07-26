@@ -41,6 +41,10 @@ def _build_parser() -> argparse.ArgumentParser:
     p_serve.add_argument("--port", type=int, default=8000)
 
     sub.add_parser("worker", help="start a fleet worker")
+    sub.add_parser(
+        "fleet-health",
+        help="readiness probe for a fleet worker (reads its signed tool receipt)",
+    )
 
     _add_identity_parsers(sub)
 
@@ -227,6 +231,11 @@ def _dispatch(args: argparse.Namespace) -> int:
 
         uvicorn.run("boltrig.api.asgi:app", host=args.host, port=args.port)
         return 0
+    if args.cmd == "fleet-health":
+        from .fleet_health import main as fleet_health_main
+
+        return fleet_health_main()
+
     if args.cmd == "worker":
         from .worker import main as worker_main
 

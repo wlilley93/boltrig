@@ -1,24 +1,27 @@
 {
   "_comment": [
-    "Services whose container health signal cannot go red for a real outage, recorded",
-    "rather than quietly tolerated. scripts/check_health_claims.py enforces the shape:",
-    "an entry with no reason, no owner, or a past expiry is itself a failure, because a",
-    "stale waiver is another claim nobody checks.",
+    "Services whose container health signal cannot go red for a real outage.",
+    "scripts/check_health_claims.py enforces the shape: an entry with no reason, no owner,",
+    "or a past expiry is itself a failure, because a stale waiver is another claim nobody",
+    "checks.",
     "",
-    "2026-07-26: the KERNEL waiver is GONE - not renewed, discharged. Its healthcheck now",
-    "probes /readyz. The deferral was written around a coupling that measurement showed is",
-    "not real: stopping the fleet-worker does NOT flip the kernel unhealthy, because the",
-    "stack-tool receipt is cached in Redis. What IS real is hatchet - stopping the engine",
-    "does flip it - and that was accepted, because durable execution is a required",
-    "readiness check and a kernel without it genuinely is not ready. Rehearsed on dev",
-    "first: forcing the schema head to 0037 made the container unhealthy while /healthz",
-    "kept answering 200, which is the 2026-07-25 client outage reproduced and caught."
+    "2026-07-26: EMPTY. Both waivers were discharged the day they were written, neither by",
+    "renewal.",
+    "",
+    "  kernel       - the healthcheck now probes /readyz. The deferral rested on a coupling",
+    "                 measurement showed is not real (stopping the fleet-worker does not",
+    "                 flip it; the stack-tool receipt is cached in Redis). Forcing the",
+    "                 schema head to 0037 on dev made the container unhealthy while",
+    "                 /healthz kept answering 200 - the 2026-07-25 client outage reproduced",
+    "                 and caught.",
+    "  fleet-worker - the probe is now `boltrig fleet-health`, which reads back the signed,",
+    "                 short-lived tool receipt the worker itself publishes and the kernel's",
+    "                 /readyz already consumed. The waiver said there was no readiness",
+    "                 endpoint to point at, which was true and beside the point: the",
+    "                 readiness EVIDENCE existed, and nothing on the worker side read it.",
+    "",
+    "An empty file is not a dead file. The gate still runs, and a new first-party service",
+    "whose healthcheck cannot see an outage lands here or turns the build red."
   ],
-  "exemptions": {
-    "fleet-worker": {
-      "owner": "fleet-maintainers",
-      "expires": "2026-09-30",
-      "reason": "The probe is `python -c \"import boltrig\"`, which proves the interpreter can import a module and nothing else - not that the pump is claiming work, not that it can reach the store. It is exempt rather than fixed because `python -m boltrig.api.worker` serves no HTTP at all, so there is no readiness endpoint to point at; inventing a requirement it cannot satisfy would make the gate a lie in the other direction. It is not exempt from the GOAL: it already publishes a signed, short-lived stack-tool receipt to Redis that the kernel's /readyz consumes, so the real fix is a `boltrig fleet health` command that reads that receipt and exits non-zero when it is stale or absent."
-    }
-  }
+  "exemptions": {}
 }

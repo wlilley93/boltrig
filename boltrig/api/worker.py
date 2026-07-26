@@ -159,9 +159,14 @@ async def _run() -> None:
             run_fleet_tool_heartbeat(tenant),
             name="fleet-stack-tool-heartbeat",
         )
-        log.info("fleet stack-tool heartbeat live (tenant=%s)", tenant)
+        # "started", not "live". Whether it actually publishes is decided INSIDE
+        # run_fleet_tool_heartbeat, which returns immediately when the audit key is
+        # a placeholder - and on dev it is, so this line used to claim
+        # "heartbeat live" two lines above the heartbeat logging
+        # "disabled (audit HMAC key not configured)". Two records, one true.
+        log.info("fleet stack-tool heartbeat started (tenant=%s)", tenant)
     else:
-        log.info("fleet stack-tool heartbeat disabled (REDIS_URL not configured)")
+        log.info("fleet stack-tool heartbeat not started (REDIS_URL not configured)")
     # The audit-rollup anchor janitor (COUNTY 9 D4).
     anchor_task = _start_anchor_janitor(kernel.store, kernel.anchorer)
     # The HITL expiry janitor (SEC-14) alongside the anchor janitor.

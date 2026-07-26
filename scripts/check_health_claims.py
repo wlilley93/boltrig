@@ -27,12 +27,17 @@ healthcheck, in docker-compose.yml and every deploy/compose*.yml overlay:
     probing liveness on an application that HAS readiness -> FAIL. If no source
     registers the probed path, or the app that serves it has no readiness route,
     the service has no readiness surface and is left alone.
-  - if the healthcheck probes no HTTP path at all, the gate cannot see it consult
-    readiness, so the service must carry an entry in
-    docs/refactoring/health-claim-exemptions.json giving an owner and a REASON
-    (the shape of docs/refactoring/structural-exemptions.json). An exemption that
-    has expired, that names a service with no finding, or that gives no reason is
-    itself a failure: a stale waiver is another claim nobody checks.
+  - if the healthcheck probes no HTTP path but runs one of this repo's own CLI
+    subcommands, resolve that subcommand through the CLI's dispatch and require
+    the module behind it to read the same evidence the readiness ROUTE HANDLER
+    reads. A process with no listener still has a readiness surface; it just is
+    not reachable over a socket. See "Readiness consulted WITHOUT an endpoint".
+  - otherwise the gate cannot see it consult readiness, so the service must carry
+    an entry in docs/refactoring/health-claim-exemptions.json giving an owner and
+    a REASON (the shape of docs/refactoring/structural-exemptions.json). An
+    exemption that has expired, that names a service with no finding, or that
+    gives no reason is itself a failure: a stale waiver is another claim nobody
+    checks. The file is currently EMPTY, and the tests hold it that way.
 
 Both halves are DERIVED. The readiness surface is discovered by parsing route
 registrations out of the source the service actually builds - not from a list in
@@ -47,20 +52,27 @@ reader cannot take and this gate ships stdlib-only. Full-manifest validity is
 `docker compose config`'s job; check_gate_coverage.py is what makes sure every
 manifest reaches it.
 
-WHAT IT DOES NOT CHECK. Whether the readiness endpoint is itself honest, and
-whether a service without a readiness surface OUGHT to have one. fleet-worker is
-the live example: it runs `python -m boltrig.api.worker`, a delegation pump with
-no HTTP listener at all, so there is no endpoint for a healthcheck to consult. It
-is not exempt from the goal - it already publishes a signed, short-lived
-stack-tool receipt to Redis that the kernel's /readyz consumes
-(boltrig/fleet/stack_tool_health.py), so a truthful check is buildable - but it
-IS the case the exemption file exists for.
+WHAT IT DOES NOT CHECK. Whether the readiness endpoint is itself honest, whether
+a service without a readiness surface OUGHT to have one, and - for the command
+form - whether the command exits non-zero when the evidence it reads is bad.
+Structure can show a probe is WIRED TO the evidence; only a test that drives the
+failing branch can show it REPORTS it, which is why every branch of
+`boltrig fleet-health` is bound as an invariant and gate-coverage keeps it bound.
+
+fleet-worker was the standing example of the gap and is no longer: it runs
+`python -m boltrig.api.worker`, a delegation pump with no HTTP listener, so there
+is no endpoint to point a probe at - but it already publishes a signed,
+short-lived stack-tool receipt to Redis that the kernel's /readyz consumes
+(boltrig/fleet/stack_tool_health.py), and `boltrig fleet-health` now reads that
+receipt back. Its waiver, and with it the last entry in the exemption file, is
+discharged.
 
 Usage:  python scripts/check_health_claims.py
 """
 
 from __future__ import annotations
 
+import ast
 import json
 import os
 import re
@@ -258,6 +270,236 @@ def probed_paths(test: str) -> list[str]:
 
 
 # --------------------------------------------------------------------------- #
+# Readiness consulted WITHOUT an endpoint
+# --------------------------------------------------------------------------- #
+# A process with no HTTP listener cannot be probed at a path, and that is not the
+# same thing as having no readiness surface. The fleet worker is the case in
+# point: it publishes a signed, short-lived receipt that the kernel's /readyz
+# already consumes, so the evidence exists - it just is not reachable over a
+# socket. Requiring a URL there would leave the only truthful check it CAN have
+# permanently waived, which is how the vacuous `python -c "import boltrig"`
+# survived in the first place.
+#
+# So the second admissible form is a command that invokes one of this repo's own
+# CLI subcommands. Both halves below are derived, and both can go red:
+#
+#   1. the named subcommand must actually be dispatched by the CLI. A compose
+#      file naming a subcommand that was renamed or deleted is a healthcheck that
+#      exits non-zero for a reason nobody meant, or (worse) zero from a shell
+#      that swallowed it.
+#   2. the module it dispatches to must read the SAME EVIDENCE the application's
+#      readiness route reads - discovered by walking from the source that
+#      registers /readyz to the module implementing it, and taking the symbols
+#      that module imports to gather its evidence. Delete the receipt read out of
+#      the probe and the overlap empties, so this fails on the commit that
+#      hollows the probe out.
+#
+# WHAT THIS DOES NOT PROVE: that the command exits non-zero when the evidence is
+# bad. Structure cannot show that; only a test that drives the failing branch
+# can, which is why the probe's branches are bound as invariants and gate-coverage
+# is what keeps them bound. This gate proves the probe is WIRED TO the evidence,
+# not that it reports it correctly.
+CLI_MODULE = ROOT / "boltrig" / "api" / "cli.py"
+
+# `python -m boltrig.api.cli fleet-health`, `boltrig fleet-health`, and the same
+# through a shell wrapper. The subcommand is the first bare word after the entry
+# point that is not an option.
+_CLI_INVOCATION = re.compile(
+    r"(?:python\d?(?:\.\d+)?\s+-m\s+boltrig(?:[.\w]*)|(?<![\w./-])boltrig)"
+    r"((?:\s+-{1,2}[\w-]+(?:=\S+)?)*)\s+([a-z][\w-]*)"
+)
+
+
+def cli_subcommands() -> dict[str, str]:
+    """Map each dispatched subcommand to the module it hands off to.
+
+    Read from the dispatch itself (`if args.cmd == "x": from .y import ...`)
+    rather than from the parser table, because a subcommand can be declared and
+    never wired - and a healthcheck pointed at a declared-but-dead subcommand is
+    exactly the drift this is here to catch.
+
+    Parsed with `ast`, not with a text window after the match. The first version
+    of this took the next `from .x import` within 400 characters, which reads
+    straight past the end of a short branch into the NEXT one: it mapped
+    `version` to fleet_health and `smoke` to chat_cli, and it let a healthcheck
+    of `boltrig version` pass by borrowing another subcommand's module. Branch
+    structure has to come from the parse, because that is the thing being
+    claimed.
+    """
+    try:
+        tree = ast.parse(CLI_MODULE.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError):
+        return {}
+
+    def _names(test: ast.expr) -> list[str]:
+        """The subcommand literals an `if` guard compares args.cmd against."""
+        out: list[str] = []
+        if isinstance(test, ast.BoolOp):
+            for value in test.values:
+                out.extend(_names(value))
+        elif isinstance(test, ast.Compare) and isinstance(test.left, ast.Attribute):
+            if test.left.attr == "cmd":
+                for op, comparator in zip(test.ops, test.comparators):
+                    if isinstance(op, ast.Eq) and isinstance(comparator, ast.Constant):
+                        if isinstance(comparator.value, str):
+                            out.append(comparator.value)
+                    elif isinstance(op, ast.In) and isinstance(
+                        comparator, (ast.Tuple, ast.List, ast.Set)
+                    ):
+                        out.extend(
+                            elt.value
+                            for elt in comparator.elts
+                            if isinstance(elt, ast.Constant)
+                            and isinstance(elt.value, str)
+                        )
+        return out
+
+    out: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.If):
+            continue
+        subcommands = _names(node.test)
+        if not subcommands:
+            continue
+        # Only imports inside THIS branch body, and not inside a nested `if`
+        # that guards a different subcommand.
+        module = ""
+        for stmt in node.body:
+            for inner in ast.walk(stmt):
+                if isinstance(inner, ast.If) and _names(inner.test):
+                    break
+                if isinstance(inner, ast.ImportFrom) and inner.module:
+                    module = inner.module
+                    break
+            if module:
+                break
+        for sub in subcommands:
+            out.setdefault(sub, module)
+    return out
+
+
+def _first_party_imports(text: str, *, deferred_only: bool) -> set[str]:
+    """Symbols imported from a `boltrig.` module, optionally only inside a body.
+
+    A readiness check gathers its evidence when it runs, so those imports sit
+    indented inside the check functions; the module's top-level imports are its
+    own structure (a Kernel type, a config helper) and are not evidence of
+    anything being reachable. Taking the deferred ones keeps the comparison
+    honest - but if a module has none, fall back to all of them rather than
+    silently comparing against an empty set.
+    """
+    out: set[str] = set()
+    pattern = re.compile(
+        r"^(?P<indent>[ \t]*)from\s+(?:boltrig[.\w]*|\.[.\w]*)\s+import\s+(?P<names>[^\n(]+)",
+        re.MULTILINE,
+    )
+    for match in pattern.finditer(text):
+        if deferred_only and not match.group("indent"):
+            continue
+        for name in match.group("names").split(","):
+            name = name.strip().split(" as ")[0].strip()
+            if name and name != "*":
+                out.add(name)
+    return out
+
+
+def readiness_evidence(route_table: dict[Path, set[str]]) -> tuple[set[str], list[str]]:
+    """The symbols the application's readiness route uses to gather its evidence.
+
+    Walks readiness HANDLER -> readiness implementation -> that module's evidence
+    imports. Returns the symbol set and the files it was derived from, so the
+    report can say where the standard came from instead of asserting it.
+
+    The hop starts at the handler, not at the file. Taking every `from boltrig.x
+    import` in the file that happens to register /readyz pulled in the whole
+    application - 69 symbols, including `Store` - and `Store` is imported by
+    almost everything, so `boltrig worker` (a command that would BLOCK FOREVER as
+    a healthcheck) counted as consulting readiness. The evidence has to be the
+    readiness route's own, or the overlap means nothing.
+    """
+    evidence: set[str] = set()
+    derived_from: list[str] = []
+    for path, registered in sorted(route_table.items()):
+        if not any(READINESS_PATHS.match(p) for p in registered):
+            continue
+        if path.suffix != ".py":
+            continue  # only Python handlers are parseable this way
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except (OSError, SyntaxError, UnicodeDecodeError):
+            continue
+        modules: set[str] = set()
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            serves_readiness = any(
+                isinstance(dec, ast.Call)
+                and any(
+                    isinstance(arg, ast.Constant)
+                    and isinstance(arg.value, str)
+                    and READINESS_PATHS.match(arg.value)
+                    for arg in dec.args
+                )
+                for dec in node.decorator_list
+            )
+            if not serves_readiness:
+                continue
+            for inner in ast.walk(node):
+                if isinstance(inner, ast.ImportFrom) and (inner.module or "").startswith(
+                    "boltrig."
+                ):
+                    modules.add(inner.module or "")
+        for module in sorted(modules):
+            impl = ROOT / (module.replace(".", "/") + ".py")
+            if not impl.is_file():
+                continue
+            try:
+                impl_text = impl.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            found = _first_party_imports(impl_text, deferred_only=True)
+            if not found:
+                found = _first_party_imports(impl_text, deferred_only=False)
+            if found:
+                evidence |= found
+                derived_from.append(_rel(impl))
+    return evidence, derived_from
+
+
+def consults_readiness_command(
+    test: str, evidence: set[str]
+) -> tuple[bool, str]:
+    """Does this non-HTTP healthcheck run a command wired to readiness evidence?"""
+    match = _CLI_INVOCATION.search(test)
+    if not match:
+        return False, ""
+    sub = match.group(2)
+    dispatch = cli_subcommands()
+    if sub not in dispatch:
+        return False, (
+            f"runs `{sub}`, which {_rel(CLI_MODULE)} does not dispatch - the "
+            "subcommand was renamed or removed and the healthcheck was not"
+        )
+    module = dispatch[sub]
+    if not module:
+        return False, f"runs `{sub}`, which the CLI dispatches to no module"
+    source = ROOT / "boltrig" / "api" / (module.replace(".", "/") + ".py")
+    if not source.is_file():
+        return False, f"runs `{sub}`, whose module {module} has no source file"
+    try:
+        text = source.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return False, f"runs `{sub}`, whose module could not be read"
+    shared = sorted(_first_party_imports(text, deferred_only=False) & evidence)
+    if not shared:
+        return False, (
+            f"runs `{sub}` ({_rel(source)}), but that module reads none of the "
+            "evidence the readiness route reads, so it cannot go red for an outage"
+        )
+    return True, f"`{sub}` reads {', '.join(shared)}"
+
+
+# --------------------------------------------------------------------------- #
 # Exemptions
 # --------------------------------------------------------------------------- #
 def _rel(path: Path) -> str:
@@ -326,6 +568,10 @@ def main() -> int:
                 occurrences.append((name, manifest, spec))
 
     route_cache: dict[Path, dict[Path, set[str]]] = {}
+    # Derived on first need from whatever source registers /readyz, so it is a
+    # measurement of this tree rather than a constant in this file.
+    evidence: set[str] | None = None
+    evidence_from: list[str] = []
     findings: list[tuple[str, str, str]] = []
     waived: set[str] = set()
     rows: list[tuple[str, str, str, str]] = []
@@ -346,12 +592,27 @@ def main() -> int:
             continue
 
         if not paths:
+            # No URL to probe is not the same as no readiness surface: a command
+            # can consult the same evidence the readiness route consults.
+            if ROOT not in route_cache:
+                route_cache[ROOT] = routes_in(ROOT)
+            if evidence is None:
+                evidence, evidence_from = readiness_evidence(route_cache[ROOT])
+            consults, why = consults_readiness_command(test, evidence)
+            if consults:
+                rows.append((name, where, "readiness (cmd)", "ok"))
+                continue
+
             vacuous = not _SERVING_HINTS.search(test)
             detail = (
-                "the test names no host, port or endpoint of its own service, so it "
-                "cannot distinguish serving from process-exists"
-                if vacuous
-                else "the test probes no HTTP path, so this gate cannot see it consult readiness"
+                why
+                or (
+                    "the test names no host, port or endpoint of its own service, so it "
+                    "cannot distinguish serving from process-exists"
+                    if vacuous
+                    else "the test probes no HTTP path, so this gate cannot see it "
+                    "consult readiness"
+                )
             )
             # Waive AFTER deriving the finding, never before: an exemption that
             # short-circuits the check can outlive the thing it waives, which is

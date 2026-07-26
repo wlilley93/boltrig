@@ -232,12 +232,25 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    # The worker serves no HTTP, so this cannot be a URL probe - but it does
+    # publish a signed, short-lived receipt naming which of its tools probed ok,
+    # and the kernel's /readyz already consumes it. `fleet-health` reads that
+    # receipt back, so a green here means the heartbeat loop ran within the TTL
+    # AND the tools are sound. It replaced `python -c "import boltrig"`, which
+    # proved an interpreter could import a module and could not go red for any
+    # outage that mattered.
+    #
+    # It exits 0 saying NOT CHECKED when the heartbeat is legitimately disabled
+    # (no REDIS_URL, or a placeholder audit key - both are the designed dev
+    # posture). Failing there would paint every offline deployment permanently
+    # red, which is how a signal gets ignored. BOLTRIG_FLEET_HEALTH_REQUIRE_RECEIPT
+    # =1 makes it fatal for a deployment that considers the heartbeat mandatory.
     healthcheck:
       test:
         - CMD-SHELL
-        - python -c "import boltrig" || exit 1
+        - python -m boltrig.api.cli fleet-health || exit 1
       interval: 60s
-      timeout: 5s
+      timeout: 10s
       retries: 3
       start_period: 20s
 

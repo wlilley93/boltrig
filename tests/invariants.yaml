@@ -1778,7 +1778,7 @@ invariants:
     tests:
       - tests/integration/test_backup_restore.py::test_backup_restores_into_a_fresh_database
   FR-OPS-05:
-    description: '/healthz is a bounded liveness probe - it answers from process state and the cached adapter posture without awaiting any live adapter I/O, so a slow or unreachable adapter backend can never make the probe slow or non-200 and flap a live kernel''s Compose healthcheck; adapter posture freshness moves to a bounded background refresh (a stale cache schedules one off-path re-probe and every probe is cut off by a per-adapter timeout) and deep dependency readiness stays on the fail-closed /readyz.'
+    description: '/healthz is a bounded liveness probe - it answers from process state and the cached adapter posture without awaiting any live adapter I/O, so a slow or unreachable adapter backend can never make the probe slow or non-200 and flap a live kernel''s Compose healthcheck; adapter posture freshness moves to a bounded background refresh (a stale cache schedules one off-path re-probe and every probe is cut off by a per-adapter timeout) and deep dependency readiness stays on the fail-closed /readyz. A process that serves no HTTP gets the same separation without an endpoint: `boltrig fleet-health` reads back the signed, TTL-bounded stack-tool receipt the fleet worker publishes and the kernel''s /readyz already consumes, exiting non-zero when it is missing, stale, forged, cross-tenant or degraded, and exiting zero with an explicit NOT CHECKED - never a bare green - when the heartbeat is disabled by configuration and no receipt can exist.'
     tests:
       - tests/unit/test_liveness.py::test_healthz_returns_200_for_a_live_app
       - tests/unit/test_liveness.py::test_healthz_stays_prompt_and_200_when_an_adapter_health_hangs
@@ -1786,6 +1786,15 @@ invariants:
       - tests/unit/test_liveness.py::test_health_snapshot_kicks_a_background_refresh_when_stale
       - tests/unit/test_liveness.py::test_refresh_health_bounds_a_hung_probe
       - tests/unit/test_liveness.py::test_readyz_stays_bounded_and_fail_closed_with_a_hung_adapter
+      - tests/unit/test_fleet_health.py::test_no_redis_is_reported_as_not_checked_not_as_healthy
+      - tests/unit/test_fleet_health.py::test_a_deployment_may_declare_the_receipt_mandatory
+      - tests/unit/test_fleet_health.py::test_a_placeholder_audit_key_is_not_checked_rather_than_failed
+      - tests/unit/test_fleet_health.py::test_a_placeholder_key_DOES_fail_when_the_receipt_is_required
+      - tests/unit/test_fleet_health.py::test_an_unreachable_redis_is_a_failure
+      - tests/unit/test_fleet_health.py::test_a_fresh_signed_receipt_validates
+      - tests/unit/test_fleet_health.py::test_a_receipt_that_is_merely_PRESENT_is_not_enough
+      - tests/unit/test_fleet_health.py::test_another_tenants_receipt_does_not_answer_for_this_one
+      - tests/unit/test_fleet_health.py::test_the_receipt_key_is_namespaced_per_tenant
   NFR-MNT-01:
     description: 'Python structural debt is an enforced expiring ratchet - every boltrig source file is at most 400 physical lines and every decorator-inclusive function or method at most 80 source-span lines unless its file has an explicit owner, reason, expiry, exact current file and largest-function baselines, and an exact record for every over-limit function; the gate rejects new or sibling debt, growth, stale-high or missing-file entries, malformed metadata, duplicate JSON keys, and expired exemptions.'
     tests:

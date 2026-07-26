@@ -89,17 +89,19 @@ def test_an_expired_waiver_stops_waiving(tmp_path, monkeypatch) -> None:
 
 @pytest.mark.invariant("NFR-MNT-05")
 def test_the_repositorys_own_waivers_are_well_formed(tmp_path, monkeypatch) -> None:
-    """The live file, not a fixture. One open debt, owned and dated.
+    """The live file, not a fixture. ZERO open debts.
 
-    It was two. The kernel waiver was DISCHARGED on 2026-07-26 rather than
-    renewed - the healthcheck now probes /readyz - so this assertion is also the
-    ratchet: adding a service back here has to be a deliberate edit to a test that
-    names exactly who is still waived.
+    It was two, and both were discharged on 2026-07-26 rather than renewed: the
+    kernel probes /readyz, and the fleet worker probes `boltrig fleet-health`,
+    which reads back the signed tool receipt it already published. This assertion
+    is the ratchet - putting a service back has to be a deliberate edit to a test,
+    not a quiet line in a JSON file.
     """
     valid, problems = check_health_claims.load_exemptions()
     assert problems == []
-    assert set(valid) == {"fleet-worker"}, (
-        "a waiver was added or removed; say which, and why, in the same change"
+    assert valid == {}, (
+        "a health waiver was added; say which service, and why its signal cannot "
+        "see an outage, in the same change"
     )
     for name, entry in valid.items():
         assert entry["expires"], f"{name}: an open debt with no expiry never comes back"
