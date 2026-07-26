@@ -48,8 +48,8 @@ Measurable, and none of it is "we were careful":
    attribution names a mechanism that no production path constructs. A check
    enumerates the named mechanisms and fails on one nothing builds.
 2. **Every invariant is enforced by a gate, not a sentence.** `binding_debt=0`
-   already holds for the 325 declared invariants. The next bar: every ORDER
-   directive that says "must" is bound to something mechanical, the way D8 now is.
+   holds for all 330 declared invariants. The next bar: every ORDER directive that
+   says "must" is bound to something mechanical, the way D8 now is.
 3. **Status tells the truth.** No component reports healthy while unable to serve.
    Readiness is what orchestration and operators consult.
 4. **Config that is derived, not restated.** Where a value appears twice it is
@@ -89,6 +89,35 @@ reason unrelated to the code.
 already ruled and OPEN. It belongs here because its D9 is precisely this goal:
 record that the change makes the RECORD single-writer and does NOT make execution
 exactly-once.
+
+## Where it stands (2026-07-26)
+
+Six gates now run in `make python-quality`, so they are in `ci/test-and-gate` and
+a claim cannot drift past them silently. Each was written because of a defect
+that had already shipped, and each found more on its first run.
+
+| Gate | Binds | Found on its first run |
+| --- | --- | --- |
+| `unwired-claims` | A class or function the record names that no production path reaches | `RedisCounter`. Then, once extended to functions: `run_retention_forever` (see below), `sweep_run_scoped` (7 records, "its only caller is the org pump", true count zero), `consume_if_approved` (the dispatch gate calls something else), `consume_budget` (superseded, 6 docstrings still anchored on it) |
+| `prose-references` | Every repo path, test node id, `make` target and env var named in prose | 12 broken references, including a founding ruling cited as binding whose register entry has never existed in this repository's history |
+| `gate-coverage` | Every compose manifest is validated; every `quality` component runs in CI | `migration-parity` and `doctor-fixture` ran in no CI job; three compose overlays reached no validation step, including the one `genesis.sh` runs |
+| `health-claims` | No service reports healthy while unable to serve | The kernel and fleet-worker, both now recorded as open debt with an owner and an expiry |
+| `structure` | File and function length, as an expiring ratchet | Pre-existing; it caught two of this week's own changes |
+| `invariants` | Every declared invariant is bound and every marker declared | The catalogue had silently eaten a whole invariant to a duplicate id, and had never parsed as the YAML its name claims |
+
+The single worst find is the measure of why the goal exists. **Right-to-erasure
+had never run.** `run_retention_forever` had zero callers - no compose service, no
+Makefile target, no deploy unit, no `__main__` - while `security-conformance.md`
+recorded DATA-07 and PRIV-04 as BUILT and SEC-74 claimed a deleted conversation no
+longer sat in Postgres indefinitely. The purge itself was tested: three tests drove
+`run_retention_once` by hand and passed. That is exactly how it survived. **A test
+for the mechanism is not a test for the wiring**, and every gate above exists to
+tell those two apart.
+
+What remains: Tier 1 is partly done (the load-bearing claims found so far are
+bound; the inventory's UNVERIFIED column is not worked through). Tier 3's
+`BOLTRIG_TEST_DATABASE_URL` case is closed - a run that skips the Postgres family
+now ends non-zero - but the family itself is not enumerated.
 
 ## What this is NOT
 
