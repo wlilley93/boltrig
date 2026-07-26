@@ -252,7 +252,12 @@ services:
       interval: 60s
       timeout: 10s
       retries: 3
-      start_period: 20s
+      # Measured on jellytot-prod, not guessed: container start 09:23:47 ->
+      # "delegation pump live" 09:24:23 is 36s of kernel build and org assembly
+      # before the heartbeat task is even created, and the first receipt lands a
+      # probe-and-publish cycle after that. 20s would have had the probe failing
+      # for the whole of a normal boot.
+      start_period: 90s
 
   hatchet-engine:
     # Optional durable execution (US-FLT-06). The kernel and fleet run WITHOUT
