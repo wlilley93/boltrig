@@ -42,6 +42,7 @@ from boltrig.work import normalise
 from boltrig.workflows.generator import learn_from_success
 from boltrig.workflows.library import WorkflowLibrary
 
+from . import lease_token
 from .authority import context_for, reflection_context, route_to_head
 from .chief_of_staff import ChiefOfStaff, Department
 from .department_head import DepartmentHead, tree_root_id
@@ -154,15 +155,40 @@ async def persist_new_work_items(
 
     Each entry becomes a normalised PENDING :class:`WorkItem` parented to the step's item
     (owner/department unset - the org lane routes it), so the pump picks it up on a later
-    cycle instead of the follow-on being dropped."""
+    cycle instead of the follow-on being dropped.
+
+    D4 of [2026] VJS-CC-BOLTRIG-WORK-ITEM-LEASE-FENCE-001, stated in the terms the
+    order requires: the existing-intent check below NARROWS the duplicate-child
+    window. It is NOT a fence and must never be described as one. A child row
+    cannot be made atomic with a predicate on the parent's lease, so two workers
+    running the same body can still both read "no such child" and both create one.
+    What the check removes is the common case - a re-run whose siblings are already
+    committed - and what it leaves is the instant between the two reads. Closing
+    that needs a uniqueness constraint on (parent_id, intent), which is a schema
+    change and a separate matter.
+    """
     created: list[WorkItem] = []
+    existing: set[str] = set()
+    if new_items:
+        try:
+            siblings = await store.list_work_items(parent.tenant_id, parent_id=parent.id)
+            existing = {s.intent for s in siblings}
+        except Exception:  # best-effort by construction: never block the follow-on
+            log.warning("could not read existing children of %s", parent.id, exc_info=True)
     for raw in new_items or []:
         payload = dict(raw) if isinstance(raw, dict) else {"intent": str(raw)}
         child = normalise(payload, source, parent.tenant_id)
+        if child.intent in existing:
+            log.info(
+                "skipping follow-on %r for %s: a child with that intent already exists",
+                child.intent, parent.id,
+            )
+            continue
         child.parent_id = parent.id
         child.depth = parent.depth + 1
         child.on_behalf_of, child.workspace_id = parent.on_behalf_of, parent.workspace_id
         await store.create_work_item(child)
+        existing.add(child.intent)
         created.append(child)
     return created
 
@@ -232,7 +258,9 @@ class WorkPump:
         )
         if item is None:
             return False
-        payload = {"tenant_id": tenant_id, "item_id": item.id}
+        # D2: the fence value is whatever the CLAIM handed out, carried to the
+        # body. Not re-read there - that shape was tried and defeated.
+        payload = {"tenant_id": tenant_id, "item_id": item.id, **lease_token.encode(item)}
         if self._executor is not None and getattr(self._executor, "durable", False):
             # durable lane: the engine re-runs the registered body on a crash.
             await self._executor.enqueue(WORK_ITEM_TASK, payload)
@@ -373,7 +401,7 @@ class WorkPump:
         item.status = WorkStatus.DONE
         item.result = {"workflow": descriptor}
         self._stamp_outcome(item, WorkStatus.DONE.value)
-        await store.update_work_item(item)
+        await lease_token.write(store, item, what="addressed-workflow done")
         await store.upsert_checkpoint(
             tenant, run_id, "execute", "done",
             output={"workflow": wf_id, "run_id": descriptor.get("run_id")},
@@ -411,7 +439,7 @@ class WorkPump:
         # flywheel: a clean success that carries a synthesised workflow is learned
         # so the library can reuse it next time (US-WFL-03).
         await self._maybe_learn(item, outcome)
-        await self._store.update_work_item(item)
+        await lease_token.write(self._store, item, what="settle done")
         await self._store.upsert_checkpoint(
             item.tenant_id, run_id, "execute", "done",
             output={"spawned": outcome.get("spawned", 0), "degraded": item.degraded},
@@ -427,6 +455,14 @@ class WorkPump:
         (``bootstrap.wire_hitl_resume``) calls this on a HITL answer; the console or an
         operator may also call it directly. A human re-queue resets ``attempts`` -
         intervention restores the retry budget (US-EXE-06).
+
+        D3 disposal: this write is deliberately NOT lease-fenced, and the reason is
+        not "there is no lease". A parked row still carries the stale claim tuple
+        from the attempt that parked it, so a fence here would compare against a
+        dead worker's token and usually pass. It is unfenced because a human
+        re-queue is an authorised RESET that overrides whatever the last attempt
+        left behind - that is the whole point of it - and the status guard above,
+        not a lease, is its predicate.
         """
         item = await self._store.get_work_item(tenant_id, item_id)
         if item is None or item.status not in (
@@ -443,8 +479,17 @@ class WorkPump:
     # --- internals ------------------------------------------------------------
     async def _run_item_payload(self, payload: dict) -> None:
         """The one task body both lanes run: process a claimed item by id."""
+        token = lease_token.decode(payload)
+        lease_token.bind(token)
         item = await self._store.get_work_item(payload["tenant_id"], payload["item_id"])
         if item is None:  # claimed then deleted; nothing to do
+            return
+        if not lease_token.matches(item, token):
+            # An early exit, NOT the fence: the row already carries someone else's
+            # claim, so this body lost before it started and there is no reason to
+            # spend a model call finding out. The fence is still the conditional
+            # write - this check can only be wrong in the safe direction.
+            log.warning("item %s was re-claimed before its body ran; standing down", item.id)
             return
         try:
             await self.handle_claimed_item(item)
@@ -496,7 +541,7 @@ class WorkPump:
                 "attempts": item.attempts,
             }
             self._stamp_outcome(item, WorkStatus.FAILED.value)
-        await self._store.update_work_item(item)
+        await lease_token.write(self._store, item, what="retry/fail")
         await self._store.upsert_checkpoint(
             item.tenant_id, run_id, "execute", "failed",
             output={"error": type(exc).__name__, "will_retry": will_retry},
@@ -527,7 +572,7 @@ class WorkPump:
     ) -> None:
         item.status = WorkStatus.AWAITING_HUMAN
         self._stamp_outcome(item, WorkStatus.AWAITING_HUMAN.value)
-        await self._store.update_work_item(item)
+        await lease_token.write(self._store, item, what="awaiting-human")
         await self._store.upsert_checkpoint(
             item.tenant_id, run_id, "execute", "awaiting_human",
             hitl_request_id=hitl_request_id,
@@ -547,7 +592,9 @@ class WorkPump:
         item.lease_owner = None
         item.lease_expires_at = None
         self._stamp_outcome(item, WorkStatus.CANCELLED.value)
-        await self._store.update_work_item(item)
+        # D8: a refused cancel is logged by lease_token.write and NEVER swallowed -
+        # no consume-or-delete may be added on this path.
+        await lease_token.write(self._store, item, what="cancel")
         await self._store.upsert_checkpoint(
             item.tenant_id, run_id, "execute", "cancelled"
         )

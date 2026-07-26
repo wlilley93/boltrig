@@ -89,6 +89,19 @@ async def _park_expired_item(store: Store, req: Any) -> None:
 
     Neutral, never a silent success: the human never acted. An item in any
     other state (resumed, finished, already cancelled) is left untouched.
+
+    D3 disposal ([2026] VJS-CC-BOLTRIG-WORK-ITEM-LEASE-FENCE-001): this write is
+    NOT lease-fenced, and cannot be. The sweeper never claimed the item, so it
+    holds no claim-time token; the parked row's stale tuple belongs to the attempt
+    that parked it, and fencing on a value this caller would have to re-read is
+    the defeated shape, not a fence.
+
+    Its real predicate is the status check above, and that check is a read-then-
+    write, so it is not a fence either. The residual race is narrow and worth
+    stating rather than implying away: a human who re-queues an item in the same
+    instant this sweeper fires can have it cancelled underneath them. Closing it
+    needs the status CAS (``transition_work_item_status``) to carry the cancel
+    ``result`` too, which it cannot today.
     """
     item = await _linked_work_item(store, req)
     if item is None or item.status != WorkStatus.AWAITING_HUMAN:

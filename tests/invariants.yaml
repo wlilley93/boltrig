@@ -331,6 +331,12 @@ invariants:
       - tests/store/test_store_parity.py::test_a_worker_that_lost_its_lease_cannot_overwrite_the_winner
       - tests/store/test_store_parity.py::test_the_lease_holder_can_still_write
       - tests/store/test_store_parity.py::test_a_read_does_not_hand_back_the_stored_row
+      - tests/fleet/test_lease_fence.py::test_the_token_survives_the_json_boundary_the_durable_lane_crosses
+      - tests/fleet/test_lease_fence.py::test_a_payload_from_before_the_fence_writes_unfenced_rather_than_crashing
+      - tests/fleet/test_lease_fence.py::test_a_worker_that_lost_its_lease_writes_nothing_and_does_not_raise
+      - tests/fleet/test_lease_fence.py::test_a_refused_cancel_is_logged_and_never_swallowed
+      - tests/fleet/test_lease_fence.py::test_an_unbound_write_says_so_rather_than_pretending_to_be_fenced
+      - tests/fleet/test_lease_fence.py::test_the_duplicate_child_window_is_narrowed_but_not_closed
   US-FLT-06:
     description: 'A filed work item completes through the org - the pump claims it, the Chief of Staff routes it, a department head decomposes and spawns child work items, the results join onto the parent, and the status walks pending -> in_flight -> done with the steps checkpointed and the spawns audited.'
     tests:
