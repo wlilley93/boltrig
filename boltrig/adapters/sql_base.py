@@ -176,12 +176,14 @@ class SqlAdapter:
     async def _run(
         self, dsn: str, sql: str, params: dict[str, Any], write: bool
     ) -> dict[str, Any]:
-        # UNPINNED, and said so where the control lives. Nothing in tests/ mentions
-        # `write_allowed` or `execute_write`, and the only in-repo subclass
-        # (builtin/crm_sql.py) is deliberately read-scoped, so this refusal has
-        # never been exercised by anything - not once, in either direction. It is
-        # the read/write-scope boundary this module advertises at the top of the
-        # file, and a boundary no test attacks is a boundary on trust.
+        # The order is the promise. "Refused BEFORE any statement reaches the
+        # driver" is the half a naive test misses: a refusal raised after the
+        # UPDATE was sent still returns UNAUTHORISED and is still a write. Pinned
+        # by tests/adapters/test_sql_base_write_scope.py, which attacks all three
+        # parts separately - it refuses, it refuses early, and it does NOT refuse a
+        # binding allowed to write. Until 2026-07-26 nothing exercised this in
+        # either direction: no in-repo subclass sets write_allowed=True, so the
+        # flag could have been ignored outright with every test still green.
         if write and not self.write_allowed:
             raise _SqlFailure(
                 AdapterError(

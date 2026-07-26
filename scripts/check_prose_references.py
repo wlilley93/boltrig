@@ -276,6 +276,13 @@ ALLOW: dict[tuple[str, str], str] = {
         "SDK reads it directly, so nothing in this tree does or should. Deleting the "
         "line would break the reproduction it exists to give."
     ),
+    ("*", "BOLTRIG_ADMIN_PAT"): (
+        "An OPBOX environment variable, read by the opbox frontend container - the "
+        "repro that names it literally runs `docker exec Opbox-Frontend printenv "
+        "BOLTRIG_ADMIN_PAT`. Same shape as BOLTRIG_CHAT_PATS below: boltrig docs "
+        "describe the opbox side of a shared deployment, and nothing in this tree "
+        "reads it or should."
+    ),
     ("*", "BOLTRIG_CHAT_PATS"): (
         "An OPBOX environment variable (opbox src/lib/ai/boltrig-chat.ts, tier-2 PAT "
         "resolution), named in boltrig docs because they describe the opbox side of "

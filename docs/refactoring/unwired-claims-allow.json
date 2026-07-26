@@ -25,7 +25,7 @@
     "execute_write": {
       "owner": "adapter-maintainers",
       "expires": "2026-12-31",
-      "reason": "The write half of the per-call `_Db` handed to SQL adapter handlers. The intended caller is a subclass handler (`SqlHandler`), including out-of-repo adapters; the only in-repo subclass is deliberately write_allowed=False (adapters/builtin/crm_sql.py:41). Noted separately: the write path has no test, so sql_base.py's read/write-scope refusal is unpinned."
+      "reason": "The write half of the per-call `_Db` handed to SQL adapter handlers. The intended caller is a subclass handler (`SqlHandler`), including out-of-repo adapters; the only in-repo subclass is deliberately write_allowed=False (adapters/builtin/crm_sql.py:41). The read/write-scope refusal it guards is no longer unpinned - tests/adapters/test_sql_base_write_scope.py drives both directions through a probe subclass and proves the refusal lands BEFORE the driver, which was the part of the sentence that could quietly stop being true."
     },
     "list_all_capabilities": {
       "owner": "store-maintainers",

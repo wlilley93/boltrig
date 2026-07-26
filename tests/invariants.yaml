@@ -1486,6 +1486,13 @@ invariants:
       - tests/security/test_rls_fence_coverage.py::test_every_tenant_table_is_rls_fenced_or_documented_excluded
 
   # --- Session active workspace context + switching ([2026] VJS-COUNTY 8, D4) -
+  SEC-189:
+    description: 'A read-scoped SQL binding cannot write, and the refusal lands BEFORE any statement reaches the driver - `SqlAdapter._run` checks write_allowed first, so a handler calling ``db.execute_write`` on a write_allowed=False binding is refused UNAUTHORISED with nothing sent, while the same binding still READS and a write_allowed=True binding is permitted. Ordering is the load-bearing half: a refusal raised after the statement was sent returns the same error and is still a write. Distinct from SEC-09, which sql_base.py cites for this and which docs/security-conformance.md uses for TENANT ISOLATION - one id, two meanings, so this boundary gets its own rather than inheriting an ambiguity.'
+    tests:
+      - tests/adapters/test_sql_base_write_scope.py::test_a_read_scoped_binding_refuses_a_write
+      - tests/adapters/test_sql_base_write_scope.py::test_the_refusal_happens_BEFORE_anything_reaches_the_driver
+      - tests/adapters/test_sql_base_write_scope.py::test_a_read_scoped_binding_still_reads
+      - tests/adapters/test_sql_base_write_scope.py::test_a_write_enabled_binding_is_permitted
   FR-ORG-03:
     description: 'The active workspace is plumbed through the session onto the InvocationContext and login seeds a deterministic default (D4) - login picks a stable default active workspace from the user''s membership (or None when they belong to none), persists it on the session, and the session resolver surfaces it onto the principal so principal.context().workspace_id carries the active workspace; pick_default_workspace is deterministic (ordered, stable) regardless of store iteration order.'
     tests:
