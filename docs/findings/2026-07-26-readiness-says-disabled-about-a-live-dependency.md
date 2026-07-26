@@ -1,7 +1,8 @@
 # `/readyz` reports a live dependency as "disabled"
 
-Date: 2026-07-26. Observed on the Classical Visas production tenant. **Not fixed** - the fix is
-recorded here with the reason it was not landed in the same pass.
+Date: 2026-07-26. Observed on the Classical Visas production tenant. **FIXED the same day**, later
+in the session - see "Resolution" at the foot. The body below is preserved as written, when it was
+still open, because the reason it was deferred is part of the record.
 
 ## The finding
 
@@ -72,3 +73,30 @@ print(d['status'], {k: v.get('status') for k, v in d['checks'].items()})"
 docker exec cv-boltrig-kernel-1 printenv BOLTRIG_MODEL_GATEWAY_URL
 # -> http://bifrost:8080/v1
 ```
+
+
+---
+
+## Resolution (2026-07-26, later)
+
+Both limbs disposed, and differently, which was the point of separating them.
+
+**1. Reporting - DONE.** `gateway_posture()` now lives in `boltrig/fleet/model_gateway.py`, which is
+where "what IS the gateway's state" belongs, and readiness calls it from both branches. A configured
+gateway with no probe armed reports `status: "unchecked"`,
+`reason: "configured_but_health_check_disabled"`.
+
+The 400/400 ratchet problem that deferred this is gone rather than waived: EXTRACTING the branch left
+`api/readiness.py` smaller than it started, and the private `_model_gateway_enabled` helper is
+deleted. No exemption was recorded, which was the whole reason for waiting.
+
+**2. Gating - STILL NOT TAKEN, deliberately.** `required` is unchanged, so no stack's readiness
+OUTCOME moves. Promoting a configured gateway to `required: true` would flip live stacks to
+`not_ready` on a bifrost blip and change what orchestration does with them. That is a deployment
+contract change and it still belongs to whoever owns that contract. This fix changes what the record
+SAYS, never what it decides - and separating those two was the correct call at the time.
+
+Seeded before believed: restoring the opt-ins-only rule fails
+`test_a_configured_gateway_with_no_probe_is_unchecked_not_disabled` and nothing else. `disabled`
+still means disabled when there is genuinely no gateway, so this is a distinction rather than a
+rename, and whitespace is not configuration.
