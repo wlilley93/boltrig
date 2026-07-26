@@ -56,7 +56,22 @@ COPY pyproject.toml requirements-lock.txt /app/
 # So these flags stay because they are correct for connection errors, and the real
 # answer to truncation is to build somewhere the link holds. The hash contract is
 # unchanged either way; only the patience is.
-RUN pip install --require-hashes --retries 10 --timeout 60 -r /app/requirements-lock.txt
+# An OPTIONAL pre-fetched wheelhouse. The bracket glob makes this COPY a no-op when the directory
+# is absent, so a checkout without one builds exactly as before. Populate it with
+# scripts/build-wheelhouse.sh, which fetches ONE REQUIREMENT AT A TIME - the point being that
+# `pip download --require-hashes` stages every wheel in a temp dir and only copies on total success,
+# so a single truncated wheel discards the whole download and the next attempt starts from nothing.
+# Six builds died that way. Per-requirement, a truncation costs one wheel.
+#
+# THE HASH CONTRACT IS UNCHANGED IN BOTH BRANCHES: --require-hashes verifies every wheel against
+# requirements-lock.txt either way. Only the source of the bytes moves.
+COPY deploy/wheelhous[e] /wheelhouse/
+RUN if [ -n "$(ls -A /wheelhouse 2>/dev/null)" ]; then \
+      echo "using pre-fetched wheelhouse ($(ls /wheelhouse | wc -l) wheels)"; \
+      pip install --require-hashes --no-index --find-links=/wheelhouse -r /app/requirements-lock.txt; \
+    else \
+      pip install --require-hashes --retries 10 --timeout 60 -r /app/requirements-lock.txt; \
+    fi
 
 # Boltrig v2 cockpit runtime: ship Herdr with the stack, not from a developer
 # workstation. Pinned release asset + sha256; override all three args together

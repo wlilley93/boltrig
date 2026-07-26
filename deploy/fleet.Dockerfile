@@ -47,7 +47,15 @@ COPY pyproject.toml requirements-lock.txt /app/
 # So these flags stay because they are correct for connection errors, and the real
 # answer to truncation is to build somewhere the link holds. The hash contract is
 # unchanged either way; only the patience is.
-RUN pip install --require-hashes --retries 10 --timeout 60 -r /app/requirements-lock.txt
+# Same optional wheelhouse as deploy/kernel.Dockerfile - see the note there. Absent directory =>
+# no-op COPY => unchanged behaviour. --require-hashes verifies every wheel in either branch.
+COPY deploy/wheelhous[e] /wheelhouse/
+RUN if [ -n "$(ls -A /wheelhouse 2>/dev/null)" ]; then \
+      echo "using pre-fetched wheelhouse ($(ls /wheelhouse | wc -l) wheels)"; \
+      pip install --require-hashes --no-index --find-links=/wheelhouse -r /app/requirements-lock.txt; \
+    else \
+      pip install --require-hashes --retries 10 --timeout 60 -r /app/requirements-lock.txt; \
+    fi
 
 # Run directly from the copied, read-only source tree. Installing the project
 # itself would invoke PEP 517 build isolation and download an unlocked hatchling
