@@ -12,6 +12,7 @@ from pathlib import Path
 
 from boltrig.fleet.codex_runtime import CodexRuntime
 from boltrig.fleet.domain import (
+    CanonicalJSON,
     PhaseMode,
     RuntimeEvent,
     RuntimeEventKind,
@@ -24,9 +25,18 @@ from boltrig.models import InvocationContext
 
 
 class _FakeLifecycle:
-    def __init__(self, *, text: str = "Hello from Codex.", fail_start: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        text: str = "Hello from Codex.",
+        fail_start: bool = False,
+        runtime_error: bool = False,
+    ) -> None:
         self._text = text
         self._fail_start = fail_start
+        # A runtime ERROR notification ahead of completion - what codex emits for a bad key,
+        # an unknown model id, or a gateway 5xx.
+        self._runtime_error = runtime_error
         self.spec: RuntimeThreadSpec | None = None
         self.closed = False
         self.turn_prompt: str | None = None
@@ -45,6 +55,15 @@ class _FakeLifecycle:
         return self._events(thread)
 
     async def _events(self, thread: RuntimeThreadRef) -> AsyncIterator[RuntimeEvent]:
+        if self._runtime_error:
+            yield RuntimeEvent(
+                event_id="e0",
+                assignment=thread.assignment,
+                kind=RuntimeEventKind.ERROR,
+                thread=thread,
+                # No message: runtime events never copy provider content.
+                payload=CanonicalJSON.from_mapping({"will_retry": False}),
+            )
         yield RuntimeEvent(
             event_id="e1",
             assignment=thread.assignment,
@@ -106,9 +125,36 @@ async def test_run_degrades_without_run_scope() -> None:
 
 
 async def test_run_degrades_on_empty_output() -> None:
+    """A genuinely silent turn keeps the plain reason - no error was reported."""
     result = await CodexRuntime(_FakeLifecycle(text=""), stack_root=_STACK).run("hi", _context(), tools=[])
     assert result.degraded is True
     assert result.output["_degraded"]["reason"] == "codex_empty_output"
+
+
+async def test_empty_output_after_a_runtime_error_is_distinguished() -> None:
+    """An empty turn that FOLLOWED a runtime error must not read as silence.
+
+    This is the second cause of `codex_empty_output`: the drain loop saw a
+    RuntimeEventKind.ERROR and dropped it, so a bad key or an unknown model id was
+    reported to the operator as "the model produced nothing usable". The two need
+    different responses, so they get different reasons.
+    """
+    fake = _FakeLifecycle(text="", runtime_error=True)
+    result = await CodexRuntime(fake, stack_root=_STACK).run("hi", _context(), tools=[])
+    assert result.degraded is True
+    assert result.output["_degraded"]["reason"] == "codex_empty_output_after_error"
+
+
+async def test_a_runtime_error_does_not_degrade_a_turn_that_produced_text() -> None:
+    """BOUNDARY. Codex retries; an error followed by real output is a SUCCESS.
+
+    Without this, adding error observation would turn every transient, retried hiccup
+    into a degraded turn, which is worse than the silence it set out to fix.
+    """
+    fake = _FakeLifecycle(text="Hello from Codex.", runtime_error=True)
+    result = await CodexRuntime(fake, stack_root=_STACK).run("hi", _context(), tools=[])
+    assert result.degraded is False
+    assert result.output["text"] == "Hello from Codex."
 
 
 async def test_run_degrades_and_never_raises_on_lifecycle_error() -> None:

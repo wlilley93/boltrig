@@ -382,6 +382,8 @@ class CodexEventTranslator:
         return self._event(
             RuntimeEventKind.ERROR,
             turn=turn,
+            # No message: carrying it was tried and correctly rejected by the
+            # never-copy-content invariant (a provider error can quote the prompt).
             payload={"will_retry": will_retry},
         )
 

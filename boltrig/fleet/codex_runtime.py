@@ -21,7 +21,7 @@ from __future__ import annotations
 import contextlib
 import logging
 import uuid
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -244,6 +244,8 @@ class CodexRuntime:
         # legs are priced at different rates - billing an input-heavy turn as if it
         # were all output costs the tenant more than twice what it should.
         usage_legs: dict[str, int] = {}
+        # Runtime ERROR events, caller-owned for the same reason as the two above.
+        runtime_errors: list[Mapping[str, object]] = []
         thread: RuntimeThreadRef | None = None
         try:
             thread = await self._lifecycle.start_thread(spec)
@@ -253,7 +255,7 @@ class CodexRuntime:
                 )
             )
             tokens_used = await _drain_until_complete(
-                self._lifecycle.events(thread), usage_seen, usage_legs
+                self._lifecycle.events(thread), usage_seen, usage_legs, runtime_errors
             )
             text = await self._lifecycle.read_turn_output(thread)
         except Exception as error:
@@ -284,7 +286,9 @@ class CodexRuntime:
             # handed the tenant a full budget refund for spend that really happened.
             return AgentResult.degrade(
                 runtime=self.runtime,
-                reason="codex_empty_output",
+                reason=_empty_output_reason(
+                    runtime_errors, spec.assignment.phase.root_run_id
+                ),
                 prompt=prompt,
                 tokens_used=tokens_used,
                 input_tokens=usage_legs.get("input_tokens", 0),
@@ -360,10 +364,31 @@ def build_trusted_codex_runtime(
     )
 
 
+def _empty_output_reason(errors: list[Mapping[str, object]], run_id: str) -> str:
+    """Silence, or a failure this path used to swallow - they want different responses.
+
+    `_drain_until_complete` ignored RuntimeEventKind.ERROR, so a bad key, an unknown model
+    id and a gateway 5xx all surfaced as `codex_empty_output`: "the model had nothing to
+    say". No provider message is carried, here or in the log - runtime events must not copy
+    content (a provider error can quote the prompt), so `will_retry` and the event's
+    existence do the work.
+    """
+    if not errors:
+        return "codex_empty_output"
+    logger.warning(
+        "codex reported %d runtime error(s) before an empty turn for run %s (will_retry=%s)",
+        len(errors),
+        run_id,
+        [observed.get("will_retry") for observed in errors],
+    )
+    return "codex_empty_output_after_error"
+
+
 async def _drain_until_complete(
     events: AsyncIterator[RuntimeEvent],
     seen: list[int] | None = None,
     legs: dict[str, int] | None = None,
+    errors: list[Mapping[str, object]] | None = None,
 ) -> int:
     """Consume the lifecycle stream until the turn completes (the completion
     signal, not the content source), returning the tokens the turn reported.
@@ -387,7 +412,12 @@ async def _drain_until_complete(
     """
     tokens = 0
     async for event in events:
-        if event.kind is RuntimeEventKind.TOKEN_USAGE:
+        if event.kind is RuntimeEventKind.ERROR:
+            # The runtime said the turn FAILED; this loop used to drop it. See
+            # _empty_output_reason.
+            if errors is not None:
+                errors.append(event.payload.to_mapping())
+        elif event.kind is RuntimeEventKind.TOKEN_USAGE:
             payload = event.payload.to_mapping()
             reported = payload.get("total_tokens")
             if type(reported) is int and reported > 0:

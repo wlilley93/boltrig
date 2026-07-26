@@ -162,12 +162,12 @@
       "expires": "2026-12-31"
     },
     "boltrig/fleet/infrastructure/codex_runtime_events.py": {
-      "max_file_lines": 482,
+      "max_file_lines": 484,
       "max_function_lines": 49,
       "over_limit_functions": [],
       "owner": "fleet-maintainers",
-      "reason": "File-length only. The read-only Codex cutover adds the agentMessage read-back capture (the translator records the latest agentMessage text for read_turn_output because thread/read is not served in the App Server exec mode) while events() stays content-free; the module was already at the 400-line floor. Split the item/turn lifecycle translation from the native-observation tripwire into a sibling module when the runtime family is next refactored. Kernel-tools lane: is_kernel_tools_mcp_startup_update (the one benign invalidation-class notification, bound to the argv-pinned boltrig server name). 2026-07-25: +47 lines to translate `thread/tokenUsage/updated`, which Codex uses to report what a turn consumed and which was previously dropped as UNKNOWN - so the fleet priced every Codex turn at zero tokens and a tenant's cost ledger stayed empty however much it spent. The growth is the translator branch, its guard against billing a foreign thread's usage, and a floored-int helper.",
-      "expires": "2026-12-31"
+      "reason": "2026-07-26: +2 lines recording WHY the codex error notification's message is parsed, validated and then deliberately not carried into the event payload (never-copy-content: a provider error can quote the prompt back). Without the note the next reader re-adds it, as this session did before the invariant caught it.",
+      "expires": "2026-10-31"
     },
     "boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py": {
       "max_file_lines": 577,
@@ -510,12 +510,12 @@
       "expires": "2026-12-31"
     },
     "boltrig/fleet/codex_runtime.py": {
-      "max_file_lines": 443,
+      "max_file_lines": 473,
       "max_function_lines": 77,
       "over_limit_functions": [],
       "owner": "fleet-maintainers",
-      "reason": "2026-07-25: +9 lines to carry token usage onto the DEGRADE path. A model can be called, consume its tokens and then produce an unusable answer - the provider is paid either way - but AgentResult.degrade had no way to say so, so every degraded run recorded as free AND was refunded in full. The growth is the usage sink (a raise discards the drain's locals, so the caller keeps what was seen) and the two degrade sites that now report it. No function exceeds the 80-line limit; this is a file-size exemption only. 2026-07-25 (input/output split): +34 lines to carry the input/output SPLIT the translator already parses off thread/tokenUsage/updated. It was dropped at this seam, so an input-heavy turn was priced at one rate for every token - more than 2x the real cost on the rate cards we bill from. The growth is a second caller-owned sink (a raise discards the drain's locals), the leg validator _reported_leg, and the three result sites that now report it; the largest function is unchanged at 77.",
-      "expires": "2026-12-31"
+      "reason": "2026-07-26: +30 lines to tell a FAILED turn from a silent one. _drain_until_complete ignored RuntimeEventKind.ERROR, so a bad key, an unknown model id and a gateway 5xx all reached the operator as codex_empty_output - 'the model had nothing to say'. The error is now observed and an empty turn degrades as codex_empty_output_after_error. Carrying the provider's message was tried and correctly rejected by the never-copy-content invariant, so the reason stays content-free. The reason logic is already folded into _empty_output_reason to keep _run_phase under the function limit; the remaining growth is that helper and its rationale, and it should be paid back by folding the two long docstrings in this file.",
+      "expires": "2026-10-31"
     }
   }
 }
