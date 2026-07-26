@@ -46,27 +46,27 @@
       "expires": "2026-12-31"
     },
     "boltrig/api/auth_routes.py": {
-      "max_file_lines": 815,
-      "max_function_lines": 506,
+      "max_file_lines": 820,
+      "max_function_lines": 510,
       "over_limit_functions": [
         {
           "name": "register_auth_routes",
-          "line": 310,
-          "lines": 506
+          "line": 311,
+          "lines": 510
         },
         {
           "name": "register_auth_routes.login",
-          "line": 391,
-          "lines": 93
+          "line": 392,
+          "lines": 97
         },
         {
           "name": "register_auth_routes.two_factor_challenge",
-          "line": 669,
+          "line": 674,
           "lines": 91
         }
       ],
       "owner": "identity-maintainers",
-      "reason": "Extract login, invitation, session, and two-factor route groups while retaining one authentication boundary. 2026-07-26: +5 lines only - the COUNTY 8 D7 rotation route was put in auth_password_routes.py rather than here, so this file gained an import and a registrar call instead of ~75 lines of handler.",
+      "reason": "Extract login, invitation, session, and two-factor route groups while retaining one authentication boundary. 2026-07-26: +5 lines only - the COUNTY 8 D7 rotation route was put in auth_password_routes.py rather than here, so this file gained an import and a registrar call instead of ~75 lines of handler. 2026-07-26 (2): +5 more for the D7 login signal - login returns password_change_required so a console routes to the rotation screen instead of discovering the clamp by being refused. Written as a one-line status choice rather than a branch to keep the cost at five.",
       "expires": "2026-12-31"
     },
     "boltrig/api/bootstrap.py": {

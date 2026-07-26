@@ -252,8 +252,9 @@ async def _mint_web_session(k, tenant: str, user: User):
 def _session_response(secret: str, csrf: str, user: User, *, status: str = "ok",
                       extra: dict | None = None) -> JSONResponse:
     """The login/challenge success envelope + the session cookies. ``status`` is
-    "ok" for a fully-authenticated session or "2fa_enrollment_required" for an org-
-    required enrollment-only session (the resolver clamps the latter to enrollment)."""
+    "ok" for a fully-authenticated session, "2fa_enrollment_required" for an org-
+    required enrollment-only session, or "password_change_required" for an account
+    still holding its provisioning credential. The resolver clamps the latter two."""
     body = {
         "status": status,
         "csrf_token": csrf,
@@ -479,7 +480,11 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
         # Keys-only audit: the session id, never the secret / csrf / password (D8).
         await _audit(k, tenant, user.id, "auth.login",
                      {"session_id": session.id, "outcome": "ok"})
-        return _session_response(secret, csrf, user)
+        # D7: the session IS issued and the resolver clamps it. Saying so here lets
+        # a console route straight to the rotation screen rather than discover the
+        # clamp by being refused. Same shape as 2fa_enrollment_required above.
+        clamped = "password_change_required" if user.must_change_password else "ok"
+        return _session_response(secret, csrf, user, status=clamped)
 
     @app.post("/v1/auth/logout")
     async def logout(request: Request, k=K, p=P) -> JSONResponse:

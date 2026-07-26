@@ -36,6 +36,20 @@ export const authApi = {
     });
   },
 
+  // Shapes kept local rather than added to the published web SDK: this is a
+  // console-only surface (opbox does not seat founding operators), and widening
+  // the shared package for it would make every consumer wait on a release.
+  changePassword(body: {
+    current_password: string;
+    new_password: string;
+  }): Promise<{ status: string; reason?: string }> {
+    return request<{ status: string; reason?: string }>("/v1/auth/change-password", {
+      method: "POST",
+      body,
+      tolerateStatus: true,
+    });
+  },
+
   logout(): Promise<StatusAck> {
     return request<StatusAck>("/v1/auth/logout", {
       method: "POST",

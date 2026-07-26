@@ -1,7 +1,11 @@
 import { useState } from "react";
 
 import { api } from "@/api/client";
-import { markAuthenticated, markEnrollRequired } from "@/auth";
+import {
+  markAuthenticated,
+  markEnrollRequired,
+  markPasswordChangeRequired,
+} from "@/auth";
 import { AuthShell } from "@/panels/AuthGate/AuthShell";
 import { ChallengeStep } from "@/panels/AuthGate/ChallengeStep";
 
@@ -87,6 +91,13 @@ export function LoginPage() {
         // D3: the password verified but NO session was issued. Move to the second
         // factor step; the session is issued only when the code verifies.
         setChallengeToken(res.challenge_token);
+        return;
+      }
+      if (res.status === "password_change_required") {
+        // [2026] VJS-COUNTY 8, D7: the account still holds its provisioning
+        // credential. A clamped session cookie IS set; route to the rotation
+        // screen, which is the only surface that session can reach.
+        markPasswordChangeRequired();
         return;
       }
       if (res.status === "2fa_enrollment_required") {
