@@ -29,7 +29,7 @@ against, and none of them was findable by reading:
     time here". Nothing in the tree reads that variable. A finding whose whole
     subject is the setup step people get wrong ships a setup step that is inert.
 
-WHAT IT CHECKS. Four kinds of reference, in prose across boltrig/**/*.py
+WHAT IT CHECKS. Five kinds of reference, in prose across boltrig/**/*.py
 (comments + docstrings), docs/**/*.md, README.md, Makefile, .env.example,
 docker-compose*.yml, .vjs/orders/*.yaml and scripts/*.py:
 
@@ -40,9 +40,22 @@ docker-compose*.yml, .vjs/orders/*.yaml and scripts/*.py:
      (BOLTRIG_/POSTGRES_/HATCHET_/     source, .env.example, compose, the
       REDIS_, or named in .env.example) Makefile, CI workflows or shell scripts
 
+  5. [YEAR] VJS-... order citations -> a filed order must answer to it, in this
+     repository's register or in the VENDORED canon citator
+     (.vjs/canon-citations.txt), because orders are federated and a subscriber
+     cites canon rulings it does not hold
+
 Rule 4 is the one that catches a knob after its code is gone: the name survives
 in the doc that told you to export it, and a reader cannot tell a variable that
-does nothing from one that does.
+does nothing from one that does. Rule 5 is the most expensive kind to have wrong:
+an order is the only thing here that BINDS, and it caught three orders relied on
+in live code that were never written to any register at all.
+
+Rule 5 resolves against a VENDORED file rather than a sibling checkout, and that
+is not a detail. The first cut read the canon repository off the author's disk; it
+passed here and reddened main the moment CI ran it - a gate passing because of a
+directory on one machine, which is the exact defect class this whole goal exists
+to close. Refresh the citator deliberately with `make refresh-canon-citations`.
 
 WHY IT SCANS THE HISTORICAL RECORD. docs/findings/, docs/decisions/ and .vjs/
 describe past states, and the tempting move is to exempt them by directory. That
@@ -552,14 +565,18 @@ _CITATION_RE = re.compile(
     r"(?:-[ \t]*\n[ \t]*#?[ \t]*[A-Z0-9][A-Z0-9 -]*)?"
 )
 
-# Registers to resolve against. Orders are FEDERATED - a subscriber repo cites
-# canon rulings it does not hold - so both are searched, and a citation resolving
-# in either is resolved. Searching only the local register would report every
-# canon citation as missing, which is how a gate teaches people to ignore it.
-ORDER_REGISTERS = (
-    ROOT / ".vjs",
-    Path.home() / "Projects" / "vibe-justice-system" / ".vjs",
-)
+# Where an order citation may resolve. Orders are FEDERATED - a subscriber repo
+# cites canon rulings it does not hold - so canon citations resolve too, but
+# against a VENDORED citator, never against a sibling checkout.
+#
+# The first cut read ~/Projects/vibe-justice-system/.vjs directly. It passed here
+# and reddened main the moment CI ran it, because that directory exists on one
+# machine. A gate that resolves against whatever happens to be on the author's
+# disk is the precise defect class this gate was written to close, so it had to be
+# fixed rather than special-cased: the citator is now a file in the repository and
+# resolution is hermetic.
+ORDER_REGISTER = ROOT / ".vjs"
+CANON_CITATIONS = ROOT / ".vjs" / "canon-citations.txt"
 
 
 def _normalise_citation(raw: str) -> str:
@@ -595,24 +612,29 @@ def filed_order_citations() -> set[str]:
     human form. Both are identities of the same order, so both count.
     """
     known: set[str] = set()
-    for register in ORDER_REGISTERS:
-        if not register.is_dir():
-            continue  # canon not checked out beside this repo: local-only resolution
-        for path in register.rglob("*.yaml"):
-            if "orders" not in path.parts:
-                continue
-            for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
-                key, _, value = line.partition(":")
-                if key.strip() not in {"id", "citation"}:
-                    continue
-                value = value.strip().strip("'\"")
-                if not value:
-                    continue
-                known.add(_normalise_citation(value))
-                # `id: 2026-VJS-CC-X-001` is cited in prose as `[2026] VJS-CC-X-001`.
-                head, _, rest = value.partition("-")
-                if head.isdigit() and rest:
-                    known.add(_normalise_citation(f"[{head}] {rest}"))
+
+    def _record(value: str) -> None:
+        value = value.strip().strip("'\"")
+        if not value:
+            return
+        known.add(_normalise_citation(value))
+        # `id: 2026-VJS-CC-X-001` is cited in prose as `[2026] VJS-CC-X-001`.
+        head, _, rest = value.partition("-")
+        if head.isdigit() and rest:
+            known.add(_normalise_citation(f"[{head}] {rest}"))
+
+    for path in ORDER_REGISTER.rglob("*.yaml"):
+        if "orders" not in path.parts:
+            continue
+        for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+            key, _, value = line.partition(":")
+            if key.strip() in {"id", "citation"}:
+                _record(value)
+
+    if CANON_CITATIONS.exists():
+        for line in CANON_CITATIONS.read_text(encoding="utf-8").splitlines():
+            if line.strip() and not line.lstrip().startswith("#"):
+                _record(line)
     return known
 
 

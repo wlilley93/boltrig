@@ -36,7 +36,7 @@ RELEASE_VALIDATE_IMAGES_ENV ?= tests/fixtures/release-images.env
 RELEASE_PROFILES ?= --profile backup
 
 .DEFAULT_GOAL := help
-.PHONY: help gate-status up down logs test lint architecture structure codex-protocol unwired-claims prose-references gate-coverage health-claims typecheck check python-quality ui-install ui-quality site-install site-quality ui-e2e compose-validate release-validate release-up doctor-fixture migration-parity python-audit sast iac-scan secret-scan actionlint security-source quality live-check lockfile-policy dependency-audit smoke invariants doctor migrate secure-up backup backup-schedule restore
+.PHONY: help gate-status up down logs test lint architecture structure codex-protocol unwired-claims prose-references refresh-canon-citations gate-coverage health-claims typecheck check python-quality ui-install ui-quality site-install site-quality ui-e2e compose-validate release-validate release-up doctor-fixture migration-parity python-audit sast iac-scan secret-scan actionlint security-source quality live-check lockfile-policy dependency-audit smoke invariants doctor migrate secure-up backup backup-schedule restore
 
 help: ## List the available targets
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -80,8 +80,15 @@ codex-protocol: ## Verify the exact checked-in stable Codex App Server protocol 
 unwired-claims: ## Fail when the record names a mechanism no production path constructs
 	$(PY) scripts/check_unwired_claims.py
 
-prose-references: ## Every path, test id, make target and env var named in prose must resolve
+prose-references: ## Every path, test id, make target, env var and order citation in prose must resolve
 	$(PY) scripts/check_prose_references.py
+
+# Re-vendor the canon citator. Run deliberately when a NEW canon ruling is cited
+# here; the gate resolves against the committed file, never against a checkout on
+# one machine, which is how the first cut passed locally and reddened CI.
+CANON_REPO ?= $(HOME)/Projects/vibe-justice-system
+refresh-canon-citations: ## Re-vendor .vjs/canon-citations.txt from the canon register
+	$(PY) scripts/refresh_canon_citations.py --canon $(CANON_REPO)
 
 gate-coverage: ## Every compose manifest is validated and every `quality` component runs in CI
 	$(PY) scripts/check_gate_coverage.py
