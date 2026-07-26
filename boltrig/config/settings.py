@@ -39,10 +39,18 @@ class Settings:
     oidc_audience: str | None = None
     oidc_jwks_uri: str | None = None
     dev_auth: bool = False  # BOLTRIG_DEV_AUTH=1 -> header-trust resolver (dev only)
-    # Codex read-only ledger scaffold (BOLTRIG_CODEX_LEDGER). Disabled by default;
-    # when off the Codex execution stack is never constructed (a total no-op). When
-    # on it is constructed and parked on app.state.platform, but nothing calls it
-    # yet: wiring an admit() into the live path is a later, court-gated PR.
+    # Codex read-only ledger (BOLTRIG_CODEX_LEDGER). Disabled by default; when off
+    # the Codex execution stack is never constructed (a total no-op). When ON it is
+    # WIRED: `shadow_admit` records one execution-neutral decision per ROOT work
+    # item, from fleet/pump.py's handle_claimed_item (SEC-172).
+    #
+    # Corrected 2026-07-26. This said "it is constructed and parked on
+    # app.state.platform, but nothing calls it yet: wiring an admit() into the live
+    # path is a later, court-gated PR". That PR landed. The docstring on
+    # api/codex_execution.py was updated to say so and this one was not - one
+    # record moved, its twin did not, which is the drift the unwired-claims gate
+    # exists for and structurally cannot catch: it finds names nothing REACHES, and
+    # this was a reached name claimed unreached.
     codex_ledger: bool = False  # BOLTRIG_CODEX_LEDGER=1 -> construct the inert stack
     # Trusted Codex runtime ([2026] VJS-CC-VJS 2; postures in decision 0017). Opt-in:
     # BOLTRIG_CODEX_TRUSTED=1 selects the loopback-proxy Codex runtime that mints a

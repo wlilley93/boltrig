@@ -78,6 +78,14 @@ dev = [
     # nowhere. A regression test for the headline defect, passing on the author's
     # box and skipping in CI, is the defect wearing the costume of its own fix.
     "fakeredis>=2.26",
+    # Randomised test order, so order-dependence FAILS on the commit that
+    # introduces it instead of waiting to be discovered. Until now the suite ran
+    # in fixed file order and every hidden inter-test dependency was latent: a
+    # test that passes only because another ran first is a test that proves
+    # nothing, and nothing here could tell. Same ratchet shape as the structure
+    # gate. The seed is printed on every run, so a failure is reproducible with
+    # `-p randomly --randomly-seed=N`.
+    "pytest-randomly>=3.15",
 ]
 
 [project.scripts]

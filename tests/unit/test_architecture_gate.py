@@ -14,12 +14,41 @@ def _layer_root(tmp_path: Path, layer: str) -> Path:
 
 
 def _layer_tree(tmp_path: Path) -> None:
-    """Build every declared layer, so adding one cannot silently skip this gate."""
+    """Build every declared layer, so adding one cannot silently skip this gate.
+
+    The kernel root is built too: as of 2026-07-26 a MISSING one is a violation
+    rather than a silent skip, so a fixture standing in for a repository has to
+    have the same parts a repository has. See
+    test_a_missing_kernel_root_is_a_violation_not_a_skip.
+    """
 
     for layer in check_architecture._LAYER_IMPORTS:
         root = _layer_root(tmp_path, layer)
         root.mkdir(parents=True, exist_ok=True)
         (root / "__init__.py").write_text("", encoding="utf-8")
+    kernel = tmp_path.joinpath(*check_architecture._KERNEL_ROOT)
+    kernel.mkdir(parents=True, exist_ok=True)
+    (kernel / "__init__.py").write_text("", encoding="utf-8")
+
+
+def test_a_missing_kernel_root_is_a_violation_not_a_skip(tmp_path: Path) -> None:
+    """Relocating boltrig/kernel used to make its whole deny-list evaporate.
+
+    The layer loop emitted a violation for a missing root; four lines below it the
+    kernel check was a bare `if kernel_root.is_dir():` with no else. So a rename
+    would have stopped `_KERNEL_FORBIDDEN` being enforced at all while the gate
+    printed "architecture boundary clean" - a scan that checked nothing, reported
+    as nothing wrong.
+    """
+    _layer_tree(tmp_path)
+    import shutil
+
+    shutil.rmtree(tmp_path.joinpath(*check_architecture._KERNEL_ROOT))
+
+    report = check_architecture.check_repository(tmp_path)
+
+    assert [v.path for v in report.violations] == ["boltrig/kernel"]
+    assert "checked nothing" in report.violations[0].reason
 
 
 def test_inward_only_imports_pass(tmp_path: Path) -> None:

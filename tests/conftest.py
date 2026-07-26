@@ -60,6 +60,19 @@ _LOUD: tuple[tuple[str, str], ...] = (
     ("BOLTRIG_COGNEE_LIVE", "the live knowledge-graph legs"),
     ("BOLTRIG_LIVE_SMOKE", "the live adapter reads"),
     ("BOLTRIG_CODEX_01443_SMOKE_BINARY", "the codex cell smoke and tool-ceiling legs"),
+    # Not an env var: the gitignored active manifest. These two legs are the
+    # ORIGINAL member of the environment-dependent family - the retired-runtime
+    # rule that passed on any box holding manifest.yaml and failed only in CI. The
+    # rule was fixed; the SKIPS were not, and they matched none of the tokens
+    # above, so in CI (where the file is never present) they have gone on
+    # vanishing without a word. Named by their reason text because that is what
+    # the skip actually carries.
+    ("manifest", "the active-manifest legs (manifest.yaml is gitignored)"),
+    # Root can write everything, so the cell-isolation boundary proves nothing and
+    # correctly skips - but a plain `docker run` is root, and silently losing both
+    # halves of a court-ordered security boundary is not something to discover by
+    # reading -rs output.
+    ("root can write everything", "the codex cell-isolation boundary (running as root)"),
 )
 
 _skipped: dict[str, set[str]] = {}
