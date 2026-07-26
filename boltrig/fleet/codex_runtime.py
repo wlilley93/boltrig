@@ -239,6 +239,11 @@ class CodexRuntime:
         # answer out of it.
         tokens_used = 0
         usage_seen: list[int] = []
+        # The last reported input/output SPLIT, caller-owned for the same reason as
+        # `usage_seen`: a raise discards the drain's locals. Kept because the two
+        # legs are priced at different rates - billing an input-heavy turn as if it
+        # were all output costs the tenant more than twice what it should.
+        usage_legs: dict[str, int] = {}
         thread: RuntimeThreadRef | None = None
         try:
             thread = await self._lifecycle.start_thread(spec)
@@ -248,7 +253,7 @@ class CodexRuntime:
                 )
             )
             tokens_used = await _drain_until_complete(
-                self._lifecycle.events(thread), usage_seen
+                self._lifecycle.events(thread), usage_seen, usage_legs
             )
             text = await self._lifecycle.read_turn_output(thread)
         except Exception as error:
@@ -266,6 +271,8 @@ class CodexRuntime:
                 # Whatever the turn had already consumed before it died. The
                 # provider was paid for it either way.
                 tokens_used=usage_seen[-1] if usage_seen else 0,
+                input_tokens=usage_legs.get("input_tokens", 0),
+                output_tokens=usage_legs.get("output_tokens", 0),
             )
         finally:
             if thread is not None:
@@ -280,15 +287,20 @@ class CodexRuntime:
                 reason="codex_empty_output",
                 prompt=prompt,
                 tokens_used=tokens_used,
+                input_tokens=usage_legs.get("input_tokens", 0),
+                output_tokens=usage_legs.get("output_tokens", 0),
             )
-        # Report what the turn consumed so the fleet can price it. `cost_micros` is
-        # left to the accountant, which applies the tenant's own per-model/tier rate
-        # (`price_micros`); the runtime's job is to report usage honestly, not to
-        # price it.
+        # Report what the turn consumed so the fleet can price it, INCLUDING the
+        # input/output split, because those legs carry different rates. `cost_micros`
+        # is left to the accountant, which applies the tenant's own per-model/tier
+        # rate (`price_micros`); the runtime's job is to report usage honestly, not
+        # to price it.
         return AgentResult.succeeded(
             output={"runtime": "codex_app_server", "text": text},
             summary=text[:256],
             tokens_used=tokens_used,
+            input_tokens=usage_legs.get("input_tokens", 0),
+            output_tokens=usage_legs.get("output_tokens", 0),
         )
 
 
@@ -349,7 +361,9 @@ def build_trusted_codex_runtime(
 
 
 async def _drain_until_complete(
-    events: AsyncIterator[RuntimeEvent], seen: list[int] | None = None
+    events: AsyncIterator[RuntimeEvent],
+    seen: list[int] | None = None,
+    legs: dict[str, int] | None = None,
 ) -> int:
     """Consume the lifecycle stream until the turn completes (the completion
     signal, not the content source), returning the tokens the turn reported.
@@ -364,18 +378,38 @@ async def _drain_until_complete(
     raises and the caller degrades, and a raise discards this function's locals -
     so without the sink a turn that consumed real tokens and then died reported
     zero, and the tenant was refunded for spend the provider had already taken.
+
+    ``legs`` is the same idea for that report's input/output SPLIT, which rides on
+    the same frame as the total. It is carried because the two legs are priced at
+    different rates (boltrig/kernel/cost.py): billing an input-heavy turn at the
+    output rate over-bills it substantially. Both sinks are written from the SAME
+    accepted report, so they can never disagree about which frame won.
     """
     tokens = 0
     async for event in events:
         if event.kind is RuntimeEventKind.TOKEN_USAGE:
-            reported = event.payload.to_mapping().get("total_tokens")
+            payload = event.payload.to_mapping()
+            reported = payload.get("total_tokens")
             if type(reported) is int and reported > 0:
                 tokens = reported
                 if seen is not None:
                     seen.append(reported)
+                if legs is not None:
+                    legs["input_tokens"] = _reported_leg(payload.get("input_tokens"))
+                    legs["output_tokens"] = _reported_leg(payload.get("output_tokens"))
         elif event.kind is RuntimeEventKind.TURN_COMPLETED:
             return tokens
     return tokens
+
+
+def _reported_leg(value: object) -> int:
+    """One usage leg as a non-negative int, or 0 when absent/malformed.
+
+    0 is the honest answer for a leg the runtime did not report, and 0/0 is priced
+    at a single rate on the TOTAL - so a partial report degrades to the previous
+    behaviour rather than billing the turn as free.
+    """
+    return value if type(value) is int and value > 0 else 0
 
 
 def _mint_assignment(

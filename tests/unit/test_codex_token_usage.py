@@ -108,8 +108,11 @@ async def test_true_up_returns_the_priced_cost_not_the_runtimes_zero():
     class _Cost:
         has_prices = False
 
-        def price(self, tokens, cost_tier, *, model=None):
-            return price_micros(tokens, cost_tier, model=model)
+        def price(self, tokens, cost_tier, *, model=None, input_tokens=0, output_tokens=0):
+            return price_micros(
+                tokens, cost_tier, model=model,
+                input_tokens=input_tokens, output_tokens=output_tokens,
+            )
 
         async def reconcile(self, *a, **k):
             return None
@@ -144,8 +147,11 @@ async def test_a_zero_token_run_is_genuinely_free():
     class _Cost:
         has_prices = False
 
-        def price(self, tokens, cost_tier, *, model=None):
-            return price_micros(tokens, cost_tier, model=model)
+        def price(self, tokens, cost_tier, *, model=None, input_tokens=0, output_tokens=0):
+            return price_micros(
+                tokens, cost_tier, model=model,
+                input_tokens=input_tokens, output_tokens=output_tokens,
+            )
 
         async def reconcile(self, *a, **k):
             return None

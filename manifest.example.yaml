@@ -94,8 +94,14 @@ models:
   #
   # The KEY is the endpoint's `model:` string above (what the runtime reports),
   # NOT the endpoint id - the `standard` endpoint is priced under its model name.
-  # The kernel meters ONE token count per run (no input/output split), so use a
-  # blended rate rather than the input-only price.
+  #
+  # A rate is EITHER a single number (one blended rate charged on every token) OR
+  # the published rate card's input/output pair. PREFER THE PAIR wherever the
+  # runtime reports a split (Codex does): the two legs commonly differ by more
+  # than 2x, and an agent turn is heavily input-weighted, so one rate set at the
+  # output price over-bills it substantially. A model priced as a pair whose
+  # runtime reports no split is charged on the higher leg - conservative, and
+  # never free.
   #
   # LEAVING THIS UNSET IS NOT NEUTRAL. With no entry for a model, cost falls back
   # to the capability's cost_tier default (boltrig/kernel/cost.py):
@@ -108,7 +114,10 @@ models:
   # has to be set per deployment. Uncomment one line per model you actually route
   # to and replace the illustrative figures with your contracted rates:
   # prices:
-  #   claude-sonnet-4-6: 3.0             # e.g. $3.00 per 1M tokens
+  #   claude-sonnet-4-6: 3.0             # e.g. $3.00 per 1M tokens, one rate
+  #   cerebras/gpt-oss-120b:             # e.g. $0.35 in / $0.75 out per 1M
+  #     input: 0.35
+  #     output: 0.75
   #   Qwen/Qwen2.5-7B-Instruct: 0.0      # self-hosted: no per-token charge
   prices: {}   # EMPTY = every model on the cost-tier fallback above. Fill this in.
 

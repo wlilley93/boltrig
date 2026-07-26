@@ -379,8 +379,17 @@ class Spawner:
                 tenant_id, capability.model_endpoint
             )
             priced_model = ep.model if ep is not None else None
+        # Priced LEG BY LEG when the runtime reported the split. Input and output
+        # differ by more than 2x on the rate cards the fleet bills from, and an
+        # agent turn is heavily input-weighted, so pricing a whole run at the
+        # output rate over-bills it substantially. A runtime that reports no split
+        # (0/0) is priced on the total exactly as before - never at zero.
         actual_micros = self._kernel.cost.price(
-            actual_tokens, capability.cost_tier, model=priced_model
+            actual_tokens,
+            capability.cost_tier,
+            model=priced_model,
+            input_tokens=int(result.input_tokens or 0),
+            output_tokens=int(result.output_tokens or 0),
         )
         await self._kernel.cost.reconcile(
             tenant_id,

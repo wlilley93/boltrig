@@ -28,6 +28,10 @@ class AgentResult:
       * ``summary`` - a short human-readable line for audit / observability.
       * ``tokens_used`` / ``cost_micros`` - accounting attributed to this run
         (US-COST-01); zero for the deterministic script runtime.
+      * ``input_tokens`` / ``output_tokens`` - the runtime's split of
+        ``tokens_used`` when it reports one, so the accountant can price each
+        leg at its own rate. Optional and additive: 0/0 means "this runtime
+        cannot split its usage" and prices exactly as it did before.
       * ``new_work_items`` - any follow-on work the run discovered (J/EXE);
         department heads cap how many of these a single step may emit
         (US-EXE-04).
@@ -40,6 +44,19 @@ class AgentResult:
     cost_micros: int = 0
     new_work_items: list[Any] = field(default_factory=list)
     degraded: bool = False
+    # The input/output split of ``tokens_used`` when the runtime reports one
+    # (Codex does, on `thread/tokenUsage/updated`). APPENDED and defaulting to 0
+    # so every existing runtime, caller and positional construction is untouched;
+    # a 0/0 result is priced at a single rate on the total exactly as before,
+    # never at zero.
+    #
+    # It exists because input and output are NOT the same price: on the rate cards
+    # the fleet bills from they differ by more than 2x (the tenant chat model is
+    # $0.35 in / $0.75 out per 1M tokens), and an agent turn is heavily
+    # input-weighted, so pricing a whole turn at the output rate over-bills it
+    # substantially and trips a hard-stop budget early.
+    input_tokens: int = 0
+    output_tokens: int = 0
 
     @classmethod
     def succeeded(
@@ -50,6 +67,8 @@ class AgentResult:
         tokens_used: int = 0,
         cost_micros: int = 0,
         new_work_items: list[Any] | None = None,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
     ) -> AgentResult:
         """Convenience constructor for a successful run."""
         return cls(
@@ -59,6 +78,8 @@ class AgentResult:
             tokens_used=tokens_used,
             cost_micros=cost_micros,
             new_work_items=new_work_items or [],
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
         )
 
     @classmethod
@@ -70,6 +91,8 @@ class AgentResult:
         prompt: str = "",
         summary: str = "",
         tokens_used: int = 0,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
     ) -> AgentResult:
         """A clearly-marked degraded result (no SDK / no key / backend down, P9).
 
@@ -88,6 +111,8 @@ class AgentResult:
         costing nothing, and the budget was refunded in full, so a tenant could burn
         real money on failing turns and never see it. Callers pass what the runtime
         actually reported; a degrade that genuinely knows nothing still passes 0.
+        The input/output split rides along for the same reason: a paid-for turn is
+        priced leg by leg whether or not it produced a usable answer.
         """
         prompt_bytes = prompt.encode("utf-8")
         return cls(
@@ -100,4 +125,6 @@ class AgentResult:
             summary=summary or f"degraded ({runtime}: {reason})",
             degraded=True,
             tokens_used=max(0, int(tokens_used or 0)),
+            input_tokens=max(0, int(input_tokens or 0)),
+            output_tokens=max(0, int(output_tokens or 0)),
         )

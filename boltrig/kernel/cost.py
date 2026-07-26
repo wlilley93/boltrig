@@ -10,7 +10,9 @@ Cost is priced as tokens x micros-per-token. The price is policy-as-data
 (FR-COST-04, audit M14): a per-model rate from the manifest ``models.prices``
 table wins, and a model with no explicit price falls back to the cost-tier
 default, so a deployment that configures no prices keeps the historical
-behaviour exactly. After a run the ledger is trued-up against ACTUAL usage
+behaviour exactly. A per-model rate is EITHER one number for every token or the
+published rate card's ``{input, output}`` pair, because those two prices are not
+the same number (see ``_rate_pair``). After a run the ledger is trued-up against ACTUAL usage
 (FR-COST-03, audit M14): ``reserve`` debits a pre-run estimate, then ``reconcile``
 applies the signed (actual - estimate) delta so the budget reflects real spend
 rather than the guess.
@@ -37,13 +39,114 @@ _ALERT_FRACTION = 0.8  # pre-emptive alert threshold (US-COST-02)
 # preserves the old static-tier accounting when a deployment sets no prices.
 _TIER_MICROS_PER_TOKEN: dict[str, int] = {"cheap": 1, "standard": 5, "expensive": 25}
 
+# One configured per-model rate: EITHER a single number applied to every token
+# (the historical shape - one blended rate) OR the published rate card's
+# ``{"input": x, "output": y}`` pair. Both are pure data; no provider name, and no
+# behaviour, ever appears in this table.
+Rate = float | Mapping[str, float]
+PriceTable = Mapping[str, Rate]
+
+
+def _as_rate(value: object) -> float | None:
+    """One rate as a float, or ``None`` when it is absent or not a number.
+
+    THE UNIT, stated where it is used: a rate is MICROS PER TOKEN, and that is
+    NUMERICALLY THE SAME NUMBER as the published USD-per-1,000,000-tokens figure.
+    A micro is $0.000001, so $0.35 per 1M tokens = 0.35e-6 USD/token = 0.35
+    micro-USD/token. A rate card number is therefore usable AS WRITTEN - there is
+    no conversion step to get wrong, and none should ever be added here.
+    """
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+
+
+def _rate_pair(rate: object) -> tuple[float, float] | None:
+    """Normalise a configured rate to ``(input_rate, output_rate)`` micros/token.
+
+    WHY THE SPLIT EXISTS: input and output are not the same price. On the rate
+    cards the fleet bills from they differ by MORE THAN 2x (the tenant chat model
+    is $0.35 in / $0.75 out per 1M tokens), and an agent turn is heavily
+    INPUT-weighted - a long composed prompt, a short answer - so charging a whole
+    turn at the output rate over-bills it substantially and trips a hard-stop
+    budget early. Nothing errors; it only shows up on the invoice.
+
+    A SCALAR is the historical shape: the same rate on both legs, which makes the
+    split arithmetic collapse back to ``tokens x rate`` exactly, so a deployment
+    that configures one number per model keeps working unchanged. In a MAPPING, a
+    leg that is missing or unparseable falls back to the OTHER leg rather than to
+    zero - a silently free leg is exactly the bug this path exists to prevent.
+    ``None`` means 'no usable rate here' and the caller falls back to the tier.
+    """
+    if isinstance(rate, Mapping):
+        input_rate = _as_rate(rate.get("input"))
+        output_rate = _as_rate(rate.get("output"))
+        if input_rate is None and output_rate is None:
+            return None
+        if input_rate is None:
+            input_rate = output_rate
+        elif output_rate is None:
+            output_rate = input_rate
+        return (float(input_rate), float(output_rate))
+    value = _as_rate(rate)
+    return None if value is None else (value, value)
+
+
+def _priced_micros(
+    rates: tuple[float, float], tokens: int, input_tokens: int, output_tokens: int
+) -> int:
+    """Apply ``(input_rate, output_rate)`` to one run's reported usage.
+
+    Every token is billed EXACTLY ONCE. Each leg the runtime reported is billed at
+    its own rate, and whatever the split does not account for is billed at the
+    higher leg. That remainder is normally zero - and it is the WHOLE total when
+    the runtime reported no split at all, which is what makes an unknown split
+    fall back to single-rate pricing on the total instead of billing the run as
+    FREE. A silent zero is worse than an imprecise charge: it also bypasses the
+    budget gate, because a cost of zero always passes a ceiling check.
+
+    Tokens are floored at 0 (a negative usage report is never a credit) and the
+    product is ROUNDED, not truncated: micros stay the integer STORAGE unit, only
+    the rate is fractional, and always flooring would under-bill every run by up
+    to a micro.
+    """
+    input_rate, output_rate = rates
+    billed_input = max(0, int(input_tokens or 0))
+    billed_output = max(0, int(output_tokens or 0))
+    unattributed = max(0, max(0, int(tokens or 0)) - billed_input - billed_output)
+    # Unattributed tokens are billed at the INPUT rate, not the higher leg.
+    #
+    # This was `max(input_rate, output_rate)` and adversarial review killed it. Only the Codex
+    # runtime reports a split today; every other producer sets a bare total, so `unattributed`
+    # is the WHOLE run there and the premium leg priced all of it. On Anthropic's rate card
+    # ($3 in / $15 out per 1M) that is a 3.84x OVER-bill - worse than the tier fallback this
+    # function exists to replace. Latent rather than live, because those runtimes sit behind
+    # BOLTRIG_ENABLE_LEGACY_RUNTIMES (default OFF, decision 0012) - but VJS-PC 20 cond.(1)
+    # requires a non-Codex leaf stay RE-WIRABLE, so it would have gone live the moment anyone
+    # exercised that seam, and silently.
+    #
+    # The input rate is the honest estimator when the split is unknown: an agent turn is heavily
+    # input-weighted (a long composed prompt plus tool schemas, a short answer), so it is the
+    # closer of the two. It also errs toward UNDER-billing, which is the right direction to be
+    # wrong with a client - an over-charge you have to refund costs more than trust.
+    return max(0, round(
+        billed_input * input_rate
+        + billed_output * output_rate
+        + unattributed * input_rate
+    ))
+
 
 def price_micros(
     tokens: int,
     cost_tier: str,
     *,
     model: str | None = None,
-    prices: Mapping[str, float] | None = None,
+    prices: PriceTable | None = None,
+    input_tokens: int = 0,
+    output_tokens: int = 0,
 ) -> int:
     """Cost in micros for a run of ``tokens`` tokens (FR-COST-04, audit M14).
 
@@ -53,20 +156,24 @@ def price_micros(
     ever appears in the logic. Tokens are floored at 0 (a negative usage report is
     never a credit).
 
+    ``input_tokens`` / ``output_tokens`` are the runtime's split of ``tokens``
+    when it reports one (Codex does, on ``thread/tokenUsage/updated``). They are
+    OPTIONAL and additive: 0/0 with a total present prices exactly as before, at a
+    single rate on the total.
+
     THE RATE MAY BE FRACTIONAL. It used to be coerced with ``int(rate)``, so the
     finest price expressible was 1 micro/token = $1.00 per million - and every real
     model we route to is cheaper than that. Configuring an honest rate therefore
     made billing WORSE, not better: 0.35 truncated to 0 and the model priced as
-    FREE, which is why the tier fallback had never been replaced. The product is
-    rounded (not truncated) because always flooring would systematically under-bill
-    by up to a micro per run. Micros stay the integer STORAGE unit; only the rate
-    gained precision."""
-    rate: float | None = None
+    FREE, which is why the tier fallback had never been replaced. Micros stay the
+    integer STORAGE unit; only the rate gained precision."""
+    rates: tuple[float, float] | None = None
     if prices is not None and model is not None:
-        rate = prices.get(model)
-    if rate is None:
-        rate = _TIER_MICROS_PER_TOKEN.get(cost_tier, 5)
-    return max(0, round(max(0, int(tokens)) * float(rate)))
+        rates = _rate_pair(prices.get(model))
+    if rates is None:
+        tier = float(_TIER_MICROS_PER_TOKEN.get(cost_tier, 5))
+        rates = (tier, tier)
+    return _priced_micros(rates, tokens, input_tokens, output_tokens)
 
 
 class CostAccountant:
@@ -75,17 +182,18 @@ class CostAccountant:
         store: Store,
         alert: AlertFn | None = None,
         *,
-        prices: Mapping[str, float] | None = None,
+        prices: PriceTable | None = None,
     ) -> None:
         self._store = store
         self._alert = alert
-        # per-model price table (model name -> micros per token), policy-as-data
-        # from the manifest (FR-COST-04). Empty => every model falls back to its
-        # cost-tier default, i.e. the historical static-tier behaviour.
-        self._prices: dict[str, int] = dict(prices or {})
+        # per-model price table (model name -> micros per token, or the rate
+        # card's {input, output} pair of them), policy-as-data from the manifest
+        # (FR-COST-04). Empty => every model falls back to its cost-tier default,
+        # i.e. the historical static-tier behaviour.
+        self._prices: dict[str, Rate] = dict(prices or {})
 
     # --- pricing (policy-as-data, FR-COST-04) ---------------------------------
-    def set_prices(self, prices: Mapping[str, float]) -> None:
+    def set_prices(self, prices: PriceTable) -> None:
         """Install the per-model price table (manifest seeding, apply_manifest)."""
         self._prices = dict(prices or {})
 
@@ -94,10 +202,27 @@ class CostAccountant:
         """True when a per-model price table is configured (else pure tier fallback)."""
         return bool(self._prices)
 
-    def price(self, tokens: int, cost_tier: str, *, model: str | None = None) -> int:
+    def price(
+        self,
+        tokens: int,
+        cost_tier: str,
+        *,
+        model: str | None = None,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
+    ) -> int:
         """Cost in micros for ``tokens`` at this tenant's configured prices
-        (FR-COST-04). Per-model rate wins; falls back to the ``cost_tier`` default."""
-        return price_micros(tokens, cost_tier, model=model, prices=self._prices)
+        (FR-COST-04). Per-model rate wins; falls back to the ``cost_tier`` default.
+        Each leg of a reported input/output split is priced at its own rate; a
+        runtime that reports no split (0/0) is priced on the total as before."""
+        return price_micros(
+            tokens,
+            cost_tier,
+            model=model,
+            prices=self._prices,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+        )
 
     async def reserve(
         self, tenant_id: str, scope_ids: list[str], tokens: int, micros: int

@@ -87,7 +87,11 @@ class ModelsConfig:
     # tier micros as the source of truth for cost accounting.
     # Micros per token, FRACTIONAL: every model we route to is cheaper than
     # 1 micro/token ($1.00/M), so an integer rate could not express any of them.
-    prices: Mapping[str, float] = field(default_factory=dict)
+    # A rate is EITHER that single number (one blended rate for every token) OR
+    # the published rate card's {input, output} pair - those two prices are not
+    # the same number, and an input-heavy agent turn billed at the output rate
+    # over-bills substantially. See _parse_price and boltrig/kernel/cost.py.
+    prices: Mapping[str, float | Mapping[str, float]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -438,6 +442,53 @@ def _parse_identity(raw: Mapping[str, Any], tenant_id: str) -> IdentityConfig:
     )
 
 
+def _parse_rate(value: Any) -> float | None:
+    """One non-negative rate as a float, or None when absent/malformed/negative.
+
+    FLOAT, never int. Coercing with int() here was half of a two-part bug (
+    price_micros int()-ed it again): every model we route to costs LESS than 1
+    micro/token, so an honest rate like 0.35 truncated to 0 and priced the model
+    FREE. A NEGATIVE rate is dropped - a price must never become a credit.
+    """
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed >= 0 else None
+
+
+def _parse_price(rate: Any) -> float | dict[str, float] | None:
+    """One entry of the per-model price table, or None to drop it (FR-COST-04).
+
+    Two shapes, both policy-as-data:
+      * a SCALAR - one rate for every token (the historical shape), and
+      * a MAPPING - the published rate card's ``{input, output}`` pair, because
+        those are not the same price (they commonly differ by more than 2x) and
+        an agent turn is heavily input-weighted, so billing the whole turn at the
+        output rate over-bills it substantially.
+
+    THE UNIT is micros per token, which IS the published USD-per-1M-tokens figure:
+    a micro is $0.000001, so $0.35 per 1,000,000 tokens = 0.35 micros/token. Copy
+    the rate card number in unchanged; there is no conversion to get wrong.
+
+    A mapping keeps whichever legs parse; ``cost.py`` fills a missing leg from the
+    other one rather than from zero. An entry with NO usable leg is dropped whole,
+    so the model falls back to its cost tier instead of billing nothing at all -
+    a silent zero also bypasses the budget gate, since a cost of zero always
+    passes a ceiling check.
+    """
+    if isinstance(rate, Mapping):
+        legs = {
+            leg: parsed
+            for leg in ("input", "output")
+            if (parsed := _parse_rate(rate.get(leg))) is not None
+        }
+        return legs or None
+    return _parse_rate(rate)
+
+
 def _parse_models(raw: Mapping[str, Any], tenant_id: str) -> ModelsConfig:
     endpoints = tuple(
         ModelEndpoint(
@@ -451,22 +502,15 @@ def _parse_models(raw: Mapping[str, Any], tenant_id: str) -> ModelsConfig:
         )
         for e in (raw.get("endpoints") or [])
     )
-    # Per-model price table (FR-COST-04): {model_name: micros_per_token}. Values
-    # are coerced to int; a malformed entry is dropped rather than failing load, so
-    # a bad price never blocks boot (the model just falls back to its tier default).
-    prices: dict[str, float] = {}
+    # Per-model price table (FR-COST-04): {model_name: micros_per_token, or the
+    # rate card's {input, output} pair of them}. A malformed entry is dropped
+    # rather than failing load, so a bad price never blocks boot (the model just
+    # falls back to its cost-tier default). See _parse_price for both shapes.
+    prices: dict[str, float | dict[str, float]] = {}
     for name, rate in (raw.get("prices") or {}).items():
-        try:
-            # FLOAT, not int. Coercing here was the other half of the same bug as
-            # price_micros: an honest rate like 0.35 micros/token ($0.35 per million)
-            # truncated to 0 and priced the model FREE, so a deployment that tried to
-            # configure real prices billed nothing. A NEGATIVE rate is dropped - a
-            # price must never become a credit.
-            parsed = float(rate)
-            if parsed >= 0:
-                prices[str(name)] = parsed
-        except (TypeError, ValueError):
-            continue
+        parsed_price = _parse_price(rate)
+        if parsed_price is not None:
+            prices[str(name)] = parsed_price
     return ModelsConfig(
         endpoints=endpoints,
         default=raw.get("default"),
