@@ -404,11 +404,11 @@
       "expires": "2026-12-31"
     },
     "boltrig/store/base.py": {
-      "max_file_lines": 658,
+      "max_file_lines": 666,
       "max_function_lines": 15,
       "over_limit_functions": [],
       "owner": "store-maintainers",
-      "reason": "Split the store protocol into domain protocols while preserving one composed compatibility contract. 2026-07-26: the conditional lease-fenced work-item write and the copy-on-read parity repair ([2026] VJS-CC-BOLTRIG-WORK-ITEM-LEASE-FENCE-001 D1/D6). The memory store previously handed callers the LIVE row, so any conditional write compared a stored object against itself and always agreed.",
+      "reason": "Split the store protocol into domain protocols while preserving one composed compatibility contract. 2026-07-26: the conditional lease-fenced work-item write and the copy-on-read parity repair ([2026] VJS-CC-BOLTRIG-WORK-ITEM-LEASE-FENCE-001 D1/D6). The memory store previously handed callers the LIVE row, so any conditional write compared a stored object against itself and always agreed. 2026-07-26: +8 comment lines for D9 of the same order, which requires the honest limit to be recorded AT the contract: the fence makes the RECORD single-writer and does NOT make execution exactly-once. A worker that lost its lease is still running; the fence only stops it landing its answer on the winner's. Recorded here rather than in a doc because the place a later reader would upgrade \"single-writer\" into \"exactly-once\" is this declaration.",
       "expires": "2026-12-31"
     },
     "boltrig/store/memory.py": {

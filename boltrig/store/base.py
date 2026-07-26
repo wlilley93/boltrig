@@ -157,6 +157,14 @@ class Store(BudgetPolicyContract, IdempotencyStoreContract, GuardedWritesContrac
     # one minted at claim and carried to the writing body, never one that body
     # re-read - a CAS whose expectation is re-derived at body start has the same
     # defect as no CAS at all.
+    #
+    # D9, the honest limit: this makes the RECORD single-writer. It does NOT make
+    # execution exactly-once. A worker that lost its lease is still RUNNING - it
+    # has already called out to models, adapters and the world - and all this
+    # fence does is stop it landing its answer on top of the winner's. Anything
+    # relying on a step running once must be idempotent in its own right. Do not
+    # let a later docstring, doc or release note upgrade "single-writer" into
+    # "exactly-once": the two are not the same guarantee and never will be.
     async def update_work_item_if_leased(
         self,
         item: WorkItem,
