@@ -47,11 +47,6 @@
       "owner": "identity-maintainers",
       "expires": "2026-11-30",
       "reason": "Not code-testable and correctly so: it is a PRINCIPAL GATE on a live cutover or an external credential. Nothing in this repository can decide whether the Principal has given the go, and a test that claimed to would be the false claim this gate exists to stop. Enforced by the deploy record, not by CI."
-    },
-    "ORG-WORKSPACE-TENANCY-001:D9": {
-      "owner": "identity-maintainers",
-      "expires": "2026-11-30",
-      "reason": "A DELIVERY-PROCESS directive, not a property of the running system: 'copy only the opbox auth/tenancy core, never its domain models, and deliver in phases, reconciling with COUNTY 7'. Two of its three clauses are about how the work was sequenced and are spent - the phases happened and the reconciliation with COUNTY 7 is what the first-party auth tests now prove. The durable clause is 'never its domain models', which an architecture check could bind by asserting no opbox domain model reaches this tree. That check is not written, and inventing a keyword list for it without reading the opbox model surface would produce a test that passes for the wrong reason."
     }
   }
 }

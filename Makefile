@@ -36,7 +36,7 @@ RELEASE_VALIDATE_IMAGES_ENV ?= tests/fixtures/release-images.env
 RELEASE_PROFILES ?= --profile backup
 
 .DEFAULT_GOAL := help
-.PHONY: help gate-status up down logs test lint architecture structure codex-protocol unwired-claims prose-references refresh-canon-citations gate-coverage health-claims order-directives typecheck check python-quality ui-install ui-quality site-install site-quality ui-e2e compose-validate release-validate release-up doctor-fixture migration-parity python-audit sast iac-scan secret-scan actionlint security-source quality live-check lockfile-policy dependency-audit smoke invariants doctor migrate secure-up backup backup-schedule restore
+.PHONY: help gate-status up down logs test lint architecture structure codex-protocol unwired-claims prose-references refresh-canon-citations refresh-opbox-surface gate-coverage health-claims order-directives typecheck check python-quality ui-install ui-quality site-install site-quality ui-e2e compose-validate release-validate release-up doctor-fixture migration-parity python-audit sast iac-scan secret-scan actionlint security-source quality live-check lockfile-policy dependency-audit smoke invariants doctor migrate secure-up backup backup-schedule restore
 
 help: ## List the available targets
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -93,8 +93,12 @@ prose-references: ## Every path, test id, make target, env var and order citatio
 # here; the gate resolves against the committed file, never against a checkout on
 # one machine, which is how the first cut passed locally and reddened CI.
 CANON_REPO ?= $(HOME)/Projects/vibe-justice-system
+OPBOX_REPO ?= $(HOME)/Projects/opbox-prod
 refresh-canon-citations: ## Re-vendor .vjs/canon-citations.txt from the canon register
 	$(PY) scripts/refresh_canon_citations.py --canon $(CANON_REPO)
+
+refresh-opbox-surface: ## Re-vendor tests/fixtures/opbox-model-surface.txt from the opbox schema
+	$(PY) scripts/refresh_opbox_surface.py --opbox $(OPBOX_REPO)
 
 gate-coverage: ## Every compose manifest is validated and every `quality` component runs in CI
 	$(PY) scripts/check_gate_coverage.py
