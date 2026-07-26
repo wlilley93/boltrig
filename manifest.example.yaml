@@ -110,6 +110,15 @@ models:
   # unpriced deployment therefore systematically OVER-BILLS and trips its
   # hard-stop budgets early, and nothing errors, so it shows up on the invoice.
   #
+  # THE KEY IS THE MODEL NAME; THE RATE IS THE PROVIDER'S. These come apart, and the
+  # gap is expensive. The same model served by two providers has two different rate
+  # cards: gpt-oss-120b is $0.15/$0.60 per 1M on Groq but $0.35/$0.75 on Cerebras, so
+  # pricing a Cerebras-routed tenant off the Groq card UNDER-bills by 2.3x. The runtime
+  # reports a bare model name and says nothing about who served it, so the key here
+  # cannot tell you the rate - only your own routing can. Look up the rate for the
+  # provider this deployment's `base_url` actually points at, and say which one it was
+  # in a comment beside the entry, because the next reader cannot derive it.
+  #
   # No rate ships as a default: the real number is your provider contract, so it
   # has to be set per deployment. Uncomment one line per model you actually route
   # to and replace the illustrative figures with your contracted rates:
