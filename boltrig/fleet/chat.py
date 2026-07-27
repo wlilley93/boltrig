@@ -28,6 +28,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
 from boltrig.config.manifest import ChatConfig
+from boltrig.fleet.result import reply_text
 from boltrig.kernel.held_call import sweep_run_credentials_if_settled
 from boltrig.models import (
     EMPTY_GRANTS,
@@ -813,15 +814,15 @@ def build_turn_executor(
             result = await spawner.spawn(
                 tenant_id, task, turn_skills, {}, ctx, partial_on_budget=True,
             )
-            summary = result.get("summary") or "Done."
+            reply = reply_text(result)
             # Honesty about degradation (US-FLT-07): the flag persists on the
             # turn's work item, and a degraded echo is never presented as
             # ordinary success - the reply carries the flag and a visible prefix.
             item.degraded = bool(result.get("degraded"))
             if item.degraded:
-                if not summary.startswith("degraded"):
-                    summary = f"(degraded) {summary}"
-                relay.publish(run_id, {"type": "text_delta", "delta": summary, "degraded": True})
+                if not reply.startswith("degraded"):
+                    reply = f"(degraded) {reply}"
+                relay.publish(run_id, {"type": "text_delta", "delta": reply, "degraded": True})
             else:
                 # Streaming runtimes (Pi, etc.) already emit the reply as
                 # text_delta events. Don't append the final summary again, or
@@ -830,7 +831,7 @@ def build_turn_executor(
                     e.get("type") == "text_delta" for e in relay.snapshot(run_id)
                 )
                 if not already_text:
-                    relay.publish(run_id, {"type": "text_delta", "delta": summary})
+                    relay.publish(run_id, {"type": "text_delta", "delta": reply})
             # Two-lane hand-off (D5/D7): the turn itself rode the direct-spawn
             # fast lane; its discovered follow-on work is filed as PENDING
             # children (owner/department unset) so the org lane pumps it onward.

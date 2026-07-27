@@ -128,3 +128,24 @@ class AgentResult:
             input_tokens=max(0, int(input_tokens or 0)),
             output_tokens=max(0, int(output_tokens or 0)),
         )
+
+
+def reply_text(result: dict) -> str:
+    """The USER-FACING reply from a spawn result: the runtime's output text.
+
+    ``summary`` is only the fallback, and the distinction above is load-bearing.
+    It is documented there as "a short human-readable line for audit /
+    observability", and the codex lane builds it as ``text[:256]``
+    (codex_runtime.py:304). Using it as the reply capped EVERY chat answer at 256
+    characters, mid-word, with status=ok and no error anywhere - so short answers
+    looked perfect while substantive ones were decapitated.
+
+    Lives here, beside the field contract it turns on, rather than at the chat
+    seam: three other runtimes slice identically (runtime.py:396 and :421,
+    opencode_runtime.py:117 and :121), and a caller that wants a reply should not
+    have to know that. Degraded results carry no ``output["text"]`` (only
+    ``output["_degraded"]``), so they fall through to ``summary`` unchanged.
+    """
+    output = result.get("output")
+    text = output.get("text") if isinstance(output, dict) else None
+    return text or result.get("summary") or "Done."

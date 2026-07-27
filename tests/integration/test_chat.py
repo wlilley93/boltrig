@@ -388,3 +388,81 @@ def test_http_steer_returns_202_queued_and_stream_carries_both_turns():
     assert r1.text.count("message_start") == 2
     assert "reply:steer" in r1.text
     assert calls == ["first", "steer"]
+
+
+@pytest.mark.invariant("US-CONV-05")
+async def test_a_long_reply_is_persisted_in_full_not_capped_at_the_summary_bound():
+    """The chat reply is the runtime's OUTPUT TEXT, never its `summary` line.
+
+    Live defect, Classical Visas, found 2026-07-27. Every assistant message on the
+    tenant was exactly 256 characters, cut mid-word: 12 messages at exactly 256, 29
+    under it, and NOT ONE had ever exceeded it. It was silent - status=ok,
+    finish_reason=stop, no error anywhere - so a short answer looked perfect and
+    every substantive one was decapitated. 29% of that client's answers.
+
+    The cause was a field confusion, not a bound that was too small.
+    `AgentResult.summary` is contractually "a short human-readable line for audit /
+    observability" (result.py:28) and the codex lane builds it as `text[:256]`
+    (codex_runtime.py:304). chat.py used it as the user-facing reply. The full
+    answer was in `output["text"]` the entire time.
+
+    Asserted at 300 chars because the bound was 256: a test written at 100 would
+    have passed against the defect. The number is chosen to straddle the specific
+    value that was wrong.
+    """
+    store, relay = InMemoryStore(), EventRelay()
+    long_text = "The full answer. " * 30  # 510 chars, comfortably over the 256 bound
+
+    async def spawn(tenant_id, task, skills, prefer, context, *,
+                    partial_on_budget=True, grant_ceiling=None):
+        # Mirrors the codex lane: full text in output, a short line in summary.
+        return {"output": {"runtime": "codex_app_server", "text": long_text},
+                "summary": long_text[:256]}
+
+    kernel = types.SimpleNamespace(store=store)
+    chat = ChatService(
+        store, relay,
+        turn_executor=build_turn_executor(kernel, types.SimpleNamespace(spawn=spawn),
+                                          continuity=True),
+    )
+    await _collect(
+        chat.handle_turn(tenant_id=T, user_id="alice", role="engineer", message="explain")
+    )
+
+    convs = await store.list_conversations(T, "alice")
+    msgs = await store.list_messages(T, convs[0].id)
+    assistant = msgs[1]
+    assert assistant.content == long_text, (
+        f"reply was truncated to {len(assistant.content)} chars "
+        f"(expected {len(long_text)}); the summary bound is leaking into the reply"
+    )
+    assert len(assistant.content) > 256
+
+
+@pytest.mark.invariant("US-FLT-07")
+async def test_a_degraded_turn_still_falls_back_to_the_summary_line():
+    """The degrade branch has no output["text"], so it must keep using `summary`.
+
+    Guards the fix above from over-reaching: a degraded result carries only
+    output["_degraded"] (result.py:120-125), and its honesty prefix must survive.
+    """
+    store, relay = InMemoryStore(), EventRelay()
+
+    async def spawn(tenant_id, task, skills, prefer, context, *,
+                    partial_on_budget=True, grant_ceiling=None):
+        return {"output": {"_degraded": True}, "summary": "backend unavailable",
+                "degraded": True}
+
+    kernel = types.SimpleNamespace(store=store)
+    chat = ChatService(
+        store, relay,
+        turn_executor=build_turn_executor(kernel, types.SimpleNamespace(spawn=spawn),
+                                          continuity=True),
+    )
+    await _collect(
+        chat.handle_turn(tenant_id=T, user_id="alice", role="engineer", message="explain")
+    )
+    convs = await store.list_conversations(T, "alice")
+    msgs = await store.list_messages(T, convs[0].id)
+    assert msgs[1].content.startswith("(degraded)")
+    assert "backend unavailable" in msgs[1].content
