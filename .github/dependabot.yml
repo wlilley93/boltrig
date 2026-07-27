@@ -102,12 +102,31 @@ updates:
       - dependencies
       - ci
 
+  # `directory: /` was here and had NEVER produced anything: there is no
+  # Dockerfile at the repo root, so every run aborted with
+  #   ERROR: No Dockerfiles nor Kubernetes YAML found in /
+  # It failed 100% of its runs, silently, because a failed Dependabot job is not
+  # a failed CI check and nothing was reading its verdict. The Dockerfiles the
+  # repository actually ships live under services/ and deploy/, so it is pointed
+  # at the ones that were uncovered.
   - package-ecosystem: docker
-    directory: /
+    directory: /services/channel_gateway
     schedule:
       interval: weekly
       day: monday
       time: "07:00"
+      timezone: Europe/London
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - containers
+
+  - package-ecosystem: docker
+    directory: /services/channel_gateway/whatsapp_bridge
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:05"
       timezone: Europe/London
     open-pull-requests-limit: 5
     labels:

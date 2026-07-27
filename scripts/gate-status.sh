@@ -44,12 +44,34 @@ short="${sha:0:8}"
 # The LATEST completed run per workflow for that exact sha. Latest matters: a
 # re-run turns a red commit green, and only the most recent verdict is the
 # standing one.
+#
+# TWO CORRECTIONS, 2026-07-27, both of which had this script lying in a way that
+# is worse than not having it:
+#
+#   1. It grouped by `.name`, the run's DISPLAY TITLE, not by workflow. For the
+#      push-triggered gate those coincide, so it looked right. For Dependabot they
+#      do not: every update job is titled "docker in /. - Update #1487545158", so
+#      each became its own "workflow" row and any failed dependency job printed
+#      GATE RED on a commit whose ci and security runs were both green. Observed
+#      exactly that on main@c35c233d.
+#
+#   2. Dependabot runs are not a verdict about the commit at all. A dependency
+#      updater failing to resolve a version says nothing about whether the tree
+#      is sound, and a gate that cannot tell those apart teaches you to ignore it
+#      - which is precisely the failure this script was written to prevent, since
+#      the whole point is to notice a red main that a bypass message hid.
+#
+# So: filter to `push` (the event branch protection gates) and group by
+# workflowName. A workflow_dispatch re-run keeps its original `push` event, so
+# re-runs are still counted.
 rows="$(gh run list --limit 40 \
-        --json name,status,conclusion,headSha,createdAt \
-        --jq "[.[] | select(.headSha == \"$sha\") | select(.status == \"completed\")]
-              | group_by(.name)
+        --json workflowName,event,status,conclusion,headSha,createdAt \
+        --jq "[.[] | select(.headSha == \"$sha\")
+                   | select(.event == \"push\")
+                   | select(.status == \"completed\")]
+              | group_by(.workflowName)
               | map(sort_by(.createdAt) | last)
-              | .[] | \"\(.conclusion)\t\(.name)\"" 2>/dev/null || true)"
+              | .[] | \"\(.conclusion)\t\(.workflowName)\"" 2>/dev/null || true)"
 
 if [ -z "$rows" ]; then
     # No verdict is NOT a pass. A commit whose checks never ran, or were
