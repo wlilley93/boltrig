@@ -13,6 +13,22 @@ updates:
         update-types:
           - minor
           - patch
+    # pydantic-core is NOT independently bumpable. `pydantic` pins its core
+    # EXACTLY (pydantic==2.13.4 requires pydantic-core==2.46.4), so a PR raising
+    # only the core produces a lock pip cannot resolve at all:
+    #
+    #   ERROR: Cannot install -r requirements-dev-lock.txt (line 1950) and
+    #   pydantic-core==2.47.0 because these package versions have conflicting
+    #   dependencies.
+    #
+    # That was PR #113, a 34-package group made unmergeable by one line, and it
+    # would have come back every Monday. Ignoring the core does not freeze it:
+    # it moves when `pydantic` moves and the lock is RECOMPILED, which is the
+    # only way it can move correctly. Same shape as the aiohttp override that
+    # shipped inert - dependabot edits one line of a lock, and a lock is a
+    # solved system, not a list.
+    ignore:
+      - dependency-name: pydantic-core
     labels:
       - dependencies
       - python
