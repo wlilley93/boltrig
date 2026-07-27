@@ -71,6 +71,17 @@ updates:
       time: "06:45"
       timezone: Europe/London
     open-pull-requests-limit: 5
+    # Grouped, unlike the default, because some actions MUST move in lockstep and
+    # arrive un-mergeable otherwise. codeql-action/init and codeql-action/analyze
+    # 4.37.0 -> 4.37.3 came as two PRs on 2026-07-27 and each failed with the mirror
+    # of the same error: whichever half was bumped ran a config the other half did
+    # not understand. Neither could ever go green alone, so both sat open until
+    # somebody noticed they were one change wearing two numbers.
+    groups:
+      actions-minor-patch:
+        update-types:
+          - minor
+          - patch
     labels:
       - dependencies
       - ci
@@ -107,6 +118,17 @@ updates:
       time: "07:30"
       timezone: Europe/London
     open-pull-requests-limit: 3
+    # nginx is deliberately pinned to the STABLE branch (1.30.x), not mainline.
+    # Measured 2026-07-27: nginx 1.30.4 and 1.31.3 shipped the same day and fix the
+    # identical three advisories (CVE-2026-42533, CVE-2026-60005, CVE-2026-56434),
+    # so the mainline bump dependabot kept proposing bought no security at all and
+    # cost the stable branch's slower-moving surface. Patch updates within 1.30.x
+    # still arrive; a branch move needs a person.
+    ignore:
+      - dependency-name: nginx
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
     labels:
       - dependencies
       - containers
