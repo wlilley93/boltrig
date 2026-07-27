@@ -71,7 +71,16 @@ function Grid(): JSX.Element {
           ROLES.slice(0, 4).map((role, i) => {
             const agent = {
               id: `${role}-${i}`, name: role, role, initials: role.slice(0, 2).toUpperCase(),
-              color: "#4C6FFF", dept: "", status, snippet: "", time: "", tier: 1, history: [],
+              // A TOKEN, not a hex literal. semanticTokens.test.ts caught the raw value here and
+              // was right to: a raw colour in a preview is still a raw colour, and the point of
+              // this page is to show what the product renders. A fixture painting itself
+              // off-system shows a body the product cannot produce.
+              //
+              // The offending value is deliberately NOT quoted in this comment. The first fix
+              // named it, and the gate went red again on the prose explaining the fix - the
+              // scanner reads comments. That is the same trap opbox hit, where a token was
+              // reported as consumed by the sentence explaining that nothing consumed it.
+              color: "var(--chat-accent)", dept: "", status, snippet: "", time: "", tier: 1, history: [],
             } as ChatAgent;
             return (
               <div key={`${status}-${role}`} style={{ textAlign: "center" }}>
