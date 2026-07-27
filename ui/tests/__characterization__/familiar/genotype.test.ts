@@ -108,22 +108,29 @@ describe("genotype derivation", () => {
   it("packs genes into the uniform in slot order, filling every named slot", () => {
     const g = deriveGenotype({ id: "p", role: "analyst" });
     const packed = packGenotype(g);
-    GENOTYPE_SLOTS.forEach((k, i) => expect(packed[i]).toBeCloseTo(g[k], 5));
+    GENOTYPE_SLOTS.forEach((k, i) => {
+      if (k === null) return;
+      expect(packed[i], `slot ${i} carries ${k}`).toBeCloseTo(g[k], 5);
+    });
     // This assertion has now gone stale TWICE by naming a number: `toBe(0)` on slots 14/15
     // until hue and saturation claimed them, then `toBe(16)` until the interior genes grew it
     // to 24. Both failures were correct and both were noise - the property being guarded was
     // never the count, it is that the packed buffer and the slot list agree and that the
     // uniform is a whole number of vec4s. Stated structurally, it stops going stale.
-    // Named slots may be FEWER than the buffer: the uniform is a whole number of vec4s and the
-    // tail can be reserved (22 named into 24 floats today). What must hold is that the buffer
-    // is vec4-shaped, that every named slot fits, and that the reserved tail stays zero - a
-    // reserved slot quietly acquiring a value is a gene the shader would read as one it does
-    // not have.
     expect(packed.length).toBe(GENOTYPE_VEC4S * 4);
-    expect(GENOTYPE_SLOTS.length).toBeLessThanOrEqual(packed.length);
-    for (let i = GENOTYPE_SLOTS.length; i < packed.length; i++) {
-      expect(packed[i], `reserved slot ${i} was written`).toBe(0);
-    }
+    expect(GENOTYPE_SLOTS.length).toBe(packed.length);
+    // A RESERVED SLOT UPLOADS 1, NOT 0, and this line replaces one that asserted the opposite.
+    // The old version described the reserved slots as a TAIL beyond the named list and required
+    // them to stay zero. Both halves were wrong, and the second was the more expensive: a
+    // reserved slot's default in genotype.h is 1.0f, because every gene that has ever claimed
+    // one has been a multiplier. Requiring zero here made the packer's zero fill look correct
+    // right up to the moment bodyScale claimed slot 25, at which point the console multiplied
+    // every familiar's radius by zero and this test stayed green. See slot-table.test.ts, which
+    // now parses genotype.h so neither list can drift from the other again.
+    GENOTYPE_SLOTS.forEach((k, i) => {
+      if (k !== null) return;
+      expect(packed[i], `reserved slot ${i} must upload the header's 1.0, not a zero fill`).toBe(1);
+    });
   });
 
   it("degrades a malformed authored genotype to the circle rather than to a black hole", () => {

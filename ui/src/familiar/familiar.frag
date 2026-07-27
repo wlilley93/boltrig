@@ -136,11 +136,19 @@ vec3 aces(vec3 x){ return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14), 0.0, 1
 //   [1] = lobe balance, superM, superN1, superN2
 //   [2] = superN3, superA, superB, aspect
 //   [3] = rotation, twist, (reserved), (reserved)
-uniform vec4 uGene[7];   // 28 slots. 24 tempoBase, 25 bodyScale, 26-27 RESERVED.
+//   [4] = warmth, breathDepth, bumpAmp, silkChurn
+//   [5] = specSharp, haloReach, specGain, fresnelGain
+//   [6] = tempoBase, bodyScale, haloGain, irritationGain
+//   [7] = lightAzimuth, bumpScale, (reserved), (reserved)
+uniform vec4 uGene[8];   // 32 slots, 30 of them claimed. 30-31 RESERVED.
 // moteGain and ejectRate were wired here and REMOVED before shipping: both feed `moteA`, which
 // only reaches `cover`, and cover is discarded wherever uPresence is 1. Swept across the moods
 // that produce motes and ejecta, neither changed a single pixel in any configuration that could
-// be measured. A gene that cannot be shown to do something is the warmth defect again.   // 24 genes; slots 16-21 tune the interior, 22-23 reserved
+// be measured. A gene that cannot be shown to do something is the warmth defect again.
+//
+// EVERY gene below is wired in BOTH theme branches, and both are measured: the bench reads the
+// shader as a file, so `sed 's/FAMILIAR_THEME 2/FAMILIAR_THEME 0/'` into a copy renders the
+// other theme with no rebuild. Wiring a theme nobody can render would be a claim, not a gene.
 
 // --- Cassini oval, polar form -----------------------------------------------
 // Implicit: |p-f1| * |p-f2| = b^2, foci at (+/-a, 0). Solving for r at angle th:
@@ -297,6 +305,16 @@ vec3 saturate3(vec3 c, float k) {
   return clamp(mix(vec3(l), c, k), 0.0, 1.0);
 }
 
+// gene: lightAzimuth. The key light turns about the VIEW axis, so the highlight walks around
+// the limb and can never end up behind the body. At 0 it is upper-left, where it has always
+// been. Only x and y rotate: the light's angle TO the camera is therefore fixed, so the gene
+// changes where the light comes from and never how much of it there is. Both themes call this
+// rather than each spelling the constant out, so the identity cannot differ between them.
+vec3 keyLight(float az) {
+  const vec2 b = vec2(-0.50, 0.62);
+  return normalize(vec3(b.x*cos(az) - b.y*sin(az), b.x*sin(az) + b.y*cos(az), -0.60));
+}
+
 // Convenience wrapper: unpacks uGene so call sites stay readable.
 float bodyDist(vec2 p, float s) {
   return shapeDist(p,
@@ -430,7 +448,7 @@ void main(){
   base = mix(base, sky,     clamp(gWarm,0.0,1.0)*0.6);
   // Identity tint. Slots 14/15 of the genotype, applied here and nowhere else.
   base = saturate3(hueRotate(base, uGene[3].z), 1.0 + uGene[3].w);
-  base = mix(base, magenta, irr*0.70);
+  base = mix(base, magenta, clamp(irr*0.70*uGene[6].w, 0.0, 1.0));   // gene: irritationGain
   base *= mix(vec3(0.90,0.94,1.12), vec3(1.02,0.98,1.06), clamp(uDay,0.0,1.0));
   vec3 hot = mix(base, vec3(0.45,0.75,1.00), 0.40 + 0.18*lum);
   hot = mix(hot, vec3(1.00,0.30,0.70), irr*0.75);   // irritation floods the highlights too
@@ -439,7 +457,7 @@ void main(){
   float alpha = 0.0;
   // dScreen is computed once, above, where the body's ray origin is derived from it.
   // Two calls would be two chances to disagree.
-  vec3  L = normalize(vec3(-0.50, 0.62, -0.60));
+  vec3  L = keyLight(uGene[7].x);                              // gene: lightAzimuth
   float excite = clamp(val*clamp(uArousal,0.0,1.0)*1.8 - 0.15, 0.0, 1.0);
 
   float near = 0.0;   // cursor proximity drives nothing here
@@ -454,7 +472,7 @@ void main(){
     float face = clamp(dot(n, -rd), 0.0, 1.0);
     float limb = pow(face, 0.55);
 
-    vec3  bq = n*3.4 + vec3(0.0, -t*0.30, 0.0);
+    vec3  bq = n*3.4*uGene[7].y + vec3(0.0, -t*0.30, 0.0);   // gene: bumpScale (frequency, not amplitude)
     float be = 0.40;
     vec3  bump = vec3(vnoise(bq + vec3(be,0,0)) - vnoise(bq - vec3(be,0,0)),
                       vnoise(bq + vec3(0,be,0)) - vnoise(bq - vec3(0,be,0)),
@@ -609,8 +627,8 @@ void main(){
     float fres  = pow(1.0 - face, 3.2);
     float spec  = pow(max(dot(reflect(rd, nb), L), 0.0), 34.0*uGene[5].x);
     float glint = pow(max(dot(reflect(rd, nb), L), 0.0), 140.0);
-    col += base*fres*(0.16 + 0.34*lum + 0.22*soc)*(0.30 + 0.70*diff);
-    col += vec3(0.80,0.85,1.00)*spec*(0.10 + 0.18*lum)*(1.0 - 0.5*fatigue);
+    col += base*fres*(0.16 + 0.34*lum + 0.22*soc)*(0.30 + 0.70*diff)*uGene[5].w;          // gene: fresnelGain
+    col += vec3(0.80,0.85,1.00)*spec*(0.10 + 0.18*lum)*(1.0 - 0.5*fatigue)*uGene[5].z;   // gene: specGain
     col += vec3(0.92,0.94,1.00)*glint*(0.5 + 0.8*lum)*(1.0 - 0.6*fatigue);
     vec3  L2 = normalize(vec3(0.55,-0.30,-0.60));
     float glint2 = pow(max(dot(reflect(rd, nb), L2), 0.0), 180.0);
@@ -682,7 +700,7 @@ void main(){
   ejectCore *= fade;
   float moteA = clamp(moteGlow*0.30 + moteCore + ejectGlow*0.35 + ejectCore, 0.0, 1.0);
   vec3 particleC = mix(vec3(0.55,0.84,1.00), vec3(1.00,0.18,0.55), irr);
-  vec3 outCol = col + base*halo*(0.22 + 0.45*lum + 0.6*uBeat + 0.5*voice + 0.32*portalEnergy)*(1.0 - 0.4*fatigue)
+  vec3 outCol = col + base*halo*(0.22 + 0.45*lum + 0.6*uBeat + 0.5*voice + 0.32*portalEnergy)*(1.0 - 0.4*fatigue)*uGene[6].z   // gene: haloGain
               + base*sonar*(0.5 + 0.5*lum)
               + mix(base, vec3(0.75,0.92,1.00), 0.6)*(moteGlow*0.18 + moteCore*1.35)*(0.8 + 0.4*lum)
               + particleC*(ejectGlow*0.22 + ejectCore*1.55)*(0.7 + 0.5*lum);
@@ -1349,7 +1367,7 @@ void main(){
   base = mix(base, sky,     clamp(gWarm,0.0,1.0)*0.6);
   // Identity tint. Slots 14/15 of the genotype, applied here and nowhere else.
   base = saturate3(hueRotate(base, uGene[3].z), 1.0 + uGene[3].w);
-  base = mix(base, magenta, irr*0.70);
+  base = mix(base, magenta, clamp(irr*0.70*uGene[6].w, 0.0, 1.0));   // gene: irritationGain
   // (The time-of-day tint is gone: colour belongs to boltrig's emotion engine alone. uDay stays in
   // the contract but paints nothing.)
   vec3 hot   = mix(base, vec3(0.40,0.64,1.00), 0.26 + 0.16*lum);   // moonlit, not lit
@@ -1358,7 +1376,7 @@ void main(){
   vec3 col = vec3(0.0);
   float alpha = 0.0;
   float dScreen = bodyDist(uv - centre, scale);
-  vec3  L = normalize(vec3(-0.50, 0.62, -0.60));
+  vec3  L = keyLight(uGene[7].x);                              // gene: lightAzimuth
 
   // curiosity: it notices when your cursor comes near, and leans in. "Near" is measured in BODY
   // RADII, not screen units - docked in the bar it is a 36 px bead, and a fixed screen threshold
@@ -1382,7 +1400,7 @@ void main(){
     float face = clamp(dot(n, -rd), 0.0, 1.0);
     float limb = pow(face, 0.55);
 
-    vec3  bq = n*3.4 + vec3(0.0, -t*0.30, 0.0);
+    vec3  bq = n*3.4*uGene[7].y + vec3(0.0, -t*0.30, 0.0);   // gene: bumpScale (frequency, not amplitude)
     float be = 0.40;
     vec3  bump = vec3(vnoise(bq + vec3(be,0,0)) - vnoise(bq - vec3(be,0,0)),
                       vnoise(bq + vec3(0,be,0)) - vnoise(bq - vec3(0,be,0)),
@@ -1792,8 +1810,8 @@ void main(){
     float fres  = pow(1.0 - face, 3.2);
     float spec  = pow(max(dot(reflect(rd, nb), L), 0.0), 34.0*uGene[5].x);
     float glint = pow(max(dot(reflect(rd, nb), L), 0.0), 140.0);
-    col += base*fres*(0.03 + 0.07*lum + 0.05*soc)*(0.30 + 0.70*diff);   // limb, not an outline
-    col += vec3(0.80,0.85,1.00)*spec*(0.10 + 0.18*lum)*(1.0 - 0.5*fatigue);
+    col += base*fres*(0.03 + 0.07*lum + 0.05*soc)*(0.30 + 0.70*diff)*uGene[5].w;   // limb, not an outline; gene: fresnelGain
+    col += vec3(0.80,0.85,1.00)*spec*(0.10 + 0.18*lum)*(1.0 - 0.5*fatigue)*uGene[5].z;   // gene: specGain
     col += vec3(0.92,0.94,1.00)*glint*(0.5 + 0.8*lum)*(1.0 - 0.6*fatigue);
     alpha = max(alpha, fres*0.5);
   }
@@ -1807,7 +1825,7 @@ void main(){
   float outside = smoothstep(scale*0.985, scale*1.010, dScreen);
   float halo = exp(-max(dScreen - scale, 0.0)*haloK/max(scale,0.02))*outside;
   halo *= smoothstep(scale*1.75, scale*1.02, dScreen);
-  vec3 outCol = col + base*halo*(0.22 + 0.45*lum)*(1.0 - 0.4*fatigue)*(1.0 + near*0.3);
+  vec3 outCol = col + base*halo*(0.22 + 0.45*lum)*(1.0 - 0.4*fatigue)*(1.0 + near*0.3)*uGene[6].z;   // gene: haloGain
 
   // --- FLAME OFF THE RIM, INTO THE VOID ---
   // Actual particles, not a modulated glow: embers are born ON the silhouette at a random angle,

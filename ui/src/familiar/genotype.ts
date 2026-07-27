@@ -25,7 +25,8 @@
  * beside this file pins them.
  */
 
-/** The 14 authored genes, in the uniform's slot order. Names match genotype.h exactly. */
+/** The 30 authored genes, in the uniform's slot order. Names match genotype.h exactly, and
+ *  the test beside this file proves it rather than asserting it. */
 export interface Genotype {
   /** 0 circle, 1 cassini, 2 superformula, 3 blend of 1 and 2 */
   shape: number;
@@ -73,6 +74,19 @@ export interface Genotype {
   tempoBase: number;
   /** overall body size */
   bodyScale: number;
+  /** how hard the specular highlight burns */
+  specGain: number;
+  /** how strongly the rim lights against the background */
+  fresnelGain: number;
+  /** how bright the corona is, independently of how far it reaches */
+  haloGain: number;
+  /** how far into magenta irritation floods the body. Inert wherever irritation is 0 */
+  irritationGain: number;
+  /** where the key light comes from, RADIANS about the view axis. The one additive gene
+   *  in this block: its identity value is 0, not 1 */
+  lightAzimuth: number;
+  /** surface relief FREQUENCY (bumpAmp is its amplitude) */
+  bumpScale: number;
 }
 
 /**
@@ -106,28 +120,56 @@ export const GENOTYPE_DEFAULTS: Genotype = {
   haloReach: 1,
   tempoBase: 1,
   bodyScale: 1,
+  specGain: 1,
+  fresnelGain: 1,
+  haloGain: 1,
+  irritationGain: 1,
+  lightAzimuth: 0,
+  bumpScale: 1,
 };
 
 /** Slot order IS the uniform layout: index i lands in uGene[i/4][i%4]. Reordering re-labels
- *  every gene, so this list is not cosmetic. */
-export const GENOTYPE_SLOTS: ReadonlyArray<keyof Genotype> = [
+ *  every gene, so this list is not cosmetic.
+ *
+ *  THE HOLES ARE LOAD-BEARING. genotype.h pads its table with NULLs so that every gene keeps
+ *  a fixed index as the array grows; this list once dropped them, and the two lists silently
+ *  disagreed from slot 22 onward. tempoBase and bodyScale were uploaded into what the shader
+ *  reads as specGain and fresnelGain, and slots 24 and 25 - which the shader reads AS
+ *  tempoBase and bodyScale - were left at the Float32Array's zero fill. A bodyScale of 0
+ *  collapses the body to nothing: measured against the identity render it changes 73% of
+ *  pixels by up to 232 levels. The console shipped that to both tenants.
+ *
+ *  It is not a list any more, it is a projection of the vendored genotype.h, and the test
+ *  beside this file parses that header and compares index for index. Two lists that must
+ *  agree will not stay agreed by being careful. */
+export const GENOTYPE_SLOTS: ReadonlyArray<keyof Genotype | null> = [
   "shape", "blend", "focal", "cassiniB",
   "lobeBalance", "superM", "superN1", "superN2",
   "superN3", "superA", "superB", "aspect",
   "rotation", "twist", "hue", "saturation",
   "warmth", "breathDepth", "bumpAmp", "silkChurn",
-  "specSharp", "haloReach",
-  "tempoBase", "bodyScale",
+  "specSharp", "haloReach", "specGain", "fresnelGain",
+  "tempoBase", "bodyScale", "haloGain", "irritationGain",
+  "lightAzimuth", "bumpScale", null, null,
 ];
 
-/** Pack a genotype into the 16 floats the shader's `uniform vec4 uGene[4]` expects. */
+/** What an UNCLAIMED slot uploads. genotype.h fills its reserved entries with 1.0f, and a
+ *  Float32Array fills with 0. The difference is invisible until the slot is claimed by a
+ *  MULTIPLIER, at which point every familiar in the fleet silently multiplies that term by
+ *  zero - which is exactly how the bodyScale defect above reached production. */
+const RESERVED_SLOT_DEFAULT = 1;
+
 /** The uniform is `vec4 uGene[GENOTYPE_VEC4S]`; the renderer uploads that many vec4s. Derived
  *  from the slot list so growing the genotype cannot leave an upload writing a prefix. */
-export const GENOTYPE_VEC4S = 7;
+export const GENOTYPE_VEC4S = GENOTYPE_SLOTS.length / 4;
 
 export function packGenotype(g: Genotype): Float32Array {
   const out = new Float32Array(GENOTYPE_VEC4S * 4);
   GENOTYPE_SLOTS.forEach((key, i) => {
+    if (key === null) {
+      out[i] = RESERVED_SLOT_DEFAULT;
+      return;
+    }
     const v = g[key];
     out[i] = Number.isFinite(v) ? v : GENOTYPE_DEFAULTS[key];
   });
@@ -334,6 +376,7 @@ export function deriveGenotype(agent: AgentIdentity): Genotype {
   // practice but is not something to hang determinism on, and the slot list is already the
   // canonical order everything else uses.
   for (const key of GENOTYPE_SLOTS) {
+    if (key === null) continue;   // a reserved slot names no gene
     const range = band.ranges[key];
     if (!range) continue;
     const [lo, hi] = range;
@@ -345,10 +388,11 @@ export function deriveGenotype(agent: AgentIdentity): Genotype {
   }
 
   // AUTHORED BEATS DERIVED, applied last so it wins over every band choice above. Unknown
-  // keys are dropped rather than passed through: the uniform has 14 named slots and writing
-  // past them would silently corrupt a neighbouring gene.
+  // keys are dropped rather than passed through: the uniform's named slots are the whole
+  // vocabulary and writing past them would silently corrupt a neighbouring gene.
   if (agent.familiar) {
     for (const key of GENOTYPE_SLOTS) {
+      if (key === null) continue;
       const v = agent.familiar[key];
       if (typeof v === "number" && Number.isFinite(v)) g[key] = v;
     }
