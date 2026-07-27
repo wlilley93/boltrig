@@ -1,0 +1,23 @@
+{
+  "_comment": [
+    "The Tier 0 ratchet of GOAL-claims-must-be-load-bearing.",
+    "",
+    "load_bearing_no_subject is the count of claims that assert a SECURITY control and name",
+    "nothing a machine can resolve: no code-quoted symbol, no path, no env var. It is where two",
+    "of the eleven original defects lived - the compose comment attributing rate limiting to",
+    "redis while nothing constructed RedisCounter, and the fourteen docstrings saying a",
+    "credential was never logged without naming what made that so.",
+    "",
+    "This number MAY ONLY DECREASE. That is the goal document's own and only success criterion,",
+    "and until this file existed nothing measured it.",
+    "",
+    "Lowering it means giving a claim a resolvable subject, not deleting the claim. Deleting a",
+    "true claim to make a number fall would be the worst possible use of this file, and the",
+    "reason the summary prints the ORDINARY residue beside it is so that rewording a claim to",
+    "dodge the phrase list is visible as a rise on the other side of the ledger."
+  ],
+  "load_bearing_no_subject": 231,
+  "pinned_at": "2026-07-27",
+  "pinned_by": "Lexby, Tier 0 first census",
+  "note": "236 at the first census, 231 after the first decrement. The auth surface's nine keys-only claims rested on nothing but the care of whoever wrote each line; five now name the mechanism they rest on (`_audit`, and the fact that the material is ABSENT from the dict rather than filtered out of it) and all of them are proven by SEC-191, which drives login, failed login and 2FA enrolment and searches the whole audit stream for the password, the session secret, the CSRF token and the otpauth URI. Shown to fail: seeding the login row with the password and the csrf reddens two of the three cases. The third neuters pii.contains_secret and requires no change, so the guarantee cannot quietly become the scrubber's. The first CI run of this gate went red where local was green: the census was walking the filesystem and read docker-compose.override.yml, which is gitignored local development config, so it contributed two rows here and none in CI. The source set is now bounded by `git ls-files`, so anything untracked is invisible by construction. A gate measuring environment-dependent claims that was itself environment-dependent is the Tier 3 family arriving inside the tool built to measure it, and it was caught by the byte-identical regeneration check rather than by anyone noticing."
+}

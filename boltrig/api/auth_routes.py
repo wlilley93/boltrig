@@ -383,7 +383,7 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
         # generic rejection.
         if not await k.store.consume_invitation(inv.tenant_id, inv.id):
             return invalid
-        # Keys-only audit: the invitation id + email (identity), never the password.
+        # Keys-only via `_audit`: invitation id + email, never the password (SEC-191).
         await _audit(k, inv.tenant_id, email, "auth.invite.accept",
                      {"invitation_id": inv.id, "email": email, **seated})
         return JSONResponse({"status": "ok", "email": email})
@@ -417,7 +417,7 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
             )
         except RateLimited:
             # [2026] VJS-COUNTY 9, D3: a login throttle trip is a security signal on
-            # the distinct stream (keys-only: the email is identity, never a secret).
+            # the distinct stream, same keys-only dict discipline as `_audit`: email, never a secret.
             await k.security.record(
                 tenant, SecurityEventType.RATE_LIMIT_TRIP, "login_rate_limited",
                 actor=email or "unknown", actor_tier="human",
@@ -462,7 +462,7 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
                 tenant_id=tenant, token_hash=hash_challenge_token(challenge),
                 user_id=user.id, expires_at=utcnow() + CHALLENGE_TTL,
             ))
-            # Keys-only audit: the fact of the challenge, never the challenge token.
+            # Keys-only via `_audit`: the fact of the challenge; the token is absent below (SEC-191).
             await _audit(k, tenant, user.id, "auth.2fa.challenge",
                          {"outcome": "challenge_issued"})
             return JSONResponse({"status": "2fa_required", "challenge_token": challenge})
@@ -477,7 +477,7 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
 
         # No second factor due: a plain session, exactly as before (backward-compat).
         session, secret, csrf = await _mint_web_session(k, tenant, user)
-        # Keys-only audit: the session id, never the secret / csrf / password (D8).
+        # Keys-only via `_audit`: the session id, never the secret / csrf / password (D8, SEC-191).
         await _audit(k, tenant, user.id, "auth.login",
                      {"session_id": session.id, "outcome": "ok"})
         # D7: the session IS issued and the resolver clamps it. Saying so here lets
@@ -608,8 +608,8 @@ def register_auth_routes(app, *, principal_dep, get_kernel) -> None:
         user = await k.store.get_user(tenant, p.subject)
         account = (user.email if user and user.email else p.subject)
         uri = totp_provisioning_uri(secret, account)
-        # Keys-only audit (D5): the fact of enrollment-begin, NEVER the secret / URI /
-        # recovery codes.
+        # Keys-only via `_audit` (D5): enrollment-begin only, NEVER the secret, the otpauth
+        # URI (which CONTAINS it) or the recovery codes (SEC-191).
         await _audit(k, tenant, p.subject, "auth.2fa.enroll", {"outcome": "begin"})
         return JSONResponse({
             "status": "ok",

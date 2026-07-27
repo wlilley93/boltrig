@@ -66,12 +66,20 @@ Measurable, and none of it is "we were careful":
 
 ## The programme
 
-**Tier 0. Inventory.** Enumerate the claims. Every docstring asserting a
-mechanism, every config comment attributing behaviour to a service, every
-invariant description, every order directive, every doc claiming a control. This
-is the piece nobody has done and everything else depends on it. Expect the
-inventory itself to find defects, because reading a claim next to its
-implementation is what found most of the eleven.
+**Tier 0. Inventory. BUILT 2026-07-27**, and the fact that it took until then is
+the sharpest finding in this document. Until that afternoon this paragraph said the
+inventory was "the piece nobody has done", the status section forty lines below said
+"the inventory's UNVERIFIED column is not worked through", and **there was no
+inventory and there never had been**. A document about claims being load-bearing
+carried a false claim about its own foundation, and it survived because the two
+sentences were far enough apart to read as a plan and a progress note rather than as
+a contradiction. That is the defect class, one level up, in the record that defines
+it.
+
+It is a SCRIPT, not a page: `scripts/build_claim_inventory.py` writes
+`docs/claim-inventory.tsv`, and `make claims` refuses both a stale census and a
+growing residue. A hand-written inventory is accurate for one afternoon, and there
+are 1,297 claim-bearing statements in `boltrig/` alone.
 
 **Tier 1. Bind the load-bearing ones.** Not all claims deserve a gate. Rank by
 what a false version would cost: a security control's description outranks a
@@ -92,8 +100,19 @@ exactly-once.
 
 ## Where it stands (2026-07-26)
 
-Ten gates now run in `make python-quality`, so they are in `ci/test-and-gate` and
-a claim cannot drift past them silently. Each was written because of a defect
+Eleven gates now run in `make python-quality`, so they are in `ci/test-and-gate`
+and a claim cannot drift past them silently. Do not take that number on trust; it is
+the kind this document is about. Count it:
+
+```
+grep '^python-quality:' Makefile | sed 's/##.*//' | cut -d: -f2- \
+  | tr ' ' '\n' | grep -vE '^$|typecheck' | wc -l
+```
+
+The first version of that command counted 20, because it did not strip the `##` help
+text and counted every word of it. A counting rule that miscounts is worse than no
+number, and it took one run to find out - which is the argument for printing the
+command beside the figure rather than only the figure. Each was written because of a defect
 that had already shipped, and each found more on its first run.
 
 | Gate | Binds | Found on its first run |
@@ -102,9 +121,10 @@ that had already shipped, and each found more on its first run.
 | `prose-references` | Every repo path, test node id, `make` target and env var named in prose | 12 broken references, including a founding ruling cited as binding whose register entry has never existed in this repository's history |
 | `gate-coverage` | Every compose manifest is validated; every `quality` component runs in CI | `migration-parity` and `doctor-fixture` ran in no CI job; three compose overlays reached no validation step, including the one `genesis.sh` runs |
 | `health-claims` | No service reports healthy while unable to serve | The kernel and fleet-worker. **Both are now fixed and the exemption file is empty**: the kernel probes `/readyz`, and `boltrig fleet-health` reads back the signed receipt the worker publishes, proven red on production for a forged key and an unreachable Redis. Extending the gate to admit a readiness COMMAND (derived: the subcommand must be dispatched, and its module must read the same evidence the `/readyz` handler reads) found two wrong versions of that rule before the right one |
+| `claims` | Tier 0's ratchet: `docs/claim-inventory.tsv` regenerates byte-identically, and the count of load-bearing claims naming nothing resolvable may only fall | 1,297 claim-bearing statements across `boltrig/` and the compose files, of which **236 assert a security control and name nothing a machine can resolve**. Zero name a subject that is dead, which is `unwired-claims` having already cleared that class - so the two gates cover the same defect through different doors and neither is redundant |
 | `structure` | File and function length, as an expiring ratchet | Pre-existing; it caught two of this week's own changes |
 | `invariants` | Every declared invariant is bound and every marker declared | The catalogue had silently eaten a whole invariant to a duplicate id, and had never parsed as the YAML its name claims |
-| `order-directives` | Every directive of a `status: binding` court order is named by a test, beside the order | 102 binding directives; **only 36 were bound by anything**. The gate then caught itself over-counting - it had matched an order and a directive anywhere in the same file, which its own new test file (naming six orders) cross-matched immediately - so it now requires them within two lines and reports the smaller, true number. Worked down to **96 bound, which is the floor**: the remaining 6 are directives no test can honestly hold (3 appellate with no engineering consequence by their own terms, 3 Principal gates on live cutovers CI cannot decide). Binding the rest is what the gate is for. COUNTY 8 D7 ordered a forced password rotation for the seeded superadmin and **half of it was not implemented** - built, tested and deployed the same day. D9's "never opbox's domain models" turned out to be a set intersection over two real schemas rather than the hand-split I had refused: four tables shared, three auth/tenancy and one a name collision with zero shared columns |
+| `order-directives` | Every directive of a `status: binding` court order is named by a test, beside the order | 102 binding directives; **only 36 were bound by anything**. The gate then caught itself over-counting - it had matched an order and a directive anywhere in the same file, which its own new test file (naming six orders) cross-matched immediately - so it now requires them within two lines and reports the smaller, true number. Worked down to **106 of 112 bound**, with 6 waived: the remaining 6 are directives no test can honestly hold (3 appellate with no engineering consequence by their own terms, 3 Principal gates on live cutovers CI cannot decide). This row said "96, which is the floor" until 2026-07-27; the floor held and the total moved, because the schema-validation ledger order added 10 directives and every one of them was bound. Quote `make order-directives`, not this sentence. Binding the rest is what the gate is for. COUNTY 8 D7 ordered a forced password rotation for the seeded superadmin and **half of it was not implemented** - built, tested and deployed the same day. D9's "never opbox's domain models" turned out to be a set intersection over two real schemas rather than the hand-split I had refused: four tables shared, three auth/tenancy and one a name collision with zero shared columns |
 
 The single worst find is the measure of why the goal exists. **Right-to-erasure
 had never run.** `run_retention_forever` had zero callers - no compose service, no
@@ -115,9 +135,10 @@ longer sat in Postgres indefinitely. The purge itself was tested: three tests dr
 for the mechanism is not a test for the wiring**, and every gate above exists to
 tell those two apart.
 
-What remains: Tier 1 is partly done (the load-bearing claims found so far are
-bound; the inventory's UNVERIFIED column is not worked through). **Tier 3 is
-closed**: the family is now enumerated in `tests/conftest.py` as two lists, one
+What remains: Tier 1 is partly done. The load-bearing claims found so far are
+bound, and Tier 0 now says how many are not: **236 claims assert a security control
+and name nothing a machine can resolve.** That is the queue, and it is the number
+this goal's closing ratchet is about. **Tier 3 is closed**: the family is now enumerated in `tests/conftest.py` as two lists, one
 BLOCKING (a run that skips the Postgres or shared-rate-limit family ends non-zero)
 and one LOUD (a run that could not reach a live service says so, by name, at the
 end), and the three vacuous globs each carry a floor that fails when the scan

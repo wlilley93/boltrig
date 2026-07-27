@@ -224,6 +224,72 @@ def test_the_order_readers_shortcut_agrees_with_a_real_yaml_parser() -> None:
         )
 
 
+# --- Tier 0: the claim inventory, and the ratchet that is the goal's only criterion ---------
+#
+# The fourth gate, added 2026-07-27, and the defect it exists for is the largest of the four:
+# GOAL-claims-must-be-load-bearing.md called the inventory "the piece nobody has done and
+# everything else depends on it", then described "the inventory's UNVERIFIED column" as partly
+# worked, and there was no inventory and never had been. A document about claims being
+# load-bearing carrying a false claim about its own foundation.
+
+
+@pytest.mark.invariant("NFR-MNT-03")
+def test_the_committed_inventory_is_current_and_the_residue_has_not_grown(capsys) -> None:
+    """The real tree, both halves: byte-identical regeneration and the pinned residue."""
+    from scripts import check_claim_inventory
+
+    assert check_claim_inventory.main() == 0, capsys.readouterr().out
+
+
+def test_a_stale_inventory_is_a_failure_not_a_pass(tmp_path, monkeypatch, capsys) -> None:
+    """A census nobody re-derives is a snapshot.
+
+    This is the assertion that stops the artefact rotting into decoration: edit the committed
+    TSV, or let the sources move past it, and the gate goes red rather than reading back the
+    file's own contents and agreeing with them.
+    """
+    from scripts import build_claim_inventory, check_claim_inventory
+
+    stale = tmp_path / "claim-inventory.tsv"
+    stale.write_text("weight\tclassification\tsource\tlocation\tsubject\tclaim\n", encoding="utf-8")
+    monkeypatch.setattr(build_claim_inventory, "OUT", stale)
+    monkeypatch.setattr(check_claim_inventory, "OUT", stale)
+
+    assert check_claim_inventory.main() == 1
+    assert "STALE" in capsys.readouterr().out
+
+
+def test_a_residue_above_the_baseline_is_refused(tmp_path, monkeypatch, capsys) -> None:
+    """"The number of unbound load-bearing claims may only decrease" is the goal's own and
+    only success criterion, and until this gate existed nothing measured it.
+
+    Seeded by pinning the baseline BELOW the true count, which is the same arithmetic as a new
+    claim arriving with no named mechanism.
+    """
+    from scripts import check_claim_inventory
+
+    low = tmp_path / "baseline.json"
+    low.write_text(json.dumps({"load_bearing_no_subject": 0}), encoding="utf-8")
+    monkeypatch.setattr(check_claim_inventory, "BASELINE", low)
+
+    assert check_claim_inventory.main() == 1
+    assert "the residue GREW" in capsys.readouterr().out
+
+
+def test_an_unpinned_baseline_is_a_failure_rather_than_an_unratcheted_pass(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """A missing baseline must not read as "nothing to compare against, therefore fine".
+
+    That is the fail-open shape this repository has now been bitten by often enough to test for
+    by reflex: a check that cannot look reporting agreement it did not observe.
+    """
+    from scripts import check_claim_inventory
+
+    monkeypatch.setattr(check_claim_inventory, "BASELINE", tmp_path / "does-not-exist.json")
+
+    assert check_claim_inventory.main() == 1
+    assert "no baseline pinned" in capsys.readouterr().out
 # --- an override that did not reach the lock is not an override -----------------------------
 #
 # The twelfth gate, 2026-07-27. Every line of deploy/browser-cli-overrides.txt is a CVE remedy,

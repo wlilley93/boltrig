@@ -2054,3 +2054,11 @@ invariants:
       - tests/security/test_schema_validation_ledger.py::test_output_validation_records_the_same_shape_and_leaks_nothing
       - tests/security/test_schema_validation_ledger.py::test_the_error_list_is_capped_and_says_when_it_truncated
       - tests/security/test_schema_validation_ledger.py::test_the_row_carries_the_key_names_and_neither_value
+
+  # --- the auth surface audits names, never the secrets in scope beside them ---
+  SEC-191:
+    description: 'Nine comments on boltrig/api/auth_routes.py assert some form of "keys-only audit: the session id, NEVER the secret / csrf / password". They are now enforced rather than intended. Login, failed login and 2FA enrolment each hold material an audit row must not carry (a chosen password, an attacker-chosen attempt, a session secret, a CSRF token, a TOTP secret and an otpauth URI that CONTAINS that secret), and after each the whole audit stream is serialised and searched for it - the whole stream and not the one row, because a regression can leak into a row the route did not previously write at all. The guarantee is POSITIONAL: the material is absent from the dict the call site passes, not filtered out of it afterwards. The write-time scrubber is a second line and a test proves it is not the first, by neutering pii.contains_secret and requiring the result to be unchanged; a pattern list is not a trust boundary ([2026] VJS-CC-OPBOX 5 H1), and the schema-validation ledger order recorded this one failing to match an sk-live- token at all.'
+    tests:
+      - tests/security/test_auth_audit_is_keys_only.py::test_login_audits_the_session_id_and_never_the_password_secret_or_csrf
+      - tests/security/test_auth_audit_is_keys_only.py::test_a_failed_login_audits_the_outcome_and_never_the_attempted_password
+      - tests/security/test_auth_audit_is_keys_only.py::test_the_guarantee_is_positional_and_not_the_write_time_scrubber
