@@ -130,7 +130,7 @@ class AgentResult:
         )
 
 
-def reply_text(result: dict) -> str:
+def reply_text(result: dict[str, Any]) -> str:
     """The USER-FACING reply from a spawn result: the runtime's output text.
 
     ``summary`` is only the fallback, and the distinction above is load-bearing.
