@@ -84,6 +84,42 @@ def test_the_write_probe_creates_nothing() -> None:
 
 @pytest.mark.security
 @pytest.mark.invariant("IAC-005")
+def test_the_write_probe_can_actually_reach_its_own_output() -> None:
+    """It could not. v0.4.14 died here twice, having proved the push WAS allowed.
+
+    GitHub runs `run:` blocks under `bash --noprofile --norc -e -o pipefail`, and
+    the step's own `set -uo pipefail` does not cancel that inherited `-e`. Two
+    separate commands therefore aborted the step before any verdict was printed:
+
+      * the registry returns `Location` as a PATH, not an absolute URL, so the
+        cancel `curl` got a URL with no scheme and exited 3 - on the SUCCESS path,
+        one line after HTTP 202 proved the package was writable;
+      * on a genuine denial there is no `Location` header at all, so `grep` exited
+        1, pipefail propagated it, and the assignment aborted - on the DENIAL path,
+        before the branch that prints DENIED and the remedy.
+
+    Success aborted and failure aborted, so this check had no path to its own
+    output. Measured against the real script: with a bad credential the old
+    version printed NOTHING, the fixed version prints four DENIED lines and the
+    two-option remedy.
+    """
+    run = _step("preflight", "Registry write access")["run"]
+    # The cancel URL must be absolutised before it reaches curl.
+    assert 'cancel="https://ghcr.io$loc"' in run, (
+        "Location is a path; curl exits 3 on it and bash -e kills the step"
+    )
+    # Cleanup is best effort: an abandoned upload session expires on its own, so it
+    # must never be able to fail a release.
+    assert "-X DELETE" in run and "|| true" in run.split("-X DELETE")[1][:200]
+    # And the no-Location case must not abort before the DENIED branch.
+    loc_line = next(l for l in run.splitlines() if l.strip().startswith("loc="))
+    assert loc_line.rstrip().endswith("|| true)\""), (
+        f"no-match grep aborts under bash -e, so DENIED is unreachable: {loc_line.strip()}"
+    )
+
+
+@pytest.mark.security
+@pytest.mark.invariant("IAC-005")
 def test_a_bad_credential_reports_the_remedy_rather_than_crashing() -> None:
     """The check must survive the case it exists for.
 
