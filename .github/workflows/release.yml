@@ -74,13 +74,29 @@ jobs:
             # no tag, no layer, and it cannot create the package by accident. A
             # docker-push probe would do all three, and creating a package with the
             # wrong owner is precisely the defect being detected.
-            hdrs="$(curl -s -D- -o /dev/null -X POST \
+            hdrs="$(curl -s --retry 3 --retry-all-errors --retry-delay 2 \
+              -D- -o /dev/null -X POST \
               -H "Authorization: Bearer $tok" \
               "https://ghcr.io/v2/$owner/$pkg/blobs/uploads/" | tr -d '\r')"
             code="$(printf '%s' "$hdrs" | head -1 | awk '{print $2}')"
-            loc="$(printf '%s' "$hdrs" | grep -i '^location:' | cut -d' ' -f2-)"
+            # `|| true` is load-bearing. On a genuine denial there is NO Location
+            # header, so grep exits 1; pipefail propagates it, the assignment fails,
+            # and GitHub's `bash -e` aborts the step - before the DENIED branch below
+            # can print anything. This step could not report a denial, which is the
+            # one thing it exists to report.
+            loc="$(printf '%s' "$hdrs" | grep -i '^location:' | cut -d' ' -f2- || true)"
             if [ -n "$loc" ]; then
-              curl -s -o /dev/null -X DELETE -H "Authorization: Bearer $tok" "$loc"
+              # The registry returns Location as a PATH, not an absolute URL. Handing
+              # that straight to curl is a malformed URL: curl exits 3 and `bash -e`
+              # kills the step - one line after it has already proved the push IS
+              # permitted. That is what killed v0.4.14, twice.
+              case "$loc" in
+                http://*|https://*) cancel="$loc" ;;
+                *) cancel="https://ghcr.io$loc" ;;
+              esac
+              # Best effort: an uncancelled upload session expires by itself, so
+              # cleanup must never be able to fail the release.
+              curl -s -o /dev/null -X DELETE -H "Authorization: Bearer $tok" "$cancel" || true
             fi
             if [ "$code" = 202 ]; then
               echo "  $image: writable"
