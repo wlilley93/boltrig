@@ -11,7 +11,7 @@ cutover wires ``CodexTrustedIngress`` into the live provider's ``acquire`` and
 removes the 0600-file delivery path (VJS-CC-VJS 3 E4). ``production_ready`` stays
 False throughout (E6); writes/effects stay PR8-gated.
 
-Two findings this module encodes (both would fail silently-until-live otherwise):
+Three findings this module encodes (each would fail silently-until-live otherwise):
 - FINDING #1: the registered scope MUST be built from ``capture_linux_process`` -
   the SAME capture attestation uses (``canonical_cgroup_digest``) - NOT from
   ``build_cell_scope``/``_read_proc_identity``, which hashes the raw cgroup bytes.
@@ -23,6 +23,22 @@ Two findings this module encodes (both would fail silently-until-live otherwise)
   token instead (``select_ingress_socket_name``): no inode to squat, and a name
   already held fails EADDRINUSE rather than losing a race. The 108-byte AF_UNIX
   bound still applies and is still checked.
+- FINDING #3: the uid/gid the registry is given must be the identity the cell MUST
+  hold, DECLARED by the caller, never the one ``/proc`` happened to show. The
+  privileged spawner publishes a cell's pid from the fork PARENT, three closes and a
+  sendmsg from the wire, while the CHILD still has an after-fork fixup, three dup2 and
+  only then ``drop_privileges`` to run - so a capture taken at the earliest instant the
+  pid exists can read the PRE-drop credentials, which are the SPAWNER's (uid 0). A
+  registration is immutable, so that snapshot is unrecoverable: once the cell settled
+  at its slot uid every auth-helper attestation compared 20001 against a registered 0,
+  matched no ancestor, and reported "registered process present but uid/gid differs".
+  No bearer, no model call, and a turn that died as ``codex_empty_output_after_error``
+  having dispatched no tool call (cv-boltrig-kernel-1, 2026-07-27, a live client
+  tenant; latent since the per-cell uid lane went live 2026-07-21, intermittent because
+  it is a race the API usually wins on an idle box). The declaration is the cell's SLOT,
+  which is what the kernel enforces rather than an observation of it; the capture is
+  demoted to a fail-closed cross-check; and ``build_ingress_bearer_issuer`` has the
+  KERNEL confirm that declaration on the pid before any bearer is minted.
 """
 
 from __future__ import annotations
@@ -77,6 +93,12 @@ from boltrig.fleet.infrastructure.model_proxy_peer_registry import (
 
 _SOCKET_TOKEN_BYTES = 16
 
+# The uid/gid the privileged spawner runs at, and therefore the credentials a cell
+# still carries between ``os.fork`` and ``drop_privileges``. Named because FINDING #3's
+# one lawful pre-drop reading is stated against it, and because a bare 0 in an
+# authentication boundary reads as a constant nobody has thought about.
+SPAWNER_PRE_DROP_ID = 0
+
 
 class CodexTrustedIngressError(RuntimeError):
     """The trusted Codex socket ingress could not be started."""
@@ -84,7 +106,10 @@ class CodexTrustedIngressError(RuntimeError):
 
 @dataclass(frozen=True)
 class CapturedCellIdentity:
-    """The App Server's attestation-consistent identity + the uid/gid to register."""
+    """The App Server's attestation-consistent scope + the identity to register.
+
+    ``uid``/``gid`` are what the cell MUST hold; a capture can precede its drop (#3).
+    """
 
     scope: ModelProxyCellScope
     uid: int
@@ -96,6 +121,8 @@ def capture_cell_identity(
     cell_id: str,
     pid: int,
     *,
+    expected_uid: int,
+    expected_gid: int,
     reader: ProcReader | None = None,
 ) -> CapturedCellIdentity:
     """Capture the started App Server's identity the way attestation captures it.
@@ -103,12 +130,24 @@ def capture_cell_identity(
     Mirrors ``build_cell_scope``'s assignment mapping, but sources the process
     identity from ``capture_linux_process`` (canonical cgroup digest, parsed pid-ns
     inode) so the registered scope matches what ``attest_peer_ancestry`` derives for
-    the connecting helper's ancestor (FINDING #1). Also yields the real uid/gid the
-    registry needs.
+    the connecting helper's ancestor (FINDING #1).
+
+    ``expected_uid``/``expected_gid`` are the credentials the cell was ALLOCATED, and
+    they are what gets registered (FINDING #3). REQUIRED and never defaulted, for the
+    reason argv is ([2026] VJS-CC-VJS 6 H5): a caller who cannot say which identity a
+    cell must hold has no business registering it, and a default would silently restore
+    the racy snapshot at the first call site that forgot.
     """
 
     if type(assignment) is not PhaseAssignmentRef:
         raise TypeError("assignment must be an exact PhaseAssignmentRef")
+    if type(expected_uid) is not int or type(expected_gid) is not int:
+        raise TypeError("expected cell credentials must be exact ints")
+    if SPAWNER_PRE_DROP_ID in (expected_uid, expected_gid):
+        # No cell is ever lawfully root. Unreachable per-cell (a CellSlot uid is inside the
+        # reserved band) but live in-process, where a root API would otherwise register root
+        # as a cell identity and _path_obeys_cell_policy would accept an all-root chain.
+        raise CodexTrustedIngressError("a cell identity may never be registered as root")
     proc_reader = reader if reader is not None else LinuxProcReader()
     boot_id = read_boot_id(proc_reader)
     # The dropped API (uid 10001, empty permitted set) cannot read a uid-distinct
@@ -122,6 +161,15 @@ def capture_cell_identity(
     captured = capture_linux_process(
         proc_reader, pid, expected_boot_id=boot_id, pid_namespace_inode=container_pid_ns
     )
+    # The capture is a CROSS-CHECK, never the source of the expectation: that is what lets
+    # a pid published before its drop be registered correctly instead of as root. Only two
+    # readings are lawful, the settled credentials and the spawner's pre-drop ones, and uid
+    # and gid are compared INDEPENDENTLY because drop_privileges runs setgroups, setgid and
+    # then setuid, so (uid 0, gid 20001) is a real mid-drop reading, not a foreign process.
+    if captured.uid not in (expected_uid, SPAWNER_PRE_DROP_ID):
+        raise CodexTrustedIngressError("the captured cell uid is neither expected nor pre-drop")
+    if captured.gid not in (expected_gid, SPAWNER_PRE_DROP_ID):
+        raise CodexTrustedIngressError("the captured cell gid is neither expected nor pre-drop")
     phase = assignment.phase
     root = ModelProxyRootScope(phase.principal.tenant_id, phase.workspace_id, phase.root_run_id)
     scope_assignment = ModelProxyAssignmentScope(
@@ -136,7 +184,7 @@ def capture_cell_identity(
         captured.pid_namespace_inode,
         captured.cgroup_identity_digest,
     )
-    return CapturedCellIdentity(scope, captured.uid, captured.gid)
+    return CapturedCellIdentity(scope, expected_uid, expected_gid)
 
 
 def select_ingress_socket_name() -> str:
@@ -174,6 +222,7 @@ def build_ingress_bearer_issuer(
     budget: ModelProxyBudgetBinding,
     ttl_seconds: int,
     holder: GenerationHolder,
+    expected_cell_uid: int | None,
 ) -> BearerIssuer:
     """A ``BearerIssuer`` that mints a fresh single-cell bearer per attested peer.
 
@@ -182,7 +231,19 @@ def build_ingress_bearer_issuer(
     replaces the time-based file refresh loop (Codex re-invokes auth.command every
     ~30s). The bearer is bound to the exact ATTESTED scope; ``issue_cell_bearer``
     hard-guards a binding-builder that strays to any other cell.
+
+    ``expected_cell_uid`` is the cell's slot uid under per-cell uids and None in the
+    in-process posture. REQUIRED either way, because it is the confirming half of
+    FINDING #3: registration now DECLARES an identity instead of observing one, and a
+    declaration nobody asks the kernel to confirm is not a boundary. It also tightens
+    J5 from "some unprivileged uid" to "THIS cell's uid" - a cell that dropped to a
+    SIBLING slot's uid is unprivileged and has no boundary at all.
     """
+
+    if expected_cell_uid is not None and (
+        type(expected_cell_uid) is not int or expected_cell_uid <= SPAWNER_PRE_DROP_ID
+    ):
+        raise CodexTrustedIngressError("expected cell uid must be a non-root uid, or None")
 
     def binding_for_cell(cell_scope: ModelProxyCellScope) -> ModelProxyGrantBinding:
         return ModelProxyGrantBinding(cell_scope, cell_model_binding(model_id, policy_digest), budget)
@@ -206,7 +267,12 @@ def build_ingress_bearer_issuer(
         # nothing. Only meaningful once per-cell uids are enacted, and skipped
         # rather than faked before then: asserting a boundary that does not exist
         # is the failure this whole programme has been correcting.
-        if per_cell_uid_mode_available():
+        if expected_cell_uid is not None:
+            # Per-cell uids: the registration DECLARED this uid rather than reading it
+            # off a process that might not have dropped yet, so ask the kernel to
+            # confirm that declaration at the instant of trust.
+            assert_cell_process_unprivileged(attested.pid, expected_uid=expected_cell_uid)
+        elif per_cell_uid_mode_available():
             assert_cell_process_unprivileged(attested.pid)
 
         # Attestation and issuance are two steps; a cell revoked in between must
@@ -322,6 +388,7 @@ class CodexTrustedIngress:
 
 
 __all__ = [
+    "SPAWNER_PRE_DROP_ID",
     "CapturedCellIdentity",
     "CodexTrustedIngress",
     "CodexTrustedIngressError",

@@ -9,6 +9,8 @@ live Codex turn (the in-container re-proof runs that on the real box):
     the upstream key).
   * a bearer minted through the ingress issuer verifies via the store verifier, and
     teardown revokes the grant, closes the proxy, and closes the ingress.
+  * FINDING #3 - the identity REGISTERED for a cell is derived from the slot it was
+    allocated, never read out of the /proc that registration is checking.
   * the rendered config.toml points the cell at the loopback proxy + socket helper.
 
 Option-B delivery (VJS-CC-VJS 3): there is NO bearer file at rest. The per-cell
@@ -33,6 +35,8 @@ import pytest
 from boltrig.fleet.application.model_proxy_grants import PhaseScopedModelProxyGrantBroker
 from boltrig.fleet.codex_trusted_wall import CodexTrustedPostureError
 from boltrig.fleet.domain import PhaseAssignmentRef, PhaseRef
+from boltrig.fleet.domain.model_proxy_scope import ModelProxyCellScope
+from boltrig.fleet.infrastructure.cell_slots import slot_for_index
 from boltrig.fleet.infrastructure.codex_cell_policy import CodexUpstreamAuth
 from boltrig.fleet.infrastructure.codex_cell_policy import sanitized_environment
 from boltrig.fleet.infrastructure.codex_cell_supervisor import CodexCellSupervisor
@@ -41,12 +45,16 @@ from boltrig.fleet.infrastructure.codex_model_proxy_server import (
 )
 from boltrig.fleet.infrastructure.codex_runtime_config import CodexReasoningEffort
 from boltrig.fleet.infrastructure.codex_trusted_proxy_ingress import (
+    CapturedCellIdentity,
     CodexTrustedIngress,
     build_ingress_bearer_issuer,
+    select_ingress_socket_name,
 )
+from boltrig.fleet.infrastructure import codex_trusted_proxy_provider as provider_module
 from boltrig.fleet.infrastructure.codex_trusted_proxy_provider import (
     TrustedProxyCodexPhaseCellProvider,
     TrustedProxyProvisionError,
+    _expected_cell_credentials,
 )
 from boltrig.fleet.infrastructure.codex_trusted_proxy_support import (
     GenerationHolder,
@@ -258,6 +266,7 @@ async def test_teardown_revokes_grant_and_closes_proxy_and_ingress(
             budget=read_only_budget(),
             ttl_seconds=60,
             holder=GenerationHolder(1),
+            expected_cell_uid=None,
         )
         # The issuer mints a fresh single-cell bearer per attested connection; the
         # first mint bumps the holder to generation 2. No file is ever written.
@@ -277,6 +286,148 @@ async def test_teardown_revokes_grant_and_closes_proxy_and_ingress(
 
         assert proxy._server is None
         assert await store.find_active_by_bearer_digest(digest, generation=2) is None
+
+
+# --- FINDING #3: the registered identity is the allocation, not the /proc read --
+
+
+async def _never_issue(attested: ModelProxyCellScope) -> bytes:
+    raise AssertionError("no peer connects in these tests")
+
+
+def test_the_expected_credentials_come_from_the_slot_not_from_proc() -> None:
+    """The derivation, on its own: a slot answers with the uid it declares.
+
+    ``slot_for_index`` is pure - it touches no filesystem and reads no /proc - so
+    this pins that the expectation is a statement of what the cell MUST be, which is
+    the only kind of expectation a check can fail against. Reading it back out of
+    the /proc being checked would be a check that cannot fail, and that is precisely
+    what the code did on 2026-07-27.
+    """
+
+    assert _expected_cell_credentials(slot_for_index(0)) == (20001, 20001)
+    assert _expected_cell_credentials(slot_for_index(3)) == (20004, 20004)
+    # In-process there is no slot and no drop: the cell is the API's own child.
+    assert _expected_cell_credentials(None) == (os.getuid(), os.getgid())
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="captures this process /proc identity")
+async def test_the_registration_seam_declares_the_slots_identity_not_the_captured_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The wiring: _register_spawned_cell must hand the SLOT's ids to the capture.
+
+    The semantics are pinned deterministically against a scripted /proc in
+    test_codex_trusted_proxy_ingress.py; what cannot be produced here is a real
+    process at uid 20001, so this pins the other half - that the provider derives
+    the expectation from the slot it reserved and passes it down. Recording the call
+    is the honest way to assert that: if the provider went back to letting the
+    capture choose, no expectation would arrive at all.
+    """
+
+    recorded: dict[str, int] = {}
+
+    def recording_capture(
+        assignment: PhaseAssignmentRef,
+        cell_id: str,
+        pid: int,
+        *,
+        expected_uid: int,
+        expected_gid: int,
+    ) -> CapturedCellIdentity:
+        recorded["uid"] = expected_uid
+        recorded["gid"] = expected_gid
+        return CapturedCellIdentity(
+            build_cell_scope(assignment, cell_id, pid), expected_uid, expected_gid
+        )
+
+    monkeypatch.setattr(provider_module, "capture_cell_identity", recording_capture)
+    store, broker = _store_broker()
+    registry = ModelProxyProcessRegistry()
+    async with httpx.AsyncClient() as client:
+        provider = _provider(broker=broker, store=store, client=client, registry=registry)
+        ingress = provider._build_ingress()
+        try:
+            await provider._register_spawned_cell(
+                assignment=_assignment(),
+                cell_id=_CELL_ID,
+                pid=os.getpid(),
+                slot=slot_for_index(2),  # uid 20003, which this process is not
+                ingress=ingress,
+                socket_name=select_ingress_socket_name(),
+                issuer=_never_issue,
+            )
+            live = (await registry.snapshot_live()).registrations
+        finally:
+            await ingress.aclose()  # revokes, so the snapshot is taken before it
+
+    assert recorded == {"uid": 20003, "gid": 20003}
+    # And the declaration is what actually reached the registry, which is the value
+    # every later ancestry attestation compares the live process against.
+    assert len(live) == 1
+    assert (live[0].expected_uid, live[0].expected_gid) == (20003, 20003)
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="captures this process /proc identity")
+async def test_the_in_process_posture_registers_the_cells_settled_credentials() -> None:
+    """The same seam, unpatched, on the posture where the cell really is this uid.
+
+    In-process there is no slot and no drop: the cell is an ordinary child of the
+    API and shares its credentials for its whole life, so the API's own ids are both
+    the right expectation and what the capture reads. Without this case the checks
+    above could be satisfied by a seam that refused everything, which would be an
+    outage wearing the costume of a fix.
+    """
+
+    store, broker = _store_broker()
+    registry = ModelProxyProcessRegistry()
+    async with httpx.AsyncClient() as client:
+        provider = _provider(broker=broker, store=store, client=client, registry=registry)
+        ingress = provider._build_ingress()
+        try:
+            scope = await provider._register_spawned_cell(
+                assignment=_assignment(),
+                cell_id=_CELL_ID,
+                pid=os.getpid(),
+                slot=None,
+                ingress=ingress,
+                socket_name=select_ingress_socket_name(),
+                issuer=_never_issue,
+            )
+            live = (await registry.snapshot_live()).registrations
+        finally:
+            await ingress.aclose()
+
+    assert scope.pid == os.getpid()
+    assert len(live) == 1
+    assert (live[0].expected_uid, live[0].expected_gid) == (os.getuid(), os.getgid())
+
+
+async def test_the_issuer_confirms_the_slots_uid_on_the_per_cell_lane_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The confirming half is wired from the SAME slot the registration declares.
+
+    ``expected_cell_uid`` is what makes the declaration a boundary rather than a
+    claim: it is the uid the kernel is asked to confirm on the cell's pid before any
+    bearer is minted. None in-process, where the cell shares the API's uid and there
+    is nothing per_cell_uid_mode_available does not already answer.
+    """
+
+    captured: dict[str, object] = {}
+
+    def recording_builder(**kwargs: object) -> object:
+        captured.update(kwargs)
+        return _never_issue
+
+    monkeypatch.setattr(provider_module, "build_ingress_bearer_issuer", recording_builder)
+    store, broker = _store_broker()
+    async with httpx.AsyncClient() as client:
+        provider = _provider(broker=broker, store=store, client=client)
+        provider._build_issuer(_MODEL_ID, GenerationHolder(1), slot_for_index(1))
+        assert captured["expected_cell_uid"] == 20002
+        provider._build_issuer(_MODEL_ID, GenerationHolder(1), None)
+        assert captured["expected_cell_uid"] is None
 
 
 # --- config: the cell is pointed at the loopback proxy + socket helper --------
