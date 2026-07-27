@@ -222,3 +222,84 @@ def test_the_order_readers_shortcut_agrees_with_a_real_yaml_parser() -> None:
         assert mine["directives"] == expected, (
             f"{path.name}: stdlib reader saw {mine['directives']}, YAML saw {expected}"
         )
+
+
+# --- an override that did not reach the lock is not an override -----------------------------
+#
+# The twelfth gate, 2026-07-27. Every line of deploy/browser-cli-overrides.txt is a CVE remedy,
+# and dependabot raised the aiohttp pin there while editing nothing else. Nothing recompiles the
+# hash-locked file the image installs, and nothing compared them, so main carried an override
+# saying 3.14.3 and a lock installing 3.14.1. Every check was green.
+
+
+def test_every_override_pin_is_the_version_the_lock_installs(capsys) -> None:
+    """The real tree."""
+    from scripts import check_override_locks
+
+    assert check_override_locks.main() == 0, capsys.readouterr().out
+
+
+def test_an_inert_override_is_reported_rather_than_passed(tmp_path, monkeypatch, capsys) -> None:
+    """Seeded with exactly the state main was in: the override raised, the lock not recompiled.
+
+    The message has to say which way round it is. "These files disagree" leaves a reader to
+    work out whether the remedy or the shipped version is the stale one, and under time
+    pressure that is the moment somebody edits the wrong file.
+    """
+    from scripts import check_override_locks
+
+    overrides = tmp_path / "o-overrides.txt"
+    lock = tmp_path / "o-requirements.txt"
+    overrides.write_text("aiohttp==3.14.3\n", encoding="utf-8")
+    lock.write_text(
+        f"# uv pip compile --overrides {overrides} -o {lock}\naiohttp==3.14.1\n", encoding="utf-8"
+    )
+    monkeypatch.setattr(check_override_locks, "ROOT", tmp_path)
+    monkeypatch.setattr(check_override_locks, "PAIRS", [(overrides, lock)])
+
+    assert check_override_locks.main() == 1
+    out = capsys.readouterr().out
+    assert "INERT" in out and "3.14.3" in out and "3.14.1" in out
+
+
+def test_a_pairing_the_lock_does_not_confirm_is_refused(tmp_path, monkeypatch, capsys) -> None:
+    """The pairing must be OBSERVED, not asserted.
+
+    A lock records the exact `uv pip compile` command that produced it. If that command does not
+    name the overrides file this script compares it against, every comparison below is answering
+    a question about two unrelated files, and answering it green.
+    """
+    from scripts import check_override_locks
+
+    overrides = tmp_path / "p-overrides.txt"
+    lock = tmp_path / "p-requirements.txt"
+    overrides.write_text("aiohttp==3.14.3\n", encoding="utf-8")
+    lock.write_text("# uv pip compile --overrides somewhere-else.txt\naiohttp==3.14.3\n",
+                    encoding="utf-8")
+    monkeypatch.setattr(check_override_locks, "ROOT", tmp_path)
+    monkeypatch.setattr(check_override_locks, "PAIRS", [(overrides, lock)])
+
+    assert check_override_locks.main() == 1
+    assert "asserted rather than observed" in capsys.readouterr().out
+
+
+def test_an_empty_override_file_is_a_failure_not_a_vacuous_pass(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """Zero pins must not read as zero violations.
+
+    An override file that has been emptied is either a mistake or a remedy someone deleted, and
+    a gate that reports PASS over nothing is the shape this repository has been bitten by often
+    enough to test for by reflex.
+    """
+    from scripts import check_override_locks
+
+    overrides = tmp_path / "e-overrides.txt"
+    lock = tmp_path / "e-requirements.txt"
+    overrides.write_text("# all remedies adopted upstream\n", encoding="utf-8")
+    lock.write_text(f"# uv pip compile --overrides {overrides} -o {lock}\n", encoding="utf-8")
+    monkeypatch.setattr(check_override_locks, "ROOT", tmp_path)
+    monkeypatch.setattr(check_override_locks, "PAIRS", [(overrides, lock)])
+
+    assert check_override_locks.main() == 1
+    assert "declares no pins" in capsys.readouterr().out
