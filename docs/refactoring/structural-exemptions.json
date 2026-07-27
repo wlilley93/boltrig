@@ -490,14 +490,6 @@
       "reason": "Answer codex server-initiated requests ([2026] VJS-COUNTY 12): a ServerRequestHandler seam, _dispatch_server_request + _answer_server_request (side-task, never crashes the pump), and _drain_server_request_tasks on close. No function exceeds the limit; the file crosses 400 by the new response path.",
       "expires": "2026-12-31"
     },
-    "boltrig/kernel/mcp.py": {
-      "max_file_lines": 422,
-      "max_function_lines": 53,
-      "over_limit_functions": [],
-      "owner": "kernel-maintainers",
-      "reason": "2026-07-25: +6 lines to carry parent_run_id on the run token, so a verb dispatched inside a delegated cell can publish its HITL PAUSE to the parent run's stream. Without it the pause reached only the child stream, which no client follows, and a write correctly held for approval was invisible to the person who asked for it. 2026-07-26 (decision 0018): _call_tool gained a branch for ApprovalNotHoldable, so a cell refused an unholdable approval is told what happened and what to do instead rather than being handed a request id that was never created.",
-      "expires": "2026-12-31"
-    },
     "boltrig/fleet/codex_runtime.py": {
       "max_file_lines": 473,
       "max_function_lines": 77,

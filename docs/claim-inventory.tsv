@@ -415,6 +415,7 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/held_call.py:281	sweep_run
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/hitl.py:1	dispatch	Human-in-the-loop management (Epic K).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/hitl_expiry.py:87	transition_work_item_status	Settle the expired request's AWAITING_HUMAN work item at CANCELLED.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/mcp.py:1	initialize	The kernel's MCP server face (Round Two, Epic MCP).
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/mcp_errors.py:1	_call_tool	Turning a kernel exception into the MCP result envelope a model actually reads.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/questions.py:1	apply_manifest	The governed "ask the user a question" built-in verb (US-CHAT-12).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/schema_diagnosis.py:1	contains_secret	What may be recorded about a schema-validation failure, and how it is read back.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/security_events.py:67	AuditWriter	Scrub, chain, and append a security signal.
@@ -985,9 +986,9 @@ ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/hitl_expiry.py:119		Drop the seal o
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/hitl_expiry.py:53		default (never a boot crash, P9).
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/hitl_http.py:163		Owner = the run's owning work item's on_behalf_of;
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/hitl_http.py:164		write when ownership cannot be confirmed.
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/mcp.py:214		(list_verbs, get_tenant_permissions, get_verb).
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/mcp.py:216		would see a null GUC and fail closed on every tool list/call.
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/mcp.py:65		The run that DELEGATED to this one.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/mcp.py:212		(list_verbs, get_tenant_permissions, get_verb).
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/mcp.py:214		would see a null GUC and fail closed on every tool list/call.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/mcp.py:63		The run that DELEGATED to this one.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/memory_routes.py:34		never strip (or spoof) them.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/memory_routes.py:73		request cannot enqueue an unbounded amount of screening work.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/pii.py:122		may not be widened for one of them.
