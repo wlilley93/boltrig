@@ -141,4 +141,31 @@ def test_promotion_still_happens_only_after_every_candidate_is_verified() -> Non
     publish = _WORKFLOW["jobs"]["publish"]
     assert "candidates" in publish["needs"]
     assert "cosign verify-attestation" in _TEXT
-    assert _TEXT.index("cosign verify-attestation") < _TEXT.index("docker buildx imagetools create")
+    promote = _step("publish", "Promote verified digests")
+    assert _TEXT.index("cosign verify-attestation") < _TEXT.index(promote["name"])
+
+
+@pytest.mark.security
+@pytest.mark.invariant("IAC-005")
+def test_promotion_publishes_the_exact_digest_that_was_signed() -> None:
+    """v0.4.13, the first run ever to reach promotion, published an UNSIGNED digest.
+
+    Candidates are published with `docker push`, so they are plain manifests.
+    `docker buildx imagetools create` can only emit a manifest INDEX, so it wrapped
+    the signed candidate `sha256:a9ee1707` in a new index `sha256:adb9b7d2` and
+    put THAT on `:v0.4.13`. Same image content, but cosign signed a9ee1707, so the
+    release tag resolved to bytes covered by no signature and no SBOM attestation.
+
+    The step's own digest assertion caught it. This pins both halves of the repair:
+    promotion must preserve the digest, and it must prove the bytes hash to the
+    signed digest before it publishes them.
+    """
+    run = _step("publish", "Promote verified digests")["run"]
+    assert "docker buildx imagetools create" not in run, (
+        "imagetools cannot preserve a plain manifest's digest; it re-wraps it in an index"
+    )
+    assert 'test "$promoted_digest" = "$digest"' in run
+    assert "sha256sum manifest.bin" in run
+    assert 'if [ "$fetched" != "$digest" ]; then' in run
+    # The integrity check must come before anything is written to a public tag.
+    assert run.index('if [ "$fetched" != "$digest" ]; then') < run.index("-X PUT")

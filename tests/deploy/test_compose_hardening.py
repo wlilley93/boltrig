@@ -379,15 +379,27 @@ def test_release_publishes_only_scanned_signed_digest_images_with_sboms():
     ):
         assert variable in workflow
     assert "--clobber" not in workflow
-    assert "docker buildx imagetools create" in workflow
+    # Anchor on the step's NAME, not on the command it happens to run. These
+    # assertions previously named `docker buildx imagetools create`, which pinned an
+    # implementation that was actively WRONG: imagetools can only emit a manifest
+    # index, so it re-wrapped each signed candidate and published a digest cosign had
+    # never signed. A test that pins the mechanism cannot tell you the mechanism is
+    # the defect. What matters is the property below.
+    promote = "Promote verified digests to immutable public tags"
+    assert promote in workflow
     assert 'gh release edit "$RELEASE_TAG"' in workflow
     assert "--draft=false" in workflow
-    assert workflow.index("cosign verify-attestation") < workflow.index(
-        "docker buildx imagetools create"
-    )
-    assert workflow.index("docker buildx imagetools create") < workflow.index(
-        'gh release edit "$RELEASE_TAG"'
-    )
+    assert workflow.index("cosign verify-attestation") < workflow.index(promote)
+    assert workflow.index(promote) < workflow.index('gh release edit "$RELEASE_TAG"')
+
+    # The property: whatever the public tag ends up resolving to must be the digest
+    # that was scanned, signed and attested - asserted by the workflow itself, and
+    # asserted here so the assertion cannot be dropped.
+    assert 'test "$promoted_digest" = "$digest"' in workflow
+    # And promotion must prove the bytes it is about to publish hash to that digest
+    # BEFORE publishing them, so a registry that returned anything else stops the run.
+    assert 'fetched="sha256:$(sha256sum manifest.bin | cut -d\' \' -f1)"' in workflow
+    assert 'if [ "$fetched" != "$digest" ]; then' in workflow
     assert "sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6" in workflow
 
 
