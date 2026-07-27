@@ -14,6 +14,8 @@ import type {
   WorkflowSummary,
 } from "../api/types";
 import type { DeckCol } from "../deck/Deck";
+import { Familiar, familiarAvailable } from "@/familiar/Familiar";
+import { automationRole, automationRunFacts } from "@/familiar/automation";
 import { navigate, useRoute } from "../router";
 import { useFetch } from "../useFetch";
 import {
@@ -154,6 +156,18 @@ function WorkflowCard({
       <span className="wfhome__accent" />
       <span className="wfhome__body">
         <span className="wfhome__head">
+          {familiarAvailable() && (
+            // The card's familiar states the automation's RECORD, not this instant: a column
+            // of settled bodies with one magenta one is a failing job you find without reading
+            // a single date. The shape comes from the intent tags, so the list is scannable by
+            // kind before it is read.
+            <Familiar
+              agent={{ id: wf.id, role: automationRole(wf.id, wf.intent_tags) }}
+              size={22}
+              run={automationRunFacts({ successRate: meta.successRate, runCount: meta.runCount })}
+              title={`${wf.id}: ${meta.hasRunStats ? `${meta.successRate}% of ${meta.runCount} runs succeeded` : "never run"}`}
+            />
+          )}
           <code className="wfhome__name">{wf.id}</code>
           <span
             className="wfhome__status"

@@ -190,6 +190,31 @@ shader's own time term and not from arousal. The claim was removed rather than l
 The pattern in all three: **compiling is not rendering, and rendering is not looking.**
 `ui/src/familiar/preview.tsx` exists so that looking is cheap.
 
+## Richness, measured against opbox
+
+`opbox-frontend/internal-docs/design/RICHNESS_REGRESSION_2026-07-27.md` sets the bar and, more
+usefully, says what richness IS: *an annotated specification screen* - slot inventory, token
+rules, state matrix drawn beside the design - not decoration and not node count for its own
+sake. Its measurement: a rich `/login` spec is 210 nodes; a faithful-but-thin recreation of the
+same route is 49.
+
+The first cut of `Screen · New agent` measured **78**. It had the form and none of the
+apparatus, which is exactly the "faithful but thin" failure that note describes. It now carries
+`Spec · AGENT CARD SHELL` (12 numbered slots with their rules), `Spec · TOKENS & STATES`
+(semantic spacing roles, the non-negotiable uniform values with the measurements behind them,
+the full mood matrix, and a REFUSALS block), and `Flow · one agent, five surfaces`. **258
+nodes.**
+
+That note's sharper finding is that the catastrophic loss was in **flows**, not screens - flow
+pages of 12,000 nodes replaced by 30-node summary strips, 1.2% kept. The flow band exists
+because of that: creation, fleet bar, fan-out, automation history, call, drawn rather than
+described.
+
+Spacing follows `SPACING_TYPOGRAPHY_MERGE.md`'s semantic families rather than raw rungs -
+`inset/lg` for a panel body, `stack/md` between sibling blocks, `gap/xl` for the two-column
+split. Its argument is the right one: *a number is not a decision you can re-make later; a role
+is.*
+
 ## What is not built
 
 - The genotype reaches the silhouette and the body volume. The remaining ~47 interior
@@ -197,7 +222,10 @@ The pattern in all three: **compiling is not rendering, and rendering is not loo
 - A fully parted body has no centre, so no nucleus, so almost no light - measured at 5.9% lit.
   The reviewer band is deliberately held on the near side of the part. A parted genotype needs
   a nucleus per lobe, which is interior work, not silhouette work.
-- The familiar is wired into `AgentAvatar` (chat, and therefore six surfaces). Automations,
-  calls and the subagent inline treatment are designed here and not yet built.
-- `familiar.frag` now exists in two repos (`beelink-desktop/familiar` and `boltrig/ui/src`).
-  That copy will drift and needs a single source before it does.
+- Voice on a call is a SYNTHESISED envelope, not metering. `speechSynthesis` exposes no output
+  level, so the only available fact is the boolean "it is speaking"; the hook is named
+  `speakingEnvelope` so no call site can mistake it for measurement. `useMicLevel` does read
+  real RMS, and is for the human's microphone during dictation, not the agent's output.
+- The Figma `Flow · one agent, five surfaces` band documents the subagent, automation and call
+  treatments. The code behind them is wired for subagent cards, automation cards and read-aloud;
+  a dedicated large-format call surface is not built.

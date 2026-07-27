@@ -209,6 +209,37 @@ export interface AgentIdentity {
 }
 
 /**
+ * WHAT COUNTS AS AN IDENTITY. The single most dangerous mistake available here.
+ *
+ * A subagent arrives carrying a `childRunId`, and it is right there, and it is unique, and
+ * using it would be a disaster: a run id is per RUN, so the same agent would come back with a
+ * different body every single time it ran. The familiar would still render, still look
+ * plausible, and would have silently stopped being evidence about anything - which is worse
+ * than the bag of eight, because at least the bag never pretended.
+ *
+ * So identity is the agent's NAME, and a run id is never accepted as a substitute.
+ *
+ * When there is no name, this returns null and the caller derives from the role alone. That
+ * yields the same body for every unnamed agent of a role, which looks like a limitation and is
+ * actually the honest answer: we know what KIND of thing it is and we do not know WHICH one,
+ * so the picture says exactly that and no more.
+ */
+export function stableAgentKey(candidate: {
+  name?: string | null;
+  id?: string | null;
+  runId?: string | null;
+}): string | null {
+  const name = candidate.name?.trim();
+  if (name) return name;
+  const id = candidate.id?.trim();
+  // A run id passed as `id` is still a run id. Callers that only have one must pass it as
+  // `runId`, where it is ignored - the parameter exists to make that refusal explicit rather
+  // than to accept it.
+  if (id && id !== candidate.runId) return id;
+  return null;
+}
+
+/**
  * The whole point, in one function: agent in, body out, same answer every time.
  *
  * Determinism is not a nicety here. The familiar is how you recognise an agent across the
