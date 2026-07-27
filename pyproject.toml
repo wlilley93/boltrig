@@ -47,7 +47,13 @@ dev = [
     "pytest-asyncio>=0.24",
     "pytest-cov>=6.0",
     "aiosqlite>=0.20",
-    "ruff>=0.7",
+    # HELD at 0.15.x deliberately. ruff 0.16.0 turns on new rule families
+    # (BLE001, RUF059, S110, TRY004 and more) and reports ~700 findings across a
+    # tree that is clean on 0.15. That is a linter upgrade - a real piece of work
+    # with judgement in it about which of those rules we want - and not something
+    # to carry in on the back of a routine dependency relock. Raise this bound in
+    # the change that does the work.
+    "ruff>=0.7,<0.16",
     # Static type checker for the scoped strict gate (see [tool.mypy] below).
     # EXACT-pinned dev tooling with a CI gate, on all fours with the UI harness's
     # exact-pinned playwright ([2026] VJS-COUNTY 2, order
