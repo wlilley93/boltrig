@@ -18,6 +18,7 @@ jobs:
     permissions:
       actions: read
       contents: write
+      packages: write
     env:
       RELEASE_TAG: ${{ github.ref_name }}
       DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
@@ -29,6 +30,87 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+
+      # Every candidate build takes ~10 minutes. Discovering AFTER them that the
+      # registry will not accept the push wastes all of it and reports
+      # `denied: permission_denied: write_package`, which names neither the cause
+      # nor the fix. That message is why v0.4.11 - the only release run this
+      # workflow has ever had - died, and why every image in production was built
+      # by hand outside this protected path instead: unsigned, unscanned, no SBOM.
+      #
+      # The cause is specific, and that run proved it by accident: pi-sidecar
+      # pushed fine while kernel, fleet and ui were denied. The sidecar package was
+      # LINKED to this repository; the others are user-owned packages that predate
+      # this workflow and grant it nothing. GitHub links a package via the
+      # org.opencontainers.image.source label only when the push CREATES it, so an
+      # existing package cannot bootstrap its own access, and no REST or GraphQL
+      # endpoint exposes the setting.
+      - name: Registry write access, before spending ten minutes building
+        env:
+          GHCR_TOKEN: ${{ secrets.GHCR_PUSH_TOKEN || secrets.GITHUB_TOKEN }}
+          USING_PAT: ${{ secrets.GHCR_PUSH_TOKEN && 'yes' || 'no' }}
+        shell: bash
+        run: |
+          set -uo pipefail
+          if [ "$USING_PAT" = yes ]; then
+            echo "credential: GHCR_PUSH_TOKEN (repository secret)"
+          else
+            echo "credential: the built-in GITHUB_TOKEN"
+          fi
+          owner="${GITHUB_REPOSITORY%%/*}"
+          name="$(echo "${GITHUB_REPOSITORY#*/}" | tr '[:upper:]' '[:lower:]')"
+          denied=""
+          for image in kernel fleet ui backup; do
+            pkg="$name-$image"
+            # sed, not a JSON parser: on a bad credential the body is not JSON at
+            # all, and a parser would die here with a stack trace instead of the
+            # explanation this step exists to print - at exactly the moment it is
+            # needed. No token extracted means DENIED, said plainly.
+            tok="$(curl -s -u "x:$GHCR_TOKEN" \
+              "https://ghcr.io/token?service=ghcr.io&scope=repository:$owner/$pkg:pull,push" \
+              | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')"
+            # Open a blob upload and cancel it. The registry answers 202 only if
+            # this credential may WRITE, and a cancelled session leaves nothing -
+            # no tag, no layer, and it cannot create the package by accident. A
+            # docker-push probe would do all three, and creating a package with the
+            # wrong owner is precisely the defect being detected.
+            hdrs="$(curl -s -D- -o /dev/null -X POST \
+              -H "Authorization: Bearer $tok" \
+              "https://ghcr.io/v2/$owner/$pkg/blobs/uploads/" | tr -d '\r')"
+            code="$(printf '%s' "$hdrs" | head -1 | awk '{print $2}')"
+            loc="$(printf '%s' "$hdrs" | grep -i '^location:' | cut -d' ' -f2-)"
+            if [ -n "$loc" ]; then
+              curl -s -o /dev/null -X DELETE -H "Authorization: Bearer $tok" "$loc"
+            fi
+            if [ "$code" = 202 ]; then
+              echo "  $image: writable"
+            else
+              denied="$denied $image"
+              echo "  $image: DENIED (HTTP ${code:-no-response})"
+            fi
+          done
+          if [ -z "$denied" ]; then
+            exit 0
+          fi
+          {
+            echo
+            echo "The registry will not accept a push for:$denied"
+            echo
+            echo "These are user-owned GHCR packages that predate this workflow, so this"
+            echo "repository's Actions token has no write access to them. Nothing in the"
+            echo "workflow can grant it. Two one-time fixes, either is enough:"
+            echo
+            echo "  (a) For each package above: Package settings -> Manage Actions access"
+            echo "      -> add $GITHUB_REPOSITORY with the Write role."
+            echo "      https://github.com/users/$owner/packages"
+            echo
+            echo "  (b) Add a repository secret GHCR_PUSH_TOKEN holding a PAT with"
+            echo "      write:packages (and optionally GHCR_PUSH_USER). Every login in"
+            echo "      this workflow already prefers it over the built-in token."
+            echo
+            echo "Failing here rather than after the builds, on purpose."
+          } >&2
+          exit 1
 
       - name: Require a new semantic tag reachable from the default branch
         id: verify
@@ -218,8 +300,14 @@ jobs:
 
       - name: Log in to GitHub Container Registry
         env:
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: echo "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          # GHCR_PUSH_TOKEN if the repository has one, else the built-in token.
+          # See the "Registry write access" preflight for why the built-in token
+          # is not always enough: a user-owned package that predates this workflow
+          # grants the repository's Actions no write access, and no API can grant
+          # it. A write:packages PAT is the only route that avoids the package UI.
+          GHCR_TOKEN: ${{ secrets.GHCR_PUSH_TOKEN || secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ secrets.GHCR_PUSH_USER || github.actor }}
+        run: echo "$GHCR_TOKEN" | docker login ghcr.io --username "$GHCR_USER" --password-stdin
 
       - name: Push only a run-scoped candidate and record its digest
         shell: bash
@@ -298,8 +386,14 @@ jobs:
 
       - name: Log in to GitHub Container Registry
         env:
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: echo "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          # GHCR_PUSH_TOKEN if the repository has one, else the built-in token.
+          # See the "Registry write access" preflight for why the built-in token
+          # is not always enough: a user-owned package that predates this workflow
+          # grants the repository's Actions no write access, and no API can grant
+          # it. A write:packages PAT is the only route that avoids the package UI.
+          GHCR_TOKEN: ${{ secrets.GHCR_PUSH_TOKEN || secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ secrets.GHCR_PUSH_USER || github.actor }}
+        run: echo "$GHCR_TOKEN" | docker login ghcr.io --username "$GHCR_USER" --password-stdin
 
       - name: Download and validate all draft release evidence
         env:
