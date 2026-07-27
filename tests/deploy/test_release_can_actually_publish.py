@@ -112,7 +112,7 @@ def test_the_write_probe_can_actually_reach_its_own_output() -> None:
     # must never be able to fail a release.
     assert "-X DELETE" in run and "|| true" in run.split("-X DELETE")[1][:200]
     # And the no-Location case must not abort before the DENIED branch.
-    loc_line = next(l for l in run.splitlines() if l.strip().startswith("loc="))
+    loc_line = next(ln for ln in run.splitlines() if ln.strip().startswith("loc="))
     assert loc_line.rstrip().endswith("|| true)\""), (
         f"no-match grep aborts under bash -e, so DENIED is unreachable: {loc_line.strip()}"
     )
