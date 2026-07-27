@@ -143,14 +143,12 @@ LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/credentials.py:205		Resolve one
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/credentials.py:344		Delete every run-scoped secure-input credential of a finished run.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/desktop_routes.py:1		Desktop-hands pull surface (decision 0016, DH-1).
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/desktop_routes.py:82		was never issued): refuse, and do not audit a no-op as execution
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:152		Capped, because this now reaches the append-only audit row and not only the
-LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/dispatch.py:170		Redact secret-shaped values before the internal run-event relay.
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:239		observability side-channel - like audit, it never affects the dispatch
-LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/dispatch.py:247		Record a security signal on the distinct stream (D3), at the same field depth as the audit row.
-LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/dispatch.py:287		Announce the pause AND make it durable (decision 0018, Order 2).
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:352		scoped credential reference (the value never enters the run) and
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:431		audit row (actor / workspace / ip / ua).
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:627		minted straight into the credential arg, never into params/events/audit.
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:193		observability side-channel - like audit, it never affects the dispatch
+LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/dispatch.py:201		Record a security signal on the distinct stream (D3), at the same field depth as the audit row.
+LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/dispatch.py:238		Announce the pause AND make it durable (decision 0018, Order 2).
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:318		scoped credential reference (the value never enters the run) and
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:397		audit row (actor / workspace / ip / ua).
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:593		minted straight into the credential arg, never into params/events/audit.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/events.py:36		A tenant-bound relay view for trusted turn-executor integrations.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/held_call.py:54		without guessing.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/hitl.py:235		Best-effort channel notice to the human who must act (SEC-179): enqueue to their bound surface per their notification_prefs so an approval/escalation raised by a channel-originated run reaches the originating chat.
@@ -164,6 +162,8 @@ LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/platform_routes/observability.py:
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/platform_routes/observability.py:368		its own disclosure.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/platform_routes/skills.py:34		runs under the AUTHOR's grants (ceiling) - never escalates (SEC-29, C4)
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/questions.py:106		a label for the audit row, never a loadable adapter.
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/run_event_projection.py:30		Capped, because this now reaches the append-only audit row and not only the
+LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/run_event_projection.py:48		Redact secret-shaped values before the internal run-event relay.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/schema_diagnosis.py:65		Bounds.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/security_events.py:104		Fail-safe convenience the auth / ratelimit / grant paths call.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/knowledge/projections.py:221		bucket names, or DSN fragments never reach the agent or the audit log.
@@ -273,10 +273,10 @@ LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/cost.py:142	tokens	Cost i
 LOAD-BEARING	SUBJECT-EXTERNAL	comment	boltrig/kernel/credentials.py:42	credential	resolved into the adapter ``credential`` arg at dispatch, never substituted
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/credentials.py:73	owner	Whether this sealed row belongs to the identity now asking for it.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/credentials.py:97	None	Parse a ``credential:run/<run_id>/<purpose>`` reference, else ``None``.
-LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/dispatch.py:140	schema_invalid	A bounded, VALUE-FREE description of a verb's params for the chat stream (K-20 bounded observability): the sorted top-level KEY NAMES and their count, never the values (which can carry secrets or untrusted content).
-LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/dispatch.py:79	schema_path	Validate, and return findings whose provenance is WHOLLY THE SCHEMA AND NAME-ONLY.
+LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/dispatch.py:82	schema_path	Validate, and return findings whose provenance is WHOLLY THE SCHEMA AND NAME-ONLY.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/events.py:1	backlog	The run/conversation event stream relay (Round Two, US-CONV-03/07).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/hitl.py:371	approval_id	The gate's authorisation check (SEC-14).
+LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/run_event_projection.py:18	schema_invalid	A bounded, VALUE-FREE description of a verb's params for the chat stream (K-20 bounded observability): the sorted top-level KEY NAMES and their count, never the values (which can carry secrets or untrusted content).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/security_events.py:1	detail	The distinct SecurityEvent stream + the audit rollup anchor ([2026] VJS-COUNTY 9).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/security_events.py:146	key	The deterministic rollup root over a contiguous audit-chain segment (D4).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/tool_disclosure.py:176	candidates	The ``tools/list`` payload for one run, in ranked order.
@@ -411,6 +411,7 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/credentials.py:240	Credent
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/credentials.py:274	_execute_adapter	Seal a caller-supplied external bearer for ONE adapter for the life of ONE run (the permission-parity passthrough).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/credentials.py:313	Credential	Resolve a per-run adapter bearer to a ``Credential`` for this adapter, or ``None`` when none is sealed (so dispatch falls back to the adapter's static credential - the fail-safe that keeps dev/non-passthrough tenants unc
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/dispatch.py:1	Dispatcher.invoke	The dispatch chokepoint (P2, US-KER-01, K-1).
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/dispatch.py:275	_emit_pause	Publish to THIS run and to the run that delegated to it.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/grants.py:1	GrantSet.permits	Grant enforcement (P8, SEC-07, US-IAM-04, K-2).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/grants.py:15	GrantMissing	Raise ``GrantMissing`` unless the verb is authorised.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/held_call.py:1	approval_gate._approval_display_context	The HELD CALL record: what a paused write is resumed FROM (decision 0018).
@@ -420,6 +421,7 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/hitl_expiry.py:87	transiti
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/mcp.py:1	initialize	The kernel's MCP server face (Round Two, Epic MCP).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/mcp_errors.py:1	_call_tool	Turning a kernel exception into the MCP result envelope a model actually reads.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/questions.py:1	apply_manifest	The governed "ask the user a question" built-in verb (US-CHAT-12).
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/run_event_projection.py:1	_summarise_output	Where ``_summarise_params``, ``_summarise_output`` and ``_event_safe`` live.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/schema_diagnosis.py:1	contains_secret	What may be recorded about a schema-validation failure, and how it is read back.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/security_events.py:67	AuditWriter	Scrub, chain, and append a security signal.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/tool_disclosure.py:1	_ranking_key	Progressive tool disclosure: the ordered OFFER, computed away from authority.
@@ -730,7 +732,9 @@ ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_model_proxy_ser
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_model_proxy_server.py:51		transport never imports or hard-codes a store.
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_protocol.py:16		Base error whose text never includes request or response payloads.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_runtime_actor.py:239		never model or user content).
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_runtime_actor.py:330		it is never translated into the ledger.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_runtime_actor.py:294		exception's TYPE is a class name from our own stack - never model output,
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_runtime_actor.py:295		tool arguments, or user text - so it is safe here and it is the only
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_runtime_actor.py:348		it is never translated into the ledger.
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_runtime_actor.py:42		A bounded, content-free marker for an invalidating notification.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_runtime_admission.py:126		admission's lane, so a read-only admission can never carry a server and a
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_runtime_admission.py:127		kernel-tools admission can never attest one it did not declare.
@@ -758,10 +762,13 @@ ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_server_request_ha
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_server_request_handler.py:99		The unique offered option label that means approve, else fail closed.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_stdio_transport.py:18		its pidfd can observe THAT it exited but never its real wait status.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_stdio_transport.py:20		clean cell teardown - so on its own it must never read as a failure, or every
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_stdio_transport.py:249		(never raises - a diagnostic must not turn a clean close into a failure).
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_stdio_transport.py:245		The type is our own class name, never cell output (K-20).
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_stdio_transport.py:25		teardown, never logged verbatim (codex stderr can carry tool arguments = user
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_stdio_transport.py:262		Drain stderr (so the pipe never blocks the child) while ACCUMULATING the
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_stdio_transport.py:281		labels only, never a stderr line - so a degraded cell is diagnosable
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_stdio_transport.py:257		(never raises - a diagnostic must not turn a clean close into a failure).
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_stdio_transport.py:261		lines.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_stdio_transport.py:274		Drain stderr (so the pipe never blocks the child) while ACCUMULATING the
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_stdio_transport.py:293		labels only, never a stderr line - so a degraded cell is diagnosable
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_stdio_transport.py:302		close failed pass force=True and always get returncode + markers.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_stdio_transport.py:31		label.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_trusted_proxy_ingress.py:153		The dropped API (uid 10001, empty permitted set) cannot read a uid-distinct
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_trusted_proxy_ingress.py:164		The capture is a CROSS-CHECK, never the source of the expectation: that is what lets
@@ -961,20 +968,18 @@ ORDINARY	NO-SUBJECT	comment	boltrig/kernel/cost.py:287		charged for a call that 
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/cost.py:38		policy-as-data price table (FR-COST-04) - a configured price always wins - and
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/credentials.py:36		a ``run:`` id is never resolvable as a secure-input reference.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/desktop_routes.py:48		kernel on the serving loop, AFTER routes are registered, so it cannot
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:154		guarantee it is never itself sensitive;
-ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/dispatch.py:162		A bounded, VALUE-FREE description of a verb's output (K-20): the output's top-level key names only, never the values.
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:190		a short scalar is taken - never free text, never a secret-bearing value.
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:240		decision and a relay failure never breaks a call (P9).
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:244		fail-safe (like the event relay) and never changes the dispatch outcome.
-ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/dispatch.py:324		Publish a run event, fail-safe.
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:397		attributes which adapter serviced the call (it was always None before).
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:407		keys (K-20), never the raw input (see fleet/chat._project_chat_event).
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:509		1.
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:535		5.
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:541		call the adapter provably never saw, and the retry that retry_after
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:575		invalid output) must release the claim like the gate above, never park
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:582		raises PendingHuman - it never touches an adapter/agent.
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:638		reference fails closed (CredentialResolution).
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:144		a short scalar is taken - never free text, never a secret-bearing value.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:194		decision and a relay failure never breaks a call (P9).
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:198		fail-safe (like the event relay) and never changes the dispatch outcome.
+ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/dispatch.py:290		Publish a run event, fail-safe.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:363		attributes which adapter serviced the call (it was always None before).
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:373		keys (K-20), never the raw input (see fleet/chat._project_chat_event).
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:475		1.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:501		5.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:507		call the adapter provably never saw, and the retry that retry_after
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:541		invalid output) must release the claim like the gate above, never park
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:548		raises PendingHuman - it never touches an adapter/agent.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:604		reference fails closed (CredentialResolution).
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/events.py:82		list index would shift on every trim;
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/events.py:87		resumed run never re-uses a seq a live cursor already passed.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/hands_registry.py:30		A command the executor never claims (offline) or never completes (crashed
@@ -1012,6 +1017,8 @@ ORDINARY	NO-SUBJECT	comment	boltrig/kernel/platform_routes/workflows.py:107		a b
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/registry.py:142		With no caller context, fall back to the ceiling (internal callers).
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/run_access.py:224		Preserve legitimate child-only trees, but never let a visible child revive a
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/run_access.py:243		Guarantee the root is present even if a clamp dropped it from the slice.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/run_event_projection.py:32		guarantee it is never itself sensitive;
+ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/run_event_projection.py:40		A bounded, VALUE-FREE description of a verb's output (K-20): the output's top-level key names only, never the values.
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/tool_disclosure.py:99		0 for a low-consequence verb, 1 for a high-consequence one.
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/web_security.py:1		Edge/web hardening for the kernel FastAPI app (Batch 1 WEB-* + RES-01).
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/web_security.py:184		Install the edge/web hardening middleware (WEB-02/03/05/06, RES-01).
@@ -1184,9 +1191,9 @@ ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/audit.py:72	seq	The ONE key a
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/channel_notify.py:65	source_route	Enqueue one outbox row per (matching pref, resolved subject, bound channel).
 ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/kernel/channel_principal.py:26	self_onboard	channel's ``self_onboard`` config naming any other role is rejected fail-closed
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/channel_routes.py:186	subject	The EXACTLY-ONE pending HITL request addressed to ``subject`` whose work item's reply route is this channel+thread, else None: zero matches (nothing to answer) or several (ambiguous) both fall back to normal intake.
-ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/dispatch.py:267	context.run_id	Publish a HITL pause to this run AND to the run that delegated to it.
-ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/dispatch.py:335	question	Create a QUESTION HITL, emit a ``question`` run event, and pause the run (US-CHAT-12).
-ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/kernel/dispatch.py:453	result_summary	``result_summary`` keys (K-20), never the raw output.
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/dispatch.py:221	context.run_id	Publish a HITL pause to this run AND to the run that delegated to it.
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/dispatch.py:301	question	Create a QUESTION HITL, emit a ``question`` run event, and pause the run (US-CHAT-12).
+ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/kernel/dispatch.py:419	result_summary	``result_summary`` keys (K-20), never the raw output.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/events.py:150	since	Yield events for a stream: the backlog first (re-attach), then live events until the stream is closed.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/hands_registry.py:1	asyncio.Event	The pending desktop-command registry (decision 0016, DH-1).
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/held_call.py:117	hitl_requests	Name the lane that will redeem an approval minted for THIS call, else None.

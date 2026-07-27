@@ -10,6 +10,8 @@ cannot regress.
 from __future__ import annotations
 
 import json
+import logging
+from typing import Any, cast
 
 import pytest
 
@@ -18,7 +20,10 @@ from boltrig.fleet.infrastructure.codex_protocol import (
     MAX_LINE_BYTES,
     decode_message,
 )
-from boltrig.fleet.infrastructure.codex_runtime_actor import CodexRuntimeTerminal
+from boltrig.fleet.infrastructure.codex_runtime_actor import (
+    CodexRuntimeActor,
+    CodexRuntimeTerminal,
+)
 
 _SECRET = "sk-am 字 provider-secret-9f3a2b7c"  # mixed ASCII/multibyte, token-shaped
 
@@ -69,3 +74,54 @@ def test_terminal_exception_message_is_sanitized_and_payload_free() -> None:
     for category in ("protocol", "binding", "closed", "operation"):
         each = CodexRuntimeTerminal(category, f"{category} cause").exception()
         assert _SECRET not in str(each)
+
+
+@pytest.mark.asyncio
+async def test_pump_crash_names_the_exception_type_without_leaking_its_content(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A live tenant's agent failed every turn and the log could not say why.
+
+    `_run` caught `Exception` and discarded it, so a reset socket, a cell that
+    died before its first frame, and a malformed frame all reported the identical
+    eight words: "Codex notification pump failed". The terminal message must stay
+    content-free (it travels to handovers and the audit record), but the operator
+    log must name the exception TYPE, which is a class from our own stack.
+
+    The type is the whole point, and str(exc)/exc_info are the whole risk: a
+    JSONDecodeError carries the offending document in its args.
+    """
+
+    class _CellDiedCarryingASecret(RuntimeError):
+        pass
+
+    poisoned = _CellDiedCarryingASecret(_SECRET)
+
+    class _Client:
+        async def next_notification(self, timeout: float | None = None) -> object:
+            raise poisoned
+
+    terminals: list[CodexRuntimeTerminal] = []
+
+    async def _on_terminal(_actor: object, terminal: CodexRuntimeTerminal) -> None:
+        terminals.append(terminal)
+
+    actor = CodexRuntimeActor(
+        client=cast(Any, _Client()),
+        translator=cast(Any, object()),
+        on_terminal=_on_terminal,
+        max_buffered_events=8,
+    )
+    with caplog.at_level(logging.WARNING):
+        await actor._run()
+
+    logged = caplog.text
+    # The cause is now distinguishable...
+    assert "_CellDiedCarryingASecret" in logged, (
+        "the pump crash log does not name the exception type, so every cause "
+        "reports the same eight words"
+    )
+    # ...and the exception's ARGS never reach the log or the terminal.
+    assert _SECRET not in logged
+    assert terminals and terminals[0].message == "Codex notification pump failed"
+    assert _SECRET not in terminals[0].message

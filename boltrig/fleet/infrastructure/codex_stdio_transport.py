@@ -240,15 +240,27 @@ class CodexStdioTransport:
                 with contextlib.suppress(Exception):
                     await asyncio.shield(self._wait_for_exit(self._kill_timeout))
                 raise
-            except Exception:
+            except Exception as exc:
                 failure = True
+                # The type is our own class name, never cell output (K-20). Without it
+                # a cleanup that went wrong is indistinguishable from one that went
+                # right but left a bad returncode.
+                logger.warning(
+                    "codex cell cleanup raised: %s.%s",
+                    type(exc).__module__,
+                    type(exc).__qualname__,
+                )
                 self._kill()
                 with contextlib.suppress(Exception):
                     await self._wait_for_exit(self._kill_timeout)
             # Surface the content-free stderr classification once the tail is final
             # (never raises - a diagnostic must not turn a clean close into a failure).
+            # FORCED on the failure path: the guard inside is "markers, or an unusual
+            # returncode", and a cell that is killed mid-turn frequently has neither -
+            # which is why an hour of a live tenant's failures produced ZERO teardown
+            # lines. A close that failed is always worth a line.
             with contextlib.suppress(Exception):
-                self._log_stderr_diagnostics()
+                self._log_stderr_diagnostics(force=failure)
             if failure:
                 raise wire.CodexTransportError("Codex process cleanup did not complete cleanly")
             self._closed = True
@@ -276,14 +288,21 @@ class CodexStdioTransport:
         except Exception:
             return
 
-    def _log_stderr_diagnostics(self) -> None:
+    def _log_stderr_diagnostics(self, *, force: bool = False) -> None:
         # Surface WHICH codex-internal stage the cell reached before teardown -
         # labels only, never a stderr line - so a degraded cell is diagnosable
         # without the prior handovers' "cause swallowed before the log" gap and
         # without leaking tool arguments codex may have echoed (K-20).
+        #
+        # ``force`` exists because the guard below is a HAPPY-PATH filter: it stays
+        # quiet when a cell exits cleanly and said nothing interesting. On the
+        # failure path that silence is the bug - a cell killed mid-turn often has no
+        # markers and a returncode of None, so this logged nothing at all through an
+        # hour of a live tenant failing every turn. Callers that already know the
+        # close failed pass force=True and always get returncode + markers.
         markers = self.stderr_markers
         code = self._process.returncode
-        if markers or (code not in (0, None, EXIT_STATUS_UNKNOWN)):
+        if force or markers or (code not in (0, None, EXIT_STATUS_UNKNOWN)):
             logger.warning(
                 "codex cell teardown: returncode=%s stderr_markers=%s",
                 code,

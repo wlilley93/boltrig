@@ -54,7 +54,6 @@ from .schema_diagnosis import (
     MAX_SCHEMA_ERRORS,
     MAX_SCHEMA_PATH_DEPTH,
     MAX_SCHEMA_PATH_SEGMENT,
-    MAX_PARAM_KEYS,
     SCHEMA_KEYWORDS,
     schema_digest,
 )
@@ -67,9 +66,13 @@ from .idempotency import (
     IdempotencyCoordinator,
     IdempotencyReplay,
     IdempotencyRun,
-    sensitive_key,
 )
 from .questions import QUESTIONS_VERB
+from .run_event_projection import (
+    _event_safe,
+    _summarise_output,
+    _summarise_params,
+)
 from .ratelimit import RateLimiter
 
 AdapterProvider = Callable[[str, str], Awaitable[Adapter | None]]
@@ -135,55 +138,6 @@ def _reject_if_invalid(
         raise SchemaValidationError(
             f"invalid {kind} for '{verb}'", errors, schema_digest=schema_digest(schema)
         )
-
-
-def _summarise_params(params: Any) -> dict[str, Any]:
-    """A bounded, VALUE-FREE description of a verb's params for the chat stream
-    (K-20 bounded observability): the sorted top-level KEY NAMES and their count,
-    never the values (which can carry secrets or untrusted content).
-
-    Since the schema-validation ledger order (D1) this rides on the AUDIT ROW as well as the
-    stream. It had fed only the stream since K-20, so a regulator-facing row was strictly
-    shallower than the chat stream beside it, and it is what makes a `schema_invalid` row
-    answerable at all: the recorded keys, against the registered schema's `required`, are a
-    diff rather than a guess."""
-    if isinstance(params, dict):
-        keys = sorted(str(k) for k in params)
-        # Capped, because this now reaches the append-only audit row and not only the
-        # ephemeral stream. A key NAME is instance-chosen, so no mechanical check can
-        # guarantee it is never itself sensitive; it is admitted because it is a name and not
-        # a value, bounded here, and still passed through the write-time scrub as a second
-        # line. That is a recorded LIMIT of the schema-validation ledger order (L1), not a
-        # safety proof, and no test should pretend otherwise.
-        return {"keys": keys[:MAX_PARAM_KEYS], "count": len(keys)}
-    return {"keys": [], "count": 0}
-
-
-def _summarise_output(output: Any) -> dict[str, Any]:
-    """A bounded, VALUE-FREE description of a verb's output (K-20): the output's
-    top-level key names only, never the values."""
-    if isinstance(output, dict):
-        return {"keys": sorted(str(k) for k in output)}
-    return {"keys": []}
-
-
-def _event_safe(value: Any) -> Any:
-    """Redact secret-shaped values before the internal run-event relay.
-
-    The caller still receives the real adapter result. Durable/run-canvas event
-    records do not need bearer material and must never become a second secret
-    store (notably for one-time invitation tokens).
-    """
-    if isinstance(value, dict):
-        safe: dict[str, Any] = {}
-        for key, item in value.items():
-            safe[str(key)] = "[redacted]" if sensitive_key(key) else _event_safe(item)
-        return safe
-    if isinstance(value, list):
-        return [_event_safe(item) for item in value]
-    if isinstance(value, tuple):
-        return [_event_safe(item) for item in value]
-    return value
 
 
 # Param keys that plausibly name the acted-on object's id (best-effort, D1). Only
@@ -279,10 +233,7 @@ class Dispatcher:
         published to the parent relay.
         """
         event = await self._hitl.pending_event(context, hitl_request_id, verb, call_id)
-        self._emit(context.tenant_id, context.run_id, event)
-        parent = getattr(context, "parent_run_id", None)
-        if parent and parent != context.run_id:
-            self._emit(context.tenant_id, parent, event)
+        self._emit_run_and_parent(context, event)
 
     async def _hold_pause(
         self,
@@ -320,6 +271,21 @@ class Dispatcher:
             noun=noun, verb=verb, params=params,
             request_id=exc.hitl_request_id, call_id=call_id,
         )
+
+    def _emit_run_and_parent(self, context: Any, event: dict[str, Any]) -> None:
+        """Publish to THIS run and to the run that delegated to it.
+
+        A chat turn never calls a verb itself: it spawns a worker whose cell reaches
+        back through the MCP face, so dispatch runs under the CHILD run id while the
+        chat client follows the ROOT stream. ``_emit_pause`` already fanned out for
+        this reason; ``tool_call``/``tool_result`` did not, so on a live tenant the
+        browser rendered a correct tool-backed answer showing NO tool call and NO
+        context while audit_log held the call.
+        """
+        self._emit(context.tenant_id, context.run_id, event)
+        parent = getattr(context, "parent_run_id", None)
+        if parent and parent != context.run_id:
+            self._emit(context.tenant_id, parent, event)
 
     def _emit(self, tenant_id: str, run_id: str | None, event: dict[str, Any]) -> None:
         """Publish a run event, fail-safe. Only when a relay is wired and the call
@@ -405,7 +371,7 @@ class Dispatcher:
         # redacted input rides for the run canvas + durable record (FR-EVT-01); the
         # chat stream forwards only the bounded ``tool``/``call_id``/``args_summary``
         # keys (K-20), never the raw input (see fleet/chat._project_chat_event).
-        self._emit(context.tenant_id, context.run_id, {"type": "tool_call", "verb": verb, "noun": noun,
+        self._emit_run_and_parent(context, {"type": "tool_call", "verb": verb, "noun": noun,
                                     "input": _event_safe(params), "run_id": context.run_id,
                                     "tool": verb, "call_id": call_id,
                                     "args_summary": _summarise_params(params)})
@@ -452,7 +418,7 @@ class Dispatcher:
             # chat stream forwards only the bounded ``call_id``/``status``/
             # ``result_summary`` keys (K-20), never the raw output.
             if status != "pending_human":
-                self._emit(context.tenant_id, context.run_id, {
+                self._emit_run_and_parent(context, {
                     "type": "tool_result", "verb": verb, "status": status,
                     "output": _event_safe(output) if status == "ok" else None,
                     "run_id": context.run_id, "call_id": call_id,
