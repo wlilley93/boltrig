@@ -15,6 +15,8 @@ import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 
 import { Familiar } from "@/familiar/Familiar";
+import { AgentAvatar } from "@/panels/chat/AgentAvatar";
+import type { ChatAgent } from "@/panels/chat/constants";
 import { FamiliarDesigner } from "@/familiar/FamiliarDesigner";
 import { deriveGenotype, type Genotype } from "@/familiar/genotype";
 import type { RunFacts } from "@/familiar/phenotype";
@@ -57,6 +59,30 @@ function Grid(): JSX.Element {
         ))}
       </div>
 
+      <h2 style={{ fontSize: 14, marginTop: 32 }}>AgentAvatar, the real component</h2>
+      <p style={{ fontSize: 12, opacity: 0.7, maxWidth: 640 }}>
+        Everything above renders &lt;Familiar&gt; directly. This row is the component the chat
+        actually uses - status dot, agent colour, the CSS that had to stop painting a flat disc
+        behind a transparent body. A familiar that reads well on a bare page and badly here is
+        a familiar that does not ship.
+      </p>
+      <div style={{ display: "flex", gap: 18, alignItems: "center", marginTop: 12, flexWrap: "wrap" }}>
+        {(["active", "idle", "offline"] as const).flatMap((status) =>
+          ROLES.slice(0, 4).map((role, i) => {
+            const agent = {
+              id: `${role}-${i}`, name: role, role, initials: role.slice(0, 2).toUpperCase(),
+              color: "#4C6FFF", dept: "", status, snippet: "", time: "", tier: 1, history: [],
+            } as ChatAgent;
+            return (
+              <div key={`${status}-${role}`} style={{ textAlign: "center" }}>
+                <AgentAvatar agent={agent} size={36} />
+                <div style={{ fontSize: 9, opacity: 0.6, marginTop: 4 }}>{status}</div>
+              </div>
+            );
+          }),
+        )}
+      </div>
+
       <h2 style={{ fontSize: 14, marginTop: 32 }}>At the sizes it is actually seen</h2>
       <div style={{ display: "flex", gap: 14, alignItems: "center", marginTop: 12 }}>
         {[20, 24, 28, 32, 40, 56, 80].map((s) => (
@@ -71,7 +97,13 @@ function App(): JSX.Element {
   const [familiar, setFamiliar] = useState<Partial<Genotype> | null>(null);
   const [role, setRole] = useState("reviewer");
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 360px", gap: 24 }}>
+    // `.chat-v3` is not decoration here. The chat's colour tokens (--chat-ok, --chat-warn,
+    // --chat-faint) are declared INSIDE that selector, so a harness that renders AgentAvatar
+    // outside it shows every status dot in the fallback colour - a dark disc on a dark body.
+    // That looked exactly like a real accessibility defect and was not one. A preview that
+    // renders components outside their token scope is worse than no preview: it reports
+    // failures that do not exist, and it would equally hide one that does.
+    <div className="chat-v3" style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 360px", gap: 24 }}>
       <Grid />
       <aside style={{ padding: 24 }}>
         <label style={{ fontSize: 12, display: "grid", gap: 4, marginBottom: 12 }}>
