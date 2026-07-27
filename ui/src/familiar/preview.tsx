@@ -18,7 +18,7 @@ import { Familiar } from "@/familiar/Familiar";
 import { AgentAvatar } from "@/panels/chat/AgentAvatar";
 import type { ChatAgent } from "@/panels/chat/constants";
 import { FamiliarDesigner } from "@/familiar/FamiliarDesigner";
-import { deriveGenotype, type Genotype } from "@/familiar/genotype";
+import { deriveGenotype, packGenotype, type Genotype } from "@/familiar/genotype";
 import type { RunFacts } from "@/familiar/phenotype";
 
 import "@/styles.css";
@@ -133,6 +133,10 @@ function App(): JSX.Element {
 // Exposed for the asset renderer that produces the Figma artwork. It must call the SAME
 // derivation the app uses, or the design system would document bodies the product does not
 // draw - which is the exact failure mode a design system exists to prevent.
-(window as unknown as { __deriveGenotype?: typeof deriveGenotype }).__deriveGenotype = deriveGenotype;
+(window as unknown as {
+  __deriveGenotype?: typeof deriveGenotype;
+  __packGenotype?: typeof packGenotype;
+}).__deriveGenotype = deriveGenotype;
+(window as unknown as { __packGenotype?: typeof packGenotype }).__packGenotype = packGenotype;
 
 createRoot(document.getElementById("root")!).render(<StrictMode><App /></StrictMode>);

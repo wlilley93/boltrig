@@ -192,17 +192,32 @@ interface Band {
  * an agent that happened to be seeded there would sit at rest looking exactly like an agent
  * whose run had just died. Identity would be quietly destroying the alarm.
  *
- * So the wedge is off limits to the derivation, and `roleHuesAvoidMagenta` in the test beside
- * this file is what makes that true rather than merely written down. An author may still put a
- * familiar there deliberately; the derivation may never wander there by accident.
+ * So the wedge is off limits to the derivation, and the test beside this file is what makes
+ * that true rather than merely written down. An author may still put a familiar there
+ * deliberately; the derivation may never wander there by accident.
+ *
+ * THE BOUNDS ARE MEASURED, and the first pair was guessed and wrong. [0.70, 1.45] came from
+ * eyeballing one render. Sweeping hue and testing the actual condition - red AND blue both
+ * above green, which is what the magenta family IS - puts it at 0.4 to 2.4:
+ *
+ *     hue   R     G     B      magenta family?
+ *     0.0   59.9  84.2 121.9   no
+ *     0.4   75.8  71.4 120.4   YES
+ *     1.6   90.8  71.7  99.4   YES   (widest)
+ *     2.4   89.4  87.8  97.8   YES   (marginal)
+ *     2.8   88.7  97.3  97.5   no
+ *
+ * The guessed wedge was less than half the true width, so the analyst band sat squarely inside
+ * it, passed the test, and rendered visibly pink. The test was enforcing a boundary nobody had
+ * measured - which is the same defect as the gate it was written to prevent.
  */
-export const MAGENTA_WEDGE: [number, number] = [0.70, 1.45];
+export const MAGENTA_WEDGE: [number, number] = [0.30, 2.50];
 
 export const ROLE_BANDS: Record<string, Band> = {
-  orchestrator: { shape: 0, ranges: { aspect: [0.96, 1.04], rotation: [0, 0.3] , hue: [6.0, 6.25], saturation: [-0.05, 0.10]} },
+  orchestrator: { shape: 0, ranges: { aspect: [0.96, 1.04], rotation: [0, 0.3] , hue: [0.0, 0.2], saturation: [-0.05, 0.10]} },
   researcher: {
     shape: 1,
-    ranges: { focal: [0.40, 0.62], cassiniB: [0.90, 1.00], lobeBalance: [0.10, 0.35], aspect: [0.95, 1.15] , hue: [2.45, 2.7], saturation: [-0.05, 0.10]},
+    ranges: { focal: [0.40, 0.62], cassiniB: [0.90, 1.00], lobeBalance: [0.10, 0.35], aspect: [0.95, 1.15] , hue: [2.6, 2.85], saturation: [-0.05, 0.10]},
   },
   reviewer: {
     // Held just BELOW the part (focal < cassiniB), and the reason changed on 2026-07-27.
@@ -219,7 +234,7 @@ export const ROLE_BANDS: Record<string, Band> = {
   },
   builder: {
     shape: 2,
-    ranges: { superM: [6, 8], superN1: [4.0, 7.0], superN2: [9, 13], superN3: [9, 13], aspect: [0.97, 1.03] , hue: [4.15, 4.4], saturation: [-0.05, 0.10]},
+    ranges: { superM: [6, 8], superN1: [4.0, 7.0], superN2: [9, 13], superN3: [9, 13], aspect: [0.97, 1.03] , hue: [4.1, 4.35], saturation: [-0.05, 0.10]},
   },
   guardian: {
     // rotation ~0.52 (30 degrees) is what actually points the triangle DOWN, verified by
@@ -228,11 +243,11 @@ export const ROLE_BANDS: Record<string, Band> = {
     // because 180 and 60 degrees are the same triangle. The range is kept narrow so every
     // guardian reads as a shield rather than as an arbitrarily tipped triangle.
     shape: 2,
-    ranges: { superM: [3, 3], superN1: [0.45, 0.62], superN2: [0.9, 1.1], superN3: [0.9, 1.1], rotation: [0.44, 0.60] , hue: [5.0, 5.25], saturation: [-0.05, 0.10]},
+    ranges: { superM: [3, 3], superN1: [0.45, 0.62], superN2: [0.9, 1.1], superN3: [0.9, 1.1], rotation: [0.44, 0.60] , hue: [4.9, 5.15], saturation: [-0.05, 0.10]},
   },
   analyst: {
     shape: 2,
-    ranges: { superM: [5, 7], superN1: [0.35, 0.50], superN2: [1.5, 1.9], superN3: [1.5, 1.9], rotation: [0, 1.2] , hue: [1.8, 2.05], saturation: [-0.05, 0.10]},
+    ranges: { superM: [5, 7], superN1: [0.35, 0.50], superN2: [1.5, 1.9], superN3: [1.5, 1.9], rotation: [0, 1.2] , hue: [5.7, 5.95], saturation: [-0.05, 0.10]},
   },
   default: { shape: 0, ranges: { aspect: [0.94, 1.06], rotation: [0, 6.28] } },
 };
