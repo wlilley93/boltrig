@@ -13,8 +13,12 @@
     "of them have no caller at all, and that raw number is more useful than a number laundered",
     "through a list of roots someone guessed at in an afternoon. Declaring a root is how the",
     "count falls, and each declaration is a claim a reader can check. So is deleting the",
-    "function, which for a good share of these 71 is the right answer: `redact` in kernel/pii.py",
-    "and `apply_rls` in store/postgres.py have no caller anywhere in the package.",
+    "function, which for a good share of these 71 is the right answer. The first two the report",
+    "named, `redact` in kernel/pii.py and `apply_rls` in store/postgres.py, have now been looked",
+    "at, and they turned out to be different cases - which is the argument for looking rather",
+    "than batch-declaring. `apply_rls` is an OPERATOR action, correctly having no in-package",
+    "caller, and is declared below. `redact` is a genuine overclaim and is recorded in",
+    "unwired-claims-allow.json with a blocker, having taken SEC-13's description down with it.",
     "",
     "The 71 include every name the repaired unwired-claims gate reports and every name its",
     "waiver file waives, which is the corroboration that the graph is measuring what it claims:",
@@ -22,6 +26,8 @@
     "build_cell_scope, dev_principal_resolver, select_locale and store_bearer_verifier are all",
     "here, arrived at from the other direction."
   ],
-  "roots": {},
-  "unreachable_baseline": 145
+  "roots": {
+    "apply_rls": "An OPERATOR action, not an application call, and its own docstring says so: it applies the opt-in RLS overlay (boltrig/store/rls.sql) and is explicitly NOT run by default, because the owner-connected default path relies on the per-method `WHERE tenant_id = $1` filter (SEC-08). A deployment that wants DB-enforced isolation runs it once, then connects as `boltrig_app` and uses `with_tenant`. Having no in-package caller is the correct shape for it: a call site would mean the application applying its own database grants. It is exercised end to end by tests/integration/test_rls.py:64, which is the check that the SQL it runs is real rather than the operator's problem."
+  },
+  "unreachable_baseline": 144
 }

@@ -15,10 +15,17 @@ workspace; the visibility + matching filter is an APPLICATION filter in
 WorkflowLibrary, not RLS: RLS stays tenant_id-fenced (a workspace_id predicate would
 hide the org-wide NULL rows, which every workspace must still see).
 
-workflow_promotions does NOT follow: a promotion is keyed (tenant_id, workflow_id)
-and is RANKING-ONLY (COUNTY 5); it maps to exactly one workflow whose row already
-carries the workspace, and the matcher filters candidates by workspace BEFORE the
-reuse weight is applied, so a promotion never needs its own workspace_id.
+A paragraph here used to explain why the workflow_promotions table did not need its
+own workspace_id. That table, and the whole promotion subsystem, were deleted under
+[2026] VJS-CC-BOLTRIG-WORKFLOW-PROMOTION-TRIGGER-001 D3, because the value they
+produced had no consumer. The explanation is removed rather than corrected: the
+reasoning was sound about a table that no longer exists, and leaving it would have a
+reader looking for one.
+
+The MIGRATION ITSELF is untouched and stays applied. An applied revision is a
+historical fact about a database, not a description of the current schema: editing
+what it DOES would change a checksum that every provisioned database already
+records, and refuse to boot. Only the prose above the code moved.
 
 Revision ID: 0014_workflow_workspace_scope
 Revises: 0013_ai_configs

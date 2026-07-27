@@ -844,7 +844,7 @@ invariants:
       - tests/security/test_rls_auth_binding.py::test_provision_user_binds_tenant_before_the_first_read
       - tests/integration/test_migration_parity.py::test_data_bearing_rls_database_upgrades_from_previous_head
   SEC-13:
-    description: 'PII is detected and redacted before it leaves the boundary.'
+    description: 'A PII redactor exists, detects the catalogued patterns and substitutes [REDACTED:<kind>] for them. It is NOT applied at an outbound boundary: `pii.redact` has no production caller, and `manifest.privacy.pii_redaction` is parsed and stored but read by nothing. This description used to say "before it leaves the boundary", which was a security guarantee nothing enforced. The audit path IS scrubbed, by `pii.redact_identity` under SEC-42 and CC-OPBOX 4; that is a different, real control. See the `redact` entry in docs/refactoring/unwired-claims-allow.json.'
     tests:
       - tests/security/test_budget_and_pii.py::test_pii_redaction
   SEC-14:
