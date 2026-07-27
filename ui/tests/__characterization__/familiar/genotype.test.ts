@@ -69,10 +69,11 @@ describe("genotype derivation", () => {
     }
   });
 
-  it("keeps reviewers on the near side of the part, where a body still has light", () => {
-    // Measured on the desktop build: past the part (focal > cassiniB) the body loses its
-    // centre and therefore its nucleus, rendering at 5.9% lit with a peak of 39/255. That is
-    // invisible in a 24px avatar. The geometry is reachable and is deliberately not used.
+  it("keeps reviewers on the near side of the part, because one agent is one body", () => {
+    // The original reason was that a parted body had no nucleus and rendered at 5.9% lit.
+    // That is fixed upstream (12.9% lit, peak 239), so the reason is now a design one and
+    // this test guards the design: a parted body reads as TWO beings, and two blobs in a
+    // 24px avatar say "two agents" to every glance. Reserved for something genuinely plural.
     for (const a of agents("reviewer", 60)) {
       const g = deriveGenotype(a);
       expect(g.focal).toBeLessThan(g.cassiniB);

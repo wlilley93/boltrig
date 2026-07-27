@@ -155,9 +155,15 @@ export const ROLE_BANDS: Record<string, Band> = {
     ranges: { focal: [0.40, 0.62], cassiniB: [0.90, 1.00], lobeBalance: [0.10, 0.35], aspect: [0.95, 1.15] },
   },
   reviewer: {
-    // Held just BELOW the part (focal < cassiniB) on purpose. Past it the body loses its
-    // centre, and with it its nucleus - measured at 5.9% lit, which is a silhouette nobody
-    // can see in a 24px avatar. The geometry is reachable; it is not yet presentable.
+    // Held just BELOW the part (focal < cassiniB), and the reason changed on 2026-07-27.
+    // It used to be that a parted body had no centre, so no nucleus, so almost no light -
+    // 5.9% lit, invisible at 24px. That is fixed upstream: a parted body now measures depth
+    // across each lobe's own thickness and renders at 12.9% lit, peak 239.
+    // The band stays closed anyway, for a design reason rather than a rendering one: a parted
+    // body reads as TWO beings, and one agent must be one body. Two blobs side by side in a
+    // 24px avatar say "two agents" to every glance, which is the opposite of identification.
+    // The geometry is reachable and presentable; it is reserved for something that is
+    // genuinely plural.
     shape: 1,
     ranges: { focal: [0.74, 0.86], cassiniB: [0.86, 0.92], lobeBalance: [0.0, 0.25], twist: [0, 0.8] },
   },
