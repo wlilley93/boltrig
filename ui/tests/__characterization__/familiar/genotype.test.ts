@@ -21,6 +21,7 @@ import {
   GENOTYPE_DEFAULTS,
   GENOTYPE_SLOTS,
   packGenotype,
+  MAGENTA_WEDGE,
   ROLE_BANDS,
   type Genotype,
 } from "@/familiar/genotype";
@@ -69,10 +70,11 @@ describe("genotype derivation", () => {
     }
   });
 
-  it("keeps reviewers on the near side of the part, where a body still has light", () => {
-    // Measured on the desktop build: past the part (focal > cassiniB) the body loses its
-    // centre and therefore its nucleus, rendering at 5.9% lit with a peak of 39/255. That is
-    // invisible in a 24px avatar. The geometry is reachable and is deliberately not used.
+  it("keeps reviewers on the near side of the part, because one agent is one body", () => {
+    // The original reason was that a parted body had no nucleus and rendered at 5.9% lit.
+    // That is fixed upstream (12.9% lit, peak 239), so the reason is now a design one and
+    // this test guards the design: a parted body reads as TWO beings, and two blobs in a
+    // 24px avatar say "two agents" to every glance. Reserved for something genuinely plural.
     for (const a of agents("reviewer", 60)) {
       const g = deriveGenotype(a);
       expect(g.focal).toBeLessThan(g.cassiniB);
@@ -102,16 +104,18 @@ describe("genotype derivation", () => {
     }
   });
 
-  it("packs genes into the uniform in slot order, and never writes past the 14 named slots", () => {
+  it("packs genes into the uniform in slot order, filling all 16 named slots", () => {
     const g = deriveGenotype({ id: "p", role: "analyst" });
     const packed = packGenotype(g);
     expect(packed.length).toBe(16);
     GENOTYPE_SLOTS.forEach((k, i) => expect(packed[i]).toBeCloseTo(g[k], 5));
-    // The last two slots are reserved. If something starts writing them, the shader will read
-    // whatever it is as a gene it does not have, which is the kind of bug that shows up as
-    // "the avatars look odd" three weeks later.
-    expect(packed[14]).toBe(0);
-    expect(packed[15]).toBe(0);
+    // Slots 14 and 15 were reserved until hue and saturation claimed them on 2026-07-27.
+    // This assertion used to be `toBe(0)` on both, and it was RIGHT to fail when they were
+    // filled: a reserved slot silently acquiring a meaning is exactly the drift it guarded.
+    // It now asserts the full 16 are packed in order, which the loop above already covers -
+    // so what is left is the bound itself: nothing may be written past the named slots.
+    expect(packed.length).toBe(16);
+    expect(GENOTYPE_SLOTS.length).toBe(16);
   });
 
   it("degrades a malformed authored genotype to the circle rather than to a black hole", () => {
@@ -123,5 +127,47 @@ describe("genotype derivation", () => {
     const packed = packGenotype(g);
     expect([...packed].every(Number.isFinite)).toBe(true);
     expect(packed[0]).toBe(GENOTYPE_DEFAULTS.shape);
+  });
+});
+
+describe("the magenta wedge is reserved", () => {
+  it("keeps every role's hue band out of it", () => {
+    // Prose would not hold this. The wedge exists because the shader spends magenta on
+    // irritation and the phenotype raises irritation for exactly one state - a failed run -
+    // which makes "magenta means failed" the only signal on the screen that is learnable at a
+    // glance across a fleet. A role seeded inside the wedge would sit at rest looking exactly
+    // like an agent whose run had just died, and identity would be quietly destroying the alarm.
+    const [lo, hi] = MAGENTA_WEDGE;
+    for (const [role, band] of Object.entries(ROLE_BANDS)) {
+      const h = band.ranges.hue;
+      if (!h) continue;
+      const overlaps = h[0] < hi && h[1] > lo;
+      expect(overlaps, `${role} hue ${JSON.stringify(h)} enters the reserved magenta wedge`).toBe(false);
+    }
+  });
+
+  it("keeps derived agents out of it too, not just the band edges", () => {
+    // The band could clear the wedge while a gene drawn from it lands inside, if the range
+    // were ever written backwards. Cheap to check against the thing that actually renders.
+    const [lo, hi] = MAGENTA_WEDGE;
+    for (const role of Object.keys(ROLE_BANDS)) {
+      for (let i = 0; i < 40; i++) {
+        const h = deriveGenotype({ id: `${role}-${i}`, role }).hue;
+        expect(h < lo || h > hi, `${role}-${i} derived hue ${h.toFixed(3)} is in the wedge`).toBe(true);
+      }
+    }
+  });
+
+  it("gives each role a visibly different hue from the others", () => {
+    // Colour is only worth spending if the roles are separable by it. The bands are placed so
+    // the worst-case adjacent pair is 0.40 rad (~23 degrees) apart; 0.35 is the floor asserted.
+    const hues = Object.keys(ROLE_BANDS)
+      .filter((r) => r !== "default" && ROLE_BANDS[r].ranges.hue)
+      .map((r) => deriveGenotype({ id: "x", role: r }).hue)
+      .sort((a, b) => a - b);
+    for (let i = 1; i < hues.length; i++) {
+      expect(hues[i] - hues[i - 1], `hues ${hues[i - 1]} and ${hues[i]} are too close`)
+        .toBeGreaterThan(0.35);
+    }
   });
 });

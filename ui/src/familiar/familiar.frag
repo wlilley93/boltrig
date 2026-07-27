@@ -182,7 +182,8 @@ float shapeDist(vec2 p,
                 float gShape, float gBlend,
                 float gFocal, float gCassB, float gLobe,
                 float gM, float gN1, float gN2, float gN3, float gSA, float gSB,
-                float gAspect, float gRot, float gTwist) {
+                float gAspect, float gRot, float gTwist,
+                float gScale) {
   // Aspect and rotation are applied to the SAMPLE, not the formula, so they compose
   // with every family for free.
   float rl = length(p);
@@ -223,18 +224,77 @@ float shapeDist(vec2 p,
   // would paint whatever fell out of it.
   if (r <= 1e-4) return 1e4;
   float lq = length(q);
-  // Inside the inner root is the GAP between two parted lobes: outside the body.
-  if (rInner > 1e-4 && lq < rInner) return 1e4;
+
+  // A PARTED BODY HAS NO CENTRE, so it cannot be measured from one.
+  //
+  // Measured before this branch existed: a genotype past the split rendered at 5.9% lit with
+  // a peak of 39/255, and the bench called it SUSPECT (flat/black). The silhouette was right -
+  // the lobes exist within +/-20.5 degrees and span r 0.616..1.351 - but every downstream
+  // consumer measures depth as distance from the figure's centre, and the figure's centre is
+  // the empty gap between the lobes. Each lobe rendered as the outer rind of a sphere whose
+  // glowing middle had been cut out.
+  //
+  // So when the body is parted, depth is measured across the LOBE's own thickness instead:
+  // 0 on its radial mid-line, 1 at both of its boundaries. That preserves the contract exactly
+  // (1.0 on the silhouette, <1 inside, >1 outside), so the ~20 `scale`-relative comparisons
+  // downstream keep their meaning, while giving the interior a core to build light around.
+  //
+  // Only when parted. For rInner == 0 the same formula would read 1.0 at the body's CENTRE,
+  // which would invert every unparted familiar - so the unparted path is untouched and stays
+  // pixel-identical to what is already verified.
+  if (rInner > 1e-4) {
+    // UNITS. The contract is not "1.0 on the silhouette" as the header above once said - it is
+    // that the returned value equals `scale` there, because every downstream test compares it
+    // against `scale`. The unparted `lq/r` satisfies that because the boundary sits at
+    // lq = r*scale. A first cut of this branch returned a dimensionless 0..1 and the body
+    // vanished completely: rendered, measured 5.8% lit, and the image was pure background.
+    //
+    // So the lobe's mid-line has to be located in the SAME units as lq, which means knowing
+    // `scale`. It is threaded in rather than guessed, and it is used ONLY here.
+    float midUv  = (rInner + r)*0.5*gScale;   // the lobe's radial centre, in uv
+    // Guarded: at the lobe TIPS the two boundaries meet, the half-thickness goes to zero, and
+    // an unguarded divide would send the tips to infinity - a body with its points snipped off.
+    float halfT  = max((r - rInner)*0.5, 1e-4);
+    if (lq < rInner*gScale) return 1e4;       // the gap between the lobes: outside the body
+    return abs(lq - midUv)/halfT;
+  }
   return lq/r;
 }
 
+// --- GENOTYPE HUE ------------------------------------------------------------
+// Rotates a colour about the achromatic axis. The YIQ form is used rather than a
+// full RGB->HSV->RGB trip because it is three dot products and this runs per pixel
+// per frame for every familiar on the page.
+//
+// APPLIED TO THE BODY PALETTE ONLY, AND BEFORE IRRITATION'S MAGENTA IS MIXED IN.
+// That placement is the whole design. Magenta is the shader's single exception in a
+// blue field and the phenotype spends it on exactly one state - a failed run. If a
+// per-agent hue rotated it too, "magenta means failed" would become "some colour
+// means failed, depending on which agent you are looking at", and the most valuable
+// signal on the screen would stop being learnable. So identity tints the being and
+// never touches the alarm.
+vec3 hueRotate(vec3 c, float a) {
+  float u = cos(a), w = sin(a);
+  return clamp(mat3(0.299 + 0.701*u + 0.168*w, 0.587 - 0.587*u + 0.330*w, 0.114 - 0.114*u - 0.497*w,
+                    0.299 - 0.299*u - 0.328*w, 0.587 + 0.413*u + 0.035*w, 0.114 - 0.114*u + 0.292*w,
+                    0.299 - 0.300*u + 1.250*w, 0.587 - 0.588*u - 1.050*w, 0.114 + 0.886*u - 0.203*w) * c,
+               0.0, 1.0);
+}
+
+// Saturation about luma. Kept narrow at the call site: a familiar desaturated to grey
+// stops reading as alive, and one oversaturated stops reading as the same species.
+vec3 saturate3(vec3 c, float k) {
+  float l = dot(c, vec3(0.299, 0.587, 0.114));
+  return clamp(mix(vec3(l), c, k), 0.0, 1.0);
+}
+
 // Convenience wrapper: unpacks uGene so call sites stay readable.
-float bodyDist(vec2 p) {
+float bodyDist(vec2 p, float s) {
   return shapeDist(p,
     uGene[0].x, uGene[0].y, uGene[0].z, uGene[0].w,
     uGene[1].x, uGene[1].y, uGene[1].z, uGene[1].w,
     uGene[2].x, uGene[2].y, uGene[2].z, uGene[2].w,
-    uGene[3].x, uGene[3].y);
+    uGene[3].x, uGene[3].y, s);
 }
 
 void main(){
@@ -335,7 +395,7 @@ void main(){
   //
   // For a circle bodyDist() returns length(), so rn == length(rxy), the remap is the
   // identity, and the pre-genotype body is preserved exactly.
-  float dScreen = bodyDist(uv - centre);
+  float dScreen = bodyDist(uv - centre, scale);
   vec2  rxy = (uv - centre)/scale;
   float rn  = dScreen/max(scale, 1e-6);
   float rl0 = length(rxy);
@@ -358,6 +418,8 @@ void main(){
                   mix(azure, sky, smoothstep(0.55,1.00,val)),
                   smoothstep(0.40,0.80,val));
   base = mix(base, sky,     clamp(gWarm,0.0,1.0)*0.6);
+  // Identity tint. Slots 14/15 of the genotype, applied here and nowhere else.
+  base = saturate3(hueRotate(base, uGene[3].z), 1.0 + uGene[3].w);
   base = mix(base, magenta, irr*0.70);
   base *= mix(vec3(0.90,0.94,1.12), vec3(1.02,0.98,1.06), clamp(uDay,0.0,1.0));
   vec3 hot = mix(base, vec3(0.45,0.75,1.00), 0.40 + 0.18*lum);
@@ -1275,6 +1337,8 @@ void main(){
                   mix(azure, sky, smoothstep(0.55,1.00,val)),
                   smoothstep(0.40,0.80,val));
   base = mix(base, sky,     clamp(gWarm,0.0,1.0)*0.6);
+  // Identity tint. Slots 14/15 of the genotype, applied here and nowhere else.
+  base = saturate3(hueRotate(base, uGene[3].z), 1.0 + uGene[3].w);
   base = mix(base, magenta, irr*0.70);
   // (The time-of-day tint is gone: colour belongs to boltrig's emotion engine alone. uDay stays in
   // the contract but paints nothing.)
@@ -1283,7 +1347,7 @@ void main(){
 
   vec3 col = vec3(0.0);
   float alpha = 0.0;
-  float dScreen = bodyDist(uv - centre);
+  float dScreen = bodyDist(uv - centre, scale);
   vec3  L = normalize(vec3(-0.50, 0.62, -0.60));
 
   // curiosity: it notices when your cursor comes near, and leans in. "Near" is measured in BODY
