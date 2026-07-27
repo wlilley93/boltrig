@@ -151,15 +151,47 @@ def _scrub(detail: dict) -> dict:
     scrubbed too, not passed verbatim."""
     out: dict = {}
     for k, v in detail.items():
-        out[k] = _scrub_value(v)
+        out[_scrub_key(k)] = _scrub_value(v)
     return out
+
+
+def _scrub_key(k: Any) -> Any:
+    """Bring the KEY within the scrub.
+
+    County Court, variation of CP3 on SUBMISSION-2026-07-27-124116 (CONVENING-county-2026-07-27-125100), head 5.
+    This loop previously copied keys verbatim while scanning only values, so a
+    caller-supplied dict key carrying a secret went into an append-only store
+    untouched. The principal ratio reaches it without extension: a record of a
+    failure is composed from what the system asserted, never from what the caller
+    supplied.
+
+    A key must stay a string (it is a dict key, and the known consumer at
+    observability.py reads `id`/`verb_id`/`verb` by name), so a secret-bearing key
+    collapses to a stable marker rather than to the digest DICT a value would get.
+    """
+    if not isinstance(k, str):
+        return k
+    if kind := pii.contains_secret(k):
+        return f"[scrubbed:{kind}]"
+    if pii.contains_identity(k):
+        return pii.redact_identity(k)
+    return k
 
 
 def _scrub_value(v: Any) -> Any:
     if isinstance(v, str):
+        # A SECRET taints its whole context: digest the value entire. An adjacent
+        # fragment can carry the rest of the credential, so span substitution is
+        # not enough here.
         if pii.contains_secret(v):
             digest = hashlib.sha256(v.encode()).hexdigest()[:16]
             return {"_scrubbed": True, "digest": digest, "size": len(v)}
+        # IDENTITY data does not taint its context: cut out the span and leave the
+        # rest readable. County Court, variation of CP3. Digesting the whole
+        # value on an ipv4 false positive would make the record less legible than
+        # leaving it alone, which is the opposite of what the order is for.
+        if pii.contains_identity(v):
+            return pii.redact_identity(v)[:_PREVIEW_LEN]
         return v[:_PREVIEW_LEN]
     if isinstance(v, dict):
         return _scrub(v)
