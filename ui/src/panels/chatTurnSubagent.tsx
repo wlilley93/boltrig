@@ -3,7 +3,7 @@
 // nests (the consumer-side run nesting).
 
 import type { CSSProperties } from "react";
-import { Familiar, familiarAvailable } from "@/familiar/Familiar";
+import { Familiar, useFamiliarAvailable } from "@/familiar/Familiar";
 import { stableAgentKey } from "@/familiar/genotype";
 import type { SubagentEntry } from "@/panels/chatTurnTypes";
 import { cleanTaskText } from "@/panels/shared";
@@ -39,7 +39,7 @@ export function SubagentCard({
   // derives from its role alone, so it looks like its kind without claiming to be a
   // particular individual.
   const key = stableAgentKey({ name: sub.name, runId: sub.childRunId });
-  const showFamiliar = familiarAvailable();
+  const showFamiliar = useFamiliarAvailable();
 
   return (
     <div

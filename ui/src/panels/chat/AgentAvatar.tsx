@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 
-import { Familiar, familiarAvailable } from "@/familiar/Familiar";
+import { Familiar, useFamiliarAvailable } from "@/familiar/Familiar";
 import type { RunFacts } from "@/familiar/phenotype";
 import type { ChatAgent } from "@/panels/chat/constants";
 
@@ -30,7 +30,7 @@ interface AgentAvatarProps {
  * ship without an accessibility regression.
  */
 export function AgentAvatar({ agent, size = 32, status = true, run, voice }: AgentAvatarProps): JSX.Element {
-  const canRender = familiarAvailable();
+  const canRender = useFamiliarAvailable();
   const runFacts: RunFacts | undefined =
     run ??
     (agent.status === "offline"

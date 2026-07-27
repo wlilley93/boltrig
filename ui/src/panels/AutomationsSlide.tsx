@@ -14,7 +14,7 @@ import type {
   WorkflowSummary,
 } from "../api/types";
 import type { DeckCol } from "../deck/Deck";
-import { Familiar, familiarAvailable } from "@/familiar/Familiar";
+import { Familiar, useFamiliarAvailable } from "@/familiar/Familiar";
 import { automationRole, automationRunFacts } from "@/familiar/automation";
 import { navigate, useRoute } from "../router";
 import { useFetch } from "../useFetch";
@@ -145,6 +145,9 @@ function WorkflowCard({
     () => mergeCardStats(deriveCardMeta(wf.id, wf.source, wf.intent_tags), stat),
     [wf.id, wf.source, wf.intent_tags, stat],
   );
+  // Hook, not a call in the JSX: the shader loads lazily, so availability starts false and
+  // becomes true. A plain call would be read once and latch on that first false.
+  const showFamiliar = useFamiliarAvailable();
   return (
     <button
       type="button"
@@ -156,7 +159,7 @@ function WorkflowCard({
       <span className="wfhome__accent" />
       <span className="wfhome__body">
         <span className="wfhome__head">
-          {familiarAvailable() && (
+          {showFamiliar && (
             // The card's familiar states the automation's RECORD, not this instant: a column
             // of settled bodies with one magenta one is a failing job you find without reading
             // a single date. The shape comes from the intent tags, so the list is scannable by

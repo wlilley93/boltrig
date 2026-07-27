@@ -22,10 +22,32 @@
  * agent used to be".
  */
 
-import FAMILIAR_FRAG from "./familiar.frag?raw";
-
 import { packGenotype, type Genotype } from "./genotype";
 import { type Phenotype } from "./phenotype";
+
+/**
+ * THE SHADER IS FETCHED, NOT BUNDLED, and the bundle budget is how that was found out.
+ *
+ * A static `import FAMILIAR_FRAG from "./familiar.frag?raw"` inlines 107KB of GLSL into the
+ * main chunk. That took the entry bundle to 509,696 bytes against a 500,000 budget, and CI
+ * refused the build - correctly, and for a better reason than the number: it meant every user
+ * downloaded a raymarcher on first paint, including on the login screen, including if they
+ * never opened a chat.
+ *
+ * A dynamic import puts it in its own chunk, fetched once when the first familiar mounts.
+ * The cost is that readiness becomes asynchronous, which is why `available()` can return false
+ * and later become true, and why there is a subscription below rather than a plain boolean.
+ */
+let FRAG: string | null = null;
+let fragLoad: Promise<void> | null = null;
+const readyListeners = new Set<() => void>();
+
+/** Notified when the shader has arrived and the first program has linked. Components hold
+ *  initials until this fires, so the failure mode of a slow network is the OLD avatar. */
+export function onFamiliarReady(cb: () => void): () => void {
+  readyListeners.add(cb);
+  return () => readyListeners.delete(cb);
+}
 
 const VERT = `#version 300 es
 void main() {
@@ -57,16 +79,41 @@ class Renderer {
   private t0 = 0;
   private failed = false;
 
-  /** True once a context and a linked program exist. Callers use this to decide whether to
-   *  render a familiar at all, so it must never be optimistic. */
+  /**
+   * True once the shader has arrived AND a context and a linked program exist. Never
+   * optimistic: it returns false while the fetch is in flight, so a caller that asks early
+   * gets initials rather than an empty canvas that may or may not fill in later.
+   *
+   * Calling it starts the fetch. That makes it a getter with a side effect, which is usually
+   * a smell and is right here: every call site is asking "should I draw a familiar", and the
+   * honest answer to the first one is "not yet, and I have started making it possible".
+   */
   available(): boolean {
     if (this.failed) return false;
     if (this.prog) return true;
+    if (FRAG === null) {
+      if (!fragLoad) {
+        fragLoad = import("./familiar.frag?raw")
+          .then((m) => {
+            FRAG = m.default;
+            // Link immediately so `available()` is true by the time a listener runs. A
+            // listener that fired before the program linked would re-render into another false.
+            this.init();
+            for (const cb of readyListeners) cb();
+          })
+          .catch((err) => {
+            console.warn("familiar: shader failed to load:", err);
+            this.failed = true;
+          });
+      }
+      return false;
+    }
     return this.init();
   }
 
   private init(): boolean {
     if (this.failed || this.prog) return !!this.prog;
+    if (FRAG === null) return false;
     try {
       // Sized generously once; each subject renders into the top-left corner at its own size
       // via glViewport, so one buffer serves every avatar size on the page without resizing
@@ -87,7 +134,7 @@ class Renderer {
       if (!gl) { this.failed = true; return false; }
 
       const vs = this.compile(gl, gl.VERTEX_SHADER, VERT);
-      const fs = this.compile(gl, gl.FRAGMENT_SHADER, FAMILIAR_FRAG);
+      const fs = this.compile(gl, gl.FRAGMENT_SHADER, FRAG);
       if (!vs || !fs) { this.failed = true; return false; }
       const prog = gl.createProgram();
       if (!prog) { this.failed = true; return false; }
