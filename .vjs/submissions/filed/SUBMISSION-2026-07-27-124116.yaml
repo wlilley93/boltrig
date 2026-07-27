@@ -1,0 +1,50 @@
+id: SUBMISSION-2026-07-27-124116
+court_requested: county
+jurisdiction: default
+question: What may be recorded in the audit ledger about a schema-validation failure?
+facts: |
+  # Schema-validation errors and the audit ledger
+
+  ## Facts
+
+  G1. `boltrig/kernel/dispatch.py:445-447` validates params and raises `SchemaValidationError(message, errors)`.
+
+  G2. `dispatch.py:354` writes `detail = {"message": str(e)}`. The `errors` list is **discarded**. The audit row records THAT params were invalid and never WHICH field.
+
+  G3. `_validate` (`dispatch.py:71-75`) returns `[e.message for e in validator.iter_errors(instance)]`. jsonschema messages **embed the offending instance value**, e.g. `"'sk-live-xxx' is not of type 'integer'"`.
+
+  G4. The codebase already has a value-free convention. `_summarise_params` records sorted top-level KEY NAMES and a count, documented as "never the values (which can carry secrets or untrusted content)". `_summarise_output` mirrors it.
+
+  G5. The audit ledger is append-only. A prior incident left 85 raw-PII rows in it that nobody had ever read, and the remedy was scrub-by-key.
+
+  G6. Live motivation: `opbox.get_matter` failed `schema_invalid` 8 times in 4 seconds on a production tenant. The cause cannot be determined from the record. The tool's wire name is snake_case (`opbox_get_matter`) while its required property is camelCase (`matterId`), so a plausible cause is the model sending `matter_id`, but that is a guess the record cannot settle.
+
+  G7. A `ValidationError` also carries `json_path`, `validator` (the failing keyword) and `validator_value`. `validator_value` is **schema-derived**, not user-derived: for `required` it is the list of required property names.
+
+  ## Question
+
+  What, if anything, may be recorded in the audit ledger about a schema-validation failure?
+
+  ## Option A: value-free structured errors
+
+  Record `{path, keyword, expected}` per error, where `expected` is `validator_value` (schema-derived). Never the message, never the instance.
+
+  *For:* follows G4's existing convention exactly; makes G6 answerable immediately (required `[matterId]` against recorded keys `[matter_id]` is a diff, not a guess); cannot leak instance data because instance data is never read.
+  *Against:* `validator_value` is only presumptively safe; a schema authored to include an example or a default could carry a value. Adds a second shape to `detail` that consumers must tolerate. It is a permanent widening of an immutable store to solve a debugging problem.
+
+  ## Option B: record the raw jsonschema messages
+
+  *For:* maximum diagnostic power, zero transformation, no risk of discarding the one detail that mattered; the errors already exist and are simply being thrown away.
+  *Against:* directly contradicts G4; G3 means instance values, including secrets and untrusted content, land verbatim in an append-only store; reproduces G5's incident by construction.
+
+  ## Option C: record nothing new; divert to a non-ledger stream
+
+  Leave `detail` as is; emit the structured errors on the existing security/observability stream, which is not append-only.
+
+  *For:* the ledger's contents stay unchanged, so no widening and no scrub risk; diagnostics still reach an operator.
+  *Against:* splits one event across two stores, so the regulator-facing record (a stated goal: nothing material outside that record) is knowingly incomplete; the diverted stream has its own retention, so the diagnosis may not exist when the audit row is read.
+
+  No option is preferred. The advocate held a view and withheld it.
+requested_order: TBD
+private_boundary: local
+word_count: 486
