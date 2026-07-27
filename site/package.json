@@ -39,7 +39,7 @@
     "eslint-config-next": "16.2.12",
     "happy-dom": "20.11.1",
     "tailwindcss": "^4",
-    "typescript": "^5",
+    "typescript": "^7",
     "vitest": "3.2.6"
   },
   "packageManager": "pnpm@11.5.0"
