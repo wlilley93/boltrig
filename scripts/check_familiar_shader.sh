@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Is the vendored familiar.frag the one it was copied from?
+# Are the vendored familiar.frag and genotype.h the ones they were copied from?
 #
 # ui/src/familiar/familiar.frag is a COPY. Its source lives in another repo entirely
 # (wlilley93/beelink-desktop, familiar/familiar.frag), so no compiler, linter or CI job in this
@@ -16,37 +16,55 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-VENDORED="$HERE/ui/src/familiar/familiar.frag"
-UPSTREAM="${FAMILIAR_UPSTREAM:-$HOME/Projects/beelink-desktop/familiar/familiar.frag}"
+UPSTREAM_DIR="${FAMILIAR_UPSTREAM_DIR:-$HOME/Projects/beelink-desktop/familiar}"
 
-if [ ! -f "$VENDORED" ]; then
-  echo "FAIL: no vendored shader at $VENDORED" >&2
-  exit 1
-fi
+# TWO vendored files, not one. genotype.h was added on 2026-07-27 because the shader alone was
+# never the whole copy: the shader reads uGene POSITIONALLY, and the header is the only thing
+# that says which slot is which gene. The console's own slot table drifted from it, uploaded
+# bodyScale into a slot the shader does not read, and left the slot the shader DOES read as
+# bodyScale at zero - which multiplies every familiar's radius by nothing. Checking the shader
+# and not the table checked the half that could not go wrong on its own.
+FILES="familiar.frag genotype.h"
 
-vend_sha="$(sha256sum "$VENDORED" | cut -d' ' -f1)"
-echo "vendored : $vend_sha  $VENDORED"
+status=0
+for f in $FILES; do
+  vendored="$HERE/ui/src/familiar/$f"
+  upstream="$UPSTREAM_DIR/$f"
 
-if [ ! -f "$UPSTREAM" ]; then
-  echo "NOT CHECKED: no upstream shader at $UPSTREAM" >&2
-  echo "             set FAMILIAR_UPSTREAM to its path, or clone wlilley93/beelink-desktop." >&2
-  exit 2
-fi
+  if [ ! -f "$vendored" ]; then
+    echo "FAIL: no vendored $f at $vendored" >&2
+    exit 1
+  fi
 
-up_sha="$(sha256sum "$UPSTREAM" | cut -d' ' -f1)"
-echo "upstream : $up_sha  $UPSTREAM"
+  vend_sha="$(sha256sum "$vendored" | cut -d' ' -f1)"
+  echo "vendored : $vend_sha  $vendored"
 
-if [ "$vend_sha" != "$up_sha" ]; then
-  echo >&2
-  echo "DRIFT: the console is rendering a different being from the desktop." >&2
-  echo "  The two files differ. Neither is automatically right - check which way the change" >&2
-  echo "  went before copying, because a blind re-copy can discard a real upstream fix." >&2
-  echo >&2
-  diff -u "$UPSTREAM" "$VENDORED" | head -40 >&2 || true
-  exit 1
-fi
+  if [ ! -f "$upstream" ]; then
+    echo "NOT CHECKED: no upstream $f at $upstream" >&2
+    echo "             set FAMILIAR_UPSTREAM_DIR to its directory, or clone wlilley93/beelink-desktop." >&2
+    exit 2
+  fi
 
-echo
-echo "RESULT: PASS - the vendored shader is byte-identical to its upstream."
+  up_sha="$(sha256sum "$upstream" | cut -d' ' -f1)"
+  echo "upstream : $up_sha  $upstream"
+
+  if [ "$vend_sha" != "$up_sha" ]; then
+    echo >&2
+    echo "DRIFT in $f: the console is rendering a different being from the desktop." >&2
+    echo "  The two files differ. Neither is automatically right - check which way the change" >&2
+    echo "  went before copying, because a blind re-copy can discard a real upstream fix." >&2
+    echo >&2
+    diff -u "$upstream" "$vendored" | head -40 >&2 || true
+    status=1
+  fi
+  echo
+done
+
+[ "$status" -eq 0 ] || exit 1
+
+frag_sha="$(sha256sum "$HERE/ui/src/familiar/familiar.frag" | cut -d' ' -f1)"
+echo "RESULT: PASS - every vendored file is byte-identical to its upstream."
 echo "        Remember the digest in ui/tests/__characterization__/familiar/shader-provenance.test.ts"
-echo "        must also name this hash: $vend_sha"
+echo "        must also name this hash: $frag_sha"
+echo "        genotype.h needs no recorded digest: slot-table.test.ts PARSES it and compares it"
+echo "        to the console's own table, which is a stronger check than a hash of either."
