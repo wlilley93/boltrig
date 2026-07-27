@@ -20,14 +20,45 @@ class BoltrigError(Exception):
 
 
 class SchemaValidationError(BoltrigError):
-    """Verb params (or output) did not match the registered JSON Schema (SEC-21)."""
+    """Verb params (or output) did not match the registered JSON Schema (SEC-21).
+
+    ``errors`` is a list of VALUE-FREE findings, ``{"schema_path": [...], "keyword": "..."}``,
+    built by ``kernel.dispatch._validate``. It is deliberately not a list of jsonschema
+    messages: those embed the offending instance verbatim, and this object's contents reach an
+    append-only, hash-chained store that nothing can edit or delete afterwards.
+
+    See the schema-validation ledger order (county, First Instance, 2026-07-27) and
+    ``docs/vjs/2026-VJS-CC-BOLTRIG-SCHEMA-VALIDATION-LEDGER-001-opinion.md``. The rule it
+    settles: a field may enter an append-only store only if its value range is closed at build
+    time, or its provenance is wholly the schema AND it is name-only.
+    """
 
     status_code = 400
     reason = "schema_invalid"
 
-    def __init__(self, message: str, errors: list[str] | None = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        errors: list[dict[str, Any]] | None = None,
+        *,
+        schema_digest: str | None = None,
+    ) -> None:
         super().__init__(message)
         self.errors = errors or []
+        self.schema_digest = schema_digest
+
+    def audit_detail(self) -> dict[str, Any]:
+        """The audit-row fields this failure contributes. Value-free by construction.
+
+        ``truncated`` is present only when findings were dropped, so its absence means the
+        list is complete rather than merely short.
+        """
+        detail: dict[str, Any] = {"schema_errors": self.errors}
+        if self.schema_digest is not None:
+            detail["schema_digest"] = self.schema_digest
+        if len(self.errors) >= 10:
+            detail["truncated"] = True
+        return detail
 
 
 class BindingNotFound(BoltrigError):

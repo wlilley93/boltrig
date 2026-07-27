@@ -2036,3 +2036,17 @@ invariants:
     tests:
       - tests/store/test_channel_durability.py::test_rebinding_a_sender_replaces_that_senders_one_row
       - tests/store/test_channel_durability.py::test_a_binding_id_held_by_another_sender_is_refused_on_both_stores
+
+  # --- an append-only row may hold names, never values ---
+  SEC-190:
+    description: 'A schema-validation failure records only what its provenance permits into the append-only, hash-chained audit row: per error the schema''s own `absolute_schema_path` (names, never a value) and an ALLOWLISTED Draft 2020-12 keyword, plus the top-level params KEY NAMES, plus a digest of the registered schema. The expectation is DERIVED at read time from the schema that digest pins, and on a mismatch the reader is told the schema moved and is shown no diff. The instance is never read on this path: `message`, `json_path`, `absolute_path`, `instance` and `validator_value` are all refused, and the two that look safe are not - `json_path` carries an instance KEY as a path segment under additionalProperties, and `validator_value` carries the literal for `const` and the whole list for `enum` on a schema that, for an MCP-imported verb, arrived verbatim from a remote server. The defence is POSITIONAL and not the write-time scrubber: the leak test passes with `pii.contains_secret` monkeypatched to return None, because nothing on the path ever reads the value there would be to scrub. Input and output validation are treated identically; the output instance is the adapter''s response and is the worse half. Bounded at 10 errors with a truncated flag, 10 path segments of 64 chars, and 50 key names reported against a true count. See the schema-validation ledger order and docs/vjs/2026-VJS-CC-BOLTRIG-SCHEMA-VALIDATION-LEDGER-001-opinion.md.'
+    tests:
+      - tests/security/test_schema_validation_ledger.py::test_records_only_the_schema_path_and_an_allowlisted_keyword
+      - tests/security/test_schema_validation_ledger.py::test_an_unrecognised_keyword_is_recorded_as_unknown
+      - tests/security/test_schema_validation_ledger.py::test_no_instance_or_schema_value_reaches_the_audit_row
+      - tests/security/test_schema_validation_ledger.py::test_the_forbidden_attributes_are_named_nowhere_on_the_audit_path
+      - tests/security/test_schema_validation_ledger.py::test_read_time_derivation_turns_the_live_failure_into_a_diff
+      - tests/security/test_schema_validation_ledger.py::test_a_moved_schema_declines_to_diff_rather_than_answering_from_the_wrong_one
+      - tests/security/test_schema_validation_ledger.py::test_output_validation_records_the_same_shape_and_leaks_nothing
+      - tests/security/test_schema_validation_ledger.py::test_the_error_list_is_capped_and_says_when_it_truncated
+      - tests/security/test_schema_validation_ledger.py::test_the_row_carries_the_key_names_and_neither_value

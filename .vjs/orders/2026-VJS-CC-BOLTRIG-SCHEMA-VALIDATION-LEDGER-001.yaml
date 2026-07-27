@@ -1,0 +1,126 @@
+id: 2026-VJS-CC-BOLTRIG-SCHEMA-VALIDATION-LEDGER-001
+court: county
+jurisdiction: default
+repo_code: boltrig
+status: binding
+issue: schema_validation_ledger_admissibility
+holding: |
+  None of the three pleaded options is right, and the axis the filing chose is the wrong
+  one. It asked how much diagnostic power may be bought; the question is PROVENANCE, per
+  field.
+
+  THE RATIO. A field may enter an append-only store only if its value range is closed at
+  build time, or its provenance is wholly the schema AND it is name-only. Everything else is
+  derived at read time from the system of record, pinned by a digest.
+
+  Three corollaries, each doing distinct work. (i) Provenance is per FIELD, not per struct:
+  "structured, therefore safe" is not an argument, and {path, keyword, expected} mixes three
+  provenances so that the least safe rides in on the reputation of the other two. (ii)
+  Schema-derived is not value-free: a schema is data, is third-party data for an
+  MCP-imported verb, and const and enum place literals in validator_value by definition. The
+  safe cut is names versus values. (iii) In a store where nothing can be unwritten the test
+  is not "is it usually safe" but "can it be wrong", because the remedy for a mistake here is
+  nothing at all.
+
+  Option B is FORBIDDEN by [2026] VJS-COUNTY 9, not weighed. Option C rests on a false fact:
+  the security stream is also append-only and hash-chained, carries the same no-secrets rule,
+  and imports the same scrubber, so diverting lowers no bar and splits the record.
+
+  Option A is refused AS PLEADED, on all three of its named fields and on its stated
+  guarantee. Its claim that instance data is never read is untrue: json_path is derived from
+  the INSTANCE, and under additionalProperties an instance key IS a path segment. Its
+  treatment of a value-bearing validator_value as hypothetical is wrong: const and enum are
+  ordinary keywords. And it does not deliver its headline benefit, because on the motivating
+  failure neither recorded field names the disagreeing property.
+
+  ADOPTED: Option A as modified, which is a materially different order. Record per error
+  {schema_path, keyword} where schema_path is absolute_schema_path (name-only) and keyword is
+  allowlisted; record the top-level params key summary; record a schema digest; derive the
+  expectation at read time; never read message, json_path, absolute_path, instance or
+  validator_value anywhere on the audit path; apply all of it to output validation too; and
+  keep the write-time scrub as a second line, proven by test not to be what saves the row.
+
+  The pleading is corrected in four places. The output-validation twin at dispatch.py:523-525
+  was not disclosed and is the worse half, its instance being the adapter's response. The
+  ledger is not value-free today: _resource_ref already lifts an instance value into
+  resource_id under COUNTY 9 D1. detail is already scrubbed at write time, and that scrubber
+  does not catch the filing's own worked example. And the remedy in the 85-row incident was
+  not scrub-by-key: those rows are permanent and unreachable, which makes that fact stronger
+  against widening than as pleaded.
+directives:
+- id: D1
+  actor: lexby
+  must: record_the_params_key_summary_on_the_audit_row_for_every_dispatch_outcome_using_the_existing_summarise_params_so_a_regulator_facing_row_is_not_shallower_than_the_chat_stream_beside_it
+  when: null
+- id: D2
+  actor: lexby
+  must: record_per_validation_error_exactly_schema_path_and_keyword_where_schema_path_is_absolute_schema_path_and_keyword_is_matched_against_a_build_time_allowlist_of_draft_2020_12_keywords_with_anything_else_including_none_recorded_as_unknown
+  when: null
+- id: D3
+  actor: lexby
+  must: never_read_the_instance_on_the_audit_path_message_json_path_absolute_path_instance_and_validator_value_must_not_be_referenced_on_any_code_path_reaching_auditwriter_write_or_securityeventwriter_record_proven_both_positionally_and_structurally
+  when: null
+- id: D4
+  actor: lexby
+  must: record_a_schema_digest_sha256_over_the_canonical_json_of_the_registered_schema_in_the_failure_detail_so_a_later_read_can_tell_whether_the_schema_it_would_diff_against_is_the_one_that_was_in_force
+  when: null
+- id: D5
+  actor: lexby
+  must: derive_the_expectation_at_read_time_by_extending_the_audit_read_surface_so_a_schema_invalid_row_renders_against_the_verbs_current_schema_and_renders_a_digest_mismatch_state_with_no_diff_where_the_schema_moved
+  when: null
+- id: D6
+  actor: lexby
+  must: apply_d1_through_d5_identically_to_output_validation_whose_instance_is_the_adapters_response_and_is_therefore_the_worse_half
+  when: null
+- id: D7
+  actor: lexby
+  must: bound_the_addition_cap_recorded_errors_per_row_at_ten_with_a_truncated_flag_cap_schema_path_depth_at_ten_and_segment_length_at_sixty_four_and_cap_the_key_summary_at_fifty_while_still_reporting_the_true_count
+  when: null
+- id: D8
+  actor: lexby
+  must: prove_the_defence_is_positional_and_not_nominal_by_running_the_leak_test_with_pii_contains_secret_monkeypatched_to_return_none_unconditionally_so_a_red_result_means_the_scrubber_was_what_saved_the_row
+  when: null
+- id: D9
+  actor: lexby
+  must: refresh_the_vendored_citator_to_carry_the_opbox_pseudonymiser_verb_scope_and_credential_audited_path_orders_before_any_boltrig_order_cites_them
+  when: null
+- id: D10
+  actor: lexby
+  must: register_the_invariant_in_the_catalogue_bound_to_the_d3_and_d8_test_ids_so_the_census_gate_reports_no_unbound_row
+  when: null
+forbidden:
+- recording_a_jsonschema_message_or_any_other_field_that_embeds_the_offending_instance
+- recording_json_path_or_absolute_path_which_are_derived_from_the_instance_and_carry_an_instance_key_as_a_path_segment_under_additionalproperties
+- recording_validator_value_which_is_schema_derived_and_still_a_value_carrying_the_literal_for_const_and_the_whole_list_for_enum
+- storing_the_expectation_beside_the_failure_when_it_can_be_derived_from_the_registered_schema_at_read_time
+- treating_the_write_time_scrub_as_discharging_the_duty_it_is_a_pattern_list_and_therefore_a_second_line_and_never_the_first
+- diverting_the_diagnosis_to_the_security_stream_as_a_substitute_since_that_stream_is_equally_append_only_and_carries_the_same_no_secrets_rule
+- rendering_a_diff_for_a_row_whose_recorded_schema_digest_does_not_match_the_schema_now_in_force
+exceptions:
+- the_top_level_params_key_names_are_admitted_as_a_bounded_exception_because_they_are_names_and_not_values_are_capped_are_already_durably_recorded_on_the_run_event_stream_and_still_pass_through_the_write_time_scrub_as_a_second_line_and_not_because_they_are_provably_safe_limit_l1
+supersedes: []
+source_opinion: docs/vjs/2026-VJS-CC-BOLTRIG-SCHEMA-VALIDATION-LEDGER-001-opinion.md
+runtime_summary: |
+  A schema-validation failure records {schema_path, keyword} per error, the top-level params
+  key names, and a digest of the registered schema. It records no message, no instance path,
+  and no schema value. The expectation is DERIVED at read time from the schema the digest
+  pins, so the ledger stores what cannot be recomputed and nothing else. Input and output
+  validation are treated identically. The write-time scrubber stays as a second line and a
+  test proves it is not the first, by disabling it and requiring the leak test to stay green.
+created_at: 2026-07-27T13:13:15Z
+citation: null
+assent_source: standing_bounded_assent
+implementation_status: DISCHARGED
+implementation_note: |
+  All ten directives implemented 2026-07-27. Every test was shown to FAIL with the fix
+  reverted: restoring `[e.message ...]` in `_validate` reddens 8 of the 14, including BOTH
+  parameter cases of the leak test. That the `scrub_live` case also fails is the measurement
+  the judgment made, not a surprise: `pii.contains_secret` does not match `sk-live-` at all.
+
+  citation is null DELIBERATELY. `vjs next-citation` refuses to mint the canon COUNTY series
+  at the BOLTRIG subscriber seat ([2026] VJS-PC 19: capability is not authority), and minting
+  at canon offers `[2026] VJS-COUNTY 1`, which this repository's own mirror already uses.
+  Numbering this order by hand would be the colliding-citation defect from VJS-CC-VJS 1 done
+  deliberately. Two existing boltrig orders (RATE-LIMIT-WINDOW-001, WORK-ITEM-LEASE-FENCE-001)
+  already carry no citation, and the bench declined to mint one for the same reason. The
+  allocator gap is recorded in the opinion under obiter O4 and is not settled here.

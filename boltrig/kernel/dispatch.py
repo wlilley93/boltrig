@@ -50,6 +50,14 @@ from boltrig.store import Store
 
 from .audit import AuditWriter
 from .adapter_errors import adapter_failure
+from .schema_diagnosis import (
+    MAX_SCHEMA_ERRORS,
+    MAX_SCHEMA_PATH_DEPTH,
+    MAX_SCHEMA_PATH_SEGMENT,
+    MAX_PARAM_KEYS,
+    SCHEMA_KEYWORDS,
+    schema_digest,
+)
 from .credentials import CredentialResolver
 from .grants import GrantChecker
 from .approval_gate import enforce_approval
@@ -68,20 +76,86 @@ AdapterProvider = Callable[[str, str], Awaitable[Adapter | None]]
 AgentInvoker = Callable[[str, dict[str, Any], InvocationContext, str], Awaitable[Result]]
 
 
-def _validate(schema: dict[str, Any], instance: dict[str, Any]) -> list[str]:
+def _validate(schema: dict[str, Any], instance: dict[str, Any]) -> list[dict[str, Any]]:
+    """Validate, and return findings whose provenance is WHOLLY THE SCHEMA AND NAME-ONLY.
+
+    Two fields, and the choice of exactly these two is the holding of the schema-validation
+    ledger order. See kernel/schema_diagnosis.py for the rule and for why the near misses
+    were refused:
+
+      * ``schema_path`` is ``absolute_schema_path``: a path through the SCHEMA, made of
+        schema keywords and property NAMES. It carries no instance value and no schema value.
+      * ``keyword`` is ``validator``, checked against the allowlist.
+
+    Refused, and both look safe: ``json_path`` / ``absolute_path`` are derived from the
+    INSTANCE (under ``additionalProperties`` an instance key IS a path segment, so a secret
+    used as a key lands in the path verbatim), and ``validator_value`` is schema-derived and
+    still a VALUE (for ``const`` it is the literal expected). ``message`` embeds the instance
+    directly and was never a candidate.
+    """
     if not schema:
         return []
     validator = Draft202012Validator(schema)
-    return [e.message for e in validator.iter_errors(instance)]
+    findings: list[dict[str, Any]] = []
+    for e in validator.iter_errors(instance):
+        if len(findings) >= MAX_SCHEMA_ERRORS:
+            break
+        path = [
+            str(seg)[:MAX_SCHEMA_PATH_SEGMENT]
+            for seg in list(e.absolute_schema_path)[:MAX_SCHEMA_PATH_DEPTH]
+        ]
+        findings.append({
+            "schema_path": path,
+            "keyword": e.validator if e.validator in SCHEMA_KEYWORDS else "unknown",
+        })
+    return findings
+
+
+def _schema_detail(e: BoltrigError) -> dict[str, Any]:
+    """The extra audit fields a schema failure contributes, and {} for every other error.
+
+    A function rather than a branch at the call site, so the failure taxonomy can grow another
+    detail-bearing member without the chokepoint's one error handler growing with it.
+    """
+    return e.audit_detail() if isinstance(e, SchemaValidationError) else {}
+
+
+def _reject_if_invalid(
+    kind: str, verb: str, schema: dict[str, Any] | None, instance: Any
+) -> None:
+    """Validate and raise, with the schema digest attached. ONE seam for input and output.
+
+    Two call sites that each built their own error were how the output twin came to be
+    forgotten in the first place: the filing that produced the schema-validation ledger order
+    described the input path only, and an order fixing just that would have left the half
+    whose instance is the adapter's response.
+    """
+    errors = _validate(schema or {}, instance)
+    if errors:
+        raise SchemaValidationError(
+            f"invalid {kind} for '{verb}'", errors, schema_digest=schema_digest(schema)
+        )
 
 
 def _summarise_params(params: Any) -> dict[str, Any]:
     """A bounded, VALUE-FREE description of a verb's params for the chat stream
     (K-20 bounded observability): the sorted top-level KEY NAMES and their count,
-    never the values (which can carry secrets or untrusted content). Mirrors the
-    keys-only rule the audit rows follow."""
+    never the values (which can carry secrets or untrusted content).
+
+    Since the schema-validation ledger order (D1) this rides on the AUDIT ROW as well as the
+    stream. It had fed only the stream since K-20, so a regulator-facing row was strictly
+    shallower than the chat stream beside it, and it is what makes a `schema_invalid` row
+    answerable at all: the recorded keys, against the registered schema's `required`, are a
+    diff rather than a guess."""
     if isinstance(params, dict):
-        return {"keys": sorted(str(k) for k in params), "count": len(params)}
+        keys = sorted(str(k) for k in params)
+        # Capped, because this now reaches the append-only audit row and not only the
+        # ephemeral stream. A key NAME is instance-chosen, so no mechanical check can
+        # guarantee it is never itself sensitive; it is admitted because it is a name and not
+        # a value, bounded here, and still passed through the write-time scrub as a second
+        # line. That is a recorded LIMIT of the schema-validation ledger order (L1), not a
+        # safety proof, and no test should pretend otherwise.
+        return {"keys": keys[:MAX_PARAM_KEYS], "count": len(keys)}
     return {"keys": [], "count": 0}
 
 
@@ -351,7 +425,7 @@ class Dispatcher:
             raise
         except BoltrigError as e:
             status = e.reason
-            detail = {"message": str(e)}
+            detail = {"message": str(e), **_schema_detail(e)}
             # D3: a denied grant or a throttle trip at the chokepoint is a security
             # signal on the distinct stream, recorded at the SAME field-depth as the
             # audit row (actor / workspace / ip / ua). Fail-safe: never breaks the
@@ -390,6 +464,7 @@ class Dispatcher:
             latency_ms = int((time.monotonic() - started) * 1000)
             target_adapter = meta.get("target_adapter")
             resource, resource_id = _resource_ref(noun, params)
+            detail.setdefault("params", _summarise_params(params))   # D1, schema-ledger order
             await self._audit.write(
                 AuditEvent(
                     tenant_id=context.tenant_id,
@@ -442,9 +517,7 @@ class Dispatcher:
         meta["target_adapter"] = binding.target_ref
 
         # 2. validate params (SEC-21)
-        errors = _validate(verb_def.input_schema, params)
-        if errors:
-            raise SchemaValidationError(f"invalid params for '{verb}'", errors)
+        _reject_if_invalid("params", verb, verb_def.input_schema, params)
 
         # 3. grant check (SEC-07)
         perms = await self._store.get_tenant_permissions(tenant)
@@ -520,9 +593,10 @@ class Dispatcher:
                 raise BindingNotFound(f"unknown target_type '{binding.target_type}'")
 
             # 8. validate output
-            out_errors = _validate(verb_def.output_schema, output)
-            if out_errors:
-                raise SchemaValidationError(f"invalid output for '{verb}'", out_errors)
+            # The OUTPUT twin, through the SAME seam. The case file did not mention output
+            # validation and it is the worse half: the instance here is the adapter's
+            # RESPONSE, which is where credentials live.
+            _reject_if_invalid("output", verb, verb_def.output_schema, output)
         except Exception:
             await self._idempotency.release(run)
             raise

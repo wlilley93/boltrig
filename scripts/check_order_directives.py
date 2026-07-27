@@ -112,7 +112,15 @@ def parse_order(path: Path) -> dict:
             if not order[key]:
                 match = pattern.match(line)
                 if match:
-                    order[key] = match.group(1).strip().strip("\"'")
+                    value = match.group(1).strip().strip("\"'")
+                    # YAML's null spellings are ABSENCE, not the four-character string
+                    # "null". This reader is a shortcut over a real parser and the test
+                    # beside it exists to keep the two agreeing; the first order to write
+                    # `citation: null` rather than omitting the key is what found the gap.
+                    # An order whose citation was deliberately withheld would otherwise have
+                    # been keyed by the literal "null", so any test naming another such order
+                    # would have cross-matched it.
+                    order[key] = "" if value in {"null", "~", "Null", "NULL"} else value
     return order
 
 
