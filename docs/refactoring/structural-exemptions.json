@@ -70,17 +70,17 @@
       "expires": "2026-12-31"
     },
     "boltrig/api/bootstrap.py": {
-      "max_file_lines": 735,
-      "max_function_lines": 87,
+      "max_file_lines": 732,
+      "max_function_lines": 84,
       "over_limit_functions": [
         {
           "name": "build_app",
           "line": 649,
-          "lines": 87
+          "lines": 84
         }
       ],
       "owner": "platform-maintainers",
-      "reason": "Split dependency construction and runtime wiring into typed bootstrap stages without changing startup order. 2026-07-25: +8 lines to wire the SHARED rate-limit counter from REDIS_URL. RedisCounter was constructed nowhere, so every bound was per-process and per-boot while three places in the record asserted Redis ([2026] VJS-CC-BOLTRIG-RATE-LIMIT-WINDOW-001 D1/D3/D7). 2026-07-26 (decision 0018): a write held for human approval is now RECORDED at the pause - a human approved opbox.add_comment in a chat turn, the request sat ANSWERED forever and the comment was never posted, because nothing anywhere held the CALL. The chat factory was EXTRACTED into _build_chat_wiring so the answer bridge can reach the SAME ChatService the SSE routes use (the relay is per-Kernel and in-process), which lowered build_app from 110 to 87 lines - the function ratchet ratchets down with this change.",
+      "reason": "Split dependency construction and runtime wiring into typed bootstrap stages without changing startup order. 2026-07-25: +8 lines to wire the SHARED rate-limit counter from REDIS_URL. RedisCounter was constructed nowhere, so every bound was per-process and per-boot while three places in the record asserted Redis ([2026] VJS-CC-BOLTRIG-RATE-LIMIT-WINDOW-001 D1/D3/D7). 2026-07-26 (decision 0018): a write held for human approval is now RECORDED at the pause - a human approved opbox.add_comment in a chat turn, the request sat ANSWERED forever and the comment was never posted, because nothing anywhere held the CALL. The chat factory was EXTRACTED into _build_chat_wiring so the answer bridge can reach the SAME ChatService the SSE routes use (the relay is per-Kernel and in-process), which lowered build_app from 110 to 87 lines - the function ratchet ratchets down with this change. 2026-07-27: the workflow-promotion subsystem deleted ([2026] VJS-CC-BOLTRIG-WORKFLOW-PROMOTION-TRIGGER-001 D3) - the ratchet falls to the measured value.",
       "expires": "2026-12-31"
     },
     "boltrig/api/doctor.py": {
@@ -186,11 +186,11 @@
       "expires": "2026-12-31"
     },
     "boltrig/fleet/pump.py": {
-      "max_file_lines": 753,
+      "max_file_lines": 757,
       "max_function_lines": 78,
       "over_limit_functions": [],
       "owner": "fleet-maintainers",
-      "reason": "File-length debt only: the work-claim lifecycle phases still share one module. SEC-178 addressed-workflow execution added _run_addressed_workflow (the workflow: target honoring branch); handle_claimed_item grew to 78 lines with the mirrored boundary-1 cancel refresh. Audit fixes: _record_failure defers to a requested cancel and persists a bounded, URL-redacted error detail instead of raw str(exc). 2026-07-25: +23 lines for the SETTLED_STATUSES guard, so a fault raised AFTER the attempt settled durably cannot re-open it and re-run the whole item (docs/findings/2026-07-25-work-item-lease-has-no-fence.md). 2026-07-26 (credential lifecycle): +9 lines routing the terminal sweep through sweep_run_credentials_if_settled. The unguarded sweep deleted the whole run: prefix, including a held write's sealed call, so an item reaching terminal while the gate still held one of its writes destroyed the record decision 0018 replays from. 2026-07-26 ([2026] VJS-CC-BOLTRIG-WORK-ITEM-LEASE-FENCE-001 D2/D3/D4): +47 lines for the claim-time lease fence. The token machinery itself is a NEW module (fleet/lease_token.py) rather than more of this file; what lands here is the payload mint in run_once, the bind + early stand-down in _run_item_payload, five write sites routed through the fence, D4's pre-persist duplicate-child narrowing, and the two D3 disposals the order requires be stated in terms - requeue is unfenced because a human re-queue is an authorised RESET, NOT because a parked row has no lease (it still carries the stale claim tuple).",
+      "reason": "File-length debt only: the work-claim lifecycle phases still share one module. SEC-178 addressed-workflow execution added _run_addressed_workflow (the workflow: target honoring branch); handle_claimed_item grew to 78 lines with the mirrored boundary-1 cancel refresh. Audit fixes: _record_failure defers to a requested cancel and persists a bounded, URL-redacted error detail instead of raw str(exc). 2026-07-25: +23 lines for the SETTLED_STATUSES guard, so a fault raised AFTER the attempt settled durably cannot re-open it and re-run the whole item (docs/findings/2026-07-25-work-item-lease-has-no-fence.md). 2026-07-26 (credential lifecycle): +9 lines routing the terminal sweep through sweep_run_credentials_if_settled. The unguarded sweep deleted the whole run: prefix, including a held write's sealed call, so an item reaching terminal while the gate still held one of its writes destroyed the record decision 0018 replays from. 2026-07-26 ([2026] VJS-CC-BOLTRIG-WORK-ITEM-LEASE-FENCE-001 D2/D3/D4): +47 lines for the claim-time lease fence. The token machinery itself is a NEW module (fleet/lease_token.py) rather than more of this file; what lands here is the payload mint in run_once, the bind + early stand-down in _run_item_payload, five write sites routed through the fence, D4's pre-persist duplicate-child narrowing, and the two D3 disposals the order requires be stated in terms - requeue is unfenced because a human re-queue is an authorised RESET, NOT because a parked row has no lease (it still carries the stale claim tuple). 2026-07-27: +4 lines, all comment, raising the file ratchet from 753. [2026] VJS-CC-BOLTRIG-WORKFLOW-PROMOTION-TRIGGER-001 D7 ordered the prose corrected: GENERATED_WORKFLOW_KEY is written by nothing, so `_maybe_learn` has never fired, and the comment that stood here said the pump 'learns from any outcome that already carries a GENERATED definition (proven by the wiring test)'. The wiring test proves the pump WOULD learn if an outcome carried one, which is a different claim, and a court was told the loop was live on the strength of the confusion. The bump is recorded rather than absorbed by shortening the correction: three drafts were shaved to fit the old number before it became clear that trimming a true statement to satisfy a line count is the wrong trade, and that a ratchet exists to make growth VISIBLE rather than to make records terser.",
       "expires": "2026-12-31"
     },
     "boltrig/fleet/runtime.py": {
@@ -393,41 +393,41 @@
       "expires": "2026-12-31"
     },
     "boltrig/store/base.py": {
-      "max_file_lines": 665,
+      "max_file_lines": 657,
       "max_function_lines": 15,
       "over_limit_functions": [],
       "owner": "store-maintainers",
-      "reason": "Split the store protocol into domain protocols while preserving one composed compatibility contract. 2026-07-26: the conditional lease-fenced work-item write and the copy-on-read parity repair ([2026] VJS-CC-BOLTRIG-WORK-ITEM-LEASE-FENCE-001 D1/D6). The memory store previously handed callers the LIVE row, so any conditional write compared a stored object against itself and always agreed. 2026-07-26: +8 comment lines for D9 of the same order, which requires the honest limit to be recorded AT the contract: the fence makes the RECORD single-writer and does NOT make execution exactly-once. A worker that lost its lease is still running; the fence only stops it landing its answer on the winner's. Recorded here rather than in a doc because the place a later reader would upgrade \"single-writer\" into \"exactly-once\" is this declaration. 2026-07-26: consume_budget deleted. It had had no caller since reserve_budgets_atomic replaced it (FR-COST-05), while six docstrings across these three files still anchored their semantics on it - the Tier 0 claim inventory found it by asking which named mechanisms nothing reaches.",
+      "reason": "Split the store protocol into domain protocols while preserving one composed compatibility contract. 2026-07-26: the conditional lease-fenced work-item write and the copy-on-read parity repair ([2026] VJS-CC-BOLTRIG-WORK-ITEM-LEASE-FENCE-001 D1/D6). The memory store previously handed callers the LIVE row, so any conditional write compared a stored object against itself and always agreed. 2026-07-26: +8 comment lines for D9 of the same order, which requires the honest limit to be recorded AT the contract: the fence makes the RECORD single-writer and does NOT make execution exactly-once. A worker that lost its lease is still running; the fence only stops it landing its answer on the winner's. Recorded here rather than in a doc because the place a later reader would upgrade \"single-writer\" into \"exactly-once\" is this declaration. 2026-07-26: consume_budget deleted. It had had no caller since reserve_budgets_atomic replaced it (FR-COST-05), while six docstrings across these three files still anchored their semantics on it - the Tier 0 claim inventory found it by asking which named mechanisms nothing reaches. 2026-07-27: the workflow-promotion subsystem deleted ([2026] VJS-CC-BOLTRIG-WORKFLOW-PROMOTION-TRIGGER-001 D3) - the ratchet falls to the measured value.",
       "expires": "2026-12-31"
     },
     "boltrig/store/memory.py": {
-      "max_file_lines": 1179,
-      "max_function_lines": 97,
+      "max_file_lines": 1168,
+      "max_function_lines": 96,
       "over_limit_functions": [
         {
           "name": "InMemoryStore.__init__",
-          "line": 95,
-          "lines": 97
+          "line": 94,
+          "lines": 96
         }
       ],
       "owner": "store-maintainers",
-      "reason": "Extract domain partials in lockstep with PostgreSQL while preserving complete store parity. 2026-07-26: the conditional lease-fenced work-item write and the copy-on-read parity repair ([2026] VJS-CC-BOLTRIG-WORK-ITEM-LEASE-FENCE-001 D1/D6). The memory store previously handed callers the LIVE row, so any conditional write compared a stored object against itself and always agreed. 2026-07-26: consume_budget deleted. It had had no caller since reserve_budgets_atomic replaced it (FR-COST-05), while six docstrings across these three files still anchored their semantics on it - the Tier 0 claim inventory found it by asking which named mechanisms nothing reaches.",
+      "reason": "Extract domain partials in lockstep with PostgreSQL while preserving complete store parity. 2026-07-26: the conditional lease-fenced work-item write and the copy-on-read parity repair ([2026] VJS-CC-BOLTRIG-WORK-ITEM-LEASE-FENCE-001 D1/D6). The memory store previously handed callers the LIVE row, so any conditional write compared a stored object against itself and always agreed. 2026-07-26: consume_budget deleted. It had had no caller since reserve_budgets_atomic replaced it (FR-COST-05), while six docstrings across these three files still anchored their semantics on it - the Tier 0 claim inventory found it by asking which named mechanisms nothing reaches. 2026-07-27: the workflow-promotion subsystem deleted ([2026] VJS-CC-BOLTRIG-WORKFLOW-PROMOTION-TRIGGER-001 D3) - the ratchet falls to the measured value.",
       "expires": "2026-12-31"
     },
     "boltrig/store/postgres.py": {
-      "max_file_lines": 1980,
+      "max_file_lines": 1955,
       "max_function_lines": 53,
       "over_limit_functions": [],
       "owner": "store-maintainers",
-      "reason": "Extract domain partials in lockstep with the in-memory store while preserving SQL and RLS parity. 2026-07-26: the conditional lease-fenced work-item write and the copy-on-read parity repair ([2026] VJS-CC-BOLTRIG-WORK-ITEM-LEASE-FENCE-001 D1/D6). The memory store previously handed callers the LIVE row, so any conditional write compared a stored object against itself and always agreed. 2026-07-26: consume_budget deleted. It had had no caller since reserve_budgets_atomic replaced it (FR-COST-05), while six docstrings across these three files still anchored their semantics on it - the Tier 0 claim inventory found it by asking which named mechanisms nothing reaches. 2026-07-26: +the COUNTY 8 D7 forced-rotation flag. A persisted field has to touch the row mapper, the upsert and the resolver clamp; the growth is the minimum a persisted field costs, and the route it serves was put in its own module (auth_password_routes.py) rather than added to auth_routes.",
+      "reason": "Extract domain partials in lockstep with the in-memory store while preserving SQL and RLS parity. 2026-07-26: the conditional lease-fenced work-item write and the copy-on-read parity repair ([2026] VJS-CC-BOLTRIG-WORK-ITEM-LEASE-FENCE-001 D1/D6). The memory store previously handed callers the LIVE row, so any conditional write compared a stored object against itself and always agreed. 2026-07-26: consume_budget deleted. It had had no caller since reserve_budgets_atomic replaced it (FR-COST-05), while six docstrings across these three files still anchored their semantics on it - the Tier 0 claim inventory found it by asking which named mechanisms nothing reaches. 2026-07-26: +the COUNTY 8 D7 forced-rotation flag. A persisted field has to touch the row mapper, the upsert and the resolver clamp; the growth is the minimum a persisted field costs, and the route it serves was put in its own module (auth_password_routes.py) rather than added to auth_routes. 2026-07-27: the workflow-promotion subsystem deleted ([2026] VJS-CC-BOLTRIG-WORKFLOW-PROMOTION-TRIGGER-001 D3) - the ratchet falls to the measured value.",
       "expires": "2026-12-31"
     },
     "boltrig/store/rows.py": {
-      "max_file_lines": 468,
+      "max_file_lines": 458,
       "max_function_lines": 17,
       "over_limit_functions": [],
       "owner": "store-maintainers",
-      "reason": "Extract domain partials in lockstep with the in-memory store while preserving SQL and RLS parity. 2026-07-26: +the COUNTY 8 D7 forced-rotation flag. A persisted field has to touch the row mapper, the upsert and the resolver clamp; the growth is the minimum a persisted field costs, and the route it serves was put in its own module (auth_password_routes.py) rather than added to auth_routes.",
+      "reason": "Extract domain partials in lockstep with the in-memory store while preserving SQL and RLS parity. 2026-07-26: +the COUNTY 8 D7 forced-rotation flag. A persisted field has to touch the row mapper, the upsert and the resolver clamp; the growth is the minimum a persisted field costs, and the route it serves was put in its own module (auth_password_routes.py) rather than added to auth_routes. 2026-07-27: the workflow-promotion subsystem deleted ([2026] VJS-CC-BOLTRIG-WORKFLOW-PROMOTION-TRIGGER-001 D3) - the ratchet falls to the measured value.",
       "expires": "2026-12-31"
     },
     "boltrig/workflows/interpreter.py": {

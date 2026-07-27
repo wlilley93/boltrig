@@ -76,7 +76,7 @@ DECLARE
   t text;
   scoped text[] := ARRAY[
     'nouns','verbs','verb_bindings','adapters','skills','agent_capabilities',
-    'workflow_definitions','workflow_promotions','model_endpoints','work_items','hitl_requests',
+    'workflow_definitions','model_endpoints','work_items','hitl_requests',
     'hitl_responses','users','role_mappings','audit_log','idempotency_keys',
     -- [2026] VJS-COUNTY 9: the distinct security-signal chain + the audit rollup
     -- anchors. Both carry a real tenant_id, so the generic tenant_id policy fences

@@ -163,10 +163,15 @@ never AUTHORITY (grants, scope, tier, or the HITL gate). SEC-84 pins that
 provenance carries no authority; these pin the newer legs that only ever move
 ranking, always through the one dispatch chokepoint under the caller ceiling.
 
+US-WFL-08, eval-gated reuse promotion, is retired in full by [2026]
+VJS-CC-BOLTRIG-WORKFLOW-PROMOTION-TRIGGER-001 D3: the ranking value it stored had
+no production consumer, so no tenant ever observed it. The determinism half of its
+pin lives on under US-WFL-04.
+
 | Invariant | Meaning | Bound test(s) |
 | --- | --- | --- |
-| **US-WFL-08** | Reuse promotion is eval-gated and competence-only - a generated/learned workflow is preferred only after it passes its eval cases (run through the chokepoint under the initiator ceiling, SEC-29); a later fail demotes it; the `WorkflowPromotion` record carries no authority field, so promotion changes ranking, never grants/scope/tier or the executable content. | `tests/security/test_self_improvement_competence.py::test_promotion_record_carries_no_authority_field`, `::test_promotion_is_eval_gated_and_changes_ranking_only` |
-| **US-WFL-09** | Harvested free signals (regenerate-supersede, HITL verdict) reweight reuse via `memory.improve` (reweight-only, no scope/grant argument) and a bounded promotion score in [-1, 1] that never moves the eval-gated state; every harvest is best-effort so it can never fail the run that produced it (P9). | `tests/security/test_self_improvement_competence.py::test_harvested_signal_reweights_reuse_only`, `::test_harvest_reuse_signal_is_reweight_only_and_best_effort` |
+| **US-WFL-04** | Selection among equally-matching workflows is deterministic - highest intent overlap, then the smallest id - and confers no executable content and no authority on what it returns. | `tests/security/test_self_improvement_competence.py::test_match_ranks_deterministically_and_changes_nothing` |
+| **US-WFL-09** | Harvested free signals (regenerate-supersede, HITL verdict) reweight reuse via `memory.improve` (reweight-only, no scope/grant argument); every harvest is best-effort so it can never fail the run that produced it (P9). | `tests/security/test_self_improvement_competence.py::test_harvest_reuse_signal_is_reweight_only_and_best_effort`, `::test_only_approval_verdicts_are_harvested_as_reuse_signals` |
 | **US-WFL-10** | Post-run reflection is opt-in and rides the chokepoint - enabled, a terminal item stores exactly one lesson through `kernel.invoke` (audited `memory.remember`); disabled, none; `build_org` wires the pump the kernel so the memory verb is reachable but stays off by default. | `tests/security/test_self_improvement_competence.py::test_reflection_is_opt_in_through_the_chokepoint`, `::test_build_org_wires_the_kernel_so_reflection_is_reachable` |
 
 ### Streaming-richness chat contracts (tool events / heartbeat / questions)

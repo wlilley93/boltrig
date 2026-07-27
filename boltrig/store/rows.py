@@ -16,10 +16,10 @@ from boltrig.models import (
     EvalRun, HITLRequest, HITLResponse, HITLStatus, HITLType, IdempotencyMode,
     MemoryErasure, MemoryFact, MemoryIngestion, MemoryItem,
     MemoryProjectionStatus, MessageRole, ModelEndpoint, NotificationPref, Noun,
-    Organisation, OrgMember, PersonalAccessToken, PersonalAgent, PromotionState,
+    Organisation, OrgMember, PersonalAccessToken, PersonalAgent,
     RateLimit, SecurityEvent, SecurityEventType, Skill, TargetType,
     TwoFactorChallenge, Urgency, User, UserInvitation, UserSession, UserSetting,
-    UserTotp, Verb, VerbBinding, WorkflowDefinition, WorkflowPromotion,
+    UserTotp, Verb, VerbBinding, WorkflowDefinition,
     WorkflowSource, Workspace, WorkspaceMember,
 )
 from boltrig.models.work import RunCheckpoint
@@ -86,16 +86,6 @@ def _workflow(r):
         source=WorkflowSource(r["source"]), definition=r["definition"],
         intent_tags=list(r["intent_tags"] or []), origin_task=r["origin_task"],
         workspace_id=r["workspace_id"],
-    )
-
-
-def _workflow_promotion(r):
-    if r is None:
-        return None
-    return WorkflowPromotion(
-        workflow_id=r["workflow_id"], tenant_id=r["tenant_id"],
-        state=PromotionState(r["state"]), score=float(r["score"]),
-        eval_run_id=r["eval_run_id"], updated_at=r["updated_at"],
     )
 
 

@@ -141,7 +141,8 @@ def test_the_unwired_waiver_file_can_be_held_to(tmp_path, monkeypatch) -> None:
         path.write_text(json.dumps({"allow": {"thing": entry}}), encoding="utf-8")
         return path
 
-    good = {"owner": "x-maintainers", "expires": "2099-12-31", "reason": "a real one"}
+    good = {"owner": "x-maintainers", "expires": "2099-12-31", "reason": "a real one",
+            "blocker": "caller:boltrig/kernel/dispatch.py:1"}
     allow, problems = check_unwired_claims.load_allow(_write(good))
     assert problems == [] and allow == {"thing": "a real one"}
 
@@ -150,6 +151,14 @@ def test_the_unwired_waiver_file_can_be_held_to(tmp_path, monkeypatch) -> None:
         ({**good, "reason": ""}, "reason"),
         ({k: v for k, v in good.items() if k != "expires"}, "expiry"),
         ({**good, "expires": "2020-01-01"}, "expired"),
+        # THE BLOCKER, added by the workflow-promotion order's D6. A waiver says "not yet";
+        # this makes it say what it is waiting FOR, in a form a reader can check. The waiver
+        # that prompted it said it awaited "the product decision of WHEN promotion runs", and
+        # the court found there was no such decision and that the real blocker was a different
+        # question nobody had asked. Prose can be sincere and still name the wrong thing for
+        # three months.
+        ({k: v for k, v in good.items() if k != "blocker"}, "blocker"),
+        ({**good, "blocker": "soon"}, "blocker"),
     ):
         allow, problems = check_unwired_claims.load_allow(_write(missing))
         assert allow == {} and any(word in p for p in problems), (missing, problems)
@@ -369,3 +378,189 @@ def test_an_empty_override_file_is_a_failure_not_a_vacuous_pass(
 
     assert check_override_locks.main() == 1
     assert "declares no pins" in capsys.readouterr().out
+
+
+# --- reachability is transitive ------------------------------------------------------------
+#
+# [2026] VJS-CC-BOLTRIG-WORKFLOW-PROMOTION-TRIGGER-001 D2. `check_unwired_claims.py` asks whether
+# a name appears outside its own definition. `WorkflowLibrary.match` did, so it passed, and its
+# only caller had no caller: an entire retrieval path, a learning leg and a promotion subsystem
+# sat behind one hop of apparent wiring, and a court was told the reader ran on every selection.
+
+
+def test_nothing_is_newly_unreachable_from_every_root(capsys) -> None:
+    """The real tree, ratcheted."""
+    from scripts import check_reachability
+
+    assert check_reachability.main() == 0, capsys.readouterr().out
+
+
+def test_a_chain_whose_head_has_no_caller_is_reported(tmp_path, monkeypatch) -> None:
+    """The property the first-hop gate cannot see.
+
+    `root -> a -> b` is reachable. `c -> d` is not, even though `c` has a caller in the sense
+    that `d` names it: the chain never reaches a root. Both `c` and `d` must be reported, and
+    `b` must not.
+    """
+    from scripts import check_reachability
+
+    pkg = tmp_path / "boltrig"
+    pkg.mkdir()
+    (pkg / "m.py").write_text(
+        "import functools\n"
+        "\n"
+        "@functools.cache\n"
+        "def root():\n"
+        "    return a()\n"
+        "\n"
+        "def a():\n"
+        "    return b()\n"
+        "\n"
+        "def b():\n"
+        "    return 1\n"
+        "\n"
+        "def c():\n"
+        "    return d()\n"
+        "\n"
+        "def d():\n"
+        "    return 2\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(check_reachability, "ROOT", tmp_path)
+    monkeypatch.setattr(check_reachability, "_sources", lambda: [pkg / "m.py"])
+
+    graph = check_reachability._build()
+    seen: set[str] = set()
+    frontier = list(graph.roots)
+    while frontier:
+        name = frontier.pop()
+        if name in seen:
+            continue
+        seen.add(name)
+        frontier.extend(graph.edges.get(name, ()))
+
+    unreachable = {n for n in graph.defined if n not in seen}
+    assert unreachable == {"c", "d"}, unreachable
+
+
+def test_a_root_without_a_reason_is_refused(tmp_path, monkeypatch, capsys) -> None:
+    """The root set is where this check can be quietly disabled, so an unreasoned root is a
+    failure rather than a shortcut. Limit L1 of the order says no mechanical check can hold
+    "the root set is honest"; this holds the one part of it that can be."""
+    from scripts import check_reachability
+
+    roots = tmp_path / "roots.json"
+    roots.write_text(json.dumps({"roots": {"whatever": ""}, "unreachable_baseline": 9999}),
+                     encoding="utf-8")
+    monkeypatch.setattr(check_reachability, "ROOTS_FILE", roots)
+
+    assert check_reachability.main() == 1
+    assert "declares no reason" in capsys.readouterr().out
+
+
+def test_reachability_without_a_baseline_is_a_failure_not_an_unratcheted_pass(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """Same fail-open shape as the claim inventory's: a missing baseline must not read as
+    nothing-to-compare-against."""
+    from scripts import check_reachability
+
+    monkeypatch.setattr(check_reachability, "ROOTS_FILE", tmp_path / "absent.json")
+
+    assert check_reachability.main() == 1
+    assert "no baseline pinned" in capsys.readouterr().out
+
+
+# --- the workflow-promotion order's remaining directives -------------------------------------
+
+
+def test_a_package_re_export_no_longer_counts_as_wiring(tmp_path, monkeypatch) -> None:
+    """[2026] VJS-CC-BOLTRIG-WORKFLOW-PROMOTION-TRIGGER-001 D1.
+
+    A single `from .m import probe_fn` in a package `__init__` used to hide a function from the
+    gate entirely, and it hid three at once in `workflows/__init__.py`. A class may still be
+    exported for an outside caller to CONSTRUCT, which is a real seam; a function has no such
+    seam in an application package, so for functions both suppressions are dropped.
+    """
+    from scripts import check_unwired_claims
+
+    pkg = tmp_path / "boltrig"
+    pkg.mkdir()
+    (pkg / "m.py").write_text("def probe_fn():\n    return 1\n", encoding="utf-8")
+    (pkg / "__init__.py").write_text(
+        'from .m import probe_fn\n\n__all__ = ["probe_fn"]\n', encoding="utf-8"
+    )
+    sources = [pkg / "m.py", pkg / "__init__.py"]
+    src = {p: p.read_text(encoding="utf-8") for p in sources}
+    *_, referenced, exported, re_exported = check_unwired_claims._collect(src)
+
+    assert "probe_fn" not in referenced, "a re-export was counted as a reference"
+    assert "probe_fn" in re_exported and "probe_fn" in exported
+
+    (pkg / "caller.py").write_text(
+        "from .m import probe_fn\n\n\ndef go():\n    return probe_fn()\n", encoding="utf-8"
+    )
+    src[pkg / "caller.py"] = (pkg / "caller.py").read_text(encoding="utf-8")
+    *_, referenced2, _, _ = check_unwired_claims._collect(src)
+    assert "probe_fn" in referenced2, "a real call site was not counted"
+
+
+@pytest.mark.invariant("NFR-MNT-06")
+def test_no_waiver_survives_the_deletion_of_its_subject() -> None:
+    """[2026] VJS-CC-BOLTRIG-WORKFLOW-PROMOTION-TRIGGER-001 D5 and D6.
+
+    A waiver for a symbol that no longer exists is a claim about nothing, and it is the shape
+    that outlives a deletion most easily: nobody greps the waiver file when they delete a class.
+    """
+    from scripts import check_unwired_claims
+
+    path = REPO_ROOT / "docs" / "refactoring" / "unwired-claims-allow.json"
+    entries = json.loads(path.read_text(encoding="utf-8"))["allow"]
+    source = "\n".join(
+        p.read_text(encoding="utf-8", errors="replace")
+        for p in (REPO_ROOT / "boltrig").rglob("*.py")
+    )
+    for name in entries:
+        assert name in source, f"{name} is waived and no longer exists under boltrig/"
+
+    allow, problems = check_unwired_claims.load_allow(path)
+    assert problems == [], problems
+    assert all(check_unwired_claims._BLOCKER.match(e["blocker"]) for e in entries.values())
+
+
+def test_no_record_still_describes_the_retrieval_path_as_reachable() -> None:
+    """[2026] VJS-CC-BOLTRIG-WORKFLOW-PROMOTION-TRIGGER-001 D7.
+
+    The court was told a loop was live because code existed and had callers. The prose that said
+    so must now say what is true, and this pins the specific sentences: a record may describe
+    intent-based retrieval, and may not describe it as something production reaches.
+    """
+    generator = (REPO_ROOT / "boltrig" / "workflows" / "generator.py").read_text(encoding="utf-8")
+    library = (REPO_ROOT / "boltrig" / "workflows" / "library.py").read_text(encoding="utf-8")
+    pump = (REPO_ROOT / "boltrig" / "fleet" / "pump.py").read_text(encoding="utf-8")
+
+    # Any of these phrasings will do. Pinning ONE wording would make the test a style rule and
+    # would reward pasting the magic string over saying the true thing well; library.py says it
+    # best of the three and would have failed a single-phrase check.
+    said = ("no production caller", "no production entry point", "NOTHING WRITES IT",
+            "not reachable", "has never fired")
+    for name, text in (("generator.py", generator), ("library.py", library), ("pump.py", pump)):
+        assert any(phrase in text for phrase in said), (
+            f"{name} does not record that the retrieval or learning leg is unreached"
+        )
+
+
+def test_the_principal_dependency_is_a_record_with_an_id_and_an_expiry() -> None:
+    """[2026] VJS-CC-BOLTRIG-WORKFLOW-PROMOTION-TRIGGER-001 D8 and D9.
+
+    The waiver this order replaced deferred to "the product decision of WHEN promotion runs",
+    which was not a decision anyone could make. A deferral has to name a record that exists, so
+    that "waiting on the Principal" is checkable rather than a mood.
+    """
+    doc = REPO_ROOT / "docs" / "decisions" / "0019-route-by-intent-is-the-principals.md"
+    assert doc.exists(), "the D8 record does not exist"
+    text = doc.read_text(encoding="utf-8")
+    assert "PRINCIPAL-2026-07-27-ROUTE-BY-INTENT" in text
+    assert "2026-10-31" in text
+    # And the ratio's consequence on expiry, so nobody reads silence as consent to keep it.
+    assert "retire" in text.lower()

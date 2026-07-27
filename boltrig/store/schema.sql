@@ -131,22 +131,6 @@ CREATE TABLE IF NOT EXISTS workflow_definitions (
 CREATE INDEX IF NOT EXISTS workflow_definitions_ws_idx
     ON workflow_definitions (tenant_id, workspace_id);
 
--- Eval-gated reuse ranking ([2026] VJS-COUNTY 5). A ranking-only record keyed by
--- workflow id: a generated/learned workflow becomes a promotion CANDIDATE, is
--- PROMOTED once it passes its eval cases (through the chokepoint, under the
--- initiator ceiling), and DEMOTED if a later eval fails. It carries NO authority
--- column (no grant/scope/tier) - execution authority comes only from the caller
--- ceiling at dispatch; this only tunes how likely the workflow is to be reused.
-CREATE TABLE IF NOT EXISTS workflow_promotions (
-    workflow_id TEXT NOT NULL,
-    tenant_id   TEXT NOT NULL,
-    state       TEXT NOT NULL DEFAULT 'candidate',       -- candidate | promoted | demoted
-    score       DOUBLE PRECISION NOT NULL DEFAULT 0,      -- bounded reuse weight in [-1, 1]
-    eval_run_id TEXT,
-    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    PRIMARY KEY (tenant_id, workflow_id)
-);
-
 CREATE TABLE IF NOT EXISTS model_endpoints (
     id          TEXT NOT NULL,
     tenant_id   TEXT NOT NULL,

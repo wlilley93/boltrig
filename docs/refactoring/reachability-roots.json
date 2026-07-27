@@ -1,0 +1,27 @@
+{
+  "_comment": [
+    "Roots for scripts/check_reachability.py, and the baseline it ratchets.",
+    "",
+    "MOST ROOTS ARE DERIVED, not listed here: a decorated function, a method overriding a base",
+    "defined outside boltrig/, module-level code, a dunder, and a getattr with a literal string.",
+    "This file is for the rest - a process entry point, a CLI, a handler a config names by",
+    "string - and it is the honest weak point of the whole check. An over-broad root set",
+    "silently re-admits the defect the check exists to catch, so every entry needs a reason",
+    "naming WHAT calls it and HOW.",
+    "",
+    "THE ROOT SET IS DELIBERATELY EMPTY ON THIS FIRST RUN. 145 functions are unreachable and 71",
+    "of them have no caller at all, and that raw number is more useful than a number laundered",
+    "through a list of roots someone guessed at in an afternoon. Declaring a root is how the",
+    "count falls, and each declaration is a claim a reader can check. So is deleting the",
+    "function, which for a good share of these 71 is the right answer: `redact` in kernel/pii.py",
+    "and `apply_rls` in store/postgres.py have no caller anywhere in the package.",
+    "",
+    "The 71 include every name the repaired unwired-claims gate reports and every name its",
+    "waiver file waives, which is the corroboration that the graph is measuring what it claims:",
+    "select_or_generate_workflow, sweep_run_scoped, execute_write, push, consume, accept_once,",
+    "build_cell_scope, dev_principal_resolver, select_locale and store_bearer_verifier are all",
+    "here, arrived at from the other direction."
+  ],
+  "roots": {},
+  "unreachable_baseline": 145
+}

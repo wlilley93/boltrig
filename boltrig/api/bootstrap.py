@@ -668,7 +668,7 @@ def build_app():
         from boltrig.fleet.eval import EvalRunner
         from boltrig.fleet.model_gateway_status import ModelGatewayStatusProvider
         from boltrig.fleet.stack_tool_status import StackToolStatusProvider
-        from boltrig.workflows import WorkflowLibrary, WorkflowPromoter
+        from boltrig.workflows import WorkflowLibrary
 
         manifest_path = _find_manifest()
         tenant = _DEFAULT_TENANT
@@ -714,9 +714,6 @@ def build_app():
             # Codex ledger scaffold (steps 1-2): None when BOLTRIG_CODEX_LEDGER off.
             "codex_execution": build_codex_execution_stack(load_settings(), kernel.store),
             "workflows": workflows,
-            # Eval-gated promotion ([2026] VJS-COUNTY 5): shares the ONE EvalRunner so a
-            # candidate is proven through the same chokepoint (SEC-29) before reuse.
-            "promoter": WorkflowPromoter(kernel.store, eval_runner),
             "status": status,
             "readiness": ReadinessService(
                 kernel,
