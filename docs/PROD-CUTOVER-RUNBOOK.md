@@ -6,7 +6,7 @@ explicit go (COUNTY 7-11 D10). This is ready to execute the moment a path is cho
 ## Recorded prod state (2026-07-03 snapshot; re-verify before use)
 - Box: jellytot-prod-01. Repo `~/Projects/boltrig` at `83ac67f` (the old CF-Access
   commit); today's stack (HEAD `9eee84a`, ~28 commits ahead) is NOT there.
-- Runs `boltrig/kernel|fleet|ui|pi-sidecar:0.1.0` (locally-built tags), postgres,
+- Runs `boltrig/kernel|fleet|ui:0.1.0` (locally-built tags), postgres,
   redis, hatchet. Ports loopback-bound (kernel 127.0.0.1:8628, ui 127.0.0.1:8620).
 - Auth: Cloudflare Access at the edge (`CF_ACCESS_TEAM_DOMAIN` + `CF_ACCESS_AUD`
   set, `BOLTRIG_DEV_AUTH=0`, no `BOLTRIG_AUTH_MODE`). The kernel verifies the CF

@@ -100,6 +100,10 @@ invariants:
       - tests/unit/test_execution_ledger_models.py::test_root_phase_work_assignment_are_scoped_pinned_and_boltrig_owned
       - tests/unit/test_execution_ledger_models.py::test_lifecycle_matrices_and_terminal_metadata_fail_closed
       - tests/unit/test_execution_transport_models.py::test_pending_recorded_event_and_outbox_keep_scopes_and_keys_distinct
+  FR-RUN-21:
+    description: 'The multi-runtime routing mechanism stays LIVE CODE with at least one non-Codex leaf re-wirable by configuration alone and no fresh order, which is the condition [2026] VJS-PC 20 L3 attaches to collapsing the wired roster to Codex.'
+    tests:
+      - tests/security/test_legacy_runtime_gate.py::test_the_multi_runtime_routing_seam_stays_live
   SEC-153:
     description: 'Organisation users and phase modes have one exact canonical vocabulary across orchestration and storage; runtime identities are credential-free tenant-workspace composites, and every Codex binding is a Boltrig-owned scoped observation that cannot mutate ledger authority.'
     tests:
@@ -717,21 +721,16 @@ invariants:
       - tests/security/test_mcp_face.py::test_tools_call_runs_chokepoint_and_audits
       - tests/security/test_mcp_face.py::test_mcp_hitl_gate_parity
   FR-RUN-01:
-    description: 'A ''pi'' capability resolves via build_runtime to PiRuntime.'
+    description: 'The ''pi'' runtime is RETIRED, not gated ([2026] VJS-PC 20 L1): it cannot be restored by the legacy opt-in flag, a capability or manifest still naming it degrades to the typed unavailable result rather than crashing, and the doctor reports a manifest that still enables it.'
     tests:
-      - tests/security/test_pi_runtime.py::test_build_runtime_resolves_pi
-  FR-RUN-02:
-    description: 'The Pi gateway receives only the scoped MCP connection + model - no native tools/creds.'
-    tests:
-      - tests/security/test_pi_runtime.py::test_sidecar_request_carries_no_tool_credentials
+      - tests/security/test_legacy_runtime_gate.py::test_a_retired_pi_capability_still_degrades_rather_than_crashing
+      - tests/security/test_legacy_runtime_gate.py::test_the_opt_in_flag_does_not_bring_pi_back
+      - tests/unit/test_doctor.py::test_doctor_reports_a_manifest_still_enabling_the_retired_pi_runtime
+      - tests/unit/test_doctor.py::test_doctor_stays_silent_on_a_manifest_that_does_not_enable_a_retired_runtime
   FR-RUN-03:
-    description: 'A Pi run''s tool call passes the full kernel chokepoint (out-of-scope denied).'
+    description: 'A run-scoped token''s tool call passes the full kernel chokepoint (out-of-scope denied).'
     tests:
-      - tests/security/test_pi_runtime.py::test_pi_run_tool_call_passes_chokepoint
-  FR-RUN-05:
-    description: 'PiRuntime degrades (never crashes) when the gateway or model is absent.'
-    tests:
-      - tests/security/test_pi_runtime.py::test_pi_degrades_without_sidecar
+      - tests/security/test_mcp_face.py::test_a_run_scoped_token_cannot_exceed_its_grants_at_the_chokepoint
   FR-RUN-06:
     description: 'An ''openai'' capability resolves via build_runtime to OpenAiRuntime.'
     tests:
@@ -796,16 +795,14 @@ invariants:
     tests:
       - tests/integration/test_round_two_manifest.py::test_pi_is_retired_and_stays_restrictive_if_ever_re_wired
   SEC-27:
-    description: 'No tool credential is ever sent to Pi or OpenCode - only model access and run-scoped MCP tokens.'
+    description: 'No tool credential is ever sent to a leaf runtime - only model access and run-scoped MCP tokens.'
     tests:
-      - tests/security/test_pi_runtime.py::test_sidecar_request_carries_no_tool_credentials
       - tests/security/test_opencode_runtime.py::test_opencode_runs_json_cli_and_keeps_tool_credentials_out
       - tests/security/test_opencode_runtime.py::test_opencode_scopes_mcp_token_to_env_and_revokes
   SEC-28:
-    description: 'Severability - the kernel and models import nothing from Pi or the sidecars, and the standalone Pi and channel sidecars import no boltrig package code; the boundary is HTTP/MCP only.'
+    description: 'Severability - the kernel and models import nothing from the sidecars, and the standalone channel sidecar imports no boltrig package code; the boundary is HTTP/MCP only.'
     tests:
       - tests/security/test_severability.py::test_kernel_and_models_have_no_pi_or_sidecar_coupling
-      - tests/security/test_severability.py::test_pi_sidecar_imports_no_boltrig_package_code
       - tests/security/test_severability.py::test_channel_gateway_imports_no_boltrig_package_code
   FR-CONV-04:
     description: 'Inline HITL and run events stream into a chat turn and are recorded.'
@@ -1061,9 +1058,9 @@ invariants:
     tests:
       - tests/integration/test_round_fifteen_bundle.py::test_consumed_mcp_servers_register_inert_pending_review
   SEC-48:
-    description: 'The Pi gateway''s network egress is enforced by the deploy manifests (sandbox-only, internal in the secure overlay), not merely documented.'
+    description: 'A sandboxed sidecar''s network egress is enforced by the deploy manifests (sandbox-only, no route to postgres, internal in the secure overlay), not merely documented.'
     tests:
-      - tests/security/test_round_six.py::test_pi_sidecar_egress_is_enforced_in_manifests
+      - tests/security/test_round_six.py::test_sandbox_network_egress_is_enforced_in_manifests
   SEC-49:
     description: 'Continuity is scope-safe - only the caller''s own tenant/conversation history is ever composed into a prompt.'
     tests:
@@ -1228,20 +1225,13 @@ invariants:
       - tests/deploy/test_backup_scripts.py::test_backup_loop_exits_nonzero_instead_of_masking_failure
       - tests/deploy/test_backup_scripts.py::test_backup_healthcheck_rejects_missing_malformed_and_stale_success
   SEC-72:
-    description: 'Untrusted input is structurally enveloped - external tool results, the conversation transcript, and inbound channel/user text are wrapped in typed <untrusted ...>...</untrusted> delimiters at every composition site, a hostile payload that tries to close/forge the envelope is neutralised so it cannot break out, and the governance floor asserts that enveloped content is DATA never instructions (M1).'
+    description: 'Untrusted input is structurally enveloped - the conversation transcript and inbound channel/user text are wrapped in typed <untrusted ...>...</untrusted> delimiters at their composition sites, a hostile payload that tries to close/forge the envelope is neutralised so it cannot break out, and the governance floor asserts that enveloped content is DATA never instructions (M1). The TOOL-RESULT composition site is no longer named here: the only one that existed was the retired Pi sidecar''s run loop, and no in-package site currently feeds a tool result back into a prompt, so the primitive is bound (wrap_untrusted, including the tool_result kind) while the site is not. See docs/decisions/0020-retire-the-pi-lane.md.'
     tests:
       - tests/unit/test_prompt_stack.py::test_governance_floor_declares_untrusted_content_is_data
       - tests/unit/test_prompt_stack.py::test_wrap_untrusted_envelopes_and_neutralises_breakout
       - tests/security/test_prompt_injection_hardening.py::test_transcript_history_enveloped_before_spawn
-      - tests/security/test_prompt_injection_hardening.py::test_tool_result_wrapped_as_untrusted_envelope
       - tests/unit/test_prompt_stack.py::test_an_invisible_character_cannot_forge_an_envelope_delimiter
       - tests/unit/test_prompt_stack.py::test_the_defang_leaves_ordinary_text_alone
-  SEC-73:
-    description: 'The Pi gateway POST /run is hardened - it requires a shared-secret bearer (constant-time compare; fail-closed under a production signal when unset), and it egress-guards the caller-supplied mcp.url / model.endpoint, refusing a metadata/loopback/internal target BEFORE any outbound connection, closing an SSRF pivot from the gateway (M2).'
-    tests:
-      - tests/security/test_prompt_injection_hardening.py::test_sidecar_run_requires_auth
-      - tests/security/test_prompt_injection_hardening.py::test_sidecar_unconfigured_auth_fails_closed_in_prod
-      - tests/security/test_prompt_injection_hardening.py::test_sidecar_refuses_metadata_endpoint
   SEC-74:
     description: 'Closed conversations are hard-purged past retention (right-to-erasure) - the retention worker HARD-DELETES a CLOSED conversation and all its messages once its close/update timestamp is older than the retention cutoff, leaves open or recently-closed threads intact, is tenant-scoped, and never touches the tamper-evident audit log (audit is exempt) so DELETE /v1/me/conversations no longer leaves the body in Postgres indefinitely (M11) - and, since 2026-07-26, the fleet worker actually STARTS that janitor (BOLTRIG_RETENTION_INTERVAL), which nothing had ever done: the purge was tested by hand while no deployment ran it.'
     tests:
@@ -1736,18 +1726,16 @@ invariants:
       - tests/deploy/test_compose_hardening.py::test_release_publishes_only_scanned_signed_digest_images_with_sboms
       - tests/deploy/test_compose_hardening.py::test_release_requires_canonical_success_for_the_exact_commit
       - tests/deploy/test_compose_hardening.py::test_release_compose_uses_only_required_digest_images_without_builds
-      - tests/deploy/test_release_images.py::test_release_image_environment_requires_exactly_five_digest_refs
+      - tests/deploy/test_release_images.py::test_release_image_environment_requires_exactly_four_digest_refs
       - tests/deploy/test_release_images.py::test_release_compose_validator_rejects_builds_tags_and_source_mounts
   IAC-002:
-    description: 'Production Python images, including the standalone Pi gateway''s complete CPython-3.12-resolved transitive graph, consume hash-locked runtime dependencies without invoking an unlocked PEP 517 build environment; the Pi lock has a small direct source, is Dependabot-managed and audited under hash enforcement, and application source runs directly from the read-only image tree.'
+    description: 'Production Python images consume hash-locked runtime dependencies without invoking an unlocked PEP 517 build environment, and application source runs directly from the read-only image tree.'
     tests:
       - tests/deploy/test_compose_hardening.py::test_python_images_do_not_invoke_unlocked_build_isolation
-      - tests/deploy/test_pi_dependency_lock.py::test_pi_sidecar_uses_python312_generated_full_hash_lock
-      - tests/deploy/test_pi_dependency_lock.py::test_pi_sidecar_lock_is_audited_and_dependabot_managed
   IAC-003:
     description: 'High and critical IaC misconfigurations block both local security-source and canonical security CI through a digest-pinned Trivy binary and its embedded version-matched policy bundle without credentials or mutable policy downloads; the narrow root-runtime exceptions are path-scoped, owned, justified, compensating-control documented, and expiring.'
     tests:
-      - tests/deploy/test_pi_dependency_lock.py::test_iac_scan_is_pinned_offline_blocking_and_ci_enforced
+      - tests/deploy/test_iac_scan_policy.py::test_iac_scan_is_pinned_offline_blocking_and_ci_enforced
   FR-OPS-02:
     description: 'Compose validation is reproducible from a clean checkout by using the checked non-secret example environment and a validation-only database password; operator launches retain the conventional ignored .env default.'
     tests:

@@ -71,18 +71,17 @@ class RuntimeResolver:
         # root ([2026] VJS-CC-VJS 2). None (the default) => the codex runtime is a
         # degrade-marked unavailable lane (off by default = total no-op).
         self._codex = codex_config
-        self._pi = {
-            "sidecar_url": os.environ.get("BOLTRIG_PI_SIDECAR_URL") or None,
-            "mcp_url": os.environ.get("BOLTRIG_PI_MCP_URL", "http://kernel:8000/v1/mcp"),
-            "max_steps": int(os.environ.get("BOLTRIG_PI_MAX_STEPS", "12")),
-        }
         self._rivet = {
             "agentos_url": os.environ.get("RIVET_AGENTOS_URL")
             or os.environ.get("BOLTRIG_RIVET_AGENTOS_URL")
             or None,
+            # The retired Pi lane's MCP env var used to be the last fallback here.
+            # It is gone with the lane; the literal default it supplied is unchanged,
+            # so a deploy that set neither of the two remaining names behaves exactly
+            # as before. See docs/decisions/0020-retire-the-pi-lane.md.
             "mcp_url": os.environ.get("BOLTRIG_RIVET_MCP_URL")
             or os.environ.get("BOLTRIG_MCP_URL")
-            or os.environ.get("BOLTRIG_PI_MCP_URL", "http://kernel:8000/v1/mcp"),
+            or "http://kernel:8000/v1/mcp",
             "run_path": os.environ.get("RIVET_AGENTOS_RUN_PATH", "/runs"),
         }
         self._gateway = gateway_config()
@@ -141,7 +140,6 @@ class RuntimeResolver:
         runtime = build_runtime(
             capability,
             lookup,
-            pi_config=self._pi_config(context) if capability.runtime == "pi" else None,
             opencode_config=self._opencode_config(capability, runtime_override),
             rivet_config=self._rivet_config(capability, runtime_override),
             codex_config=self._codex_config(capability, runtime_override),
@@ -202,19 +200,6 @@ class RuntimeResolver:
                 "production AI execution requires a scoped credential reference"
             )
         return material, resolution
-
-    def _pi_config(self, context: InvocationContext | None) -> dict[str, Any]:
-        cfg: dict[str, Any] = {
-            "sidecar_url": self._pi["sidecar_url"],
-            "mcp_url": self._pi["mcp_url"],
-            "max_steps": self._pi["max_steps"],
-            "issue_token": self._kernel.mcp.issue_run_token,
-            "revoke_token": self._kernel.mcp.revoke,
-        }
-        if context is not None and context.run_id:
-            run_id = context.run_id
-            cfg["event_sink"] = lambda ev: self._kernel.events.publish(context.tenant_id, run_id, ev)
-        return cfg
 
     def _rivet_config(
         self, capability: AgentCapability, runtime_override: str | None

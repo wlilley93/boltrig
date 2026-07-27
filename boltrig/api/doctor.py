@@ -35,7 +35,6 @@ _LOCAL_HOSTS = {
     "postgres",
     "redis",
     "kernel",
-    "pi-sidecar",
     "bifrost",
     "local-model",
 }
@@ -360,56 +359,46 @@ def _check_edge(env: Mapping[str, str], prod: bool, checks: list[DoctorCheck]) -
         )
 
 
+# Runtime kinds that have been REMOVED from the codebase, not merely gated off.
+# A capability or manifest still naming one degrades to the typed unavailable
+# result rather than crashing (P9), so this is drift to report, never a deploy
+# blocker. `pi` was retired under [2026] VJS-PC 20 L1; see
+# docs/decisions/0020-retire-the-pi-lane.md.
+_RETIRED_RUNTIMES = ("pi",)
+
+
 def _check_runtime(
     env: Mapping[str, str],
     prod: bool,
     checks: list[DoctorCheck],
     manifest: FleetManifest | None,
 ) -> None:
-    manifest_pi = False
-    if manifest is not None:
-        runtimes = manifest.section("runtimes")
-        pi = runtimes.get("pi") if isinstance(runtimes.get("pi"), dict) else {}
-        manifest_pi = is_truthy(str(pi.get("enabled", False))) if isinstance(pi, dict) else False
+    """Report a manifest still enabling a runtime this build no longer has.
 
-    sidecar_url = env.get("BOLTRIG_PI_SIDECAR_URL")
-    pi_enabled = bool(sidecar_url) or manifest_pi
-    if sidecar_url and not _is_local_host(_host(sidecar_url)):
-        _add(checks, "warn", "pi_sidecar_url", "Pi sidecar URL is not an internal-looking host.")
-    elif sidecar_url:
-        _add(checks, "ok", "pi_sidecar_url", "Pi sidecar URL is internal-looking.")
-    elif manifest_pi:
-        # Pi is a staged-cutover non-target runtime (decision 0012): a manifest
-        # that still enables it without the sidecar URL is informational, never a
-        # production deploy blocker.
+    Until the Pi retirement this function checked the sidecar's URL, bearer and
+    egress allow-list. Those checks went with the lane. What replaces them is the
+    check the retirement actually creates a need for: a tenant manifest OUTLIVES
+    the image, so a provisioned tenant can keep asking for `runtimes.pi` long
+    after nothing can serve it. Measured on the Classical Visas tenant the day the
+    lane was retired: `runtimes.pi.enabled: true`, pointing at a sidecar that no
+    longer exists, and nothing anywhere said so.
+    """
+    if manifest is None:
+        return
+    runtimes = manifest.section("runtimes")
+    for kind in _RETIRED_RUNTIMES:
+        entry = runtimes.get(kind)
+        if not isinstance(entry, dict):
+            continue
+        if not is_truthy(str(entry.get("enabled", False))):
+            continue
         _add(
             checks,
             "warn",
-            "pi_sidecar_url",
-            "Manifest enables Pi but BOLTRIG_PI_SIDECAR_URL is unset; Pi runs will degrade.",
+            f"retired_runtime_{kind}",
+            f"Manifest enables the retired '{kind}' runtime; capabilities asking for "
+            f"it degrade. Remove the runtimes.{kind} block.",
         )
-
-    if pi_enabled:
-        if prod and _weak(env.get("PI_SIDECAR_TOKEN"), min_len=32):
-            _add(checks, "fail", "pi_sidecar_token", "PI_SIDECAR_TOKEN is missing or weak.")
-        elif env.get("PI_SIDECAR_TOKEN"):
-            _add(checks, "ok", "pi_sidecar_token", "Pi sidecar bearer token is set.")
-        else:
-            _add(checks, "warn", "pi_sidecar_token", "Pi sidecar bearer token is unset.")
-
-        allow = _csv(env.get("PI_SIDECAR_EGRESS_ALLOW"))
-        unsafe = {"*", "0.0.0.0/0", "::/0"}
-        if any(v in unsafe for v in allow):
-            _add(checks, "fail", "pi_egress_allow", "Pi sidecar egress allow-list is broad.")
-        elif allow:
-            _add(checks, "ok", "pi_egress_allow", "Pi sidecar egress allow-list is explicit.")
-        else:
-            _add(checks, "fail" if prod else "warn", "pi_egress_allow", "Pi egress allow-list is unset.")
-
-        if env.get("BOLTRIG_PI_MCP_URL"):
-            _add(checks, "ok", "pi_mcp_url", "Pi MCP URL is set.")
-        else:
-            _add(checks, "warn", "pi_mcp_url", "BOLTRIG_PI_MCP_URL is unset; Pi runs will degrade.")
 
 
 def _check_manifest(

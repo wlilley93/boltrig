@@ -84,7 +84,7 @@
       "expires": "2026-12-31"
     },
     "boltrig/api/doctor.py": {
-      "max_file_lines": 587,
+      "max_file_lines": 576,
       "max_function_lines": 68,
       "over_limit_functions": [],
       "owner": "operations-maintainers",
@@ -194,8 +194,8 @@
       "expires": "2026-12-31"
     },
     "boltrig/fleet/runtime.py": {
-      "max_file_lines": 541,
-      "max_function_lines": 65,
+      "max_file_lines": 538,
+      "max_function_lines": 63,
       "over_limit_functions": [],
       "owner": "fleet-maintainers",
       "reason": "Complete runtime-family extraction so the legacy compatibility facade falls below the file floor. Audit fix: UnavailableRuntime marks the unknown-runtime / unwired-codex fallback degraded=True instead of an echo presented as a real run (US-FLT-07).",

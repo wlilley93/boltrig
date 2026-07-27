@@ -10,7 +10,7 @@ Production runs the exact first-party image digests verified by the release
 workflow; it does not rebuild mutable source on the target host. Check out or
 transfer the protected release tag so its Compose manifests and migration chain
 match the images, then download `boltrig-images.env` from that GitHub release.
-The file contains exactly the kernel, fleet, UI, Pi-sidecar, and backup
+The file contains exactly the kernel, fleet, UI, and backup
 `image@sha256` references.
 
 With the normal production configuration in `.env`:

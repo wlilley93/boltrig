@@ -36,7 +36,7 @@ RELEASE_VALIDATE_IMAGES_ENV ?= tests/fixtures/release-images.env
 RELEASE_PROFILES ?= --profile backup
 
 .DEFAULT_GOAL := help
-.PHONY: help gate-status up down logs test lint architecture structure codex-protocol unwired-claims prose-references refresh-canon-citations refresh-opbox-surface fleet-drift gate-coverage health-claims order-directives typecheck check python-quality ui-install ui-quality site-install site-quality ui-e2e compose-validate release-validate release-up doctor-fixture migration-parity python-audit sast iac-scan secret-scan actionlint security-source quality live-check lockfile-policy dependency-audit smoke invariants doctor migrate secure-up backup backup-schedule restore
+.PHONY: help gate-status up down logs test lint architecture structure codex-protocol unwired-claims reachability prose-references refresh-canon-citations refresh-opbox-surface fleet-drift gate-coverage health-claims order-directives typecheck check python-quality ui-install ui-quality site-install site-quality ui-e2e compose-validate release-validate release-up doctor-fixture migration-parity python-audit sast iac-scan secret-scan actionlint security-source quality live-check lockfile-policy dependency-audit smoke invariants doctor migrate secure-up backup backup-schedule restore
 
 help: ## List the available targets
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -107,6 +107,9 @@ codex-protocol: ## Verify the exact checked-in stable Codex App Server protocol 
 unwired-claims: ## Fail when the record names a mechanism no production path constructs
 	$(PY) scripts/check_unwired_claims.py
 
+reachability: ## Reachability is TRANSITIVE: report every function unreachable from every root
+	$(PY) scripts/check_reachability.py
+
 prose-references: ## Every path, test id, make target, env var and order citation in prose must resolve
 	$(PY) scripts/check_prose_references.py
 
@@ -153,9 +156,9 @@ typecheck: ## Module-by-module strict mypy gate (see [tool.mypy])
 gate-status: ## Is the gate on the default branch actually green right now?
 	@./scripts/gate-status.sh
 
-check: invariants lint architecture structure codex-protocol unwired-claims typecheck test ## Run the local Python gates CI enforces
+check: invariants lint architecture structure codex-protocol unwired-claims reachability typecheck test ## Run the local Python gates CI enforces
 
-python-quality: invariants lint architecture structure codex-protocol unwired-claims prose-references gate-coverage health-claims order-directives claims override-locks typecheck ## Run Python tests on Postgres with coverage override-locks typecheck
+python-quality: invariants lint architecture structure codex-protocol unwired-claims reachability prose-references gate-coverage health-claims order-directives claims override-locks typecheck ## Run Python tests on Postgres with coverage override-locks typecheck
 	scripts/with_test_postgres.sh $(PY) -m pytest -q \
 		--cov=boltrig --cov-report=term:skip-covered --cov-report=xml \
 		--cov-fail-under=$(COVERAGE_MIN)
@@ -260,8 +263,6 @@ python-audit: ## Audit every shipped Python dependency graph
 		-r deploy/browser-cli-requirements.txt
 	$(PY) -m pip_audit --strict --progress-spinner off --no-deps --disable-pip \
 		-r deploy/browser-cli-requirements.txt
-	$(PY) -m pip_audit --strict --progress-spinner off \
-		--require-hashes -r services/pi_sidecar/requirements.txt
 
 sast: ## Run the blocking medium/high-confidence Python SAST gate
 	$(PY) -m bandit -q -r boltrig -ll -ii

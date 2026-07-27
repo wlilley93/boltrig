@@ -229,6 +229,32 @@ _PROSPECTIVE_RE = re.compile(
 
 ALLOW: dict[tuple[str, str], str] = {
     (
+        "docs/decisions/0020-retire-the-pi-lane.md",
+        "boltrig/fleet/pi_runtime.py",
+    ): (
+        "Same reasoning as 0013 below: the ADR's whole subject is the deletion of "
+        "that module, so it must name it. Rewording it to avoid the path would "
+        "leave the record unable to say what was removed."
+    ),
+    (
+        "docs/DEFINITION-OF-DONE-round-two.md",
+        "tests/security/test_pi_runtime.py",
+    ): (
+        "A dated definition-of-done: it records which tests proved Round Two "
+        "complete on the day it was signed off. The Pi lane was retired on "
+        "2026-07-27 (decision 0020) and that file went with it. Editing a "
+        "historical sign-off to cite tests that did not exist then would falsify "
+        "it, and the honest record is that the work was done and later removed."
+    ),
+    (
+        "docs/security/audit-2026-07-02.md",
+        "services/pi_sidecar/app.py",
+    ): (
+        "A dated security audit. Its findings were made against the file as it "
+        "stood on 2026-07-02; the service was retired on 2026-07-27 (decision "
+        "0020). An audit is evidence of what was examined, not a live index."
+    ),
+    (
         "docs/decisions/0013-emotion-addon.md",
         "boltrig/observability/orb_presence.py",
     ): (

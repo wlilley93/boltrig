@@ -26,11 +26,6 @@ services:
     image: ${BOLTRIG_UI_IMAGE:?set BOLTRIG_UI_IMAGE to an image@sha256 digest}
     pull_policy: always
 
-  pi-sidecar:
-    build: !reset null
-    image: ${BOLTRIG_PI_SIDECAR_IMAGE:?set BOLTRIG_PI_SIDECAR_IMAGE to an image@sha256 digest}
-    pull_policy: always
-
   backup:
     build: !reset null
     image: ${BOLTRIG_BACKUP_IMAGE:?set BOLTRIG_BACKUP_IMAGE to an image@sha256 digest}

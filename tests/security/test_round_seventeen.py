@@ -16,7 +16,7 @@ import yaml
 _REPO = Path(__file__).resolve().parents[2]
 
 # Our first-party app containers (run our code) must be hardened.
-_APP_SERVICES = ("kernel", "fleet-worker", "pi-sidecar")
+_APP_SERVICES = ("kernel", "fleet-worker")
 
 
 @pytest.mark.security
@@ -39,8 +39,7 @@ def test_app_containers_are_hardened():
 @pytest.mark.invariant("SEC-64")
 def test_app_images_run_non_root():
     # every first-party Dockerfile must declare a non-root USER (INF-01).
-    for df in ("deploy/kernel.Dockerfile", "deploy/fleet.Dockerfile",
-               "services/pi_sidecar/Dockerfile"):
+    for df in ("deploy/kernel.Dockerfile", "deploy/fleet.Dockerfile"):
         text = (_REPO / df).read_text()
         users = re.findall(r"^USER\s+(\S+)", text, re.MULTILINE)
         assert users, f"{df} declares no USER (runs as root)"
