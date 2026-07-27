@@ -1741,6 +1741,16 @@ invariants:
     tests:
       - tests/deploy/test_python_version_is_one_version.py::test_every_python_declaration_agrees_on_one_version
       - tests/deploy/test_python_version_is_one_version.py::test_the_channel_gateway_lock_is_compiled_for_that_same_version
+  IAC-005:
+    description: 'The release workflow can actually publish, and fails FAST when it cannot. Registry write access is probed in the preflight job - before ten minutes of candidate builds - by opening and cancelling a blob upload, which proves write without creating a tag, a layer or (critically) the package itself. A bad credential reports the remedy instead of dying in a JSON parser on the 401 body. Every registry login prefers an optional GHCR_PUSH_TOKEN over the built-in token, so the one blocker that cannot be fixed in code closes by adding a secret rather than by another change. The ui candidate is given the GitHub Packages token its Dockerfile mounts, and the release vulnerability gate reads the SAME .trivyignore.yaml acceptances the security gate does, so the two cannot disagree about an identical image. Promotion still happens only after every candidate is cosign-verified.'
+    tests:
+      - tests/deploy/test_release_can_actually_publish.py::test_registry_write_access_is_checked_before_the_builds
+      - tests/deploy/test_release_can_actually_publish.py::test_the_write_probe_creates_nothing
+      - tests/deploy/test_release_can_actually_publish.py::test_a_bad_credential_reports_the_remedy_rather_than_crashing
+      - tests/deploy/test_release_can_actually_publish.py::test_every_registry_login_prefers_a_pat_when_one_exists
+      - tests/deploy/test_release_can_actually_publish.py::test_the_ui_candidate_is_given_the_packages_token_it_mounts
+      - tests/deploy/test_release_can_actually_publish.py::test_the_release_vuln_gate_reads_the_same_acceptances_as_the_security_gate
+      - tests/deploy/test_release_can_actually_publish.py::test_promotion_still_happens_only_after_every_candidate_is_verified
   FR-OPS-02:
     description: 'Compose validation is reproducible from a clean checkout by using the checked non-secret example environment and a validation-only database password; operator launches retain the conventional ignored .env default.'
     tests:
