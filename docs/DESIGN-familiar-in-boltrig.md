@@ -217,6 +217,13 @@ is.*
 
 ## What is not built
 
+- **Colour is a WEAKER channel than shape, and that is a deliberate trade.** Excluding the
+  magenta family leaves about 60% of the hue wheel, and the body's own blue base narrows it
+  further: measured, guardian (R95.6 G146.9 B152.4), analyst (R95.7 G140.3 B157.3) and
+  orchestrator (R101.5 G130.7 B158.5) are close enough that colour alone would not separate
+  them. Shape stays the primary channel and hue reinforces it. The magenta signal is worth more
+  than a wider spread, and an earlier version of this document overclaimed hue as making roles
+  "instantly separable" - it does not, on its own.
 - **Fixed 2026-07-27, recorded because the note above described them as limits.** A parted body
   now measures depth across each lobe's own thickness rather than from a centre it does not
   have: 5.9% lit / peak 39 before, 12.9% / peak 239 after. And the two reserved genotype slots
