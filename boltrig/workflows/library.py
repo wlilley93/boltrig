@@ -81,35 +81,34 @@ class WorkflowLibrary:
         *,
         active_workspace_id: str | None = None,
     ) -> WorkflowDefinition | None:
-        """Best workflow by intent-tag overlap, promotion-aware (US-WFL-01/08).
+        """Best workflow by intent-tag overlap (US-WFL-01).
 
-        Picks the definition sharing the most ``intent_tags`` with the request.
-        Intent overlap stays the PRIMARY key (a promoted workflow can never be
-        surfaced for an intent it does not match); among equally-matching
-        workflows the eval-gated reuse weight is the tiebreak, so a PROMOTED
-        workflow is preferred and a DEMOTED one deferred; workflow id is the final,
-        deterministic tiebreak. Returns ``None`` when no workflow overlaps at all
-        (a generated workflow is the fallback path).
+        Picks the definition sharing the most ``intent_tags`` with the request;
+        workflow id is the deterministic tiebreak among equal overlaps. Returns
+        ``None`` when no workflow overlaps at all (a generated workflow is the
+        fallback path).
 
-        The reuse weight is RANKING only ([2026] VJS-COUNTY 5): it changes which
-        equally-relevant workflow is reused, never what any workflow may do. With
-        no promotion records every weight is 0, so behaviour is unchanged.
+        NOT REACHABLE FROM PRODUCTION. ``match``'s only caller is
+        ``select_or_generate_workflow``, which no production entry point calls:
+        production selects a workflow by explicit id, never by intent. It survives
+        under the waiver in [2026] VJS-CC-BOLTRIG-WORKFLOW-PROMOTION-TRIGGER-001,
+        against the Principal question of whether the pump's routing path should
+        consult the library by intent (D8), and retires on expiry without an answer.
 
-        The learning-loop retrieval half, wired by the engine plan Phase 3
-        (``learn_from_success`` + ``match``); a reserved API.
+        A second, reuse-weight sort key used to sit between overlap and id. It is
+        gone with the rest of the promotion subsystem (that order, D3): the value it
+        ranked by was written by nothing a production path ran.
 
         Workspace-scoped ([2026] VJS-COUNTY 8, D2): a candidate must be visible to
         the caller - org-wide (``workspace_id`` None) OR the caller's active
         workspace - so ``match`` never surfaces a workflow scoped to a DIFFERENT
         workspace. With no active workspace only org-wide workflows match (the pre-
-        workspace set, byte-for-byte backward-compat). Scoping is applied BEFORE the
-        reuse weighting, so it only narrows which workflows are reusable, never what
-        any workflow may do (COUNTY 5).
+        workspace set, byte-for-byte backward-compat). Scoping only narrows which
+        workflows are reusable, never what any workflow may do (COUNTY 5).
         """
         wanted = set(intent_tags or [])
         if not wanted:
             return None
-        weights = await self._reuse_weights(tenant)
         candidates = [
             wf
             for wf in await self._store.list_workflows(tenant)
@@ -117,37 +116,15 @@ class WorkflowLibrary:
         ]
         if not candidates:
             return None
-        # Deterministic order: highest overlap, then highest reuse weight, then the
-        # smallest id. The negations make ``min`` prefer larger overlap/weight while
-        # ascending id still breaks the final tie.
+        # Deterministic order: highest overlap, then the smallest id. The negation
+        # makes ``min`` prefer larger overlap while ascending id still breaks the tie.
         return cast(
             WorkflowDefinition,
             min(
                 candidates,
-                key=lambda wf: (
-                    -len(wanted & set(wf.intent_tags)),
-                    -weights.get(wf.id, 0.0),
-                    wf.id,
-                ),
+                key=lambda wf: (-len(wanted & set(wf.intent_tags)), wf.id),
             ),
         )
-
-    async def _reuse_weights(self, tenant: str) -> dict[str, float]:
-        """Map workflow id -> bounded reuse weight (ranking only); {} on any gap.
-
-        Best-effort: a store without the promotion methods (or a read failure) is
-        treated as no promotions - the matcher then behaves exactly as before (P9).
-        """
-        from .promotion import reuse_weight  # local import: avoid a load cycle
-
-        lister = getattr(self._store, "list_workflow_promotions", None)
-        if lister is None:
-            return {}
-        try:
-            promotions = await lister(tenant)
-        except Exception:  # a promotion-read failure never breaks selection (P9)
-            return {}
-        return {p.workflow_id: reuse_weight(p) for p in promotions}
 
     async def trigger(
         self,

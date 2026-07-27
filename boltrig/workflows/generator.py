@@ -7,6 +7,16 @@ pipeline (understand -> plan -> execute -> verify -> report). When such a run
 succeeds, :func:`learn_from_success` re-saves it as ``source='learned'`` so the
 library can reuse it next time (US-WFL-03).
 
+NONE OF THAT RUNS. `select_or_generate_workflow` has no production caller and
+`learn_from_success` is gated on ``GENERATED_WORKFLOW_KEY``, which nothing under
+``boltrig/`` writes, so neither the retrieval half nor the learning half has ever
+fired. This module survives under
+[2026] VJS-CC-BOLTRIG-WORKFLOW-PROMOTION-TRIGGER-001, waived against the Principal
+question at ``docs/decisions/0019-route-by-intent-is-the-principals.md``: should
+the pump route an unaddressed item by intent at all? On expiry without an answer,
+retire. Do not describe this loop as live: a court was told it was, because the
+code existed and had callers, and no gate could contradict it.
+
 :func:`schedule_spec` builds a timezone-aware cron trigger spec (US-WFL-05).
 """
 
@@ -122,8 +132,12 @@ async def select_or_generate_workflow(
     so a workflow whose intent overlaps the request - including one saved by
     :func:`learn_from_success` after a prior success - is reused instead of
     synthesised again. When nothing overlaps (an empty or non-matching library)
-    ``match`` returns ``None`` and we fall back to synthesis, so behaviour is
-    unchanged today and improves as the library fills.
+    ``match`` returns ``None`` and we fall back to synthesis.
+
+    "Behaviour is unchanged today and improves as the library fills" is what this
+    said until 2026-07-27, and behaviour is unchanged today for a reason that
+    sentence did not give: this function has no production caller, so nothing here
+    improves as anything fills.
 
     Workspace-scoped ([2026] VJS-COUNTY 8, D2): the caller's active ``workspace_id``
     both narrows the library lookup (match returns org-wide OR own-workspace

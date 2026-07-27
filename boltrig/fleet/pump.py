@@ -73,8 +73,12 @@ SETTLED_STATUSES = frozenset(
 )
 
 # The key under which a step's outcome may carry a synthesised workflow to learn
-# from (Phase 3, US-WFL-03): today the pump learns from any outcome that already
-# carries a GENERATED definition (proven by the wiring test).
+# from (Phase 3, US-WFL-03). NOTHING WRITES IT. Measured 2026-07-27: this constant is
+# defined here, read once below, and set only by tests, so `_maybe_learn` has never fired
+# in production and the learning leg has no production caller. The wiring test proves the
+# pump WOULD learn if an outcome carried one, which is a different claim and was being
+# read as this one. A court was told the loop was live on the strength of it. See
+# [2026] VJS-CC-BOLTRIG-WORKFLOW-PROMOTION-TRIGGER-001 D7.
 GENERATED_WORKFLOW_KEY = "generated_workflow"
 
 # Addressed workflow execution (SEC-178): a channel-addressed target of the form

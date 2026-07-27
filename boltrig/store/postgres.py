@@ -33,7 +33,7 @@ from .rows import (
     _invitation, _mem_erasure, _mem_fact, _mem_ingestion, _mem_projection,
     _memory, _message, _notif, _noun, _org, _org_member, _pat, _personal,
     _revision, _security, _session, _setting, _skill, _summary, _tfa_challenge,
-    _user, _user_totp, _verb, _workflow, _workflow_promotion, _workspace,
+    _user, _user_totp, _verb, _workflow, _workspace,
     _workspace_member,
 )
 from boltrig.models import (
@@ -77,7 +77,6 @@ from boltrig.models import (
     Workspace,
     WorkspaceMember,
     WorkflowDefinition,
-    WorkflowPromotion,
     WorkItem,
 )
 from boltrig.models.errors import SchemaValidationError
@@ -418,30 +417,6 @@ class PostgresStore(
             tenant_id,
         )
         return [_workflow(r) for r in rows]
-
-    async def upsert_workflow_promotion(self, p: WorkflowPromotion):
-        await self._pool.execute(
-            """INSERT INTO workflow_promotions (workflow_id, tenant_id, state, score,
-                                                eval_run_id, updated_at)
-               VALUES ($1,$2,$3,$4,$5,now())
-               ON CONFLICT (tenant_id, workflow_id) DO UPDATE SET
-                 state=EXCLUDED.state, score=EXCLUDED.score,
-                 eval_run_id=EXCLUDED.eval_run_id, updated_at=now()""",
-            p.workflow_id, p.tenant_id, p.state.value, p.score, p.eval_run_id,
-        )
-
-    async def get_workflow_promotion(self, tenant_id, workflow_id):
-        row = await self._pool.fetchrow(
-            "SELECT * FROM workflow_promotions WHERE tenant_id=$1 AND workflow_id=$2",
-            tenant_id, workflow_id,
-        )
-        return _workflow_promotion(row)
-
-    async def list_workflow_promotions(self, tenant_id):
-        rows = await self._pool.fetch(
-            "SELECT * FROM workflow_promotions WHERE tenant_id=$1", tenant_id
-        )
-        return [_workflow_promotion(r) for r in rows]
 
     # --- workflow run records (design brief 22.1, observability-only) -------
     async def record_workflow_run(self, tenant_id, workflow_id, run_id, status):

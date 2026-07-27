@@ -1,0 +1,135 @@
+id: 2026-VJS-CC-BOLTRIG-WORKFLOW-PROMOTION-TRIGGER-001
+court: county
+jurisdiction: default
+repo_code: boltrig
+status: binding
+issue: workflow_promotion_trigger
+holding: |
+  None of the four pleaded options is right, and three of them are not justiciable.
+
+  A, B and C each answer "which trigger writes a promotion". Each is defeated by a fact the
+  pleading did not establish: the VALUE HAS NO CONSUMER. `WorkflowLibrary.match` has one
+  caller, `select_or_generate_workflow`, and that function has no production caller at all.
+  Production never selects a workflow by intent; it selects by explicit id
+  (`control.workflow.trigger`, `control.workflow.execute`, and the pump's addressed
+  `workflow:<id>` target). Writing a promotion by eval completion, by a governed verb or by run
+  outcome therefore all produce identical observable behaviour, namely none.
+
+  THE RATIO. A fork about which trigger should WRITE a value is not justiciable while no
+  production path READS it. Reachability is transitive and is measured to a production entry
+  point: a reader that has a caller is not wired if that caller has none. Where the consumer is
+  transitively unreachable every candidate producer is equally inert, the choice between them
+  decides nothing, and the court refuses it. The order of work is: wire or retire the CONSUMER
+  first. A producer's trigger becomes a live question only where writing the value changes
+  observable behaviour.
+
+  Corollary 1, on pleading. A submission asserting a reader "runs on every X" must prove the
+  transitive chain to a production entry point. A caller count that stops at the first hop
+  misstates the record, and a misstatement about reachability is not a detail: it is the whole
+  question, dressed as background.
+
+  Corollary 2, on gates. A reachability gate that accepts a name's presence in `__all__`, or in
+  a package re-export, as evidence of wiring is honest on the paths it walks and cosmetic on the
+  paths it does not. That is a parity defect and the repair is parity, not a waiver on the one
+  instance the gate happened to catch.
+
+  Corollary 3, on triggers. Where the value a trigger would write is a pure function of records
+  the system already keeps, there is no trigger question: the value is derived and "when does it
+  run" has no referent. A live product question about WHEN a value is written is a symptom that
+  the value was stored where it should have been derived.
+
+  ON THE WAIVER'S DEFERRAL. The waiver says the promoter awaits "the product decision of WHEN
+  promotion runs". That is NOT the Principal's decision and this court decides it: there is no
+  such decision. On the current record every answer to "when" has identical effect, so the
+  question is not ripe and no decision-maker could be given material on which to answer it; and
+  permanently, the eval-gated state is derivable from the eval cases and their runs, so under
+  the derive-don't-store ratio promotion is not an event with a trigger at all. Routing it to
+  the Principal would have handed them an unanswerable question and bought another expiry cycle.
+
+  There IS a genuine Principal-owned question, and it is a different one nobody asked: should
+  the pump's routing path consult the workflow library BY INTENT before routing an unaddressed
+  item to the chief of staff? That changes what runs for a tenant and no record establishes a
+  demand for it. That one is the Principal's, it is D8, and it is the real blocker the waiver
+  mis-described.
+
+  Options A, B and C are REFUSED, not weighed. Option D is ADOPTED IN PART, on different
+  reasoning and extended: retire the half that is wrong-shaped and would not be reused on any
+  rebuild, keep the half that is right-shaped and one call away from live under a waiver whose
+  reason is true, and repair the gate that let a whole inert loop present itself as a live
+  control. The cut runs through `signals.py`: `harvest_reuse_signal` is wired, has a live
+  consumer, and STAYS.
+
+  The pleading is corrected in three places. Its claim that the read side "runs on every
+  workflow selection" is false (the chain is dead one hop up). Its claim that the only platform
+  keys any reader looks up are `workflows` and `admin` is false (`eval`, `spawner`, `status` and
+  `readiness` are all read; `promoter` is the one key with no reader, which is the point it
+  needed and did not make, and which the waiver it cites states correctly). And COUNTY 5's
+  stated ground that "the loop is already live and already reuses learned artifacts" is not true
+  on today's record: `GENERATED_WORKFLOW_KEY` is written by nothing, so `_maybe_learn` cannot
+  fire either. That is a mistaken fact and not ignorance of binding law, so COUNTY 5 is not per
+  incuriam and its ratio stands untouched.
+directives:
+- id: D1
+  actor: lexby
+  must: repair_the_parity_defect_in_check_unwired_claims_so_that_for_the_function_rule_a_names_presence_in_an_all_and_its_appearance_in_an_importfrom_within_a_package_init_stop_counting_as_wiring
+  when: null
+- id: D2
+  actor: lexby
+  must: add_a_transitive_reachability_check_building_a_call_graph_over_boltrig_from_an_explicitly_enumerated_root_set_held_in_one_file_and_report_every_function_unreachable_from_every_root
+  when: null
+- id: D3
+  actor: lexby
+  must: delete_the_promotion_write_machinery_in_full_workflowpromoter_reuse_weight_apply_promotion_signal_the_bootstrap_construction_the_reuse_weights_call_and_second_sort_key_the_workflowpromotion_model_and_promotionstate_the_three_store_methods_the_sql_grants_and_a_migration_dropping_the_table
+  when: null
+- id: D4
+  actor: lexby
+  must: leave_harvest_reuse_signal_and_both_its_call_sites_untouched_by_d3_and_prove_they_still_dispatch_memory_improve_through_the_kernel
+  when: null
+- id: D5
+  actor: lexby
+  must: remove_the_workflowpromoter_entry_from_the_unwired_claims_waiver_since_its_subject_is_deleted_and_dispose_of_every_name_d1_and_d2_newly_report_by_wiring_it_or_waiving_it
+  when: null
+- id: D6
+  actor: lexby
+  must: require_every_unwired_claims_waiver_to_carry_a_blocker_field_of_the_form_caller_path_line_or_principal_record_id_and_make_a_waiver_lacking_one_a_failure_exactly_as_a_missing_expiry_is_today
+  when: null
+- id: D7
+  actor: lexby
+  must: correct_the_prose_that_asserts_a_live_loop_including_the_generator_and_library_docstrings_and_the_pump_comment_about_generated_workflow_key_so_no_record_describes_intent_based_retrieval_or_the_learning_leg_as_reachable
+  when: null
+- id: D8
+  actor: lexby
+  must: file_the_principal_dependency_as_a_record_with_an_id_asking_whether_the_pumps_routing_path_should_consult_select_or_generate_workflow_by_intent_and_waive_the_four_surviving_names_against_that_record_id_with_an_expiry_no_later_than_2026_10_31
+  when: null
+- id: D9
+  actor: lexby
+  must: show_every_test_bound_to_d1_d2_d3_and_d6_going_red_with_its_change_reverted_and_record_the_red_run_in_the_discharge_note
+  when: null
+forbidden:
+- choosing_between_producers_of_a_value_that_no_production_path_reads
+- treating_a_names_presence_in_an_all_or_a_package_re_export_as_evidence_that_it_is_wired
+- deleting_harvest_reuse_signal_or_either_of_its_two_live_call_sites_under_cover_of_this_order
+- rebuilding_promotion_with_a_stored_state_a_writer_and_a_trigger_rather_than_deriving_it_from_the_eval_cases_and_their_runs_pinned_by_the_definition_digest
+- describing_this_order_as_making_the_self_improvement_flywheel_work
+exceptions:
+- select_or_generate_workflow_workflowlibrary_match_learn_from_success_and_maybe_learn_survive_the_deletion_and_are_waived_against_the_d8_principal_record_because_the_question_of_whether_the_pump_should_route_by_intent_is_genuinely_the_principals_and_on_expiry_without_an_answer_the_ratio_applies_without_further_order_retire
+supersedes: []
+source_opinion: docs/vjs/2026-VJS-CC-BOLTRIG-WORKFLOW-PROMOTION-TRIGGER-001-opinion.md
+runtime_summary: |
+  The promotion subsystem's write side is deleted and its read side follows, because the
+  consumer was transitively dead: `match` is reachable only from `select_or_generate_workflow`,
+  which nothing in production calls. `harvest_reuse_signal` is wired and stays. Two gate repairs
+  land with it: the unwired-claims FUNCTION rule stops treating a re-export as wiring, and a new
+  transitive-reachability check measures to an enumerated root set rather than to the first hop.
+  Waivers now carry a `blocker`, so a deferral names the caller or the record it waits on. If
+  promotion is ever rebuilt, the eval-gated state is DERIVED from the eval cases and their runs,
+  pinned by the definition digest: no table, no writer, no trigger.
+created_at: 2026-07-27T15:13:30Z
+citation: null
+assent_source: standing_bounded_assent
+implementation_status: OPEN
+implementation_note: |
+  Filed 2026-07-27. citation is null for the reason recorded in
+  2026-VJS-CC-BOLTRIG-SCHEMA-VALIDATION-LEDGER-001: `vjs next-citation` refuses to mint the
+  canon COUNTY series at a subscriber seat ([2026] VJS-PC 19), and minting at canon offers a
+  number this repository's mirror already uses. The allocator gap is not settled here.

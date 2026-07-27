@@ -15,37 +15,68 @@
     "accept_once": {
       "owner": "fleet-maintainers",
       "expires": "2026-12-31",
-      "reason": "The single-shot attestation seam, kept for tests/integration/test_model_proxy_peer_listener_live.py. The production accept loop is `serve`, wired at fleet/infrastructure/codex_trusted_proxy_ingress.py:306, and the module docstring already says so rather than claiming otherwise."
+      "reason": "The single-shot attestation seam, kept for tests/integration/test_model_proxy_peer_listener_live.py. The production accept loop is `serve`, wired at fleet/infrastructure/codex_trusted_proxy_ingress.py:306, and the module docstring already says so rather than claiming otherwise. BLOCKER design: the production accept loop is `serve`, not this; nothing is waiting for a caller here and nothing should attach one.",
+      "blocker": "design:test-only-attestation-seam"
     },
     "consume": {
       "owner": "adapter-maintainers",
       "expires": "2026-12-31",
-      "reason": "Gate false positive. The code-quoted ``mcp.consume`` in api/bootstrap.py is a MANIFEST YAML KEY, not KafkaSeam.consume; the gate's dotted-prefix rule cannot tell a config path from a symbol. The function itself is a self-declaring driver seam that raises SeamUnavailable (adapters/builtin/mq_file.py:11), which is an honest unimplemented, not a false claim."
+      "reason": "Gate false positive. The code-quoted ``mcp.consume`` in api/bootstrap.py is a MANIFEST YAML KEY, not KafkaSeam.consume; the gate's dotted-prefix rule cannot tell a config path from a symbol. The function itself is a self-declaring driver seam that raises SeamUnavailable (adapters/builtin/mq_file.py:11), which is an honest unimplemented, not a false claim. BLOCKER design: this is not a deferral at all. The remedy is a gate that can tell a config path from a symbol; until then the waiver records a false positive, not an unwired mechanism.",
+      "blocker": "design:gate-false-positive-manifest-key"
     },
     "execute_write": {
       "owner": "adapter-maintainers",
       "expires": "2026-12-31",
-      "reason": "The write half of the per-call `_Db` handed to SQL adapter handlers. The intended caller is a subclass handler (`SqlHandler`), including out-of-repo adapters; the only in-repo subclass is deliberately write_allowed=False (adapters/builtin/crm_sql.py:41). The read/write-scope refusal it guards is no longer unpinned - tests/adapters/test_sql_base_write_scope.py drives both directions through a probe subclass and proves the refusal lands BEFORE the driver, which was the part of the sentence that could quietly stop being true."
+      "reason": "The write half of the per-call `_Db` handed to SQL adapter handlers. The intended caller is a subclass handler (`SqlHandler`), including out-of-repo adapters; the only in-repo subclass is deliberately write_allowed=False (adapters/builtin/crm_sql.py:41). The read/write-scope refusal it guards is no longer unpinned - tests/adapters/test_sql_base_write_scope.py drives both directions through a probe subclass and proves the refusal lands BEFORE the driver, which was the part of the sentence that could quietly stop being true. BLOCKER caller: the only in-repo subclass is deliberately write_allowed=False. A subclass that sets it True is the caller that clears this.",
+      "blocker": "caller:boltrig/adapters/builtin/crm_sql.py:41"
     },
     "list_all_capabilities": {
       "owner": "store-maintainers",
       "expires": "2026-12-31",
-      "reason": "The unfiltered admin/audit read, mandated by .vjs/logs/decisions/LOG-2026-07-17-120214.yaml and deliberately kept OFF the routing path (list_capabilities is the active-only read the router uses). Exercised by tests/integration/test_manifest_reconciliation.py; the admin surface that would consume it is not built yet."
+      "reason": "The unfiltered admin/audit read, mandated by .vjs/logs/decisions/LOG-2026-07-17-120214.yaml and deliberately kept OFF the routing path (list_capabilities is the active-only read the router uses). Exercised by tests/integration/test_manifest_reconciliation.py; the admin surface that would consume it is not built yet. BLOCKER caller: the admin surface that would consume it. The console route module is where it would attach.",
+      "blocker": "caller:boltrig/kernel/platform_routes/console.py:1"
     },
     "push": {
       "owner": "fleet-maintainers",
       "expires": "2026-12-31",
-      "reason": "A method of `InternalQueueAdapter`, which IS exported (boltrig/work/__init__.py) as the reference queue adapter for source integrations to copy. It is deliberately not on the `QueueAdapter` protocol, so it is outside the production contract by design rather than missing from it."
+      "reason": "A method of `InternalQueueAdapter`, which IS exported (boltrig/work/__init__.py) as the reference queue adapter for source integrations to copy. It is deliberately not on the `QueueAdapter` protocol, so it is outside the production contract by design rather than missing from it. BLOCKER design: deliberately off the QueueAdapter protocol, so it is outside the production contract by design rather than missing from it. No caller is intended.",
+      "blocker": "design:exported-reference-adapter"
     },
     "sweep_run_scoped": {
       "owner": "kernel-maintainers",
       "expires": "2026-12-31",
-      "reason": "The unguarded run-scoped credential primitive. Kept, but it must NEVER be used at a run terminal: an unguarded delete of the whole run: prefix destroys a held write's sealed call, which is the record decision 0018 replays from. The terminal sweep is `sweep_run_credentials_if_settled` (kernel/held_call.py), and the prose that used to name this function was corrected on 2026-07-26."
+      "reason": "The unguarded run-scoped credential primitive. Kept, but it must NEVER be used at a run terminal: an unguarded delete of the whole run: prefix destroys a held write's sealed call, which is the record decision 0018 replays from. The terminal sweep is `sweep_run_credentials_if_settled` (kernel/held_call.py), and the prose that used to name this function was corrected on 2026-07-26. BLOCKER design: this must NEVER acquire a caller at a run terminal. An unguarded delete of the whole run: prefix destroys a held write's sealed call. The terminal sweep is a different function.",
+      "blocker": "design:must-never-be-called-at-a-run-terminal"
     },
-    "WorkflowPromoter": {
+    "dev_principal_resolver": {
+      "owner": "identity-maintainers",
+      "expires": "2026-10-31",
+      "blocker": "design:dev-only-header-trusting-resolver-must-stay-unwired",
+      "reason": "A header-trusting resolver for LOCAL DEV ONLY: it accepts x-boltrig-* with no verification. That it has no production caller is the SAFE state and the only acceptable one, not a gap. A dev-identity build answering /v/* with no bearer was live on the internet on 2026-07-26 in a sibling estate; this waiver exists so nobody reads the gate's report as a prompt to wire it. If it ever acquires a caller outside a test, that is an incident and not a fix."
+    },
+    "select_locale": {
+      "owner": "skills-maintainers",
+      "expires": "2026-10-31",
+      "blocker": "caller:boltrig/skills/loader.py:134",
+      "reason": "The locale-variant resolver (US-SKL-03). Nothing selects a locale yet: the loader resolves a bare base id on every path, so this is built ahead of the surface that would choose a locale. Exercised by its unit tests. The caller that clears this is a locale-aware skill selection in the loader itself."
+    },
+    "build_cell_scope": {
+      "owner": "fleet-maintainers",
+      "expires": "2026-10-31",
+      "blocker": "caller:boltrig/fleet/infrastructure/codex_trusted_proxy_ingress.py:1",
+      "reason": "Builds a model-proxy cell scope from the child's real /proc identity for the TRUSTED lane, where SO_PEERCRED attestation is deliberately absent. The trusted-lane ingress is the module that would call it; today that path constructs its scope elsewhere. The name is reported because the gate stopped treating a package re-export as a caller ([2026] VJS-CC-BOLTRIG-WORKFLOW-PROMOTION-TRIGGER-001 D1), not because anything changed about it."
+    },
+    "store_bearer_verifier": {
+      "owner": "fleet-maintainers",
+      "expires": "2026-10-31",
+      "blocker": "caller:boltrig/fleet/infrastructure/codex_model_proxy_server.py:63",
+      "reason": "A store-backed BearerVerifier: accepts a bearer iff its sha256 maps to an active, non-expired grant at the given generation. The proxy server currently builds its verifier by another route, so this is an alternative construction with no production caller. Reported for the same D1 reason as build_cell_scope."
+    },
+    "select_or_generate_workflow": {
       "owner": "workflow-maintainers",
       "expires": "2026-10-31",
-      "reason": "CONSTRUCTED AND PARKED, not wired. api/bootstrap.py builds it into app.state.platform under \"promoter\"; no reader looks up that key (readers use admin/eval/spawner/status/workflows), so `evaluate` runs only from tests/security/test_self_improvement_competence.py. Its SEC-29 grant ceiling is CORRECT - the initiator's grants are intersected at the spawn seam - and currently vacuous, because the path never runs. Waived rather than deleted because eval-gated promotion is a decided design ([2026] VJS-COUNTY 5) awaiting the product decision of WHEN promotion runs. A shorter expiry than the others on purpose: this one is a decision waiting to be made, not a seam for an external caller."
+      "blocker": "principal:PRINCIPAL-2026-07-27-ROUTE-BY-INTENT",
+      "reason": "Intent-based retrieval. The whole chain below it is unreached: this function has no production caller, `WorkflowLibrary.match` has only this one, and `learn_from_success` is gated on GENERATED_WORKFLOW_KEY, which nothing writes. Production selects a workflow by explicit id. Waived expressly by [2026] VJS-CC-BOLTRIG-WORKFLOW-PROMOTION-TRIGGER-001, whose exceptions clause names it, against the Principal question at docs/decisions/0019-route-by-intent-is-the-principals.md: should the pump route an unaddressed item by intent at all? That changes what runs for a tenant, so it is not an engineering call. On expiry without an answer the order's ratio applies with no further order: retire."
     }
   }
 }

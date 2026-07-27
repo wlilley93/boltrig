@@ -70,7 +70,6 @@ from boltrig.models import (
     Workspace,
     WorkspaceMember,
     WorkflowDefinition,
-    WorkflowPromotion,
     WorkItem,
     WorkStatus,
     utcnow,
@@ -101,7 +100,6 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
         self._skills: dict[tuple[str, str, str], Skill] = {}
         self._caps: dict[tuple[str, str], AgentCapability] = {}
         self._workflows: dict[tuple[str, str, str], WorkflowDefinition] = {}
-        self._workflow_promotions: dict[tuple[str, str], WorkflowPromotion] = {}
         # Design brief 22.1: workflow run records (observability-only). Keyed by
         # (tenant_id, run_id) - one row per execute. Read aggregated by
         # workflow_run_stats to feed the automations home cards with REAL stats.
@@ -277,15 +275,6 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
             if t == tenant_id and (wid not in latest or w.version > latest[wid].version):
                 latest[wid] = w
         return list(latest.values())
-
-    async def upsert_workflow_promotion(self, promotion):
-        self._workflow_promotions[(promotion.tenant_id, promotion.workflow_id)] = promotion
-
-    async def get_workflow_promotion(self, tenant_id, workflow_id):
-        return self._workflow_promotions.get((tenant_id, workflow_id))
-
-    async def list_workflow_promotions(self, tenant_id):
-        return [p for (t, _), p in self._workflow_promotions.items() if t == tenant_id]
 
     # --- workflow run records (design brief 22.1, observability-only) -------
     async def record_workflow_run(self, tenant_id, workflow_id, run_id, status):

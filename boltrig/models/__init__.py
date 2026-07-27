@@ -179,10 +179,8 @@ from .libraries import (
     AgentCapability,
     Budget,
     ModelEndpoint,
-    PromotionState,
     Skill,
     WorkflowDefinition,
-    WorkflowPromotion,
     WorkflowSource,
 )
 from .registry import (
@@ -360,10 +358,8 @@ __all__ = [
     "AgentCapability",
     "Budget",
     "ModelEndpoint",
-    "PromotionState",
     "Skill",
     "WorkflowDefinition",
-    "WorkflowPromotion",
     "WorkflowSource",
     "Consequence",
     "Noun",

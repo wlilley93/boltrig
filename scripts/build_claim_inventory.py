@@ -70,7 +70,9 @@ def tracked(pattern: str) -> list[Path]:
         ["git", "-C", str(ROOT), "ls-files", "-z", "--", pattern],
         capture_output=True, check=True, text=True,
     ).stdout
-    return sorted(ROOT / name for name in out.split("\0") if name)
+    # `.exists()` because `git ls-files` lists a tracked path even when the working tree has
+    # deleted it and the deletion is not yet staged. A half-finished deletion is not a source.
+    return sorted(p for p in (ROOT / name for name in out.split("\0") if name) if p.exists())
 
 # Closed, and narrow on purpose. An earlier draft included "should" and "handles", which made
 # every ordinary explanatory comment a claim and buried the four hundred that matter. A claim

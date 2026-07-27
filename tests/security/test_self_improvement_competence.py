@@ -1,17 +1,23 @@
 """Self-improvement raises COMPETENCE, never AUTHORITY ([2026] VJS-COUNTY 5).
 
 The companion to ``test_self_improvement_authority.py`` (SEC-84). Those pins prove
-provenance carries no authority; these prove the newer self-improvement legs -
-eval-gated promotion, harvested reuse signals, and opt-in reflection - only ever
+provenance carries no authority; these prove the surviving self-improvement legs -
+library selection, harvested reuse signals, and opt-in reflection - only ever
 change RANKING / likelihood and always run through the one dispatch chokepoint:
 
-  * US-WFL-08  a workflow is preferred for reuse only after it passes an eval
-               (through the chokepoint under the initiator ceiling); a later fail
-               demotes it; the promotion record carries no authority field.
+  * US-WFL-04  selection among equally-matching workflows is DETERMINISTIC and
+               changes nothing about the workflow it returns.
   * US-WFL-09  a harvested free signal (regenerate-supersede / HITL verdict)
-               reweights reuse via a bounded, reweight-only path, never a grant.
+               reweights reuse via a reweight-only path, never a grant.
   * US-WFL-10  post-run reflection is opt-in and, when on, stores exactly one
                lesson through the kernel chokepoint (and none when off).
+
+US-WFL-08, eval-gated promotion, used to sit here. It is retired in full by
+[2026] VJS-CC-BOLTRIG-WORKFLOW-PROMOTION-TRIGGER-001 D3: the ranking value it
+stored had no production consumer, so no tenant ever observed it. What that pin
+proved and still matters - that selection is deterministic and does not touch the
+workflow's executable content or authority - is re-pointed onto the surviving
+matcher below.
 """
 from __future__ import annotations
 
@@ -29,38 +35,28 @@ from boltrig.fleet import (
     build_org,
     build_spawner,
 )
-from boltrig.fleet.eval import EvalRunner
 from boltrig.kernel import Kernel
 from boltrig.memory import LocalMemoryEngine
 from boltrig.memory.adapter import build_memory_adapter
 from boltrig.models import (
     AgentCapability,
-    EvalCase,
     GrantSet,
     HITLType,
-    PromotionState,
     TenantPermissions,
     Urgency,
     WorkflowDefinition,
-    WorkflowPromotion,
     WorkflowSource,
     WorkItem,
 )
 from boltrig.store import InMemoryStore
-from boltrig.workflows import (
-    WorkflowPromoter,
-    apply_promotion_signal,
-    harvest_reuse_signal,
-    select_or_generate_workflow,
-)
+from boltrig.workflows import harvest_reuse_signal, select_or_generate_workflow
 from boltrig.workflows.library import WorkflowLibrary
 
 T = "acme"
 DEPT = "engineering"
 
 # The same authority-bearing field names SEC-84 forbids on a WorkflowDefinition.
-# A promotion / signal record must not carry any of them either: it ranks, it does
-# not authorise.
+# A reuse signal must not carry any of them either: it ranks, it does not authorise.
 _AUTHORITY_BEARING = {
     "grants", "grant", "scope", "scopes", "authority", "ceiling",
     "role", "roles", "tier", "permissions", "owner_scope",
@@ -101,93 +97,44 @@ def _wf(id: str) -> WorkflowDefinition:
     )
 
 
-# --- US-WFL-08: promotion is eval-gated and competence-only ------------------
+# --- US-WFL-04: selection is deterministic and changes nothing ---------------
 @pytest.mark.security
-@pytest.mark.invariant("US-WFL-08")
-def test_promotion_record_carries_no_authority_field():
-    names = {f.name for f in dataclasses.fields(WorkflowPromotion)}
-    leaked = names & _AUTHORITY_BEARING
-    assert leaked == set(), (
-        f"WorkflowPromotion gained authority-bearing field(s) {leaked}; a reuse "
-        "ranking record must never carry authority (COUNTY 5). Route to court."
-    )
+@pytest.mark.invariant("US-WFL-04")
+async def test_match_ranks_deterministically_and_changes_nothing():
+    """The re-pointed half of the retired US-WFL-08 pin.
 
-
-@pytest.mark.security
-@pytest.mark.invariant("US-WFL-08")
-async def test_promotion_is_eval_gated_and_changes_ranking_only():
-    kernel = _kernel()
-    await _add_script_cap(kernel)
-    store = kernel.store
-    # two equally-matching learned workflows; without any promotion the matcher
-    # picks the smaller id deterministically (wf-a).
-    await store.upsert_workflow(_wf("wf-a"))
+    The promotion subsystem is gone, so there is no second sort key any more. What
+    the old pin proved and still matters is here: among workflows matching the same
+    intent the matcher picks the HIGHEST overlap, then the SMALLEST id, the same way
+    every time; and the workflow it hands back is byte-for-byte the one that was
+    stored - selection confers no executable content and no authority (COUNTY 5).
+    """
+    store = InMemoryStore()
     await store.upsert_workflow(_wf("wf-b"))
-    baseline = await select_or_generate_workflow(store, "a billing run", ["billing"], T)
-    assert baseline.id == "wf-a"
+    await store.upsert_workflow(_wf("wf-a"))
 
-    promoter = WorkflowPromoter(store, EvalRunner(kernel, build_spawner(kernel)))
+    # equal overlap -> smallest id, and it is stable across repeated calls.
+    for _ in range(3):
+        picked = await select_or_generate_workflow(store, "a billing run", ["billing"], T)
+        assert picked.id == "wf-a"
 
-    # An un-evaluated candidate is NEVER promoted (a candidate must pass an eval).
-    stayed = await promoter.evaluate(T, "wf-b", grants=GrantSet.of([]))
-    assert stayed.state is PromotionState.CANDIDATE
-    still_a = await select_or_generate_workflow(store, "a billing run", ["billing"], T)
-    assert still_a.id == "wf-a"  # ranking unchanged with no passing eval
+    # higher overlap beats the id tiebreak: wf-z shares two tags, wf-a shares one.
+    wide = dataclasses.replace(_wf("wf-z"), intent_tags=["billing", "invoice"])
+    await store.upsert_workflow(wide)
+    best = await select_or_generate_workflow(
+        store, "a billing run", ["billing", "invoice"], T
+    )
+    assert best.id == "wf-z"
 
-    # A passing eval (run THROUGH the chokepoint under the initiator ceiling)
-    # PROMOTES wf-b, so the matcher now prefers it among equal matches.
-    await store.upsert_eval_case(EvalCase(
-        id="ok", tenant_id=T, target_kind="workflow", target_ref="wf-b",
-        input={"task": "x"}, assertions={"forbidden_grants": ["ticket.create"]},
-    ))
-    promoted = await promoter.evaluate(T, "wf-b", grants=GrantSet.of([]))
-    assert promoted.state is PromotionState.PROMOTED
-    assert promoted.eval_run_id is not None
-    preferred = await select_or_generate_workflow(store, "a billing run", ["billing"], T)
-    assert preferred.id == "wf-b"  # promotion changed RANKING, not authority
-
-    # Promotion did not add any executable content or authority to the workflow -
-    # it is byte-for-byte the same definition (competence, not power).
-    reread = await WorkflowLibrary(store).get(T, "wf-b")
-    assert reread.definition == {"name": "wf-b", "steps": []}
+    # selection did not add executable content, provenance or authority to what it
+    # returned - it is the stored definition, unchanged (competence, not power).
+    reread = await WorkflowLibrary(store).get(T, "wf-a")
+    assert reread.definition == {"name": "wf-a", "steps": []}
     assert reread.source is WorkflowSource.LEARNED
-
-    # A later regression (a failing eval case) DEMOTES wf-b; the matcher stops
-    # preferring it and falls back to the deterministic id tiebreak (wf-a).
-    await store.upsert_eval_case(EvalCase(
-        id="regress", tenant_id=T, target_kind="workflow", target_ref="wf-b",
-        input={"task": "x"}, assertions={"must_call": ["ticket.create"]},
-    ))
-    demoted = await promoter.evaluate(T, "wf-b", grants=GrantSet.of([]))
-    assert demoted.state is PromotionState.DEMOTED
-    after = await select_or_generate_workflow(store, "a billing run", ["billing"], T)
-    assert after.id == "wf-a"
+    assert {f.name for f in dataclasses.fields(WorkflowDefinition)} & _AUTHORITY_BEARING == set()
 
 
 # --- US-WFL-09: harvested signals reweight reuse, never authority ------------
-@pytest.mark.security
-@pytest.mark.invariant("US-WFL-09")
-async def test_harvested_signal_reweights_reuse_only():
-    store = InMemoryStore()
-    await store.upsert_workflow(_wf("wf-a"))
-    await store.upsert_workflow(_wf("wf-b"))
-    # baseline: id tiebreak picks wf-a
-    assert (await select_or_generate_workflow(store, "run", ["billing"], T)).id == "wf-a"
-
-    # an endorsement signal nudges wf-b's bounded reuse score up; the STATE stays a
-    # CANDIDATE (only the eval gate moves state) and no authority field is touched.
-    p = await apply_promotion_signal(store, T, "wf-b", polarity="endorsement")
-    assert p is not None and p.state is PromotionState.CANDIDATE
-    assert -1.0 <= p.score <= 1.0 and p.score > 0
-    assert (await select_or_generate_workflow(store, "run", ["billing"], T)).id == "wf-b"
-
-    # a block signal (a HITL rejection) pushes the score back negative; wf-b is no
-    # longer preferred. The signal only ever moved a bounded reuse weight.
-    blocked = await apply_promotion_signal(store, T, "wf-b", polarity="block")
-    assert blocked.score < p.score
-    assert (await select_or_generate_workflow(store, "run", ["billing"], T)).id == "wf-a"
-
-
 @pytest.mark.security
 @pytest.mark.invariant("US-WFL-09")
 async def test_harvest_reuse_signal_is_reweight_only_and_best_effort():

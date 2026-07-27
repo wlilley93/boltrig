@@ -21,7 +21,7 @@ from .readiness_control import (
     control_plane_check,
 )
 
-EXPECTED_ALEMBIC_HEAD = "0039_user_must_change_password"
+EXPECTED_ALEMBIC_HEAD = "0040_drop_workflow_promotions"
 
 _PRODUCTION_NAMES = {"prod", "production", "staging"}
 # The tools /readyz requires. Codex is the only target agent runtime (decision

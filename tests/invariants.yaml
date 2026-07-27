@@ -459,9 +459,10 @@ invariants:
     tests:
       - tests/integration/test_learning_loop.py::test_successful_generated_workflow_is_learned
   US-WFL-04:
-    description: 'The flywheel''s retrieval half - generation consults the library FIRST and reuses a workflow whose intent matches (learned/precreated/generated) before synthesising a new one; an empty or non-matching library still synthesises.'
+    description: 'The flywheel''s retrieval half - generation consults the library FIRST and reuses a workflow whose intent matches (learned/precreated/generated) before synthesising a new one; an empty or non-matching library still synthesises; and selection among equally-matching workflows is deterministic (highest intent overlap, then smallest id) and confers no executable content or authority.'
     tests:
       - tests/integration/test_learning_loop.py::test_generation_prefers_a_learned_match
+      - tests/security/test_self_improvement_competence.py::test_match_ranks_deterministically_and_changes_nothing
   US-WFL-06:
     description: 'Every terminal work item is scored deterministically - DONE not-degraded is 1.0, DONE degraded is 0.5, FAILED is 0.0, AWAITING_HUMAN is neutral - recorded on the item''s result.outcome sub-dict.'
     tests:
@@ -470,15 +471,9 @@ invariants:
     description: 'Post-run reflection is governed and best-effort - a bounded, deterministic lesson is stored through the kernel chokepoint (memory verb, with run-id provenance and the secret/injection screen), and a reflection failure never fails the run.'
     tests:
       - tests/integration/test_learning_loop.py::test_reflection_is_governed_and_best_effort
-  US-WFL-08:
-    description: 'Reuse promotion is eval-gated and competence-only ([2026] VJS-COUNTY 5) - a generated/learned workflow is preferred for reuse only after it passes its eval cases run through the kernel chokepoint under the initiator ceiling (SEC-29), a later failing eval demotes it, and the promotion record (WorkflowPromotion) carries no authority-bearing field, so promotion changes RANKING only, never grants/scope/tier or the executable content.'
-    tests:
-      - tests/security/test_self_improvement_competence.py::test_promotion_record_carries_no_authority_field
-      - tests/security/test_self_improvement_competence.py::test_promotion_is_eval_gated_and_changes_ranking_only
   US-WFL-09:
-    description: 'Harvested free signals reweight reuse, never authority ([2026] VJS-COUNTY 5) - a regenerate-supersede or genuine APPROVAL verdict (never clarification, escalation, or question answer text) feeds reuse weighting through memory.improve (reweight-only, no scope/grant argument) and a bounded promotion score in [-1, 1] that never changes the eval-gated state, and every harvest is best-effort so it can never fail the run that produced it (P9).'
+    description: 'Harvested free signals reweight reuse, never authority ([2026] VJS-COUNTY 5) - a regenerate-supersede or genuine APPROVAL verdict (never clarification, escalation, or question answer text) feeds reuse weighting through memory.improve (reweight-only, no scope/grant argument), and every harvest is best-effort so it can never fail the run that produced it (P9).'
     tests:
-      - tests/security/test_self_improvement_competence.py::test_harvested_signal_reweights_reuse_only
       - tests/security/test_self_improvement_competence.py::test_harvest_reuse_signal_is_reweight_only_and_best_effort
       - tests/security/test_self_improvement_competence.py::test_only_approval_verdicts_are_harvested_as_reuse_signals
   US-WFL-10:
