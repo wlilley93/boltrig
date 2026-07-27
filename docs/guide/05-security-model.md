@@ -97,5 +97,4 @@ when fronting the box.
 - `BOLTRIG_ALLOWED_HOSTS` - the box's real hostnames (default `*` is dev-only).
 - `BOLTRIG_CORS_ORIGINS` - the browser origin allowlist (never `*` with credentials).
 - `BOLTRIG_MAX_BODY_BYTES` - request body cap (default 1 MiB).
-- `PI_SIDECAR_TOKEN` - the sidecar bearer (fails closed under a production signal).
 - Off-box, optionally-encrypted backups via the `backup` compose profile (`BACKUP_REMOTE`, `BACKUP_PASSPHRASE`).

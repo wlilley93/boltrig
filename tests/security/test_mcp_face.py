@@ -152,3 +152,28 @@ def test_mcp_notification_gets_202_with_no_body():
     )
     assert ping.status_code == 200
     assert ping.json()["result"] == {}
+
+
+@pytest.mark.security
+@pytest.mark.invariant("FR-RUN-03")
+async def test_a_run_scoped_token_cannot_exceed_its_grants_at_the_chokepoint():
+    """A run token issued for one verb cannot call another (FR-RUN-03).
+
+    This case arrived here from ``tests/security/test_pi_runtime.py``, deleted with
+    the Pi lane ([2026] VJS-PC 20 L1). It was filed under Pi and named for Pi, but it
+    never exercised PiRuntime: it issues a run-scoped token and asserts the kernel
+    refuses an out-of-scope verb. The property belongs to the MCP face and is live for
+    every runtime that holds a run token, so it moves rather than dying with its
+    former filing. The actor name is the only thing that was ever Pi-specific.
+    """
+    store = InMemoryStore()
+    store.set_tenant_permissions(TenantPermissions(T, GrantSet.of(["*"])))
+    k = Kernel(store)
+    await k.register_adapter(T, build_tickets())
+    token = k.mcp.issue_run_token(T, GrantSet.of(["ticket.read"]), run_id="r1", actor="worker")
+    res = await k.mcp.handle(
+        token,
+        {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+         "params": {"name": "ticket.create", "arguments": {"title": "x"}}},
+    )
+    assert res["result"]["_boltrig"]["status"] == "denied"

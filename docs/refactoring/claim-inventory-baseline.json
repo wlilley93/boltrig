@@ -16,7 +16,7 @@
     "reason the summary prints the ORDINARY residue beside it is so that rewording a claim to",
     "dodge the phrase list is visible as a rise on the other side of the ledger."
   ],
-  "load_bearing_no_subject": 231,
+  "load_bearing_no_subject": 228,
   "pinned_at": "2026-07-27",
   "pinned_by": "Lexby, Tier 0 first census",
   "note": "236 at the first census, 231 after the first decrement. The auth surface's nine keys-only claims rested on nothing but the care of whoever wrote each line; five now name the mechanism they rest on (`_audit`, and the fact that the material is ABSENT from the dict rather than filtered out of it) and all of them are proven by SEC-191, which drives login, failed login and 2FA enrolment and searches the whole audit stream for the password, the session secret, the CSRF token and the otpauth URI. Shown to fail: seeding the login row with the password and the csrf reddens two of the three cases. The third neuters pii.contains_secret and requires no change, so the guarantee cannot quietly become the scrubber's. The first CI run of this gate went red where local was green: the census was walking the filesystem and read docker-compose.override.yml, which is gitignored local development config, so it contributed two rows here and none in CI. The source set is now bounded by `git ls-files`, so anything untracked is invisible by construction. A gate measuring environment-dependent claims that was itself environment-dependent is the Tier 3 family arriving inside the tool built to measure it, and it was caught by the byte-identical regeneration check rather than by anyone noticing."

@@ -122,9 +122,6 @@ jobs:
           - image: ui
             dockerfile: ui/Dockerfile
             context: ui
-          - image: pi-sidecar
-            dockerfile: services/pi_sidecar/Dockerfile
-            context: services/pi_sidecar
           - image: backup
             dockerfile: deploy/backup.Dockerfile
             context: .
@@ -316,11 +313,11 @@ jobs:
             --pattern 'image-ref-*.txt' \
             --pattern 'sbom-*.cdx.json' \
             --dir release-evidence
-          test "$(find release-evidence -name 'image-ref-*.txt' -type f | wc -l)" -eq 5
-          test "$(find release-evidence -name 'sbom-*.cdx.json' -type f | wc -l)" -eq 5
+          test "$(find release-evidence -name 'image-ref-*.txt' -type f | wc -l)" -eq 4
+          test "$(find release-evidence -name 'sbom-*.cdx.json' -type f | wc -l)" -eq 4
           image_env=release-evidence/boltrig-images.env
           : > "$image_env"
-          for image in kernel fleet ui pi-sidecar backup; do
+          for image in kernel fleet ui backup; do
             image_name="$(printf 'ghcr.io/%s-%s' "$GITHUB_REPOSITORY" "$image" | tr '[:upper:]' '[:lower:]')"
             image_ref="$(tr -d '\r\n' < "release-evidence/image-ref-$image.txt")"
             digest="${image_ref##*@}"
@@ -331,18 +328,17 @@ jobs:
               kernel) variable=BOLTRIG_KERNEL_IMAGE ;;
               fleet) variable=BOLTRIG_FLEET_IMAGE ;;
               ui) variable=BOLTRIG_UI_IMAGE ;;
-              pi-sidecar) variable=BOLTRIG_PI_SIDECAR_IMAGE ;;
               backup) variable=BOLTRIG_BACKUP_IMAGE ;;
             esac
             printf '%s=%s\n' "$variable" "$image_ref" >> "$image_env"
           done
-          test "$(wc -l < "$image_env")" -eq 5
+          test "$(wc -l < "$image_env")" -eq 4
 
       - name: Refuse to move an existing public image tag
         shell: bash
         run: |
           set -euo pipefail
-          for image in kernel fleet ui pi-sidecar backup; do
+          for image in kernel fleet ui backup; do
             image_name="$(printf 'ghcr.io/%s-%s' "$GITHUB_REPOSITORY" "$image" | tr '[:upper:]' '[:lower:]')"
             for tag in "$RELEASE_TAG" "$COMMIT_TAG"; do
               if docker buildx imagetools inspect "$image_name:$tag" >/dev/null 2>&1; then
@@ -356,7 +352,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for image in kernel fleet ui pi-sidecar backup; do
+          for image in kernel fleet ui backup; do
             image_ref="$(tr -d '\r\n' < "release-evidence/image-ref-$image.txt")"
             cosign verify \
               --certificate-identity "$CERTIFICATE_IDENTITY" \
@@ -373,7 +369,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for image in kernel fleet ui pi-sidecar backup; do
+          for image in kernel fleet ui backup; do
             image_ref="$(tr -d '\r\n' < "release-evidence/image-ref-$image.txt")"
             image_name="${image_ref%@*}"
             digest="${image_ref##*@}"

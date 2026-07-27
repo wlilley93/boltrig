@@ -15,7 +15,6 @@ import pytest
 
 _REPO = pathlib.Path(__file__).resolve().parents[2]
 _ROOT = _REPO / "boltrig"
-_PI_SIDECAR = _REPO / "services" / "pi_sidecar"
 _CHANNEL_GATEWAY = _REPO / "services" / "channel_gateway"
 _SCOPED = [_ROOT / "kernel", _ROOT / "models"]
 
@@ -80,24 +79,9 @@ def test_kernel_and_models_have_no_pi_or_sidecar_coupling():
 
 @pytest.mark.security
 @pytest.mark.invariant("SEC-28")
-def test_pi_sidecar_imports_no_boltrig_package_code():
-    offenders: list[str] = []
-    pattern = re.compile(r"^\s*(?:from|import)\s+boltrig(?:\.|\b)")
-    for path in _PI_SIDECAR.rglob("*.py"):
-        for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-            if pattern.match(line):
-                offenders.append(f"{path}:{n}: {line.strip()}")
-    assert not offenders, (
-        "Pi gateway must stay package-severed and communicate over HTTP/MCP only "
-        "(SEC-28):\n" + "\n".join(offenders)
-    )
-
-
-@pytest.mark.security
-@pytest.mark.invariant("SEC-28")
 def test_channel_gateway_imports_no_boltrig_package_code():
     # Decision 0003, condition 3: the channel gateway is severed exactly like
-    # the pi_sidecar - the only coupling is the wire protocol (signed intake
+    # the retired pi_sidecar was - the only coupling is the wire protocol (signed intake
     # POSTs + the run-scoped outbox links), never a package import.
     offenders: list[str] = []
     pattern = re.compile(r"^\s*(?:from|import)\s+boltrig(?:\.|\b)")

@@ -321,19 +321,21 @@ Phase 2 (the socket class) landed: the severed `services/channel_gateway` daemon
 
 **Maturity.** Wired-but-thin toward the real backends (single-shot, degrade to echo without keys); production-grade on the degrade path itself.
 
-### 2.5 PiRuntime and the Pi gateway service
+### 2.5 PiRuntime and the Pi gateway service - RETIRED
 
-**One line.** The one agentic, tool-calling lane, run in a severed sandboxed process that reaches tools only through the kernel's MCP socket.
+**Retired 2026-07-27** under [2026] VJS-PC 20 L1. See
+`docs/decisions/0020-retire-the-pi-lane.md` for the measurement, the ground, and the
+discharge of the L3 condition. The kernel-side runtime, the standalone gateway
+service and their compose, release and Dependabot wiring are all deleted; a
+capability or manifest still naming `pi` degrades to the typed unavailable result
+exactly as it did while the lane was gated off.
 
-**Plain language.** The one worker allowed to use power tools, kept in a locked workshop. The kernel-side `PiRuntime` mints a run-scoped MCP token, posts the job to the gateway over HTTP, streams its events back, and revokes the token afterwards. The gateway (a standalone FastAPI service, deliberately outside the `boltrig` package) receives only a model key and that token: no filesystem, no processes, no tool credentials, network egress restricted to the kernel and the model. Inside, it runs a loop: ask the model, execute any tool calls through `tools/call` on the kernel MCP face (so every tool call passes the full ten-step gate, including the human gate, which pauses the loop), feed results back, repeat up to `max_steps`. Honesty: this loop is a first-party stand-in written so the service works with no external Pi package; its own docstring marks `run_loop` as the integration point where a real third-party agent loop would replace the body. Offline it degrades to listing the tools it would have had.
-
-**Key files.** `boltrig/fleet/pi_runtime.py` (`PiRuntime`, `build_request`); `services/pi_sidecar/app.py` (`run_loop`, `McpClient`, the FastAPI app).
-
-**Public surface.** Gateway: `GET /health`, `POST /run` (streaming ndjson). It consumes `POST /v1/mcp` with the `x-boltrig-mcp-token` header. Compose keeps it on the `sandbox` network only, with no published port.
-
-**Governed by.** FR-RUN-02 and SEC-27 (only the scoped MCP connection and model, no tool credentials), FR-RUN-03 (every tool call passes the chokepoint), FR-RUN-05 (degrades without the gateway), SEC-24 and SEC-48 (sandbox declared and enforced in the deploy manifests), SEC-28 (kernel and models import nothing from Pi or the gateway), SEC-23/FR-MCP-02.
-
-**Maturity.** Wired-but-thin: the transport, sandboxing contract, token scoping, and degrade paths are real and tested; the reasoning loop is a home-grown stand-in, not the real Pi library.
+This section is kept as a stub rather than deleted because the surrounding document
+is a component map, and a reader arriving from an older reference should find out
+where the component went rather than find a gap. The invariants it used to carry did
+not all go with it: SEC-48 (sandbox egress) and FR-RUN-03 (a run-scoped token's tool
+call passes the chokepoint) were never Pi's and were re-pointed; IAC-003 was
+recovered from a file the deletion removed.
 
 ### 2.6 Chat orchestrator and SSE event relay
 

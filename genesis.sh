@@ -92,7 +92,6 @@ echo "==> Phase 0: .env + blank internal secrets + config"
 [ -f manifest.yaml ] || cp manifest.example.yaml manifest.yaml
 gen_secret POSTGRES_PASSWORD
 gen_secret BOLTRIG_AUDIT_HMAC_KEY
-gen_secret PI_SIDECAR_TOKEN
 # Keep DATABASE_URL's credential segment consistent with the POSTGRES_* vars
 # (M9/SEC-69: they MUST match) and default the db/user to 'boltrig'.
 PGUSER="$(secret_of POSTGRES_USER)"; PGUSER="${PGUSER:-boltrig}"; set_env POSTGRES_USER "$PGUSER"
@@ -109,8 +108,7 @@ set_env HATCHET_CLIENT_TLS_STRATEGY none
 [ -n "$(secret_of BIFROST_PORT)" ] || set_env BIFROST_PORT 8081
 [ -n "$(secret_of BOLTRIG_MODEL_GATEWAY_URL)" ] || set_env BOLTRIG_MODEL_GATEWAY_URL http://bifrost:8080/v1
 [ -n "$(secret_of BOLTRIG_MODEL_GATEWAY_TTL)" ] || set_env BOLTRIG_MODEL_GATEWAY_TTL 900
-ensure_csv_env NO_PROXY pi-sidecar bifrost local-model
-ensure_csv_env PI_SIDECAR_EGRESS_ALLOW kernel bifrost local-model
+ensure_csv_env NO_PROXY bifrost local-model
 
 # ---------------------------------------------------------------- Phase 1: datastores + Hatchet db
 echo "==> Phase 1: datastores up + Hatchet database"

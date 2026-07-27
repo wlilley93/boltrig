@@ -83,7 +83,6 @@ LOAD-BEARING	NO-SUBJECT	comment	boltrig/fleet/infrastructure/model_proxy_peer_li
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/postgres_root_engine_decisions.py:42		Durable insert-once root decision store backed by PostgreSQL.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/lease_token.py:106		Does this row still carry the lease the token names? Used ONLY as an early exit before doing work - never as the fence.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/model_profiles.py:17		A named provider/model/base-url selection, never credential material.
-LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/pi_runtime.py:70		The sidecar /run payload.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/pump.py:140		A short, deterministic lesson distilled from an outcome (Phase 3, US-WFL-07).
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/stack_tool_health.py:1		Owner-local liveness evidence for first-party stack tools.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/stack_tool_receipts.py:1		Authenticated, expiring Redis receipts for fleet-owned tool health.
@@ -227,8 +226,6 @@ LOAD-BEARING	NO-SUBJECT	comment	boltrig/store/postgres.py:1926		tenant's AI-conf
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/store/postgres.py:879		Transactional multi-scope reserve (audit H4, Phase 6, FR-COST-05): all-or-nothing debit across every scope in ONE transaction.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:281		one-time secret result must never be replay-cached.
 LOAD-BEARING	NO-SUBJECT	compose	docker-compose.yml:413		the token and the per-channel secrets are env at spawn, never logged.
-LOAD-BEARING	NO-SUBJECT	compose	docker-compose.yml:493		M2 (SEC-73): the shared /run bearer.
-LOAD-BEARING	NO-SUBJECT	compose	docker-compose.yml:499		these directly, mirroring the kernel), so an unset token fails closed
 LOAD-BEARING	NO-SUBJECT	compose	docker-compose.yml:50		M9 (SEC-69): no baked default credential.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/adapters/builtin/channel_send.py:1	outbound_url	channel.send - the governed outbound egress verb (decision 0003).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/adapters/builtin/crm_sql.py:1	contact	Reference SQL adapter: a CRM over a relational database (US-ADP-03, SEC-09).
@@ -344,7 +341,7 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/cell_spawner
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/codex_cell_boundary.py:1	codex_cell_policy.validate_cell_layout	The named, kernel-enforced per-cell isolation boundary for Codex cells.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/codex_cell_policy.py:404	sanitized_environment	Validate per-cell env additions (the kernel-tools MCP bearer delivery).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/codex_cell_provisioning.py:1	CodexPhaseAdmissionSource	A concrete read-only ``CodexPhaseAdmissionSource`` that provisions a cell.
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/codex_kernel_tool_scope.py:1	PiRuntime	The per-run kernel-tools scope: one run-scoped MCP token plus its ceiling.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/codex_kernel_tool_scope.py:1	McpFace.issue_run_token	The per-run kernel-tools scope: one run-scoped MCP token plus its ceiling.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/codex_kernel_tools_phase.py:1	ProfileRef	The kernel-tools Codex phase contract (adapter <-> admission source).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/codex_model_proxy_issuance.py:1	ModelProxyCellScope	Mint a per-cell model bearer for an ALREADY-ATTESTED cell scope (Stage B, 2b).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/codex_runtime_preflight.py:170	codex_mcp_tool_name	The kernel-tools lane's inventory is EXACTLY the kernel's own face.
@@ -364,12 +361,11 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/postgres_exe
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/postgres_model_proxy_grants.py:44	MemoryModelProxyGrantStore	Durable model-proxy grant store backed by PostgreSQL.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/lease_token.py:1	Store.update_work_item_if_leased	The claim-time lease token, and the only fenced way to write a claimed row.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/lease_token.py:118	_record_failure	Write a claimed row, fenced on the claim-time token.
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/pi_runtime.py:1	PiRuntime	PiRuntime - the Pi sidecar behind the Runtime seam (Round Two, Epic RUN).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/pump.py:586	handle_claimed_item	Durably record a cooperative cancel ([2026] VJS-COUNTY 6, D1/D4).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/pump.py:678	kernel.invoke	Distil one lesson and store it via the memory verb, best-effort (US-WFL-07).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/retention.py:1	run_retention_once	Retention purge: hard-erasure of closed conversations (M11, right-to-erasure).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/runtime.py:1	build_runtime	The pluggable agent-runtime abstraction (P4, US-FLT-04).
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/runtime.py:196	ModelEndpoint	A Hermes-gateway-backed runtime (lazy SDK / HTTP, degrade if absent).
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/runtime.py:204	ModelEndpoint	A Hermes-gateway-backed runtime (lazy SDK / HTTP, degrade if absent).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/runtime_resolver.py:18	resolve	The model that ACTUALLY served a call, for the audit record.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/spawn.py:333	_publish_subagent_end_event	Retire the bearer this child inherited, at the child's run terminal.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/spawn.py:363	_publish_subagent_event	Settle a delegated child on the parent relay (G3, SDK-CONTRACT §5).
@@ -543,7 +539,7 @@ ORDINARY	NO-SUBJECT	comment	boltrig/api/codex_execution.py:148		structural ratch
 ORDINARY	NO-SUBJECT	comment	boltrig/api/codex_trusted.py:108		never carries the upstream key;
 ORDINARY	NO-SUBJECT	comment	boltrig/api/codex_trusted.py:78		Lazy imports so the flag-off path never pulls in the infrastructure layer or
 ORDINARY	NO-SUBJECT	comment	boltrig/api/doctor.py:24		three sites cannot disagree about what counts as a placeholder again.
-ORDINARY	NO-SUBJECT	comment	boltrig/api/doctor.py:383		that still enables it without the sidecar URL is informational, never a
+ORDINARY	NO-SUBJECT	comment	boltrig/api/doctor.py:364		result rather than crashing (P9), so this is drift to report, never a deploy
 ORDINARY	NO-SUBJECT	comment	boltrig/api/initiate.py:103		shell history and usually in a runbook too.
 ORDINARY	NO-SUBJECT	comment	boltrig/api/mint_token.py:72		user's own allow set.
 ORDINARY	NO-SUBJECT	comment	boltrig/api/mint_token.py:86		trivially capturable (`...
@@ -812,7 +808,6 @@ ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/postgres_model_proxy_gr
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/postgres_root_engine_decisions.py:93		ON CONFLICT fired so a row must exist;
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/mastra.py:14		The Mastra-style plan cannot be compiled into a bounded workflow.
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/model_gateway.py:33		An in-memory, TTL-bounded ``conversation_id -> model`` binding.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/pi_runtime.py:110		fail-closed /run auth accepts this call in prod.
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/ports/authority.py:11		Resolve all current ceilings;
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/ports/capability_attestations.py:31		The bounded attestation store cannot retain another immutable set.
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/ports/execution_ledger.py:1		Canonical execution-ledger persistence boundary.
@@ -833,12 +828,13 @@ ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/pump.py:658		Re-save a succeeded, sy
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/pump.py:76		from (Phase 3, US-WFL-03).
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/pump.py:87		a deterministic automation.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/result.py:51		never at zero.
-ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/runtime.py:115		OpenAI-style messages with the authoritative system prompt prepended;
-ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/runtime.py:187		A typed unavailable result, never an unmarked echo.
+ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/runtime.py:123		OpenAI-style messages with the authoritative system prompt prepended;
+ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/runtime.py:195		A typed unavailable result, never an unmarked echo.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/runtime.py:33		backend does not report real usage, so accounting is never left blank.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/runtime.py:42		is UNKNOWN and must degrade to the env default runtime, never crash a run (P9).
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/runtime.py:519		degrade-marked under the REQUESTED lane's name, never the lane itself.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/runtime.py:517		degrade-marked under the REQUESTED lane's name, never the lane itself.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/runtime.py:74		Decision 0012: Codex is the only target agent runtime and script stays the
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/runtime.py:87		set, or reducing it to Codex, is expressly forbidden while production_ready is
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/spawn.py:168		The PRICED cost (see _true_up_cost), never result.cost_micros.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/spawn.py:238		cross: see _inherit_adapter_bearer for why the child cannot use the seal
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/spawn.py:419		(0/0) is priced on the total exactly as before - never at zero.
@@ -1138,9 +1134,8 @@ ORDINARY	NO-SUBJECT	compose	docker-compose.yml:318		`build: !reset null` and pul
 ORDINARY	NO-SUBJECT	compose	docker-compose.yml:342		never routed through it (residency) - that goes to local-model.
 ORDINARY	NO-SUBJECT	compose	docker-compose.yml:387		Mount a local model cache so air-gapped boxes never reach the internet.
 ORDINARY	NO-SUBJECT	compose	docker-compose.yml:456		CHANNEL_GATEWAY_CHANNELS connect-time injection - it is never written
-ORDINARY	NO-SUBJECT	compose	docker-compose.yml:498		Pass the prod signals the gateway's fail-closed auth checks (it reads
-ORDINARY	NO-SUBJECT	compose	docker-compose.yml:521		THIS image, never the kernel's or the Python gateway's).
-ORDINARY	NO-SUBJECT	compose	docker-compose.yml:616		a local gateway.
+ORDINARY	NO-SUBJECT	compose	docker-compose.yml:475		THIS image, never the kernel's or the Python gateway's).
+ORDINARY	NO-SUBJECT	compose	docker-compose.yml:570		a local gateway.
 ORDINARY	NO-SUBJECT	compose	docker-compose.yml:93		than folklore: a NON-ROOT container cannot hold CAP_SETUID at all.
 ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/adapters/base.py:100	disabled	``disabled`` is for one-time/bearer-secret results that must never be
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/adapters/builtin/script_base.py:66	argv	Run ``argv`` with an output cap and timeout termination.
@@ -1170,7 +1165,7 @@ ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/model_proxy_too
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/model_gateway.py:135	disabled	The gateway's readiness `(status, reason)` when no probe is armed.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/ports/grant_leases.py:17	expected_authority	Durable atomic operations; implementations must never persist raw bearers.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/pump.py:709	hierarchy.tier2	Build the live org (CoS + heads + pump) from the manifest hierarchy (P7).
-ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/runtime.py:171	BOLTRIG_ENABLE_LEGACY_RUNTIMES	The deterministic fallback for a runtime Boltrig cannot provide.
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/runtime.py:179	BOLTRIG_ENABLE_LEGACY_RUNTIMES	The deterministic fallback for a runtime Boltrig cannot provide.
 ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/fleet/turn_executor_compat.py:11	on_behalf_bearer	executor never chokes on an unexpected keyword).
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/workers.py:136	fn	Await ``fn`` directly.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/workers.py:158	KeyError	Start the registered task on the engine without waiting (US-EXE-02).
@@ -1249,8 +1244,8 @@ ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/model_router.py:1	SensitiveData
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/pump.py:155	WorkItem	Persist a step's discovered follow-on work as PENDING children (D7).
 ORDINARY	SUBJECT-REACHED	comment	boltrig/fleet/pump.py:77	_maybe_learn	defined here, read once below, and set only by tests, so `_maybe_learn` has never fired
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/retention.py:103	run_forever	Loop :func:`run_retention_once` forever; cancellable, idle-sleeping.
-ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/runtime.py:477	UnavailableRuntime	Select the runtime implementation for a capability (P4, US-FLT-04, US-RUN-01).
-ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/runtime_resolver.py:234	kernel.mcp.issue_run_token	The injected trusted-Codex config, gated ONLY on ``capability.runtime``.
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/runtime.py:476	UnavailableRuntime	Select the runtime implementation for a capability (P4, US-FLT-04, US-RUN-01).
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/runtime_resolver.py:219	kernel.mcp.issue_run_token	The injected trusted-Codex config, gated ONLY on ``capability.runtime``.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/identity/ai_keys.py:68	workspace_id	Resolve the AI key for a call, precedence user -> workspace -> org -> default.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/identity/auth.py:331	OidcVerifier	Build a ``PrincipalResolver`` backed by Cloudflare Access (zero-trust edge).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/identity/auth.py:386	build_principal_resolver	Header-trusting resolver for LOCAL DEV ONLY (mirrors the kernel default).

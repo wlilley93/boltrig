@@ -105,9 +105,6 @@ jobs:
           - image: ui
             dockerfile: ui/Dockerfile
             context: ui
-          - image: pi-sidecar
-            dockerfile: services/pi_sidecar/Dockerfile
-            context: services/pi_sidecar
           - image: backup
             dockerfile: deploy/backup.Dockerfile
             context: .

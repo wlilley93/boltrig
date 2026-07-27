@@ -73,14 +73,22 @@ def runtime_for_provider(provider: str | None) -> str | None:
 
 # Decision 0012: Codex is the only target agent runtime and script stays the
 # deterministic non-agent fallback. Every other lane (hermes / openai /
-# claude-api / pi / opencode / rivet) is staged-cutover rollback residue: it is
+# claude-api / opencode / rivet) is staged-cutover rollback residue: it is
 # reachable only when the operator explicitly opts in with
 # BOLTRIG_ENABLE_LEGACY_RUNTIMES (default OFF). With the flag unset, requesting
 # a legacy lane returns the typed unavailable result instead of reaching the
 # lane; with it set, dispatch is byte-for-byte what it was (rollback-ability).
+#
+# The `pi` lane is GONE, not gated: [2026] VJS-PC 20 L1 permits retiring pi from
+# the roster, and a measurement on both prod tenants found one real request in
+# three weeks against 61,212 health probes. THIS SET AND THE DISPATCH BELOW ARE
+# THE ROUTING MECHANISM PC-20 L3 REQUIRES TO STAY LIVE: five non-Codex lanes
+# remain re-wirable by setting the flag alone, with no fresh order. Emptying this
+# set, or reducing it to Codex, is expressly forbidden while production_ready is
+# False. See docs/decisions/0020-retire-the-pi-lane.md.
 LEGACY_RUNTIMES_ENV = "BOLTRIG_ENABLE_LEGACY_RUNTIMES"
 _LEGACY_RUNTIME_KINDS = frozenset(
-    {"hermes", "openai", "claude-api", "pi", "opencode", "rivet", "rivet_agentos", "rivet-agentos"}
+    {"hermes", "openai", "claude-api", "opencode", "rivet", "rivet_agentos", "rivet-agentos"}
 )
 
 
@@ -430,7 +438,6 @@ def _build_legacy_runtime(
     *,
     endpoint: "ModelEndpoint | None",
     api_key: str | None,
-    pi_config: dict[str, Any] | None,
     opencode_config: dict[str, Any] | None,
     rivet_config: dict[str, Any] | None,
 ) -> Runtime:
@@ -448,14 +455,6 @@ def _build_legacy_runtime(
     if kind == "claude-api":
         return ClaudeApiRuntime(
             endpoint=endpoint, cost_tier=capability.cost_tier, api_key=api_key
-        )
-    if kind == "pi":
-        from .pi_runtime import PiRuntime
-
-        cfg = dict(pi_config or {})
-        cfg.setdefault("sidecar_url", None)  # no config -> degrades offline (FR-RUN-05)
-        return PiRuntime(
-            endpoint=endpoint, cost_tier=capability.cost_tier or "standard", **cfg
         )
     if kind == "opencode":
         from .opencode_runtime import OpenCodeRuntime
@@ -478,7 +477,6 @@ def build_runtime(
     capability: AgentCapability,
     endpoint_lookup: EndpointLookup | None = None,
     *,
-    pi_config: dict[str, Any] | None = None,
     opencode_config: dict[str, Any] | None = None,
     rivet_config: dict[str, Any] | None = None,
     codex_config: dict[str, Any] | None = None,
@@ -489,9 +487,9 @@ def build_runtime(
     """Select the runtime implementation for a capability (P4, US-FLT-04, US-RUN-01).
 
     Dispatch is by ``capability.runtime``. The model endpoint (if any) is resolved
-    through ``endpoint_lookup`` so the model is pinned by data. ``pi_config`` supplies
-    the Pi sidecar wiring; ``opencode_config`` the OpenCode scoped-MCP callbacks.
-    Unknown runtimes fall back to a degrade-marked deterministic runtime.
+    through ``endpoint_lookup`` so the model is pinned by data. ``opencode_config``
+    supplies the OpenCode scoped-MCP callbacks. Unknown runtimes fall back to a
+    degrade-marked deterministic runtime.
 
     ``api_key`` is the resolved per-org/workspace/user AI key ([2026] VJS-COUNTY 8,
     D5): a network runtime uses it instead of the env-configured provider key; None
@@ -525,7 +523,6 @@ def build_runtime(
             capability,
             endpoint=endpoint,
             api_key=api_key,
-            pi_config=pi_config,
             opencode_config=opencode_config,
             rivet_config=rivet_config,
         )

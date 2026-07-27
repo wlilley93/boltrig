@@ -97,7 +97,8 @@ token, every tool call back through the chokepoint.
   config, each its own governance dimension.
 - **3.5 New front doors** - `kernel/app.py`'s HTTP surface reads no policy; it
   authenticates, builds a context, and calls the same `kernel.invoke`. An internal
-  kernel MCP face exists (the Pi sidecar's); a broader MCP front door is a future
+  kernel MCP face exists (built for the retired Pi sidecar, now serving the Codex
+  lane); a broader MCP front door is a future
   surface.
 - **3.6 The flywheel edge** - `learn_from_success` re-saves a succeeded generated
   workflow as `source='learned'`, feeding `match()` next time. The one place
@@ -113,7 +114,7 @@ token, every tool call back through the chokepoint.
   to a department first. Same destination, different hops.
 - Hatchet is **not** where cron/webhooks land - it is downstream, durably wrapping
   an execution that has already been routed. It pulls nothing in.
-- (Original) Bifrost is **not** wired in; `PiRuntime` resolves a `ModelEndpoint`
+- (Original) Bifrost is **not** wired in; the runtime resolves a `ModelEndpoint`
   and calls it directly. See Section 6: Round Six added the gateway seam (point the
   endpoint `base_url` at the gateway), but the Bifrost service itself stays
   external.
