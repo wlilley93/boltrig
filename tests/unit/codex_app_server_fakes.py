@@ -105,7 +105,18 @@ async def client_factory() -> AsyncIterator[ClientFactory]:
 
     def make(
         *,
-        request_timeout: float = 0.2,
+        # 5s, not 0.2s. A test that expects a request to SUCCEED must not be racing
+        # a wall clock: the default budget applies to `initialize`, which does
+        # several awaits on an event loop shared with ~2,750 other tests, and at
+        # 200ms it lost that race about once in five full-suite runs. The failure
+        # looked exactly like a real regression in the Codex runtime -
+        # `_wait_for_response` raising TimeoutError on a future the traceback showed
+        # as already FINISHED, because the deadline was exhausted before the await
+        # began. A test asserting no-timeout must not fail on a GC pause.
+        #
+        # Raising it costs nothing: every test that WANTS a timeout passes its own
+        # tiny value explicitly, and none relies on this default expiring.
+        request_timeout: float = 5.0,
         max_pending: int = 4,
         max_notifications: int = 8,
         max_notification_bytes: int = 4096,
@@ -147,3 +158,19 @@ async def initialize(
     receipt = await task
     assert await sent(transport) == wire.NotificationMessage("initialized")
     return receipt
+
+
+def relax_request_timeout(client: CodexAppServerClient, seconds: float = 5.0) -> None:
+    """Widen a client's request budget after it has already produced a timeout.
+
+    A client has ONE request timeout, so a test that needs a request to expire AND
+    a later one to succeed cannot express both with a single constructor argument.
+    Setting the tiny value for the whole test makes the success leg race the loop,
+    which is how test_first_late_timeout_response_is_discarded_but_duplicate_fails
+    came to fail once in five full-suite runs while passing in isolation.
+
+    `BoundedWriter.deadline()` reads `_request_timeout` on every call, so changing
+    it between requests is honest rather than a trick: the first request really did
+    expire under a 15ms budget, and the second really does get a generous one.
+    """
+    client._writer._request_timeout = seconds
