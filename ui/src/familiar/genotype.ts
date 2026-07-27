@@ -69,6 +69,10 @@ export interface Genotype {
   specSharp: number;
   /** how far the halo reaches past the silhouette */
   haloReach: number;
+  /** base pace, before arousal and fatigue modify it */
+  tempoBase: number;
+  /** overall body size */
+  bodyScale: number;
 }
 
 /**
@@ -100,6 +104,8 @@ export const GENOTYPE_DEFAULTS: Genotype = {
   silkChurn: 1,
   specSharp: 1,
   haloReach: 1,
+  tempoBase: 1,
+  bodyScale: 1,
 };
 
 /** Slot order IS the uniform layout: index i lands in uGene[i/4][i%4]. Reordering re-labels
@@ -111,12 +117,13 @@ export const GENOTYPE_SLOTS: ReadonlyArray<keyof Genotype> = [
   "rotation", "twist", "hue", "saturation",
   "warmth", "breathDepth", "bumpAmp", "silkChurn",
   "specSharp", "haloReach",
+  "tempoBase", "bodyScale",
 ];
 
 /** Pack a genotype into the 16 floats the shader's `uniform vec4 uGene[4]` expects. */
 /** The uniform is `vec4 uGene[GENOTYPE_VEC4S]`; the renderer uploads that many vec4s. Derived
  *  from the slot list so growing the genotype cannot leave an upload writing a prefix. */
-export const GENOTYPE_VEC4S = 6;
+export const GENOTYPE_VEC4S = 7;
 
 export function packGenotype(g: Genotype): Float32Array {
   const out = new Float32Array(GENOTYPE_VEC4S * 4);

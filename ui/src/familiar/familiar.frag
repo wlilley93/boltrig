@@ -136,7 +136,11 @@ vec3 aces(vec3 x){ return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14), 0.0, 1
 //   [1] = lobe balance, superM, superN1, superN2
 //   [2] = superN3, superA, superB, aspect
 //   [3] = rotation, twist, (reserved), (reserved)
-uniform vec4 uGene[6];   // 24 genes; slots 16-21 tune the interior, 22-23 reserved
+uniform vec4 uGene[7];   // 28 slots. 24 tempoBase, 25 bodyScale, 26-27 RESERVED.
+// moteGain and ejectRate were wired here and REMOVED before shipping: both feed `moteA`, which
+// only reaches `cover`, and cover is discarded wherever uPresence is 1. Swept across the moods
+// that produce motes and ejecta, neither changed a single pixel in any configuration that could
+// be measured. A gene that cannot be shown to do something is the warmth defect again.   // 24 genes; slots 16-21 tune the interior, 22-23 reserved
 
 // --- Cassini oval, polar form -----------------------------------------------
 // Implicit: |p-f1| * |p-f2| = b^2, foci at (+/-a, 0). Solving for r at angle th:
@@ -324,7 +328,7 @@ void main(){
   float voice   = clamp(uAudio.x, 0.0, 1.0);
   float vWARMTH = 0.25*uGene[4].x;   // gene: warmth. The warm breath in the heart, and
                                     // the value theme 2 actually consumes (see WARMTH above).
-  float tempo   = (0.26 + 0.85*clamp(uArousal,0.0,1.0))*(1.0 - 0.45*fatigue);
+  float tempo   = (0.26*uGene[6].x + 0.85*clamp(uArousal,0.0,1.0))*(1.0 - 0.45*fatigue);
   // The master clock IS an emotion readout: it runs at tempo, not wall speed. With no phenotype
   // published the host feeds the resting baseline (arousal ~0.07), so the being drifts at roughly
   // a sixth of its old fixed rate - an animated idle, not a canned loop racing through its moves.
@@ -367,7 +371,7 @@ void main(){
   // the voice SWELLS the whole body - this is now its primary voice tell (rings removed).
   float breathe = 1.0 + (0.010 + 0.012*tempo)*sin(iTime*0.9) + 0.030*uAudio.y + 0.02*uBeat + 0.090*voice*uGene[4].y;          // gene: breathDepth
   float voiceScale = 1.0 + 0.10*voice;
-  float scaleFull = 0.265*breathe*voiceScale*(1.0 + gSwell)*(1.0 - 0.05*fatigue)*(1.0 + 0.025*soc);
+  float scaleFull = 0.265*uGene[6].y*breathe*voiceScale*(1.0 + gSwell)*(1.0 - 0.05*fatigue)*(1.0 + 0.025*soc);
   float scaleDock = uScaleDock*breathe*(1.0 + gSwell*0.5)*(1.0 + 0.012*soc);
   // There is no travelling seed in the void. The old 0.0035-radius remnant was still visible as a
   // bright pixel and its interpolated centre made the supposed teleport read as physical movement.
