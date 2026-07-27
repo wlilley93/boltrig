@@ -28,8 +28,8 @@ import { describe, expect, it } from "vitest";
 // URL is not a file:// URL and fileURLToPath throws "The URL must be of scheme file".
 const SHADER = resolve(process.cwd(), "src/familiar/familiar.frag");
 
-/** Source of truth: wlilley93/beelink-desktop, familiar/familiar.frag at e73b3dc. */
-const RECORDED_SHA256 = "3f04ebf2ecb8d8194445c67589663d579476d6965ada3e47a5d4d35ba7966f31";
+/** Source of truth: wlilley93/beelink-desktop, familiar/familiar.frag at ff0cfa1. */
+const RECORDED_SHA256 = "902521bfe5f023196ed63f30445518872ac9c713d8cfe4e7145e92a469bf2166";
 
 describe("vendored familiar.frag", () => {
   it("is actually where this test thinks it is", () => {
