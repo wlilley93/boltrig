@@ -39,6 +39,21 @@ THE HONEST LIMIT, and it is the same one the goal document states: this cannot k
 claim is TRUE. It knows whether the claim has a subject and whether that subject is reached.
 That is the difference between the eleven defects in the evidence table and eleven silent ones,
 and it is not more than that.
+
+A SECOND LIMIT, found on 2026-07-27 by working the residue rather than measuring it. The
+residue counts whether a claim NAMES a symbol, as a proxy for whether anything CHECKS it. For
+a function's docstring describing that function's own output the proxy fails, and it fails in
+the safe-looking direction: six docstrings on the access-management surface promised "NEVER
+the secret", nothing checked any of them, and binding all six to a positional test
+(tests/security/test_access_views_carry_no_secret.py, SEC-192) moved this number by ZERO,
+because the prose still code-quotes nothing. The only way to move it would be to have the
+docstrings name symbols they have no reason to name, which is gaming a proxy rather than
+closing a gap.
+
+So the residue is a WORKLIST, not a score. Some of what it holds is genuinely unfounded prose
+and shrinking it is progress; some is prose whose subject is the code it sits on, where the
+work is a test and the number will not move. Read a decrement as evidence, never a decrement's
+absence as its lack.
 """
 
 from __future__ import annotations
