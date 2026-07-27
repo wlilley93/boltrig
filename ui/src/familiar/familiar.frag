@@ -71,7 +71,12 @@ const int   SHELLS = 5;
 const int   SPARKS = 7;
 const int   EMBERS = 12;   // particles thrown off the rim
 const float RADIUS = 1.0;
-const float WARMTH = 0.35;   // 0.0 = strict blue family; >0 = the ember at the core
+const float WARMTH = 0.35;   // 0.0 = strict blue family; >0 = the ember at the core.
+// DEAD IN THE SHIPPED THEME. Grep says WARMTH appears only here and in two comments; theme 2
+// carries its own vWARMTH below, which is the one the heart actually reads. A warmth gene was
+// briefly attached HERE and measured byte-identical across a 3x sweep - a gene wired to a
+// constant nothing consumes. Left in place for theme 0, and named as dead so the next reader
+// does not spend the same afternoon.
 
 // THEME. Bodies inside the same crystal ball, sharing every mood scalar and the host contract:
 //   0 = the photoreal non-human eye (AMBITION.md): iris, aperture, tapetum, corneal refraction.
@@ -131,7 +136,7 @@ vec3 aces(vec3 x){ return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14), 0.0, 1
 //   [1] = lobe balance, superM, superN1, superN2
 //   [2] = superN3, superA, superB, aspect
 //   [3] = rotation, twist, (reserved), (reserved)
-uniform vec4 uGene[4];
+uniform vec4 uGene[6];   // 24 genes; slots 16-21 tune the interior, 22-23 reserved
 
 // --- Cassini oval, polar form -----------------------------------------------
 // Implicit: |p-f1| * |p-f2| = b^2, foci at (+/-a, 0). Solving for r at angle th:
@@ -317,7 +322,8 @@ void main(){
   float soc     = clamp(uSocial, 0.0, 1.0);
   float buo     = clamp(uBuoyancy, 0.0, 1.0);
   float voice   = clamp(uAudio.x, 0.0, 1.0);
-  float vWARMTH = 0.25;   // a faint warm breath in the heart (voice variant)
+  float vWARMTH = 0.25*uGene[4].x;   // gene: warmth. The warm breath in the heart, and
+                                    // the value theme 2 actually consumes (see WARMTH above).
   float tempo   = (0.26 + 0.85*clamp(uArousal,0.0,1.0))*(1.0 - 0.45*fatigue);
   // The master clock IS an emotion readout: it runs at tempo, not wall speed. With no phenotype
   // published the host feeds the resting baseline (arousal ~0.07), so the being drifts at roughly
@@ -359,7 +365,7 @@ void main(){
     growP = 0.0;
   }
   // the voice SWELLS the whole body - this is now its primary voice tell (rings removed).
-  float breathe = 1.0 + (0.010 + 0.012*tempo)*sin(iTime*0.9) + 0.030*uAudio.y + 0.02*uBeat + 0.090*voice;
+  float breathe = 1.0 + (0.010 + 0.012*tempo)*sin(iTime*0.9) + 0.030*uAudio.y + 0.02*uBeat + 0.090*voice*uGene[4].y;          // gene: breathDepth
   float voiceScale = 1.0 + 0.10*voice;
   float scaleFull = 0.265*breathe*voiceScale*(1.0 + gSwell)*(1.0 - 0.05*fatigue)*(1.0 + 0.025*soc);
   float scaleDock = uScaleDock*breathe*(1.0 + gSwell*0.5)*(1.0 + 0.012*soc);
@@ -449,7 +455,7 @@ void main(){
     vec3  bump = vec3(vnoise(bq + vec3(be,0,0)) - vnoise(bq - vec3(be,0,0)),
                       vnoise(bq + vec3(0,be,0)) - vnoise(bq - vec3(0,be,0)),
                       vnoise(bq + vec3(0,0,be)) - vnoise(bq - vec3(0,0,be)));
-    vec3  nb = normalize(n + bump*(0.25 + 0.30*ten));
+    vec3  nb = normalize(n + bump*(0.25 + 0.30*ten)*uGene[4].z);
 
     // ==================== INTERIOR: silk ====================
     vec2  sp    = ro.xy;
@@ -484,7 +490,7 @@ void main(){
       vec3 w = q*aniso*(1.0 + 0.5*ten)*mix(0.78, 1.22, val) + vec3(0.0, -t*0.09 + 0.30*fatigue, 0.0);
       float w1 = vnoise(w*1.1 + 3.7);
       float w2 = vnoise(w*1.7 + vec3(w1*2.2, 0.0, 0.0) - vec3(0.0, t*0.07, 0.0) + 9.1);
-      float silk = vnoise(w*1.5 + vec3(w1, w2, w1)*(1.9 + 0.8*irr));
+      float silk = vnoise(w*1.5 + vec3(w1, w2, w1)*(1.9 + 0.8*irr)*uGene[4].w);
       // (voice ripple removed - the orb swells on voice instead of ringing)
       silk += (vnoise(w*5.5 + vec3(0.0, iTime*1.2, 0.0)) - 0.5)*irr*0.55;   // anger: jagged chop
       float band = smoothstep(edge0, edge1, silk);
@@ -597,7 +603,7 @@ void main(){
     col += hot*exp(-dScreen*dScreen/(scale*scale*0.16))*(0.05 + 0.16*lum)*(1.0 - 0.5*fatigue)*diff;
 
     float fres  = pow(1.0 - face, 3.2);
-    float spec  = pow(max(dot(reflect(rd, nb), L), 0.0), 34.0);
+    float spec  = pow(max(dot(reflect(rd, nb), L), 0.0), 34.0*uGene[5].x);
     float glint = pow(max(dot(reflect(rd, nb), L), 0.0), 140.0);
     col += base*fres*(0.16 + 0.34*lum + 0.22*soc)*(0.30 + 0.70*diff);
     col += vec3(0.80,0.85,1.00)*spec*(0.10 + 0.18*lum)*(1.0 - 0.5*fatigue);
@@ -616,7 +622,7 @@ void main(){
   col *= fade;
 
   // corona: tight; social widens it; the voice makes it shimmer (but no concentric rings)
-  float haloK = 34.0 - 16.0*soc;
+  float haloK = (34.0 - 16.0*soc)*uGene[5].y;                  // gene: haloReach
   float outside = smoothstep(scale*0.985, scale*1.010, dScreen);
   float halo = exp(-max(dScreen - scale, 0.0)*haloK/max(scale,0.02))*outside;
   halo *= smoothstep(scale*1.75, scale*1.02, dScreen);
@@ -1780,7 +1786,7 @@ void main(){
     float disp  = pow(1.0 - face, 7.0);
     col += vec3(-0.25, 0.05, 0.55)*disp*0.16*(0.4 + 0.6*lum);
     float fres  = pow(1.0 - face, 3.2);
-    float spec  = pow(max(dot(reflect(rd, nb), L), 0.0), 34.0);
+    float spec  = pow(max(dot(reflect(rd, nb), L), 0.0), 34.0*uGene[5].x);
     float glint = pow(max(dot(reflect(rd, nb), L), 0.0), 140.0);
     col += base*fres*(0.03 + 0.07*lum + 0.05*soc)*(0.30 + 0.70*diff);   // limb, not an outline
     col += vec3(0.80,0.85,1.00)*spec*(0.10 + 0.18*lum)*(1.0 - 0.5*fatigue);
@@ -1793,7 +1799,7 @@ void main(){
   col *= mix(1.12, 1.0, pres);   // docked it burns only slightly brighter: 1.55 blew it to white
 
   // --- corona OUTSIDE the rim only; a tight soft halo, social widens it ---
-  float haloK = 34.0 - 16.0*soc;
+  float haloK = (34.0 - 16.0*soc)*uGene[5].y;                  // gene: haloReach
   float outside = smoothstep(scale*0.985, scale*1.010, dScreen);
   float halo = exp(-max(dScreen - scale, 0.0)*haloK/max(scale,0.02))*outside;
   halo *= smoothstep(scale*1.75, scale*1.02, dScreen);

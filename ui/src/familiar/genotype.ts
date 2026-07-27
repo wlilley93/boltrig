@@ -54,6 +54,21 @@ export interface Genotype {
   hue: number;
   /** saturation delta on the tinted body. Small: a grey familiar stops reading as alive */
   saturation: number;
+
+  /* Interior tuning. All MULTIPLIERS defaulting to 1.0, so an absent genotype reproduces the
+   * body that shipped before they existed - verified byte-identical on the circle case. */
+  /** the warm ember in the heart, against an otherwise cool body */
+  warmth: number;
+  /** how far the body swells on each breath */
+  breathDepth: number;
+  /** surface relief */
+  bumpAmp: number;
+  /** how violently the interior silk churns */
+  silkChurn: number;
+  /** specular tightness: low is a broad wet sheen, high is a pinpoint */
+  specSharp: number;
+  /** how far the halo reaches past the silhouette */
+  haloReach: number;
 }
 
 /**
@@ -79,6 +94,12 @@ export const GENOTYPE_DEFAULTS: Genotype = {
   twist: 0,
   hue: 0,
   saturation: 0,
+  warmth: 1,
+  breathDepth: 1,
+  bumpAmp: 1,
+  silkChurn: 1,
+  specSharp: 1,
+  haloReach: 1,
 };
 
 /** Slot order IS the uniform layout: index i lands in uGene[i/4][i%4]. Reordering re-labels
@@ -88,11 +109,17 @@ export const GENOTYPE_SLOTS: ReadonlyArray<keyof Genotype> = [
   "lobeBalance", "superM", "superN1", "superN2",
   "superN3", "superA", "superB", "aspect",
   "rotation", "twist", "hue", "saturation",
+  "warmth", "breathDepth", "bumpAmp", "silkChurn",
+  "specSharp", "haloReach",
 ];
 
 /** Pack a genotype into the 16 floats the shader's `uniform vec4 uGene[4]` expects. */
+/** The uniform is `vec4 uGene[GENOTYPE_VEC4S]`; the renderer uploads that many vec4s. Derived
+ *  from the slot list so growing the genotype cannot leave an upload writing a prefix. */
+export const GENOTYPE_VEC4S = 6;
+
 export function packGenotype(g: Genotype): Float32Array {
-  const out = new Float32Array(16);
+  const out = new Float32Array(GENOTYPE_VEC4S * 4);
   GENOTYPE_SLOTS.forEach((key, i) => {
     const v = g[key];
     out[i] = Number.isFinite(v) ? v : GENOTYPE_DEFAULTS[key];
