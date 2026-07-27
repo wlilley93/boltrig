@@ -46,11 +46,31 @@ from __future__ import annotations
 import argparse
 import ast
 import re
+import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "docs" / "claim-inventory.tsv"
+
+
+def tracked(pattern: str) -> list[Path]:
+    """Files matching a pathspec that git TRACKS. The source set, and not a directory walk.
+
+    This function exists because the first version walked the filesystem and the census could
+    only regenerate on one machine. `docker-compose.override.yml` is gitignored and holds local
+    development config; it contributed two rows here and none in CI, so the gate that measures
+    environment-dependent claims was itself environment-dependent. Tier 3 of this goal is
+    exactly that family, and it arrived inside the tool measuring it.
+
+    A fallback to `rglob` when git is unavailable was considered and refused: a fallback that
+    changes the answer is the same defect wearing a different hat. Without git this raises.
+    """
+    out = subprocess.run(
+        ["git", "-C", str(ROOT), "ls-files", "-z", "--", pattern],
+        capture_output=True, check=True, text=True,
+    ).stdout
+    return sorted(ROOT / name for name in out.split("\0") if name)
 
 # Closed, and narrow on purpose. An earlier draft included "should" and "handles", which made
 # every ordinary explanatory comment a claim and buried the four hundred that matter. A claim
@@ -96,7 +116,7 @@ CODE_QUOTED = re.compile(r"``([A-Za-z_][\w.]*)``|`([A-Za-z_][\w.]*)`")
 def _defined_symbols(pkg: Path) -> set[str]:
     """Every class and function name defined under the package."""
     names: set[str] = set()
-    for path in sorted(pkg.rglob("*.py")):
+    for path in tracked(f"{pkg.name}/**/*.py"):
         try:
             tree = ast.parse(path.read_text(encoding="utf-8", errors="replace"))
         except SyntaxError:
@@ -115,7 +135,7 @@ def _reference_counts(pkg: Path) -> dict[str, int]:
     """
     counts: dict[str, int] = {}
     word = re.compile(r"[A-Za-z_][\w]*")
-    for path in sorted(pkg.rglob("*.py")):
+    for path in tracked(f"{pkg.name}/**/*.py"):
         for name in word.findall(path.read_text(encoding="utf-8", errors="replace")):
             counts[name] = counts.get(name, 0) + 1
     return counts
@@ -159,7 +179,7 @@ def _first_sentence(text: str) -> str:
 
 def _python_claims(pkg: Path, defined: set[str], counts: dict[str, int]) -> list[dict]:
     rows: list[dict] = []
-    for path in sorted(pkg.rglob("*.py")):
+    for path in tracked(f"{pkg.name}/**/*.py"):
         rel = path.relative_to(ROOT).as_posix()
         src = path.read_text(encoding="utf-8", errors="replace")
         try:
@@ -209,9 +229,7 @@ def _compose_claims(defined: set[str], counts: dict[str, int]) -> list[dict]:
     them was here.
     """
     rows: list[dict] = []
-    for path in sorted(ROOT.glob("docker-compose*.yml")) + sorted(
-        (ROOT / "deploy").rglob("*compose*.yml")
-    ):
+    for path in tracked("docker-compose*.yml") + tracked("deploy/**/*compose*.yml"):
         rel = path.relative_to(ROOT).as_posix()
         for i, line in enumerate(path.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
             stripped = line.strip()

@@ -1,0 +1,71 @@
+id: SUBMISSION-2026-07-27-144351
+court_requested: county
+jurisdiction: default
+question: 'A wired reader over a table nothing writes: both promotion writers have zero production callers, so every workflow reuse weight is permanently 0.0 and the matcher''s second sort key is inert. Which path writes a promotion, or should the subsystem be retired?'
+facts: |
+  # A wired reader over a table nothing writes
+
+  ## Facts
+
+  G1. `library.py:112/150` maps every stored `WorkflowPromotion` through `reuse_weight` and uses
+  it as the SECOND sort key of `WorkflowLibrary.match` (`:126`). The read side runs on every
+  workflow selection.
+
+  G2. Two functions write a promotion: `WorkflowPromoter.evaluate` (`promotion.py:93`, the
+  eval-gated STATE) and `apply_promotion_signal` (`signals.py:91`, the SCORE). **Neither has a
+  production caller.** The promoter is constructed into `app.state.platform["promoter"]`; measured,
+  the only platform keys any reader looks up are `workflows` and `admin`.
+
+  G3. So the table is never written, every weight is `0.0`, and the second sort key is inert on
+  every tenant. `reuse_weight(None)` returns 0.0, so this is indistinguishable from the subsystem
+  not existing.
+
+  G4. The waiver (`unwired-claims-allow.json`, expires 2026-10-31) names only the promoter, as
+  "constructed and parked". It records neither the second unreachable writer nor a wired reader
+  over an always-empty table.
+
+  G5. `[2026] VJS-COUNTY 5`: provenance may make a workflow more LIKELY to be reused and may never
+  widen what it may do. Every option below changes ranking only.
+
+  G6. `evaluate` runs eval cases through `EvalRunner`, which costs model spend.
+
+  ## Question
+
+  Which path (if any) writes a promotion, or should the subsystem be retired?
+
+  ## Option A: run promotion off the eval it already depends on
+
+  On completion of an eval run targeting a workflow, call the promoter for it.
+
+  *For:* the eval is already paid for; state changes when the evidence does; no new surface.
+  *Against:* couples eval to workflows in the direction that did not depend on it; an eval started
+  for another reason silently changes ranking; "all cases pass" is over whatever cases exist then.
+
+  ## Option B: a governed verb, `control.workflow.promote`
+
+  *For:* a person decides when to spend; inherits the chokepoint's grant check, audit row and HITL
+  seam; the trigger is in the record.
+  *Against:* a flywheel only a human turns is not a flywheel; nothing guarantees it ever runs,
+  which is where we already are.
+
+  ## Option C: promote from run outcome, not from eval
+
+  Wire `apply_promotion_signal` at a run's terminal transition. Leave `evaluate` unwired.
+
+  *For:* free, continuous, uses evidence already produced; the score half was designed for it.
+  *Against:* not eval-gated, so a workflow that fails its cases but runs without erroring gets
+  preferred. COUNTY 5's rail is that promotion is EVAL-gated; this promotes on the weaker signal
+  and leaves the stronger unbuilt.
+
+  ## Option D: retire it
+
+  Delete both writers, `reuse_weight` and the `_reuse_weights` call.
+
+  *For:* the honest state; removes a reader of an empty table and a dead sort key; nothing
+  regresses, because nothing happens now.
+  *Against:* discards a decided design and a tested build because nobody chose a trigger.
+
+  No option is preferred. The advocate held a view and withheld it.
+requested_order: TBD
+private_boundary: local
+word_count: 492

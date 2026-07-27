@@ -1118,8 +1118,6 @@ ORDINARY	NO-SUBJECT	comment	boltrig/store/sealing.py:73		store layer may NOT imp
 ORDINARY	NO-SUBJECT	comment	boltrig/store/work_items.py:137		can only REMOVE rows from the already-scoped set - never resurrect a
 ORDINARY	NO-SUBJECT	comment	boltrig/store/work_items.py:267		ONLY - never the hidden-alias subquery - so a filter can only NARROW
 ORDINARY	NO-SUBJECT	comment	boltrig/store/work_items.py:268		the already-scoped, hidden-wins-deduped set, never widen it.
-ORDINARY	NO-SUBJECT	docstring	boltrig/text_envelope.py:1		The canonical untrusted-input envelope (M1 / SEC-72) - a neutral low-level helper with no fleet or kernel dependencies.
-ORDINARY	NO-SUBJECT	docstring	boltrig/text_envelope.py:34		Defang any literal ``<untrusted`` / ``</untrusted`` delimiter inside DATA so the span can never break out of its envelope (M1, the load-bearing part).
 ORDINARY	NO-SUBJECT	comment	boltrig/work/store.py:22		cancelled run is never resurrected.
 ORDINARY	NO-SUBJECT	comment	boltrig/workflows/control_flow.py:164		The excess items are never dispatched (MAX_LOOP_ITEMS): recorded
 ORDINARY	NO-SUBJECT	docstring	boltrig/workflows/control_flow.py:80		Evaluate a declarative comparison.
@@ -1131,11 +1129,6 @@ ORDINARY	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:304		above and neve
 ORDINARY	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:331		and descendants must never dispatch with the paused parent's
 ORDINARY	NO-SUBJECT	docstring	boltrig/workflows/interpreter.py:74		Order steps so every parent precedes its children (Kahn's algorithm).
 ORDINARY	NO-SUBJECT	comment	boltrig/workflows/library.py:197		itself guarantees depends on the executor - see
-ORDINARY	NO-SUBJECT	compose	deploy/compose.release.yml:39		Keep mutable source mounts in the developer base manifest, never here.
-ORDINARY	NO-SUBJECT	compose	deploy/compose.secure.yml:57		engine by service name), never from any host interface - matching how this
-ORDINARY	NO-SUBJECT	compose	deploy/compose.secure.yml:86		Docker attaches no gateway to this network, so containers on it cannot reach
-ORDINARY	NO-SUBJECT	compose	docker-compose.override.yml:5		config: it must never live in the shared docker-compose.yml, or prod images would ship it.
-ORDINARY	NO-SUBJECT	compose	docker-compose.override.yml:8		0700 uid 1011, so the container cannot write there directly.
 ORDINARY	NO-SUBJECT	compose	docker-compose.yml:109		survived intact.
 ORDINARY	NO-SUBJECT	compose	docker-compose.yml:110		to the API, or sideways to a sibling, and cannot exec a setuid binary
 ORDINARY	NO-SUBJECT	compose	docker-compose.yml:130		cell reaches a KNOWN slot path but cannot enumerate the set, and each slot is
@@ -1162,6 +1155,7 @@ ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/emotion/tables.py:161	None	Load and 
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/anchor.py:65	DEFAULT_INTERVAL_SECONDS	The configured sweep interval (seconds), or :data:`DEFAULT_INTERVAL_SECONDS`.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/chat.py:695	cancelled	End a live chat turn's SSE stream cleanly on a server-side cancel ([2026] VJS-COUNTY 6, D5).
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/codex_trusted_wall.py:49	BOLTRIG_CODEX_TRUSTED	Fail closed unless a lawful trusted-Codex posture holds (see module docstring).
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/continuity.py:136	wrap_untrusted	Render the derived summary as a fixed, content-stable frame.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/domain/attested_assignment.py:37	attempt	Trusted facts; no binding, pin, attestation set, or set reference appears.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/cell_privilege.py:141	setuid	Empty the permitted, effective and inheritable sets via ``capset(2)``.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/cell_spawner.py:398	SCM_RIGHTS	Hand the pid and the three stdio descriptors back over the socketpair.
@@ -1190,6 +1184,7 @@ ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/channel_notify.py:65	source_r
 ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/kernel/channel_principal.py:26	self_onboard	channel's ``self_onboard`` config naming any other role is rejected fail-closed
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/channel_routes.py:186	subject	The EXACTLY-ONE pending HITL request addressed to ``subject`` whose work item's reply route is this channel+thread, else None: zero matches (nothing to answer) or several (ambiguous) both fall back to normal intake.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/dispatch.py:267	context.run_id	Publish a HITL pause to this run AND to the run that delegated to it.
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/dispatch.py:335	question	Create a QUESTION HITL, emit a ``question`` run event, and pause the run (US-CHAT-12).
 ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/kernel/dispatch.py:453	result_summary	``result_summary`` keys (K-20), never the raw output.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/events.py:150	since	Yield events for a stream: the backlog first (re-attach), then live events until the stream is closed.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/hands_registry.py:1	asyncio.Event	The pending desktop-command registry (decision 0016, DH-1).
@@ -1206,7 +1201,6 @@ ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/store/base.py:601	level	never the raw 
 ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/store/base.py:620	offset	``offset`` is 0-based.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/store/postgres.py:174	apply_schema	Open the durable store.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/store/postgres.py:538	_still_leased	Write the row ONLY if it still carries the lease the caller was given.
-ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/text_envelope.py:48	untrusted	Wrap an untrusted span in a typed envelope (M1 / SEC-72).
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/work/store.py:105	cap	Persist discovered child items and write them back, capped (US-WRK-04).
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/workflows/control_flow.py:137	status	Execute a control-plane step locally.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/workflows/control_flow.py:183	branch	Whether a step's declared ``branch`` is satisfied by its parents' outputs.
@@ -1240,7 +1234,6 @@ ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/chat.py:674	regenerate_turn	Car
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/chief_of_staff.py:81	work_item	Return the department name that should own ``work_item``.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/codex_runtime.py:311	UnavailableRuntime	Construct the trusted read-only Codex runtime, or a typed unavailable one.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/codex_runtime.py:367	_drain_until_complete	Silence, or a failure this path used to swallow - they want different responses.
-ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/continuity.py:136	wrap_untrusted	Render the derived summary as a fixed, content-stable frame.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/hatchet_app.py:169	HatchetExecutor	Run a stored workflow through the interpreter with BOTH durability seams wired (NFR-REL-02): each step dispatches inside its own ``executor.run_step`` boundary AND the checkpoint seam replays completed steps, so a re-run
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/cell_process.py:1	CodexCellSupervisor	Drive a spawner-created cell from the unprivileged API ([2026] VJS-CC-VJS 7 J1).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/cell_spawner.py:262	_require_projected_file	The ownership/mode leg of validate_cell_layout, run by the cell uid itself.
@@ -1269,7 +1262,6 @@ ORDINARY	SUBJECT-REACHED	docstring	boltrig/identity/sessions.py:216	list_workspa
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/identity/sessions.py:257	request.state	Build the first-party session ``PrincipalResolver`` (D3).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/approval_gate.py:92	held_call.name_redeemer	Refuse to MINT an approval no lane could ever redeem (decision 0018, Order 5).
 ORDINARY	SUBJECT-REACHED	comment	boltrig/kernel/credentials.py:41	resolve_run_scoped_params	is NEVER resolvable through ``resolve_run_scoped_params`` - it is only ever
-ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/dispatch.py:335	wrap_untrusted	Create a QUESTION HITL, emit a ``question`` run event, and pause the run (US-CHAT-12).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/events.py:103	max_seq	Record an event and fan it out to current subscribers (non-blocking).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/events.py:135	chat._safe_exec	Re-open a closed stream so a continuation can be published to it.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/held_call.py:143	_emit_pause	Record the pause durably: the ``held:`` checkpoint plus the sealed call.
