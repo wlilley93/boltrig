@@ -67,3 +67,43 @@ The previous overlays are at `/tmp/bio.bak` and `/tmp/cv.bak` on the box, and
 `boltrig-ui:0.4.6@sha256:60700bd7…` is still in the registry and still in the
 local image cache on both stacks. Rolling back is a pin edit and `up -d ui`; no
 data moves, because the UI holds none.
+
+---
+
+# 0.4.9, forty minutes later, because 0.4.8 shipped a broken body
+
+`ui 0.4.8` put the familiar in front of both tenants with **every body's radius
+multiplied by zero**. Rolled to `0.4.9`
+(`sha256:9849af16…`) the same afternoon.
+
+The cause is in `docs/vjs`-adjacent detail in the PR, and the short version is that two
+hand-written slot tables described one POSITIONAL uniform and disagreed from slot 22 onward.
+`genotype.h` pads with `NULL`s so a gene keeps its index as the array grows; `genotype.ts`
+dropped the padding, so `bodyScale` was written to a slot the shader does not read and the
+slot the shader reads AS `bodyScale` got a `Float32Array`'s zero fill.
+
+## What this roll changes about how a roll is verified
+
+The 0.4.8 verification above has four steps and step 4 says it is "the only one of the four
+that measures what a user gets". That was right about the shader and **wrong about the
+genotype**, and the difference is worth writing down because the check looked identical.
+
+`assets/familiar-*.js` is the chunk the DYNAMIC import produces, and it holds the GLSL and
+nothing else. Its 19 occurrences of `uGene` are the shader's own, so the check proved the
+shader shipped and proved nothing whatever about the packer that feeds it. The packer is in
+`assets/index-*.js`, a different chunk entirely, and it was the broken half.
+
+So the check for this roll reads the SLOT TABLE out of the served index chunk:
+
+```
+"specSharp","haloReach","specGain","fresnelGain",
+"tempoBase","bodyScale","haloGain","irritationGain",
+"lightAzimuth","bumpScale",null,null
+```
+
+Thirty-two entries, the two holes present, `tempoBase` at index 24 and `bodyScale` at 25,
+matching `uGene[6].x` and `uGene[6].y` in the shader beside it. That is the artefact whose
+correctness was in question, fetched from the address a browser fetches it from.
+
+Grepping a chunk for a symbol shows that SOMETHING shipped. It does not show that the thing
+you were worried about shipped, and a chunk boundary is exactly where those two come apart.
