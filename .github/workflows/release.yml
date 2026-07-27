@@ -200,6 +200,14 @@ jobs:
           severity: HIGH,CRITICAL
           exit-code: "1"
           timeout: 10m
+          # The SAME acceptances security.yml's blocking scan reads. Without this
+          # the two gates disagree about the identical image: `Container (backup)`
+          # passes on every PR while the release scan blocks on
+          # GHSA-hrxh-6v49-42gf, which .trivyignore.yaml already accepts with a
+          # written justification and an expiry of 2026-10-23. A release gate that
+          # is stricter than the security gate BY ACCIDENT is not a stricter
+          # policy, it is drift, and it is the reason no tag has ever published.
+          trivyignores: .trivyignore.yaml
 
       - name: Generate CycloneDX SBOM from the scanned image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
