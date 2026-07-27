@@ -228,3 +228,60 @@ async def test_a_run_scoped_token_cannot_exceed_its_grants_at_the_chokepoint():
          "params": {"name": "ticket.create", "arguments": {"title": "x"}}},
     )
     assert res["result"]["_boltrig"]["status"] == "denied"
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-26")
+async def test_the_ranked_offer_changes_the_order_but_never_the_authority():
+    """[2026] VJS-CC-VJS 10 D3: disclosure only ever REDUCES what a model sees.
+
+    The order was wired precisely because an unwired ranker decides nothing. So the
+    thing that must be proven is not that ranking happens, but that ranking cannot
+    reach authority: whatever the offer says, the chokepoint answers the same.
+
+    Seeded both ways. If ``_list_tools`` ever gained the power to widen, the first
+    assertion goes red; if it ever narrowed authority instead of context, the second
+    does.
+    """
+    k = await _kernel()
+    tok = k.mcp.issue_run_token(T, GrantSet.of(["ticket.read"]))
+    offered = {t["name"] for t in (await k.mcp.handle(tok, _req("tools/list")))["result"]["tools"]}
+
+    # 1. The offer never exceeds the grants: an ungranted verb is not published...
+    assert "ticket.create" not in offered
+
+    # ...and is still REFUSED at the chokepoint, which is the check that matters.
+    denied = await k.mcp.handle(
+        tok, _req("tools/call", {"name": "ticket.create", "arguments": {"title": "x"}})
+    )
+    assert denied["result"]["_boltrig"]["status"] == "denied"
+
+    # 2. A verb the grants DO admit is NOT denied, whatever the offer did with it.
+    # This is the limb that catches a ranker that quietly dropped rather than sorted.
+    # It asserts "not denied" rather than "ok" on purpose: whether this adapter can
+    # serve the read is not this test's subject, and asserting success here would
+    # make it fail for a reason that has nothing to do with disclosure.
+    ok = await k.mcp.handle(
+        tok, _req("tools/call", {"name": "ticket.read", "arguments": {"id": "1"}})
+    )
+    assert ok["result"]["_boltrig"]["status"] != "denied"
+
+
+@pytest.mark.security
+async def test_the_wired_offer_is_stable_and_drops_nothing_granted():
+    """CC-VJS 10 D2 at the WIRING level: repeated identical runs give the identical
+    offer, and ranking never loses a granted verb.
+
+    Deliberately NOT claiming to prove the total order. Seeding a removal of the
+    verb-id tie-break leaves this green, because the input arrives in one order and
+    the sort is stable, and it is
+    ``tests/unit/test_tool_disclosure.py::test_the_order_is_total_and_independent_of_the_order_the_verbs_arrived_in``
+    that goes red for that defect. Saying so here rather than letting the name imply
+    a guarantee this does not give is the CC-VJS 11 rule applied to a test."""
+    k = await _kernel()
+    grants = GrantSet.of(["ticket.read", "ticket.create"])
+    first = [t["name"] for t in (await k.mcp.handle(k.mcp.issue_run_token(T, grants), _req("tools/list")))["result"]["tools"]]
+    for _ in range(5):
+        again = [t["name"] for t in (await k.mcp.handle(k.mcp.issue_run_token(T, grants), _req("tools/list")))["result"]["tools"]]
+        assert again == first, "the offer must not vary between identical runs"
+    assert len(first) == 2, "ranking must not drop a granted verb"

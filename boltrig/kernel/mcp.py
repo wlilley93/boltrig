@@ -25,7 +25,7 @@ from urllib.parse import quote, unquote
 
 from boltrig.adapters.base import McpResourceSpec
 
-from boltrig.kernel import mcp_errors
+from boltrig.kernel import mcp_errors, tool_disclosure
 from boltrig.models import (
     GrantSet,
     InvocationContext,
@@ -356,14 +356,12 @@ class McpFace:
         raise ValueError("resource not found")
 
     async def _list_tools(self, rt: RunToken) -> list[dict]:
-        """Granted-only: tenant ceiling ∩ the run's grants (SEC-23, FR-MCP-02)."""
+        """Granted-only and RANKED: tenant ceiling ∩ run grants (SEC-23, FR-MCP-02)."""
         perms = await self._kernel.store.get_tenant_permissions(rt.tenant_id)
         verbs = await self._kernel.store.list_verbs(rt.tenant_id)
-        return [
-            {"name": v.id, "description": v.description or v.id, "inputSchema": v.input_schema}
-            for v in verbs
-            if perms.grants.permits(v.id) and rt.grants.permits(v.id)
-        ]
+        return tool_disclosure.offer_payload(
+            [v for v in verbs if perms.grants.permits(v.id)], rt.grants, rt.skills
+        )
 
     async def _call_tool(
         self, rt: RunToken, params: dict, *,

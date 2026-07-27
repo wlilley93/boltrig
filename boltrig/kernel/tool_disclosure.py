@@ -171,3 +171,32 @@ def compute_tool_offer(
 
     ordered = sorted(eligible, key=lambda verb: _ranking_key(verb, grants, tokens))
     return tuple(ordered[:budget])
+
+
+def offer_payload(
+    candidates: Iterable[Verb],
+    grants: GrantSet,
+    skills: Iterable[str],
+) -> list[dict]:
+    """The ``tools/list`` payload for one run, in ranked order.
+
+    Wired at the MCP face per [2026] VJS-CC-VJS 10 D3: an unwired ranker decides
+    nothing and protects nothing. ``candidates`` is already narrowed to the tenant
+    ceiling by the caller, so ``grants`` here is the RUN's authority and the
+    eligibility this applies is the same ceiling-intersect-run it always was.
+
+    NOTHING IS DROPPED. The budget is the candidate count, so this changes the
+    ORDER of the offer and not its membership. That is deliberate: ranking is
+    provably authority-neutral, whereas choosing a truncation size is a policy
+    question the order reserves (D4), and a wiring commit is the wrong place to
+    settle it. When a budget is adopted it is passed here and nowhere else.
+    """
+    # Materialise once. `len(list(candidates))` evaluated as an argument beside
+    # `candidates` would consume a generator before compute_tool_offer ever saw it,
+    # and the offer would silently be empty for every non-list caller.
+    rows = list(candidates)
+    ranked = compute_tool_offer(rows, grants, skills, len(rows))
+    return [
+        {"name": v.id, "description": v.description or v.id, "inputSchema": v.input_schema}
+        for v in ranked
+    ]
