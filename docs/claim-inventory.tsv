@@ -19,12 +19,7 @@ LOAD-BEARING	NO-SUBJECT	docstring	boltrig/api/auth_password_routes.py:33		The ca
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/api/auth_password_routes.py:91		Keys-only ([2026] VJS-COUNTY 7, D8): the fact of the rotation, never a password.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/api/auth_routes.py:1		First-party invite-only login HTTP surface ([2026] VJS-COUNTY 7).
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/api/auth_routes.py:118		Materialise an org/workspace-scoped invite's provisioning on accept ([2026] VJS-COUNTY 8, D6).
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/api/auth_routes.py:386		Keys-only audit: the invitation id + email (identity), never the password.
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/api/auth_routes.py:420		the distinct stream (keys-only: the email is identity, never a secret).
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/api/auth_routes.py:465		Keys-only audit: the fact of the challenge, never the challenge token.
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/api/auth_routes.py:480		Keys-only audit: the session id, never the secret / csrf / password (D8).
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/api/auth_routes.py:555		store (never a plaintext column), and return the otpauth URI + secret + the
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/api/auth_routes.py:611		Keys-only audit (D5): the fact of enrollment-begin, NEVER the secret / URI /
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/api/auth_routes.py:768		never a bypass.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/api/bootstrap.py:280		Bridge a HITL answer to the lane that can act on it (Beat 5, NFR-REL-03).
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/api/bootstrap.py:459		Abort if the audit-chain HMAC key is unset/default with a production signal (K-19).
@@ -313,6 +308,10 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/mcp_transport.py:1	McpHt
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/mcp_transport.py:157	initialize	The MCP handshake, run lazily when a server demands a session.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/sql_base.py:1	db.execute_write	Reusable SQL adapter base for ``runtime='sql'`` integrations (US-ADP-03, SEC-09).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/api/auth_routes.py:270	verify_totp	Load the SEALED base32 TOTP secret for a ref, kernel-side, at verify time.
+LOAD-BEARING	SUBJECT-REACHED	comment	boltrig/api/auth_routes.py:386	_audit	Keys-only via `_audit`: invitation id + email, never the password (SEC-191).
+LOAD-BEARING	SUBJECT-REACHED	comment	boltrig/api/auth_routes.py:420	_audit	the distinct stream, same keys-only dict discipline as `_audit`: email, never a secret.
+LOAD-BEARING	SUBJECT-REACHED	comment	boltrig/api/auth_routes.py:480	_audit	Keys-only via `_audit`: the session id, never the secret / csrf / password (D8, SEC-191).
+LOAD-BEARING	SUBJECT-REACHED	comment	boltrig/api/auth_routes.py:611	_audit	Keys-only via `_audit` (D5): enrollment-begin only, NEVER the secret, the otpauth
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/api/bootstrap.py:177	mcp.consume	Register external MCP servers declared in the bundle's manifest (`mcp.consume`), each INERT pending review (SEC-22) - the review/activate route still gates them.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/api/bootstrap.py:196	control_rehydrate.consumer_spec	Rebuild live instances for adapter rows the control plane persisted.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/api/codex_execution.py:76	RootEngineDecision	Record one shadow ``RootEngineDecision`` for a chat root, execution-neutral.

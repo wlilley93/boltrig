@@ -16,8 +16,8 @@
     "reason the summary prints the ORDINARY residue beside it is so that rewording a claim to",
     "dodge the phrase list is visible as a rise on the other side of the ledger."
   ],
-  "load_bearing_no_subject": 236,
+  "load_bearing_no_subject": 231,
   "pinned_at": "2026-07-27",
   "pinned_by": "Lexby, Tier 0 first census",
-  "note": "First measurement. 1297 claims enumerated across boltrig/ docstrings, comments and the compose files; 248 name a subject production code reaches, 236 load-bearing ones name nothing at all. No SUBJECT-ABSENT rows, which is the unwired-claims gate having already cleared that class."
+  "note": "236 at the first census, 231 after the first decrement. The auth surface's nine keys-only claims rested on nothing but the care of whoever wrote each line; five now name the mechanism they rest on (`_audit`, and the fact that the material is ABSENT from the dict rather than filtered out of it) and all of them are proven by SEC-191, which drives login, failed login and 2FA enrolment and searches the whole audit stream for the password, the session secret, the CSRF token and the otpauth URI. Shown to fail: seeding the login row with the password and the csrf reddens two of the three cases. The third neuters pii.contains_secret and requires no change, so the guarantee cannot quietly become the scrubber's."
 }
