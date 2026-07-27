@@ -1788,6 +1788,14 @@ invariants:
       - tests/unit/test_fleet_health.py::test_a_receipt_that_is_merely_PRESENT_is_not_enough
       - tests/unit/test_fleet_health.py::test_another_tenants_receipt_does_not_answer_for_this_one
       - tests/unit/test_fleet_health.py::test_the_receipt_key_is_namespaced_per_tenant
+  FR-OPS-06:
+    description: 'The fleet-drift check sees BIND-MOUNTED TREES, not only image digests: a directory bind-mounted into a container is a deployment surface exactly like an image tag, and digest pinning does nothing for it. Staleness is scoped to the MOUNTED PATH rather than the repository (or the check is red on every unrelated merge and gets ignored), a detached HEAD is reported rather than measured against origin/HEAD, a stale mount exits non-zero rather than only printing, and the PASS line names both halves so a green cannot read as covering only images.'
+    tests:
+      - tests/deploy/test_fleet_drift_sees_bind_mounts.py::test_the_drift_check_reads_bind_mounts_at_all
+      - tests/deploy/test_fleet_drift_sees_bind_mounts.py::test_staleness_is_scoped_to_the_mounted_path_not_the_whole_repository
+      - tests/deploy/test_fleet_drift_sees_bind_mounts.py::test_a_detached_head_is_reported_rather_than_measured
+      - tests/deploy/test_fleet_drift_sees_bind_mounts.py::test_a_stale_mount_fails_the_command_rather_than_only_printing
+      - tests/deploy/test_fleet_drift_sees_bind_mounts.py::test_the_pass_message_does_not_claim_more_than_was_checked
   NFR-MNT-01:
     description: 'Python structural debt is an enforced expiring ratchet - every boltrig source file is at most 400 physical lines and every decorator-inclusive function or method at most 80 source-span lines unless its file has an explicit owner, reason, expiry, exact current file and largest-function baselines, and an exact record for every over-limit function; the gate rejects new or sibling debt, growth, stale-high or missing-file entries, malformed metadata, duplicate JSON keys, and expired exemptions.'
     tests:

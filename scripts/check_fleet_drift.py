@@ -163,6 +163,84 @@ def running(host: str, project: str) -> dict[str, str]:
     return out
 
 
+
+def bind_mounted_repos(host: str, project: str) -> dict[str, tuple[str, str, int]]:
+    """Git checkouts bind-mounted into running containers, and how stale each is.
+
+    THE HALF A DIGEST PIN CANNOT SEE. Every image above is digest-pinned, which is
+    exactly why this was invisible: on 2026-07-27 `app.boltrig.io` was serving a
+    digest-pinned kernel while bind-mounting `libraries/` from a checkout of main
+    that was FIFTY-SEVEN COMMITS BEHIND. A merged fix to the opbox skill - whose
+    eight tool_grants named the kernel door's noun-first verbs while the tenant
+    runs the frontend door's verb-first ones, so ZERO of them resolved - sat
+    undelivered for three days and only landed because an unrelated retirement
+    happened to pull that tree.
+
+    A bind-mounted directory is a DEPLOYMENT SURFACE exactly like an image tag.
+    `git pull` on it is a deploy step, and until this check existed it appeared in
+    no runbook and no gate.
+
+    STALENESS IS SCOPED TO THE MOUNTED PATH, not the tree. `HEAD..origin/main` on
+    the whole checkout is red the moment anything merges, which would make this
+    permanently red and therefore ignored - the cry-wolf failure that `gate-status`
+    had on the same day. What matters is whether the BYTES THE CONTAINER READS are
+    behind, so the count is `rev-list HEAD..origin/<branch> -- <mounted path>`. Ten
+    commits behind with none of them touching `libraries/` is not a stale deploy;
+    one commit behind that touches it is.
+
+    Reported per (container, mounted path). A path that is not a git repository is
+    reported too, because a copy nobody can update from source is the worse case.
+    """
+    script = (
+        "for c in $(docker ps -q --filter "
+        f"label=com.docker.compose.project={shlex.quote(project)}); do "
+        """docker inspect -f '{{$n := .Name}}{{range .Mounts}}{{if eq .Type "bind"}}"""
+        """{{$n}} {{.Source}}{{println}}{{end}}{{end}}' "$c"; done | sort -u | """
+        "while read -r name src; do "
+        "  [ -n \"$src\" ] || continue; "
+        "  d=$src; [ -d \"$d\" ] || d=$(dirname \"$src\"); "
+        "  top=$(git -C \"$d\" rev-parse --show-toplevel 2>/dev/null) || continue; "
+        "  git -C \"$top\" fetch -q origin 2>/dev/null; "
+        # A DETACHED head reports the literal string "HEAD", which would then be
+        # compared against `origin/HEAD` and quietly produce a number about the
+        # wrong ref. A deployment tree not on a branch is itself the finding, so
+        # it is reported as such rather than measured.
+        "  br=$(git -C \"$top\" rev-parse --abbrev-ref HEAD 2>/dev/null); "
+        "  [ \"$br\" = HEAD ] && { echo \"$name|$src|DETACHED|$(git -C \"$top\" rev-parse --short HEAD)|-2\"; continue; }; "
+        "  head=$(git -C \"$top\" rev-parse --short HEAD 2>/dev/null); "
+        # The mounted path RELATIVE to the checkout, so the count is about the
+        # bytes this container reads rather than about the repository.
+        "  rel=${src#\"$top\"/}; [ \"$rel\" = \"$src\" ] && rel=.; "
+        "  behind=$(git -C \"$top\" rev-list --count HEAD..origin/\"$br\" -- \"$rel\" 2>/dev/null || echo -1); "
+        "  echo \"$name|$src|$br|$head|$behind\"; "
+        "done"
+    )
+    try:
+        proc = subprocess.run(
+            ["ssh", "-o", "ConnectTimeout=15", host, script],
+            capture_output=True, text=True, timeout=180, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        print(f"NOT CHECKED: cannot read bind mounts on {host} ({exc})", file=sys.stderr)
+        raise SystemExit(2) from exc
+
+    out: dict[str, tuple[str, str, int]] = {}
+    for line in proc.stdout.splitlines():
+        parts = line.strip().split("|")
+        if len(parts) != 5:
+            continue
+        name, mount, branch, head, behind = parts
+        try:
+            n = int(behind)
+        except ValueError:
+            n = -1
+        # One entry per (container, MOUNT). Two paths from one checkout are two
+        # facts, because they go stale independently: `libraries/` can be behind
+        # while `boltrig/store/schema.sql` is current.
+        out[f"{name.lstrip('/')}:{mount}"] = (branch, head, n)
+    return out
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", required=True)
@@ -200,6 +278,33 @@ def main() -> int:
                   f"running {actual[:19]}...")
     print("-" * 76)
 
+    # The half a digest pin cannot see: a bind-mounted git checkout is a
+    # deployment surface, and nothing above would notice it going stale.
+    trees = bind_mounted_repos(args.host, args.project)
+    stale: list[tuple[str, str, str, int]] = []
+    if trees:
+        print("\nBind-mounted git trees (a `git pull` here IS a deploy step)")
+        print("-" * 76)
+        for key, (branch, head, behind) in sorted(trees.items()):
+            container, mount = key.split(":", 1)
+            if behind == -2:
+                print(f"  {container:22} {mount}")
+                print(f"  {'':22}   DETACHED    not on a branch, at {head}")
+                stale.append((container, mount, branch, behind))
+            elif behind < 0:
+                print(f"  {container:22} {mount}")
+                print(f"  {'':22}   UNKNOWN     no upstream for {branch}")
+                stale.append((container, mount, branch, behind))
+            elif behind == 0:
+                print(f"  {container:22} {mount}")
+                print(f"  {'':22}   ok          {branch}@{head}, this path is current")
+            else:
+                print(f"  {container:22} {mount}")
+                print(f"  {'':22}   STALE       {branch}@{head}, {behind} commit(s) "
+                      f"touching this path are unpulled")
+                stale.append((container, mount, branch, behind))
+        print("-" * 76)
+
     if drift:
         print("\nDRIFT: the next `up -d` will swap the running image for the pinned one.")
         for name, want_d, got in drift:
@@ -210,7 +315,20 @@ def main() -> int:
         # is not - which is not agreement, and does not get a silent pass.
         print(f"\nNOT RUNNING (pinned, not profile-gated, absent): {', '.join(missing)}")
         return 1
-    print("\nRESULT: PASS - every pinned image is the one running.")
+    if stale:
+        print("\nSTALE BIND MOUNT: a container is serving files from a checkout that "
+              "is behind its\nupstream. Digest pinning does nothing for these - the "
+              "bytes come from the host\nfilesystem, so the fix is `git pull` in the "
+              "tree, and that is a DEPLOY.")
+        for container, mount, branch, behind in stale:
+            how = ("on a DETACHED HEAD - a deployment tree must track a branch"
+                   if behind == -2 else
+                   "no upstream" if behind < 0
+                   else f"{behind} unpulled commit(s) touch it on origin/{branch}")
+            print(f"  - {container}: {mount} ({how})")
+        return 1
+    print("\nRESULT: PASS - every pinned image is the one running, and every "
+          "bind-mounted tree is level with its upstream.")
     return 0
 
 
