@@ -158,7 +158,7 @@ def _scrub(detail: dict) -> dict:
 def _scrub_key(k: Any) -> Any:
     """Bring the KEY within the scrub.
 
-    [2026] VJS-COUNTY, variation of CP3 on SUBMISSION-2026-07-27-124116, head 5.
+    County Court, variation of CP3 on SUBMISSION-2026-07-27-124116 (CONVENING-county-2026-07-27-125100), head 5.
     This loop previously copied keys verbatim while scanning only values, so a
     caller-supplied dict key carrying a secret went into an append-only store
     untouched. The principal ratio reaches it without extension: a record of a
@@ -187,7 +187,7 @@ def _scrub_value(v: Any) -> Any:
             digest = hashlib.sha256(v.encode()).hexdigest()[:16]
             return {"_scrubbed": True, "digest": digest, "size": len(v)}
         # IDENTITY data does not taint its context: cut out the span and leave the
-        # rest readable. [2026] VJS-COUNTY, variation of CP3. Digesting the whole
+        # rest readable. County Court, variation of CP3. Digesting the whole
         # value on an ipv4 false positive would make the record less legible than
         # leaving it alone, which is the opposite of what the order is for.
         if pii.contains_identity(v):

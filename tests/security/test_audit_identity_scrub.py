@@ -1,6 +1,6 @@
 """The audit scrubber sees identity data; the refusal gates do not.
 
-[2026] VJS-COUNTY, variation of CP3 on SUBMISSION-2026-07-27-124116.
+County Court, variation of CP3 on SUBMISSION-2026-07-27-124116 (CONVENING-county-2026-07-27-125100).
 
 The order first required ``contains_secret`` itself to consult the identity
 patterns. It was varied because that predicate has six callers and only ONE is

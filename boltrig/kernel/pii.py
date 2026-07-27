@@ -102,7 +102,7 @@ def redact(text: str) -> ScanResult:
 
 # The identity patterns, as a SEPARATE question from `contains_secret`.
 #
-# [2026] VJS-COUNTY, variation of CP3 on SUBMISSION-2026-07-27-124116. The order
+# County Court, variation of CP3 on SUBMISSION-2026-07-27-124116 (CONVENING-county-2026-07-27-125100). The order
 # first required `contains_secret` itself to consult these. It was varied on the
 # application, because `contains_secret` has SIX callers and only one of them is
 # the audit scrubber; at the other five a truthy answer REFUSES. Widening it would

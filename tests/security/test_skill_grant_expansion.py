@@ -1,6 +1,6 @@
 """Skill tool_grants are a SELECTION, and this is what holds them to it.
 
-[2026] VJS-COUNTY, SUBMISSION-2026-07-27-123842. Ratio:
+County Court, SUBMISSION-2026-07-27-123842 (CONVENING-county-2026-07-27-125100). Ratio:
 
     An upper bound on authority must never be used as the selection of what an
     agent is offered for a task. Offering is an affirmative, enumerated,
