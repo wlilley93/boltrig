@@ -419,6 +419,9 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/mcp_errors.py:1	_call_tool
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/questions.py:1	apply_manifest	The governed "ask the user a question" built-in verb (US-CHAT-12).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/schema_diagnosis.py:1	contains_secret	What may be recorded about a schema-validation failure, and how it is read back.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/security_events.py:67	AuditWriter	Scrub, chain, and append a security signal.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/tool_disclosure.py:1	_ranking_key	Progressive tool disclosure: the ordered OFFER, computed away from authority.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/tool_disclosure.py:126	permits	Rank the granted verbs and return the first ``budget`` of them.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/tool_disclosure.py:58	normalize_identifier	The lowercase segment set of the run's loaded skill ids.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/memory/__init__.py:1	PgVectorMemoryEngine	Round Five memory subsystem (Epic MEM).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/memory/adapter.py:1	MemoryEngine	The MemoryAdapter: memory.* verbs behind the kernel chokepoint, and the kernel-side isolation boundary (Epic MEM, SEC-40..45).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/memory/cognee.py:1	MemoryEngine	Cognee Memory Engine (MEM-ENG-03): the ADOPTED production graph engine.
@@ -1005,6 +1008,7 @@ ORDINARY	NO-SUBJECT	comment	boltrig/kernel/platform_routes/workflows.py:107		a b
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/registry.py:142		With no caller context, fall back to the ceiling (internal callers).
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/run_access.py:224		Preserve legitimate child-only trees, but never let a visible child revive a
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/run_access.py:243		Guarantee the root is present even if a clamp dropped it from the slice.
+ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/tool_disclosure.py:99		0 for a low-consequence verb, 1 for a high-consequence one.
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/web_security.py:1		Edge/web hardening for the kernel FastAPI app (Batch 1 WEB-* + RES-01).
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/web_security.py:184		Install the edge/web hardening middleware (WEB-02/03/05/06, RES-01).
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/web_security.py:212		Explicit allowlist only - never '*' with credentials, never reflect.
