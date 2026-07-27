@@ -100,11 +100,73 @@ def redact(text: str) -> ScanResult:
     return ScanResult(found=found, redacted=out)
 
 
-def contains_secret(text: str) -> str | None:
-    """Return the name of the first secret/identity pattern found, or None.
+# The identity patterns, as a SEPARATE question from `contains_secret`.
+#
+# [2026] VJS-COUNTY, variation of CP3 on SUBMISSION-2026-07-27-124116. The order
+# first required `contains_secret` itself to consult these. It was varied on the
+# application, because `contains_secret` has SIX callers and only one of them is
+# the audit scrubber; at the other five a truthy answer REFUSES. Widening it would
+# have meant a memory recall silently dropping a stored memory that mentions a host
+# IP, and a phase result refused for carrying an epoch-millis timestamp (13 digits,
+# which `credit_card` matches). Verified false positives that decided it:
+#
+#     "run started at 1753600000000"   -> credit_card, phone
+#     "kernel at 10.0.1.42 responded"  -> ipv4
+#     "version 1.2.3.4 shipped"        -> ipv4
+#
+# The deciding fact was that a consumer had ALREADY noticed and patched around it
+# locally: codex_phase_result_schema.py:304-306 subtracts `email` by hand. So the
+# predicate was already answering two questions. The ratio of the variation:
+#
+#     A predicate shared by call sites that take different actions on its answer
+#     may not be widened for one of them. Where one consumer needs a broader
+#     question answered, the answer is a second predicate, not a wider one.
+#
+# Hence this. `email` deliberately stays in `contains_secret` and is NOT listed
+# here: moving it would change what the five refusal gates refuse, which is the
+# very change the variation exists to avoid.
+_IDENTITY_KINDS = ("ssn", "credit_card", "phone", "ipv4")
 
-    Used by the audit writer to fail-closed (K-20): if this is non-None, the
-    record must not be written verbatim."""
+
+def contains_identity(text: str) -> str | None:
+    """Return the name of the first identity pattern found, or None.
+
+    Consulted ONLY by the audit scrubber. Never by a refusal gate: these patterns
+    have a false-positive rate that is acceptable when the remedy is redaction of
+    the matched span and unacceptable when the remedy is refusing the content.
+    """
+    for name in _IDENTITY_KINDS:
+        if _PATTERNS[name].search(text):
+            return name
+    return None
+
+
+def redact_identity(text: str) -> str:
+    """Substitute ``[REDACTED:<kind>]`` for identity spans, leaving the rest legible.
+
+    The audit path's action for an identity match. Whole-value digesting here would
+    defeat the order it serves: the point of recording a validation failure is that
+    someone can later read what happened, and replacing a value wholesale because it
+    contained a build number destroys exactly that.
+    """
+    out = text
+    for name in _IDENTITY_KINDS:
+        out = _PATTERNS[name].sub(f"[REDACTED:{name}]", out)
+    return out
+
+
+def contains_secret(text: str) -> str | None:
+    """Return the name of the first secret pattern found, or None.
+
+    A REFUSAL predicate with six callers, five of which refuse on a truthy answer
+    (memory recall/ingest, phase-result admission) and one of which digests (the
+    audit scrubber). Do not widen it for the benefit of one caller: see
+    ``contains_identity`` above and the ratio recorded there. It answers "must this
+    content be refused", not "does this content contain personal data".
+
+    `email` is here rather than in the identity set for historical reasons and is
+    deliberately left in place; ``codex_phase_result_schema`` subtracts it by hand.
+    """
     for name, pat in _SECRET_PATTERNS.items():
         if pat.search(text):
             return name
