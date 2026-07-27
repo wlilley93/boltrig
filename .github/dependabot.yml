@@ -66,6 +66,14 @@ updates:
     labels:
       - dependencies
       - site
+    # @types/node MAJOR is pinned to the Node CI actually runs (22). Dependabot
+    # offered 26 twice; types ahead of the runtime make `tsc` accept a `node:`
+    # API that throws, so the green check proves the site COMPILES rather than
+    # that it RUNS. This moves when the workflows' node-version does, together,
+    # deliberately - see .github/workflows/ci.yml:72,97,121.
+    ignore:
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: pip
     directory: /deploy
