@@ -129,6 +129,12 @@ fleet-drift: ## Is what is RUNNING what we pinned? (needs a box; not a CI gate)
 	$(PY) scripts/check_fleet_drift.py --host $(DRIFT_HOST) --project $(DRIFT_PROJECT) \
 		--compose $(DRIFT_COMPOSE) --overlay $(DRIFT_OVERLAY)
 
+claim-inventory: ## Rebuild docs/claim-inventory.tsv from the sources (Tier 0)
+	$(PY) scripts/build_claim_inventory.py
+
+claims: ## The Tier 0 ratchet: the inventory is current and the residue has not grown
+	$(PY) scripts/check_claim_inventory.py
+
 gate-coverage: ## Every compose manifest is validated and every `quality` component runs in CI
 	$(PY) scripts/check_gate_coverage.py
 
@@ -146,7 +152,7 @@ gate-status: ## Is the gate on the default branch actually green right now?
 
 check: invariants lint architecture structure codex-protocol unwired-claims typecheck test ## Run the local Python gates CI enforces
 
-python-quality: invariants lint architecture structure codex-protocol unwired-claims prose-references gate-coverage health-claims order-directives typecheck ## Run Python tests on Postgres with coverage enforcement
+python-quality: invariants lint architecture structure codex-protocol unwired-claims prose-references gate-coverage health-claims order-directives claims typecheck ## Run Python tests on Postgres with coverage enforcement
 	scripts/with_test_postgres.sh $(PY) -m pytest -q \
 		--cov=boltrig --cov-report=term:skip-covered --cov-report=xml \
 		--cov-fail-under=$(COVERAGE_MIN)
