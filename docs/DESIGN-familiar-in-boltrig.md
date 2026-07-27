@@ -217,15 +217,21 @@ is.*
 
 ## What is not built
 
-- The genotype reaches the silhouette and the body volume. The remaining ~47 interior
-  constants (silk band edges, mote counts, ember placement) are still hardcoded.
-- A fully parted body has no centre, so no nucleus, so almost no light - measured at 5.9% lit.
-  The reviewer band is deliberately held on the near side of the part. A parted genotype needs
-  a nucleus per lobe, which is interior work, not silhouette work.
+- **Fixed 2026-07-27, recorded because the note above described them as limits.** A parted body
+  now measures depth across each lobe's own thickness rather than from a centre it does not
+  have: 5.9% lit / peak 39 before, 12.9% / peak 239 after. And the two reserved genotype slots
+  are claimed by hue and saturation, so roles are separable by colour as well as by form - with
+  the magenta wedge reserved by test, because magenta is the failure signal and identity must
+  not be able to imitate it.
+- The genotype reaches the silhouette, the body volume and the palette. The remaining interior
+  constants (silk band edges, mote counts, ember placement) are still hardcoded - roughly 45 of
+  the inventory in GENOTYPE.md.
 - Voice on a call is a SYNTHESISED envelope, not metering. `speechSynthesis` exposes no output
   level, so the only available fact is the boolean "it is speaking"; the hook is named
   `speakingEnvelope` so no call site can mistake it for measurement. `useMicLevel` does read
   real RMS, and is for the human's microphone during dictation, not the agent's output.
 - The Figma `Flow · one agent, five surfaces` band documents the subagent, automation and call
-  treatments. The code behind them is wired for subagent cards, automation cards and read-aloud;
-  a dedicated large-format call surface is not built.
+  treatments. Subagent cards, automation cards and read-aloud are wired; a dedicated
+  large-format call surface is not built.
+- **Nothing is deployed.** The work is on `main`; the two prod stacks still run the previous
+  image. That is an outward-facing step and is deliberately not taken here.
