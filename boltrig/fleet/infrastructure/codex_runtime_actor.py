@@ -288,7 +288,25 @@ class CodexRuntimeActor:
                     )
         except asyncio.CancelledError:
             raise
-        except Exception:
+        except Exception as exc:
+            # The TERMINAL message stays content-free, because it travels to handovers
+            # and the audit record. The operator log is a different audience, and the
+            # exception's TYPE is a class name from our own stack - never model output,
+            # tool arguments, or user text - so it is safe here and it is the only
+            # thing that distinguishes the causes.
+            #
+            # Its absence was load-bearing: a reset socket, a cell that died before
+            # first frame, and a malformed frame all reported the identical eight
+            # words, "Codex notification pump failed". A live tenant's agent failed
+            # every turn for an hour and the log could not say which of those it was.
+            #
+            # NOT exc_info and NOT str(exc): a JSONDecodeError carries the offending
+            # document in its args, which is exactly the content K-20 keeps out.
+            logger.warning(
+                "codex notification pump crashed: %s.%s",
+                type(exc).__module__,
+                type(exc).__qualname__,
+            )
             await self.fail(
                 CodexRuntimeTerminal("operation", "Codex notification pump failed")
             )

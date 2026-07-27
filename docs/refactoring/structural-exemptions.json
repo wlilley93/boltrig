@@ -324,17 +324,17 @@
       "expires": "2026-12-31"
     },
     "boltrig/kernel/dispatch.py": {
-      "max_file_lines": 673,
+      "max_file_lines": 639,
       "max_function_lines": 114,
       "over_limit_functions": [
         {
           "name": "Dispatcher.invoke",
-          "line": 382,
+          "line": 348,
           "lines": 114
         },
         {
           "name": "Dispatcher._invoke_inner",
-          "line": 497,
+          "line": 463,
           "lines": 110
         }
       ],
