@@ -460,21 +460,65 @@ jobs:
           done
 
       - name: Promote verified digests to immutable public tags
+        # A release tag must resolve to the exact bytes cosign signed. `docker buildx
+        # imagetools create` cannot do that: the candidates are pushed by `docker push`,
+        # so they are plain manifests, and imagetools only ever emits a manifest INDEX.
+        # It therefore WRAPS the candidate and mints a fresh digest, leaving the public
+        # tag pointing at bytes no signature covers. v0.4.13 promoted the kernel that way
+        # and the digest assertion below is what caught it.
+        # A retag is a manifest PUT of the bytes already in the registry, so the digest is
+        # preserved by construction. Fetching them by digest also lets promotion prove,
+        # locally and unforgeably, that what it is about to publish hashes to the signed
+        # digest, before it publishes it.
+        env:
+          GHCR_TOKEN: ${{ secrets.GHCR_PUSH_TOKEN || secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ secrets.GHCR_PUSH_USER || github.actor }}
         shell: bash
         run: |
           set -euo pipefail
+          accept='application/vnd.oci.image.index.v1+json'
+          accept="$accept,application/vnd.oci.image.manifest.v1+json"
+          accept="$accept,application/vnd.docker.distribution.manifest.list.v2+json"
+          accept="$accept,application/vnd.docker.distribution.manifest.v2+json"
+          basic="$(printf '%s:%s' "$GHCR_USER" "$GHCR_TOKEN" | base64 -w0)"
+
           for image in kernel fleet ui backup; do
             image_ref="$(tr -d '\r\n' < "release-evidence/image-ref-$image.txt")"
             image_name="${image_ref%@*}"
             digest="${image_ref##*@}"
-            docker buildx imagetools create \
-              --tag "$image_name:$RELEASE_TAG" \
-              --tag "$image_name:$COMMIT_TAG" \
-              "$image_ref"
+            repository="${image_name#ghcr.io/}"
+
+            token="$(curl -fsSL -H "Authorization: Basic $basic" \
+              "https://ghcr.io/token?service=ghcr.io&scope=repository:$repository:pull,push" \
+              | jq -r '.token')"
+            test -n "$token" && test "$token" != null
+
+            curl -fsSL -H "Authorization: Bearer $token" -H "Accept: $accept" \
+              -D manifest-headers.txt -o manifest.bin \
+              "https://ghcr.io/v2/$repository/manifests/$digest"
+
+            # The signed digest IS the hash of these bytes. If they do not hash to it,
+            # promotion stops before anything is published.
+            fetched="sha256:$(sha256sum manifest.bin | cut -d' ' -f1)"
+            if [ "$fetched" != "$digest" ]; then
+              echo "$image: registry returned bytes hashing to $fetched, signed digest is $digest" >&2
+              exit 1
+            fi
+
+            content_type="$(tr -d '\r' < manifest-headers.txt \
+              | awk 'tolower($1) == "content-type:" { print $2 }' | tail -1)"
+            test -n "$content_type"
+
             for tag in "$RELEASE_TAG" "$COMMIT_TAG"; do
+              curl -fsS -X PUT -o /dev/null \
+                -H "Authorization: Bearer $token" \
+                -H "Content-Type: $content_type" \
+                --data-binary @manifest.bin \
+                "https://ghcr.io/v2/$repository/manifests/$tag"
               promoted_digest="$(docker buildx imagetools inspect "$image_name:$tag" --format '{{json .Manifest.Digest}}' | tr -d '"')"
               test "$promoted_digest" = "$digest"
             done
+            rm -f manifest.bin manifest-headers.txt
           done
 
       - name: Attach the digest-pinned Compose environment
