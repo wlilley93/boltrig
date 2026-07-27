@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
+from boltrig.kernel.schema_diagnosis import diagnose
 from boltrig.models.work import work_item_run_id
 from boltrig.observability.model_telemetry import model_telemetry
 from boltrig.store.base import DEFAULT_WORK_PAGE, MAX_OBSERVABILITY_PAGE, clamp_work_page
@@ -201,6 +202,46 @@ def _register_model_telemetry_routes(app, P, K) -> None:
         }
 
 
+def _parse_bound(raw: str | None, *, end_of_day: bool):
+    """Parse a date filter bound. A date-only upper bound includes the whole day.
+
+    Module level rather than a closure: it captures nothing, and the route it used to sit
+    inside is over the structural limit under a standing exemption. A pure function that
+    could be a closure and need not be is the cheapest thing to move out of one.
+    """
+    if not raw:
+        return None
+    try:
+        dt = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    if end_of_day and len(raw) == 10:  # a bare YYYY-MM-DD upper bound
+        dt = dt.replace(hour=23, minute=59, second=59, microsecond=999999)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    return dt
+
+
+async def _attach_schema_diagnosis(store, tenant_id: str, pairs: list[tuple[dict, Any]]) -> None:
+    """D5 of the schema-validation ledger order: render a `schema_invalid` row against the
+    verb's schema AS IT IS NOW.
+
+    The expectation is not stored beside the failure, it is derived here, and the digest
+    recorded on the row is what decides whether deriving it is honest. On a mismatch
+    ``diagnose`` returns ``schema_moved`` and NO diff, because answering from a schema that
+    was not in force is worse than declining to answer.
+
+    One store round trip per DISTINCT verb, after the filtering, so a page with no schema
+    failures costs nothing at all.
+    """
+    for verb_id in {ev.verb for _, ev in pairs if ev.verb}:
+        vd = await store.get_verb(tenant_id, verb_id)
+        schema = getattr(vd, "input_schema", None) if vd else None
+        for row, ev in pairs:
+            if ev.verb == verb_id:
+                row["schema_diagnosis"] = diagnose(getattr(ev, "detail", None), schema)
+
+
 def _register_audit_search_routes(app, P, K) -> None:
     @app.get("/v1/audit/search")
     async def audit_search(request: Request, actor: str | None = None, verb: str | None = None,
@@ -210,20 +251,6 @@ def _register_audit_search_routes(app, P, K) -> None:
                            k=K, p=P) -> dict:
         # D5: scoped actor/resource/date filters plus a SecurityEvent stream pivot.
         depts = scope_depts(p)
-
-        # Parse once by value; a date-only upper bound includes the whole day.
-        def _parse_bound(raw: str | None, *, end_of_day: bool):
-            if not raw:
-                return None
-            try:
-                dt = datetime.fromisoformat(raw)
-            except ValueError:
-                return None
-            if end_of_day and len(raw) == 10:  # a bare YYYY-MM-DD upper bound
-                dt = dt.replace(hour=23, minute=59, second=59, microsecond=999999)
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=UTC)
-            return dt
 
         since_dt = _parse_bound(since, end_of_day=False)
         until_dt = _parse_bound(until, end_of_day=True)
@@ -271,6 +298,7 @@ def _register_audit_search_routes(app, P, K) -> None:
             limit=MAX_OBSERVABILITY_PAGE,
         )
         rows = []
+        schemas: list[tuple[dict, Any]] = []
         for e in events:
             if actor and e.actor != actor:
                 continue
@@ -282,11 +310,16 @@ def _register_audit_search_routes(app, P, K) -> None:
                 continue
             if not _in_range(e.ts):
                 continue
-            rows.append({"seq": e.seq, "ts": e.ts.isoformat(), "actor": e.actor,
-                         "verb": e.verb, "status": e.status, "run_id": e.run_id,
-                         "workspace_id": e.workspace_id, "ip_address": e.ip_address,
-                         "user_agent": e.user_agent, "resource": e.resource,
-                         "resource_id": e.resource_id})
+            row = {"seq": e.seq, "ts": e.ts.isoformat(), "actor": e.actor,
+                   "verb": e.verb, "status": e.status, "run_id": e.run_id,
+                   "workspace_id": e.workspace_id, "ip_address": e.ip_address,
+                   "user_agent": e.user_agent, "resource": e.resource,
+                   "resource_id": e.resource_id}
+            if e.status == "schema_invalid":
+                schemas.append((row, e))
+            rows.append(row)
+
+        await _attach_schema_diagnosis(k.store, p.tenant_id, schemas)
         return {"stream": "audit", "results": rows[-500:], "scope": depts or "all"}
 
 

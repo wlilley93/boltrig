@@ -38,7 +38,23 @@ HEADER = """\
 """
 
 
-def citations_in(register: Path) -> set[str]:
+def citations_in(*registers: Path) -> set[str]:
+    """Every citation the canon repository answers to, across BOTH of its estates.
+
+    Two roots, not one, and the second was missing until 2026-07-27. Canon keeps filed orders
+    under `.vjs/orders/` and ENACTED law under `lawpack/v2/orders/`, and this script read only
+    the first. The effect was quiet in the worst way: `[2026] VJS-PC 20` is in `.vjs` and
+    vendored fine, so the citator looked complete, while `[2026] VJS-PC 19` is in the lawpack
+    alone and any record citing it failed the prose gate as though the ruling did not exist.
+    A subscriber could not cite most of the enacted constitution and nothing said so.
+    """
+    found: set[str] = set()
+    for register in registers:
+        found |= _citations_under(register)
+    return found
+
+
+def _citations_under(register: Path) -> set[str]:
     found: set[str] = set()
     for path in sorted(register.rglob("*.yaml")):
         if "orders" not in path.parts:
@@ -66,17 +82,22 @@ def main() -> int:
         help="path to the canon VJS repository",
     )
     args = parser.parse_args()
-    register = args.canon / ".vjs"
-    if not register.is_dir():
+    registers = [args.canon / ".vjs", args.canon / "lawpack"]
+    missing = [r for r in registers if not r.is_dir()]
+    if missing:
         print(
-            f"FAIL: no canon register at {register}. This script is the only thing "
-            "allowed to read it; the gate reads the vendored file.",
+            "FAIL: no canon register at " + ", ".join(str(r) for r in missing)
+            + ". This script is the only thing allowed to read canon; the gate reads the "
+            "vendored file. BOTH estates are required: filed orders live under .vjs/orders "
+            "and enacted law under lawpack/v2/orders, and reading only the first silently "
+            "made most of the constitution uncitable here.",
             file=sys.stderr,
         )
         return 1
-    found = citations_in(register)
+    found = citations_in(*registers)
     if not found:
-        print(f"FAIL: {register} yielded no citations; refusing to blank the citator.",
+        roots = ", ".join(str(r) for r in registers)
+        print(f"FAIL: {roots} yielded no citations; refusing to blank the citator.",
               file=sys.stderr)
         return 1
     OUT.write_text(HEADER + "\n".join(sorted(found)) + "\n", encoding="utf-8")

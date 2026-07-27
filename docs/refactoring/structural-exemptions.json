@@ -324,22 +324,22 @@
       "expires": "2026-12-31"
     },
     "boltrig/kernel/dispatch.py": {
-      "max_file_lines": 599,
-      "max_function_lines": 113,
+      "max_file_lines": 673,
+      "max_function_lines": 114,
       "over_limit_functions": [
         {
           "name": "Dispatcher.invoke",
-          "line": 308,
-          "lines": 113
+          "line": 382,
+          "lines": 114
         },
         {
           "name": "Dispatcher._invoke_inner",
-          "line": 422,
-          "lines": 111
+          "line": 497,
+          "lines": 110
         }
       ],
       "owner": "kernel-maintainers",
-      "reason": "Extract dispatch phases behind private typed helpers while retaining the single governed chokepoint. SEC-181 secure input added the run-scoped param resolution at the credential stage and the secure-question marker. Parity passthrough (2026): _execute_adapter overrides the static adapter credential with a per-run sealed bearer when present. 2026-07-25: +17 lines for _emit_pause, which publishes a HITL pause to the run that DELEGATED to this one as well as to this one. A chat turn never calls a verb itself, so the dispatch runs under the child run id while the client follows the root stream - the pause landed on a stream nobody follows and a write held for approval was invisible to the person who asked. Extracting it LOWERED Dispatcher.invoke from 116 to 113 lines, so the function ratchet ratchets down with this change. 2026-07-25: +25 lines to enforce the rate limit BEFORE the approval gate on a leg carrying an approval id, so a throttle trip cannot burn a single-use human authorisation; most of it is the comment recording which pre-execution refusals are still NOT approval-safe. 2026-07-26 (decision 0018): a write held for human approval is now RECORDED at the pause - a human approved opbox.add_comment in a chat turn, the request sat ANSWERED forever and the comment was never posted, because nothing anywhere held the CALL. The pause branch now calls _hold_pause, an EXTRACTED helper that emits the pause and writes the durable held-call record, so Dispatcher.invoke stays at 113 lines and neither over-limit function grew.",
+      "reason": "Extract dispatch phases behind private typed helpers while retaining the single governed chokepoint. SEC-181 secure input added the run-scoped param resolution at the credential stage and the secure-question marker. Parity passthrough (2026): _execute_adapter overrides the static adapter credential with a per-run sealed bearer when present. 2026-07-25: +17 lines for _emit_pause, which publishes a HITL pause to the run that DELEGATED to this one as well as to this one. A chat turn never calls a verb itself, so the dispatch runs under the child run id while the client follows the root stream - the pause landed on a stream nobody follows and a write held for approval was invisible to the person who asked. Extracting it LOWERED Dispatcher.invoke from 116 to 113 lines, so the function ratchet ratchets down with this change. 2026-07-25: +25 lines to enforce the rate limit BEFORE the approval gate on a leg carrying an approval id, so a throttle trip cannot burn a single-use human authorisation; most of it is the comment recording which pre-execution refusals are still NOT approval-safe. 2026-07-26 (decision 0018): a write held for human approval is now RECORDED at the pause - a human approved opbox.add_comment in a chat turn, the request sat ANSWERED forever and the comment was never posted, because nothing anywhere held the CALL. The pause branch now calls _hold_pause, an EXTRACTED helper that emits the pause and writes the durable held-call record, so Dispatcher.invoke stays at 113 lines and neither over-limit function grew. 2026-07-27 (schema-validation ledger order): +1 line net on Dispatcher.invoke and -1 on _invoke_inner, which ratchets the second one DOWN. The failure detail now carries the params key names and, for a schema failure, the value-free {schema_path, keyword} pairs and a schema digest. Both additions were extracted rather than inlined: _schema_detail keeps the taxonomy branch out of the chokepoint's one error handler, and _reject_if_invalid gives input and output validation ONE seam, which is the thing whose absence let the output twin be forgotten by the filing in the first place.",
       "expires": "2026-12-31"
     },
     "boltrig/kernel/memory_routes.py": {
@@ -371,22 +371,11 @@
       "expires": "2026-12-31"
     },
     "boltrig/kernel/platform_routes/observability.py": {
-      "max_file_lines": 427,
-      "max_function_lines": 87,
-      "over_limit_functions": [
-        {
-          "name": "_register_audit_search_routes",
-          "line": 204,
-          "lines": 87
-        },
-        {
-          "name": "_register_audit_search_routes.audit_search",
-          "line": 206,
-          "lines": 86
-        }
-      ],
+      "max_file_lines": 460,
+      "max_function_lines": 79,
+      "over_limit_functions": [],
       "owner": "kernel-maintainers",
-      "reason": "The security-stream author/admin gate (the stream carries other users' IPs/user agents; SEC-33 parity with verify/export) pushed the audit-search registrar past the 80-line function floor; extract the security-stream arm into its own registrar when the observability surface grows.",
+      "reason": "The security-stream author/admin gate (the stream carries other users' IPs/user agents; SEC-33 parity with verify/export) pushed the audit-search registrar past the 80-line function floor; extract the security-stream arm into its own registrar when the observability surface grows. 2026-07-27 (schema-validation ledger order D5): the audit browser renders a schema_invalid row against the verb's CURRENT schema, deriving the expectation rather than storing it. The derivation went into _attach_schema_diagnosis and the date-bound parser was hoisted out of the route as the module-level _parse_bound it always could have been, so audit_search fell from 87 lines to 79 and is now UNDER the function floor: both function exemptions are removed and max_function_lines ratchets down from 87. The file grew by the two helpers and their reasoning, which is where the file ratchet moved.",
       "expires": "2026-12-31"
     },
     "boltrig/memory/pgvector.py": {
