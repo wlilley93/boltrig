@@ -10,7 +10,7 @@
 #                  installed into the trust store automatically (else skipped).
 
 # IAC-002: pinned to a stable tag + digest.
-FROM python:3.12.13-slim-bookworm@sha256:8a7e7cc04fd3e2bd787f7f24e22d5d119aa590d429b50c95dfe12b3abe52f48b AS base
+FROM python:3.14.6-slim-bookworm@sha256:86f975aca15cf04a40b399eebede9aea7c82eae084d1f1a0a6ef6bcaae871a30 AS base
 
 # Build-time egress proxy (harmless when empty). pip honours these env vars.
 ARG HTTP_PROXY=""
