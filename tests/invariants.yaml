@@ -695,8 +695,9 @@ invariants:
     tests:
       - tests/security/test_credential_isolation.py::test_audit_scrubs_secret_in_detail
   SEC-05:
-    description: 'Resolved credential material never enters the audit log.'
+    description: 'Resolved credential material never escapes the kernel boundary - it never enters the audit log, and it is unprintable by construction: `Credential.material` carries `repr=False`, which is the load-bearing half - it alone keeps an f-string, a log line, a `%s` format and a traceback frame rendering the wrapper rather than the secret. The overridden `__str__` is belt-and-braces and was MEASURED as such: with it deleted the property still holds, because `str()` falls back to the dataclass repr that already omits the material. The audit half and the printability half are bound separately because they fail separately; ~14 adapter docstrings say "never logged" and it is the second half they are relying on.'
     tests:
+      - tests/security/test_credential_isolation.py::test_credential_repr_never_leaks_material
       - tests/security/test_credential_isolation.py::test_secret_material_never_enters_audit
       - tests/kernel/test_chokepoint_order.py::test_credential_never_resolved_when_the_grant_check_fails
       - tests/kernel/test_chokepoint_order.py::test_credential_never_resolved_when_the_hitl_gate_pends
