@@ -20,6 +20,7 @@ import {
   deriveGenotype,
   GENOTYPE_DEFAULTS,
   GENOTYPE_SLOTS,
+  GENOTYPE_VEC4S,
   packGenotype,
   MAGENTA_WEDGE,
   ROLE_BANDS,
@@ -104,18 +105,25 @@ describe("genotype derivation", () => {
     }
   });
 
-  it("packs genes into the uniform in slot order, filling all 16 named slots", () => {
+  it("packs genes into the uniform in slot order, filling every named slot", () => {
     const g = deriveGenotype({ id: "p", role: "analyst" });
     const packed = packGenotype(g);
-    expect(packed.length).toBe(16);
     GENOTYPE_SLOTS.forEach((k, i) => expect(packed[i]).toBeCloseTo(g[k], 5));
-    // Slots 14 and 15 were reserved until hue and saturation claimed them on 2026-07-27.
-    // This assertion used to be `toBe(0)` on both, and it was RIGHT to fail when they were
-    // filled: a reserved slot silently acquiring a meaning is exactly the drift it guarded.
-    // It now asserts the full 16 are packed in order, which the loop above already covers -
-    // so what is left is the bound itself: nothing may be written past the named slots.
-    expect(packed.length).toBe(16);
-    expect(GENOTYPE_SLOTS.length).toBe(16);
+    // This assertion has now gone stale TWICE by naming a number: `toBe(0)` on slots 14/15
+    // until hue and saturation claimed them, then `toBe(16)` until the interior genes grew it
+    // to 24. Both failures were correct and both were noise - the property being guarded was
+    // never the count, it is that the packed buffer and the slot list agree and that the
+    // uniform is a whole number of vec4s. Stated structurally, it stops going stale.
+    // Named slots may be FEWER than the buffer: the uniform is a whole number of vec4s and the
+    // tail can be reserved (22 named into 24 floats today). What must hold is that the buffer
+    // is vec4-shaped, that every named slot fits, and that the reserved tail stays zero - a
+    // reserved slot quietly acquiring a value is a gene the shader would read as one it does
+    // not have.
+    expect(packed.length).toBe(GENOTYPE_VEC4S * 4);
+    expect(GENOTYPE_SLOTS.length).toBeLessThanOrEqual(packed.length);
+    for (let i = GENOTYPE_SLOTS.length; i < packed.length; i++) {
+      expect(packed[i], `reserved slot ${i} was written`).toBe(0);
+    }
   });
 
   it("degrades a malformed authored genotype to the circle rather than to a black hole", () => {

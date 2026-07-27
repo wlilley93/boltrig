@@ -22,7 +22,7 @@
  * agent used to be".
  */
 
-import { packGenotype, type Genotype } from "./genotype";
+import { GENOTYPE_VEC4S, packGenotype, type Genotype } from "./genotype";
 import { type Phenotype } from "./phenotype";
 
 /**
@@ -284,7 +284,9 @@ class Renderer {
       // covers 55% of the frame. Below that it just gets small.
       gl.uniform1f(u.uScaleDock, 0.34);
       gl.uniform1f(u.uFitScale, 0.34);
-      gl.uniform4fv(u.uGene, packGenotype(s.genotype));
+      // Count derived, never a literal: a hardcoded 4 here would upload the first four vec4s
+      // and leave the interior genes reading whatever was in the uniform before.
+      gl.uniform4fv(u.uGene, packGenotype(s.genotype).subarray(0, GENOTYPE_VEC4S * 4));
 
       gl.drawArrays(gl.TRIANGLES, 0, 3);
 
