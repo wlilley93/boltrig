@@ -40,6 +40,13 @@ import sys
 # the tag is a label anyone can move.
 _IMAGE = re.compile(r"^\s*image:\s*(?P<ref>\S+)\s*$", re.MULTILINE)
 _DIGEST = re.compile(r"@(sha256:[0-9a-f]{64})$")
+# A service under `profiles:` is OPT-IN - compose does not start it unless the
+# profile is selected, so its absence is the design, not drift. Without this the
+# check reports vllm-openai and signal-cli-rest-api missing on every healthy box,
+# goes permanently red, and gets ignored - the precise failure this file's own
+# docstring warns about.
+_SERVICE = re.compile(r"^  (?P<name>[a-z0-9][\w-]*):\s*$", re.MULTILINE)
+_PROFILES = re.compile(r"^    profiles:\s*\[(?P<list>[^\]]*)\]", re.MULTILINE)
 
 
 def _read(path: str, host: str | None) -> str:
@@ -75,6 +82,7 @@ def pinned(paths: list[str], host: str | None = None) -> dict[str, str]:
     for path in paths:
         try:
             text = _read(path, host)
+            _record_profiles(text)
         except OSError as exc:
             print(f"fleet-drift: cannot read {path}: {exc}", file=sys.stderr)
             raise SystemExit(1) from exc
@@ -86,6 +94,28 @@ def pinned(paths: list[str], host: str | None = None) -> dict[str, str]:
             name = ref.split("@")[0].split("/")[-1].split(":")[0]
             out[name] = digest.group(1)
     return out
+
+
+# image-name -> True when the service carrying it is opt-in behind a profile.
+_OPT_IN: dict[str, bool] = {}
+
+
+def _record_profiles(text: str) -> None:
+    """Note which services are profile-gated, keyed by their image name."""
+    services = list(_SERVICE.finditer(text))
+    for i, match in enumerate(services):
+        end = services[i + 1].start() if i + 1 < len(services) else len(text)
+        block = text[match.start():end]
+        image = _IMAGE.search(block)
+        if not image:
+            continue
+        name = image.group("ref").strip("\"'").split("@")[0].split("/")[-1].split(":")[0]
+        # Only ever turn opt-in ON: an overlay that re-declares a service without
+        # repeating `profiles:` must not silently make it look mandatory.
+        if _PROFILES.search(block):
+            _OPT_IN[name] = True
+        else:
+            _OPT_IN.setdefault(name, False)
 
 
 def running(host: str, project: str) -> dict[str, str]:
@@ -157,6 +187,9 @@ def main() -> int:
     for name, digest in sorted(want.items()):
         actual = have.get(name)
         if actual is None:
+            if _OPT_IN.get(name):
+                print(f"  {name:16} not enabled   (profile-gated, absent by design)")
+                continue
             missing.append(name)
             print(f"  {name:16} NOT RUNNING   pinned {digest[:19]}...")
         elif actual == digest:
@@ -173,10 +206,9 @@ def main() -> int:
             print(f"  - {name}: pinned {want_d}\n      running {got}")
         return 1
     if missing:
-        # Not automatically wrong - a profile-gated service is legitimately absent -
-        # but it is not agreement either, so it does not get a silent pass.
-        print(f"\nNOT RUNNING (pinned but absent): {', '.join(missing)}")
-        print("Confirm each is profile-gated rather than a service that died.")
+        # These are NOT profile-gated, so absence means a service that should be up
+        # is not - which is not agreement, and does not get a silent pass.
+        print(f"\nNOT RUNNING (pinned, not profile-gated, absent): {', '.join(missing)}")
         return 1
     print("\nRESULT: PASS - every pinned image is the one running.")
     return 0
