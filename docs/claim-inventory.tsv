@@ -73,9 +73,9 @@ LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_runtime_con
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_runtime_config_toml.py:155		The ``[mcp_servers]`` section: empty, or exactly the kernel's own face.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_runtime_config_toml.py:19		so it is a fixed constant, never a per-run value.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_stdio_transport.py:51		Content-free diagnostic labels for a codex stderr tail.
-LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py:141		The run-scoped MCP bearer as the child's ONLY environment addition.
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py:245		D1: fail closed BEFORE any provisioning or bearer mint can happen.
-LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py:458		Write the cell's config.toml and return the argv pinning the same values.
+LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py:154		The run-scoped MCP bearer as the child's ONLY environment addition.
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py:279		D1: fail closed BEFORE any provisioning or bearer mint can happen.
+LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py:534		Write the cell's config.toml and return the argv pinning the same values.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_trusted_proxy_support.py:179		Build the cell scope from the child's REAL ``/proc`` identity (D3).
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/model_proxy_peer_attestation.py:1		Bounded pidfd-backed attestation for an accepted model-auth Unix peer.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/fleet/infrastructure/model_proxy_peer_attestation.py:102		peer-supplied data), so logging it cannot leak attacker content.
@@ -251,7 +251,7 @@ LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_model
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_runtime_config_argv.py:1	config.toml	Deterministic App Server argv pinning for security-critical Codex config.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_runtime_config_policy.py:68	codex_cell_boundary	Validate lexical paths; production must separately bind roots and reject symlinks.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_runtime_events.py:94	boltrig	Whether an invalidation-class notification is the ONE the kernel-tools lane expects: the admitted ``boltrig`` MCP server reaching a live state.
-LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py:429	auth.command	Refuse a second live cell while config.toml is unprotected (G3).
+LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py:505	auth.command	Refuse a second live cell while config.toml is unprotected (G3).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_trusted_proxy_support.py:1	model_auth_helper	Support values for the trusted single-tenant read-only Codex proxy provider.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/model_gateway.py:1	model_router	Conversation-scoped model binding for an upstream gateway (Round Six, gap 3.2).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/prompt_stack.py:1	prompt	Layered system-prompt composition per fleet tier (Corporate Brain Part III/V: character + overriding objective, kernel-composed).
@@ -348,8 +348,10 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/codex_runtim
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/codex_runtime_state.py:42	validate_cell_layout	Best-effort removal of a per-run cell tree AFTER its cell is down.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/codex_server_request_handler.py:1	CodexRuntimeOperationError	Answer codex's server-initiated requests, deriving the answer from the kernel as the sole governing gate ([2026] VJS-COUNTY 12).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/codex_trusted_proxy_ingress.py:1	_read_proc_identity	SO_PEERCRED socket ingress for the trusted Codex provider (Track 3, beat 3a).
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/codex_trusted_proxy_ingress.py:142	bind	A fresh unguessable ABSTRACT socket name, in the ``@name`` argv convention.
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py:1	kernel_tool_scopes	Trusted single-tenant read-only Codex phase-cell provider ([2026] VJS-CC-VJS 2).
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/codex_trusted_proxy_ingress.py:119	build_cell_scope	Capture the started App Server's identity the way attestation captures it.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/codex_trusted_proxy_ingress.py:190	bind	A fresh unguessable ABSTRACT socket name, in the ``@name`` argv convention.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py:1	_expected_cell_credentials	Trusted single-tenant read-only Codex phase-cell provider ([2026] VJS-CC-VJS 2).
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py:375	_abort_acquire	Capture the just-spawned App Server, declare its identity, register it.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/codex_trusted_proxy_support.py:228	assert_cell_isolation_boundary	Render the exact read-only config.toml pointing at the loopback proxy (D6).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/linux_peer_process_handle.py:49	_borrow	Deliver bytes to exactly this attested peer, then let the caller close.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/model_proxy_peer_listener.py:1	accept_once	Supervisor-ownable AF_UNIX ingress that attests each connecting peer.
@@ -757,21 +759,22 @@ ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_stdio_transport.p
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_stdio_transport.py:262		Drain stderr (so the pipe never blocks the child) while ACCUMULATING the
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_stdio_transport.py:281		labels only, never a stderr line - so a degraded cell is diagnosable
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_stdio_transport.py:31		label.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_trusted_proxy_ingress.py:114		The dropped API (uid 10001, empty permitted set) cannot read a uid-distinct
-ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_trusted_proxy_ingress.py:263		Assert the boundary, register the App Server, bind, and start serving.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py:194		environment never carries the upstream key (CODEX_ACCESS_TOKEN).
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py:226		helper on a writable path can never construct a live provider at all.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py:233		pops it.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py:238		registers, provisioning the forbidden two-cell state.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py:280		tool-enabled lane.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py:290		the two surfaces cannot disagree about the provider, the helper, the
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py:323		by the supervisor and never handed out.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py:329		start() only returns once on_spawned succeeded, so this cannot
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py:330		happen;
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py:355		A failed acquire must not strand the API-owned cell tree the
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py:376		An EMPTY ceiling is never admitted as a tools lane: the config
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py:378		the two must always agree.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py:543		successor can never take a uid still in use (J10).
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_trusted_proxy_ingress.py:153		The dropped API (uid 10001, empty permitted set) cannot read a uid-distinct
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_trusted_proxy_ingress.py:164		The capture is a CROSS-CHECK, never the source of the expectation: that is what lets
+ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_trusted_proxy_ingress.py:329		Assert the boundary, register the App Server, bind, and start serving.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py:228		environment never carries the upstream key (CODEX_ACCESS_TOKEN).
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py:260		helper on a writable path can never construct a live provider at all.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py:267		pops it.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py:272		registers, provisioning the forbidden two-cell state.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py:314		tool-enabled lane.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py:324		the two surfaces cannot disagree about the provider, the helper, the
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py:357		by the supervisor and never handed out.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py:363		start() only returns once on_spawned succeeded, so this cannot
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py:364		happen;
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py:424		A failed acquire must not strand the API-owned cell tree the
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py:445		An EMPTY ceiling is never admitted as a tools lane: the config
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py:447		the two must always agree.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py:619		successor can never take a uid still in use (J10).
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_trusted_proxy_support.py:73		proxy and never lives here.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_trusted_proxy_support.py:77		never has to be escaped into the Python literal.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/linux_peer_identity.py:168		capless API cannot perform;
@@ -1235,6 +1238,7 @@ ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/codex_protocol.p
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/codex_read_only_phase.py:1	read_only_static_profile	The shared read-only Codex phase contract (adapter <-> admission source).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/codex_runtime_config_argv.py:182	codex_app_server_arguments	Gate the SHAPE of an argv at a boundary that cannot see the receipt.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/codex_runtime_validation.py:1	AgentRuntime	Fail-closed validation at the Codex ``AgentRuntime`` boundary.
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py:168	drop_privileges	The credentials the cell MUST hold when its identity is registered (#3).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/memory_capability_attestations.py:31	resolve	Serializable non-evicting reference adapter with bounded backpressure.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/model_proxy_peer_listener.py:97	bind	Bind either an abstract ``@name`` or a filesystem path.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/model_proxy_tool_ceiling.py:137	enforce_tool_ceiling	Enforce the ceiling on the RESPONSE and reattach the MCP namespace.

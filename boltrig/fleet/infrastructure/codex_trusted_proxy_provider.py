@@ -20,6 +20,18 @@ parallel. The cell scope is now peer-attested, not merely observed, and the App
 Server is registered inside ``CodexCellSupervisor.start`` against the just-spawned
 pid, so no live-and-unregistered window exists.
 
+That registration DECLARES the cell's identity from the slot it was allocated
+(``_expected_cell_credentials``) rather than observing it (FINDING #3 in
+``codex_trusted_proxy_ingress``). Under per-cell uids the spawner publishes a cell's
+pid from the fork PARENT, so the capture at ``on_spawned`` can still read the child's
+PRE-drop root credentials; because a registration is immutable, registering those
+refused the cell's own auth helper for the rest of its life, and every tool turn on
+that tenant degraded with no bearer, no model call and no tool call ever dispatched
+(cv-boltrig-kernel-1, 2026-07-27). Declaring the identity does NOT reopen the
+live-and-unregistered window: registration still runs at ``on_spawned``, before any
+protocol traffic, and the kernel is asked to confirm the declaration on the pid at
+every issuance instead (``expected_cell_uid``).
+
 [2026] VJS-CC-VJS 5: the auth helper is no longer written into the mutable cell
 root. There is one shared helper, root-owned and non-writable on the read-only
 image mount, proved at composition and re-proved at ingress startup by
@@ -55,6 +67,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -150,6 +163,27 @@ def _kernel_tools_environment(
     if kernel_scope is None:
         return None
     return {CODEX_MCP_BEARER_ENV_VAR: kernel_scope.token}
+
+
+def _expected_cell_credentials(slot: CellSlot | None) -> tuple[int, int]:
+    """The credentials the cell MUST hold when its identity is registered (#3).
+
+    Taken from the SLOT the lane reserved, never from the cell's own ``/proc``: the
+    capture is the thing being cross-checked, so sourcing the expectation from it
+    would be a check that cannot fail. The slot is not an observation either - the
+    kernel creates each tmpfs already owned by that uid from the compose declaration,
+    the allocator lends one uid to at most one live cell, and that same uid is what
+    the lane put in the spawn request the cell was forked from and what
+    ``drop_privileges`` proved from ``/proc`` inside the child.
+
+    In the in-process posture there is no slot and no drop at all: the cell is an
+    ordinary child of the API and keeps the API's credentials for its whole life, so
+    the API's own ids are the correct expectation there.
+    """
+
+    if slot is None:
+        return os.getuid(), os.getgid()
+    return slot.uid, slot.gid
 
 
 def _per_cell_tree_dirs(layout: CodexCellLayout) -> list[dict[str, object]]:
@@ -303,18 +337,18 @@ class TrustedProxyCodexPhaseCellProvider:
                 kernel_scope=kernel_scope,
             )
             ingress = self._build_ingress()
-            issuer = self._build_issuer(model_id, holder)
+            issuer = self._build_issuer(model_id, holder, slot)
 
             async def register_spawned(pid: int) -> None:
-                # FINDING #1: build the registered scope from the App Server's real
-                # /proc identity via the SAME capture attestation uses (canonical
-                # cgroup digest), so the auth-helper child attests against a matching
-                # ancestor.
                 nonlocal scope
-                identity = capture_cell_identity(assignment, layout.cell_id, pid)
-                scope = identity.scope
-                await ingress.start(
-                    identity=identity, socket_name=socket_name, bearer_issuer=issuer
+                scope = await self._register_spawned_cell(
+                    assignment=assignment,
+                    cell_id=layout.cell_id,
+                    pid=pid,
+                    slot=slot,
+                    ingress=ingress,
+                    socket_name=socket_name,
+                    issuer=issuer,
                 )
 
             # The supervisor runs the registration against the just-spawned pid,
@@ -337,6 +371,41 @@ class TrustedProxyCodexPhaseCellProvider:
         except BaseException:
             await self._abort_acquire(proxy, scope, ingress, cell, admission, slot, reaper_started)
             raise
+
+    async def _register_spawned_cell(
+        self,
+        *,
+        assignment: PhaseAssignmentRef,
+        cell_id: str,
+        pid: int,
+        slot: CellSlot | None,
+        ingress: CodexTrustedIngress,
+        socket_name: str,
+        issuer: BearerIssuer,
+    ) -> ModelProxyCellScope:
+        """Capture the just-spawned App Server, declare its identity, register it.
+
+        FINDING #1: the registered scope is built from the cell's real /proc identity
+        via the SAME capture attestation uses (canonical cgroup digest), so the
+        auth-helper child later attests against a matching ancestor.
+
+        FINDING #3: the uid/gid REGISTERED are the ones the cell was ALLOCATED, never
+        the ones this capture read. The spawner publishes a pid from the fork parent,
+        so the capture can still see the child's pre-drop root credentials, and a
+        registration is immutable - registering those refused the cell's own auth
+        helper for the rest of its life (cv-boltrig-kernel-1, 2026-07-27).
+
+        Raising leaves nothing live: the capture's cross-check runs before the
+        registration exists, and a failure after it (the listener bind) is revoked by
+        the ``ingress.aclose`` that ``_abort_acquire`` runs through ``_teardown``.
+        """
+
+        expected_uid, expected_gid = _expected_cell_credentials(slot)
+        identity = capture_cell_identity(
+            assignment, cell_id, pid, expected_uid=expected_uid, expected_gid=expected_gid
+        )
+        await ingress.start(identity=identity, socket_name=socket_name, bearer_issuer=issuer)
+        return identity.scope
 
     async def _abort_acquire(
         self,
@@ -415,7 +484,9 @@ class TrustedProxyCodexPhaseCellProvider:
             boundary=self._boundary,
         )
 
-    def _build_issuer(self, model_id: str, holder: GenerationHolder) -> BearerIssuer:
+    def _build_issuer(
+        self, model_id: str, holder: GenerationHolder, slot: CellSlot | None
+    ) -> BearerIssuer:
         return build_ingress_bearer_issuer(
             broker=self._broker,
             registry=self._registry,
@@ -424,6 +495,11 @@ class TrustedProxyCodexPhaseCellProvider:
             budget=read_only_budget(),
             ttl_seconds=self._ttl,
             holder=holder,
+            # J5's confirming half: per-cell the kernel is asked to confirm, on the
+            # pid and at the instant of trust, the uid the registration DECLARED. None
+            # in-process, where the cell shares the API's uid and there is nothing
+            # per_cell_uid_mode_available does not already answer.
+            expected_cell_uid=None if slot is None else slot.uid,
         )
 
     def _require_admissible_concurrency(self) -> None:

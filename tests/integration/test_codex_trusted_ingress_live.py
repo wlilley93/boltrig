@@ -94,7 +94,16 @@ async def test_ingress_registers_binds_serves_and_delivers_to_the_helper() -> No
         registry, attestor, stack_root=stack_root, boundary=boundary
     )
 
-    identity = capture_cell_identity(_assignment(), "cell-3a", os.getpid())
+    # This process stands in as the cell, so the identity it was "allocated" is its
+    # own; FINDING #3's cross-check is exercised on the settled-credentials path,
+    # and the registered ids are the declared ones the helper must then match.
+    identity = capture_cell_identity(
+        _assignment(),
+        "cell-3a",
+        os.getpid(),
+        expected_uid=os.getuid(),
+        expected_gid=os.getgid(),
+    )
 
     socket_name = select_ingress_socket_name()
 

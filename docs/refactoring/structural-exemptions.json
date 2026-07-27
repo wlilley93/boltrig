@@ -170,11 +170,11 @@
       "expires": "2026-10-31"
     },
     "boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py": {
-      "max_file_lines": 577,
+      "max_file_lines": 653,
       "max_function_lines": 79,
       "over_limit_functions": [],
       "owner": "fleet-maintainers",
-      "reason": "Gap 5 threads the per-cell slot through acquire (acquire slot -> admit(slot) -> provision tree -> config via spawner -> start(slot) -> release in the reaper). Audit fixes: a lock now makes the G3 concurrency check + session registration indivisible, and the rollback (teardown/close/cell-tree removal/slot release) is extracted to _abort_acquire, clearing the function debt the old 89-line acquire carried. Kernel-tools lane: the pop-once scope take, lane-aware admit/preflight (extracted to _admit_for_lane/_probe_for_lane), the mcp server config render, and the env-only bearer delivery (_kernel_tools_environment). Follow-up: split the lane branches into a collaborator and lower back. Empty-ceiling scopes now fail closed at admission (the live lane-mismatch fix).",
+      "reason": "Gap 5 threads the per-cell slot through acquire (acquire slot -> admit(slot) -> provision tree -> config via spawner -> start(slot) -> release in the reaper). Audit fixes: a lock now makes the G3 concurrency check + session registration indivisible, and the rollback (teardown/close/cell-tree removal/slot release) is extracted to _abort_acquire, clearing the function debt the old 89-line acquire carried. Kernel-tools lane: the pop-once scope take, lane-aware admit/preflight (extracted to _admit_for_lane/_probe_for_lane), the mcp server config render, and the env-only bearer delivery (_kernel_tools_environment). Follow-up: split the lane branches into a collaborator and lower back. Empty-ceiling scopes now fail closed at admission (the live lane-mismatch fix). FINDING #3: registration now DECLARES the cell's identity from its slot (_expected_cell_credentials) and is extracted to _register_spawned_cell, because capturing it from /proc raced the spawner's fork-then-drop and registered root (the cv-boltrig-kernel-1 model-bearer outage of 2026-07-27).",
       "expires": "2026-12-31"
     },
     "boltrig/fleet/infrastructure/memory_model_proxy_grants.py": {
