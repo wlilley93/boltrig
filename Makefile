@@ -36,7 +36,7 @@ RELEASE_VALIDATE_IMAGES_ENV ?= tests/fixtures/release-images.env
 RELEASE_PROFILES ?= --profile backup
 
 .DEFAULT_GOAL := help
-.PHONY: help gate-status relock up down logs test lint architecture structure codex-protocol unwired-claims reachability prose-references refresh-canon-citations refresh-opbox-surface fleet-drift gate-coverage health-claims order-directives typecheck check python-quality ui-install ui-quality site-install site-quality ui-e2e compose-validate release-validate release-up doctor-fixture migration-parity python-audit sast iac-scan secret-scan actionlint security-source quality live-check lockfile-policy dependency-audit smoke invariants doctor migrate secure-up backup backup-schedule restore
+.PHONY: help gate-status relock fleet-drift-all up down logs test lint architecture structure codex-protocol unwired-claims reachability prose-references refresh-canon-citations refresh-opbox-surface fleet-drift gate-coverage health-claims order-directives typecheck check python-quality ui-install ui-quality site-install site-quality ui-e2e compose-validate release-validate release-up doctor-fixture migration-parity python-audit sast iac-scan secret-scan actionlint security-source quality live-check lockfile-policy dependency-audit smoke invariants doctor migrate secure-up backup backup-schedule restore
 
 help: ## List the available targets
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -131,6 +131,20 @@ refresh-opbox-surface: ## Re-vendor tests/fixtures/opbox-model-surface.txt from 
 fleet-drift: ## Is what is RUNNING what we pinned? (needs a box; not a CI gate)
 	$(PY) scripts/check_fleet_drift.py --host $(DRIFT_HOST) --project $(DRIFT_PROJECT) \
 		--compose $(DRIFT_COMPOSE) --overlay $(DRIFT_OVERLAY)
+
+# Both prod tenants in one command. `fleet-drift` alone only ever asked about
+# app.boltrig.io, so the CLIENT tenant was never checked by the default
+# invocation - a drift tool that answers for one of two boxes reads as answering
+# for the fleet. Fails on the FIRST tenant that drifts, deliberately: a partial
+# answer here is the thing being fixed.
+fleet-drift-all: ## Drift + bind-mount staleness for EVERY prod tenant
+	@$(MAKE) --no-print-directory fleet-drift \
+		DRIFT_PROJECT=boltrig \
+		DRIFT_OVERLAY=$(HOME)/Projects/opbox-prod/boltrig-tenants/boltrig-io.override.yml
+	@echo
+	@$(MAKE) --no-print-directory fleet-drift \
+		DRIFT_PROJECT=cv-boltrig \
+		DRIFT_OVERLAY=$(HOME)/Projects/opbox-prod/boltrig-tenants/cv/compose.override.yml
 
 override-locks: ## A security override that did not reach the lock is not an override
 	$(PY) scripts/check_override_locks.py

@@ -28,6 +28,43 @@ uses `--no-build`. The release overlay also removes the developer bind mount of
 host source. Set `RELEASE_PROFILES=` only when backup scheduling is provided and
 verified by an external operator mechanism.
 
+## `git pull` on the deployment tree IS a deploy step
+
+The images above are digest-pinned, and that covers only what is IN them. The base
+compose bind-mounts host paths straight into running containers, and those bytes
+come from a git checkout on the box, not from any image:
+
+| container | mounted from the deployment tree |
+| --- | --- |
+| kernel, fleet-worker | `manifest.yaml`, `libraries/` (the skills the agents load) |
+| postgres | `boltrig/store/schema.sql` |
+
+**A bind-mounted directory is a deployment surface exactly like an image tag, and
+digest pinning does nothing for it.** On 2026-07-27 `app.boltrig.io` was serving a
+correctly-pinned kernel while its deployment tree sat 57 commits behind `main`. A
+merged fix to `libraries/skills/ops/opbox.yaml` - eight `tool_grants` naming the
+kernel door's noun-first verbs while the tenant runs the frontend door's verb-first
+ones, so none of them resolved and the skill's Opbox reach was nil - stayed
+undelivered for three days. Nothing was wrong with the release; the deploy was
+simply half done, and no step in this document said so.
+
+So a roll is:
+
+```bash
+# 1. the tree the containers read from
+ssh <host> 'cd ~/Projects/boltrig-main && git pull --ff-only origin main'
+# 2. the images
+docker compose ... pull && docker compose ... up -d
+# 3. prove BOTH halves landed, on EVERY tenant, before calling it done
+make fleet-drift-all
+```
+
+`make fleet-drift-all` compares each pinned digest against what the daemon is
+actually running AND reports any bind-mounted path whose upstream has commits it
+has not pulled. Staleness is scoped to the mounted path, so an unrelated merge does
+not turn it red; a detached HEAD on a deployment tree is reported as the finding it
+is. It needs a box, so it is an operator command and never a CI gate.
+
 ## TLS in transit (SEC-10)
 
 Run the secure overlay, which puts a Caddy TLS terminator in front of the UI and

@@ -1,4 +1,35 @@
 version: 2
+
+# GitHub Packages, for the first-party @wlilley93/boltrig-web-sdk that ui/.npmrc
+# scopes there. WITHOUT THIS the /ui npm ecosystem fails 100% of its runs:
+#
+#   Error while accessing npm.pkg.github.com ... {"error":"authentication token
+#   not provided"}
+#   Handled error whilst updating vite: private_source_authentication_failure
+#
+# and the failure is per-DEPENDENCY, so NOTHING in /ui gets updated - nine errors
+# in one run, none of them about the SDK. It failed silently for as long as it has
+# existed, because a failed Dependabot job is not a failed CI check and nothing
+# read its verdict (see #134, which also found `docker in /.` dead the same way).
+#
+# GITHUB_TOKEN is NOT available to Dependabot the way it is to Actions, so this
+# needs a Dependabot secret. It wants ONE scope, `read:packages`, and nothing else:
+#
+#   gh secret set GH_PACKAGES_READ_TOKEN --app dependabot --repo wlilley93/boltrig
+#
+# Until that secret exists the ecosystem keeps failing. It may now name the missing
+# secret rather than the missing token - which would be an improvement, since the
+# current error blames npm.pkg.github.com and reads like an upstream outage. Either
+# way it was failing before and fails after, so this block risks nothing and leaves
+# a paste rather than an investigation. NOT verified, because verifying it means
+# pushing and watching a scheduled run; if it turns out to fail more loudly, that is
+# the intended direction.
+registries:
+  npm-github:
+    type: npm-registry
+    url: https://npm.pkg.github.com
+    token: ${{secrets.GH_PACKAGES_READ_TOKEN}}
+
 updates:
   - package-ecosystem: pip
     directory: /
@@ -35,6 +66,10 @@ updates:
 
   - package-ecosystem: npm
     directory: /ui
+    # ui/.npmrc scopes @wlilley93 at npm.pkg.github.com; without the registry
+    # below Dependabot cannot install and updates NOTHING here.
+    registries:
+      - npm-github
     schedule:
       interval: weekly
       day: monday
