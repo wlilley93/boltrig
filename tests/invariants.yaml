@@ -2050,3 +2050,12 @@ invariants:
       - tests/security/test_auth_audit_is_keys_only.py::test_login_audits_the_session_id_and_never_the_password_secret_or_csrf
       - tests/security/test_auth_audit_is_keys_only.py::test_a_failed_login_audits_the_outcome_and_never_the_attempted_password
       - tests/security/test_auth_audit_is_keys_only.py::test_the_guarantee_is_positional_and_not_the_write_time_scrubber
+  SEC-192:
+    description: 'Every list view on the account & access-management surface publishes exactly its declared keys and no credential material. Proved POSITIONALLY: each source row carries a unique sentinel in its secret-bearing attribute and the sentinel must not appear anywhere in the rendered view, so a renamed or newly passed-through field fails whatever it is called. The key set is pinned by set equality, so a view cannot satisfy the sentinel by dropping one secret while adding another field. has_key is DERIVED from the credential ref, never defaulted.'
+    tests:
+      - tests/security/test_access_views_carry_no_secret.py::test_the_pat_list_view_carries_neither_the_secret_nor_its_hash
+      - tests/security/test_access_views_carry_no_secret.py::test_the_ai_config_view_reports_that_a_key_exists_without_carrying_it
+      - tests/security/test_access_views_carry_no_secret.py::test_the_ai_config_view_distinguishes_no_key_from_a_key_it_will_not_show
+      - tests/security/test_access_views_carry_no_secret.py::test_the_org_view_carries_the_policy_flags_and_nothing_nested_in_settings
+      - tests/security/test_access_views_carry_no_secret.py::test_each_view_publishes_exactly_these_keys_and_no_others
+      - tests/security/test_access_views_carry_no_secret.py::test_the_user_directory_view_carries_no_credential_material
