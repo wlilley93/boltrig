@@ -1,0 +1,239 @@
+# The REGISTERED verb surface, vendored so the skill-grant gates can expand
+# tool_grants without a live database.
+#
+# Format: <verb id><TAB><adapter id><TAB><adapter runtime>
+#
+# Provenance: captured 2026-07-27 from the Classical Visas tenant
+# (cv-boltrig-postgres-1, database cvboltrig), joining verbs to verb_bindings to
+# adapters. Refresh with: python scripts/refresh_verb_surface.py
+#
+# WHY THE RUNTIME COLUMN. An adapter with runtime `mcp` is a CONSUMED server: its
+# tool surface is chosen by the far side and returned from tools/list, so it can
+# grow between deploys with no commit in this repo. That is what makes a wildcard
+# over it selection-by-upper-bound rather than a selection. Every other runtime
+# ships its verbs from code here, so a wildcard expands to a set we authored.
+#
+# The namespace cannot be derived from the adapter id (`memory-tickets` serves
+# `ticket.*`, `browser-cli` serves `browser.*`), and it cannot be derived from the
+# filesystem either: builtin adapters bootstrap from scattered modules
+# (boltrig.config.control_plane, boltrig.memory.adapter), not one registry, so
+# globbing boltrig/adapters/builtin/ wrongly marks `control` and `memory` as
+# consumed. That was tried and the gate went red on two false positives. The
+# binding row is the only honest source.
+#
+# WHY THIS FILE EXISTS. [2026] VJS-COUNTY (SUBMISSION-2026-07-27-123842) CP1
+# orders a gate expanding every shipped skill's tool_grants against the FULL
+# registered verb set. A gate that can only run where a database is reachable is
+# a gate that silently skips, which this repo has already been bitten by (~156
+# tests skip when BOLTRIG_TEST_DATABASE_URL is unset). So it is vendored.
+#
+# THE TRAP THIS FILE IS IN. A vendored snapshot goes stale, and staleness is what
+# CP1 exists to catch: the 2026-07-24 wildcard fix narrowed ops/opbox to eight
+# verbs written against the opbox KERNEL door (noun-first, `opbox.matter.list`)
+# while the tenant runs the FRONTEND door (verb-first, `opbox.list_matters`).
+# Zero of the eight resolve. The skill has been inert since the outage was
+# "fixed" and nothing could have said so. Treat a dead-grant failure as evidence
+# about the SKILL until a refresh proves it is evidence about the SURFACE.
+#
+# NATIVE TARGETS. A verb may bind to a kernel-native target (`native:questions`)
+# that has no adapters row, so this MUST be a left join: an inner join silently
+# dropped chat.ask_user (196 of 197) and the dead-grant gate then reported a false
+# positive against a verb that exists. Native targets are recorded with runtime
+# `native` and are definitionally not consumed - the kernel authors them.
+browser.auth.status	browser-cli	script
+browser.doctor	browser-cli	script
+browser.page.info	browser-cli	script
+browser.remote.start	browser-cli	script
+browser.remote.stop	browser-cli	script
+browser.tab.open	browser-cli	script
+calendar.create_event	ms-graph	http
+channel.send	channel-send	script
+chat.ask_user	native:questions	native
+chat.post_message	ms-graph	http
+contact.read	crm-sql	sql
+contact.search	crm-sql	sql
+control.adapter.activate	control	script
+control.adapter.deactivate	control	script
+control.adapter.delete	control	script
+control.adapter.generate	control	script
+control.ai_key.delete	control	script
+control.ai_key.set	control	script
+control.binding.set	control	script
+control.budget.reset	control	script
+control.budget.upsert	control	script
+control.capability.upsert	control	script
+control.channel.bind	control	script
+control.channel.configure	control	script
+control.channel.connect	control	script
+control.channel.disconnect	control	script
+control.channel.pair	control	script
+control.channel.unbind	control	script
+control.config.rollback	control	script
+control.config.upsert	control	script
+control.eval_case.upsert	control	script
+control.invitation.create	control	script
+control.invitation.revoke	control	script
+control.mcp_server.register	control	script
+control.model_endpoint.upsert	control	script
+control.notification.route	control	script
+control.noun.define	control	script
+control.org.update	control	script
+control.skill.upsert	control	script
+control.user.deactivate	control	script
+control.user.update	control	script
+control.verb.define	control	script
+control.workflow.execute	control	script
+control.workflow.schedule	control	script
+control.workflow.trigger	control	script
+control.workflow.upsert	control	script
+control.workspace.create	control	script
+control.workspace.member.add	control	script
+control.workspace.member.remove	control	script
+control.workspace.update	control	script
+desktop.app.launch	desktop	file
+desktop.window.arrange	desktop	file
+desktop.window.focus	desktop	file
+desktop.window.list	desktop	file
+desktop.window.move	desktop	file
+desktop.workspace.switch	desktop	file
+directory.get_user	ms-graph	http
+document.create	ms-graph	http
+document.read	ms-graph	http
+document.search	ms-graph	http
+document.update	ms-graph	http
+email.send	ms-graph	http
+herdr.pane.list	herdr	script
+herdr.pane.read	herdr	script
+herdr.pane.run	herdr	script
+herdr.pane.split	herdr	script
+herdr.snapshot	herdr	script
+herdr.tab.create	herdr	script
+knowledge.asset.erase	knowledge	script
+knowledge.asset.get	knowledge	script
+knowledge.asset.list	knowledge	script
+knowledge.asset.original	knowledge	script
+knowledge.context.build	knowledge	script
+knowledge.provider.disable	knowledge	script
+knowledge.provider.enable	knowledge	script
+knowledge.providers.list	knowledge	script
+knowledge.search	knowledge	script
+knowledge.upload.begin	knowledge	script
+knowledge.upload.commit	knowledge	script
+knowledge.upload.stage	knowledge	script
+memory.forget	memory	script
+memory.improve	memory	script
+memory.recall	memory	script
+memory.remember	memory	script
+opbox.add_comment	opbox	mcp
+opbox.add_line_item	opbox	mcp
+opbox.add_member	opbox	mcp
+opbox.add_subtask	opbox	mcp
+opbox.archive_document	opbox	mcp
+opbox.assign_step	opbox	mcp
+opbox.backfill_matter_files	opbox	mcp
+opbox.bridge_kyc_documents	opbox	mcp
+opbox.browse_entity_files	opbox	mcp
+opbox.browse_smart_folders	opbox	mcp
+opbox.call_api_endpoint	opbox	mcp
+opbox.check_file_sensitivity	opbox	mcp
+opbox.complete_step	opbox	mcp
+opbox.complete_subtask	opbox	mcp
+opbox.consume_approve_token	opbox	mcp
+opbox.create_filing_folder	opbox	mcp
+opbox.create_kyc_person_folder	opbox	mcp
+opbox.create_matter	opbox	mcp
+opbox.delete_line_item	opbox	mcp
+opbox.describe_tools	opbox	mcp
+opbox.download_document	opbox	mcp
+opbox.duplicate_file	opbox	mcp
+opbox.execute_workflow	opbox	mcp
+opbox.fill_step_form	opbox	mcp
+opbox.get_board	opbox	mcp
+opbox.get_document	opbox	mcp
+opbox.get_document_content	opbox	mcp
+opbox.get_document_extractions	opbox	mcp
+opbox.get_document_presence	opbox	mcp
+opbox.get_entity_files_deep	opbox	mcp
+opbox.get_extraction_quality	opbox	mcp
+opbox.get_file_record	opbox	mcp
+opbox.get_file_version_history	opbox	mcp
+opbox.get_identity_review_queue	opbox	mcp
+opbox.get_individual_files_deep	opbox	mcp
+opbox.get_matter	opbox	mcp
+opbox.get_matter_by_number	opbox	mcp
+opbox.get_matter_documents	opbox	mcp
+opbox.get_my_transcript	opbox	mcp
+opbox.get_notifications	opbox	mcp
+opbox.get_open_escalations	opbox	mcp
+opbox.get_registry_coverage	opbox	mcp
+opbox.get_stakeholder_file_timeline	opbox	mcp
+opbox.get_step_form_data	opbox	mcp
+opbox.knowledge_search	opbox	mcp
+opbox.link_entity_to_matter	opbox	mcp
+opbox.link_files	opbox	mcp
+opbox.link_file_to_entity	opbox	mcp
+opbox.link_individual_to_matter	opbox	mcp
+opbox.list_access_grants	opbox	mcp
+opbox.list_api_endpoints	opbox	mcp
+opbox.list_archived_documents	opbox	mcp
+opbox.list_awaiting_approvals	opbox	mcp
+opbox.list_board_properties	opbox	mcp
+opbox.list_boards	opbox	mcp
+opbox.list_documents	opbox	mcp
+opbox.list_file_links	opbox	mcp
+opbox.list_files_for_entity	opbox	mcp
+opbox.list_files_for_matter	opbox	mcp
+opbox.list_files_for_row	opbox	mcp
+opbox.list_labels	opbox	mcp
+opbox.list_line_items	opbox	mcp
+opbox.list_matter_emails	opbox	mcp
+opbox.list_matters	opbox	mcp
+opbox.list_members	opbox	mcp
+opbox.list_my_transcripts	opbox	mcp
+opbox.list_steps_by_status	opbox	mcp
+opbox.list_subtasks	opbox	mcp
+opbox.list_workflows	opbox	mcp
+opbox.list_workspace_grants	opbox	mcp
+opbox.mark_notifications_read	opbox	mcp
+opbox.mint_approval_pair	opbox	mcp
+opbox.mint_approve_token	opbox	mcp
+opbox.patch_document	opbox	mcp
+opbox.preview_step_document	opbox	mcp
+opbox.purge_archived_document	opbox	mcp
+opbox.reject_step	opbox	mcp
+opbox.remove_member	opbox	mcp
+opbox.reopen_step	opbox	mcp
+opbox.request_file_access	opbox	mcp
+opbox.resolve_escalation	opbox	mcp
+opbox.resolve_identity_review	opbox	mcp
+opbox.resolve_row_identity	opbox	mcp
+opbox.respond_to_acceptance_gate	opbox	mcp
+opbox.revoke_approval_token	opbox	mcp
+opbox.run_extraction	opbox	mcp
+opbox.scaffold_form_from_pack	opbox	mcp
+opbox.search	opbox	mcp
+opbox.search_matters	opbox	mcp
+opbox.skip_step	opbox	mcp
+opbox.sync_matter_entity_links	opbox	mcp
+opbox.unlink_files	opbox	mcp
+opbox.update_document	opbox	mcp
+opbox.update_line_item	opbox	mcp
+opbox.update_matter	opbox	mcp
+opbox.update_matter_metadata	opbox	mcp
+opbox.update_member_role	opbox	mcp
+opbox.update_step_config	opbox	mcp
+opbox.update_subtask	opbox	mcp
+runpod.pod.get	runpod	http
+runpod.pod.list	runpod	http
+runpod.pod.restart	runpod	http
+runpod.pod.start	runpod	http
+runpod.pod.stop	runpod	http
+skill.describe	skill-shelf	script
+skill.load	skill-shelf	script
+skill.search	skill-shelf	script
+ticket.comment	jira	http
+ticket.create	memory-tickets	script
+ticket.read	memory-tickets	script
+ticket.search	jira	http
+ticket.update	jira	http
+web.fetch	web	http

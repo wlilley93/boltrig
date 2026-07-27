@@ -17,20 +17,45 @@ locale: en
 description: Query and act on the connected Opbox workspace (matters, parties, workflow runs, agent tasks) through the governed opbox.* verbs - use when asked about matters, parties, or work in Opbox.
 prompt_fragment: |
   You can read and act on the connected Opbox workspace through the governed
-  opbox.* verbs: list and inspect matters (opbox.matter.list / opbox.matter.get),
-  parties (opbox.party.list / opbox.party.get), workflow runs
-  (opbox.workflow.run.list / opbox.workflow.run.get), and agent tasks
-  (opbox.agenttask.ext.create / opbox.agenttask.ext.update). Reads are
-  immediate; any create or update is high consequence and will hold for human
-  approval - report a pending approval honestly rather than claiming the change.
+  opbox verbs.
+
+  To find matters by topic or content, use opbox.search_matters - it deep-searches
+  titles, labels, board properties, step form data and linked document titles, and
+  tells you where each match was found. Prefer it over opbox.list_matters for any
+  "which matters relate to X" question. opbox.search is the broader cross-entity
+  search. Once you have a matter id, opbox.get_matter returns its full detail, and
+  opbox.get_matter_documents / opbox.get_document_content read the documents on it.
+
+  If you need a capability you have not been given, call opbox.describe_tools with
+  the relevant category to load its full tool definitions before using them.
+
+  Reads are immediate. opbox.add_comment is high consequence and will hold for
+  human approval - report a pending approval honestly rather than claiming the
+  change was made.
+# Every token below is asserted to resolve against the registered surface by
+# tests/security/test_skill_grant_expansion.py. The previous enumeration named
+# eight verbs in the opbox KERNEL door's noun-first form (opbox.matter.list); the
+# tenant runs the FRONTEND door's verb-first form (opbox.list_matters), so ZERO
+# of them resolved and this skill's opbox reach was nil from 2026-07-24 until
+# 2026-07-27. Re-authored against the surface that is actually registered.
 tool_grants:
-  - opbox.matter.list
-  - opbox.matter.get
-  - opbox.party.list
-  - opbox.party.get
-  - opbox.workflow.run.list
-  - opbox.workflow.run.get
-  - opbox.agenttask.ext.create
-  - opbox.agenttask.ext.update
+  # discovery: lets the model load a category's schemas before using its tools
+  - opbox.describe_tools
+  # search: the preferred entry point for "which matters relate to X"
+  - opbox.search
+  - opbox.search_matters
+  # matters
+  - opbox.list_matters
+  - opbox.get_matter
+  - opbox.get_matter_by_number
+  - opbox.get_matter_documents
+  # documents
+  - opbox.list_documents
+  - opbox.get_document
+  - opbox.get_document_content
+  # workflows
+  - opbox.list_workflows
+  # the one write, deliberately: high consequence, so it holds for human approval
+  - opbox.add_comment
   - memory.*
   - chat.ask_user

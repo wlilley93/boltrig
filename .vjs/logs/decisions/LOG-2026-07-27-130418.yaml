@@ -1,0 +1,12 @@
+id: LOG-2026-07-27-130418
+time: 2026-07-27T13:04:18.076215262+00:00
+actor: lexby
+kind: fix
+issue: agent-tool-progressive-disclosure
+decision: Land CP1+CP2 as three seeded-failure gates over skill tool_grants, and repair the ops/opbox skill whose eight grants resolved to zero registered verbs
+basis:
+- '[2026] VJS-COUNTY SUBMISSION-2026-07-27-123842 CP1/CP2; CONVENING-county-2026-07-27-125100'
+risk: medium
+reversibility: easy
+court_required: false
+why: 'The ratio holds that offering is an affirmative enumerated task-scoped choice made from within the authority bound, never selection by the bound itself. Three ways the selection slot fails: a wildcard over a consumed namespace (the 2026-07-24 outage), an expansion above MAX_KERNEL_TOOLS (the same outage from the other side), and an expansion to ZERO. The third was not ordered and was found while implementing the first two: the 07-24 fix narrowed opbox.* to eight verbs written in the opbox KERNEL door''s noun-first form while the tenant runs the FRONTEND door''s verb-first form, so zero resolved and the skill was inert from 2026-07-24 to 2026-07-27. An over-wide grant announces itself by breaking every turn; a dead grant is silent, so it needs a gate more, not less. Each gate proven red on its own seeded failure and green at baseline.'
