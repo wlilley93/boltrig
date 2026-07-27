@@ -12,10 +12,29 @@ from urllib.parse import parse_qs, urlsplit, urlunsplit
 import asyncpg
 import pytest
 
-_PG_CLIENT_IMAGE = (
-    "pgvector/pgvector:pg16@"
-    "sha256:131dcf7ff6a900545df8e7e092c270aa8c6db2f2c818e408cb45ec21316b74e6"
-)
+_REPO = Path(__file__).resolve().parents[2]
+_BACKUP_DOCKERFILE = _REPO / "deploy" / "backup.Dockerfile"
+
+
+def _shipped_pg_client_image() -> str:
+    """The base image `deploy/backup.Dockerfile` actually ships, read from it.
+
+    DERIVED, not restated. This module named its own
+    `pgvector/pgvector:pg16@sha256:...` literal, so the drill exercised a client
+    that had no connection to the one in production. The consequence is precise:
+    dependabot #4 proposes moving the backup image from postgres 16 to 18, and its
+    green run would have told us nothing at all, because the drill would have gone
+    on dumping and restoring with a pg16 client either way. A drill that cannot
+    detect the change it is meant to gate is a drill in name only.
+
+    The Dockerfile's first FROM is the base the backup tools come from, and it is
+    digest-pinned there (IAC-002), so this carries the pin without duplicating it.
+    """
+    for line in _BACKUP_DOCKERFILE.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("FROM "):
+            return stripped.split()[1]
+    raise AssertionError(f"no FROM line in {_BACKUP_DOCKERFILE}")
 
 
 def _dsn_with_database(dsn: str, database: str) -> str:
@@ -78,7 +97,7 @@ def _run_pg_tool(
             *env_flags,
             "--volume",
             f"{workdir}:/backup",
-            _PG_CLIENT_IMAGE,
+            _shipped_pg_client_image(),
             tool,
             *arguments,
         ],

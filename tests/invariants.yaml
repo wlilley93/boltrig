@@ -1736,6 +1736,11 @@ invariants:
     description: 'High and critical IaC misconfigurations block both local security-source and canonical security CI through a digest-pinned Trivy binary and its embedded version-matched policy bundle without credentials or mutable policy downloads; the narrow root-runtime exceptions are path-scoped, owned, justified, compensating-control documented, and expiring.'
     tests:
       - tests/deploy/test_iac_scan_policy.py::test_iac_scan_is_pinned_offline_blocking_and_ci_enforced
+  IAC-004:
+    description: 'The repository declares ONE Python version. Every place that names it - the kernel, fleet and channel-gateway images, every python-version in CI and the security workflow, requires-python, ruff''s target-version and mypy''s python_version - must agree, and the channel-gateway lock must record the same interpreter that compiled it. An image running a Python the suite never executes means a green check proves the image BUILDS, not that the code RUNS.'
+    tests:
+      - tests/deploy/test_python_version_is_one_version.py::test_every_python_declaration_agrees_on_one_version
+      - tests/deploy/test_python_version_is_one_version.py::test_the_channel_gateway_lock_is_compiled_for_that_same_version
   FR-OPS-02:
     description: 'Compose validation is reproducible from a clean checkout by using the checked non-secret example environment and a validation-only database password; operator launches retain the conventional ignored .env default.'
     tests:

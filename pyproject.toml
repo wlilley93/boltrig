@@ -67,7 +67,7 @@ dev = [
     "types-jsonschema==4.26.0.20260518",
     # Third-party stubs for PyYAML (boltrig/emotion/tables.py's yaml.safe_load),
     # pinned exactly on the same precedent as types-jsonschema above.
-    "types-PyYAML==6.0.12.20260518",
+    "types-PyYAML==6.0.12.20260724",
     # Source-security tools are exact-pinned so `make quality` and CI run the
     # same analyzers rather than whatever a developer happens to have globally.
     "pip-audit==2.10.1",
