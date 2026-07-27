@@ -19,6 +19,7 @@ from boltrig.fleet.ports.runtime import (
     TurnSteerRequest,
 )
 
+from .codex_diagnostics import log_operation_failure
 from .codex_runtime_actor import (
     MAX_BUFFERED_RUNTIME_EVENTS,
     CodexRuntimeActor,
@@ -222,7 +223,8 @@ class CodexAgentRuntime(AgentRuntime):
             except (CodexRuntimeBindingError, CodexRuntimeProtocolError):
                 await self._fail_operation(state, "Codex turn start violated its binding")
                 raise
-            except Exception:
+            except Exception as exc:
+                log_operation_failure("start_turn", exc)
                 await self._fail_operation(state, "Codex turn start failed")
                 raise CodexRuntimeOperationError("Codex turn start failed") from None
 
