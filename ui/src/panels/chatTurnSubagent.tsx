@@ -3,6 +3,8 @@
 // nests (the consumer-side run nesting).
 
 import type { CSSProperties } from "react";
+import { Familiar, useFamiliarAvailable } from "@/familiar/Familiar";
+import { stableAgentKey } from "@/familiar/genotype";
 import type { SubagentEntry } from "@/panels/chatTurnTypes";
 import { cleanTaskText } from "@/panels/shared";
 
@@ -28,15 +30,37 @@ export function SubagentCard({
   const role = sub.role ?? "ephemeral";
   const initials = sub.initials ?? initialsOf(name);
   const stepCount = sub.stepCount ?? sub.skills.length;
+
+  // A fan-out is exactly where the familiar earns its place: three subagents called "Third
+  // architecture", "Third observability" and "Third reliability" are almost unreadable as
+  // names and instantly separable as shapes.
+  //
+  // The key is the NAME, never sub.childRunId - see stableAgentKey. An unnamed subagent
+  // derives from its role alone, so it looks like its kind without claiming to be a
+  // particular individual.
+  const key = stableAgentKey({ name: sub.name, runId: sub.childRunId });
+  const showFamiliar = useFamiliarAvailable();
+
   return (
     <div
       className="subagent-card"
       style={{ "--agent-color": agentColor } as CSSProperties}
     >
       <div className="subagent-card__head">
-        <span className="subagent-card__avatar" style={{ background: agentColor }}>
-          {initials}
-        </span>
+        {showFamiliar ? (
+          <span className="subagent-card__avatar subagent-card__avatar--familiar">
+            <Familiar
+              agent={{ id: key ?? `role:${role}`, role }}
+              size={24}
+              run={{ status: "running" }}
+              title={`${name}, ${role}`}
+            />
+          </span>
+        ) : (
+          <span className="subagent-card__avatar" style={{ background: agentColor }}>
+            {initials}
+          </span>
+        )}
         <span className="subagent-card__meta">
           <span className="subagent-card__name" style={{ color: agentColor }}>
             {name}

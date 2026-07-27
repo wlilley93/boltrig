@@ -72,6 +72,27 @@ test: ## Run the test suite (set BOLTRIG_TEST_DATABASE_URL to also run the Postg
 	$(PY) -m pytest -q
 
 lint: ## Run ruff over the Python source, scripts, and tests
+# The version check is the gate, and the lint is what it protects.
+#
+# `$(PY) -m ruff` runs whatever happens to be in the venv, and on 2026-07-27 that had drifted
+# to 0.16.0 while requirements-dev-lock.txt pins 0.15.21. The newer ruff invented 800 findings
+# in files nobody had touched, so `make lint` failed on a MAIN that CI reported green. A local
+# gate that fails on clean main is worse than no local gate: it teaches everyone to skip the
+# step, and then it is not there on the day it would have caught something.
+#
+# The drift is dangerous in both directions. A newer ruff cries wolf; an older one would pass
+# code CI rejects, and you would only learn that from a red CI run after pushing.
+	@LOCKED=$$(grep -oP '^ruff==\K[0-9.]+' requirements-dev-lock.txt | head -1); \
+	HAVE=$$($(PY) -m ruff --version 2>/dev/null | awk '{print $$2}'); \
+	if [ -z "$$HAVE" ]; then \
+	  echo "make lint: no ruff in $(PY). Install the dev lock: uv pip sync requirements-dev-lock.txt"; exit 1; \
+	elif [ "$$HAVE" != "$$LOCKED" ]; then \
+	  echo "make lint: ruff $$HAVE is installed, requirements-dev-lock.txt pins $$LOCKED."; \
+	  echo "           This is NOT the linter CI runs, so its verdict does not mean what it looks like."; \
+	  echo "           Fix:  uv pip sync requirements-dev-lock.txt"; \
+	  echo "           Or run the pinned one directly:  uvx ruff@$$LOCKED check boltrig scripts tests"; \
+	  exit 1; \
+	fi
 	$(PY) -m ruff check boltrig scripts tests
 
 architecture: ## Enforce inward-only thin-orchestration dependencies
@@ -98,19 +119,11 @@ DRIFT_HOST ?= jellytot-prod
 DRIFT_PROJECT ?= boltrig
 DRIFT_COMPOSE ?= $(HOME)/Projects/boltrig-main/docker-compose.yml
 DRIFT_OVERLAY ?= $(HOME)/Projects/opbox-prod/boltrig-tenants/boltrig-io.override.yml
-DRIFT_HOST ?= jellytot-prod
-DRIFT_PROJECT ?= boltrig
-DRIFT_COMPOSE ?= $(HOME)/Projects/boltrig-main/docker-compose.yml
-DRIFT_OVERLAY ?= $(HOME)/Projects/opbox-prod/boltrig-tenants/boltrig-io.override.yml
 refresh-canon-citations: ## Re-vendor .vjs/canon-citations.txt from the canon register
 	$(PY) scripts/refresh_canon_citations.py --canon $(CANON_REPO)
 
 refresh-opbox-surface: ## Re-vendor tests/fixtures/opbox-model-surface.txt from the opbox schema
 	$(PY) scripts/refresh_opbox_surface.py --opbox $(OPBOX_REPO)
-
-fleet-drift: ## Is what is RUNNING what we pinned? (needs a box; not a CI gate)
-	$(PY) scripts/check_fleet_drift.py --host $(DRIFT_HOST) --project $(DRIFT_PROJECT) \
-		--compose $(DRIFT_COMPOSE) --overlay $(DRIFT_OVERLAY)
 
 fleet-drift: ## Is what is RUNNING what we pinned? (needs a box; not a CI gate)
 	$(PY) scripts/check_fleet_drift.py --host $(DRIFT_HOST) --project $(DRIFT_PROJECT) \

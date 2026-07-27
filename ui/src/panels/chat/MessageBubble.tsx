@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import type { ChatMessage } from "@/api/types";
 import type { Speech } from "@/voice";
 import { AgentAvatar } from "@/panels/chat/AgentAvatar";
+import { useSpeakingLevel } from "@/familiar/voiceLevel";
 import { AttachmentList } from "@/panels/chat/AttachmentChip";
 import { CopyButton } from "@/panels/chat/CopyButton";
 import type { ChatAgent } from "@/panels/chat/constants";
@@ -95,6 +96,11 @@ export function MessageBubble(props: MessageBubbleProps): JSX.Element {
   const { message, agent, resolvedHitls, onResolve, canRegenerate, regenerating, onRegenerate, onOpenRun, speech } = props;
   const turn = useMemo(() => normalizeEvents(message.events ?? []), [message.events]);
   const isAssistant = message.role === "assistant";
+  // Read-aloud makes the agent's own familiar pulse, so a call reads as that agent talking
+  // rather than as a speaker icon lighting up somewhere else on the row. This is a SYNTHESISED
+  // envelope, not metering - speechSynthesis exposes no output level at all - which is why the
+  // hook is named for speaking rather than for volume.
+  const speakingLevel = useSpeakingLevel(speech.speakingKey === message.id);
   const superseded = Boolean(message.superseded_by);
 
   const body = (
@@ -120,7 +126,7 @@ export function MessageBubble(props: MessageBubbleProps): JSX.Element {
     >
       {isAssistant ? (
         <div className="chat-msg__head">
-          <AgentAvatar agent={agent} size={22} status={false} />
+          <AgentAvatar agent={agent} size={22} status={false} voice={speakingLevel} />
           <span className="chat-msg__role">{agent.name}</span>
           <span className="chat-msg__time" title={message.created_at}>{whenText(message.created_at)}</span>
         </div>
