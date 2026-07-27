@@ -8,7 +8,11 @@ import re
 import sys
 from typing import Any
 
-FIRST_PARTY_SERVICES = ("kernel", "fleet-worker", "ui", "pi-sidecar", "backup")
+# "pi-sidecar" was the fifth entry until the Pi lane was retired
+# ([2026] VJS-PC 20 L1). It is not merely unpinned now, it does not exist: the
+# loop below fails on a MISSING service as loudly as on an unpinned one, so a
+# stale entry here would break every release rather than pass quietly.
+FIRST_PARTY_SERVICES = ("kernel", "fleet-worker", "ui", "backup")
 _DIGEST_IMAGE = re.compile(r"^[^\s@=]+@sha256:[0-9a-f]{64}$")
 
 

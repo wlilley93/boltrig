@@ -245,6 +245,30 @@ def resolve_coverage(
 
 
 # --------------------------------------------------------------------------- #
+def unwired_check_scripts(recipes: list[tuple[str, str]]) -> list[str]:
+    """Every `scripts/check_*.py` must be invoked by some Makefile recipe.
+
+    (c) A GATE NOBODY RUNS. `scripts/check_reachability.py` was written and merged
+    on 2026-07-27 under a court order, was correct, printed a clean report, and was
+    wired into NO make target and no workflow. It ran exactly once, by hand, on the
+    day it was written. Nothing in this file caught it: the two checks above ask
+    whether the manifests and the `quality` components are reached, and a brand new
+    script is neither. So the gate that exists to find unreached gates had the same
+    hole it was built to close.
+
+    The rule is deliberately crude - the script's filename must appear in some
+    recipe line - because anything cleverer needs a list of which gates count, and
+    that list is the thing that goes stale. A script genuinely meant to be run by
+    hand belongs in a target anyway, even one nothing depends on.
+    """
+    invoked_text = "\n".join(body for _, body in recipes)
+    orphans = []
+    for path in sorted((ROOT / "scripts").glob("check_*.py")):
+        if path.name not in invoked_text:
+            orphans.append(f"scripts/{path.name}")
+    return orphans
+
+
 def main() -> int:
     if not MAKEFILE.exists():
         print(f"FAIL: missing {MAKEFILE.relative_to(ROOT)}", file=sys.stderr)
@@ -254,6 +278,7 @@ def main() -> int:
     validated = compose_validation_inputs(recipes)
     manifests = compose_manifests()
     invoked = workflow_make_targets(set(prereqs))
+    orphan_checks = unwired_check_scripts(recipes)
 
     print("Compose manifests validated by `docker compose config` in the Makefile")
     print("-" * 78)
@@ -285,7 +310,8 @@ def main() -> int:
     print("-" * 78)
     print(
         f"manifests={len(manifests)}  unvalidated={len(unvalidated)}  "
-        f"components={len(gate_prereqs)}  uncovered={len(uncovered)}"
+        f"components={len(gate_prereqs)}  uncovered={len(uncovered)}  "
+        f"orphan_checks={len(orphan_checks)}"
     )
 
     if not gate_prereqs:
@@ -307,8 +333,15 @@ def main() -> int:
             print(f"  - {component}")
         print("  Either run the target in a CI job, or stop calling the aggregate complete.")
 
-    if unvalidated or uncovered:
-        print("\nRESULT: FAIL - a gate input or a release-gate component is unreached.")
+    if orphan_checks:
+        print("\nORPHAN check scripts (no Makefile recipe runs them):")
+        for script in orphan_checks:
+            print(f"  - {script}")
+        print("  Give each one a target. A gate nobody runs protects nothing.")
+
+    if unvalidated or uncovered or orphan_checks:
+        print("\nRESULT: FAIL - a gate input, a release-gate component or a check "
+              "script is unreached.")
         return 1
     print("\nRESULT: PASS - every compose manifest is validated and every "
           f"`{RELEASE_GATE_TARGET}` component runs in CI.")

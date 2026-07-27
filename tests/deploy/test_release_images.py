@@ -29,7 +29,7 @@ def _valid_environment() -> dict[str, str]:
 
 @pytest.mark.security
 @pytest.mark.invariant("SEC-137")
-def test_release_image_environment_requires_exactly_five_digest_refs(tmp_path: Path) -> None:
+def test_release_image_environment_requires_exactly_four_digest_refs(tmp_path: Path) -> None:
     path = tmp_path / "boltrig-images.env"
     values = _valid_environment()
     _write_environment(path, values)
@@ -56,7 +56,7 @@ def test_release_image_environment_requires_exactly_five_digest_refs(tmp_path: P
 def _compose_document() -> dict:
     services = {
         name: {"image": f"registry.invalid/boltrig/{name}@sha256:{'1' * 64}"}
-        for name in ("kernel", "fleet-worker", "ui", "pi-sidecar", "backup")
+        for name in ("kernel", "fleet-worker", "ui", "backup")
     }
     services["backup"]["volumes"] = [{"target": "/backups"}]
     services["local-model"] = {"ports": [{"host_ip": "127.0.0.1"}]}

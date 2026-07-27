@@ -84,10 +84,11 @@ Three additions sit on the same thin core (the dispatch sequence is unchanged):
   advertised as MCP tools and adapter-declared resources over a run-scoped token;
   every call runs the full chokepoint. Any MCP-capable client can use the same
   governed surface without bespoke glue.
-- **Pi sidecar runtime** (`boltrig/fleet/pi_runtime.py` + `services/pi_sidecar/`):
-  a `pi` capability runs through a sandboxed sidecar whose only tools are the
-  run's granted verbs over MCP (no native tools, no credentials, SEC-24/27); it
-  degrades offline.
+- **Codex is the one wired agent runtime.** The Pi sidecar lane that used to sit
+  here is RETIRED (`docs/decisions/0020-retire-the-pi-lane.md`, on the authority of
+  [2026] VJS-PC 20 L1). The multi-runtime routing seam stays live and five
+  non-Codex lanes remain re-wirable by configuration alone, which is the condition
+  that grant carries.
 - **Conversational layer** (`boltrig/fleet/chat.py`, `POST /v1/chat` + a fourth
   Chat panel): a turn routes through the fleet and streams reasoning/tool/
   sub-agent/inline-HITL events; conversations persist and are owner-scoped.

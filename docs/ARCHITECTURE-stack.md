@@ -28,12 +28,12 @@ one.
 | --- | --- | --- | --- |
 | **kernel** (policy core) | `boltrig/kernel` + `boltrig/models` | `kernel` service | imports only the `Store` **Protocol**, never an implementation |
 | **database** (persistence) | `boltrig/store` + `schema.sql` + `migrations` | `postgres` + the store impls | **0** imports from kernel/fleet (inverted) |
-| **agent-runtime** (the fleet + Pi) | `boltrig/fleet` + `services/pi_sidecar` | `fleet-worker` + `pi-sidecar` | sidecar already severed, HTTP-only, SEC-28 tested |
+| **agent-runtime** (the fleet) | `boltrig/fleet` | `fleet-worker` | the Pi sidecar that sat here is retired (decision 0020); `services/channel_gateway` is the remaining severed sidecar, HTTP-only, SEC-28 tested |
 | **frontend** | `ui/` | `ui` service | separate npm app + build |
 
 Dependency direction is already correct and inverted at the contract: kernel
 depends on the `Store` Protocol (not the DB); the runtime depends on kernel
-contracts; `models` is a 0-coupled foundation; the Pi sidecar imports nothing from
+contracts; `models` is a 0-coupled foundation; the channel sidecar imports nothing from
 the package and is reached only over the wire. The severability gate of a split is
 therefore already PASSED and machine-enforced (`tests/security/test_severability.py`,
 SEC-28).

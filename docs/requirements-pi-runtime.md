@@ -1,5 +1,13 @@
 # Boltrig Pi runtime spec (Round Six)
 
+> **RETIRED, 2026-07-27.** The Pi lane this spec describes no longer exists. It was
+> removed under [2026] VJS-PC 20 L1; see `docs/decisions/0020-retire-the-pi-lane.md`
+> for the measurement, the ground and the discharge of the L3 condition. The spec is
+> kept unedited below because several of its requirements outlived the lane and were
+> re-pointed rather than deleted (SEC-46, SEC-47, SEC-48, SEC-49, FR-RUN-03), so a
+> reader tracing one of those needs to find where it came from. Nothing here
+> describes the system as it is now.
+
 Session continuity, model gateway, and execution isolation for the foundational
 agent piece.
 

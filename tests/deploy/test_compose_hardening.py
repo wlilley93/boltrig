@@ -331,7 +331,6 @@ def test_release_publishes_only_scanned_signed_digest_images_with_sboms():
         "deploy/kernel.Dockerfile",
         "deploy/fleet.Dockerfile",
         "ui/Dockerfile",
-        "services/pi_sidecar/Dockerfile",
         "deploy/backup.Dockerfile",
     ):
         assert f"dockerfile: {image}" in workflow
@@ -359,7 +358,6 @@ def test_release_publishes_only_scanned_signed_digest_images_with_sboms():
         "BOLTRIG_KERNEL_IMAGE",
         "BOLTRIG_FLEET_IMAGE",
         "BOLTRIG_UI_IMAGE",
-        "BOLTRIG_PI_SIDECAR_IMAGE",
         "BOLTRIG_BACKUP_IMAGE",
     ):
         assert variable in workflow
@@ -401,7 +399,6 @@ def test_release_compose_uses_only_required_digest_images_without_builds():
         "kernel": "BOLTRIG_KERNEL_IMAGE",
         "fleet-worker": "BOLTRIG_FLEET_IMAGE",
         "ui": "BOLTRIG_UI_IMAGE",
-        "pi-sidecar": "BOLTRIG_PI_SIDECAR_IMAGE",
         "backup": "BOLTRIG_BACKUP_IMAGE",
     }
     for service, variable in variables.items():

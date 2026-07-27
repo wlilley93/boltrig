@@ -1,11 +1,13 @@
-"""Round Six - Pi runtime: continuity, model gateway, egress (SEC-46..49).
+"""Round Six - continuity, model gateway, sandbox egress (SEC-46..49).
 
-The pi lane is the only agentic runtime. These bind the new guarantees:
+Written when the Pi lane was the only agentic runtime. Pi is retired
+([2026] VJS-PC 20 L1) and every guarantee below outlived it, because none of them
+was ever about Pi. These bind them:
   SEC-46  conversation continuity is deterministic + append-only (prefix stable)
           and adds no authority (it composes only persisted text).
   SEC-47  the model gateway binds per CONVERSATION (not run), pins a conversation
           to one model across turns, and never re-routes sensitive data.
-  SEC-48  the Pi sidecar's network egress is ENFORCED by the deploy manifests
+  SEC-48  a sandboxed sidecar's network egress is ENFORCED by the deploy manifests
           (sandbox-only; internal in the secure overlay), not merely documented.
   SEC-49  continuity is scope-safe: only the caller's own tenant/conversation
           history is ever composed into a prompt.
@@ -120,14 +122,13 @@ def test_bifrost_is_wired_into_the_stack():
     bifrost = compose["services"].get("bifrost")
     assert bifrost is not None, "no bifrost service in docker-compose.yml"
     # OpenAI-compatible inside compose on :8080; host admin/API defaults to 8081
-    # so it does not collide with the console. Pi calls {base_url}/chat/completions,
-    # so the documented gateway URL includes /v1.
+    # so it does not collide with the console. A runtime calls
+    # {base_url}/chat/completions, so the documented gateway URL includes /v1.
     assert "127.0.0.1:${BIFROST_PORT:-8081}:8080" in bifrost.get("ports", [])
     assert "gateway" in (bifrost.get("profiles") or [])  # opt-in, default stack lean
     assert {"default", "sandbox"} <= set(bifrost.get("networks") or [])
     env = (_REPO / ".env.example").read_text()
     assert "BOLTRIG_MODEL_GATEWAY_URL=http://bifrost:8080/v1" in env
-    assert "PI_SIDECAR_EGRESS_ALLOW=kernel,bifrost,local-model" in env
     assert "--profile gateway" in (_REPO / "genesis.sh").read_text()
     assert "--profile gateway" in (_REPO / "scripts" / "dev-up.sh").read_text()
 
@@ -150,25 +151,44 @@ def test_gateway_never_reroutes_sensitive_and_is_inert_when_unset():
 
 
 # --------------------------------------------------------------------------- #
-# SEC-48  the deploy manifests ENFORCE sidecar egress (not just documented)
+# SEC-48  the deploy manifests ENFORCE sandbox egress (not just documented)
 # --------------------------------------------------------------------------- #
 @pytest.mark.security
 @pytest.mark.invariant("SEC-48")
-def test_pi_sidecar_egress_is_enforced_in_manifests():
+def test_sandbox_network_egress_is_enforced_in_manifests():
+    """The sandbox network's isolation, asserted against every service on it.
+
+    This was ``test_pi_sidecar_egress_is_enforced_in_manifests`` and named for a
+    service that no longer exists ([2026] VJS-PC 20 L1). The property was never Pi's:
+    it is the only assertion anywhere that the sandbox network is INTERNAL in the
+    secure overlay and that postgres is unreachable from it. Deleting it with its
+    former subject would have dropped that silently, which is why the re-point is a
+    rename and a widening rather than a deletion.
+
+    Widened deliberately: it now checks EVERY sandbox-only service rather than one
+    named one, so the next sidecar to join the network is covered on the day it is
+    added instead of whenever someone remembers to extend this list.
+    """
     base = _compose_yaml(_REPO / "docker-compose.yml")
     services = base["services"]
-    sidecar_nets = set(services["pi-sidecar"].get("networks") or [])
 
-    # The sidecar sits on the sandbox network ONLY - not the default app network,
-    # so it cannot reach postgres/redis/the rest, only the kernel MCP face and
-    # sandbox model peers/proxies.
-    assert sidecar_nets == {"sandbox"}, sidecar_nets
-    # postgres is NOT on sandbox -> the sidecar has no path to the database.
+    sandboxed = {
+        name: set(svc.get("networks") or ["default"])
+        for name, svc in services.items()
+        if "sandbox" in (svc.get("networks") or [])
+    }
+    # Services confined to the sandbox reach the kernel MCP face and the sandbox
+    # model peers, and nothing on the default app network.
+    confined = {name for name, nets in sandboxed.items() if nets == {"sandbox"}}
+    assert confined, "no service is confined to the sandbox network"
+    assert "channel-gateway" in confined, sorted(sandboxed)
+
+    # postgres is NOT on sandbox -> nothing confined there has a path to the database.
     pg_nets = set(services["postgres"].get("networks") or ["default"])
     assert "sandbox" not in pg_nets
     # the kernel bridges both so MCP is reachable from the sandbox.
     assert "sandbox" in set(services["kernel"].get("networks") or [])
-    # model endpoints/proxies that Pi may call are explicit sandbox peers.
+    # model endpoints/proxies a sandboxed service may call are explicit sandbox peers.
     assert "sandbox" in set(services["bifrost"].get("networks") or [])
     assert "sandbox" in set(services["local-model"].get("networks") or [])
     # the sandbox network is actually declared at the top level (a real network).

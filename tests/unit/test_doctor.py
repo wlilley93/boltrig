@@ -90,10 +90,6 @@ def _secure_env(tmp_path: Path | None = None) -> dict[str, str]:
         "BOLTRIG_ALLOWED_HOSTS": "api.acme.test",
         "BOLTRIG_CORS_ORIGINS": "https://app.acme.test",
         "BOLTRIG_DOMAIN": "boltrig.acme.test",
-        "BOLTRIG_PI_SIDECAR_URL": "http://pi-sidecar:8090",
-        "BOLTRIG_PI_MCP_URL": "http://kernel:8000/v1/mcp",
-        "PI_SIDECAR_TOKEN": "p" * 40,
-        "PI_SIDECAR_EGRESS_ALLOW": "kernel,bifrost,local-model",
         "BOLTRIG_HERDR_HOME": "/var/lib/boltrig/herdr",
         "BOLTRIG_OPENCODE_HOME": "/var/lib/boltrig/opencode",
         "BACKUP_REMOTE": "s3:acme/boltrig",
@@ -114,6 +110,49 @@ def test_production_doctor_has_no_failures_for_secure_posture(tmp_path):
     assert all(check.status != "fail" for check in report.checks)
 
 
+@pytest.mark.security
+@pytest.mark.invariant("FR-RUN-01")
+def test_doctor_reports_a_manifest_still_enabling_the_retired_pi_runtime(tmp_path):
+    """A tenant manifest outlives the image that served it.
+
+    The Pi lane was retired under [2026] VJS-PC 20 L1, but a provisioned tenant
+    keeps whatever `manifest.yaml` it was given. Measured on the Classical Visas
+    tenant on the day of the retirement: `runtimes.pi.enabled: true`, pointing at
+    a sidecar that no longer exists. A capability asking for it degrades rather
+    than crashing, so this is a WARN and never a deploy blocker - but silence
+    would leave the operator no way to find the drift at all.
+    """
+    report = run_doctor(env=_secure_env(tmp_path), manifest_path=_manifest(tmp_path), production=True)
+    retired = [c for c in report.checks if c.name == "retired_runtime_pi"]
+    assert len(retired) == 1
+    assert retired[0].status == "warn"
+    assert "retired" in retired[0].message
+    # a warn, so a tenant carrying the stale block still deploys
+    assert not report.failed
+
+
+@pytest.mark.security
+@pytest.mark.invariant("FR-RUN-01")
+def test_doctor_stays_silent_on_a_manifest_that_does_not_enable_a_retired_runtime(tmp_path):
+    """The check must key on ENABLED, not on the block's presence.
+
+    Without this case the test above passes just as well against a check that
+    fires on every manifest, which would train the operator to ignore it.
+    """
+    path = tmp_path / "manifest-clean.yaml"
+    path.write_text(MANIFEST.replace("  pi:\n    enabled: true\n", ""), encoding="utf-8")
+    report = run_doctor(env=_secure_env(tmp_path), manifest_path=path, production=True)
+    assert not [c for c in report.checks if c.name.startswith("retired_runtime_")]
+
+    disabled = tmp_path / "manifest-disabled.yaml"
+    disabled.write_text(
+        MANIFEST.replace("  pi:\n    enabled: true\n", "  pi:\n    enabled: false\n"),
+        encoding="utf-8",
+    )
+    report = run_doctor(env=_secure_env(tmp_path), manifest_path=disabled, production=True)
+    assert not [c for c in report.checks if c.name.startswith("retired_runtime_")]
+
+
 def test_production_doctor_flags_deploy_blockers(tmp_path):
     env = {
         "PATH": "",
@@ -121,7 +160,6 @@ def test_production_doctor_flags_deploy_blockers(tmp_path):
         "POSTGRES_PASSWORD": "",
         "BOLTRIG_DEV_AUTH": "1",
         "BOLTRIG_ALLOWED_HOSTS": "*",
-        "PI_SIDECAR_EGRESS_ALLOW": "*",
     }
 
     report = run_doctor(env=env, manifest_path=_manifest(tmp_path), production=True)
@@ -136,7 +174,6 @@ def test_production_doctor_flags_deploy_blockers(tmp_path):
         "dev_auth",
         "auth_mode",
         "allowed_hosts",
-        "pi_egress_allow",
         "herdr_stack_home",
         "herdr_stack_cli",
         "opencode_stack_home",

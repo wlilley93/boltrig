@@ -44,7 +44,7 @@ The superadmin password must pass `validate_password_strength` before the owner 
 
 ### What genesis does (phases)
 
-- Phase 0: copies `.env` / `manifest.yaml` if missing, fills blank internal secrets (`POSTGRES_PASSWORD`, `BOLTRIG_AUDIT_HMAC_KEY`, `PI_SIDECAR_TOKEN`), and sets `BOLTRIG_AUTH_MODE=session`, `BOLTRIG_DEV_AUTH=0` (invite-only first-party login is the gate).
+- Phase 0: copies `.env` / `manifest.yaml` if missing, fills blank internal secrets (`POSTGRES_PASSWORD`, `BOLTRIG_AUDIT_HMAC_KEY`), and sets `BOLTRIG_AUTH_MODE=session`, `BOLTRIG_DEV_AUTH=0` (invite-only first-party login is the gate).
 - Phase 1: brings up Postgres + Redis and creates the separate `hatchet` database (Hatchet-lite needs its own db owned by the boltrig role or its engine never boots).
 - Phase 2: builds and brings up the full stack, waits for the kernel to be healthy. A fresh volume loads the schema on first boot (no migration needed on a clean box).
 - Phase 3: mints and wires the Hatchet client token, then restarts the fleet worker so it selects the durable executor.
