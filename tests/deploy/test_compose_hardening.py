@@ -228,8 +228,25 @@ def test_browser_cli_state_roots_are_stack_owned():
     assert "BOLTRIG_BROWSER_CLI_BIN=/usr/local/bin/browser-use" in env_example
     assert "BROWSER_CLI_URL" not in env_example
     assert "--python-platform linux" in lock
-    assert "browser-use==0.13.3" in lock
-    assert "0756dd726837fa7c0f0aa02eae2c47a93c3d02ef7dba980c8dae9077d8a0157d" in lock
+    # DERIVED, not restated. This named `browser-use==0.13.3` and one of its hashes
+    # as literals, so a routine version bump broke a test about STATE ROOTS - the
+    # exact defect the retired pi-sidecar lock test recorded in its own comment:
+    # restating a version makes the test a second place to maintain it, and the
+    # second place is the one that goes stale.
+    #
+    # The property is that the lock installs the version the SOURCE pins, at a real
+    # hash. Which version that is belongs to browser-cli-requirements.in.
+    source = _text("deploy/browser-cli-requirements.in")
+    pinned = [ln.strip() for ln in source.splitlines()
+              if ln.strip().startswith("browser-use==")]
+    assert len(pinned) == 1, f"browser-cli-requirements.in must pin browser-use once: {pinned}"
+    name, _, version = pinned[0].partition("==")
+    assert f"\n{name}=={version}" in f"\n{lock}", (
+        f"{name} is pinned to {version} in the .in and the lock does not install that "
+        "version. The lock was not recompiled, so the image ships the old release."
+    )
+    # every pin carries hashes, which is what makes --require-hashes below mean something
+    assert lock.count("--hash=sha256:") > 100, "the lock is not hash-generated"
     assert "/opt/boltrig/browser-cli/bin/pip install" in fleet_dockerfile
     assert "--no-deps" in fleet_dockerfile
     assert "--require-hashes" in fleet_dockerfile

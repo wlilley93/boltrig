@@ -36,7 +36,7 @@ RELEASE_VALIDATE_IMAGES_ENV ?= tests/fixtures/release-images.env
 RELEASE_PROFILES ?= --profile backup
 
 .DEFAULT_GOAL := help
-.PHONY: help gate-status up down logs test lint architecture structure codex-protocol unwired-claims reachability prose-references refresh-canon-citations refresh-opbox-surface fleet-drift gate-coverage health-claims order-directives typecheck check python-quality ui-install ui-quality site-install site-quality ui-e2e compose-validate release-validate release-up doctor-fixture migration-parity python-audit sast iac-scan secret-scan actionlint security-source quality live-check lockfile-policy dependency-audit smoke invariants doctor migrate secure-up backup backup-schedule restore
+.PHONY: help gate-status relock up down logs test lint architecture structure codex-protocol unwired-claims reachability prose-references refresh-canon-citations refresh-opbox-surface fleet-drift gate-coverage health-claims order-directives typecheck check python-quality ui-install ui-quality site-install site-quality ui-e2e compose-validate release-validate release-up doctor-fixture migration-parity python-audit sast iac-scan secret-scan actionlint security-source quality live-check lockfile-policy dependency-audit smoke invariants doctor migrate secure-up backup backup-schedule restore
 
 help: ## List the available targets
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -294,6 +294,25 @@ quality: python-quality ui-quality site-quality compose-validate doctor-fixture 
 # profile and receives NO `pnpm audit` coverage, so audit it by hand whenever the
 # bridge is next touched.
 LOCKFILE_POLICY_EXEMPT := services/channel_gateway/whatsapp_bridge/package-lock.json
+
+# UPGRADE= is empty by default, which REUSES the existing pins: `uv pip compile`
+# reads its own output file and holds what is already there, so a bare `make relock`
+# is a no-op on an up-to-date tree and only re-solves what a source change forces.
+# `make relock UPGRADE=--upgrade` takes every available upgrade AS ONE RESOLUTION,
+# which is the difference that matters: dependabot edits a compiled lock line by
+# line (every pin in a uv output is flat and looks direct to it) and has twice
+# produced a file pip refuses outright - pydantic-core against the pydantic that
+# pins it exactly, then protobuf against its sibling. A lock is DERIVED. Change the
+# constraints, re-solve, commit the solution; never patch the solution.
+UPGRADE ?=
+relock: ## Recompile every Python lock from its source (UPGRADE=--upgrade to take upgrades)
+	uv pip compile pyproject.toml --extra durable --extra inference \
+		--extra sql-adapters --extra cognee --generate-hashes $(UPGRADE) -o requirements-lock.txt
+	uv pip compile pyproject.toml --extra durable --extra inference \
+		--extra sql-adapters --group dev --generate-hashes $(UPGRADE) -o requirements-dev-lock.txt
+	uv pip compile deploy/browser-cli-requirements.in \
+		--overrides deploy/browser-cli-overrides.txt --generate-hashes \
+		--python-platform linux $(UPGRADE) -o deploy/browser-cli-requirements.txt
 
 lockfile-policy: ## Enforce pnpm as the JavaScript package manager (one recorded exemption)
 	@locks="$$(git ls-files '*yarn.lock' '*package-lock.json' | grep -vxF '$(LOCKFILE_POLICY_EXEMPT)' || true)"; \
