@@ -10,6 +10,7 @@ from .codex_app_server_fakes import (
     ClientFactory,
     client_factory,
     initialize,
+    relax_request_timeout,
     sent,
     thread_result,
 )
@@ -88,6 +89,13 @@ async def test_first_late_timeout_response_is_discarded_but_duplicate_fails(
     assert isinstance(slow, wire.RequestMessage)
     with pytest.raises(wire.RequestTimeoutError):
         await slow_task
+
+    # The 15ms budget has now done its only job, which was to expire `slow_task`.
+    # Leaving it in place would make the SUCCESS leg below race the event loop:
+    # under a full-suite run `live_task` would time out too, and the test would
+    # fail claiming the client had dropped a live response it had actually
+    # delivered. Observed once in five `make python-quality` runs on 2026-07-27.
+    relax_request_timeout(client)
 
     live_task = asyncio.create_task(client.thread_read("thr-live"))
     live = await sent(transport)
