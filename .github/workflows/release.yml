@@ -147,18 +147,47 @@ jobs:
         with:
           cosign-release: v3.0.6
 
+      # ui/ depends on @wlilley93/boltrig-web-sdk from GitHub Packages, and
+      # ui/Dockerfile installs it behind `--mount=type=secret,id=gh_npmrc`.
+      # Nothing in this workflow ever supplied that secret, so the mount was
+      # empty and every ui candidate died on ERR_PNPM_FETCH_401 - which is why
+      # no tag has ever produced a published release. ci.yml's ui-build proves
+      # the built-in GITHUB_TOKEN can read the package, so this introduces no
+      # new credential class; `packages: write` above already implies read.
+      - name: Authenticate the ui build to GitHub Packages
+        if: matrix.image == 'ui'
+        env:
+          GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          umask 077
+          printf '//npm.pkg.github.com/:_authToken=%s\n' "$GH_PACKAGES_TOKEN" > "$RUNNER_TEMP/gh_npmrc"
+
       - name: Build release candidate locally
         env:
           BUILD_CONTEXT: ${{ matrix.context }}
           DOCKERFILE: ${{ matrix.dockerfile }}
-        run: >-
-          docker build --pull
-          --file "$DOCKERFILE"
-          --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY"
-          --label "org.opencontainers.image.revision=$RELEASE_COMMIT"
-          --label "org.opencontainers.image.version=$RELEASE_TAG"
-          --tag "$LOCAL_IMAGE"
-          "$BUILD_CONTEXT"
+          DOCKER_BUILDKIT: "1"
+        run: |
+          set -euo pipefail
+          secret_args=()
+          # Only the ui matrix leg writes this file, so every other image builds
+          # with no secret mounted, exactly as before.
+          if [ -f "$RUNNER_TEMP/gh_npmrc" ]; then
+            secret_args+=(--secret "id=gh_npmrc,src=$RUNNER_TEMP/gh_npmrc")
+          fi
+          docker build --pull \
+            "${secret_args[@]}" \
+            --file "$DOCKERFILE" \
+            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$RELEASE_COMMIT" \
+            --label "org.opencontainers.image.version=$RELEASE_TAG" \
+            --tag "$LOCAL_IMAGE" \
+            "$BUILD_CONTEXT"
+
+      - name: Remove the registry token
+        if: always()
+        run: rm -f "$RUNNER_TEMP/gh_npmrc"
 
       - name: Block fixable high or critical vulnerabilities before publication
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
