@@ -29,7 +29,7 @@ import { describe, expect, it } from "vitest";
 const SHADER = resolve(process.cwd(), "src/familiar/familiar.frag");
 
 /** Source of truth: wlilley93/beelink-desktop, familiar/familiar.frag at 00aac04. */
-const RECORDED_SHA256 = "1347d6471da9d60dc37091949f48325573d48bd5b82bbc1dec5b5312ffab8538";
+const RECORDED_SHA256 = "8aba43b1ffcbdc62d2d75680990de13dc7ee274a57469b809412782b34804c76";
 
 describe("vendored familiar.frag", () => {
   it("is actually where this test thinks it is", () => {

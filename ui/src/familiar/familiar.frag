@@ -261,6 +261,33 @@ float shapeDist(vec2 p,
   return lq/r;
 }
 
+// --- GENOTYPE HUE ------------------------------------------------------------
+// Rotates a colour about the achromatic axis. The YIQ form is used rather than a
+// full RGB->HSV->RGB trip because it is three dot products and this runs per pixel
+// per frame for every familiar on the page.
+//
+// APPLIED TO THE BODY PALETTE ONLY, AND BEFORE IRRITATION'S MAGENTA IS MIXED IN.
+// That placement is the whole design. Magenta is the shader's single exception in a
+// blue field and the phenotype spends it on exactly one state - a failed run. If a
+// per-agent hue rotated it too, "magenta means failed" would become "some colour
+// means failed, depending on which agent you are looking at", and the most valuable
+// signal on the screen would stop being learnable. So identity tints the being and
+// never touches the alarm.
+vec3 hueRotate(vec3 c, float a) {
+  float u = cos(a), w = sin(a);
+  return clamp(mat3(0.299 + 0.701*u + 0.168*w, 0.587 - 0.587*u + 0.330*w, 0.114 - 0.114*u - 0.497*w,
+                    0.299 - 0.299*u - 0.328*w, 0.587 + 0.413*u + 0.035*w, 0.114 - 0.114*u + 0.292*w,
+                    0.299 - 0.300*u + 1.250*w, 0.587 - 0.588*u - 1.050*w, 0.114 + 0.886*u - 0.203*w) * c,
+               0.0, 1.0);
+}
+
+// Saturation about luma. Kept narrow at the call site: a familiar desaturated to grey
+// stops reading as alive, and one oversaturated stops reading as the same species.
+vec3 saturate3(vec3 c, float k) {
+  float l = dot(c, vec3(0.299, 0.587, 0.114));
+  return clamp(mix(vec3(l), c, k), 0.0, 1.0);
+}
+
 // Convenience wrapper: unpacks uGene so call sites stay readable.
 float bodyDist(vec2 p, float s) {
   return shapeDist(p,
@@ -391,6 +418,8 @@ void main(){
                   mix(azure, sky, smoothstep(0.55,1.00,val)),
                   smoothstep(0.40,0.80,val));
   base = mix(base, sky,     clamp(gWarm,0.0,1.0)*0.6);
+  // Identity tint. Slots 14/15 of the genotype, applied here and nowhere else.
+  base = saturate3(hueRotate(base, uGene[3].z), 1.0 + uGene[3].w);
   base = mix(base, magenta, irr*0.70);
   base *= mix(vec3(0.90,0.94,1.12), vec3(1.02,0.98,1.06), clamp(uDay,0.0,1.0));
   vec3 hot = mix(base, vec3(0.45,0.75,1.00), 0.40 + 0.18*lum);
@@ -1308,6 +1337,8 @@ void main(){
                   mix(azure, sky, smoothstep(0.55,1.00,val)),
                   smoothstep(0.40,0.80,val));
   base = mix(base, sky,     clamp(gWarm,0.0,1.0)*0.6);
+  // Identity tint. Slots 14/15 of the genotype, applied here and nowhere else.
+  base = saturate3(hueRotate(base, uGene[3].z), 1.0 + uGene[3].w);
   base = mix(base, magenta, irr*0.70);
   // (The time-of-day tint is gone: colour belongs to boltrig's emotion engine alone. uDay stays in
   // the contract but paints nothing.)

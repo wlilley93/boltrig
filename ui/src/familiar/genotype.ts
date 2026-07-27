@@ -50,6 +50,10 @@ export interface Genotype {
   rotation: number;
   /** orientation that varies with radius, shearing lobes into a spiral */
   twist: number;
+  /** identity tint, radians about the achromatic axis. Applied to the BODY palette only */
+  hue: number;
+  /** saturation delta on the tinted body. Small: a grey familiar stops reading as alive */
+  saturation: number;
 }
 
 /**
@@ -73,6 +77,8 @@ export const GENOTYPE_DEFAULTS: Genotype = {
   aspect: 1,
   rotation: 0,
   twist: 0,
+  hue: 0,
+  saturation: 0,
 };
 
 /** Slot order IS the uniform layout: index i lands in uGene[i/4][i%4]. Reordering re-labels
@@ -81,7 +87,7 @@ export const GENOTYPE_SLOTS: ReadonlyArray<keyof Genotype> = [
   "shape", "blend", "focal", "cassiniB",
   "lobeBalance", "superM", "superN1", "superN2",
   "superN3", "superA", "superB", "aspect",
-  "rotation", "twist",
+  "rotation", "twist", "hue", "saturation",
 ];
 
 /** Pack a genotype into the 16 floats the shader's `uniform vec4 uGene[4]` expects. */
@@ -148,11 +154,28 @@ interface Band {
   ranges: Partial<Record<keyof Genotype, [number, number]>>;
 }
 
+/**
+ * THE MAGENTA WEDGE IS RESERVED, and no role may enter it.
+ *
+ * The shader spends magenta on exactly one thing: irritation, which the phenotype raises for
+ * exactly one state, a failed run. That makes "magenta means failed" the most valuable signal
+ * on the screen, because it is the only one that is learnable at a glance across a whole fleet.
+ *
+ * A per-agent hue threatens it directly. Rendered, hue 1.047 rad comes out frankly magenta - so
+ * an agent that happened to be seeded there would sit at rest looking exactly like an agent
+ * whose run had just died. Identity would be quietly destroying the alarm.
+ *
+ * So the wedge is off limits to the derivation, and `roleHuesAvoidMagenta` in the test beside
+ * this file is what makes that true rather than merely written down. An author may still put a
+ * familiar there deliberately; the derivation may never wander there by accident.
+ */
+export const MAGENTA_WEDGE: [number, number] = [0.70, 1.45];
+
 export const ROLE_BANDS: Record<string, Band> = {
-  orchestrator: { shape: 0, ranges: { aspect: [0.96, 1.04], rotation: [0, 0.3] } },
+  orchestrator: { shape: 0, ranges: { aspect: [0.96, 1.04], rotation: [0, 0.3] , hue: [6.0, 6.25], saturation: [-0.05, 0.10]} },
   researcher: {
     shape: 1,
-    ranges: { focal: [0.40, 0.62], cassiniB: [0.90, 1.00], lobeBalance: [0.10, 0.35], aspect: [0.95, 1.15] },
+    ranges: { focal: [0.40, 0.62], cassiniB: [0.90, 1.00], lobeBalance: [0.10, 0.35], aspect: [0.95, 1.15] , hue: [2.45, 2.7], saturation: [-0.05, 0.10]},
   },
   reviewer: {
     // Held just BELOW the part (focal < cassiniB), and the reason changed on 2026-07-27.
@@ -165,11 +188,11 @@ export const ROLE_BANDS: Record<string, Band> = {
     // The geometry is reachable and presentable; it is reserved for something that is
     // genuinely plural.
     shape: 1,
-    ranges: { focal: [0.74, 0.86], cassiniB: [0.86, 0.92], lobeBalance: [0.0, 0.25], twist: [0, 0.8] },
+    ranges: { focal: [0.74, 0.86], cassiniB: [0.86, 0.92], lobeBalance: [0.0, 0.25], twist: [0, 0.8] , hue: [3.3, 3.55], saturation: [-0.05, 0.10]},
   },
   builder: {
     shape: 2,
-    ranges: { superM: [6, 8], superN1: [4.0, 7.0], superN2: [9, 13], superN3: [9, 13], aspect: [0.97, 1.03] },
+    ranges: { superM: [6, 8], superN1: [4.0, 7.0], superN2: [9, 13], superN3: [9, 13], aspect: [0.97, 1.03] , hue: [4.15, 4.4], saturation: [-0.05, 0.10]},
   },
   guardian: {
     // rotation ~0.52 (30 degrees) is what actually points the triangle DOWN, verified by
@@ -178,11 +201,11 @@ export const ROLE_BANDS: Record<string, Band> = {
     // because 180 and 60 degrees are the same triangle. The range is kept narrow so every
     // guardian reads as a shield rather than as an arbitrarily tipped triangle.
     shape: 2,
-    ranges: { superM: [3, 3], superN1: [0.45, 0.62], superN2: [0.9, 1.1], superN3: [0.9, 1.1], rotation: [0.44, 0.60] },
+    ranges: { superM: [3, 3], superN1: [0.45, 0.62], superN2: [0.9, 1.1], superN3: [0.9, 1.1], rotation: [0.44, 0.60] , hue: [5.0, 5.25], saturation: [-0.05, 0.10]},
   },
   analyst: {
     shape: 2,
-    ranges: { superM: [5, 7], superN1: [0.35, 0.50], superN2: [1.5, 1.9], superN3: [1.5, 1.9], rotation: [0, 1.2] },
+    ranges: { superM: [5, 7], superN1: [0.35, 0.50], superN2: [1.5, 1.9], superN3: [1.5, 1.9], rotation: [0, 1.2] , hue: [1.8, 2.05], saturation: [-0.05, 0.10]},
   },
   default: { shape: 0, ranges: { aspect: [0.94, 1.06], rotation: [0, 6.28] } },
 };
