@@ -53,7 +53,7 @@ from boltrig.adapters.base import (
     bearer_token,
 )
 from boltrig.adapters.mcp_transport import McpHttpRefusal, StreamableHttp
-from boltrig.addons import active_addons, consequence_hint_for
+from boltrig.addons import consequence_hint_for
 from boltrig.models import Consequence, CredentialResolution, InvocationContext
 
 log = logging.getLogger(__name__)
@@ -76,9 +76,13 @@ _CONSEQUENCE_HINTS = frozenset({Consequence.LOW.value, Consequence.HIGH.value})
 
 # A consumed server that declares no ``consequence`` field may still carry its own
 # risk vocabulary somewhere in its tool projection. Reading THAT vocabulary is
-# integration-specific knowledge, so it lives in an addon (``boltrig.addons``) and
-# is present only where that integration is provisioned - this module ships in
-# every boltrig and no longer carries one server's regex.
+# integration-specific KNOWLEDGE, so the regex lives in an addon
+# (``boltrig.addons``) rather than in this module, which ships in every boltrig.
+#
+# It is consulted from every REGISTERED addon, not only the activated ones. A
+# reading can only raise a consequence, so gating it on ``BOLTRIG_ADDONS`` bought
+# no safety and cost the approval gate: measured, an opbox tool carrying
+# ``riskClass=DESTRUCTIVE`` registered as ``low`` wherever the flag was unset.
 
 
 def _status_error(status: int) -> ErrorClass:
@@ -94,8 +98,13 @@ def _status_error(status: int) -> ErrorClass:
 
 
 def _addon_hint(tool: dict) -> str | None:
-    """The consumed server's own risk vocabulary, per the active addons."""
-    return consequence_hint_for(active_addons(), tool)
+    """The consumed server's own risk vocabulary, per every addon this build ships.
+
+    REGISTERED, not active: a reading can only RAISE a consequence, so gating it on
+    ``BOLTRIG_ADDONS`` bought nothing and cost the approval gate. See
+    ``consequence_hint_for``.
+    """
+    return consequence_hint_for(None, tool)
 
 
 def _annotations_hint(tool: dict) -> str | None:

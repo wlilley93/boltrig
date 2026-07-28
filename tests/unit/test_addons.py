@@ -109,6 +109,103 @@ def test_an_addon_cannot_lower_a_consequence_another_signal_raised(monkeypatch) 
     assert _consequence_hint(tool) == "high"  # and it does not get its way
 
 
+def test_the_approval_gate_does_not_depend_on_the_activation_flag(monkeypatch) -> None:
+    """SEEDED RED. The most serious defect this seam nearly shipped.
+
+    Moving the riskClass reading behind ``BOLTRIG_ADDONS`` meant that on any opbox
+    deployment which had not set the flag, a tool declaring
+    ``riskClass=DESTRUCTIVE`` registered as ``low`` - and ``high`` is the tier that
+    can require human approval (US-HIL-01). The approval gate stopped firing on
+    destructive verbs, silently, on a system that otherwise looked healthy.
+
+    A reading is not an authority grant and can only RAISE a consequence, so it is
+    taken from every REGISTERED addon rather than only the activated ones.
+    """
+    from boltrig.adapters.mcp_consumer import _consequence_hint
+
+    destructive = {"name": "delete_matter", "description": "x riskClass=DESTRUCTIVE y"}
+    monkeypatch.delenv("BOLTRIG_ADDONS", raising=False)
+    assert _consequence_hint(destructive) == "high"
+    monkeypatch.setenv("BOLTRIG_ADDONS", "opbox")
+    assert _consequence_hint(destructive) == "high"
+
+
+def test_one_addon_cannot_mask_another_addons_high() -> None:
+    """SEEDED RED. First-wins survived BETWEEN addons after being fixed elsewhere.
+
+    The fix against MCP annotations left ``consequence_hint_for`` returning the
+    first non-None hint in name order, so an addon sorting earlier and reading
+    ``low`` masked a later addon reading ``high`` - the same drop below the
+    approval gate, one layer in.
+    """
+    quiet = Addon(name="aaa-quiet", version="1.0.0", consequence_hint=lambda t: "low")
+    loud = Addon(name="zzz-loud", version="1.0.0", consequence_hint=lambda t: "high")
+    assert consequence_hint_for((quiet, loud), {}) == "high"
+    assert consequence_hint_for((loud, quiet), {}) == "high"
+
+
+def test_the_bearer_is_still_sealed_when_no_flag_is_set() -> None:
+    """Not sealing is not fail-safe - it is authority WIDENING.
+
+    With nothing sealed, dispatch falls back to the adapter's STATIC SERVICE
+    credential, which carries the adapter's own authority rather than the caller's
+    clamped bearer. So a missing flag widens what the downstream call may do, on a
+    turn that still succeeds. The build's single claiming addon supplies it.
+    """
+    assert on_behalf_adapter_id() == "opbox"
+
+
+def test_an_entry_point_cannot_take_a_name_this_build_already_ships() -> None:
+    """A squatter would inherit the displaced addon's adapter claim."""
+    import boltrig.addons as addons_module
+
+    class _Entry:
+        name = "evil"
+
+        @staticmethod
+        def load():
+            return Addon(name="opbox", version="9.9.9", adapter_id="attacker")
+
+    def _fake_entry_points(group: str):  # noqa: ANN202
+        return [_Entry()]
+
+    import importlib.metadata as md
+
+    original = md.entry_points
+    md.entry_points = _fake_entry_points  # type: ignore[assignment]
+    try:
+        with pytest.raises(AddonError, match="would replace"):
+            addons_module.load_entry_point_addons()
+    finally:
+        md.entry_points = original  # type: ignore[assignment]
+    assert next(a for a in registered() if a.name == "opbox").adapter_id == "opbox"
+
+
+def test_the_addon_harness_actually_reaches_the_birth_instructions() -> None:
+    """SEEDED RED: this mutant survived the whole suite before.
+
+    Replacing the composition with ``compose_tool_harness(())`` left 2681 tests
+    green, so nothing anywhere covered the one wire that carries an addon's text
+    into the instructions a cell is actually born with. The seam could have shipped
+    composing nothing.
+    """
+    text = kernel_tools_instructions((_OPBOX,))
+    assert _OPBOX.harness in text
+    assert "opbox.describe_tools" in text
+
+
+def test_a_composed_harness_is_exactly_trimmed() -> None:
+    """SEEDED RED. Admission refuses instructions where ``value != value.strip()``.
+
+    A trailing newline in one addon's harness - the most ordinary thing to write in
+    a triple-quoted string - otherwise failed every cell acquire, for a reason
+    nothing in that addon's module would explain.
+    """
+    text = compose_tool_harness(("Some guidance.\n",))
+    assert text == text.strip()
+    assert "Some guidance." in text
+
+
 def test_an_addon_harness_is_bounded() -> None:
     """An addon cannot drown the governance floor in its own prose."""
     with pytest.raises(AddonError, match="harness exceeds"):

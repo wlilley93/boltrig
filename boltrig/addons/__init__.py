@@ -156,17 +156,36 @@ def adapter_id_for(addons: tuple[Addon, ...]) -> str | None:
 
 
 def consequence_hint_for(
-    addons: tuple[Addon, ...], tool: Mapping[str, object]
+    addons: tuple[Addon, ...] | None, tool: Mapping[str, object]
 ) -> str | None:
-    """First non-``None`` consequence hint from the active addons, in name order."""
+    """The HIGHEST consequence any addon reads off ``tool``. Defaults to REGISTERED.
 
-    for addon in addons:
+    TWO RULES, both learned the hard way.
+
+    HIGHEST, not first. First-wins let one addon's ``low`` mask another's ``high``
+    and drop a tool below the approval gate - the same defect this seam already
+    fixed between an addon and a server's MCP annotations, left in place here
+    between two addons.
+
+    REGISTERED, not active. Reading a server's risk vocabulary is not an authority
+    grant: with the rule above it can only ever RAISE a consequence. Gating it on
+    ``BOLTRIG_ADDONS`` therefore bought nothing and cost the approval gate -
+    measured: an opbox tool carrying ``riskClass=DESTRUCTIVE`` registered as
+    ``low`` on any deployment that had not set the flag, so the HITL gate never
+    fired on it. Activation stays meaningful where it belongs: the HARNESS text,
+    which is compiled into an attested, hashed birth profile.
+    """
+
+    highest: str | None = None
+    for addon in registered() if addons is None else addons:
         if addon.consequence_hint is None:
             continue
         hint = addon.consequence_hint(tool)
-        if hint is not None:
-            return hint
-    return None
+        if hint == "high":
+            return "high"
+        if hint is not None and highest is None:
+            highest = hint
+    return highest
 
 
 def on_behalf_adapter_id(addons: tuple[Addon, ...] | None = None) -> str | None:
@@ -182,7 +201,21 @@ def on_behalf_adapter_id(addons: tuple[Addon, ...] | None = None) -> str | None:
     override = os.environ.get("BOLTRIG_OBO_ADAPTER_ID")
     if override:
         return override
-    return adapter_id_for(active_addons() if addons is None else addons)
+    if addons is not None:
+        return adapter_id_for(addons)
+    claimed = adapter_id_for(active_addons())
+    if claimed:
+        return claimed
+    # Fall back to what this BUILD ships, not just what the deployment activated.
+    # Failing to seal is not fail-safe: dispatch then uses the adapter's STATIC
+    # SERVICE credential, which carries the adapter's own authority rather than the
+    # caller's clamped bearer - so a missing flag WIDENS what the downstream call
+    # may do, silently, on a turn that still succeeds. Identity is not authority:
+    # sealing for the adapter that owns the bearer is strictly the narrower choice.
+    # Only when exactly one registered addon claims it, so a multi-integration
+    # build stays unambiguous rather than guessing.
+    single = [addon for addon in registered() if addon.adapter_id]
+    return single[0].adapter_id if len(single) == 1 else None
 
 
 ENTRY_POINT_GROUP = "boltrig.addons"
@@ -219,6 +252,17 @@ def load_entry_point_addons() -> tuple[str, ...]:
             raise AddonError(
                 f"addon entry point {entry.name!r} resolved to "
                 f"{type(addon).__qualname__}, not an Addon"
+            )
+        if addon.name in _REGISTRY:
+            # An installed package must not be able to TAKE a name this build
+            # already ships. ``register`` replaces by design (a build may override
+            # its own), but reached from an entry point that becomes a hijack: the
+            # squatter inherits the displaced addon's adapter claim, so the bearer a
+            # chat turn seals is redirected to a server of the squatter's choosing,
+            # and its consequence reading of the real server disappears with it.
+            raise AddonError(
+                f"addon entry point {entry.name!r} would replace the already "
+                f"registered addon {addon.name!r}; names must be unique"
             )
         register(addon)
         loaded.append(addon.name)

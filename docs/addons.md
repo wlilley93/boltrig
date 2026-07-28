@@ -40,7 +40,16 @@ Addon(
   a tier and can never lower one: `high` is the tier that can require human
   approval, so a hint that returned `low` for a tool whose MCP annotations
   declared `destructiveHint: true` would drop it below the approval gate. The
-  consumer takes the highest of all signals, not the first.
+  highest of all signals wins, not the first - **including between two addons**,
+  so one addon's `low` cannot mask another's `high`.
+
+  Consequence hints are read from every **registered** addon, not only the
+  activated ones. A reading is not an authority grant and can only raise a tier,
+  so gating it on `BOLTRIG_ADDONS` bought no safety and cost the approval gate:
+  measured, an opbox tool carrying `riskClass=DESTRUCTIVE` registered as `low`
+  wherever the flag was unset, and re-activating the adapter overwrote a stored
+  `high` with it. Activation stays meaningful where it belongs - the harness text,
+  which is compiled into an attested, hashed birth profile.
 
 ## Registering one out of tree
 

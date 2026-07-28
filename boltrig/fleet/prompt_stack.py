@@ -129,8 +129,14 @@ def compose_tool_harness(addon_harnesses: tuple[str, ...] = ()) -> str:
     ITS tools without editing the text every boltrig ships.
     """
 
-    parts = [GOVERNANCE_FLOOR, TOOL_HARNESS, *(t for t in addon_harnesses if t)]
-    return "\n\n".join(parts)
+    # Each fragment is STRIPPED, and so is the join. The composed text becomes the
+    # birth instructions of an attested cell, and admission requires an exactly
+    # trimmed value (``value != value.strip()`` is refused). A single trailing
+    # newline in one addon's harness - the most ordinary thing to write in a
+    # triple-quoted string - would otherwise fail every cell acquire, for a reason
+    # nothing in the addon's own module would explain.
+    parts = [GOVERNANCE_FLOOR, TOOL_HARNESS, *(t.strip() for t in addon_harnesses if t and t.strip())]
+    return "\n\n".join(parts).strip()
 
 
 def compose_system_prompt(

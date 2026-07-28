@@ -101,10 +101,17 @@ async def inherit_on_behalf_bearer(
 
     if not parent_run_id or not owner:
         return
-    adapter_id = on_behalf_adapter_id()
-    if not adapter_id:  # no addon claims one: nothing was sealed to inherit
-        return
+    adapter_id = None
     try:
+        # INSIDE the guard. This resolution reads configuration and can raise
+        # (an unregistered BOLTRIG_ADDONS name is deliberately fatal), and this
+        # function's contract is that it must NEVER take down a spawn that would
+        # otherwise succeed - the worst case is the pre-existing fallback. Resolved
+        # outside, a misconfiguration stopped being a degraded parity path and
+        # became a failed spawn.
+        adapter_id = on_behalf_adapter_id()
+        if not adapter_id:  # nothing claims one: nothing was sealed to inherit
+            return
         inherited = await credentials.resolve_run_scoped_credential(
             tenant_id, parent_run_id, adapter_id, owner
         )
