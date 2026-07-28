@@ -53,11 +53,21 @@ So a roll is:
 ```bash
 # 1. the tree the containers read from
 ssh <host> 'cd ~/Projects/boltrig-main && git pull --ff-only origin main'
-# 2. the images
-docker compose ... pull && docker compose ... up -d
+# 2. the images - CANARY FIRST, and the canary is a GATE
+scripts/roll-release.sh v0.4.19
 # 3. prove BOTH halves landed, on EVERY tenant, before calling it done
 make fleet-drift-all
 ```
+
+**Use the script for step 2, not a hand-typed `compose up`.** The recipe used to
+live in one person's head and was re-typed per release, and every re-typing lost a
+check. On 2026-07-28 the hand-written version printed the canary's health and its
+`addons active:` line and then rolled the live client *regardless* - a canary you
+do not assert on is not a canary, it is a delay. `scripts/roll-release.sh` asserts,
+per stack and before touching the next one, that the overlay diff is exactly the
+two image lines, that the kernel is healthy and not restarting, that both
+containers report the expected `addons active:` line, and that the kernel really is
+running the target version. It aborts rather than continuing.
 
 `make fleet-drift-all` compares each pinned digest against what the daemon is
 actually running AND reports any bind-mounted path whose upstream has commits it
