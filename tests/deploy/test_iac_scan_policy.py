@@ -44,3 +44,10 @@ def test_iac_scan_is_pinned_offline_blocking_and_ci_enforced() -> None:
     exceptions = ignore["misconfigurations"]
     assert exceptions
     assert all(item.get("paths") and item.get("expired_at") and item.get("statement") for item in exceptions)
+    # 2026-VJS-CC-BOLTRIG-SUPPLY-CHAIN-ADVISORY-ACCEPTANCE-001 D1: a vulnerability
+    # acceptance is scoped to the operative path - an entry with no paths (a
+    # global ignore) or no expiry fails here, so CVE-2026-56852 can never be
+    # silenced where x/text is reachable in another artefact.
+    vulnerabilities = ignore["vulnerabilities"]
+    assert vulnerabilities
+    assert all(item.get("paths") and item.get("expired_at") and item.get("statement") for item in vulnerabilities)

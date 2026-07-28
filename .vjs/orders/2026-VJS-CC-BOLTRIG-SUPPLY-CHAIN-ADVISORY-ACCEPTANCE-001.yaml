@@ -1,0 +1,93 @@
+id: 2026-VJS-CC-BOLTRIG-SUPPLY-CHAIN-ADVISORY-ACCEPTANCE-001
+court: county
+jurisdiction: default
+repo_code: boltrig
+status: binding
+issue: supply-chain.advisory-acceptance
+holding: |
+  Option A is ADOPTED AS MODIFIED; Options B, C and D are REFUSED, each on stated grounds.
+
+  THE RATIO. An advisory may be accepted only where the fix cannot be taken - no released
+  upstream artefact carries it - and only as a record, never as a silence: scoped to the
+  operative path, owned, expiring, reachable-stated, and mirrored into the ledger whose
+  machinery fails the review the day the statement goes stale. Where the fix CAN be taken
+  it must be taken; the acceptance is self-terminating by expiry and self-cancelling by
+  condition, so the gate loses nothing it was measuring.
+
+  F2 is verified by direct measurement: rclone v1.74.4 (2026-07-08) is the latest release
+  and pins golang.org/x/text v0.38.0; master pins v0.40.0; no released fix exists. F1 is
+  verified via the Go vulnerability record GO-2026-5970 (alias CVE-2026-56852, fixed
+  0.39.0, norm.Iter infinite loop on invalid UTF-8); the release gate blocks it because a
+  PACKAGE-level fix exists even though no released ARTIFACT carries one. F5 is confirmed
+  as qualified: the backup service publishes no ports and runs rclone strictly as a client
+  against operator-configured remotes, so reaching the defect requires a compromised
+  operator-provisioned remote; the pleaded absolute ("no untrusted text input") is
+  corrected and the entry must carry the qualified statement.
+
+  B is refused: a mutable beta tag defeats the digest-pinning discipline
+  backup.Dockerfile:16 exists for and ships unreleased code on the backup path. C is
+  refused: the blocked release carries a court-ordered kernel cure with a live-tenant D4
+  outstanding (2026-VJS-CC-BOLTRIG-HITL-NOTIFICATION-ROUTING-001), reachability is
+  genuinely absent as deployed, and the schedule is upstream's; holding is the price of
+  the cure paid for no measured security gain. D is refused: it trades an official
+  cosign-attested artefact for a self-built one and adds the toolchain to the trusted
+  set - Option B's defect wearing a pin.
+
+  The modification to A: the acceptance is entered in .trivyignore.yaml scoped to
+  usr/local/bin/rclone AND mirrored, together with the existing GHSA-hrxh-6v49-42gf entry,
+  into docs/security/accepted-advisories.json, repairing the pleaded F4 drift by
+  completing the record the gRPC entry's statement already claims - the ledger was
+  designed for exactly this (scripts/python_audit.py:58-64, one ledger for every
+  ecosystem, expiry fail-before-audit).
+
+  RESERVED, not decided: whether .trivyignore.yaml statements should be schema-validated
+  against the ledger so such a claim cannot drift again; the repair here is the record,
+  not the tooling.
+directives:
+- id: D1
+  actor: lexby
+  must: add_cve_2026_56852_to_the_vulnerabilities_section_of_trivyignore_yaml_scoped_by_paths_to_usr_local_bin_rclone_carrying_a_named_owner_expired_at_2026_10_23_the_qualified_f5_reachability_statement_client_only_against_operator_configured_remotes_no_published_ports_and_the_drop_condition_drop_this_the_moment_a_released_rclone_carries_x_text_gte_0_39_0_checkable_the_entry_is_absent_from_no_other_path_and_a_global_unscoped_ignore_fails_the_check
+  when: null
+- id: D2
+  actor: lexby
+  must: repair_the_f4_record_drift_by_recording_both_cve_2026_56852_and_ghsa_hrxh_6v49_42gf_in_docs_security_accepted_advisories_json_with_ecosystem_go_owner_expires_2026_10_23_no_fix_available_true_the_same_qualified_reachability_a_compensating_control_and_a_reason_naming_the_drop_condition_so_the_grpc_entry_existing_claim_becomes_true_and_both_entries_gain_the_ledgers_fail_on_expiry_enforcement_checkable_make_python_audit_passes_today_and_fails_loudly_when_either_entry_expires_is_set_to_a_past_date_run_red
+  when: null
+- id: D3
+  actor: lexby
+  must: prove_the_acceptance_against_the_operative_artefact_not_the_prose_build_the_backup_image_and_run_the_release_gates_own_trivy_invocation_severity_high_critical_ignore_unfixed_reading_trivyignore_yaml_demonstrating_it_exits_non_zero_on_cve_2026_56852_with_the_d1_entry_removed_red_and_passes_with_it_present_recording_the_red_run_in_the_discharge_note
+  when: null
+- id: D4
+  actor: lexby
+  must: bind_the_drop_condition_with_teeth_when_rclone_ships_a_release_whose_go_mod_carries_x_text_gte_0_39_0_update_the_digest_pin_in_deploy_backup_dockerfile_and_remove_both_the_trivyignore_entry_and_the_ledger_entry_in_the_same_change_checkable_after_that_change_the_release_gate_trivy_scan_of_the_rebuilt_backup_image_passes_with_neither_entry_present_and_before_expiry_silence_is_impossible_because_an_expired_entry_fails_make_python_audit_and_the_trivy_expired_at_returns_the_finding_to_the_gate
+  when: null
+forbidden:
+- switching_the_backup_image_to_rclone_beta_or_any_mutable_or_unreleased_tag_under_cover_of_this_order
+- building_rclone_from_source_under_cover_of_this_order_pinned_commit_or_not
+- accepting_cve_2026_56852_without_paths_scoping_to_usr_local_bin_rclone_a_global_ignore_would_silence_the_finding_where_x_text_is_reachable_elsewhere
+- extending_or_renewing_the_2026_10_23_expiry_in_either_file_without_a_fresh_case_file_and_ruling
+- treating_this_acceptance_as_precedent_for_accepting_an_advisory_where_a_released_upstream_artifact_carries_the_fix_the_ratio_inverts_the_day_f2_becomes_false
+exceptions:
+- if_a_released_rclone_carrying_x_text_gte_0_39_0_exists_at_implementation_time_take_the_fix_repin_the_digest_and_file_no_acceptance_policy_item_6_prefers_the_fix_wherever_it_can_be_taken
+- the_existing_ghsa_hrxh_6v49_42gf_acceptance_is_not_reopened_only_its_record_is_completed_under_d2
+supersedes: []
+source_opinion: docs/vjs/2026-VJS-CC-BOLTRIG-SUPPLY-CHAIN-ADVISORY-ACCEPTANCE-001-opinion.md
+runtime_summary: |
+  CVE-2026-56852 (golang.org/x/text v0.38.0 vendored in the pinned rclone 1.74.4 binary,
+  no released upstream fix) is accepted in .trivyignore.yaml, scoped to
+  usr/local/bin/rclone, with owner, expiry 2026-10-23, the qualified client-only
+  reachability statement, and a drop-on-fixed-release condition. The acceptance and the
+  pre-existing GHSA-hrxh-6v49-42gf acceptance are both mirrored into
+  docs/security/accepted-advisories.json (ecosystem go), repairing the pleaded record
+  drift and binding both to the ledger's fail-on-expiry enforcement. The acceptance is
+  proven against the built backup image under the release gate's own trivy invocation,
+  red without the entry. v0.4.22 (the HITL-notification cure) is unblocked. Beta tags,
+  source builds, unscoped ignores, and silent expiry renewals are forbidden.
+created_at: 2026-07-28T20:16:24Z
+citation: null
+assent_source: standing_bounded_assent
+implementation_status: OPEN
+implementation_note: |
+  Filed 2026-07-28. citation is null for the reason recorded in
+  2026-VJS-CC-BOLTRIG-SCHEMA-VALIDATION-LEDGER-001: `vjs next-citation` refuses to mint the
+  canon COUNTY series at a subscriber seat ([2026] VJS-PC 19), and minting at canon offers a
+  number this repository's mirror already uses. The allocator gap is not settled here.

@@ -1,0 +1,12 @@
+id: LOG-2026-07-28-202341
+time: 2026-07-28T20:23:41.541321735+00:00
+actor: lexby
+kind: fix
+issue: supply-chain.advisory-acceptance
+decision: 'County court convened on its own motion ruled Option A adopted as modified: accept CVE-2026-56852 in .trivyignore.yaml scoped to usr/local/bin/rclone with owner, expiry 2026-10-23, qualified reachability, drop-on-fixed-release, AND mirror both the CVE and the existing gRPC acceptance into docs/security/accepted-advisories.json; B, C, D refused'
+basis:
+- '[2026] VJS-COUNTY SUBMISSION-2026-07-28-201135; CONVENING-county-2026-07-28-201143; order 2026-VJS-CC-BOLTRIG-SUPPLY-CHAIN-ADVISORY-ACCEPTANCE-001 (binding)'
+risk: medium
+reversibility: easy
+court_required: false
+why: 'Trivy blocked v0.4.22 on CVE-2026-56852 (x/text v0.38.0 vendored in the digest-pinned rclone 1.74.4 binary); no released rclone carries the fix, so policy item 6''s only-when-no-fixed-release condition is met at the artefact level. Acceptance is a record, never a silence: scoped, owned, expiring, with the qualified reachability statement (exploitation needs a compromised operator-provisioned remote, not ''no untrusted input'' as pleaded) and mirrored into the ledger whose machinery fails review on expiry - which also repairs the drifted ''Recorded in accepted-advisories.json'' claim on the gRPC entry. Beta tag (mutable unreleased code, defeats pinning), holding the release (delays a binding court-ordered cure with live-tenant D4), and source builds (provenance/attestation regression) were refused. Expiry renewal requires a fresh ruling; no precedent where a fixed released artefact exists. No config changed at this step; implementation follows under D1-D4.'

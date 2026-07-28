@@ -1751,6 +1751,12 @@ invariants:
       - tests/deploy/test_release_can_actually_publish.py::test_the_ui_candidate_is_given_the_packages_token_it_mounts
       - tests/deploy/test_release_can_actually_publish.py::test_the_release_vuln_gate_reads_the_same_acceptances_as_the_security_gate
       - tests/deploy/test_release_can_actually_publish.py::test_promotion_still_happens_only_after_every_candidate_is_verified
+  IAC-006:
+    description: 'Accepted advisories are a record with teeth, never a silence (docs/dependency-policy.md item 6): every entry in docs/security/accepted-advisories.json carries owner, expiry, reachability, compensating control and reason, and scripts/python_audit.py fails BEFORE pip-audit runs on any expired or unparseable entry in EVERY ecosystem (non-Python entries are expiry-reviewed but never passed as --ignore-vuln), so a stale acceptance fails the review the day it goes stale.'
+    tests:
+      - tests/unit/test_python_audit_expiry.py::test_an_expired_entry_fails_before_the_audit_in_every_ecosystem
+      - tests/unit/test_python_audit_expiry.py::test_only_python_entries_become_ignore_vuln_flags
+      - tests/unit/test_python_audit_expiry.py::test_the_shipped_ledger_is_live_and_wellformed
   FR-OPS-02:
     description: 'Compose validation is reproducible from a clean checkout by using the checked non-secret example environment and a validation-only database password; operator launches retain the conventional ignored .env default.'
     tests:

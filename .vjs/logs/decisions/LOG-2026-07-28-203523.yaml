@@ -1,0 +1,12 @@
+id: LOG-2026-07-28-203523
+time: 2026-07-28T20:35:23.300641093+00:00
+actor: lexby
+kind: decision
+issue: ROUTE-20260728-203512
+decision: 'Final scope for the advisory acceptance: .trivyignore.yaml + ledger entries, the built-image trivy proof, and the order-binding artefacts - D1 bound by the extended IaC scan test (vulnerabilities entries path-scoped/expiring), D2 by a new python_audit expiry test under declared invariant IAC-006, D3 by the release-gate invocation test, D4 waived until a fixed rclone release exists'
+basis:
+- PERMIT-1785270912
+risk: low
+reversibility: easy
+court_required: false
+why: check_order_directives requires every directive of the binding order enforced by a named test or a recorded waiver; the D1 vulnerabilities-section check and the D2 expiry test are real enforcements, not prose
