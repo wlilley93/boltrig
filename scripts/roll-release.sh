@@ -49,18 +49,29 @@ say "digests for $VERSION, read from the registry"
 # default multi-line block, which a naive capture swallows whole and then writes
 # into a live overlay as a malformed pin.
 digest_of() { docker buildx imagetools inspect "$1" 2>/dev/null | awk '/^Digest:/{print $2; exit}'; }
-KD=""; FD=""
+KD=""; FD=""; UD=""
 for i in $(seq 1 40); do
   KD=$(digest_of "ghcr.io/wlilley93/boltrig-kernel:$VERSION")
   FD=$(digest_of "ghcr.io/wlilley93/boltrig-fleet:$VERSION")
-  [[ "$KD" == sha256:* && "$FD" == sha256:* ]] && break
+  UD=$(digest_of "ghcr.io/wlilley93/boltrig-ui:$VERSION")
+  [[ "$KD" == sha256:* && "$FD" == sha256:* && "$UD" == sha256:* ]] && break
   [ "$i" = 1 ] && echo "  waiting for $VERSION to publish (the release workflow is probably still running)"
   sleep 15
 done
 echo "  kernel $KD"
 echo "  fleet  $FD"
+echo "  ui     $UD"
 [[ "$KD" == sha256:* ]] || die "kernel digest for $VERSION never became resolvable - did the release succeed?"
 [[ "$FD" == sha256:* ]] || die "fleet digest for $VERSION never became resolvable - did the release succeed?"
+# THE UI IS ROLLED TOO, and it was not until 2026-07-28. This script pulled and
+# brought up `kernel fleet-worker` only, and repin() rewrote only those two image
+# refs, so no invocation of it could ever move the UI. Both stacks silently sat on
+# boltrig-ui:0.4.9 while the kernel reached v0.4.21 - twelve releases - and
+# check_fleet_drift.py reported PASS the whole time because it asks whether the
+# PINNED image is running, not whether the pin is current. 0.4.9 also predates the
+# release pipeline gaining cosign signing, so the one component nothing rolled was
+# also the one unsigned artefact on the client's box.
+[[ "$UD" == sha256:* ]] || die "ui digest for $VERSION never became resolvable - did the release succeed?"
 
 # SOURCE-FIRST. The overlay is TRACKED in wlilley93/Opbox
 # (boltrig-tenants/), and the box's copy is DERIVED. This used to sed the file on
@@ -80,22 +91,28 @@ repin() { # $1=overlay path ON THE BOX (its basename-relative path under SRC_ROO
   [ -f "$src" ] || die "no tracked source for $rel at $src - the box copy is not authoritative, so refusing to edit it"
 
   cp -a "$src" "$src.bak-roll-$STAMP"
-  python3 - "$src" "$VERSION" "$KD" "$FD" <<'PY'
+  python3 - "$src" "$VERSION" "$KD" "$FD" "$UD" <<'PY'
 import re, sys
-p, version, kd, fd = sys.argv[1:5]
+p, version, kd, fd, ud = sys.argv[1:6]
 s = open(p).read()
 s = re.sub(r'ghcr\.io/wlilley93/boltrig-kernel:[^\s"]+', f'ghcr.io/wlilley93/boltrig-kernel:{version}@{kd}', s)
 s = re.sub(r'ghcr\.io/wlilley93/boltrig-fleet:[^\s"]+',  f'ghcr.io/wlilley93/boltrig-fleet:{version}@{fd}',  s)
+s = re.sub(r'ghcr\.io/wlilley93/boltrig-ui:[^\s"]+',     f'ghcr.io/wlilley93/boltrig-ui:{version}@{ud}',     s)
 open(p, 'w').write(s)
 PY
 
   local n
   n=$(diff "$src.bak-roll-$STAMP" "$src" | grep -c '^[<>]' || true)
   diff "$src.bak-roll-$STAMP" "$src" || true
+  # 6, not 4: three image lines (kernel, fleet, ui), each contributing a `<` and a
+  # `>`. This assertion is the thing that would have caught the UI being left
+  # behind - it counted 4 and passed, because a line that is never rewritten never
+  # shows up in the diff. A count that only ever sees what it already expects
+  # cannot report an omission, so widen it whenever a service joins the roll.
   case "${n:-0}" in
-    4) echo "  [ok] repinned both image lines IN THE SOURCE ($rel)" ;;
+    6) echo "  [ok] repinned all three image lines IN THE SOURCE ($rel)" ;;
     0) echo "  [ok] source already pinned at $VERSION (safe no-op re-run)" ;;
-    *) die "source diff for $rel is $n changed lines; expected 4 (repin) or 0 (already pinned)" ;;
+    *) die "source diff for $rel is $n changed lines; expected 6 (repin kernel+fleet+ui) or 0 (already pinned)" ;;
   esac
   rm -f "$src.bak-roll-$STAMP"
 
@@ -113,8 +130,8 @@ PY
 
 bring_up() { # $1=overlay $2=project
   ssh "$H" "cd $PROJECT_DIR && \
-    docker compose -f $COMPOSE -f $1 -p $2 pull kernel fleet-worker && \
-    docker compose -f $COMPOSE -f $1 -p $2 up -d --no-deps kernel fleet-worker" \
+    docker compose -f $COMPOSE -f $1 -p $2 pull kernel fleet-worker ui && \
+    docker compose -f $COMPOSE -f $1 -p $2 up -d --no-deps kernel fleet-worker ui" \
     || die "compose up failed for $2"
 }
 
@@ -154,6 +171,27 @@ gate() { # $1=project $2=expected `addons active:` substring
   img=$(ssh "$H" "docker ps --filter name=^/$k\$ --format '{{.Image}}'")
   [[ "$img" == *"$VERSION"* ]] || die "$k is running '$img', not $VERSION"
   echo "  [ok] $k running $img"
+
+  # THE UI, asserted on the same terms as the kernel. Bringing a service up
+  # without gating it is how it drifts unnoticed in the first place: the roll now
+  # moves the UI, so a UI that comes back on the wrong image, or does not come
+  # back at all, has to fail the roll rather than be discovered twelve releases
+  # later. Asserting the IMAGE and not merely `healthy` is the point - a container
+  # that never restarted reports healthy while serving the old bundle.
+  local u="$P-ui-1"
+  local us=""
+  for i in $(seq 1 24); do
+    us=$(ssh "$H" "docker ps --filter name=^/$u\$ --format '{{.Status}}'" 2>/dev/null)
+    case "$us" in *Restarting*) die "$u is RESTARTING: $us" ;; esac
+    case "$us" in *healthy*) break ;; esac
+    sleep 5
+  done
+  case "$us" in *healthy*) echo "  [ok] $u $us" ;; *) die "$u never became healthy: '$us'" ;; esac
+
+  local uimg
+  uimg=$(ssh "$H" "docker ps --filter name=^/$u\$ --format '{{.Image}}'")
+  [[ "$uimg" == *"$VERSION"* ]] || die "$u is running '$uimg', not $VERSION"
+  echo "  [ok] $u running $uimg"
 }
 
 say "roll the CANARY (solo boltrig: must report NO addons)"
