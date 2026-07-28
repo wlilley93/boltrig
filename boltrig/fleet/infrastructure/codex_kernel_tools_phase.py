@@ -131,7 +131,15 @@ def validated_kernel_tool_names(values: object) -> tuple[str, ...]:
     if type(values) is not tuple or any(type(item) is not str for item in values):
         raise CodexKernelToolsError("kernel tools must be an exact tuple of strings")
     if len(values) > MAX_KERNEL_TOOLS:
-        raise CodexKernelToolsError("kernel tools exceed the attestation bound")
+        # The counts, because this is a CLIFF and the bare sentence gave an operator
+        # nothing to act on. Measured on a live tenant: 197 verbs registered and a
+        # tenant ceiling of allow:["*"], so a run whose grants resolve to the
+        # wildcard is 197 against a bound of 128 and EVERY turn dies here. Skills
+        # narrow it to ~74 today, which is the only reason it does not bite.
+        # Two integers, no names: a count is not content (K-20).
+        raise CodexKernelToolsError(
+            f"kernel tools exceed the attestation bound: {len(values)} > {MAX_KERNEL_TOOLS}"
+        )
     for name in values:
         if len(name) > MAX_KERNEL_TOOL_NAME_LENGTH or _WIRE_NAME.fullmatch(name) is None:
             raise CodexKernelToolsError("kernel tool name is not an exact boltrig wire name")

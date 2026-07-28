@@ -97,3 +97,29 @@ def test_both_entrypoints_configure_logging_and_neither_rolls_its_own() -> None:
         assert "basicConfig" not in src, (
             f"{name} rolls its own logging config; there must be exactly one"
         )
+
+
+def test_the_tool_ceiling_refusal_names_the_counts() -> None:
+    """A cliff whose message names neither side of the comparison is unactionable.
+
+    Measured on a live tenant on 2026-07-27: 197 verbs registered and a tenant
+    ceiling of ``allow:["*"]``, against MAX_KERNEL_TOOLS=128. A run whose grants
+    resolve to that wildcard is 197 over a bound of 128 and every turn dies here.
+    Skills narrow it to ~74 today, which is the only reason it does not bite - so
+    the operator who eventually meets it deserves both integers, not a sentence.
+
+    Counts are not content (K-20): no verb names are in the message.
+    """
+    from boltrig.fleet.infrastructure.codex_kernel_tools_phase import (
+        MAX_KERNEL_TOOLS,
+        CodexKernelToolsError,
+        validated_kernel_tool_names,
+    )
+
+    over = tuple(f"t{i:04d}" for i in range(MAX_KERNEL_TOOLS + 1))
+    with pytest.raises(CodexKernelToolsError) as raised:
+        validated_kernel_tool_names(over)
+    message = str(raised.value)
+    assert str(len(over)) in message and str(MAX_KERNEL_TOOLS) in message, message
+    # and it still says nothing about WHICH tools
+    assert "t0000" not in message
