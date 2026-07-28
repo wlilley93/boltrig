@@ -18,6 +18,11 @@
     "would be precisely the false claim this gate exists to catch."
   ],
   "allow": {
+    "HITL-NOTIFICATION-ROUTING-001:D4": {
+      "owner": "kernel-maintainers",
+      "expires": "2026-11-30",
+      "reason": "Not code-testable and correctly so: D4 binds the LIVE Classical Visas tenant - provisioning its delivery data (notification_prefs, bindings, channel) and evidencing a delivery artefact addressed to info@classicalvisas.com by a SELECT on the tenant database. Nothing in this repository can decide what a remote tenant database holds, and a test that claimed to would be the false claim this gate exists to stop. Discharged by the tenant record, not by CI."
+    },
     "AUDIT-DEPTH-001:D8": {
       "owner": "kernel-maintainers",
       "expires": "2026-11-30",

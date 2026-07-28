@@ -1,0 +1,12 @@
+id: LOG-2026-07-28-190121
+time: 2026-07-28T19:01:21.888163627+00:00
+actor: lexby
+kind: decision
+issue: ROUTE-20260728-190103
+decision: 'Implement 2026-VJS-CC-BOLTRIG-HITL-NOTIFICATION-ROUTING-001 D1-D3: factor one shared eligible-approver derivation out of authorize_approval_response; _notify_request additionally enqueues to that set via enqueue_user_notification, deduplicated, fail-safe; tests seeded red'
+basis:
+- PERMIT-1785265263
+risk: low
+reversibility: easy
+court_required: false
+why: County order (binding) adopts Option A - notice follows eligibility; the notice set must derive from the same eligibility rule the response route enforces so notice and authority cannot drift; fail-safe side-channel doctrine (SEC-179, P9) preserved

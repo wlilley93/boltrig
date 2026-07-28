@@ -133,7 +133,7 @@ LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/audit.py:146		Bounded-observabi
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/audit.py:36		argues for never rotating a LEAKED key.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/channel_gateway_routes.py:102		The token is returned exactly once here and is never logged;
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/channel_gateway_routes.py:53		Authenticate a gateway link call: a live run-scoped token minted for the channel gateway (extra.channel_gateway), else None (fail-closed).
-LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/channel_notify.py:44		The recipient subjects a matching pref addresses (SEC-179).
+LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/channel_notify.py:47		The recipient subjects a matching pref addresses (SEC-179).
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/channel_routes.py:205		SEC-181 adjacency: a SECURE question's answer is sealed as a run/purpose-scoped credential reference by the secure-input surface;
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/channel_routes.py:450		2.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/channel_routes.py:451		Fail CLOSED when the channel has no resolvable secret: without one the
@@ -151,10 +151,8 @@ LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:397		audit row (actor
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:593		minted straight into the credential arg, never into params/events/audit.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/events.py:36		A tenant-bound relay view for trusted turn-executor integrations.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/held_call.py:54		without guessing.
-LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/hitl.py:235		Best-effort channel notice to the human who must act (SEC-179): enqueue to their bound surface per their notification_prefs so an approval/escalation raised by a channel-originated run reaches the originating chat.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/hitl_http.py:115		The four-eyes bootstrap exemption always leaves a flag on the chain:
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/hitl_http.py:141		Owner-only, fail-closed answer to a QUESTION request (US-CHAT-12).
-LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/hitl_response_auth.py:142		Require an independent, assigned human with the live action grant.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/pii.py:108		the audit scrubber; at the other five a truthy answer REFUSES.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/pii.py:131		Return the name of the first identity pattern found, or None.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/pii.py:25		Secret patterns that must NEVER reach the audit record (K-20).
@@ -279,7 +277,7 @@ LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/credentials.py:73	owner	W
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/credentials.py:97	None	Parse a ``credential:run/<run_id>/<purpose>`` reference, else ``None``.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/dispatch.py:82	schema_path	Validate, and return findings whose provenance is WHOLLY THE SCHEMA AND NAME-ONLY.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/events.py:1	backlog	The run/conversation event stream relay (Round Two, US-CONV-03/07).
-LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/hitl.py:371	approval_id	The gate's authorisation check (SEC-14).
+LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/hitl.py:378	approval_id	The gate's authorisation check (SEC-14).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/run_event_projection.py:18	schema_invalid	A bounded, VALUE-FREE description of a verb's params for the chat stream (K-20 bounded observability): the sorted top-level KEY NAMES and their count, never the values (which can carry secrets or untrusted content).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/security_events.py:1	detail	The distinct SecurityEvent stream + the audit rollup anchor ([2026] VJS-COUNTY 9).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/security_events.py:146	key	The deterministic rollup root over a contiguous audit-chain segment (D4).
@@ -429,6 +427,8 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/held_call.py:1	approval_ga
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/held_call.py:281	sweep_run_scoped	Retire a finished run's sealed credentials, unless a held write still needs them.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/hitl.py:1	dispatch	Human-in-the-loop management (Epic K).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/hitl_expiry.py:87	transition_work_item_status	Settle the expired request's AWAITING_HUMAN work item at CANCELLED.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/hitl_response_auth.py:142	authorize_approval_response	ONE definition of who may lawfully answer an APPROVAL request.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/hitl_response_auth.py:225	approval_response_block	Require an independent, assigned human with the live action grant.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/mcp.py:1	initialize	The kernel's MCP server face (Round Two, Epic MCP).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/mcp_errors.py:1	_call_tool	Turning a kernel exception into the MCP result envelope a model actually reads.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/questions.py:1	apply_manifest	The governed "ask the user a question" built-in verb (US-CHAT-12).
@@ -1028,8 +1028,8 @@ ORDINARY	NO-SUBJECT	comment	boltrig/kernel/held_call.py:184		DIFFERENT action an
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/held_call.py:323		The recorded call for an answered approval, or None when it is gone.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/held_call.py:59		same question and cannot drift apart.
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/held_call.py:96		Whether this pause could be RECORDED as a held call if it happened now.
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/hitl.py:288		expired on the spot and refuses the answer with a typed 409 - the
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/hitl.py:353		A stale approval can never execute (SEC-14): the human approved in
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/hitl.py:295		expired on the spot and refuses the answer with a typed 409 - the
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/hitl.py:360		A stale approval can never execute (SEC-14): the human approved in
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/hitl_expiry.py:119		Drop the seal of a write held by a request that has just timed out.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/hitl_expiry.py:53		default (never a boot crash, P9).
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/hitl_http.py:163		Owner = the run's owning work item's on_behalf_of;
@@ -1226,7 +1226,7 @@ ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/workers.py:158	KeyError	Start 
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/workers.py:72	KeyError	Run the registered task body INLINE (awaited here, US-EXE-05).
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/app.py:128	id	The streamable-HTTP answer for one JSON-RPC message.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/audit.py:72	seq	The ONE key a row at ``seq`` is allowed to verify under.
-ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/channel_notify.py:65	source_route	Enqueue one outbox row per (matching pref, resolved subject, bound channel).
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/channel_notify.py:68	source_route	Enqueue one outbox row per (matching pref, resolved subject, bound channel).
 ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/kernel/channel_principal.py:26	self_onboard	channel's ``self_onboard`` config naming any other role is rejected fail-closed
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/channel_routes.py:186	subject	The EXACTLY-ONE pending HITL request addressed to ``subject`` whose work item's reply route is this channel+thread, else None: zero matches (nothing to answer) or several (ambiguous) both fall back to normal intake.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/dispatch.py:221	context.run_id	Publish a HITL pause to this run AND to the run that delegated to it.
@@ -1308,6 +1308,7 @@ ORDINARY	SUBJECT-REACHED	docstring	boltrig/identity/rbac.py:224	narrow_grants_to
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/identity/sessions.py:216	list_workspaces_for_user	Re-authorize a session's active workspace against CURRENT membership (D4).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/identity/sessions.py:257	request.state	Build the first-party session ``PrincipalResolver`` (D3).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/approval_gate.py:92	held_call.name_redeemer	Refuse to MINT an approval no lane could ever redeem (decision 0018, Order 5).
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/channel_notify.py:120	eligible_approval_responders	Enqueue an APPROVAL request's notice to every eligible approver.
 ORDINARY	SUBJECT-REACHED	comment	boltrig/kernel/credentials.py:41	resolve_run_scoped_params	is NEVER resolvable through ``resolve_run_scoped_params`` - it is only ever
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/events.py:103	max_seq	Record an event and fan it out to current subscribers (non-blocking).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/events.py:135	chat._safe_exec	Re-open a closed stream so a continuation can be published to it.
@@ -1315,8 +1316,10 @@ ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/held_call.py:143	_emit_pause	R
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/held_call.py:264	held_write_is_waiting	Whether ANY held call is still paused on this run, whichever request it is.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/held_call.py:84	dispatch._emit_pause	The run a pause belongs to: the run that DELEGATED to this one if any.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/hitl.py:168	HITLRequest	Attach the answer -> resume bridge (NFR-REL-03): a callable (sync or async) fired with the answered :class:`HITLRequest`.
-ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/hitl.py:311	consume_approved_by	Fire the resume notifier with the answered request, fail-safe (P9): the recorded answer is the truth; a notifier fault never voids it.
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/hitl.py:235	enqueue_approval_fanout	Best-effort channel notice to the humans who must act (SEC-179): enqueue to the subject's bound surface per their notification_prefs - and, for an APPROVAL, to every eligible approver (``enqueue_approval_fanout``: notice
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/hitl.py:318	consume_approved_by	Fire the resume notifier with the answered request, fail-safe (P9): the recorded answer is the truth; a notifier fault never voids it.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/hitl_expiry.py:1	run_hitl_expiry_sweep	Periodic HITL timeout enforcement (SEC-14) - the expiry sweep janitor.
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/hitl_response_auth.py:187	_notify_request	The users who may lawfully answer this APPROVAL request right now.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/ratelimit.py:1	RedisCounter	Rate limiting (FR-KER-05, US-KER-04).
 ORDINARY	SUBJECT-REACHED	comment	boltrig/models/access.py:71	workspace_id	never set it).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/models/channels.py:1	kernel.invoke	Channel gateway domain (Channels feature; decision 0003, VJS First Instance).

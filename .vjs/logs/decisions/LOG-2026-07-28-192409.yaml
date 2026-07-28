@@ -1,0 +1,12 @@
+id: LOG-2026-07-28-192409
+time: 2026-07-28T19:24:09.091457409+00:00
+actor: lexby
+kind: decision
+issue: ROUTE-20260728-192359
+decision: 'Final scope for the HITL notification routing cure, adding docs/claim-inventory.tsv: regenerated via make claim-inventory after the new docstrings made the committed census stale'
+basis:
+- PERMIT-1785266639
+risk: low
+reversibility: easy
+court_required: false
+why: The claim-gate test requires byte-identical regeneration of the inventory; the cure's docstrings are new claims the census must record

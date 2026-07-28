@@ -121,8 +121,8 @@ async def hitl_request_visible(
     return request.assignee in identities if request.assignee else True
 
 
-async def _sole_active_author(kernel: Any, principal: Any) -> bool:
-    """True when the principal is the tenant's ONLY active author-tier user.
+async def _sole_active_author(store: Any, tenant_id: str, subject: str) -> bool:
+    """True when the subject is the tenant's ONLY active author-tier user.
 
     The four-eyes bootstrap exemption: on a single-author tenant the independent-
     approver rule is unsatisfiable (every high-consequence control verb, including
@@ -131,12 +131,95 @@ async def _sole_active_author(kernel: Any, principal: Any) -> bool:
     lapses automatically the moment a second author exists."""
     from boltrig.identity.rbac import AUTHOR_ROLES
 
-    users = await kernel.store.list_users(principal.tenant_id)
+    users = await store.list_users(tenant_id)
     authors = [
         u for u in users
         if u.status == "active" and u.role in AUTHOR_ROLES
     ]
-    return len(authors) == 1 and authors[0].id == principal.subject
+    return len(authors) == 1 and authors[0].id == subject
+
+
+async def approval_response_block(
+    store: Any,
+    grants: Any,
+    request: HITLRequest,
+    *,
+    tenant_id: str,
+    subject: str,
+    on_behalf_of: str | None,
+    actor_tier: str,
+    context: Any,
+) -> tuple[str | None, bool]:
+    """ONE definition of who may lawfully answer an APPROVAL request.
+
+    Returns ``(block, exempt)``: ``block`` is the refusal detail, None when the
+    responder is eligible; ``exempt`` is True only when the sole-author
+    bootstrap exemption lifted the independence rule. The response route
+    (``authorize_approval_response``) raises on a block; the notice fan-out
+    (``eligible_approval_responders``) skips on one - the same rule in both
+    postures, so notice and authority cannot drift
+    ([2026] VJS-CC-BOLTRIG-HITL-NOTIFICATION-ROUTING-001, D2)."""
+    if actor_tier != "human":
+        return "only a human may approve", False
+    if not request.verb or not request.request_fingerprint:
+        return "approval is not request-bound", False
+    if request.assignee and request.assignee != subject:
+        return "approval is assigned to another user", False
+    initiators = {
+        value
+        for value in (request.requested_by, request.requested_on_behalf_of)
+        if value
+    }
+    respondents = {value for value in (subject, on_behalf_of) if value}
+    exempt = False
+    if initiators & respondents:
+        if not await _sole_active_author(store, tenant_id, subject):
+            return "cannot approve your own request", False
+        exempt = True
+    permissions = await store.get_tenant_permissions(tenant_id)
+    try:
+        grants.check(context, request.verb, permissions)
+    except GrantMissing:
+        return "not authorised to approve this action", False
+    return None, exempt
+
+
+async def eligible_approval_responders(store: Any, request: HITLRequest) -> list[str]:
+    """The users who may lawfully answer this APPROVAL request right now.
+
+    The notice fan-out (``_notify_request``) addresses exactly this set - notice
+    follows eligibility ([2026] VJS-CC-BOLTRIG-HITL-NOTIFICATION-ROUTING-001,
+    D1/D2). Each candidate is admitted by the SAME ``approval_response_block``
+    the response route enforces, with grants resolved exactly as the principal
+    resolver resolves them at the door (``current_grants_for_user``), so a user
+    the route would refuse is never notified and a user it would admit is never
+    missed. Notification widens the audience, never the authority."""
+    if request.type != HITLType.APPROVAL:
+        return []
+    from boltrig.identity.provisioning import current_grants_for_user
+    from boltrig.kernel.grants import GrantChecker
+    from boltrig.models import InvocationContext
+
+    grants = GrantChecker()
+    responders: list[str] = []
+    for user in await store.list_users(request.tenant_id):
+        context = InvocationContext(
+            tenant_id=request.tenant_id,
+            grants=current_grants_for_user(user),
+            actor=user.id,
+            actor_tier="human",
+        )
+        block, _ = await approval_response_block(
+            store, grants, request,
+            tenant_id=request.tenant_id,
+            subject=user.id,
+            on_behalf_of=None,
+            actor_tier="human",
+            context=context,
+        )
+        if block is None:
+            responders.append(user.id)
+    return responders
 
 
 async def authorize_approval_response(
@@ -146,35 +229,23 @@ async def authorize_approval_response(
 
     Returns True when the sole-author bootstrap exemption was applied (the
     caller MUST audit-flag it); the exemption never lifts the assignment,
-    humanity, or live-grant requirements below."""
+    humanity, or live-grant requirements below. The eligibility rule itself is
+    ``approval_response_block`` - ONE definition, shared with the notice
+    fan-out so the route and the routing table cannot drift."""
     if request.type != HITLType.APPROVAL:
         return False
-    if principal.actor_tier != "human":
-        raise HTTPException(status_code=403, detail="only a human may approve")
-    if not request.verb or not request.request_fingerprint:
-        raise HTTPException(status_code=409, detail="approval is not request-bound")
-    if request.assignee and request.assignee != principal.subject:
-        raise HTTPException(status_code=403, detail="approval is assigned to another user")
-    initiators = {
-        value
-        for value in (request.requested_by, request.requested_on_behalf_of)
-        if value
-    }
-    respondents = {
-        value for value in (principal.subject, principal.on_behalf_of) if value
-    }
-    exempt = False
-    if initiators & respondents:
-        if not await _sole_active_author(kernel, principal):
-            raise HTTPException(status_code=403, detail="cannot approve your own request")
-        exempt = True
-    permissions = await kernel.store.get_tenant_permissions(principal.tenant_id)
-    try:
-        kernel.grants.check(principal.context(), request.verb, permissions)
-    except GrantMissing as exc:
-        raise HTTPException(
-            status_code=403, detail="not authorised to approve this action"
-        ) from exc
+    block, exempt = await approval_response_block(
+        kernel.store, kernel.grants, request,
+        tenant_id=principal.tenant_id,
+        subject=principal.subject,
+        on_behalf_of=principal.on_behalf_of,
+        actor_tier=principal.actor_tier,
+        context=principal.context(),
+    )
+    if block == "approval is not request-bound":
+        raise HTTPException(status_code=409, detail=block)
+    if block is not None:
+        raise HTTPException(status_code=403, detail=block)
     return exempt
 
 

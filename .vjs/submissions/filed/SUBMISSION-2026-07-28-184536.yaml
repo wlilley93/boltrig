@@ -1,0 +1,73 @@
+id: SUBMISSION-2026-07-28-184536
+court_requested: county
+jurisdiction: default
+question: An operator-raised HITL approval notifies its initiator, never the only lawful approver. Should the notice be brought to the eligible approver(s), and how?
+facts: |
+  # The approval notice never reaches the only lawful approver
+
+  ## Facts
+
+  F1. `hitl.py:244` sets the notification subject to
+  `assignee or requested_on_behalf_of or requested_by`; `_notify_request` (`:235-252`)
+  enqueues a channel notice to that ONE user. An operator-raised approval with no assignee
+  notifies its raiser.
+
+  F2. Who may lawfully RESPOND is fixed by `authorize_approval_response`
+  (`hitl_response_auth.py:142-178`): a human outside the initiator set, matching the assignee
+  if set, holding the live grant for the verb. The sole-author exemption (`:124-139`) lifts
+  independence only while exactly ONE active author-tier user exists. Eligibility is
+  grant-based; `AUTHOR_ROLES` (rbac.py:163) enters ONLY through that exemption.
+
+  F3. On live tenant Classical Visas two active author-tier users exist (operator and client
+  `info@classicalvisas.com`); the exemption has lapsed, so the ONLY lawful approver of an
+  operator-raised request is the client (operator-seat record, 2026-07-28, scrutiny-verified).
+
+  F4. That ruling's D8 ordered a `control.invitation.create` "actually PUT TO
+  info@classicalvisas.com on a window of at least 24 hours". Shipped code cannot perform it:
+  by F1 the notice goes to the operator. That tenant's `notification_prefs` is also EMPTY,
+  and the manifest's `notify_via`/`primary_channel` knobs are parsed (manifest.py:591) and
+  read by nothing.
+
+  F5. Visibility is NOT the defect: `_approval_visible` (`:83-99`) already admits a
+  non-initiator human holding the verb grant to collection endpoints. What never happens is
+  the approach to them. Delivery is fail-soft: `_notify_request` swallows every fault (P9);
+  `enqueue_user_notification` returns `[]` on no match.
+
+  ## Option A: notify the eligible approver set
+
+  Extend `_notify_request` to also enqueue to every active user who could lawfully respond
+  under F2, deduplicated against the current subject, fail-safe as now.
+
+  *For:* the notice reaches exactly those F2 allows to act; the enqueue machinery exists; one
+  shared eligibility definition keeps notice and authorization from drifting.
+  *Against:* a grant sweep per raise; a recipient without prefs/bindings still ends in the
+  silent gap.
+
+  ## Option B: leave routing; expose the queue another way
+
+  F5 already grants visibility. Rely on pull (queue endpoint, in_app relay, UI); change no
+  kernel code.
+
+  *For:* smallest change; nothing pushed that no pref row asked for.
+  *Against:* pull never reaches an approver never told to look — precisely the F3/F4 posture;
+  D8's "actually PUT TO" is not satisfied by a queue never heard of.
+
+  ## Option C: notify all active author-tier users
+
+  *For:* cheap, deterministic, one store read.
+  *Against:* author tier is NOT eligibility (F2): it notifies users lacking the verb's grant,
+  and on a single-author tenant notifies only the initiator — the same defect where the
+  exemption serves.
+
+  ## Option D: require the raiser to name the approver (assignee)
+
+  F1 already notifies the assignee first; keep the subject singular.
+
+  *For:* one recipient chosen with context at raise time; the fallback honours it.
+  *Against:* the raiser must know who is eligible — the computation A centralises — and a
+  stale or ineligible assignee REFUSES everyone else (`:156-157`), worse than none.
+
+  No option is preferred. The advocate held a view and withheld it.
+requested_order: TBD
+private_boundary: local
+word_count: 499

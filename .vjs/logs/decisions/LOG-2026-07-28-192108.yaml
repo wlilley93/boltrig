@@ -1,0 +1,12 @@
+id: LOG-2026-07-28-192108
+time: 2026-07-28T19:21:08.606294124+00:00
+actor: lexby
+kind: decision
+issue: ROUTE-20260728-192058
+decision: 'Re-scoped permit adding boltrig/kernel/channel_notify.py: the approval fan-out lives there as enqueue_approval_fanout (delivery module), keeping hitl.py within the structural line budget and hitl_response_auth.py policy-only'
+basis:
+- PERMIT-1785266458
+risk: low
+reversibility: easy
+court_required: false
+why: check_structure.py flagged hitl.py at 414/400 lines after the D1 fan-out; moving the delivery loop to the delivery module cures the structural violation while the eligibility derivation stays shared in hitl_response_auth (D2)
