@@ -70,8 +70,10 @@ KERNEL_TOOLS_PROFILE_NAME = "codex-kernel-tools"
 # the wall and nothing else; 1.1.0 adds the governance floor and the tool-call
 # harness (see ``fleet/prompt_stack``), because the lane that ships to clients was
 # the ONLY lane that never sent the floor - including the sentence that explains
-# the <untrusted> envelope its own chat path wraps user input in.
-KERNEL_TOOLS_BASE_VERSION = "1.1.0"
+# the <untrusted> envelope its own chat path wraps user input in. 1.2.0 adds the
+# memory rule that 1.1.0 left out on a premise which turned out to be false when
+# checked against the live tenant rather than asserted.
+KERNEL_TOOLS_BASE_VERSION = "1.2.0"
 
 # The lane's own wall statement. Everything else in the instructions is shared
 # with any other tool-calling lane; this sentence is what makes it THIS lane.

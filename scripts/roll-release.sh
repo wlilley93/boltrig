@@ -39,15 +39,28 @@ say() { echo; echo "=== $* ==="; }
 die() { echo "ABORT: $*" >&2; exit 1; }
 
 say "digests for $VERSION, read from the registry"
+# WAIT, do not abort on the first miss. Tagging and rolling is ONE operator
+# motion, and the release workflow takes minutes to publish - so the natural
+# `git push --tags && roll` sequence hit "digest not resolvable" every single
+# time, which reads like a broken release rather than a race. Bounded (~10min),
+# so a release that never publishes still fails rather than hanging.
+#
 # awk, not `--format`: buildx 0.30.1 ignores the Go template here and prints its
 # default multi-line block, which a naive capture swallows whole and then writes
 # into a live overlay as a malformed pin.
-KD=$(docker buildx imagetools inspect "ghcr.io/wlilley93/boltrig-kernel:$VERSION" 2>/dev/null | awk '/^Digest:/{print $2; exit}')
-FD=$(docker buildx imagetools inspect "ghcr.io/wlilley93/boltrig-fleet:$VERSION"  2>/dev/null | awk '/^Digest:/{print $2; exit}')
+digest_of() { docker buildx imagetools inspect "$1" 2>/dev/null | awk '/^Digest:/{print $2; exit}'; }
+KD=""; FD=""
+for i in $(seq 1 40); do
+  KD=$(digest_of "ghcr.io/wlilley93/boltrig-kernel:$VERSION")
+  FD=$(digest_of "ghcr.io/wlilley93/boltrig-fleet:$VERSION")
+  [[ "$KD" == sha256:* && "$FD" == sha256:* ]] && break
+  [ "$i" = 1 ] && echo "  waiting for $VERSION to publish (the release workflow is probably still running)"
+  sleep 15
+done
 echo "  kernel $KD"
 echo "  fleet  $FD"
-[[ "$KD" == sha256:* ]] || die "kernel digest for $VERSION is not resolvable"
-[[ "$FD" == sha256:* ]] || die "fleet digest for $VERSION is not resolvable"
+[[ "$KD" == sha256:* ]] || die "kernel digest for $VERSION never became resolvable - did the release succeed?"
+[[ "$FD" == sha256:* ]] || die "fleet digest for $VERSION never became resolvable - did the release succeed?"
 
 repin() { # $1=overlay
   ssh "$H" "cp -a $1 $1.bak-roll-$STAMP" || die "backup failed for $1"
