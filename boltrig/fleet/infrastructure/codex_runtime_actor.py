@@ -11,6 +11,7 @@ from boltrig.fleet.domain import RuntimeEvent, RuntimeTurnRef
 
 from . import codex_protocol as wire
 from .codex_app_server import CodexAppServerClient
+from .codex_diagnostics import log_pump_crash
 from .codex_runtime_event_state import CodexRuntimeProtocolError
 from .codex_runtime_events import CodexEventTranslator, is_runtime_invalidation
 
@@ -302,11 +303,8 @@ class CodexRuntimeActor:
             #
             # NOT exc_info and NOT str(exc): a JSONDecodeError carries the offending
             # document in its args, which is exactly the content K-20 keeps out.
-            logger.warning(
-                "codex notification pump crashed: %s.%s",
-                type(exc).__module__,
-                type(exc).__qualname__,
-            )
+            #
+            log_pump_crash(exc, terminal_already_set=self._terminal is not None)
             await self.fail(
                 CodexRuntimeTerminal("operation", "Codex notification pump failed")
             )

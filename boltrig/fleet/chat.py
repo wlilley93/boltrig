@@ -28,6 +28,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
 from boltrig.config.manifest import ChatConfig
+from boltrig.fleet.chat_authority import warn_if_no_usable_authority
 from boltrig.fleet.result import reply_text
 from boltrig.kernel.held_call import sweep_run_credentials_if_settled
 from boltrig.models import (
@@ -752,6 +753,7 @@ def build_turn_executor(
         # Every chat spawn is ceilinged by the caller's role-resolved grants
         # (identity/rbac.py); a caller whose role resolution failed carries the empty set (SEC-78).
         ceiling = grants if grants is not None else EMPTY_GRANTS
+        warn_if_no_usable_authority(role, ceiling, turn_skills)
         item = WorkItem(
             id=run_id, tenant_id=tenant_id, source="chat", intent=message,
             confidence=1.0, convergent=False, status=WorkStatus.IN_FLIGHT,

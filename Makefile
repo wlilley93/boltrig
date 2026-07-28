@@ -128,6 +128,13 @@ refresh-canon-citations: ## Re-vendor .vjs/canon-citations.txt from the canon re
 refresh-opbox-surface: ## Re-vendor tests/fixtures/opbox-model-surface.txt from the opbox schema
 	$(PY) scripts/refresh_opbox_surface.py --opbox $(OPBOX_REPO)
 
+user-authority: ## Does EVERY active user resolve to usable authority? (needs a tenant DSN; not a CI gate)
+	@# Fail-closed is right; fail-SILENT is the bug. A user in no org/workspace
+	@# resolves to the empty grant set, and a role absent from chat.skills_by_role
+	@# loads no skills - so their turns complete, apologise, and record nothing
+	@# wrong. Found exactly that on a live client. DSN=... MANIFEST=... make user-authority
+	$(PY) scripts/check_user_authority.py
+
 fleet-drift: ## Is what is RUNNING what we pinned? (needs a box; not a CI gate)
 	$(PY) scripts/check_fleet_drift.py --host $(DRIFT_HOST) --project $(DRIFT_PROJECT) \
 		--compose $(DRIFT_COMPOSE) --overlay $(DRIFT_OVERLAY)

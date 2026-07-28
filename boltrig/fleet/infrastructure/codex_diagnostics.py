@@ -34,3 +34,22 @@ def log_operation_failure(op: str, exc: BaseException) -> None:
         type(exc).__qualname__,
         code if isinstance(code, int) else "-",
     )
+
+
+def log_pump_crash(exc: BaseException, *, terminal_already_set: bool) -> None:
+    """Report a notification-pump crash at the level its role deserves.
+
+    WARNING when the crash is the CAUSE. When a terminal already exists the turn has
+    already ended and the pump is simply blocked on next_notification() against a
+    connection that has gone, raising ProtocolStateError("connection is closed") on
+    the way out; the first terminal correctly wins. Logging THAT at WARNING fires on
+    every healthy turn, and an alarm that cries wolf on the happy path is the same
+    blindness as no alarm at all.
+    """
+    logger.log(
+        logging.INFO if terminal_already_set else logging.WARNING,
+        "codex notification pump crashed: %s.%s (terminal_already_set=%s)",
+        type(exc).__module__,
+        type(exc).__qualname__,
+        terminal_already_set,
+    )

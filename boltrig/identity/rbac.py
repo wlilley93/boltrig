@@ -125,6 +125,38 @@ def grants_for_scope(scope: dict[str, Any] | None) -> GrantSet:
     return GrantSet.of(allow=allow, deny=deny)
 
 
+# Read by ``provisioning._coherent_scope`` when a scope was NEVER STATED. K-13 makes
+# an empty scope mean NOTHING, deliberately - ``grants_for_scope({})`` above returns
+# ``EMPTY_GRANTS`` - so without this a caller can be minted holding a role that
+# implies authority and a scope that grants none.
+#
+# This is a boltrig-internal coherence rule, not an integration table. Whoever
+# provisions a user (an IdP group mapping, an invitation, or a first-party product
+# calling the control plane) decides WHICH role to ask for; boltrig only insists that
+# the role it is handed and the authority it confers agree.
+#
+# Tenant-wide here means the ORG ceiling; a workspace membership intersects it DOWN
+# (see identity/provisioning.effective_grants_for_request), never up (COUNTY 5).
+# Roles absent from this table get no default: their authority is tenant policy, and
+# inventing one here would be widening authority nobody asked for.
+ORG_ROLE_DEFAULT_SCOPE: dict[str, dict[str, Any]] = {
+    "superadmin": {"all": True},
+    "admin": {"all": True},
+    "org-admin": {"all": True},
+}
+
+
+def default_scope_for_role(role: str) -> dict[str, Any] | None:
+    """Look ``role`` up in ``ORG_ROLE_DEFAULT_SCOPE``; ``None`` when it has no entry.
+
+    ``provisioning._coherent_scope`` is the only caller, and only when a scope was
+    NEVER STATED: a stated-but-narrow scope is a deliberate choice and is never
+    widened. The returned dict is fed to ``grants_for_scope`` above.
+    """
+    scope = ORG_ROLE_DEFAULT_SCOPE.get(role)
+    return dict(scope) if scope is not None else None
+
+
 # Roles permitted to author (studios) and administer (admin console) (C3, SEC-32).
 # superadmin + admin author/administer; member deliberately does NOT (it operates
 # only - the console's authoring studios and admin console are hidden from it).
