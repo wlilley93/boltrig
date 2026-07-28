@@ -97,6 +97,12 @@ def test_chat_accepts_on_behalf_bearer_and_stays_compatible_with_legacy_executor
     # threaded through handle_turn; the legacy _stub_executor signature predates it,
     # so the turn-executor compat filter must DROP it rather than pass an unexpected
     # keyword (backward-compat with older injected executors).
+    #
+    # EVERY optional passthrough goes in this payload, because that filter is a
+    # REGISTRY and adding a field to the call without adding it to the registry is
+    # a silent break: the legacy executor raises TypeError, _safe_exec degrades
+    # rather than raises (P9), and the turn answers "(turn error: TypeError)" with
+    # nothing anywhere naming the field. `origin` did exactly that for one commit.
     store, relay = InMemoryStore(), EventRelay()
     chat = ChatService(store, relay, turn_executor=_stub_executor(
         [{"type": "text_delta", "delta": "hi there"}]
@@ -105,7 +111,8 @@ def test_chat_accepts_on_behalf_bearer_and_stays_compatible_with_legacy_executor
     hdr = {"x-boltrig-tenant": T, "x-boltrig-subject": "alice", "x-boltrig-role": "engineer"}
     r = client.post(
         "/v1/chat",
-        json={"message": "hello", "on_behalf_bearer": "opbox-clamped-bearer-xyz"},
+        json={"message": "hello", "on_behalf_bearer": "opbox-clamped-bearer-xyz",
+              "origin": "opbox-spotlight"},
         headers=hdr,
     )
     assert r.status_code == 200
@@ -466,3 +473,56 @@ async def test_a_degraded_turn_still_falls_back_to_the_summary_line():
     msgs = await store.list_messages(T, convs[0].id)
     assert msgs[1].content.startswith("(degraded)")
     assert "backend unavailable" in msgs[1].content
+
+
+def test_the_channel_a_turn_arrived_through_is_recorded_without_steering_routing():
+    """One conversation, two surfaces - and the surface does not choose the department.
+
+    The requirement was "when I type a message in the Opbox spotlight it should
+    appear in the boltrig UI, but the channel was opbox". Half of that (it must not
+    register or perform twice) shipped as the idempotency guard; this is the other
+    half.
+
+    Asserted through the REAL HTTP body and the REAL turn executor, because the
+    two things that could go wrong both live between them: a stub executor never
+    builds a WorkItem at all, and the compat filter that keeps legacy executors
+    working silently DROPS unknown keywords - so a version of this wired only to
+    `handle_turn` would pass while nothing was ever recorded.
+
+    The second assertion is the load-bearing one. `WorkItem.source` selects the
+    handling department (`chief_of_staff._route_deterministic`), so it must stay
+    pinned to "chat" no matter what the caller sends. If someone later "simplifies"
+    this by passing `origin` into `source`, this goes red.
+    """
+    store, relay = InMemoryStore(), EventRelay()
+
+    async def spawn(tenant_id, task, skills, prefer, context, *,
+                    partial_on_budget=True, grant_ceiling=None):
+        return {"output": {"text": "done"}, "summary": "done"}
+
+    kernel = types.SimpleNamespace(store=store)
+    chat = ChatService(
+        store, relay,
+        turn_executor=build_turn_executor(kernel, types.SimpleNamespace(spawn=spawn),
+                                          continuity=True),
+    )
+    client = TestClient(create_app(Kernel(store), chat_service=chat))
+    hdr = {"x-boltrig-tenant": T, "x-boltrig-subject": "alice", "x-boltrig-role": "engineer"}
+    r = client.post(
+        "/v1/chat",
+        # "legal" is a REAL department queue_source name: if origin were being fed
+        # into `source`, this exact payload is how a client would pick its handler.
+        json={"message": "hello", "origin": "legal"},
+        headers=hdr,
+    )
+    assert r.status_code == 200 and "message_end" in r.text
+
+    items = asyncio.run(store.list_run_items_scoped(T, external_ref="legal"))
+    assert len(items) == 1, (
+        "the channel label never reached the work item; a UI cannot ask "
+        "/v1/runs?external_ref=... which surface a run came from"
+    )
+    assert items[0].source == "chat", (
+        f"source is {items[0].source!r}, not 'chat': the caller just chose which "
+        "department handles their work through a field documented as a label"
+    )

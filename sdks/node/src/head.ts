@@ -148,6 +148,18 @@ export interface StreamTurnOptions extends KernelRequestOptions {
    * mints into the app adapter's credential so a chat-driven app verb runs under
    * THIS user's grants. Optional; omit for the PAT-only identity. (GAP G2) */
   onBehalfBearer?: string;
+  /** Exactly-once key for THIS message. A retry that reuses it is answered as an
+   * accepted replay rather than convening a second agent - the kernel has run
+   * every VERB through the idempotency coordinator since SEC-15, but the surface
+   * a person actually types into had no replay defence, and a live client's retry
+   * loop turned one question into seven agent spawns. Omit for prior behaviour. */
+  idempotencyKey?: string;
+  /** WHICH SURFACE this turn arrived through (e.g. `"opbox-spotlight"`), so one
+   * conversation can span two of them and each turn still says where it came
+   * from. A LABEL: it reaches no authority or routing decision, and the kernel
+   * drops an unusable value rather than failing the message. It is deliberately
+   * not the work item's `source`, which selects the handling department. */
+  origin?: string;
 }
 
 /**
@@ -160,6 +172,8 @@ export async function* streamTurn(opts: StreamTurnOptions): AsyncGenerator<ChatE
   const body: Record<string, unknown> = { message: opts.message };
   if (opts.conversationId) body.conversation_id = opts.conversationId;
   if (opts.onBehalfBearer) body.on_behalf_bearer = opts.onBehalfBearer;
+  if (opts.idempotencyKey) body.idempotency_key = opts.idempotencyKey;
+  if (opts.origin) body.origin = opts.origin;
   let resp: Awaited<ReturnType<FetchLike>>;
   try {
     resp = await doFetch(`${opts.server.replace(/\/+$/, "")}/v1/chat`, {
