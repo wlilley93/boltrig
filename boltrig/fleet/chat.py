@@ -22,6 +22,7 @@ import asyncio
 import base64
 import binascii
 import contextlib
+import logging
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import TYPE_CHECKING, Any
@@ -31,6 +32,8 @@ from boltrig.fleet.chat_authority import (
     seal_on_behalf_bearer,
     warn_if_no_usable_authority,
 )
+from boltrig.fleet.chat_event_projection import project_chat_event
+from boltrig.fleet.chat_idempotency import replay_if_duplicate
 from boltrig.fleet.result import reply_text
 from boltrig.kernel.held_call import sweep_run_credentials_if_settled
 from boltrig.models import (
@@ -69,6 +72,8 @@ TurnExecutor = Callable[..., Awaitable[Any]]
 # re-enters the task). On raise/empty the deterministic offline summariser stands in.
 Summariser = Callable[[list[ConversationMessage]], Awaitable[str]]
 
+logger = logging.getLogger(__name__)
+
 _SCOPED_ROLES = {"org-admin", "compliance"}  # may read others' threads (SEC-25)
 
 
@@ -95,41 +100,28 @@ async def _settle_turn(
         await sweep_run_credentials_if_settled(kernel.store, tenant_id, run_id)
 
 
-def _project_chat_event(event: dict[str, Any]) -> dict[str, Any]:
-    """Bound the tool events before they reach the user-facing chat stream (K-20,
-    US-CHAT-10).
+async def _resolve_conversation(
+    store: Any, tenant_id: str, conversation_id: str | None,
+    user_id: str, role: str, message: str,
+) -> Conversation:
+    """The thread this turn belongs to, enforcing SEC-25 before anything streams.
 
-    The run relay carries the FULL ``tool_call``/``tool_result`` payloads (``input``
-    / ``output``) for the run canvas and the durable audit record (FR-EVT-01). The
-    chat SSE, which a browser renders live, must NEVER carry the raw params or
-    output of a verb: they can hold sensitive values or untrusted content. For
-    those two event types this forwards only the bounded keys + summaries the UI
-    needs to render a tool callout (``tool``/``call_id``/``args_summary`` and
-    ``call_id``/``status``/``result_summary``); every other event passes through
-    untouched, so message_start / text_delta / message_end / cancelled / hitl /
-    question are unchanged."""
-    etype = event.get("type")
-    if etype == "tool_call":
-        out: dict[str, Any] = {
-            "type": "tool_call",
-            "run_id": event.get("run_id"),
-            "tool": event.get("tool") or event.get("verb"),
-            "call_id": event.get("call_id"),
-        }
-        if "args_summary" in event:
-            out["args_summary"] = event["args_summary"]
-        return out
-    if etype == "tool_result":
-        out = {
-            "type": "tool_result",
-            "run_id": event.get("run_id"),
-            "call_id": event.get("call_id"),
-            "status": event.get("status"),
-        }
-        if "result_summary" in event:
-            out["result_summary"] = event["result_summary"]
-        return out
-    return event
+    Continuing a thread requires access to it; starting one creates it. Extracted
+    so ``handle_turn`` states the SEQUENCE of a turn rather than the mechanics of
+    each step.
+    """
+    if conversation_id:
+        conv = await store.get_conversation(tenant_id, conversation_id)
+        if conv is None or not _can_read(conv, user_id, role):
+            raise ConversationForbidden("no such conversation")
+        return conv
+    conv = Conversation(
+        id=uuid.uuid4().hex, tenant_id=tenant_id, user_id=user_id,
+        title=(message[:60] or "New conversation"),
+        status=ConversationStatus.ACTIVE,
+    )
+    await store.create_conversation(conv)
+    return conv
 
 
 class ConversationForbidden(BoltrigError):
@@ -352,6 +344,7 @@ class ChatService:
         attachments: list[dict[str, Any]] | None = None,
         workspace_id: str | None = None, scope: dict[str, Any] | None = None,
         on_behalf_bearer: str | None = None,
+        idempotency_key: str | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         # Enforce the attachment caps FIRST ([2026] VJS-COUNTY 3, D3): an over-cap
         # turn is refused whole before ANY side effect - before a new conversation is
@@ -359,18 +352,16 @@ class ChatService:
         # persisted and over-cap input is never truncated to fit.
         records = _validate_attachments(attachments, self._cfg)
 
-        # RBAC before anything streams (SEC-25): continuing a thread requires access
-        if conversation_id:
-            conv = await self._store.get_conversation(tenant_id, conversation_id)
-            if conv is None or not _can_read(conv, user_id, role):
-                raise ConversationForbidden("no such conversation")
-        else:
-            conv = Conversation(
-                id=uuid.uuid4().hex, tenant_id=tenant_id, user_id=user_id,
-                title=(message[:60] or "New conversation"),
-                status=ConversationStatus.ACTIVE,
-            )
-            await self._store.create_conversation(conv)
+        # Then EXACTLY ONCE, still before any side effect (see chat_idempotency).
+        replay = await replay_if_duplicate(self._store, tenant_id, idempotency_key, conversation_id)
+        if replay is not None:
+            for frame in replay:
+                yield frame
+            return
+
+        conv = await _resolve_conversation(
+            self._store, tenant_id, conversation_id, user_id, role, message
+        )
 
         run_id = uuid.uuid4().hex
         # Mid-run steer (US-CHAT-15): when this conversation already has a turn in
@@ -586,7 +577,7 @@ class ChatService:
                     item = await queue.get()
                 if item is done:
                     break
-                yield _project_chat_event(item)
+                yield project_chat_event(item)
         finally:
             pump.cancel()
             with contextlib.suppress(asyncio.CancelledError):
