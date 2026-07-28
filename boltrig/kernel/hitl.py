@@ -233,21 +233,28 @@ class HITLManager:
         return req
 
     async def _notify_request(self, req: HITLRequest) -> None:
-        """Best-effort channel notice to the human who must act (SEC-179):
-        enqueue to their bound surface per their notification_prefs so an
-        approval/escalation raised by a channel-originated run reaches the
-        originating chat. Fail-safe (P9), mirroring _fire_resume: the recorded
-        request is the truth; a notifier fault never voids it."""
+        """Best-effort channel notice to the humans who must act (SEC-179):
+        enqueue to the subject's bound surface per their notification_prefs -
+        and, for an APPROVAL, to every eligible approver
+        (``enqueue_approval_fanout``: notice follows eligibility,
+        [2026] VJS-CC-BOLTRIG-HITL-NOTIFICATION-ROUTING-001). Fail-safe (P9),
+        mirroring _fire_resume: the recorded request is the truth; a notifier
+        or eligibility fault never voids it - the subject notice stands even
+        when the fan-out below faults."""
+        subject = req.assignee or req.requested_on_behalf_of or req.requested_by
+        event = "approval" if req.type == HITLType.APPROVAL else "escalation"
         try:
-            from boltrig.kernel.channel_notify import enqueue_user_notification
-
-            subject = req.assignee or req.requested_on_behalf_of or req.requested_by
-            if not subject:
-                return
-            event = "approval" if req.type == HITLType.APPROVAL else "escalation"
-            await enqueue_user_notification(
-                self._store, req.tenant_id, subject, event, req.question
+            from boltrig.kernel.channel_notify import (
+                enqueue_approval_fanout,
+                enqueue_user_notification,
             )
+
+            if subject:
+                await enqueue_user_notification(
+                    self._store, req.tenant_id, subject, event, req.question
+                )
+            if req.type == HITLType.APPROVAL:
+                await enqueue_approval_fanout(self._store, req, exclude=subject)
         except Exception:  # noqa: BLE001 - delivery is a side channel
             pass
 

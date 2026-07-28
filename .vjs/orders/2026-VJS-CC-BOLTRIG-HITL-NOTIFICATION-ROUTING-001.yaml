@@ -1,0 +1,96 @@
+id: 2026-VJS-CC-BOLTRIG-HITL-NOTIFICATION-ROUTING-001
+court: county
+jurisdiction: default
+repo_code: boltrig
+status: binding
+issue: hitl_notification_routing
+holding: |
+  Option A is ADOPTED; Options B, C and D are REFUSED, each on stated grounds.
+
+  THE RATIO. Notice follows eligibility. The side channel that advertises a governance record
+  must address the same set the authorization rule would admit, derived from ONE shared
+  definition, so that notice and authority cannot drift apart: a system that admits X to answer
+  and notifies only Y has built its deadlock into its routing table. Notification widens the
+  AUDIENCE, never the AUTHORITY - being notified confers no power to approve, and the response
+  route re-checks everything at answer time. The recorded request remains the truth (SEC-179,
+  P9); delivery remains best-effort and fail-safe; a notifier fault never voids anything.
+
+  `_notify_request` (hitl.py:235-252) addresses `assignee or requested_on_behalf_of or
+  requested_by` (hitl.py:244) - an operator-raised approval notifies its raiser and never the
+  only lawful approver, and on the live Classical Visas tenant (empty notification_prefs, per
+  the scrutiny-verified operator-seat record) it notifies nobody at all. Who may lawfully
+  respond is fixed by authorize_approval_response (hitl_response_auth.py:142-178): a human
+  outside the initiator set, assignee-consistent, holding the verb's live grant, the sole-author
+  exemption lifting independence only while exactly one active author-tier user exists. On
+  Classical Visas the exemption has lapsed and the only lawful approver of an operator-raised
+  request is the client.
+
+  B is refused: pull-visibility already exists (hitl_response_auth.py:83-99) and has never once
+  been exercised; a queue never heard of is not a route put to anyone. C is refused: author tier
+  is not eligibility - it notifies users lacking the verb's grant, on a single-author tenant it
+  notifies only the initiator, and routing by AUTHOR_ROLES would entrench the double duty the
+  operator-seat court expressly reserved. D is refused as a general rule: it asks the raiser to
+  compute by hand the eligibility the kernel already computes, and a stale or ineligible
+  assignee refuses every other responder (hitl_response_auth.py:156-157); the existing
+  assignee-first routing stays.
+
+  Corollaries. (1) A check of this cure must test the OPERATIVE artefact - kernel behaviour and
+  the tenant database, never code constants a deployed manifest or tenant data overrides. (2) A
+  request that expires unheard is not a request put to anyone; expiry proves silence, not
+  refusal. (3) The notice set must be DERIVED from the same eligibility rule the response route
+  enforces, not a parallel computation that happens to agree today.
+
+  RESERVED, not decided: the AUTHOR_ROLES double duty (already reserved by the operator-seat
+  court) and the seat-operator question (this order makes that court's D8 performable; it does
+  not satisfy it and is no record for re-arguing it).
+directives:
+- id: D1
+  actor: lexby
+  must: extend_notify_request_so_every_hitl_request_notice_is_also_enqueued_via_the_existing_enqueue_user_notification_to_each_member_of_the_eligible_approver_set_outside_the_initiator_set_human_assignee_consistent_holding_the_verbs_live_grant_the_sole_author_exemption_applied_exactly_as_authorize_approval_response_applies_it_deduplicated_against_the_existing_subject_and_each_other_checkable_seeded_test_two_active_author_tenant_operator_raised_approval_no_assignee_asserts_the_client_is_enqueued_and_the_initiator_not_double_enqueued_run_red_with_the_change_reverted
+  when: null
+- id: D2
+  actor: lexby
+  must: derive_the_notice_set_from_one_eligibility_definition_shared_with_authorize_approval_response_not_a_parallel_computation_checkable_seeded_matrix_test_over_initiator_non_human_assignee_mismatch_grant_missing_lapsed_exemption_and_sole_author_exempt_users_asserting_the_notified_set_equals_the_set_the_response_route_would_admit_run_red_when_the_derivation_is_replaced_by_a_role_based_or_duplicated_rule
+  when: null
+- id: D3
+  actor: lexby
+  must: preserve_the_fail_safe_side_channel_doctrine_a_notifier_fault_never_voids_the_request_and_no_authorization_path_consults_notification_state_checkable_seeded_test_enqueue_user_notification_raises_and_create_still_returns_the_recorded_request_and_a_second_test_asserting_authorize_approval_response_and_consume_approved_by_behave_identically_with_an_empty_and_a_populated_outbox
+  when: null
+- id: D4
+  actor: lexby
+  must: discharge_the_cure_on_the_operative_tenant_not_on_code_constants_on_classical_visas_provision_the_tenant_delivery_data_notification_prefs_bindings_channel_as_data_so_that_a_raised_approval_provably_reaches_info_at_classicalvisas_dot_com_evidenced_by_select_on_the_tenant_database_for_a_delivery_artefact_addressed_to_her_a_channel_outbox_row_whose_payload_subject_is_info_at_classicalvisas_dot_com_with_event_approval_or_an_equivalent_recorded_delivery_on_her_bound_surface_a_hitl_requests_row_that_expires_unheard_satisfies_nothing
+  when: null
+- id: D5
+  actor: lexby
+  must: show_every_test_bound_to_d1_d2_and_d3_going_red_with_its_change_reverted_and_record_the_red_run_in_the_discharge_note
+  when: null
+forbidden:
+- making_notification_load_bearing_notification_remains_a_side_channel_the_recorded_request_remains_the_truth_a_notifier_fault_never_voids_anything_and_no_authorization_decision_reads_notification_state
+- routing_the_notice_by_author_roles_or_any_role_test_rather_than_grant_based_eligibility
+- changing_authorize_approval_response_sole_active_author_or_approval_visible_under_cover_of_this_order_eligibility_itself_is_not_before_the_court
+- widening_who_may_approve_under_cover_of_widening_who_is_notified_being_notified_confers_no_authority
+- treating_a_request_that_timed_out_unheard_or_a_code_constant_only_test_as_evidence_the_notice_was_brought_to_the_approver
+exceptions:
+- on_a_tenant_with_no_delivery_data_enqueue_user_notification_returns_empty_an_honest_delivery_gap_cured_by_data_under_d4_never_a_kernel_error_and_pull_visibility_under_approval_visible_remains_the_backstop_meanwhile
+- where_an_assignee_is_set_the_existing_assignee_first_routing_is_untouched_by_this_order
+supersedes: []
+source_opinion: docs/vjs/2026-VJS-CC-BOLTRIG-HITL-NOTIFICATION-ROUTING-001-opinion.md
+runtime_summary: |
+  HITL approval notices now follow eligibility: `_notify_request` additionally enqueues, via
+  the existing `enqueue_user_notification`, to every user who could lawfully respond under
+  `authorize_approval_response` (outside the initiator set, human, assignee-consistent, holding
+  the verb's live grant, sole-author exemption applied identically), deduplicated against the
+  present subject, best-effort and fail-safe as now. The recorded request remains the truth
+  (SEC-179, P9); notification widens the audience, never the authority. On Classical Visas the
+  cure is discharged only when a raised approval provably reaches the client on the tenant
+  database - a delivery artefact, never an expired row. The AUTHOR_ROLES double duty and the
+  seat-operator question stay reserved.
+created_at: 2026-07-28T18:55:00Z
+citation: null
+assent_source: standing_bounded_assent
+implementation_status: OPEN
+implementation_note: |
+  Filed 2026-07-28. citation is null for the reason recorded in
+  2026-VJS-CC-BOLTRIG-SCHEMA-VALIDATION-LEDGER-001: `vjs next-citation` refuses to mint the
+  canon COUNTY series at a subscriber seat ([2026] VJS-PC 19), and minting at canon offers a
+  number this repository's mirror already uses. The allocator gap is not settled here.

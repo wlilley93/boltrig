@@ -23,7 +23,10 @@ class has no outbox consumer (its direct ``outbound_url`` path belongs to
 
 Callers:
   - ``HITLManager.create`` wires approval/escalation notices (fail-safe: a
-    notifier fault never voids the request record, mirroring _fire_resume);
+    notifier fault never voids the request record, mirroring _fire_resume) -
+    the legacy subject directly, and every eligible approver through
+    ``enqueue_approval_fanout`` (notice follows eligibility,
+    [2026] VJS-CC-BOLTRIG-HITL-NOTIFICATION-ROUTING-001);
   - ``notify_work_item_result`` is the run-completion seam: the fleet pump
     calls it with the terminal work item and the reply returns to the
     originating thread via ``item.reply_route``.
@@ -111,6 +114,31 @@ async def enqueue_user_notification(
                 )
                 await store.enqueue_channel_outbox(message)
                 enqueued.append(message.id)
+    return enqueued
+
+
+async def enqueue_approval_fanout(
+    store, request, *, exclude: str | None
+) -> list[str]:
+    """Enqueue an APPROVAL request's notice to every eligible approver.
+
+    Notice follows eligibility ([2026] VJS-CC-BOLTRIG-HITL-NOTIFICATION-ROUTING-001,
+    D1): the audience is exactly ``eligible_approval_responders`` - the set the
+    response route would admit - deduplicated against the already-notified
+    ``exclude`` subject and each other. Being notified confers no authority;
+    delivery stays pref/binding-gated, so an unreachable approver is an honest
+    delivery gap, never an error."""
+    from boltrig.kernel.hitl_response_auth import eligible_approval_responders
+
+    enqueued: list[str] = []
+    notified = {exclude} if exclude else set()
+    for responder in await eligible_approval_responders(store, request):
+        if responder in notified:
+            continue
+        notified.add(responder)
+        enqueued += await enqueue_user_notification(
+            store, request.tenant_id, responder, "approval", request.question
+        )
     return enqueued
 
 

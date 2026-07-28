@@ -1,0 +1,12 @@
+id: LOG-2026-07-28-192729
+time: 2026-07-28T19:27:29.687033322+00:00
+actor: lexby
+kind: decision
+issue: ROUTE-20260728-192720
+decision: 'Final scope: kernel cure (hitl, hitl_response_auth, channel_notify), seeded tests, regenerated claim inventory, and the order-binding artefacts - D1/D2/D3/D5 bound in the test module, D4 waived as a live-tenant discharge'
+basis:
+- PERMIT-1785266840
+risk: low
+reversibility: easy
+court_required: false
+why: check_order_directives requires every directive of a binding order enforced by a named test or a recorded waiver; D4 binds the live Classical Visas tenant database, which no repo test can decide

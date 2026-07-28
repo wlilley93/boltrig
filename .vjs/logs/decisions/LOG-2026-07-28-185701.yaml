@@ -1,0 +1,12 @@
+id: LOG-2026-07-28-185701
+time: 2026-07-28T18:57:01.877988981+00:00
+actor: lexby
+kind: fix
+issue: hitl_notification_routing
+decision: 'County court convened on its own motion ruled Option A adopted: notice follows eligibility - _notify_request additionally enqueues to every eligible approver via the existing enqueue_user_notification, from one shared eligibility definition, deduplicated, fail-safe; B, C, D refused'
+basis:
+- '[2026] VJS-COUNTY SUBMISSION-2026-07-28-184536; CONVENING-county-2026-07-28-184547; order 2026-VJS-CC-BOLTRIG-HITL-NOTIFICATION-ROUTING-001 (binding)'
+risk: high
+reversibility: easy
+court_required: false
+why: _notify_request (hitl.py:244) addressed only assignee/requested_on_behalf_of/requested_by, so an operator-raised approval notified its raiser and never the only lawful approver; on Classical Visas the lapsed sole-author exemption leaves the client as sole lawful approver and empty notification_prefs meant the notice reached nobody, leaving the operator-seat D8 act unperformable. The eligible-approver fan-out addresses exactly the set authorize_approval_response admits from one shared definition, so notice and authority cannot drift; pull-only (never once exercised), author-tier broadcast (role is not eligibility) and raiser-named assignee (stale assignee refuses everyone) were refused. Fail-safe doctrine (SEC-179, P9) preserved; discharge requires a delivery artefact on the tenant database, never an expired row. AUTHOR_ROLES double duty and seat-operator stay reserved. No kernel code changed at this step; implementation follows under D1-D5, tests seeded red.
