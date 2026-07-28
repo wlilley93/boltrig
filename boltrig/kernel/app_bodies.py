@@ -19,6 +19,14 @@ class InvokeBody(BaseModel):
     params: dict[str, Any] = Field(default_factory=dict)
     context: dict[str, Any] = Field(default_factory=dict)
     idempotency_key: str | None = None
+    # OPTIONAL channel label: WHICH SURFACE this turn arrived through, so one
+    # conversation can span two of them (a message typed into an Opbox spotlight
+    # and the same thread in the boltrig UI) and still say where each turn came
+    # from. It is a LABEL and reaches no authority or routing decision - see
+    # fleet/chat_origin for why this is deliberately NOT WorkItem.source, which
+    # selects the handling department. Unusable values are dropped, never a
+    # reason to refuse someone's message. Absent => today's behaviour (NULL).
+    origin: str | None = None
     approval_id: str | None = None
 
 
@@ -56,3 +64,11 @@ class ChatBody(BaseModel):
     # one since SEC-15; the surface a person actually types into had none.
     # Absent => today's behaviour exactly (see fleet/chat_idempotency).
     idempotency_key: str | None = None
+    # OPTIONAL channel label: WHICH SURFACE this turn arrived through, so one
+    # conversation can span two of them (a message typed into an Opbox spotlight
+    # and the same thread in the boltrig UI) and still say where each turn came
+    # from. It is a LABEL and reaches no authority or routing decision - see
+    # fleet/chat_origin for why this is deliberately NOT WorkItem.source, which
+    # selects the handling department. Unusable values are dropped, never a
+    # reason to refuse someone's message. Absent => today's behaviour (NULL).
+    origin: str | None = None

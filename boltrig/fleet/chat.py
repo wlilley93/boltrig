@@ -28,12 +28,10 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
 from boltrig.config.manifest import ChatConfig
-from boltrig.fleet.chat_authority import (
-    seal_on_behalf_bearer,
-    warn_if_no_usable_authority,
-)
+from boltrig.fleet.chat_authority import seal_on_behalf_bearer, warn_if_no_usable_authority
 from boltrig.fleet.chat_event_projection import project_chat_event
 from boltrig.fleet.chat_idempotency import replay_if_duplicate
+from boltrig.fleet.chat_origin import normalised_origin
 from boltrig.fleet.result import reply_text
 from boltrig.kernel.held_call import sweep_run_credentials_if_settled
 from boltrig.models import (
@@ -344,7 +342,7 @@ class ChatService:
         attachments: list[dict[str, Any]] | None = None,
         workspace_id: str | None = None, scope: dict[str, Any] | None = None,
         on_behalf_bearer: str | None = None,
-        idempotency_key: str | None = None,
+        idempotency_key: str | None = None, origin: str | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         # Enforce the attachment caps FIRST ([2026] VJS-COUNTY 3, D3): an over-cap
         # turn is refused whole before ANY side effect - before a new conversation is
@@ -431,7 +429,7 @@ class ChatService:
                 async for event in self._drive(
                     tenant_id, user_id, conv.id, run_id, turn_message, role, grants,
                     turn_records, workspace_id=workspace_id, scope=scope,
-                    on_behalf_bearer=on_behalf_bearer,
+                    on_behalf_bearer=on_behalf_bearer, origin=origin,
                 ):
                     # Heartbeats are transport keepalives (US-CHAT-11), not turn content:
                     # stream them but never persist them on the turn's event record.
@@ -530,7 +528,7 @@ class ChatService:
     async def _drive(
         self, tenant_id, user_id, conv_id, run_id, message, role, grants,
         attachments=None, *, heartbeat=True, workspace_id=None, scope=None,
-        on_behalf_bearer=None,
+        on_behalf_bearer=None, origin=None,
     ):
         if self._exec is None:
             yield {"type": "text_delta", "delta": "(no runtime configured)"}
@@ -543,7 +541,7 @@ class ChatService:
                 tenant_id=tenant_id, user_id=user_id, conversation_id=conv_id,
                 run_id=run_id, message=message, role=role, grants=grants,
                 attachments=attachments or [], workspace_id=workspace_id, scope=scope,
-                on_behalf_bearer=on_behalf_bearer,
+                on_behalf_bearer=on_behalf_bearer, origin=origin,
             )
         )
         # SSE keepalive (US-CHAT-11): a relay-pump task feeds a local queue; the
@@ -729,7 +727,7 @@ def build_turn_executor(
 
     async def executor(*, tenant_id, user_id, role, grants, conversation_id,
                        run_id, message, relay, attachments=None, workspace_id=None, scope=None,
-                       on_behalf_bearer=None):
+                       on_behalf_bearer=None, origin=None):
         # Bare-turn authority is manifest data under a caller ceiling ([2026]
         # VJS-COUNTY 1): chat.skills_by_role selects the role's skill set
         # (default_skills when unmapped); a missing skill is skipped (fail-closed).
@@ -742,7 +740,7 @@ def build_turn_executor(
         ceiling = grants if grants is not None else EMPTY_GRANTS
         warn_if_no_usable_authority(role, ceiling, turn_skills)
         item = WorkItem(
-            id=run_id, tenant_id=tenant_id, source="chat", intent=message,
+            id=run_id, tenant_id=tenant_id, source="chat", intent=message, source_id=normalised_origin(origin),
             confidence=1.0, convergent=False, status=WorkStatus.IN_FLIGHT,
             owner_member="chief-of-staff", hatchet_run_id=run_id, on_behalf_of=user_id, workspace_id=workspace_id,
         )

@@ -279,6 +279,17 @@ export interface ChatRequest {
   // inline, size-capped attachments ({name, media_type, data:base64}); omitted
   // when the turn carries none.
   attachments?: ChatAttachment[];
+  // Exactly-once key for THIS user message, chosen by the caller. A retry that
+  // reuses it is answered as an accepted replay instead of convening a second
+  // agent. Measured on a live tenant before this existed: one message sent five
+  // times 1.4-2.1s apart produced seven agent_spawn rows - N times the spend and
+  // N duplicate answers. Omit for today's behaviour.
+  idempotency_key?: string;
+  // WHICH SURFACE this turn arrived through, so one conversation can span two of
+  // them and still say where each turn came from. A label only: it reaches no
+  // authority or routing decision, and an unusable value is dropped rather than
+  // failing the message. Lower-case, <=64 chars of [a-z0-9._:-] starting alnum.
+  origin?: string;
 }
 
 // POST /v1/me/conversations/{cid}/messages/{mid}/regenerate: re-runs the last

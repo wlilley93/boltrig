@@ -9,8 +9,13 @@ from typing import Any
 # Newer-than-legacy optional kwargs: passed through when the injected executor
 # declares them, dropped for a legacy signature that predates them (so an older
 # executor never chokes on an unexpected keyword). ``on_behalf_bearer`` is the
-# permission-parity passthrough (2026); scope/workspace_id predate it.
-_OPTIONAL_KWARGS = frozenset({"scope", "workspace_id", "on_behalf_bearer"})
+# permission-parity passthrough (2026); scope/workspace_id predate it. ``origin``
+# is the channel label (2026-07-28, fleet/chat_origin) and was added here only
+# after it was added to the CALL: passing it unconditionally raised TypeError
+# inside every legacy-signature executor, which _safe_exec degrades rather than
+# raises, so the turn answered "(turn error: TypeError)" and nothing said why.
+# Anything threaded into the executor call belongs in this set the same day.
+_OPTIONAL_KWARGS = frozenset({"scope", "workspace_id", "on_behalf_bearer", "origin"})
 _KEYWORD_KINDS = frozenset(
     {
         inspect.Parameter.POSITIONAL_OR_KEYWORD,

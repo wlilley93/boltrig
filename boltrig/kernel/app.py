@@ -451,7 +451,7 @@ def create_app(
             workspace_id=p.active_workspace_id, scope=p.scope,
             message=body.message, conversation_id=body.conversation_id,
             attachments=body.attachments, on_behalf_bearer=body.on_behalf_bearer,
-            idempotency_key=body.idempotency_key,
+            idempotency_key=body.idempotency_key, origin=body.origin,
         )
         # RBAC / access errors happen before the first event and propagate to the
         # central exception handler (canonical envelope) - the stream hasn't begun.

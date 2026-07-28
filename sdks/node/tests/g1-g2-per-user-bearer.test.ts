@@ -136,3 +136,29 @@ test("G2: on_behalf_bearer is absent when onBehalfBearer is not set", async () =
   await drain(streamTurn({ server: "http://k/", token: "t", fetch, message: "hi" }));
   assert.equal("on_behalf_bearer" in (calls[0]?.body ?? {}), false);
 });
+
+// --- One conversation, two surfaces: exactly once, and channel-attributed ----
+// The kernel gained both of these before the SDK did, which is the gap that
+// matters: an integrator consuming the SDK could not reach either without
+// hand-rolling the POST, and hand-rolling the POST is exactly what this seam
+// exists to stop. The wire names are snake_case because the kernel body is.
+
+test("a caller's idempotency key rides in the turn body as idempotency_key", async () => {
+  const { fetch, calls } = streamFetch();
+  await drain(streamTurn({ server: "http://k/", token: "t", fetch, message: "hi", idempotencyKey: "msg-42" }));
+  assert.equal(calls[0]?.body.idempotency_key, "msg-42");
+});
+
+test("the channel label rides in the turn body as origin", async () => {
+  const { fetch, calls } = streamFetch();
+  await drain(streamTurn({ server: "http://k/", token: "t", fetch, message: "hi", origin: "opbox-spotlight" }));
+  assert.equal(calls[0]?.body.origin, "opbox-spotlight");
+});
+
+test("neither field is sent when the caller sets neither", async () => {
+  // Both are strictly additive: an existing integration's wire body is unchanged.
+  const { fetch, calls } = streamFetch();
+  await drain(streamTurn({ server: "http://k/", token: "t", fetch, message: "hi" }));
+  assert.equal("idempotency_key" in (calls[0]?.body ?? {}), false);
+  assert.equal("origin" in (calls[0]?.body ?? {}), false);
+});

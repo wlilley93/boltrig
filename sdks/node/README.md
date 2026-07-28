@@ -217,6 +217,35 @@ for await (const event of streamTurn({ server, token, message: "List paid orders
 `streamTurn` POSTs `/v1/chat` and yields events as they arrive. No TTY
 assumptions — bring your own UI.
 
+### One conversation, two surfaces
+
+An app that embeds boltrig usually gives a person a second place to type - a
+spotlight, a side panel - and the same conversation continues in the boltrig UI.
+Two options make that work; both are optional and strictly additive.
+
+```ts
+for await (const event of streamTurn({
+  server, token, message,
+  conversationId,                  // continue the same thread across both surfaces
+  idempotencyKey: clientMessageId, // exactly once, even if the user's retry fires
+  origin: "opbox-spotlight",       // which surface this turn arrived through
+})) { /* ... */ }
+```
+
+`idempotencyKey` is per USER MESSAGE, not per request: reuse the same key on
+every retry of the same message and a repeat is answered as an accepted replay
+instead of convening a second agent. Measured on a live tenant before this
+existed - one message sent five times 1.4-2.1s apart produced seven agent
+spawns, so N times the spend and N duplicate answers.
+
+`origin` is a label and nothing else: lower-case, up to 64 characters of
+`[a-z0-9._:-]` starting alphanumeric, and an unusable value is dropped rather
+than failing the message. It lands on the run's opaque external reference, so
+`GET /v1/runs?external_ref=opbox-spotlight` lists the turns that came from that
+surface. It is deliberately NOT the work item's `source`, which selects the
+handling department: a caller-settable `source` would let a client choose who
+handles its work through what reads like a display field.
+
 ## Per-instance (per-tenant) registration
 
 One adapter id per app instance: `opbox-acme`, `opbox-globex`, … Each
