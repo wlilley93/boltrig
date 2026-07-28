@@ -10,14 +10,19 @@ against it and a deactivated user's access (and tokens) stop working at once
 
 from __future__ import annotations
 
+import logging
+
 from boltrig.models import EMPTY_GRANTS, GrantSet, RoleMapping, User, utcnow
 
 from .rbac import (
     DEFAULT_ROLE,
+    default_scope_for_role,
     grants_for_scope,
     narrow_grants_to_workspace,
     resolve_role,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def current_grants_for_user(user: User) -> GrantSet:
@@ -107,6 +112,41 @@ async def ensure_user_record(store, principal) -> User:
     return user
 
 
+def _coherent_scope(role: str, scope: dict, subject: str) -> dict:
+    """A role that implies authority must not arrive with a scope that grants none.
+
+    Grants come from SCOPE (``grants_for_scope``), never from role, and an empty
+    scope is EMPTY_GRANTS by design (K-13, fail-closed). So a user can be minted
+    reading ``role=admin`` and holding no authority at all - which is exactly what
+    happened to a live client on 2026-07-27: an invitation carried
+    ``intended_role="admin"`` with ``intended_scope={}``, and every turn that
+    account took had zero verbs while the console showed it as an administrator.
+    Nothing errored, because fail-closed is correct; it was fail-SILENT that hid it.
+
+    A scope that was NEVER STATED is filled from the role's canonical mapping. A
+    scope that WAS stated is never widened, however narrow - that is a deliberate
+    choice and this must not overrule it.
+    """
+    if scope or not role:
+        return scope
+    default = default_scope_for_role(role)
+    if default is None:
+        logger.warning(
+            "provisioning %s with role=%s and NO scope: grants come from scope, so "
+            "this user will hold no verbs (no canonical scope for that role)",
+            subject,
+            role,
+        )
+        return scope
+    logger.warning(
+        "provisioning %s with role=%s and no stated scope; applying the role's "
+        "canonical scope so role and authority agree",
+        subject,
+        role,
+    )
+    return default
+
+
 async def provision_user(
     store,
     *,
@@ -164,6 +204,7 @@ async def provision_user(
             return None
         role, scope = inv.intended_role, dict(inv.intended_scope)
         source = "invitation"
+        scope = _coherent_scope(role, scope, subject)
     else:
         source_group = _conferring_group(groups, mappings, role)
 

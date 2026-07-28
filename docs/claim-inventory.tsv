@@ -95,7 +95,7 @@ LOAD-BEARING	NO-SUBJECT	docstring	boltrig/identity/invites.py:21		A fresh high-e
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/identity/invites.py:26		The at-rest representation of an invite token: its sha256, never the secret.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/identity/passwords.py:25		A minimum-length floor so accept-invite cannot set a trivially weak password.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/identity/passwords.py:81		never as an error that could distinguish it from a wrong password.
-LOAD-BEARING	NO-SUBJECT	docstring	boltrig/identity/rbac.py:252		The Knowledge access scopes a caller may use (SEC-KNO-01), derived server-side from the authenticated principal - never from caller-supplied context keys: their own user (and the user they act on behalf of), the active w
+LOAD-BEARING	NO-SUBJECT	docstring	boltrig/identity/rbac.py:284		The Knowledge access scopes a caller may use (SEC-KNO-01), derived server-side from the authenticated principal - never from caller-supplied context keys: their own user (and the user they act on behalf of), the active w
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/identity/rbac.py:34		Returned when no IdP group matches any mapping.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/identity/rbac.py:52		Map a caller's IdP groups to (platform_role, merged_scope) (US-IAM-02).
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/identity/sessions.py:300		it (fail-closed, D3).
@@ -241,6 +241,7 @@ LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/authority.py:117	item	Rout
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/chat.py:1	queued	The conversational service (Round Two, Epic CONV).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/chat.py:102	tool_call	Bound the tool events before they reach the user-facing chat stream (K-20, US-CHAT-10).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/chat.py:282	run_id	The OLDEST queued steer still waiting for its turn, else None.
+LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/chat_authority.py:1	org_members	Say when a chat turn has no usable authority.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/codex_runtime.py:157	finally	The tool-enabled lane: the cell's only tools are the kernel's MCP face.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/codex_runtime.py:387	total	Consume the lifecycle stream until the turn completes (the completion signal, not the content source), returning the tokens the turn reported.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/continuity.py:1	model_gateway	Cross-turn conversation continuity for the pi lane (Round Six, gap 3.1).
@@ -263,7 +264,7 @@ LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/result.py:99	tokens_used	A
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/spawn.py:208	subagent	Resolve the runtime and run the turn, refunding the reservation on a raise.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/identity/delegation.py:1	delegated	On-behalf-of identity decisions and OBO token exchange (US-IAM-03/05, SEC-03).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/identity/provisioning.py:1	users	Just-in-time user provisioning and current-grant resolution (Round Four USR).
-LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/identity/rbac.py:276	None	The caller's row-level department scope for work listing (US-IAM-02).
+LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/identity/rbac.py:308	None	The caller's row-level department scope for work listing (US-IAM-02).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/identity/sessions.py:166	realm_tenant_id	Resolve + RE-AUTHORIZE the session's ACTIVE org against CURRENT membership ([2026] VJS-COUNTY 11, D2/D3).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/identity/totp.py:82	code	Whether ``code`` is a currently-valid TOTP for ``secret`` (constant-time).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/access_routes.py:610	level	Authorize a set/delete at ``level``/``scope_id``.
@@ -386,10 +387,13 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/auth.py:177	verify	SAML 
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/auth.py:237	Principal	Build a production ``PrincipalResolver`` from a verifier (US-IAM-01/02).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/passwords.py:1	verify_dummy	First-party password hashing ([2026] VJS-COUNTY 7, D4).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/passwords.py:65	verify_dummy	Whether ``password`` matches the stored argon2 ``encoded`` hash (D4/D5).
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/provisioning.py:110	ensure_user_record	Provision (or refresh) a user on authenticated login (US-USR-01/02).
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/provisioning.py:31	current_grants_for_user	The caller's EFFECTIVE grants for one request ([2026] VJS-COUNTY 8, D11).
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/provisioning.py:115	grants_for_scope	A role that implies authority must not arrive with a scope that grants none.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/provisioning.py:150	ensure_user_record	Provision (or refresh) a user on authenticated login (US-USR-01/02).
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/provisioning.py:36	current_grants_for_user	The caller's EFFECTIVE grants for one request ([2026] VJS-COUNTY 8, D11).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/rbac.py:1	GrantSet	IdP-group -> platform-role + visibility-scope mapping (US-IAM-02, SEC-07).
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/rbac.py:209	GrantSet.intersect	Narrow ``base`` (the caller's org/user grants) by a workspace role's ceiling ([2026] VJS-COUNTY 8, D11; composes with COUNTY 5 - intersect DOWN, never widen).
+LOAD-BEARING	SUBJECT-REACHED	comment	boltrig/identity/rbac.py:128	provisioning._coherent_scope	Read by ``provisioning._coherent_scope`` when a scope was NEVER STATED.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/rbac.py:149	provisioning._coherent_scope	Look ``role`` up in ``ORG_ROLE_DEFAULT_SCOPE``; ``None`` when it has no entry.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/rbac.py:241	GrantSet.intersect	Narrow ``base`` (the caller's org/user grants) by a workspace role's ceiling ([2026] VJS-COUNTY 8, D11; composes with COUNTY 5 - intersect DOWN, never widen).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/rbac.py:93	GrantSet	Turn a visibility scope into a verb ``GrantSet`` ceiling (US-IAM-02/04).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/sessions.py:1	build_session_resolver	First-party browser sessions + the session principal resolver ([2026] VJS-COUNTY 7).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/identity/sessions.py:237	UserSession	Resolve a session cookie secret to a live :class:`UserSession`, else None.
@@ -872,14 +876,15 @@ ORDINARY	NO-SUBJECT	comment	boltrig/identity/auth.py:73		(HS*) algorithm are rej
 ORDINARY	NO-SUBJECT	comment	boltrig/identity/auth.py:79		request with a bogus kid must not amplify into an outbound IdP fetch per
 ORDINARY	NO-SUBJECT	comment	boltrig/identity/passwords.py:33		always fails but costs the same as a genuine verify.
 ORDINARY	NO-SUBJECT	comment	boltrig/identity/passwords.py:80		A corrupt/foreign hash string is treated as a non-match (fail-closed),
-ORDINARY	NO-SUBJECT	comment	boltrig/identity/provisioning.py:133		the first read so the _RlsPool does not fail closed on login.
-ORDINARY	NO-SUBJECT	comment	boltrig/identity/rbac.py:141		only ever intersected DOWN, never widened): a workspace membership can only take
-ORDINARY	NO-SUBJECT	comment	boltrig/identity/rbac.py:142		authority away, never add it.
-ORDINARY	NO-SUBJECT	comment	boltrig/identity/rbac.py:143		grants unchanged (that path never reaches here) - backward-compat is pinned.
-ORDINARY	NO-SUBJECT	comment	boltrig/identity/rbac.py:157		agent -> the agent ceiling: a non-human runtime seat operates but never
-ORDINARY	NO-SUBJECT	comment	boltrig/identity/rbac.py:169		Action suffixes that only READ (never mutate).
-ORDINARY	NO-SUBJECT	comment	boltrig/identity/rbac.py:171		writes, so a viewer cannot keep it: it collapses (fail-closed, never widen).
+ORDINARY	NO-SUBJECT	comment	boltrig/identity/provisioning.py:173		the first read so the _RlsPool does not fail closed on login.
+ORDINARY	NO-SUBJECT	comment	boltrig/identity/rbac.py:139		(see identity/provisioning.effective_grants_for_request), never up (COUNTY 5).
+ORDINARY	NO-SUBJECT	comment	boltrig/identity/rbac.py:173		only ever intersected DOWN, never widened): a workspace membership can only take
+ORDINARY	NO-SUBJECT	comment	boltrig/identity/rbac.py:174		authority away, never add it.
+ORDINARY	NO-SUBJECT	comment	boltrig/identity/rbac.py:175		grants unchanged (that path never reaches here) - backward-compat is pinned.
+ORDINARY	NO-SUBJECT	comment	boltrig/identity/rbac.py:189		agent -> the agent ceiling: a non-human runtime seat operates but never
 ORDINARY	NO-SUBJECT	comment	boltrig/identity/rbac.py:20		is the owner, admin is a full operator+configurator, member operates but cannot
+ORDINARY	NO-SUBJECT	comment	boltrig/identity/rbac.py:201		Action suffixes that only READ (never mutate).
+ORDINARY	NO-SUBJECT	comment	boltrig/identity/rbac.py:203		writes, so a viewer cannot keep it: it collapses (fail-closed, never widen).
 ORDINARY	NO-SUBJECT	comment	boltrig/identity/sessions.py:194		pre-COUNTY-11: login never seeded an active org, so active_org_id is None)
 ORDINARY	NO-SUBJECT	comment	boltrig/identity/sessions.py:197		(backward-compatible);
 ORDINARY	NO-SUBJECT	comment	boltrig/identity/sessions.py:285		request.
@@ -1271,7 +1276,7 @@ ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/runtime_resolver.py:219	kernel.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/identity/ai_keys.py:68	workspace_id	Resolve the AI key for a call, precedence user -> workspace -> org -> default.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/identity/auth.py:331	OidcVerifier	Build a ``PrincipalResolver`` backed by Cloudflare Access (zero-trust edge).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/identity/auth.py:386	build_principal_resolver	Header-trusting resolver for LOCAL DEV ONLY (mirrors the kernel default).
-ORDINARY	SUBJECT-REACHED	docstring	boltrig/identity/rbac.py:192	narrow_grants_to_workspace	The verb-grant ceiling for a workspace role (D11), or ``None`` when the role has no namespace ceiling (``viewer``, handled by :func:`narrow_grants_to_workspace`, and any unknown role, which fails closed).
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/identity/rbac.py:224	narrow_grants_to_workspace	The verb-grant ceiling for a workspace role (D11), or ``None`` when the role has no namespace ceiling (``viewer``, handled by :func:`narrow_grants_to_workspace`, and any unknown role, which fails closed).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/identity/sessions.py:216	list_workspaces_for_user	Re-authorize a session's active workspace against CURRENT membership (D4).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/identity/sessions.py:257	request.state	Build the first-party session ``PrincipalResolver`` (D3).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/approval_gate.py:92	held_call.name_redeemer	Refuse to MINT an approval no lane could ever redeem (decision 0018, Order 5).
