@@ -100,3 +100,90 @@ def test_the_pass_message_does_not_claim_more_than_was_checked() -> None:
         "the pass message mentions only images, so a green would read as proving "
         "something the check now measures twice as much of"
     )
+
+
+# --------------------------------------------------------------------------- #
+# The pinned TAG must name the pinned DIGEST (the second thing drift could not see)
+# --------------------------------------------------------------------------- #
+@pytest.mark.invariant("FR-OPS-06")
+def test_the_pinned_tag_is_kept_and_verified_not_discarded() -> None:
+    """`pinned()` used to throw the tag away and compare digests only.
+
+    Docker resolves by digest, so `:0.4.14@sha256:X` and `:not-a-release@sha256:X`
+    pull identical bytes and both read as correct forever. Proved by seeding: with
+    the tag mispinned the DIGEST row still says `ok`, which is exactly why nothing
+    caught it.
+    """
+    body = inspect.getsource(check_fleet_drift.pinned)
+    assert "_PINNED_REF" in body, "the tag is discarded again, so nothing verifies it"
+    assert hasattr(check_fleet_drift, "tag_resolution")
+
+
+@pytest.mark.invariant("FR-OPS-06")
+def test_only_our_own_immutable_tags_are_failed_on() -> None:
+    """A floating third-party tag moving is upstream working, not a defect.
+
+    `redis:7` and `pgvector/pgvector:pg16` move whenever upstream publishes, and a
+    digest pin is precisely how a deployment survives that. Failing on them would
+    redden this check on every upstream release, for a condition nobody should act
+    on - the cry-wolf failure that made `gate-status` unreadable.
+    """
+    ours = "ghcr.io/wlilley93/boltrig-"
+    decide = check_fleet_drift.tag_state_is_a_defect
+    # upstream moving a floating tag: reported, never failed on
+    assert decide("TAG MOVED", "docker.io/library/redis", ours) is False
+    assert decide("TAG MOVED", "pgvector/pgvector", ours) is False
+    # our own immutable release tags: both states are defects
+    assert decide("TAG MOVED", "ghcr.io/wlilley93/boltrig-kernel", ours) is True
+    assert decide("TAG MISSING", "ghcr.io/wlilley93/boltrig-ui", ours) is True
+    # a resolved tag is never a defect, whoever published it
+    assert decide("ok", "ghcr.io/wlilley93/boltrig-kernel", ours) is False
+    # and with no remote we cannot tell them apart, so nothing is failed on
+    assert decide("TAG MISSING", "ghcr.io/wlilley93/boltrig-kernel", None) is False
+
+    prefix = inspect.getsource(check_fleet_drift.first_party_prefix)
+    assert "remote" in prefix and "origin" in prefix, (
+        "first-party images are identified by a hand list again; it will go stale "
+        "the first time an image is added or renamed"
+    )
+
+
+@pytest.mark.invariant("FR-OPS-06")
+def test_a_private_package_is_actually_reachable_by_the_check() -> None:
+    """Anonymous auth returns 403 on boltrig-kernel, -fleet and -ui.
+
+    Assuming an anonymous token was enough would have made this whole check inert
+    on exactly the three images that matter, while the one public package reported
+    fine - a check that cannot fail on its real subject.
+    """
+    body = inspect.getsource(check_fleet_drift.tag_resolution)
+    assert "_registry_auth" in body, "the check no longer presents a credential"
+    auth = inspect.getsource(check_fleet_drift._registry_auth)
+    assert "config.json" in auth and "auths" in auth
+
+
+@pytest.mark.invariant("FR-OPS-06")
+def test_docker_hub_references_are_expanded_before_being_asked_about() -> None:
+    """`redis:7` names no registry and no namespace, and Hub issues tokens elsewhere.
+
+    Without both expansions every third-party image reported NOT CHECKED, which
+    fails the command - red on every run, for reasons nobody can act on.
+    """
+    body = inspect.getsource(check_fleet_drift.tag_resolution)
+    assert "registry-1.docker.io" in body
+    assert "library/" in body, "official images are not given their implicit namespace"
+    assert "auth.docker.io" in body, "Hub's token host differs from its manifest host"
+
+
+@pytest.mark.invariant("FR-OPS-06")
+def test_a_mismatched_tag_fails_the_command() -> None:
+    """A report nobody exits non-zero on is a log line, not a check."""
+    main = inspect.getsource(check_fleet_drift.main)
+    assert "PINNED TAG DOES NOT MATCH THE REGISTRY" in main
+    block = main[main.index("if bad_tags:"):]
+    assert "return 1" in block
+    # and it points at the fix that removes the class rather than detecting it
+    assert "boltrig-images.env" in main, (
+        "the remedy no longer names generating the pin from the release record, "
+        "which is what makes a wrong tag impossible rather than merely visible"
+    )
