@@ -235,3 +235,17 @@ async def gated_kernel():
     """A kernel where ticket.create is a blocking (gated) verb."""
     k, _ = await _build_kernel(blocking_verbs={"ticket.create"})
     return k
+
+
+@pytest.fixture
+def opbox_addon(monkeypatch):
+    """Activate the opbox addon for a test that asserts opbox-provisioned behaviour.
+
+    Boltrig ships alone AND as the engine beneath a product, and integration
+    knowledge lives in an addon rather than in the modules every boltrig ships
+    (see docs/addons.md). Registration is not activation: reading opbox's
+    ``riskClass`` vocabulary and sealing the on-behalf bearer for the ``opbox``
+    adapter happen only where ``BOLTRIG_ADDONS`` names it. A test asserting either
+    is asserting the PROVISIONED configuration and must say so.
+    """
+    monkeypatch.setenv("BOLTRIG_ADDONS", "opbox")

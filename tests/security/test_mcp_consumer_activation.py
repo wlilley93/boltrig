@@ -252,6 +252,7 @@ def _opbox_tool(name: str, risk_class: str) -> dict:
 
 @pytest.mark.invariant("FR-MCP-03")
 @pytest.mark.invariant("SEC-22")
+@pytest.mark.usefixtures("opbox_addon")
 async def test_opbox_risk_class_drives_consequence_on_the_published_verbs(monkeypatch, caplog):
     """The Opbox door declares no ``consequence`` hint; its risk class rides in
     the description. Every class above READ must publish high so the HITL gate

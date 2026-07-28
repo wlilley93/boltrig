@@ -287,9 +287,11 @@ _PRECEDENCE_TOOLS = [
     # standard MCP annotations: destructive -> high, read-only -> low
     {"name": "t.ann_destructive", "annotations": {"destructiveHint": True}},
     {"name": "t.ann_readonly", "annotations": {"readOnlyHint": True}},
-    # the risk class beats annotations: READ stays low under a destructive hint
-    {"name": "t.class_beats_ann", "annotations": {"destructiveHint": True},
-     "description": _opbox_desc("t.class_beats_ann", "READ")},
+    # a signal may RAISE a tier and never lower one: a tool declaring both a READ
+    # risk class and a destructive hint contradicts itself, and high is the
+    # fail-closed reading (high is the tier that can require human approval).
+    {"name": "t.class_never_lowers", "annotations": {"destructiveHint": True},
+     "description": _opbox_desc("t.class_never_lowers", "READ")},
     # an unknown class (structured or in the token) falls through to low
     {"name": "t.unknown", "riskClass": "CHARGE"},
     # prose alone never trips the description parse
@@ -299,9 +301,16 @@ _PRECEDENCE_TOOLS = [
 
 
 @pytest.mark.invariant("FR-MCP-03")
+@pytest.mark.usefixtures("opbox_addon")
 async def test_consequence_hint_precedence_and_fail_closed_clamps():
-    """Precedence: explicit ``consequence`` (bogus clamps low) > Opbox risk_class
-    > MCP annotations > low; nothing climbs above the Consequence ceiling."""
+    """Explicit ``consequence`` (bogus clamps low) wins outright; otherwise the
+    HIGHEST of the addon's risk vocabulary and the MCP annotations, never the
+    first. Nothing climbs above the Consequence ceiling.
+
+    First-wins precedence let a ``low`` reading override a ``destructiveHint``
+    and drop a tool below the human-approval gate, so an addon can now raise a
+    tier and never lower one. Requires the opbox addon ACTIVE: reading that
+    server's ``riskClass`` token is integration knowledge, not core behaviour."""
     async def rpc(request):
         return {"jsonrpc": "2.0", "id": request["id"],
                 "result": {"tools": _PRECEDENCE_TOOLS}}
@@ -314,7 +323,7 @@ async def test_consequence_hint_precedence_and_fail_closed_clamps():
         "mcp-x.t.structured": "high",
         "mcp-x.t.ann_destructive": "high",
         "mcp-x.t.ann_readonly": "low",
-        "mcp-x.t.class_beats_ann": "low",
+        "mcp-x.t.class_never_lowers": "high",
         "mcp-x.t.unknown": "low",
         "mcp-x.t.prose": "low",
     }

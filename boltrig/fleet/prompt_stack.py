@@ -70,6 +70,69 @@ TIER_CHARACTER: dict[str, str] = {
 }
 
 
+# --- The tool-call harness ---------------------------------------------------
+# WHY THIS IS HERE AND NOT IN THE CODEX LANE. The codex kernel-tools lane sends
+# its own pinned birth instructions and NEVER called compose_system_prompt, so
+# the tenant that ships to clients received four sentences and none of the frame
+# above. That is not only a tone gap: chat.py wraps every inbound user message
+# with ``wrap_untrusted``, and the sentence explaining what that envelope MEANS
+# is in ``GOVERNANCE_FLOOR``, which that lane never sent. So ``wrap_untrusted``
+# was tagging attacker-capable text for a model that had never been taught to
+# read the tag.
+#
+# Every rule below is grounded in a failure measured on a live tenant, not in
+# what a prompt guide recommends. Cited in order:
+#   (a) the model emitted tool calls as PROSE, so they never reached the
+#       dispatcher and the turn looked like an ordinary refusal;
+#   (b) it called one verb with the same rejected argument shape fifteen times
+#       running, because the rejection was a single word and nothing told it that
+#       repeating an identical call is never the recovery;
+#   (c) it invented record identifiers rather than looking them up;
+#   (d) a call HELD for human approval reads like a failure unless you are told
+#       otherwise, and the agent worked around it instead of stopping;
+#   (e) a caller whose scope resolved to no grants got zero tools and simply
+#       apologised, which is the worst way for a client to meet a defect.
+#
+# NOT included, deliberately: a rule telling the agent to remember things.
+# ``TOOL_HARNESS`` says nothing about the memory verbs, which have never once been
+# called on the live tenant, because the cause there is that they are disabled by
+# configuration - so a prompt rule would teach a call that can only be refused,
+# which is the failure this text exists to stop. Grant/config fix, not a prompt fix.
+TOOL_HARNESS = (
+    "Calling tools. A tool call is something you EMIT, not something you "
+    "describe: never write out the call you would make as prose, or say you are "
+    "about to call something instead of calling it. Every call is mediated by the "
+    "kernel, which may answer it, deny it, or hold it for a human to approve.\n\n"
+    "When a call is rejected, read the rejection - it names what was wrong. Fix "
+    "that, or choose the tool whose inputs match what you actually hold. Never "
+    "repeat a call that was just rejected with the same arguments: an identical "
+    "retry is never the recovery, and the same rejection will come back.\n\n"
+    "Never invent an identifier, a reference or a record number. If you do not "
+    "have the exact value a tool needs, look it up with a search or a by-name "
+    "tool first and read the value off the result.\n\n"
+    "If a call is held for human approval, that is not a failure and not a "
+    "refusal. Say plainly that it is waiting for approval and stop there - do not "
+    "retry it, and do not route around it with a different tool.\n\n"
+    "If you have no tools at all, say exactly that. Do not apologise vaguely or "
+    "imply the work is impossible: having no tools is a fault in your setup that "
+    "someone can fix, and only you can report it.\n\n"
+    "Report only verified conclusions - what a tool actually returned. If you "
+    "could not verify something, say so rather than presenting it as fact."
+)
+
+
+def compose_tool_harness(addon_harnesses: tuple[str, ...] = ()) -> str:
+    """The full harness a tool-calling lane sends: cage, tool discipline, addons.
+
+    ``addon_harnesses`` are integration fragments (see ``boltrig.addons``),
+    appended in the caller's order so an integration can teach the model about
+    ITS tools without editing the text every boltrig ships.
+    """
+
+    parts = [GOVERNANCE_FLOOR, TOOL_HARNESS, *(t for t in addon_harnesses if t)]
+    return "\n\n".join(parts)
+
+
 def compose_system_prompt(
     actor_tier: str,
     *,

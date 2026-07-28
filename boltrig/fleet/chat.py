@@ -22,13 +22,15 @@ import asyncio
 import base64
 import binascii
 import contextlib
-import os
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
 from boltrig.config.manifest import ChatConfig
-from boltrig.fleet.chat_authority import warn_if_no_usable_authority
+from boltrig.fleet.chat_authority import (
+    seal_on_behalf_bearer,
+    warn_if_no_usable_authority,
+)
 from boltrig.fleet.result import reply_text
 from boltrig.kernel.held_call import sweep_run_credentials_if_settled
 from boltrig.models import (
@@ -68,12 +70,6 @@ TurnExecutor = Callable[..., Awaitable[Any]]
 Summariser = Callable[[list[ConversationMessage]], Awaitable[str]]
 
 _SCOPED_ROLES = {"org-admin", "compliance"}  # may read others' threads (SEC-25)
-
-# The adapter a chat turn's ``on_behalf_bearer`` (the permission-parity
-# passthrough) is sealed for. The bearer IS that adapter's downstream credential
-# (the opbox-kernel session bearer), so it is scoped to exactly that adapter and
-# never leaks to any other. Overridable for a differently-named integration.
-_OBO_ADAPTER_ID = os.environ.get("BOLTRIG_OBO_ADAPTER_ID", "opbox")
 
 
 async def _settle_turn(
@@ -760,16 +756,13 @@ def build_turn_executor(
             owner_member="chief-of-staff", hatchet_run_id=run_id, on_behalf_of=user_id, workspace_id=workspace_id,
         )
         await kernel.store.create_work_item(item)
-        # Permission-parity passthrough: seal the caller's clamped external bearer
-        # for the opbox adapter for the life of THIS run, BEFORE any verb dispatch.
-        # Dispatch (``_execute_adapter``) re-mints it into the adapter credential so
-        # a downstream opbox-kernel call enforces the caller's grants, not the
-        # adapter's static service token. Absent => static credential (fail-safe).
-        # Kernel-only + run-scoped: never enters params/events/audit, swept on
-        # terminal, and unresolvable by any other run or adapter.
+        # Permission-parity passthrough. With no bearer, ``seal_on_behalf_bearer``
+        # is never reached and dispatch keeps the adapter's static credential
+        # (fail-safe). What it seals is kernel-only + run-scoped: never enters
+        # params/events/audit, swept on terminal, unresolvable by any other run.
         if on_behalf_bearer:
-            await kernel.credentials.seal_run_scoped_adapter_bearer(
-                tenant_id, run_id, _OBO_ADAPTER_ID, on_behalf_bearer, user_id
+            await seal_on_behalf_bearer(
+                kernel.credentials, tenant_id, run_id, on_behalf_bearer, user_id
             )
         # Shadow Codex root admission (SEC-170); None=>flag off=>no-op (execution-neutral, fail-open).
         if codex_execution is not None:
