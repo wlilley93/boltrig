@@ -58,8 +58,50 @@ updates:
     # only way it can move correctly. Same shape as the aiohttp override that
     # shipped inert - dependabot edits one line of a lock, and a lock is a
     # solved system, not a list.
+    #
+    # The same shape, four more times: #145 #146 #147 #148, all four opened on
+    # 2026-07-27 and all four failing every check. Proof that they are not merely
+    # broken but IMPOSSIBLE: `make relock UPGRADE=--upgrade` re-solves the whole
+    # system with every upgrade allowed, and it holds all four at exactly the
+    # versions those PRs try to raise. The resolver, given free rein, refuses them.
+    # Asked why:
+    #
+    #   gunicorn>=24            cognee>=1.2.0 depends on gunicorn>=20.1.0,<24
+    #   limits>=5               cognee>=1.2.0 depends on limits>=4.4.1,<5
+    #   packaging>=25           limits<5 depends on packaging>=21,<25 (via cognee)
+    #   importlib-metadata>=9   litellm 1.83.x depends on importlib-metadata==8.5.0
+    #
+    # Three of the four are one constraint wearing different hats: `cognee` bounds
+    # this graph. Dependabot cannot see any of it, because it reasons per-package
+    # against a flat file where every pin in a `uv` output looks direct.
+    #
+    # Bounded at the CONSTRAINT, not by name. A bare `dependency-name` ignore would
+    # also suppress `gunicorn 23.0.0 -> 23.0.1`, so a security patch inside the
+    # permitted range would go unproposed - trading a weekly void PR for a silent
+    # hole. These ranges reopen the moment the bound moves: raise cognee or litellm,
+    # `make relock`, and the pins follow as part of one solution, which is the only
+    # way they can move correctly.
     ignore:
       - dependency-name: pydantic-core
+      - dependency-name: gunicorn
+        versions: [">=24"]
+      - dependency-name: limits
+        versions: [">=5"]
+      - dependency-name: packaging
+        versions: [">=25"]
+      - dependency-name: importlib-metadata
+        versions: [">=9"]
+      # ruff is held at 0.15.x by pyproject's dev group, for a reason written
+      # there: 0.16 widens ruff's DEFAULT rule set, so taking it turns on new
+      # families wholesale and that is a linter upgrade, not a relock. The hold
+      # alone was not enough, because #144 arrived as a GROUP and dependabot
+      # raised the pyproject bound inside it - so one held package failed every
+      # check on a PR that also carried click, mypy and openai. A group is only
+      # as mergeable as its most constrained member. Ignored here so the rest of
+      # the group can land; lift both this and the pyproject bound together, in
+      # the change that decides which of those rule families we want.
+      - dependency-name: ruff
+        versions: [">=0.16"]
     labels:
       - dependencies
       - python
