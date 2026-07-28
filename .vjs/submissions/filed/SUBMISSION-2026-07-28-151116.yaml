@@ -1,0 +1,62 @@
+id: SUBMISSION-2026-07-28-151116
+court_requested: county
+jurisdiction: default
+question: Should boltrig seat a second author-tier operator at the host boundary without four-eyes, or correct the role assignment instead?
+facts: |+
+  # Facts: a host-boundary command to seat a second operator after `initiate` has run
+
+  ## The deadlock, encountered live
+
+  On 2026-07-28 Classical Visas needed `control.adapter.activate` approved. It could not be.
+
+  Four-eyes (`hitl_response_auth.py:158-170`) refuses an approver in the initiator set. The
+  sole-author exemption (`:124-139`) lifts that only while the tenant has exactly ONE active
+  author-tier user. CV has two: the operator and **the client**. So the only lawful approver of
+  an operator-raised request is the client.
+
+  The exemption did not lapse by accident. `control.user.update` promoted the client from
+  `member` to `admin`; that promotion was itself self-approved under the exemption on
+  2026-07-27. **The last act performed under the exemption destroyed it**, unannounced.
+
+  Seating a second OPERATOR-side human would dissolve this permanently. It cannot be done:
+  `control.invitation.create` and `control.user.update` are both `high` consequence through the
+  same gate (`dispatch.py:502`), so each needs the approval we cannot get; `boltrig initiate`
+  returns 3 once an owner exists (`initiate.py:86-95`); `mint-token` and `set-password` refuse
+  for a non-existent user. **Every route to a second operator requires an approval that requires
+  a second operator.**
+
+  ## FOR a host-boundary command
+
+  - The boundary already confers strictly more: `initiate` creates the FIRST owner from
+    nothing, `mint-token` mints bearer credentials. `seat-operator` adds no authority the
+    boundary does not already hold.
+  - The alternative is asking the client to approve operator business, training them to approve
+    what they cannot evaluate and degrading every future approval they give.
+  - A bootstrap exemption exitable only by a route it blocks is not a bootstrap, it is a trap.
+    `initiate` solves this for the first user; the second has no equivalent.
+
+  ## AGAINST
+
+  - It creates author-tier authority that no approval gates. Four-eyes then guarantees only
+    "two humans agreed, OR one human had root".
+  - Host access is not narrow: any process on the box has it, including agent runtimes - and
+    this programme already recorded an agent seat clearing an irreversible verb on standing.
+  - The tenant gains no visibility that a new author appeared; their four-eyes protection is
+    diluted by a purely operator-side act.
+  - A narrower cure exists: the exemption lapsed because a CLIENT was given an author-tier ROLE
+    when the intent was authority over their own data. `AUTHOR_ROLES` is used ONLY by the
+    exemption - approver eligibility does not require author tier. Correcting the role may
+    dissolve the deadlock with no new command.
+
+  ## Options
+
+  1. Refuse; fix the role assignment so the client holds the authority they need without
+     counting as an author.
+  2. Allow `seat-operator`, run-once-per-seat, on conditions: an INV-8-class audit row, an event
+     visible to the tenant, cannot set owner tier, refused when a second author exists.
+  3. Allow it only for an allow-listed operator domain.
+  4. Neither: a distinct `operator` tier satisfying four-eyes without being author-tier.
+
+requested_order: TBD
+private_boundary: local
+word_count: 476

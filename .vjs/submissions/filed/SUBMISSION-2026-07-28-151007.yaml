@@ -1,0 +1,59 @@
+id: SUBMISSION-2026-07-28-151007
+court_requested: county
+jurisdiction: default
+question: May the first-party @wlilley93/* npm scope be exempted from the minimumReleaseAge supply-chain verifier, or should the ui/SDK coupling be removed instead?
+facts: |
+  # Facts: exempting the first-party `@wlilley93/*` scope from the minimumReleaseAge verifier
+
+  ## Measured position
+
+  `ui/` enforces pnpm `minimumReleaseAge` (24h). On 2026-07-28 CI refused PR #166/#167:
+  `@wlilley93/boltrig-web-sdk@0.1.1 was published at 10:15:05Z, within the cutoff`. The package
+  is ours, published by `release.yml` from this repo one minute before CI ran. `ui/package.json`
+  pins it exactly and `ui/src/api/types.ts` re-exports the published tarball rather than the
+  workspace source, so any UI change touching the SDK contract is blocked for 24h.
+
+  `ui/pnpm-workspace.yaml:17` already lists `minimumReleaseAgeExclude` for that exact version.
+  **It made no difference.** The exclude is honoured at resolution; the `--frozen-lockfile`
+  VERIFIER re-checks the lockfile and ignores it. That entry is inert, and I added it believing
+  it worked. This recurs on every SDK bump.
+
+  ## FOR exemption
+
+  - The control's threat model is a compromised THIRD-PARTY upstream; 24h buys detection time
+    from a community we do not control. There is no such community for our own scope: the only
+    party who could detect a bad first-party publish is us, and we already gate it at publish.
+  - `release.yml` runs `cosign sign` + `cosign attest` and verifies both before publishing.
+  - A recurring cost with no matching benefit gets routed around informally
+    (`--no-frozen-lockfile`, a hand-edited lockfile), which is worse than a narrow exemption.
+
+  ## AGAINST exemption
+
+  - "We trust ourselves" is what makes a publish-token compromise fatal. If an attacker gets
+    the OIDC path or a registry token, this 24h window is the ONLY control delaying a malicious
+    `@wlilley93/*` version reaching a client build. Exempting removes exactly that control.
+  - The scope is a name, not a cryptographic fact. Anyone able to publish under it inherits the
+    exemption, so it is only as strong as registry ACLs, which are not audited here.
+  - Cosign verification happens at PUBLISH time, by the publishing workflow. `pnpm` does not
+    verify it at INSTALL time, which is where this policy operates. "It is already signed" does
+    not transfer to the consumer side.
+  - The cost is bounded and predictable and can be planned around by sequencing.
+
+  ## Options
+
+  1. Refuse; sequence releases (publish SDK, wait, merge consumer). Cost: 24h per change.
+  2. Exempt the first-party scope at the verifier, narrowly, by scope pattern, with reasons.
+  3. Remove the coupling: have `ui/` build against the WORKSPACE SDK in CI, so publish timing
+     never gates a UI change. Leaves the security policy untouched. Untried.
+  4. (3) as the durable fix with (2) as a bounded bridge.
+
+  ## Note
+
+  Whatever is decided, the inert `minimumReleaseAgeExclude` entries should be removed or made
+  effective: a security policy carrying decorative exemptions misleads the next reader.
+
+  Nothing is urgent - the affected PRs clear by themselves at 2026-07-29T10:15:05Z, so option 1
+  costs only the wait.
+requested_order: TBD
+private_boundary: local
+word_count: 469
