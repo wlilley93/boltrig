@@ -62,23 +62,53 @@ echo "  fleet  $FD"
 [[ "$KD" == sha256:* ]] || die "kernel digest for $VERSION never became resolvable - did the release succeed?"
 [[ "$FD" == sha256:* ]] || die "fleet digest for $VERSION never became resolvable - did the release succeed?"
 
-repin() { # $1=overlay
-  ssh "$H" "cp -a $1 $1.bak-roll-$STAMP" || die "backup failed for $1"
-  ssh "$H" "python3 - <<'PY'
-import re
-p='$1'; s=open(p).read()
-s=re.sub(r'ghcr\.io/wlilley93/boltrig-kernel:[^\s\"]+','ghcr.io/wlilley93/boltrig-kernel:$VERSION@$KD',s)
-s=re.sub(r'ghcr\.io/wlilley93/boltrig-fleet:[^\s\"]+', 'ghcr.io/wlilley93/boltrig-fleet:$VERSION@$FD', s)
-open(p,'w').write(s)
-PY"
+# SOURCE-FIRST. The overlay is TRACKED in wlilley93/Opbox
+# (boltrig-tenants/), and the box's copy is DERIVED. This used to sed the file on
+# the box, which meant the digest a tenant was actually running existed only on
+# that box, in a directory that is not a git repository: nothing recorded which
+# image a client ran, and a rebuilt box would have silently reverted the pin.
+#
+# So: edit the SOURCE, verify it, copy it to the box, and prove the two match by
+# checksum before anything is brought up. A pin that is not in the source is not
+# a pin, it is a local edit waiting to be lost.
+SRC_ROOT="${ROLL_SRC:-/home/jellytot/Projects/opbox-prod/boltrig-tenants}"
+
+repin() { # $1=overlay path ON THE BOX (its basename-relative path under SRC_ROOT)
+  local remote="$1"
+  local rel="${remote#*/boltrig-tenants/}"
+  local src="$SRC_ROOT/$rel"
+  [ -f "$src" ] || die "no tracked source for $rel at $src - the box copy is not authoritative, so refusing to edit it"
+
+  cp -a "$src" "$src.bak-roll-$STAMP"
+  python3 - "$src" "$VERSION" "$KD" "$FD" <<'PY'
+import re, sys
+p, version, kd, fd = sys.argv[1:5]
+s = open(p).read()
+s = re.sub(r'ghcr\.io/wlilley93/boltrig-kernel:[^\s"]+', f'ghcr.io/wlilley93/boltrig-kernel:{version}@{kd}', s)
+s = re.sub(r'ghcr\.io/wlilley93/boltrig-fleet:[^\s"]+',  f'ghcr.io/wlilley93/boltrig-fleet:{version}@{fd}',  s)
+open(p, 'w').write(s)
+PY
+
   local n
-  n=$(ssh "$H" "diff $1.bak-roll-$STAMP $1 | grep -c '^[<>]' || true" | head -1)
-  ssh "$H" "diff $1.bak-roll-$STAMP $1 || true"
+  n=$(diff "$src.bak-roll-$STAMP" "$src" | grep -c '^[<>]' || true)
+  diff "$src.bak-roll-$STAMP" "$src" || true
   case "${n:-0}" in
-    4) echo "  [ok] repinned both image lines" ;;
-    0) echo "  [ok] already pinned at $VERSION (safe no-op re-run)" ;;
-    *) die "overlay diff for $1 is $n changed lines; expected 4 (repin) or 0 (already pinned)" ;;
+    4) echo "  [ok] repinned both image lines IN THE SOURCE ($rel)" ;;
+    0) echo "  [ok] source already pinned at $VERSION (safe no-op re-run)" ;;
+    *) die "source diff for $rel is $n changed lines; expected 4 (repin) or 0 (already pinned)" ;;
   esac
+  rm -f "$src.bak-roll-$STAMP"
+
+  # Propagate, then PROVE the box carries exactly the source. scp reporting
+  # success is not the same as the bytes matching - and this is the one file that
+  # decides which image a client runs.
+  ssh "$H" "cp -a $remote $remote.bak-roll-$STAMP" || die "backup failed for $remote"
+  scp -q "$src" "$H:$remote" || die "propagate failed for $rel"
+  local a b
+  a=$(sha256sum "$src" | cut -d" " -f1)
+  b=$(ssh "$H" "sha256sum $remote" | cut -d" " -f1)
+  [ "$a" = "$b" ] || die "propagated $rel but the box checksum differs ($a vs $b)"
+  echo "  [ok] box matches source (sha256 ${a:0:12})"
 }
 
 bring_up() { # $1=overlay $2=project
