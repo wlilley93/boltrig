@@ -9,6 +9,7 @@ cannot regress.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import Any, cast
@@ -125,3 +126,60 @@ async def test_pump_crash_names_the_exception_type_without_leaking_its_content(
     assert _SECRET not in logged
     assert terminals and terminals[0].message == "Codex notification pump failed"
     assert _SECRET not in terminals[0].message
+
+
+@pytest.mark.asyncio
+async def test_an_expected_teardown_race_is_not_logged_as_a_failure(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Observed live on 2026-07-28, one millisecond apart:
+
+        codex runtime terminal: category=closed cause=Codex thread closed
+        codex notification pump crashed: ...codex_protocol.ProtocolStateError
+
+    The turn had ALREADY ended. The pump was blocked on next_notification() against
+    a connection that had gone, and raised ProtocolStateError("connection is
+    closed") on the way out. `fail` correctly declines to overwrite the first
+    terminal, so the turn is recorded as closed, not failed.
+
+    But logging that at WARNING fires on EVERY healthy turn, and an alarm that
+    cries wolf on the happy path is the same blindness as no alarm at all. It is a
+    WARNING only when the crash is the CAUSE.
+
+    The terminal must be set WHILE the pump is awaiting - setting it first makes
+    `_run` exit on its loop condition without ever calling the client, which is not
+    the race.
+    """
+
+    class _ConnectionClosed(RuntimeError):
+        pass
+
+    released = asyncio.Event()
+
+    class _Client:
+        async def next_notification(self, timeout: float | None = None) -> object:
+            await released.wait()
+            raise _ConnectionClosed("connection is closed")
+
+    async def _on_terminal(_a: object, _t: CodexRuntimeTerminal) -> None:
+        return None
+
+    actor = CodexRuntimeActor(
+        client=cast(Any, _Client()),
+        translator=cast(Any, object()),
+        on_terminal=_on_terminal,
+        max_buffered_events=8,
+    )
+    with caplog.at_level(logging.INFO):
+        runner = asyncio.create_task(actor._run())
+        await asyncio.sleep(0)  # let the pump reach its await
+        await actor.fail(CodexRuntimeTerminal("closed", "Codex thread closed"))
+        released.set()
+        await asyncio.wait_for(runner, timeout=5)
+
+    records = [r for r in caplog.records if "pump crashed" in r.getMessage()]
+    assert records, "the crash is still recorded - it is downgraded, not hidden"
+    assert all(r.levelno == logging.INFO for r in records), (
+        "an expected teardown race logged at WARNING fires on every healthy turn"
+    )
+    assert "_ConnectionClosed" in caplog.text

@@ -114,27 +114,27 @@
       "expires": "2026-12-31"
     },
     "boltrig/fleet/chat.py": {
-      "max_file_lines": 857,
+      "max_file_lines": 859,
       "max_function_lines": 144,
       "over_limit_functions": [
         {
           "name": "ChatService.handle_turn",
-          "line": 346,
+          "line": 347,
           "lines": 144
         },
         {
           "name": "build_turn_executor",
-          "line": 719,
-          "lines": 139
+          "line": 720,
+          "lines": 140
         },
         {
           "name": "build_turn_executor.executor",
-          "line": 742,
-          "lines": 114
+          "line": 743,
+          "lines": 115
         }
       ],
       "owner": "fleet-maintainers",
-      "reason": "Separate conversation context, turn execution, and event persistence while preserving streaming behavior. Audit fix: the executor now also settles non-BoltrigError failures FAILED (the item no longer stays IN_FLIGHT forever). US-CHAT-15: handle_turn now also runs the mid-run steer queue (queue-vs-drive decision, sequential drain turns on one stream). Parity passthrough (2026): handle_turn/build_turn_executor thread the caller's clamped on_behalf_bearer, sealed per-run for the opbox adapter before any verb dispatch. 2026-07-26 (decision 0018): a write held for human approval is now RECORDED at the pause - a human approved opbox.add_comment in a chat turn, the request sat ANSWERED forever and the comment was never posted, because nothing anywhere held the CALL. ChatService gained resume_held_write, a thin sibling to regenerate_turn that replays the recorded CALL (fleet/held_write_resume.py) rather than the model; no existing function grew by a line. 2026-07-26 (credential lifecycle): +24 lines for _settle_turn, extracted rather than inlined so no over-limit function grows (executor is UNCHANGED at 114 lines; only line numbers moved). The chat lane settles its own work item and never reached the pump's terminal hook, which was the ONLY caller of sweep_run_scoped, so a turn's sealed permission-parity bearer was never retired: 29 live rows on the Classical Visas tenant, one per turn plus one per delegated child, oldest a day old, none ever deleted. 2026-07-27: +1 line (one import) for the chat-reply fix. Every assistant message on the Classical Visas tenant was exactly 256 characters, cut mid-word: 12 at exactly 256, 29 under, and not one had ever exceeded it - 29% of that client's answers silently decapitated, with status=ok and no error anywhere. The cause was a field confusion, not a small bound: AgentResult.summary is a short audit line that the codex lane builds as text[:256], and chat used it as the user-facing reply while the full answer sat in output['text']. The selection moved OUT of this file into fleet/result.py beside the field contract it turns on, so the largest function is unchanged at 144 and build_turn_executor.executor SHRANK; the single physical line is the import.",
+      "reason": "Separate conversation context, turn execution, and event persistence while preserving streaming behavior. Audit fix: the executor now also settles non-BoltrigError failures FAILED (the item no longer stays IN_FLIGHT forever). US-CHAT-15: handle_turn now also runs the mid-run steer queue (queue-vs-drive decision, sequential drain turns on one stream). Parity passthrough (2026): handle_turn/build_turn_executor thread the caller's clamped on_behalf_bearer, sealed per-run for the opbox adapter before any verb dispatch. 2026-07-26 (decision 0018): a write held for human approval is now RECORDED at the pause - a human approved opbox.add_comment in a chat turn, the request sat ANSWERED forever and the comment was never posted, because nothing anywhere held the CALL. ChatService gained resume_held_write, a thin sibling to regenerate_turn that replays the recorded CALL (fleet/held_write_resume.py) rather than the model; no existing function grew by a line. 2026-07-26 (credential lifecycle): +24 lines for _settle_turn, extracted rather than inlined so no over-limit function grows (executor is UNCHANGED at 114 lines; only line numbers moved). The chat lane settles its own work item and never reached the pump's terminal hook, which was the ONLY caller of sweep_run_scoped, so a turn's sealed permission-parity bearer was never retired: 29 live rows on the Classical Visas tenant, one per turn plus one per delegated child, oldest a day old, none ever deleted. 2026-07-27: +1 line (one import) for the chat-reply fix. Every assistant message on the Classical Visas tenant was exactly 256 characters, cut mid-word: 12 at exactly 256, 29 under, and not one had ever exceeded it - 29% of that client's answers silently decapitated, with status=ok and no error anywhere. The cause was a field confusion, not a small bound: AgentResult.summary is a short audit line that the codex lane builds as text[:256], and chat used it as the user-facing reply while the full answer sat in output['text']. The selection moved OUT of this file into fleet/result.py beside the field contract it turns on, so the largest function is unchanged at 144 and build_turn_executor.executor SHRANK; the single physical line is the import. +2 lines (857->859) for an import and a call. A chat turn with no authority or no skills is fail-closed and CORRECT, but it was fail-SILENT: on a live tenant the client's own account was in neither org_members nor workspace_members, so role resolution produced the empty grant set (SEC-78), and its role was absent from chat.skills_by_role with default_skills empty. Every turn that user took had zero tools and nothing said so - the turn completed, the agent apologised, and the record showed nothing wrong. The rule lives in fleet/chat_authority.py so this file would not buy the debt; the two lines left are the import and the call.",
       "expires": "2026-12-31"
     },
     "boltrig/fleet/infrastructure/cell_spawner.py": {
