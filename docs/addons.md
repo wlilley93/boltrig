@@ -103,6 +103,25 @@ two sides cannot drift. To update the harness text, bump
 `KERNEL_TOOLS_BASE_VERSION`; to update an integration's contribution, bump that
 addon's `version`. Either moves the pin forward. Neither forks it.
 
+## Sending a chat turn: use an idempotency key
+
+Unrelated to addons, but part of the same contract a product consumes. `POST
+/v1/chat` accepts an optional `idempotency_key`, chosen by the client, identifying
+**one user message**:
+
+```json
+{ "message": "Look up MAT-0002", "idempotency_key": "a7f3…" }
+```
+
+A retry that reuses the key is answered as an accepted replay (`message_start` /
+`message_end`, both carrying `"replay": true`) instead of convening a second
+agent. Without it, a retry starts another run: measured on a live tenant, one
+message sent five times 1.4-2.1s apart produced **seven** `agent_spawn` rows — N
+times the model spend and N duplicate answers to one question.
+
+Mint the key once per user message, **not** per HTTP attempt, or retries defeat
+it. Omitting it is safe and behaves exactly as before.
+
 ## Checklist for a new addon
 
 1. Name only tools that **exist** in the tenant's registry. A harness naming an

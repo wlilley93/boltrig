@@ -18,7 +18,6 @@ from typing import Any, Awaitable, Callable
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
-from pydantic import BaseModel, Field
 
 from boltrig.models import (
     BoltrigError,
@@ -30,6 +29,7 @@ from boltrig.models import (
 from boltrig.store.base import DEFAULT_WORK_PAGE, MAX_WORK_PAGE, clamp_work_page
 
 from . import Kernel
+from .app_bodies import ChatBody, InvokeBody, RespondBody, SpawnBody
 from .hitl_http import list_visible_hitl, respond_to_hitl
 from .web_security import client_ip
 from .work_http import get_visible_work_item, list_visible_work_items, work_item_audit_trail
@@ -191,44 +191,6 @@ def _depth_from(raw: Any) -> int:
         return max(0, int(raw or 0))
     except (TypeError, ValueError):
         return 0
-
-
-class InvokeBody(BaseModel):
-    noun: str
-    verb: str
-    params: dict[str, Any] = Field(default_factory=dict)
-    context: dict[str, Any] = Field(default_factory=dict)
-    idempotency_key: str | None = None
-    approval_id: str | None = None
-
-
-class SpawnBody(BaseModel):
-    task: str
-    skills: list[str] = Field(default_factory=list)
-    prefer: dict[str, Any] = Field(default_factory=dict)
-    context: dict[str, Any] = Field(default_factory=dict)
-
-
-class RespondBody(BaseModel):
-    decision: str
-    notes: str = ""
-
-
-class ChatBody(BaseModel):
-    message: str
-    conversation_id: str | None = None
-    # Inline, size-capped attachments ([2026] VJS-COUNTY 3): each is a record
-    # {name, media_type, data (base64)}. Caps are enforced fail-closed at intake
-    # from ChatConfig; an over-cap turn is refused whole before anything persists.
-    attachments: list[dict[str, Any]] = Field(default_factory=list)
-    # OPTIONAL permission-parity passthrough: a caller's clamped external bearer
-    # (e.g. the opbox-kernel session bearer, already clamped to min(agent,user))
-    # that the fleet seals per-run for the opbox adapter, so a downstream service
-    # call enforces the CALLER's grants rather than the adapter's static service
-    # token. Absent => today's behaviour (static adapter credential). This is a
-    # CALLER-supplied downstream credential, NOT an identity override: the PAT's
-    # user is still the chatter and every spawn is still ceilinged by their grants.
-    on_behalf_bearer: str | None = None
 
 
 # Spawner seam: the fleet attaches an async (principal, body) -> dict callable.
@@ -485,16 +447,11 @@ def create_app(
         # The caller's role-resolved grants ride along as the ceiling every chat
         # spawn intersects ([2026] VJS-COUNTY 1) - same resolution as any verb call.
         gen = chat_svc.handle_turn(
-            tenant_id=p.tenant_id,
-            user_id=p.subject,
-            role=p.role,
-            grants=p.grants,
-            workspace_id=p.active_workspace_id,
-            scope=p.scope,
-            message=body.message,
-            conversation_id=body.conversation_id,
-            attachments=body.attachments,
-            on_behalf_bearer=body.on_behalf_bearer,
+            tenant_id=p.tenant_id, user_id=p.subject, role=p.role, grants=p.grants,
+            workspace_id=p.active_workspace_id, scope=p.scope,
+            message=body.message, conversation_id=body.conversation_id,
+            attachments=body.attachments, on_behalf_bearer=body.on_behalf_bearer,
+            idempotency_key=body.idempotency_key,
         )
         # RBAC / access errors happen before the first event and propagate to the
         # central exception handler (canonical envelope) - the stream hasn't begun.
