@@ -14,7 +14,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@wlilley93/boltrig-web-sdk": "0.1.0",
+    "@wlilley93/boltrig-web-sdk": "0.1.1",
     "@xyflow/react": "^12.11.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

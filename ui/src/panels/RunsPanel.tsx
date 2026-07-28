@@ -14,10 +14,13 @@ import {
 } from "@/panels/ux";
 import { useFetch } from "@/useFetch";
 import {
+  ALL_CHANNEL_FILTER,
   ALL_OWNER_FILTER,
   ALL_STATUS_FILTER,
+  channelFilterValue,
   filterRunRows,
   ownerFilterValue,
+  runChannels,
   runOwners,
   runStatusCounts,
   statusFilterValue,
@@ -58,6 +61,7 @@ function RunsTable({ rows }: { rows: ReadonlyArray<RunRow> }) {
             <th>Work item</th>
             <th>Status</th>
             <th>Owner</th>
+            <th>Channel</th>
           </tr>
         </thead>
         <tbody>
@@ -80,6 +84,17 @@ function RunsTable({ rows }: { rows: ReadonlyArray<RunRow> }) {
                   <span className="muted">No owner</span>
                 )}
               </td>
+              {/* Which SURFACE this turn arrived through, so one conversation can
+                  span an Opbox spotlight and this UI and still say where each turn
+                  came from. Absent is the ordinary case (typed into boltrig
+                  itself), so it reads as a named value, not a missing one. */}
+              <td>
+                {row.external_ref && row.external_ref.trim() ? (
+                  <code>{row.external_ref}</code>
+                ) : (
+                  <span className="muted">Direct</span>
+                )}
+              </td>
             </tr>
           ))}
         </tbody>
@@ -93,9 +108,11 @@ export function RunsPanel() {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState(ALL_STATUS_FILTER);
   const [owner, setOwner] = useState(ALL_OWNER_FILTER);
+  const [channel, setChannel] = useState(ALL_CHANNEL_FILTER);
   const rows = runs.data?.runs ?? [];
   const statusCounts = useMemo(() => runStatusCounts(rows), [rows]);
   const owners = useMemo(() => runOwners(rows), [rows]);
+  const channels = useMemo(() => runChannels(rows), [rows]);
   const statusOptions = [
     { value: ALL_STATUS_FILTER, label: "All statuses" },
     ...statusCounts.map(({ status: value }) => ({
@@ -110,15 +127,31 @@ export function RunsPanel() {
       label: value ?? "No owner",
     })),
   ];
+  const channelOptions = [
+    { value: ALL_CHANNEL_FILTER, label: "All channels" },
+    ...channels.map((value) => ({
+      value: channelFilterValue(value),
+      label: value ?? "Direct",
+    })),
+  ];
   const activeStatus = statusOptions.some((option) => option.value === status)
     ? status
     : ALL_STATUS_FILTER;
   const activeOwner = ownerOptions.some((option) => option.value === owner)
     ? owner
     : ALL_OWNER_FILTER;
+  const activeChannel = channelOptions.some((option) => option.value === channel)
+    ? channel
+    : ALL_CHANNEL_FILTER;
   const visibleRows = useMemo(
-    () => filterRunRows(rows, { query, status: activeStatus, owner: activeOwner }),
-    [rows, query, activeStatus, activeOwner],
+    () =>
+      filterRunRows(rows, {
+        query,
+        status: activeStatus,
+        owner: activeOwner,
+        channel: activeChannel,
+      }),
+    [rows, query, activeStatus, activeOwner, activeChannel],
   );
 
   return (
@@ -126,7 +159,7 @@ export function RunsPanel() {
       <PageIntro
         title="Runs"
         lead="Find and inspect the work-backed runs currently visible in your scope."
-        how="This view reports only the run, work item, intent, status, and owner returned by the server. It does not yet claim to be a unified history of every runtime. Open a run to inspect its live details and audit context."
+        how="This view reports only the run, work item, intent, status, owner, and originating channel returned by the server. It does not yet claim to be a unified history of every runtime. Open a run to inspect its live details and audit context."
         howToggle
         actions={(
           <button className="btn" onClick={runs.reload} disabled={runs.loading && !runs.data}>
@@ -161,6 +194,14 @@ export function RunsPanel() {
             value={activeOwner}
             options={ownerOptions}
             onChange={setOwner}
+          />
+        </Field>
+        <Field label="Channel" htmlFor="runs-channel">
+          <Select
+            id="runs-channel"
+            value={activeChannel}
+            options={channelOptions}
+            onChange={setChannel}
           />
         </Field>
       </div>
