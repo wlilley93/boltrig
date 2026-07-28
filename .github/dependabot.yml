@@ -102,6 +102,41 @@ updates:
       # the change that decides which of those rule families we want.
       - dependency-name: ruff
         versions: [">=0.16"]
+    #
+    # THE SAME AGAIN, and now the pattern rather than the instances. Within minutes
+    # of the ignores above taking effect dependabot opened #157 and #158, carrying
+    # exactly the six packages the previous re-solve had already refused. Every one
+    # is TRANSITIVE - none is declared in pyproject - and all six trace to one
+    # package bounding the graph:
+    #
+    #   instructor>=1.15.3    cognee 1.4.0 depends on instructor>=1.9.1,<1.15.3
+    #   ladybug>=0.18         cognee 1.4.0 depends on ladybug>=0.16.0,<0.18
+    #   rdflib>=7.2.0         cognee 1.4.0 depends on rdflib>=7.1.4,<7.2.0
+    #   jiter>=0.14           instructor (bounded above) depends on jiter>=0.6.1,<0.14
+    #   rich>=15              instructor (bounded above) depends on rich>=13.7.0,<15.0.0
+    #   grpcio-tools>=1.82.1  needs protobuf>=7.35.1, which hatchet-sdk forbids
+    #
+    # cognee is ALREADY at the latest release (1.4.0), so these are not staleness
+    # waiting to be upgraded away - they are what this graph requires today. The
+    # bumps are impossible, not merely failing, and they would have returned every
+    # Monday indefinitely.
+    #
+    # Bounds are the upstream constraints, not round numbers, and grpcio-tools was
+    # measured rather than guessed: 1.82.0 solves and 1.82.1 does not, so 1.82.0 is
+    # still offered. Every one of these reopens by itself the moment its bound moves
+    # and the lock is recompiled - which is the only way a derived lock can move.
+      - dependency-name: instructor
+        versions: [">=1.15.3"]
+      - dependency-name: ladybug
+        versions: [">=0.18"]
+      - dependency-name: rdflib
+        versions: [">=7.2.0"]
+      - dependency-name: jiter
+        versions: [">=0.14"]
+      - dependency-name: rich
+        versions: [">=15"]
+      - dependency-name: grpcio-tools
+        versions: [">=1.82.1"]
     labels:
       - dependencies
       - python
