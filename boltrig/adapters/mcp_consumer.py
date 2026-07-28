@@ -53,6 +53,7 @@ from boltrig.adapters.base import (
     bearer_token,
 )
 from boltrig.adapters.mcp_transport import McpHttpRefusal, StreamableHttp
+from boltrig.addons import consequence_hint_for
 from boltrig.models import Consequence, CredentialResolution, InvocationContext
 
 log = logging.getLogger(__name__)
@@ -73,13 +74,15 @@ _TOOL_VERB_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
 # declares can push a verb above it.
 _CONSEQUENCE_HINTS = frozenset({Consequence.LOW.value, Consequence.HIGH.value})
 
-# The Opbox kernel's MCP door declares no ``consequence`` hint: its tools/list
-# projection (opbox-kernel kernel/src/mcp/tools.rs ``verb_to_tool``) emits only
-# name/description/inputSchema, the risk class inside the description's metadata
-# run as ``riskClass=READ|WRITE|SENSITIVE|MONEY|DESTRUCTIVE`` (uppercase, from
-# ``RiskClass::as_str``). READ maps low, the rest high (FR-MCP-03).
-_OPBOX_RISK = re.compile(r"\briskClass=(READ|WRITE|SENSITIVE|MONEY|DESTRUCTIVE)\b")
-_OPBOX_RISK_HIGH = frozenset({"WRITE", "SENSITIVE", "MONEY", "DESTRUCTIVE"})
+# A consumed server that declares no ``consequence`` field may still carry its own
+# risk vocabulary somewhere in its tool projection. Reading THAT vocabulary is
+# integration-specific KNOWLEDGE, so the regex lives in an addon
+# (``boltrig.addons``) rather than in this module, which ships in every boltrig.
+#
+# It is consulted from every REGISTERED addon, not only the activated ones. A
+# reading can only raise a consequence, so gating it on ``BOLTRIG_ADDONS`` bought
+# no safety and cost the approval gate: measured, an opbox tool carrying
+# ``riskClass=DESTRUCTIVE`` registered as ``low`` wherever the flag was unset.
 
 
 def _status_error(status: int) -> ErrorClass:
@@ -94,16 +97,14 @@ def _status_error(status: int) -> ErrorClass:
     return ErrorClass.INVALID
 
 
-def _risk_class_hint(tool: dict) -> str | None:
-    """Opbox risk_class -> consequence, or None (structured field, else the description token)."""
-    value = tool.get("riskClass") or tool.get("risk_class")
-    if not (isinstance(value, str) and value):
-        match = _OPBOX_RISK.search(str(tool.get("description") or ""))
-        value = match.group(1) if match else ""
-    risk = value.upper()
-    if risk == "READ":
-        return Consequence.LOW.value
-    return Consequence.HIGH.value if risk in _OPBOX_RISK_HIGH else None
+def _addon_hint(tool: dict) -> str | None:
+    """The consumed server's own risk vocabulary, per every addon this build ships.
+
+    REGISTERED, not active: a reading can only RAISE a consequence, so gating it on
+    ``BOLTRIG_ADDONS`` bought nothing and cost the approval gate. See
+    ``consequence_hint_for``.
+    """
+    return consequence_hint_for(None, tool)
 
 
 def _annotations_hint(tool: dict) -> str | None:
@@ -117,13 +118,22 @@ def _annotations_hint(tool: dict) -> str | None:
 
 
 def _consequence_hint(tool: dict) -> str:
-    # Precedence: an explicit ``consequence`` declaration (an unrecognised value
-    # clamps low, fail-closed) > the Opbox risk_class mapping > MCP annotations
-    # > low. No path returns above the Consequence ceiling.
+    # An explicit ``consequence`` declaration is the server's own contract and
+    # wins outright (an unrecognised value clamps low, fail-closed).
     if tool.get("consequence") is not None:
         hint = str(tool.get("consequence") or "").lower()
         return hint if hint in _CONSEQUENCE_HINTS else Consequence.LOW.value
-    return _risk_class_hint(tool) or _annotations_hint(tool) or Consequence.LOW.value
+    # Otherwise take the HIGHEST of the remaining signals, never the first.
+    # ``high`` is the tier that can require human approval (US-HIL-01), so
+    # first-wins precedence let an addon's mapping return ``low`` for a tool whose
+    # own MCP annotations declared ``destructiveHint: true`` and quietly drop it
+    # below the approval gate. An addon is a reading of a server's vocabulary, not
+    # an authority over it: it may RAISE a consequence and must never lower one.
+    # No path returns above the Consequence ceiling.
+    signals = (_addon_hint(tool), _annotations_hint(tool))
+    if any(hint == Consequence.HIGH.value for hint in signals):
+        return Consequence.HIGH.value
+    return Consequence.LOW.value
 
 
 class _McpFailure(Exception):

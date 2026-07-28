@@ -79,6 +79,7 @@ async def test_swept_with_the_run(kernel):
 
 
 @pytest.mark.security
+@pytest.mark.usefixtures("opbox_addon")
 async def test_child_run_inherits_the_sealed_bearer(kernel):
     from boltrig.fleet.spawn import Spawner
 

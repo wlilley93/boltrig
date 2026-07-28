@@ -35,6 +35,7 @@ import hashlib
 import re
 from pathlib import Path
 
+from boltrig.addons import Addon, active_addons, composed_version
 from boltrig.fleet.domain import (
     PhaseAssignmentRef,
     ProfileRef,
@@ -50,6 +51,7 @@ from boltrig.fleet.domain.profile_policy_values import (
     RuntimeToolPolicy,
 )
 from boltrig.fleet.ports.runtime import RuntimeThreadSpec
+from boltrig.fleet.prompt_stack import compose_tool_harness
 
 from .codex_read_only_phase import (
     read_only_cell_id,
@@ -63,18 +65,46 @@ def _sha256(text: str) -> str:
     return f"sha256:{hashlib.sha256(text.encode('utf-8')).hexdigest()}"
 
 KERNEL_TOOLS_PROFILE_NAME = "codex-kernel-tools"
-KERNEL_TOOLS_PROFILE_VERSION = "1.0.0"
-KERNEL_TOOLS_PROFILE = ProfileRef(KERNEL_TOOLS_PROFILE_NAME, KERNEL_TOOLS_PROFILE_VERSION)
 
-# The bounded kernel-tools birth instructions. Same discipline as the read-only
-# text: short, pinned, compiled into the birth policy and passed to
-# ``thread_start`` verbatim.
-KERNEL_TOOLS_INSTRUCTIONS = (
+# The base version of the birth instructions. 1.0.0 was four sentences that named
+# the wall and nothing else; 1.1.0 adds the governance floor and the tool-call
+# harness (see ``fleet/prompt_stack``), because the lane that ships to clients was
+# the ONLY lane that never sent the floor - including the sentence that explains
+# the <untrusted> envelope its own chat path wraps user input in.
+KERNEL_TOOLS_BASE_VERSION = "1.1.0"
+
+# The lane's own wall statement. Everything else in the instructions is shared
+# with any other tool-calling lane; this sentence is what makes it THIS lane.
+KERNEL_TOOLS_LANE_FRAME = (
     "You are a bounded Boltrig phase. You may call only the boltrig MCP tools "
-    "advertised to you; every call is mediated by the kernel, which may deny it "
-    "or hold it for human approval. You cannot write files, run commands, or "
-    "spawn subagents. Report only verified conclusions."
+    "advertised to you. You cannot write files, run commands, or spawn subagents."
 )
+
+
+def kernel_tools_instructions(addons: tuple[Addon, ...] = ()) -> str:
+    """The birth instructions for this lane, composed with any active addons."""
+
+    return "\n\n".join(
+        [
+            KERNEL_TOOLS_LANE_FRAME,
+            compose_tool_harness(tuple(addon.harness for addon in addons)),
+        ]
+    )
+
+
+# Resolved ONCE at import: the birth policy is an attested artefact, so the text
+# and the version a process compiles must not change under it mid-life. Both
+# derive from the same ``_ACTIVE_ADDONS`` tuple, and the adapter and the admission
+# both read these constants, so the two sides cannot drift - the same
+# cannot-drift property this module's docstring claims for the tool ceiling.
+#
+# The version COMPOSES rather than forks: one profile name, with the active
+# addons as semver build metadata (``1.1.0+opbox-1.0.0``). Adding an integration
+# moves the pin forward instead of creating a second lineage to maintain.
+_ACTIVE_ADDONS = active_addons()
+KERNEL_TOOLS_PROFILE_VERSION = composed_version(KERNEL_TOOLS_BASE_VERSION, _ACTIVE_ADDONS)
+KERNEL_TOOLS_PROFILE = ProfileRef(KERNEL_TOOLS_PROFILE_NAME, KERNEL_TOOLS_PROFILE_VERSION)
+KERNEL_TOOLS_INSTRUCTIONS = kernel_tools_instructions(_ACTIVE_ADDONS)
 
 # One server's tools is a bounded set: the ceiling is the run's effective verbs,
 # and a run carrying more than this cannot be attested exactly, so it degrades

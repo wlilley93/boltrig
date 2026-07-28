@@ -44,6 +44,7 @@ from boltrig.fleet.infrastructure.codex_kernel_tool_scope import (
 from boltrig.fleet.infrastructure.codex_kernel_tools_phase import (
     KERNEL_TOOLS_INSTRUCTIONS,
     KERNEL_TOOLS_PROFILE_NAME,
+    KERNEL_TOOLS_PROFILE_VERSION,
     codex_mcp_tool_name,
     kernel_tools_static_profile,
     kernel_tools_thread_spec,
@@ -127,9 +128,13 @@ def test_admission_carries_the_exact_wire_name_ceiling() -> None:
     policy = value.compilation.policy
     # The domain policy stays tool-free: kernel tools are not Codex runtime tools.
     assert policy.enabled_tools == ()
+    # The version is COMPOSED from the active addons (``boltrig.addons``), so the
+    # literal lives in test_addons.py where the composition itself is asserted.
+    # What matters here is that the admission pins exactly what the adapter does:
+    # this equality is the lane's cannot-drift claim.
     assert (policy.profile.name, policy.profile.version) == (
         KERNEL_TOOLS_PROFILE_NAME,
-        "1.0.0",
+        KERNEL_TOOLS_PROFILE_VERSION,
     )
 
 

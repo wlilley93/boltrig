@@ -464,6 +464,7 @@ async def test_both_ends_of_a_delegated_call_report_their_own_hold():
 
 @pytest.mark.security
 @pytest.mark.invariant("SEC-181")
+@pytest.mark.usefixtures("opbox_addon")
 async def test_a_chat_turn_retires_the_bearer_it_sealed():
     """End to end on the lane that actually leaked.
 

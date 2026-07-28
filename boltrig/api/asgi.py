@@ -11,9 +11,22 @@ and no logger name.
 
 from __future__ import annotations
 
+import logging
+
 from .logging_config import configure_logging
 
 configure_logging()
+
+from boltrig.addons import active_addons  # noqa: E402  (logging must be live first)
+
+# Resolve the configured addons at BOOT so a bad value is a startup failure.
+# ``active_addons`` raises on a name nothing registers, and it is otherwise first
+# reached from the adapter's tool listing - i.e. mid-turn, intermittently, long
+# after the deployment that caused it. Failing here makes it loud and immediate.
+_ADDONS = active_addons()
+logging.getLogger(__name__).info(
+    "addons active: %s", ", ".join(f"{a.name}/{a.version}" for a in _ADDONS) or "(none)"
+)
 
 from .bootstrap import build_app  # noqa: E402  (logging must be live first)
 

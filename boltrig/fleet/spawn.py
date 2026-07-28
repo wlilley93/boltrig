@@ -5,7 +5,6 @@ from __future__ import annotations
 import contextlib
 import json
 import logging
-import os
 import time
 import uuid
 from typing import TYPE_CHECKING, Any, Awaitable, Callable
@@ -26,6 +25,7 @@ from boltrig.models import (
 )
 from boltrig.observability.langfuse_sink import build_observability_sink
 
+from .chat_authority import inherit_on_behalf_bearer
 from .result import AgentResult
 from .runtime_resolver import RuntimeResolver
 from .spawn_skills import (
@@ -468,30 +468,13 @@ class Spawner:
         failure here must never take down a spawn that would otherwise succeed - the
         worst case is the pre-existing behaviour, a fallback to the static credential.
         """
-        # The child inherits only what the SAME owner sealed on the parent, and
-        # re-seals it to that same owner: delegation carries a user's authority
-        # down their own run tree, it never launders it into somebody else's.
-        if not parent_run_id or not owner:
-            return
-        adapter_id = os.environ.get("BOLTRIG_OBO_ADAPTER_ID", "opbox")
-        try:
-            inherited = await self._kernel.credentials.resolve_run_scoped_credential(
-                tenant_id, parent_run_id, adapter_id, owner
-            )
-            if inherited is None:
-                return
-            token = (inherited.material or {}).get("token")
-            if not token:
-                return
-            await self._kernel.credentials.seal_run_scoped_adapter_bearer(
-                tenant_id, child_run_id, adapter_id, token, owner
-            )
-        except Exception:  # noqa: BLE001 - never fail a spawn on the parity path
-            log.warning(
-                "could not carry the run-scoped adapter bearer for '%s' to the child "
-                "run; it will fall back to the adapter's static credential",
-                adapter_id,
-            )
+        await inherit_on_behalf_bearer(
+            self._kernel.credentials,
+            tenant_id,
+            parent_run_id=parent_run_id,
+            child_run_id=child_run_id,
+            owner=owner,
+        )
 
     async def _audit_spawn(
         self,

@@ -14,6 +14,7 @@ import logging
 import os
 from typing import Any
 
+from boltrig.addons import active_addons
 from boltrig.config import load_manifest, load_settings
 from boltrig.store import Store
 from boltrig.fleet import (
@@ -33,6 +34,20 @@ from .codex_execution import build_codex_execution_stack
 
 configure_logging()
 log = logging.getLogger("boltrig.worker")
+
+# Resolve the configured addons at BOOT, exactly as the ASGI entrypoint does.
+# BOTH processes need this, and for different reasons. The worker is where chat
+# turns actually execute, so an unregistered name here would otherwise surface as
+# every turn dying mid-run with its work item stranded IN_FLIGHT, rather than as a
+# process that refuses to start. And because the pinned kernel-tools birth profile
+# is COMPOSED from the active addons at import, a worker whose environment differs
+# from the kernel's would compile a different profile version than the kernel
+# attests - the exact drift this seam claims cannot happen. Resolving in both
+# places makes a mismatch loud on startup instead of silent at attestation.
+_ADDONS = active_addons()
+log.info(
+    "addons active: %s", ", ".join(f"{a.name}/{a.version}" for a in _ADDONS) or "(none)"
+)
 
 _POLL_SECONDS = 5.0
 
