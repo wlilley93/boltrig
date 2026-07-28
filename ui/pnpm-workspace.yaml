@@ -14,8 +14,24 @@ overrides:
 # `pnpm install` / `pnpm run build` work in CI and the Docker image.
 onlyBuiltDependencies:
   - esbuild
+# ONE ENTRY PER PACKAGE NAME. pnpm evaluates this list FIRST-MATCHING-NAME-PATTERN
+# and consults no later entry for that package.
+#
+# This held two entries, `…/boltrig-web-sdk@0.1.0` and `…@0.1.1`. The 0.1.0 entry
+# matched the name first, so 0.1.1 was never excluded and every UI PR failed
+# `pnpm install --frozen-lockfile` with ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION.
+# 0.1.0 is not even resolved by the lockfile and is older than the 24h window, so
+# it needed no exemption at all - a dead entry that broke the live one beside it.
+#
+# I diagnosed that wrongly and at length: I recorded that the exclude list is
+# "honoured at resolution but ignored by the --frozen-lockfile verifier", and it
+# is not. Proven by running it, both ways, on 2026-07-28:
+#   both entries -> ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION
+#   0.1.1 alone  -> passes
+# Guarded by scripts/check-release-age-exclusions.py so a second entry for the
+# same package cannot silently disable the first again.
 minimumReleaseAgeExclude:
-  - '@wlilley93/boltrig-web-sdk@0.1.0'
+  - '@wlilley93/boltrig-web-sdk@0.1.1'
 
 # Accepted advisory, recorded in docs/security/accepted-advisories.json with its
 # reachability, owner, EXPIRY (2026-10-23) and compensating control. No fixed

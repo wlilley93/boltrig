@@ -49,42 +49,89 @@ say "digests for $VERSION, read from the registry"
 # default multi-line block, which a naive capture swallows whole and then writes
 # into a live overlay as a malformed pin.
 digest_of() { docker buildx imagetools inspect "$1" 2>/dev/null | awk '/^Digest:/{print $2; exit}'; }
-KD=""; FD=""
+KD=""; FD=""; UD=""
 for i in $(seq 1 40); do
   KD=$(digest_of "ghcr.io/wlilley93/boltrig-kernel:$VERSION")
   FD=$(digest_of "ghcr.io/wlilley93/boltrig-fleet:$VERSION")
-  [[ "$KD" == sha256:* && "$FD" == sha256:* ]] && break
+  UD=$(digest_of "ghcr.io/wlilley93/boltrig-ui:$VERSION")
+  [[ "$KD" == sha256:* && "$FD" == sha256:* && "$UD" == sha256:* ]] && break
   [ "$i" = 1 ] && echo "  waiting for $VERSION to publish (the release workflow is probably still running)"
   sleep 15
 done
 echo "  kernel $KD"
 echo "  fleet  $FD"
+echo "  ui     $UD"
 [[ "$KD" == sha256:* ]] || die "kernel digest for $VERSION never became resolvable - did the release succeed?"
 [[ "$FD" == sha256:* ]] || die "fleet digest for $VERSION never became resolvable - did the release succeed?"
+# THE UI IS ROLLED TOO, and it was not until 2026-07-28. This script pulled and
+# brought up `kernel fleet-worker` only, and repin() rewrote only those two image
+# refs, so no invocation of it could ever move the UI. Both stacks silently sat on
+# boltrig-ui:0.4.9 while the kernel reached v0.4.21 - twelve releases - and
+# check_fleet_drift.py reported PASS the whole time because it asks whether the
+# PINNED image is running, not whether the pin is current. 0.4.9 also predates the
+# release pipeline gaining cosign signing, so the one component nothing rolled was
+# also the one unsigned artefact on the client's box.
+[[ "$UD" == sha256:* ]] || die "ui digest for $VERSION never became resolvable - did the release succeed?"
 
-repin() { # $1=overlay
-  ssh "$H" "cp -a $1 $1.bak-roll-$STAMP" || die "backup failed for $1"
-  ssh "$H" "python3 - <<'PY'
-import re
-p='$1'; s=open(p).read()
-s=re.sub(r'ghcr\.io/wlilley93/boltrig-kernel:[^\s\"]+','ghcr.io/wlilley93/boltrig-kernel:$VERSION@$KD',s)
-s=re.sub(r'ghcr\.io/wlilley93/boltrig-fleet:[^\s\"]+', 'ghcr.io/wlilley93/boltrig-fleet:$VERSION@$FD', s)
-open(p,'w').write(s)
-PY"
+# SOURCE-FIRST. The overlay is TRACKED in wlilley93/Opbox
+# (boltrig-tenants/), and the box's copy is DERIVED. This used to sed the file on
+# the box, which meant the digest a tenant was actually running existed only on
+# that box, in a directory that is not a git repository: nothing recorded which
+# image a client ran, and a rebuilt box would have silently reverted the pin.
+#
+# So: edit the SOURCE, verify it, copy it to the box, and prove the two match by
+# checksum before anything is brought up. A pin that is not in the source is not
+# a pin, it is a local edit waiting to be lost.
+SRC_ROOT="${ROLL_SRC:-/home/jellytot/Projects/opbox-prod/boltrig-tenants}"
+
+repin() { # $1=overlay path ON THE BOX (its basename-relative path under SRC_ROOT)
+  local remote="$1"
+  local rel="${remote#*/boltrig-tenants/}"
+  local src="$SRC_ROOT/$rel"
+  [ -f "$src" ] || die "no tracked source for $rel at $src - the box copy is not authoritative, so refusing to edit it"
+
+  cp -a "$src" "$src.bak-roll-$STAMP"
+  python3 - "$src" "$VERSION" "$KD" "$FD" "$UD" <<'PY'
+import re, sys
+p, version, kd, fd, ud = sys.argv[1:6]
+s = open(p).read()
+s = re.sub(r'ghcr\.io/wlilley93/boltrig-kernel:[^\s"]+', f'ghcr.io/wlilley93/boltrig-kernel:{version}@{kd}', s)
+s = re.sub(r'ghcr\.io/wlilley93/boltrig-fleet:[^\s"]+',  f'ghcr.io/wlilley93/boltrig-fleet:{version}@{fd}',  s)
+s = re.sub(r'ghcr\.io/wlilley93/boltrig-ui:[^\s"]+',     f'ghcr.io/wlilley93/boltrig-ui:{version}@{ud}',     s)
+open(p, 'w').write(s)
+PY
+
   local n
-  n=$(ssh "$H" "diff $1.bak-roll-$STAMP $1 | grep -c '^[<>]' || true" | head -1)
-  ssh "$H" "diff $1.bak-roll-$STAMP $1 || true"
+  n=$(diff "$src.bak-roll-$STAMP" "$src" | grep -c '^[<>]' || true)
+  diff "$src.bak-roll-$STAMP" "$src" || true
+  # 6, not 4: three image lines (kernel, fleet, ui), each contributing a `<` and a
+  # `>`. This assertion is the thing that would have caught the UI being left
+  # behind - it counted 4 and passed, because a line that is never rewritten never
+  # shows up in the diff. A count that only ever sees what it already expects
+  # cannot report an omission, so widen it whenever a service joins the roll.
   case "${n:-0}" in
-    4) echo "  [ok] repinned both image lines" ;;
-    0) echo "  [ok] already pinned at $VERSION (safe no-op re-run)" ;;
-    *) die "overlay diff for $1 is $n changed lines; expected 4 (repin) or 0 (already pinned)" ;;
+    6) echo "  [ok] repinned all three image lines IN THE SOURCE ($rel)" ;;
+    0) echo "  [ok] source already pinned at $VERSION (safe no-op re-run)" ;;
+    *) die "source diff for $rel is $n changed lines; expected 6 (repin kernel+fleet+ui) or 0 (already pinned)" ;;
   esac
+  rm -f "$src.bak-roll-$STAMP"
+
+  # Propagate, then PROVE the box carries exactly the source. scp reporting
+  # success is not the same as the bytes matching - and this is the one file that
+  # decides which image a client runs.
+  ssh "$H" "cp -a $remote $remote.bak-roll-$STAMP" || die "backup failed for $remote"
+  scp -q "$src" "$H:$remote" || die "propagate failed for $rel"
+  local a b
+  a=$(sha256sum "$src" | cut -d" " -f1)
+  b=$(ssh "$H" "sha256sum $remote" | cut -d" " -f1)
+  [ "$a" = "$b" ] || die "propagated $rel but the box checksum differs ($a vs $b)"
+  echo "  [ok] box matches source (sha256 ${a:0:12})"
 }
 
 bring_up() { # $1=overlay $2=project
   ssh "$H" "cd $PROJECT_DIR && \
-    docker compose -f $COMPOSE -f $1 -p $2 pull kernel fleet-worker && \
-    docker compose -f $COMPOSE -f $1 -p $2 up -d --no-deps kernel fleet-worker" \
+    docker compose -f $COMPOSE -f $1 -p $2 pull kernel fleet-worker ui && \
+    docker compose -f $COMPOSE -f $1 -p $2 up -d --no-deps kernel fleet-worker ui" \
     || die "compose up failed for $2"
 }
 
@@ -124,6 +171,27 @@ gate() { # $1=project $2=expected `addons active:` substring
   img=$(ssh "$H" "docker ps --filter name=^/$k\$ --format '{{.Image}}'")
   [[ "$img" == *"$VERSION"* ]] || die "$k is running '$img', not $VERSION"
   echo "  [ok] $k running $img"
+
+  # THE UI, asserted on the same terms as the kernel. Bringing a service up
+  # without gating it is how it drifts unnoticed in the first place: the roll now
+  # moves the UI, so a UI that comes back on the wrong image, or does not come
+  # back at all, has to fail the roll rather than be discovered twelve releases
+  # later. Asserting the IMAGE and not merely `healthy` is the point - a container
+  # that never restarted reports healthy while serving the old bundle.
+  local u="$P-ui-1"
+  local us=""
+  for i in $(seq 1 24); do
+    us=$(ssh "$H" "docker ps --filter name=^/$u\$ --format '{{.Status}}'" 2>/dev/null)
+    case "$us" in *Restarting*) die "$u is RESTARTING: $us" ;; esac
+    case "$us" in *healthy*) break ;; esac
+    sleep 5
+  done
+  case "$us" in *healthy*) echo "  [ok] $u $us" ;; *) die "$u never became healthy: '$us'" ;; esac
+
+  local uimg
+  uimg=$(ssh "$H" "docker ps --filter name=^/$u\$ --format '{{.Image}}'")
+  [[ "$uimg" == *"$VERSION"* ]] || die "$u is running '$uimg', not $VERSION"
+  echo "  [ok] $u running $uimg"
 }
 
 say "roll the CANARY (solo boltrig: must report NO addons)"

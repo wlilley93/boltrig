@@ -342,6 +342,17 @@ lockfile-policy: ## Enforce pnpm as the JavaScript package manager (one recorded
 		echo "stale exemption: $(LOCKFILE_POLICY_EXEMPT) no longer exists;"; \
 		echo "drop it from LOCKFILE_POLICY_EXEMPT in the Makefile"; exit 1; }
 	@test -f ui/pnpm-lock.yaml -a -f site/pnpm-lock.yaml -a -f sdks/node/pnpm-lock.yaml
+	@# Runs BEFORE the frozen install, deliberately: a shadowed exclusion entry
+	@# surfaces as ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION, which reads as "the
+	@# exemption is being ignored" rather than "your second entry disabled your
+	@# first". That misreading cost most of 2026-07-28. Refuse the list here, where
+	@# the message can name the actual cause.
+	@# `python3`, NOT $(PY). $(PY) defaults to .venv/bin/python, which does not
+	@# exist in the ui-build or site-build-test-lint jobs - they never set up
+	@# Python, so make exits 127 (command not found) and the whole target dies
+	@# before it checks anything. I shipped exactly that and turned
+	@# site-build-test-lint red. The stdlib is all this script needs.
+	@python3 scripts/check-release-age-exclusions.py
 
 dependency-audit: lockfile-policy ## Fail on high/critical UI and site dependency advisories
 	cd ui && pnpm audit --audit-level=high

@@ -1051,6 +1051,15 @@ export interface RunRow {
   intent: string;
   status: string;
   owner?: string | null;
+  // The intake lane this work arrived on. It SELECTS THE HANDLING DEPARTMENT
+  // (chief_of_staff matches it against each department's queue_sources), which is
+  // why no caller may set it and why it is not the channel a person typed into.
+  source?: string | null;
+  // WHICH SURFACE this run came from - "opbox" for a turn typed into an Opbox
+  // spotlight, absent for one typed into boltrig itself. The kernel's generic
+  // opaque external reference, so it is also the filter key:
+  // GET /v1/runs?external_ref=opbox. A label: it reaches no authority decision.
+  external_ref?: string | null;
 }
 
 export interface RunsResponse {
