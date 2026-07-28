@@ -177,8 +177,7 @@ class Spawner:
             status=("degraded" if result.degraded else "ok" if result.ok else "error"),
             tokens=result.tokens_used,
             cost=cost_micros,
-            model_route=model_route,
-            latency_ms=latency_ms,
+            model_route=model_route, latency_ms=latency_ms, reason=result.degrade_reason,
         )
         return {
             "run_id": run_id,
@@ -507,10 +506,13 @@ class Spawner:
         cost: int,
         model_route: dict[str, str] | None = None,
         latency_ms: int | None = None,
+        reason: str | None = None,
     ) -> None:
         detail = {"capability": capability.name, "runtime": capability.runtime}
         if model_route:
             detail["model_route"] = _public_model_route(model_route)
+        if reason:  # a degraded row recorded WHAT failed but never why
+            detail["reason"] = reason
         event = AuditEvent(
             tenant_id=tenant_id,
             ts=utcnow(),

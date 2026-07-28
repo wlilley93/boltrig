@@ -82,6 +82,19 @@ class AgentResult:
             output_tokens=output_tokens,
         )
 
+    @property
+    def degrade_reason(self) -> str | None:
+        """The bounded degrade tag this result carries, or None.
+
+        Read here because ``degrade`` writes it here. It is a runtime tag plus an
+        exception CLASS name ("codex_turn_failed:CodexRuntimeOperationError") - never
+        the prompt, the output, or the exception's args - so it is safe on the audit
+        row, where its absence meant a degraded turn recorded WHAT failed but not why.
+        """
+        marker = self.output.get("_degraded") if isinstance(self.output, dict) else None
+        reason = marker.get("reason") if isinstance(marker, dict) else None
+        return str(reason)[:200] if reason else None
+
     @classmethod
     def degrade(
         cls,

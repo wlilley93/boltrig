@@ -28,9 +28,10 @@ from boltrig.fleet import (
 )
 
 from .bootstrap import _DEFAULT_TENANT, _find_manifest, build_kernel_async
+from .logging_config import configure_logging
 from .codex_execution import build_codex_execution_stack
 
-logging.basicConfig(level=logging.INFO)
+configure_logging()
 log = logging.getLogger("boltrig.worker")
 
 _POLL_SECONDS = 5.0

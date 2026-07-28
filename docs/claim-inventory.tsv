@@ -29,7 +29,7 @@ LOAD-BEARING	NO-SUBJECT	docstring	boltrig/api/chat_cli.py:50		The CLI config fil
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/api/fleet_health.py:1		`boltrig fleet-health` - a readiness probe for a process that serves no HTTP.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/api/initiate.py:139		Audit the owner seed keys-only (D8): the email, never the password.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/api/initiate.py:180		Set (or reset) the first-party password of an EXISTING user.
-LOAD-BEARING	NO-SUBJECT	docstring	boltrig/api/worker.py:66		Start the audit-rollup anchor janitor (COUNTY 9 D4), or None when disabled.
+LOAD-BEARING	NO-SUBJECT	docstring	boltrig/api/worker.py:67		Start the audit-rollup anchor janitor (COUNTY 9 D4), or None when disabled.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/config/admin.py:75		Surface adapter credential references (never values) for rotation view (US-ADM-03).
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/config/control_compat.py:1		Compatibility mutations routed through the governed ``control.*`` adapter.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/config/control_lifecycle.py:96		Unbind and delete the credential ref registration created, if unshared.
@@ -234,6 +234,7 @@ LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/adapters/builtin/inbound_webhook
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/adapters/loader.py:1	down	Dynamic adapter loading + hot reload + health (US-ADP-06, P1, NFR-MNT-02).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/api/chat_cli.py:1	BOLTRIG_CLI_TOKEN	``boltrig chat`` - the user-facing terminal client.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/api/initiate.py:1	superadmin	``boltrig initiate`` - seat the founding OWNER ([2026] VJS-COUNTY 7, D7).
+LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/api/logging_config.py:1	LOGGING_CONFIG	One declared logging configuration for every boltrig process.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/config/manifest.py:462	cost.py	One entry of the per-model price table, or None to drop it (FR-COST-04).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/emotion/__init__.py:1	boltrig.observability.orb_presence	Boltrig's affective side-channel: a read-only emotion projection over run events.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/authority.py:117	item	Route ``item`` to its department head, or ``None`` if unroutable (SEC-165).
@@ -246,7 +247,7 @@ LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/continuity.py:1	model_gate
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/held_write_resume.py:118	max_closed	Persist the continuation as a new assistant message on the conversation.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/cell_privilege.py:118	no_new_privileges	Fail closed unless this process is non-root and holds no capabilities (J5).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/cell_slots.py:1	CAP_CHOWN	Per-cell uid slots ([2026] VJS-CC-VJS 7 J2 and J10).
-LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_kernel_tools_phase.py:153	assignment	The exact kernel-tools spec the adapter sends for ``assignment``.
+LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_kernel_tools_phase.py:161	assignment	The exact kernel-tools spec the adapter sends for ``assignment``.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_model_proxy_server.py:1	SO_PEERCRED	Per-cell loopback model proxy: authenticate a Codex cell's model calls by bearer and forward them to the shared gateway with the kernel-only key.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_runtime_config_argv.py:1	config.toml	Deterministic App Server argv pinning for security-critical Codex config.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_runtime_config_policy.py:68	codex_cell_boundary	Validate lexical paths; production must separately bind roots and reject symlinks.
@@ -258,8 +259,8 @@ LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/prompt_stack.py:1	prompt	L
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/pump.py:1	new_work_items	The delegation pump: the org goes live (Beat 4; US-FLT-06, US-EXE-06).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/pump.py:108	error	A bounded, infrastructure-free error note for a FAILED item's result.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/result.py:16	ok	The outcome of one ephemeral agent run (US-FLT-04).
-LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/result.py:86	tokens_used	A clearly-marked degraded result (no SDK / no key / backend down, P9).
-LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/spawn.py:209	subagent	Resolve the runtime and run the turn, refunding the reservation on a raise.
+LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/result.py:99	tokens_used	A clearly-marked degraded result (no SDK / no key / backend down, P9).
+LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/spawn.py:208	subagent	Resolve the runtime and run the turn, refunding the reservation on a raise.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/identity/delegation.py:1	delegated	On-behalf-of identity decisions and OBO token exchange (US-IAM-03/05, SEC-03).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/identity/provisioning.py:1	users	Just-in-time user provisioning and current-grant resolution (Round Four USR).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/identity/rbac.py:276	None	The caller's row-level department scope for work listing (US-IAM-02).
@@ -310,7 +311,7 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/api/bootstrap.py:177	mcp.consume	
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/api/bootstrap.py:196	control_rehydrate.consumer_spec	Rebuild live instances for adapter rows the control plane persisted.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/api/codex_execution.py:76	RootEngineDecision	Record one shadow ``RootEngineDecision`` for a chat root, execution-neutral.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/api/mint_token.py:1	resolve_pat_principal	``boltrig mint-token`` - mint a Personal Access Token for an EXISTING user.
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/api/worker.py:86	purge_closed_conversations	Start the retention janitor (M11 / SEC-74), or None when disabled.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/api/worker.py:87	purge_closed_conversations	Start the retention janitor (M11 / SEC-74), or None when disabled.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/config/admin.py:1	ConfigRevision	AdminConfig - the Admin Console service (Round Three, Epic ADM).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/config/control_lifecycle.py:1	control.adapter.activate	Governed adapter suspension and removal - the inverse of activation (SEC-22).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/config/manifest_reconcile.py:1	plan_capability_reconciliation	Scoped-declarative capability reconciliation for ``apply_manifest``.
@@ -366,13 +367,14 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/lease_token.py:1	Store.upda
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/lease_token.py:118	_record_failure	Write a claimed row, fenced on the claim-time token.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/pump.py:586	handle_claimed_item	Durably record a cooperative cancel ([2026] VJS-COUNTY 6, D1/D4).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/pump.py:678	kernel.invoke	Distil one lesson and store it via the memory verb, best-effort (US-WFL-07).
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/result.py:86	degrade	The bounded degrade tag this result carries, or None.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/retention.py:1	run_retention_once	Retention purge: hard-erasure of closed conversations (M11, right-to-erasure).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/runtime.py:1	build_runtime	The pluggable agent-runtime abstraction (P4, US-FLT-04).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/runtime.py:204	ModelEndpoint	A Hermes-gateway-backed runtime (lazy SDK / HTTP, degrade if absent).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/runtime_resolver.py:18	resolve	The model that ACTUALLY served a call, for the audit record.
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/spawn.py:333	_publish_subagent_end_event	Retire the bearer this child inherited, at the child's run terminal.
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/spawn.py:363	_publish_subagent_event	Settle a delegated child on the parent relay (G3, SDK-CONTRACT §5).
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/spawn.py:440	resolve_run_scoped_credential	Carry a run-scoped adapter bearer from the spawning run to its child.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/spawn.py:332	_publish_subagent_end_event	Retire the bearer this child inherited, at the child's run terminal.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/spawn.py:362	_publish_subagent_event	Settle a delegated child on the parent relay (G3, SDK-CONTRACT §5).
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/spawn.py:439	resolve_run_scoped_credential	Carry a run-scoped adapter bearer from the spawning run to its child.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/spawn.py:51	get_budget	The budget scopes one spawn is metered against.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/ultracode_memory.py:73	identity.rbac.memory_owner_scopes	Memory RBAC owner scopes derivable at this layer: the principal + org.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/workers.py:1	new_run_id	The Hatchet integration seam (P6, US-EXE-02).
@@ -550,6 +552,7 @@ ORDINARY	NO-SUBJECT	comment	boltrig/api/codex_trusted.py:78		Lazy imports so the
 ORDINARY	NO-SUBJECT	comment	boltrig/api/doctor.py:24		three sites cannot disagree about what counts as a placeholder again.
 ORDINARY	NO-SUBJECT	comment	boltrig/api/doctor.py:364		result rather than crashing (P9), so this is drift to report, never a deploy
 ORDINARY	NO-SUBJECT	comment	boltrig/api/initiate.py:103		shell history and usually in a runbook too.
+ORDINARY	NO-SUBJECT	docstring	boltrig/api/logging_config.py:36		The numeric level for a configured name, falling back to INFO.
 ORDINARY	NO-SUBJECT	comment	boltrig/api/mint_token.py:72		user's own allow set.
 ORDINARY	NO-SUBJECT	comment	boltrig/api/mint_token.py:86		trivially capturable (`...
 ORDINARY	NO-SUBJECT	docstring	boltrig/api/readiness.py:1		Bounded, fail-closed ``/readyz`` checks for durable dependencies, governed control registration, and enabled runtime seams.
@@ -557,8 +560,8 @@ ORDINARY	NO-SUBJECT	comment	boltrig/api/readiness.py:133		cannot amplify into un
 ORDINARY	NO-SUBJECT	comment	boltrig/api/readiness.py:27		The tools /readyz requires.
 ORDINARY	NO-SUBJECT	comment	boltrig/api/readiness.py:29		status snapshot when deployed, but never readiness-GATING.
 ORDINARY	NO-SUBJECT	docstring	boltrig/api/worker.py:1		The fleet worker process.
-ORDINARY	NO-SUBJECT	comment	boltrig/api/worker.py:152		/readyz combines it with a kernel-local Herdr probe;
-ORDINARY	NO-SUBJECT	docstring	boltrig/api/worker.py:39		Start the HITL expiry janitor (SEC-14), or None when disabled.
+ORDINARY	NO-SUBJECT	comment	boltrig/api/worker.py:153		/readyz combines it with a kernel-local Herdr probe;
+ORDINARY	NO-SUBJECT	docstring	boltrig/api/worker.py:40		Start the HITL expiry janitor (SEC-14), or None when disabled.
 ORDINARY	NO-SUBJECT	comment	boltrig/config/control_approval.py:148		internal-egress flag "is always human-approved before any call" because
 ORDINARY	NO-SUBJECT	comment	boltrig/config/control_approval.py:149		registration is inert until the SEC-22 review gate.
 ORDINARY	NO-SUBJECT	comment	boltrig/config/control_lifecycle.py:89		stale reference cannot execute (SEC-22, mirrors review_and_activate).
@@ -721,6 +724,7 @@ ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_cell_supervisor.p
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_cell_supervisor.py:373		(the validator already refuses one), and the base is never mutated.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_cell_supervisor.py:62		not succeed the cell is never handed out.
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_kernel_tools_phase.py:123		Canonicalize the per-run wire-name ceiling, fail-closed.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_kernel_tools_phase.py:138		narrow it to ~74 today, which is the only reason it does not bite.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_kernel_tools_phase.py:80		and a run carrying more than this cannot be attested exactly, so it degrades
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_model_proxy_server.py:175		runtime's own config: Codex 0.144.3 cannot suppress its built-in
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_model_proxy_server.py:183		The kernel-only upstream key is injected here and NEVER seen by the
@@ -851,11 +855,11 @@ ORDINARY	NO-SUBJECT	comment	boltrig/fleet/runtime.py:517		degrade-marked under t
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/runtime.py:74		Decision 0012: Codex is the only target agent runtime and script stays the
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/runtime.py:87		set, or reducing it to Codex, is expressly forbidden while production_ready is
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/spawn.py:168		The PRICED cost (see _true_up_cost), never result.cost_micros.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/spawn.py:238		cross: see _inherit_adapter_bearer for why the child cannot use the seal
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/spawn.py:419		(0/0) is priced on the total exactly as before - never at zero.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/spawn.py:474		down their own run tree, it never launders it into somebody else's.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/spawn.py:553		The run never happened: honest degradation (US-FLT-07), so the chat
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/spawn.py:675		A raised runtime must never be papered over with an ok=True echo
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/spawn.py:237		cross: see _inherit_adapter_bearer for why the child cannot use the seal
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/spawn.py:418		(0/0) is priced on the total exactly as before - never at zero.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/spawn.py:473		down their own run tree, it never launders it into somebody else's.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/spawn.py:555		The run never happened: honest degradation (US-FLT-07), so the chat
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/spawn.py:677		A raised runtime must never be papered over with an ok=True echo
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/stack_tool_health.py:212		Probe only tools that execute in the fleet worker container.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/ultracode.py:179		(ultracode_memory.memory_prompt), never as bare prompt text (SEC-72).
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/ultracode_memory.py:283		Prompt-safe memory block: recall is untrusted data, never instruction.
@@ -1157,6 +1161,7 @@ ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/adapters/base.py:100	disabled	``disabl
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/adapters/builtin/script_base.py:66	argv	Run ``argv`` with an output cap and timeout termination.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/adapters/egress.py:227	httpx.AsyncClient	Return an ``httpx.AsyncClient`` whose TCP connections are pinned to an already-vetted IP (H2/SEC-61).
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/adapters/loader.py:44	down	Load an adapter from ``module:factory``.
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/api/logging_config.py:48	force	Install a root handler + formatter for this process.
 ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/config/control_channel_ops.py:60	signing_secret_ref	``signing_secret_ref`` so the DB never even transiently holds the dict.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/emotion/tables.py:1	model.yaml	Load the emotion tables from ``libraries/emotion`` into engine dataclasses (EMO-5).
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/emotion/tables.py:161	None	Load and validate the three emotion YAML tables, or ``None`` on ANY failure.
@@ -1167,7 +1172,7 @@ ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/continuity.py:136	wrap_untrust
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/domain/attested_assignment.py:37	attempt	Trusted facts; no binding, pin, attestation set, or set reference appears.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/cell_privilege.py:141	setuid	Empty the permitted, effective and inheritable sets via ``capset(2)``.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/cell_spawner.py:398	SCM_RIGHTS	Hand the pid and the three stdio descriptors back over the socketpair.
-ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_agent_runtime.py:285	agentMessage	The latest turn's assistant text, captured from the lifecycle stream.
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_agent_runtime.py:287	agentMessage	The latest turn's assistant text, captured from the lifecycle stream.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_cell_boundary.py:113	path	Ask the KERNEL whether our effective ids can write ``path``.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_cell_boundary.py:284	execve	Refuse to run if any setuid/setgid binary survives in the image (J4).
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_model_proxy_server.py:209	function_call	Relay the upstream body, holding the ceiling and bridging the namespace.
