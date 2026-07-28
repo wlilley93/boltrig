@@ -204,6 +204,16 @@ def _registry_auth(registry: str) -> str | None:
     return entry.get("auth") or None
 
 
+# Docker Hub wears three names for one registry, and using the wrong one for the
+# wrong purpose is silent: the token request simply returns no token, and every
+# third-party image then reports NOT CHECKED. Named here so the difference is a
+# value the tests can assert on, rather than a string literal buried in an f-string.
+HUB_REGISTRY = "registry-1.docker.io"   # serves manifests
+HUB_TOKEN_HOST = "auth.docker.io"       # issues tokens - a DIFFERENT host
+HUB_TOKEN_SERVICE = "registry.docker.io"  # names itself a THIRD way in the request
+HUB_IMPLICIT_NAMESPACE = "library"      # `redis` means `library/redis`
+
+
 def tag_resolution(name: str) -> tuple[str, str]:
     """Does the pinned TAG actually resolve to the pinned DIGEST?
 
@@ -243,9 +253,10 @@ def tag_resolution(name: str) -> tuple[str, str]:
     # tag comparison exists to notice.
     head = repo.split("/")[0]
     if "/" not in repo:
-        registry, path = "registry-1.docker.io", f"library/{repo.rsplit(':', 1)[0]}"
+        registry = HUB_REGISTRY
+        path = f"{HUB_IMPLICIT_NAMESPACE}/{repo.rsplit(':', 1)[0]}"
     elif "." not in head and ":" not in head and head != "localhost":
-        registry, path = "registry-1.docker.io", repo.rsplit(":", 1)[0]
+        registry, path = HUB_REGISTRY, repo.rsplit(":", 1)[0]
     else:
         registry, path = repo.split("/", 1)
         path = path.rsplit(":", 1)[0]
@@ -255,8 +266,8 @@ def tag_resolution(name: str) -> tuple[str, str]:
     # from, and names itself a third thing in the service parameter. Asking
     # registry-1.docker.io for a token returns no token at all, which this used to
     # report as NOT CHECKED for every third-party image.
-    if registry == "registry-1.docker.io":
-        token_url = f"https://auth.docker.io/token?service=registry.docker.io&scope={scope}"
+    if registry == HUB_REGISTRY:
+        token_url = f"https://{HUB_TOKEN_HOST}/token?service={HUB_TOKEN_SERVICE}&scope={scope}"
     else:
         token_url = f"https://{registry}/token?service={registry}&scope={scope}"
     token_cmd = ["curl", "-s", "--max-time", "20", token_url]

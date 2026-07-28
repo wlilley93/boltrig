@@ -169,10 +169,30 @@ def test_docker_hub_references_are_expanded_before_being_asked_about() -> None:
     Without both expansions every third-party image reported NOT CHECKED, which
     fails the command - red on every run, for reasons nobody can act on.
     """
+    # Asserted as VALUES, not as substrings of the source. Reading the source for
+    # `"auth.docker.io" in body` is the shape of validating a URL by substring, and
+    # CodeQL is right to flag it wherever it appears - a hostname test that passes on
+    # any string merely CONTAINING the host is not a test of the host. Equality on a
+    # named constant says the same thing and cannot be satisfied by an accident.
+    assert check_fleet_drift.HUB_REGISTRY == "registry-1.docker.io"
+    assert check_fleet_drift.HUB_IMPLICIT_NAMESPACE == "library", (
+        "official images are not given their implicit namespace"
+    )
+    assert check_fleet_drift.HUB_TOKEN_HOST == "auth.docker.io", (
+        "Hub's token host differs from the host that serves its manifests"
+    )
+    assert check_fleet_drift.HUB_TOKEN_SERVICE == "registry.docker.io"
+    # and the three are genuinely distinct, which is the whole reason they are named
+    assert len({
+        check_fleet_drift.HUB_REGISTRY,
+        check_fleet_drift.HUB_TOKEN_HOST,
+        check_fleet_drift.HUB_TOKEN_SERVICE,
+    }) == 3
+    # the resolver must actually USE them rather than carry them as decoration
     body = inspect.getsource(check_fleet_drift.tag_resolution)
-    assert "registry-1.docker.io" in body
-    assert "library/" in body, "official images are not given their implicit namespace"
-    assert "auth.docker.io" in body, "Hub's token host differs from its manifest host"
+    for const in ("HUB_REGISTRY", "HUB_TOKEN_HOST", "HUB_TOKEN_SERVICE",
+                  "HUB_IMPLICIT_NAMESPACE"):
+        assert const in body, f"{const} is defined but tag_resolution does not use it"
 
 
 @pytest.mark.invariant("FR-OPS-06")
