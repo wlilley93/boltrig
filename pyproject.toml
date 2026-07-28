@@ -60,7 +60,7 @@ dev = [
     # 2026-VJS-CC-BOLTRIG-UI-TEST-HARNESS-001): a dev-only, deterministic, exact
     # version so the gate is reproducible across the fleet and CI. No new ruling
     # is needed - the pin + gate follows that precedent directly.
-    "mypy==2.1.0",
+    "mypy==2.3.0",
     # Third-party stubs for jsonschema (dispatch.py's Draft202012Validator). Pinned
     # exactly for the same reason; the stub is what lets the chokepoint be strict
     # without a blanket type: ignore.
@@ -124,6 +124,33 @@ target-version = "py312"
 # and no repo path), and their compact style is deliberate: an attacker probe
 # should fit on screen beside the property it tests. See the README beside them.
 extend-exclude = ["tests/integration/percell"]
+
+# WHAT `make lint` MEANS, stated rather than inherited.
+#
+# Until now this file selected no rules, so the gate enforced whatever the
+# installed ruff happened to default to. Two consequences:
+#
+#   * the gate's meaning changed when the TOOL changed, with nobody deciding.
+#     Same tree, same command: 0.15.22 reports "All checks passed" and 0.16.0
+#     reports 808 findings across 344 files, because 0.16 widened its defaults.
+#     That is why the dev-group holds `ruff<0.16` above - but the hold treats the
+#     symptom. Nothing stops 0.17 from moving the line again, in either direction,
+#     and a gate whose scope is set by a third party's release schedule cannot be
+#     reasoned about.
+#   * the set was also much NARROWER than "lint" suggests: pyflakes plus three
+#     pycodestyle groups, no bugbear, no security, no import hygiene. A green here
+#     has always meant less than it reads as meaning.
+#
+# Pinned to exactly the set that was already in force, so this changes no verdict
+# on any tree - it only makes the existing contract explicit. Deliberately NOT the
+# linter upgrade the `ruff<0.16` comment defers: those 808 findings are unaffected
+# by this and remain somebody's bounded piece of work, with judgement in it about
+# which families to adopt (BLE001 blind excepts, 143, and S110 silent
+# pass-on-exception, 38, are the two with real teeth). What this does is make that
+# work possible to do one family at a time, as an edit to this list, instead of
+# arriving all at once attached to a version bump.
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
 
 # Static type-checking gate. Scoped STRICT to the highest-value, most-typed core
 # FIRST - the domain models (boltrig.models.*) and the ONE dispatch chokepoint
