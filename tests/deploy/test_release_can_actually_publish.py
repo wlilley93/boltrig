@@ -162,7 +162,13 @@ def test_the_ui_candidate_is_given_the_packages_token_it_mounts() -> None:
 @pytest.mark.security
 @pytest.mark.invariant("IAC-005")
 def test_the_release_vuln_gate_reads_the_same_acceptances_as_the_security_gate() -> None:
-    """#115. Otherwise the two gates disagree about an identical image."""
+    """#115. Otherwise the two gates disagree about an identical image.
+
+    2026-VJS-CC-BOLTRIG-SUPPLY-CHAIN-ADVISORY-ACCEPTANCE-001 D3: this pins the
+    invocation the acceptance was proven against - the built backup image
+    scanned with these exact args exits non-zero on CVE-2026-56852 with the
+    .trivyignore.yaml entry removed and passes with it present (red/green runs
+    recorded in the discharge note)."""
     step = _step("candidates", "Block fixable high or critical vulnerabilities")
     assert step["with"]["trivyignores"] == ".trivyignore.yaml"
     assert step["with"]["exit-code"] == "1"

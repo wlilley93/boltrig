@@ -1,0 +1,12 @@
+id: LOG-2026-07-28-202551
+time: 2026-07-28T20:25:51.557168561+00:00
+actor: lexby
+kind: decision
+issue: ROUTE-20260728-202541
+decision: 'Implement 2026-VJS-CC-BOLTRIG-SUPPLY-CHAIN-ADVISORY-ACCEPTANCE-001 D1-D3: accept CVE-2026-56852 in .trivyignore.yaml scoped to usr/local/bin/rclone with the qualified F5 reachability and drop condition; mirror it and GHSA-hrxh-6v49-42gf into docs/security/accepted-advisories.json (ecosystem go); prove red/green against the built backup image'
+basis:
+- PERMIT-1785270341
+risk: low
+reversibility: easy
+court_required: false
+why: 'County order (binding) adopts acceptance-as-record: no released upstream artefact carries the fix (rclone 1.74.4 is latest, pins x/text 0.38.0); the acceptance is scoped, owned, expiring, reachable-stated, and ledger-mirrored so the gate loses nothing it was measuring'

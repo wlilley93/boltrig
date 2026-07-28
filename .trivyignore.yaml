@@ -42,3 +42,21 @@ vulnerabilities:
       no ports, and never uses xDS service-mesh configuration. Recorded in
       docs/security/accepted-advisories.json; drop this the moment rclone ships
       a build with grpc >= 1.82.1.
+  - id: CVE-2026-56852
+    paths:
+      - usr/local/bin/rclone
+    expired_at: 2026-10-23
+    statement: >-
+      golang.org/x/text v0.38.0 vendored inside the upstream rclone binary;
+      fixed in x/text 0.39.0, but no rclone release carries it - v1.74.4 IS
+      the latest upstream release, so there is nothing to upgrade to.
+      Accepted under 2026-VJS-CC-BOLTRIG-SUPPLY-CHAIN-ADVISORY-ACCEPTANCE-001;
+      owner release-engineering. The advisory is a norm.Iter infinite loop on
+      input containing invalid UTF-8. The backup image runs rclone strictly
+      as a CLIENT in a fixed backup loop against operator-configured remotes;
+      it serves nothing and publishes no ports, but it DOES process names and
+      listings returned by the remote, so reaching the defect requires a
+      compromised operator-provisioned remote - at which point the attacker
+      already holds the off-box backup channel. Recorded in
+      docs/security/accepted-advisories.json; drop this the moment a released
+      rclone carries golang.org/x/text >= 0.39.0.

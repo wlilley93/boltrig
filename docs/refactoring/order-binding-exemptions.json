@@ -18,6 +18,11 @@
     "would be precisely the false claim this gate exists to catch."
   ],
   "allow": {
+    "SUPPLY-CHAIN-ADVISORY-ACCEPTANCE-001:D4": {
+      "owner": "release-engineering",
+      "expires": "2026-10-23",
+      "reason": "Not testable yet and correctly so: the duty engages only WHEN rclone ships a release carrying golang.org/x/text >= 0.39.0 (repin deploy/backup.Dockerfile's digest and drop both acceptances in the same change). No released upstream artefact carries the fix today, so no repo test can run the repin; what stops silence before expiry is already mechanical - an expired entry fails `make python-audit` (IAC-006) and trivy's expired_at returns the finding to the release gate. Binding arrives with the repin change itself."
+    },
     "HITL-NOTIFICATION-ROUTING-001:D4": {
       "owner": "kernel-maintainers",
       "expires": "2026-11-30",

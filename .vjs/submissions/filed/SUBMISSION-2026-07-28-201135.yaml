@@ -1,0 +1,71 @@
+id: SUBMISSION-2026-07-28-201135
+court_requested: county
+jurisdiction: default
+question: CVE-2026-56852 (HIGH, x/text vendored in the pinned rclone binary, no fixed release) blocks v0.4.22. Accept it, or which alternative?
+facts: |
+  # Accept a HIGH advisory vendored in the pinned rclone binary, or hold the release
+
+  ## Facts
+
+  F1. The v0.4.22 release (kernel HITL-notification cure, order
+  2026-VJS-CC-BOLTRIG-HITL-NOTIFICATION-ROUTING-001, PR #169 merged) is BLOCKED at the release
+  security gate: trivy flags `golang.org/x/text` v0.38.0, CVE-2026-56852 HIGH (fixed 0.39.0;
+  `norm.Iter` can enter an infinite loop), vendored INSIDE the rclone binary copied into
+  `deploy/backup.Dockerfile:16,37` from `rclone/rclone:1.74.4@sha256:c61954aa...`.
+
+  F2. v1.74.4 (2026-07-08) IS the latest rclone release; no released fix exists. rclone
+  master's go.mod already carries x/text v0.40.0, so the next release will carry the fix.
+
+  F3. The dependency policy (docs/dependency-policy.md item 6) permits accepting an advisory
+  ONLY when no fixed upstream release exists, recorded with reachability, owner, expiry and a
+  compensating control; expired exceptions fail release review. In-tree precedent:
+  `.trivyignore.yaml` already accepts GHSA-hrxh-6v49-42gf (grpc vendored in the SAME rclone
+  binary), expiry 2026-10-23, on the same client-only reachability argument.
+
+  F4. Aside, not the question: that gRPC entry's statement claims it is "Recorded in
+  docs/security/accepted-advisories.json"; it is NOT — that file holds only two unrelated
+  PYSEC/GHSA entries.
+
+  F5. Reachability: the advisory is a DoS in text normalization (an infinite loop on crafted
+  input). The backup image runs rclone strictly as a CLIENT in a fixed backup loop against
+  operator-configured remotes; it serves nothing, publishes no ports, and processes no
+  untrusted text input.
+
+  ## Option A: accept in `.trivyignore.yaml`
+
+  Add CVE-2026-56852 under vulnerabilities, path `usr/local/bin/rclone`, owner, expiry
+  (same 2026-10-23 horizon as the gRPC entry), the F5 reachability statement, and
+  drop-on-fixed-release.
+
+  *For:* matches policy item 6 exactly (no fixed upstream release); matches the in-tree
+  precedent for the same binary; unblocks a court-ordered cure; expiry makes the acceptance
+  self-terminating.
+  *Against:* suppresses a HIGH finding by statement rather than fix; the F4 drift shows this
+  exact record-keeping already failed once; trivyignore entries lack the machine enforcement
+  `accepted-advisories.json` entries have.
+
+  ## Option B: switch the backup image to rclone's `beta` tag
+
+  The beta carries the fix TODAY.
+
+  *For:* takes the fix, which the policy prefers; no advisory is accepted at all.
+  *Against:* ships mutable, unreleased code into a production backup path and defeats the
+  digest-pinning discipline `backup.Dockerfile:16` exists for; the cure outruns the disease.
+
+  ## Option C: hold v0.4.22 until rclone ships 1.74.5
+
+  *For:* no acceptance, no mutable artefact; the gate stays absolute.
+  *Against:* the blocked release carries a court-ordered kernel cure with a live-tenant D4
+  outstanding (2026-VJS-CC-BOLTRIG-HITL-NOTIFICATION-ROUTING-001); delay has its own cost,
+  and upstream's release date is not ours to schedule.
+
+  ## Option D: build rclone from source at a pinned master commit
+
+  *For:* the fix is present and the commit can be digest-pinned.
+  *Against:* replaces an official, cosign-attested artefact with a self-built one; provenance
+  and attestation regress, and the build toolchain joins the trusted set.
+
+  No option is preferred. The advocate held a view and withheld it.
+requested_order: TBD
+private_boundary: local
+word_count: 473

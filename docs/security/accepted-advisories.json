@@ -31,6 +31,30 @@
       "compensating_control": "The 5.x line IS pinned to the fixed 5.0.8 via a per-major override, so every dependency that can take the fix has it. Only the two legacy lines, which have no fixed release, remain.",
       "reason": "No fixed release exists on the 1.x or 2.x lines: 1.x ends at 1.1.16 and 2.x at 2.1.2, and the fix ships only in 5.0.8, whose API minimatch@3 cannot use (forcing it throws at lint time). Closing this needs the PULLERS to move off minimatch@3, not a version pin. Re-check at expiry.",
       "ecosystem": "npm"
+    },
+    {
+      "id": "GHSA-hrxh-6v49-42gf",
+      "package": "google.golang.org/grpc",
+      "version": "1.80.0",
+      "owner": "release-engineering",
+      "expires": "2026-10-23",
+      "no_fix_available": true,
+      "reachability": "Vendored inside the rclone binary copied from the digest-pinned official image into the backup sidecar. The advisory covers xDS RBAC and HTTP/2 handling in gRPC servers; the backup image runs rclone strictly as a CLIENT in a fixed backup loop, serves no gRPC, publishes no ports, and never loads xDS service-mesh configuration, so no server-side path the advisory covers exists in this deployment.",
+      "compensating_control": "paths-scoped acceptance in .trivyignore.yaml (usr/local/bin/rclone only, so the finding still fires anywhere else); trivy's expired_at returns the finding to the release gate past 2026-10-23; this ledger fails `make python-audit` on expiry; the backup service is profile-gated, publishes no ports, and mounts the rclone config read-only.",
+      "reason": "No fixed release exists upstream: fixed in grpc 1.82.1, but rclone v1.74.4 IS the latest upstream release and carries 1.80.0, so there is nothing to upgrade to. Drop this the moment rclone ships a build with grpc >= 1.82.1 (2026-VJS-CC-BOLTRIG-SUPPLY-CHAIN-ADVISORY-ACCEPTANCE-001, D2 - completing the record the .trivyignore.yaml statement already claimed).",
+      "ecosystem": "go"
+    },
+    {
+      "id": "CVE-2026-56852",
+      "package": "golang.org/x/text",
+      "version": "0.38.0",
+      "owner": "release-engineering",
+      "expires": "2026-10-23",
+      "no_fix_available": true,
+      "reachability": "Vendored inside the rclone binary copied from the digest-pinned official image into the backup sidecar. The advisory is a norm.Iter infinite loop on input containing invalid UTF-8. The backup image runs rclone strictly as a CLIENT in a fixed backup loop against operator-configured remotes; it serves nothing and publishes no ports, but it DOES process names and listings returned by the remote, so reaching the defect requires a compromised operator-provisioned remote - at which point the attacker already holds the off-box backup channel (2026-VJS-CC-BOLTRIG-SUPPLY-CHAIN-ADVISORY-ACCEPTANCE-001, F5 as qualified).",
+      "compensating_control": "paths-scoped acceptance in .trivyignore.yaml (usr/local/bin/rclone only, so the finding still fires anywhere else); trivy's expired_at returns the finding to the release gate past 2026-10-23; this ledger fails `make python-audit` on expiry; the backup service is profile-gated, publishes no ports, and mounts the rclone config read-only.",
+      "reason": "No fixed release exists upstream: fixed in x/text 0.39.0, but rclone v1.74.4 IS the latest upstream release and pins 0.38.0 (master has 0.40.0, unreleased), so there is nothing to upgrade to. Drop this the moment a released rclone carries golang.org/x/text >= 0.39.0 (2026-VJS-CC-BOLTRIG-SUPPLY-CHAIN-ADVISORY-ACCEPTANCE-001).",
+      "ecosystem": "go"
     }
   ]
 }
