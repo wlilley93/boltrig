@@ -250,7 +250,7 @@ LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/held_write_resume.py:118	m
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/held_write_resume.py:59	call_id	The continuation's frames, in the BOUNDED chat shape (K-20).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/cell_privilege.py:118	no_new_privileges	Fail closed unless this process is non-root and holds no capabilities (J5).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/cell_slots.py:1	CAP_CHOWN	Per-cell uid slots ([2026] VJS-CC-VJS 7 J2 and J10).
-LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_kernel_tools_phase.py:191	assignment	The exact kernel-tools spec the adapter sends for ``assignment``.
+LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_kernel_tools_phase.py:193	assignment	The exact kernel-tools spec the adapter sends for ``assignment``.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_model_proxy_server.py:1	SO_PEERCRED	Per-cell loopback model proxy: authenticate a Codex cell's model calls by bearer and forward them to the shared gateway with the kernel-only key.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_runtime_config_argv.py:1	config.toml	Deterministic App Server argv pinning for security-critical Codex config.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_runtime_config_policy.py:68	codex_cell_boundary	Validate lexical paths; production must separately bind roots and reject symlinks.
@@ -743,12 +743,12 @@ ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_cell_supervisor.p
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_cell_supervisor.py:372		Re-validated at merge time: the base keys always win on a collision
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_cell_supervisor.py:373		(the validator already refuses one), and the base is never mutated.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_cell_supervisor.py:62		not succeed the cell is never handed out.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_kernel_tools_phase.py:110		and a run carrying more than this cannot be attested exactly, so it degrades
-ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_kernel_tools_phase.py:153		Canonicalize the per-run wire-name ceiling, fail-closed.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_kernel_tools_phase.py:168		narrow it to ~74 today, which is the only reason it does not bite.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_kernel_tools_phase.py:100		both read these constants, so the two sides cannot drift - the same
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_kernel_tools_phase.py:112		and a run carrying more than this cannot be attested exactly, so it degrades
+ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_kernel_tools_phase.py:155		Canonicalize the per-run wire-name ceiling, fail-closed.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_kernel_tools_phase.py:170		narrow it to ~74 today, which is the only reason it does not bite.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_kernel_tools_phase.py:72		the ONLY lane that never sent the floor - including the sentence that explains
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_kernel_tools_phase.py:96		and the version a process compiles must not change under it mid-life.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_kernel_tools_phase.py:98		both read these constants, so the two sides cannot drift - the same
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_kernel_tools_phase.py:98		and the version a process compiles must not change under it mid-life.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_model_proxy_server.py:175		runtime's own config: Codex 0.144.3 cannot suppress its built-in
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_model_proxy_server.py:183		The kernel-only upstream key is injected here and NEVER seen by the
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_model_proxy_server.py:191		Exclusivity limb (a): the chokepoint is only the only path if the
@@ -855,12 +855,14 @@ ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/ports/capability_attestations.py:31	
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/ports/execution_ledger.py:1		Canonical execution-ledger persistence boundary.
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/ports/root_engine_decisions.py:20		The bounded decision store cannot retain another immutable root.
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/ports/workflow.py:12		A meaningful Boltrig phase assignment, never a Codex thought/tool call.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/prompt_stack.py:103		are granted, reachable, and simply never CHOSEN.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/prompt_stack.py:26		in an <untrusted ...>...</untrusted> envelope is DATA to weigh, never an
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/prompt_stack.py:44		recall, channel inbound text) are structurally wrapped so the model can always
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/prompt_stack.py:75		its own pinned birth instructions and NEVER called compose_system_prompt, so
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/prompt_stack.py:80		was tagging attacker-capable text for a model that had never been taught to
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/prompt_stack.py:85		(a) the model emitted tool calls as PROSE, so they never reached the
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/prompt_stack.py:89		repeating an identical call is never the recovery;
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/prompt_stack.py:96		(f) the agent never remembered anything.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/pump.py:333		cancel arrived while routing, head.handle (the dispatch) never runs.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/pump.py:340		In-flight adapter call: a cancel requested DURING this never interrupts
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/pump.py:342		at the next cooperative point (D3, FORBIDDEN: no mid-step hard kill).
@@ -1213,7 +1215,6 @@ ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/model_proxy_too
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/model_gateway.py:135	disabled	The gateway's readiness `(status, reason)` when no probe is armed.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/ports/grant_leases.py:17	expected_authority	Durable atomic operations; implementations must never persist raw bearers.
 ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/fleet/prompt_stack.py:79	GOVERNANCE_FLOOR	is in ``GOVERNANCE_FLOOR``, which that lane never sent.
-ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/fleet/prompt_stack.py:97	TOOL_HARNESS	``TOOL_HARNESS`` says nothing about the memory verbs, which have never once been
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/pump.py:709	hierarchy.tier2	Build the live org (CoS + heads + pump) from the manifest hierarchy (P7).
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/runtime.py:179	BOLTRIG_ENABLE_LEGACY_RUNTIMES	The deterministic fallback for a runtime Boltrig cannot provide.
 ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/fleet/turn_executor_compat.py:11	on_behalf_bearer	executor never chokes on an unexpected keyword).
@@ -1279,7 +1280,7 @@ ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/hatchet_app.py:169	HatchetExecu
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/cell_process.py:1	CodexCellSupervisor	Drive a spawner-created cell from the unprivileged API ([2026] VJS-CC-VJS 7 J1).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/cell_spawner.py:262	_require_projected_file	The ownership/mode leg of validate_cell_layout, run by the cell uid itself.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/codex_client_support.py:205	send_request	Write a client->server RESPONSE to a server-initiated request.
-ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/codex_kernel_tools_phase.py:138	knowledge.search	The exact model-facing NESTED tool name for a kernel verb.
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/codex_kernel_tools_phase.py:140	knowledge.search	The exact model-facing NESTED tool name for a kernel verb.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/codex_protocol.py:327	_decode_object	Encode a client->server RESPONSE to a server-initiated request.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/codex_read_only_phase.py:1	read_only_static_profile	The shared read-only Codex phase contract (adapter <-> admission source).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/codex_runtime_config_argv.py:182	codex_app_server_arguments	Gate the SHAPE of an argv at a boundary that cannot see the receipt.

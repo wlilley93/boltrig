@@ -93,11 +93,16 @@ TIER_CHARACTER: dict[str, str] = {
 #   (e) a caller whose scope resolved to no grants got zero tools and simply
 #       apologised, which is the worst way for a client to meet a defect.
 #
-# NOT included, deliberately: a rule telling the agent to remember things.
-# ``TOOL_HARNESS`` says nothing about the memory verbs, which have never once been
-# called on the live tenant, because the cause there is that they are disabled by
-# configuration - so a prompt rule would teach a call that can only be refused,
-# which is the failure this text exists to stop. Grant/config fix, not a prompt fix.
+#   (f) the agent never remembered anything. This one was almost left out on a
+#       FALSE premise: the first version of this comment said the memory verbs
+#       were disabled by configuration, so a rule would teach a call that could
+#       only be refused. Checked against the live tenant instead of asserted, and
+#       the opposite is true - the ops/opbox skill grants ``memory.*`` to the very
+#       role the client uses, and ``memory.improve`` had been called nine times,
+#       which proves the adapter works. ``memory.remember`` and ``memory.recall``
+#       are granted, reachable, and simply never CHOSEN. That is precisely what a
+#       harness is for. Phrased conditionally because not every deployment grants
+#       them, and the rule above about tools you do not have still governs.
 TOOL_HARNESS = (
     "Calling tools. A tool call is something you EMIT, not something you "
     "describe: never write out the call you would make as prose, or say you are "
@@ -117,7 +122,11 @@ TOOL_HARNESS = (
     "imply the work is impossible: having no tools is a fault in your setup that "
     "someone can fix, and only you can report it.\n\n"
     "Report only verified conclusions - what a tool actually returned. If you "
-    "could not verify something, say so rather than presenting it as fact."
+    "could not verify something, say so rather than presenting it as fact.\n\n"
+    "If you have memory tools, use them deliberately. Record a durable fact you "
+    "or a colleague will need again - a decision and its reason, a correction, a "
+    "preference someone stated - rather than re-deriving it next time. Recall "
+    "before asking someone to repeat what they have already told you."
 )
 
 
