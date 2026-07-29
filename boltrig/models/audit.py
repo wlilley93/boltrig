@@ -45,6 +45,12 @@ class SecurityEventType(str, Enum):
     # answered the leaky boundary by attributing it rather than by opening a
     # third command beside it.
     HOST_BOUNDARY_CREDENTIAL = "host_boundary_credential"
+    # An approval admitted with NO independent reviewer because the tenant
+    # declared a development posture (config/dev_posture.py). The click is
+    # removed; this is the record that there was nobody to click. On the
+    # tamper-evident stream deliberately: it is the one signal saying a control
+    # that normally requires two parties required one.
+    DEVELOPMENT_POSTURE_APPROVAL = "development_posture_approval"
 
 
 @dataclass

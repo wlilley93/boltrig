@@ -70,17 +70,17 @@
       "expires": "2026-12-31"
     },
     "boltrig/api/bootstrap.py": {
-      "max_file_lines": 732,
+      "max_file_lines": 733,
       "max_function_lines": 84,
       "over_limit_functions": [
         {
           "name": "build_app",
-          "line": 649,
+          "line": 650,
           "lines": 84
         }
       ],
       "owner": "platform-maintainers",
-      "reason": "Split dependency construction and runtime wiring into typed bootstrap stages without changing startup order. 2026-07-25: +8 lines to wire the SHARED rate-limit counter from REDIS_URL. RedisCounter was constructed nowhere, so every bound was per-process and per-boot while three places in the record asserted Redis ([2026] VJS-CC-BOLTRIG-RATE-LIMIT-WINDOW-001 D1/D3/D7). 2026-07-26 (decision 0018): a write held for human approval is now RECORDED at the pause - a human approved opbox.add_comment in a chat turn, the request sat ANSWERED forever and the comment was never posted, because nothing anywhere held the CALL. The chat factory was EXTRACTED into _build_chat_wiring so the answer bridge can reach the SAME ChatService the SSE routes use (the relay is per-Kernel and in-process), which lowered build_app from 110 to 87 lines - the function ratchet ratchets down with this change. 2026-07-27: the workflow-promotion subsystem deleted ([2026] VJS-CC-BOLTRIG-WORKFLOW-PROMOTION-TRIGGER-001 D3) - the ratchet falls to the measured value.",
+      "reason": "Split dependency construction and runtime wiring into typed bootstrap stages without changing startup order. 2026-07-25: +8 lines to wire the SHARED rate-limit counter from REDIS_URL. RedisCounter was constructed nowhere, so every bound was per-process and per-boot while three places in the record asserted Redis ([2026] VJS-CC-BOLTRIG-RATE-LIMIT-WINDOW-001 D1/D3/D7). 2026-07-26 (decision 0018): a write held for human approval is now RECORDED at the pause - a human approved opbox.add_comment in a chat turn, the request sat ANSWERED forever and the comment was never posted, because nothing anywhere held the CALL. The chat factory was EXTRACTED into _build_chat_wiring so the answer bridge can reach the SAME ChatService the SSE routes use (the relay is per-Kernel and in-process), which lowered build_app from 110 to 87 lines - the function ratchet ratchets down with this change. 2026-07-27: the workflow-promotion subsystem deleted ([2026] VJS-CC-BOLTRIG-WORKFLOW-PROMOTION-TRIGGER-001 D3) - the ratchet falls to the measured value. 2026-07-29: +1 line and build_app shifts 649->650 for the DEV-POSTURE development-posture flag - one composition-root argument threading the tenant's declared posture to the HITL manager, exactly as the approval timeout already is.",
       "expires": "2026-12-31"
     },
     "boltrig/api/doctor.py": {
@@ -106,11 +106,11 @@
       "expires": "2026-12-31"
     },
     "boltrig/config/manifest.py": {
-      "max_file_lines": 918,
+      "max_file_lines": 953,
       "max_function_lines": 56,
       "over_limit_functions": [],
       "owner": "configuration-maintainers",
-      "reason": "Split manifest models, validation, and application into section-oriented modules with round-trip parity. 2026-07-25: +9 lines so a per-model price keeps sub-micro precision. int(rate) on the way in was half of a two-part bug (price_micros int()-ed it again): every model we route to costs LESS than 1 micro/token, so an honest rate like 0.35 truncated to 0 and the model billed FREE - configuring real prices was strictly worse than the tier fallback, which is why no deployment had ever configured them. 2026-07-25 (input/output split): +44 lines for _parse_rate + _parse_price, EXTRACTED rather than grown inside _parse_models (which shrank), so the largest function is unchanged at 56. A per-model rate may now be the rate card's {input, output} pair as well as a scalar: the two legs differ by more than 2x on the cards we bill from and an agent turn is input-heavy, so one blended rate set at the output price over-bills every turn. 2026-07-29: +20 lines for [2026] VJS-CC-BOLTRIG-OPERATOR-SEAT-001 D5 - the shipped control.* approval window moves 3600s -> 86400s behind one named constant so the dataclass default and the parser fallback cannot drift, with the reasoning recorded beside it.",
+      "reason": "Split manifest models, validation, and application into section-oriented modules with round-trip parity. 2026-07-25: +9 lines so a per-model price keeps sub-micro precision. int(rate) on the way in was half of a two-part bug (price_micros int()-ed it again): every model we route to costs LESS than 1 micro/token, so an honest rate like 0.35 truncated to 0 and the model billed FREE - configuring real prices was strictly worse than the tier fallback, which is why no deployment had ever configured them. 2026-07-25 (input/output split): +44 lines for _parse_rate + _parse_price, EXTRACTED rather than grown inside _parse_models (which shrank), so the largest function is unchanged at 56. A per-model rate may now be the rate card's {input, output} pair as well as a scalar: the two legs differ by more than 2x on the cards we bill from and an agent turn is input-heavy, so one blended rate set at the output price over-bills every turn. 2026-07-29: +20 lines for [2026] VJS-CC-BOLTRIG-OPERATOR-SEAT-001 D5 - the shipped control.* approval window moves 3600s -> 86400s behind one named constant so the dataclass default and the parser fallback cannot drift, with the reasoning recorded beside it. 2026-07-29: +34 lines for the DEV-POSTURE development-posture flag - the development_posture manifest block and its parser, which fails closed to None on a malformed or absent expires_at so a bad date yields full four-eyes rather than an unbounded suspension of it.",
       "expires": "2026-12-31"
     },
     "boltrig/fleet/chat.py": {
