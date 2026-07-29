@@ -131,8 +131,16 @@ def _require_foreign_owner(label: str, details: os.stat_result) -> None:
     """Refuse anything our own euid owns: an owner can always restore write."""
 
     if details.st_uid == os.geteuid():
+        # NAME THE ACCOUNT. "owned by this account" alone cannot be acted on: it
+        # is true of every euid and says nothing about which one, so the same
+        # sentence is emitted whether the deployment is misconfigured or the test
+        # runner simply happens to be root. That ambiguity cost real time - the
+        # message was identical on a box where it was correct behaviour and on CI
+        # where the cause was unknown. A refusal that does not say what would have
+        # been accepted is a wall.
         raise CodexCellBoundaryError(
-            f"{label} is owned by this account, so its mode is no boundary"
+            f"{label} is owned by this account (euid {os.geteuid()}, "
+            f"owner uid {details.st_uid}), so its mode is no boundary"
         )
     if stat.S_IMODE(details.st_mode) & 0o022:
         raise CodexCellBoundaryError(f"{label} is group- or world-writable")

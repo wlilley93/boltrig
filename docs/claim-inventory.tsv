@@ -62,8 +62,8 @@ LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/cell_privilege.py
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/fleet/infrastructure/cell_spawner.py:325		slot's own contents FIRST, as the cell uid, so a later tenant never
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/cell_spawner.py:499		Signal a cell by forking a reaper that shares its uid.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/fleet/infrastructure/cell_spawner.py:558		that never did would leak a pid-table entry per cell until the container
-LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_cell_boundary.py:189		Assert Yama restricted ptrace, failing closed when it cannot be read (G5).
-LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_cell_boundary.py:222		Prove the named boundary is in force right now, or refuse to proceed (G4).
+LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_cell_boundary.py:197		Assert Yama restricted ptrace, failing closed when it cannot be read (G5).
+LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_cell_boundary.py:230		Prove the named boundary is in force right now, or refuse to proceed (G4).
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_cell_policy.py:62		Supervisor-managed upstream Codex authentication, always redacted.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_model_proxy_server.py:170		Fail-closed: never reach upstream without an active bearer.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_model_proxy_server.py:200		Bounded, body-safe: never leak the key or the upstream error detail.
@@ -737,8 +737,9 @@ ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_app_server.py:21	
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_app_server.py:368		task so the single reader never blocks;
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_app_server.py:411		Answering must never crash the pump: a failed write leaves the
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_cell_boundary.py:130		Refuse anything our own euid owns: an owner can always restore write.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_cell_boundary.py:268		access to everything its uid can reach cannot rewrite, append to, read,
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_cell_boundary.py:271		Derived, never configured.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_cell_boundary.py:134		NAME THE ACCOUNT.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_cell_boundary.py:276		access to everything its uid can reach cannot rewrite, append to, read,
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_cell_boundary.py:279		Derived, never configured.
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_cell_boundary.py:94		Resolve the single shared helper path, defaulting to the image location.
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_cell_policy.py:1		Fail-closed filesystem, binary, and environment policy for Codex cells.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_cell_policy.py:243		The read-only reasoning lane's workspace is always EMPTY, so its projection is a
@@ -1239,7 +1240,7 @@ ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/cell_privilege.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/cell_spawner.py:398	SCM_RIGHTS	Hand the pid and the three stdio descriptors back over the socketpair.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_agent_runtime.py:287	agentMessage	The latest turn's assistant text, captured from the lifecycle stream.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_cell_boundary.py:113	path	Ask the KERNEL whether our effective ids can write ``path``.
-ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_cell_boundary.py:284	execve	Refuse to run if any setuid/setgid binary survives in the image (J4).
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_cell_boundary.py:292	execve	Refuse to run if any setuid/setgid binary survives in the image (J4).
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_model_proxy_server.py:209	function_call	Relay the upstream body, holding the ceiling and bridging the namespace.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_read_only_phase.py:94	model_id	The read-only static profile compiled into the birth policy.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_runtime_events.py:257	ThreadTokenUsage	Carry what the turn consumed onto the normalized event stream.
