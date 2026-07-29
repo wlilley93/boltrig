@@ -1,0 +1,91 @@
+id: SUBMISSION-2026-07-29-083653
+court_requested: county
+jurisdiction: default
+question: May a development-posture tenant dispatch high-consequence verbs without a synchronous human veto, and by what mechanism?
+facts: |
+  # Unattended dispatch on a tenant in development posture
+
+  Own motion, on a Principal instruction that development proceed unattended. The operator-seat court
+  (2026-07-28) refused a carve-out on a LIVE CLIENT tenant with an eligible, untried approver; a
+  tenant with no client was not before it.
+
+  ## Facts
+
+  F1. The veto is the CONSEQUENCE gate, not four-eyes: `dispatch` gates on
+  `consequence == HIGH or verb in blocking_verbs`, and every `control.*` spec defaults
+  `consequence="high"` (`control_specs.py:36`).
+
+  F2. The sole-author exemption does not give unattended operation. `_sole_active_author`
+  (`hitl_response_auth.py:124-139`) lifts INDEPENDENCE, but `approval_response_block` still
+  refuses a non-human ("only a human may approve"). It removes the second human, never the
+  human, so a HIGH verb still parks.
+
+  F3. `[2026] VJS-APPEAL 1`: LOW verbs admit "with no synchronous human veto (by calibration,
+  not defect)"; "to add a LOW-class veto, recalibrate as data (consequence: HIGH /
+  blocking_verbs), never a codex-side gate." It addresses ADDING a veto, not removing one.
+
+  F4. A posture-gated relaxation is already approved. `[2026] VJS-CC-VJS 2` admits the trusted
+  Codex runtime under (a) a single trusted operator - dev auth, no real ingress - or (b)
+  kernel-attested per-cell uids; explicit flag, off by default; refuses under ANY production
+  signal (`codex_trusted_wall.py:49-97`).
+
+  F5. Candidate tenant `app.boltrig.io` has ONE active author-tier user, but runs
+  `BOLTRIG_AUTH_MODE=session`, so `real_ingress` is true and F4's posture (a) would REFUSE it.
+
+  F6. Approval is not the only blocker, and the other half is not law: both kernels use
+  `build_session_resolver` (cookie only, `sessions.py:268-273`), never `resolve_pat_principal`,
+  so machine invocation is impossible regardless.
+
+  F7. Classical Visas (two authors, client data) is untouched by this matter.
+
+  CORRECTION, entered by the advocate before any bench read this file. F6 IS FALSE and F2 is
+  materially incomplete. Measured on `app.boltrig.io` 2026-07-29: `principal` (`app.py:322-333`)
+  tries `looks_like_pat` FIRST and only falls through to the session resolver, so a PAT
+  authenticates (`GET /v1/hitl` -> 200). `resolve_pat_principal` sets `actor_tier="human"`
+  (`tokens.py:145`), so a PAT satisfies the human requirement in F2. The full loop closes
+  headlessly on a sole-author tenant: `control.config.upsert` -> 202 `pending_human`, then
+  `POST /v1/hitl/{id}/respond` -> 200 `{"sole_author_exemption": true}`. The advocate's earlier
+  401s were operator error - a captured log line passed as a bearer, which failed the
+  `boltrig_pat_` prefix test and fell through to the session resolver ("no session").
+
+  What this leaves for decision is therefore NARROWER than pleaded: unattended operation
+  already works on a sole-author tenant via a two-call approve-then-invoke round trip, needing
+  no ruling. The live question is only whether the ROUND TRIP itself may be removed - i.e.
+  Option B's downward calibration - and whether any posture may do so. Options C and D may now
+  be unnecessary to reach.
+
+  ## A: refuse; posture is not a lawful ground
+
+  *For:* no new surface; F4's wall protects an attestation gap, not an approval; posture is
+  self-declared, and self-declaration is what independent approval exists to distrust.
+  *Against:* no unattended path survives; treats a tenant with no client identically to one
+  with a client.
+
+  ## B: calibration only, no new law
+
+  A tenant sets `consequence`/`blocking_verbs` as manifest data, including downward.
+
+  *For:* the lever precedent names; manifest data is already the policy seam; reversible.
+  *Against:* F3's ratio addressed adding, so this may exceed it; no boundary, so a tenant may
+  calibrate down in production.
+
+  ## C: a declared development posture, modelled on F4
+
+  Suspends the synchronous veto for a bounded verb set on a proved test: no non-operator users,
+  no client data, no production signal.
+
+  *For:* reuses a mechanism this court approved for a comparable relaxation, production refusal
+  included; machine-checked, not asserted.
+  *Against:* a second wall to maintain; by F5 the candidate tenant fails the nearest test; "no
+  client data" is cheap to assert, hard to prove.
+
+  ## D: a non-human approver under that posture
+
+  *For:* delivers it directly; actor tier is already modelled.
+  *Against:* consistently refused; an agent seat already cleared an irreversible verb on
+  standing here; changes WHO approves, not WHETHER.
+
+  No option is preferred. The advocate held a view and withheld it.
+requested_order: TBD
+private_boundary: local
+word_count: 496
