@@ -529,22 +529,34 @@ import os  # noqa: E402
 # on such a runner this module proves nothing, including the assertions that would
 # have passed. That is preferable to a red that means nothing, and the skip names
 # the euid so the next reader can check the claim in one command.
-def _foreign_owned_ancestor(path: str) -> bool:
-    """True when some ancestor of ``path`` belongs to another account."""
+def _every_ancestor_is_foreign(path: str) -> bool:
+    """True only when EVERY ancestor of ``path`` belongs to another account.
+
+    EVERY, not any, and the difference is the whole bug. `_assert_shared_helper`
+    walks `helper_path.parents` and refuses on the FIRST ancestor our euid owns,
+    so the precondition has to be the conjunction. An `any` version passed both
+    of its checks - green as my own uid, skipped as root - because root is the
+    degenerate case where every ancestor is ours and `any` and `all` agree. On a
+    runner where /usr is ours but / is root's, `any` found / , declined to skip,
+    and the tests failed exactly as before.
+    """
     euid = os.geteuid()
-    for ancestor in Path(path).parents:
+    parents = list(Path(path).parents)
+    if not parents:
+        return False
+    for ancestor in parents:
         try:
-            if ancestor.stat().st_uid != euid:
-                return True
+            if ancestor.stat().st_uid == euid:
+                return False
         except OSError:
             return False
-    return False
+    return True
 
 
 pytestmark = pytest.mark.skipif(
-    not _foreign_owned_ancestor(os.path.realpath("/bin/sh")),
+    not _every_ancestor_is_foreign(os.path.realpath("/bin/sh")),
     reason=(
-        f"no ancestor of {os.path.realpath('/bin/sh')} is owned by another account "
+        f"an ancestor of {os.path.realpath('/bin/sh')} is owned by this account "
         f"(euid {os.geteuid()}), so the file-mode boundary the trusted-Codex lane "
         "rests on does not exist here and these tests would prove nothing"
     ),
