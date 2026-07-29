@@ -507,6 +507,49 @@ async def test_empty_ceiling_falls_back_to_read_only_without_a_token(
 
 import os  # noqa: E402
 
+# --- the environment precondition this whole module needs -------------------
+# Every test here drives the trusted-Codex lane, and that lane's ONE available
+# boundary is a helper owned by ANOTHER ACCOUNT on a directory chain this account
+# cannot write (see codex_cell_boundary's module docstring). `/bin/sh` stands in
+# for the baked image helper. Whether that property holds is a fact about the
+# MACHINE, not about the code:
+#
+#   * as root every ancestor is ours, so nothing is proved. test_codex_cell_boundary
+#     already skips for exactly this reason ("root can write everything").
+#   * on some GitHub-hosted runner images /usr is owned by the RUNNER account, so
+#     the same is true at uid 1001 and a root-only guard misses it entirely.
+#
+# The second case cost real time and produced a false accusation: 25 tests here
+# failed on a PR whose entire diff was two TypeScript files, while a PR that DID
+# change Python passed 16/16 minutes apart - same code, different runner. A test
+# that fails when the machine cannot supply its precondition reports the
+# environment as a code defect, and sends whoever reads it hunting their own diff.
+#
+# So it SKIPS, visibly and with the reason. The cost is honest and worth stating:
+# on such a runner this module proves nothing, including the assertions that would
+# have passed. That is preferable to a red that means nothing, and the skip names
+# the euid so the next reader can check the claim in one command.
+def _foreign_owned_ancestor(path: str) -> bool:
+    """True when some ancestor of ``path`` belongs to another account."""
+    euid = os.geteuid()
+    for ancestor in Path(path).parents:
+        try:
+            if ancestor.stat().st_uid != euid:
+                return True
+        except OSError:
+            return False
+    return False
+
+
+pytestmark = pytest.mark.skipif(
+    not _foreign_owned_ancestor(os.path.realpath("/bin/sh")),
+    reason=(
+        f"no ancestor of {os.path.realpath('/bin/sh')} is owned by another account "
+        f"(euid {os.geteuid()}), so the file-mode boundary the trusted-Codex lane "
+        "rests on does not exist here and these tests would prove nothing"
+    ),
+)
+
 import httpx  # noqa: E402
 
 from boltrig.fleet.application.model_proxy_grants import (  # noqa: E402
