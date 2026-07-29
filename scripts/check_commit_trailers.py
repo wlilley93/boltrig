@@ -120,7 +120,7 @@ def main() -> int:
     args = ap.parse_args()
 
     raw = _git(
-        "log", f"--format=%H%x00%s%x00%b%x1e", f"-{args.limit}", args.ref
+        "log", "--format=%H%x00%s%x00%b%x1e", f"-{args.limit}", args.ref
     )
     entries = [e.strip() for e in raw.split("\x1e") if e.strip()]
 
