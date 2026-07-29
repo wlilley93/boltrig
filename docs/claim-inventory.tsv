@@ -1078,8 +1078,8 @@ ORDINARY	NO-SUBJECT	comment	boltrig/kernel/schema_diagnosis.py:145		row it must 
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/schema_diagnosis.py:148		schema_path back into the schema document.
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/tool_disclosure.py:99		0 for a low-consequence verb, 1 for a high-consequence one.
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/web_security.py:1		Edge/web hardening for the kernel FastAPI app (Batch 1 WEB-* + RES-01).
-ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/web_security.py:268		Install the edge/web hardening middleware (WEB-02/03/05/06, RES-01).
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/web_security.py:297		Explicit allowlist only - never '*' with credentials, never reflect.
+ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/web_security.py:277		Install the edge/web hardening middleware (WEB-02/03/05/06, RES-01).
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/web_security.py:306		Explicit allowlist only - never '*' with credentials, never reflect.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/web_security.py:78		DERIVED, never configured (see the UI's mountPrefix): the edge states it per
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/web_security.py:82		the same reason client_ip refuses X-Forwarded-For by default: a header a client
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/web_security.py:84		OWN cookie and never widen anyone else's, so the exposure is slight - but a
