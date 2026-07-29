@@ -27,6 +27,7 @@ LOAD-BEARING	NO-SUBJECT	comment	boltrig/api/bootstrap.py:490		audit log is tampe
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/api/chat_cli.py:233		A one-line, user-facing HTTP failure.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/api/chat_cli.py:50		The CLI config file (TOML), or {} when absent;
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/api/fleet_health.py:1		`boltrig fleet-health` - a readiness probe for a process that serves no HTTP.
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/api/host_boundary.py:69		addresses in a ledger that is append-only by design.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/api/initiate.py:143		Audit the owner seed keys-only (D8): the email, never the password.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/api/initiate.py:184		Set (or reset) the first-party password of an EXISTING user.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/api/worker.py:82		Start the audit-rollup anchor janitor (COUNTY 9 D4), or None when disabled.
@@ -233,8 +234,11 @@ LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/adapters/builtin/inbound_webhook
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/adapters/loader.py:1	down	Dynamic adapter loading + hot reload + health (US-ADP-06, P1, NFR-MNT-02).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/addons/__init__.py:158	tool	The HIGHEST consequence any addon reads off ``tool``.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/api/chat_cli.py:1	BOLTRIG_CLI_TOKEN	``boltrig chat`` - the user-facing terminal client.
+LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/api/host_boundary.py:1	actor	Attribution for acts performed from the HOST SHELL ([2026] VJS-CC-BOLTRIG-OPERATOR-SEAT-001, D6).
+LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/api/host_boundary.py:33	subject	Record a host-boundary credential act on the security stream.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/api/initiate.py:1	superadmin	``boltrig initiate`` - seat the founding OWNER ([2026] VJS-COUNTY 7, D7).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/api/logging_config.py:1	LOGGING_CONFIG	One declared logging configuration for every boltrig process.
+LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/config/author_ratchet.py:40	stays_author	Refuse a crossing DOWN to exactly one active author.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/config/manifest.py:480	cost.py	One entry of the per-model price table, or None to drop it (FR-COST-04).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/emotion/__init__.py:1	boltrig.observability.orb_presence	Boltrig's affective side-channel: a read-only emotion projection over run events.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/authority.py:117	item	Route ``item`` to its department head, or ``None`` if unroutable (SEC-165).
@@ -567,6 +571,8 @@ ORDINARY	NO-SUBJECT	comment	boltrig/api/codex_trusted.py:108		never carries the 
 ORDINARY	NO-SUBJECT	comment	boltrig/api/codex_trusted.py:78		Lazy imports so the flag-off path never pulls in the infrastructure layer or
 ORDINARY	NO-SUBJECT	comment	boltrig/api/doctor.py:24		three sites cannot disagree about what counts as a placeholder again.
 ORDINARY	NO-SUBJECT	comment	boltrig/api/doctor.py:364		result rather than crashing (P9), so this is drift to report, never a deploy
+ORDINARY	NO-SUBJECT	comment	boltrig/api/host_boundary.py:26		Deliberately not an email and not a real user id: it must not collide with any
+ORDINARY	NO-SUBJECT	comment	boltrig/api/host_boundary.py:29		box cannot name them more precisely than this.
 ORDINARY	NO-SUBJECT	comment	boltrig/api/initiate.py:107		shell history and usually in a runbook too.
 ORDINARY	NO-SUBJECT	comment	boltrig/api/initiate.py:221		D6: the actor is the HOST BOUNDARY, never the target user.
 ORDINARY	NO-SUBJECT	docstring	boltrig/api/logging_config.py:36		The numeric level for a configured name, falling back to INFO.
