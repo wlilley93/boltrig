@@ -156,14 +156,14 @@ class HITLManager:
         resume_notifier: Callable[..., Any] | None = None,
         *,
         approval_timeout_seconds: int | None = None,
+        development_posture: Any = None,
     ) -> None:
         self._store = store
         self._resume_notifier = resume_notifier
-        # The manifest's hitl.approval_timeout_seconds, threaded in at the
-        # composition root (Kernel). The approval gate stamps every request it
-        # creates with it; a manager without one (the fleet's escalation lane)
-        # creates unbounded requests, matching the pre-timeout behaviour.
+        # Manifest values threaded in at the composition root: the timeout the approval
+        # gate stamps on each request, and the posture (dev_posture.py) eligibility reads.
         self.approval_timeout_seconds = approval_timeout_seconds
+        self.development_posture = development_posture
 
     def set_resume_notifier(self, notifier: Callable[..., Any] | None) -> None:
         """Attach the answer -> resume bridge (NFR-REL-03): a callable (sync or

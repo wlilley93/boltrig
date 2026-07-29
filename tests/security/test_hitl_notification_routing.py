@@ -189,7 +189,7 @@ def test_notice_set_equals_the_response_route_set():
     ) == {"will@solo"}
     assert asyncio.run(
         authorize_approval_response(solo_kernel, _principal(will), own)
-    ) is True  # exempt
+    ) == "sole_author"  # the relief is now NAMED, not a bare True
 
 
 @pytest.mark.security
@@ -311,4 +311,8 @@ def test_authorization_never_reads_notification_state():
 
     assert empty_outbox == 0 and full_outbox == 1  # the outbox state differed
     assert (empty_exempt, empty_consumed) == (full_exempt, full_consumed)
-    assert full_exempt is False and full_consumed == CLIENT
+    # None, not False: authorize_approval_response now returns the NAME of the
+    # relief that lifted independence ("sole_author" / "development_posture")
+    # or None when none was needed. The client is independent of the operator
+    # who raised this, so no relief applies - which is what this asserts.
+    assert full_exempt is None and full_consumed == CLIENT

@@ -21,6 +21,7 @@ from typing import Any, Mapping
 import yaml
 
 from boltrig.identity.rbac import grants_for_scope
+from boltrig.config.dev_posture import DevelopmentPosture
 from boltrig.config.environment import is_truthy
 from boltrig.config.manifest_reconcile import (
     declared_capabilities,
@@ -325,6 +326,9 @@ class FleetManifest:
     spawn_rules: tuple[SpawnRule, ...] = ()
     adapters: tuple[AdapterConfig, ...] = ()
     hitl: HitlConfig = field(default_factory=HitlConfig)
+    # The tenant's declared development posture (config/dev_posture.py). Default
+    # is NOT declared, so a manifest that says nothing gets full four-eyes.
+    development_posture: DevelopmentPosture = field(default_factory=DevelopmentPosture)
     network: NetworkConfig = field(default_factory=NetworkConfig)
     privacy: PrivacyConfig = field(default_factory=PrivacyConfig)
     chat: ChatConfig = field(default_factory=ChatConfig)
@@ -603,6 +607,36 @@ def _parse_adapter(raw: Mapping[str, Any]) -> AdapterConfig:
     )
 
 
+def _parse_development_posture(raw: Mapping[str, Any]) -> DevelopmentPosture:
+    """Parse ``development_posture`` into a ``dev_posture.DevelopmentPosture``.
+
+    An absent block yields ``DevelopmentPosture()`` (enabled False), and a
+    malformed or absent ``expires_at`` yields ``expires_at=None``, which
+    ``dev_posture.posture_block`` refuses: the failure mode of a bad date must
+    be full four-eyes, never an unbounded suspension of it.
+    """
+    from datetime import datetime
+
+    block = raw.get("development_posture")
+    if not isinstance(block, Mapping):
+        return DevelopmentPosture()
+    expires: datetime | None = None
+    stated = block.get("expires_at")
+    if isinstance(stated, datetime):
+        expires = stated
+    elif isinstance(stated, str):
+        try:
+            expires = datetime.fromisoformat(stated)
+        except ValueError:
+            expires = None
+    return DevelopmentPosture(
+        enabled=_as_bool(block.get("enabled", False)),
+        expires_at=expires,
+        declared_by=str(block.get("declared_by") or ""),
+        reason=str(block.get("reason") or ""),
+    )
+
+
 def _parse_hitl(raw: Mapping[str, Any]) -> HitlConfig:
     return HitlConfig(
         primary_channel=str(raw.get("primary_channel", "slack")),
@@ -726,6 +760,7 @@ def load_manifest(path: str, *, env: Mapping[str, str] | None = None) -> FleetMa
         spawn_rules=tuple(_parse_spawn_rule(r) for r in (doc.get("spawn_rules") or [])),
         adapters=tuple(_parse_adapter(a) for a in (doc.get("adapters") or [])),
         hitl=_parse_hitl(doc.get("hitl") or {}),
+        development_posture=_parse_development_posture(doc),
         network=_parse_network(doc.get("network") or {}),
         privacy=_parse_privacy(doc.get("privacy") or {}),
         chat=_parse_chat(doc.get("chat") or {}),

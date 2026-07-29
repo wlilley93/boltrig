@@ -149,39 +149,79 @@ async def approval_response_block(
     on_behalf_of: str | None,
     actor_tier: str,
     context: Any,
-) -> tuple[str | None, bool]:
+    posture: Any = None,
+) -> tuple[str | None, str | None]:
     """ONE definition of who may lawfully answer an APPROVAL request.
 
-    Returns ``(block, exempt)``: ``block`` is the refusal detail, None when the
-    responder is eligible; ``exempt`` is True only when the sole-author
-    bootstrap exemption lifted the independence rule. The response route
+    Returns ``(block, relief)``: ``block`` is the refusal detail, None when the
+    responder is eligible; ``relief`` names which rule lifted independence -
+    ``"sole_author"`` (the bootstrap exemption: the rule was unsatisfiable) or
+    ``"development_posture"`` (deliberately suspended on a declared tenant) -
+    and is None when no relief was needed or none applied. The response route
     (``authorize_approval_response``) raises on a block; the notice fan-out
     (``eligible_approval_responders``) skips on one - the same rule in both
     postures, so notice and authority cannot drift
     ([2026] VJS-CC-BOLTRIG-HITL-NOTIFICATION-ROUTING-001, D2)."""
     if actor_tier != "human":
-        return "only a human may approve", False
+        return "only a human may approve", None
     if not request.verb or not request.request_fingerprint:
-        return "approval is not request-bound", False
+        return "approval is not request-bound", None
     if request.assignee and request.assignee != subject:
-        return "approval is assigned to another user", False
+        return "approval is assigned to another user", None
     initiators = {
         value
         for value in (request.requested_by, request.requested_on_behalf_of)
         if value
     }
     respondents = {value for value in (subject, on_behalf_of) if value}
-    exempt = False
+    relief: str | None = None
     if initiators & respondents:
-        if not await _sole_active_author(store, tenant_id, subject):
-            return "cannot approve your own request", False
-        exempt = True
+        # TWO reliefs can lift independence, and they are reported separately
+        # because they mean different things to whoever reads the record: the
+        # bootstrap exemption says the rule was UNSATISFIABLE (one author), the
+        # development posture says it was DELIBERATELY SUSPENDED on a tenant not
+        # yet in service. Sole-author is tried first: where it applies nothing
+        # needed declaring, so nothing should be reported as declared.
+        if await _sole_active_author(store, tenant_id, subject):
+            relief = "sole_author"
+        else:
+            blocked = await _development_posture_block(
+                store, tenant_id, posture, request, subject
+            )
+            if blocked is not None:
+                return "cannot approve your own request", None
+            relief = "development_posture"
     permissions = await store.get_tenant_permissions(tenant_id)
     try:
         grants.check(context, request.verb, permissions)
     except GrantMissing:
-        return "not authorised to approve this action", False
-    return None, exempt
+        # AFTER the relief, never before: dev_posture.posture_block lifts
+        # INDEPENDENCE and never authority, so a superadmin without the verb's
+        # grant is refused under a posture exactly as without one.
+        return "not authorised to approve this action", None
+    return None, relief
+
+
+async def _development_posture_block(
+    store: Any, tenant_id: str, posture: Any, request: HITLRequest, subject: str
+) -> str | None:
+    """None when the declared development posture admits this self-approval.
+
+    The role is read from the STORE, not from the caller's principal: the
+    posture admits superadmin only, and a principal is shaped by the request.
+    """
+    from boltrig.config.dev_posture import posture_block
+    from boltrig.config.environment import production_signal
+    from boltrig.models import utcnow
+
+    user = await store.get_user(tenant_id, subject)
+    return posture_block(
+        posture,
+        now=utcnow(),
+        production_signal=production_signal(),
+        verb=request.verb,
+        subject_role=str(getattr(user, "role", "") or ""),
+    )
 
 
 async def eligible_approval_responders(store: Any, request: HITLRequest) -> list[str]:
@@ -209,7 +249,7 @@ async def eligible_approval_responders(store: Any, request: HITLRequest) -> list
             actor=user.id,
             actor_tier="human",
         )
-        block, _ = await approval_response_block(
+        block, _relief = await approval_response_block(
             store, grants, request,
             tenant_id=request.tenant_id,
             subject=user.id,
@@ -227,26 +267,28 @@ async def authorize_approval_response(
 ) -> bool:
     """Require an independent, assigned human with the live action grant.
 
-    Returns True when the sole-author bootstrap exemption was applied (the
-    caller MUST audit-flag it); the exemption never lifts the assignment,
-    humanity, or live-grant requirements below. The eligibility rule itself is
+    Returns the NAME of the relief that lifted independence, or None. The
+    caller MUST record it: an approval nobody independent reviewed is exactly
+    the thing a reader of the record needs to see. No relief ever lifts the
+    assignment, humanity, or live-grant requirements below. The eligibility rule itself is
     ``approval_response_block`` - ONE definition, shared with the notice
     fan-out so the route and the routing table cannot drift."""
     if request.type != HITLType.APPROVAL:
         return False
-    block, exempt = await approval_response_block(
+    block, relief = await approval_response_block(
         kernel.store, kernel.grants, request,
         tenant_id=principal.tenant_id,
         subject=principal.subject,
         on_behalf_of=principal.on_behalf_of,
         actor_tier=principal.actor_tier,
         context=principal.context(),
+        posture=getattr(getattr(kernel, "hitl", None), "development_posture", None),
     )
     if block == "approval is not request-bound":
         raise HTTPException(status_code=409, detail=block)
     if block is not None:
         raise HTTPException(status_code=403, detail=block)
-    return exempt
+    return relief
 
 
 async def authorize_hitl_response(
@@ -254,8 +296,8 @@ async def authorize_hitl_response(
 ) -> bool:
     """Apply common scope, then the type-specific mutation authorization.
 
-    Returns True only when the APPROVAL path applied the sole-author bootstrap
-    exemption (see authorize_approval_response) - the caller MUST audit-flag it."""
+    Returns the relief the APPROVAL path applied, if any (see
+    authorize_approval_response) - the caller MUST audit-flag it."""
     item = await authorize_hitl_scope(kernel, principal, request)
     if request.type == HITLType.QUESTION:
         owner = getattr(item, "on_behalf_of", None)

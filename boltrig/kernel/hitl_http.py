@@ -135,6 +135,34 @@ def _exemption_would_end_itself(request: Any) -> bool:
     return isinstance(role, str) and role in AUTHOR_ROLES
 
 
+async def _alarm_development_posture(kernel: Any, principal: Any, request: Any) -> None:
+    """THE RECORD THE POSTURE DOES NOT REMOVE.
+
+    The second person's click is gone; this is not. It goes on the
+    tamper-evident SecurityWriter stream because it is the one signal saying a
+    control that normally takes two parties took one - so a party who was never
+    asked to approve can read afterwards what was done on their tenant.
+
+    Fail-safe: the AuditWriter row written by the caller is the truth, and an
+    alarm that could break an approval would be traded away the first time it did.
+    """
+    from boltrig.models import SecurityEvent, SecurityEventType, utcnow
+
+    try:
+        await kernel.security.write(
+            SecurityEvent(
+                tenant_id=principal.tenant_id, ts=utcnow(),
+                event_type=SecurityEventType.DEVELOPMENT_POSTURE_APPROVAL,
+                reason="self_approval_under_development_posture",
+                actor=principal.subject, actor_tier=principal.actor_tier,
+                resource="hitl", resource_id=request.id,
+                detail={"verb": request.verb},
+            )
+        )
+    except Exception:  # noqa: BLE001 - see the fail-safe note above
+        pass
+
+
 async def respond_to_hitl(
     kernel: Any,
     principal: Any,
@@ -145,7 +173,9 @@ async def respond_to_hitl(
     request = await kernel.hitl.get(principal.tenant_id, request_id)
     if request is None:
         raise HTTPException(status_code=404, detail="unknown request")
-    sole_author_exempt = await authorize_hitl_response(kernel, principal, request)
+    relief = await authorize_hitl_response(kernel, principal, request)
+    sole_author_exempt = relief == "sole_author"
+    dev_posture = relief == "development_posture"
     # GAP G5: capture the run-relay cursor BEFORE answer() fires the resume lane, so
     # everything the resume publishes lands at a seq strictly greater than it.
     resume_since = _run_cursor(kernel, principal.tenant_id, request.run_id)
@@ -157,19 +187,26 @@ async def respond_to_hitl(
         principal.tenant_id, request_id, decision, principal.subject, notes
     )
     ends_exemption = sole_author_exempt and _exemption_would_end_itself(request)
-    if sole_author_exempt:
-        # The four-eyes bootstrap exemption always leaves a flag on the chain:
+    if dev_posture:
+        await _alarm_development_posture(kernel, principal, request)
+    if sole_author_exempt or dev_posture:
+        # Either relief (sole_author / development_posture) always leaves a
+        # flag on the AuditWriter chain (SEC-182):
         # a single-author tenant approved its own request (SEC-182).
         from boltrig.models import ActionType, AuditEvent, utcnow
 
         detail: dict[str, Any] = {"hitl_request_id": request.id, "verb": request.verb}
         if ends_exemption:
             detail["ends_sole_author_exemption"] = True
+        if dev_posture:
+            detail["development_posture"] = True
         await kernel.audit.write(
             AuditEvent(
                 tenant_id=principal.tenant_id, ts=utcnow(),
                 actor=principal.subject, actor_tier=principal.actor_tier,
-                action_type=ActionType.TOOL_CALL, verb="hitl.sole_author_approval",
+                action_type=ActionType.TOOL_CALL,
+                verb=("hitl.development_posture_approval" if dev_posture
+                      else "hitl.sole_author_approval"),
                 status="ok", run_id=request.run_id,
                 on_behalf_of=principal.on_behalf_of,
                 detail=detail,
@@ -184,6 +221,8 @@ async def respond_to_hitl(
         result["resume_since"] = resume_since
     if sole_author_exempt:
         result["sole_author_exemption"] = True
+    if dev_posture:
+        result["development_posture"] = True
     if ends_exemption:
         result["ends_sole_author_exemption"] = True
     return result
