@@ -287,7 +287,7 @@ LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/run_event_projection.py:1
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/security_events.py:1	detail	The distinct SecurityEvent stream + the audit rollup anchor ([2026] VJS-COUNTY 9).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/security_events.py:146	key	The deterministic rollup root over a contiguous audit-chain segment (D4).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/tool_disclosure.py:176	candidates	The ``tools/list`` payload for one run, in ranked order.
-LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/web_security.py:48	BOLTRIG_TRUST_CF_CONNECTING_IP	The caller's client IP for audit provenance and per-IP rate limits.
+LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/web_security.py:49	BOLTRIG_TRUST_CF_CONNECTING_IP	The caller's client IP for audit provenance and per-IP rate limits.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/knowledge/service.py:36	extra	Scopes derived from the authenticated principal (SEC-KNO-01) - never from caller-supplied ``extra`` keys;
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/models/audit.py:1	boltrig.kernel.audit	The audit event (S6.5).
 LOAD-BEARING	SUBJECT-EXTERNAL	comment	boltrig/models/errors.py:51	hints	enters an append-only hash-chained store;
@@ -1078,8 +1078,11 @@ ORDINARY	NO-SUBJECT	comment	boltrig/kernel/schema_diagnosis.py:145		row it must 
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/schema_diagnosis.py:148		schema_path back into the schema document.
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/tool_disclosure.py:99		0 for a low-consequence verb, 1 for a high-consequence one.
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/web_security.py:1		Edge/web hardening for the kernel FastAPI app (Batch 1 WEB-* + RES-01).
-ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/web_security.py:184		Install the edge/web hardening middleware (WEB-02/03/05/06, RES-01).
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/web_security.py:212		Explicit allowlist only - never '*' with credentials, never reflect.
+ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/web_security.py:268		Install the edge/web hardening middleware (WEB-02/03/05/06, RES-01).
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/web_security.py:297		Explicit allowlist only - never '*' with credentials, never reflect.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/web_security.py:78		DERIVED, never configured (see the UI's mountPrefix): the edge states it per
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/web_security.py:82		the same reason client_ip refuses X-Forwarded-For by default: a header a client
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/web_security.py:84		OWN cookie and never widen anyone else's, so the exposure is slight - but a
 ORDINARY	NO-SUBJECT	comment	boltrig/knowledge/bootstrap.py:23		Default OFF: a manifest without a ``knowledge:`` section must not silently
 ORDINARY	NO-SUBJECT	docstring	boltrig/knowledge/projections.py:1		Rebuildable compiler fanout;
 ORDINARY	NO-SUBJECT	comment	boltrig/memory/adapter.py:134		consequence (not HITL-gated) but always ledgered + audited (SEC-44).
