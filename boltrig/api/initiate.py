@@ -32,6 +32,10 @@ import inspect
 import os
 import sys
 
+from boltrig.api.host_boundary import (
+    HOST_BOUNDARY_ACTOR,
+    write_host_boundary_security_event,
+)
 from boltrig.identity import hash_password, validate_password_strength
 from boltrig.identity.passwords import WeakPassword
 from boltrig.models import (
@@ -214,12 +218,22 @@ async def _run_set_password(email: str, password: str, tenant: str) -> int:
         # the flag - otherwise the operator path out of the clamp would not be one.
         if user.must_change_password:
             await store.upsert_user(replace(user, must_change_password=False))
+        # D6: the actor is the HOST BOUNDARY, never the target user. Writing
+        # actor=email made a shell holder resetting someone's password produce a
+        # row that reads as that person's own act - the one attribution that
+        # matters most here, since the capability is exactly the ability to act
+        # as somebody else.
         await AuditWriter(store).write(
             AuditEvent(
-                tenant_id=tenant, ts=utcnow(), actor=email, actor_tier="human",
+                tenant_id=tenant, ts=utcnow(),
+                actor=HOST_BOUNDARY_ACTOR, actor_tier="host",
                 action_type=ActionType.TOOL_CALL, verb="auth.set_password", status="ok",
+                on_behalf_of=email,
                 detail={"email": email},
             )
+        )
+        await write_host_boundary_security_event(
+            store, tenant=tenant, subject=email, reason="set_password"
         )
         print(f"set-password: password set for '{email}' in tenant '{tenant}'. They can "
               "now log in with BOLTRIG_AUTH_MODE=session.")

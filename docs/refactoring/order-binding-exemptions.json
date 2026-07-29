@@ -28,6 +28,11 @@
       "expires": "2026-11-30",
       "reason": "Not code-testable and correctly so: D4 binds the LIVE Classical Visas tenant - provisioning its delivery data (notification_prefs, bindings, channel) and evidencing a delivery artefact addressed to info@classicalvisas.com by a SELECT on the tenant database. Nothing in this repository can decide what a remote tenant database holds, and a test that claimed to would be the false claim this gate exists to stop. Discharged by the tenant record, not by CI."
     },
+    "OPERATOR-SEAT-001:D8": {
+      "owner": "kernel-maintainers",
+      "expires": "2026-11-30",
+      "reason": "Not code-testable and correctly so, and this one is unbound because it is UNPERFORMED rather than merely unbindable. D8 orders that a control.invitation.create for a second operator-side human be raised and actually put to info@classicalvisas.com on a >=24h window, and it states its own checkable: a SELECT on the Classical Visas database finding either a hitl_responses row from the client, or a hitl_requests row for that verb with (timeout_at - created_at) >= 24h and status='timed_out'. Nothing in this repository can decide what a remote tenant database holds. It is also the directive on which the RESERVED seat-operator question turns - that question becomes arguable only on a record showing D8 satisfied and the client having declined or failed to respond - so a test asserting it discharged would manufacture the very record the court said must be earned. Raising it is an outward-facing act on a live client tenant naming a third party, and is the Principal's to authorise. Discharged by the tenant record, not by CI."
+    },
     "AUDIT-DEPTH-001:D8": {
       "owner": "kernel-maintainers",
       "expires": "2026-11-30",

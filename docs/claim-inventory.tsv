@@ -27,15 +27,17 @@ LOAD-BEARING	NO-SUBJECT	comment	boltrig/api/bootstrap.py:490		audit log is tampe
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/api/chat_cli.py:233		A one-line, user-facing HTTP failure.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/api/chat_cli.py:50		The CLI config file (TOML), or {} when absent;
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/api/fleet_health.py:1		`boltrig fleet-health` - a readiness probe for a process that serves no HTTP.
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/api/initiate.py:139		Audit the owner seed keys-only (D8): the email, never the password.
-LOAD-BEARING	NO-SUBJECT	docstring	boltrig/api/initiate.py:180		Set (or reset) the first-party password of an EXISTING user.
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/api/host_boundary.py:69		addresses in a ledger that is append-only by design.
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/api/initiate.py:143		Audit the owner seed keys-only (D8): the email, never the password.
+LOAD-BEARING	NO-SUBJECT	docstring	boltrig/api/initiate.py:184		Set (or reset) the first-party password of an EXISTING user.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/api/worker.py:82		Start the audit-rollup anchor janitor (COUNTY 9 D4), or None when disabled.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/config/admin.py:75		Surface adapter credential references (never values) for rotation view (US-ADM-03).
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/config/control_compat.py:1		Compatibility mutations routed through the governed ``control.*`` adapter.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/config/control_lifecycle.py:96		Unbind and delete the credential ref registration created, if unshared.
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/config/manifest.py:219		Long-conversation compaction (append-only derived summaries).
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/config/manifest.py:264		Long-conversation compaction knobs (append-only derived summaries).
-LOAD-BEARING	NO-SUBJECT	docstring	boltrig/config/manifest.py:445		One non-negative rate as a float, or None when absent/malformed/negative.
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/config/manifest.py:185		block at all are the same tenant posture, so they cannot resolve differently.
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/config/manifest.py:237		Long-conversation compaction (append-only derived summaries).
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/config/manifest.py:282		Long-conversation compaction knobs (append-only derived summaries).
+LOAD-BEARING	NO-SUBJECT	docstring	boltrig/config/manifest.py:463		One non-negative rate as a float, or None when absent/malformed/negative.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/config/manifest.py:52		A reference to secret material - never the material itself (SEC-04).
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/config/weak_secrets.py:1		One predicate for "this secret is a placeholder, not a secret".
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/config/weak_secrets.py:24		Exact values that are never a real secret.
@@ -148,11 +150,11 @@ LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/dispatch.py:201		Record a secur
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/dispatch.py:238		Announce the pause AND make it durable (decision 0018, Order 2).
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:318		scoped credential reference (the value never enters the run) and
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:397		audit row (actor / workspace / ip / ua).
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:593		minted straight into the credential arg, never into params/events/audit.
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:669		minted straight into the credential arg, never into params/events/audit.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/events.py:36		A tenant-bound relay view for trusted turn-executor integrations.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/held_call.py:54		without guessing.
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/hitl_http.py:115		The four-eyes bootstrap exemption always leaves a flag on the chain:
-LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/hitl_http.py:141		Owner-only, fail-closed answer to a QUESTION request (US-CHAT-12).
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/hitl_http.py:161		The four-eyes bootstrap exemption always leaves a flag on the chain:
+LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/hitl_http.py:192		Owner-only, fail-closed answer to a QUESTION request (US-CHAT-12).
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/pii.py:108		the audit scrubber; at the other five a truthy answer REFUSES.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/kernel/pii.py:131		Return the name of the first identity pattern found, or None.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/kernel/pii.py:25		Secret patterns that must NEVER reach the audit record (K-20).
@@ -178,7 +180,7 @@ LOAD-BEARING	NO-SUBJECT	docstring	boltrig/memory/engine.py:72		Reweight from a u
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/memory/projections.py:1		Kernel-led memory projection fanout.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/models/access.py:100		(fail-closed once past);
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/models/access.py:60		and never stored;
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/models/audit.py:65		never a secret here.
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/models/audit.py:76		never a secret here.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/models/channels.py:80		A verified external sender mapped to an internal identity, within a channel's tenant.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/models/channels.py:96		A durable outbound delivery for a socket-class channel (decision 0003, Phase 2).
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/models/context.py:27		AUTHORIZED the caller's membership every request (fail-closed to None), so it
@@ -232,9 +234,12 @@ LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/adapters/builtin/inbound_webhook
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/adapters/loader.py:1	down	Dynamic adapter loading + hot reload + health (US-ADP-06, P1, NFR-MNT-02).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/addons/__init__.py:158	tool	The HIGHEST consequence any addon reads off ``tool``.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/api/chat_cli.py:1	BOLTRIG_CLI_TOKEN	``boltrig chat`` - the user-facing terminal client.
+LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/api/host_boundary.py:1	actor	Attribution for acts performed from the HOST SHELL ([2026] VJS-CC-BOLTRIG-OPERATOR-SEAT-001, D6).
+LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/api/host_boundary.py:33	subject	Record a host-boundary credential act on the security stream.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/api/initiate.py:1	superadmin	``boltrig initiate`` - seat the founding OWNER ([2026] VJS-COUNTY 7, D7).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/api/logging_config.py:1	LOGGING_CONFIG	One declared logging configuration for every boltrig process.
-LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/config/manifest.py:462	cost.py	One entry of the per-model price table, or None to drop it (FR-COST-04).
+LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/config/author_ratchet.py:40	stays_author	Refuse a crossing DOWN to exactly one active author.
+LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/config/manifest.py:480	cost.py	One entry of the per-model price table, or None to drop it (FR-COST-04).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/emotion/__init__.py:1	boltrig.observability.orb_presence	Boltrig's affective side-channel: a read-only emotion projection over run events.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/authority.py:117	item	Route ``item`` to its department head, or ``None`` if unroutable (SEC-165).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/chat.py:1	queued	The conversational service (Round Two, Epic CONV).
@@ -427,6 +432,7 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/held_call.py:1	approval_ga
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/held_call.py:281	sweep_run_scoped	Retire a finished run's sealed credentials, unless a held write still needs them.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/hitl.py:1	dispatch	Human-in-the-loop management (Epic K).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/hitl_expiry.py:87	transition_work_item_status	Settle the expired request's AWAITING_HUMAN work item at CANCELLED.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/hitl_http.py:96	_approval_display_context	Is this exempted approval the one that ends the exemption? ([2026] VJS-CC-BOLTRIG-OPERATOR-SEAT-001, D4.) The sole-author exemption exists because a one-author tenant cannot satisfy four-eyes.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/hitl_response_auth.py:142	authorize_approval_response	ONE definition of who may lawfully answer an APPROVAL request.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/hitl_response_auth.py:225	approval_response_block	Require an independent, assigned human with the live action grant.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/kernel/mcp.py:1	initialize	The kernel's MCP server face (Round Two, Epic MCP).
@@ -447,7 +453,7 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/memory/pgvector.py:1	VectorMemory
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/memory/vector.py:1	PgVectorMemoryEngine	The native vector Memory Engine reference (MEM-ENG-02).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/models/access.py:1	UserInvitation	Round Four access models: personal access tokens, invitations, settings, sessions (S R4 Ch.4).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/models/access.py:127	credential_refs	A user's TOTP second-factor enrolment state, kept in its OWN table apart from the identity row (like the password credential).
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/models/audit.py:78	AuditEvent	A distinct, tamper-evident (hash-chained) security-signal row ([2026] VJS-COUNTY 9, D3).
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/models/audit.py:89	AuditEvent	A distinct, tamper-evident (hash-chained) security-signal row ([2026] VJS-COUNTY 9, D3).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/models/context.py:1	tenant_id	The invocation context that travels with every kernel call (S7.1).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/models/conversation.py:66	ChatConfig	A DERIVED, append-only compaction record over a conversation's older turns.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/models/errors.py:22	kernel.dispatch._validate	Verb params (or output) did not match the registered JSON Schema (SEC-21).
@@ -565,10 +571,13 @@ ORDINARY	NO-SUBJECT	comment	boltrig/api/codex_trusted.py:108		never carries the 
 ORDINARY	NO-SUBJECT	comment	boltrig/api/codex_trusted.py:78		Lazy imports so the flag-off path never pulls in the infrastructure layer or
 ORDINARY	NO-SUBJECT	comment	boltrig/api/doctor.py:24		three sites cannot disagree about what counts as a placeholder again.
 ORDINARY	NO-SUBJECT	comment	boltrig/api/doctor.py:364		result rather than crashing (P9), so this is drift to report, never a deploy
-ORDINARY	NO-SUBJECT	comment	boltrig/api/initiate.py:103		shell history and usually in a runbook too.
+ORDINARY	NO-SUBJECT	comment	boltrig/api/host_boundary.py:26		Deliberately not an email and not a real user id: it must not collide with any
+ORDINARY	NO-SUBJECT	comment	boltrig/api/host_boundary.py:29		box cannot name them more precisely than this.
+ORDINARY	NO-SUBJECT	comment	boltrig/api/initiate.py:107		shell history and usually in a runbook too.
+ORDINARY	NO-SUBJECT	comment	boltrig/api/initiate.py:221		D6: the actor is the HOST BOUNDARY, never the target user.
 ORDINARY	NO-SUBJECT	docstring	boltrig/api/logging_config.py:36		The numeric level for a configured name, falling back to INFO.
-ORDINARY	NO-SUBJECT	comment	boltrig/api/mint_token.py:72		user's own allow set.
-ORDINARY	NO-SUBJECT	comment	boltrig/api/mint_token.py:86		trivially capturable (`...
+ORDINARY	NO-SUBJECT	comment	boltrig/api/mint_token.py:74		user's own allow set.
+ORDINARY	NO-SUBJECT	comment	boltrig/api/mint_token.py:98		trivially capturable (`...
 ORDINARY	NO-SUBJECT	docstring	boltrig/api/readiness.py:1		Bounded, fail-closed ``/readyz`` checks for durable dependencies, governed control registration, and enabled runtime seams.
 ORDINARY	NO-SUBJECT	comment	boltrig/api/readiness.py:133		cannot amplify into unbounded Herdr subprocesses or dependency probes.
 ORDINARY	NO-SUBJECT	comment	boltrig/api/readiness.py:27		The tools /readyz requires.
@@ -582,26 +591,26 @@ ORDINARY	NO-SUBJECT	comment	boltrig/config/control_approval.py:148		internal-egr
 ORDINARY	NO-SUBJECT	comment	boltrig/config/control_approval.py:149		registration is inert until the SEC-22 review gate.
 ORDINARY	NO-SUBJECT	comment	boltrig/config/control_lifecycle.py:89		stale reference cannot execute (SEC-22, mirrors review_and_activate).
 ORDINARY	NO-SUBJECT	comment	boltrig/config/control_mcp.py:80		can never be rehydrated.
-ORDINARY	NO-SUBJECT	comment	boltrig/config/control_operations.py:181		A store row this kernel never rebuilt (another replica's
-ORDINARY	NO-SUBJECT	comment	boltrig/config/control_operations.py:184		otherwise - never pend or fail opaquely on a row that exists.
-ORDINARY	NO-SUBJECT	comment	boltrig/config/control_operations.py:204		dispatch uses (SEC-04/05);
+ORDINARY	NO-SUBJECT	comment	boltrig/config/control_operations.py:182		A store row this kernel never rebuilt (another replica's
+ORDINARY	NO-SUBJECT	comment	boltrig/config/control_operations.py:185		otherwise - never pend or fail opaquely on a row that exists.
+ORDINARY	NO-SUBJECT	comment	boltrig/config/control_operations.py:205		dispatch uses (SEC-04/05);
 ORDINARY	NO-SUBJECT	docstring	boltrig/config/control_rehydrate.py:30		The persisted consumer spec: ``{"url": str|None, "allow_internal": bool}``.
 ORDINARY	NO-SUBJECT	comment	boltrig/config/control_specs.py:204		inert until the SEC-22 review gate, so the flag is always
 ORDINARY	NO-SUBJECT	comment	boltrig/config/control_specs.py:205		human-approved before any call.
 ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest.py:112		Compatibility default for old manifests.
 ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest.py:138		profiles.
-ORDINARY	NO-SUBJECT	docstring	boltrig/config/manifest.py:172		Human-in-the-loop routing and the verbs that always block (S8, P5).
-ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest.py:213		seconds while a run is producing nothing, so a slow-but-alive run never trips a
-ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest.py:226		conversations are never compacted.
-ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest.py:236		unbounded scan is impossible).
-ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest.py:237		caps: a manifest may only LOWER them (a smaller, more conservative page), never
-ORDINARY	NO-SUBJECT	docstring	boltrig/config/manifest.py:326		Verbs that always require human approval (P5) - the Kernel's gate.
-ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest.py:416		selection never reads this field - so a deployment that sets it would
-ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest.py:507		rather than failing load, so a bad price never blocks boot (the model just
-ORDINARY	NO-SUBJECT	docstring	boltrig/config/manifest.py:617		Resolve an attachment cap: a manifest may only TIGHTEN it, never loosen it ([2026] VJS-COUNTY 3, D2).
-ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest.py:652		turns verbatim, never grow the verbatim window past the code ceiling.
-ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest.py:661		default/ceiling page, never grow a page past the code ceiling.
-ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest.py:866		Plan + enforce the mass-deactivation guard BEFORE any write (fail-closed): a
+ORDINARY	NO-SUBJECT	docstring	boltrig/config/manifest.py:190		Human-in-the-loop routing and the verbs that always block (S8, P5).
+ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest.py:231		seconds while a run is producing nothing, so a slow-but-alive run never trips a
+ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest.py:244		conversations are never compacted.
+ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest.py:254		unbounded scan is impossible).
+ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest.py:255		caps: a manifest may only LOWER them (a smaller, more conservative page), never
+ORDINARY	NO-SUBJECT	docstring	boltrig/config/manifest.py:344		Verbs that always require human approval (P5) - the Kernel's gate.
+ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest.py:434		selection never reads this field - so a deployment that sets it would
+ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest.py:525		rather than failing load, so a bad price never blocks boot (the model just
+ORDINARY	NO-SUBJECT	docstring	boltrig/config/manifest.py:637		Resolve an attachment cap: a manifest may only TIGHTEN it, never loosen it ([2026] VJS-COUNTY 3, D2).
+ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest.py:672		turns verbatim, never grow the verbatim window past the code ceiling.
+ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest.py:681		default/ceiling page, never grow a page past the code ceiling.
+ORDINARY	NO-SUBJECT	comment	boltrig/config/manifest.py:886		Plan + enforce the mass-deactivation guard BEFORE any write (fail-closed): a
 ORDINARY	NO-SUBJECT	comment	boltrig/config/settings.py:43		the Codex execution stack is never constructed (a total no-op).
 ORDINARY	NO-SUBJECT	comment	boltrig/config/settings.py:48		app.state.platform, but nothing calls it yet: wiring an admit() into the live
 ORDINARY	NO-SUBJECT	comment	boltrig/config/settings.py:52		exists for and structurally cannot catch: it finds names nothing REACHES, and
@@ -1013,9 +1022,9 @@ ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:373		keys (K-20), never t
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:475		1.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:501		5.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:507		call the adapter provably never saw, and the retry that retry_after
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:541		invalid output) must release the claim like the gate above, never park
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:548		raises PendingHuman - it never touches an adapter/agent.
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:604		reference fails closed (CredentialResolution).
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:547		invalid output) must release the claim like the gate above, never park
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:554		raises PendingHuman - it never touches an adapter/agent.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:680		reference fails closed (CredentialResolution).
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/events.py:82		list index would shift on every trim;
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/events.py:87		resumed run never re-uses a seq a live cursor already passed.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/hands_registry.py:30		A command the executor never claims (offline) or never completes (crashed
@@ -1032,8 +1041,10 @@ ORDINARY	NO-SUBJECT	comment	boltrig/kernel/hitl.py:295		expired on the spot and 
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/hitl.py:360		A stale approval can never execute (SEC-14): the human approved in
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/hitl_expiry.py:119		Drop the seal of a write held by a request that has just timed out.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/hitl_expiry.py:53		default (never a boot crash, P9).
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/hitl_http.py:163		Owner = the run's owning work item's on_behalf_of;
-ORDINARY	NO-SUBJECT	comment	boltrig/kernel/hitl_http.py:164		write when ownership cannot be confirmed.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/hitl_http.py:126		An approval whose context is not canonical JSON cannot be raised by
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/hitl_http.py:127		the gate (it refuses at creation), so this is a legacy or hand-made
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/hitl_http.py:214		Owner = the run's owning work item's on_behalf_of;
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/hitl_http.py:215		write when ownership cannot be confirmed.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/mcp.py:212		(list_verbs, get_tenant_permissions, get_verb).
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/mcp.py:214		would see a null GUC and fail closed on every tool list/call.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/mcp.py:63		The run that DELEGATED to this one.
@@ -1262,8 +1273,8 @@ ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/mcp_transport.py:109	egress.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/mcp_transport.py:85	allow_internal	One MCP server's HTTP transport: the pinned client, header conventions, the lazy handshake, the server-issued session id, and SSE decoding.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/api/bootstrap.py:320	held_write_is_waiting	The answer bridge's third route: replay a write held on THIS run.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/api/codex_execution.py:1	shadow_admit	Flag-gated composition of the Codex read-only execution stack.
-ORDINARY	SUBJECT-REACHED	comment	boltrig/config/manifest.py:205	_tighten_cap	cap (min(default, manifest)), never loosen it (see ``_tighten_cap`` below).
-ORDINARY	SUBJECT-REACHED	docstring	boltrig/config/manifest.py:244	_parse_chat	Bare chat-turn authority ([2026] VJS-COUNTY 1): which skill set a bare chat turn spawns with, per caller role.
+ORDINARY	SUBJECT-REACHED	comment	boltrig/config/manifest.py:223	_tighten_cap	cap (min(default, manifest)), never loosen it (see ``_tighten_cap`` below).
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/config/manifest.py:262	_parse_chat	Bare chat-turn authority ([2026] VJS-COUNTY 1): which skill set a bare chat turn spawns with, per caller role.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/config/manifest_reconcile.py:88	BulkCapabilityDeactivationError	Compute the plan and enforce the mass-deactivation guard BEFORE any write.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/config/weak_secrets.py:52	is_weak_secret	True when ``value`` is absent, a known placeholder, or obviously unfilled.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/emotion/engine.py:1	now	The pure affective engine: emotions, needs, mood and tension over time (EMO-3).
