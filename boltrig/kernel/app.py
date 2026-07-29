@@ -122,7 +122,14 @@ def _error_envelope(e: BoltrigError) -> dict:
     """The one canonical kernel error body: a 403 is a denial, anything else is
     an error. Every transport surface returns this shape so a client parses one
     envelope, never per-route variants."""
-    return {"status": "denied" if e.status_code == 403 else "error", "reason": e.reason}
+    body = {"status": "denied" if e.status_code == 403 else "error", "reason": e.reason}
+    # A refusal that does not say what WOULD have been accepted cannot be acted
+    # on. Only SchemaValidationError carries this, and only outward: its
+    # SchemaValidationError.audit_detail stays value-free for the ledger.
+    caller = getattr(e, "caller_detail", None)
+    if callable(caller):
+        body.update(caller())
+    return body
 
 
 def _mcp_wire_response(body: dict, result: dict) -> Response:

@@ -42,10 +42,19 @@ class SchemaValidationError(BoltrigError):
         errors: list[dict[str, Any]] | None = None,
         *,
         schema_digest: str | None = None,
+        hints: list[dict[str, Any]] | None = None,
     ) -> None:
         super().__init__(message)
         self.errors = errors or []
         self.schema_digest = schema_digest
+        # CALLER-ONLY, and never audited. `errors` is value-free because it
+        # enters an append-only hash-chained store; `hints` answers the caller's
+        # different question - what should I have sent - and is derived from the
+        # schema at the moment of failure. That is exactly the disposal the
+        # schema-validation ledger order prescribes for everything outside the
+        # ledger's own narrow admission rule: "derived at read time from the
+        # system of record, pinned by a digest". A live response is not a store.
+        self.hints = hints or []
 
     def audit_detail(self) -> dict[str, Any]:
         """The audit-row fields this failure contributes. Value-free by construction.
@@ -53,11 +62,33 @@ class SchemaValidationError(BoltrigError):
         ``truncated`` is present only when findings were dropped, so its absence means the
         list is complete rather than merely short.
         """
+        # ``hints`` is deliberately ABSENT here: it carries schema VALUES which
+        # VJS-CC-BOLTRIG-SCHEMA-VALIDATION-LEDGER-001 forbids in the ledger.
+        # ``caller_detail`` returns them instead.
         detail: dict[str, Any] = {"schema_errors": self.errors}
         if self.schema_digest is not None:
             detail["schema_digest"] = self.schema_digest
         if len(self.errors) >= 10:
             detail["truncated"] = True
+        return detail
+
+    def caller_detail(self) -> dict[str, Any]:
+        """What the CALLER is told: enough to correct the call and retry.
+
+        Returned, never stored. Before this existed the caller received only
+        ``{"status":"error","reason":"schema_invalid"}`` - which names the
+        failure class and nothing else - so an agent could not tell WHICH field
+        was wrong or what shape it wanted. Observed on Classical Visas
+        2026-07-29: a model sent ``entities`` as a string where the schema wants
+        an array and retried the identical wrong call four times, because the
+        answer it got back was the same opaque word each time. A refusal that
+        does not say what would have been accepted cannot be acted on.
+        """
+        detail: dict[str, Any] = {}
+        if self.hints:
+            detail["schema_hints"] = self.hints
+        if self.schema_digest is not None:
+            detail["schema_digest"] = self.schema_digest
         return detail
 
 

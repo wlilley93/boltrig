@@ -291,17 +291,17 @@
       "expires": "2026-12-31"
     },
     "boltrig/kernel/app.py": {
-      "max_file_lines": 817,
+      "max_file_lines": 824,
       "max_function_lines": 587,
       "over_limit_functions": [
         {
           "name": "create_app",
-          "line": 231,
+          "line": 238,
           "lines": 587
         }
       ],
       "owner": "kernel-maintainers",
-      "reason": "Extract application middleware and route-family wiring while preserving dependency ownership and ordering. Parity passthrough (2026): ChatBody carries the optional on_behalf_bearer forwarded to the spawner. SEC-186 (2026-07-25): the /v1/invoke door refuses a body-supplied run id belonging to another user; the predicate itself lives in run_access.py, so only the 5-line guard is here. 2026-07-28 (exactly once): 860->817 and create_app 592->587, both LOWERED while ADDING ChatBody.idempotency_key. The chat door was the only caller surface with no replay defence - InvokeBody has carried a key since SEC-15 - and a client retry loop on the live tenant turned one message into seven agent_spawn rows. The room came from moving the four request models into kernel/app_bodies.py: they are the door's PUBLIC CONTRACT, they grow whenever the product does, and reading them should not mean paging through route wiring.",
+      "reason": "Extract application middleware and route-family wiring while preserving dependency ownership and ordering. Parity passthrough (2026): ChatBody carries the optional on_behalf_bearer forwarded to the spawner. SEC-186 (2026-07-25): the /v1/invoke door refuses a body-supplied run id belonging to another user; the predicate itself lives in run_access.py, so only the 5-line guard is here. 2026-07-28 (exactly once): 860->817 and create_app 592->587, both LOWERED while ADDING ChatBody.idempotency_key. The chat door was the only caller surface with no replay defence - InvokeBody has carried a key since SEC-15 - and a client retry loop on the live tenant turned one message into seven agent_spawn rows. The room came from moving the four request models into kernel/app_bodies.py: they are the door's PUBLIC CONTRACT, they grow whenever the product does, and reading them should not mean paging through route wiring. 2026-07-29: +7 lines and create_app shifts 231->238 (no change inside it) for the caller-facing schema hint - a failed verb call now returns which field was wrong and what shape it wanted, instead of the bare word schema_invalid that made a model retry the identical call four times.",
       "expires": "2026-12-31"
     },
     "boltrig/kernel/channel_routes.py": {
@@ -324,22 +324,22 @@
       "expires": "2026-12-31"
     },
     "boltrig/kernel/dispatch.py": {
-      "max_file_lines": 715,
+      "max_file_lines": 721,
       "max_function_lines": 118,
       "over_limit_functions": [
         {
           "name": "Dispatcher.invoke",
-          "line": 348,
+          "line": 354,
           "lines": 114
         },
         {
           "name": "Dispatcher._invoke_inner",
-          "line": 463,
+          "line": 469,
           "lines": 118
         }
       ],
       "owner": "kernel-maintainers",
-      "reason": "Extract dispatch phases behind private typed helpers while retaining the single governed chokepoint. SEC-181 secure input added the run-scoped param resolution at the credential stage and the secure-question marker. Parity passthrough (2026): _execute_adapter overrides the static adapter credential with a per-run sealed bearer when present. 2026-07-25: +17 lines for _emit_pause, which publishes a HITL pause to the run that DELEGATED to this one as well as to this one. A chat turn never calls a verb itself, so the dispatch runs under the child run id while the client follows the root stream - the pause landed on a stream nobody follows and a write held for approval was invisible to the person who asked. Extracting it LOWERED Dispatcher.invoke from 116 to 113 lines, so the function ratchet ratchets down with this change. 2026-07-25: +25 lines to enforce the rate limit BEFORE the approval gate on a leg carrying an approval id, so a throttle trip cannot burn a single-use human authorisation; most of it is the comment recording which pre-execution refusals are still NOT approval-safe. 2026-07-26 (decision 0018): a write held for human approval is now RECORDED at the pause - a human approved opbox.add_comment in a chat turn, the request sat ANSWERED forever and the comment was never posted, because nothing anywhere held the CALL. The pause branch now calls _hold_pause, an EXTRACTED helper that emits the pause and writes the durable held-call record, so Dispatcher.invoke stays at 113 lines and neither over-limit function grew. 2026-07-27 (schema-validation ledger order): +1 line net on Dispatcher.invoke and -1 on _invoke_inner, which ratchets the second one DOWN. The failure detail now carries the params key names and, for a schema failure, the value-free {schema_path, keyword} pairs and a schema digest. Both additions were extracted rather than inlined: _schema_detail keeps the taxonomy branch out of the chokepoint's one error handler, and _reject_if_invalid gives input and output validation ONE seam, which is the thing whose absence let the output twin be forgotten by the filing in the first place. 2026-07-29: +76 file lines, and _invoke_inner 110->118 for [2026] VJS-CC-BOLTRIG-OPERATOR-SEAT-001 D3 - the 1<->2 author-boundary crossing is announced from the ONE chokepoint both agent and route calls pass. Only 8 of those lines are inside _invoke_inner (one guarded count before execution, one call after it); the other 68 are two new private helpers and their reasoning, deliberately placed outside the long function rather than in it.",
+      "reason": "Extract dispatch phases behind private typed helpers while retaining the single governed chokepoint. SEC-181 secure input added the run-scoped param resolution at the credential stage and the secure-question marker. Parity passthrough (2026): _execute_adapter overrides the static adapter credential with a per-run sealed bearer when present. 2026-07-25: +17 lines for _emit_pause, which publishes a HITL pause to the run that DELEGATED to this one as well as to this one. A chat turn never calls a verb itself, so the dispatch runs under the child run id while the client follows the root stream - the pause landed on a stream nobody follows and a write held for approval was invisible to the person who asked. Extracting it LOWERED Dispatcher.invoke from 116 to 113 lines, so the function ratchet ratchets down with this change. 2026-07-25: +25 lines to enforce the rate limit BEFORE the approval gate on a leg carrying an approval id, so a throttle trip cannot burn a single-use human authorisation; most of it is the comment recording which pre-execution refusals are still NOT approval-safe. 2026-07-26 (decision 0018): a write held for human approval is now RECORDED at the pause - a human approved opbox.add_comment in a chat turn, the request sat ANSWERED forever and the comment was never posted, because nothing anywhere held the CALL. The pause branch now calls _hold_pause, an EXTRACTED helper that emits the pause and writes the durable held-call record, so Dispatcher.invoke stays at 113 lines and neither over-limit function grew. 2026-07-27 (schema-validation ledger order): +1 line net on Dispatcher.invoke and -1 on _invoke_inner, which ratchets the second one DOWN. The failure detail now carries the params key names and, for a schema failure, the value-free {schema_path, keyword} pairs and a schema digest. Both additions were extracted rather than inlined: _schema_detail keeps the taxonomy branch out of the chokepoint's one error handler, and _reject_if_invalid gives input and output validation ONE seam, which is the thing whose absence let the output twin be forgotten by the filing in the first place. 2026-07-29: +76 file lines, and _invoke_inner 110->118 for [2026] VJS-CC-BOLTRIG-OPERATOR-SEAT-001 D3 - the 1<->2 author-boundary crossing is announced from the ONE chokepoint both agent and route calls pass. Only 8 of those lines are inside _invoke_inner (one guarded count before execution, one call after it); the other 68 are two new private helpers and their reasoning, deliberately placed outside the long function rather than in it. 2026-07-29: +6 lines, all in _reject_if_invalid and its imports; the two long functions are unchanged in length and only shift line numbers for the caller-facing schema hint - a failed verb call now returns which field was wrong and what shape it wanted, instead of the bare word schema_invalid that made a model retry the identical call four times.",
       "expires": "2026-12-31"
     },
     "boltrig/kernel/memory_routes.py": {
