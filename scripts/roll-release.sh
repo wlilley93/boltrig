@@ -126,6 +126,18 @@ PY
   b=$(ssh "$H" "sha256sum $remote" | cut -d" " -f1)
   [ "$a" = "$b" ] || die "propagated $rel but the box checksum differs ($a vs $b)"
   echo "  [ok] box matches source (sha256 ${a:0:12})"
+
+  # SWEEP THE BOX'S OWN BACKUPS. The LOCAL backup is removed above once the diff
+  # is asserted, but the REMOTE one never was - so every roll left a file behind
+  # forever. By 2026-07-29 each tenant directory held a dozen-plus
+  # `.bak-roll-*`, the real config was hard to pick out of the noise, and anyone
+  # copying a tenant dir as a template for a new stack inherited the confusion.
+  #
+  # Keep the most recent 3: enough to reconstruct what a roll changed, bounded
+  # so it cannot grow without limit. The SOURCE is tracked in git and is the
+  # authority for the pin, so these are a convenience, never the record - which
+  # is exactly why they may be swept without ceremony.
+  ssh "$H" "ls -1t ${remote}.bak-roll-* 2>/dev/null | tail -n +4 | xargs -r rm -f" || true
 }
 
 bring_up() { # $1=overlay $2=project
