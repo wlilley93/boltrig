@@ -55,6 +55,7 @@ from .schema_diagnosis import (
     MAX_SCHEMA_PATH_DEPTH,
     MAX_SCHEMA_PATH_SEGMENT,
     SCHEMA_KEYWORDS,
+    caller_hints,
     schema_digest,
 )
 from .credentials import CredentialResolver
@@ -136,7 +137,12 @@ def _reject_if_invalid(
     errors = _validate(schema or {}, instance)
     if errors:
         raise SchemaValidationError(
-            f"invalid {kind} for '{verb}'", errors, schema_digest=schema_digest(schema)
+            f"invalid {kind} for '{verb}'", errors,
+            schema_digest=schema_digest(schema),
+            # Derived in schema_diagnosis, NOT here: this module is on the audit
+            # path and is under a module-wide ban on instance-derived reads, so
+            # the caller's hint is built where it cannot contaminate a row.
+            hints=caller_hints(schema or {}, errors),
         )
 
 

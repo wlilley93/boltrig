@@ -62,8 +62,8 @@ SCHEMA_KEYWORDS = frozenset({
     "uniqueItems",
 })
 
-# Bounds. An append-only store cannot be trimmed later, so the ceiling is applied at the one
-# moment it can be: before the row is written.
+# Bounds on what ``write`` may store. An append-only store cannot be trimmed
+# later, so the ceiling is applied at the one moment it can be: before the row is written.
 MAX_SCHEMA_ERRORS = 10
 MAX_SCHEMA_PATH_DEPTH = 10
 MAX_SCHEMA_PATH_SEGMENT = 64
@@ -129,3 +129,89 @@ def diagnose(detail: dict[str, Any] | None, schema: dict[str, Any] | None) -> di
         "errors": detail.get("schema_errors") or [],
         "truncated": bool(detail.get("truncated")),
     }
+
+
+# --- the CALLER's half: what would have been accepted -----------------------
+#
+# ``audit_detail`` implements VJS-CC-BOLTRIG-SCHEMA-VALIDATION-LEDGER-001, which
+# settles what may enter the append-only ledger.
+# The caller asks a different question - what should I have sent - which that
+# order leaves to be "derived at read time from the system of record, pinned by
+# a digest". ``caller_detail`` is that derivation.
+#
+# ``caller_hints`` lives here rather than in ``dispatch`` because
+# dispatch is on the audit path, where tests/security/test_schema_validation_ledger
+# holds a module-wide ban on instance-derived reads. Building the hint beside the
+# row it must never join would put the two provenances one typo apart.
+#
+# ``caller_hints`` therefore derives from the SCHEMA alone, walking a recorded
+# schema_path back into the schema document. It never reads the instance - not
+# its values, and not its KEYS, which under additionalProperties are
+# caller-supplied and are why absolute_path was refused for the ledger.
+
+HINT_KEYWORDS = frozenset({
+    "type", "enum", "required", "format",
+    "minimum", "maximum", "minItems", "maxItems", "minLength", "maxLength",
+})
+MAX_HINT_ITEMS = 20
+
+
+def _walk(schema: dict[str, Any], path: list[str]) -> Any:
+    """Follow a recorded schema_path back into the schema document, or None."""
+    node: Any = schema
+    for seg in path:
+        if isinstance(node, dict) and seg in node:
+            node = node[seg]
+        elif isinstance(node, list) and seg.isdigit() and int(seg) < len(node):
+            node = node[int(seg)]
+        else:
+            return None
+    return node
+
+
+def _field_of(path: list[str]) -> str:
+    """The failing field's NAME, taken from the schema path.
+
+    The segment after the last `properties` is a property name declared by the
+    schema author - never an instance key.
+    """
+    if "properties" in path:
+        idx = len(path) - 1 - path[::-1].index("properties")
+        if idx + 1 < len(path):
+            return path[idx + 1]
+    return "(root)"
+
+
+def _bounded(value: Any) -> Any:
+    if isinstance(value, list):
+        return [str(v)[:MAX_SCHEMA_PATH_SEGMENT] for v in value[:MAX_HINT_ITEMS]]
+    if isinstance(value, bool) or isinstance(value, (int, float)):
+        return value
+    if isinstance(value, str):
+        return value[:MAX_SCHEMA_PATH_SEGMENT]
+    return None
+
+
+def caller_hints(
+    schema: dict[str, Any], findings: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Turn value-free findings into something a caller can act on.
+
+    Before this existed a caller got `{"status":"error","reason":"schema_invalid"}`
+    and nothing more - not the field, not the shape. Observed on Classical Visas
+    2026-07-29: a model sent `entities` as a string where the schema wants an
+    array and retried the identical call four times, because the answer was the
+    same opaque word each time. A refusal that cannot be acted on is not a
+    control, it is a wall.
+    """
+    hints: list[dict[str, Any]] = []
+    for finding in findings:
+        path = [str(p) for p in (finding.get("schema_path") or [])]
+        keyword = str(finding.get("keyword") or "")
+        hint: dict[str, Any] = {"field": _field_of(path), "keyword": keyword}
+        if keyword in HINT_KEYWORDS:
+            expected = _bounded(_walk(schema, path))
+            if expected is not None:
+                hint["expected"] = expected
+        hints.append(hint)
+    return hints
