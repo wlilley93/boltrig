@@ -57,6 +57,12 @@ class Principal:
     # principal builds so the enriched audit row carries ip/ua.
     ip_address: str | None = None
     user_agent: str | None = None
+    # HOW this caller authenticated, as opposed to `actor_tier`, which is the
+    # authority they act with. The two are not the same question and conflating
+    # them is what let a machine bearer clear a control approval; the full
+    # reasoning lives with the concept, in `config/dev_posture.py`. Defaults to
+    # "machine" so an unlabelled resolver is refused, never admitted.
+    credential_kind: str = "machine"
 
     def context(
         self, *, run_id=None, parent_run_id=None, depth=0, skills=(),
@@ -181,6 +187,7 @@ async def _dev_principal(request: Request) -> Principal:
         actor_tier=h.get("x-boltrig-tier", "human"),
         on_behalf_of=h.get("x-boltrig-obo"),
         scope=scope,
+        credential_kind="dev-header",  # stands in for an interactive session
         # The dev resolver simulates the authenticated session via headers; the
         # active workspace is part of that session. Without it a codex-routed turn
         # has no run+workspace scope and the read-only Codex phase degrades

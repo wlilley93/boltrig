@@ -14,20 +14,34 @@ WHAT IT DOES NOT DO, and these are load-bearing:
     fingerprinted, bound to its verb, and answered by a named human. The record
     is identical to any other approval except that it carries a flag saying
     nobody independent looked.
-  * It does not admit a non-human approver. ``actor_tier != "human"`` still
-    refuses first, so an agent cannot clear its own work.
+  * It does not admit a non-human approver. This is enforced on the CREDENTIAL
+    CLASS (``Principal.credential_kind``), not on ``actor_tier``: a PAT is
+    stamped ``actor_tier="human"`` because it carries its owner's authority, and
+    reading that as a humanity check let a machine bearer clear its own control
+    approval on a live client tenant. The claim is now true because a different
+    thing is checked, not because the old check was restated more firmly.
   * It does not touch grants. A superadmin who lacks the verb's grant is still
     refused - the posture lifts independence, never authority.
   * It does not reach outside ``control.*``. Business verbs are unaffected.
   * It does not lower any consequence. A HIGH verb still parks for a human; the
     posture only changes WHICH human may answer.
 
-THE TWO CONDITIONS. A declared flag alone would let the party four-eyes
-constrains remove their own constraint, so the posture also requires an OBSERVED
-fact the operator cannot assert away: no production signal. This mirrors
-``fleet/codex_trusted_wall.require_codex_trusted_posture``, which the court
-approved for a comparable relaxation - an explicit off-by-default flag AND a
-production refusal, under both of its postures.
+THE CONDITIONS, and the ruling that fixed them. A declared flag alone would let
+the party four-eyes constrains remove their own constraint, so the posture also
+requires facts the operator cannot assert away. The first version required only
+"no production signal", and [2026] VJS-CC-BOLTRIG-DEVELOPMENT-POSTURE-001 refused
+it as shipped on three grounds now answered here:
+
+  D5  the absence of a production signal is not evidence of development - four
+      unset variables permitted on every unconfigured environment - so an
+      AFFIRMATIVE development signal is required.
+  D2  ``require_codex_trusted_posture``, the precedent this was modelled on, has
+      TWO limbs: no production signal AND no real ingress posture. Only the first
+      was reproduced, and the dropped limb was the one that would have refused
+      the tenant it was actually declared on.
+  D3  a relief may suspend independence only where there is no party for
+      independence to protect, so the declaration names the authors it covers and
+      lapses when anyone else appears.
 
 AND IT EXPIRES. ``expires_at`` is mandatory. A development posture with no end
 is not a posture, it is a permanent condition nobody re-examines; the whole
@@ -44,8 +58,15 @@ person - so a party who was not asked can always see what was done, and when.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
+
+
+# The credential classes that mean a person authenticated at a door. A PAT is
+# excluded on purpose: it carries its owner's authority but nobody is present
+# (D4). "machine" is the Principal default, so an unlabelled resolver is refused.
+_INTERACTIVE_CREDENTIALS = frozenset({"session", "federated", "dev-header"})
 
 
 @dataclass(frozen=True)
@@ -56,6 +77,48 @@ class DevelopmentPosture:
     expires_at: datetime | None = None
     declared_by: str = ""
     reason: str = ""
+    # The active author-tier identities this declaration was made in respect of
+    # (D3). The posture lapses the moment an author appears who is not named
+    # here, mirroring how _sole_active_author lapses when a second author exists.
+    # Empty means the declaration covers nobody, which refuses everything.
+    covers: tuple[str, ...] = ()
+
+
+# The refusals, as a named table rather than inline in the function. Each is the
+# sentence an operator reads when the posture does NOT apply, so they are the
+# most-read prose in this module and deserve to be reviewable in one place - and
+# it keeps posture_block a readable sequence of conditions rather than a wall.
+_R_NONE = "no development posture is declared for this tenant"
+_R_PRODUCTION = (
+    "a production signal is present ({signal}); the development posture never "
+    "applies in production, whatever the manifest declares"
+)
+_R_UNDECLARED_ENV = (
+    "the environment declares neither development nor production; the development "
+    "posture requires an affirmative development signal (ENV / BOLTRIG_ENV / "
+    "APP_ENV = dev|development|local|test), because the absence of a production "
+    "signal is not evidence of anything"
+)
+_R_INGRESS = (
+    "a real ingress posture is configured (OIDC / Cloudflare Access / session "
+    "login); a tenant with real users at a real door is in service, whatever the "
+    "manifest declares"
+)
+_R_UNBOUNDED = "the development posture has no expires_at; an unbounded posture is refused"
+_R_EXPIRED = "the development posture expired at {when}"
+_R_MACHINE = (
+    "the development posture requires a person at a door, and this caller "
+    "authenticated with a '{kind}' credential; suspending the independence rule "
+    "for a machine bearer would leave nobody in the loop at all, not merely "
+    "nobody independent"
+)
+_R_ROLE = "the development posture admits superadmin only, not '{role}'"
+_R_VERB = "the development posture covers control.* only, not '{verb}'"
+_R_UNCOVERED = (
+    "the development posture does not cover every active author on this tenant: "
+    "{who}. An author it does not name is a party the independence rule exists to "
+    "protect, so the posture has lapsed"
+)
 
 
 class DevelopmentPostureError(RuntimeError):
@@ -67,6 +130,10 @@ def posture_block(
     *,
     now: datetime,
     production_signal: str | None,
+    development_signal: str | None,
+    real_ingress: bool,
+    credential_kind: str,
+    active_author_ids: Sequence[str],
     verb: str | None,
     subject_role: str,
 ) -> str | None:
@@ -76,31 +143,51 @@ def posture_block(
     Returning a REASON rather than a bool is deliberate: a caller that silently
     got False could not tell "no posture declared" from "declared but this is
     production", and those want very different responses from an operator.
+
+    EVERY CONDITION IS A PARAMETER, none is read from the environment here. That
+    is what makes each one testable in isolation, and it means adding a condition
+    breaks every call site until it is supplied, rather than defaulting to
+    permissive at the one caller nobody updated.
     """
     if posture is None or not posture.enabled:
-        return "no development posture is declared for this tenant"
+        return _R_NONE
 
-    # The observed condition, checked BEFORE the declared one. A tenant that
-    # says it is in development and also says it is production is not a tenant
-    # whose own declaration should be trusted to break the tie.
+    # The observed condition, checked BEFORE the declared one. A tenant that says
+    # it is in development and also says it is production is not one whose own
+    # declaration should be trusted to break the tie.
     if production_signal is not None:
-        return (
-            f"a production signal is present ({production_signal}); the development "
-            "posture never applies in production, whatever the manifest declares"
-        )
+        return _R_PRODUCTION.format(signal=production_signal)
+
+    # D5. Absence of a production signal is not evidence of development.
+    if development_signal is None:
+        return _R_UNDECLARED_ENV
+
+    # D2. The limb this fence dropped - and the one that would have refused the
+    # tenant it was actually declared on.
+    if real_ingress:
+        return _R_INGRESS
 
     if posture.expires_at is None:
-        return "the development posture has no expires_at; an unbounded posture is refused"
+        return _R_UNBOUNDED
     if posture.expires_at <= now:
-        return f"the development posture expired at {posture.expires_at.isoformat()}"
+        return _R_EXPIRED.format(when=posture.expires_at.isoformat())
 
-    # Only the tenant's highest tier. `admin` is a role a CLIENT is routinely
-    # given so they have authority over their own data; letting it self-approve
-    # would hand the relief to the very party four-eyes protects.
+    # D4. The credential CLASS, never `actor_tier` - see the module docstring.
+    if credential_kind not in _INTERACTIVE_CREDENTIALS:
+        return _R_MACHINE.format(kind=credential_kind)
+
+    # `admin` is a role a CLIENT is routinely given over their own data; admitting
+    # it would hand the relief to the very party four-eyes protects.
     if subject_role != "superadmin":
-        return f"the development posture admits superadmin only, not '{subject_role}'"
+        return _R_ROLE.format(role=subject_role)
 
     if not (verb or "").startswith("control."):
-        return f"the development posture covers control.* only, not '{verb}'"
+        return _R_VERB.format(verb=verb)
+
+    # D3, last because it is the most specific: an author the declaration does not
+    # name is a party the independence rule exists to protect.
+    uncovered = sorted(a for a in active_author_ids if a not in set(posture.covers))
+    if uncovered:
+        return _R_UNCOVERED.format(who=", ".join(uncovered))
 
     return None

@@ -610,10 +610,11 @@ def _parse_adapter(raw: Mapping[str, Any]) -> AdapterConfig:
 def _parse_development_posture(raw: Mapping[str, Any]) -> DevelopmentPosture:
     """Parse ``development_posture`` into a ``dev_posture.DevelopmentPosture``.
 
-    An absent block yields ``DevelopmentPosture()`` (enabled False), and a
-    malformed or absent ``expires_at`` yields ``expires_at=None``, which
-    ``dev_posture.posture_block`` refuses: the failure mode of a bad date must
-    be full four-eyes, never an unbounded suspension of it.
+    An absent block yields ``DevelopmentPosture()`` (enabled False); a malformed
+    or absent ``expires_at`` yields ``expires_at=None`` and a malformed ``covers``
+    yields ``()``. ``dev_posture.posture_block`` refuses both: the failure mode of
+    a bad date or a bad author list must be full four-eyes, never an unbounded or
+    unbounded-in-scope suspension of it.
     """
     from datetime import datetime
 
@@ -629,11 +630,16 @@ def _parse_development_posture(raw: Mapping[str, Any]) -> DevelopmentPosture:
             expires = datetime.fromisoformat(stated)
         except ValueError:
             expires = None
+    # `covers` names the authors the declaration was made in respect of (D3);
+    # absent or malformed yields (), which covers nobody and refuses everything.
+    stated = block.get("covers")
+    covers = tuple(str(v).strip() for v in stated if str(v).strip()) if isinstance(stated, (list, tuple)) else ()
     return DevelopmentPosture(
         enabled=_as_bool(block.get("enabled", False)),
         expires_at=expires,
         declared_by=str(block.get("declared_by") or ""),
         reason=str(block.get("reason") or ""),
+        covers=covers,
     )
 
 

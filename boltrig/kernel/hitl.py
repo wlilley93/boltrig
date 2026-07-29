@@ -254,7 +254,8 @@ class HITLManager:
                     self._store, req.tenant_id, subject, event, req.question
                 )
             if req.type == HITLType.APPROVAL:
-                await enqueue_approval_fanout(self._store, req, exclude=subject)
+                await enqueue_approval_fanout(
+                    self._store, req, exclude=subject, posture=self.development_posture)
         except Exception:  # noqa: BLE001 - delivery is a side channel
             pass
 

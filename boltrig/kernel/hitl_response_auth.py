@@ -150,6 +150,7 @@ async def approval_response_block(
     actor_tier: str,
     context: Any,
     posture: Any = None,
+    credential_kind: str = "machine",
 ) -> tuple[str | None, str | None]:
     """ONE definition of who may lawfully answer an APPROVAL request.
 
@@ -186,7 +187,7 @@ async def approval_response_block(
             relief = "sole_author"
         else:
             blocked = await _development_posture_block(
-                store, tenant_id, posture, request, subject
+                store, tenant_id, posture, request, subject, credential_kind
             )
             if blocked is not None:
                 return "cannot approve your own request", None
@@ -203,28 +204,52 @@ async def approval_response_block(
 
 
 async def _development_posture_block(
-    store: Any, tenant_id: str, posture: Any, request: HITLRequest, subject: str
+    store: Any,
+    tenant_id: str,
+    posture: Any,
+    request: HITLRequest,
+    subject: str,
+    credential_kind: str,
 ) -> str | None:
     """None when the declared development posture admits this self-approval.
 
-    The role is read from the STORE, not from the caller's principal: the
-    posture admits superadmin only, and a principal is shaped by the request.
+    The role and the author roll are read from the STORE, not from the caller's
+    principal: the posture admits superadmin only, and a principal is shaped by
+    the request. ``credential_kind`` is the one thing that MUST come from the
+    principal, because it is a fact about how this caller authenticated and
+    nothing in the store can answer it.
     """
+    from boltrig.config.author_ratchet import is_active_author
     from boltrig.config.dev_posture import posture_block
-    from boltrig.config.environment import production_signal
+    from boltrig.config.environment import development_signal, production_signal
+    from boltrig.config.settings import load_settings
     from boltrig.models import utcnow
 
     user = await store.get_user(tenant_id, subject)
+    users = await store.list_users(tenant_id)
+    settings = load_settings()
     return posture_block(
         posture,
         now=utcnow(),
         production_signal=production_signal(),
+        development_signal=development_signal(),
+        real_ingress=(
+            settings.oidc_configured
+            or settings.cf_access_configured
+            or settings.session_auth_configured
+        ),
+        credential_kind=credential_kind,
+        active_author_ids=[
+            str(getattr(u, "id", "")) for u in users if is_active_author(u)
+        ],
         verb=request.verb,
         subject_role=str(getattr(user, "role", "") or ""),
     )
 
 
-async def eligible_approval_responders(store: Any, request: HITLRequest) -> list[str]:
+async def eligible_approval_responders(
+    store: Any, request: HITLRequest, *, posture: Any = None
+) -> list[str]:
     """The users who may lawfully answer this APPROVAL request right now.
 
     The notice fan-out (``_notify_request``) addresses exactly this set - notice
@@ -256,6 +281,17 @@ async def eligible_approval_responders(store: Any, request: HITLRequest) -> list
             on_behalf_of=None,
             actor_tier="human",
             context=context,
+            # D6. Without the posture here, notice was computed against
+            # posture=None while the route used the live one, so under a posture
+            # the route admitted a user the notice never told. Measured before
+            # the fix: notice ['client@cv'], route ['client@cv', 'operator@cv'].
+            posture=posture,
+            # A notice asks whether this PERSON may answer, so eligibility is
+            # computed as though they arrive at a door, not with whatever
+            # credential some later request happens to carry. This keeps the
+            # notice set a superset of the route set, which is the safe
+            # direction: nobody the route would admit is missed.
+            credential_kind="session",
         )
         if block is None:
             responders.append(user.id)
@@ -283,6 +319,10 @@ async def authorize_approval_response(
         actor_tier=principal.actor_tier,
         context=principal.context(),
         posture=getattr(getattr(kernel, "hitl", None), "development_posture", None),
+        # HOW this caller authenticated, which is the only fact here the store
+        # cannot answer. Defaults to "machine" on a principal that does not say,
+        # so a resolver nobody labelled is refused rather than admitted (D4).
+        credential_kind=getattr(principal, "credential_kind", "machine"),
     )
     if block == "approval is not request-bound":
         raise HTTPException(status_code=409, detail=block)

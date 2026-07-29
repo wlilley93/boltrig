@@ -118,7 +118,7 @@ async def enqueue_user_notification(
 
 
 async def enqueue_approval_fanout(
-    store, request, *, exclude: str | None
+    store, request, *, exclude: str | None, posture=None
 ) -> list[str]:
     """Enqueue an APPROVAL request's notice to every eligible approver.
 
@@ -132,7 +132,10 @@ async def enqueue_approval_fanout(
 
     enqueued: list[str] = []
     notified = {exclude} if exclude else set()
-    for responder in await eligible_approval_responders(store, request):
+    # The posture is threaded through because eligibility depends on it: computing
+    # notice against posture=None while the route uses the live one is exactly the
+    # drift D2 of that order forbids, and it shipped once already.
+    for responder in await eligible_approval_responders(store, request, posture=posture):
         if responder in notified:
             continue
         notified.add(responder)
