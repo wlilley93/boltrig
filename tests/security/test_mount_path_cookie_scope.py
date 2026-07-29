@@ -82,14 +82,32 @@ def test_the_header_is_honoured_when_the_edge_is_trusted():
     assert forwarded_prefix(_Req("/boltrig/"), env=env) == "/boltrig"
 
 
+@pytest.mark.parametrize("value", ["/boltrig/operator", "/apps/boltrig", "/a/b/c/d"])
+def test_a_NESTED_mount_is_honoured(value):
+    """This assertion used to be its opposite, and the opposite failed OPEN.
+
+    A single-segment pattern rejects `/boltrig/operator`, and rejecting means
+    falling back to `Path=/` - the whole-host scope this middleware exists to
+    close. So the conservative-looking choice quietly reinstated the widening.
+    Decision 0021 nests the operator console under /operator/ inside the worker
+    image, so that is not a hypothetical shape; it is the one the next mount has.
+
+    The rule this encodes: when the fallback for "unrecognised" is the PERMISSIVE
+    branch, narrowing what you recognise makes the control weaker, not stronger.
+    """
+    env = {"BOLTRIG_TRUST_FORWARDED_PREFIX": "1"}
+    assert forwarded_prefix(_Req(value), env=env) == value
+
+
 @pytest.mark.parametrize(
     "value",
     [
-        "boltrig",           # no leading slash
-        "/a/b",              # more than one segment
-        "/../etc",           # traversal
-        "/boltrig; Path=/",  # header injection into the cookie attributes
-        "/" + "x" * 200,     # unbounded
+        "boltrig",             # no leading slash
+        "/../etc",             # traversal
+        "/boltrig; Path=/",    # header injection into the cookie attributes
+        "//x",                 # empty segment
+        "/a/b/c/d/e",          # deeper than any real mount
+        "/" + "x" * 200,       # unbounded
         "",
     ],
 )

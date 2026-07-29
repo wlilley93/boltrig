@@ -86,9 +86,17 @@ def client_ip(request: Request) -> str | None:
 # trusted too.
 _FORWARDED_PREFIX_HEADER = "x-forwarded-prefix"
 _SCOPED_COOKIES = frozenset({"boltrig_session", "boltrig_csrf"})
-# One conservative path segment. Anything else is IGNORED rather than sanitised:
-# a prefix we do not recognise is a prefix we do not honour.
-_PREFIX_RE = re.compile(r"^/[A-Za-z0-9][A-Za-z0-9._~-]{0,63}$")
+# Up to four conservative path segments. Anything else is IGNORED rather than
+# sanitised: a prefix we do not recognise is a prefix we do not honour.
+#
+# It was ONE segment, and that was wrong in a way worth recording. Decision 0021
+# nests the operator console under /operator/ inside the worker image, so a
+# tenant mount of it is `/boltrig/operator` - which a single-segment pattern
+# rejects, dropping the cookie back to Path=/ and silently reinstating the
+# whole-host widening this middleware exists to close. The conservative choice
+# failed OPEN, because the fallback for "I do not recognise this prefix" is the
+# widest scope there is. Rejecting a value must never be the permissive branch.
+_PREFIX_RE = re.compile(r"^(?:/[A-Za-z0-9][A-Za-z0-9._~-]{0,62}){1,4}$")
 
 
 def forwarded_prefix(request: Request, env: dict | None = None) -> str:
