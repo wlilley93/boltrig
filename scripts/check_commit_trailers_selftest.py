@@ -119,6 +119,33 @@ for spelling in ("Refs", "Ref", "See", "refs", "SEE"):
         "did not exist",
     )
 
+# --- an INDENTED trailer is a quotation, not a citation ---------------------
+# This case exists because the gate flagged its OWN introducing commit: that
+# message quotes 881a9df's `Refs:` line, indented, in order to explain what the
+# gate is for. Git's own convention (git interpret-trailers) puts trailers flush
+# left in the last paragraph, so indentation is exactly the signal that separates
+# "I am citing this" from "I am talking about someone citing this".
+check(
+    "an indented Refs: naming a ghost is IGNORED",
+    build([({"docs/real.md": "x"},
+            "explain the defect\n\n    Refs: docs/ghost.md\n\nthat trailer dangles.\n\nRefs: docs/real.md")]),
+    0,  # the real trailer resolves; the quoted ghost is prose and must not count
+    "RESULT: PASS",
+)
+check(
+    "an indented Refs: is not a trailer at all",
+    build([({"a.md": "x"}, "explain it\n\n    Refs: docs/ghost.md")]),
+    1,  # nothing here is a real trailer, so the empty-scan refusal is correct
+    "found NO Refs:/See: trailer at all",
+)
+check(
+    "a real trailer alongside a quoted one is still read",
+    build([({"docs/real.md": "x"},
+            "explain it\n\n    Refs: docs/ghost.md\n\nRefs: docs/real.md")]),
+    0,
+    "RESULT: PASS",
+)
+
 # --- what must NOT be treated as a path ------------------------------------
 # The gate has no business guessing at non-paths. A false positive here would
 # make it noisy enough to be switched off, which is how a gate dies.
@@ -152,6 +179,25 @@ check(
     1,
     "broken scan",
 )
+
+# --- outside a repository it must SAY so, not traceback ---------------------
+import shutil as _shutil
+
+_export = Path(tempfile.mkdtemp())
+(_export / "scripts").mkdir()
+_shutil.copy(GATE, _export / "scripts" / GATE.name)
+_proc = subprocess.run(
+    [sys.executable, str(_export / "scripts" / GATE.name)],
+    cwd=_export, capture_output=True, text=True,
+)
+_out = _proc.stdout + _proc.stderr
+if _proc.returncode != 0 and "needs a real repository" in _out and "Traceback" not in _out:
+    print(f"ok   {'outside a repo it says so, no traceback':<52} exit={_proc.returncode}")
+    passed += 1
+else:
+    print(f"FAIL {'outside a repo it says so, no traceback':<52} exit={_proc.returncode}")
+    print("\n".join(f"       {line}" for line in _out.splitlines()[:6]))
+    failed += 1
 
 print()
 print(f"seeded cases: {passed} passed, {failed} failed")

@@ -64,7 +64,13 @@ import sys
 # Without the "/" requirement this matches "e.g." and every abbreviation in a
 # commit message; without the extension it matches "docs" and "PERMIT-123".
 _PATH = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.\-/]*\.[A-Za-z0-9]{1,6}")
-_TRAILER = re.compile(r"^\s*(refs?|see)\s*:", re.IGNORECASE)
+# UNINDENTED, deliberately. Git's own trailer convention (git interpret-trailers)
+# puts trailers flush left in the final paragraph, so an INDENTED "Refs:" line is
+# prose quoting a trailer, not a trailer. Allowing leading whitespace made this
+# gate flag its own commit: that message quotes 881a9df's trailer in order to
+# explain what the gate is for, and the quotation was read as a citation. Found by
+# running the gate against the branch that introduced it.
+_TRAILER = re.compile(r"^(refs?|see)\s*:", re.IGNORECASE)
 
 # Paths a commit may cite that will never resolve, each with the reason. Held to
 # the same bar as the order-binding waivers: a commit message is IMMUTABLE, so an
@@ -87,9 +93,21 @@ ALLOW: dict[tuple[str, str], str] = {
 
 
 def _git(*args: str) -> str:
-    return subprocess.run(
-        ["git", *args], capture_output=True, text=True, check=True
-    ).stdout
+    """Run git, or exit with a sentence instead of a traceback.
+
+    This gate reads history, so it cannot run in an exported tree (a `git archive`
+    checkout has no .git). Saying so plainly matters: a stack trace reads as a bug
+    in the gate, and the next person silences the gate rather than pointing it at
+    a real repository.
+    """
+    result = subprocess.run(["git", *args], capture_output=True, text=True)
+    if result.returncode != 0:
+        raise SystemExit(
+            f"FAIL: `git {' '.join(args)}` failed. This gate reads commit MESSAGES, so it "
+            "needs a real repository with history - not an exported tree, and not a shallow "
+            f"clone.\n      git said: {result.stderr.strip().splitlines()[0] if result.stderr.strip() else '(nothing)'}"
+        )
+    return result.stdout
 
 
 def cited_paths(body: str) -> list[str]:
