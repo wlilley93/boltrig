@@ -1,5 +1,13 @@
 """A declared development posture lifts INDEPENDENCE, and nothing else.
 
+Binds [2026] VJS-CC-BOLTRIG-DEVELOPMENT-POSTURE-001 D2, D3, D4 and D5. Its D6
+lives in test_hitl_notification_routing.py, alongside the notification order it
+repairs. D1 (withdraw the posture from Classical Visas) is discharged on the
+operative tenant, not here: it is a fact about a manifest on a box, and the
+order's implementation_note records the verification against the running kernel.
+D7 (put the act to the client) and D8 (correct the record) are record repair.
+
+
 The Principal's requirement: on a tenant that is not yet in service, an
 operator must be able to work without a second human answering each approval,
 and must be able to turn that off again.
@@ -81,7 +89,7 @@ def test_a_production_signal_refuses_whatever_the_manifest_declares(signal) -> N
 
 
 def test_an_unconfigured_environment_refuses() -> None:
-    """The absence of a production signal is not evidence of development.
+    """DEVELOPMENT-POSTURE-001 D5. The absence of a production signal is not evidence of development.
 
     production_signal() reads four operator-set variables and returns None when
     all are unset, so a control that read "no production signal" as permission
@@ -111,7 +119,7 @@ def test_the_development_signal_is_read_from_the_environment_not_invented() -> N
 
 
 def test_a_real_ingress_posture_refuses() -> None:
-    """require_codex_trusted_posture, the wall this was modelled on, refuses a
+    """DEVELOPMENT-POSTURE-001 D2. require_codex_trusted_posture, the wall this was modelled on, refuses a
     production signal AND a real ingress posture. Only the first limb was
     reproduced, and the dropped one is exactly the limb that would have refused
     the tenant this was actually declared on: Classical Visas runs
@@ -141,7 +149,7 @@ def test_the_ingress_limb_is_computed_from_settings_not_assumed() -> None:
 
 @pytest.mark.parametrize("kind", ["pat", "machine", "", "agent"])
 def test_a_non_interactive_credential_refuses(kind) -> None:
-    """resolve_pat_principal stamps actor_tier="human" on every machine bearer,
+    """DEVELOPMENT-POSTURE-001 D4. resolve_pat_principal stamps actor_tier="human" on every machine bearer,
     so actor_tier could never have carried this. "machine" is the Principal
     default, which means a resolver nobody labelled is refused, not admitted."""
     assert "person at a door" in (_block(credential_kind=kind) or "")
@@ -156,6 +164,8 @@ def test_an_interactive_credential_admits(kind) -> None:
 
 
 def test_an_author_the_declaration_does_not_name_lapses_it() -> None:
+    """DEVELOPMENT-POSTURE-001 D3: an author the declaration does not name is a
+    party the independence rule exists to protect, so the posture has lapsed."""
     blocked = _block(active_author_ids=["op", "client@example.com"]) or ""
     assert "does not cover every active author" in blocked
     assert "client@example.com" in blocked
@@ -323,7 +333,7 @@ def test_without_a_posture_a_two_author_tenant_still_refuses_self_approval() -> 
 
 
 def test_it_lapses_when_an_author_it_does_not_name_exists() -> None:
-    """D3, and this assertion USED to be the opposite.
+    """DEVELOPMENT-POSTURE-001 D3, and this assertion USED to be the opposite.
 
     The shipped posture admitted a self-approval on this exact tenant: two active
     authors, one of them a client, and a declaration that named nobody. The court
@@ -349,7 +359,8 @@ def test_it_lapses_when_an_author_it_does_not_name_exists() -> None:
 
 
 def test_a_machine_bearer_is_refused_even_under_a_live_posture() -> None:
-    """D4, and the court proved this by execution against the shipped code.
+    """DEVELOPMENT-POSTURE-001 D4, and the court proved this by execution against
+    the shipped code.
 
     ``resolve_pat_principal`` stamps ``actor_tier="human"`` on every PAT, because
     a PAT carries its owner's authority. Reading that as a humanity check meant a

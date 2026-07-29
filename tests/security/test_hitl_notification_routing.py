@@ -200,7 +200,7 @@ def test_notice_set_equals_the_response_route_set():
 @pytest.mark.security
 @pytest.mark.invariant("SEC-179")
 def test_notice_set_equals_the_route_set_UNDER_A_DEVELOPMENT_POSTURE(monkeypatch):
-    """The row this matrix was missing, and the reason it could not fail.
+    """DEVELOPMENT-POSTURE-001 D6. The row this matrix was missing, and the reason it could not fail.
 
     ``eligible_approval_responders`` called ``approval_response_block`` without
     the posture, so notice was computed against ``posture=None`` while the route
