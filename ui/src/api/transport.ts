@@ -35,6 +35,18 @@ export function mountPrefix(pathname: string): string {
 
 // Build-time VITE_API_BASE still wins where a deployment needs to state the
 // prefix explicitly; unset, the prefix is derived at runtime.
+//
+// THE CASE THAT NEEDS THE EXPLICIT FORM, because deriving is wrong for it.
+// Deriving is right when the EDGE STRIPS the prefix: <host>/boltrig reaches the
+// container as / and /v1, so pathname IS the mount. It is wrong when the console
+// sits at a real path while the kernel is proxied at the ROOT - which is how the
+// worker image packages this build, at /operator/ with /v1/ at the root. There a
+// derived "/operator" sends every call to /operator/v1/..., and that image's
+// try_files answers with the operator's own index.html at HTTP 200. Not a 404: a
+// 200 full of HTML, so every request "succeeds" and returns the wrong thing.
+// Such a deployment must pin VITE_API_BASE to empty, and `??` falling through
+// only on null/undefined is what makes an empty string a real answer rather than
+// a fallback. Pinned by two tests in ui/tests/mount-prefix.test.ts.
 export const BASE = (
   import.meta.env.VITE_API_BASE ??
   (typeof window === "undefined" ? "" : mountPrefix(window.location.pathname))
