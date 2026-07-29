@@ -92,25 +92,25 @@
       "expires": "2026-12-31"
     },
     "boltrig/api/initiate.py": {
-      "max_file_lines": 244,
+      "max_file_lines": 258,
       "max_function_lines": 96,
       "over_limit_functions": [
         {
           "name": "_run",
-          "line": 61,
+          "line": 65,
           "lines": 96
         }
       ],
       "owner": "platform-maintainers",
-      "reason": "Extract initiation orchestration phases without changing request validation or execution semantics. 2026-07-26: +11 lines recording a KNOWN LIMIT in the module docstring - the \"refusing to run twice\" guard is a read-then-write with no uniqueness on one owner per tenant, so two concurrent runs with different emails both seat a superadmin. Placed in the docstring rather than inside _run precisely so the note does not grow the function it describes; _run is unchanged at 91 lines and only its line number moved. 2026-07-26: +5 lines to flag the seeded account for forced rotation ([2026] VJS-COUNTY 8, D7) - the seeding path is the flag's only producer.",
+      "reason": "Extract initiation orchestration phases without changing request validation or execution semantics. 2026-07-26: +11 lines recording a KNOWN LIMIT in the module docstring - the \"refusing to run twice\" guard is a read-then-write with no uniqueness on one owner per tenant, so two concurrent runs with different emails both seat a superadmin. Placed in the docstring rather than inside _run precisely so the note does not grow the function it describes; _run is unchanged at 91 lines and only its line number moved. 2026-07-26: +5 lines to flag the seeded account for forced rotation ([2026] VJS-COUNTY 8, D7) - the seeding path is the flag's only producer. 2026-07-29: +14 lines and _run shifts 61->65 (import only) for [2026] VJS-CC-BOLTRIG-OPERATOR-SEAT-001 D6 - set-password stops attributing its audit row to the TARGET user and additionally writes a host-boundary SecurityEvent; _run itself is untouched.",
       "expires": "2026-12-31"
     },
     "boltrig/config/manifest.py": {
-      "max_file_lines": 898,
+      "max_file_lines": 918,
       "max_function_lines": 56,
       "over_limit_functions": [],
       "owner": "configuration-maintainers",
-      "reason": "Split manifest models, validation, and application into section-oriented modules with round-trip parity. 2026-07-25: +9 lines so a per-model price keeps sub-micro precision. int(rate) on the way in was half of a two-part bug (price_micros int()-ed it again): every model we route to costs LESS than 1 micro/token, so an honest rate like 0.35 truncated to 0 and the model billed FREE - configuring real prices was strictly worse than the tier fallback, which is why no deployment had ever configured them. 2026-07-25 (input/output split): +44 lines for _parse_rate + _parse_price, EXTRACTED rather than grown inside _parse_models (which shrank), so the largest function is unchanged at 56. A per-model rate may now be the rate card's {input, output} pair as well as a scalar: the two legs differ by more than 2x on the cards we bill from and an agent turn is input-heavy, so one blended rate set at the output price over-bills every turn.",
+      "reason": "Split manifest models, validation, and application into section-oriented modules with round-trip parity. 2026-07-25: +9 lines so a per-model price keeps sub-micro precision. int(rate) on the way in was half of a two-part bug (price_micros int()-ed it again): every model we route to costs LESS than 1 micro/token, so an honest rate like 0.35 truncated to 0 and the model billed FREE - configuring real prices was strictly worse than the tier fallback, which is why no deployment had ever configured them. 2026-07-25 (input/output split): +44 lines for _parse_rate + _parse_price, EXTRACTED rather than grown inside _parse_models (which shrank), so the largest function is unchanged at 56. A per-model rate may now be the rate card's {input, output} pair as well as a scalar: the two legs differ by more than 2x on the cards we bill from and an agent turn is input-heavy, so one blended rate set at the output price over-bills every turn. 2026-07-29: +20 lines for [2026] VJS-CC-BOLTRIG-OPERATOR-SEAT-001 D5 - the shipped control.* approval window moves 3600s -> 86400s behind one named constant so the dataclass default and the parser fallback cannot drift, with the reasoning recorded beside it.",
       "expires": "2026-12-31"
     },
     "boltrig/fleet/chat.py": {
@@ -324,8 +324,8 @@
       "expires": "2026-12-31"
     },
     "boltrig/kernel/dispatch.py": {
-      "max_file_lines": 639,
-      "max_function_lines": 114,
+      "max_file_lines": 715,
+      "max_function_lines": 118,
       "over_limit_functions": [
         {
           "name": "Dispatcher.invoke",
@@ -335,11 +335,11 @@
         {
           "name": "Dispatcher._invoke_inner",
           "line": 463,
-          "lines": 110
+          "lines": 118
         }
       ],
       "owner": "kernel-maintainers",
-      "reason": "Extract dispatch phases behind private typed helpers while retaining the single governed chokepoint. SEC-181 secure input added the run-scoped param resolution at the credential stage and the secure-question marker. Parity passthrough (2026): _execute_adapter overrides the static adapter credential with a per-run sealed bearer when present. 2026-07-25: +17 lines for _emit_pause, which publishes a HITL pause to the run that DELEGATED to this one as well as to this one. A chat turn never calls a verb itself, so the dispatch runs under the child run id while the client follows the root stream - the pause landed on a stream nobody follows and a write held for approval was invisible to the person who asked. Extracting it LOWERED Dispatcher.invoke from 116 to 113 lines, so the function ratchet ratchets down with this change. 2026-07-25: +25 lines to enforce the rate limit BEFORE the approval gate on a leg carrying an approval id, so a throttle trip cannot burn a single-use human authorisation; most of it is the comment recording which pre-execution refusals are still NOT approval-safe. 2026-07-26 (decision 0018): a write held for human approval is now RECORDED at the pause - a human approved opbox.add_comment in a chat turn, the request sat ANSWERED forever and the comment was never posted, because nothing anywhere held the CALL. The pause branch now calls _hold_pause, an EXTRACTED helper that emits the pause and writes the durable held-call record, so Dispatcher.invoke stays at 113 lines and neither over-limit function grew. 2026-07-27 (schema-validation ledger order): +1 line net on Dispatcher.invoke and -1 on _invoke_inner, which ratchets the second one DOWN. The failure detail now carries the params key names and, for a schema failure, the value-free {schema_path, keyword} pairs and a schema digest. Both additions were extracted rather than inlined: _schema_detail keeps the taxonomy branch out of the chokepoint's one error handler, and _reject_if_invalid gives input and output validation ONE seam, which is the thing whose absence let the output twin be forgotten by the filing in the first place.",
+      "reason": "Extract dispatch phases behind private typed helpers while retaining the single governed chokepoint. SEC-181 secure input added the run-scoped param resolution at the credential stage and the secure-question marker. Parity passthrough (2026): _execute_adapter overrides the static adapter credential with a per-run sealed bearer when present. 2026-07-25: +17 lines for _emit_pause, which publishes a HITL pause to the run that DELEGATED to this one as well as to this one. A chat turn never calls a verb itself, so the dispatch runs under the child run id while the client follows the root stream - the pause landed on a stream nobody follows and a write held for approval was invisible to the person who asked. Extracting it LOWERED Dispatcher.invoke from 116 to 113 lines, so the function ratchet ratchets down with this change. 2026-07-25: +25 lines to enforce the rate limit BEFORE the approval gate on a leg carrying an approval id, so a throttle trip cannot burn a single-use human authorisation; most of it is the comment recording which pre-execution refusals are still NOT approval-safe. 2026-07-26 (decision 0018): a write held for human approval is now RECORDED at the pause - a human approved opbox.add_comment in a chat turn, the request sat ANSWERED forever and the comment was never posted, because nothing anywhere held the CALL. The pause branch now calls _hold_pause, an EXTRACTED helper that emits the pause and writes the durable held-call record, so Dispatcher.invoke stays at 113 lines and neither over-limit function grew. 2026-07-27 (schema-validation ledger order): +1 line net on Dispatcher.invoke and -1 on _invoke_inner, which ratchets the second one DOWN. The failure detail now carries the params key names and, for a schema failure, the value-free {schema_path, keyword} pairs and a schema digest. Both additions were extracted rather than inlined: _schema_detail keeps the taxonomy branch out of the chokepoint's one error handler, and _reject_if_invalid gives input and output validation ONE seam, which is the thing whose absence let the output twin be forgotten by the filing in the first place. 2026-07-29: +76 file lines, and _invoke_inner 110->118 for [2026] VJS-CC-BOLTRIG-OPERATOR-SEAT-001 D3 - the 1<->2 author-boundary crossing is announced from the ONE chokepoint both agent and route calls pass. Only 8 of those lines are inside _invoke_inner (one guarded count before execution, one call after it); the other 68 are two new private helpers and their reasoning, deliberately placed outside the long function rather than in it.",
       "expires": "2026-12-31"
     },
     "boltrig/kernel/memory_routes.py": {

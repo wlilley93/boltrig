@@ -32,6 +32,8 @@ import sys
 
 from boltrig.models import ActionType, AuditEvent, utcnow
 
+from .host_boundary import HOST_BOUNDARY_ACTOR, write_host_boundary_security_event
+
 
 async def _run_mint_token(
     email: str,
@@ -75,12 +77,22 @@ async def _run_mint_token(
             store, tenant_id=tenant, user_id=email, name=name,
             requested_scope=scope, user_grants=grants, ttl_days=ttl_days,
         )
+        # D6: actor is the HOST BOUNDARY, not the user the PAT is minted FOR.
+        # This is the sharper of the two: the token carries that user's grants,
+        # so a row attributing the mint to them made the resulting impersonation
+        # self-consistent end to end.
         await AuditWriter(store).write(
             AuditEvent(
-                tenant_id=tenant, ts=utcnow(), actor=email, actor_tier="human",
+                tenant_id=tenant, ts=utcnow(),
+                actor=HOST_BOUNDARY_ACTOR, actor_tier="host",
                 action_type=ActionType.TOOL_CALL, verb="token.mint", status="ok",
+                on_behalf_of=email,
                 detail={"id": pat.id, "name": name, "scope": list(pat.scope)},
             )
+        )
+        await write_host_boundary_security_event(
+            store, tenant=tenant, subject=email, reason="mint_token",
+            detail={"pat_id": pat.id, "scope": list(pat.scope)},
         )
         # The secret is shown ONCE. Print it on its own line, unadorned, so it is
         # trivially capturable (`... | tail -1`) and never re-derivable afterwards.

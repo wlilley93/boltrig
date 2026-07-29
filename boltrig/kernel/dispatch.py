@@ -536,6 +536,12 @@ class Dispatcher:
 
         await self._idempotency.start(run)
 
+        # The author-tier count before the call, for the 1<->2 crossing row
+        # (D3). See _announce_author_crossing for why it is measured here.
+        authors_before = (
+            await self._active_author_count(tenant) if verb.startswith("control.") else None
+        )
+
         # Everything from here to ``complete`` runs with the key IN_PROGRESS: any
         # raise (the pausing ask-user verb, a definitive adapter failure, an
         # invalid output) must release the claim like the gate above, never park
@@ -569,7 +575,77 @@ class Dispatcher:
 
         # 9. complete atomically; secret-shaped output becomes uncacheable.
         await self._idempotency.complete(run, output)
+        if authors_before is not None:
+            await self._announce_author_crossing(verb, noun, context, authors_before)
         return output
+
+    async def _active_author_count(self, tenant_id: str) -> int:
+        """Active users whose role is author-tier - the number the exemption reads."""
+        from boltrig.identity.rbac import AUTHOR_ROLES
+
+        users = await self._store.list_users(tenant_id)
+        return sum(
+            1
+            for u in users
+            if getattr(u, "status", None) == "active"
+            and getattr(u, "role", None) in AUTHOR_ROLES
+        )
+
+    async def _announce_author_crossing(
+        self, verb: str, noun: str, context: InvocationContext, before: int
+    ) -> None:
+        """Announce a crossing of the 1<->2 author boundary
+        ([2026] VJS-CC-BOLTRIG-OPERATOR-SEAT-001, D3).
+
+        At exactly one active author-tier user the sole-author bootstrap
+        exemption is live and self-approval is lawful; at two it is not. So that
+        count is not a detail of the user record, it is the tenant's approval
+        REGIME - and on Classical Visas it changed without a word: the
+        `control.user.update` promoting the client to `admin` was itself the
+        last act self-approved under the exemption, and destroyed the exemption
+        on its way through. The operator discovered the regime had changed only
+        by hitting the deadlock it created, and applied to open the host
+        boundary to escape it.
+
+        Measured at the dispatch chokepoint, which both agent and route calls
+        pass, and measured by COUNTING rather than by knowing which verbs touch
+        users: a list of user-mutating verbs has to be maintained, and the
+        crossing that matters is the one made by the verb nobody thought of,
+        including verbs not yet written. D2 forbids the downward crossing via a
+        control verb; this records whichever ones still occur.
+
+        Written ONLY on an actual crossing. A row per control verb would bury
+        the few that matter under hundreds that do not, and a reader who has to
+        filter is a reader who stops looking. Silent on 2->3 and on any change
+        that leaves the count where it was.
+        """
+        after = await self._active_author_count(context.tenant_id)
+        if before == after or min(before, after) > 1:
+            return
+        await self._audit.write(
+            AuditEvent(
+                tenant_id=context.tenant_id,
+                ts=utcnow(),
+                run_id=context.run_id,
+                parent_run_id=context.parent_run_id,
+                actor=context.actor,
+                actor_tier=context.actor_tier,
+                depth=context.depth,
+                action_type=ActionType.TOOL_CALL,
+                noun=noun,
+                verb="control.author_tier.crossing",
+                status="ok",
+                on_behalf_of=context.on_behalf_of,
+                detail={
+                    "verb": verb,
+                    "active_authors_before": before,
+                    "active_authors_after": after,
+                    # At one, self-approval is lawful; at two it is not. Spelled
+                    # out so the row does not require the reader to know that.
+                    "sole_author_exemption_after": after == 1,
+                },
+            )
+        )
 
     async def _execute_adapter(
         self,
