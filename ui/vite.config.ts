@@ -31,6 +31,11 @@ const KERNEL_PROXY = {
 };
 
 export default defineConfig({
+  // Where the built assets are addressed from. "/" for local development and
+  // `vite preview`; the container image sets "./" so the same build serves under
+  // any mount (<tenant-host>/boltrig/) without being rebuilt for it. See
+  // docs/GOAL-console-mounts-with-its-stack.md.
+  base: process.env.BOLTRIG_UI_BASE || "/",
   plugins: [react(), enforceChunkBudget()],
   resolve: {
     alias: {
