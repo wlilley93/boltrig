@@ -12,6 +12,7 @@ so no case can depend on this repository's own history.
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -181,11 +182,9 @@ check(
 )
 
 # --- outside a repository it must SAY so, not traceback ---------------------
-import shutil as _shutil
-
 _export = Path(tempfile.mkdtemp())
 (_export / "scripts").mkdir()
-_shutil.copy(GATE, _export / "scripts" / GATE.name)
+shutil.copy(GATE, _export / "scripts" / GATE.name)
 _proc = subprocess.run(
     [sys.executable, str(_export / "scripts" / GATE.name)],
     cwd=_export, capture_output=True, text=True,
