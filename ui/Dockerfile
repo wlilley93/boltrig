@@ -17,6 +17,19 @@ RUN --mount=type=secret,id=gh_npmrc,target=/root/.npmrc \
     pnpm install --frozen-lockfile --ignore-scripts && pnpm rebuild esbuild
 
 COPY . .
+# Emit RELATIVE asset URLs (./assets/...) rather than absolute (/assets/...), so
+# this one image serves correctly at "/" and under any sub-path mount such as
+# <tenant-host>/boltrig/ with no rebuild and no per-mount tag. The API prefix is
+# derived at runtime from the same mount (src/api/transport.ts, mountPrefix).
+#
+# NOT "/boltrig/": baking a mount path into the image is what produces "which
+# image does this client run" as a question with more than one answer. The mount
+# is data. See docs/GOAL-console-mounts-with-its-stack.md (M1, M2).
+#
+# vite.config.ts still defaults to "/", so local development and `vite preview`
+# (which the e2e smoke serves the built dist through) are unchanged. Only the
+# image is relative.
+ENV BOLTRIG_UI_BASE=./
 RUN pnpm run build
 
 FROM nginx:1.30.4-alpine@sha256:97d490c12ba55b4946b01546d1c3ed324e8d41ab1c9fcb2a616aa470620e5b46 AS runtime
