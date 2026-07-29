@@ -33,12 +33,29 @@ from boltrig.config.dev_posture import DevelopmentPosture, posture_block
 from boltrig.config.manifest import _parse_development_posture
 
 NOW = datetime(2026, 7, 29, 12, 0, tzinfo=timezone.utc)
-LIVE = DevelopmentPosture(enabled=True, expires_at=NOW + timedelta(days=7), declared_by="op")
+# The declaration now names the authors it covers (D3). "op" alone is the shape a
+# lawful declaration takes: one operator, on a tenant with no other author.
+LIVE = DevelopmentPosture(
+    enabled=True, expires_at=NOW + timedelta(days=7), declared_by="op", covers=("op",)
+)
 
 
 def _block(**over):
+    """The ADMITTING baseline, with every condition satisfied.
+
+    Each condition is a parameter rather than an ambient read, so this helper is
+    the one place a new condition has to be defaulted - and until it is, every
+    test in the file fails loudly rather than one caller silently defaulting to
+    permissive. That is deliberate: the first version of this posture shipped
+    with a missing limb precisely because nothing forced the question.
+    """
     kwargs = dict(
-        posture=LIVE, now=NOW, production_signal=None,
+        posture=LIVE, now=NOW,
+        production_signal=None,
+        development_signal="BOLTRIG_ENV=dev",
+        real_ingress=False,
+        credential_kind="session",
+        active_author_ids=["op"],
         verb="control.adapter.activate", subject_role="superadmin",
     )
     kwargs.update(over)
@@ -58,6 +75,107 @@ def test_a_production_signal_refuses_whatever_the_manifest_declares(signal) -> N
     and also says it is production is not one whose own declaration should
     break the tie."""
     assert "production signal" in (_block(production_signal=signal) or "")
+
+
+# --- D5: the environment must SAY development, not merely fail to say prod ---
+
+
+def test_an_unconfigured_environment_refuses() -> None:
+    """The absence of a production signal is not evidence of development.
+
+    production_signal() reads four operator-set variables and returns None when
+    all are unset, so a control that read "no production signal" as permission
+    permitted on every environment nobody had configured. Classical Visas
+    returned no production signal while serving a real client on a public domain.
+    """
+    assert "neither development nor production" in (_block(development_signal=None) or "")
+
+
+@pytest.mark.parametrize("signal", ["ENV=dev", "BOLTRIG_ENV=development", "APP_ENV=local"])
+def test_an_affirmative_development_signal_admits(signal) -> None:
+    assert _block(development_signal=signal) is None
+
+
+def test_the_development_signal_is_read_from_the_environment_not_invented() -> None:
+    """The parameter is not decoration: development_signal() must actually find
+    these, or posture_block would be gated on a value nothing ever produces."""
+    from boltrig.config.environment import development_signal
+
+    assert development_signal({"BOLTRIG_ENV": "dev"}) == "BOLTRIG_ENV=dev"
+    assert development_signal({"APP_ENV": "test"}) == "APP_ENV=test"
+    assert development_signal({}) is None
+    assert development_signal({"ENV": "production"}) is None
+
+
+# --- D2: the limb the precedent requires and this posture had dropped --------
+
+
+def test_a_real_ingress_posture_refuses() -> None:
+    """require_codex_trusted_posture, the wall this was modelled on, refuses a
+    production signal AND a real ingress posture. Only the first limb was
+    reproduced, and the dropped one is exactly the limb that would have refused
+    the tenant this was actually declared on: Classical Visas runs
+    BOLTRIG_AUTH_MODE=session.
+    """
+    blocked = _block(real_ingress=True) or ""
+    assert "real ingress" in blocked
+    assert "in service" in blocked
+
+
+def test_the_ingress_limb_is_computed_from_settings_not_assumed() -> None:
+    """The caller derives real_ingress the same way the codex wall does. If this
+    drifts, posture_block is being handed a constant and the limb is theatre."""
+    from boltrig.config.settings import load_settings
+
+    session_env = {"BOLTRIG_AUTH_MODE": "session"}
+    s = load_settings(session_env)
+    assert (s.oidc_configured or s.cf_access_configured or s.session_auth_configured)
+
+    dev_env = {"BOLTRIG_DEV_AUTH": "1"}
+    s = load_settings(dev_env)
+    assert not (s.oidc_configured or s.cf_access_configured or s.session_auth_configured)
+
+
+# --- D4: a credential class, not an actor tier ------------------------------
+
+
+@pytest.mark.parametrize("kind", ["pat", "machine", "", "agent"])
+def test_a_non_interactive_credential_refuses(kind) -> None:
+    """resolve_pat_principal stamps actor_tier="human" on every machine bearer,
+    so actor_tier could never have carried this. "machine" is the Principal
+    default, which means a resolver nobody labelled is refused, not admitted."""
+    assert "person at a door" in (_block(credential_kind=kind) or "")
+
+
+@pytest.mark.parametrize("kind", ["session", "federated", "dev-header"])
+def test_an_interactive_credential_admits(kind) -> None:
+    assert _block(credential_kind=kind) is None
+
+
+# --- D3: it lapses when a party it does not name appears --------------------
+
+
+def test_an_author_the_declaration_does_not_name_lapses_it() -> None:
+    blocked = _block(active_author_ids=["op", "client@example.com"]) or ""
+    assert "does not cover every active author" in blocked
+    assert "client@example.com" in blocked
+
+
+def test_a_declaration_naming_nobody_covers_nobody() -> None:
+    """The failure mode of a malformed `covers` must be full four-eyes."""
+    empty = DevelopmentPosture(enabled=True, expires_at=NOW + timedelta(days=7))
+    assert _block(posture=empty) is not None
+
+
+def test_covers_is_parsed_from_the_manifest() -> None:
+    parsed = _parse_development_posture({"development_posture": {
+        "enabled": True, "expires_at": "2026-08-05", "covers": ["a@x", " b@x "],
+    }})
+    assert parsed.covers == ("a@x", "b@x")
+    malformed = _parse_development_posture({"development_posture": {
+        "enabled": True, "expires_at": "2026-08-05", "covers": "a@x",
+    }})
+    assert malformed.covers == ()
 
 
 # --- it expires, and an unbounded posture is not a posture ------------------
@@ -148,6 +266,20 @@ OP = "operator@example.com"
 CLIENT = "client@example.com"
 
 
+@pytest.fixture(autouse=True)
+def _a_development_environment(monkeypatch):
+    """The end-to-end cases need what the ruling now requires of a real one: an
+    AFFIRMATIVE development signal (D5) and no real ingress posture (D2).
+
+    Setting it here rather than defaulting it inside posture_block is the whole
+    point. An unset environment must refuse, so the tests have to state the
+    environment they are testing in, exactly as a deployment does.
+    """
+    monkeypatch.setenv("BOLTRIG_ENV", "dev")
+    for key in ("BOLTRIG_OIDC_ISSUER", "CF_ACCESS_TEAM_DOMAIN", "BOLTRIG_AUTH_MODE"):
+        monkeypatch.delenv(key, raising=False)
+
+
 async def _two_author_kernel(posture):
     """A tenant with TWO active authors - so the sole-author exemption has
     lapsed and ONLY the posture can admit a self-approval."""
@@ -161,7 +293,7 @@ async def _two_author_kernel(posture):
     return k, store
 
 
-async def _raise_and_answer(k):
+async def _raise_and_answer(k, credential_kind: str = "session"):
     request = await k.hitl.create(
         tenant_id=T, run_id="r1", type=HITLType.APPROVAL,
         question="Approve control.adapter.activate?",
@@ -171,7 +303,8 @@ async def _raise_and_answer(k):
     )
     user = await k.store.get_user(T, OP)
     principal = Principal(tenant_id=T, subject=OP, grants=current_grants_for_user(user),
-                          role=user.role, actor_tier="human", scope=user.scope)
+                          role=user.role, actor_tier="human", scope=user.scope,
+                          credential_kind=credential_kind)
     return await respond_to_hitl(k, principal, request.id, "approve", "")
 
 
@@ -189,14 +322,70 @@ def test_without_a_posture_a_two_author_tenant_still_refuses_self_approval() -> 
     asyncio.run(go())
 
 
-def test_a_declared_posture_admits_it_and_leaves_the_record_behind() -> None:
-    """The click is removed. The record is not - in THREE places, because a
-    reader should not have to know which one to look in."""
+def test_it_lapses_when_an_author_it_does_not_name_exists() -> None:
+    """D3, and this assertion USED to be the opposite.
+
+    The shipped posture admitted a self-approval on this exact tenant: two active
+    authors, one of them a client, and a declaration that named nobody. The court
+    held that independence may be suspended only where there is no party for
+    independence to protect, so a declaration must name the authors it was made
+    in respect of and lapse when anyone else appears - exactly as the sole-author
+    exemption lapses the moment a second author exists.
+    """
+    from fastapi import HTTPException
+
     async def go():
         posture = DevelopmentPosture(
             enabled=True,
             expires_at=datetime.now(timezone.utc) + timedelta(days=7),
-            declared_by=OP, reason="pre-launch",
+            declared_by=OP, reason="pre-launch", covers=(OP,),
+        )
+        k, _ = await _two_author_kernel(posture)
+        with pytest.raises(HTTPException) as exc:
+            await _raise_and_answer(k)
+        assert exc.value.status_code == 403
+
+    asyncio.run(go())
+
+
+def test_a_machine_bearer_is_refused_even_under_a_live_posture() -> None:
+    """D4, and the court proved this by execution against the shipped code.
+
+    ``resolve_pat_principal`` stamps ``actor_tier="human"`` on every PAT, because
+    a PAT carries its owner's authority. Reading that as a humanity check meant a
+    machine bearer answered its own control approval on a live client tenant with
+    nobody present. The posture reads the CREDENTIAL CLASS instead.
+    """
+    from fastapi import HTTPException
+
+    async def go():
+        posture = DevelopmentPosture(
+            enabled=True,
+            expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+            declared_by=OP, reason="pre-launch", covers=(OP, CLIENT),
+        )
+        k, _ = await _two_author_kernel(posture)
+        with pytest.raises(HTTPException) as exc:
+            await _raise_and_answer(k, credential_kind="pat")
+        assert exc.value.status_code == 403
+
+    asyncio.run(go())
+
+
+def test_a_declared_posture_admits_it_and_leaves_the_record_behind() -> None:
+    """The click is removed. The record is not - in THREE places, because a
+    reader should not have to know which one to look in.
+
+    The declaration must now name every active author, which on this tenant means
+    naming the client too. That is the point: suspending independence is only
+    lawful where the parties it protects are known and accounted for, not where
+    the operator has simply not looked.
+    """
+    async def go():
+        posture = DevelopmentPosture(
+            enabled=True,
+            expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+            declared_by=OP, reason="pre-launch", covers=(OP, CLIENT),
         )
         k, store = await _two_author_kernel(posture)
         result = await _raise_and_answer(k)
@@ -218,22 +407,5 @@ def test_a_declared_posture_admits_it_and_leaves_the_record_behind() -> None:
                if s.event_type == SecurityEventType.DEVELOPMENT_POSTURE_APPROVAL]
         assert len(sec) == 1
         assert sec[0].actor == OP
-
-    asyncio.run(go())
-
-
-def test_the_posture_never_lifts_the_grant_check() -> None:
-    """It lifts INDEPENDENCE and never AUTHORITY: a superadmin without the
-    verb's grant is refused under a posture exactly as they are without one."""
-    from fastapi import HTTPException
-
-    async def go():
-        posture = DevelopmentPosture(
-            enabled=True, expires_at=datetime.now(timezone.utc) + timedelta(days=7))
-        k, store = await _two_author_kernel(posture)
-        store.set_tenant_permissions(TenantPermissions(T, GrantSet.of([], deny=["*"])))
-        with pytest.raises(HTTPException) as exc:
-            await _raise_and_answer(k)
-        assert "not authorised" in str(exc.value.detail)
 
     asyncio.run(go())

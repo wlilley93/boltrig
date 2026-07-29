@@ -71,6 +71,11 @@ def _principal(user: User) -> Principal:
         role=user.role,
         actor_tier="human",
         scope=user.scope,
+        # A person who authenticated at a door. Principal defaults this to
+        # "machine" so an unlabelled resolver is refused, which means a test
+        # modelling a human must say so - otherwise it silently models a bot and
+        # the route refuses where a real user would be admitted.
+        credential_kind="session",
     )
 
 
@@ -190,6 +195,52 @@ def test_notice_set_equals_the_response_route_set():
     assert asyncio.run(
         authorize_approval_response(solo_kernel, _principal(will), own)
     ) == "sole_author"  # the relief is now NAMED, not a bare True
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-179")
+def test_notice_set_equals_the_route_set_UNDER_A_DEVELOPMENT_POSTURE(monkeypatch):
+    """The row this matrix was missing, and the reason it could not fail.
+
+    ``eligible_approval_responders`` called ``approval_response_block`` without
+    the posture, so notice was computed against ``posture=None`` while the route
+    used the live one. Under a posture the route therefore admitted the initiator
+    and the notice set never named them. Measured on the shipped code before the
+    fix: notice ``['client@cv']``, route ``['client@cv', 'operator@cv']``.
+
+    The matrix above stayed green throughout, because not one of its rows ever
+    set a posture - a check that could not fail in the exact dimension the new
+    code introduced. That is why this row exists rather than a broader assertion:
+    the gap was a missing INPUT, and only an input can close it.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    from boltrig.config.dev_posture import DevelopmentPosture
+
+    monkeypatch.setenv("BOLTRIG_ENV", "dev")
+    for key in ("BOLTRIG_OIDC_ISSUER", "CF_ACCESS_TEAM_DOMAIN", "BOLTRIG_AUTH_MODE"):
+        monkeypatch.delenv(key, raising=False)
+
+    store = _store()
+    users = [_seat(store, OPERATOR, "superadmin"), _seat(store, CLIENT, "admin")]
+    kernel = Kernel(store)
+    posture = DevelopmentPosture(
+        enabled=True,
+        expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+        declared_by=OPERATOR, reason="pre-launch",
+        covers=(OPERATOR, CLIENT),
+    )
+    kernel.hitl.development_posture = posture
+
+    req = _raise(kernel.hitl, OPERATOR)
+    notice = set(asyncio.run(
+        hitl_response_auth.eligible_approval_responders(store, req, posture=posture)
+    ))
+    route = _admitted(kernel, req, users)
+    assert notice == route, f"notice {sorted(notice)} != route {sorted(route)}"
+    # And the initiator IS in it: under a live posture they may answer their own
+    # request, so a notice set that omitted them would be the drift D2 forbids.
+    assert OPERATOR in route
 
 
 @pytest.mark.security

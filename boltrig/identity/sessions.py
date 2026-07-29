@@ -374,6 +374,9 @@ def build_session_resolver(tenant_id: str) -> PrincipalResolver:
             actor_tier="human",
             scope=user.scope,
             active_workspace_id=active_workspace_id,
+            # A first-party interactive login: a person authenticated at the door
+            # with a password (and a second factor where the org requires one).
+            credential_kind="session",
         )
 
     return resolver

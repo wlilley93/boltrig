@@ -291,6 +291,7 @@ def build_principal_resolver(
                 actor_tier="human",
                 on_behalf_of=_on_behalf_of(claims),
                 scope=user.scope,
+                credential_kind="federated",
             )
 
         role, scope = resolve_role(groups, mappings)
