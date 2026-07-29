@@ -229,6 +229,18 @@ _PROSPECTIVE_RE = re.compile(
 
 ALLOW: dict[tuple[str, str], str] = {
     (
+        "docs/vjs/2026-VJS-CC-BOLTRIG-DEVELOPMENT-POSTURE-001-opinion.md",
+        "docs/proposals/DEV-POSTURE-001-draft.yaml",
+    ): (
+        "The judgment's whole finding on this path is that it does NOT exist. 881a9df's "
+        "Refs trailer cites it; the bench searched origin/main, the working tree and "
+        "git log --all --diff-filter=A and found it nowhere, and recorded that as the "
+        "THIRD instance of the dangling-authority class (INV-8, then C1-C9, then this). "
+        "Rewording the opinion to avoid the path would leave the record unable to say "
+        "which citation was empty, which is the one thing that finding is about. This "
+        "entry IS the 'record its absence' half of that order's D8."
+    ),
+    (
         "docs/decisions/0020-retire-the-pi-lane.md",
         "boltrig/fleet/pi_runtime.py",
     ): (
