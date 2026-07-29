@@ -125,6 +125,34 @@ So: **M6 gates M4.** No console is reachable before its perimeter is evidenced.
 Phase 1 is the only phase that changes an artefact tenants run. Phases 2 and 3 are configuration and
 templating.
 
+## Where this stands (2026-07-29)
+
+**Live.** `https://classicalvisas.opbox.app/boltrig` serves the console. Verified as a browser does
+it: `/boltrig` → 308 → `/boltrig/` → 200 with `<title>Boltrig</title>`, its relative asset → 200
+`application/javascript`, and `/boltrig/v1/skills` anonymous → 401.
+
+| | status |
+|---|---|
+| M1 one artefact | met - the canary and CV run byte-identical image ids, one serving `/`, one `/boltrig/` |
+| M2 derived, not declared | met - no tenant compose, env or manifest names the path |
+| M3 negative control | met - red observed both directions, and `app.boltrig.io/` re-verified live |
+| M4 destination, reaching the API | met - the gate is registered and green; 50 gates pass, 0 fail |
+| M5 tenant N+1 inherits | met - `gen-tenant.sh`, `env.tenant.tmpl`, `new-tenant.sh` step 6 |
+| M6 limbs 1-2 | met - `BOLTRIG_DEV_AUTH=0`, `AUTH_MODE=session`, forged `x-boltrig-role: superadmin` → 401 |
+| M6 limb 3 (cookie Path) | **shipped and unit-proven, NOT verified at the destination** |
+
+**The one open limb, stated plainly.** Cookie scoping is covered by 15 tests including the wiring
+case and two negative controls, the middleware is confirmed present in the running image, and the
+edge sends `X-Forwarded-Prefix`. But a cookie's `Path` is only observable on a *successful* login, and
+the only credentials available are for a live client's console. Logging in to read a cookie attribute
+is not proportionate to what it would prove, particularly on the tenant a court has just ruled about
+in respect of acts taken without the client's knowledge. So M6 limb 3 is **proven in test, not at the
+destination**, and this document says so rather than letting a green table imply otherwise. Closing it
+needs one deliberate operator login, which is a decision for the Principal, not a default.
+
+Note that this is the *weaker* form of exactly the discipline the rest of the goal insists on. It is
+recorded as a gap, not retired as done.
+
 ## Related
 
 - `opbox-prod/docs/GOAL-boltrig-federation.md` - one kernel under every app; this is its console
