@@ -168,13 +168,31 @@ class AdapterConfig:
     module_ref: str = ""
 
 
+# The floor on the shipped approval window
+# ([2026] VJS-CC-BOLTRIG-OPERATOR-SEAT-001, D5).
+#
+# It shipped as 3600. An hour is not a window a human can answer: on Classical
+# Visas three control-verb approvals expired unheard on it, and the operator
+# experienced that as a four-eyes DEADLOCK and applied to open the host boundary.
+# The court found there was no deadlock - the in-band route was open the whole
+# time - and that the one-hour window "is the actual proximate cause of what was
+# experienced as deadlock". A control that is unanswerable in practice does not
+# read as a control; it reads as a bug in the thing it guards, and the cure
+# proposed for it was a permanent carve-out.
+#
+# Both the dataclass default and the parser fallback below must carry this, and
+# they must agree: a manifest that omits the key and a manifest that has no hitl
+# block at all are the same tenant posture, so they cannot resolve differently.
+APPROVAL_TIMEOUT_SECONDS_FLOOR = 86400
+
+
 @dataclass(frozen=True)
 class HitlConfig:
     """Human-in-the-loop routing and the verbs that always block (S8, P5)."""
 
     primary_channel: str = "slack"
     notify_via: tuple[str, ...] = ()
-    approval_timeout_seconds: int = 3600
+    approval_timeout_seconds: int = APPROVAL_TIMEOUT_SECONDS_FLOOR
     escalation_chain: tuple[str, ...] = ()
     blocking_verbs: tuple[str, ...] = ()
 
@@ -589,7 +607,9 @@ def _parse_hitl(raw: Mapping[str, Any]) -> HitlConfig:
     return HitlConfig(
         primary_channel=str(raw.get("primary_channel", "slack")),
         notify_via=_as_tuple(raw.get("notify_via")),
-        approval_timeout_seconds=int(raw.get("approval_timeout_seconds", 3600)),
+        approval_timeout_seconds=int(
+            raw.get("approval_timeout_seconds", APPROVAL_TIMEOUT_SECONDS_FLOOR)
+        ),
         escalation_chain=_as_tuple(raw.get("escalation_chain")),
         blocking_verbs=_as_tuple(raw.get("blocking_verbs")),
     )

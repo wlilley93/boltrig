@@ -14,7 +14,21 @@ import type { DeckCol, DeckRow } from "./Deck";
 // Roles permitted to author (studios, agents, automations) / administer. The
 // server is the real gate (403); these only decide what the deck offers up
 // front. App re-exports AUTHOR_ROLES so existing imports from "../App" hold.
+//
+// MUST equal boltrig/identity/rbac.py::AUTHOR_ROLES element-for-element
+// ([2026] VJS-CC-BOLTRIG-OPERATOR-SEAT-001, D7), enforced by
+// tests/security/test_operator_seat_boundary.py.
+//
+// `superadmin` and `admin` were missing here while the Python set has carried
+// both all along, so the deck hid the authoring studios and the agents /
+// automations rows from exactly the two roles most entitled to them - a 403 the
+// server would never have raised. Two sets wearing one name and disagreeing is
+// how a role grant means one thing to the kernel and another to the console,
+// and that divergence is what let a client-facing promotion silently redefine
+// an operator-side control.
 export const AUTHOR_ROLES: ReadonlySet<string> = new Set([
+  "superadmin",
+  "admin",
   "org-admin",
   "department-head",
   "manager",

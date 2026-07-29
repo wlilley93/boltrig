@@ -1,0 +1,41 @@
+id: PERMIT-1785310980
+route_id: ROUTE-20260729-074300
+actor: lexby
+scope:
+  paths:
+  - boltrig/config/manifest.py
+  - boltrig/identity/rbac.py
+  - boltrig/api/initiate.py
+  - boltrig/api/mint_token.py
+  - boltrig/config/control_user_ops.py
+  - boltrig/kernel/hitl_response_auth.py
+  - boltrig/kernel/hitl_http.py
+  - boltrig/models/audit.py
+  - ui/src/deck/deckMap.ts
+  - tests
+  jurisdictions: null
+  action_kinds: null
+  issue_tags: null
+  records: null
+obligations:
+- id: OBL-LOG-001
+  kind: decision_log
+  required: true
+  due: before_commit
+  description: Write a decision log for this material implementation decision
+- id: OBL-VALIDATE-001
+  kind: validation
+  required: true
+  due: before_commit
+  description: Run vjs validate before commit
+expires_at: 2026-07-30T07:43:00.228348399+00:00
+status: active
+self_issued: true
+meaning: 'agent-routed self-issue: records that the actor took the front door (ACT-007 local-sovereign invocation); NOT an external authority''s approval. It cannot satisfy a check reserved to the Sovereign (assent) or to a constituted bench (an order).'
+intent_digest: sha256:d18b1fde25c3d97a6382191a6d34062b7332847377ac94cf1660f22431c4f9a8
+law_source:
+- 2026-VJS-CA-BOLTRIG-CODEX-APPROVAL-ROUTING-001
+- 2026-VJS-CC-BOLTRIG-AUDIT-DEPTH-001
+- 2026-VJS-CC-BOLTRIG-CHAT-ATTACHMENTS-001
+- 2026-VJS-CC-BOLTRIG-CHAT-AUTHORITY-001
+- 2026-VJS-CC-BOLTRIG-CHAT-REGENERATE-001

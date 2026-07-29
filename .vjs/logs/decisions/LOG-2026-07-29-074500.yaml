@@ -1,0 +1,24 @@
+id: LOG-2026-07-29-074500
+time: 2026-07-29T07:45:00+00:00
+actor: lexby
+kind: fix
+issue: operator_seat_host_boundary
+decision: 'File the 2026-07-28 First Instance operator-seat judgment as a binding order (it had never been recorded), then implement its statically-checkable directives D1, D5 and D7 under PERMIT-1785310980; D2, D3, D4 and D6 follow in the same branch'
+basis:
+- '[2026] VJS-CC-BOLTRIG-OPERATOR-SEAT-001 (binding, filed 2026-07-29 from the convening record at ~/Projects/Jellytot/docs/court-2026-07-28/first-instance-three-matters.json, submission SUBMISSION-2026-07-28-151116)'
+- '[2026] VJS-COUNTY 7 (2026-VJS-CC-BOLTRIG-FIRST-PARTY-AUTH-001, binding) D7 - the host boundary was opened ONCE, for bootstrap necessity'
+- 'PERMIT-1785310980 (allowed_with_conditions; conditions: write_decision_log)'
+risk: medium
+reversibility: easy
+court_required: false
+why: 'No fork was decided here - the court decided them on 2026-07-28. Two things were wrong with the record, and both are fixed before any code.
+
+  FIRST, the judgment had never been filed as an order. It lived only in the convening JSON, so the citator could not see it, `vjs route` returned court_required with trigger first_impression for every touch of this area, and three separate courts were convened yesterday on questions this order had already decided. A ruling that is not filed is not law anyone can follow, and re-deciding a decided question risks a per incuriam ruling. The order is transcribed verbatim (holding, ratio, all eight directives, the reserved limbs, the authorities) with the opinion generated mechanically from the court''s own JSON - nothing paraphrased and no condition invented, which is the C1-C9 / INV-8 defect class this very judgment called out.
+
+  SECOND, and material to how this repository is governed: `vjs route` did NOT find the order even after filing. The on-point test (vjs-core/src/court.rs:47-51) is a CASE-SENSITIVE substring match of the issue tag against an authority''s id, title and summary, and it never consults the order''s own declared `issue` field. Routing on `operator_seat_host_boundary` - the tag this order declares about itself - returns court_required/first_impression, while `OPERATOR-SEAT` returns allowed_with_conditions. The permit was therefore taken on the tag that genuinely resolves, because the order IS on point in fact and the router''s answer on the lowercase tag is simply wrong. This is recorded rather than relied on quietly: the matcher sends settled questions to fresh courts, and worse, lets a court sit believing there is no binding law. Repairing it is filed separately as a defect against the VJS kernel; nothing here depends on the workaround surviving.
+
+  On the implementation: D5 replaces the 3600-second default at both shipped sites with a single named constant at 86400, so the dataclass default and the parser fallback cannot disagree - they describe the same tenant posture (no hitl block vs. a block omitting the key). A stated window is still honoured exactly as written; the floor moves the default only, since a value silently raised behind the operator would be the same class of surprise as the promotion that ended the exemption. D7 adds `superadmin` and `admin` to the TypeScript AUTHOR_ROLES, which had hidden the authoring studios and the agents/automations rows from the two roles most entitled to them - a 403 the server would never have raised. D1 is test-only, since the refusal is a thing that must not appear.
+
+  Every assertion reads a SHIPPED artefact: the parser `_build_parser` actually returns, the constants the manifest module actually compiles, and the two source files as they sit on disk. The host-boundary module set for the User-construction check is DERIVED from `_dispatch_identity`''s own imports rather than hand-listed or swept from boltrig/api - the first goes stale on the next command, and the second reports `auth_routes.py` (the in-band invite-acceptance path the court found open and directed be used under D8) as the violation. All nine tests were seeded red in five distinct ways - floor lowered, the two sites made to disagree, a fourth subparser registered, the dispatch guard tuple widened, and a User constructed in mint_token.py - and each failure landed on exactly the test that owns it.
+
+  D8 is NOT performed and is not mine to perform: it requires raising an invitation on a live client tenant naming a third party, which is an outward-facing act on the Principal''s client. It is put to the Principal, not decided here.'

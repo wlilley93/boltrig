@@ -1,0 +1,139 @@
+id: 2026-VJS-CC-BOLTRIG-OPERATOR-SEAT-001
+court: county
+jurisdiction: default
+repo_code: boltrig
+status: binding
+issue: operator_seat_host_boundary
+holding: |
+  Both limbs are REFUSED. `seat-operator` is refused because the bootstrap necessity that alone
+  justifies a host-boundary carve-out is not made out: an eligible approver exists and the in-band
+  route has never once been exercised. Demoting the client is refused because it does not correct
+  the role - it switches mandatory four-eyes off, and asks the protected party to sign away their
+  own protection.
+
+  THE RATIO. A host-boundary carve-out from an in-band control is justified only by bootstrap
+  NECESSITY - that no in-band route can discharge the act - and necessity is measured on the
+  record, not on the record's awkwardness. Where an eligible approver exists in fact and the
+  in-band route has never been exercised, the boundary stays shut and the defect is repaired
+  in-band. That another boundary command already confers more is an argument for CLOSING that
+  command, never for opening a comparable one beside it, because "no worse than the last" makes
+  every future widening self-justifying. Correlatively, the four-eyes ratchet is ONE-WAY: no
+  control verb may reduce a tenant's active author-tier count from two to one, because that
+  silently converts a mandatory independent approval into an optional one; and such a reduction
+  may never be effected by asking the protected party to approve the removal of their own
+  protection.
+
+  WHAT THE COURT VERIFIED, against the pleading. The mechanism pleaded is exactly right and the
+  live record proves it more precisely: the invitation raised at 08:19:12 on 2026-07-27 and
+  self-approved under the exemption, the client created `member` at 08:27:05, then
+  `control.user.update` to `admin` raised at 08:29:31, self-approved at 08:30:05 and executed at
+  08:30:31 - at which point the client became author-tier and the exemption died. The last act
+  performed under the exemption destroyed it, unannounced.
+
+  But the central NECESSITY claim in the case file is FALSE. "Every route to a second operator
+  requires an approval that requires a second operator" cannot stand beside the case file's own
+  concession that the only lawful approver is the client. The court walked every gate on the
+  respond path (`authorize_hitl_scope` -> `departments_for("admin", {all:true})` is None ->
+  `_scope_matches` True; human actor tier; fingerprint present; assignee NULL on every live row;
+  initiators and respondents disjoint; client scope `{all:true}` -> `allow=["*"]`) and found NO
+  author-tier gate anywhere on it. The route to a second operator is OPEN TODAY, with no code
+  change. It has never been used: `hitl_responses` held 9 rows, all the operator's, none the
+  client's. This is not a deadlock; it is an unexercised route. The three expired requests are
+  evidence of a 3600-second window, not of a legal impossibility.
+
+  The case file's claim that `AUTHOR_ROLES` is "used ONLY by the exemption" is also wrong - it is
+  read by `rbac.can_author()` at six verified call sites, and a second, differently-populated set
+  lives in `ui/src/deck/deckMap.ts`. The load-bearing half is nonetheless correct and was verified
+  independently: approver eligibility genuinely does not require author tier, because grants come
+  from SCOPE, never role.
+
+  The "narrower cure" (demotion) is the MOST destructive option on the list, not the conservative
+  one: it revives the self-approval exemption, ends mandatory four-eyes on the tenant, and -
+  because `control.user.update` is itself high-consequence - requires the client to approve
+  stripping their own author tier and the independent approval that protects them.
+
+  ON AUTHORITY HYGIENE. Option 2 proposed "an INV-8-class audit row". INV-8 has ZERO occurrences
+  anywhere in boltrig; it is an opbox invariant living in the VJS repo. The court declined to
+  adopt a condition under that name and wrote its audit directives against mechanisms it had read
+  (`AuditWriter.write`, `SecurityEventWriter.write`). This is the same defect class as the C1-C9
+  incident.
+directives:
+- id: D1
+  actor: lexby
+  must: refuse_limb_1_no_new_host_boundary_cli_command_that_creates_a_user_identity_the_identity_command_set_remains_exactly_initiate_set_password_mint_token_checkable_a_test_asserts_the_guard_tuple_at_boltrig_api_cli_py_200_and_the_registered_subparser_names_in_add_identity_parsers_are_exactly_that_three_element_set_and_fails_when_a_fourth_is_added_plus_a_test_asserting_boltrig_api_initiate_py_remains_the_only_host_boundary_call_site_constructing_a_user_object
+  when: null
+- id: D2
+  actor: lexby
+  must: refuse_limb_2_and_make_the_four_eyes_ratchet_one_way_any_control_verb_control_user_update_control_user_deactivate_or_any_other_must_refuse_when_its_effect_would_reduce_a_tenants_count_of_active_users_whose_role_is_in_author_roles_from_two_or_more_to_exactly_one_checkable_seeded_test_tenant_with_an_active_superadmin_and_an_active_admin_control_user_update_demoting_the_admin_to_member_raises_and_sole_active_author_still_returns_false_for_the_superadmin_afterwards_a_second_seeded_test_asserts_the_refusal_does_not_fire_on_a_three_to_two_or_two_to_two_transition
+  when: null
+- id: D3
+  actor: lexby
+  must: announce_the_crossing_any_control_verb_whose_execution_changes_a_tenants_active_author_tier_count_across_the_one_to_two_boundary_must_write_an_auditevent_via_auditwriter_write_kernel_audit_py_257_naming_the_verb_the_count_before_and_the_count_after_checkable_seeded_test_promote_a_one_author_tenants_sole_member_to_admin_assert_exactly_one_such_row_with_before_one_and_after_two_assert_no_such_row_is_written_for_a_promotion_that_leaves_the_count_unchanged
+  when: null
+- id: D4
+  actor: lexby
+  must: warn_when_the_exemption_is_spent_to_end_itself_where_authorize_approval_response_applies_the_sole_author_exemption_to_a_request_whose_verb_and_params_would_raise_the_active_author_count_above_one_control_user_update_or_control_invitation_create_carrying_a_role_in_author_roles_respond_to_hitl_must_return_a_distinct_flag_alongside_the_existing_sole_author_exemption_key_and_record_it_in_the_detail_of_the_hitl_sole_author_approval_audit_row_hitl_http_py_114_131_checkable_seeded_test_asserts_the_flag_is_present_for_a_control_user_update_promoting_a_member_to_admin_and_absent_for_an_exempted_approval_of_any_verb_that_does_not_change_the_author_count
+  when: null
+- id: D5
+  actor: lexby
+  must: fix_the_window_that_caused_this_the_shipped_approval_timeout_for_control_verbs_must_be_at_least_86400_seconds_checkable_a_test_reads_the_value_actually_compiled_into_boltrig_config_manifest_py_at_both_177_the_dataclass_default_and_592_the_raw_get_fallback_and_fails_if_either_is_below_86400_or_if_the_two_disagree_with_each_other_the_test_must_assert_the_shipped_constant_not_a_value_it_supplies_itself
+  when: null
+- id: D6
+  actor: lexby
+  must: attribute_the_host_boundary_honestly_and_put_it_on_the_security_stream_set_password_initiate_py_214_222_and_mint_token_mint_token_py_77_84_must_not_write_an_auditevent_whose_actor_is_the_target_user_the_row_must_name_the_host_boundary_as_actor_each_must_additionally_write_a_securityevent_via_securityeventwriter_write_kernel_security_events_py_82_under_a_new_securityeventtype_member_additive_to_the_four_in_models_audit_py_33_36_consistent_with_2026_vjs_county_9_d3_checkable_seeded_test_runs_set_password_for_user_x_and_asserts_no_audit_row_for_that_act_has_actor_equal_to_x_and_exactly_one_securityevent_row_is_written
+  when: null
+- id: D7
+  actor: lexby
+  must: reconcile_the_two_author_roles_sets_which_currently_disagree_boltrig_identity_rbac_py_163_contains_superadmin_and_admin_ui_src_deck_deckmap_ts_17_23_does_not_checkable_a_test_asserts_the_typescript_set_equals_the_python_set_element_for_element_or_that_the_typescript_set_is_generated_from_the_python_one_and_fails_on_any_divergence_in_either_direction
+  when: null
+- id: D8
+  actor: lexby
+  must: exercise_the_open_route_before_this_question_returns_a_control_invitation_create_for_a_second_operator_side_human_must_be_raised_and_actually_put_to_info_at_classicalvisas_com_on_a_window_of_at_least_24_hours_per_d5_checkable_by_select_on_the_tenant_database_either_a_hitl_responses_row_with_respondent_info_at_classicalvisas_com_for_that_request_or_a_hitl_requests_row_with_verb_control_invitation_create_and_timeout_at_minus_created_at_at_least_24_hours_and_status_timed_out_neither_condition_is_presently_satisfied_hitl_responses_holds_nine_rows_all_from_the_operator
+  when: null
+forbidden:
+- adding_a_fourth_host_boundary_identity_command_or_any_second_host_boundary_call_site_that_constructs_a_user_object
+- reducing_a_tenants_active_author_tier_count_from_two_or_more_to_exactly_one_by_any_control_verb
+- effecting_such_a_reduction_by_asking_the_protected_party_to_approve_the_removal_of_their_own_protection
+- justifying_a_new_boundary_carve_out_on_the_ground_that_an_existing_boundary_command_already_confers_more_that_is_an_argument_for_closing_the_existing_command
+- treating_the_awkwardness_of_an_in_band_route_as_the_necessity_that_justifies_a_carve_out_necessity_is_measured_on_the_record
+- adopting_a_condition_under_an_authority_name_that_does_not_exist_in_this_repository
+exceptions:
+- the_refusal_of_seat_operator_is_on_this_record_only_the_question_may_be_brought_again_on_a_record_showing_d8_satisfied_and_the_client_having_declined_or_failed_to_respond
+- d2_does_not_fire_on_a_three_to_two_or_two_to_two_transition_only_on_a_crossing_down_to_exactly_one
+supersedes: []
+source_opinion: docs/vjs/2026-VJS-CC-BOLTRIG-OPERATOR-SEAT-001-opinion.md
+runtime_summary: |
+  No host-boundary command may create a user identity: the identity set stays exactly
+  {initiate, set-password, mint-token}. The four-eyes ratchet is one-way - no control verb may
+  take a tenant's active author-tier count from >=2 down to exactly 1, and no such reduction may
+  be routed through the protected party's own approval. Crossings of the 1<->2 author boundary
+  are announced on the audit stream, and an exemption spent to end itself is flagged at the
+  moment it is spent. The shipped control.* approval window is at least 24 hours. The host
+  boundary stops attributing set-password and mint-token to the target user and puts both on the
+  security event stream. The Python and TypeScript AUTHOR_ROLES sets are reconciled. Before the
+  seat-operator question returns, the open in-band route must actually be exercised: an
+  invitation raised and put to the client on a >=24h window, evidenced on the tenant database.
+created_at: 2026-07-28T15:11:16Z
+assent_source: standing_bounded_assent
+filed_at: 2026-07-29T07:40:00Z
+implementation_note: |
+  Given at First Instance 2026-07-28 on submission SUBMISSION-2026-07-28-151116, alongside the
+  `pnpm` and `truncation` matters, and checked for invented authority in the same convening. It
+  was not filed as an order at the time: the judgment lived only in the convening JSON at
+  ~/Projects/Jellytot/docs/court-2026-07-28/first-instance-three-matters.json, so the citator
+  could not see it and `vjs route` kept sending this area to a fresh court. Filed 2026-07-29.
+
+  citation is null for the reason recorded in 2026-VJS-CC-BOLTRIG-SCHEMA-VALIDATION-LEDGER-001:
+  `vjs next-citation` refuses to mint the canon COUNTY series at a subscriber seat
+  ([2026] VJS-PC 19), and minting at canon offers a number this repository's mirror already
+  uses. The allocator gap is not settled here.
+
+  D5 is discharged on the Classical Visas tenant as data (manifest.yaml
+  approval_timeout_seconds 3600 -> 86400, live in cv-boltrig-kernel-1 from v0.4.22 on
+  2026-07-29), but the directive is written against the SHIPPED constant and is not discharged
+  until manifest.py carries it. D8 is unperformed.
+implementation_status: OPEN
+reserved:
+- option_4_a_distinct_operator_tier_that_satisfies_four_eyes_without_being_author_tier_is_expressly_reserved_not_refused_to_decide_it_the_court_would_need_an_enumeration_of_what_the_client_actually_needs_to_do_as_against_what_role_admin_confers_the_effect_of_a_new_tier_at_each_of_the_six_verified_can_author_call_sites_and_how_it_composes_with_the_workspace_role_ceilings_in_rbac_py
+- whether_a_host_boundary_seat_operator_could_ever_be_justified_refused_on_this_record_because_necessity_is_absent_arguable_on_a_record_showing_d8_satisfied
+- whether_the_client_should_hold_all_true_scope_which_was_not_argued
