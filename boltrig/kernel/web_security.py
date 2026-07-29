@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 
 from fastapi import FastAPI, Request
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -63,6 +64,89 @@ def client_ip(request: Request) -> str | None:
         if cf:
             return cf
     return request.client.host if request.client else None
+
+# --- mount-path cookie scoping ----------------------------------------------
+# A console mounted at <host>/boltrig shares an origin with whatever else that
+# host serves - on a tenant box, the Opbox app. Cookies set with Path=/ are then
+# attached to EVERY request to that host, so the console's session secret is
+# handed to an unrelated application on every page load it took no part in.
+# Nothing is compromised by that alone (same origin, same operator), but it is a
+# widening nobody asked for, and it becomes a leak the first time either
+# application logs a request header.
+#
+# So the two session cookies are re-scoped to the mount. The mount itself stays
+# DERIVED, never configured (see the UI's mountPrefix): the edge states it per
+# request, and the deployment says once whether the edge is to be believed.
+#
+# X-Forwarded-Prefix is honored ONLY under BOLTRIG_TRUST_FORWARDED_PREFIX, for
+# the same reason client_ip refuses X-Forwarded-For by default: a header a client
+# can set is not evidence. A forged prefix could only ever narrow the forger's
+# OWN cookie and never widen anyone else's, so the exposure is slight - but a
+# proxy header trusted "because it is probably fine" is how the next one gets
+# trusted too.
+_FORWARDED_PREFIX_HEADER = "x-forwarded-prefix"
+_SCOPED_COOKIES = frozenset({"boltrig_session", "boltrig_csrf"})
+# One conservative path segment. Anything else is IGNORED rather than sanitised:
+# a prefix we do not recognise is a prefix we do not honour.
+_PREFIX_RE = re.compile(r"^/[A-Za-z0-9][A-Za-z0-9._~-]{0,63}$")
+
+
+def forwarded_prefix(request: Request, env: dict | None = None) -> str:
+    """The mount prefix the edge stripped, or "" when there is none to trust."""
+    from boltrig.config.environment import is_truthy
+
+    e = env if env is not None else os.environ
+    if not is_truthy(e.get("BOLTRIG_TRUST_FORWARDED_PREFIX")):
+        return ""
+    raw = (request.headers.get(_FORWARDED_PREFIX_HEADER) or "").strip().rstrip("/")
+    return raw if _PREFIX_RE.match(raw) else ""
+
+
+def scope_set_cookie(value: str, prefix: str) -> str:
+    """Rewrite one Set-Cookie header so a session cookie is scoped to ``prefix``.
+
+    Only the two session cookies are touched. Pure, so the rewrite can be tested
+    without a transport.
+    """
+    parts = value.split(";")
+    if parts[0].split("=", 1)[0].strip() not in _SCOPED_COOKIES:
+        return value
+    out, seen = [], False
+    for part in parts:
+        if part.strip().lower().startswith("path="):
+            out.append(f" Path={prefix}")
+            seen = True
+        else:
+            out.append(part)
+    if not seen:  # a cookie set without an explicit Path defaults to the
+        out.append(f" Path={prefix}")  # request's directory; state it instead.
+    return ";".join(out)
+
+
+class MountPathCookieMiddleware(BaseHTTPMiddleware):
+    """Scope session cookies to the mount when the console is served under one.
+
+    One chokepoint on the way out, rather than a ``path=`` argument at each of
+    the five ``set_cookie`` / ``delete_cookie`` sites in auth_routes - so a route
+    added later inherits the scoping instead of having to remember it.
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        prefix = forwarded_prefix(request)
+        if not prefix:
+            return response
+        cookies = response.headers.getlist("set-cookie")
+        if not cookies:
+            return response
+        scoped = [scope_set_cookie(c, prefix) for c in cookies]
+        if scoped == cookies:
+            return response
+        del response.headers["set-cookie"]
+        for value in scoped:
+            response.headers.append("set-cookie", value)
+        return response
+
 
 # Per-path body-cap overrides: the Knowledge upload route stages immutable
 # originals up to knowledge.models.MAX_UPLOAD_BYTES (25 MiB) over HTTP (KNO-01),
@@ -207,6 +291,7 @@ def install_security(app: FastAPI, *, env: dict | None = None) -> None:
     # Order: body cap first (cheap reject), then headers, then CORS, then Host.
     # Starlette runs middleware in reverse add order, so add Host last to run first.
     app.add_middleware(BodySizeLimitMiddleware, max_bytes=max_body)
+    app.add_middleware(MountPathCookieMiddleware)
     app.add_middleware(SecurityHeadersMiddleware)
     if origins:
         # Explicit allowlist only - never '*' with credentials, never reflect.
