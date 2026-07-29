@@ -145,9 +145,6 @@ async def resolve_pat_principal(store: Any, secret: str) -> Principal | None:
         actor_tier="human",
         scope=user.scope,
         active_workspace_id=active_workspace_id,
-        # A machine bearer. It acts WITH its owner's authority (actor_tier stays
-        # "human", and every grant decision should treat it as that person), but
-        # nobody is at a keyboard, so controls that require a present human refuse
-        # it. See Principal.credential_kind.
+        # Acts with its owner's authority, but nobody is at a keyboard.
         credential_kind="pat",
     )

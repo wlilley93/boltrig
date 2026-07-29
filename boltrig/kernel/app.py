@@ -57,24 +57,11 @@ class Principal:
     # principal builds so the enriched audit row carries ip/ua.
     ip_address: str | None = None
     user_agent: str | None = None
-    # HOW this caller authenticated, as distinct from what tier they act at
-    # ([2026] VJS-CC-BOLTRIG-DEVELOPMENT-POSTURE-001 D4).
-    #
-    # `actor_tier` answers "with what authority", and a PAT legitimately answers
-    # "human" there: it carries its owner's role and a subset of their grants, and
-    # every authority decision should treat it as that person. But that made the
-    # development posture's headline claim - "it does not admit a non-human
-    # approver" - FALSE, because resolve_pat_principal stamps actor_tier="human"
-    # on a machine bearer. The court proved it: a PAT answered its own control
-    # approval on a live client tenant with no human present.
-    #
-    # So the credential CLASS is recorded separately from the authority tier, and
-    # the two questions stop being conflated. Any control that needs a person at
-    # a keyboard reads this, never actor_tier.
-    #
-    # It defaults to "machine" so a resolver added later, or one nobody thought
-    # about, is refused rather than admitted. A default of "unknown" that some
-    # caller treats as fine is the fail-open this field exists to prevent.
+    # HOW this caller authenticated, as opposed to `actor_tier`, which is the
+    # authority they act with. The two are not the same question and conflating
+    # them is what let a machine bearer clear a control approval; the full
+    # reasoning lives with the concept, in `config/dev_posture.py`. Defaults to
+    # "machine" so an unlabelled resolver is refused, never admitted.
     credential_kind: str = "machine"
 
     def context(
@@ -200,9 +187,7 @@ async def _dev_principal(request: Request) -> Principal:
         actor_tier=h.get("x-boltrig-tier", "human"),
         on_behalf_of=h.get("x-boltrig-obo"),
         scope=scope,
-        # The dev header door stands in for an interactive session (BOLTRIG_DEV_AUTH
-        # only; it is never reachable under a real ingress posture).
-        credential_kind="dev-header",
+        credential_kind="dev-header",  # stands in for an interactive session
         # The dev resolver simulates the authenticated session via headers; the
         # active workspace is part of that session. Without it a codex-routed turn
         # has no run+workspace scope and the read-only Codex phase degrades

@@ -84,6 +84,43 @@ class DevelopmentPosture:
     covers: tuple[str, ...] = ()
 
 
+# The refusals, as a named table rather than inline in the function. Each is the
+# sentence an operator reads when the posture does NOT apply, so they are the
+# most-read prose in this module and deserve to be reviewable in one place - and
+# it keeps posture_block a readable sequence of conditions rather than a wall.
+_R_NONE = "no development posture is declared for this tenant"
+_R_PRODUCTION = (
+    "a production signal is present ({signal}); the development posture never "
+    "applies in production, whatever the manifest declares"
+)
+_R_UNDECLARED_ENV = (
+    "the environment declares neither development nor production; the development "
+    "posture requires an affirmative development signal (ENV / BOLTRIG_ENV / "
+    "APP_ENV = dev|development|local|test), because the absence of a production "
+    "signal is not evidence of anything"
+)
+_R_INGRESS = (
+    "a real ingress posture is configured (OIDC / Cloudflare Access / session "
+    "login); a tenant with real users at a real door is in service, whatever the "
+    "manifest declares"
+)
+_R_UNBOUNDED = "the development posture has no expires_at; an unbounded posture is refused"
+_R_EXPIRED = "the development posture expired at {when}"
+_R_MACHINE = (
+    "the development posture requires a person at a door, and this caller "
+    "authenticated with a '{kind}' credential; suspending the independence rule "
+    "for a machine bearer would leave nobody in the loop at all, not merely "
+    "nobody independent"
+)
+_R_ROLE = "the development posture admits superadmin only, not '{role}'"
+_R_VERB = "the development posture covers control.* only, not '{verb}'"
+_R_UNCOVERED = (
+    "the development posture does not cover every active author on this tenant: "
+    "{who}. An author it does not name is a party the independence rule exists to "
+    "protect, so the posture has lapsed"
+)
+
+
 class DevelopmentPostureError(RuntimeError):
     """The declared posture is not one this process may honour."""
 
@@ -113,81 +150,44 @@ def posture_block(
     permissive at the one caller nobody updated.
     """
     if posture is None or not posture.enabled:
-        return "no development posture is declared for this tenant"
+        return _R_NONE
 
-    # The observed condition, checked BEFORE the declared one. A tenant that
-    # says it is in development and also says it is production is not a tenant
-    # whose own declaration should be trusted to break the tie.
+    # The observed condition, checked BEFORE the declared one. A tenant that says
+    # it is in development and also says it is production is not one whose own
+    # declaration should be trusted to break the tie.
     if production_signal is not None:
-        return (
-            f"a production signal is present ({production_signal}); the development "
-            "posture never applies in production, whatever the manifest declares"
-        )
+        return _R_PRODUCTION.format(signal=production_signal)
 
-    # D5. The absence of a production signal is not evidence of development: four
-    # unset variables permitted on every environment nobody configured, which is
-    # how this reached a live client. Require the environment to SAY so.
+    # D5. Absence of a production signal is not evidence of development.
     if development_signal is None:
-        return (
-            "the environment declares neither development nor production; the "
-            "development posture requires an affirmative development signal "
-            "(ENV / BOLTRIG_ENV / APP_ENV = dev|development|local|test), because "
-            "the absence of a production signal is not evidence of anything"
-        )
+        return _R_UNDECLARED_ENV
 
-    # D2. The limb this fence was missing. require_codex_trusted_posture refuses
-    # a real ingress posture as well as a production signal, and this posture was
-    # built expressly on that precedent while reproducing only one of its limbs.
-    # A tenant with OIDC, Cloudflare Access or session login has real users
-    # arriving at a real door, which is the definition of being in service.
+    # D2. The limb this fence dropped - and the one that would have refused the
+    # tenant it was actually declared on.
     if real_ingress:
-        return (
-            "a real ingress posture is configured (OIDC / Cloudflare Access / "
-            "session login); a tenant with real users at a real door is in service, "
-            "whatever the manifest declares"
-        )
+        return _R_INGRESS
 
     if posture.expires_at is None:
-        return "the development posture has no expires_at; an unbounded posture is refused"
+        return _R_UNBOUNDED
     if posture.expires_at <= now:
-        return f"the development posture expired at {posture.expires_at.isoformat()}"
+        return _R_EXPIRED.format(when=posture.expires_at.isoformat())
 
-    # D4. `actor_tier` is not a humanity check. `resolve_pat_principal` stamps it
-    # "human" on every machine bearer, so `Principal.credential_kind` is what
-    # carries this instead: a PAT cleared a control approval on a live client
-    # tenant with nobody present, and the check that was supposed to stop it read
-    # the wrong field rather than being absent.
+    # D4. The credential CLASS, never `actor_tier` - see the module docstring.
     if credential_kind not in _INTERACTIVE_CREDENTIALS:
-        return (
-            f"the development posture requires a person at a door, and this caller "
-            f"authenticated with a '{credential_kind}' credential; suspending the "
-            "independence rule for a machine bearer would leave nobody in the loop "
-            "at all, not merely nobody independent"
-        )
+        return _R_MACHINE.format(kind=credential_kind)
 
-    # Only the tenant's highest tier. `admin` is a role a CLIENT is routinely
-    # given so they have authority over their own data; letting it self-approve
-    # would hand the relief to the very party four-eyes protects.
+    # `admin` is a role a CLIENT is routinely given over their own data; admitting
+    # it would hand the relief to the very party four-eyes protects.
     if subject_role != "superadmin":
-        return f"the development posture admits superadmin only, not '{subject_role}'"
+        return _R_ROLE.format(role=subject_role)
 
     if not (verb or "").startswith("control."):
-        return f"the development posture covers control.* only, not '{verb}'"
+        return _R_VERB.format(verb=verb)
 
-    # D3, and it is last because it is the most specific. Independence may be
-    # suspended only where there is no party for independence to protect, so the
-    # declaration must name the authors it was made in respect of, and the
-    # arrival of anyone else must switch it off with no operator act. This
-    # mirrors _sole_active_author, which lapses the moment a second author
-    # exists - the difference between a relief that tracks an unsatisfiable rule
-    # and one that tracks an operator's say-so.
-    covered = set(posture.covers)
-    uncovered = sorted(a for a in active_author_ids if a not in covered)
+    # D3, last because it is the most specific: an author the declaration does not
+    # name is a party the independence rule exists to protect.
+    uncovered = sorted(a for a in active_author_ids if a not in set(posture.covers))
     if uncovered:
-        return (
-            "the development posture does not cover every active author on this "
-            f"tenant: {', '.join(uncovered)}. An author it does not name is a party "
-            "the independence rule exists to protect, so the posture has lapsed"
-        )
+        return _R_UNCOVERED.format(who=", ".join(uncovered))
 
     return None

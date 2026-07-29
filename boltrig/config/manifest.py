@@ -630,13 +630,10 @@ def _parse_development_posture(raw: Mapping[str, Any]) -> DevelopmentPosture:
             expires = datetime.fromisoformat(stated)
         except ValueError:
             expires = None
-    # `covers` names the active author-tier identities the declaration was made in
-    # respect of (D3). Absent or malformed yields (), which covers nobody and so
-    # refuses everything - the failure mode of a bad list must be full four-eyes.
-    stated_covers = block.get("covers")
-    covers: tuple[str, ...] = ()
-    if isinstance(stated_covers, (list, tuple)):
-        covers = tuple(str(v).strip() for v in stated_covers if str(v).strip())
+    # `covers` names the authors the declaration was made in respect of (D3);
+    # absent or malformed yields (), which covers nobody and refuses everything.
+    stated = block.get("covers")
+    covers = tuple(str(v).strip() for v in stated if str(v).strip()) if isinstance(stated, (list, tuple)) else ()
     return DevelopmentPosture(
         enabled=_as_bool(block.get("enabled", False)),
         expires_at=expires,
