@@ -92,10 +92,11 @@ _SCOPED_COOKIES = frozenset({"boltrig_session", "boltrig_csrf"})
 # It was ONE segment, and that was wrong in a way worth recording. Decision 0021
 # nests the operator console under /operator/ inside the worker image, so a
 # tenant mount of it is `/boltrig/operator` - which a single-segment pattern
-# rejects, dropping the cookie back to Path=/ and silently reinstating the
-# whole-host widening this middleware exists to close. The conservative choice
-# failed OPEN, because the fallback for "I do not recognise this prefix" is the
-# widest scope there is. Rejecting a value must never be the permissive branch.
+# rejects, and `forwarded_prefix` returning "" drops the cookie back to Path=/,
+# silently reinstating the whole-host widening `scope_set_cookie` exists to
+# close. The conservative choice failed OPEN, because the fallback for an
+# unrecognised prefix is the widest scope there is. Narrowing what a control
+# recognises weakens it whenever rejection is the permissive branch.
 _PREFIX_RE = re.compile(r"^(?:/[A-Za-z0-9][A-Za-z0-9._~-]{0,62}){1,4}$")
 
 
