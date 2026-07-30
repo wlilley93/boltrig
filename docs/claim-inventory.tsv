@@ -271,7 +271,7 @@ LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/models/grants.py:102	verb_id	Tru
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/models/memory.py:1	owner_scope	Round Five memory models: the governance + provenance control plane.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/models/workflow_schedules.py:12	grant_ceiling	One active cron desire and its last scheduler observation.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/models/workflow_triggers.py:14	secret_hash	One approved event source bound to one stored workflow.
-LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/store/distillation_reads.py:69	idle_before	Threads last touched before ``idle_before``, still open, NOT yet distilled.
+LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/store/distillation_reads.py:79	idle_before	Threads last touched before ``idle_before``, still open, NOT yet distilled.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/store/postgres.py:103	assume_role	SET LOCAL app.tenant_id from the request context.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/workflows/library.py:151	LookupError	Start a workflow and return a run descriptor (Hatchet seam).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/workflows/loop_contract.py:1	flow.loop	Closed declarative contract for bounded ``flow.loop`` expansion.
@@ -442,7 +442,7 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/memory/engine.py:1	LocalMemoryEng
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/memory/local.py:1	InMemoryStore	A minimal in-process Memory Engine reference for dev / offline (P9).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/memory/pgvector.py:1	VectorMemoryEngine	The Postgres + pgvector production Memory Engine (MEM-ENG-02).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/memory/session_distillation.py:1	list_idle_conversations	Distil a conversation into memory once it has gone quiet (`ingest.on_session_end`).
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/memory/session_distillation.py:165	select_conversations_to_distil	Call ``select_conversations_to_distil`` then ``distil_conversation`` on a slow loop, never crashing the worker (P9).
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/memory/session_distillation.py:203	select_conversations_to_distil	Call ``select_conversations_to_distil`` then ``distil_conversation`` on a slow loop, never crashing the worker (P9).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/memory/vector.py:1	PgVectorMemoryEngine	The native vector Memory Engine reference (MEM-ENG-02).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/models/access.py:1	UserInvitation	Round Four access models: personal access tokens, invitations, settings, sessions (S R4 Ch.4).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/models/access.py:127	credential_refs	A user's TOTP second-factor enrolment state, kept in its OWN table apart from the identity row (like the password credential).
@@ -1080,8 +1080,9 @@ ORDINARY	NO-SUBJECT	comment	boltrig/memory/cognee.py:90		ambient .env into os.en
 ORDINARY	NO-SUBJECT	comment	boltrig/memory/local.py:67		graph_completion: BFS over explicit edges, NEVER leaving the allowed
 ORDINARY	NO-SUBJECT	comment	boltrig/memory/pgvector.py:136		in-scope node set (scope-filtered in SQL: out-of-scope rows never read)
 ORDINARY	NO-SUBJECT	docstring	boltrig/memory/projection_queue.py:69		Return safe facts about this live queue seam, never its task payloads.
-ORDINARY	NO-SUBJECT	comment	boltrig/memory/session_distillation.py:202		candidate away) cannot also zero this number.
-ORDINARY	NO-SUBJECT	comment	boltrig/memory/session_distillation.py:211		A single generic seat cannot work: memory RBAC derives the
+ORDINARY	NO-SUBJECT	comment	boltrig/memory/session_distillation.py:181		INSIDE selection (the 2026-07-30 wedge filtered every candidate away) cannot
+ORDINARY	NO-SUBJECT	comment	boltrig/memory/session_distillation.py:191		generic seat cannot work: memory RBAC derives the permitted owner
+ORDINARY	NO-SUBJECT	comment	boltrig/memory/session_distillation.py:256		never change the sweep outcome, and a failed write must not stall the
 ORDINARY	NO-SUBJECT	comment	boltrig/memory/vector.py:85		graph_completion: BFS over explicit edges, NEVER leaving the allowed
 ORDINARY	NO-SUBJECT	comment	boltrig/models/access.py:109		It is a HINT persisted on the session, NEVER trusted on its own: the resolver
 ORDINARY	NO-SUBJECT	comment	boltrig/models/access.py:111		None if the user is no longer a member (fail-closed), so a stale row can never
@@ -1151,7 +1152,7 @@ ORDINARY	NO-SUBJECT	comment	boltrig/store/channel_outbox.py:196		claim_work_item
 ORDINARY	NO-SUBJECT	comment	boltrig/store/channel_outbox.py:244		terminally failed (a poison message never hot-loops).
 ORDINARY	NO-SUBJECT	comment	boltrig/store/channels.py:108		control_channel_ops._bind_channel), so an id-arbitrated upsert never
 ORDINARY	NO-SUBJECT	comment	boltrig/store/channels.py:235		The PRIMARY KEY first, BEFORE anything is removed.
-ORDINARY	NO-SUBJECT	comment	boltrig/store/distillation_reads.py:55		caught this - the in-memory tests never touch the pool).
+ORDINARY	NO-SUBJECT	comment	boltrig/store/distillation_reads.py:65		caught this - the in-memory tests never touch the pool).
 ORDINARY	NO-SUBJECT	comment	boltrig/store/idempotency.py:130		twin, whose claim never awaits between its dict read and write, has no such
 ORDINARY	NO-SUBJECT	comment	boltrig/store/idempotency.py:183		a claim we never wrote - but say so, loudly.
 ORDINARY	NO-SUBJECT	comment	boltrig/store/idempotency.py:186		in fact FREE becomes a silently dropped idempotency guarantee.

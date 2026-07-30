@@ -14,7 +14,12 @@ import re
 
 from .base import TenantId
 
-BACKGROUND_JOB_NAMES = ("hitl_expiry", "retention")
+# Adding a name here is what puts a loop on /readyz: background_readiness
+# iterates this tuple, so an unregistered loop is invisible to readiness no matter
+# how carefully it logs. `distillation` was added 2026-07-30 after its sweep
+# wedged for seven minutes in total silence - it had been writing to logs only,
+# which survive no restart and no operator query.
+BACKGROUND_JOB_NAMES = ("hitl_expiry", "retention", "distillation")
 BACKGROUND_JOB_OUTCOMES = ("succeeded", "failed")
 BACKGROUND_JOB_RECEIPTS_PER_JOB = 4
 BACKGROUND_JOB_MAX_RETURNED_RECEIPTS = (

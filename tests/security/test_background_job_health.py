@@ -188,7 +188,12 @@ def test_authenticated_platform_projection_is_tenant_scoped_and_opaque():
         "proves_liveness": False,
         "process_coverage": "bounded_receipts_not_replica_inventory",
         "max_retained_process_receipts_per_job": 4,
-        "max_returned_receipts": 8,
+        # DELIBERATELY A LITERAL, not len(BACKGROUND_JOB_NAMES) * 4. Deriving it
+        # would make this assertion unable to notice a change in what the
+        # authenticated projection exposes, which is the one thing it is here to
+        # catch. It moved 8 -> 12 on 2026-07-30 when `distillation` was registered
+        # as a third background job, and this test is how that surfaced.
+        "max_returned_receipts": 12,
     }
     assert [row["process_instance_identity"] for row in body["background_jobs"]] == [
         PROCESS

@@ -50,6 +50,16 @@ class DistillationReadsPG:
         so a selection bug leaves this number visibly non-zero while acted stays
         zero, which is precisely the stalled signal SweepProgress escalates.
         """
+        # COUPLED TO TASK #43, AND IT WILL BREAK SILENTLY. This subtraction counts
+        # ALL conversation receipts against the idle population, which is exact only
+        # while "has a receipt" means "needs no further work". The moment a
+        # CONTINUED thread becomes re-eligible (re-distil after new messages), such
+        # a thread sits in BOTH counts - +1 idle, -1 distilled - so this returns 0
+        # while one genuinely waits, and the stall detector reports idle with work
+        # pending. That is the exact blind spot `pending` was added to close.
+        # Whoever implements #43 must change this to count threads with no receipt
+        # NEWER than their last message, not threads with no receipt at all.
+        #
         # fetchrow, not fetchval: _RlsPool exposes only fetch/fetchrow/execute,
         # and it is the pool every store call goes through (the beelink deploy
         # caught this - the in-memory tests never touch the pool).
