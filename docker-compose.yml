@@ -228,6 +228,21 @@ services:
       BOLTRIG_OPENCODE_HOME: ${BOLTRIG_OPENCODE_HOME:-/var/lib/boltrig/opencode}
       BOLTRIG_BROWSER_CLI_HOME: ${BOLTRIG_BROWSER_CLI_HOME:-/var/lib/boltrig/browser-cli}
       BOLTRIG_BROWSER_CLI_BIN: ${BOLTRIG_BROWSER_CLI_BIN:-/usr/local/bin/browser-use}
+      # Reflection is the ONLY automatic memory writer in the stack: fleet/pump.py
+      # calls memory.remember with a distilled lesson when a work item reaches a
+      # terminal status, under the bounded REFLECTION_GRANTS seat (exactly that one
+      # verb). It reads BOLTRIG_REFLECT, and until now that variable was not plumbed
+      # into this service at all, so it could not be set without editing this file -
+      # and it was set nowhere. Measured 2026-07-30: 90 terminal work items on the
+      # beelink and 69 on the CV tenant, and ZERO memory_items on either. A memory
+      # subsystem that never records anything looks identical to one switched off.
+      #
+      # Defaulted OFF deliberately. Reflection RETAINS derived content (manifest
+      # memory.retention_days is 365), so switching it on for a tenant is a data
+      # decision, not a default. The manifest already declares memory.enabled per
+      # tenant; that declaration ought to drive this rather than a separate env var
+      # nobody sets, and that mismatch is filed rather than papered over here.
+      BOLTRIG_REFLECT: ${BOLTRIG_REFLECT:-}
     volumes:
       - ./manifest.yaml:/app/manifest.yaml:ro
       - ./libraries:/app/libraries:ro
