@@ -21,6 +21,7 @@ from .channel_outbox import ChannelOutboxStorePG
 from .budget_policy import BudgetPolicyPG
 from .budget_usage import BudgetUsagePG
 from .capabilities import CapabilityStorePG
+from .distillation_reads import DistillationReadsPG
 from .guarded_writes import GuardedWritesPG
 from .idempotency import IdempotencyStorePG
 from .observability_reads import ObservabilityReadsPG
@@ -168,6 +169,7 @@ async def _init_conn(conn: asyncpg.Connection) -> None:
 
 @bind_tenant_on_store_methods
 class PostgresStore(
+    DistillationReadsPG,
     BudgetPolicyPG, BudgetUsagePG, WorkItemReadsPG, IdempotencyStorePG, GuardedWritesPG,
     PermanentFleetStorePG,
     BirthProfileStorePG,

@@ -474,6 +474,11 @@ BACKGROUND_FEATURES: dict[str, FeatureCoverage] = {
         ("worker", "deployment", "worker", "worker", "operator"),
         "Operate shows bounded per-process attempt/success/failure/lag receipts without claiming liveness or complete replica coverage.",
     ),
+    "session-distillation": _coverage(
+        "boltrig/memory/session_distillation.py:run_distillation_forever",
+        ("worker", "operator", "worker", "worker", "operator"),
+        "Idle-thread distillation into memory runs in the worker under a memory.remember-only seat; the manifest toggle and idle window stay operational.",
+    ),
     "retention-janitor": _coverage(
         "boltrig/fleet/retention.py:run_retention_forever",
         ("worker", "operator", "worker", "worker", "operator"),

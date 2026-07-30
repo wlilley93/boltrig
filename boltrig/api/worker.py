@@ -158,6 +158,52 @@ def _start_retention_janitor(
     )
 
 
+def _start_session_distillation(
+    kernel: Any, tenant: str, manifest: Any
+) -> "asyncio.Task[None] | None":
+    """Start the on_session_end distillation sweep, or None when the manifest is off.
+
+    Same reason this sits beside the retention janitor: the flag
+    ``memory.ingest.on_session_end`` had shipped in manifest.example.yaml and been
+    offered as an admin-console toggle while NOTHING read it. An operator who
+    turned it on believed conversations were being distilled into memory; none
+    were. A switch for behaviour that does not exist is worse than no switch.
+
+    Off unless the manifest asks for it, and the worker SAYS which - so "off" is a
+    decision on the record rather than the silence it used to be.
+    """
+    from boltrig.memory.session_distillation import (
+        policy_from_manifest,
+        run_distillation_forever,
+    )
+
+    policy = policy_from_manifest(getattr(manifest, "extra", None))
+    if not policy.enabled:
+        log.info("session distillation disabled (memory.ingest.on_session_end)")
+        return None
+    log.info(
+        "session distillation live (tenant=%s, idle=%smin)", tenant, policy.idle_minutes
+    )
+    return asyncio.create_task(
+        run_distillation_forever(
+            kernel, tenant, policy, lambda: _distillation_context(tenant)
+        ),
+        name="session-distillation",
+    )
+
+
+def _distillation_context(tenant: str) -> Any:
+    """The seat the sweep acts under: a system actor with exactly memory.remember."""
+    from boltrig.models import GrantSet, InvocationContext
+
+    return InvocationContext(
+        tenant_id=tenant,
+        actor="session-distillation",
+        actor_tier="system",
+        grants=GrantSet.of(["memory.remember"]),
+    )
+
+
 def _start_workflow_scheduler(
     kernel: Any, tenant: str, executor: Any
 ) -> "asyncio.Task[None] | None":
@@ -255,6 +301,7 @@ def _start_background_tasks(
         stack_health_task,
         _start_retention_janitor(kernel.store, tenant, manifest, process_identity),
         _start_workflow_scheduler(kernel, tenant, executor),
+        _start_session_distillation(kernel, tenant, manifest),
     )
 
 

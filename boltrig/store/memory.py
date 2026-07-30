@@ -785,6 +785,24 @@ class InMemoryStore(BudgetPolicyMem, BudgetUsageMem, WorkItemReadsMem, Idempoten
     async def update_memory_ingestion(self, ing):
         self._mem_ingest[(ing.tenant_id, ing.id)] = ing
 
+    async def get_memory_ingestion_by_source(self, tenant_id, source_kind, source_ref):
+        hits = [
+            i
+            for (t, _), i in self._mem_ingest.items()
+            if t == tenant_id and i.source_kind == source_kind and i.source_ref == source_ref
+        ]
+        return max(hits, key=lambda i: i.created_at) if hits else None
+
+    async def list_idle_conversations(self, tenant_id, idle_before, *, limit=50):
+        out = [
+            c
+            for (t, _), c in self._convs.items()
+            if t == tenant_id
+            and getattr(c, "status", "active") == "active"
+            and c.updated_at < idle_before
+        ]
+        return sorted(out, key=lambda c: c.updated_at)[: max(1, min(limit, 500))]
+
     async def list_memory_ingestions(self, tenant_id, limit=50):
         out = [i for (t, _), i in self._mem_ingest.items() if t == tenant_id]
         return sorted(out, key=lambda i: i.created_at, reverse=True)[:limit]
