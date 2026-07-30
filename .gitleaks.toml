@@ -52,6 +52,26 @@ regexTarget = "line"
 regexes = ['''b9f2c1a4e7d38650f1c2b3a4958d6e7f0a1b2c3d4e5f60718293a4b5c6d7e8f9''']
 
 [[allowlists]]
+# The AI-key SEALING test's own fixture. The value is an obviously-fake sentence
+# in hyphenated english, and it is the material the test then PROVES never leaves
+# the sealed store - so the one place it is written is the place that exists to
+# show it cannot escape. generic-api-key matched it on the `sk-` prefix and the
+# length, not on any property that makes it a credential.
+#
+# Scoped exactly like every other fixture entry here: one rule, one path, one
+# literal. Nothing else in that file is suppressed, so a REAL key added to it
+# tomorrow still stops the scan.
+description = "AI key sealing fixture (tests/security/test_ai_key_secret_proposals.py)"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = [
+  '''^tests/security/test_ai_key_secret_proposals\.py$''',
+  '''^tests/store/test_ai_key_secret_proposals\.py$''',
+]
+regexTarget = "line"
+regexes = ['''sk-proposal-secret-material-0123456789''']
+
+[[allowlists]]
 description = "Webhook signature verification fixture"
 condition = "AND"
 targetRules = ["generic-api-key"]
