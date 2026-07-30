@@ -290,6 +290,7 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/mcp_transport.py:157	ini
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/sql_base.py:1	db.execute_write	Reusable SQL adapter base for ``runtime='sql'`` integrations (US-ADP-03, SEC-09).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/addons/__init__.py:1	composed_version	Addons: integration-specific behaviour that ships only where it is provisioned.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/addons/__init__.py:53	ref	One declarative, kernel-evaluated add-on readiness requirement.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/api/audit_verify.py:1	AuditWriter.verify	`boltrig audit-verify` runs ``AuditWriter.verify`` from a shell, so a cron or a probe can re-derive the tamper-evidence chain without a Python session.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/api/auth_recovery_routes.py:1	deliver_password_reset	Public password recovery through the fail-closed ``deliver_password_reset`` seam.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/api/auth_recovery_routes.py:53	replace_password_reset_token	Use ``replace_password_reset_token`` to issue only for an active credential-backed identity, then call ``deliver_password_reset`` once.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/api/auth_routes.py:270	verify_totp	Load the SEALED base32 TOTP secret for a ref, kernel-side, at verify time.

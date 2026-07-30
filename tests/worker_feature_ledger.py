@@ -681,6 +681,11 @@ CLI_COMMAND_FEATURES: dict[str, FeatureCoverage] = {
         ("worker", "deployment", "deployment", "worker", "deployment"),
         "The signed short-lived tool receipt is projected in Operate; probe execution stays operational.",
     ),
+    "audit-verify": _coverage(
+        "boltrig/api/cli.py:audit-verify",
+        ("worker", "deployment", "deployment", "worker", "deployment"),
+        "Re-deriving the tamper-evidence chain is an operational probe; the verdict is projected in Operate.",
+    ),
     "initiate": _coverage(
         "boltrig/api/cli.py:initiate",
         ("deployment", "deployment", "deployment", "worker", "deployment"),

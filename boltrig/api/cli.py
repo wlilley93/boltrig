@@ -45,6 +45,15 @@ def _build_parser() -> argparse.ArgumentParser:
         "fleet-health",
         help="readiness probe for a fleet worker (reads its signed tool receipt)",
     )
+    # The audit chain claims tamper evidence, and until 2026-07-30 nothing read
+    # it: verify was reachable only from Python. The beelink's chain had been
+    # failing for six days unnoticed. Exposing it is what makes the claim
+    # checkable by a cron rather than by remembering.
+    p_audit = sub.add_parser(
+        "audit-verify",
+        help="re-derive the audit hash chain (0 verifies, 1 does not, 2 could not look)",
+    )
+    p_audit.add_argument("--tenant", default=None, help="tenant to verify")
 
     _add_identity_parsers(sub)
 
@@ -235,6 +244,12 @@ def _dispatch(args: argparse.Namespace) -> int:
         from .fleet_health import main as fleet_health_main
 
         return fleet_health_main()
+    if args.cmd == "audit-verify":
+        from .audit_verify import main as audit_verify_main
+
+        return audit_verify_main(
+            ["--tenant", args.tenant] if args.tenant else []
+        )
 
     if args.cmd == "worker":
         from .worker import main as worker_main
