@@ -205,6 +205,9 @@ async def verify_chain(
     canonical: Callable[[Any], str],
     tenant_id: str,
     page_size: int,
+    *,
+    start_after: int = 0,
+    seed_prev: str | None = None,
 ) -> tuple[bool, int | None]:
     """Re-derive a tamper-evidence hash chain for a tenant from seq 1 upward.
 
@@ -214,9 +217,22 @@ async def verify_chain(
     window's first row chains to a hash outside it while ``prev`` seeds None)
     and never see tampering below the window. ``scan`` is ``store.audit_scan``
     or ``store.security_scan``; ``canonical`` is the matching serialiser.
+    ``start_after``/``seed_prev`` verify a SEGMENT instead, and exist because this
+    function returns at the FIRST bad row - so one unrepairable break makes every
+    later row permanently unchecked. The beelink is the live case: a key rotated
+    on 2026-07-24 without a recorded epoch left rows 368-405 unverifiable for good,
+    and the walk aborts there, so the 300 rows written since say nothing about
+    themselves. A check that can never speak about current data is one people stop
+    reading.
+
+    ``seed_prev`` is not optional decoration when ``start_after`` is set. The
+    segment's first row chains to a hash OUTSIDE the segment, so seeding ``prev``
+    as None would report a break on a sound chain - the exact cry-wolf this
+    docstring warns about above. Pass the preceding row's stored hash.
+
     Returns (ok, first_bad_seq)."""
-    prev: str | None = None
-    after = 0
+    prev: str | None = seed_prev
+    after = max(0, int(start_after))
     page = max(1, page_size)
     # Resolved once per verification, not per row: a rotation cannot move mid-scan, and the
     # bound must be the same for every row or the answer depends on when it was read.
@@ -270,6 +286,24 @@ class AuditWriter:
             await self._store.audit_append(event)
         return event
 
-    async def verify(self, tenant_id: str, *, page_size: int = 1000) -> tuple[bool, int | None]:
-        """Re-derive the WHOLE chain from seq 1 (SEC-168). Returns (ok, first_bad_seq)."""
-        return await verify_chain(self._store.audit_scan, _canonical, tenant_id, page_size)
+    async def verify(
+        self,
+        tenant_id: str,
+        *,
+        page_size: int = 1000,
+        start_after: int = 0,
+        seed_prev: str | None = None,
+    ) -> tuple[bool, int | None]:
+        """Re-derive the WHOLE chain from seq 1 (SEC-168). Returns (ok, first_bad_seq).
+
+        ``start_after``/``seed_prev`` narrow it to a segment; see ``verify_chain``
+        for why the seed is mandatory rather than convenient.
+        """
+        return await verify_chain(
+            self._store.audit_scan,
+            _canonical,
+            tenant_id,
+            page_size,
+            start_after=start_after,
+            seed_prev=seed_prev,
+        )

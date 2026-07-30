@@ -29,7 +29,7 @@ import os
 import sys
 
 
-async def _verify(tenant_id: str) -> tuple[int, str]:
+async def _verify(tenant_id: str, from_seq: int = 0) -> tuple[int, str]:
     dsn = os.environ.get("DATABASE_URL") or os.environ.get("BOLTRIG_DATABASE_URL")
     if not dsn:
         return 2, "no DATABASE_URL: cannot verify, and cannot call that success"
@@ -48,7 +48,24 @@ async def _verify(tenant_id: str) -> tuple[int, str]:
 
     try:
         epochs = _retired_epochs()
-        ok, first_bad = await AuditWriter(store).verify(tenant_id)
+        writer = AuditWriter(store)
+        seed = None
+        skipped = ""
+        if from_seq > 1:
+            # Seed prev from the row BEFORE the segment. Without it the segment's
+            # first row chains to a hash outside the window and a sound chain
+            # reports a break - the cry-wolf verify_chain's docstring warns of.
+            rows = await store.audit_scan(tenant_id, from_seq - 2, 1)
+            if not rows:
+                return 2, f"no row at seq {from_seq - 1} to seed the segment from"
+            seed = rows[0].hash
+            skipped = (
+                f"  SEGMENT ONLY: rows 1..{from_seq - 1} were NOT CHECKED. "
+                f"This says nothing about them.\n"
+            )
+        ok, first_bad = await writer.verify(
+            tenant_id, start_after=max(0, from_seq - 1), seed_prev=seed
+        )
     finally:
         await store.close()
 
@@ -59,8 +76,9 @@ async def _verify(tenant_id: str) -> tuple[int, str]:
         else " (no retired key epochs registered)"
     )
     if ok:
-        return 0, f"audit chain verifies for tenant={tenant_id}{epoch_note}"
-    return 1, (
+        scope = f"from seq {from_seq} " if from_seq > 1 else ""
+        return 0, f"{skipped}audit chain verifies {scope}for tenant={tenant_id}{epoch_note}"
+    return 1, skipped + (
         f"AUDIT CHAIN DOES NOT VERIFY for tenant={tenant_id}: first bad seq "
         f"{first_bad}{epoch_note}. Either the chain was altered, or a key was "
         f"rotated without recording it in BOLTRIG_AUDIT_HMAC_RETIRED."
@@ -70,11 +88,22 @@ async def _verify(tenant_id: str) -> tuple[int, str]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="boltrig audit-verify")
     parser.add_argument(
+        "--from-seq",
+        type=int,
+        default=0,
+        help=(
+            "verify only from this seq upward, seeded from the preceding row. "
+            "Use when an UNREPAIRABLE break below it would otherwise abort the "
+            "walk and leave every later row permanently unchecked. It prints the "
+            "skipped range, because skipping is exactly how a real break gets missed."
+        ),
+    )
+    parser.add_argument(
         "--tenant",
         default=os.environ.get("BOLTRIG_TENANT_ID", "default"),
         help="tenant whose chain to re-derive (default: default)",
     )
     args = parser.parse_args(argv)
-    code, message = asyncio.run(_verify(args.tenant))
+    code, message = asyncio.run(_verify(args.tenant, args.from_seq))
     print(message, file=sys.stderr if code else sys.stdout)
     return code
