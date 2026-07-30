@@ -454,6 +454,8 @@ rivet_agentos:
   enabled: true
   role: sandbox_runtime
   network_allow: [kernel_mcp, model_endpoint]
+  # NOT READ BY ANY CODE (measured 2026-07-30). It is offered in the admin console,
+  # so it can be toggled and nothing changes. Task #40.
   native_tools: false
 
 browser_cli:
@@ -517,7 +519,18 @@ memory:
   fanout:
     mode: ledger_then_projection       # commit once, then write projections
     execution: inline                  # inline | queued; queued uses Hatchet/local executor tasks
+    # NOT READ BY ANY CODE (measured 2026-07-30). Left in place rather than
+    # deleted so an existing manifest still parses, but the comments now say what
+    # actually happens instead of what the field name implies.
+    #
+    # retry_failed: retry is a property of `execution: queued`, which bounds
+    # attempts at 3. Under the default `execution: inline` there is NO retry loop
+    # at all, so a failed projection is not reattempted whatever this says. Tracked
+    # on task #40; the fix is either to honour the flag or to move retry inline.
     retry_failed: true
+    # record_projection_status: this one is TRUE, just not optional - status is
+    # recorded unconditionally (memory/projection_delivery_attempts.py). Setting it
+    # false would be silently ignored.
     record_projection_status: true
   embedding_endpoint: local-sensitive  # sensitive-safe default (SEC-43)
   extraction_endpoint: local-sensitive # entity/relationship extraction model
@@ -526,6 +539,9 @@ memory:
   cross_scope_edges: forbidden         # forbidden | governed
   ingest:
     on_session_end: true               # distil a conversation when it closes
+    # NOT READ (2026-07-30). A thread is distilled ONCE and never revisited, so a
+    # conversation that continues after distillation keeps a summary of only its
+    # earlier messages. Task #43; this is the flag that should govern the fix.
     incremental: true                  # process only new/changed content
     schedule: null                     # optional tz-aware cron for document corpora
     screen_content: true               # anti-poisoning screen (SEC-42)
