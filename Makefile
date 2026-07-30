@@ -75,8 +75,16 @@ logs: ## Tail logs for every service (SERVICE=kernel to scope it)
 # real failures. Do not reach for 127.0.0.1:5432 instead: on a box like this one
 # that is a DIFFERENT Postgres, and pointing the store suite at the wrong server
 # is the kind of mistake that only fails loudly by luck.
-test: ## Run the test suite (set BOLTRIG_TEST_DATABASE_URL to also run the Postgres tests)
-	$(PY) -m pytest -q
+test: ## Run the test suite against a real Postgres, standing one up if needed
+# NOT "also run the Postgres tests", which is what this said until 2026-07-30.
+# The database leg is ~187 tests including the RLS fence-drift guard, store
+# parity, migration parity and tenancy, and conftest now ENDS THE RUN NON-ZERO
+# when BOLTRIG_TEST_DATABASE_URL is absent - so the old opt-in text described a
+# target that fails. with_test_postgres.sh reuses an existing
+# BOLTRIG_TEST_DATABASE_URL (CI supplies one) and otherwise runs a disposable
+# pinned pgvector container, so the default local run verifies what CI verifies.
+# To decline deliberately: BOLTRIG_ALLOW_UNVERIFIED_POSTGRES=1 $(PY) -m pytest -q
+	scripts/with_test_postgres.sh $(PY) -m pytest -q
 
 lint: ## Run ruff over the Python source, scripts, and tests
 # The version check is the gate, and the lint is what it protects.
