@@ -1205,3 +1205,71 @@ async def test_authoritative_provider_preserves_non_mcp_dispatch() -> None:
         {"value": "still-routed"},
         _ctx(["*"], run_id="ordinary-provider"),
     ) == {"echo": "still-routed"}
+
+
+async def test_oversize_stored_snapshot_degrades_one_adapter_not_the_whole_kernel(
+    monkeypatch,
+):
+    """A stored snapshot the validator rejects must not refuse the process a start.
+
+    Regression, measured on the beelink 2026-07-30. `d072c92` added
+    MCP_MAX_TOOL_SNAPSHOT=500 and validated it inside ``apply_tool_snapshot``, which
+    rehydrate calls at boot. The live `opbox` consumer publishes 633 verbs, so the
+    kernel died on EVERY start with "MCP tool snapshot is out of bounds" the moment
+    the image was rebuilt. Raising here cannot stop bad data arriving - the snapshot
+    is already stored - it can only turn one unusable adapter into a dead kernel.
+    """
+    from boltrig.config import control_rehydrate
+    from boltrig.config.control_rehydrate import rehydrate_adapter_instance
+
+    store = InMemoryStore()
+    store.set_tenant_permissions(TenantPermissions(T, GrantSet.of(["*"])))
+    kernel = Kernel(store)
+    await kernel.register_adapter(
+        T,
+        build_control_plane_adapter(
+            store,
+            loader=kernel.loader,
+            registry=kernel.registry,
+            credentials=kernel.credentials,
+        ),
+    )
+    monkeypatch.setenv("SOME_MCP_REF", "a-bearer")
+    await kernel.invoke(
+        "control",
+        "control.mcp_server.register",
+        {
+            "id": "ext-mcp",
+            "url": "https://mcp.example.com/v1",
+            "credential_ref": "SOME_MCP_REF",
+        },
+        _ctx(["*"], run_id="register-oversize"),
+    )
+    record = await store.get_adapter(T, "ext-mcp")
+    assert record is not None
+
+    # Red-seed: without the try/except this propagates and startup dies.
+    def _reject(snapshot):  # noqa: ANN001 - test seam
+        raise ValueError("MCP tool snapshot is out of bounds")
+
+    monkeypatch.setattr(
+        "boltrig.adapters.mcp_consumer.validate_mcp_tool_snapshot", _reject
+    )
+
+    live = await rehydrate_adapter_instance(
+        store, kernel.credentials, kernel.loader, T, record
+    )
+    assert live is None, "the adapter must be skipped, not raised through"
+    assert control_rehydrate.log is not None
+
+
+def test_snapshot_cap_admits_a_real_registry():
+    """The cap must sit ABOVE a shipping adapter, not below it.
+
+    `opbox` published 633 verbs on 2026-07-30 against a cap of 500. A ceiling that a
+    real deployment exceeds is not a safety bound, it is an outage. The payload bound
+    that does the actual work is MCP_MAX_TOOL_SNAPSHOT_BYTES.
+    """
+    from boltrig.models.mcp_lifecycle import MCP_MAX_TOOL_SNAPSHOT
+
+    assert MCP_MAX_TOOL_SNAPSHOT > 633
