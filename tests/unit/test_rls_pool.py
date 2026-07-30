@@ -189,3 +189,81 @@ def test_binding_works_when_the_tenant_is_passed_as_a_KEYWORD():
     assert guc, "no GUC statement was issued for a keyword-passed tenant"
     assert guc[0][2][0] == "kw-tenant"
     assert _current_tenant.get() is None
+
+
+@pytest.mark.invariant("SEC-65")
+def test_every_holder_of_an_rls_pool_binds_the_tenant():
+    """Decorating PostgresStore is NOT sufficient, and this is how we know.
+
+    PostgresKnowledgeRepository holds its own _RlsPool and sits OUTSIDE the
+    PostgresStore MRO, so the class decorator there never reached it. With
+    BOLTRIG_RLS=1 the kernel got past model_endpoints and died on
+    `new row violates row-level security policy for table "knowledge_providers"`.
+
+    So the invariant is not "PostgresStore is decorated", it is "every class that
+    issues statements through an _RlsPool binds the tenant". This walks the source
+    for _pool users and fails on any that is neither a PostgresStore mixin (covered
+    transitively) nor decorated itself - which is what makes a THIRD such class,
+    added later, fail here rather than at some future boot.
+    """
+    import importlib
+    import inspect
+    import pathlib
+    import re
+
+    from boltrig.store.postgres import PostgresStore
+
+    covered = {c.__module__ for c in PostgresStore.__mro__}
+
+    root = pathlib.Path(__file__).resolve().parents[2] / "boltrig"
+    uses_pool = re.compile(r"self\._pool\.(execute|fetch|fetchrow)\b")
+    offenders = []
+    for path in root.rglob("*.py"):
+        if not uses_pool.search(path.read_text(encoding="utf-8", errors="ignore")):
+            continue
+        module = ".".join(path.relative_to(root.parent).with_suffix("").parts)
+        if module in covered or module == "boltrig.store.postgres":
+            continue
+        # Do NOT trust a name allowlist - that is a check that cannot fail. Import
+        # the module and require that its _pool-using classes are ACTUALLY
+        # decorated. Removing the decorator must turn this red.
+        mod = importlib.import_module(module)
+        for _, cls in inspect.getmembers(mod, inspect.isclass):
+            if cls.__module__ != module:
+                continue
+            methods = [
+                inspect.getattr_static(cls, a, None)
+                for a in dir(cls)
+                if not a.startswith("_")
+            ]
+            coros = [f for f in methods if inspect.iscoroutinefunction(f)]
+            if not coros:
+                continue
+            if not any(getattr(f, "_boltrig_binds_tenant", False) for f in coros):
+                offenders.append(f"{module}.{cls.__name__}")
+
+    assert not offenders, (
+        "these modules issue statements through an _RlsPool but are neither a "
+        f"PostgresStore mixin nor decorated, so their tenant is unbound: {offenders}"
+    )
+
+
+@pytest.mark.invariant("SEC-65")
+def test_the_knowledge_repository_is_decorated():
+    """The concrete half of the sweep above: the class that actually broke boot."""
+    import inspect
+
+    from boltrig.knowledge.postgres_repository import PostgresKnowledgeRepository
+
+    bound = [
+        name
+        for name in dir(PostgresKnowledgeRepository)
+        if not name.startswith("_")
+        and getattr(
+            inspect.getattr_static(PostgresKnowledgeRepository, name, None),
+            "_boltrig_binds_tenant",
+            False,
+        )
+    ]
+    assert "ensure_providers" in bound, "ensure_providers is the one that killed boot"
+    assert len(bound) >= 17, f"only {len(bound)} methods bound"

@@ -22,9 +22,18 @@ from .postgres_rows import (
     upload as _upload,
     vector as _vector,
 )
+from boltrig.store.tenant_scope import bind_tenant_on_store_methods
+
 from .postgres_writes import insert_bundle
 
 
+# The SECOND holder of an _RlsPool. PostgresStore's mixins are all covered by the
+# same decorator applied there, but this repository sits outside that MRO, so it
+# was missed: with BOLTRIG_RLS=1 the kernel got past model_endpoints and then died
+# on `new row violates row-level security policy for table "knowledge_providers"`.
+# Checked the whole tree for others - every other _RlsPool user IS a PostgresStore
+# mixin, so these two decorations are the complete set.
+@bind_tenant_on_store_methods
 class PostgresKnowledgeRepository:
     def __init__(self, pool) -> None:
         self._pool = pool
