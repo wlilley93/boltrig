@@ -123,3 +123,92 @@ def test_rls_enforces_tenant_isolation_and_fails_closed():
             await store.close()
 
     asyncio.run(run())
+
+
+@_pg
+@pytest.mark.invariant("SEC-65")
+def test_rls_binds_the_STORE_not_just_a_hand_rolled_connection():
+    """The deployed shape: does a store call through _RlsPool actually get fenced?
+
+    THE TEST ABOVE PASSES ON AN UNPROTECTED DEPLOYMENT, and that is why this one
+    exists. It issues `SET LOCAL ROLE boltrig_app` itself before asserting, and it
+    skips its owner-side assertion when the connecting user is a superuser. Both are
+    reasonable in isolation and together they mean it proves the POLICIES are correct
+    while proving nothing about the APP.
+
+    Measured on the beelink 2026-07-30 with the overlay applied and
+    relrowsecurity + relforcerowsecurity TRUE on every tenant table: the app,
+    connected as the owner, could still read every tenant's rows, because the owner
+    is a superuser and a superuser bypasses RLS unconditionally. The fence was up and
+    the application walked round it.
+
+    So this test does NOT touch roles. It binds a tenant the way the API does
+    (set_current_tenant) and then goes through the store's ordinary fetch path. If
+    the store stops assuming boltrig_app, this fails.
+    """
+    async def run():
+        from boltrig.store.postgres import PostgresStore, set_current_tenant
+
+        owner = await PostgresStore.connect(DSN)
+        try:
+            await owner.apply_rls()
+            async with owner._pool.acquire() as c:
+                for tid, nid in (("rls_A", "rls_store_a"), ("rls_B", "rls_store_b")):
+                    async with c.transaction():
+                        await c.execute("SELECT set_config('app.tenant_id',$1,true)", tid)
+                        await c.execute(
+                            "INSERT INTO nouns (id, tenant_id) VALUES ($1,$2) "
+                            "ON CONFLICT DO NOTHING", nid, tid,
+                        )
+
+            # the deployed configuration: rls=True, apply_schema=False
+            store = await PostgresStore.connect(DSN, apply_schema=False, rls=True)
+            try:
+                # The overlay is applied, so the role must have been found. If this is
+                # False the rest of the test would pass vacuously against an
+                # unprotected store, so it is asserted rather than assumed.
+                assert store._assume_app_role is True, (
+                    "boltrig_app not found after apply_rls; the assertions below would "
+                    "then be testing an unprotected store and passing"
+                )
+
+                set_current_tenant("rls_A")
+                rows = await store._pool.fetch(
+                    "SELECT id FROM nouns WHERE id IN ('rls_store_a','rls_store_b')"
+                )
+                ids = {r["id"] for r in rows}
+                assert "rls_store_a" in ids, "tenant A cannot see its own row"
+                assert "rls_store_b" not in ids, (
+                    "TENANT B'S ROW WAS VISIBLE TO TENANT A through the store. The "
+                    "policies are applied but the app is bypassing them - it is "
+                    "connected as a superuser and never dropped to boltrig_app."
+                )
+
+                # fail-closed: no tenant bound at all yields nothing, never everything
+                set_current_tenant(None)
+                none_rows = await store._pool.fetch(
+                    "SELECT id FROM nouns WHERE id IN ('rls_store_a','rls_store_b')"
+                )
+                assert none_rows == [], f"unbound tenant saw {len(none_rows)} rows"
+
+                # with_tenant is a SECOND path - it opens its own transaction and so
+                # never reaches _scoped. It was unprotected while _scoped was fenced.
+                async with store.with_tenant("rls_A") as conn:
+                    via = await conn.fetch(
+                        "SELECT id FROM nouns WHERE id IN ('rls_store_a','rls_store_b')"
+                    )
+                assert {r["id"] for r in via} == {"rls_store_a"}, (
+                    "with_tenant did not fence the connection"
+                )
+            finally:
+                set_current_tenant(None)
+                await store.close()
+        finally:
+            async with owner._pool.acquire() as c:
+                await c.execute(_DISABLE_RLS)
+                await c.execute(
+                    "DELETE FROM nouns WHERE id IN ('rls_store_a','rls_store_b')"
+                )
+            await owner.close()
+
+    asyncio.run(run())

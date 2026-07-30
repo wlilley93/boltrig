@@ -104,9 +104,35 @@ def set_current_tenant(tenant_id: str | None) -> None:
     _current_tenant.set(tenant_id)
 
 
-async def _apply_guc(conn: asyncpg.Connection) -> None:
+async def app_role_exists(conn: asyncpg.Connection) -> bool:
+    """Whether the non-bypassing ``boltrig_app`` role is present, i.e. whether
+    rls.sql has been applied to this database. Probed ONCE at connect."""
+    return bool(await conn.fetchval("SELECT 1 FROM pg_roles WHERE rolname = 'boltrig_app'"))
+
+
+async def _apply_guc(conn: asyncpg.Connection, *, assume_role: bool = False) -> None:
     """SET LOCAL app.tenant_id from the request context. An unset tenant becomes
-    '' so the RLS predicate is never true (fail-closed, never wide-open)."""
+    '' so the RLS predicate is never true (fail-closed, never wide-open).
+
+    ``assume_role`` additionally drops to ``boltrig_app`` for the transaction, and
+    WITHOUT IT THE POLICIES DO NOTHING. The app connects as the database owner,
+    which on a stock deployment is a SUPERUSER, and a superuser bypasses RLS
+    unconditionally - FORCE ROW LEVEL SECURITY included. Measured on the beelink
+    2026-07-30 with the overlay applied and relrowsecurity/relforcerowsecurity TRUE
+    on every tenant table: as the owner with no GUC, 19 of 19 rows were visible; as
+    boltrig_app, 0. So the fence was up and the app walked round it.
+
+    rls.sql's own header says to "connect the app as boltrig_app", but line 23
+    creates that role NOLOGIN, so connecting as it is impossible and SET LOCAL ROLE
+    is the only mechanism the overlay actually leaves available.
+
+    This must be a plain statement, not a DO block guarding on pg_roles: SET LOCAL
+    inside a PL/pgSQL block is reverted when the block exits, so the guard would
+    silently produce exactly the no-op it was written to avoid. Hence the role's
+    existence is probed once at connect and cached instead.
+    """
+    if assume_role:
+        await conn.execute("SET LOCAL ROLE boltrig_app")
     await conn.execute("SELECT set_config('app.tenant_id', $1, true)", _current_tenant.get() or "")
 
 
@@ -117,13 +143,17 @@ class _RlsPool:
     tenant-scoped at the DB without touching any method body. acquire()/close()
     pass through - the few explicit-transaction methods set the GUC themselves."""
 
-    def __init__(self, pool: asyncpg.Pool) -> None:
+    def __init__(self, pool: asyncpg.Pool, *, assume_role: bool = False) -> None:
         self._pool = pool
+        # Whether to drop to boltrig_app per transaction. False when rls.sql has
+        # never been applied to this database, so the facade stays a no-op rather
+        # than erroring on a role that does not exist.
+        self._assume_role = assume_role
 
     async def _scoped(self, op: str, query: str, *args):
         async with self._pool.acquire() as conn:
             async with conn.transaction():
-                await _apply_guc(conn)
+                await _apply_guc(conn, assume_role=self._assume_role)
                 return await getattr(conn, op)(query, *args)
 
     async def fetch(self, query, *args):
@@ -178,6 +208,10 @@ class PostgresStore(
     composed here so the public method surface is one class."""
     def __init__(self, pool: asyncpg.Pool) -> None:
         self._pool = pool
+        # Set by connect() when RLS is live AND boltrig_app exists. with_tenant()
+        # reads it, because that method opens its own transaction and so does not
+        # go through _RlsPool._scoped.
+        self._assume_app_role = False
 
     @classmethod
     async def connect(
@@ -197,10 +231,19 @@ class PostgresStore(
             async with pool.acquire() as conn:
                 await conn.execute(_SCHEMA.read_text(encoding="utf-8"))
         if rls:
-            # activate RLS-live: every store call is now tenant-scoped at the DB
-            # via the request contextvar. Connect as boltrig_app with apply_schema
-            # False (an owner connection provisions the schema + rls.sql first).
-            store._pool = _RlsPool(pool)
+            # activate RLS-live: every store call is now tenant-scoped at the DB via
+            # the request contextvar, AND drops to the non-bypassing boltrig_app role
+            # for the transaction. The role switch is not optional garnish - the app
+            # connects as the owner, which is typically a superuser, and a superuser
+            # bypasses RLS unconditionally, so without it the policies are inert.
+            #
+            # Probed once here rather than per call: a database that has never had
+            # rls.sql applied has no boltrig_app, and SET LOCAL ROLE would then error
+            # on every statement. Probing per transaction would be a round trip per
+            # query for a fact that cannot change without a deployment.
+            async with pool.acquire() as conn:
+                store._assume_app_role = await app_role_exists(conn)
+            store._pool = _RlsPool(pool, assume_role=store._assume_app_role)
         return store
 
     async def close(self) -> None:
@@ -240,6 +283,13 @@ class PostgresStore(
         path when connected as the non-bypassing ``boltrig_app`` role."""
         async with self._pool.acquire() as conn:
             async with conn.transaction():
+                # Same role switch as _RlsPool._scoped, and for the same reason: the
+                # owner connection is a superuser and bypasses the policies. This is
+                # a SECOND code path - with_tenant opens its own transaction, so it
+                # never reaches _scoped and would otherwise stay unprotected while
+                # the convenience calls were fenced.
+                if self._assume_app_role:
+                    await conn.execute("SET LOCAL ROLE boltrig_app")
                 await conn.execute("SELECT set_config('app.tenant_id', $1, true)", tenant_id)
                 yield conn
 
