@@ -9,7 +9,6 @@ fresh-database/test bootstrap used only when ``apply_schema=True``.
 from __future__ import annotations
 
 import contextlib
-import contextvars
 import json
 from datetime import datetime
 from pathlib import Path
@@ -88,20 +87,16 @@ from boltrig.models.errors import SchemaValidationError
 _SCHEMA = Path(__file__).with_name("schema.sql")
 _RLS = Path(__file__).with_name("rls.sql")
 
-# RLS LIVE (opt-in): the active tenant for the current async context, set by the
-# API per request (set_current_tenant). The _RlsPool reads it to scope every
-# statement, so the opt-in RLS policies activate through the store's UNCHANGED
-# method bodies - no per-method retrofit. Default off; the running app is
-# unaffected until BOLTRIG_RLS is set and the app connects as boltrig_app.
-_current_tenant: contextvars.ContextVar[str | None] = contextvars.ContextVar(
-    "boltrig_current_tenant", default=None
+# The tenant a call acts for, and the binding that keeps _apply_guc and the
+# method's own argument from ever disagreeing, live in tenant_scope.
+# Re-exported here because callers and tests import them from this module.
+from .tenant_scope import (  # noqa: E402,F401  (deliberate re-export)
+    _bind_tenant_from_argument,
+    _current_tenant,
+    _tenant_of,
+    bind_tenant_on_store_methods,
+    set_current_tenant,
 )
-
-
-def set_current_tenant(tenant_id: str | None) -> None:
-    """Bind the active tenant for RLS for this async context (the API calls this
-    per request from the resolved Principal)."""
-    _current_tenant.set(tenant_id)
 
 
 async def _apply_guc(conn: asyncpg.Connection, *, assume_role: bool = False) -> None:
@@ -171,6 +166,7 @@ async def _init_conn(conn: asyncpg.Connection) -> None:
         "jsonb", encoder=json.dumps, decoder=json.loads, schema="pg_catalog"
     )
 
+@bind_tenant_on_store_methods
 class PostgresStore(
     BudgetPolicyPG, BudgetUsagePG, WorkItemReadsPG, IdempotencyStorePG, GuardedWritesPG,
     PermanentFleetStorePG,
