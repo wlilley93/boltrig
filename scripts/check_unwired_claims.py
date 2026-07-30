@@ -281,6 +281,39 @@ def _collect(
 _BLOCKER = re.compile(r"^(caller:[\w./-]+:\d+|principal:[A-Z][\w-]+|design:[a-z][\w-]+)$")
 
 
+
+# --- PART 3: MANIFEST KNOBS (2026-07-30) -------------------------------------
+# The class and function rules cover mechanisms the CODE names. They cannot see a
+# CONFIG key the record offers and no code reads, which is the same false claim
+# wearing different clothes - and it is the more dangerous shape, because an
+# operator can TOGGLE it and form a confident, wrong belief about what the system
+# is doing.
+#
+# The live case: `memory.ingest.on_session_end` shipped in manifest.example.yaml
+# AND as an admin console switch while no Python read either. Anyone who turned it
+# on believed conversations were being distilled into memory. None were. Built out
+# 2026-07-30; the sweep that followed found four more.
+_MANIFEST_BOOL_RE = re.compile(r"^\s*([a-z_]+):\s*(?:true|false)\s*(?:#.*)?$", re.M)
+
+
+def manifest_bool_keys(manifest_text: str) -> set[str]:
+    """Every `key: true|false` the shipped manifest offers."""
+    return set(_MANIFEST_BOOL_RE.findall(manifest_text))
+
+
+def unread_manifest_keys(manifest_text: str, sources: dict) -> set[str]:
+    """Knobs no Python source names at all.
+
+    Matches the BARE name, so ``cfg.get("incremental")`` counts as reading it -
+    a miss here is a genuine absence, not an artefact of how the value is fetched.
+    """
+    blob = "\n".join(sources.values())
+    return {
+        key for key in manifest_bool_keys(manifest_text)
+        if not re.search(rf"\b{re.escape(key)}\b", blob)
+    }
+
+
 def load_allow(path: Path) -> tuple[dict[str, str], list[str]]:
     """Load the waivers, refusing any that cannot be held to.
 
@@ -418,6 +451,16 @@ def main() -> int:
         if not where:
             continue  # unused, but nothing claims it exists: not this gate's business
         findings.append((name, kind, str(path.relative_to(ROOT)), ", ".join(where[:4])))
+
+    manifest_path = ROOT / "manifest.example.yaml"
+    if manifest_path.exists():
+        unread = unread_manifest_keys(
+            manifest_path.read_text(encoding="utf-8"), sources
+        )
+        for key in sorted(unread - set(allow)):
+            findings.append(
+                (key, "manifest knob", "manifest.example.yaml", "the shipped manifest")
+            )
 
     if not findings:
         print(f"PASS: {len(unwired)} unreached name(s), none advertised by the record.")

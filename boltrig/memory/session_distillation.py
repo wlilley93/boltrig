@@ -89,6 +89,26 @@ async def select_conversations_to_distil(
     return out
 
 
+def distillation_context(tenant_id: str, user_id: str) -> Any:
+    """The seat ONE distillation acts under: memory.remember, for a single owner.
+
+    ``on_behalf_of`` is load-bearing. ``ultracode_memory.owner_scopes`` derives the
+    permitted memory scopes from it, and ``adapter_writes._refuse_unsafe_content``
+    rejects a write to any scope outside that set - so a context with no principal
+    is refused for EVERY user. Binding the thread's own owner here is what makes
+    the write land in that owner's scope, and bounds it to nowhere else.
+    """
+    from boltrig.models import GrantSet, InvocationContext
+
+    return InvocationContext(
+        tenant_id=tenant_id,
+        actor="session-distillation",
+        actor_tier="system",
+        on_behalf_of=user_id,
+        grants=GrantSet.of(["memory.remember"]),
+    )
+
+
 async def distil_conversation(kernel: Any, tenant_id: str, conv: Any, context: Any) -> bool:
     """Summarise one quiet thread into memory through the governed verb.
 
@@ -173,8 +193,14 @@ async def run_distillation_forever(
             )
             for conv in due:
                 try:
+                    # The context is built PER THREAD, on behalf of its owner.
+                    # A single generic seat cannot work: memory RBAC derives the
+                    # permitted owner scopes from context.on_behalf_of, so a
+                    # context with no principal is refused for every user - see
+                    # distillation_context above, and the beelink measurement in
+                    # its docstring. The check was right; the seat was wrong.
                     await distil_conversation(
-                        kernel, tenant_id, conv, context_factory()
+                        kernel, tenant_id, conv, context_factory(conv.user_id)
                     )
                 except Exception:  # one bad thread must not stall the rest
                     log.exception("distillation failed for conversation %s", conv.id)

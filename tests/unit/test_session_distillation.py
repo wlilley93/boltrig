@@ -125,3 +125,30 @@ async def test_disabled_policy_selects_nothing_even_with_idle_threads():
     await _conv(store, "quiet", minutes_idle=999)
     picked = await select_conversations_to_distil(store, T, NOW, DistillationPolicy())
     assert picked == []
+
+
+def test_the_seat_acts_on_behalf_of_the_thread_owner():
+    """A generic seat cannot write memory, and only a deployment showed that.
+
+    Memory RBAC derives the permitted owner scopes from ``context.on_behalf_of``
+    (ultracode_memory.owner_scopes -> adapter_writes._refuse_unsafe_content). A
+    context with no principal has NO scopes, so the write is refused for every
+    user. Measured on the beelink 2026-07-30: the sweep raised
+    ``GrantMissing: cannot write memory to scope user:...`` on every thread while
+    the unit tests were green, because they exercised SELECTION and never the
+    governed write.
+
+    So the seat must be per-owner. This also bounds it: a distillation can write
+    into that one owner's scope and nowhere else.
+    """
+    from boltrig.memory.session_distillation import distillation_context as _distillation_context
+
+    ctx = _distillation_context("t1", "alice@example.com")
+    assert ctx.on_behalf_of == "alice@example.com", (
+        "without on_behalf_of the memory write is refused for every scope"
+    )
+    assert ctx.grants.permits("memory.remember")
+    assert not ctx.grants.permits("memory.forget"), "the seat must stay bounded"
+
+    other = _distillation_context("t1", "bob@example.com")
+    assert other.on_behalf_of == "bob@example.com", "each thread gets its own seat"

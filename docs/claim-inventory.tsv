@@ -442,7 +442,7 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/memory/engine.py:1	LocalMemoryEng
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/memory/local.py:1	InMemoryStore	A minimal in-process Memory Engine reference for dev / offline (P9).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/memory/pgvector.py:1	VectorMemoryEngine	The Postgres + pgvector production Memory Engine (MEM-ENG-02).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/memory/session_distillation.py:1	list_idle_conversations	Distil a conversation into memory once it has gone quiet (`ingest.on_session_end`).
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/memory/session_distillation.py:145	select_conversations_to_distil	Call ``select_conversations_to_distil`` then ``distil_conversation`` on a slow loop, never crashing the worker (P9).
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/memory/session_distillation.py:165	select_conversations_to_distil	Call ``select_conversations_to_distil`` then ``distil_conversation`` on a slow loop, never crashing the worker (P9).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/memory/vector.py:1	PgVectorMemoryEngine	The native vector Memory Engine reference (MEM-ENG-02).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/models/access.py:1	UserInvitation	Round Four access models: personal access tokens, invitations, settings, sessions (S R4 Ch.4).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/models/access.py:127	credential_refs	A user's TOTP second-factor enrolment state, kept in its OWN table apart from the identity row (like the password credential).
@@ -1079,6 +1079,7 @@ ORDINARY	NO-SUBJECT	comment	boltrig/memory/cognee.py:90		ambient .env into os.en
 ORDINARY	NO-SUBJECT	comment	boltrig/memory/local.py:67		graph_completion: BFS over explicit edges, NEVER leaving the allowed
 ORDINARY	NO-SUBJECT	comment	boltrig/memory/pgvector.py:136		in-scope node set (scope-filtered in SQL: out-of-scope rows never read)
 ORDINARY	NO-SUBJECT	docstring	boltrig/memory/projection_queue.py:69		Return safe facts about this live queue seam, never its task payloads.
+ORDINARY	NO-SUBJECT	comment	boltrig/memory/session_distillation.py:197		A single generic seat cannot work: memory RBAC derives the
 ORDINARY	NO-SUBJECT	comment	boltrig/memory/vector.py:85		graph_completion: BFS over explicit edges, NEVER leaving the allowed
 ORDINARY	NO-SUBJECT	comment	boltrig/models/access.py:109		It is a HINT persisted on the session, NEVER trusted on its own: the resolver
 ORDINARY	NO-SUBJECT	comment	boltrig/models/access.py:111		None if the user is no longer a member (fail-closed), so a stale row can never

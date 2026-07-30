@@ -9,7 +9,8 @@
     "first time. Of the nine names it found, four were real defects and were fixed",
     "(sweep_run_scoped and consume_if_approved's prose, and run_retention_forever,",
     "which nothing had ever started). These five are the remainder.",
-    "2026-07-26: entries gained owner/expires, matching structural-exemptions.json and health-claim-exemptions.json. They had neither, which made every one an ETERNAL SILENT waiver - the shape this whole programme exists to remove, in the file that waives its own gate."
+    "2026-07-26: entries gained owner/expires, matching structural-exemptions.json and health-claim-exemptions.json. They had neither, which made every one an ETERNAL SILENT waiver - the shape this whole programme exists to remove, in the file that waives its own gate.",
+    "2026-07-30: the gate gained PART 3, manifest knobs - a config key the record offers that no Python reads. It found on_session_end's four siblings. They are waived to a NEAR expiry, not the file's usual year-end, because two of them are live UI switches and a lying switch should not sit behind a twelve-month waiver."
   ],
   "allow": {
     "accept_once": {
@@ -83,6 +84,30 @@
       "expires": "2026-10-31",
       "reason": "`pii.redact` has NO caller in boltrig/ - found by the transitive reachability gate, which was the first thing to look past the first hop. It is not dead code in the ordinary sense: it works, it is unit-tested, and SEC-13 advertised it as \"PII is detected and redacted before it leaves the boundary\", which no path enforced. SEC-13's description has been corrected to what is true rather than the function deleted, because WHICH boundary should redact is a genuine design question and not a gap to close on the way past: `manifest.privacy.pii_redaction` and `redact_fields` are already parsed and stored, so the operator-facing knob exists and reads as live. Note the audit path is separately and really scrubbed by `redact_identity` (SEC-42), so this is an unapplied capability, not an unprotected one.",
       "blocker": "design:which-outbound-boundary-redacts"
+    },
+    "incremental": {
+      "owner": "memory-maintainers",
+      "expires": "2026-09-30",
+      "reason": "memory.ingest:529 'process only new/changed content'. SURFACED IN THE UI, so an operator can toggle it and it does nothing. Sits beside on_session_end, and the MemoryIngestion receipt built for session distillation (424302f) already carries what it needs: distil only messages after the last receipt. Tracked on task #40.",
+      "blocker": "design:flag-meaning-undecided"
+    },
+    "native_tools": {
+      "owner": "memory-maintainers",
+      "expires": "2026-09-30",
+      "reason": "manifest.example.yaml:457. SURFACED IN THE UI and read by nothing. Needs a decision on what it should mean before it is wired or deleted. Tracked on task #40.",
+      "blocker": "design:flag-meaning-undecided"
+    },
+    "record_projection_status": {
+      "owner": "memory-maintainers",
+      "expires": "2026-09-30",
+      "reason": "memory.fanout:521. Manifest-only, not surfaced in the UI, so the weaker form: documented but unread. Belongs with the projection/fanout read. Tracked on task #40.",
+      "blocker": "design:flag-meaning-undecided"
+    },
+    "retry_failed": {
+      "owner": "memory-maintainers",
+      "expires": "2026-09-30",
+      "reason": "memory.fanout:520. Manifest-only, same as record_projection_status. Tracked on task #40.",
+      "blocker": "design:flag-meaning-undecided"
     }
   }
 }
