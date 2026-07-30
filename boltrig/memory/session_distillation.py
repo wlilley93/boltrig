@@ -182,15 +182,29 @@ async def run_distillation_forever(
     import asyncio
     import logging
 
+    from boltrig.fleet.sweep_progress import SweepProgress
     from boltrig.models.base import utcnow
 
     log = logging.getLogger("boltrig.memory.session_distillation")
     clock = now_fn or utcnow
+    # Silence was the failure. Every cycle now states what it saw against what it
+    # did, so a sweep that can see work and does none is visible in the log rather
+    # than only in a database count somebody thought to check.
+    progress = SweepProgress("session-distillation")
     while True:
         try:
+            now = clock()
             due = await select_conversations_to_distil(
-                kernel.store, tenant_id, clock(), policy
+                kernel.store, tenant_id, now, policy
             )
+            # pending comes from a count that shares no logic with selection, so
+            # a bug INSIDE selection (the 2026-07-30 wedge filtered every
+            # candidate away) cannot also zero this number. Without it, seen=0
+            # acted=0 reports "idle" for a sweep that is in fact stuck.
+            pending = await kernel.store.count_pending_distillation(
+                tenant_id, now - policy.idle_after
+            )
+            acted = 0
             for conv in due:
                 try:
                     # The context is built PER THREAD, on behalf of its owner.
@@ -202,8 +216,10 @@ async def run_distillation_forever(
                     await distil_conversation(
                         kernel, tenant_id, conv, context_factory(conv.user_id)
                     )
+                    acted += 1
                 except Exception:  # one bad thread must not stall the rest
                     log.exception("distillation failed for conversation %s", conv.id)
+            progress.record(seen=len(due), acted=acted, pending=pending)
         except asyncio.CancelledError:
             raise
         except Exception:

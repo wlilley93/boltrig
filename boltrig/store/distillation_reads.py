@@ -37,6 +37,32 @@ class DistillationReadsPG:
         )
         return _mem_ingestion(row) if row else None
 
+    async def count_pending_distillation(self, tenant_id: str, idle_before: datetime) -> int:
+        """How many idle threads still await distillation, measured INDEPENDENTLY
+        of the selection query.
+
+        ``list_idle_conversations`` answers "what should this batch do". This
+        answers "is there work at all", and it must not share the selection
+        query's logic: the 2026-07-30 wedge was a bug INSIDE selection that made
+        it return nothing, and any pending count derived from the same NOT EXISTS
+        would inherit the same blind spot and report idle. Two plain counts -
+        idle threads, and conversation receipts - share no logic with selection,
+        so a selection bug leaves this number visibly non-zero while acted stays
+        zero, which is precisely the stalled signal SweepProgress escalates.
+        """
+        idle_total = await self._pool.fetchval(
+            """SELECT count(*) FROM conversations
+               WHERE tenant_id=$1 AND status='active' AND updated_at < $2""",
+            tenant_id,
+            idle_before,
+        )
+        distilled = await self._pool.fetchval(
+            """SELECT count(*) FROM memory_ingestions
+               WHERE tenant_id=$1 AND source_kind='conversation'""",
+            tenant_id,
+        )
+        return max(0, int(idle_total) - int(distilled))
+
     async def list_idle_conversations(
         self, tenant_id: str, idle_before: datetime, *, limit: int = 50
     ) -> list[Any]:

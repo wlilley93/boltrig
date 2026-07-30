@@ -198,3 +198,65 @@ async def test_the_sweep_drains_a_backlog_LARGER_than_one_batch():
         f"first batch instead of advancing"
     )
     assert await select_conversations_to_distil(store, T, NOW, policy) == []
+
+
+async def test_pending_is_visible_even_when_selection_returns_nothing():
+    """The 2026-07-30 wedge made selection return NOTHING - seen=0 acted=0, which
+    reads as idle. ``count_pending_distillation`` is computed from two plain
+    counts sharing no logic with selection, so a selection bug cannot zero it.
+
+    Here selection is HEALTHY and empty because every idle thread is distilled -
+    and pending agrees at 0. The point is the next test: the numbers are derived
+    independently, so a regression in one cannot silently agree with the other.
+    """
+    store = InMemoryStore()
+    policy = policy_from_manifest(_manifest(on_session_end=True))
+    await _conv(store, "a", minutes_idle=90)
+    await _conv(store, "b", minutes_idle=120)
+    await _conv(store, "busy", minutes_idle=2)
+
+    idle_before = NOW - policy.idle_after
+    assert await store.count_pending_distillation(T, idle_before) == 2
+
+    for cid in ("a", "b"):
+        await store.add_memory_ingestion(
+            MemoryIngestion(
+                id=f"ing-{cid}",
+                tenant_id=T,
+                source_kind="conversation",
+                source_ref=cid,
+                owner_scope="user:u1",
+                status="done",
+            )
+        )
+    assert await select_conversations_to_distil(store, T, NOW, policy) == []
+    assert await store.count_pending_distillation(T, idle_before) == 0
+
+
+async def test_pending_counts_do_not_share_selections_logic():
+    """If the pending number were derived from selection's own row set, a bug in
+    selection (filtering every candidate away, as on 2026-07-30) would zero it
+    too, and a wedged sweep would report "idle". These counts deliberately go
+    straight to the conversation and receipt tables."""
+    store = InMemoryStore()
+    await _conv(store, "wedged-1", minutes_idle=90)
+    await _conv(store, "wedged-2", minutes_idle=90)
+    idle_before = NOW - timedelta(minutes=60)
+
+    # Simulate selection's blind spot WITHOUT touching the underlying data: even
+    # if selection somehow returned nothing, the pending count must not move.
+    pending_before = await store.count_pending_distillation(T, idle_before)
+    assert pending_before == 2
+
+    # a receipt for a DIFFERENT source kind must not reduce the count either
+    await store.add_memory_ingestion(
+        MemoryIngestion(
+            id="ing-other",
+            tenant_id=T,
+            source_kind="reflection",
+            source_ref="wedged-1",
+            owner_scope="user:u1",
+            status="done",
+        )
+    )
+    assert await store.count_pending_distillation(T, idle_before) == 2
