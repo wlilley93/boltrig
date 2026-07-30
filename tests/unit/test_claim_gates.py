@@ -551,8 +551,21 @@ def test_no_waiver_survives_the_deletion_of_its_subject() -> None:
         p.read_text(encoding="utf-8", errors="replace")
         for p in (REPO_ROOT / "boltrig").rglob("*.py")
     )
+    # A waiver's SUBJECT depends on its kind. A class or function lives in the
+    # Python source; a manifest knob (part 3, added 2026-07-30) lives in the
+    # manifest and by definition appears in NO Python file - that absence is
+    # exactly what it is waived for. Checking both against boltrig/**/*.py would
+    # make every knob waiver look like a waiver for a deleted subject, so the
+    # guard would fire on the correct state and teach people to loosen it.
+    manifest_text = (REPO_ROOT / "manifest.example.yaml").read_text(encoding="utf-8")
+    knobs = check_unwired_claims.manifest_bool_keys(manifest_text)
     for name in entries:
-        assert name in source, f"{name} is waived and no longer exists under boltrig/"
+        if name in knobs:
+            continue  # subject present in the manifest
+        assert name in source, (
+            f"{name} is waived but exists in neither boltrig/**/*.py nor "
+            f"manifest.example.yaml"
+        )
 
     allow, problems = check_unwired_claims.load_allow(path)
     assert problems == [], problems

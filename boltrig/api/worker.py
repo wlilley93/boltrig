@@ -173,6 +173,7 @@ def _start_session_distillation(
     decision on the record rather than the silence it used to be.
     """
     from boltrig.memory.session_distillation import (
+        distillation_context,
         policy_from_manifest,
         run_distillation_forever,
     )
@@ -186,22 +187,12 @@ def _start_session_distillation(
     )
     return asyncio.create_task(
         run_distillation_forever(
-            kernel, tenant, policy, lambda: _distillation_context(tenant)
+            kernel, tenant, policy, lambda user_id: distillation_context(tenant, user_id)
         ),
         name="session-distillation",
     )
 
 
-def _distillation_context(tenant: str) -> Any:
-    """The seat the sweep acts under: a system actor with exactly memory.remember."""
-    from boltrig.models import GrantSet, InvocationContext
-
-    return InvocationContext(
-        tenant_id=tenant,
-        actor="session-distillation",
-        actor_tier="system",
-        grants=GrantSet.of(["memory.remember"]),
-    )
 
 
 def _start_workflow_scheduler(
