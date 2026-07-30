@@ -16,7 +16,10 @@ whole author document). Both retain their durable review-gate state.
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any, TypedDict
+
+log = logging.getLogger("boltrig.config.control_rehydrate")
 
 __all__ = [
     "consumer_spec",
@@ -166,7 +169,25 @@ async def rehydrate_adapter_instance(
 
         published = await owned_tool_snapshot(store, tenant_id, record.id)
         snapshot = published or snapshot
-    consumer.apply_tool_snapshot(snapshot)
+    # Rehydrate must never be able to refuse the process a start. The snapshot here
+    # is ALREADY STORED, so raising cannot prevent bad data arriving - it can only
+    # convert one unusable adapter into an unbootable kernel. Measured on the beelink
+    # 2026-07-30: `opbox` publishes 633 verbs, MCP_MAX_TOOL_SNAPSHOT was 500, and the
+    # kernel died at startup with "MCP tool snapshot is out of bounds" on every boot.
+    # The bound belongs at INGEST (snapshot_from_response), where refusing is
+    # meaningful because the data can still be rejected. Here we degrade: this one
+    # adapter does not load, and everything else serves.
+    try:
+        consumer.apply_tool_snapshot(snapshot)
+    except ValueError:
+        log.exception(
+            "adapter %s for tenant %s has an unusable stored tool snapshot "
+            "(%d tools); skipping it rather than failing startup",
+            record.id,
+            tenant_id,
+            len(snapshot),
+        )
+        return None
     stamp_mcp_consumer(consumer, record, lifecycle)
     loader.register(tenant_id, consumer)
     credentials.replace_adapter_credential_binding(

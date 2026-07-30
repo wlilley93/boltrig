@@ -19,7 +19,13 @@ MCP_PROBE_FAILURE_CODES = (
 )
 MCP_PROBE_RECEIPTS_PER_SERVER = 20
 MCP_MAX_RETURNED_PROBE_RECEIPTS = 100
-MCP_MAX_TOOL_SNAPSHOT = 500
+# A REAL adapter exceeds 500. Measured on the beelink 2026-07-30: the `opbox`
+# consumer publishes 633 verbs (verb_bindings.target_ref='opbox'), so this cap
+# refused a legitimately-registered server. The DoS bound that actually matters is
+# MCP_MAX_TOOL_SNAPSHOT_BYTES below - a count cap only bounds the row count, and
+# 2MB already bounds the payload whatever the count. Kept as a sanity ceiling, set
+# above any plausible real registry rather than below the one we ship.
+MCP_MAX_TOOL_SNAPSHOT = 5000
 MCP_MAX_TOOL_DESCRIPTION_BYTES = 8 * 1024
 MCP_MAX_TOOL_SCHEMA_BYTES = 256 * 1024
 MCP_MAX_TOOL_SNAPSHOT_BYTES = 2 * 1024 * 1024
