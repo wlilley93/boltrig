@@ -30,6 +30,30 @@ def _error(reason: str, status: int = 400) -> JSONResponse:
     return JSONResponse({"status": "error", "reason": reason}, status_code=status)
 
 
+# The reasons a validation failure in this module may state to a caller. Telling
+# them WHICH field was wrong is deliberate and is the same principle as the
+# caller-facing schema hints: a bare "invalid" makes a client retry the identical
+# request. What must not reach them is an arbitrary exception message.
+#
+# Every `raise ValueError` below uses one of these, so today `str(exc)` would be
+# safe - but that is a property of five call sites agreeing, which is the kind of
+# claim this repository has learned not to rest on. `_validation_reason` makes it
+# a mechanism: a token nobody registered becomes the generic answer instead of
+# being forwarded, so adding a `raise ValueError(f"bad {value}")` here leaks
+# nothing and shows up as an unhelpful message rather than as a disclosure.
+_VALIDATION_REASONS = frozenset({
+    "invalid_label",
+    "invalid_root_scope",
+    "invalid_command_enabled",
+    "invalid_git_enabled",
+})
+
+
+def _validation_reason(exc: Exception) -> str:
+    reason = str(exc)
+    return reason if reason in _VALIDATION_REASONS else "invalid_request"
+
+
 def _label(value: object) -> str:
     if not isinstance(value, str):
         raise ValueError("invalid_label")
@@ -48,7 +72,7 @@ async def start_enrollment(body: dict, request: Request, kernel, principal):
     try:
         label = _label(body.get("label"))
     except ValueError as exc:
-        return _error(str(exc))
+        return _error(_validation_reason(exc))
     enrollment_id = uuid.uuid4().hex
     code = mint_scoped_token(
         "device_enrollment", principal.tenant_id, enrollment_id
@@ -119,7 +143,7 @@ async def create_root(device_id: str, body: dict, kernel, principal):
         if not isinstance(body.get("git_enabled", False), bool):
             raise ValueError("invalid_git_enabled")
     except ValueError as exc:
-        return _error(str(exc))
+        return _error(_validation_reason(exc))
     root = DeviceRoot(
         id=uuid.uuid4().hex, tenant_id=principal.tenant_id,
         device_id=device_id, label=label, scope=scope,

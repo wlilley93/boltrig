@@ -57,9 +57,15 @@ async def issue_gateway_session(body: dict, kernel, principal) -> JSONResponse:
             },
             ttl_seconds=ttl,
         )
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError):
+        # A FIXED reason, not str(exc). This block wraps int() AND
+        # issue_run_token, so the exception can come from anywhere inside the MCP
+        # run-token layer - `int("abc")` echoes the caller's own input back, which
+        # is harmless, but a TypeError raised three frames down names internal
+        # arguments to an UNAUTHENTICATED-adjacent caller. The two cases are
+        # indistinguishable at this line, so neither is forwarded.
         return JSONResponse(
-            {"status": "error", "reason": str(exc)}, status_code=400
+            {"status": "error", "reason": "invalid_session_request"}, status_code=400
         )
     await _audit_session(
         kernel, principal, channel_ids, gateway_id, ttl

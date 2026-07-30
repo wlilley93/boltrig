@@ -993,6 +993,7 @@ ORDINARY	NO-SUBJECT	comment	boltrig/kernel/cost.py:310		charged for a call that 
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/cost.py:45		policy-as-data price table (FR-COST-04) - a configured price always wins - and
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/credentials.py:110		row is broken.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/desktop_routes.py:48		kernel on the serving loop, AFTER routes are registered, so it cannot
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/device_routes.py:36		request.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:144		the caller's hint is built where it cannot contaminate a row.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:150		a short scalar is taken - never free text, never a secret-bearing value.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/dispatch.py:200		decision and a relay failure never breaks a call (P9).

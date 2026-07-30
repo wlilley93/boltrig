@@ -667,3 +667,44 @@ def test_ed25519_verifier_rejects_any_tampered_lease_field():
         )
     )
     assert not signer.verify(replace(signed, root_id="other-root"))
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-WRK-07")
+def test_only_registered_validation_reasons_reach_the_caller():
+    """The device routes forward `str(exc)` - so what CAN be in it is the control.
+
+    Every `raise ValueError` in device_routes uses a fixed token today, which is
+    why returning the message is safe AND useful: a caller learns which field was
+    wrong instead of retrying the identical request. But "safe because five call
+    sites happen to agree" is the shape this repository has been bitten by, and
+    CodeQL flagged the forward as information exposure for exactly that reason.
+
+    So the property is pinned here rather than assumed. The seeded case is the
+    one that matters: an exception message NOBODY registered - the kind a future
+    `raise ValueError(f"bad scope {value!r}")` would produce - must come back as
+    the generic token, not as itself.
+    """
+    from boltrig.kernel.device_routes import _VALIDATION_REASONS, _validation_reason
+
+    for token in sorted(_VALIDATION_REASONS):
+        assert _validation_reason(ValueError(token)) == token
+
+    # THE seeded case: an unregistered message, carrying a value.
+    leaky = ValueError("bad scope '/etc/shadow' for actor act_7f3 on tenant acme")
+    assert _validation_reason(leaky) == "invalid_request"
+    assert "act_7f3" not in _validation_reason(leaky)
+
+    # And the shapes an exception can take that are not str-clean.
+    assert _validation_reason(ValueError()) == "invalid_request"
+    assert _validation_reason(ValueError("invalid_label", "extra")) == "invalid_request"
+
+    # Every token the module can raise must be registered, or the allowlist is
+    # the thing that breaks the API rather than the thing that guards it.
+    import re
+    from pathlib import Path
+
+    source = Path(__file__).resolve().parents[2] / "boltrig" / "kernel" / "device_routes.py"
+    raised = set(re.findall(r'raise ValueError\("([^"]+)"\)', source.read_text(encoding="utf-8")))
+    assert raised, "scanned nothing: no `raise ValueError(\"...\")` found in device_routes"
+    assert raised <= _VALIDATION_REASONS, f"unregistered reason(s): {raised - _VALIDATION_REASONS}"
