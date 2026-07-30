@@ -279,6 +279,11 @@ async def test_kernel_uses_the_composition_manifest_snapshot_without_rereading(
         tenant_id="snapshot-tenant",
         models=SimpleNamespace(sensitive_endpoint=sensitive_endpoint_id),
         hitl=SimpleNamespace(approval_timeout_seconds=30),
+        # None, not omitted. This double stands in for a REAL FleetManifest at the
+        # composition root, and a field the double lacks is an AttributeError there
+        # rather than a default - which is how the merge found it. None is also the
+        # right value on the merits: no posture declared is the fail-closed answer.
+        development_posture=None,
         blocking_verbs=Mock(return_value={"sensitive.write"}),
     )
     kernel = SimpleNamespace(set_agent_invoker=Mock())

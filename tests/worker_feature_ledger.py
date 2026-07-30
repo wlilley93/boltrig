@@ -102,6 +102,17 @@ MANIFEST_FEATURES: dict[str, FeatureCoverage] = {
         ("worker", "missing", "worker", "worker", "missing"),
         "Inbox, process-start blocking/timeout evidence and bounded janitor attempts work; routing fields are explicitly inactive and policy mutation remains missing.",
     ),
+    "development_posture": _coverage(
+        "boltrig/config/manifest.py:FleetManifest.development_posture",
+        ("operator", "deployment", "operator", "worker", "deployment"),
+        "A declared development posture lifts the four-eyes INDEPENDENCE limb on control.* "
+        "and nothing else ([2026] VJS-CC-BOLTRIG-DEVELOPMENT-POSTURE-001). It is never a "
+        "Worker affordance: the party it un-constrains is the one who would be clicking, so "
+        "it is declared in the tenant manifest at deploy time and cleared the same way. "
+        "Observe is `worker` deliberately - every reliance writes a SecurityWriter row, and a "
+        "party who was never asked to approve must be able to read afterwards what was done "
+        "on their tenant, which is the whole point of that record.",
+    ),
     "network": _coverage(
         "boltrig/config/manifest.py:NetworkConfig",
         ("worker", "deployment", "worker", "worker", "deployment"),

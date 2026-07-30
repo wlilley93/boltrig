@@ -587,9 +587,9 @@ ORDINARY	NO-SUBJECT	docstring	boltrig/config/control_integrations.py:68		Return 
 ORDINARY	NO-SUBJECT	comment	boltrig/config/control_lifecycle.py:89		stale reference cannot execute (SEC-22, mirrors review_and_activate).
 ORDINARY	NO-SUBJECT	comment	boltrig/config/control_mcp.py:103		can never be rehydrated.
 ORDINARY	NO-SUBJECT	comment	boltrig/config/control_mcp_lifecycle.py:225		A losing CAS must not unpublish/deactivate an identical winner.
-ORDINARY	NO-SUBJECT	comment	boltrig/config/control_operations.py:213		A store row this kernel never rebuilt (another replica's
-ORDINARY	NO-SUBJECT	comment	boltrig/config/control_operations.py:216		otherwise - never pend or fail opaquely on a row that exists.
-ORDINARY	NO-SUBJECT	comment	boltrig/config/control_operations.py:233		dispatch uses (SEC-04/05);
+ORDINARY	NO-SUBJECT	comment	boltrig/config/control_operations.py:214		A store row this kernel never rebuilt (another replica's
+ORDINARY	NO-SUBJECT	comment	boltrig/config/control_operations.py:217		otherwise - never pend or fail opaquely on a row that exists.
+ORDINARY	NO-SUBJECT	comment	boltrig/config/control_operations.py:234		dispatch uses (SEC-04/05);
 ORDINARY	NO-SUBJECT	docstring	boltrig/config/control_rehydrate.py:40		Read the private, persisted consumer reconstruction spec.
 ORDINARY	NO-SUBJECT	comment	boltrig/config/control_workflow_triggers.py:84		It cannot be authored by a synthetic agent context with no User record.
 ORDINARY	NO-SUBJECT	comment	boltrig/config/control_workflows.py:103		desired schedule, but its observed state says needs_action and it cannot run.

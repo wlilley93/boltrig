@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import replace
 from typing import Any, cast
 
 from boltrig.models import (
