@@ -793,6 +793,28 @@ class InMemoryStore(BudgetPolicyMem, BudgetUsageMem, WorkItemReadsMem, Idempoten
         ]
         return max(hits, key=lambda i: i.created_at) if hits else None
 
+    async def count_pending_distillation(self, tenant_id, idle_before):
+        # Two plain counts, sharing no logic with list_idle_conversations: the
+        # pending signal must stay non-zero even if selection has a bug that
+        # filters every candidate away (the 2026-07-30 wedge).
+        idle_total = len(
+            [
+                c
+                for (t, _), c in self._convs.items()
+                if t == tenant_id
+                and getattr(c, "status", "active") == "active"
+                and c.updated_at < idle_before
+            ]
+        )
+        distilled = len(
+            {
+                i.source_ref
+                for (t, _), i in self._mem_ingest.items()
+                if t == tenant_id and i.source_kind == "conversation"
+            }
+        )
+        return max(0, idle_total - distilled)
+
     async def list_idle_conversations(self, tenant_id, idle_before, *, limit=50):
         # Excludes already-distilled threads HERE, before the limit, exactly as the
         # Postgres twin does - filtering after the limit wedges the sweep.
