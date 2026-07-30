@@ -19,6 +19,7 @@ from boltrig.models import (
     VerbBinding,
     utcnow,
 )
+from .author_ratchet import assert_author_ratchet, is_active_author
 from .control_safety import (
     ControlConflict,
     ensure_activation_safe,
@@ -275,14 +276,20 @@ async def update_user_record(
     user = await store.get_user(tenant_id, params["user_id"])
     if user is None:
         raise LookupError("user not found")
+    # Build the RESULTING record, ask the ratchet about THAT, then persist it (D2).
+    changes: dict[str, Any] = {}
     if "role" in params:
-        user.role = params["role"]
+        changes["role"] = params["role"]
     if isinstance(params.get("scope"), dict):
-        user.scope = params["scope"]
+        changes["scope"] = params["scope"]
     if params.get("status") in {"active", "deactivated"}:
-        user.status = params["status"]
-    await store.upsert_user(user)
-    return user
+        changes["status"] = params["status"]
+    updated = replace(user, **changes)
+    await assert_author_ratchet(
+        store, tenant_id, user_id=updated.id, stays_author=is_active_author(updated)
+    )
+    await store.upsert_user(updated)
+    return updated
 
 
 async def deactivate_user_record(store: Any, tenant_id: str, user_id: str, *, context: Any) -> Any:
@@ -290,6 +297,9 @@ async def deactivate_user_record(store: Any, tenant_id: str, user_id: str, *, co
     user = await store.get_user(tenant_id, user_id)
     if user is None:
         raise LookupError("user not found")
+    # The same crossing by another route (D2): a deactivated user is not an
+    # active author.
+    await assert_author_ratchet(store, tenant_id, user_id=user.id, stays_author=False)
     user.status = "deactivated"
     await store.upsert_user(user)
     return user

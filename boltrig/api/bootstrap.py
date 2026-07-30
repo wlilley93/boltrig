@@ -422,6 +422,7 @@ async def build_kernel_async(
             event_relay=event_relay,
             blocking_verbs=manifest.blocking_verbs(),
             approval_timeout_seconds=manifest.hitl.approval_timeout_seconds,
+            development_posture=manifest.development_posture,
         )
         if _desktop_hands_enabled():
             _attach_hands_registry(kernel)

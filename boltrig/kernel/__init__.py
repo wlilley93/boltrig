@@ -41,6 +41,7 @@ class Kernel:
         event_relay: EventRelay | None = None,
         blocking_verbs: set[str] | None = None,
         approval_timeout_seconds: int | None = None,
+        development_posture: Any = None,
         alert: AlertFn | None = None,
     ) -> None:
         self.store = store
@@ -53,7 +54,11 @@ class Kernel:
         # security writer records fail-safe so a signal never breaks a guarded path.
         self.security = SecurityWriter(store)
         self.anchorer = AuditAnchorer(store)
-        self.hitl = HITLManager(store, approval_timeout_seconds=approval_timeout_seconds)
+        self.hitl = HITLManager(
+            store,
+            approval_timeout_seconds=approval_timeout_seconds,
+            development_posture=development_posture,
+        )
         self.cost = CostAccountant(store, alert)
         self.registry = KernelRegistry(store)
         self._blocking_verbs = blocking_verbs or set()

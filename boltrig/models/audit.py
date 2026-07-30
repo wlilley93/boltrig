@@ -34,6 +34,23 @@ class SecurityEventType(str, Enum):
     RATE_LIMIT_TRIP = "rate_limit_trip"
     PERMISSION_DENIED = "permission_denied"
     MCP_AUTH_FAILURE = "mcp_auth_failure"
+    # A credential act performed from the HOST SHELL, outside every in-band
+    # control ([2026] VJS-CC-BOLTRIG-OPERATOR-SEAT-001, D6). `set-password` and
+    # `mint-token` operate on ANY existing user with no role restriction, and
+    # `mint-token` caps a PAT at that user's own grants - so whoever holds shell
+    # on the box can mint a fully-scoped token AS the tenant's client and answer
+    # the operator's own approval wearing their identity. Both wrote their audit
+    # row with actor = the TARGET user, which rendered that as the client's own
+    # act. This is the signal that says otherwise, and it is why the court
+    # answered the leaky boundary by attributing it rather than by opening a
+    # third command beside it.
+    HOST_BOUNDARY_CREDENTIAL = "host_boundary_credential"
+    # An approval admitted with NO independent reviewer because the tenant
+    # declared a development posture (config/dev_posture.py). The click is
+    # removed; this is the record that there was nobody to click. On the
+    # tamper-evident stream deliberately: it is the one signal saying a control
+    # that normally requires two parties required one.
+    DEVELOPMENT_POSTURE_APPROVAL = "development_posture_approval"
 
 
 @dataclass

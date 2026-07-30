@@ -19,6 +19,7 @@ from typing import Any, Mapping
 import yaml
 
 from boltrig.identity.rbac import grants_for_scope
+from boltrig.config.dev_posture import DevelopmentPosture
 from boltrig.config.environment import is_truthy
 from boltrig.config.spawn_rules import SpawnRule, parse_spawn_rules
 from boltrig.models import (
@@ -159,13 +160,31 @@ class AdapterConfig:
     module_ref: str = ""
 
 
+# The floor on the shipped approval window
+# ([2026] VJS-CC-BOLTRIG-OPERATOR-SEAT-001, D5).
+#
+# It shipped as 3600. An hour is not a window a human can answer: on Classical
+# Visas three control-verb approvals expired unheard on it, and the operator
+# experienced that as a four-eyes DEADLOCK and applied to open the host boundary.
+# The court found there was no deadlock - the in-band route was open the whole
+# time - and that the one-hour window "is the actual proximate cause of what was
+# experienced as deadlock". A control that is unanswerable in practice does not
+# read as a control; it reads as a bug in the thing it guards, and the cure
+# proposed for it was a permanent carve-out.
+#
+# Both the dataclass default and the parser fallback below must carry this, and
+# they must agree: a manifest that omits the key and a manifest that has no hitl
+# block at all are the same tenant posture, so they cannot resolve differently.
+APPROVAL_TIMEOUT_SECONDS_FLOOR = 86400
+
+
 @dataclass(frozen=True)
 class HitlConfig:
     """Human-in-the-loop routing and the verbs that always block (S8, P5)."""
 
     primary_channel: str = "slack"
     notify_via: tuple[str, ...] = ()
-    approval_timeout_seconds: int = 3600
+    approval_timeout_seconds: int = APPROVAL_TIMEOUT_SECONDS_FLOOR
     escalation_chain: tuple[str, ...] = ()
     blocking_verbs: tuple[str, ...] = ()
 
@@ -298,6 +317,9 @@ class FleetManifest:
     spawn_rules: tuple[SpawnRule, ...] = ()
     adapters: tuple[AdapterConfig, ...] = ()
     hitl: HitlConfig = field(default_factory=HitlConfig)
+    # The tenant's declared development posture (config/dev_posture.py). Default
+    # is NOT declared, so a manifest that says nothing gets full four-eyes.
+    development_posture: DevelopmentPosture = field(default_factory=DevelopmentPosture)
     network: NetworkConfig = field(default_factory=NetworkConfig)
     privacy: PrivacyConfig = field(default_factory=PrivacyConfig)
     chat: ChatConfig = field(default_factory=ChatConfig)
@@ -567,11 +589,49 @@ def _parse_adapter(raw: Mapping[str, Any]) -> AdapterConfig:
     )
 
 
+def _parse_development_posture(raw: Mapping[str, Any]) -> DevelopmentPosture:
+    """Parse ``development_posture`` into a ``dev_posture.DevelopmentPosture``.
+
+    An absent block yields ``DevelopmentPosture()`` (enabled False); a malformed
+    or absent ``expires_at`` yields ``expires_at=None`` and a malformed ``covers``
+    yields ``()``. ``dev_posture.posture_block`` refuses both: the failure mode of
+    a bad date or a bad author list must be full four-eyes, never an unbounded or
+    unbounded-in-scope suspension of it.
+    """
+    from datetime import datetime
+
+    block = raw.get("development_posture")
+    if not isinstance(block, Mapping):
+        return DevelopmentPosture()
+    expires: datetime | None = None
+    stated = block.get("expires_at")
+    if isinstance(stated, datetime):
+        expires = stated
+    elif isinstance(stated, str):
+        try:
+            expires = datetime.fromisoformat(stated)
+        except ValueError:
+            expires = None
+    # `covers` names the authors the declaration was made in respect of (D3);
+    # absent or malformed yields (), which covers nobody and refuses everything.
+    stated = block.get("covers")
+    covers = tuple(str(v).strip() for v in stated if str(v).strip()) if isinstance(stated, (list, tuple)) else ()
+    return DevelopmentPosture(
+        enabled=_as_bool(block.get("enabled", False)),
+        expires_at=expires,
+        declared_by=str(block.get("declared_by") or ""),
+        reason=str(block.get("reason") or ""),
+        covers=covers,
+    )
+
+
 def _parse_hitl(raw: Mapping[str, Any]) -> HitlConfig:
     return HitlConfig(
         primary_channel=str(raw.get("primary_channel", "slack")),
         notify_via=_as_tuple(raw.get("notify_via")),
-        approval_timeout_seconds=int(raw.get("approval_timeout_seconds", 3600)),
+        approval_timeout_seconds=int(
+            raw.get("approval_timeout_seconds", APPROVAL_TIMEOUT_SECONDS_FLOOR)
+        ),
         escalation_chain=_as_tuple(raw.get("escalation_chain")),
         blocking_verbs=_as_tuple(raw.get("blocking_verbs")),
     )
@@ -688,6 +748,7 @@ def load_manifest(path: str, *, env: Mapping[str, str] | None = None) -> FleetMa
         spawn_rules=parse_spawn_rules(doc.get("spawn_rules") or []),
         adapters=tuple(_parse_adapter(a) for a in (doc.get("adapters") or [])),
         hitl=_parse_hitl(doc.get("hitl") or {}),
+        development_posture=_parse_development_posture(doc),
         network=_parse_network(doc.get("network") or {}),
         privacy=_parse_privacy(doc.get("privacy") or {}),
         chat=_parse_chat(doc.get("chat") or {}),

@@ -374,6 +374,7 @@ def build_session_resolver(tenant_id: str) -> PrincipalResolver:
             actor_tier="human",
             scope=user.scope,
             active_workspace_id=active_workspace_id,
+            credential_kind="session",  # a person, at the door, with a password
         )
 
     return resolver

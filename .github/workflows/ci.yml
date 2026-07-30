@@ -43,6 +43,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # `make commit-trailers` reads commit MESSAGES, so it needs history.
+          # actions/checkout defaults to depth 1: the gate would see one commit,
+          # find no trailer, and REFUSE - correctly, since a scan with nothing to
+          # check is a broken scan. Verified against a real --depth 1 clone.
+          # Only this job needs it; the other jobs stay shallow.
+          fetch-depth: 0
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"

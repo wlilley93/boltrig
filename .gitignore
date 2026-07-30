@@ -20,6 +20,10 @@ __pycache__/
 build/
 dist/
 .eggs/
+# Both forms. A trailing slash matches a DIRECTORY only, and that is how a
+# self-referential `.venv` SYMLINK reached origin/main in #177: it was not a
+# directory, so `.venv/` never ignored it, and `git add -A` took it.
+.venv
 .venv/
 venv/
 .python-version

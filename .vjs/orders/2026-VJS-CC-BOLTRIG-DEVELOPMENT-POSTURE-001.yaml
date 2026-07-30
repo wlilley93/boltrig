@@ -1,0 +1,172 @@
+id: 2026-VJS-CC-BOLTRIG-DEVELOPMENT-POSTURE-001
+court: county
+jurisdiction: default
+repo_code: boltrig
+status: binding
+issue: development_posture
+holding: |
+  Option C is ADOPTED IN PRINCIPLE and REFUSED AS SHIPPED. Option E is REFUSED. Options A and D
+  are REFUSED. Option B is expressly not reached.
+
+  THE RATIO. Independence may be suspended only where there is no party for independence to
+  protect, and that absence must be established by a fact the declaring party does not author.
+
+  Four corollaries, each stated to decide future cases. (a) Necessity, not convenience, and
+  absence, not declaration: every lawful lifting of four-eyes in this repository tracks the
+  UNSATISFIABILITY of the rule - the founding-owner bootstrap ([2026] VJS-COUNTY 7 D7, because
+  invite-only needs a first inviter) and the sole-author exemption (`_sole_active_author`: one
+  author, so no independent approver can exist). A posture that tracks the operator's STATEMENT
+  that protection is unnecessary tracks the wrong fact. (b) A posture-gated relaxation is lawful
+  only under a fence that is mandatory, test-enforced, and makes the relaxation provably
+  unreachable in production - and a court that approves such a fence approves it WHOLE; taking
+  the flag and the production signal from an approved wall while leaving behind its isolation
+  limb is not following the precedent, it is citing it. (c) A gate whose permissive branch is
+  the ABSENCE of a signal is not a gate: a control that must establish a fact must require an
+  affirmative signal of that fact, not the silence of its negation. (d) A humanity check is only
+  as strong as the weakest issuer of `actor_tier="human"`; where any credential path stamps that
+  tier on a machine bearer, no downstream control may claim to exclude non-human actors, and the
+  claim must be made good at the issuer or struck from the record.
+
+  And, following the operator-seat court: "it is the same relief an existing exemption already
+  grants, extended" is an argument for EXAMINING the existing exemption, never for opening a
+  comparable one beside it.
+
+  A declared development posture is a lawful MECHANISM for a tenant with no protected party. The
+  kernel work in 881a9df is architecturally close to right: it lifts independence only, never
+  admits a second relief silently, never lifts the grant check, bounds itself to `control.*`,
+  requires an expiry, admits superadmin only, and writes the reliance to both the audit chain and
+  the client-readable security stream. It is not struck down. But as shipped it is not fenced,
+  and as applied to Classical Visas it was unlawful, on three findings.
+
+  ONE, the fence is missing its load-bearing limb. The posture is modelled expressly on
+  `require_codex_trusted_posture` ([2026] VJS-CC-VJS 2), whose fence has TWO limbs: no production
+  signal AND no real ingress posture (OIDC / CF Access / session login). The second is both an
+  express directive and an express forbidden item of that order. The posture reproduced the first
+  and dropped the second - and the dropped limb is the one that would have refused the tenant it
+  was actually declared on.
+
+  TWO, its central safety claim is false in operation. `resolve_pat_principal`
+  (identity/tokens.py:145) hardcodes `actor_tier="human"` on every machine bearer, so the claim
+  that the posture "never admits a non-human approver" does not hold. Proven by execution: a PAT
+  minted for the declaring superadmin, on a two-author tenant under a live posture, answered its
+  own `control.adapter.activate` approval and returned {"status": "answered",
+  "development_posture": true}. No human acted. The posture as shipped delivers Option D - the
+  option the case file records as consistently refused - by accident rather than by design.
+
+  THREE, the "observed condition the operator cannot assert away" is neither observed nor
+  unassertable, and it fails OPEN. `production_signal()` reads four process environment variables
+  and returns None when all are unset; unset means permitted. It is a second declaration, in a
+  different file, written by the same operator on the same box. Classical Visas returned no
+  production signal while serving a real client on a public domain.
+
+  FOUND ADDITIONALLY, on a point the case file does not plead at all: 881a9df BREACHED a binding
+  directive. [2026] VJS-CC-BOLTRIG-HITL-NOTIFICATION-ROUTING-001 D2 requires the notified set to
+  equal the set the response route admits, derived from ONE shared definition.
+  `eligible_approval_responders` does not receive the posture. Measured: notice ['client@cv'],
+  route ['client@cv', 'operator@cv']. That function's own docstring - "a user it would admit is
+  never missed" - had become false, and the D2 matrix test could not detect it because no row
+  ever set a posture: a check that cannot fail in the exact dimension the new code introduced.
+
+  ON THE PRINCIPAL. Applying [2026] VJS-APPEAL 1 (construction-to-validity first, ultra vires as
+  a last resort), the Principal's instruction is NOT ultra vires. Its stated requirement - "on a
+  tenant NOT YET IN SERVICE, work without a second human answering each approval, and turn it off
+  again after" - is entirely lawful and is Option C properly fenced. What was ultra vires was the
+  APPLICATION, and it was the executive's act, not the Sovereign's: Classical Visas is in
+  service, so the instruction's own premise does not reach it, and the declaration was made while
+  the operator-seat refusal stood and its express condition precedent for re-argument remained
+  open. The residual failure under S-4..S-8 is stated precisely: the thing was deployed to a
+  client tenant and relied upon BEFORE the court sat. The remedy is to make the work good, and
+  nothing else.
+
+  ON THE ABSENT THIRD PARTY. The demotion limb the operator-seat court refused had the vice of
+  consent EXTRACTED; this posture has the vice of consent DISPENSED WITH. A court cannot hold
+  that not asking the protected party is an improvement on asking her badly. But her absence is
+  decisive against the mechanism ON HER TENANT, not against the mechanism: on a tenant with no
+  client there is no absent party and independence protects nobody. That is why the condition
+  must be the demonstrable ABSENCE of a protected party, not a declaration that protection is
+  unnecessary.
+
+  DISPOSITION. The Classical Visas declaration is withdrawn forthwith (D1). No tenant may declare
+  the posture until D2-D6 are discharged. The act already taken under it STANDS (it was within
+  grant, fully recorded, corrective, and voiding it would injure the very absent party this
+  ruling protects) and must be put to her (D7). The record is to be corrected (D8).
+directives:
+- id: D1
+  actor: lexby
+  must: withdraw_the_development_posture_from_classical_visas_now_not_on_its_expiry_checkable_parse_development_posture_yields_enabled_false_on_that_tenant_and_posture_block_returns_a_non_none_string_and_zero_audit_event_rows_with_verb_hitl_development_posture_approval_after_the_withdrawal_timestamp
+  when: null
+- id: D2
+  actor: lexby
+  must: restore_the_ingress_limb_the_precedent_requires_posture_block_refuses_when_settings_oidc_configured_or_cf_access_configured_or_session_auth_configured_exactly_as_require_codex_trusted_posture_does_checkable_seeded_test_asserting_a_non_none_refusal_mentioning_ingress_under_boltrig_auth_mode_session_and_none_under_boltrig_dev_auth_1_with_no_real_ingress_run_red_with_the_limb_reverted
+  when: null
+- id: D3
+  actor: lexby
+  must: lapse_the_posture_automatically_when_a_party_it_could_harm_appears_the_declaration_enumerates_the_active_author_tier_identities_it_covers_and_posture_block_refuses_when_any_active_user_whose_role_is_in_author_roles_is_not_enumerated_mirroring_sole_active_author_checkable_the_existing_two_author_test_assertion_inverts_and_a_malformed_covers_yields_an_empty_tuple_that_refuses_everything
+  when: null
+- id: D4
+  actor: lexby
+  must: make_the_humanity_claim_good_at_the_issuer_or_strike_it_from_the_record_either_resolve_pat_principal_yields_a_principal_the_posture_path_refuses_or_every_statement_that_the_posture_never_admits_a_non_human_approver_is_removed_checkable_a_seeded_test_that_mints_a_pat_resolves_it_and_drives_respond_to_hitl_under_a_live_posture_must_raise
+  when: null
+- id: D5
+  actor: lexby
+  must: make_the_environment_condition_fail_closed_require_an_affirmative_non_production_signal_instead_of_the_absence_of_a_production_one_checkable_seeded_test_asserting_posture_block_returns_a_non_none_string_when_the_environment_declares_neither_development_nor_production
+  when: null
+- id: D6
+  actor: lexby
+  must: repair_the_notice_authority_drift_and_make_the_d2_matrix_able_to_see_it_eligible_approval_responders_receives_and_passes_posture_so_the_notified_set_is_derived_from_one_definition_checkable_add_a_posture_row_to_test_notice_set_equals_the_response_route_set_asserting_equality_under_a_live_posture_run_red_with_the_fix_reverted
+  when: null
+- id: D7
+  actor: lexby
+  must: put_the_act_to_the_party_it_was_taken_from_the_client_must_be_told_that_a_control_approval_was_cleared_with_no_independent_reviewer_and_that_the_invocable_surface_over_her_data_went_from_99_verbs_to_443_checkable_a_select_on_the_cv_tenant_database_returning_a_channel_outbox_row_addressed_to_info_at_classicalvisas_dot_com_referencing_the_audit_row_and_the_adapter_re_registration_a_hitl_requests_row_that_expired_unheard_satisfies_nothing
+  when: null
+- id: D8
+  actor: lexby
+  must: correct_the_record_amend_the_filed_submission_to_withdraw_f7_which_was_false_once_the_supervening_fact_was_entered_and_either_add_the_dev_posture_001_draft_cited_in_the_881a9df_refs_trailer_or_record_its_absence_and_add_the_forward_looking_gate_asserting_every_path_referenced_in_a_refs_trailer_resolves_in_tree_the_standing_cure_for_the_inv_8_c1_c9_defect_class_now_at_its_third_instance
+  when: null
+forbidden:
+- declaring_the_development_posture_on_any_tenant_before_d2_to_d6_are_all_discharged_they_are_conditions_precedent_not_improvements
+- declaring_it_on_a_tenant_with_a_real_ingress_posture_oidc_cf_access_or_session_login_or_under_any_production_or_staging_signal
+- treating_actor_tier_human_as_evidence_that_a_human_is_present_any_control_requiring_a_person_reads_the_credential_class_not_the_authority_tier
+- reading_the_absence_of_a_production_signal_as_evidence_of_development
+- justifying_this_or_any_comparable_relief_on_the_ground_that_an_existing_exemption_or_boundary_command_already_confers_as_much_that_is_an_argument_for_examining_the_existing_route
+- computing_a_notice_set_against_a_different_posture_from_the_one_the_response_route_uses
+exceptions:
+- the_control_adapter_activate_act_already_taken_under_the_withdrawn_posture_stands_it_was_within_grant_fully_recorded_corrective_and_voiding_it_would_injure_the_absent_party_this_ruling_protects_standing_is_not_ratification_and_d7_still_runs
+- the_sole_author_exemption_is_untouched_by_this_order_it_tracks_an_unsatisfiable_rule_and_is_not_a_declared_posture
+supersedes: []
+source_opinion: docs/vjs/2026-VJS-CC-BOLTRIG-DEVELOPMENT-POSTURE-001-opinion.md
+runtime_summary: |
+  The development posture is fenced as the court required, and each limb is proven to fail.
+  `posture_block` now takes every condition as a PARAMETER rather than reading the environment,
+  so adding one breaks every call site instead of defaulting to permissive at the caller nobody
+  updated. It refuses under a real ingress posture (D2), refuses unless the environment
+  AFFIRMATIVELY declares development (D5), refuses a caller whose `Principal.credential_kind` is
+  not an interactive door (D4, defaulting to "machine" so an unlabelled resolver is refused), and
+  lapses when any active author-tier user is not named in the declaration's `covers` (D3).
+  `eligible_approval_responders` receives and passes the posture, so notice and authority are
+  again derived from one definition (D6). Classical Visas' declaration was withdrawn on the box
+  the hour the judgment landed (D1), verified against the running kernel.
+created_at: 2026-07-29T15:15:00Z
+citation: null
+assent_source: standing_bounded_assent
+implementation_status: PARTIAL
+implementation_note: |
+  D1 DONE 2026-07-29 on jellytot-prod: the `development_posture` block was removed from
+  boltrig-tenants/cv/manifest.yaml (previous kept as manifest.yaml.bak-posture-withdraw-*) and
+  the kernel restarted. Verified against the RUNNING container, not the file: posture object
+  None, enabled False, `posture_block(...)` returns "no development posture is declared for this
+  tenant". Kernel healthy with all 15 adapters registered; unauthenticated /v1/skills returns 401.
+
+  D2, D3, D4, D5, D6 DONE. 40 tests in tests/security/test_development_posture.py plus the new
+  posture row in tests/security/test_hitl_notification_routing.py. Every limb was RED-SEEDED by
+  removing it in turn: D2 -> 1 fails, D5 -> 1 fails, D4 -> 1 fails, D3 -> 3 fail, D6 -> notice
+  != route, reproducing the drift the court measured. Recorded honestly: the FIRST pass of that
+  work had no test for D2 or D5 at all, so both seeds stayed green and those two limbs were
+  unfalsifiable - the check-that-cannot-fail defect written into the fix for it. Caught by
+  running the seeds rather than assuming they would fail.
+
+  D7 OPEN and BLOCKED on the Principal. It requires an outward communication to the client, and
+  the Principal has a standing instruction not to email that client. Nothing has been sent. The
+  lawful routes are that the Principal relays it himself, or directs another channel.
+
+  D8 OPEN.

@@ -90,6 +90,79 @@ def _run_cursor(kernel: Any, tenant_id: str, run_id: str | None) -> int | None:
         return None
 
 
+_AUTHOR_GRANTING_VERBS = frozenset({"control.user.update", "control.invitation.create"})
+
+
+def _exemption_would_end_itself(request: Any) -> bool:
+    """Is this exempted approval the one that ends the exemption?
+    ([2026] VJS-CC-BOLTRIG-OPERATOR-SEAT-001, D4.)
+
+    The sole-author exemption exists because a one-author tenant cannot satisfy
+    four-eyes. Granting author tier to a second human is therefore the one act
+    that both NEEDS the exemption and DESTROYS it - and on Classical Visas that
+    is exactly what happened, unannounced: the `control.user.update` promoting
+    the client to `admin` was self-approved under the exemption at 08:30:05 and
+    executed at 08:30:31, and from that moment self-approval was unlawful. The
+    operator found out by hitting the wall, and read the wall as a deadlock
+    serious enough to apply to open the host boundary.
+
+    Read from ``request.context``, which ``_approval_display_context`` writes as
+    canonical JSON carrying the exact governed inputs - the same serialisation
+    the approver was shown. Not re-derived from live tenant state, which by
+    answer time may already have moved, and not parsed out of a human-facing
+    rendering.
+
+    The court's own discriminator: one of the two granting verbs, carrying a
+    role in ``AUTHOR_ROLES``. Deliberately not narrowed by checking whether the
+    target is ALREADY author-tier (in which case the count would not actually
+    move). This is a warning attached to an authority the approver is spending,
+    and a warning is better over-given than withheld on a subtlety.
+    """
+    if getattr(request, "verb", None) not in _AUTHOR_GRANTING_VERBS:
+        return False
+    try:
+        payload = json.loads(getattr(request, "context", "") or "")
+    except (TypeError, ValueError):
+        # An approval whose context is not canonical JSON cannot be raised by
+        # the gate (it refuses at creation), so this is a legacy or hand-made
+        # row. Say nothing rather than guess.
+        return False
+    inputs = payload.get("inputs") if isinstance(payload, dict) else None
+    role = inputs.get("role") if isinstance(inputs, dict) else None
+
+    from boltrig.identity.rbac import AUTHOR_ROLES
+
+    return isinstance(role, str) and role in AUTHOR_ROLES
+
+
+async def _alarm_development_posture(kernel: Any, principal: Any, request: Any) -> None:
+    """THE RECORD THE POSTURE DOES NOT REMOVE.
+
+    The second person's click is gone; this is not. It goes on the
+    tamper-evident SecurityWriter stream because it is the one signal saying a
+    control that normally takes two parties took one - so a party who was never
+    asked to approve can read afterwards what was done on their tenant.
+
+    Fail-safe: the AuditWriter row written by the caller is the truth, and an
+    alarm that could break an approval would be traded away the first time it did.
+    """
+    from boltrig.models import SecurityEvent, SecurityEventType, utcnow
+
+    try:
+        await kernel.security.write(
+            SecurityEvent(
+                tenant_id=principal.tenant_id, ts=utcnow(),
+                event_type=SecurityEventType.DEVELOPMENT_POSTURE_APPROVAL,
+                reason="self_approval_under_development_posture",
+                actor=principal.subject, actor_tier=principal.actor_tier,
+                resource="hitl", resource_id=request.id,
+                detail={"verb": request.verb},
+            )
+        )
+    except Exception:  # noqa: BLE001 - see the fail-safe note above
+        pass
+
+
 async def respond_to_hitl(
     kernel: Any,
     principal: Any,
@@ -100,7 +173,9 @@ async def respond_to_hitl(
     request = await kernel.hitl.get(principal.tenant_id, request_id)
     if request is None:
         raise HTTPException(status_code=404, detail="unknown request")
-    sole_author_exempt = await authorize_hitl_response(kernel, principal, request)
+    relief = await authorize_hitl_response(kernel, principal, request)
+    sole_author_exempt = relief == "sole_author"
+    dev_posture = relief == "development_posture"
     # GAP G5: capture the run-relay cursor BEFORE answer() fires the resume lane, so
     # everything the resume publishes lands at a seq strictly greater than it.
     resume_since = _run_cursor(kernel, principal.tenant_id, request.run_id)
@@ -111,19 +186,30 @@ async def respond_to_hitl(
     response = await kernel.hitl.answer(
         principal.tenant_id, request_id, decision, principal.subject, notes
     )
-    if sole_author_exempt:
-        # The four-eyes bootstrap exemption always leaves a flag on the chain:
+    ends_exemption = sole_author_exempt and _exemption_would_end_itself(request)
+    if dev_posture:
+        await _alarm_development_posture(kernel, principal, request)
+    if sole_author_exempt or dev_posture:
+        # Either relief (sole_author / development_posture) always leaves a
+        # flag on the AuditWriter chain (SEC-182):
         # a single-author tenant approved its own request (SEC-182).
         from boltrig.models import ActionType, AuditEvent, utcnow
 
+        detail: dict[str, Any] = {"hitl_request_id": request.id, "verb": request.verb}
+        if ends_exemption:
+            detail["ends_sole_author_exemption"] = True
+        if dev_posture:
+            detail["development_posture"] = True
         await kernel.audit.write(
             AuditEvent(
                 tenant_id=principal.tenant_id, ts=utcnow(),
                 actor=principal.subject, actor_tier=principal.actor_tier,
-                action_type=ActionType.TOOL_CALL, verb="hitl.sole_author_approval",
+                action_type=ActionType.TOOL_CALL,
+                verb=("hitl.development_posture_approval" if dev_posture
+                      else "hitl.sole_author_approval"),
                 status="ok", run_id=request.run_id,
                 on_behalf_of=principal.on_behalf_of,
-                detail={"hitl_request_id": request.id, "verb": request.verb},
+                detail=detail,
             )
         )
     result: dict[str, Any] = {"status": "answered", "response_id": response.id}
@@ -135,6 +221,10 @@ async def respond_to_hitl(
         result["resume_since"] = resume_since
     if sole_author_exempt:
         result["sole_author_exemption"] = True
+    if dev_posture:
+        result["development_posture"] = True
+    if ends_exemption:
+        result["ends_sole_author_exemption"] = True
     return result
 
 

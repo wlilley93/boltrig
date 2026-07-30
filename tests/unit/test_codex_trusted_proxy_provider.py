@@ -32,6 +32,7 @@ from pathlib import Path
 import httpx
 import pytest
 
+
 from boltrig.fleet.application.model_proxy_grants import PhaseScopedModelProxyGrantBroker
 from boltrig.fleet.codex_trusted_wall import CodexTrustedPostureError
 from boltrig.fleet.domain import PhaseAssignmentRef, PhaseRef
@@ -75,6 +76,61 @@ from boltrig.fleet.infrastructure.model_proxy_peer_registry import (
 from boltrig.models.execution_scope import OrganisationUserRef
 
 from .codex_process_fakes import make_layout
+
+# --- the environment precondition this whole module needs -------------------
+# Every test here drives the trusted-Codex lane, and that lane's ONE available
+# boundary is a helper owned by ANOTHER ACCOUNT on a directory chain this account
+# cannot write (see codex_cell_boundary's module docstring). `/bin/sh` stands in
+# for the baked image helper. Whether that property holds is a fact about the
+# MACHINE, not about the code:
+#
+#   * as root every ancestor is ours, so nothing is proved. test_codex_cell_boundary
+#     already skips for exactly this reason ("root can write everything").
+#   * on some GitHub-hosted runner images /usr is owned by the RUNNER account, so
+#     the same is true at uid 1001 and a root-only guard misses it entirely.
+#
+# The second case cost real time and produced a false accusation: 25 tests here
+# failed on a PR whose entire diff was two TypeScript files, while a PR that DID
+# change Python passed 16/16 minutes apart - same code, different runner. A test
+# that fails when the machine cannot supply its precondition reports the
+# environment as a code defect, and sends whoever reads it hunting their own diff.
+#
+# So it SKIPS, visibly and with the reason. The cost is honest and worth stating:
+# on such a runner this module proves nothing, including the assertions that would
+# have passed. That is preferable to a red that means nothing, and the skip names
+# the euid so the next reader can check the claim in one command.
+def _every_ancestor_is_foreign(path: str) -> bool:
+    """True only when EVERY ancestor of ``path`` belongs to another account.
+
+    EVERY, not any, and the difference is the whole bug. `_assert_shared_helper`
+    walks `helper_path.parents` and refuses on the FIRST ancestor our euid owns,
+    so the precondition has to be the conjunction. An `any` version passed both
+    of its checks - green as my own uid, skipped as root - because root is the
+    degenerate case where every ancestor is ours and `any` and `all` agree. On a
+    runner where /usr is ours but / is root's, `any` found / , declined to skip,
+    and the tests failed exactly as before.
+    """
+    euid = os.geteuid()
+    parents = list(Path(path).parents)
+    if not parents:
+        return False
+    for ancestor in parents:
+        try:
+            if ancestor.stat().st_uid == euid:
+                return False
+        except OSError:
+            return False
+    return True
+
+
+pytestmark = pytest.mark.skipif(
+    not _every_ancestor_is_foreign(os.path.realpath("/bin/sh")),
+    reason=(
+        f"an ancestor of {os.path.realpath('/bin/sh')} is owned by this account "
+        f"(euid {os.geteuid()}), so the file-mode boundary the trusted-Codex lane "
+        "rests on does not exist here and these tests would prove nothing"
+    ),
+)
 
 _CODEX_BIN = Path("/opt/boltrig/codex/codex")
 _CELL_ID = "cell-abc1234567890ab"

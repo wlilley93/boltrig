@@ -229,6 +229,29 @@ _PROSPECTIVE_RE = re.compile(
 
 ALLOW: dict[tuple[str, str], str] = {
     (
+        "scripts/check_commit_trailers.py",
+        "docs/proposals/DEV-POSTURE-001-draft.yaml",
+    ): (
+        "The gate written to catch this class must be able to quote the instance that "
+        "motivated it. check_commit_trailers.py exists because 881a9df's Refs trailer cites "
+        "this path and the path was never committed; its module docstring names it in order "
+        "to say so. Rewording the docstring to avoid the path would leave the gate unable to "
+        "explain what it is for. The two gates are complementary by design - this one covers "
+        "prose, that one covers commit messages - and each records the other's blind spot."
+    ),
+    (
+        "docs/vjs/2026-VJS-CC-BOLTRIG-DEVELOPMENT-POSTURE-001-opinion.md",
+        "docs/proposals/DEV-POSTURE-001-draft.yaml",
+    ): (
+        "The judgment's whole finding on this path is that it does NOT exist. 881a9df's "
+        "Refs trailer cites it; the bench searched origin/main, the working tree and "
+        "git log --all --diff-filter=A and found it nowhere, and recorded that as the "
+        "THIRD instance of the dangling-authority class (INV-8, then C1-C9, then this). "
+        "Rewording the opinion to avoid the path would leave the record unable to say "
+        "which citation was empty, which is the one thing that finding is about. This "
+        "entry IS the 'record its absence' half of that order's D8."
+    ),
+    (
         "docs/decisions/0020-retire-the-pi-lane.md",
         "boltrig/fleet/pi_runtime.py",
     ): (

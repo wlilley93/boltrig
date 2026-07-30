@@ -28,6 +28,11 @@
       "expires": "2026-11-30",
       "reason": "Not code-testable and correctly so: D4 binds the LIVE Classical Visas tenant - provisioning its delivery data (notification_prefs, bindings, channel) and evidencing a delivery artefact addressed to info@classicalvisas.com by a SELECT on the tenant database. Nothing in this repository can decide what a remote tenant database holds, and a test that claimed to would be the false claim this gate exists to stop. Discharged by the tenant record, not by CI."
     },
+    "OPERATOR-SEAT-001:D8": {
+      "owner": "kernel-maintainers",
+      "expires": "2026-11-30",
+      "reason": "Not code-testable and correctly so, and this one is unbound because it is UNPERFORMED rather than merely unbindable. D8 orders that a control.invitation.create for a second operator-side human be raised and actually put to info@classicalvisas.com on a >=24h window, and it states its own checkable: a SELECT on the Classical Visas database finding either a hitl_responses row from the client, or a hitl_requests row for that verb with (timeout_at - created_at) >= 24h and status='timed_out'. Nothing in this repository can decide what a remote tenant database holds. It is also the directive on which the RESERVED seat-operator question turns - that question becomes arguable only on a record showing D8 satisfied and the client having declined or failed to respond - so a test asserting it discharged would manufacture the very record the court said must be earned. Raising it is an outward-facing act on a live client tenant naming a third party, and is the Principal's to authorise. Discharged by the tenant record, not by CI."
+    },
     "AUDIT-DEPTH-001:D8": {
       "owner": "kernel-maintainers",
       "expires": "2026-11-30",
@@ -57,6 +62,16 @@
       "owner": "identity-maintainers",
       "expires": "2026-11-30",
       "reason": "Not code-testable and correctly so: it is a PRINCIPAL GATE on a live cutover or an external credential. Nothing in this repository can decide whether the Principal has given the go, and a test that claimed to would be the false claim this gate exists to stop. Enforced by the deploy record, not by CI."
+    },
+    "DEVELOPMENT-POSTURE-001:D7": {
+      "owner": "lexby",
+      "expires": "2026-09-30",
+      "reason": "Not code-testable, and BLOCKED on the Principal - both facts matter. D7 orders that the Classical Visas client be told a control approval was cleared with no independent reviewer, and that the invocable surface over her data went from 99 verbs to 443. Discharge is a delivery artefact on the LIVE tenant database (a channel_outbox row addressed to info@classicalvisas.com), exactly as HITL-NOTIFICATION-ROUTING-001:D4 above: nothing in this repository can decide what a remote tenant database holds, and a test claiming to would be the false claim this gate exists to stop. WHAT BINDING IT WOULD TAKE: the same SELECT-based evidence that order's D4 takes, run against the CV database, recorded in this order's implementation_note. WHY IT HAS NOT BEEN DONE: the Principal has a standing instruction not to email this client. Nothing has been sent and nothing will be until he directs the channel or relays it himself - an agent does not resolve a conflict between a court order and a Principal instruction by picking the one it prefers. Per that order's forbidden list, a hitl_requests row that expires unheard satisfies nothing."
+    },
+    "DEVELOPMENT-POSTURE-001:D8": {
+      "owner": "lexby",
+      "expires": "2026-09-30",
+      "reason": "PARTLY discharged and partly not code-testable, so it is waived rather than claimed. D8 has three limbs. (a) Withdraw F7 from SUBMISSION-2026-07-29-083653: an amendment to a filed record, which no test can assert. (b) Account for docs/proposals/DEV-POSTURE-001-draft.yaml, cited in 881a9df's Refs trailer and existing nowhere - DONE, by recording its absence in scripts/check_prose_references.py's ALLOW with the reason, so the gate now carries the finding rather than the finding being lost. A commit message is immutable, so the historical half can never be more than recorded. (c) The forward-looking gate asserting every path in a Refs: trailer resolves in-tree - THIS IS GENUINELY TESTABLE AND IS NOT YET WRITTEN. WHAT BINDING IT WOULD TAKE: that gate, plus its seeded-failure suite, plus a decision on the historical offenders it finds (a gate red on arrival needs a ratchet, not a green claim). It is the standing cure for a defect class now at its third instance (INV-8, C1-C9, DEV-POSTURE-001-draft), which is why this expiry is short."
     }
   }
 }

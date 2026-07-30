@@ -79,3 +79,57 @@ describe("BASE (the value that ships)", () => {
     expect(await urlFetchedFrom("/")).toBe("/v1/skills");
   });
 });
+
+describe("VITE_API_BASE pins the prefix, for the mounts derivation gets wrong", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    // AND the envs. unstubAllGlobals does NOT undo stubEnv, so without this the
+    // pinned VITE_API_BASE="" leaks into the next test and the negative control
+    // below passes for the wrong reason. It caught exactly that on first run -
+    // which is what a negative control is for.
+    vi.unstubAllEnvs();
+    vi.resetModules();
+    vi.restoreAllMocks();
+  });
+
+  // WHY THIS ESCAPE HATCH IS LOAD-BEARING, not decoration.
+  //
+  // Deriving from pathname is right when the EDGE STRIPS the prefix: a tenant
+  // mount at <host>/boltrig reaches the container as / and /v1, so pathname is
+  // the mount and the derived prefix is correct.
+  //
+  // It is WRONG where the console sits at a real path while the kernel is proxied
+  // at the root. That is exactly how the worker image packages this build
+  // (apps/worker/Dockerfile serves it at /operator/ and proxies /v1/ at the root),
+  // and the failure is the worst available shape: a derived "/operator" prefix
+  // sends every call to /operator/v1/..., which that image's try_files answers
+  // with the operator's own index.html at HTTP 200. Not a 404 - a 200 full of
+  // HTML. Every request "succeeds" and returns the wrong thing.
+  //
+  // So the packaging pins VITE_API_BASE to empty, and this test is what stops
+  // anyone "simplifying" the derivation into something that ignores it.
+  it("an explicitly empty VITE_API_BASE beats the derivation", async () => {
+    vi.resetModules();
+    vi.stubEnv("VITE_API_BASE", "");
+    vi.stubGlobal("location", { ...window.location, pathname: "/operator/" });
+    const fetchSpy = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const { request } = await import("@/api/transport");
+    await request("/v1/skills");
+    expect(String(fetchSpy.mock.calls[0][0])).toBe("/v1/skills");
+  });
+
+  it("and the negative control: unset, /operator/ DOES derive a prefix", async () => {
+    // The hazard, stated as an assertion. If this ever returns "/v1/skills" the
+    // derivation has been changed and the comment above has gone stale.
+    vi.resetModules();
+    vi.stubGlobal("location", { ...window.location, pathname: "/operator/" });
+    const fetchSpy = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const { request } = await import("@/api/transport");
+    await request("/v1/skills");
+    expect(String(fetchSpy.mock.calls[0][0])).toBe("/operator/v1/skills");
+  });
+});

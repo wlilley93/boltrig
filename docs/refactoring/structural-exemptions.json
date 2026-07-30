@@ -70,11 +70,17 @@
       "expires": "2026-12-31"
     },
     "boltrig/api/bootstrap.py": {
-      "max_file_lines": 665,
-      "max_function_lines": 65,
-      "over_limit_functions": [],
+      "max_file_lines": 733,
+      "max_function_lines": 84,
+      "over_limit_functions": [
+        {
+          "name": "build_app",
+          "line": 650,
+          "lines": 84
+        }
+      ],
       "owner": "platform-maintainers",
-      "reason": "Split dependency construction and runtime wiring into typed bootstrap stages without changing startup order. 2026-07-25: +8 lines to wire the SHARED rate-limit counter from REDIS_URL. RedisCounter was constructed nowhere, so every bound was per-process and per-boot while three places in the record asserted Redis ([2026] VJS-CC-BOLTRIG-RATE-LIMIT-WINDOW-001 D1/D3/D7). 2026-07-26 (decision 0018): a write held for human approval is now RECORDED at the pause - a human approved opbox.add_comment in a chat turn, the request sat ANSWERED forever and the comment was never posted, because nothing anywhere held the CALL. The chat factory was EXTRACTED into _build_chat_wiring so the answer bridge can reach the SAME ChatService the SSE routes use (the relay is per-Kernel and in-process), which lowered build_app from 110 to 87 lines - the function ratchet ratchets down with this change. 2026-07-27: the workflow-promotion subsystem deleted ([2026] VJS-CC-BOLTRIG-WORKFLOW-PROMOTION-TRIGGER-001 D3) - the ratchet falls to the measured value. 2026-07-30: API app and birth-profile composition moved behind focused modules; build_app is now a dependency-injection facade and the function ratchet falls to 65.",
+      "reason": "Split dependency construction and runtime wiring into typed bootstrap stages without changing startup order. 2026-07-25: +8 lines to wire the SHARED rate-limit counter from REDIS_URL. RedisCounter was constructed nowhere, so every bound was per-process and per-boot while three places in the record asserted Redis ([2026] VJS-CC-BOLTRIG-RATE-LIMIT-WINDOW-001 D1/D3/D7). 2026-07-26 (decision 0018): a write held for human approval is now RECORDED at the pause - a human approved opbox.add_comment in a chat turn, the request sat ANSWERED forever and the comment was never posted, because nothing anywhere held the CALL. The chat factory was EXTRACTED into _build_chat_wiring so the answer bridge can reach the SAME ChatService the SSE routes use (the relay is per-Kernel and in-process), which lowered build_app from 110 to 87 lines - the function ratchet ratchets down with this change. 2026-07-27: the workflow-promotion subsystem deleted ([2026] VJS-CC-BOLTRIG-WORKFLOW-PROMOTION-TRIGGER-001 D3) - the ratchet falls to the measured value. 2026-07-29: +1 line and build_app shifts 649->650 for the DEV-POSTURE development-posture flag - one composition-root argument threading the tenant's declared posture to the HITL manager, exactly as the approval timeout already is.",
       "expires": "2026-12-31"
     },
     "boltrig/api/doctor.py": {
@@ -86,25 +92,49 @@
       "expires": "2026-12-31"
     },
     "boltrig/api/initiate.py": {
-      "max_file_lines": 244,
+      "max_file_lines": 258,
       "max_function_lines": 96,
       "over_limit_functions": [
         {
           "name": "_run",
-          "line": 61,
+          "line": 65,
           "lines": 96
         }
       ],
       "owner": "platform-maintainers",
-      "reason": "Extract initiation orchestration phases without changing request validation or execution semantics. 2026-07-26: +11 lines recording a KNOWN LIMIT in the module docstring - the \"refusing to run twice\" guard is a read-then-write with no uniqueness on one owner per tenant, so two concurrent runs with different emails both seat a superadmin. Placed in the docstring rather than inside _run precisely so the note does not grow the function it describes; _run is unchanged at 91 lines and only its line number moved. 2026-07-26: +5 lines to flag the seeded account for forced rotation ([2026] VJS-COUNTY 8, D7) - the seeding path is the flag's only producer.",
+      "reason": "Extract initiation orchestration phases without changing request validation or execution semantics. 2026-07-26: +11 lines recording a KNOWN LIMIT in the module docstring - the \"refusing to run twice\" guard is a read-then-write with no uniqueness on one owner per tenant, so two concurrent runs with different emails both seat a superadmin. Placed in the docstring rather than inside _run precisely so the note does not grow the function it describes; _run is unchanged at 91 lines and only its line number moved. 2026-07-26: +5 lines to flag the seeded account for forced rotation ([2026] VJS-COUNTY 8, D7) - the seeding path is the flag's only producer. 2026-07-29: +14 lines and _run shifts 61->65 (import only) for [2026] VJS-CC-BOLTRIG-OPERATOR-SEAT-001 D6 - set-password stops attributing its audit row to the TARGET user and additionally writes a host-boundary SecurityEvent; _run itself is untouched.",
       "expires": "2026-12-31"
     },
     "boltrig/config/manifest.py": {
-      "max_file_lines": 781,
-      "max_function_lines": 48,
+      "max_file_lines": 959,
+      "max_function_lines": 56,
       "over_limit_functions": [],
       "owner": "configuration-maintainers",
-      "reason": "Split manifest models, validation, and application into section-oriented modules with round-trip parity. 2026-07-25: +9 lines so a per-model price keeps sub-micro precision. int(rate) on the way in was half of a two-part bug (price_micros int()-ed it again): every model we route to costs LESS than 1 micro/token, so an honest rate like 0.35 truncated to 0 and the model billed FREE - configuring real prices was strictly worse than the tier fallback, which is why no deployment had ever configured them. 2026-07-25 (input/output split): +44 lines for _parse_rate + _parse_price, EXTRACTED rather than grown inside _parse_models (which shrank), so the largest function is unchanged at 56. A per-model rate may now be the rate card's {input, output} pair as well as a scalar: the two legs differ by more than 2x on the cards we bill from and an agent turn is input-heavy, so one blended rate set at the output price over-bills every turn.",
+      "reason": "Split manifest models, validation, and application into section-oriented modules with round-trip parity. 2026-07-25: +9 lines so a per-model price keeps sub-micro precision. int(rate) on the way in was half of a two-part bug (price_micros int()-ed it again): every model we route to costs LESS than 1 micro/token, so an honest rate like 0.35 truncated to 0 and the model billed FREE - configuring real prices was strictly worse than the tier fallback, which is why no deployment had ever configured them. 2026-07-25 (input/output split): +44 lines for _parse_rate + _parse_price, EXTRACTED rather than grown inside _parse_models (which shrank), so the largest function is unchanged at 56. A per-model rate may now be the rate card's {input, output} pair as well as a scalar: the two legs differ by more than 2x on the cards we bill from and an agent turn is input-heavy, so one blended rate set at the output price over-bills every turn. 2026-07-29: +20 lines for [2026] VJS-CC-BOLTRIG-OPERATOR-SEAT-001 D5 - the shipped control.* approval window moves 3600s -> 86400s behind one named constant so the dataclass default and the parser fallback cannot drift, with the reasoning recorded beside it. 2026-07-29: +34 lines for the DEV-POSTURE development-posture flag - the development_posture manifest block and its parser, which fails closed to None on a malformed or absent expires_at so a bad date yields full four-eyes rather than an unbounded suspension of it. 2026-07-29 (+6): _parse_development_posture parses `covers`, the active authors a development-posture declaration is made in respect of. [2026] VJS-CC-BOLTRIG-DEVELOPMENT-POSTURE-001 D3 requires the posture to lapse when an author it does not name appears, which means the declaration has to carry that list. A malformed value yields () - covering nobody, refusing everything - because the failure mode of a bad author list must be full four-eyes.",
+      "expires": "2026-12-31"
+    },
+    "boltrig/fleet/chat.py": {
+      "max_file_lines": 841,
+      "max_function_lines": 143,
+      "over_limit_functions": [
+        {
+          "name": "ChatService.handle_turn",
+          "line": 333,
+          "lines": 143
+        },
+        {
+          "name": "build_turn_executor",
+          "line": 705,
+          "lines": 137
+        },
+        {
+          "name": "build_turn_executor.executor",
+          "line": 728,
+          "lines": 112
+        }
+      ],
+      "owner": "fleet-maintainers",
+      "reason": "Separate conversation context, turn execution, and event persistence while preserving streaming behavior. Audit fix: the executor now also settles non-BoltrigError failures FAILED (the item no longer stays IN_FLIGHT forever). US-CHAT-15: handle_turn now also runs the mid-run steer queue (queue-vs-drive decision, sequential drain turns on one stream). Parity passthrough (2026): handle_turn/build_turn_executor thread the caller's clamped on_behalf_bearer, sealed per-run for the opbox adapter before any verb dispatch. 2026-07-26 (decision 0018): a write held for human approval is now RECORDED at the pause - a human approved opbox.add_comment in a chat turn, the request sat ANSWERED forever and the comment was never posted, because nothing anywhere held the CALL. ChatService gained resume_held_write, a thin sibling to regenerate_turn that replays the recorded CALL (fleet/held_write_resume.py) rather than the model; no existing function grew by a line. 2026-07-26 (credential lifecycle): +24 lines for _settle_turn, extracted rather than inlined so no over-limit function grows (executor is UNCHANGED at 114 lines; only line numbers moved). The chat lane settles its own work item and never reached the pump's terminal hook, which was the ONLY caller of sweep_run_scoped, so a turn's sealed permission-parity bearer was never retired: 29 live rows on the Classical Visas tenant, one per turn plus one per delegated child, oldest a day old, none ever deleted. 2026-07-27: +1 line (one import) for the chat-reply fix. Every assistant message on the Classical Visas tenant was exactly 256 characters, cut mid-word: 12 at exactly 256, 29 under, and not one had ever exceeded it - 29% of that client's answers silently decapitated, with status=ok and no error anywhere. The cause was a field confusion, not a small bound: AgentResult.summary is a short audit line that the codex lane builds as text[:256], and chat used it as the user-facing reply while the full answer sat in output['text']. The selection moved OUT of this file into fleet/result.py beside the field contract it turns on, so the largest function is unchanged at 144 and build_turn_executor.executor SHRANK; the single physical line is the import. +2 lines (857->859) for an import and a call. A chat turn with no authority or no skills is fail-closed and CORRECT, but it was fail-SILENT: on a live tenant the client's own account was in neither org_members nor workspace_members, so role resolution produced the empty grant set (SEC-78), and its role was absent from chat.skills_by_role with default_skills empty. Every turn that user took had zero tools and nothing said so - the turn completed, the agent apologised, and the record showed nothing wrong. The rule lives in fleet/chat_authority.py so this file would not buy the debt; the two lines left are the import and the call. 2026-07-28 (addon seam): 859->852 and build_turn_executor 140->137 / .executor 115->112. The on-behalf seal no longer resolves its adapter from a hardcoded os.environ.get('BOLTRIG_OBO_ADAPTER_ID', 'opbox') in this file - an integration's name defaulted into a module every boltrig ships, in two places. It now calls seal_on_behalf_bearer in fleet/chat_authority.py, which resolves the adapter from the active addon (boltrig.addons) and WARNS when a caller holds a clamped bearer that nothing claims: the turn otherwise falls back to the static credential, the caller's own grants stop being enforced downstream, and the record shows a successful turn. The ratchet is LOWERED, not raised. 2026-07-28 (exactly once): 852->843 and handle_turn 144->143, both LOWERED while ADDING the guard. A client retry loop was measured on the live tenant sending one message five times 1.4-2.1s apart, and each send convened another agent: seven agent_spawn rows for one question, so N times the spend and N duplicate answers. The chat lane was the only caller surface with no replay defence - dispatch has run every VERB through IdempotencyCoordinator since SEC-15 and SpawnBody carries a key. The guard is one call to fleet/chat_idempotency.replay_if_duplicate; the room for it came from extracting _resolve_conversation (the SEC-25 thread lookup) and moving _project_chat_event wholesale into fleet/chat_event_projection.py, so handle_turn now states the SEQUENCE of a turn rather than the mechanics of each step. 2026-07-28 (channel attribution): 843->841, and every over-limit function is UNCHANGED (143/137/112) - only line numbers moved. A chat turn now carries which surface it arrived through, so a message typed into an Opbox spotlight and the same thread in the boltrig UI are one conversation, attributed. The obvious home was WorkItem.source, and that is a trap: chief_of_staff._route_deterministic selects a DEPARTMENT by matching source against queue_sources, so a caller-settable source would hand routing authority to the requester through what reads like a display field. source stays 'chat'; the label goes to source_id, the documented generic opaque external reference, which is NULL on every chat turn today and is already filterable end to end via /v1/runs?external_ref=. The room came from folding the four-line chat_authority import into one; the rule and the whole argument live in fleet/chat_origin.py so this file does not buy the debt.",
       "expires": "2026-12-31"
     },
     "boltrig/fleet/infrastructure/cell_spawner.py": {
@@ -172,104 +202,180 @@
       "expires": "2026-12-31"
     },
     "boltrig/fleet/spawn.py": {
-      "max_file_lines": 535,
-      "max_function_lines": 76,
-      "over_limit_functions": [],
+      "max_file_lines": 676,
+      "max_function_lines": 92,
+      "over_limit_functions": [
+        {
+          "name": "Spawner.spawn",
+          "line": 102,
+          "lines": 92
+        }
+      ],
       "owner": "fleet-maintainers",
-      "reason": "Split spawn selection, token issuance, and execution while preserving delegated authority checks. Audit fixes: the budget reservation is refunded when the runtime raises (extracted _invoke_runtime, which lowered spawn's function debt), the budget hard-stop partial is degrade-marked, and make_agent_invoker now applies the same depth cap + reserve/refund/true-up governance as spawn. 2026-07-25: +58 lines for _inherit_adapter_bearer, which carries the run-scoped permission-parity bearer across the delegation boundary. The chat turn seals it against the ROOT run id but never calls a verb itself, so the dispatch under the CHILD run id missed the seal and fell back to the adapter's static credential - every parity-dependent verb call was rejected downstream. Spawner.spawn itself is UNCHANGED at 91 lines (the line number moved only because of the new module logger); the growth is the helper and its docstring, which records the failure so the seam is not re-broken. 2026-07-25 (cost): _true_up_cost now RETURNS the priced cost and spawn records that instead of result.cost_micros. A runtime reports tokens, not money - pricing is the tenant's per-model/tier rate that only the accountant knows - so result.cost_micros was 0 for every run while the budget was trued up correctly: a tenant could spend and still read as free in the audit tree. 2026-07-25 (budget scope): +15 lines for _budget_scope_ids, extracted rather than inlined so Spawner.spawn does NOT grow (still 93; only its line number moved). The tenant budget's scope id is the tenant id, but spawn reserved against the literal string \"tenant\", so get_budget found no row and the scope was silently unmetered: the hard-stop cap could never fire and the ledger stayed at zero. The docstring records it at the derivation site. SEC-186 (2026-07-25): the same fence on /v1/spawn, plus threading the sealing owner through _inherit_adapter_bearer so a child cannot inherit a bearer sealed by someone else. 2026-07-25 (input/output split): +9 lines in _true_up_cost (36 -> 45), which now passes the runtime's reported input/output split to the accountant so each leg is priced at its own rate. Spawner.spawn is UNCHANGED at 93 lines and still starts at line 101. 2026-07-26 (credential lifecycle): +33 lines for _retire_child_credentials, called from the SAME two exits as _publish_subagent_end_event because those are the two ways a child run ends. A delegated child has NO work item, so the pump's terminal hook could never sweep the bearer _inherit_adapter_bearer re-seals under the CHILD run id. Spawner.spawn is UNCHANGED at 93 lines (the call sites are in _invoke_runtime, which stays under the limit); only its line number moved. +2 file lines (691->693) to carry the DEGRADE REASON onto the audit row: a degraded row recorded the capability, the runtime and the model route but not the failure, so the ledger could say a turn failed and never why - which is how a client outage stayed undiagnosable from the database alone. The accessor itself lives on AgentResult, beside the degrade() that writes the marker, so the spawner gained no parsing. Spawner.spawn went the other way, 93->92, and that ratchet is lowered in the same change. 2026-07-28 (addon seam): 693->676. _inherit_adapter_bearer's body moved to inherit_on_behalf_bearer in fleet/chat_authority.py, beside the seal site it is the delegation half of, so both resolve the adapter through boltrig.addons rather than through two copies of the same env read defaulting to one integration's name. Spawner.spawn is untouched; the ratchet is LOWERED, not raised. 2026-07-29: deterministic budget helpers moved to fleet/spawn_budget.py and bound-capability active/retired resolution moved to spawn_skills.py; this lowers the file ratchet to 663 and keeps make_agent_invoker below the function ceiling while preserving artifact production and the retired-capability fallback fence.",
+      "reason": "Split spawn selection, token issuance, and execution while preserving delegated authority checks. Audit fixes: the budget reservation is refunded when the runtime raises (extracted _invoke_runtime, which lowered spawn's function debt), the budget hard-stop partial is degrade-marked, and make_agent_invoker now applies the same depth cap + reserve/refund/true-up governance as spawn. 2026-07-25: +58 lines for _inherit_adapter_bearer, which carries the run-scoped permission-parity bearer across the delegation boundary. The chat turn seals it against the ROOT run id but never calls a verb itself, so the dispatch under the CHILD run id missed the seal and fell back to the adapter's static credential - every parity-dependent verb call was rejected downstream. Spawner.spawn itself is UNCHANGED at 91 lines (the line number moved only because of the new module logger); the growth is the helper and its docstring, which records the failure so the seam is not re-broken. 2026-07-25 (cost): _true_up_cost now RETURNS the priced cost and spawn records that instead of result.cost_micros. A runtime reports tokens, not money - pricing is the tenant's per-model/tier rate that only the accountant knows - so result.cost_micros was 0 for every run while the budget was trued up correctly: a tenant could spend and still read as free in the audit tree. 2026-07-25 (budget scope): +15 lines for _budget_scope_ids, extracted rather than inlined so Spawner.spawn does NOT grow (still 93; only its line number moved). The tenant budget's scope id is the tenant id, but spawn reserved against the literal string \"tenant\", so get_budget found no row and the scope was silently unmetered: the hard-stop cap could never fire and the ledger stayed at zero. The docstring records it at the derivation site. SEC-186 (2026-07-25): the same fence on /v1/spawn, plus threading the sealing owner through _inherit_adapter_bearer so a child cannot inherit a bearer sealed by someone else. 2026-07-25 (input/output split): +9 lines in _true_up_cost (36 -> 45), which now passes the runtime's reported input/output split to the accountant so each leg is priced at its own rate. Spawner.spawn is UNCHANGED at 93 lines and still starts at line 101. 2026-07-26 (credential lifecycle): +33 lines for _retire_child_credentials, called from the SAME two exits as _publish_subagent_end_event because those are the two ways a child run ends. A delegated child has NO work item, so the pump's terminal hook could never sweep the bearer _inherit_adapter_bearer re-seals under the CHILD run id. Spawner.spawn is UNCHANGED at 93 lines (the call sites are in _invoke_runtime, which stays under the limit); only its line number moved. +2 file lines (691->693) to carry the DEGRADE REASON onto the audit row: a degraded row recorded the capability, the runtime and the model route but not the failure, so the ledger could say a turn failed and never why - which is how a client outage stayed undiagnosable from the database alone. The accessor itself lives on AgentResult, beside the degrade() that writes the marker, so the spawner gained no parsing. Spawner.spawn went the other way, 93->92, and that ratchet is lowered in the same change. 2026-07-28 (addon seam): 693->676. _inherit_adapter_bearer's body moved to inherit_on_behalf_bearer in fleet/chat_authority.py, beside the seal site it is the delegation half of, so both resolve the adapter through boltrig.addons rather than through two copies of the same env read defaulting to one integration's name. Spawner.spawn is untouched; the ratchet is LOWERED, not raised.",
+      "expires": "2026-12-31"
+    },
+    "boltrig/fleet/ultracode.py": {
+      "max_file_lines": 392,
+      "max_function_lines": 101,
+      "over_limit_functions": [
+        {
+          "name": "run_ultracode_body",
+          "line": 292,
+          "lines": 101
+        }
+      ],
+      "owner": "fleet-maintainers",
+      "reason": "Extract UltraCode task-body orchestration stages without changing runtime registration behavior. Audit fix: prior phase outputs (model-generated) are wrapped in the M1 untrusted envelope before reaching the next phase's prompt.",
       "expires": "2026-12-31"
     },
     "boltrig/identity/auth.py": {
-      "max_file_lines": 404,
-      "max_function_lines": 71,
+      "max_file_lines": 405,
+      "max_function_lines": 72,
       "over_limit_functions": [],
       "owner": "identity-maintainers",
-      "reason": "File-length only. The IAM-03/05 token-verification hardening (absolute exp cap, throttled forced JWKS refetch) pushed the module four lines past the 400 floor; split the OIDC verifier and its JWKS cache from the principal resolver when the identity boundary is next refactored.",
+      "reason": "File-length only. The IAM-03/05 token-verification hardening (absolute exp cap, throttled forced JWKS refetch) pushed the module four lines past the 400 floor; split the OIDC verifier and its JWKS cache from the principal resolver when the identity boundary is next refactored. 2026-07-29 (+1): credential_kind=\"federated\" on the CF Access / OIDC resolver's Principal, per that order's D4. Same one-line shape as the session resolver. 2026-07-29 (+1 line in the largest function): credential_kind=\"federated\" on the CF Access / OIDC resolver's Principal, per that order's D4. One line, and the split this entry has always called for is still the right fix when the identity boundary is next refactored.",
       "expires": "2026-12-31"
     },
     "boltrig/identity/sessions.py": {
-      "max_file_lines": 379,
-      "max_function_lines": 123,
+      "max_file_lines": 380,
+      "max_function_lines": 124,
       "over_limit_functions": [
         {
           "name": "build_session_resolver",
           "line": 257,
-          "lines": 123
+          "lines": 124
         },
         {
           "name": "build_session_resolver.resolver",
           "line": 268,
-          "lines": 110
+          "lines": 111
         }
       ],
       "owner": "identity-maintainers",
-      "reason": "Separate session resolution and cross-tenant membership rebinding while retaining fail-closed identity semantics. 2026-07-26: +the COUNTY 8 D7 forced-rotation flag. A persisted field has to touch the row mapper, the upsert and the resolver clamp; the growth is the minimum a persisted field costs, and the route it serves was put in its own module (auth_password_routes.py) rather than added to auth_routes.",
+      "reason": "Separate session resolution and cross-tenant membership rebinding while retaining fail-closed identity semantics. 2026-07-26: +the COUNTY 8 D7 forced-rotation flag. A persisted field has to touch the row mapper, the upsert and the resolver clamp; the growth is the minimum a persisted field costs, and the route it serves was put in its own module (auth_password_routes.py) rather than added to auth_routes. 2026-07-29 (+1): credential_kind=\"session\" on the resolver's Principal, per that order's D4. One line, no comment block - the explanation belongs to the concept, not to each caller.",
       "expires": "2026-12-31"
     },
     "boltrig/kernel/access_routes.py": {
-      "max_file_lines": 681,
-      "max_function_lines": 120,
+      "max_file_lines": 1077,
+      "max_function_lines": 148,
       "over_limit_functions": [
         {
+          "name": "_register_me_routes",
+          "line": 174,
+          "lines": 142
+        },
+        {
           "name": "_register_context_routes",
-          "line": 407,
-          "lines": 103
+          "line": 503,
+          "lines": 100
+        },
+        {
+          "name": "_register_ai_key_routes",
+          "line": 605,
+          "lines": 148
         },
         {
           "name": "_register_admin_directory_routes",
-          "line": 512,
-          "lines": 120
+          "line": 791,
+          "lines": 116
+        },
+        {
+          "name": "_register_workspace_routes",
+          "line": 954,
+          "lines": 124
         }
       ],
       "owner": "kernel-maintainers",
-      "reason": "Decompose access, user, invitation, and notification route registrars behind the governed control chokepoint. 2026-07-29: focused notification, account profile, conversation account, AI-key, workspace-management, and model-endpoint route modules lower this facade from 1038 to 681 lines and its largest registrar from 148 to 120 while preserving the same governed dependencies and response contracts.",
+      "reason": "Decompose access, user, invitation, and notification route registrars behind the governed control chokepoint.",
       "expires": "2026-12-31"
     },
     "boltrig/kernel/app.py": {
-      "max_file_lines": 780,
-      "max_function_lines": 546,
+      "max_file_lines": 831,
+      "max_function_lines": 587,
       "over_limit_functions": [
         {
           "name": "create_app",
-          "line": 235,
-          "lines": 546
+          "line": 245,
+          "lines": 587
         }
       ],
       "owner": "kernel-maintainers",
-      "reason": "Extract application middleware and route-family wiring while preserving dependency ownership and ordering. Parity passthrough (2026): ChatBody carries the optional on_behalf_bearer forwarded to the spawner. SEC-186 (2026-07-25): the /v1/invoke door refuses a body-supplied run id belonging to another user; the predicate itself lives in run_access.py, so only the 5-line guard is here. 2026-07-28 (exactly once): 860->817 and create_app 592->587, both LOWERED while ADDING ChatBody.idempotency_key. The chat door was the only caller surface with no replay defence - InvokeBody has carried a key since SEC-15 - and a client retry loop on the live tenant turned one message into seven agent_spawn rows. The room came from moving the four request models into kernel/app_bodies.py: they are the door's PUBLIC CONTRACT, they grow whenever the product does, and reading them should not mean paging through route wiring. 2026-07-29 (Worker continuity): 817->793 and create_app 587->563, both LOWERED by extracting conversation detail and browser-safe projected follow routes into kernel/conversation_live_routes.py. The safe chat configuration projection now uses that same registrar, lowering the facade again. 2026-07-30: health and readiness registration moved to health_routes.py, lowering the facade while retaining the same lazy service lock and public paths.",
+      "reason": "Extract application middleware and route-family wiring while preserving dependency ownership and ordering. Parity passthrough (2026): ChatBody carries the optional on_behalf_bearer forwarded to the spawner. SEC-186 (2026-07-25): the /v1/invoke door refuses a body-supplied run id belonging to another user; the predicate itself lives in run_access.py, so only the 5-line guard is here. 2026-07-28 (exactly once): 860->817 and create_app 592->587, both LOWERED while ADDING ChatBody.idempotency_key. The chat door was the only caller surface with no replay defence - InvokeBody has carried a key since SEC-15 - and a client retry loop on the live tenant turned one message into seven agent_spawn rows. The room came from moving the four request models into kernel/app_bodies.py: they are the door's PUBLIC CONTRACT, they grow whenever the product does, and reading them should not mean paging through route wiring. 2026-07-29: +7 lines and create_app shifts 231->238 (no change inside it) for the caller-facing schema hint - a failed verb call now returns which field was wrong and what shape it wanted, instead of the bare word schema_invalid that made a model retry the identical call four times. 2026-07-29 (+7): Principal gains `credential_kind`, recording HOW a caller authenticated as distinct from `actor_tier`, which is the authority they act with. The two were conflated, and [2026] VJS-CC-BOLTRIG-DEVELOPMENT-POSTURE-001 D4 proved by execution that the conflation let a machine bearer clear its own control approval on a live client tenant. A field that every principal resolver must set costs a line at each door; the reasoning is kept OUT of this file and lives with the concept in config/dev_posture.py, so only five lines land here.",
       "expires": "2026-12-31"
     },
     "boltrig/kernel/channel_routes.py": {
-      "max_file_lines": 668,
-      "max_function_lines": 258,
+      "max_file_lines": 759,
+      "max_function_lines": 356,
       "over_limit_functions": [
         {
           "name": "register_channel_routes",
-          "line": 411,
-          "lines": 258
+          "line": 404,
+          "lines": 356
+        },
+        {
+          "name": "register_channel_routes.channel_inbound",
+          "line": 440,
+          "lines": 144
         }
       ],
       "owner": "kernel-maintainers",
-      "reason": "The inventory, delivery-evidence and signed-inbound registrars are now extracted behind channel-owned modules, lowering both ratchets without weakening signature checks. The remaining debt is the administration/binding registrar plus SEC-180 self-onboarding and SEC-14/SEC-179 channel-native HITL helpers; split those as the next behavior-preserving channel pass.",
+      "reason": "Split channel administration and inbound gateway route registrars without weakening signature checks. SEC-180 self-serve onboarding added the _self_onboard helper and its wiring in channel_inbound. SEC-14/SEC-179 channel-native HITL replies added the command-parse/addressed-to/sole-pending helpers and their intake wiring.",
       "expires": "2026-12-31"
     },
     "boltrig/kernel/dispatch.py": {
-      "max_file_lines": 639,
-      "max_function_lines": 114,
+      "max_file_lines": 721,
+      "max_function_lines": 118,
       "over_limit_functions": [
         {
           "name": "Dispatcher.invoke",
-          "line": 348,
+          "line": 354,
           "lines": 114
         },
         {
           "name": "Dispatcher._invoke_inner",
-          "line": 463,
-          "lines": 110
+          "line": 469,
+          "lines": 118
         }
       ],
       "owner": "kernel-maintainers",
-      "reason": "Extract dispatch phases behind private typed helpers while retaining the single governed chokepoint. SEC-181 secure input added the run-scoped param resolution at the credential stage and the secure-question marker. Parity passthrough (2026): _execute_adapter overrides the static adapter credential with a per-run sealed bearer when present. 2026-07-25: +17 lines for _emit_pause, which publishes a HITL pause to the run that DELEGATED to this one as well as to this one. A chat turn never calls a verb itself, so the dispatch runs under the child run id while the client follows the root stream - the pause landed on a stream nobody follows and a write held for approval was invisible to the person who asked. Extracting it LOWERED Dispatcher.invoke from 116 to 113 lines, so the function ratchet ratchets down with this change. 2026-07-25: +25 lines to enforce the rate limit BEFORE the approval gate on a leg carrying an approval id, so a throttle trip cannot burn a single-use human authorisation; most of it is the comment recording which pre-execution refusals are still NOT approval-safe. 2026-07-26 (decision 0018): a write held for human approval is now RECORDED at the pause - a human approved opbox.add_comment in a chat turn, the request sat ANSWERED forever and the comment was never posted, because nothing anywhere held the CALL. The pause branch now calls _hold_pause, an EXTRACTED helper that emits the pause and writes the durable held-call record, so Dispatcher.invoke stays at 113 lines and neither over-limit function grew. 2026-07-27 (schema-validation ledger order): +1 line net on Dispatcher.invoke and -1 on _invoke_inner, which ratchets the second one DOWN. The failure detail now carries the params key names and, for a schema failure, the value-free {schema_path, keyword} pairs and a schema digest. Both additions were extracted rather than inlined: _schema_detail keeps the taxonomy branch out of the chokepoint's one error handler, and _reject_if_invalid gives input and output validation ONE seam, which is the thing whose absence let the output twin be forgotten by the filing in the first place.",
+      "reason": "Extract dispatch phases behind private typed helpers while retaining the single governed chokepoint. SEC-181 secure input added the run-scoped param resolution at the credential stage and the secure-question marker. Parity passthrough (2026): _execute_adapter overrides the static adapter credential with a per-run sealed bearer when present. 2026-07-25: +17 lines for _emit_pause, which publishes a HITL pause to the run that DELEGATED to this one as well as to this one. A chat turn never calls a verb itself, so the dispatch runs under the child run id while the client follows the root stream - the pause landed on a stream nobody follows and a write held for approval was invisible to the person who asked. Extracting it LOWERED Dispatcher.invoke from 116 to 113 lines, so the function ratchet ratchets down with this change. 2026-07-25: +25 lines to enforce the rate limit BEFORE the approval gate on a leg carrying an approval id, so a throttle trip cannot burn a single-use human authorisation; most of it is the comment recording which pre-execution refusals are still NOT approval-safe. 2026-07-26 (decision 0018): a write held for human approval is now RECORDED at the pause - a human approved opbox.add_comment in a chat turn, the request sat ANSWERED forever and the comment was never posted, because nothing anywhere held the CALL. The pause branch now calls _hold_pause, an EXTRACTED helper that emits the pause and writes the durable held-call record, so Dispatcher.invoke stays at 113 lines and neither over-limit function grew. 2026-07-27 (schema-validation ledger order): +1 line net on Dispatcher.invoke and -1 on _invoke_inner, which ratchets the second one DOWN. The failure detail now carries the params key names and, for a schema failure, the value-free {schema_path, keyword} pairs and a schema digest. Both additions were extracted rather than inlined: _schema_detail keeps the taxonomy branch out of the chokepoint's one error handler, and _reject_if_invalid gives input and output validation ONE seam, which is the thing whose absence let the output twin be forgotten by the filing in the first place. 2026-07-29: +76 file lines, and _invoke_inner 110->118 for [2026] VJS-CC-BOLTRIG-OPERATOR-SEAT-001 D3 - the 1<->2 author-boundary crossing is announced from the ONE chokepoint both agent and route calls pass. Only 8 of those lines are inside _invoke_inner (one guarded count before execution, one call after it); the other 68 are two new private helpers and their reasoning, deliberately placed outside the long function rather than in it. 2026-07-29: +6 lines, all in _reject_if_invalid and its imports; the two long functions are unchanged in length and only shift line numbers for the caller-facing schema hint - a failed verb call now returns which field was wrong and what shape it wanted, instead of the bare word schema_invalid that made a model retry the identical call four times.",
+      "expires": "2026-12-31"
+    },
+    "boltrig/kernel/memory_routes.py": {
+      "max_file_lines": 120,
+      "max_function_lines": 99,
+      "over_limit_functions": [
+        {
+          "name": "register_memory_routes",
+          "line": 22,
+          "lines": 99
+        }
+      ],
+      "owner": "kernel-maintainers",
+      "reason": "Flatten the memory route registrar while preserving scope enforcement at every endpoint.",
+      "expires": "2026-12-31"
+    },
+    "boltrig/kernel/platform_routes/eval_routes.py": {
+      "max_file_lines": 98,
+      "max_function_lines": 87,
+      "over_limit_functions": [
+        {
+          "name": "register",
+          "line": 12,
+          "lines": 87
+        }
+      ],
+      "owner": "kernel-maintainers",
+      "reason": "The eval.run author/admin gate + required-case_id validation (model spend must not be member-reachable or a 500) pushed the one registrar past the 80-line function floor; split the case-listing and run routes into focused registrars when the eval surface grows.",
+      "expires": "2026-12-31"
+    },
+    "boltrig/kernel/platform_routes/observability.py": {
+      "max_file_lines": 460,
+      "max_function_lines": 79,
+      "over_limit_functions": [],
+      "owner": "kernel-maintainers",
+      "reason": "The security-stream author/admin gate (the stream carries other users' IPs/user agents; SEC-33 parity with verify/export) pushed the audit-search registrar past the 80-line function floor; extract the security-stream arm into its own registrar when the observability surface grows. 2026-07-27 (schema-validation ledger order D5): the audit browser renders a schema_invalid row against the verb's CURRENT schema, deriving the expectation rather than storing it. The derivation went into _attach_schema_diagnosis and the date-bound parser was hoisted out of the route as the module-level _parse_bound it always could have been, so audit_search fell from 87 lines to 79 and is now UNDER the function floor: both function exemptions are removed and max_function_lines ratchets down from 87. The file grew by the two helpers and their reasoning, which is where the file ratchet moved.",
       "expires": "2026-12-31"
     },
     "boltrig/memory/pgvector.py": {
@@ -287,49 +393,69 @@
       "expires": "2026-12-31"
     },
     "boltrig/store/base.py": {
-      "max_file_lines": 621,
+      "max_file_lines": 657,
       "max_function_lines": 15,
       "over_limit_functions": [],
       "owner": "store-maintainers",
-      "reason": "Split the store protocol into domain protocols while preserving one composed compatibility contract. 2026-07-26: the conditional lease-fenced work-item write and the copy-on-read parity repair ([2026] VJS-CC-BOLTRIG-WORK-ITEM-LEASE-FENCE-001 D1/D6). The memory store previously handed callers the LIVE row, so any conditional write compared a stored object against itself and always agreed. 2026-07-26: +8 comment lines for D9 of the same order, which requires the honest limit to be recorded AT the contract: the fence makes the RECORD single-writer and does NOT make execution exactly-once. A worker that lost its lease is still running; the fence only stops it landing its answer on the winner's. Recorded here rather than in a doc because the place a later reader would upgrade \"single-writer\" into \"exactly-once\" is this declaration. 2026-07-26: consume_budget deleted. It had had no caller since reserve_budgets_atomic replaced it (FR-COST-05), while six docstrings across these three files still anchored their semantics on it - the Tier 0 claim inventory found it by asking which named mechanisms nothing reaches. 2026-07-27: the workflow-promotion subsystem deleted ([2026] VJS-CC-BOLTRIG-WORKFLOW-PROMOTION-TRIGGER-001 D3). 2026-07-29: authored-definition and evaluation contracts moved into focused domain protocols. 2026-07-30: conversation methods moved into a focused composed protocol; the ratchet falls to the measured value.",
+      "reason": "Split the store protocol into domain protocols while preserving one composed compatibility contract. 2026-07-26: the conditional lease-fenced work-item write and the copy-on-read parity repair ([2026] VJS-CC-BOLTRIG-WORK-ITEM-LEASE-FENCE-001 D1/D6). The memory store previously handed callers the LIVE row, so any conditional write compared a stored object against itself and always agreed. 2026-07-26: +8 comment lines for D9 of the same order, which requires the honest limit to be recorded AT the contract: the fence makes the RECORD single-writer and does NOT make execution exactly-once. A worker that lost its lease is still running; the fence only stops it landing its answer on the winner's. Recorded here rather than in a doc because the place a later reader would upgrade \"single-writer\" into \"exactly-once\" is this declaration. 2026-07-26: consume_budget deleted. It had had no caller since reserve_budgets_atomic replaced it (FR-COST-05), while six docstrings across these three files still anchored their semantics on it - the Tier 0 claim inventory found it by asking which named mechanisms nothing reaches. 2026-07-27: the workflow-promotion subsystem deleted ([2026] VJS-CC-BOLTRIG-WORKFLOW-PROMOTION-TRIGGER-001 D3) - the ratchet falls to the measured value.",
       "expires": "2026-12-31"
     },
     "boltrig/store/memory.py": {
-      "max_file_lines": 1125,
-      "max_function_lines": 77,
-      "over_limit_functions": [],
+      "max_file_lines": 1168,
+      "max_function_lines": 96,
+      "over_limit_functions": [
+        {
+          "name": "InMemoryStore.__init__",
+          "line": 94,
+          "lines": 96
+        }
+      ],
       "owner": "store-maintainers",
-      "reason": "Extract domain partials in lockstep with PostgreSQL while preserving complete store parity. 2026-07-26: the conditional lease-fenced work-item write and the copy-on-read parity repair ([2026] VJS-CC-BOLTRIG-WORK-ITEM-LEASE-FENCE-001 D1/D6). The memory store previously handed callers the LIVE row, so any conditional write compared a stored object against itself and always agreed. 2026-07-26: consume_budget deleted. It had had no caller since reserve_budgets_atomic replaced it (FR-COST-05), while six docstrings across these three files still anchored their semantics on it - the Tier 0 claim inventory found it by asking which named mechanisms nothing reaches. 2026-07-27: the workflow-promotion subsystem deleted ([2026] VJS-CC-BOLTRIG-WORKFLOW-PROMOTION-TRIGGER-001 D3). 2026-07-29: authored-definition and evaluation bodies moved into focused mixins and their state initialisation moved with them. 2026-07-30: core state initialisation split into bounded helpers; the function debt is removed and the ratchets fall to the measured values.",
+      "reason": "Extract domain partials in lockstep with PostgreSQL while preserving complete store parity. 2026-07-26: the conditional lease-fenced work-item write and the copy-on-read parity repair ([2026] VJS-CC-BOLTRIG-WORK-ITEM-LEASE-FENCE-001 D1/D6). The memory store previously handed callers the LIVE row, so any conditional write compared a stored object against itself and always agreed. 2026-07-26: consume_budget deleted. It had had no caller since reserve_budgets_atomic replaced it (FR-COST-05), while six docstrings across these three files still anchored their semantics on it - the Tier 0 claim inventory found it by asking which named mechanisms nothing reaches. 2026-07-27: the workflow-promotion subsystem deleted ([2026] VJS-CC-BOLTRIG-WORKFLOW-PROMOTION-TRIGGER-001 D3) - the ratchet falls to the measured value.",
       "expires": "2026-12-31"
     },
     "boltrig/store/postgres.py": {
-      "max_file_lines": 1799,
-      "max_function_lines": 40,
+      "max_file_lines": 1955,
+      "max_function_lines": 53,
       "over_limit_functions": [],
       "owner": "store-maintainers",
-      "reason": "Extract domain partials in lockstep with the in-memory store while preserving SQL and RLS parity. 2026-07-26: the conditional lease-fenced work-item write and the copy-on-read parity repair ([2026] VJS-CC-BOLTRIG-WORK-ITEM-LEASE-FENCE-001 D1/D6). The memory store previously handed callers the LIVE row, so any conditional write compared a stored object against itself and always agreed. 2026-07-26: consume_budget deleted. It had had no caller since reserve_budgets_atomic replaced it (FR-COST-05), while six docstrings across these three files still anchored their semantics on it - the Tier 0 claim inventory found it by asking which named mechanisms nothing reaches. 2026-07-26: +the COUNTY 8 D7 forced-rotation flag. A persisted field has to touch the row mapper, the upsert and the resolver clamp; the growth is the minimum a persisted field costs, and the route it serves was put in its own module (auth_password_routes.py) rather than added to auth_routes. 2026-07-27: the workflow-promotion subsystem deleted ([2026] VJS-CC-BOLTRIG-WORKFLOW-PROMOTION-TRIGGER-001 D3). 2026-07-29: authored-definition and evaluation SQL moved into focused mixins; the ratchet falls to the measured value.",
+      "reason": "Extract domain partials in lockstep with the in-memory store while preserving SQL and RLS parity. 2026-07-26: the conditional lease-fenced work-item write and the copy-on-read parity repair ([2026] VJS-CC-BOLTRIG-WORK-ITEM-LEASE-FENCE-001 D1/D6). The memory store previously handed callers the LIVE row, so any conditional write compared a stored object against itself and always agreed. 2026-07-26: consume_budget deleted. It had had no caller since reserve_budgets_atomic replaced it (FR-COST-05), while six docstrings across these three files still anchored their semantics on it - the Tier 0 claim inventory found it by asking which named mechanisms nothing reaches. 2026-07-26: +the COUNTY 8 D7 forced-rotation flag. A persisted field has to touch the row mapper, the upsert and the resolver clamp; the growth is the minimum a persisted field costs, and the route it serves was put in its own module (auth_password_routes.py) rather than added to auth_routes. 2026-07-27: the workflow-promotion subsystem deleted ([2026] VJS-CC-BOLTRIG-WORKFLOW-PROMOTION-TRIGGER-001 D3) - the ratchet falls to the measured value.",
       "expires": "2026-12-31"
     },
     "boltrig/store/rows.py": {
-      "max_file_lines": 449,
+      "max_file_lines": 458,
       "max_function_lines": 17,
       "over_limit_functions": [],
       "owner": "store-maintainers",
-      "reason": "Extract domain partials in lockstep with the in-memory store while preserving SQL and RLS parity. 2026-07-26: +the COUNTY 8 D7 forced-rotation flag. A persisted field has to touch the row mapper, the upsert and the resolver clamp; the growth is the minimum a persisted field costs, and the route it serves was put in its own module (auth_password_routes.py) rather than added to auth_routes. 2026-07-27: the workflow-promotion subsystem deleted ([2026] VJS-CC-BOLTRIG-WORKFLOW-PROMOTION-TRIGGER-001 D3). 2026-07-30: memory-projection receipt mapping moved into a focused mapper; the ratchet falls to the measured value.",
+      "reason": "Extract domain partials in lockstep with the in-memory store while preserving SQL and RLS parity. 2026-07-26: +the COUNTY 8 D7 forced-rotation flag. A persisted field has to touch the row mapper, the upsert and the resolver clamp; the growth is the minimum a persisted field costs, and the route it serves was put in its own module (auth_password_routes.py) rather than added to auth_routes. 2026-07-27: the workflow-promotion subsystem deleted ([2026] VJS-CC-BOLTRIG-WORKFLOW-PROMOTION-TRIGGER-001 D3) - the ratchet falls to the measured value.",
       "expires": "2026-12-31"
     },
     "boltrig/workflows/interpreter.py": {
       "max_file_lines": 381,
-      "max_function_lines": 269,
+      "max_function_lines": 270,
       "over_limit_functions": [
         {
           "name": "run_workflow_definition",
-          "line": 113,
-          "lines": 269
+          "line": 112,
+          "lines": 270
         }
       ],
       "owner": "workflow-maintainers",
       "reason": "Decompose workflow execution by step type while preserving checkpoint, retry, and governance semantics.",
+      "expires": "2026-12-31"
+    },
+    "boltrig/kernel/channel_gateway_routes.py": {
+      "max_file_lines": 156,
+      "max_function_lines": 110,
+      "over_limit_functions": [
+        {
+          "name": "register_channel_gateway_routes",
+          "line": 47,
+          "lines": 110
+        }
+      ],
+      "owner": "kernel-maintainers",
+      "reason": "Split the gateway session mint from the token-gated outbox claim/ack/fail registrars.",
       "expires": "2026-12-31"
     },
     "boltrig/fleet/infrastructure/codex_cell_policy.py": {

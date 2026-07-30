@@ -145,4 +145,6 @@ async def resolve_pat_principal(store: Any, secret: str) -> Principal | None:
         actor_tier="human",
         scope=user.scope,
         active_workspace_id=active_workspace_id,
+        # Acts with its owner's authority, but nobody is at a keyboard.
+        credential_kind="pat",
     )
