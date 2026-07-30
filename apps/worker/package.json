@@ -1,0 +1,36 @@
+{
+  "name": "@boltrig/worker",
+  "private": true,
+  "version": "0.1.0-beta.1",
+  "type": "module",
+  "description": "Boltrig's task-oriented web and Tauri client.",
+  "license": "UNLICENSED",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --reporter=dot",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@wlilley93/boltrig-web-sdk": "file:../../sdks/web",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "react-markdown": "10.1.0",
+    "remark-gfm": "4.0.1"
+  },
+  "devDependencies": {
+    "@tauri-apps/api": "2.8.0",
+    "@tauri-apps/cli": "2.8.4",
+    "@testing-library/react": "16.3.2",
+    "@types/react": "18.3.28",
+    "@types/react-dom": "18.3.7",
+    "@vitejs/plugin-react": "4.7.0",
+    "happy-dom": "20.10.0",
+    "typescript": "5.6.3",
+    "vite": "6.4.3",
+    "vitest": "4.1.10"
+  },
+  "packageManager": "pnpm@11.5.0"
+}

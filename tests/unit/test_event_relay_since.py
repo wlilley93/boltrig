@@ -52,6 +52,28 @@ async def test_subscribe_since_replays_only_after_cursor_then_live():
     assert [first["delta"], second["delta"]] == ["2", "live"]
 
 
+@pytest.mark.asyncio
+@pytest.mark.invariant("SEC-WRK-09")
+async def test_cursor_bearing_subscription_keeps_event_payloads_unchanged():
+    r = EventRelay(backlog=2)
+    original = {"type": "tool_call", "input": {"secret": "raw"}}
+    r.publish(TENANT, RUN, {"type": "text_delta", "delta": "trimmed"})
+    r.publish(TENANT, RUN, original)
+    r.publish(TENANT, RUN, {"type": "text_delta", "delta": "latest"})
+    assert r.seq_bounds(TENANT, RUN) == (2, 3)
+
+    stream = r.subscribe_with_seq(TENANT, RUN, since=1)
+    first = await stream.__anext__()
+    second = await stream.__anext__()
+    r.close(TENANT, RUN)
+    with pytest.raises(StopAsyncIteration):
+        await stream.__anext__()
+
+    assert first == (2, original)
+    assert second == (3, {"type": "text_delta", "delta": "latest"})
+    assert "seq" not in original
+
+
 def test_forget_resets_seq_state():
     r = EventRelay()
     r.publish(TENANT, RUN, {"type": "text_delta", "delta": "x"})

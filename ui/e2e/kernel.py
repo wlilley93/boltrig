@@ -57,6 +57,7 @@ app = create_app(kernel_factory=_kernel_factory, chat_factory=_chat_factory)
 @app.post("/v1/_e2e/seed-hitl")
 async def seed_hitl(request: Request) -> dict[str, str]:
     """Create one credential-free approval for the browser confirmation flow."""
+    assignee = request.headers.get("x-boltrig-subject", "dev")
     req = await request.app.state.kernel.hitl.create(
         tenant_id="default",
         run_id="e2e-approval-run",
@@ -65,7 +66,7 @@ async def seed_hitl(request: Request) -> dict[str, str]:
         question="Approve the e2e outbound update?",
         context="The e2e requester wants to perform ticket.update.",
         options=["approve", "reject"],
-        assignee="dev",
+        assignee=assignee,
         verb="ticket.update",
         requested_by="e2e-requester",
         request_fingerprint="e2e-approval-fingerprint",

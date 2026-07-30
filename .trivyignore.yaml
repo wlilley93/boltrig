@@ -22,11 +22,22 @@ misconfigurations:
   - id: AVD-DS-0002
     paths:
       - ui/Dockerfile
+      - apps/worker/Dockerfile
     expired_at: 2026-08-15
     statement: >-
       Frontend engineering owns the nginx-unprivileged migration; the secure
       overlay removes the direct host port and the digest-pinned runtime serves
       only the generated static build through its fixed nginx configuration.
+      apps/worker/Dockerfile is the SAME runtime stage as ui/Dockerfile - the
+      same pinned nginx alpine, the same static root, the same fixed config -
+      so it is listed here rather than given an entry of its own, and
+      deliberately shares this expiry rather than taking a fresh one. The
+      justification for the original date is migration cost on a LIVE artefact,
+      and the worker image is profile-gated and runs nowhere, so it has earned
+      no extra time: a separate entry would have let the newer image quietly
+      extend a deadline the older one is already close to. Both move to
+      nginx-unprivileged as one piece of work, or this expires and iac-scan
+      turns red on both.
 
 vulnerabilities:
   - id: GHSA-hrxh-6v49-42gf

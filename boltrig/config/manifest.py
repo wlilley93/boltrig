@@ -5,13 +5,11 @@ fleet manifest is that data: who the org is, how it authenticates, which models
 and adapters it uses, the agent hierarchy, the ephemeral runtimes, the HITL
 policy, and the network / privacy posture. ``load_manifest`` parses it into
 frozen dataclasses (with ``${ENV}`` interpolation); ``apply_manifest`` seeds the
-store so the kernel and fleet can run against it. No core code changes to add a
-new org, model, capability, or integration.
+store so the kernel and fleet can run against it.
 """
 
 from __future__ import annotations
 
-import importlib
 import json
 import os
 import re
@@ -23,17 +21,12 @@ import yaml
 from boltrig.identity.rbac import grants_for_scope
 from boltrig.config.dev_posture import DevelopmentPosture
 from boltrig.config.environment import is_truthy
-from boltrig.config.manifest_reconcile import (
-    declared_capabilities,
-    plan_capability_reconciliation,
-    reconcile_capabilities,
-)
+from boltrig.config.spawn_rules import SpawnRule, parse_spawn_rules
 from boltrig.models import (
-    Budget,
     GrantSet,
     ModelEndpoint,
     RoleMapping,
-    TenantPermissions,
+    validate_cost_tier,
 )
 
 # Adapter id -> builtin module providing a ``build() -> Adapter`` factory.
@@ -104,6 +97,10 @@ class BudgetConfig:
     hard_stop: bool = True
     window: str = "run"  # run | daily | monthly
 
+    def __post_init__(self) -> None:
+        if self.window not in {"run", "daily", "monthly"}:
+            raise ValueError("budget window must be run, daily, or monthly")
+
 
 @dataclass(frozen=True)
 class HierarchyTier:
@@ -120,6 +117,12 @@ class HierarchyTier:
     cost_tier: str = "standard"
     department: str | None = None
     budget: BudgetConfig | None = None
+    # Authored permanent-fleet identity. build_org consumes both fields into the
+    # lazy permanent runtime profile; they become model prompt policy only when a
+    # call passes the existing runtime admission gates. Deterministic fallback
+    # routing/decomposition remains available when that runtime is unavailable.
+    purpose: str = ""
+    brief: str = ""
 
 
 @dataclass(frozen=True)
@@ -143,18 +146,6 @@ class EphemeralRuntime:
     max_depth: int = 2
     cost_tier: str = "cheap"
     model_endpoint: str | None = None
-
-
-@dataclass(frozen=True)
-class SpawnRule:
-    """A rule for matching a task to a runtime / skill set (S6 spawning)."""
-
-    name: str = ""
-    match: dict[str, Any] = field(default_factory=dict)
-    capability: str | None = None
-    skills: tuple[str, ...] = ()
-    max_depth: int | None = None
-    raw: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -183,7 +174,8 @@ class AdapterConfig:
 #
 # Both the dataclass default and the parser fallback below must carry this, and
 # they must agree: a manifest that omits the key and a manifest that has no hitl
-# block at all are the same tenant posture, so they cannot resolve differently.
+# block at all are the same tenant posture, so both must resolve through
+# ``APPROVAL_TIMEOUT_SECONDS_FLOOR`` and cannot resolve differently.
 APPROVAL_TIMEOUT_SECONDS_FLOOR = 86400
 
 
@@ -560,9 +552,11 @@ def _parse_tier(raw: Mapping[str, Any]) -> HierarchyTier:
         model_endpoint=raw.get("model_endpoint"),
         max_depth=int(raw.get("max_depth", 3)),
         supported_skills=_as_tuple(skills),
-        cost_tier=str(raw.get("cost_tier", "standard")),
+        cost_tier=validate_cost_tier(str(raw.get("cost_tier", "standard"))),
         department=raw.get("department"),
         budget=_parse_budget(raw.get("budget")),
+        purpose=str(raw.get("purpose") or ""),
+        brief=str(raw.get("brief") or ""),
     )
 
 
@@ -579,19 +573,8 @@ def _parse_ephemeral(raw: Mapping[str, Any]) -> EphemeralRuntime:
         runtime=str(raw.get("runtime", "codex")),
         supported_skills=_as_tuple(skills),
         max_depth=int(raw.get("max_depth", 2)),
-        cost_tier=str(raw.get("cost_tier", "cheap")),
+        cost_tier=validate_cost_tier(str(raw.get("cost_tier", "cheap"))),
         model_endpoint=raw.get("model_endpoint"),
-    )
-
-
-def _parse_spawn_rule(raw: Mapping[str, Any]) -> SpawnRule:
-    return SpawnRule(
-        name=str(raw.get("name", raw.get("intent", ""))),
-        match=dict(raw.get("match") or {}),
-        capability=raw.get("capability"),
-        skills=_as_tuple(raw.get("skills")),
-        max_depth=raw.get("max_depth"),
-        raw=dict(raw),
     )
 
 
@@ -763,7 +746,7 @@ def load_manifest(path: str, *, env: Mapping[str, str] | None = None) -> FleetMa
         ephemeral_runtimes=tuple(
             _parse_ephemeral(r) for r in (doc.get("ephemeral_runtimes") or [])
         ),
-        spawn_rules=tuple(_parse_spawn_rule(r) for r in (doc.get("spawn_rules") or [])),
+        spawn_rules=parse_spawn_rules(doc.get("spawn_rules") or []),
         adapters=tuple(_parse_adapter(a) for a in (doc.get("adapters") or [])),
         hitl=_parse_hitl(doc.get("hitl") or {}),
         development_posture=_parse_development_posture(doc),
@@ -828,81 +811,11 @@ def export_runtime_environment(
         target["BOLTRIG_BROWSER_CLOUD_POLICY"] = policy
 
 
-# --- applying the manifest to the store -------------------------------------
-async def _seed_call(store: Any, method: str, *args: Any) -> None:
-    """Call a store seeding helper, awaiting it if it is async (PostgresStore) and
-    calling it directly if it is sync (InMemoryStore). Clear error if unsupported."""
-    import inspect
-
-    fn = getattr(store, method, None)
-    if fn is None:
-        raise RuntimeError(
-            f"store {type(store).__name__} lacks seed helper {method!r}; "
-            "apply_manifest requires a seedable store (e.g. InMemoryStore, PostgresStore)"
-        )
-    result = fn(*args)
-    if inspect.isawaitable(result):
-        await result
-
-
-def _budget_from_tier(
-    tier: HierarchyTier, tenant_id: str, *, scope_type: str, scope_id: str
-) -> Budget:
-    b = tier.budget
-    assert b is not None  # guarded by caller
-    return Budget(
-        id=scope_id,
-        tenant_id=tenant_id,
-        scope_type=scope_type,
-        token_limit=b.token_limit,
-        cost_limit_micros=b.cost_limit_micros,
-        hard_stop=b.hard_stop,
-        window=b.window,
-    )
-
-
-async def _seed_tier_budgets(store: Any, manifest: FleetManifest, tenant: str) -> None:
-    """Seed the tenant + department budgets from the tier budget blocks."""
-    if manifest.hierarchy.tier1 is not None and manifest.hierarchy.tier1.budget:
-        await _seed_call(store, "set_budget", _budget_from_tier(
-            manifest.hierarchy.tier1, tenant, scope_type="tenant", scope_id=tenant))
-    for tier in manifest.hierarchy.tier2:
-        if tier.budget:
-            scope_id = tier.department or tier.name
-            await _seed_call(store, "set_budget", _budget_from_tier(
-                tier, tenant, scope_type="department", scope_id=scope_id))
-
-
-async def _seed_credentials(
-    kernel: Any, store: Any, manifest: FleetManifest, tenant: str
-) -> None:
-    """Seed credential references + adapter bindings (refs only, SEC-04)."""
-    for adapter in manifest.adapters:
-        if adapter.credential is not None:
-            cred = adapter.credential
-            await _seed_call(store, "set_credential_ref", tenant, cred.id, cred.as_ref())
-            kernel.credentials.bind_adapter_credential(tenant, adapter.id, cred.id)
-
-
-async def _register_manifest_adapters(
-    kernel: Any, manifest: FleetManifest, tenant: str
-) -> None:
-    """Import + register the builtin/module-ref adapters named in the manifest. A
-    builtin id maps to a known module; otherwise the adapter's own ``module_ref``
-    ("pkg.mod" or "pkg.mod:factory") is honoured, so a project extends the kernel
-    from OUTSIDE with no core edit (the extension contract). Unknown ids skip."""
-    for adapter in manifest.adapters:
-        module_path = _BUILTIN_MODULES.get(adapter.id) or adapter.module_ref
-        if not module_path:
-            continue  # unknown id and no module_ref -> skip gracefully
-        mod_name, _, factory = module_path.partition(":")
-        module = importlib.import_module(mod_name)
-        build = getattr(module, factory or "build")
-        await kernel.register_adapter(tenant, build())
-
-
 async def apply_manifest(
-    kernel: Any, manifest: FleetManifest, *, load_builtin_adapters: bool = True,
+    kernel: Any,
+    manifest: FleetManifest,
+    *,
+    load_builtin_adapters: bool = True,
     confirm_bulk_deactivate: bool = False,
 ) -> None:
     """Seed the store from the manifest so the kernel/fleet can run (S11.2, P7).
@@ -920,40 +833,11 @@ async def apply_manifest(
     committed) unless ``confirm_bulk_deactivate`` (or ``reconcile.allow_bulk_
     deactivate`` in the manifest) is set.
     """
-    export_runtime_environment(manifest)
-    tenant = manifest.tenant_id
-    store = kernel.store
+    from .manifest_apply import apply_manifest as project_manifest
 
-    # Plan + enforce the mass-deactivation guard BEFORE any write (fail-closed): a
-    # tripped guard aborts the whole apply here, with nothing committed.
-    plan = await plan_capability_reconciliation(
-        store, manifest, confirm_bulk_deactivate=confirm_bulk_deactivate)
-
-    # 1. model endpoints (P4) + the per-model price table (FR-COST-04, audit M14).
-    for endpoint in manifest.models.endpoints:
-        await store.upsert_model_endpoint(endpoint)
-    cost = getattr(kernel, "cost", None)
-    if cost is not None and manifest.models.prices:
-        cost.set_prices(manifest.models.prices)
-
-    # 2. agent capabilities: ephemeral runtimes + hierarchy tiers (source='manifest')
-    for capability in declared_capabilities(manifest):
-        await store.upsert_capability(capability)
-
-    # 3. tier budgets, 4. tenant permissions, 4b. the governed questions verb
-    await _seed_tier_budgets(store, manifest, tenant)
-    await _seed_call(store, "set_tenant_permissions",
-                     TenantPermissions(tenant, manifest.tenant_grants()))
-    from boltrig.kernel.questions import register_questions_verb
-
-    await register_questions_verb(store, tenant)
-
-    # 5. credential refs + adapter bindings; 6. register the builtin adapters
-    await _seed_credentials(kernel, store, manifest, tenant)
-    if load_builtin_adapters:
-        await _register_manifest_adapters(kernel, manifest, tenant)
-
-    # 7. reconcile: soft-deactivate the manifest-sourced capabilities this redeployed
-    #    manifest no longer declares (control-plane grants untouched). The guard
-    #    already passed, so this drops a safe number; every drop is audited.
-    await reconcile_capabilities(kernel, manifest, plan)
+    await project_manifest(
+        kernel,
+        manifest,
+        load_builtin_adapters=load_builtin_adapters,
+        confirm_bulk_deactivate=confirm_bulk_deactivate,
+    )

@@ -28,7 +28,9 @@ COPY . .
 #
 # vite.config.ts still defaults to "/", so local development and `vite preview`
 # (which the e2e smoke serves the built dist through) are unchanged. Only the
-# image is relative.
+# image is relative. The worker candidate image sets the same variable to
+# /operator/ for its own packaging (apps/worker/Dockerfile, invariant WRK-01),
+# which is the same knob answering a different question, not a second mechanism.
 ENV BOLTRIG_UI_BASE=./
 RUN pnpm run build
 

@@ -32,7 +32,7 @@ import tempfile
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
-from boltrig.fleet.domain import PhaseAssignmentRef
+from boltrig.fleet.domain import NativeSubagentLimits, PhaseAssignmentRef
 from boltrig.fleet.domain.model_proxy_scope import (
     ModelProxyAssignmentScope,
     ModelProxyBudgetBinding,
@@ -237,6 +237,7 @@ def render_trusted_config(
     policy_digest: str,
     reasoning_effort: CodexReasoningEffort,
     proxy_port: int,
+    native_subagents: NativeSubagentLimits = NativeSubagentLimits(),
     mcp_server_url: str | None = None,
     mcp_bearer_env_var: str | None = None,
 ) -> ComposedCodexRuntimeConfig:
@@ -266,6 +267,7 @@ def render_trusted_config(
         proxy_port=proxy_port,
         skill_config_fragment=fragment,
         skill_inventory_digest=_sha256_prefixed(fragment),
+        native_subagents=native_subagents,
         mcp_server_url=mcp_server_url,
         mcp_bearer_env_var=mcp_bearer_env_var,
     )

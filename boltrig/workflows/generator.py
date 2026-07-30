@@ -257,13 +257,11 @@ def schedule_spec(cron: str, timezone: str) -> dict[str, Any]:
     real IANA zone (via ``zoneinfo``, stdlib). Raises ``ValueError`` otherwise so
     a bad schedule fails loudly at definition time, not at the next tick.
     """
-    fields = (cron or "").split()
-    if len(fields) not in (5, 6):
-        raise ValueError(
-            f"cron expression must have 5 or 6 fields, got {len(fields)}: {cron!r}"
-        )
     try:
         ZoneInfo(timezone)
     except Exception as exc:  # unknown / unavailable zone
         raise ValueError(f"unknown timezone {timezone!r}: {exc}") from exc
+    from .scheduler import CronExpression
+
+    CronExpression.parse(cron)
     return {"type": "cron", "cron": cron, "timezone": timezone}

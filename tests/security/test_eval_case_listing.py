@@ -74,6 +74,8 @@ def test_eval_case_listing_is_tenant_isolated_and_stable() -> None:
                 "input": {"ticket": "42"},
                 "assertions": {"forbidden_grants": ["ticket.delete"]},
                 "labels": ["security", "regression"],
+                "is_active": True,
+                "status": "active",
             },
             {
                 "id": "z-last",
@@ -82,6 +84,8 @@ def test_eval_case_listing_is_tenant_isolated_and_stable() -> None:
                 "input": {"version": "2.0"},
                 "assertions": {"passed": True},
                 "labels": ["release"],
+                "is_active": True,
+                "status": "active",
             },
         ]
     }

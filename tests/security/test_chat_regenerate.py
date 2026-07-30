@@ -16,7 +16,7 @@ from boltrig.fleet.continuity import compose_turn_task, render_transcript
 from boltrig.kernel import Kernel
 from boltrig.kernel.app import create_app
 from boltrig.kernel.events import EventRelay
-from boltrig.models import ConversationMessage, MessageRole
+from boltrig.models import ConversationMessage, ConversationStatus, MessageRole
 from boltrig.store import InMemoryStore
 
 T = "acme"
@@ -177,6 +177,23 @@ def test_regenerate_rejects_earlier_message():
             tenant_id=T, user_id="alice", role="engineer",
             conversation_id=conv.id, target_message_id=earlier_user,
         ))
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-WRK-13")
+def test_regenerate_refuses_a_closed_conversation_until_restore():
+    client, _kernel, store, conv, msgs = _client_with_seeded_turn()
+    conv.status = ConversationStatus.CLOSED
+    import asyncio
+    asyncio.run(store.update_conversation(conv))
+
+    response = client.post(
+        f"/v1/me/conversations/{conv.id}/messages/{msgs[1].id}/regenerate",
+        headers=_hdr("alice"),
+    )
+    assert response.status_code == 409
+    assert response.json() == {"status": "error", "reason": "conversation_closed"}
+    assert len(asyncio.run(store.list_messages(T, conv.id))) == 2
 
 
 @pytest.mark.security

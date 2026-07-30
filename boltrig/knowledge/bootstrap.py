@@ -13,7 +13,11 @@ from boltrig.config.environment import is_truthy
 from .adapter import KnowledgeAdapter
 from .filesystem_vault import FilesystemObjectVault
 from .memory_repository import InMemoryKnowledgeRepository
-from .projections import KnowledgeProjectionCoordinator, provider_defaults
+from .projections import (
+    KnowledgeProjectionCoordinator,
+    provider_defaults,
+    reconcile_unavailable_providers,
+)
 from .service import KnowledgeService
 
 log = logging.getLogger("boltrig.bootstrap")
@@ -82,6 +86,7 @@ async def register_knowledge(
         return None
     repository = _repository(kernel.store)
     await repository.ensure_providers(tenant_id, provider_defaults(tenant_id, cfg))
+    await reconcile_unavailable_providers(repository, tenant_id)
     cognee_config = dict(cfg.get("cognee") or {})
     cognee_config.setdefault("cognee_root", str(_default_cognee_root()))
     cfg["cognee"] = cognee_config

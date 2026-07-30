@@ -25,6 +25,7 @@ from boltrig.models import (
     GrantSet,
     InvocationContext,
     PendingHuman,
+    PermanentFleetObservation,
     TenantPermissions,
     WorkItem,
     WorkStatus,
@@ -39,6 +40,7 @@ _TABLES = (
     "nouns,verbs,verb_bindings,adapters,skills,agent_capabilities,workflow_definitions,"
     "model_endpoints,work_items,hitl_requests,hitl_responses,audit_log,budgets,"
     "idempotency_keys,credential_refs,tenant_permissions"
+    ",permanent_fleet_observations"
 )
 
 
@@ -82,6 +84,47 @@ async def test_pg_roundtrip_create_read():
 
 
 @_pg
+@pytest.mark.invariant("SEC-WRK-27")
+async def test_pg_permanent_fleet_observation_is_tenant_scoped_and_upserted():
+    store = await _fresh_pg()
+    try:
+        await store.upsert_permanent_fleet_observation(
+            PermanentFleetObservation(
+                tenant_id=T,
+                worker_id="worker-1",
+                generation="pf_" + "a" * 24,
+                status="degraded",
+                inactive_fields=["purpose"],
+            )
+        )
+        await store.upsert_permanent_fleet_observation(
+            PermanentFleetObservation(
+                tenant_id=T,
+                worker_id="worker-1",
+                generation="pf_" + "b" * 24,
+                status="applied",
+                applied_fields=["department_routing_identity"],
+                inactive_fields=["purpose"],
+            )
+        )
+        await store.upsert_permanent_fleet_observation(
+            PermanentFleetObservation(
+                tenant_id="other",
+                worker_id="worker-1",
+                generation="pf_" + "c" * 24,
+                status="applied",
+                applied_fields=["department_routing_identity"],
+            )
+        )
+        rows = await store.list_permanent_fleet_observations(T)
+        assert [(row.worker_id, row.generation) for row in rows] == [
+            ("worker-1", "pf_" + "b" * 24)
+        ]
+    finally:
+        await store.close()
+
+
+@_pg
 async def test_pg_grant_denied_and_audited():
     store = await _fresh_pg()
     try:
@@ -114,7 +157,7 @@ async def test_pg_budget_hard_stop():
         k = await _kernel_on(store)
         await store.set_budget(
             Budget(id="dept:eng", tenant_id=T, scope_type="department",
-                   cost_limit_micros=1000, hard_stop=True)
+                   cost_limit_micros=1000, hard_stop=True, window="daily")
         )
         await k.cost.reserve(T, ["dept:eng"], tokens=0, micros=900)
         with pytest.raises(BudgetExceeded):

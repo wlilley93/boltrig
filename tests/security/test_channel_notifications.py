@@ -130,21 +130,21 @@ def test_run_completion_returns_to_the_originating_thread():
 @pytest.mark.invariant("SEC-179")
 def test_direct_enqueue_is_user_scoped_and_event_matched():
     store = asyncio.run(_store())
-    asyncio.run(_pref(store, "budget_alert"))
+    asyncio.run(_pref(store, "work_status"))
     # a different event type does not match the pref
     assert asyncio.run(
-        enqueue_user_notification(store, T, "alice", "error", "boom")) == []
+        enqueue_user_notification(store, T, "alice", "escalation", "boom")) == []
     # a team-scoped pref resolves to the team's members - with no users in the
     # store it addresses no one
     asyncio.run(store.upsert_notification_pref(
         NotificationPref(id="np-team", tenant_id=T, scope_kind="team", scope_ref="eng",
-                         event_type="error", channel="slack")
+                         event_type="escalation", channel="slack")
     ))
     assert asyncio.run(
-        enqueue_user_notification(store, T, "alice", "error", "boom")) == []
+        enqueue_user_notification(store, T, "alice", "escalation", "boom")) == []
     # the matching one lands
     assert asyncio.run(
-        enqueue_user_notification(store, T, "alice", "budget_alert", "over")) != []
+        enqueue_user_notification(store, T, "alice", "work_status", "done")) != []
 
 
 async def _user(store, subject: str, departments: list[str], *, status="active"):
@@ -175,8 +175,10 @@ def test_team_pref_reaches_exactly_the_bound_members():
     asyncio.run(_user(store, "eve", ["eng"], status="deactivated"))
     asyncio.run(store.upsert_notification_pref(
         NotificationPref(id="np-team-eng", tenant_id=T, scope_kind="team",
-                         scope_ref="eng", event_type="error", channel="slack")))
-    enqueued = asyncio.run(enqueue_user_notification(store, T, "alice", "error", "boom"))
+                         scope_ref="eng", event_type="escalation", channel="slack")))
+    enqueued = asyncio.run(
+        enqueue_user_notification(store, T, "alice", "escalation", "boom")
+    )
     assert len(enqueued) == 2
     msgs = asyncio.run(_claimed(store))
     # exactly the ACTIVE, BOUND eng members hear it - carol (unbound), dave
@@ -193,14 +195,14 @@ def test_team_pref_disabled_or_memberless_delivers_nothing():
     # a DISABLED team pref addresses no one
     asyncio.run(store.upsert_notification_pref(
         NotificationPref(id="np-team-off", tenant_id=T, scope_kind="team",
-                         scope_ref="eng", event_type="error", channel="slack",
+                         scope_ref="eng", event_type="escalation", channel="slack",
                          enabled=False)))
     assert asyncio.run(
-        enqueue_user_notification(store, T, "alice", "error", "boom")) == []
+        enqueue_user_notification(store, T, "alice", "escalation", "boom")) == []
     # an enabled pref for a team with no members delivers nothing either
     asyncio.run(store.upsert_notification_pref(
         NotificationPref(id="np-team-empty", tenant_id=T, scope_kind="team",
-                         scope_ref="ops", event_type="error", channel="slack")))
+                         scope_ref="ops", event_type="escalation", channel="slack")))
     assert asyncio.run(
-        enqueue_user_notification(store, T, "alice", "error", "boom")) == []
+        enqueue_user_notification(store, T, "alice", "escalation", "boom")) == []
     assert asyncio.run(_claimed(store)) == []

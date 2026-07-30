@@ -6,5 +6,17 @@
 // reducer. Transport (fetch/SSE/identity) stays app-side by design - each app
 // brings its own; the shared contract is the frame vocabulary + the reducer.
 export * from "./types.js";
+export * from "./capabilityInvocation.js";
 export * from "./chatTurnTypes.js";
 export { normalizeEvents } from "./chatTurnNormalizer.js";
+export {
+  BoltrigApiError,
+  BoltrigClient,
+  pumpSse,
+} from "./client.js";
+export type {
+  BoltrigClientOptions,
+  ChatFollowResult,
+  ChatQueued,
+} from "./client.js";
+export { WORKER_INTEGRATION_CATALOGUE } from "./integrationCatalogue.js";

@@ -27,9 +27,14 @@ from boltrig.fleet.infrastructure.codex_kernel_tools_phase import (
     CODEX_MCP_NAMESPACE_NAME,
 )
 from boltrig.fleet.infrastructure.model_proxy_tool_ceiling import (
+    CODEX_NATIVE_COLLAB_NAMESPACE_NAME,
+    CODEX_NATIVE_COLLAB_TOOLS,
     MAX_MODEL_CALL_BODY_BYTES,
     CodexResponseStreamProcessor,
+    NativeCollaborationWireGate,
     ToolCeilingViolation,
+    enforce_model_ceiling,
+    enforce_reasoning_effort_ceiling,
     enforce_tool_ceiling,
 )
 
@@ -52,6 +57,37 @@ _NAMESPACE = {"type": "namespace", "name": CODEX_MCP_NAMESPACE_NAME, "tools": _N
 
 def _body(payload: object) -> bytes:
     return json.dumps(payload).encode("utf-8")
+
+
+# --- request-side model ceiling ---------------------------------------------
+
+
+def test_model_ceiling_accepts_only_the_admission_pinned_model() -> None:
+    body = _body({"model": "gpt-5.2-codex", "input": "hi"})
+    assert enforce_model_ceiling(body, "gpt-5.2-codex") is body
+
+    with pytest.raises(ToolCeilingViolation, match="model"):
+        enforce_model_ceiling(body, "gpt-5.4-codex")
+    with pytest.raises(ToolCeilingViolation, match="model"):
+        enforce_model_ceiling(_body({"input": "hi"}), "gpt-5.2-codex")
+
+
+def test_reasoning_effort_ceiling_requires_the_exact_pinned_wire_value() -> None:
+    body = _body(
+        {
+            "model": "gpt-5.2-codex",
+            "input": "hi",
+            "reasoning": {"effort": "high", "summary": "auto"},
+        }
+    )
+    assert enforce_reasoning_effort_ceiling(body, "high") is body
+
+    with pytest.raises(ToolCeilingViolation, match="reasoning effort"):
+        enforce_reasoning_effort_ceiling(body, "medium")
+    with pytest.raises(ToolCeilingViolation, match="reasoning effort"):
+        enforce_reasoning_effort_ceiling(
+            _body({"model": "gpt-5.2-codex", "input": "hi"}), "high"
+        )
 
 
 # --- request-side ceiling on Codex built-ins --------------------------------
@@ -150,6 +186,31 @@ def test_flatten_dedupes_a_verb_offered_both_bare_and_namespaced() -> None:
     assert [t["name"] for t in result["tools"]] == ["opbox_matter_list"]
 
 
+def test_native_collaboration_is_stripped_by_default_and_exact_v1_when_enabled() -> None:
+    nested = [
+        {"type": "function", "name": name, "parameters": {}}
+        for name in sorted(CODEX_NATIVE_COLLAB_TOOLS)
+    ]
+    namespace = {
+        "type": "namespace",
+        "name": CODEX_NATIVE_COLLAB_NAMESPACE_NAME,
+        "tools": nested
+        + [{"type": "function", "name": "spawn_agents_on_csv", "parameters": {}}],
+    }
+    body = _body({"model": "gpt-5.2-codex", "input": "hi", "tools": [namespace]})
+
+    assert "tools" not in json.loads(enforce_tool_ceiling(body, frozenset()))
+    enabled = json.loads(
+        enforce_tool_ceiling(
+            body, frozenset(), allow_native_collaboration=True
+        )
+    )
+    assert {tool["name"] for tool in enabled["tools"]} == CODEX_NATIVE_COLLAB_TOOLS
+    assert "spawn_agents_on_csv" not in {
+        tool["name"] for tool in enabled["tools"]
+    }
+
+
 # --- request-side fail-closed guards ----------------------------------------
 
 
@@ -182,6 +243,11 @@ def test_a_non_object_json_body_is_forwarded_unchanged() -> None:
 
 def _event(item: dict) -> bytes:
     frame = {"type": "response.output_item.added", "item": item}
+    return b"data: " + json.dumps(frame).encode("utf-8") + b"\n\n"
+
+
+def _done_event(item: dict) -> bytes:
+    frame = {"type": "response.output_item.done", "item": item}
     return b"data: " + json.dumps(frame).encode("utf-8") + b"\n\n"
 
 
@@ -280,3 +346,102 @@ def test_a_done_frame_ends_the_stream_cleanly() -> None:
     processor = CodexResponseStreamProcessor(frozenset())
     assert processor.feed(b"data: [DONE]\n\n") == b"data: [DONE]\n\n"
     assert processor.finish() == b""
+
+
+@pytest.mark.invariant("SEC-159")
+def test_native_spawn_is_prevalidated_and_charged_once_across_response_streams() -> None:
+    """The per-cell gate, unlike a response processor, survives every child turn."""
+
+    gate = NativeCollaborationWireGate(
+        max_total=1,
+        allowed_model="gpt-5.2-codex",
+        allowed_reasoning_effort="high",
+    )
+    arguments = json.dumps(
+        {
+            "message": "review",
+            "model": "gpt-5.2-codex",
+            "reasoning_effort": "high",
+        }
+    )
+    item = {
+        "type": "function_call",
+        "name": "spawn_agent",
+        "arguments": arguments,
+        "call_id": "call-1",
+    }
+    first = CodexResponseStreamProcessor(frozenset(), native_gate=gate)
+    added = first.feed(_event(dict(item)))
+    assert gate.spawn_count == 0  # incomplete frames cannot spend the budget
+    done = first.feed(_done_event(dict(item)))
+    assert gate.spawn_count == 1
+    assert CODEX_NATIVE_COLLAB_NAMESPACE_NAME.encode() in added + done
+
+    replay = CodexResponseStreamProcessor(frozenset(), native_gate=gate)
+    replay.feed(_done_event(dict(item)))
+    assert gate.spawn_count == 1  # duplicate SSE/call replay is not double charged
+
+    second = CodexResponseStreamProcessor(frozenset(), native_gate=gate)
+    with pytest.raises(ToolCeilingViolation, match="total spawn budget"):
+        second.feed(
+            _done_event(
+                {
+                    **item,
+                    "call_id": "call-2",
+                }
+            )
+        )
+
+
+@pytest.mark.invariant("SEC-159")
+@pytest.mark.parametrize(
+    ("override", "reason"),
+    [
+        ({"model": "other/model"}, "model"),
+        ({"reasoning_effort": "xhigh"}, "reasoning"),
+        ({"service_tier": "priority"}, "service tier"),
+    ],
+)
+def test_native_spawn_rejects_unadmitted_overrides_before_execution(
+    override: dict[str, str], reason: str
+) -> None:
+    gate = NativeCollaborationWireGate(
+        max_total=2,
+        allowed_model="gpt-5.2-codex",
+        allowed_reasoning_effort="high",
+    )
+    arguments = {"message": "review", **override}
+    processor = CodexResponseStreamProcessor(frozenset(), native_gate=gate)
+    with pytest.raises(ToolCeilingViolation, match=reason):
+        processor.feed(
+            _done_event(
+                {
+                    "type": "function_call",
+                    "name": "spawn_agent",
+                    "arguments": json.dumps(arguments),
+                    "call_id": "call-bad",
+                }
+            )
+        )
+    assert gate.spawn_count == 0
+
+
+def test_native_response_with_a_foreign_declared_namespace_is_refused() -> None:
+    gate = NativeCollaborationWireGate(
+        max_total=1,
+        allowed_model="gpt-5.2-codex",
+        allowed_reasoning_effort="high",
+    )
+    processor = CodexResponseStreamProcessor(frozenset(), native_gate=gate)
+    with pytest.raises(ToolCeilingViolation, match="outside the ceiling"):
+        processor.feed(
+            _done_event(
+                {
+                    "type": "function_call",
+                    "name": "spawn_agent",
+                    "namespace": "multi_agent_v2",
+                    "arguments": '{"message":"review"}',
+                    "call_id": "call-foreign",
+                }
+            )
+        )

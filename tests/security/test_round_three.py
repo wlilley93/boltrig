@@ -22,10 +22,18 @@ from boltrig.models import (
     EvalCase,
     GrantSet,
     MemoryItem,
+    ModelEndpoint,
+    Noun,
     Skill,
     TenantPermissions,
     WorkItem,
     WorkStatus,
+    Consequence,
+    IdempotencyMode,
+    RateLimit,
+    TargetType,
+    Verb,
+    VerbBinding,
     utcnow,
 )
 from boltrig.store import InMemoryStore
@@ -86,6 +94,96 @@ def test_authoring_requires_role_and_is_audited():
     assert any(e.verb == "control.skill.upsert" and e.actor == "u" for e in events)
 
 
+@pytest.mark.security
+@pytest.mark.invariant("SEC-32")
+def test_author_replacement_views_are_complete_and_role_gated():
+    k = asyncio.run(_kernel())
+
+    async def _seed():
+        skill = await k.store.get_skill(T, "risky")
+        assert skill is not None
+        skill.description = "Risk review"
+        skill.context_requirements = {"type": "object", "required": ["case"]}
+        await k.store.upsert_skill(skill)
+        await k.store.upsert_noun(
+            Noun(id="case", tenant_id=T, description="Case", schema={"type": "object"})
+        )
+        await k.store.upsert_verb(
+            Verb(
+                id="case.review",
+                tenant_id=T,
+                noun_id="case",
+                input_schema={"type": "object"},
+                output_schema={"type": "object"},
+                description="Review a case",
+                consequence=Consequence.HIGH,
+                degraded_mode={"status": "queued"},
+                identity_mode="delegated",
+                idempotency_mode=IdempotencyMode.DISABLED,
+            )
+        )
+        await k.store.upsert_binding(
+            VerbBinding(
+                verb_id="case.review",
+                tenant_id=T,
+                target_type=TargetType.ADAPTER,
+                target_ref="tickets",
+                rate_limit=RateLimit(per="minute", max=3, scope="verb"),
+            )
+        )
+        await k.store.upsert_model_endpoint(
+            ModelEndpoint(
+                id="internal",
+                tenant_id=T,
+                kind="local",
+                model="pinned",
+                base_url="http://model.internal",
+                fallback="backup",
+                data_class="sensitive",
+            )
+        )
+
+    asyncio.run(_seed())
+    c = _client(k)
+    viewer = _hdr("viewer")
+    author = _hdr("org-admin")
+
+    assert c.get("/v1/skills/risky", headers=viewer).status_code == 403
+    skill = c.get("/v1/skills/risky", headers=author).json()["skill"]
+    assert skill["prompt_fragment"] == "p"
+    assert skill["context_requirements"]["required"] == ["case"]
+    assert skill["description"] == "Risk review"
+
+    noun = c.get("/v1/nouns/case", headers=author).json()["noun"]
+    assert noun == {
+        "id": "case",
+        "description": "Case",
+        "schema": {"type": "object"},
+        "is_active": True,
+        "status": "active",
+    }
+    verb = c.get("/v1/verbs/case.review", headers=author).json()
+    assert verb["verb"]["degraded_mode"] == {"status": "queued"}
+    assert verb["verb"]["identity_mode"] == "delegated"
+    assert verb["verb"]["idempotency_mode"] == "disabled"
+    assert verb["binding"]["rate_limit"] == {"per": "minute", "max": 3, "scope": "verb"}
+
+    public_endpoints = c.get("/v1/model-endpoints", headers=viewer).json()["endpoints"]
+    assert public_endpoints == [{
+        "id": "internal",
+        "kind": "local",
+        "model": "pinned",
+        "data_class": "sensitive",
+        "is_active": True,
+        "status": "active",
+    }]
+    assert "base_url" not in public_endpoints[0]
+    assert c.get("/v1/model-endpoints/internal", headers=viewer).status_code == 403
+    endpoint = c.get("/v1/model-endpoints/internal", headers=author).json()["endpoint"]
+    assert endpoint["base_url"] == "http://model.internal"
+    assert endpoint["fallback"] == "backup"
+
+
 # --- SEC-29: a test-spawn cannot escalate beyond the author's grants ---------
 @pytest.mark.security
 @pytest.mark.invariant("SEC-29")
@@ -129,6 +227,7 @@ def test_personal_agent_is_delegated_only():
                   headers=h).status_code == 200
     res = c.post("/v1/me/agent/invoke", json={"message": "do it"}, headers=h)
     assert res.status_code == 200
+    assert res.json()["agent_type"] == "script-worker"
     assert "ticket.create" not in res.json().get("effective_grants", [])  # capped to owner
     # the run is audited on-behalf-of the owner
     events = asyncio.run(k.store.audit_query(T))
@@ -143,19 +242,20 @@ def test_personal_agent_get_and_delete_lifecycle():
     h = _hdr("employee", grants="")
     h["x-boltrig-subject"] = "alice"
 
-    assert c.get("/v1/me/agent", headers=h).status_code == 404
+    assert c.get("/v1/me/agent", headers=h).json() == {"agent": None}
     assert c.post("/v1/me/agent", json={"runtime": "script", "skills": ["risky"]},
                   headers=h).status_code == 200
     got = c.get("/v1/me/agent", headers=h)
     assert got.status_code == 200
-    assert got.json()["runtime"] == "script" and got.json()["skills"] == ["risky"]
+    assert got.json()["agent"]["runtime"] == "script"
+    assert got.json()["agent"]["skills"] == ["risky"]
     # another subject never sees it
     other = _hdr("employee", grants="")
     other["x-boltrig-subject"] = "bob"
-    assert c.get("/v1/me/agent", headers=other).status_code == 404
+    assert c.get("/v1/me/agent", headers=other).json() == {"agent": None}
 
     assert c.delete("/v1/me/agent", headers=h).status_code == 200
-    assert c.get("/v1/me/agent", headers=h).status_code == 404
+    assert c.get("/v1/me/agent", headers=h).json() == {"agent": None}
     assert c.delete("/v1/me/agent", headers=h).status_code == 404
     # delete is audited
     events = asyncio.run(k.store.audit_query(T))

@@ -46,7 +46,7 @@ async def _unpublish_owned_verbs(
     ownership convention). Nouns are left for the caller: they may be shared.
     """
     owned: list[Verb] = []
-    for verb in await store.list_verbs(tenant_id):
+    for verb in await store.list_all_verbs(tenant_id):
         binding = await store.get_binding(tenant_id, verb.id)
         if binding is not None and binding.target_ref == adapter_id:
             owned.append(verb)
@@ -64,7 +64,7 @@ async def _drop_orphaned_nouns(store: Any, tenant_id: str, removed: list[Verb]) 
     is not this adapter's to remove.
     """
     for noun_id in sorted({verb.noun_id for verb in removed}):
-        if not await store.list_verbs(tenant_id, noun_id):
+        if not await store.list_all_verbs(tenant_id, noun_id):
             await store.delete_noun(tenant_id, noun_id)
 
 
@@ -87,7 +87,18 @@ async def _deactivate(
         # Defence in depth behind the removed rows: a live instance that
         # carries the review-gate flag is flipped back to inert, so even a
         # stale reference cannot execute (SEC-22, mirrors review_and_activate).
-        adapter.activated = False
+        review_gate = getattr(adapter, "review_gate", None)
+        if review_gate is not None and hasattr(review_gate, "activated"):
+            review_gate.activated = False
+        else:
+            adapter.activated = False
+        from .control_generated_adapter import (
+            is_generated_adapter_record,
+            stamp_generated_adapter,
+        )
+
+        if is_generated_adapter_record(record):
+            stamp_generated_adapter(adapter, record)
     return Result.success(
         {"id": adapter_id, "activated": False, "verbs": [verb.id for verb in removed]}
     )

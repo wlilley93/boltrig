@@ -1,5 +1,9 @@
 # 0004 - The spatial deck frontend
 
+> Amended by decision 0021: the spatial deck is the Operator client's
+> presentation. The primary Worker client intentionally uses a task-oriented
+> shell while consuming the same SDK contracts and governed event vocabulary.
+
 Date: 2026-07-02. Status: adopted (Principal-directed product design; engineering
 disposition recorded here). Supersedes nothing; extends the R9 front-end experience
 spec's presentation layer.

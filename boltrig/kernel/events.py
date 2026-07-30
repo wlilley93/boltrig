@@ -7,8 +7,11 @@ dropped client re-attach and receive the events it missed plus subsequent ones;
 the run keeps producing regardless of whether anyone is listening
 (NFR-CONV-01, US-CONV-07).
 
-In-memory and single-process by design (thin). A multi-replica deployment swaps
-this for a Redis pub/sub behind the same interface.
+The default backend is deliberately in-memory for offline development and
+deterministic tests. Production composition selects
+:class:`~boltrig.kernel.redis_event_relay.RedisEventRelay`, which keeps the same
+bounded cursor contract in Redis Streams and also owns the small
+active-conversation coordination seam required by multiple replicas.
 
 Retention is bounded (NFR-CONV-02): each stream keeps at most ``backlog``
 events, and once more than ``max_closed`` streams have been closed the oldest
@@ -27,7 +30,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import Any, AsyncContextManager
 
 _SENTINEL = object()  # end-of-stream marker placed on subscriber queues
 _StreamKey = tuple[str, str]
@@ -61,6 +64,13 @@ class TenantEventRelay:
             self._tenant_id, stream_id, replay=replay, since=since
         )
 
+    def subscribe_with_seq(
+        self, stream_id: str, *, replay: bool = True, since: int | None = None
+    ) -> AsyncIterator[tuple[int, dict[str, Any]]]:
+        return self._relay.subscribe_with_seq(
+            self._tenant_id, stream_id, replay=replay, since=since
+        )
+
     def forget(self, stream_id: str) -> None:
         self._relay.forget(self._tenant_id, stream_id)
 
@@ -72,10 +82,13 @@ class TenantEventRelay:
     def max_seq(self, stream_id: str) -> int:
         return self._relay.max_seq(self._tenant_id, stream_id)
 
+    def seq_bounds(self, stream_id: str) -> tuple[int | None, int]:
+        return self._relay.seq_bounds(self._tenant_id, stream_id)
+
 
 class EventRelay:
     def __init__(self, backlog: int = 500, max_closed: int = 256) -> None:
-        self._subs: dict[_StreamKey, set[asyncio.Queue]] = {}
+        self._subs: dict[_StreamKey, set[asyncio.Queue[Any]]] = {}
         # each backlog entry is (seq, event): the per-stream monotonic seq lets a
         # caller resume after events it has already seen (?since=<seq>, GAP G5)
         # even after the bounded buffer has trimmed its oldest entries - a plain
@@ -86,6 +99,12 @@ class EventRelay:
         # per-stream monotonic seq counter (last assigned), kept until forget so a
         # resumed run never re-uses a seq a live cursor already passed.
         self._seq: dict[_StreamKey, int] = {}
+        # Conversation run ownership is colocated with the relay because both
+        # must name the same cross-replica live stream.  The in-memory backend
+        # keeps the original single-process semantics; Redis overrides these
+        # methods with shared keys and a distributed conversation lock.
+        self._active_runs: dict[_StreamKey, str] = {}
+        self._conversation_locks: dict[_StreamKey, asyncio.Lock] = {}
         self._max = backlog
         self._max_closed = max_closed
 
@@ -99,6 +118,57 @@ class EventRelay:
         """Return a relay view permanently bound to one non-empty tenant."""
         self._key(tenant_id, "namespace-check")
         return TenantEventRelay(self, tenant_id)
+
+    @property
+    def shared(self) -> bool:
+        """Whether stream and conversation coordination span processes."""
+        return False
+
+    async def readiness(self) -> bool:
+        return True
+
+    async def aclose(self) -> None:
+        return None
+
+    def conversation_lock(
+        self, tenant_id: str, conversation_id: str
+    ) -> AsyncContextManager[None]:
+        """Serialize the short active-run/message-queue hand-off."""
+        key = self._key(tenant_id, conversation_id)
+        lock = self._conversation_locks.get(key)
+        if lock is None:
+            lock = self._conversation_locks[key] = asyncio.Lock()
+        return lock
+
+    def active_run(self, tenant_id: str, conversation_id: str) -> str | None:
+        return self._active_runs.get(self._key(tenant_id, conversation_id))
+
+    def set_active_run(
+        self, tenant_id: str, conversation_id: str, run_id: str
+    ) -> None:
+        self._key(tenant_id, conversation_id)
+        if not run_id:
+            raise ValueError("run_id is required")
+        self._active_runs[(tenant_id, conversation_id)] = run_id
+
+    def clear_active_run(
+        self,
+        tenant_id: str,
+        conversation_id: str,
+        *,
+        expected: str | None = None,
+    ) -> bool:
+        key = self._key(tenant_id, conversation_id)
+        current = self._active_runs.get(key)
+        if current is None or (expected is not None and current != expected):
+            return False
+        self._active_runs.pop(key, None)
+        return True
+
+    def refresh_active_run(
+        self, tenant_id: str, conversation_id: str, *, expected: str
+    ) -> bool:
+        return self.active_run(tenant_id, conversation_id) == expected
 
     def publish(self, tenant_id: str, stream_id: str, event: dict[str, Any]) -> None:
         """Record an event and fan it out to current subscribers (non-blocking).
@@ -117,7 +187,7 @@ class EventRelay:
         if len(buf) > self._max:
             del buf[: len(buf) - self._max]
         for q in list(self._subs.get(key, ())):
-            q.put_nowait(event)
+            q.put_nowait((seq, event))
 
     def close(self, tenant_id: str, stream_id: str) -> None:
         """Mark a stream complete; live subscribers end after draining.
@@ -165,13 +235,43 @@ class EventRelay:
         filtered; ``since`` only ever narrows the REPLAY, never the live tail.
         """
         key = self._key(tenant_id, stream_id)
-        queue: asyncio.Queue = asyncio.Queue()
+        queue: asyncio.Queue[Any] = asyncio.Queue()
         self._subs.setdefault(key, set()).add(queue)
         try:
             if replay:
                 for seq, event in list(self._backlog.get(key, [])):
                     if since is None or seq > since:
                         yield event
+            if key in self._closed:
+                return
+            while True:
+                item = await queue.get()
+                if item is _SENTINEL:
+                    return
+                _seq, event = item
+                yield event
+        finally:
+            subs = self._subs.get(key)
+            if subs is not None:
+                subs.discard(queue)
+
+    async def subscribe_with_seq(
+        self,
+        tenant_id: str,
+        stream_id: str,
+        *,
+        replay: bool = True,
+        since: int | None = None,
+    ) -> AsyncIterator[tuple[int, dict[str, Any]]]:
+        """Yield cursor/event pairs without mutating the event dictionaries."""
+        key = self._key(tenant_id, stream_id)
+        queue: asyncio.Queue[Any] = asyncio.Queue()
+        self._subs.setdefault(key, set()).add(queue)
+        try:
+            if replay:
+                for seq, event in list(self._backlog.get(key, [])):
+                    if since is None or seq > since:
+                        yield seq, event
             if key in self._closed:
                 return
             while True:
@@ -208,3 +308,45 @@ class EventRelay:
         nothing). A caller captures this at a boundary and passes it back as
         ?since=<seq> to resume the stream after exactly what it has seen (GAP G5)."""
         return self._seq.get(self._key(tenant_id, stream_id), 0)
+
+    def seq_bounds(self, tenant_id: str, stream_id: str) -> tuple[int | None, int]:
+        """The oldest retained cursor and latest assigned cursor for a stream."""
+        key = self._key(tenant_id, stream_id)
+        buf = self._backlog.get(key, [])
+        return (buf[0][0] if buf else None, self._seq.get(key, 0))
+
+
+def build_event_relay(
+    redis_url: str | None = None,
+    *,
+    production: bool = False,
+    backlog: int = 500,
+    max_closed: int = 256,
+    namespace: str = "default",
+    sync_client: Any = None,
+    async_client: Any = None,
+) -> EventRelay:
+    """Select the relay explicitly; production never falls back to memory."""
+    from .redis_event_relay import RedisEventRelay
+
+    configured = bool(str(redis_url or "").strip())
+    if sync_client is not None or async_client is not None:
+        if sync_client is None or async_client is None:
+            raise ValueError("both Redis clients are required")
+        return RedisEventRelay(
+            sync_client,
+            async_client,
+            backlog=backlog,
+            max_closed=max_closed,
+            namespace=namespace,
+        )
+    if configured:
+        return RedisEventRelay.from_url(
+            str(redis_url).strip(),
+            backlog=backlog,
+            max_closed=max_closed,
+            namespace=namespace,
+        )
+    if production:
+        raise RuntimeError("production_event_relay_requires_redis")
+    return EventRelay(backlog=backlog, max_closed=max_closed)

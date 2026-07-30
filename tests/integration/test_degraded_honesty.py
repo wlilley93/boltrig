@@ -66,12 +66,20 @@ async def test_chat_turn_surfaces_a_degraded_spawn():
     spawner = build_spawner(kernel)
     relay = EventRelay()
     chat = ChatService(
-        kernel.store, relay,
+        kernel.store,
+        relay,
         turn_executor=build_turn_executor(kernel, spawner, continuity=False),
     )
-    out = [e async for e in chat.handle_turn(
-        tenant_id=T, user_id="alice", role="engineer", message="do the thing"
-    )]
+    out = [
+        e
+        async for e in chat.handle_turn(
+            tenant_id=T,
+            user_id="alice",
+            role="engineer",
+            message="do the thing",
+            grants=GrantSet.of(["*"]),
+        )
+    ]
     # the reply event visibly carries degradation: the flag plus a degraded text
     deltas = [e for e in out if e.get("type") == "text_delta"]
     assert any(e.get("degraded") is True for e in deltas)

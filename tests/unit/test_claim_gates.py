@@ -23,8 +23,10 @@ to rot: a waiver is exactly the thing people stop reading.
 from __future__ import annotations
 
 import json
+import subprocess
 from datetime import date, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -127,6 +129,35 @@ def test_a_scan_that_finds_nothing_is_a_failure_not_a_pass() -> None:
 
     with pytest.raises(SystemExit):
         scan_guard.require_scanned([1], "sources", minimum=50)
+
+
+@pytest.mark.invariant("NFR-MNT-06")
+def test_source_gates_include_new_nonignored_files_before_staging(
+    tmp_path, monkeypatch
+) -> None:
+    """A new module is part of the change even before Git's index knows it."""
+    from scripts import build_claim_inventory, check_reachability
+
+    source = tmp_path / "boltrig" / "new_contract.py"
+    source.parent.mkdir()
+    source.write_text("def new_contract():\n    return True\n", encoding="utf-8")
+    calls: list[list[str]] = []
+
+    def fake_run(args, *, capture_output, check, text):
+        assert capture_output and check and text
+        calls.append(args)
+        return SimpleNamespace(stdout="boltrig/new_contract.py\0")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(build_claim_inventory, "ROOT", tmp_path)
+    monkeypatch.setattr(check_reachability, "ROOT", tmp_path)
+
+    assert build_claim_inventory.tracked("boltrig/**/*.py") == [source]
+    assert check_reachability._sources() == [source]
+    for args in calls:
+        assert "--cached" in args
+        assert "--others" in args
+        assert "--exclude-standard" in args
 
 
 @pytest.mark.invariant("NFR-MNT-06")

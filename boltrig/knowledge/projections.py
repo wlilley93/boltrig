@@ -12,9 +12,13 @@ from boltrig.memory.engine import EngineFact
 from .models import Asset, ProjectionStatus, Provider, Segment, now
 
 
-def provider_defaults(
-    tenant_id: str, config: dict[str, Any] | None = None
-) -> list[Provider]:
+UNAVAILABLE_PROVIDER_IDS = frozenset({"supermemory", "mem0"})
+UNAVAILABLE_PROVIDER_REASON = (
+    "Credential-backed projection adapter is not implemented in this build."
+)
+
+
+def provider_defaults(tenant_id: str, config: dict[str, Any] | None = None) -> list[Provider]:
     cfg = dict(config or {})
     entries = {
         str(row.get("id")): row
@@ -31,14 +35,20 @@ def provider_defaults(
         bundled: bool,
     ) -> Provider:
         entry = entries.get(provider_id, {})
+        configured_enabled = _bool(entry.get("enabled"), enabled)
+        unavailable = provider_id in UNAVAILABLE_PROVIDER_IDS
         return Provider(
             id=provider_id,
             tenant_id=tenant_id,
             display_name=name,
             role=role,
-            enabled=_bool(entry.get("enabled"), enabled),
+            enabled=False if unavailable else configured_enabled,
             bundled=bundled,
-            status="enabled" if _bool(entry.get("enabled"), enabled) else "available",
+            health="unavailable" if unavailable else "unknown",
+            status=(
+                "unavailable" if unavailable else ("enabled" if configured_enabled else "available")
+            ),
+            last_error=UNAVAILABLE_PROVIDER_REASON if unavailable else None,
             config={**dict(cfg.get(provider_id) or {}), **dict(entry.get("config") or {})},
         )
 
@@ -47,6 +57,31 @@ def provider_defaults(
         make("supermemory", "Supermemory", "managed_context", enabled=False, bundled=False),
         make("mem0", "Mem0", "memory_compatibility", enabled=False, bundled=False),
     ]
+
+
+async def reconcile_unavailable_providers(repository, tenant_id: str) -> None:
+    """Repair persisted rows that older builds allowed operators to enable."""
+
+    for provider_id in UNAVAILABLE_PROVIDER_IDS:
+        provider = await repository.get_provider(tenant_id, provider_id)
+        if provider is None:
+            continue
+        if (
+            provider.enabled
+            or provider.health != "unavailable"
+            or provider.status != "unavailable"
+            or provider.last_error != UNAVAILABLE_PROVIDER_REASON
+        ):
+            await repository.save_provider(
+                replace(
+                    provider,
+                    enabled=False,
+                    health="unavailable",
+                    status="unavailable",
+                    last_error=UNAVAILABLE_PROVIDER_REASON,
+                    updated_at=now(),
+                )
+            )
 
 
 def _bool(value: Any, default: bool) -> bool:

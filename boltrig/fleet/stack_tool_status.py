@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import inspect
 import os
 from collections.abc import Mapping
@@ -169,6 +170,7 @@ class StackToolStatusProvider:
     ) -> None:
         self._base = base
         self._env = env
+        self._cached: dict[tuple[str, str | None], dict[str, Any]] = {}
 
     async def snapshot(self, *, tenant_id: str, workspace_id: str | None) -> dict[str, Any]:
         raw = await self._base_snapshot(tenant_id=tenant_id, workspace_id=workspace_id)
@@ -191,7 +193,21 @@ class StackToolStatusProvider:
                     "live_health": "not_polled",
                 },
             })
-        return {"components": components, "runtimes": runtimes}
+        result = {"components": components, "runtimes": runtimes}
+        self._cached[(tenant_id, workspace_id)] = copy.deepcopy(result)
+        return result
+
+    def cached_snapshot(
+        self, *, tenant_id: str, workspace_id: str | None
+    ) -> dict[str, Any] | None:
+        """``cached_snapshot`` returns only an already-reported scoped snapshot.
+
+        Inventory callers use this seam so listing add-ons cannot initiate a
+        model-gateway probe or any other provider I/O.
+        """
+
+        value = self._cached.get((tenant_id, workspace_id))
+        return copy.deepcopy(value) if value is not None else None
 
     async def _base_snapshot(
         self, *, tenant_id: str, workspace_id: str | None

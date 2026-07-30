@@ -27,85 +27,21 @@ from typing import Any, Protocol
 from boltrig.adapters.base import Credential
 from boltrig.models import CredentialResolution
 from boltrig.store import Store
-
-# The reference shape a run carries in place of a secure answer's value, and
-# the credential_refs id prefix the value is sealed under (SEC-181).
-RUN_SCOPED_REF_PREFIX = "credential:run/"
-RUN_SCOPED_CRED_PREFIX = "run:"
-# Marker on the sealed row so an unrelated credential that happens to sit under
-# a ``run:`` id is never resolvable as a secure-input reference.
-_SECURE_ANSWER_KIND = "secure_answer"
-# Marker on the sealed row for a per-turn, per-run ADAPTER BEARER (the parity
-# passthrough: a caller's clamped external bearer sealed for one adapter for the
-# life of one run). DELIBERATELY DISTINCT from _SECURE_ANSWER_KIND so this value
-# is NEVER resolvable through ``resolve_run_scoped_params`` - it is only ever
-# resolved into the adapter ``credential`` arg at dispatch, never substituted
-# into a verb param (an agent could otherwise coax the bearer into an output).
-_ADAPTER_BEARER_KIND = "adapter_bearer"
-# Marker on the sealed row for a HELD CALL: the canonical {noun, verb, params,
-# ctx} of a write the HITL gate paused, sealed so the approved call can later be
-# replayed from the RECORD (decision 0018, Order 1). DELIBERATELY DISTINCT from
-# _SECURE_ANSWER_KIND for the same reason as the bearer above, and here the
-# danger is sharper: a held call carries the cell's OWN pending write verbatim,
-# so under the secure-answer kind a later param of the shape
-# ``credential:run/<run_id>/held_call:<request_id>`` would resolve straight back
-# into a verb param and hand the cell its own held write to exfiltrate.
-HELD_CALL_KIND = "held_call"
-
-
-def run_scoped_cred_id(run_id: str, purpose: str) -> str:
-    """The credential_refs id a secure answer is sealed under."""
-    return f"{RUN_SCOPED_CRED_PREFIX}{run_id}:{purpose}"
-
-
-def adapter_bearer_cred_id(run_id: str, adapter_id: str) -> str:
-    """The credential_refs id a per-run adapter bearer is sealed under. Distinct
-    ``adapter_bearer:`` segment keeps it out of the secure-answer keyspace."""
-    return f"{RUN_SCOPED_CRED_PREFIX}{run_id}:adapter_bearer:{adapter_id}"
-
-
-def held_call_cred_id(run_id: str, request_id: str) -> str:
-    """The credential_refs id a gate-held call is sealed under. Distinct
-    ``held_call:`` segment keeps it out of the secure-answer keyspace."""
-    return f"{RUN_SCOPED_CRED_PREFIX}{run_id}:held_call:{request_id}"
-
-
-def _owner_matches(ref: dict, context_owner: str | None) -> bool:
-    """Whether this sealed row belongs to the identity now asking for it.
-
-    The run id was once the whole fence here, on the reasoning that a run id is
-    server-minted and therefore trustworthy. It is not: the write doors let the
-    request body name the run (``POST /v1/invoke``, ``POST /v1/spawn``), so a
-    same-tenant caller could quote a stranger's run id and be handed that
-    stranger's sealed material - the reference's run id and the "context" run id
-    it was compared against both came from the same attacker-controlled request,
-    so they always agreed. The doors now refuse a foreign run id
-    (``kernel/run_access.py``), and this is the second, independent fence at the
-    resolver itself: whatever any future door decides to trust, the material only
-    resolves for the identity it was sealed for.
-
-    Fail closed on both sides. A row sealed before this fence existed carries no
-    ``owner`` and resolves for nobody; run-scoped rows are swept at run terminal
-    and live only for the length of a run, so that costs at most the in-flight
-    runs at deploy time - a secure answer must be re-asked, and a passthrough
-    bearer falls back to the adapter's static credential, which is the documented
-    behaviour when no bearer is sealed."""
-    owner = ref.get("owner")
-    return bool(owner) and bool(context_owner) and owner == context_owner
-
-
-def parse_run_scoped_ref(value: Any) -> tuple[str, str] | None:
-    """Parse a ``credential:run/<run_id>/<purpose>`` reference, else ``None``.
-
-    Strict shape (exactly one run id and one purpose segment): anything else -
-    including a reference with extra path segments - is not a run-scoped ref at
-    all, so it is never silently reinterpreted."""
-    if not isinstance(value, str) or not value.startswith(RUN_SCOPED_REF_PREFIX):
-        return None
-    parts = value[len(RUN_SCOPED_REF_PREFIX):].split("/")
-    if len(parts) != 2 or not parts[0] or not parts[1]:
-        return None
-    return parts[0], parts[1]
+from .integration_credentials import (
+    resolve_integration_credential,
+)
+from .run_scoped_credentials import (
+    ADAPTER_BEARER_KIND as _ADAPTER_BEARER_KIND,
+    HELD_CALL_KIND as HELD_CALL_KIND,
+    RUN_SCOPED_CRED_PREFIX as RUN_SCOPED_CRED_PREFIX,
+    RUN_SCOPED_REF_PREFIX,
+    SECURE_ANSWER_KIND as _SECURE_ANSWER_KIND,
+    adapter_bearer_cred_id,
+    held_call_cred_id as held_call_cred_id,
+    owner_matches,
+    parse_run_scoped_ref,
+    run_scoped_cred_id,
+)
 
 
 class SecretStore(Protocol):
@@ -142,14 +78,75 @@ class CredentialResolver:
         # adapter id -> credential id, populated from the manifest at boot.
         self._adapter_cred: dict[tuple[str, str], str] = {}
 
-    def bind_adapter_credential(self, tenant_id: str, adapter_id: str, cred_id: str) -> None:
-        self._adapter_cred[(tenant_id, adapter_id)] = cred_id
+    def bind_adapter_credential(
+        self,
+        tenant_id: str,
+        adapter_id: str,
+        cred_id: str,
+        *,
+        replace_existing: bool = True,
+    ) -> bool:
+        key = (tenant_id, adapter_id)
+        if not replace_existing and key in self._adapter_cred:
+            return False
+        self._adapter_cred[key] = cred_id
+        return True
 
-    async def resolve_for_adapter(
-        self, tenant_id: str, adapter_id: str
-    ) -> Credential | None:
-        """Resolve the credential an adapter needs, or ``None`` if it needs none."""
+    def replace_adapter_credential_binding(
+        self, tenant_id: str, adapter_id: str, cred_id: str | None
+    ) -> str | None:
+        """Replace one process-local binding from durable adapter authority."""
+        key = (tenant_id, adapter_id)
+        previous = self._adapter_cred.pop(key, None)
+        if cred_id is not None:
+            self._adapter_cred[key] = cred_id
+        return previous
+
+    async def has_adapter_credential_reference(self, tenant_id: str, adapter_id: str) -> bool:
+        """Report configured reference state without resolving secret material."""
         cred_id = self._adapter_cred.get((tenant_id, adapter_id))
+        if cred_id:
+            # An explicit binding remains authoritative even when its backing
+            # row is broken. Setup must not silently shadow that configuration.
+            return True
+        connection = await self._store.get_active_integration_connection_for_adapter(
+            tenant_id, adapter_id
+        )
+        return bool(
+            connection
+            and connection.credential_ref
+            and await self._store.has_credential_ref(tenant_id, connection.credential_ref)
+        )
+
+    def unbind_adapter_credential(self, tenant_id: str, adapter_id: str, cred_id: str) -> bool:
+        """Use ``unbind_adapter_credential`` to drop exactly the owned binding.
+
+        The expected reference is part of the comparison so revoking an older
+        connection can never detach a newer credential rotation.
+        """
+        key = (tenant_id, adapter_id)
+        if self._adapter_cred.get(key) != cred_id:
+            return False
+        del self._adapter_cred[key]
+        return True
+
+    async def resolve_for_adapter(self, tenant_id: str, adapter_id: str) -> Credential | None:
+        """Resolve the credential an adapter needs, or ``None`` if it needs none."""
+        configured_id = self._adapter_cred.get((tenant_id, adapter_id))
+        connection = await self._store.get_active_integration_connection_for_adapter(
+            tenant_id, adapter_id
+        )
+        durable_id = connection.credential_ref if connection is not None else None
+        if connection is not None and durable_id is None:
+            raise CredentialResolution(
+                f"active integration connection has no credential reference for adapter "
+                f"'{adapter_id}'"
+            )
+        if configured_id is not None and durable_id is not None and configured_id != durable_id:
+            raise CredentialResolution(
+                f"adapter '{adapter_id}' has conflicting credential references"
+            )
+        cred_id = configured_id or durable_id
         if cred_id is None:
             return None  # adapter requires no credential (e.g. a local script)
         ref = await self._store.get_credential_ref(tenant_id, cred_id)
@@ -157,6 +154,9 @@ class CredentialResolver:
             raise CredentialResolution(
                 f"no credential reference '{cred_id}' for tenant '{tenant_id}'"
             )
+        integration = resolve_integration_credential(ref, cred_id, adapter_id)
+        if integration is not None:
+            return integration
         material = await self.fetch_material(ref)
         return Credential(id=cred_id, kind=ref.get("kind", "api_key"), material=material)
 
@@ -181,12 +181,10 @@ class CredentialResolver:
         replays the reference, never the value.
 
         ``owner`` is the user this material belongs to (the answering principal),
-        and it is REQUIRED. See ``_owner_matches`` for why the run id alone is
+        and it is REQUIRED. See ``owner_matches`` for why the run id alone is
         not a sufficient fence."""
         if not run_id or not purpose:
-            raise CredentialResolution(
-                "a secure answer requires both a run id and a purpose"
-            )
+            raise CredentialResolution("a secure answer requires both a run id and a purpose")
         if not owner:
             raise CredentialResolution("a secure answer requires an owning identity")
         await self._store.set_credential_ref(
@@ -219,9 +217,7 @@ class CredentialResolver:
             raise CredentialResolution(
                 "run-scoped credential reference does not belong to this run"
             )
-        ref = await self._store.get_credential_ref(
-            tenant_id, run_scoped_cred_id(run_id, purpose)
-        )
+        ref = await self._store.get_credential_ref(tenant_id, run_scoped_cred_id(run_id, purpose))
         if (
             not isinstance(ref, dict)
             or ref.get("kind") != _SECURE_ANSWER_KIND
@@ -231,7 +227,7 @@ class CredentialResolver:
             raise CredentialResolution(
                 "run-scoped credential reference is unknown or scope-mismatched"
             )
-        if not _owner_matches(ref, context_owner):
+        if not owner_matches(ref, context_owner):
             raise CredentialResolution(
                 "run-scoped credential reference does not belong to this caller"
             )
@@ -257,17 +253,13 @@ class CredentialResolver:
             }
         if isinstance(params, (list, tuple)):
             return [
-                await self.resolve_run_scoped_params(
-                    tenant_id, item, run_id=run_id, owner=owner
-                )
+                await self.resolve_run_scoped_params(tenant_id, item, run_id=run_id, owner=owner)
                 for item in params
             ]
         parsed = parse_run_scoped_ref(params)
         if parsed is None:
             return params
-        return await self._resolve_run_scoped(
-            tenant_id, parsed[0], parsed[1], run_id, owner
-        )
+        return await self._resolve_run_scoped(tenant_id, parsed[0], parsed[1], run_id, owner)
 
     # --- Per-run adapter bearer (parity passthrough) -------------------------
 
@@ -289,15 +281,13 @@ class CredentialResolver:
         (``sweep_run_credentials_if_settled``), fail-closed to the same run until then.
 
         ``owner`` is the user whose downstream authority this bearer carries, and
-        it is REQUIRED. See ``_owner_matches``."""
+        it is REQUIRED. See ``owner_matches``."""
         if not run_id or not adapter_id or not token:
             raise CredentialResolution(
                 "a run-scoped adapter bearer requires a run id, an adapter id and a token"
             )
         if not owner:
-            raise CredentialResolution(
-                "a run-scoped adapter bearer requires an owning identity"
-            )
+            raise CredentialResolution("a run-scoped adapter bearer requires an owning identity")
         await self._store.set_credential_ref(
             tenant_id,
             adapter_bearer_cred_id(run_id, adapter_id),
@@ -332,7 +322,7 @@ class CredentialResolver:
             or ref.get("kind") != _ADAPTER_BEARER_KIND
             or ref.get("run_id") != run_id
             or ref.get("adapter_id") != adapter_id
-            or not _owner_matches(ref, owner)
+            or not owner_matches(ref, owner)
         ):
             return None
         return Credential(

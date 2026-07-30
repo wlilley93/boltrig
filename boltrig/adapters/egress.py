@@ -231,7 +231,11 @@ def pinned_async_client_for_ip(vetted_ip: str, *, inner_backend: Any | None = No
     client must keep the original hostname so SNI/cert verification are correct."""
     import httpx
 
-    transport = httpx.AsyncHTTPTransport()
+    # A caller-supplied TLS verifier belongs on the transport.  Passing
+    # ``verify`` to AsyncClient while also supplying a transport silently leaves
+    # the transport's default trust configuration in force.
+    verify = client_kwargs.pop("verify", True)
+    transport = httpx.AsyncHTTPTransport(verify=verify)
     transport._pool._network_backend = _pinned_backend(vetted_ip, inner_backend)
     client_kwargs["follow_redirects"] = False
     client_kwargs["transport"] = transport

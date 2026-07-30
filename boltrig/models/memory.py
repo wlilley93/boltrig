@@ -83,5 +83,12 @@ class MemoryProjectionStatus:
     target: str | None = None
     projection_ref: str | None = None
     error: str | None = None
+    enqueue_attempts: int = 0
+    operation_attempts: int = 0
+    max_operation_attempts: int = 1
+    first_attempt_at: datetime | None = None
+    last_attempt_at: datetime | None = None
+    last_failure_at: datetime | None = None
+    failure_code: str | None = None
     created_at: datetime = field(default_factory=utcnow)
     updated_at: datetime = field(default_factory=utcnow)

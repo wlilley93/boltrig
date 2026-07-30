@@ -21,6 +21,9 @@ call ``require_codex_trusted_posture``); returning a live provider only when
 
 from __future__ import annotations
 
+import hashlib
+import json
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -28,6 +31,29 @@ from boltrig.config.settings import Settings
 
 if TYPE_CHECKING:
     from boltrig.fleet.infrastructure.cell_lane import CellLane
+
+
+def _receipt_identity(
+    settings: Settings, *, model_id: str, gateway_base_url: str
+) -> str:
+    """Opaque identity of non-secret provider composition inputs.
+
+    Paths and the gateway URL influence drift detection but only this digest
+    leaves the composition root.  The upstream key is deliberately excluded.
+    """
+
+    payload = {
+        "schema": "trusted-codex-provider-v1",
+        "trusted": bool(settings.codex_trusted),
+        "binary": str(settings.codex_binary or ""),
+        "stack_root": str(settings.codex_stack_root or ""),
+        "model_id": model_id,
+        "gateway_base_url": gateway_base_url,
+        "auth_helper": os.environ.get("BOLTRIG_CODEX_AUTH_HELPER", ""),
+        "cell_lane": bool(os.environ.get("BOLTRIG_CELL_SPAWNER_FD")),
+    }
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return "cp_" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:24]
 
 
 def _build_cell_lane() -> CellLane | None:
@@ -61,6 +87,27 @@ def _build_cell_lane() -> CellLane | None:
     return CellLane(spawner_socket, CellSlotAllocator(DECLARED_CELL_SLOTS))
 
 
+def _trusted_config(
+    settings: Settings,
+    *,
+    provider: Any,
+    stack_root: Path,
+    model_id: str,
+    gateway_base_url: str,
+) -> dict[str, Any]:
+    return {
+        "trusted": True,
+        "provider": provider,
+        "stack_root": stack_root,
+        "model_id": model_id,
+        "receipt_identity": _receipt_identity(
+            settings,
+            model_id=model_id,
+            gateway_base_url=gateway_base_url,
+        ),
+    }
+
+
 def build_trusted_codex_config(
     settings: Settings, *, model_id: str, gateway_base_url: str
 ) -> dict[str, Any] | None:
@@ -70,7 +117,7 @@ def build_trusted_codex_config(
     the stack root are configured; a missing value is OFF and constructs nothing.
     When all three are present it builds the provider and returns the dict shape
     ``build_trusted_codex_runtime`` consumes: ``{"trusted": True, "provider": ...,
-    "stack_root": Path}``.
+    "stack_root": Path, "model_id": ...}``.
     """
     if not (settings.codex_trusted and settings.codex_binary and settings.codex_stack_root):
         return None
@@ -131,7 +178,15 @@ def build_trusted_codex_config(
         upstream_key=settings.model_gateway_key or "",
         http_client=httpx.AsyncClient(),
     )
-    return {"trusted": True, "provider": provider, "stack_root": stack_root}
+    # model_id is non-secret admission policy: the resolver refuses a permanent
+    # profile whose endpoint differs from the supervised cell's composed model.
+    return _trusted_config(
+        settings,
+        provider=provider,
+        stack_root=stack_root,
+        model_id=model_id,
+        gateway_base_url=gateway_base_url,
+    )
 
 
 __all__ = ["build_trusted_codex_config"]

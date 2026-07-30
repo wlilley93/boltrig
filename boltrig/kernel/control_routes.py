@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
-from boltrig.models import DegradedMode, PendingHuman
+from boltrig.models import DegradedMode, HITLStatus, PendingHuman
 
 
 async def _ensure_control_plane(
@@ -35,6 +35,7 @@ async def _ensure_control_plane(
             registry=kernel.registry,
             admin=platform.get("admin"),
             workflows=platform.get("workflows"),
+            credentials=kernel.credentials,
         )
         await kernel.register_adapter(tenant, adapter)
         return
@@ -54,6 +55,7 @@ async def dispatch_control_route(
     params: dict[str, Any],
     *,
     request: Request | None = None,
+    run_id: str | None = None,
 ) -> tuple[dict[str, Any] | None, JSONResponse | None]:
     """Invoke a control verb and translate only its control-flow responses.
 
@@ -73,10 +75,35 @@ async def dispatch_control_route(
             "control",
             verb,
             clean,
-            principal.context(),
+            principal.context(run_id=run_id),
             approval_id=approval_id,
             idempotency_key=idempotency_key,
         )
+        if approval_id:
+            approved = await kernel.hitl.get(principal.tenant_id, approval_id)
+            if (
+                approved is not None
+                and approved.status == HITLStatus.CONSUMED
+                and approved.verb == verb
+                and approved.run_id
+            ):
+                # An explicit caller-lane finalization consumes the approval
+                # without entering held_write_resume. Retire any exact held
+                # checkpoint/seal that represented the same call so a later
+                # notifier or sweep cannot find an orphaned replay claimant.
+                from boltrig.kernel.held_call import settle_held_call
+
+                try:
+                    await settle_held_call(
+                        kernel.store,
+                        principal.tenant_id,
+                        approved.run_id,
+                        approval_id,
+                    )
+                except Exception:
+                    # The governed write already committed. Cleanup is fail-safe
+                    # and must never turn success into a client-visible failure.
+                    pass
         return output, None
     except PendingHuman as exc:
         return None, JSONResponse(

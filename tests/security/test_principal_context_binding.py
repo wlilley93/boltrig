@@ -24,9 +24,7 @@ class CaptureSpawner:
     def __init__(self) -> None:
         self.context = None
 
-    async def spawn(
-        self, tenant_id, task, skills, prefer, context, **kwargs
-    ):
+    async def spawn(self, tenant_id, task, skills, prefer, context, **kwargs):
         self.context = context
         return {"run_id": "captured", "status": "ok"}
 
@@ -151,7 +149,9 @@ async def test_spawn_runtime_and_mcp_preserve_trusted_principal_metadata(monkeyp
     kernel, _ = await _kernel()
     capture = CaptureSpawner()
     monkeypatch.setattr(
-        spawn_module, "build_spawner", lambda _kernel, *, codex_config=None: capture
+        spawn_module,
+        "build_spawner",
+        lambda _kernel, *, codex_config=None, sensitive_endpoint_id=None: capture,
     )
     app_spawner = spawn_module.make_app_spawner(kernel)
     await app_spawner(

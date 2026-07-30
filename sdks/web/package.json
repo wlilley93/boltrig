@@ -39,6 +39,14 @@
     "./chatTurnNormalizer": {
       "types": "./dist/src/chatTurnNormalizer.d.ts",
       "import": "./dist/src/chatTurnNormalizer.js"
+    },
+    "./client": {
+      "types": "./dist/src/client.d.ts",
+      "import": "./dist/src/client.js"
+    },
+    "./integrationCatalogue": {
+      "types": "./dist/src/integrationCatalogue.d.ts",
+      "import": "./dist/src/integrationCatalogue.js"
     }
   },
   "files": [

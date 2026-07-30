@@ -12,16 +12,13 @@ can resume the paused run - the kernel never imports the fleet (P1).
 
 from __future__ import annotations
 
-import hashlib
 import hmac
 import inspect
-import json
-import math
-import unicodedata
 import uuid
 from datetime import timedelta
 from typing import Any, Callable
 
+from boltrig.notification_catalogue import APPROVAL_EVENT, ESCALATION_EVENT
 from boltrig.models import (
     HITLStateConflict,
     HITLRequest,
@@ -32,6 +29,10 @@ from boltrig.models import (
     utcnow,
 )
 from boltrig.store import Store
+from boltrig.kernel.hitl_fingerprint import (
+    approval_request_fingerprint as approval_request_fingerprint,
+    canonical_approval_value as canonical_approval_value,
+)
 
 # Decisions that count as approval for a gated verb.
 _APPROVING = {"approve", "approved", "yes", "ok", "allow"}
@@ -68,85 +69,6 @@ def request_timed_out(req: HITLRequest) -> bool:
         and req.timeout_at is not None
         and req.timeout_at <= utcnow()
     )
-
-
-def _normalise_json(value: Any) -> Any:
-    """Return a deterministic JSON value for approval request binding.
-
-    HTTP params and adapter approval contexts are required to be JSON-like. NFC
-    string normalisation prevents visually identical Unicode from producing
-    different bindings; normalised-key collisions and non-finite numbers fail
-    closed instead of being silently reinterpreted.
-    """
-    if value is None or isinstance(value, (bool, int)):
-        return value
-    if isinstance(value, float):
-        if not math.isfinite(value):
-            raise ValueError("non-finite number in approval context")
-        return value
-    if isinstance(value, str):
-        return unicodedata.normalize("NFC", value)
-    if isinstance(value, (list, tuple)):
-        return [_normalise_json(item) for item in value]
-    if isinstance(value, dict):
-        out: dict[str, Any] = {}
-        for raw_key, item in value.items():
-            if not isinstance(raw_key, str):
-                raise ValueError("non-string key in approval context")
-            key = unicodedata.normalize("NFC", raw_key)
-            if key in out:
-                raise ValueError("normalised key collision in approval context")
-            out[key] = _normalise_json(item)
-        return out
-    raise ValueError("non-JSON value in approval context")
-
-
-def canonical_approval_value(value: Any) -> Any:
-    """Return a detached canonical copy suitable for an adapter re-check."""
-    return _normalise_json(value)
-
-
-def approval_request_fingerprint(
-    *, noun: str, verb: str, params: dict[str, Any], context: Any,
-    resource_context: Any = None,
-) -> str:
-    """Bind one approval to one canonical action and authenticated initiator.
-
-    The digest deliberately excludes transport provenance (IP/User-Agent), which
-    may legitimately change while an approval is pending. It includes every
-    authority-bearing identity field, grant/scope state, run/workspace and the
-    optional adapter-provided snapshot of mutable resource state.
-    """
-    payload = {
-        "version": 1,
-        "tenant_id": context.tenant_id,
-        "noun": noun,
-        "verb": verb,
-        "params": params,
-        "initiator": {
-            "actor": context.actor,
-            "actor_tier": context.actor_tier,
-            "on_behalf_of": context.on_behalf_of,
-            "workspace_id": context.workspace_id,
-            "run_id": context.run_id,
-            "role": context.extra.get("principal_role"),
-            "scope": context.extra.get("principal_scope"),
-            "grants": {
-                "allow": sorted(context.grants.allow),
-                "deny": sorted(context.grants.deny),
-            },
-            "skills_loaded": sorted(context.skills_loaded),
-        },
-        "resource_context": resource_context,
-    }
-    canonical = json.dumps(
-        _normalise_json(payload),
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-        allow_nan=False,
-    ).encode("utf-8")
-    return hashlib.sha256(canonical).hexdigest()
 
 
 class HITLManager:
@@ -187,14 +109,13 @@ class HITLManager:
         requested_by: str | None = None,
         requested_on_behalf_of: str | None = None,
         request_fingerprint: str | None = None,
+        action_digest: str | None = None,
         workspace_id: str | None = None,
         department_scope: list[str] | None = None,
         secure: bool = False,
         secure_purpose: str | None = None,
     ) -> HITLRequest:
-        if type == HITLType.APPROVAL and not (
-            verb and requested_by and request_fingerprint
-        ):
+        if type == HITLType.APPROVAL and not (verb and requested_by and request_fingerprint):
             raise ValueError("approval requests must be action- and requester-bound")
         # SEC-181: a secure QUESTION must carry its bounded purpose label (the
         # answer route seals the answer under it); a purpose without the secure
@@ -216,15 +137,14 @@ class HITLManager:
             requested_by=requested_by,
             requested_on_behalf_of=requested_on_behalf_of,
             request_fingerprint=request_fingerprint,
+            action_digest=action_digest,
             workspace_id=workspace_id,
             department_scope=(
                 None
                 if department_scope is None
                 else sorted({str(value) for value in department_scope if str(value)})
             ),
-            timeout_at=(
-                utcnow() + timedelta(seconds=timeout_seconds) if timeout_seconds else None
-            ),
+            timeout_at=(utcnow() + timedelta(seconds=timeout_seconds) if timeout_seconds else None),
             secure=bool(secure),
             secure_purpose=secure_purpose if secure else None,
         )
@@ -242,7 +162,7 @@ class HITLManager:
         or eligibility fault never voids it - the subject notice stands even
         when the fan-out below faults."""
         subject = req.assignee or req.requested_on_behalf_of or req.requested_by
-        event = "approval" if req.type == HITLType.APPROVAL else "escalation"
+        event = APPROVAL_EVENT if req.type == HITLType.APPROVAL else ESCALATION_EVENT
         try:
             from boltrig.kernel.channel_notify import (
                 enqueue_approval_fanout,
@@ -278,10 +198,10 @@ class HITLManager:
             "requested_by": request.requested_by if request else context.actor,
         }
         if request and request.secure:
-            # SEC-181 marker (present only when secure, so the pause event's
-            # shape is unchanged for every existing consumer): a secure-input
-            # affordance may be rendered.
-            event["secure"] = True
+            # SEC-181 marker + bounded non-secret purpose (present only when
+            # secure, so ordinary pause events retain their previous shape):
+            # consumers can render the correct one-time-input affordance.
+            event.update({"secure": True, "secure_purpose": request.secure_purpose})
         return event
 
     async def list_pending(self, tenant_id: str) -> list[HITLRequest]:
@@ -296,6 +216,10 @@ class HITLManager:
             # expired on the spot and refuses the answer with a typed 409 - the
             # human's decision arrives too late to authorise anything.
             await self._store.expire_hitl(tenant_id, request_id)
+            if req.verb == "control.ai_key.set":
+                await self._store.invalidate_ai_key_proposal_for_approval(
+                    tenant_id, request_id, "expired", utcnow()
+                )
             raise HITLStateConflict(
                 f"HITL request '{request_id}' has timed out and cannot be answered"
             )
@@ -312,6 +236,10 @@ class HITLManager:
         if answered is None:
             raise HITLStateConflict(
                 f"HITL request '{request_id}' is not pending and cannot be answered"
+            )
+        if answered.verb == "control.ai_key.set" and decision.strip().lower() not in _APPROVING:
+            await self._store.invalidate_ai_key_proposal_for_approval(
+                tenant_id, request_id, "rejected", utcnow()
             )
         await self._fire_resume(tenant_id, request_id)
         return resp
@@ -392,8 +320,6 @@ class HITLManager:
         another. dispatch always raises the gate's APPROVAL WITH a verb, so this is
         safe for every legitimate flow."""
         return (
-            await self.consume_approved_by(
-                tenant_id, request_id, verb, request_fingerprint
-            )
+            await self.consume_approved_by(tenant_id, request_id, verb, request_fingerprint)
             is not None
         )

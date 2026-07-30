@@ -1,33 +1,45 @@
 """In-memory Store implementation.
 
-Used by tests and single-process dev. It is the reference implementation of the
-Store contract: a Postgres-backed store must behave identically. Tenant scoping
-is enforced on every method (keys are ``(tenant_id, id)`` tuples).
+Used by tests and dev as the reference Store; PostgreSQL must behave identically.
+Tenant scoping is enforced on every method (keys are ``(tenant_id, id)`` tuples).
 """
-
 from __future__ import annotations
-
 from dataclasses import replace
 from datetime import datetime, timedelta
+from threading import Lock
 
 from .channels import ChannelStoreMem
 from .channel_dedup import ChannelDedupStoreMem
 from .channel_outbox import ChannelOutboxStoreMem
 from .budget_policy import BudgetPolicyMem
+from .budget_usage import BudgetUsageMem
 from .capabilities import CapabilityStoreMem
 from .guarded_writes import GuardedWritesMem
 from .idempotency import IdempotencyStoreMem
 from .observability_reads import ObservabilityReadsMem
+from .password_resets import PasswordResetStoreMem
+from .permanent_fleet import PermanentFleetStoreMem
+from .birth_profiles import BirthProfileStoreMem
+from .background_jobs import BackgroundJobStoreMem
 from .sealing import seal_ref, unseal_ref
 from .work_items import WorkItemReadsMem
+from .workflow_triggers import WorkflowTriggerStoreMem
+from .workflow_schedules import WorkflowScheduleStoreMem
+from .authored_definitions_memory import AuthoredDefinitionStoreMem
+from .eval_cases import EvalCaseStoreMem
+from .credential_references import CredentialReferencePresenceMem
+from .ai_key_proposals import AiKeyProposalStoreMem
+from .mcp_lifecycle import McpLifecycleStoreMem
 from boltrig.models import (
-    AdapterRecord,
     AgentCapability,
     AuditEvent,
     AuditRollupAnchor,
     Budget,
+    BudgetWindowRef,
     Channel,
     ChannelBinding,
+    ChannelGatewayLease,
+    ChannelGatewayStatus,
     ChannelOutboxMessage,
     ChannelPairing,
     ConfigRevision,
@@ -42,6 +54,8 @@ from boltrig.models import (
     NotificationPref,
     PersonalAccessToken,
     PersonalAgent,
+    PermanentFleetObservation,
+    BirthProfileReceipt,
     HITLRequest,
     HITLResponse,
     HITLStatus,
@@ -50,13 +64,11 @@ from boltrig.models import (
     MemoryIngestion,
     MemoryProjectionStatus,
     ModelEndpoint,
-    Noun,
     AI_CONFIG_LEVELS,
     AiConfig,
     Organisation,
     OrgMember,
     SecurityEvent,
-    Skill,
     TenantPermissions,
     TwoFactorChallenge,
     User,
@@ -64,8 +76,6 @@ from boltrig.models import (
     UserSession,
     UserSetting,
     UserTotp,
-    Verb,
-    VerbBinding,
     WORKSPACE_ROLES,
     Workspace,
     WorkspaceMember,
@@ -83,26 +93,33 @@ def _norm_email_key(value) -> str:
     normalisation ([2026] VJS-COUNTY 11)."""
     return value.strip().lower() if isinstance(value, str) else ""
 
-
-class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
+class InMemoryStore(BudgetPolicyMem, BudgetUsageMem, WorkItemReadsMem, IdempotencyStoreMem,
                     GuardedWritesMem, ChannelStoreMem, CapabilityStoreMem,
+                    PermanentFleetStoreMem, BirthProfileStoreMem,
+                    BackgroundJobStoreMem,
                     ObservabilityReadsMem, ChannelDedupStoreMem,
-                    ChannelOutboxStoreMem):
-    """In-memory Store (offline + test). Domain methods live in partial mixins
-    (e.g. ``ChannelStoreMem``), composed here for one public method surface."""
+                    ChannelOutboxStoreMem, PasswordResetStoreMem,
+                    WorkflowTriggerStoreMem, WorkflowScheduleStoreMem,
+                    AuthoredDefinitionStoreMem,
+                    EvalCaseStoreMem, CredentialReferencePresenceMem,
+                    AiKeyProposalStoreMem, McpLifecycleStoreMem):
+    """In-memory Store composed from domain partial mixins for offline use and tests."""
 
     def __init__(self) -> None:
-        self._nouns: dict[tuple[str, str], Noun] = {}
-        self._verbs: dict[tuple[str, str], Verb] = {}
-        self._bindings: dict[tuple[str, str], VerbBinding] = {}
+        self._init_authored_definition_state()
+        self._init_ai_key_proposal_state()
+        self._init_background_job_state()
+        self._init_mcp_lifecycle_state()
+        self._init_execution_state()
+        self._init_account_state()
+
+    def _init_execution_state(self) -> None:
         self._perms: dict[str, TenantPermissions] = {}
-        self._adapters: dict[tuple[str, str], AdapterRecord] = {}
-        self._skills: dict[tuple[str, str, str], Skill] = {}
         self._caps: dict[tuple[str, str], AgentCapability] = {}
         self._workflows: dict[tuple[str, str, str], WorkflowDefinition] = {}
-        # Design brief 22.1: workflow run records (observability-only). Keyed by
-        # (tenant_id, run_id) - one row per execute. Read aggregated by
-        # workflow_run_stats to feed the automations home cards with REAL stats.
+        # Design brief 22.1: workflow runs keyed by (tenant_id, run_id), one row per execute.
+        # Read aggregated by workflow_run_stats to feed the automations home
+        # cards with real persisted statistics.
         self._workflow_runs: dict[tuple[str, str], tuple[str, str, datetime]] = {}
         self._endpoints: dict[tuple[str, str], ModelEndpoint] = {}
         self._work: dict[tuple[str, str], WorkItem] = {}
@@ -115,14 +132,29 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
         self._security: dict[str, list[SecurityEvent]] = {}
         self._anchors: dict[str, list[AuditRollupAnchor]] = {}
         self._budgets: dict[tuple[str, str], Budget] = {}
+        self._budget_usage: dict[
+            tuple[str, str, str], tuple[BudgetWindowRef, int, int]
+        ] = {}
         self._idem: dict[tuple[str, str], dict] = {}
         self._creds: dict[tuple[str, str], dict] = {}
         self._convs: dict[tuple[str, str], Conversation] = {}
+        # Restore and hard purge share this lifecycle lock. InMemoryStore is used
+        # from TestClient and retention threads as well as one asyncio loop, so a
+        # threading lock (with no await while held) is the correct primitive.
+        self._conversation_lifecycle_lock = Lock()
         self._messages: dict[str, list[ConversationMessage]] = {}
         # Append-only derived compaction summaries, keyed by conversation id.
         self._summaries: dict[str, list[ConversationSummary]] = {}
         self._revisions: list[ConfigRevision] = []
         self._rev_seq = 0
+
+    def _init_account_state(self) -> None:
+        self._permanent_fleet_observations: dict[
+            tuple[str, str], PermanentFleetObservation
+        ] = {}
+        self._birth_profile_receipts: dict[
+            tuple[str, str, str], BirthProfileReceipt
+        ] = {}
         self._eval_cases: dict[tuple[str, str], EvalCase] = {}
         self._eval_runs: list[EvalRun] = []
         self._notif: dict[tuple[str, str], NotificationPref] = {}
@@ -154,6 +186,12 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
         self._channels: dict[str, Channel] = {}
         self._chan_bindings: dict[tuple[str, str], ChannelBinding] = {}
         self._chan_pairings: dict[tuple[str, str], ChannelPairing] = {}
+        self._chan_gateway_status: dict[
+            tuple[str, str], ChannelGatewayStatus
+        ] = {}
+        self._chan_gateway_leases: dict[
+            tuple[str, str], ChannelGatewayLease
+        ] = {}
         # Phase 2 durability: replay-dedup markers keyed (tenant, channel,
         # delivery) -> expiry, and the socket-class outbound hand-off.
         self._chan_deliveries: dict[tuple[str, str, str], datetime] = {}
@@ -188,40 +226,6 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
         # key. Tenant stays the isolation key.
         self._ai_configs: dict[tuple[str, str, str], AiConfig] = {}
 
-    # --- registry ---
-    async def get_noun(self, tenant_id, noun_id):
-        return self._nouns.get((tenant_id, noun_id))
-
-    async def get_verb(self, tenant_id, verb_id):
-        return self._verbs.get((tenant_id, verb_id))
-
-    async def list_verbs(self, tenant_id, noun_id=None):
-        out = [v for (t, _), v in self._verbs.items() if t == tenant_id]
-        if noun_id is not None:
-            out = [v for v in out if v.noun_id == noun_id]
-        return out
-
-    async def get_binding(self, tenant_id, verb_id):
-        return self._bindings.get((tenant_id, verb_id))
-
-    async def upsert_noun(self, noun):
-        self._nouns[(noun.tenant_id, noun.id)] = noun
-
-    async def upsert_verb(self, verb):
-        self._verbs[(verb.tenant_id, verb.id)] = verb
-
-    async def upsert_binding(self, binding):
-        self._bindings[(binding.tenant_id, binding.verb_id)] = binding
-
-    async def delete_noun(self, tenant_id, noun_id):
-        self._nouns.pop((tenant_id, noun_id), None)
-
-    async def delete_verb(self, tenant_id, verb_id):
-        self._verbs.pop((tenant_id, verb_id), None)
-
-    async def delete_binding(self, tenant_id, verb_id):
-        self._bindings.pop((tenant_id, verb_id), None)
-
     # --- permissions ---
     async def get_tenant_permissions(self, tenant_id):
         return self._perms.get(tenant_id, TenantPermissions(tenant_id, EMPTY_GRANTS))
@@ -242,26 +246,7 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
 
     async def delete_adapter(self, tenant_id, adapter_id):
         self._adapters.pop((tenant_id, adapter_id), None)
-
-    async def upsert_skill(self, skill):
-        # Versioned like Postgres (PK tenant+id+version): every version is kept.
-        self._skills[(skill.tenant_id, skill.id, skill.version)] = skill
-
-    async def get_skill(self, tenant_id, skill_id):
-        # Latest version (mirrors the PG ORDER BY version DESC LIMIT 1).
-        versions = [
-            s for (t, i, _), s in self._skills.items() if t == tenant_id and i == skill_id
-        ]
-        return max(versions, key=lambda s: s.version, default=None)
-
-    async def list_skills(self, tenant_id):
-        # Latest version per skill id for the tenant (the shelf), mirroring the
-        # PG DISTINCT ON (id) ... ORDER BY id, version DESC.
-        latest: dict[str, Skill] = {}
-        for (t, sid, _), s in self._skills.items():
-            if t == tenant_id and (sid not in latest or s.version > latest[sid].version):
-                latest[sid] = s
-        return list(latest.values())
+        self._delete_mcp_lifecycle_state(tenant_id, adapter_id)
 
     async def upsert_workflow(self, wf):
         # Versioned like Postgres (PK tenant+id+version): every version is kept.
@@ -317,6 +302,11 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
         ]
 
     async def upsert_model_endpoint(self, ep):
+        existing = self._endpoints.get((ep.tenant_id, ep.id))
+        if existing is not None:
+            # Replacement edits preserve withdrawal. Only the explicit
+            # lifecycle seam may reactivate an endpoint.
+            ep.is_active = existing.is_active
         self._endpoints[(ep.tenant_id, ep.id)] = ep
 
     async def get_model_endpoint(self, tenant_id, ep_id):
@@ -324,6 +314,13 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
 
     async def list_model_endpoints(self, tenant_id):
         return [ep for (t, _), ep in self._endpoints.items() if t == tenant_id]
+
+    async def set_model_endpoint_active(self, tenant_id, ep_id, active):
+        endpoint = self._endpoints.get((tenant_id, ep_id))
+        if endpoint is None:
+            return None
+        endpoint.is_active = bool(active)
+        return endpoint
 
     # --- work items ---
     # Store a COPY, and hand back copies on read (see work_items._detached). The
@@ -450,6 +447,23 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
         pending = HITLStatus.PENDING
         return [r for (t, _), r in self._hitl.items() if t == tenant_id and r.status == pending]
 
+    async def list_hitl_requests_for_requester(
+        self, tenant_id, requested_by, statuses, *, limit=20
+    ):
+        allowed = {
+            status.value if isinstance(status, HITLStatus) else str(status)
+            for status in statuses
+        }
+        rows = [
+            request
+            for (tenant, _), request in self._hitl.items()
+            if tenant == tenant_id
+            and request.requested_by == requested_by
+            and request.status.value in allowed
+        ]
+        bounded = max(0, min(int(limit), 100))
+        return rows[-bounded:] if bounded else []
+
     async def answer_hitl(self, resp):
         req = self._hitl.get((resp.tenant_id, resp.request_id))
         if req is None or req.status != HITLStatus.PENDING:
@@ -541,68 +555,6 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
         ]
         return rows[-limit:]
 
-    # --- budgets ---
-    async def get_budget(self, tenant_id, scope_id):
-        return self._budgets.get((tenant_id, scope_id))
-
-    def set_budget(self, budget: Budget) -> None:
-        """Legacy fixture/bootstrap setter; governed callers use the async policy API."""
-        self._budgets[(budget.tenant_id, budget.id)] = budget
-
-    async def list_budgets(self, tenant_id):
-        return [b for (t, _), b in self._budgets.items() if t == tenant_id]
-
-    async def reconcile_budget(self, tenant_id, scope_id, delta_tokens, delta_micros):
-        """Post-run cost true-up (FR-COST-03): apply a SIGNED delta to the scope,
-        each accumulator floored at 0. No hard-stop gate (this corrects a call that
-        already ran). No budget row for the scope -> no-op. The read-modify-write
-        has no await between steps, so it is atomic under cooperative scheduling
-        (the same rule the reserve applies)."""
-        b = self._budgets.get((tenant_id, scope_id))
-        if b is None:
-            return  # no budget configured for this scope -> unmetered
-        new_tokens = max(0, b.spent_tokens + delta_tokens)
-        new_micros = max(0, b.spent_micros + delta_micros)
-        self._budgets[(tenant_id, scope_id)] = replace(
-            b, spent_tokens=new_tokens, spent_micros=new_micros
-        )
-
-    async def reserve_budgets_atomic(self, tenant_id, reservations):
-        """Transactional multi-scope reserve (audit H4, Phase 6, FR-COST-05):
-        all-or-nothing debit across every scope in ``reservations``. Compute every
-        debit first; if ANY hard-stop scope lacks headroom, apply NONE and return
-        False; otherwise apply them all and return True. A scope with no budget row
-        is a no-op (unmetered). The whole compute-then-apply
-        has no await between steps, so it is atomic under cooperative scheduling - two
-        concurrent reserves can never interleave into a partial debit."""
-        # Aggregate per scope so a scope named twice is locked and debited once
-        # (its amounts summed), matching the postgres FOR UPDATE that locks a row
-        # once. Negative amounts are floored to 0 (a refund is reconcile's job).
-        agg: dict[str, tuple[int, int]] = {}
-        for scope_id, tokens, micros in reservations:
-            t, m = agg.get(scope_id, (0, 0))
-            agg[scope_id] = (t + max(0, tokens), m + max(0, micros))
-        # Phase 1: compute every debit + hard-stop check; touch nothing yet.
-        planned: list[tuple[str, Budget, int, int]] = []
-        for scope_id, (tokens, micros) in agg.items():
-            b = self._budgets.get((tenant_id, scope_id))
-            if b is None:
-                continue  # unmetered scope -> skip (no-op)
-            new_tokens = b.spent_tokens + tokens
-            new_micros = b.spent_micros + micros
-            over = (b.token_limit is not None and new_tokens > b.token_limit) or (
-                b.cost_limit_micros is not None and new_micros > b.cost_limit_micros
-            )
-            if over and b.hard_stop:
-                return False  # all-or-nothing: nothing has been applied
-            planned.append((scope_id, b, new_tokens, new_micros))
-        # Phase 2: apply every debit (no await above, so this is atomic).
-        for scope_id, b, new_tokens, new_micros in planned:
-            self._budgets[(tenant_id, scope_id)] = replace(
-                b, spent_tokens=new_tokens, spent_micros=new_micros
-            )
-        return True
-
     # --- credential references (sealed at rest, SEC-04 - see store/sealing.py) ---
     async def get_credential_ref(self, tenant_id, cred_id):
         ref = self._creds.get((tenant_id, cred_id))
@@ -689,6 +641,23 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
     async def update_conversation(self, conv):
         self._convs[(conv.tenant_id, conv.id)] = conv
 
+    async def restore_closed_conversation(
+        self, tenant_id, conv_id, user_id, restored_at
+    ):
+        # One critical section decides existence, ownership, and CLOSED -> ACTIVE.
+        # `restore_closed_conversation` never upserts; a concurrent purge stays final.
+        with self._conversation_lifecycle_lock:
+            conv = self._convs.get((tenant_id, conv_id))
+            if conv is None:
+                return False, False, False
+            if conv.user_id != user_id:
+                return True, False, False
+            if conv.status != ConversationStatus.CLOSED:
+                return True, True, False
+            conv.status = ConversationStatus.ACTIVE
+            conv.updated_at = restored_at
+            return True, True, True
+
     async def add_message(self, message):
         # Insert-if-absent on (tenant_id, id) (mirrors the PG ON CONFLICT DO
         # NOTHING): a replayed message id is a no-op, never a duplicate row.
@@ -725,18 +694,19 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
         # M11 / SEC-74: hard-erase CLOSED conversations past the cutoff plus their
         # messages AND their derived summaries; audit rows are elsewhere and never
         # touched. Tenant-scoped.
-        doomed = [
-            c
-            for (t, _), c in self._convs.items()
-            if t == tenant_id
-            and c.status == ConversationStatus.CLOSED
-            and c.updated_at <= older_than
-        ]
-        for conv in doomed:
-            self._convs.pop((conv.tenant_id, conv.id), None)
-            self._messages.pop(conv.id, None)
-            self._summaries.pop(conv.id, None)
-        return len(doomed)
+        with self._conversation_lifecycle_lock:
+            doomed = [
+                c
+                for (t, _), c in self._convs.items()
+                if t == tenant_id
+                and c.status == ConversationStatus.CLOSED
+                and c.updated_at <= older_than
+            ]
+            for conv in doomed:
+                self._convs.pop((conv.tenant_id, conv.id), None)
+                self._messages.pop(conv.id, None)
+                self._summaries.pop(conv.id, None)
+            return len(doomed)
 
     # --- Round Three: config revisions ---
     async def add_config_revision(self, rev):
@@ -756,25 +726,6 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
         return next(
             (r for r in self._revisions if r.tenant_id == tenant_id and r.id == rev_id), None
         )
-
-    # --- eval ---
-    async def upsert_eval_case(self, case):
-        self._eval_cases[(case.tenant_id, case.id)] = case
-
-    async def get_eval_case(self, tenant_id, case_id):
-        return self._eval_cases.get((tenant_id, case_id))
-
-    async def list_eval_cases(self, tenant_id):
-        return [c for (t, _), c in self._eval_cases.items() if t == tenant_id]
-
-    async def add_eval_run(self, run):
-        self._eval_runs.append(run)
-
-    async def list_eval_runs(self, tenant_id, case_id=None):
-        out = [r for r in self._eval_runs if r.tenant_id == tenant_id]
-        out = [r for r in out if case_id is None or r.case_id == case_id]
-        # newest-first, matching Postgres ORDER BY created_at DESC.
-        return sorted(out, key=lambda r: r.created_at, reverse=True)
 
     # --- notifications ---
     async def upsert_notification_pref(self, pref):
@@ -846,7 +797,13 @@ class InMemoryStore(BudgetPolicyMem, WorkItemReadsMem, IdempotencyStoreMem,
         return sorted(out, key=lambda e: e.created_at, reverse=True)[:limit]
 
     async def upsert_memory_projection_status(self, status):
-        self._mem_projection[(status.tenant_id, status.id)] = status
+        key = (status.tenant_id, status.id)
+        previous = self._mem_projection.get(key)
+        self._mem_projection[key] = (
+            replace(status, created_at=previous.created_at)
+            if previous is not None
+            else status
+        )
 
     async def list_memory_projection_statuses(self, tenant_id, fact_id=None, limit=50):
         out = [

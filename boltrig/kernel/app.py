@@ -9,8 +9,6 @@ the request body.
 
 from __future__ import annotations
 
-import asyncio
-import inspect
 import json
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -65,16 +63,21 @@ class Principal:
     credential_kind: str = "machine"
 
     def context(
-        self, *, run_id=None, parent_run_id=None, depth=0, skills=(),
-        extra=None, trusted_extra=None,
+        self,
+        *,
+        run_id=None,
+        parent_run_id=None,
+        depth=0,
+        skills=(),
+        extra=None,
+        trusted_extra=None,
     ):
         # ``extra`` is caller-supplied (a request body's context): reserved
         # kernel-trusted keys are dropped from it. ``trusted_extra`` is the
         # server-side stamping channel (memory/knowledge scope derivers) and is
         # merged verbatim, then the resolver-owned role/scope win last.
         stamped_extra = {
-            **{k: v for k, v in dict(extra or {}).items()
-               if k not in RESERVED_CONTEXT_KEYS},
+            **{k: v for k, v in dict(extra or {}).items() if k not in RESERVED_CONTEXT_KEYS},
             **dict(trusted_extra or {}),
             "principal_role": self.role,
             "principal_scope": dict(self.scope),
@@ -109,6 +112,7 @@ RESERVED_CONTEXT_KEYS = frozenset(
         "principal_role",
         "principal_scope",
         "approved_by",
+        "approval_request_id",
         "approval_request_fingerprint",
         "approval_resource_context",
         "knowledge_scopes",
@@ -300,15 +304,11 @@ def create_app(
         try:
             yield
         finally:
-            store = getattr(getattr(app.state, "kernel", None), "store", None)
-            close = getattr(store, "close", None)
-            if close is not None:  # PostgresStore: drain the pool on shutdown
-                result = close()
-                if inspect.isawaitable(result):
-                    await result
+            active_kernel = getattr(app.state, "kernel", None)
+            if active_kernel is not None:
+                await active_kernel.aclose()
 
     app = FastAPI(title="Boltrig Kernel", version="0.1.0", lifespan=lifespan)
-    readiness_service_lock = asyncio.Lock()
     # Edge/web hardening (Batch 1 WEB-02/03/05/06, RES-01): security headers, CORS
     # allowlist, Host validation, request-body cap. Additive middleware; no route
     # or kernel change.
@@ -362,34 +362,9 @@ def create_app(
         set_current_tenant(p.tenant_id)
         return p
 
-    @app.get("/healthz")
-    async def healthz(k: Kernel = Depends(_get_kernel)) -> dict:
-        health = k.loader.health_snapshot()  # liveness: cached posture, no adapter I/O awaited
-        return {"status": "ok", "adapters": {f"{t}/{a}": h for (t, a), h in health.items()}}
+    from .health_routes import register_health_routes
 
-    @app.get("/readyz")
-    async def readyz(request: Request, k: Kernel = Depends(_get_kernel)) -> JSONResponse:
-        """Deep deployment readiness; fail closed without requiring user auth."""
-        from boltrig.api.readiness import ReadinessService
-
-        service = getattr(request.app.state, "readiness_service", None)
-        if service is None:
-            async with readiness_service_lock:
-                service = getattr(request.app.state, "readiness_service", None)
-                if service is None:
-                    platform_state = getattr(request.app.state, "platform", {}) or {}
-                    service = platform_state.get("readiness")
-                    if service is None:
-                        service = ReadinessService(
-                            k,
-                            status_provider=platform_state.get("status"),
-                        )
-                    request.app.state.readiness_service = service
-        report = await service.check()
-        return JSONResponse(
-            report,
-            status_code=200 if report.get("status") == "ready" else 503,
-        )
+    register_health_routes(app, get_kernel=_get_kernel)
 
     @app.post("/v1/invoke")
     async def invoke(
@@ -401,9 +376,7 @@ def create_app(
         from .run_access import foreign_run_asserted
 
         if await foreign_run_asserted(k.store, p, body.context):
-            return JSONResponse(
-                {"status": "denied", "reason": "not your run"}, status_code=403
-            )
+            return JSONResponse({"status": "denied", "reason": "not your run"}, status_code=403)
         ctx = p.context(
             run_id=body.context.get("run_id"),
             parent_run_id=body.context.get("parent_run_id"),
@@ -428,6 +401,16 @@ def create_app(
         except DegradedMode as e:
             return JSONResponse({"status": "degraded", "output": e.output}, status_code=503)
         # any other BoltrigError -> the central exception handler (canonical envelope)
+
+    @app.get("/v1/invoke/approvals/{request_id}")
+    async def invoke_approval(
+        request_id: str,
+        k: Kernel = Depends(_get_kernel),
+        p: Principal = Depends(principal),
+    ) -> dict[str, str]:
+        from .invoke_finalization import invoke_approval_state
+
+        return await invoke_approval_state(k, p, request_id)
 
     @app.post("/v1/mcp")
     async def mcp(body: dict, request: Request, k: Kernel = Depends(_get_kernel)) -> JSONResponse:
@@ -461,11 +444,19 @@ def create_app(
         # The caller's role-resolved grants ride along as the ceiling every chat
         # spawn intersects ([2026] VJS-COUNTY 1) - same resolution as any verb call.
         gen = chat_svc.handle_turn(
-            tenant_id=p.tenant_id, user_id=p.subject, role=p.role, grants=p.grants,
-            workspace_id=p.active_workspace_id, scope=p.scope,
-            message=body.message, conversation_id=body.conversation_id,
-            attachments=body.attachments, on_behalf_bearer=body.on_behalf_bearer,
-            idempotency_key=body.idempotency_key, origin=body.origin,
+            tenant_id=p.tenant_id,
+            user_id=p.subject,
+            role=p.role,
+            grants=p.grants,
+            workspace_id=p.active_workspace_id,
+            scope=p.scope,
+            message=body.message,
+            conversation_id=body.conversation_id,
+            attachments=body.attachments,
+            on_behalf_bearer=body.on_behalf_bearer,
+            idempotency_key=body.idempotency_key,
+            origin=body.origin,
+            model_profile_id=body.model_profile_id,
         )
         # RBAC / access errors happen before the first event and propagate to the
         # central exception handler (canonical envelope) - the stream hasn't begun.
@@ -550,33 +541,9 @@ def create_app(
             "next_offset": next_offset,
         }
 
-    @app.get("/v1/conversations/{conversation_id}")
-    async def conversation(
-        conversation_id: str, request: Request, p: Principal = Depends(principal)
-    ):
-        chat_svc = getattr(request.app.state, "chat", None)
-        if chat_svc is None:
-            return JSONResponse({"error": "chat_unavailable"}, status_code=503)
-        # ConversationForbidden (403, SEC-25) propagates to the central handler.
-        messages = await chat_svc.get_messages(p.tenant_id, p.subject, p.role, conversation_id)
-        if messages is None:
-            return JSONResponse({"error": "not_found"}, status_code=404)
-        return {
-            "messages": [
-                {
-                    "id": m.id,
-                    "role": m.role.value,
-                    "content": m.content,
-                    "run_id": m.run_id,
-                    "hitl_request_id": m.hitl_request_id,
-                    "events": m.events,
-                    "attachments": m.attachments,
-                    "superseded_by": m.superseded_by,
-                    "created_at": m.created_at.isoformat(),
-                }
-                for m in messages
-            ]
-        }
+    from .conversation_live_routes import register_worker_query_routes
+
+    register_worker_query_routes(app, principal_dep=principal, get_kernel=_get_kernel)
 
     @app.get("/v1/capabilities")
     async def capabilities(
@@ -610,9 +577,7 @@ def create_app(
         k: Kernel = Depends(_get_kernel),
         p: Principal = Depends(principal),
     ) -> dict:
-        return await respond_to_hitl(
-            k, p, request_id, body.decision, body.notes
-        )
+        return await respond_to_hitl(k, p, request_id, body.decision, body.notes)
 
     @app.get("/v1/work")
     async def work(
@@ -771,9 +736,7 @@ def create_app(
             return StreamingResponse(snapshot(), media_type="text/event-stream")
 
         async def live():  # backlog (re-attach) then live until the run closes
-            async for event in k.events.subscribe(
-                p.tenant_id, run_id, replay=True, since=cursor
-            ):
+            async for event in k.events.subscribe(p.tenant_id, run_id, replay=True, since=cursor):
                 yield f"data: {json.dumps(event)}\n\n"
 
         return StreamingResponse(live(), media_type="text/event-stream")

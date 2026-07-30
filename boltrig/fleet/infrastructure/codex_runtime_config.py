@@ -17,13 +17,13 @@ from .codex_runtime_config_argv import (
 )
 from .codex_runtime_config_toml import (
     CODEX_MODEL_PROVIDER_ID,
-    CODEX_RUNTIME_DISABLED_FEATURES,
     CODEX_RUNTIME_PROVIDER_CONTRACT_DIGEST,
     _render_codex_runtime_config,
     _runtime_config_skill_entries,
     canonical_skill_entries_digest,
     runtime_config_matches_receipt,
 )
+from .codex_native_runtime_config import NativeSubagentLimits, native_receipt_arguments, native_render_arguments, require_native_subagent_limits
 from .codex_runtime_config_policy import (
     CodexRuntimeConfigError,
     validate_cell_id,
@@ -69,9 +69,7 @@ class CodexRuntimeSurfaceAttestation:
         validate_digest("surface inventory digest", self.inventory_digest)
 
 
-def _surface_attestations(
-    value: object,
-) -> tuple[CodexRuntimeSurfaceAttestation, ...]:
+def _surface_attestations(value: object) -> tuple[CodexRuntimeSurfaceAttestation, ...]:
     if type(value) is not tuple or any(
         type(item) is not CodexRuntimeSurfaceAttestation for item in value
     ):
@@ -102,6 +100,7 @@ class CodexRuntimeConfigRequest:
     proxy_port: int
     skill_config_fragment: bytes
     skill_inventory_digest: str
+    native_subagents: NativeSubagentLimits = NativeSubagentLimits()
     surface_attestations: tuple[CodexRuntimeSurfaceAttestation, ...] = ()
     # The kernel-tools lane ONLY: the kernel's MCP face and the env var NAME its
     # run-scoped bearer travels in. Both None (the default) is the read-only
@@ -132,6 +131,7 @@ def _validate_request(request: CodexRuntimeConfigRequest) -> None:
     if type(request.proxy_port) is not int or not 1 <= request.proxy_port <= 65535:
         raise CodexRuntimeConfigError("proxy port must be between 1 and 65535")
     validate_digest("skill inventory digest", request.skill_inventory_digest)
+    require_native_subagent_limits(request.native_subagents)
     _surface_attestations(request.surface_attestations)
     validate_optional_mcp_server(request.mcp_server_url, request.mcp_bearer_env_var)
 
@@ -154,6 +154,7 @@ def _snapshot_request(
         proxy_port=request.proxy_port,
         skill_config_fragment=request.skill_config_fragment,
         skill_inventory_digest=request.skill_inventory_digest,
+        native_subagents=request.native_subagents,
         surface_attestations=request.surface_attestations,
         mcp_server_url=request.mcp_server_url,
         mcp_bearer_env_var=request.mcp_bearer_env_var,
@@ -178,6 +179,7 @@ class CodexRuntimeConfigReceipt:
     skill_entries_digest: str
     skill_inventory_digest: str
     surface_attestations: tuple[CodexRuntimeSurfaceAttestation, ...]
+    native_subagents: NativeSubagentLimits = NativeSubagentLimits()
     # The kernel-tools lane's MCP pair (None on the read-only lane). Carried on
     # the receipt so the re-render comparison binds them: a config whose MCP
     # server or bearer env var was rewritten cannot match its receipt.
@@ -209,7 +211,7 @@ class CodexRuntimeConfigReceipt:
             helper_path=self.helper_path,
             socket_name=self.socket_name,
             proxy_port=self.proxy_port,
-            features=CODEX_RUNTIME_DISABLED_FEATURES,
+            **native_render_arguments(self.native_subagents),
             mcp_server_url=self.mcp_server_url,
             mcp_bearer_env_var=self.mcp_bearer_env_var,
         )
@@ -253,6 +255,7 @@ def _validate_receipt(receipt: CodexRuntimeConfigReceipt) -> None:
     validate_digest("model auth helper digest", receipt.helper_sha256)
     validate_digest("skill entries digest", receipt.skill_entries_digest)
     validate_digest("skill inventory digest", receipt.skill_inventory_digest)
+    require_native_subagent_limits(receipt.native_subagents, receipt=True)
     validate_optional_mcp_server(receipt.mcp_server_url, receipt.mcp_bearer_env_var)
     if receipt.surface_attestations != _surface_attestations(receipt.surface_attestations):
         raise CodexRuntimeConfigError("receipt surface attestations are not canonical")
@@ -311,6 +314,7 @@ class ComposedCodexRuntimeConfig:
             provider_id=self.receipt.provider_id,
             skill_entries=skill_entries,
             skill_entries_digest=self.receipt.skill_entries_digest,
+            **native_receipt_arguments(self.receipt.native_subagents),
             mcp_server_url=self.receipt.mcp_server_url,
             mcp_bearer_env_var=self.receipt.mcp_bearer_env_var,
         ):
@@ -346,7 +350,7 @@ def compose_codex_runtime_config(
         helper_path=snapshot.helper_path.as_posix(),
         socket_name=snapshot.socket_name,
         proxy_port=snapshot.proxy_port,
-        features=CODEX_RUNTIME_DISABLED_FEATURES,
+        **native_render_arguments(snapshot.native_subagents),
         skill_entries=entries,
         mcp_server_url=snapshot.mcp_server_url,
         mcp_bearer_env_var=snapshot.mcp_bearer_env_var,
@@ -370,6 +374,7 @@ def compose_codex_runtime_config(
         skill_entries_digest=canonical_skill_entries_digest(entries),
         skill_inventory_digest=snapshot.skill_inventory_digest,
         surface_attestations=attestations,
+        native_subagents=snapshot.native_subagents,
         mcp_server_url=snapshot.mcp_server_url,
         mcp_bearer_env_var=snapshot.mcp_bearer_env_var,
     )

@@ -91,6 +91,19 @@ jobs:
         if: always()
         run: rm -f "$HOME/.npmrc"
 
+  worker-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+      - name: Worker quality gate (lock, audit, types, contracts, web bundle)
+        run: make worker-quality
+
   site-build-test-lint:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -140,6 +153,39 @@ jobs:
         if: always()
         run: rm -f "$HOME/.npmrc"
 
+  worker-e2e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install kernel (in-memory store, offline)
+        run: python -m pip install --require-hashes -r requirements-lock.txt
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+      # worker-e2e depends on ui-install as well as worker-install, because the
+      # Playwright binaries and the harness live under ui/. apps/worker resolves
+      # the SDK with `file:../../sdks/web` and needs no registry at all, but ui/
+      # takes the published @wlilley93 package, so this job needs the same token
+      # step ui-e2e has. Without it the run dies at ERR_PNPM_FETCH_401 before a
+      # single test executes - which is exactly how it failed on first landing.
+      - name: Authenticate pnpm to GitHub Packages
+        env:
+          GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          umask 077
+          printf '//npm.pkg.github.com/:_authToken=%s\n' "$GH_PACKAGES_TOKEN" >> "$HOME/.npmrc"
+      - name: Worker e2e and accessibility (built artifact, explicit preview bind)
+        run: make worker-e2e PY=python PLAYWRIGHT_INSTALL_ARGS="--with-deps chromium"
+      - name: Remove the registry token
+        if: always()
+        run: rm -f "$HOME/.npmrc"
+
   compose-validate:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -166,14 +212,18 @@ jobs:
     needs:
       - test-and-gate
       - ui-build
+      - worker-build
       - site-build-test-lint
       - ui-e2e
+      - worker-e2e
       - compose-validate
     steps:
       - name: Require every quality component
         run: |
           test "${{ needs.test-and-gate.result }}" = success
           test "${{ needs.ui-build.result }}" = success
+          test "${{ needs.worker-build.result }}" = success
           test "${{ needs.site-build-test-lint.result }}" = success
           test "${{ needs.ui-e2e.result }}" = success
+          test "${{ needs.worker-e2e.result }}" = success
           test "${{ needs.compose-validate.result }}" = success

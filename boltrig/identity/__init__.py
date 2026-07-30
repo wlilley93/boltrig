@@ -24,6 +24,14 @@ from .passwords import (
     verify_dummy,
     verify_password,
 )
+from .password_reset import (
+    RESET_TOKEN_TTL,
+    PasswordResetNotice,
+    PasswordResetNotifier,
+    deliver_password_reset,
+    generate_password_reset_token,
+    hash_password_reset_token,
+)
 from .rbac import DEFAULT_ROLE, ROLE_PRECEDENCE, grants_for_scope, resolve_role
 from .sessions import (
     CSRF_COOKIE,
@@ -75,6 +83,12 @@ __all__ = [
     "verify_password",
     "verify_dummy",
     "validate_password_strength",
+    "RESET_TOKEN_TTL",
+    "PasswordResetNotice",
+    "PasswordResetNotifier",
+    "deliver_password_reset",
+    "generate_password_reset_token",
+    "hash_password_reset_token",
     "generate_invite_token",
     "hash_invite_token",
     "new_session",

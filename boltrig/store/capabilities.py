@@ -13,6 +13,8 @@ read and is NEVER used on the routing path.
 apply uses: it soft-deactivates the manifest-sourced rows a redeployed manifest
 no longer declares, and it touches ONLY ``source='manifest'`` rows, so a governed
 ``source='control-plane'`` grant is never reconciled away.
+Governed profile edits use ``preserve_status=True`` so editing a retired row
+cannot reactivate it; only the explicit lifecycle seam does that.
 """
 
 from __future__ import annotations
@@ -23,7 +25,9 @@ from boltrig.models import AgentCapability
 
 
 class CapabilityStoreContract(Protocol):
-    async def upsert_capability(self, cap: AgentCapability) -> None: ...
+    async def upsert_capability(
+        self, cap: AgentCapability, *, preserve_status: bool = False
+    ) -> None: ...
     # Routing read: ACTIVE capabilities only (is_active = true).
     async def list_capabilities(self, tenant_id: str) -> list[AgentCapability]: ...
     # Admin/audit read: every capability, active or not. Never on the routing path.
@@ -34,13 +38,22 @@ class CapabilityStoreContract(Protocol):
     async def deactivate_absent_manifest_capabilities(
         self, tenant_id: str, declared_names: list[str]
     ) -> list[str]: ...
+    # Governed lifecycle seam: retain the row and all references while removing
+    # it from every active routing read.
+    async def set_capability_active(
+        self, tenant_id: str, name: str, active: bool
+    ) -> AgentCapability | None: ...
 
 
 class CapabilityStoreMem:
-    async def upsert_capability(self, cap):
-        # A fresh or re-declared capability is always active: upsert RESETS the
-        # flag (the memory mirror of the Postgres ON CONFLICT is_active=true).
-        cap.is_active = True
+    async def upsert_capability(self, cap, *, preserve_status=False):
+        existing = self._caps.get((cap.tenant_id, cap.name))
+        # Manifest re-declarations remain active by default. Governed authoring
+        # opts into preserving a retired row so an ordinary edit cannot smuggle
+        # it back into routing without the explicit restore verb.
+        cap.is_active = (
+            existing.is_active if preserve_status and existing is not None else True
+        )
         self._caps[(cap.tenant_id, cap.name)] = cap
 
     async def list_capabilities(self, tenant_id):
@@ -65,12 +78,19 @@ class CapabilityStoreMem:
                 deactivated.append(name)
         return sorted(deactivated)
 
+    async def set_capability_active(self, tenant_id, name, active):
+        cap = self._caps.get((tenant_id, name))
+        if cap is None:
+            return None
+        cap.is_active = bool(active)
+        return cap
+
 
 class CapabilityStorePG:
-    async def upsert_capability(self, c: AgentCapability):
-        # ON CONFLICT sets source to the INCOMING value and RESETS is_active=true:
-        # a manifest re-declaration reclaims ownership of a name and thereafter that
-        # name lives under declarative reconciliation (the tie-break).
+    async def upsert_capability(self, c: AgentCapability, *, preserve_status=False):
+        # By default ON CONFLICT sets source to the incoming value and resets
+        # is_active=true: a manifest re-declaration reclaims ownership of a name.
+        # Governed author edits opt into preserving the prior lifecycle state.
         await self._pool.execute(
             """INSERT INTO agent_capabilities (name, tenant_id, runtime, model_endpoint,
                                                supported_skills, max_depth, is_ephemeral,
@@ -80,9 +100,11 @@ class CapabilityStorePG:
                  runtime=EXCLUDED.runtime, model_endpoint=EXCLUDED.model_endpoint,
                  supported_skills=EXCLUDED.supported_skills, max_depth=EXCLUDED.max_depth,
                  is_ephemeral=EXCLUDED.is_ephemeral, cost_tier=EXCLUDED.cost_tier,
-                 source=EXCLUDED.source, is_active=true, updated_at=now()""",
+                 source=EXCLUDED.source,
+                 is_active=CASE WHEN $10 THEN agent_capabilities.is_active ELSE true END,
+                 updated_at=now()""",
             c.name, c.tenant_id, c.runtime, c.model_endpoint, c.supported_skills,
-            c.max_depth, c.is_ephemeral, c.cost_tier, c.source,
+            c.max_depth, c.is_ephemeral, c.cost_tier, c.source, preserve_status,
         )
 
     async def list_capabilities(self, tenant_id):
@@ -110,6 +132,14 @@ class CapabilityStorePG:
             tenant_id, list(declared_names),
         )
         return [r["name"] for r in rows]
+
+    async def set_capability_active(self, tenant_id, name, active):
+        row = await self._pool.fetchrow(
+            """UPDATE agent_capabilities SET is_active=$3, updated_at=now()
+               WHERE tenant_id=$1 AND name=$2 RETURNING *""",
+            tenant_id, name, bool(active),
+        )
+        return _capability(row)
 
 
 def _capability(r):

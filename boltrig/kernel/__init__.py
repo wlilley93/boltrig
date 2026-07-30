@@ -10,6 +10,7 @@ without the kernel importing the fleet (no cycle).
 
 from __future__ import annotations
 
+import inspect
 from typing import Any
 
 from boltrig.adapters.base import Adapter
@@ -23,6 +24,7 @@ from .credentials import CredentialResolver, SecretStore
 from .dispatch import AgentInvoker, Dispatcher
 from .grants import GrantChecker
 from .hitl import HITLManager
+from .events import EventRelay
 from .ratelimit import Counter, RateLimiter
 from .registry import KernelRegistry
 
@@ -36,6 +38,7 @@ class Kernel:
         *,
         secret_store: SecretStore | None = None,
         counter: Counter | None = None,
+        event_relay: EventRelay | None = None,
         blocking_verbs: set[str] | None = None,
         approval_timeout_seconds: int | None = None,
         development_posture: Any = None,
@@ -61,17 +64,21 @@ class Kernel:
         self._blocking_verbs = blocking_verbs or set()
 
         from boltrig.adapters.loader import AdapterLoader
-        from boltrig.emotion.relay import build_event_relay
+        from boltrig.emotion.relay import build_event_relay as build_emotion_relay
 
         from .mcp import McpFace
 
         self.loader = AdapterLoader()
         # MCP server face: granted verbs as MCP tools, every call via the chokepoint.
         self.mcp = McpFace(self)
-        # Event relay: run/conversation event streams for the conversational layer. The factory
-        # upgrades it to the emotion relay when the add-on is enabled (see boltrig/emotion/);
-        # everywhere else it is the plain EventRelay.
-        self.events = build_event_relay()
+        # Emotion is a fail-open observer over whichever transport composition
+        # selected; it never substitutes a second backlog for the Redis relay.
+        self.events = build_emotion_relay(backend=event_relay)
+        from .adapter_provider import AuthoritativeAdapterProvider
+
+        self.adapter_provider = AuthoritativeAdapterProvider(
+            store, self.loader, self.credentials
+        )
         self.dispatcher = Dispatcher(
             store,
             grants=self.grants,
@@ -79,7 +86,7 @@ class Kernel:
             credentials=self.credentials,
             audit=self.audit,
             hitl=self.hitl,
-            adapter_provider=self.loader.get,
+            adapter_provider=self.adapter_provider,
             agent_invoker=None,
             blocking_verbs=self._blocking_verbs,
             events=self.events,
@@ -90,6 +97,15 @@ class Kernel:
     def set_agent_invoker(self, invoker: AgentInvoker) -> None:
         """Attach the fleet's reasoning-verb invoker (US-KER-02)."""
         self.dispatcher._agent_invoker = invoker
+
+    async def aclose(self) -> None:
+        """Drain relay clients and the durable store pool."""
+        await self.events.aclose()
+        close = getattr(self.store, "close", None)
+        if close is not None:
+            result = close()
+            if inspect.isawaitable(result):
+                await result
 
     async def register_adapter(self, tenant_id: str, adapter: Adapter) -> list[str]:
         """Load an adapter and register its verbs as data (P1). Returns verb ids."""

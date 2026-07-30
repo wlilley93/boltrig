@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from boltrig.config import export_runtime_environment, load_manifest
+from boltrig.config import BudgetConfig, export_runtime_environment, load_manifest
 
 _MANIFEST = "manifest.example.yaml"
 _ACTIVE_MANIFEST = "manifest.yaml"
@@ -61,6 +61,11 @@ def test_no_default_lane_targets_a_retired_runtime(manifest_path):
 def test_manifest_interpolated_false_is_false():
     m = load_manifest(_MANIFEST, env={"AIR_GAPPED": "false"})
     assert m.network.air_gapped is False
+
+
+def test_manifest_budget_window_vocabulary_is_closed():
+    with pytest.raises(ValueError, match="budget window must be"):
+        BudgetConfig(window="weekly")
 
 
 @pytest.mark.security

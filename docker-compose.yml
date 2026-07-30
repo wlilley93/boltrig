@@ -10,10 +10,8 @@
 #
 # Services:
 #   postgres          durable state (SRS S6 / boltrig/store/schema.sql)
-#   redis             rate-limit + ephemeral counters (FR-KER-05). This is the
-#                     SHARED counter, wired from REDIS_URL: without it each
-#                     kernel process counts alone and every bound resets on
-#                     restart. Was true only on paper until 2026-07-25.
+#   redis             shared rate-limit counters and the bounded live
+#                     conversation relay. REDIS_URL is required in production.
 #   kernel            the dispatch chokepoint HTTP surface (P2)
 #   fleet-worker      the fleet runtime + durable workers (Epics F/G)
 #   hatchet-engine    optional durable execution engine (US-FLT-06, seam)
@@ -70,7 +68,12 @@ services:
     # IAC-002: pinned to tag + digest.
     image: redis:7@sha256:b2b95679e3b46fb51864949ed25ea976fc3a6bcc00a40a1bc00d568cb2822e50
     restart: unless-stopped
-    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    # AOF preserves the bounded relay/cursors and shared counter state across a
+    # Redis container restart. External Redis deployments must provide
+    # equivalent persistence and availability.
+    command: ["redis-server", "--save", "", "--appendonly", "yes", "--appendfsync", "everysec"]
+    volumes:
+      - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -153,6 +156,9 @@ services:
       BOLTRIG_HERDR_HOME: ${BOLTRIG_HERDR_HOME:-/var/lib/boltrig/herdr}
       BOLTRIG_KNOWLEDGE_VAULT: ${BOLTRIG_KNOWLEDGE_VAULT:-/var/lib/boltrig/knowledge}
       BOLTRIG_COGNEE_ROOT: ${BOLTRIG_COGNEE_ROOT:-/var/lib/boltrig/cognee}
+      BOLTRIG_BACKUP_HEALTH_FILE: /run/boltrig-backup-health/last-success
+      BACKUP_INTERVAL: ${BACKUP_INTERVAL:-86400}
+      BACKUP_HEALTH_GRACE: ${BACKUP_HEALTH_GRACE:-3600}
     # On both the app network and the sandbox, so the Pi gateway can reach the
     # MCP face (sandbox) while the kernel keeps its normal connectivity (default).
     networks:
@@ -168,6 +174,8 @@ services:
       # Canonical originals and rebuildable Cognee state are persisted separately.
       - knowledge_data:/var/lib/boltrig/knowledge
       - cognee_data:/var/lib/boltrig/cognee
+      # Safe epoch marker only. The kernel cannot read backup artifacts.
+      - backup_health:/run/boltrig-backup-health:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -334,6 +342,34 @@ services:
       retries: 5
       start_period: 10s
 
+  worker-ui:
+    # Decision 0021 candidate topology. This remains explicitly profile-gated
+    # until parity, connector, device, call and accessibility acceptance pass.
+    # It serves Worker at / and the maintained Operator at /operator/.
+    profiles: ["worker"]
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile
+      secrets:
+        - gh_npmrc
+    image: boltrig/worker-ui:0.1.0
+    restart: unless-stopped
+    networks:
+      - default
+      - sandbox
+    ports:
+      - "${WORKER_PORT:-8082}:80"
+    depends_on:
+      - kernel
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget -q --spider http://127.0.0.1/index.html && wget -q --spider http://127.0.0.1/operator/index.html || exit 1
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   bifrost:
     # The model gateway (Pi runtime spec S4.2, the cost/cache layer in front of
     # providers). Bifrost is OpenAI-compatible on :8080, so the kernel's
@@ -399,18 +435,21 @@ services:
   channel-gateway:
     # Decision 0003, Phase 2: the severed terminator for the socket channel
     # class (Slack/Discord/Telegram/WhatsApp/Signal + the reference generic
-    # adapter). Profile-gated: it is inert without operator config (the
-    # connect-time injection), so bring it up deliberately with
+    # adapter). Profile-gated: it is inert without a scoped gateway token, so
+    # bring it up deliberately with
     #   docker compose --profile channels up -d
-    # after minting a run-scoped token (POST /v1/channels/gateway/session).
+    # after minting a run-scoped token in Worker's channel detail. Prefer a
+    # read-only mounted CHANNEL_GATEWAY_TOKEN_FILE so rotation can be loaded
+    # without restarting; CHANNEL_GATEWAY_TOKEN remains restart-only.
     #
     # Sandboxed like the pi_sidecar (conditions 2 + 7): it sits on the
     # `sandbox` network ONLY - it reaches the kernel intake but NOT
     # postgres/redis. Egress to platform endpoints is allow-listed
     # (CHANNEL_GATEWAY_EGRESS_ALLOW); the secure overlay's internal sandbox
     # removes arbitrary internet egress, so in that posture platform traffic
-    # must route via an allow-list proxy. It holds no persistent credential:
-    # the token and the per-channel secrets are env at spawn, never logged.
+    # must route via an allow-list proxy. It owns no credential authority:
+    # the short-lived token is injected and provider credentials are resolved
+    # into memory only after the durable per-channel owner lease is won.
     profiles: ["channels"]
     networks:
       - sandbox
@@ -422,10 +461,16 @@ services:
     restart: unless-stopped
     environment:
       BOLTRIG_KERNEL_URL: ${CHANNEL_GATEWAY_KERNEL_URL:-http://kernel:8000}
-      # The connect-time injection (operator-supplied; empty = idle daemon).
+      # Mutually exclusive token sources. The file path must be supplied by a
+      # deployment overlay that also mounts it read-only into this container.
       CHANNEL_GATEWAY_TOKEN: ${CHANNEL_GATEWAY_TOKEN:-}
+      CHANNEL_GATEWAY_TOKEN_FILE: ${CHANNEL_GATEWAY_TOKEN_FILE:-}
+      # Development compatibility only; production refuses a static snapshot
+      # so Worker-authored kernel desired state remains the sole authority.
       CHANNEL_GATEWAY_CHANNELS: ${CHANNEL_GATEWAY_CHANNELS:-}
+      CHANNEL_GATEWAY_RECONCILE_SECONDS: ${CHANNEL_GATEWAY_RECONCILE_SECONDS:-10}
       CHANNEL_GATEWAY_EGRESS_ALLOW: ${CHANNEL_GATEWAY_EGRESS_ALLOW:-kernel}
+      CHANNEL_GATEWAY_MAX_BROWSER_CALLS: ${CHANNEL_GATEWAY_MAX_BROWSER_CALLS:-8}
       BOLTRIG_ENV: ${BOLTRIG_ENV:-}
       BOLTRIG_PRODUCTION: ${BOLTRIG_PRODUCTION:-}
     expose:
@@ -436,7 +481,7 @@ services:
     healthcheck:
       test:
         - CMD-SHELL
-        - python -c "import urllib.request; urllib.request.urlopen('http://localhost:8091/health')" || exit 1
+        - python -c "import urllib.request; urllib.request.urlopen('http://localhost:8091/ready')" || exit 1
       interval: 30s
       timeout: 5s
       retries: 3
@@ -453,9 +498,9 @@ services:
     # Register/link the account into the named volume FIRST (per the image's
     # docs, e.g. `docker compose run --rm signal-cli ... register`); the daemon
     # is inert without one. The account NUMBER reaches the adapter via the
-    # CHANNEL_GATEWAY_CHANNELS connect-time injection - it is never written
-    # here. Third-party image, so the first-party hardening anchor does not
-    # apply; pinned by tag + digest like every other third-party image (IAC).
+    # Worker-authored channel provider config - it is never written here.
+    # Third-party image, so the first-party hardening anchor does not apply;
+    # pinned by tag + digest like every other third-party image (IAC).
     profiles: ["channels"]
     networks:
       - sandbox
@@ -546,12 +591,14 @@ services:
       BACKUP_REMOTE: ${BACKUP_REMOTE:-}
       BACKUP_PASSPHRASE: ${BACKUP_PASSPHRASE:-}
       BACKUP_HEALTH_GRACE: ${BACKUP_HEALTH_GRACE:-3600}
+      BACKUP_HEALTH_FILE: /backup-health/last-success
     volumes:
       # The script is also baked into the image, but mounting it keeps the dev
       # loop editable without rebuilding. (IAC-003: rclone is built in, not
       # installed at runtime.)
       - ./scripts/backup.sh:/usr/local/bin/backup.sh:ro
       - ${BACKUP_DIR:-./backups}:/backups
+      - backup_health:/backup-health
       # rclone config for the off-box leg (remotes, tokens). Only read when
       # BACKUP_REMOTE is set; mount your own configured rclone.conf here.
       - ${RCLONE_CONFIG_DIR:-./deploy/rclone}:/root/.config/rclone:ro
@@ -582,6 +629,7 @@ secrets:
 
 volumes:
   pgdata:
+  redis_data:
   bifrost_data:
   herdr_data:
   opencode_data:
@@ -590,3 +638,4 @@ volumes:
   cognee_data:
   signal_cli_data:
   whatsapp_session:
+  backup_health:

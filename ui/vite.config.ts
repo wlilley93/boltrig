@@ -34,7 +34,9 @@ export default defineConfig({
   // Where the built assets are addressed from. "/" for local development and
   // `vite preview`; the container image sets "./" so the same build serves under
   // any mount (<tenant-host>/boltrig/) without being rebuilt for it. See
-  // docs/GOAL-console-mounts-with-its-stack.md.
+  // docs/GOAL-console-mounts-with-its-stack.md. The same mechanism is what lets
+  // the profile-gated Worker candidate image package this build beneath
+  // /operator/; the default stays "/" and neither case is special-cased here.
   base: process.env.BOLTRIG_UI_BASE || "/",
   plugins: [react(), enforceChunkBudget()],
   resolve: {

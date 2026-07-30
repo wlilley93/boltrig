@@ -21,28 +21,51 @@ import pytest
 
 from boltrig.models import (
     ActionType,
+    AdapterRecord,
     AuditEvent,
+    Channel,
+    Conversation,
+    EvalCase,
+    EvalRun,
     HITLRequest,
     HITLResponse,
     HITLStatus,
     HITLType,
     MemoryFact,
     MemoryProjectionStatus,
+    ModelEndpoint,
+    Noun,
+    RealtimeCallEvent,
+    RealtimeCallSession,
+    SecurityEvent,
+    SecurityEventType,
+    Skill,
+    TargetType,
     Urgency,
+    Verb,
+    VerbBinding,
     WorkItem,
     WorkStatus,
     utcnow,
 )
 from boltrig.store.idempotency_contract import IdempotencyClaimStatus
+from boltrig.store.work_mutations import (
+    WorkMutationConflict,
+    governed_create_work,
+    governed_mutate_work,
+)
 
 DSN = os.environ.get("BOLTRIG_TEST_DATABASE_URL")
 T = "acme"
 _TABLES = (
     "nouns,verbs,verb_bindings,adapters,skills,agent_capabilities,workflow_definitions,"
-    "model_endpoints,work_items,hitl_requests,hitl_responses,audit_log,budgets,"
+    "model_endpoints,eval_runs,eval_cases,work_items,hitl_requests,hitl_responses,"
+    "audit_log,budget_usage,budgets,"
     "idempotency_keys,credential_refs,tenant_permissions,memory_facts,"
     "memory_projection_statuses,"
-    "security_log,audit_rollup_anchors"
+    "integration_connections,integration_catalogue,"
+    "security_log,audit_rollup_anchors,conversations,channels,realtime_calls,"
+    "realtime_call_events"
 )
 
 
@@ -75,6 +98,298 @@ async def store(request):
     close = getattr(s, "close", None)
     if close is not None:
         await close()
+
+
+@pytest.mark.store
+@pytest.mark.invariant("SEC-22")
+async def test_generated_adapter_projection_roundtrips_on_both_stores(store):
+    from boltrig.adapters.generator import generate_adapter_from_spec
+    from boltrig.config.control_generated_adapter import (
+        generated_adapter_from_record,
+        generated_adapter_projection,
+    )
+
+    generated = generate_adapter_from_spec(
+        {
+            "openapi": "3.0.0",
+            "info": {"title": "Durable", "version": "1"},
+            "servers": [{"url": "https://durable.example.test/v1"}],
+            "paths": {
+                "/things/{id}": {
+                    "get": {
+                        "operationId": "thing.read",
+                        "parameters": [
+                            {
+                                "name": "id",
+                                "in": "path",
+                                "required": True,
+                                "schema": {"type": "string"},
+                            }
+                        ],
+                        "responses": {"200": {"description": "ok"}},
+                    }
+                }
+            },
+        },
+        adapter_id="durable-generated",
+    )
+    projection = generated_adapter_projection(generated)
+    assert await store.create_adapter_if_absent(
+        AdapterRecord(
+            id=generated.id,
+            tenant_id=T,
+            version=generated.version,
+            runtime=generated.runtime,
+            source="generated",
+            module_ref=type(generated).__module__,
+            spec_ref=projection,
+            created_by="author",
+            activated=True,
+        )
+    )
+    stored = await store.get_adapter(T, generated.id)
+    assert stored is not None
+    assert stored.spec_ref == projection
+    rebuilt = generated_adapter_from_record(stored)
+    assert rebuilt.activated is True
+    assert rebuilt.render_source() == generated.render_source()
+    assert [item.verb_id for item in rebuilt.describe()] == ["thing.read"]
+
+
+@pytest.mark.store
+@pytest.mark.invariant("SEC-WRK-17")
+async def test_governed_work_graph_and_lease_fence_match_on_both_stores(store):
+    root = await governed_create_work(
+        store,
+        WorkItem(
+            id="governed-root",
+            tenant_id=T,
+            workspace_id="workspace-a",
+            source="internal",
+            intent="Root",
+            confidence=1.0,
+            convergent=True,
+            owner_member="engineering",
+        ),
+        workspace_id="workspace-a",
+        departments=None,
+    )
+    child = await governed_create_work(
+        store,
+        WorkItem(
+            id="governed-child",
+            tenant_id=T,
+            workspace_id="workspace-a",
+            source="internal",
+            intent="Child",
+            confidence=1.0,
+            convergent=True,
+            owner_member="engineering",
+            parent_id=root.id,
+        ),
+        workspace_id="workspace-a",
+        departments=None,
+    )
+    grandchild = await governed_create_work(
+        store,
+        WorkItem(
+            id="governed-grandchild",
+            tenant_id=T,
+            workspace_id="workspace-a",
+            source="internal",
+            intent="Grandchild",
+            confidence=1.0,
+            convergent=True,
+            owner_member="engineering",
+            parent_id=child.id,
+        ),
+        workspace_id="workspace-a",
+        departments=None,
+    )
+
+    moved = await governed_mutate_work(
+        store,
+        T,
+        child.id,
+        action="reparent",
+        value=None,
+        workspace_id="workspace-a",
+        departments=None,
+    )
+    assert moved.depth == 0 and moved.parent_id is None
+    assert (await store.get_work_item(T, grandchild.id)).depth == 1
+
+    with pytest.raises(ValueError, match="cycle"):
+        await governed_mutate_work(
+            store,
+            T,
+            child.id,
+            action="reparent",
+            value=grandchild.id,
+            workspace_id="workspace-a",
+            departments=None,
+        )
+
+    leased = await store.get_work_item(T, grandchild.id)
+    leased.lease_owner = "worker"
+    leased.lease_expires_at = utcnow() + timedelta(minutes=5)
+    await store.update_work_item(leased)
+    with pytest.raises(WorkMutationConflict, match="leased"):
+        await governed_mutate_work(
+            store,
+            T,
+            grandchild.id,
+            action="assign",
+            value="operations",
+            workspace_id="workspace-a",
+            departments=None,
+        )
+    with pytest.raises(WorkMutationConflict, match="leased"):
+        await governed_mutate_work(
+            store,
+            T,
+            child.id,
+            action="reparent",
+            value=root.id,
+            workspace_id="workspace-a",
+            departments=None,
+        )
+    with pytest.raises(ValueError, match="illegal manual transition"):
+        await governed_mutate_work(
+            store,
+            T,
+            child.id,
+            action="status",
+            value=WorkStatus.DONE,
+            workspace_id="workspace-a",
+            departments=None,
+        )
+
+    depth_limit = WorkItem(
+        id="governed-depth-limit",
+        tenant_id=T,
+        workspace_id="workspace-a",
+        source="internal",
+        intent="Depth limit",
+        confidence=1.0,
+        convergent=True,
+        owner_member="engineering",
+        depth=32,
+    )
+    await store.create_work_item(depth_limit)
+    with pytest.raises(ValueError, match="depth limit"):
+        await governed_create_work(
+            store,
+            WorkItem(
+                id="governed-too-deep",
+                tenant_id=T,
+                workspace_id="workspace-a",
+                source="internal",
+                intent="Too deep",
+                confidence=1.0,
+                convergent=True,
+                owner_member="engineering",
+                parent_id=depth_limit.id,
+            ),
+            workspace_id="workspace-a",
+            departments=None,
+        )
+
+
+# --- model endpoint lifecycle (SEC-WRK-14) ----------------------------------
+@pytest.mark.store
+@pytest.mark.invariant("SEC-WRK-14")
+async def test_model_endpoint_lifecycle_matches_on_both_stores(store):
+    endpoint = ModelEndpoint(
+        id="recoverable-model",
+        tenant_id=T,
+        kind="openai",
+        model="model-a",
+        base_url="https://models.example.test/v1",
+        fallback=None,
+        data_class="standard",
+    )
+    await store.upsert_model_endpoint(endpoint)
+    retired = await store.set_model_endpoint_active(T, endpoint.id, False)
+    assert retired is not None and retired.is_active is False
+
+    await store.upsert_model_endpoint(
+        ModelEndpoint(
+            id=endpoint.id,
+            tenant_id=T,
+            kind="openai",
+            model="model-b",
+            base_url="https://replacement.example.test/v1",
+            fallback=None,
+            data_class="standard",
+        )
+    )
+    edited = await store.get_model_endpoint(T, endpoint.id)
+    assert edited is not None
+    assert edited.model == "model-b"
+    assert edited.base_url == "https://replacement.example.test/v1"
+    assert edited.is_active is False
+    assert [(item.id, item.is_active) for item in await store.list_model_endpoints(T)] == [
+        (endpoint.id, False)
+    ]
+
+    restored = await store.set_model_endpoint_active(T, endpoint.id, True)
+    assert restored is not None and restored.is_active is True
+
+
+# --- evaluation case lifecycle (SEC-WRK-18) --------------------------------
+@pytest.mark.store
+@pytest.mark.invariant("SEC-WRK-18")
+async def test_eval_case_lifecycle_matches_on_both_stores(store):
+    case = EvalCase(
+        id="recoverable-eval",
+        tenant_id=T,
+        target_kind="skill",
+        target_ref="review",
+        input={"task": "review first"},
+        assertions={"must_not_call": ["record.delete"]},
+        labels=["regression"],
+    )
+    await store.upsert_eval_case(case)
+    historical = EvalRun(
+        id="historical-run",
+        tenant_id=T,
+        case_id=case.id,
+        passed=True,
+        score=1.0,
+        run_id="fleet-run",
+        detail={"checks": {"safe": True}},
+    )
+    await store.add_eval_run(historical)
+
+    assert await store.set_eval_case_active(T, case.id, False) is True
+    archived = await store.get_eval_case(T, case.id)
+    assert archived is not None and archived.is_active is False
+
+    await store.upsert_eval_case(
+        EvalCase(
+            id=case.id,
+            tenant_id=T,
+            target_kind="workflow",
+            target_ref="review-v2",
+            input={"task": "review again"},
+            assertions={"must_call": ["record.read"]},
+            labels=["edited"],
+        )
+    )
+    edited = await store.get_eval_case(T, case.id)
+    assert edited is not None
+    assert edited.target_kind == "workflow"
+    assert edited.target_ref == "review-v2"
+    assert edited.is_active is False
+    assert [run.id for run in await store.list_eval_runs(T, case.id)] == [historical.id]
+    assert [(item.id, item.is_active) for item in await store.list_eval_cases(T)] == [
+        (case.id, False)
+    ]
+
+    assert await store.set_eval_case_active(T, case.id, True) is True
+    restored = await store.get_eval_case(T, case.id)
+    assert restored is not None and restored.is_active is True
 
 
 # --- idempotency (SEC-15 / NFR-REL-02) -------------------------------------
@@ -232,9 +547,16 @@ async def _write_audit_chain(store, n: int):
     for i in range(n):
         await writer.write(
             AuditEvent(
-                tenant_id=T, run_id=f"r{i}", actor="t", actor_tier="human",
-                action_type=ActionType.TOOL_CALL, noun="ticket", verb="ticket.create",
-                status="ok", detail={}, ts=None,
+                tenant_id=T,
+                run_id=f"r{i}",
+                actor="t",
+                actor_tier="human",
+                action_type=ActionType.TOOL_CALL,
+                noun="ticket",
+                verb="ticket.create",
+                status="ok",
+                detail={},
+                ts=None,
             )
         )
     return writer
@@ -289,10 +611,15 @@ async def test_security_verify_and_scan_page_the_whole_chain(store):
 
     writer = SecurityWriter(store)
     for i in range(25):
-        await writer.write(SecurityEvent(
-            tenant_id=T, ts=utcnow(), event_type=SecurityEventType.LOGIN_FAILURE,
-            reason=f"attempt-{i}", actor="eve",
-        ))
+        await writer.write(
+            SecurityEvent(
+                tenant_id=T,
+                ts=utcnow(),
+                event_type=SecurityEventType.LOGIN_FAILURE,
+                reason=f"attempt-{i}",
+                actor="eve",
+            )
+        )
     assert await writer.verify(T, page_size=8) == (True, None)
     assert [e.seq for e in await store.security_scan(T, 23, 10)] == [24, 25]
     assert [e.seq for e in await store.security_query(T, limit=2)] == [24, 25]
@@ -412,6 +739,7 @@ async def test_list_memory_facts_is_newest_first(store):
 
 
 @pytest.mark.store
+@pytest.mark.invariant("SEC-WRK-36")
 async def test_memory_projection_status_upserts_and_filters_on_both_stores(store):
     base = utcnow()
     row = MemoryProjectionStatus(
@@ -421,6 +749,13 @@ async def test_memory_projection_status_upserts_and_filters_on_both_stores(store
         operation="remember",
         status="pending",
         fact_id="f1",
+        enqueue_attempts=1,
+        operation_attempts=1,
+        max_operation_attempts=3,
+        first_attempt_at=base,
+        last_attempt_at=base,
+        last_failure_at=base,
+        failure_code="projection_operation_failed",
         created_at=base,
         updated_at=base,
     )
@@ -446,6 +781,14 @@ async def test_memory_projection_status_upserts_and_filters_on_both_stores(store
     assert [(r.projection_id, r.status, r.projection_ref) for r in rows] == [
         ("mem0", "written", "mem0:f1")
     ]
+    assert rows[0].enqueue_attempts == 1
+    assert rows[0].operation_attempts == 1
+    assert rows[0].max_operation_attempts == 3
+    assert rows[0].first_attempt_at == base
+    assert rows[0].last_attempt_at == base
+    assert rows[0].last_failure_at == base
+    assert rows[0].failure_code == "projection_operation_failed"
+    assert rows[0].created_at == base
     assert [r.fact_id for r in await store.list_memory_projection_statuses(T)] == ["f2", "f1"]
 
 
@@ -573,9 +916,7 @@ async def test_audit_query_scoped_pushes_run_scope_into_the_store(store):
     assert [e.seq for e in rows] == [1, 2, 3, 6, 7, 8, 9, 10]
     # match_parent=True folds parent_run_id into the refs: seq 9's parent is
     # owned by a hidden ws-2 item, so the hidden ref now denies the event.
-    rows_parent = await store.audit_query_scoped(
-        T, workspace_id="ws-1", match_parent=True
-    )
+    rows_parent = await store.audit_query_scoped(T, workspace_id="ws-1", match_parent=True)
     assert [e.seq for e in rows_parent] == [1, 2, 3, 6, 7, 8, 10]
     # No active workspace: org-wide rows only, and ws-bound work runs are hidden.
     rows_org = await store.audit_query_scoped(T, workspace_id=None, match_parent=True)
@@ -621,6 +962,101 @@ async def test_audit_query_scoped_page_is_clamped(store):
 
 
 @pytest.mark.store
+@pytest.mark.invariant("SEC-ACCOUNT-AUDIT-PAGE-01")
+async def test_account_activity_filters_before_offset_page_on_both_stores(store):
+    for seq, actor, behalf in (
+        (1, "alice", None),
+        (2, "delegate", "alice"),
+        (3, "alice", None),
+        *((seq, "other", None) for seq in range(4, 14)),
+    ):
+        event = _event(seq, f"h{seq - 1}" if seq > 1 else None)
+        event.actor = actor
+        event.on_behalf_of = behalf
+        await store.audit_append(event)
+
+    first, next_offset = await store.account_activity_page(T, "alice", limit=2, offset=0)
+    second, end = await store.account_activity_page(T, "alice", limit=2, offset=2)
+    assert [e.seq for e in first] == [3, 2]
+    assert next_offset == 2
+    assert [e.seq for e in second] == [1]
+    assert end is None
+
+
+@pytest.mark.store
+@pytest.mark.invariant("SEC-ACCOUNT-AUDIT-PAGE-01")
+async def test_audit_and_security_search_filter_before_pages_on_both_stores(store):
+    for seq in range(1, 7):
+        event = _event(seq, f"h{seq - 1}" if seq > 1 else None)
+        event.actor = "alice" if seq in {1, 3, 5} else "other"
+        event.resource = "ticket" if seq != 3 else "invoice"
+        await store.audit_append(event)
+
+    audit_page, audit_next = await store.audit_search_page(
+        T, actor="alice", resource="ticket", limit=1
+    )
+    audit_end, audit_done = await store.audit_search_page(
+        T, actor="alice", resource="ticket", limit=1, offset=1
+    )
+    assert [e.seq for e in audit_page] == [5] and audit_next == 1
+    assert [e.seq for e in audit_end] == [1] and audit_done is None
+
+    for seq in range(1, 5):
+        await store.security_append(
+            SecurityEvent(
+                tenant_id=T,
+                seq=seq,
+                ts=utcnow(),
+                event_type=SecurityEventType.LOGIN_FAILURE,
+                reason="test",
+                actor="alice" if seq % 2 else "other",
+                prev_hash=f"s{seq - 1}" if seq > 1 else None,
+                hash=f"s{seq}",
+            )
+        )
+    security_page, security_next = await store.security_search_page(T, actor="alice", limit=1)
+    security_end, security_done = await store.security_search_page(
+        T, actor="alice", limit=1, offset=1
+    )
+    assert [e.seq for e in security_page] == [3] and security_next == 1
+    assert [e.seq for e in security_end] == [1] and security_done is None
+
+
+@pytest.mark.store
+@pytest.mark.invariant("SEC-69")
+async def test_audit_literal_query_matches_structural_fields_on_both_stores(store):
+    target = _event(1, None)
+    target.actor = "CaseKeeper"
+    target.verb = "Approval.Run"
+    target.status = "needs_review"
+    target.run_id = "RUN-ABC"
+    target.parent_run_id = "PARENT-XYZ"
+    target.resource = "Invoice"
+    target.resource_id = r"Case%_\42"
+    target.detail = {"secret_note": "not-a-search-column"}
+    decoy = _event(2, "h1")
+    decoy.resource_id = "CaseABZ42"
+    await store.audit_append(target)
+    await store.audit_append(decoy)
+
+    for query in (
+        "casekeeper",
+        "approval.run",
+        "needs_review",
+        "run-abc",
+        "parent-xyz",
+        "invoice",
+        r"case%_\42",
+        "%_\\",
+    ):
+        rows, next_offset = await store.audit_search_page(T, query=query, limit=1)
+        assert [row.seq for row in rows] == [1]
+        assert next_offset is None
+    rows, _ = await store.audit_search_page(T, query="not-a-search-column", limit=10)
+    assert rows == []
+
+
+@pytest.mark.store
 @pytest.mark.invariant("SEC-69")
 async def test_list_work_items_by_refs_matches_ids_and_hatchet_aliases(store):
     await store.create_work_item(_wi("i-1", hatchet_run_id="h-1"))
@@ -657,10 +1093,78 @@ async def test_list_run_items_scoped_pushes_run_scope_into_the_store(store):
     # Keyset pages walk the scoped slice in id order with no overlap.
     page1 = await store.list_run_items_scoped(T, workspace_id="ws-1", limit=2)
     assert [w.id for w in page1] == ["run-org", "run-sales"]
-    page2 = await store.list_run_items_scoped(
-        T, workspace_id="ws-1", limit=2, cursor=page1[-1].id
-    )
+    page2 = await store.list_run_items_scoped(T, workspace_id="ws-1", limit=2, cursor=page1[-1].id)
     assert [w.id for w in page2] == ["work-ws1"]
+
+
+@pytest.mark.store
+@pytest.mark.invariant("SEC-69")
+async def test_execution_search_scope_and_text_match_on_both_stores(store):
+    target = WorkItem(
+        id=r"exec%_\visible",
+        tenant_id=T,
+        workspace_id="ws-1",
+        source="linear-source",
+        source_id=r"case%_\42",
+        intent="Quarterly Renewal Plan",
+        confidence=1.0,
+        convergent=True,
+        status=WorkStatus.FAILED,
+        owner_member="engineering",
+        hatchet_run_id="run-renewal-42",
+        on_behalf_of="alice-search",
+    )
+    for item in (
+        target,
+        _wi(
+            "collision-hidden",
+            workspace_id="ws-2",
+            owner="engineering",
+            hatchet_run_id="run-collision",
+        ),
+        _wi(
+            "collision-visible",
+            workspace_id="ws-1",
+            owner="engineering",
+            hatchet_run_id="run-collision",
+        ),
+    ):
+        await store.create_work_item(item)
+    collision = await store.get_work_item(T, "collision-visible")
+    collision.intent = "resurrect-me"
+    await store.update_work_item(collision)
+    rival = replace(target, id="rival-match", tenant_id="rival")
+    await store.create_work_item(rival)
+
+    for query in (
+        "quarterly renewal",
+        r"exec%_\visible",
+        "RUN-RENEWAL-42",
+        "engineering",
+        "ALICE-SEARCH",
+        "LINEAR-SOURCE",
+        r"case%_\42",
+        "FAILED",
+        "%_\\",
+    ):
+        rows = await store.search_execution_items_scoped(
+            T,
+            query,
+            departments=["engineering"],
+            workspace_id="ws-1",
+            limit=1,
+        )
+        assert [row.id for row in rows] == [target.id]
+    assert (
+        await store.search_execution_items_scoped(
+            T,
+            "resurrect-me",
+            departments=["engineering"],
+            workspace_id="ws-1",
+            limit=10,
+        )
+        == []
+    )
 
 
 # --- adapter lifecycle deletes (SEC-22) --------------------------------------
@@ -749,11 +1253,18 @@ async def test_adapter_lifecycle_deletes_are_idempotent_and_tenant_scoped(store)
 
 
 async def _leased_item(store, item_id: str = "w-lease"):
-    await store.create_work_item(WorkItem(
-        id=item_id, tenant_id=T, source="internal", intent="long step",
-        confidence=1.0, convergent=True, status=WorkStatus.PENDING,
-        owner_member="engineering",
-    ))
+    await store.create_work_item(
+        WorkItem(
+            id=item_id,
+            tenant_id=T,
+            source="internal",
+            intent="long step",
+            confidence=1.0,
+            convergent=True,
+            status=WorkStatus.PENDING,
+            owner_member="engineering",
+        )
+    )
     claimed = await store.claim_work_item(T, "worker-a", 300)
     assert claimed is not None and claimed.id == item_id
     return claimed
@@ -775,16 +1286,22 @@ async def test_a_worker_that_lost_its_lease_cannot_overwrite_the_winner(store):
     assert rival.attempts == 2
 
     # The rival settles the item.
-    await store.update_work_item(replace(
-        rival, status=WorkStatus.DONE, result={"who": "winner"},
-        lease_owner=None, lease_expires_at=None,
-    ))
+    await store.update_work_item(
+        replace(
+            rival,
+            status=WorkStatus.DONE,
+            result={"who": "winner"},
+            lease_owner=None,
+            lease_expires_at=None,
+        )
+    )
 
     # Body A, still running, now writes its stale snapshot fenced on the tuple it
     # was GIVEN at claim. It must not land.
     wrote = await store.update_work_item_if_leased(
         replace(claimed, status=WorkStatus.DONE, result={"who": "loser"}),
-        lease_owner=a_owner, lease_expires_at=a_expiry,
+        lease_owner=a_owner,
+        lease_expires_at=a_expiry,
     )
     assert wrote is False, "the loser's write was applied over the winner's record"
 
@@ -802,7 +1319,8 @@ async def test_the_lease_holder_can_still_write(store):
     claimed = await _leased_item(store, "w-holder")
     wrote = await store.update_work_item_if_leased(
         replace(claimed, status=WorkStatus.DONE, result={"ok": True}),
-        lease_owner=claimed.lease_owner, lease_expires_at=claimed.lease_expires_at,
+        lease_owner=claimed.lease_owner,
+        lease_expires_at=claimed.lease_expires_at,
     )
     assert wrote is True
     final = await store.get_work_item(T, "w-holder")
@@ -825,3 +1343,324 @@ async def test_a_read_does_not_hand_back_the_stored_row(store):
     assert second.result != {"mutated": "without a write call"}, (
         "the store handed back its live row: a caller mutated it with no write"
     )
+
+
+# --- decision-0021 realtime call metadata -----------------------------------
+@pytest.mark.store
+@pytest.mark.invariant("SEC-WRK-03")
+@pytest.mark.invariant("SEC-WRK-04")
+@pytest.mark.invariant("SEC-08")
+async def test_realtime_call_media_claim_and_events_match_on_both_stores(store):
+    from datetime import timedelta
+
+    await store.create_conversation(Conversation(id="conv-call", tenant_id=T, user_id="alice"))
+    await store.upsert_channel(
+        Channel(
+            id="ch-call",
+            tenant_id=T,
+            platform="voice",
+            name="Voice",
+            transport="socket",
+        )
+    )
+    call = RealtimeCallSession(
+        id="call-1",
+        tenant_id=T,
+        conversation_id="conv-call",
+        owner_id="alice",
+        channel_id="ch-call",
+        status="creating",
+        media_token_hash="token-digest",
+        media_token_expires_at=utcnow() + timedelta(minutes=1),
+        tool_context={"allow": ["ticket.create"], "deny": []},
+    )
+    await store.create_realtime_call(call)
+    assert await store.get_realtime_call("rival", call.id) is None
+    assert (
+        await store.claim_realtime_call_media(T, call.id, ["wrong-channel"], "token-digest") is None
+    )
+    claimed = await store.claim_realtime_call_media(T, call.id, ["ch-call"], "token-digest")
+    assert claimed is not None and claimed.status == "active"
+    assert claimed.media_token_hash is None
+    assert await store.claim_realtime_call_media(T, call.id, ["ch-call"], "token-digest") is None
+
+    event = RealtimeCallEvent(
+        id="event-1",
+        tenant_id=T,
+        call_id=call.id,
+        type="transcript",
+        participant_id="user",
+        payload={"text": "hello", "final": True},
+    )
+    await store.append_realtime_call_event(event)
+    await store.append_realtime_call_event(event)
+    assert await store.list_realtime_call_events("rival", call.id) == []
+    events = await store.list_realtime_call_events(T, call.id)
+    assert [(row.id, row.payload) for row in events] == [
+        ("event-1", {"text": "hello", "final": True})
+    ]
+    hitl = RealtimeCallEvent(
+        id="event-hitl",
+        tenant_id=T,
+        call_id=call.id,
+        type="hitl",
+        payload={"request_id": "req-call", "status": "ok"},
+    )
+    usage = RealtimeCallEvent(
+        id="event-usage",
+        tenant_id=T,
+        call_id=call.id,
+        type="usage",
+        payload={
+            "input_audio_bytes": 100,
+            "output_audio_bytes": 50,
+            "tool_calls": 1,
+            "provider_input_tokens": 12,
+            "provider_output_tokens": 8,
+            "estimated_cost_micros": 7,
+            "pricing_revision": "contract-v1",
+            "cost_status": "estimated",
+        },
+    )
+    await store.append_realtime_call_event(hitl)
+    await store.append_realtime_call_event(usage)
+    found = await store.get_realtime_call_hitl_event(T, call.id, "req-call")
+    assert found is not None and found.payload["status"] == "ok"
+    assert await store.get_realtime_call_hitl_event("rival", call.id, "req-call") is None
+    assert await store.summarize_realtime_call_usage(T, call.id) == {
+        "input_audio_bytes": 100,
+        "output_audio_bytes": 50,
+        "tool_calls": 1,
+        "provider_input_tokens": 12,
+        "provider_output_tokens": 8,
+        "estimated_cost_micros": 7,
+        "pricing_revision": "contract-v1",
+        "cost_status": "estimated",
+    }
+
+
+@pytest.mark.store
+@pytest.mark.invariant("SEC-WRK-06")
+@pytest.mark.invariant("SEC-08")
+async def test_integration_catalogue_and_connection_state_match_on_both_stores(store):
+    from boltrig.models.integrations import (
+        IntegrationCatalogueRecord,
+        IntegrationConnection,
+    )
+    from boltrig.models.integration_auth import (
+        IntegrationSecretContract,
+        IntegrationSecretField,
+    )
+
+    item = IntegrationCatalogueRecord(
+        id="github",
+        tenant_id=T,
+        label="GitHub",
+        category="work",
+        transport="rest",
+        auth=["oauth2", "manual_secret"],
+        description="Reviewed source control connector.",
+        certification="certified",
+        adapter_id="github-adapter",
+        secret_contract=IntegrationSecretContract(
+            version="github_v1",
+            credential_kind="token",
+            fields=(
+                IntegrationSecretField(
+                    name="token",
+                    label="Personal access token",
+                    max_length=200,
+                ),
+            ),
+        ),
+    )
+    await store.upsert_integration_catalogue(item)
+    item.auth.append("channel_pairing")
+    assert await store.get_integration_catalogue("rival", item.id) is None
+    catalogue = await store.list_integration_catalogue(T)
+    assert [row.id for row in catalogue] == ["github"]
+    assert catalogue[0].auth == ["oauth2", "manual_secret"]
+    assert catalogue[0].secret_contract is not item.secret_contract
+    assert catalogue[0].secret_contract is not None
+    assert catalogue[0].secret_contract.version == "github_v1"
+    catalogue[0].auth.append("channel_pairing")
+    stored_item = await store.get_integration_catalogue(T, item.id)
+    assert stored_item is not None
+    assert stored_item.auth == ["oauth2", "manual_secret"]
+    assert stored_item.secret_contract is not None
+    connection = IntegrationConnection(
+        id="conn-github",
+        tenant_id=T,
+        integration_id=item.id,
+        adapter_id="github-adapter",
+        label="Engineering",
+        health="ok",
+        credential_ref="cred-github",
+        credential_owned=True,
+    )
+    assert await store.create_integration_connection(connection)
+    assert not await store.create_integration_connection(
+        replace(connection, id="conn-github-duplicate")
+    )
+    connection.accounts.append({"id": "caller-only"})
+    assert await store.get_integration_connection("rival", connection.id) is None
+    connections = await store.list_integration_connections(T)
+    assert [row.id for row in connections] == ["conn-github"]
+    assert connections[0].accounts == []
+    connections[0].accounts.append({"id": "reader-only"})
+    stored_connection = await store.get_integration_connection(T, connection.id)
+    assert stored_connection is not None and stored_connection.accounts == []
+    revoked = await store.revoke_integration_connection(T, connection.id)
+    assert revoked is not None
+    assert revoked.health == "revoked" and revoked.credential_ref is None
+    assert await store.revoke_integration_connection(T, connection.id) is None
+    assert await store.create_integration_connection(
+        replace(connection, id="conn-github-replacement")
+    )
+
+
+@pytest.mark.store
+@pytest.mark.invariant("SEC-WRK-06")
+@pytest.mark.invariant("SEC-140")
+async def test_atomic_integration_credential_lifecycle_matches_on_both_stores(store):
+    from boltrig.kernel.credentials import CredentialResolver
+    from boltrig.kernel.integration_credentials import integration_manual_secret_ref
+    from boltrig.models.integrations import (
+        IntegrationCatalogueRecord,
+        IntegrationConnection,
+    )
+
+    await store.upsert_integration_catalogue(
+        IntegrationCatalogueRecord(
+            id="durable-tickets",
+            tenant_id=T,
+            label="Durable tickets",
+            category="work",
+            transport="rest",
+            auth=["manual_secret"],
+            description="Atomic integration fixture.",
+            certification="certified",
+            adapter_id="durable-tickets-adapter",
+        )
+    )
+    credential = integration_manual_secret_ref(
+        "durable-tickets",
+        "durable-tickets-adapter",
+        "api_key",
+        "tickets_v1",
+        {"opaque": "replica-visible-secret"},
+    )
+    connection = IntegrationConnection(
+        id="conn-durable-tickets",
+        tenant_id=T,
+        integration_id="durable-tickets",
+        adapter_id="durable-tickets-adapter",
+        label="Durable tickets",
+        credential_ref="cred-durable-tickets",
+        credential_owned=True,
+    )
+
+    assert await store.create_integration_connection_with_credential(connection, credential)
+    active = await store.get_active_integration_connection_for_adapter(T, connection.adapter_id)
+    assert active is not None and active.id == connection.id
+    # Two fresh resolvers model a restart and a second replica. Neither receives
+    # a process-local bind; the durable active connection is their authority.
+    for resolver in (CredentialResolver(store), CredentialResolver(store)):
+        resolved = await resolver.resolve_for_adapter(T, connection.adapter_id)
+        assert resolved is not None
+        assert resolved.material == {"opaque": "replica-visible-secret"}
+
+    duplicate = replace(
+        connection,
+        id="conn-durable-tickets-duplicate",
+        credential_ref="cred-durable-tickets-duplicate",
+    )
+    assert not await store.create_integration_connection_with_credential(duplicate, credential)
+    assert not await store.has_credential_ref(T, duplicate.credential_ref)
+
+    revoked, detached_ref, deleted = await store.revoke_integration_connection_with_credential(
+        T, connection.id
+    )
+    assert revoked is not None and revoked.health == "revoked"
+    assert detached_ref == connection.credential_ref and deleted
+    assert not await store.has_credential_ref(T, connection.credential_ref)
+    assert await CredentialResolver(store).resolve_for_adapter(T, connection.adapter_id) is None
+
+
+@pytest.mark.store
+@pytest.mark.invariant("SEC-WRK-19")
+async def test_authored_definition_lifecycle_matches_on_both_stores(store):
+    noun = Noun(
+        id="invoice",
+        tenant_id=T,
+        description="Invoice",
+        schema={"type": "object"},
+    )
+    verb = Verb(
+        id="invoice.read",
+        tenant_id=T,
+        noun_id=noun.id,
+        input_schema={"type": "object"},
+        output_schema={"type": "object"},
+        description="Read an invoice",
+    )
+    binding = VerbBinding(
+        verb_id=verb.id,
+        tenant_id=T,
+        target_type=TargetType.ADAPTER,
+        target_ref="billing",
+    )
+    skill = Skill(
+        id="billing/review",
+        tenant_id=T,
+        version="1.0.0",
+        prompt_fragment="Review the invoice.",
+        tool_grants=[verb.id],
+    )
+    await store.upsert_noun(noun)
+    await store.upsert_verb(verb)
+    await store.upsert_binding(binding)
+    await store.upsert_skill(skill)
+
+    assert await store.set_noun_active(T, noun.id, False) is not None
+    assert await store.set_verb_active(T, verb.id, False) is not None
+    assert await store.set_skill_active(T, skill.id, False) is not None
+    assert await store.get_noun(T, noun.id) is None
+    assert await store.get_verb(T, verb.id) is None
+    assert await store.get_skill(T, skill.id) is None
+    assert await store.list_nouns(T) == []
+    assert await store.list_verbs(T) == []
+    assert await store.list_skills(T) == []
+    assert (await store.get_noun_any(T, noun.id)).is_active is False
+    assert (await store.get_verb_any(T, verb.id)).is_active is False
+    assert (await store.get_skill_any(T, skill.id)).is_active is False
+    assert [row.id for row in await store.list_all_nouns(T)] == [noun.id]
+    assert [row.id for row in await store.list_all_verbs(T)] == [verb.id]
+    assert [row.id for row in await store.list_all_skills(T)] == [skill.id]
+    assert await store.get_binding(T, verb.id) == binding
+
+    # Ordinary replacement upserts cannot accidentally reactivate a withdrawn
+    # definition. A new skill version inherits the current lifecycle status.
+    await store.upsert_noun(replace(noun, description="Updated invoice", is_active=True))
+    await store.upsert_verb(replace(verb, description="Updated reader", is_active=True))
+    await store.upsert_skill(
+        replace(
+            skill,
+            version="1.1.0",
+            prompt_fragment="Review the updated invoice.",
+            is_active=True,
+        )
+    )
+    assert (await store.get_noun_any(T, noun.id)).is_active is False
+    assert (await store.get_verb_any(T, verb.id)).is_active is False
+    latest_skill = await store.get_skill_any(T, skill.id)
+    assert latest_skill.version == "1.1.0" and latest_skill.is_active is False
+    assert await store.get_binding(T, verb.id) == binding
+
+    assert await store.set_noun_active(T, noun.id, True) is not None
+    assert await store.set_verb_active(T, verb.id, True) is not None
+    assert await store.set_skill_active(T, skill.id, True) is not None
+    assert (await store.get_noun(T, noun.id)).description == "Updated invoice"
+    assert (await store.get_verb(T, verb.id)).description == "Updated reader"
+    assert (await store.get_skill(T, skill.id)).version == "1.1.0"
+    assert await store.get_binding(T, verb.id) == binding

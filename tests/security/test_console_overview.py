@@ -63,6 +63,7 @@ async def _kernel() -> Kernel:
             cost_limit_micros=1000,
             spent_tokens=125,
             spent_micros=250,
+            window="daily",
         )
     )
     return Kernel(store)

@@ -119,6 +119,8 @@ def test_render_question_surfaces_id_choices_and_answer_hint() -> None:
 
 def test_render_terminal_and_silent_events() -> None:
     assert render_event({"type": "cancelled", "run_id": "r1"}) == "\n(cancelled)\n"
+    assert render_event({"type": "queued", "run_id": "r1"}) \
+        == "\n(instruction queued behind the active turn)\n"
     assert render_event({"type": "message_end", "run_id": "r1"}) == "\n"
     assert "[subagent]" in (render_event(
         {"type": "subagent", "name": "researcher", "task": "dig"}) or "")
@@ -228,6 +230,41 @@ async def test_stream_turn_yields_events_and_sends_bearer_auth() -> None:
     assert [e["type"] for e in events] == ["message_start", "text_delta", "message_end"]
     assert seen["auth"] == "Bearer boltrig_pat_secret"
     assert json.loads(seen["body"]) == {"message": "hello", "conversation_id": "c0"}
+
+
+async def test_stream_turn_202_queued_is_an_accepted_terminal_event() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(202, json={
+            "status": "queued",
+            "conversation_id": "c1",
+            "message_id": "m2",
+            "run_id": "r1",
+        })
+
+    async with _client(handler) as client:
+        events = [
+            e async for e in chat_cli.stream_turn(
+                client, "http://kernel", "tok", "steer", "c1")
+        ]
+    assert events == [{
+        "type": "queued",
+        "conversation_id": "c1",
+        "message_id": "m2",
+        "run_id": "r1",
+    }]
+
+
+async def test_stream_turn_other_202_remains_a_clean_error() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            202, json={"status": "pending_human", "reason": "approval_required"})
+
+    async with _client(handler) as client:
+        with pytest.raises(ChatCliError, match=r"HTTP 202.*approval_required"):
+            _ = [
+                e async for e in chat_cli.stream_turn(
+                    client, "http://kernel", "tok", "hi", "c1")
+            ]
 
 
 async def test_stream_turn_401_is_a_clean_error_that_never_carries_the_token() -> None:

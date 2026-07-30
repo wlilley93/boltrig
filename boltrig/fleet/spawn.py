@@ -3,22 +3,17 @@
 from __future__ import annotations
 
 import contextlib
-import json
 import logging
 import time
 import uuid
-from typing import TYPE_CHECKING, Any, Awaitable, Callable
+from typing import TYPE_CHECKING, Any, Sequence
 
-from boltrig.adapters.base import AdapterError, ErrorClass, Result
-from boltrig.kernel.cost import price_micros
+from boltrig.config.spawn_rules import SpawnRule, SpawnRuleSelection
 from boltrig.kernel.held_call import sweep_run_credentials_if_settled
 from boltrig.models import (
     ActionType,
     AgentCapability,
     AuditEvent,
-    BudgetExceeded,
-    ContextRequirementsUnmet,
-    DepthExceeded,
     GrantSet,
     InvocationContext,
     utcnow,
@@ -28,56 +23,26 @@ from boltrig.observability.langfuse_sink import build_observability_sink
 from .chat_authority import inherit_on_behalf_bearer
 from .result import AgentResult
 from .runtime_resolver import RuntimeResolver
+from .spawn_completion import complete_spawn, public_model_route
+from .spawn_budget import estimate
+from .spawn_policy import (
+    build_child_context,
+    prepare_spawn_intake,
+    publish_subagent_event,
+)
+from .spawn_reservation import reserve_spawn
 from .spawn_skills import (
-    NoCapableRuntime as NoCapableRuntime,
     SkillNotFound as SkillNotFound,
-    context_payload,
-    display_task as _display_task,
-    missing_requirements,
-    resolve_skills,
-    select_capability,
+    display_task as _display_task,  # noqa: F401 - compatibility import
 )
 
 if TYPE_CHECKING:
     from boltrig.kernel import Kernel
-    from boltrig.kernel.app import Principal, SpawnBody
-    from boltrig.kernel.dispatch import AgentInvoker
+    from boltrig.kernel.cost import BudgetReservation
 
 log = logging.getLogger(__name__)
 
-_PUBLIC_ROUTE_KEYS = {"profile", "provider", "model", "runtime", "tier"}
-
-
-def _budget_scope_ids(tenant_id: str, department: Any | None) -> list[str]:
-    """The budget scopes one spawn is metered against.
-
-    The TENANT budget's scope id IS the tenant id. That is the convention
-    everywhere else, and ``control.budget.upsert`` REFUSES to create a tenant-scope
-    row under any other id ("tenant budget must target the active organisation",
-    config/control_budget.py). Reserving against the literal string ``"tenant"``
-    matched no row, so ``get_budget`` returned None and reserve/reconcile treated
-    the scope as UNMETERED: the tenant's hard-stop cap could never fire and its
-    spend ledger stayed at zero however much it spent. The DEPARTMENT leg was
-    always correct - the manifest seeds it under the department name.
-    """
-    return [tenant_id, *([str(department)] if department else [])]
-
-
-def _estimate(task: str, prompt: str, skills: list[str], cost_tier: str) -> tuple[int, int]:
-    """Deterministic pre-run token/cost estimate for budget reservation."""
-    chars = len(task) + len(prompt) + sum(len(skill) for skill in skills)
-    tokens = max(16, chars // 4)
-    return tokens, price_micros(tokens, cost_tier)
-
-
-def _public_model_route(route: dict[str, Any] | None) -> dict[str, str]:
-    if not isinstance(route, dict):
-        return {}
-    return {
-        key: str(value)[:160]
-        for key, value in route.items()
-        if key in _PUBLIC_ROUTE_KEYS and value
-    }
+_public_model_route = public_model_route
 
 
 class Spawner:
@@ -89,6 +54,7 @@ class Spawner:
         *,
         sensitive_endpoint_id: str | None = None,
         codex_config: dict[str, Any] | None = None,
+        spawn_rules: Sequence[SpawnRule] = (),
     ) -> None:
         self._kernel = kernel
         self._sensitive_endpoint_id = sensitive_endpoint_id
@@ -98,6 +64,12 @@ class Spawner:
             codex_config=codex_config,
         )
         self._observability = build_observability_sink()
+        self._base_spawn_rules = tuple(spawn_rules)
+
+    def observability_status(self) -> dict[str, Any]:
+        """Return only the sink's process-local, content-free attempt counters."""
+
+        return self._observability.status_snapshot()
 
     async def spawn(
         self,
@@ -112,90 +84,96 @@ class Spawner:
     ) -> dict[str, Any]:
         """Spawn one ephemeral agent for ``task`` with ``skills``."""
         kernel = self._kernel
-        prefer = prefer or {}
-        skills = list(skills or [])
-
-        merged = await resolve_skills(kernel.store, tenant_id, skills)
-        instance = {k: v for k, v in context_payload(context).items() if v is not None}
-        missing, errors = missing_requirements(merged.context_requirements, instance)
-        if missing or errors:
-            detail = "; ".join(errors) if errors else "missing required context"
-            raise ContextRequirementsUnmet(
-                f"spawn context unmet: {detail}", missing=missing or errors
-            )
-
-        capability = await self._select_capability(tenant_id, skills, prefer)
-        child_depth = context.depth + 1
-        if child_depth > capability.max_depth:
-            raise DepthExceeded(
-                f"depth {child_depth} exceeds max_depth {capability.max_depth} "
-                f"for capability '{capability.name}'"
-            )
-
-        merged_prompt = "\n\n".join(merged.prompt_fragments)
+        intake = await prepare_spawn_intake(
+            kernel.store,
+            tenant_id,
+            base_rules=self._base_spawn_rules,
+            skills=skills or [],
+            prefer=prefer or {},
+            context=context,
+        )
+        skills, prefer = intake.skills, intake.prefer
+        capability, spawn_rule = intake.capability, intake.spawn_rule
         run_id = uuid.uuid4().hex
-        tokens_est, micros_est = _estimate(task, merged_prompt, skills, capability.cost_tier)
-        scope_ids = _budget_scope_ids(tenant_id, prefer.get("department"))
-        try:
-            await kernel.cost.reserve(
-                tenant_id, scope_ids=scope_ids, tokens=tokens_est, micros=micros_est
-            )
-        except BudgetExceeded:
-            await self._audit_spawn(
-                tenant_id, context, capability, skills, run_id,
-                status="budget_exceeded", tokens=0, cost=0,
-            )
-            if not partial_on_budget:
-                raise
-            return self._budget_partial(run_id, capability)
+        tokens_est, micros_est = estimate(task, intake.merged_prompt, skills, capability.cost_tier)
+        reservation = await reserve_spawn(
+            self,
+            tenant_id=tenant_id,
+            context=context,
+            capability=capability,
+            skills=skills,
+            prefer=prefer,
+            run_id=run_id,
+            tokens_est=tokens_est,
+            micros_est=micros_est,
+            partial_on_budget=partial_on_budget,
+            spawn_rule=spawn_rule,
+        )
+        if isinstance(reservation, dict):
+            return reservation
 
-        child_grants = GrantSet.of(allow=list(merged.tool_grants)).intersect(context.grants)
-        if grant_ceiling is not None:
-            child_grants = child_grants.intersect(grant_ceiling)
-        child_ctx = self._child_context(
-            tenant_id, run_id, child_depth, context, capability, skills, child_grants
+        child_grants, child_ctx = self._prepare_child(
+            tenant_id, run_id, intake, context, capability, skills, grant_ceiling
         )
 
         result, model_route, latency_ms = await self._invoke_runtime(
-            tenant_id, capability, context,
-            task=task, skills=skills, run_id=run_id, merged_prompt=merged_prompt,
-            child_ctx=child_ctx, child_grants=child_grants, scope_ids=scope_ids,
-            tokens_est=tokens_est, micros_est=micros_est,
-        )
-        if model_route and isinstance(result.output, dict):
-            result.output.setdefault("model_route", _public_model_route(model_route))
-
-        # The PRICED cost (see _true_up_cost), never result.cost_micros.
-        cost_micros = await self._true_up_cost(
-            tenant_id, scope_ids, capability, tokens_est, micros_est, result)
-        await self._audit_spawn(
             tenant_id,
+            capability,
+            context,
+            task=task,
+            skills=skills,
+            run_id=run_id,
+            merged_prompt=intake.merged_prompt,
+            child_ctx=child_ctx,
+            child_grants=child_grants,
+            reservation=reservation,
+            tokens_est=tokens_est,
+            micros_est=micros_est,
+            spawn_rule=spawn_rule,
+        )
+        return await complete_spawn(
+            self,
+            tenant_id=tenant_id,
+            capability=capability,
+            context=context,
+            skills=skills,
+            run_id=run_id,
+            child_grants=child_grants,
+            reservation=reservation,
+            tokens_est=tokens_est,
+            micros_est=micros_est,
+            result=result,
+            model_route=model_route,
+            latency_ms=latency_ms,
+            spawn_rule=spawn_rule,
+        )
+
+    def _prepare_child(
+        self,
+        tenant_id: str,
+        run_id: str,
+        intake: Any,
+        context: InvocationContext,
+        capability: AgentCapability,
+        skills: list[str],
+        grant_ceiling: GrantSet | None,
+    ) -> tuple[GrantSet, InvocationContext]:
+        child_grants = GrantSet.of(allow=list(intake.tool_grants)).intersect(
+            context.grants
+        )
+        if grant_ceiling is not None:
+            child_grants = child_grants.intersect(grant_ceiling)
+        child_ctx = self._child_context(
+            tenant_id,
+            run_id,
+            intake.child_depth,
             context,
             capability,
             skills,
-            run_id,
-            status=("degraded" if result.degraded else "ok" if result.ok else "error"),
-            tokens=result.tokens_used,
-            cost=cost_micros,
-            model_route=model_route, latency_ms=latency_ms, reason=result.degrade_reason,
+            child_grants,
+            intake.spawn_rule,
         )
-        return {
-            "run_id": run_id,
-            "agent_type": capability.name,
-            "status": "ok" if result.ok else "error",
-            "degraded": result.degraded,
-            "summary": result.summary,
-            "output": result.output,
-            "tokens_used": result.tokens_used,
-            "cost_micros": cost_micros,
-            "new_work_items": list(result.new_work_items),
-            "effective_grants": list(child_grants.allow),
-        }
-
-    async def _select_capability(
-        self, tenant_id: str, skills: list[str], prefer: dict[str, Any]
-    ) -> AgentCapability:
-        return await select_capability(self._kernel.store, tenant_id, skills, prefer)
+        return child_grants, child_ctx
 
     async def _runtime_for(
         self,
@@ -217,9 +195,10 @@ class Spawner:
         merged_prompt: str,
         child_ctx: InvocationContext,
         child_grants: GrantSet,
-        scope_ids: list[str],
+        reservation: BudgetReservation,
         tokens_est: int,
         micros_est: int,
+        spawn_rule: SpawnRuleSelection | None,
     ) -> tuple[AgentResult, dict[str, Any] | None, int]:
         """Resolve the runtime and run the turn, refunding the reservation on a raise.
 
@@ -236,14 +215,12 @@ class Spawner:
         # The delegation boundary is also where the permission-parity seal has to
         # cross: see _inherit_adapter_bearer for why the child cannot use the seal
         # the chat turn wrote against the ROOT run id.
-        await self._inherit_adapter_bearer(
-            tenant_id, context.run_id, run_id, context.on_behalf_of
-        )
+        await self._inherit_adapter_bearer(tenant_id, context.run_id, run_id, context.on_behalf_of)
         try:
             runtime = await self._runtime_for(tenant_id, capability, context)
             model_route = getattr(runtime, "model_route", None)
             if context.run_id:
-                self._publish_subagent_event(context, task, skills, run_id, capability)
+                self._publish_subagent_event(context, task, skills, run_id, capability, spawn_rule)
                 opened = True
             started = time.monotonic()
             result = await runtime.run(
@@ -257,8 +234,9 @@ class Spawner:
                 self._publish_subagent_end_event(context, run_id, "error")
             with contextlib.suppress(Exception):
                 await self._kernel.cost.reconcile(
-                    tenant_id, scope_ids=scope_ids,
-                    delta_tokens=-tokens_est, delta_micros=-micros_est,
+                    reservation,
+                    delta_tokens=-tokens_est,
+                    delta_micros=-micros_est,
                 )
             await self._retire_child_credentials(tenant_id, run_id)
             raise
@@ -280,31 +258,10 @@ class Spawner:
         capability: AgentCapability,
         skills: list[str],
         grants: GrantSet,
+        spawn_rule: SpawnRuleSelection | None = None,
     ) -> InvocationContext:
-        # A read-only Codex leaf is scoped by a run + workspace. Under [2026]
-        # VJS-CC-VJS 8 the kernel orchestrates the leaf, so it supplies the leaf's
-        # read-only scope: when a scopeless caller (e.g. /v1/spawn with no active
-        # workspace) orchestrates a codex leaf, scope it to its OWN run. The phase is
-        # read-only, writes nothing, and its per-cell tree is already run/slot
-        # isolated, so the run is a sufficient and self-contained scope. Other
-        # runtimes keep inheriting the parent's workspace unchanged (None stays None).
-        workspace_id = parent.workspace_id
-        if workspace_id is None and capability.runtime == "codex":
-            workspace_id = run_id
-        return InvocationContext(
-            tenant_id=tenant_id,
-            run_id=run_id,
-            parent_run_id=parent.run_id,
-            depth=child_depth,
-            on_behalf_of=parent.on_behalf_of,
-            workspace_id=workspace_id,
-            ip_address=parent.ip_address,
-            user_agent=parent.user_agent,
-            grants=grants,
-            actor=capability.name,
-            actor_tier="ephemeral",
-            skills_loaded=tuple(skills),
-            extra=dict(parent.extra),
+        return build_child_context(
+            tenant_id, run_id, child_depth, parent, capability, skills, grants, spawn_rule
         )
 
     def _publish_subagent_event(
@@ -314,20 +271,17 @@ class Spawner:
         skills: list[str],
         run_id: str,
         capability: AgentCapability,
+        spawn_rule: SpawnRuleSelection | None,
     ) -> None:
-        try:
-            self._kernel.events.publish(
-                context.tenant_id, context.run_id,
-                {
-                    "type": "subagent",
-                    "task": _display_task(task),
-                    "skills": list(skills),
-                    "child_run_id": run_id,
-                    "capability": capability.name,
-                },
-            )
-        except Exception:
-            pass
+        publish_subagent_event(
+            self._kernel.events,
+            context,
+            task,
+            skills,
+            run_id,
+            capability,
+            spawn_rule,
+        )
 
     async def _retire_child_credentials(self, tenant_id: str, run_id: str) -> None:
         """Retire the bearer this child inherited, at the child's run terminal.
@@ -336,27 +290,24 @@ class Spawner:
         runtime raise and the success return) and for the same reason: those are
         the two ways a child run ends, so a terminal wired to only one of them
         leaks on the other.
-
         Necessary because a delegated child has NO work item, so the pump's
         terminal hook (``sweep_run_credentials_if_settled``, pump.py) - can never fire
         for it. ``_inherit_adapter_bearer`` re-seals the caller's bearer under the
         CHILD run id, so without this every delegated turn left a second live
         bearer at rest forever (observed live: one root row plus one child row per
         turn, none ever deleted).
-
         Guarded by ``sweep_run_credentials_if_settled``: when the gate held a
         write, the resume replays under the CHILD's context and therefore needs
         this exact bearer, so the seal must outlive the child. Best-effort (P9),
         exactly like the inherit that created it: hygiene never fails a spawn.
         """
         try:
-            await sweep_run_credentials_if_settled(
-                self._kernel.store, tenant_id, run_id
-            )
+            await sweep_run_credentials_if_settled(self._kernel.store, tenant_id, run_id)
         except Exception:  # noqa: BLE001 - a sweep fault is the pre-existing leak
             log.warning(
                 "could not retire the run-scoped credentials of child run '%s'",
-                run_id, exc_info=True,
+                run_id,
+                exc_info=True,
             )
 
     def _publish_subagent_end_event(
@@ -375,7 +326,8 @@ class Spawner:
         failure never breaks the turn."""
         try:
             self._kernel.events.publish(
-                context.tenant_id, context.run_id,
+                context.tenant_id,
+                context.run_id,
                 {
                     "type": "subagent_end",
                     "child_run_id": run_id,
@@ -388,7 +340,7 @@ class Spawner:
     async def _true_up_cost(
         self,
         tenant_id: str,
-        scope_ids: list[str],
+        reservation: BudgetReservation,
         capability: AgentCapability,
         tokens_est: int,
         micros_est: int,
@@ -407,9 +359,7 @@ class Spawner:
         actual_tokens = int(result.tokens_used or 0)
         priced_model: str | None = None
         if capability.model_endpoint and self._kernel.cost.has_prices:
-            ep = await self._kernel.store.get_model_endpoint(
-                tenant_id, capability.model_endpoint
-            )
+            ep = await self._kernel.store.get_model_endpoint(tenant_id, capability.model_endpoint)
             priced_model = ep.model if ep is not None else None
         # Priced LEG BY LEG when the runtime reported the split. Input and output
         # differ by more than 2x on the rate cards the fleet bills from, and an
@@ -424,8 +374,7 @@ class Spawner:
             output_tokens=int(result.output_tokens or 0),
         )
         await self._kernel.cost.reconcile(
-            tenant_id,
-            scope_ids=scope_ids,
+            reservation,
             delta_tokens=actual_tokens - tokens_est,
             delta_micros=actual_micros - micros_est,
         )
@@ -490,8 +439,11 @@ class Spawner:
         model_route: dict[str, str] | None = None,
         latency_ms: int | None = None,
         reason: str | None = None,
+        spawn_rule: SpawnRuleSelection | None = None,
     ) -> None:
         detail = {"capability": capability.name, "runtime": capability.runtime}
+        if spawn_rule is not None:
+            detail["spawn_rule"] = spawn_rule.receipt()
         if model_route:
             detail["model_route"] = _public_model_route(model_route)
         if reason:  # a degraded row recorded WHAT failed but never why
@@ -509,7 +461,8 @@ class Spawner:
             latency_ms=latency_ms,
             tokens_used=tokens or None,
             cost_micros=cost or None,
-            on_behalf_of=parent.on_behalf_of, workspace_id=parent.workspace_id,
+            on_behalf_of=parent.on_behalf_of,
+            workspace_id=parent.workspace_id,
             skills_loaded=list(skills),
             detail=detail,
         )
@@ -530,8 +483,13 @@ class Spawner:
         except Exception:
             pass
 
-    def _budget_partial(self, run_id: str, capability: AgentCapability) -> dict[str, Any]:
-        return {
+    def _budget_partial(
+        self,
+        run_id: str,
+        capability: AgentCapability,
+        spawn_rule: SpawnRuleSelection | None,
+    ) -> dict[str, Any]:
+        result = {
             "run_id": run_id,
             "agent_type": capability.name,
             "status": "partial",
@@ -545,132 +503,33 @@ class Spawner:
             "cost_micros": 0,
             "new_work_items": [],
         }
+        if spawn_rule is not None:
+            result["spawn_rule"] = spawn_rule.receipt()
+        return result
 
 
 def build_spawner(
-    kernel: Kernel, *, codex_config: dict[str, Any] | None = None
+    kernel: Kernel,
+    *,
+    codex_config: dict[str, Any] | None = None,
+    sensitive_endpoint_id: str | None = None,
+    spawn_rules: Sequence[SpawnRule] = (),
 ) -> Spawner:
     """Construct the fleet ``Spawner`` for a kernel.
 
     ``codex_config`` is the trusted read-only Codex provider config assembled at the
     api composition root ([2026] VJS-CC-VJS 2); None (the default) keeps existing
     callers unaffected and the codex runtime degrade-marked unavailable.
+    ``sensitive_endpoint_id`` is the manifest's local-only routing role. None keeps
+    the router fail-closed: sensitive work must already name a sensitive endpoint
+    or it is refused rather than escaping through a standard provider.
     """
-    return Spawner(kernel, codex_config=codex_config)
+    return Spawner(
+        kernel,
+        codex_config=codex_config,
+        sensitive_endpoint_id=sensitive_endpoint_id,
+        spawn_rules=spawn_rules,
+    )
 
 
-def make_app_spawner(
-    kernel: Kernel, *, codex_config: dict[str, Any] | None = None
-) -> Callable[[Principal, SpawnBody], Awaitable[dict[str, Any]]]:
-    """Adapt ``Spawner.spawn`` to the ``POST /v1/spawn`` seam.
-
-    ``codex_config`` (VJS-CC-VJS 2/8) lets a spawn that pins a ``runtime: codex``
-    capability answer through the per-cell proxy instead of a degrade-marked
-    unavailable result.
-    """
-    spawner = build_spawner(kernel, codex_config=codex_config)
-    envelope = {"run_id", "parent_run_id", "depth", "skills_loaded"}
-
-    async def app_spawner(principal: Principal, body: SpawnBody) -> dict[str, Any]:
-        # SEC-186, and it matters more here than at /v1/invoke: an unchecked
-        # parent_run_id would launder a stranger's sealed bearer into a run the
-        # caller owns outright (see _inherit_adapter_bearer). Same status and
-        # wording as the sibling fence in kernel/hitl_http.py.
-        from fastapi import HTTPException
-
-        from boltrig.kernel.run_access import foreign_run_asserted
-
-        if await foreign_run_asserted(kernel.store, principal, body.context):
-            raise HTTPException(status_code=403, detail="not your run")
-        extra = {key: value for key, value in body.context.items() if key not in envelope}
-        ctx = principal.context(
-            run_id=body.context.get("run_id"),
-            parent_run_id=body.context.get("parent_run_id"),
-            depth=int(body.context.get("depth", 0)),
-            skills=body.context.get("skills_loaded", ()),
-            extra=extra,
-        )
-        return await spawner.spawn(
-            tenant_id=principal.tenant_id,
-            task=body.task,
-            skills=body.skills,
-            prefer=body.prefer,
-            context=ctx,
-            partial_on_budget=False,
-            grant_ceiling=principal.grants,  # SEC-139: cap the child to the caller
-        )
-
-    return app_spawner
-
-
-def make_agent_invoker(kernel: Kernel) -> AgentInvoker:
-    """Build the reasoning-verb invoker the kernel attaches."""
-    spawner = build_spawner(kernel)
-
-    async def agent_invoker(
-        verb: str,
-        params: dict[str, Any],
-        context: InvocationContext,
-        agent_capability: str,
-    ) -> Result:
-        from .runtime import ScriptRuntime
-
-        prompt = (
-            f"Verb: {verb}\n"
-            f"Params: {json.dumps(params, default=str, sort_keys=True)}"
-        )
-        caps = await kernel.store.list_capabilities(context.tenant_id)
-        cap = next((item for item in caps if item.name == agent_capability), None)
-        if cap is not None:
-            # The same governance Spawner.spawn applies, or an agent-bound verb is
-            # an unmetered side door around it: the depth cap first, then a budget
-            # reservation that is refunded if the run raises and trued up after.
-            child_depth = context.depth + 1
-            if child_depth > cap.max_depth:
-                raise DepthExceeded(
-                    f"depth {child_depth} exceeds max_depth {cap.max_depth} "
-                    f"for capability '{cap.name}'"
-                )
-            scope_ids = _budget_scope_ids(context.tenant_id, None)
-            tokens_est, micros_est = _estimate(prompt, "", [], cap.cost_tier)
-            await kernel.cost.reserve(
-                context.tenant_id, scope_ids=scope_ids, tokens=tokens_est, micros=micros_est
-            )
-        try:
-            if cap is not None:
-                try:
-                    runtime = await spawner._runtime_for(context.tenant_id, cap, context)
-                    result = await runtime.run(prompt, context, tools=list(context.grants.allow))
-                except Exception:
-                    with contextlib.suppress(Exception):
-                        await kernel.cost.reconcile(
-                            context.tenant_id, scope_ids=scope_ids,
-                            delta_tokens=-tokens_est, delta_micros=-micros_est,
-                        )
-                    raise
-                await spawner._true_up_cost(
-                    context.tenant_id, scope_ids, cap, tokens_est, micros_est, result
-                )
-            else:
-                # No capability: the unmetered deterministic script fallback is deliberate.
-                result = await ScriptRuntime().run(
-                    prompt, context, tools=list(context.grants.allow)
-                )
-        except Exception as exc:
-            # A raised runtime must never be papered over with an ok=True echo
-            # (US-FLT-07): return a degrade-marked result with an audit reason.
-            result = AgentResult.degrade(
-                runtime=cap.runtime if cap is not None else "script",
-                reason=type(exc).__name__,
-                prompt=prompt,
-            )
-        if result.ok:
-            output = dict(result.output)
-            if result.degraded:
-                output.setdefault("_degraded", {"reason": "degraded"})
-            return Result.success(output)
-        return Result.failure(
-            AdapterError(ErrorClass.INTERNAL, result.summary or "agent run failed")
-        )
-
-    return agent_invoker
+from .spawn_entrypoints import make_agent_invoker as make_agent_invoker, make_app_spawner as make_app_spawner  # noqa: E402

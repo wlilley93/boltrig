@@ -7,7 +7,6 @@ interface MetaFormProps {
     version: string;
     setVersion: (v: string) => void;
     source: WorkflowSourceValue;
-    setSource: (v: WorkflowSourceValue) => void;
     tags: string;
     setTags: (v: string) => void;
     saveBusy: boolean;
@@ -45,19 +44,11 @@ export function MetaForm({ meta, api, clearCanvas }: MetaFormProps) {
             onChange={(e) => meta.setVersion(e.target.value)}
           />
         </label>
-        <label className="field">
+        <div className="field">
           <span>source</span>
-          <select
-            value={meta.source}
-            onChange={(e) =>
-              meta.setSource(e.target.value as WorkflowSourceValue)
-            }
-          >
-            <option value="precreated">precreated</option>
-            <option value="generated">generated</option>
-            <option value="learned">learned</option>
-          </select>
-        </label>
+          <strong>{meta.source}</strong>
+          <small>Assigned by Boltrig</small>
+        </div>
       </div>
       <label className="field">
         <span>intent_tags (comma list)</span>

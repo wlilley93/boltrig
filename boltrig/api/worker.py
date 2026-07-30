@@ -16,6 +16,10 @@ from typing import Any
 
 from boltrig.addons import active_addons
 from boltrig.config import load_manifest, load_settings
+from boltrig.config.permanent_fleet import (
+    effective_manifest_from_desired,
+    record_permanent_fleet_startup_observation,
+)
 from boltrig.store import Store
 from boltrig.fleet import (
     anchor_interval_from_env,
@@ -28,9 +32,15 @@ from boltrig.fleet import (
     run_retention_forever,
 )
 
-from .bootstrap import _DEFAULT_TENANT, _find_manifest, build_kernel_async
-from .logging_config import configure_logging
+from .bootstrap import (
+    _DEFAULT_TENANT,
+    _build_shared_codex_config,
+    _find_manifest,
+    _publish_birth_profile_startup,
+    build_kernel_async,
+)
 from .codex_execution import build_codex_execution_stack
+from .logging_config import configure_logging
 
 configure_logging()
 log = logging.getLogger("boltrig.worker")
@@ -45,14 +55,15 @@ log = logging.getLogger("boltrig.worker")
 # attests - the exact drift this seam claims cannot happen. Resolving in both
 # places makes a mismatch loud on startup instead of silent at attestation.
 _ADDONS = active_addons()
-log.info(
-    "addons active: %s", ", ".join(f"{a.name}/{a.version}" for a in _ADDONS) or "(none)"
-)
+log.info("addons active: %s", ", ".join(f"{a.name}/{a.version}" for a in _ADDONS) or "(none)")
 
 _POLL_SECONDS = 5.0
 
 
-def _start_hitl_expiry_janitor(store: Store) -> "asyncio.Task[None] | None":
+def _start_hitl_expiry_janitor(
+    store: Store,
+    process_instance_identity: str | None = None,
+) -> "asyncio.Task[None] | None":
     """Start the HITL expiry janitor (SEC-14), or None when disabled.
 
     On an interval the janitor transitions every overdue PENDING request to
@@ -74,7 +85,11 @@ def _start_hitl_expiry_janitor(store: Store) -> "asyncio.Task[None] | None":
         return None
     log.info("hitl-expiry janitor live (interval=%ss)", interval)
     return asyncio.create_task(
-        run_hitl_expiry_forever(store, interval=interval),
+        run_hitl_expiry_forever(
+            store,
+            interval=interval,
+            process_instance_identity=process_instance_identity,
+        ),
         name="hitl-expiry-janitor",
     )
 
@@ -100,7 +115,10 @@ def _start_anchor_janitor(store: Store, anchorer: Any) -> "asyncio.Task[None] | 
 
 
 def _start_retention_janitor(
-    store: Store, tenant: str, manifest: Any
+    store: Store,
+    tenant: str,
+    manifest: Any,
+    process_instance_identity: str | None = None,
 ) -> "asyncio.Task[None] | None":
     """Start the retention janitor (M11 / SEC-74), or None when disabled.
 
@@ -124,16 +142,147 @@ def _start_retention_janitor(
     days = retention_days_from_manifest(manifest)
     log.info(
         "retention janitor live (tenant=%s, window=%sd, interval=%ss)",
-        tenant, days, interval,
+        tenant,
+        days,
+        interval,
     )
     return asyncio.create_task(
-        run_retention_forever(store, tenant, days, interval=interval),
+        run_retention_forever(
+            store,
+            tenant,
+            days,
+            interval=interval,
+            process_instance_identity=process_instance_identity,
+        ),
         name="retention-janitor",
     )
 
 
+def _start_workflow_scheduler(
+    kernel: Any, tenant: str, executor: Any
+) -> "asyncio.Task[None] | None":
+    """Start the store-backed cron reconciler used by every executor mode."""
+
+    from boltrig.workflows import WorkflowLibrary
+    from boltrig.workflows.scheduler import (
+        run_workflow_scheduler_forever,
+        scheduler_interval_from_env,
+    )
+
+    interval = scheduler_interval_from_env()
+    if interval <= 0:
+        log.info("workflow scheduler disabled (interval<=0)")
+        return None
+    workflows = WorkflowLibrary(kernel.store, executor=executor, kernel=kernel)
+    log.info(
+        "workflow scheduler started (tenant=%s, interval=%ss, durable=%s)",
+        tenant,
+        interval,
+        bool(getattr(executor, "durable", False)),
+    )
+    return asyncio.create_task(
+        run_workflow_scheduler_forever(
+            kernel.store,
+            tenant,
+            workflows,
+            executor=executor,
+            interval=interval,
+        ),
+        name="workflow-scheduler",
+    )
+
+
+async def _manifest_spawn_context(
+    kernel: Any,
+    *,
+    codex_config: dict[str, object] | None,
+    manifest_snapshot: Any,
+) -> tuple[Any, str, Any, bool]:
+    """Overlay one process-owned manifest and compose its policy-aware spawner."""
+
+    manifest = manifest_snapshot
+    desired_overlay_applied = False
+    if manifest is not None:
+        try:
+            manifest = await effective_manifest_from_desired(kernel.store, manifest)
+            desired_overlay_applied = True
+        except Exception as exc:
+            log.warning("manifest load failed (%s); using the default org", exc)
+            manifest = None
+    tenant = manifest.tenant_id if manifest is not None else _DEFAULT_TENANT
+    spawner = (
+        build_spawner(
+            kernel,
+            codex_config=codex_config,
+            sensitive_endpoint_id=manifest.models.sensitive_endpoint,
+            spawn_rules=manifest.spawn_rules,
+        )
+        if manifest is not None
+        else build_spawner(
+            kernel,
+            codex_config=codex_config,
+            sensitive_endpoint_id=None,
+        )
+    )
+    return manifest, tenant, spawner, desired_overlay_applied
+
+
+def _start_background_tasks(
+    kernel: Any,
+    tenant: str,
+    manifest: Any,
+    executor: Any,
+) -> tuple["asyncio.Task[None] | None", ...]:
+    """Start fleet-owned loops under one opaque per-boot process identity."""
+    stack_health_task: asyncio.Task[None] | None = None
+    if str(os.environ.get("REDIS_URL") or "").strip():
+        from boltrig.fleet.stack_tool_health import run_fleet_tool_heartbeat
+
+        stack_health_task = asyncio.create_task(
+            run_fleet_tool_heartbeat(tenant),
+            name="fleet-stack-tool-heartbeat",
+        )
+        log.info("fleet stack-tool heartbeat started (tenant=%s)", tenant)
+    else:
+        log.info("fleet stack-tool heartbeat not started (REDIS_URL not configured)")
+
+    from boltrig.observability.background_jobs import new_background_process_identity
+
+    process_identity = new_background_process_identity()
+    return (
+        _start_anchor_janitor(kernel.store, kernel.anchorer),
+        _start_hitl_expiry_janitor(kernel.store, process_identity),
+        stack_health_task,
+        _start_retention_janitor(kernel.store, tenant, manifest, process_identity),
+        _start_workflow_scheduler(kernel, tenant, executor),
+    )
+
+
+async def _stop_background_tasks(
+    tasks: tuple["asyncio.Task[None] | None", ...],
+) -> None:
+    pending = [task for task in tasks if task is not None]
+    for task in pending:
+        task.cancel()
+    if pending:
+        await asyncio.gather(*pending, return_exceptions=True)
+
+
 async def _run() -> None:
-    kernel = await build_kernel_async()  # async build (no nested asyncio.run)
+    # Build the trusted provider once for this process and inject that exact
+    # instance into both kernel-bound and pump-bound fleet spawners. None is off.
+    codex_config = _build_shared_codex_config()
+    manifest_path = _find_manifest()
+    manifest_snapshot = load_manifest(manifest_path) if manifest_path else None
+    sensitive_endpoint_id = (
+        manifest_snapshot.models.sensitive_endpoint if manifest_snapshot is not None else None
+    )
+    kernel = await build_kernel_async(
+        codex_config=codex_config,
+        sensitive_endpoint_id=sensitive_endpoint_id,
+        manifest_snapshot=manifest_snapshot,
+        manifest_path=manifest_path,
+    )  # async build (no nested asyncio.run)
     executor = register_workers(kernel)
     # Honest executor selection (US-EXE-05): the boot record states durability.
     log.info(
@@ -143,72 +292,49 @@ async def _run() -> None:
     )
     # The org from the manifest hierarchy; a missing/broken manifest degrades to
     # the minimal default org (one CoS over one general head, P9).
-    manifest = None
-    manifest_path = _find_manifest()
-    if manifest_path:
-        try:
-            manifest = load_manifest(manifest_path)
-        except Exception as exc:
-            log.warning("manifest load failed (%s); using the default org", exc)
-    tenant = manifest.tenant_id if manifest is not None else _DEFAULT_TENANT
+    manifest, tenant, spawner, desired_overlay_applied = await _manifest_spawn_context(
+        kernel,
+        codex_config=codex_config,
+        manifest_snapshot=manifest_snapshot,
+    )
     pump = build_org(
-        kernel, build_spawner(kernel), manifest, executor=executor,
+        kernel,
+        spawner,
+        manifest,
+        executor=executor,
         # Codex shadow root admission (SEC-172), built here at the composition
         # root: None when BOLTRIG_CODEX_LEDGER is off => no admit.
         codex_execution=build_codex_execution_stack(load_settings(), kernel.store),
     )
+    await _publish_birth_profile_startup(
+        kernel,
+        process_kind="fleet",
+        manifest=manifest,
+        addons_snapshot=_ADDONS,
+        codex_config=codex_config,
+        sensitive_endpoint_id=(
+            manifest.models.sensitive_endpoint if manifest is not None else None
+        ),
+    )
+    if desired_overlay_applied:
+        await record_permanent_fleet_startup_observation(
+            kernel.store,
+            tenant,
+            os.environ.get("HOSTNAME") or "fleet-worker",
+        )
     log.info(
         "delegation pump live (tenant=%s, departments=%s)",
         tenant,
         sorted(pump.heads),
     )
-    # Each execution owner proves only the tools present in its own image.  The
-    # fleet worker probes OpenCode, Browser Use, and loopback Chromium, then
-    # publishes a short-lived redacted receipt to shared Redis.  The kernel's
-    # /readyz combines it with a kernel-local Herdr probe; it never assumes a
-    # fleet hostname or executes fleet binaries in the wrong container.
-    from boltrig.fleet.stack_tool_health import run_fleet_tool_heartbeat
-
-    stack_health_task: asyncio.Task[None] | None = None
-    if str(os.environ.get("REDIS_URL") or "").strip():
-        stack_health_task = asyncio.create_task(
-            run_fleet_tool_heartbeat(tenant),
-            name="fleet-stack-tool-heartbeat",
-        )
-        # "started", not "live". Whether it actually publishes is decided INSIDE
-        # run_fleet_tool_heartbeat, which returns immediately when the audit key is
-        # a placeholder - and on dev it is, so this line used to claim
-        # "heartbeat live" two lines above the heartbeat logging
-        # "disabled (audit HMAC key not configured)". Two records, one true.
-        log.info("fleet stack-tool heartbeat started (tenant=%s)", tenant)
-    else:
-        log.info("fleet stack-tool heartbeat not started (REDIS_URL not configured)")
-    # The audit-rollup anchor janitor (COUNTY 9 D4).
-    anchor_task = _start_anchor_janitor(kernel.store, kernel.anchorer)
-    # The HITL expiry janitor (SEC-14) alongside the anchor janitor.
-    expiry_task = _start_hitl_expiry_janitor(kernel.store)
-    # The retention janitor (M11 / SEC-74 right-to-erasure), same shape again.
-    retention_task = _start_retention_janitor(kernel.store, tenant, manifest)
+    tasks = _start_background_tasks(kernel, tenant, manifest, executor)
     try:
         await pump.run_forever(tenant, interval=_POLL_SECONDS)
     finally:
-        if anchor_task is not None:
-            anchor_task.cancel()
-        if expiry_task is not None:
-            expiry_task.cancel()
-        if stack_health_task is not None:
-            stack_health_task.cancel()
-        if retention_task is not None:
-            retention_task.cancel()
-        # Gather the cancelled tasks so none is destroyed while pending (an
-        # ungathered anchor janitor also leaves an unsealed anchor tail).
-        pending = [
-            t
-            for t in (anchor_task, expiry_task, stack_health_task, retention_task)
-            if t is not None
-        ]
-        if pending:
-            await asyncio.gather(*pending, return_exceptions=True)
+        await _stop_background_tasks(tasks)
+        close = getattr(kernel, "aclose", None)
+        if close is not None:
+            await close()
 
 
 def main() -> None:

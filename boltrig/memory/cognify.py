@@ -15,7 +15,13 @@ from __future__ import annotations
 
 import uuid
 
-from boltrig.models import InvocationContext, MemoryIngestion, BoltrigError, utcnow
+from boltrig.models import (
+    BoltrigError,
+    InvocationContext,
+    MemoryIngestion,
+    PendingHuman,
+    utcnow,
+)
 
 from .adapter import screen_content
 
@@ -72,6 +78,11 @@ async def cognify(
                     "source_kind": source_kind, "source_ref": source_ref,
                 }, context)
                 added += len(out.get("fact_ids", []))
+            except PendingHuman:
+                # A policy pause is control flow, not a bad source item. Hiding
+                # it here used to turn an approval-required batch into a false
+                # ``done`` result with zero committed facts.
+                raise
             except BoltrigError:
                 # a single bad item should not fail the whole run (P9)
                 continue
@@ -89,17 +100,3 @@ async def cognify(
     ing.completed_at = utcnow()
     await kernel.store.update_memory_ingestion(ing)
     return ing
-
-
-async def cognify_conversation(
-    kernel, tenant_id: str, conversation_id: str, *, owner_scope: str,
-    context: InvocationContext, executor=None,
-) -> MemoryIngestion:
-    """Bridge the verbatim transcript layer into memory (US-ING-01): cognify a
-    conversation's messages, with provenance back to the conversation id."""
-    messages = await kernel.store.list_messages(tenant_id, conversation_id)
-    items = [m.content for m in messages if getattr(m, "content", None)]
-    return await cognify(
-        kernel, tenant_id, source_kind="conversation", source_ref=conversation_id,
-        owner_scope=owner_scope, items=items, context=context, executor=executor,
-    )

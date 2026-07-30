@@ -20,8 +20,10 @@ from .readiness_control import (
     REQUIRED_CONTROL_VERBS as REQUIRED_CONTROL_VERBS,
     control_plane_check,
 )
+from .background_readiness import read_background_job_readiness
+from .readiness_dependencies import database_checks, password_reset_check
 
-EXPECTED_ALEMBIC_HEAD = "0040_drop_workflow_promotions"
+EXPECTED_ALEMBIC_HEAD = "0064_mcp_registration_revision"
 
 _PRODUCTION_NAMES = {"prod", "production", "staging"}
 # The tools /readyz requires. Codex is the only target agent runtime (decision
@@ -33,6 +35,7 @@ PostgresProbe = Callable[[], Awaitable[tuple[bool, tuple[str, ...]]]]
 RedisProbe = Callable[[str, float], Awaitable[bool]]
 HerdrProbe = Callable[[Mapping[str, str], float], Awaitable[bool]]
 FleetReceiptProbe = Callable[[str, str, float, float, bytes], Awaitable[tuple[bool, str]]]
+PasswordResetProbe = Callable[[], bool | Awaitable[bool]]
 
 
 def _configured(value: str | None) -> bool:
@@ -64,13 +67,8 @@ def _cache_ttl(env: Mapping[str, str]) -> float:
         return 1.0
 
 
-def _check(
-    status: str,
-    *,
-    required: bool,
-    reason: str | None = None,
-    **extra: Any,
-) -> dict[str, Any]:
+def _check(status: str, *, required: bool, reason: str | None = None,
+           **extra: Any) -> dict[str, Any]:
     value: dict[str, Any] = {"status": status, "required": required}
     if reason:
         value["reason"] = reason
@@ -108,6 +106,8 @@ class ReadinessService:
         redis_probe: RedisProbe | None = None,
         herdr_probe: HerdrProbe | None = None,
         fleet_receipt_probe: FleetReceiptProbe | None = None,
+        password_reset_notifier: Any = None,
+        password_reset_probe: PasswordResetProbe | None = None,
     ) -> None:
         self._kernel = kernel
         self._tenant_id = tenant_id
@@ -118,6 +118,8 @@ class ReadinessService:
         self._redis_probe = redis_probe or _probe_redis
         self._herdr_probe = herdr_probe
         self._fleet_receipt_probe = fleet_receipt_probe
+        self._password_reset_notifier = password_reset_notifier
+        self._password_reset_probe = password_reset_probe
         self._cache_lock = asyncio.Lock()
         self._cache: tuple[float, dict[str, Any]] | None = None
 
@@ -148,6 +150,9 @@ class ReadinessService:
         control = await control_plane_check(self._kernel, self._tenant_id)
         stack_tools, model_gateway = await self._platform_checks(env, timeout_s)
         hatchet = await self._hatchet_check(env, timeout_s)
+        password_reset = await self._password_reset_check(env, timeout_s)
+        background_jobs = await read_background_job_readiness(
+            self._kernel.store, self._tenant_id, timeout_s=timeout_s)
 
         checks = {
             "postgres": postgres,
@@ -157,71 +162,35 @@ class ReadinessService:
             "stack_tools": stack_tools,
             "hatchet": hatchet,
             "model_gateway": model_gateway,
+            "password_reset_delivery": password_reset,
+            **background_jobs,
         }
         ready = all(not item["required"] or item["status"] == "ok" for item in checks.values())
         return {"status": "ready" if ready else "not_ready", "checks": checks}
 
+    async def _password_reset_check(
+        self,
+        env: Mapping[str, str],
+        timeout_s: float,
+    ) -> dict[str, Any]:
+        return await password_reset_check(
+            self._password_reset_notifier,
+            self._password_reset_probe,
+            env,
+            timeout_s,
+        )
+
     async def _database_checks(
         self, env: Mapping[str, str], production: bool, timeout_s: float
     ) -> tuple[dict[str, Any], dict[str, Any]]:
-        configured = _configured(env.get("DATABASE_URL"))
-        required = production or configured
-        if not required:
-            disabled = _check("disabled", required=False, reason="not_configured")
-            return disabled, {
-                **disabled,
-                "expected": EXPECTED_ALEMBIC_HEAD,
-            }
-        if not configured:
-            return (
-                _check("failed", required=True, reason="not_configured"),
-                _check(
-                    "failed",
-                    required=True,
-                    reason="postgres_unavailable",
-                    expected=EXPECTED_ALEMBIC_HEAD,
-                ),
-            )
-
-        probe = self._postgres_probe or getattr(self._kernel.store, "readiness_snapshot", None)
-        if not callable(probe):
-            return (
-                _check("failed", required=True, reason="wrong_store"),
-                _check(
-                    "failed",
-                    required=True,
-                    reason="postgres_unavailable",
-                    expected=EXPECTED_ALEMBIC_HEAD,
-                ),
-            )
-        try:
-            alive, heads = await asyncio.wait_for(probe(), timeout=timeout_s)
-        except Exception:
-            return (
-                _check("failed", required=True, reason="probe_failed"),
-                _check(
-                    "failed",
-                    required=True,
-                    reason="probe_failed",
-                    expected=EXPECTED_ALEMBIC_HEAD,
-                ),
-            )
-
-        postgres = _check(
-            "ok" if alive else "failed",
-            required=True,
-            reason=None if alive else "probe_failed",
+        return await database_checks(
+            self._kernel.store,
+            self._postgres_probe,
+            env,
+            production,
+            timeout_s,
+            EXPECTED_ALEMBIC_HEAD,
         )
-        expected = (EXPECTED_ALEMBIC_HEAD,)
-        head_ok = tuple(heads) == expected
-        migration = _check(
-            "ok" if head_ok else "failed",
-            required=True,
-            reason=None if head_ok else "head_mismatch",
-            expected=EXPECTED_ALEMBIC_HEAD,
-            current=EXPECTED_ALEMBIC_HEAD if head_ok else "mismatch",
-        )
-        return postgres, migration
 
     async def _redis_check(
         self, env: Mapping[str, str], production: bool, timeout_s: float
@@ -232,16 +201,17 @@ class ReadinessService:
             return _check("disabled", required=False, reason="not_configured")
         if not url:
             return _check("failed", required=True, reason="not_configured")
+        if production and not self._kernel.events.shared:
+            return _check("failed", required=True, reason="wrong_backend")
+        reason = "probe_failed"
         try:
             alive = await asyncio.wait_for(self._redis_probe(url, timeout_s), timeout=timeout_s)
+            if alive and self._kernel.events.shared:
+                reason = "capability_failed"
+                alive = await asyncio.wait_for(self._kernel.events.readiness(), timeout=timeout_s)
         except Exception:
             alive = False
-        return _check(
-            "ok" if alive else "failed",
-            required=True,
-            reason=None if alive else "probe_failed",
-        )
-
+        return _check("ok" if alive else "failed", required=True, reason=None if alive else reason)
     async def _platform_checks(
         self, env: Mapping[str, str], timeout_s: float
     ) -> tuple[dict[str, Any], dict[str, Any]]:

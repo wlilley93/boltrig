@@ -85,7 +85,7 @@ async def test_budget_trued_up_to_actual_after_run(monkeypatch):
     kernel = await _kernel_with_caps()
     kernel.store.set_budget(
         Budget(id=T, tenant_id=T, scope_type="tenant",
-               cost_limit_micros=10_000_000, hard_stop=True)
+               cost_limit_micros=10_000_000, hard_stop=True, window="daily")
     )
     spawner = build_spawner(kernel)
 
@@ -125,7 +125,7 @@ async def test_degraded_run_refunds_the_estimate(monkeypatch):
     kernel = await _kernel_with_caps()
     kernel.store.set_budget(
         Budget(id=T, tenant_id=T, scope_type="tenant",
-               cost_limit_micros=10_000, hard_stop=True)
+               cost_limit_micros=10_000, hard_stop=True, window="run")
     )
     spawner = build_spawner(kernel)
 
@@ -144,7 +144,7 @@ async def test_degraded_run_refunds_the_estimate(monkeypatch):
     res = await spawner.spawn(T, "decompose epic", ["analysis/decompose"], {}, _ctx())
     assert res["degraded"] is True
     assert res["tokens_used"] == 0
-    b = await kernel.store.get_budget(T, T)
+    b = await kernel.store.get_budget(T, T, run_id=res["run_id"])
     # the reserved estimate was fully refunded - a no-op run costs nothing.
     assert b.spent_tokens == 0
     assert b.spent_micros == 0
@@ -196,6 +196,34 @@ async def test_model_price_from_config_overrides_tier_default(tmp_path):
 
 
 @pytest.mark.security
+@pytest.mark.invariant("FR-COST-04")
+def test_cost_tier_vocabulary_is_closed_across_manifest_and_control(tmp_path):
+    """Authoring must not mint a tier routing and pricing interpret differently."""
+    from boltrig.config.control_specs import control_specs
+    from boltrig.models import COST_TIERS
+
+    profile = next(
+        spec
+        for spec in control_specs()
+        if spec.verb_id == "control.capability.upsert"
+    )
+    assert profile.input_schema["properties"]["cost_tier"]["enum"] == list(COST_TIERS)
+    assert COST_TIERS == ("cheap", "standard", "expensive")
+
+    path = tmp_path / "manifest.yaml"
+    path.write_text(
+        "tenant_id: acme\n"
+        "hierarchy:\n"
+        "  tier1:\n"
+        "    name: chief\n"
+        "    cost_tier: premium\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="cost_tier must be one of"):
+        load_manifest(str(path))
+
+
+@pytest.mark.security
 @pytest.mark.invariant("FR-COST-03")
 async def test_the_manifest_seeded_tenant_budget_is_actually_debited(monkeypatch):
     """The tenant budget must be found under the id the MANIFEST seeds it with.
@@ -219,9 +247,11 @@ async def test_the_manifest_seeded_tenant_budget_is_actually_debited(monkeypatch
         return _FakeRuntime(tokens=4321, cost_micros=0)
 
     monkeypatch.setattr(spawner, "_runtime_for", runtime_for)
-    await spawner.spawn(T, "decompose epic", ["analysis/decompose"], {}, _ctx())
+    result = await spawner.spawn(
+        T, "decompose epic", ["analysis/decompose"], {}, _ctx()
+    )
 
-    budget = await kernel.store.get_budget(T, T)
+    budget = await kernel.store.get_budget(T, T, run_id=result["run_id"])
     assert budget is not None, "the manifest-seeded tenant budget must be the one reserved against"
     # 'cheap' prices at 1 micro/token, so the ledger reads straight through.
     assert budget.spent_tokens == 4321, "the tenant ledger must record real spend, not zero"

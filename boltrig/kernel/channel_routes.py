@@ -21,12 +21,6 @@ import uuid
 from fastapi import Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from boltrig.adapters.builtin.inbound_webhook import (
-    WebhookAuthError,
-    WebhookValidationError,
-    is_duplicate_delivery,
-    verify_and_normalise,
-)
 from boltrig.models import (
     ActionType,
     AuditEvent,
@@ -35,10 +29,9 @@ from boltrig.models import (
     HITLStateConflict,
     HITLType,
     RateLimit,
-    RateLimited,
     utcnow,
 )
-from boltrig.work.normalise import normalise
+from boltrig.models.channel_providers import CHANNEL_PLATFORMS
 
 from .channel_principal import (
     CHANNEL_TIERS,
@@ -87,6 +80,20 @@ async def _channel_secret(kernel, ref: dict | None) -> str | None:
     carry a reference."""
     if not ref:
         return None
+    if ref.get("kind") == "channel_credentials_v1":
+        signing = dict(ref.get("refs") or {}).get("signing")
+        if not isinstance(signing, dict) or not signing.get("ref"):
+            return None
+        try:
+            material = await kernel.credentials.fetch_material(signing)
+        except Exception:
+            return None
+        return str(
+            material.get("signing")
+            or material.get("secret")
+            or material.get("value")
+            or ""
+        ) or None
     if ref.get("ref"):
         try:
             material = await kernel.credentials.fetch_material(ref)
@@ -402,10 +409,16 @@ async def _consume_pairing(kernel, channel, external_user_id, code) -> bool:
 
 
 def register_channel_routes(app, *, principal_dep, get_kernel) -> None:
-    from boltrig.identity.rbac import _role_rank, can_author
+    from boltrig.identity.rbac import _role_rank
+    from .channel_inbound_routes import register_channel_inbound_route
+    from .channel_inventory_routes import register_channel_inventory_routes
 
     P = Depends(principal_dep)
     K = Depends(get_kernel)
+    register_channel_inventory_routes(
+        app, principal_dep=principal_dep, get_kernel=get_kernel
+    )
+    register_channel_inbound_route(app, get_kernel=get_kernel)
 
     def _role_clamp(p, role: str) -> JSONResponse | None:
         """Role-rank clamp (parity with access_routes._reject_escalation, SEC-102):
@@ -417,169 +430,6 @@ def register_channel_routes(app, *, principal_dep, get_kernel) -> None:
                 status_code=403,
             )
         return None
-
-    @app.get("/v1/channels")
-    async def list_channels(k=K, p=P) -> JSONResponse:
-        if not can_author(p.role):
-            return JSONResponse({"status": "denied", "reason": "admin only"}, status_code=403)
-        chans = await k.store.list_channels(p.tenant_id)
-        return JSONResponse(
-            {
-                "channels": [
-                    {
-                        "id": c.id, "platform": c.platform, "name": c.name,
-                        "transport": c.transport, "enabled": c.enabled,
-                        "unpaired_behavior": c.unpaired_behavior,
-                    }
-                    for c in chans
-                ]
-            }
-        )
-
-    @app.post("/v1/channels/{channel_id}/inbound")
-    async def channel_inbound(channel_id: str, body: dict, request: Request, k=K) -> JSONResponse:
-        # 1. resolve the channel by its unguessable id (tenant comes from HERE).
-        # ONE intake path for BOTH transport classes (decision 0003): webhook
-        # platforms call this directly; a socket-class event reaches the same
-        # route via the severed gateway, which signs with the same connect-time
-        # secret the kernel resolves below - nothing built for Phase 1 changes.
-        ch = await k.store.get_channel_by_id(channel_id)
-        if ch is None or not ch.enabled or ch.transport not in ("webhook", "socket"):
-            return JSONResponse({"error": "unknown_channel"}, status_code=404)
-
-        # 2. resolve the signing secret kernel-side (SEC-05), never from the body.
-        # Fail CLOSED when the channel has no resolvable secret: without one the
-        # signature check is skipped entirely and intake would proceed on the
-        # unguessable channel id alone.
-        ref = None
-        if ch.credential_ref:
-            ref = await k.store.get_credential_ref(ch.tenant_id, ch.credential_ref)
-        secret = await _channel_secret(k, ref)
-        if not secret:
-            return JSONResponse({"error": "channel_misconfigured"}, status_code=503)
-
-        # 3. verify the signature at the edge, before acting on the body. The
-        # verified candidate carries the delivery id used for replay dedup (M3).
-        try:
-            candidate = verify_and_normalise(body, dict(request.headers), secret)
-        except WebhookAuthError:
-            return JSONResponse({"status": "denied", "reason": "signature"}, status_code=401)
-        except WebhookValidationError as exc:
-            return JSONResponse({"status": "error", "reason": str(exc)}, status_code=400)
-
-        # 4. bind the tenant from the VERIFIED channel (RLS + K-3)
-        from boltrig.store.postgres import set_current_tenant
-
-        set_current_tenant(ch.tenant_id)
-
-        # 5. map the verified sender -> a governed Principal (kernel-authoritative)
-        sender_field = ch.config.get("sender_field", "sender")
-        external_user_id = str(body.get(sender_field) or "").strip()
-        if not external_user_id:
-            return JSONResponse({"status": "error", "reason": "no sender"}, status_code=400)
-        principal = await resolve_channel_principal(k.store, ch, external_user_id)
-        if principal is None:
-            # unpaired sender. If the channel is in 'pair' mode and the message
-            # carries a pairing code, consume it (expiry + wrong-code lockout) and
-            # bind the sender, then proceed as the now-bound principal. Otherwise
-            # apply the channel's configured behaviour (fail-closed default).
-            if ch.unpaired_behavior == "pair":
-                code = str(body.get("pairing_code") or "").strip()
-                if code and await _consume_pairing(k, ch, external_user_id, code):
-                    principal = await resolve_channel_principal(
-                        k.store, ch, external_user_id
-                    )
-            if principal is None:
-                # SEC-180: an opted-in channel onboards the stranger itself, at
-                # the configured CONSTRAINED role (rate-limited per channel).
-                try:
-                    principal = await _self_onboard(k, ch, external_user_id)
-                except RateLimited as exc:
-                    headers = {}
-                    if exc.retry_after_seconds is not None:
-                        headers["Retry-After"] = str(int(exc.retry_after_seconds))
-                    return JSONResponse(
-                        {"status": "throttled", "reason": "onboarding rate limit"},
-                        status_code=429,
-                        headers=headers,
-                    )
-            if principal is None:
-                if ch.unpaired_behavior == "ignore":
-                    return JSONResponse({"status": "ignored"}, status_code=200)
-                return JSONResponse(
-                    {"status": "denied", "reason": "sender not paired"}, status_code=403
-                )
-
-        # 6. intake rate limit BEFORE minting a work item (M5): throttle per-channel
-        # and per-(channel, sender) so an abusive channel or sender cannot drive
-        # unbounded model spend. On the limit, return 429 and create nothing.
-        try:
-            await k.rate_limiter.enforce(
-                ch.tenant_id, f"channel.inbound:{ch.id}", INBOUND_RL_PER_CHANNEL
-            )
-            await k.rate_limiter.enforce(
-                ch.tenant_id, f"channel.inbound:{ch.id}:{external_user_id}", INBOUND_RL_PER_SENDER
-            )
-        except RateLimited as exc:
-            headers = {}
-            if exc.retry_after_seconds is not None:
-                headers["Retry-After"] = str(int(exc.retry_after_seconds))
-            return JSONResponse(
-                {"status": "throttled", "reason": "intake rate limit"},
-                status_code=429,
-                headers=headers,
-            )
-
-        # 7. replay dedup BEFORE minting a work item (M3): a captured signed request
-        # replays with a genuine signature, so the signature check cannot stop the
-        # second ingest. Skip it here on a stable delivery id. The store is the
-        # record-and-check AUTHORITY (decision 0003 Phase 2): dedup holds across
-        # workers and restarts; the process-local set is only a first-tier cache.
-        # Placed after sender resolution so only would-be intakes are marked,
-        # never a rejected/unpaired request. A message with NO stable delivery id
-        # still cannot be deduped (honest gap: it is ingested on every replay).
-        delivery = candidate.get("delivery_id")
-        if delivery and await is_duplicate_delivery(
-            k.store, ch.tenant_id, ch.id, str(delivery)
-        ):
-            return JSONResponse(
-                {"status": "duplicate", "reason": "delivery already ingested"},
-                status_code=200,
-            )
-
-        # 8. channel-native HITL replies (SEC-14/SEC-179): a BOUND sender's
-        # /approve|/deny|/answer command - or a plain reply in a thread with
-        # EXACTLY ONE pending item addressed to them - is answered through the
-        # same chokepoint logic the API uses, AS the resolved principal. A
-        # consumed reply mints NO work item; anything else is normal intake.
-        target, reply_route = _resolve_addressing(ch, body)
-        hitl_reply = await _hitl_reply_response(
-            k, ch, principal, external_user_id, body, reply_route
-        )
-        if hitl_reply is not None:
-            return hitl_reply
-
-        # 9. normalise -> a work-item intake (the CoS routes it), tenant-scoped.
-        # The item carries the ADDRESSING (decision 0003 Phase 2): the resolved
-        # target (tier-1 CoS by default, a named tier-2 subagent/run when the
-        # message addresses one) and the reply route for round-trip delivery.
-        item = normalise(body, source=ch.platform, tenant_id=ch.tenant_id)
-        item.on_behalf_of = principal.subject
-        item.target, item.reply_route = target, reply_route
-        item.reply_route["sender"] = external_user_id
-        await k.store.create_work_item(item)
-
-        # 10. audit the intake as the resolved principal (audit-always)
-        await k.audit.write(
-            AuditEvent(
-                tenant_id=ch.tenant_id, ts=utcnow(), actor=principal.subject,
-                actor_tier="human", action_type=ActionType.TOOL_CALL, noun="channel",
-                verb="channel.inbound", status="ok",
-                detail={"channel": ch.id, "work_item": item.id, "platform": ch.platform,
-                        "target": item.target},
-            )
-        )
-        return JSONResponse({"status": "ok", "work_item": item.id}, status_code=202)
 
     # === Governance verbs (decision 0003): admin-authored channel lifecycle. ===
     # Lifecycle and sender bindings are admin-gated and audited; connection secrets
@@ -599,9 +449,9 @@ def register_channel_routes(app, *, principal_dep, get_kernel) -> None:
             return denied
         platform = str(body.get("platform") or "").strip()
         name = str(body.get("name") or "").strip()
-        if platform not in ("webhook", "msteams") or not name:
+        if platform not in CHANNEL_PLATFORMS or not name:
             return JSONResponse(
-                {"status": "error", "reason": "platform must be a webhook-class + name"},
+                {"status": "error", "reason": "a supported platform + name is required"},
                 status_code=400,
             )
         output, pending = await dispatch_control_route(
@@ -653,6 +503,41 @@ def register_channel_routes(app, *, principal_dep, get_kernel) -> None:
         await _audit(k, p, "channel.disconnect", {"channel": channel_id}, status="ok")
         return JSONResponse({"status": "ok"})
 
+    @app.post("/v1/channels/{channel_id}/deliveries/{message_id}/retry")
+    async def retry_channel_delivery(
+        channel_id: str,
+        message_id: str,
+        body: dict,
+        request: Request,
+        k=K,
+        p=P,
+    ) -> JSONResponse:
+        denied = _admin(p)
+        if denied:
+            return denied
+        expected_updated_at = str(body.get("expected_updated_at") or "").strip()
+        approval_id = str(body.get("approval_id") or "").strip()
+        if not expected_updated_at:
+            return JSONResponse(
+                {"status": "error", "reason": "delivery snapshot is required"},
+                status_code=400,
+            )
+        output, pending = await dispatch_control_route(
+            k,
+            p,
+            "control.channel.delivery.retry",
+            {
+                "channel_id": channel_id,
+                "message_id": message_id,
+                "expected_updated_at": expected_updated_at,
+                **({"approval_id": approval_id} if approval_id else {}),
+            },
+            request=request,
+        )
+        if pending is not None:
+            return pending
+        return JSONResponse({"status": "ok", **(output or {})})
+
     @app.post("/v1/channels/{channel_id}/pair")
     async def channel_pair(channel_id: str, body: dict, request: Request,
                            k=K, p=P) -> JSONResponse:
@@ -693,6 +578,30 @@ def register_channel_routes(app, *, principal_dep, get_kernel) -> None:
                       "pairing": output.get("pairing_id")})
         return JSONResponse({"status": "ok", **output},
                             status_code=201)  # code returned ONCE, never again
+
+    @app.get("/v1/channels/{channel_id}/pair-finalizations")
+    async def channel_pair_finalizations(
+        channel_id: str,
+        k=K,
+        p=P,
+    ) -> JSONResponse:
+        denied = _admin(p)
+        if denied:
+            return denied
+        channel = await k.store.get_channel(p.tenant_id, channel_id)
+        if channel is None:
+            return JSONResponse(
+                {"status": "error", "reason": "not_found"},
+                status_code=404,
+            )
+        from .channel_pair_finalization import discover_pair_finalizations
+
+        finalizations = await discover_pair_finalizations(
+            k.store, k.hitl, p, channel
+        )
+        return JSONResponse(
+            {"channel_id": channel_id, "finalizations": finalizations}
+        )
 
     @app.post("/v1/channels/{channel_id}/bindings")
     async def channel_bind(channel_id: str, body: dict, request: Request,

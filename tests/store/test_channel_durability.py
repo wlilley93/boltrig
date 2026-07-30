@@ -10,6 +10,7 @@ set (CI) and skips cleanly offline.
 from __future__ import annotations
 
 import os
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -128,6 +129,92 @@ async def test_outbox_claim_is_single_winner_and_lease_scoped(store):
 
 
 @pytest.mark.store
+@pytest.mark.invariant("SEC-177")
+async def test_gateway_owner_lease_is_single_winner_expiring_and_tenant_scoped(
+    store,
+):
+    await _channel(store, "ch-owner")
+    now = datetime(2026, 7, 30, 12, 0, tzinfo=UTC)
+    owner = await store.claim_channel_gateway_lease(
+        T,
+        "ch-owner",
+        "gateway-a",
+        "private-token-lease-a",
+        45,
+        now=now,
+    )
+    assert owner is not None
+    assert owner.gateway_id == "gateway-a"
+    assert await store.channel_gateway_lease_owned(
+        T,
+        "ch-owner",
+        "private-token-lease-a",
+        minimum_remaining_seconds=30,
+        now=now,
+    )
+    assert not await store.channel_gateway_lease_owned(
+        T,
+        "ch-owner",
+        "private-token-lease-a",
+        minimum_remaining_seconds=60,
+        now=now,
+    )
+    assert await store.claim_channel_gateway_lease(
+        T,
+        "ch-owner",
+        "gateway-b",
+        "private-token-lease-b",
+        45,
+        now=now,
+    ) is None
+    assert await store.list_channel_gateway_leases("other") == []
+
+    takeover = await store.claim_channel_gateway_lease(
+        T,
+        "ch-owner",
+        "gateway-b",
+        "private-token-lease-b",
+        45,
+        now=now + timedelta(seconds=46),
+    )
+    assert takeover is not None
+    assert takeover.gateway_id == "gateway-b"
+    assert not await store.channel_gateway_lease_owned(
+        T,
+        "ch-owner",
+        "private-token-lease-a",
+        now=now + timedelta(seconds=46),
+    )
+
+
+@pytest.mark.store
+@pytest.mark.invariant("SEC-WRK-11")
+async def test_notification_receipts_are_subject_scoped_on_both_stores(store):
+    await _channel(store, "ch-1")
+    for message_id, subject in (
+        ("n-1", "alice"),
+        ("n-2", "bob"),
+    ):
+        await store.enqueue_channel_outbox(
+            ChannelOutboxMessage(
+                id=message_id,
+                tenant_id=T,
+                channel_id="ch-1",
+                payload={
+                    "text": "test",
+                    "target": "U-1",
+                    "subject": subject,
+                    "event": "approval",
+                },
+            )
+        )
+    alice = await store.list_notification_outbox(T, "alice")
+    assert [(item.id, item.status) for item in alice] == [("n-1", "pending")]
+    assert await store.list_notification_outbox(T, "mallory") == []
+    assert await store.list_notification_outbox("other", "alice") == []
+
+
+@pytest.mark.store
 @pytest.mark.invariant("SEC-176")
 async def test_outbox_claim_honours_channel_set_and_lease_expiry(store):
     await _channel(store, "ch-1")
@@ -165,6 +252,90 @@ async def test_outbox_fail_backs_off_then_terminates(store):
     assert await store.fail_channel_outbox(
         T, "m-1", "stranger", "x", max_attempts=3, backoff_seconds=1
     ) is False
+
+
+@pytest.mark.store
+@pytest.mark.invariant("SEC-WRK-29")
+async def test_delivery_receipts_are_safe_scoped_and_exactly_retry_terminal_failure(store):
+    """Both stores expose metadata, not the gateway's payload or lease row.
+
+    Manual recovery is intentionally one narrow transition: the caller must
+    name a terminal row and its exact observed revision. Automatic retryable
+    rows, delivered rows and stale snapshots cannot be requeued.
+    """
+    for channel_id in ("queued", "flight", "retryable", "delivered", "failed"):
+        await _channel(store, channel_id)
+        await store.enqueue_channel_outbox(_msg(f"m-{channel_id}", channel_id))
+
+    in_flight = await store.claim_channel_outbox(T, ["flight"], "gateway", 60, 1)
+    assert [row.id for row in in_flight] == ["m-flight"]
+
+    retrying = await store.claim_channel_outbox(T, ["retryable"], "gateway", 60, 1)
+    assert [row.id for row in retrying] == ["m-retryable"]
+    assert await store.fail_channel_outbox(
+        T, "m-retryable", "gateway", "provider said: private detail",
+        max_attempts=3, backoff_seconds=600,
+    )
+
+    delivered = await store.claim_channel_outbox(T, ["delivered"], "gateway", 60, 1)
+    assert [row.id for row in delivered] == ["m-delivered"]
+    assert await store.ack_channel_outbox(T, "m-delivered", "gateway")
+
+    failed = await store.claim_channel_outbox(T, ["failed"], "gateway", 60, 1)
+    assert [row.id for row in failed] == ["m-failed"]
+    assert await store.fail_channel_outbox(
+        T, "m-failed", "gateway", "credential and destination must stay private",
+        max_attempts=1, backoff_seconds=1,
+    )
+
+    expected = {
+        "queued": ("queued", 0, None),
+        "flight": ("in_flight", 1, None),
+        "retryable": ("retryable", 1, "delivery_failed"),
+        "delivered": ("delivered", 1, None),
+        "failed": ("terminal_failed", 1, "delivery_failed"),
+    }
+    for channel_id, (status, attempts, safe_reason) in expected.items():
+        receipt = await store.get_channel_delivery_receipt(
+            T, channel_id, f"m-{channel_id}"
+        )
+        assert receipt is not None
+        assert (receipt.status, receipt.attempts, receipt.safe_reason) == (
+            status, attempts, safe_reason
+        )
+        assert set(vars(receipt)) == {
+            "id", "tenant_id", "channel_id", "status", "attempts",
+            "safe_reason", "created_at", "updated_at", "next_attempt_at",
+        }
+        assert await store.get_channel_delivery_receipt(
+            "other", channel_id, receipt.id
+        ) is None
+        assert await store.get_channel_delivery_receipt(
+            T, "different-channel", receipt.id
+        ) is None
+
+    retryable = await store.get_channel_delivery_receipt(
+        T, "retryable", "m-retryable"
+    )
+    assert retryable is not None and retryable.next_attempt_at is not None
+    assert await store.retry_terminal_channel_delivery(
+        T, "retryable", "m-retryable", retryable.updated_at
+    ) is None
+
+    terminal = await store.get_channel_delivery_receipt(T, "failed", "m-failed")
+    assert terminal is not None and terminal.updated_at is not None
+    stale = terminal.updated_at - timedelta(microseconds=1)
+    assert await store.retry_terminal_channel_delivery(
+        T, "failed", "m-failed", stale
+    ) is None
+    queued = await store.retry_terminal_channel_delivery(
+        T, "failed", "m-failed", terminal.updated_at
+    )
+    assert queued is not None
+    assert (queued.status, queued.attempts, queued.safe_reason) == ("queued", 0, None)
+    assert await store.retry_terminal_channel_delivery(
+        T, "failed", "m-failed", terminal.updated_at
+    ) is None
 
 
 # --- the sender's binding row -------------------------------------------------

@@ -68,6 +68,7 @@ async def _proxy(captured: dict[str, Any], allowed: frozenset[str]) -> PerCellMo
         upstream_base_url="http://gateway/v1",
         upstream_key="KERNEL-ONLY-KEY",
         client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+        allowed_model="gpt-5.2-codex",
         allowed_tools=allowed,
     )
 
@@ -116,6 +117,7 @@ async def test_the_proxy_offers_exactly_the_granted_wire_names() -> None:
                 headers={"authorization": "Bearer cell-bearer"},
                 content=json.dumps(
                     {
+                        "model": "gpt-5.2-codex",
                         "input": "hi",
                         "tools": [
                             {"type": "function", "name": "exec_command"},
@@ -166,6 +168,7 @@ async def test_a_namespace_emptied_by_the_ceiling_is_dropped() -> None:
                 headers={"authorization": "Bearer cell-bearer"},
                 content=json.dumps(
                     {
+                        "model": "gpt-5.2-codex",
                         "input": "hi",
                         "tools": [
                             {
@@ -214,6 +217,7 @@ async def test_the_response_stream_holds_the_same_ceiling() -> None:
         upstream_base_url="http://gateway/v1",
         upstream_key="KERNEL-ONLY-KEY",
         client=upstream_of(allowed_call),
+        allowed_model="gpt-5.2-codex",
         allowed_tools=frozenset({_ALLOWED_WIRE}),
     )
     port = await proxy.start()
@@ -222,7 +226,7 @@ async def test_the_response_stream_holds_the_same_ceiling() -> None:
             resp = await caller.post(
                 f"http://127.0.0.1:{port}/v1/responses",
                 headers={"authorization": "Bearer cell-bearer"},
-                content=b"{}",
+                content=b'{"model":"gpt-5.2-codex"}',
             )
             assert _ALLOWED_WIRE.encode() in resp.content  # the allowed call relays
     finally:
@@ -233,6 +237,7 @@ async def test_the_response_stream_holds_the_same_ceiling() -> None:
         upstream_base_url="http://gateway/v1",
         upstream_key="KERNEL-ONLY-KEY",
         client=upstream_of(barred_call),
+        allowed_model="gpt-5.2-codex",
         allowed_tools=frozenset({_ALLOWED_WIRE}),
     )
     port = await proxy.start()
@@ -241,7 +246,7 @@ async def test_the_response_stream_holds_the_same_ceiling() -> None:
             resp = await caller.post(
                 f"http://127.0.0.1:{port}/v1/responses",
                 headers={"authorization": "Bearer cell-bearer"},
-                content=b"{}",
+                content=b'{"model":"gpt-5.2-codex"}',
             )
             assert b"exec_command" not in resp.content  # the barred call truncates
     finally:

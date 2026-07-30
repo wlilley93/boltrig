@@ -1,14 +1,13 @@
 import { useState } from "react";
 
 import { api } from "@/api/client";
-import type { StatusAck, WorkflowSourceValue } from "@/api/types";
+import type { StatusAck } from "@/api/types";
 import { AckLine } from "@/panels/studio/AckLine";
 import { csvToList, errText, parseJson } from "@/panels/shared";
 
 interface UpsertWorkflowValues {
   id: string;
   version: string;
-  source: WorkflowSourceValue;
   definition: string;
   tags: string;
 }
@@ -16,7 +15,6 @@ interface UpsertWorkflowValues {
 interface UpsertWorkflowChangeHandlers {
   setId: (v: string) => void;
   setVersion: (v: string) => void;
-  setSource: (v: WorkflowSourceValue) => void;
   setDefinition: (v: string) => void;
   setTags: (v: string) => void;
 }
@@ -36,8 +34,8 @@ function UpsertWorkflowFields({
   onSave,
   status,
 }: UpsertWorkflowFieldsProps) {
-  const { id, version, source, definition, tags } = values;
-  const { setId, setVersion, setSource, setDefinition, setTags } = onChange;
+  const { id, version, definition, tags } = values;
+  const { setId, setVersion, setDefinition, setTags } = onChange;
   const { ack, error } = status;
 
   return (
@@ -52,17 +50,11 @@ function UpsertWorkflowFields({
           <span>version</span>
           <input value={version} onChange={(e) => setVersion(e.target.value)} />
         </label>
-        <label className="field">
+        <div className="field">
           <span>source</span>
-          <select
-            value={source}
-            onChange={(e) => setSource(e.target.value as WorkflowSourceValue)}
-          >
-            <option value="precreated">precreated</option>
-            <option value="generated">generated</option>
-            <option value="learned">learned</option>
-          </select>
-        </label>
+          <strong>precreated</strong>
+          <small>Assigned by Boltrig</small>
+        </div>
       </div>
       <label className="field">
         <span>definition / steps (JSON)</span>
@@ -90,7 +82,6 @@ function UpsertWorkflowFields({
 export function UpsertWorkflowForm({ onSaved }: { onSaved: () => void }) {
   const [id, setId] = useState("");
   const [version, setVersion] = useState("1.0.0");
-  const [source, setSource] = useState<WorkflowSourceValue>("precreated");
   const [definition, setDefinition] = useState("{}");
   const [tags, setTags] = useState("");
   const [busy, setBusy] = useState(false);
@@ -116,7 +107,6 @@ export function UpsertWorkflowForm({ onSaved }: { onSaved: () => void }) {
       const res = await api.upsertWorkflow({
         id: id.trim(),
         version: version.trim() || "1.0.0",
-        source,
         definition: def,
         intent_tags: csvToList(tags),
       });
@@ -131,11 +121,10 @@ export function UpsertWorkflowForm({ onSaved }: { onSaved: () => void }) {
 
   return (
     <UpsertWorkflowFields
-      values={{ id, version, source, definition, tags }}
+      values={{ id, version, definition, tags }}
       onChange={{
         setId,
         setVersion,
-        setSource,
         setDefinition,
         setTags,
       }}

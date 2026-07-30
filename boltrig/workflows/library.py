@@ -32,6 +32,24 @@ def _visible_in_workspace(wf: WorkflowDefinition, active_workspace_id: str | Non
     return wf.workspace_id is None or wf.workspace_id == active_workspace_id
 
 
+def _archived(wf: WorkflowDefinition) -> bool:
+    lifecycle = wf.definition.get("_boltrig_lifecycle")
+    return isinstance(lifecycle, dict) and lifecycle.get("status") == "archived"
+
+
+def _run_id(executor: Any | None, requested: str | None) -> str:
+    if requested:
+        return requested
+    return executor.new_run_id() if executor is not None else uuid.uuid4().hex
+
+
+def _snapshot(wf: WorkflowDefinition, expected_sha256: str | None) -> dict[str, Any]:
+    snapshot = build_workflow_snapshot(wf)
+    if expected_sha256 is not None and snapshot["sha256"] != expected_sha256:
+        raise RuntimeError("workflow_snapshot_changed")
+    return snapshot
+
+
 class WorkflowLibrary:
     """Selection facade over the store's :class:`WorkflowDefinition` records.
 
@@ -112,7 +130,11 @@ class WorkflowLibrary:
         candidates = [
             wf
             for wf in await self._store.list_workflows(tenant)
-            if wanted & set(wf.intent_tags) and _visible_in_workspace(wf, active_workspace_id)
+            if (
+                wanted & set(wf.intent_tags)
+                and _visible_in_workspace(wf, active_workspace_id)
+                and not _archived(wf)
+            )
         ]
         if not candidates:
             return None
@@ -134,6 +156,8 @@ class WorkflowLibrary:
         *,
         active_workspace_id: str | None = None,
         context: InvocationContext | None = None,
+        run_id: str | None = None,
+        expected_workflow_sha256: str | None = None,
     ) -> dict[str, Any]:
         """Start a workflow and return a run descriptor (Hatchet seam).
 
@@ -147,9 +171,11 @@ class WorkflowLibrary:
         wf = await self.get(tenant, wf_id, active_workspace_id=active_workspace_id)
         if wf is None:
             raise LookupError(f"unknown workflow '{wf_id}' for tenant '{tenant}'")
+        if _archived(wf):
+            raise PermissionError("workflow_archived")
         durable = bool(self._executor and getattr(self._executor, "durable", False))
-        run_id = self._executor.new_run_id() if self._executor is not None else uuid.uuid4().hex
-        snapshot = build_workflow_snapshot(wf)
+        run_id = _run_id(self._executor, run_id)
+        snapshot = _snapshot(wf, expected_workflow_sha256)
         descriptor = {
             "run_id": run_id,
             "tenant_id": tenant,
@@ -224,6 +250,8 @@ class WorkflowLibrary:
         wf = await self.get(tenant, wf_id, active_workspace_id=context.workspace_id)
         if wf is None:
             raise LookupError(f"unknown workflow '{wf_id}' for tenant '{tenant}'")
+        if _archived(wf):
+            raise PermissionError("workflow_archived")
         return await run_workflow_definition(
             self._kernel, wf, inputs, context, executor=self._executor
         )

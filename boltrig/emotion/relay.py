@@ -30,9 +30,9 @@ import shutil
 import tempfile
 import threading
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import AsyncIterator, Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, AsyncContextManager
 
 from boltrig.emotion.engine import EmotionEngine, EmotionModel
 from boltrig.emotion.tables import EventRule, load_emotion_tables
@@ -47,6 +47,7 @@ class EmotionRelay(EventRelay):
     def __init__(
         self,
         *args: Any,
+        backend: EventRelay | None = None,
         model: EmotionModel,
         rules: Sequence[EventRule],
         phenotype_path: Path,
@@ -56,7 +57,11 @@ class EmotionRelay(EventRelay):
         autostart: bool = True,
         **kwargs: Any,
     ) -> None:
-        super().__init__(*args, **kwargs)
+        if backend is None:
+            super().__init__(*args, **kwargs)
+        elif args or kwargs:
+            raise ValueError("backend cannot be combined with relay constructor options")
+        self._backend = backend
         self._model = model
         self._rules = list(rules)
         self._phenotype_path = phenotype_path
@@ -92,11 +97,125 @@ class EmotionRelay(EventRelay):
         return saved
 
     def publish(self, tenant_id: str, stream_id: str, event: dict[str, Any]) -> None:
-        super().publish(tenant_id, stream_id, event)
+        if self._backend is None:
+            super().publish(tenant_id, stream_id, event)
+        else:
+            self._backend.publish(tenant_id, stream_id, event)
         try:
             self._react(tenant_id, event)
         except Exception:  # noqa: BLE001 - cosmetic channel, never let it touch a run
             pass
+
+    @property
+    def shared(self) -> bool:
+        return self._backend.shared if self._backend is not None else False
+
+    async def readiness(self) -> bool:
+        if self._backend is None:
+            return True
+        return await self._backend.readiness()
+
+    async def aclose(self) -> None:
+        self.stop()
+        if self._backend is not None:
+            await self._backend.aclose()
+
+    def close(self, tenant_id: str, stream_id: str) -> None:
+        if self._backend is None:
+            super().close(tenant_id, stream_id)
+        else:
+            self._backend.close(tenant_id, stream_id)
+
+    def reopen(self, tenant_id: str, stream_id: str) -> None:
+        if self._backend is None:
+            super().reopen(tenant_id, stream_id)
+        else:
+            self._backend.reopen(tenant_id, stream_id)
+
+    def subscribe(
+        self, tenant_id: str, stream_id: str, *, replay: bool = True,
+        since: int | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
+        if self._backend is None:
+            return super().subscribe(tenant_id, stream_id, replay=replay, since=since)
+        return self._backend.subscribe(tenant_id, stream_id, replay=replay, since=since)
+
+    def subscribe_with_seq(
+        self, tenant_id: str, stream_id: str, *, replay: bool = True,
+        since: int | None = None,
+    ) -> AsyncIterator[tuple[int, dict[str, Any]]]:
+        if self._backend is None:
+            return super().subscribe_with_seq(
+                tenant_id, stream_id, replay=replay, since=since
+            )
+        return self._backend.subscribe_with_seq(
+            tenant_id, stream_id, replay=replay, since=since
+        )
+
+    def forget(self, tenant_id: str, stream_id: str) -> None:
+        if self._backend is None:
+            super().forget(tenant_id, stream_id)
+        else:
+            self._backend.forget(tenant_id, stream_id)
+
+    def snapshot(
+        self, tenant_id: str, stream_id: str, *, since: int | None = None
+    ) -> list[dict[str, Any]]:
+        if self._backend is None:
+            return super().snapshot(tenant_id, stream_id, since=since)
+        return self._backend.snapshot(tenant_id, stream_id, since=since)
+
+    def max_seq(self, tenant_id: str, stream_id: str) -> int:
+        if self._backend is None:
+            return super().max_seq(tenant_id, stream_id)
+        return self._backend.max_seq(tenant_id, stream_id)
+
+    def seq_bounds(self, tenant_id: str, stream_id: str) -> tuple[int | None, int]:
+        if self._backend is None:
+            return super().seq_bounds(tenant_id, stream_id)
+        return self._backend.seq_bounds(tenant_id, stream_id)
+
+    def conversation_lock(
+        self, tenant_id: str, conversation_id: str
+    ) -> AsyncContextManager[None]:
+        if self._backend is None:
+            return super().conversation_lock(tenant_id, conversation_id)
+        return self._backend.conversation_lock(tenant_id, conversation_id)
+
+    def active_run(self, tenant_id: str, conversation_id: str) -> str | None:
+        if self._backend is None:
+            return super().active_run(tenant_id, conversation_id)
+        return self._backend.active_run(tenant_id, conversation_id)
+
+    def set_active_run(
+        self, tenant_id: str, conversation_id: str, run_id: str
+    ) -> None:
+        if self._backend is None:
+            super().set_active_run(tenant_id, conversation_id, run_id)
+        else:
+            self._backend.set_active_run(tenant_id, conversation_id, run_id)
+
+    def clear_active_run(
+        self, tenant_id: str, conversation_id: str, *, expected: str | None = None
+    ) -> bool:
+        if self._backend is None:
+            return super().clear_active_run(
+                tenant_id, conversation_id, expected=expected
+            )
+        return self._backend.clear_active_run(
+            tenant_id, conversation_id, expected=expected
+        )
+
+    def refresh_active_run(
+        self, tenant_id: str, conversation_id: str, *, expected: str
+    ) -> bool:
+        if self._backend is None:
+            return super().refresh_active_run(
+                tenant_id, conversation_id, expected=expected
+            )
+        return self._backend.refresh_active_run(
+            tenant_id, conversation_id, expected=expected
+        )
 
     # --- emotion side (loop thread; pure math + dict ops, no I/O) ---
     def _react(self, tenant_id: str, event: Mapping[str, Any]) -> None:
@@ -229,24 +348,27 @@ def _enabled() -> bool:
     return shutil.which("orbctl") is not None
 
 
-def build_event_relay(*args: Any, **kwargs: Any) -> EventRelay:
+def build_event_relay(
+    *args: Any, backend: EventRelay | None = None, **kwargs: Any
+) -> EventRelay:
     """The kernel's relay factory: the emotion relay when the add-on is enabled and its
     data tables load, the plain relay everywhere else (fail-safe, P9)."""
     try:
         if not _enabled():
-            return EventRelay(*args, **kwargs)
+            return backend if backend is not None else EventRelay(*args, **kwargs)
         runtime_dir = os.environ.get("XDG_RUNTIME_DIR", "").strip()
         if not runtime_dir:
-            return EventRelay(*args, **kwargs)
+            return backend if backend is not None else EventRelay(*args, **kwargs)
         tables = load_emotion_tables()
         if tables is None:
-            return EventRelay(*args, **kwargs)
+            return backend if backend is not None else EventRelay(*args, **kwargs)
         model, rules = tables
         state_home = os.environ.get("XDG_STATE_HOME", "").strip() or str(
             Path.home() / ".local" / "state"
         )
         return EmotionRelay(
             *args,
+            backend=backend,
             model=model,
             rules=rules,
             phenotype_path=Path(runtime_dir) / "boltrig-phenotype.json",
@@ -254,4 +376,4 @@ def build_event_relay(*args: Any, **kwargs: Any) -> EventRelay:
             **kwargs,
         )
     except Exception:  # noqa: BLE001 - the emotion path must never break kernel bring-up
-        return EventRelay(*args, **kwargs)
+        return backend if backend is not None else EventRelay(*args, **kwargs)

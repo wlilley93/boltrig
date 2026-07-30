@@ -150,10 +150,12 @@ def test_every_registry_login_prefers_a_pat_when_one_exists() -> None:
 
 @pytest.mark.security
 @pytest.mark.invariant("IAC-005")
-def test_the_ui_candidate_is_given_the_packages_token_it_mounts() -> None:
-    """#115. ui/Dockerfile mounts `gh_npmrc`; nothing used to write it."""
-    step = _step("candidates", "Authenticate the ui build to GitHub Packages")
-    assert step.get("if") == "matrix.image == 'ui'"
+def test_frontend_candidates_receive_the_packages_token_they_mount() -> None:
+    """Both first-party frontend Dockerfiles mount the ephemeral gh_npmrc."""
+    step = _step("candidates", "Authenticate frontend builds to GitHub Packages")
+    condition = str(step.get("if"))
+    assert "matrix.image == 'ui'" in condition
+    assert "matrix.image == 'worker-ui'" in condition
     assert "npm.pkg.github.com/:_authToken" in step["run"]
     build = _step("candidates", "Build release candidate locally")["run"]
     assert "id=gh_npmrc" in build, "the built token is never mounted into the build"

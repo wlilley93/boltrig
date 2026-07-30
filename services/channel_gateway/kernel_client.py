@@ -63,13 +63,35 @@ class KernelClient:
         timeout: float = 15.0,
     ) -> None:
         self._token = token
+        self._owns_client = client is None
         self._client = client or httpx.AsyncClient(
             base_url=base_url.rstrip("/"), timeout=timeout
         )
         self._rpc_ids = itertools.count(1)
 
     async def aclose(self) -> None:
-        await self._client.aclose()
+        if self._owns_client:
+            await self._client.aclose()
+
+    @property
+    def has_token(self) -> bool:
+        """Whether a token is currently loaded, without exposing its value."""
+        return bool(self._token)
+
+    def with_token(self, token: str) -> "KernelClient":
+        """A non-owning view over the same transport with a narrower token."""
+        return KernelClient("", token, client=self._client)
+
+    def set_token(self, token: str) -> bool:
+        """Replace this private client's short-lived run token.
+
+        Return whether the value changed so the supervisor can distinguish a
+        real file rotation from rereading the same expired token.
+        """
+        if not token or token == self._token:
+            return False
+        self._token = token
+        return True
 
     def _token_headers(self) -> dict[str, str]:
         return {"x-boltrig-mcp-token": self._token or ""}
@@ -99,6 +121,21 @@ class KernelClient:
         )
         return list(resp.get("messages") or [])
 
+    async def reconcile_channels(self) -> dict:
+        """Fetch this token's current desired channel specs.
+
+        Resolved credentials are returned only over this authenticated link and
+        remain in this daemon's memory.
+        """
+        return await self._link_get("/v1/channels/gateway/reconcile")
+
+    async def heartbeat_channels(self, observations: list[dict[str, Any]]) -> dict:
+        """Report bounded desired/observed convergence evidence to the kernel."""
+        return await self._link_post(
+            "/v1/channels/gateway/heartbeat",
+            {"observations": observations},
+        )
+
     async def ack_outbox(self, message_id: str) -> bool:
         resp = await self._link_post(f"/v1/channels/gateway/outbox/{message_id}/ack", {})
         return resp.get("status") == "ok"
@@ -124,6 +161,51 @@ class KernelClient:
                 "params": params,
             },
         )
+
+    async def claim_call_media(self, call_id: str, media_token: str) -> dict:
+        """Redeem the browser bearer once, under this token's channel ceiling."""
+        return await self._link_post(
+            "/v1/calls/gateway/claim",
+            {"call_id": call_id, "media_token": media_token},
+        )
+
+    async def append_call_event(
+        self,
+        call_id: str,
+        event_type: str,
+        payload: dict,
+        *,
+        participant_id: str | None = None,
+    ) -> dict:
+        body: dict[str, Any] = {"type": event_type, "payload": payload}
+        if participant_id is not None:
+            body["participant_id"] = participant_id
+        return await self._link_post(f"/v1/calls/gateway/{call_id}/events", body)
+
+    async def set_call_state(self, call_id: str, status: str) -> dict:
+        return await self._link_post(
+            f"/v1/calls/gateway/{call_id}/state", {"status": status}
+        )
+
+    async def get_call_hitl(self, call_id: str, request_id: str) -> dict:
+        return await self._link_get(
+            f"/v1/calls/gateway/{call_id}/hitl/{request_id}"
+        )
+
+    async def _link_get(self, path: str) -> dict:
+        try:
+            resp = await self._client.get(path, headers=self._token_headers())
+        except Exception as exc:
+            raise KernelLinkError(type(exc).__name__) from exc
+        if resp.status_code == 401:
+            raise KernelAuthError("run-scoped token refused")
+        try:
+            data = resp.json()
+        except ValueError:
+            data = {}
+        if resp.status_code >= 400:
+            raise KernelLinkError(f"{path} -> {resp.status_code}")
+        return data
 
     async def _link_post(self, path: str, body: dict) -> dict:
         try:

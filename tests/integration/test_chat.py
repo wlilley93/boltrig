@@ -1,12 +1,15 @@
 """The conversational layer: streaming, persistence, inline HITL (Epic CONV)."""
 
 import asyncio
+import json
 import threading
+import time
 import types
 
 import pytest
 from fastapi.testclient import TestClient
 
+from boltrig.config.manifest import ChatConfig
 from boltrig.fleet.chat import (
     ChatService,
     ConversationForbidden,
@@ -342,6 +345,7 @@ async def test_cancel_wins_over_the_queue():
 
 
 @pytest.mark.invariant("US-CHAT-15")
+@pytest.mark.invariant("SEC-WRK-09")
 def test_http_steer_returns_202_queued_and_stream_carries_both_turns():
     store, relay = InMemoryStore(), EventRelay()
     entered, release = threading.Event(), threading.Event()
@@ -395,6 +399,186 @@ def test_http_steer_returns_202_queued_and_stream_carries_both_turns():
     assert r1.text.count("message_start") == 2
     assert "reply:steer" in r1.text
     assert calls == ["first", "steer"]
+
+
+@pytest.mark.invariant("SEC-WRK-09")
+def test_conversation_follow_is_server_selected_cursor_bounded_and_projected():
+    """Worker reattachment can follow only its conversation's active run.
+
+    The relay intentionally contains the raw tool payload for the Operator run
+    canvas. The conversation route must preserve the chat projection across both
+    replay and live delivery, even when its bounded backlog has already trimmed.
+    """
+    store, relay = InMemoryStore(), EventRelay(backlog=2)
+    entered, release = threading.Event(), threading.Event()
+
+    async def executor(
+        *, tenant_id, user_id, role, grants, conversation_id, run_id, message,
+        relay, attachments=None,
+    ):
+        relay.publish(run_id, {"type": "text_delta", "delta": "trimmed"})
+        relay.publish(
+            run_id,
+            {
+                "type": "tool_call",
+                "run_id": run_id,
+                "verb": "vault.inspect",
+                "call_id": "call-1",
+                "input": {"token": "RAW-CALL-SECRET"},
+                "args_summary": {"keys": ["token"], "count": 1},
+            },
+        )
+        relay.publish(
+            run_id,
+            {
+                "type": "tool_result",
+                "run_id": run_id,
+                "call_id": "call-1",
+                "status": "ok",
+                "output": {"token": "RAW-RESULT-SECRET"},
+                "result_summary": {"keys": ["token"], "status": "ok"},
+            },
+        )
+        entered.set()
+        while not release.is_set():
+            await asyncio.sleep(0.01)
+
+    chat = ChatService(
+        store,
+        relay,
+        turn_executor=executor,
+        chat_config=ChatConfig(heartbeat_seconds=1),
+    )
+    client = TestClient(create_app(Kernel(store), chat_service=chat))
+    hdr = {
+        "x-boltrig-tenant": T,
+        "x-boltrig-subject": "alice",
+        "x-boltrig-role": "engineer",
+    }
+    turn_result: dict = {}
+    turn = threading.Thread(
+        target=lambda: turn_result.setdefault(
+            "response",
+            client.post("/v1/chat", json={"message": "inspect"}, headers=hdr),
+        )
+    )
+    turn.start()
+    assert entered.wait(timeout=5)
+    conv_id = client.get("/v1/conversations", headers=hdr).json()["conversations"][0]["id"]
+
+    thread = client.get(f"/v1/conversations/{conv_id}", headers=hdr)
+    assert thread.status_code == 200
+    active_run_id = thread.json()["active_run_id"]
+    assert active_run_id
+    assert client.get(
+        f"/v1/conversations/{conv_id}/events?since=0",
+        headers={**hdr, "x-boltrig-subject": "bob"},
+    ).status_code == 403
+    assert client.get(
+        f"/v1/conversations/{conv_id}/events?follow=0", headers=hdr
+    ).status_code == 400
+    assert client.get(
+        f"/v1/conversations/{conv_id}/events?since={1 << 63}", headers=hdr
+    ).status_code == 400
+
+    follow_result: dict = {}
+    follow = threading.Thread(
+        target=lambda: follow_result.setdefault(
+            "response",
+            client.get(f"/v1/conversations/{conv_id}/events?since=0", headers=hdr),
+        )
+    )
+    follow.start()
+    deadline = time.monotonic() + 5
+    while (
+        len(relay._subs.get((T, active_run_id), ())) < 2
+        and time.monotonic() < deadline
+    ):
+        time.sleep(0.01)
+    assert len(relay._subs.get((T, active_run_id), ())) >= 2
+    release.set()
+    turn.join(timeout=5)
+    follow.join(timeout=5)
+    assert not turn.is_alive() and not follow.is_alive()
+
+    response = follow_result["response"]
+    assert response.status_code == 200
+    frames = [
+        json.loads(line[6:])
+        for line in response.text.splitlines()
+        if line.startswith("data: ")
+    ]
+    content_frames = [
+        frame for frame in frames if frame["event"]["type"] != "heartbeat"
+    ]
+    assert [frame["event"]["type"] for frame in content_frames] == [
+        "message_start",
+        "tool_call",
+        "tool_result",
+        "message_end",
+    ]
+    assert content_frames[0]["replay_truncated"] is True
+    assert [frame["cursor"] for frame in content_frames] == [0, 2, 3, 3]
+    assert content_frames[1]["event"]["args_summary"] == {
+        "keys": ["token"],
+        "count": 1,
+    }
+    assert content_frames[2]["event"]["result_summary"] == {
+        "keys": ["token"],
+        "status": "ok",
+    }
+    assert "RAW-CALL-SECRET" not in response.text
+    assert "RAW-RESULT-SECRET" not in response.text
+    assert '"input"' not in response.text and '"output"' not in response.text
+
+    # Once the canonical turn settles, the hint is cleared and a new follow does
+    # not resurrect a client-selected run.
+    assert client.get(f"/v1/conversations/{conv_id}", headers=hdr).json()[
+        "active_run_id"
+    ] is None
+    idle = client.get(f"/v1/conversations/{conv_id}/events", headers=hdr)
+    assert idle.status_code == 409 and idle.json()["status"] == "idle"
+
+
+@pytest.mark.invariant("SEC-WRK-09")
+async def test_active_run_truth_is_tenant_and_conversation_scoped():
+    from boltrig.models import Conversation, ConversationStatus
+
+    store, relay = InMemoryStore(), EventRelay()
+    for tenant, owner in ((T, "alice"), ("other", "bob")):
+        await store.create_conversation(
+            Conversation(
+                id="same-conversation-id",
+                tenant_id=tenant,
+                user_id=owner,
+                title="Same local id",
+                status=ConversationStatus.ACTIVE,
+            )
+        )
+    gate = asyncio.Event()
+    entered = asyncio.Event()
+
+    async def executor(**kwargs):
+        entered.set()
+        await gate.wait()
+
+    chat = ChatService(store, relay, turn_executor=executor)
+    turn = asyncio.create_task(_collect(chat.handle_turn(
+        tenant_id=T,
+        user_id="alice",
+        role="engineer",
+        message="first",
+        conversation_id="same-conversation-id",
+    )))
+    await entered.wait()
+    assert await chat.live_projection().active_run_for(
+        T, "alice", "engineer", "same-conversation-id"
+    )
+    assert await chat.live_projection().active_run_for(
+        "other", "bob", "engineer", "same-conversation-id"
+    ) is None
+    gate.set()
+    await turn
 
 
 @pytest.mark.invariant("US-CONV-05")

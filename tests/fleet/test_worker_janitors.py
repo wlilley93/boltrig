@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -45,7 +46,7 @@ class _Kernel:
     anchorer = object()
 
 
-async def _janitor_names(monkeypatch, **env) -> set[str]:
+async def _janitor_names(monkeypatch, **env) -> tuple[set[str], AsyncMock]:
     """Run the worker far enough to see which janitors it started."""
     for key in (
         "BOLTRIG_RETENTION_INTERVAL",
@@ -58,11 +59,19 @@ async def _janitor_names(monkeypatch, **env) -> set[str]:
         monkeypatch.setenv(key, value)
 
     pump = _Pump()
+    record_observation = AsyncMock(return_value=None)
     monkeypatch.setattr(worker_mod, "build_kernel_async", _async(_Kernel()))
+    monkeypatch.setattr(worker_mod, "_build_shared_codex_config", lambda: None)
+    monkeypatch.setattr(
+        worker_mod,
+        "record_permanent_fleet_startup_observation",
+        record_observation,
+    )
+    monkeypatch.setattr(worker_mod, "_publish_birth_profile_startup", _async(True))
     monkeypatch.setattr(worker_mod, "register_workers", lambda k: _Executor())
     monkeypatch.setattr(worker_mod, "_find_manifest", lambda: None)
     monkeypatch.setattr(worker_mod, "load_settings", lambda: object())
-    monkeypatch.setattr(worker_mod, "build_spawner", lambda k: object())
+    monkeypatch.setattr(worker_mod, "build_spawner", lambda k, **kw: object())
     monkeypatch.setattr(worker_mod, "build_codex_execution_stack", lambda s, st: None)
     monkeypatch.setattr(worker_mod, "build_org", lambda *a, **kw: pump)
     # The janitor bodies never need to do work; only being STARTED is the claim.
@@ -72,7 +81,7 @@ async def _janitor_names(monkeypatch, **env) -> set[str]:
     task = asyncio.create_task(worker_mod._run())
     try:
         await asyncio.wait_for(pump.running.wait(), timeout=5)
-        return {t.get_name() for t in asyncio.all_tasks()}
+        return {t.get_name() for t in asyncio.all_tasks()}, record_observation
     finally:
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
@@ -82,6 +91,7 @@ async def _janitor_names(monkeypatch, **env) -> set[str]:
 def _async(value):
     async def _call(*a, **kw):
         return value
+
     return _call
 
 
@@ -92,7 +102,7 @@ async def _forever(*a, **kw) -> None:
 @pytest.mark.invariant("SEC-74")
 async def test_the_fleet_worker_starts_the_retention_janitor(monkeypatch) -> None:
     """The wiring erasure depends on. Absent it, a DELETE only soft-closes."""
-    names = await _janitor_names(monkeypatch)
+    names, _ = await _janitor_names(monkeypatch)
     assert "retention-janitor" in names, (
         "the fleet worker did not start the retention janitor, so no deployment "
         "hard-erases a closed conversation"
@@ -104,5 +114,14 @@ async def test_the_retention_janitor_is_off_only_when_someone_turns_it_off(
     monkeypatch,
 ) -> None:
     """Disabled must be a decision on the record, not the default it used to be."""
-    names = await _janitor_names(monkeypatch, BOLTRIG_RETENTION_INTERVAL="0")
+    names, _ = await _janitor_names(monkeypatch, BOLTRIG_RETENTION_INTERVAL="0")
     assert "retention-janitor" not in names
+
+
+@pytest.mark.invariant("SEC-WRK-27")
+async def test_default_org_does_not_claim_permanent_fleet_startup_parity(
+    monkeypatch,
+) -> None:
+    """A missing manifest cannot be reported as an applied desired hierarchy."""
+    _, record_observation = await _janitor_names(monkeypatch)
+    record_observation.assert_not_awaited()

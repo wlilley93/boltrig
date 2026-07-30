@@ -405,11 +405,26 @@ async def test_build_org_reads_the_manifest_hierarchy():
     manifest = FleetManifest(
         organisation=T, tenant_id=T,
         hierarchy=HierarchyConfig(
-            tier1=HierarchyTier(name="chief-of-staff"),
+            tier1=HierarchyTier(
+                name="chief-of-staff",
+                runtime="codex",
+                model_endpoint="chief-model",
+                max_depth=4,
+                supported_skills=("coordination/*",),
+                cost_tier="expensive",
+                purpose="Coordinate the whole organisation",
+                brief="Prefer an explicit department decision.",
+            ),
             tier2=(
                 HierarchyTier(
                     name="head-of-engineering", department="engineering",
                     supported_skills=("analysis/*", "integration/refactor"),
+                    runtime="script",
+                    model_endpoint="head-model",
+                    max_depth=2,
+                    cost_tier="cheap",
+                    purpose="Own engineering delivery",
+                    brief="Split work into independently verifiable tasks.",
                 ),
                 HierarchyTier(name="head-of-sales", department="sales"),
             ),
@@ -419,6 +434,37 @@ async def test_build_org_reads_the_manifest_hierarchy():
     assert sorted(pump.heads) == ["engineering", "sales"]
     # wildcard patterns describe capabilities, not loadable skill ids
     assert pump.heads["engineering"].domain_skills == ["integration/refactor"]
+    chief_runtime = pump._cos._runtime
+    assert chief_runtime is not None
+    assert chief_runtime.capability == AgentCapability(
+        name="chief-of-staff",
+        tenant_id=T,
+        runtime="codex",
+        supported_skills=["coordination/*"],
+        max_depth=4,
+        is_ephemeral=False,
+        cost_tier="expensive",
+        model_endpoint="chief-model",
+        source="manifest",
+    )
+    assert chief_runtime.purpose == "Coordinate the whole organisation"
+    assert chief_runtime.brief == "Prefer an explicit department decision."
+    head_runtime = pump.heads["engineering"]._runtime
+    assert head_runtime is not None
+    assert head_runtime.capability == AgentCapability(
+        name="head-of-engineering",
+        tenant_id=T,
+        runtime="script",
+        supported_skills=["analysis/*", "integration/refactor"],
+        max_depth=2,
+        is_ephemeral=False,
+        cost_tier="cheap",
+        model_endpoint="head-model",
+        source="manifest",
+    )
+    assert head_runtime.department == "engineering"
+    assert head_runtime.purpose == "Own engineering delivery"
+    assert head_runtime.brief == "Split work into independently verifiable tasks."
 
 
 async def test_build_org_without_hierarchy_degrades_to_the_default_org():

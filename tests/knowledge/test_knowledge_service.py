@@ -11,7 +11,12 @@ from boltrig.knowledge.adapter import KnowledgeAdapter
 from boltrig.knowledge.filesystem_vault import FilesystemObjectVault
 from boltrig.knowledge.memory_repository import InMemoryKnowledgeRepository
 from boltrig.knowledge.models import MAX_UPLOAD_BYTES, Provider
-from boltrig.knowledge.projections import KnowledgeProjectionCoordinator, provider_defaults
+from boltrig.knowledge.projections import (
+    UNAVAILABLE_PROVIDER_REASON,
+    KnowledgeProjectionCoordinator,
+    provider_defaults,
+    reconcile_unavailable_providers,
+)
 from boltrig.knowledge.service import KnowledgeService
 from boltrig.adapters.base import ErrorClass
 from boltrig.kernel import Kernel
@@ -62,6 +67,23 @@ async def ingest(svc: KnowledgeService, ctx: InvocationContext, text: str, title
     )
     await svc.stage_upload(begun["upload_id"], text.encode(), ctx)
     return await svc.commit_upload(begun["upload_id"], ctx)
+
+
+async def test_asset_library_pages_without_truncating_the_accessible_set(
+    tmp_path: Path,
+) -> None:
+    svc = await service(tmp_path)
+    ctx = context("will")
+    await ingest(svc, ctx, "first source", title="First")
+    await ingest(svc, ctx, "second source", title="Second")
+
+    first = await svc.list_assets({"limit": 1, "offset": 0}, ctx)
+    second = await svc.list_assets({"limit": 1, "offset": first["next_offset"]}, ctx)
+
+    assert len(first["assets"]) == len(second["assets"]) == 1
+    assert first["assets"][0]["id"] != second["assets"][0]["id"]
+    assert first["next_offset"] == 1
+    assert second["next_offset"] is None
 
 
 def pdf_bytes(text: str) -> bytes:
@@ -202,7 +224,9 @@ async def test_erasure_preserves_deduplicated_blob_until_last_reference(tmp_path
 
 
 @pytest.mark.invariant("KNO-04")
-async def test_cognee_is_default_and_addons_enable_without_becoming_authority(tmp_path: Path) -> None:
+async def test_cognee_is_default_and_unimplemented_addons_refuse_enablement(
+    tmp_path: Path,
+) -> None:
     svc = await service(tmp_path)
     ctx = context("will")
     providers = {row["id"]: row for row in (await svc.list_providers(ctx))["providers"]}
@@ -210,10 +234,47 @@ async def test_cognee_is_default_and_addons_enable_without_becoming_authority(tm
     assert providers["cognee"]["bundled"] is True
     assert providers["supermemory"]["enabled"] is False
     assert providers["mem0"]["enabled"] is False
+    assert providers["supermemory"]["status"] == "unavailable"
+    assert providers["mem0"]["health"] == "unavailable"
+    assert providers["supermemory"]["last_error"] == UNAVAILABLE_PROVIDER_REASON
 
-    enabled = await svc.set_provider("supermemory", True, ctx)
-    assert enabled["provider"]["enabled"] is True
-    assert enabled["provider"]["role"] == "managed_context"
+    with pytest.raises(ValueError, match="projection adapter is not implemented"):
+        await svc.set_provider("supermemory", True, ctx)
+
+
+async def test_unavailable_provider_config_and_persisted_state_are_reconciled() -> None:
+    configured = {
+        row.id: row
+        for row in provider_defaults(
+            TENANT,
+            {"providers": [{"id": "mem0", "enabled": True}]},
+        )
+    }
+    assert configured["mem0"].enabled is False
+    assert configured["mem0"].status == "unavailable"
+
+    repository = InMemoryKnowledgeRepository()
+    await repository.ensure_providers(
+        TENANT,
+        [
+            Provider(
+                id="mem0",
+                tenant_id=TENANT,
+                display_name="Mem0",
+                role="memory_compatibility",
+                enabled=True,
+                bundled=False,
+                health="ok",
+                status="enabled",
+            )
+        ],
+    )
+    await reconcile_unavailable_providers(repository, TENANT)
+    repaired = await repository.get_provider(TENANT, "mem0")
+    assert repaired is not None
+    assert repaired.enabled is False
+    assert repaired.health == repaired.status == "unavailable"
+    assert repaired.last_error == UNAVAILABLE_PROVIDER_REASON
 
 
 @pytest.mark.invariant("KNO-01")

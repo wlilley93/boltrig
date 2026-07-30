@@ -15,6 +15,7 @@ from boltrig.models import (
     ActionType,
     AuditEvent,
     ModelEndpoint,
+    ModelEndpointUnavailable,
     SensitiveDataMisrouted,
     utcnow,
 )
@@ -37,13 +38,21 @@ async def select_model_endpoint(
     own if local, else the configured ``sensitive_endpoint_id``) or raises
     ``SensitiveDataMisrouted`` after auditing the misroute.
     """
-    ep = await store.get_model_endpoint(tenant_id, endpoint_id) if endpoint_id else None
+    ep = await _active_endpoint(
+        store, tenant_id, endpoint_id, audit=audit, actor=actor
+    )
     if not sensitive:
         return ep
     if ep is not None and ep.data_class == "sensitive":
         return ep
     if sensitive_endpoint_id:
-        local = await store.get_model_endpoint(tenant_id, sensitive_endpoint_id)
+        local = await _active_endpoint(
+            store,
+            tenant_id,
+            sensitive_endpoint_id,
+            audit=audit,
+            actor=actor,
+        )
         if local is not None and local.data_class == "sensitive":
             return local
     if audit is not None:
@@ -62,4 +71,44 @@ async def select_model_endpoint(
         )
     raise SensitiveDataMisrouted(
         f"sensitive data may not route to non-local endpoint '{endpoint_id}'"
+    )
+
+
+async def _active_endpoint(
+    store: Any,
+    tenant_id: str,
+    endpoint_id: str | None,
+    *,
+    audit: Any | None,
+    actor: str,
+) -> ModelEndpoint | None:
+    """Resolve one explicit reference without traversing its fallback.
+
+    A missing or retired named row is configuration failure, not permission to
+    drop to an environment model or follow a stale fallback reference.
+    """
+    if not endpoint_id:
+        return None
+    endpoint = await store.get_model_endpoint(tenant_id, endpoint_id)
+    if endpoint is not None and endpoint.is_active:
+        return endpoint
+    if audit is not None:
+        await audit.write(
+            AuditEvent(
+                tenant_id=tenant_id,
+                ts=utcnow(),
+                actor=actor,
+                action_type=ActionType.MODEL_CALL,
+                status="model_endpoint_unavailable",
+                detail={
+                    "endpoint": endpoint_id,
+                    "endpoint_status": (
+                        "retired" if endpoint is not None else "missing"
+                    ),
+                },
+            )
+        )
+    raise ModelEndpointUnavailable(
+        f"model endpoint '{endpoint_id}' is "
+        f"{'retired' if endpoint is not None else 'missing'}"
     )

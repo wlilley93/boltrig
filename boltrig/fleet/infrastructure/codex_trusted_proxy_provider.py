@@ -80,7 +80,7 @@ from boltrig.fleet.application.model_proxy_grants import (
     PhaseScopedModelProxyGrantBroker,
 )
 from boltrig.fleet.codex_trusted_wall import require_codex_trusted_posture
-from boltrig.fleet.domain import PhaseAssignmentRef
+from boltrig.fleet.domain import NativeSubagentLimits, PhaseAssignmentRef
 from boltrig.fleet.domain.model_proxy_scope import ModelProxyCellScope
 from boltrig.fleet.infrastructure.cell_slots import CellSlot
 from boltrig.fleet.infrastructure.codex_cell_policy import CodexCellLayout
@@ -92,6 +92,7 @@ from boltrig.fleet.infrastructure.codex_model_proxy_server import (
     BearerDigestLookup,
     PerCellModelProxyServer,
 )
+from boltrig.fleet.infrastructure import codex_trusted_proxy_native as native_proxy
 from boltrig.fleet.infrastructure.codex_trusted_proxy_ingress import (
     CodexTrustedIngress,
     build_ingress_bearer_issuer,
@@ -124,7 +125,6 @@ from boltrig.fleet.infrastructure.codex_trusted_proxy_support import (
     model_policy_digest,
     read_only_budget,
     render_trusted_config,
-    tracking_bearer_verifier,
     write_cell_config,
 )
 from boltrig.fleet.infrastructure.codex_cell_boundary import (
@@ -138,6 +138,7 @@ from boltrig.fleet.infrastructure.model_proxy_peer_attestation import (
 from boltrig.fleet.infrastructure.model_proxy_peer_registry import (
     ModelProxyProcessRegistry,
 )
+
 
 @dataclass(eq=False)
 class _TrustedSession:
@@ -309,13 +310,12 @@ class TrustedProxyCodexPhaseCellProvider:
         scope: ModelProxyCellScope | None = None
         ingress: CodexTrustedIngress | None = None
         try:
-            # The ceiling is the admission-compiled effective tools: empty on the
-            # read-only lane, the admission's kernel-tools wire names on the
-            # tool-enabled lane. It widens by admission, never by proxy edit.
-            ceiling = frozenset(admission.kernel_tools)
-            ceiling |= frozenset(admission.compilation.policy.enabled_tools)
-            proxy = await self._start_proxy(holder, ceiling)
-            model_id = admission.compilation.policy.model.model_id
+            proxy_policy = native_proxy.codex_proxy_admission(admission)
+            proxy = await self._start_proxy(
+                holder, proxy_policy.allowed_tools, proxy_policy.model_id, proxy_policy.reasoning_effort,
+                native_collaboration=proxy_policy.native_collaboration,
+            )
+            model_id = proxy_policy.model_id
             layout = admission.layout
             # The socket path is derived from the (pre-start) cell id, so the helper
             # the App Server will exec can be materialized before start.
@@ -332,6 +332,7 @@ class TrustedProxyCodexPhaseCellProvider:
                 model_id=model_id,
                 proxy_port=proxy.port,
                 socket_name=socket_name,
+                native_subagents=proxy_policy.native_subagents,
                 slot=slot,
                 tree_dirs=_per_cell_tree_dirs(layout) if slot is not None else [],
                 kernel_scope=kernel_scope,
@@ -519,17 +520,14 @@ class TrustedProxyCodexPhaseCellProvider:
             )
 
     async def _start_proxy(
-        self, holder: GenerationHolder, allowed_tools: frozenset[str]
+        self, holder: GenerationHolder, allowed_tools: frozenset[str],
+        allowed_model: str, allowed_reasoning_effort: str | None = None,
+        *, native_collaboration: native_proxy.NativeCollaborationWireGate | None = None,
     ) -> PerCellModelProxyServer:
-        proxy = PerCellModelProxyServer(
-            verify_bearer=tracking_bearer_verifier(self._grant_store, holder),
-            upstream_base_url=self._upstream_base_url,
-            upstream_key=self._upstream_key,
-            client=self._client,
-            allowed_tools=allowed_tools,
+        return await native_proxy.start_codex_model_proxy(
+            self, holder, allowed_tools, allowed_model, allowed_reasoning_effort,
+            native_collaboration=native_collaboration,
         )
-        await proxy.start()
-        return proxy
 
     async def _write_cell_config(
         self,
@@ -540,6 +538,7 @@ class TrustedProxyCodexPhaseCellProvider:
         model_id: str,
         proxy_port: int,
         socket_name: str,
+        native_subagents: NativeSubagentLimits = NativeSubagentLimits(),
         slot: CellSlot | None = None,
         tree_dirs: list[dict[str, object]] | None = None,
         kernel_scope: CodexKernelToolScope | None = None,
@@ -567,6 +566,7 @@ class TrustedProxyCodexPhaseCellProvider:
             policy_digest=model_policy_digest(model_id, self._reasoning_effort),
             reasoning_effort=self._reasoning_effort,
             proxy_port=proxy_port,
+            native_subagents=native_subagents,
             mcp_server_url=None if kernel_scope is None else kernel_scope.mcp_url,
             mcp_bearer_env_var=None if kernel_scope is None else CODEX_MCP_BEARER_ENV_VAR,
         )

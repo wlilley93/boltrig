@@ -72,3 +72,7 @@ class ChatBody(BaseModel):
     # selects the handling department. Unusable values are dropped, never a
     # reason to refuse someone's message. Absent => today's behaviour (NULL).
     origin: str | None = None
+    # Optional caller preference among administrator-approved profiles. It is a
+    # request, never authority: the runtime resolver looks it up only in
+    # server-held profile data and residency/availability policy may override it.
+    model_profile_id: str | None = None

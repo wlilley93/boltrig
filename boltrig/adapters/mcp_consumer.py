@@ -11,21 +11,9 @@ the kernel per call, from the credential seam, and handed to ``execute`` as
 ``credential`` (SEC-04/05, K-20 - credentials resolve inside the kernel only). A
 call with no credential FAILS CLOSED rather than posting an empty bearer.
 
-## Verb namespacing
-
-Many apps register consumed servers under ONE kernel, so tool names are never
-published verbatim: every discovered tool becomes ``<adapter_id>.<tool_name>``
-(adapter ``opbox`` consuming ``matter.list`` publishes the verb
-``opbox.matter.list`` under the noun ``opbox``). This keeps a consumed server
-out of every other app's namespace and out of the reserved core prefixes
-(``system.`` et al., ``control_safety._RESERVED_VERB_PREFIXES``) by
-construction. Tools that cannot form a verb id after prefixing - empty, or
-carrying characters outside the verb-id charset (the ``control_safety``
-identifier convention: ASCII alphanumerics plus ``. _ -``) such as a ``/`` or
-whitespace - are SKIPPED with a warning, never published: that honestly drops
-presentation-layer meta-tools like Opbox's ``opbox/expand_tools``, which is
-not a real verb. ``execute`` maps the prefixed verb id back to the BARE tool
-name for ``tools/call``; the server never sees the prefix.
+Discovered tools publish as ``<adapter_id>.<tool_name>``. Unsafe names are
+skipped, and execution maps the safe namespaced id back to the server's bare
+tool name.
 
 The HTTP mechanics - the dual credential headers, the lazy Streamable-HTTP
 handshake, the server-issued session id, SSE decoding, and the
@@ -39,8 +27,8 @@ injected for tests (and to let Boltrig consume its own MCP face).
 
 from __future__ import annotations
 
+import asyncio
 import logging
-import re
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -54,7 +42,20 @@ from boltrig.adapters.base import (
 )
 from boltrig.adapters.mcp_transport import McpHttpRefusal, StreamableHttp
 from boltrig.addons import consequence_hint_for
-from boltrig.models import Consequence, CredentialResolution, InvocationContext
+from boltrig.models import (
+    Consequence,
+    CredentialResolution,
+    InvocationContext,
+    McpToolSnapshot,
+)
+from boltrig.models.mcp_lifecycle import validate_mcp_tool_snapshot
+
+from .mcp_discovery import (
+    McpDiscoveryInvalid,
+    McpProbeResult,
+    McpProtocolInvalid,
+    snapshot_from_response,
+)
 
 log = logging.getLogger(__name__)
 
@@ -65,15 +66,13 @@ Rpc = Callable[[dict], Awaitable[dict]]
 # (ASCII alphanumerics plus . _ -): applied to the PREFIXED id, so a tool name
 # with a '/' (a presentation meta-tool like opbox/expand_tools), whitespace, or
 # an empty name can never publish.
-_TOOL_VERB_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
-
 # A consumed server may declare a per-tool ``consequence`` hint in the tool
 # descriptor. The ceiling is the Consequence enum itself ("high" - the same
 # ceiling generated adapters live under, where only mutating verbs reach high):
 # an absent or unrecognised hint defaults to "low", so nothing a consumed server
 # declares can push a verb above it.
 _CONSEQUENCE_HINTS = frozenset({Consequence.LOW.value, Consequence.HIGH.value})
-
+MCP_PROBE_TIMEOUT_S = 5.0
 # A consumed server that declares no ``consequence`` field may still carry its own
 # risk vocabulary somewhere in its tool projection. Reading THAT vocabulary is
 # integration-specific KNOWLEDGE, so the regex lives in an addon
@@ -144,9 +143,10 @@ class _McpFailure(Exception):
     established way to carry one out of a helper and convert it at the boundary.
     """
 
-    def __init__(self, error: AdapterError) -> None:
+    def __init__(self, error: AdapterError, probe_failure_code: str) -> None:
         super().__init__(error.message)
         self.error = error
+        self.probe_failure_code = probe_failure_code
 
 
 class McpConsumerAdapter:
@@ -191,30 +191,63 @@ class McpConsumerAdapter:
         become a back door around the per-call credential. Each tool's declared
         ``consequence`` hint propagates to its VerbSpec (see ``_consequence_hint``).
         """
+        snapshot = await self._discover(credential)
+        return self.apply_tool_snapshot(snapshot)
+
+    async def probe(
+        self,
+        credential: Credential | None = None,
+        *,
+        timeout_s: float = MCP_PROBE_TIMEOUT_S,
+    ) -> McpProbeResult:
+        """``probe`` runs bounded discovery without publishing live tool state.
+
+        The result carries only a closed failure code. Remote bodies, exception
+        messages, URLs and credential references never cross this boundary.
+        """
+        try:
+            snapshot = await asyncio.wait_for(
+                self._discover(credential), timeout=max(0.1, timeout_s)
+            )
+            return McpProbeResult(True, None, snapshot)
+        except asyncio.TimeoutError:
+            code = "transport_unavailable"
+        except CredentialResolution:
+            code = "credential_unavailable"
+        except _McpFailure as failure:
+            code = failure.probe_failure_code
+        except McpProtocolInvalid:
+            code = "protocol_invalid"
+        except (McpDiscoveryInvalid, ValueError):
+            code = "discovery_invalid"
+        except Exception:
+            code = "unexpected_failure"
+        return McpProbeResult(False, code, ())
+
+    async def _discover(
+        self, credential: Credential | None
+    ) -> tuple[McpToolSnapshot, ...]:
         resp = await self._call(
             {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}},
             bearer_token(credential),
         )
-        tools = (resp.get("result") or {}).get("tools", [])
+        return snapshot_from_response(self.id, resp, _consequence_hint)
+
+    def apply_tool_snapshot(
+        self, snapshot: tuple[McpToolSnapshot, ...]
+    ) -> list[VerbSpec]:
+        """Load an already-vetted snapshot into this in-process adapter only."""
+        validate_mcp_tool_snapshot(snapshot)
         specs: list[VerbSpec] = []
         self._tools = {}
-        for t in tools:
-            name = str(t.get("name") or "")
-            verb_id = f"{self.id}.{name}"  # namespaced: see the module docstring
-            if not name or not _TOOL_VERB_ID.fullmatch(verb_id):
-                log.warning(
-                    "mcp server '%s' tool %r skipped: not a verb id after "
-                    "namespacing (a presentation meta-tool or an unsafe charset)",
-                    self.id,
-                    name,
-                )
-                continue
-            self._tools[verb_id] = name
+        for tool in snapshot:
+            verb_id = f"{self.id}.{tool.name}"
+            self._tools[verb_id] = tool.name
             specs.append(
                 VerbSpec(
                     verb_id=verb_id,
                     noun_id=self.id,  # one noun per consumed server (opbox.*)
-                    input_schema=t.get("inputSchema", {}),
+                    input_schema=tool.input_schema,
                     # An MCP tool returns arbitrary JSON - an array, a string and a
                     # number are all legal results. Asserting `{"type": "object"}`
                     # here rejected every list-shaped tool at OUTPUT validation with
@@ -224,9 +257,9 @@ class McpConsumerAdapter:
                     # Honour the server's own `outputSchema` when it declares one,
                     # otherwise accept any JSON rather than inventing a constraint
                     # the protocol does not make.
-                    output_schema=t.get("outputSchema") or {},
-                    description=t.get("description", ""),
-                    consequence=_consequence_hint(t),
+                    output_schema=tool.output_schema,
+                    description=tool.description,
+                    consequence=tool.consequence,
                 )
             )
         self._specs = specs
@@ -323,19 +356,44 @@ class McpConsumerAdapter:
             client = self._transport.pinned_client()
         except EgressBlocked as exc:
             raise _McpFailure(
-                AdapterError(ErrorClass.INVALID, str(exc), retryable=False)
+                AdapterError(ErrorClass.INVALID, str(exc), retryable=False),
+                "egress_denied",
             ) from exc
         async with client:
             try:
                 return await self._transport.call(client, request, bearer)
             except McpHttpRefusal as refusal:
+                failure_code = (
+                    "credential_unavailable"
+                    if refusal.status in {401, 403}
+                    else "transport_unavailable"
+                )
                 raise _McpFailure(
                     AdapterError(
                         _status_error(refusal.status),
                         str(refusal),  # status only - the body never crosses
                         retryable=refusal.status == 429 or refusal.status >= 500,
-                    )
+                    ),
+                    failure_code,
                 ) from refusal
+            except (TypeError, ValueError, KeyError) as exc:
+                raise _McpFailure(
+                    AdapterError(
+                        ErrorClass.INVALID,
+                        "mcp server returned an invalid protocol response",
+                        retryable=False,
+                    ),
+                    "protocol_invalid",
+                ) from exc
+            except Exception as exc:
+                raise _McpFailure(
+                    AdapterError(
+                        ErrorClass.UNAVAILABLE,
+                        "mcp transport unavailable",
+                        retryable=True,
+                    ),
+                    "transport_unavailable",
+                ) from exc
 
 
 def build() -> Any:  # loader hook; real config comes from the mcp_servers table

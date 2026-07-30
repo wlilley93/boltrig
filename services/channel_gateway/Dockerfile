@@ -33,12 +33,14 @@ COPY app.py /app/app.py
 COPY adapters.py /app/adapters.py
 COPY egress.py /app/egress.py
 COPY kernel_client.py /app/kernel_client.py
+COPY browser_audio.py /app/browser_audio.py
 # The platform ports (imported by app.py at boot so they self-register).
 COPY slack_adapter.py /app/slack_adapter.py
 COPY telegram_adapter.py /app/telegram_adapter.py
 COPY discord_adapter.py /app/discord_adapter.py
 COPY signal_adapter.py /app/signal_adapter.py
 COPY whatsapp_adapter.py /app/whatsapp_adapter.py
+COPY xai_voice_adapter.py /app/xai_voice_adapter.py
 # The custom-surface client kit (embedded by/mimicked in off-box surfaces).
 COPY clients /app/clients
 

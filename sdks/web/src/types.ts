@@ -41,6 +41,7 @@ export interface VerbInfo {
   consequence?: Consequence;
   binding?: VerbBinding;
   health?: AdapterHealth | string;
+  idempotency_mode?: "cacheable" | "disabled" | string;
   [key: string]: unknown;
 }
 
@@ -59,6 +60,96 @@ export interface AgentCapabilityInfo {
   is_ephemeral: boolean;
   cost_tier: string;
   model_endpoint?: string | null;
+  familiar_genotype: FamiliarGenotype;
+}
+
+export interface AgentCapabilityAuthorInfo extends AgentCapabilityInfo {
+  source: "manifest" | "control-plane";
+  is_active: boolean;
+  status: "active" | "retired";
+}
+
+export interface AgentCapabilitiesResponse {
+  agent_capabilities: AgentCapabilityAuthorInfo[];
+}
+
+export interface CapabilityLifecycleResponse {
+  status: "ok" | "pending_human" | "error";
+  id?: string;
+  capability_status?: "active" | "retired";
+  hitl_request_id?: string;
+  reason?: string;
+}
+
+export interface PermanentFleetBudget {
+  token_limit: number | null;
+  cost_limit_micros: number | null;
+  hard_stop: boolean;
+  window: "run" | "daily" | "monthly";
+}
+
+export interface PermanentFleetHead {
+  name: string;
+  routing_id: string;
+  purpose: string;
+  brief: string;
+  runtime: "codex" | "script";
+  model_endpoint: string | null;
+  supported_skills: string[];
+  max_depth: number;
+  cost_tier: "cheap" | "standard" | "expensive";
+  budget: PermanentFleetBudget | null;
+}
+
+export interface PermanentFleetHierarchy {
+  chief: PermanentFleetHead;
+  departments: PermanentFleetHead[];
+}
+
+export interface PermanentFleetObservation {
+  worker_id: string;
+  generation: string;
+  status: "applied" | "degraded";
+  apply_mode: "startup_snapshot" | string;
+  applied_fields: string[];
+  inactive_fields: string[];
+  observed_at?: string | null;
+}
+
+export interface PermanentFleetResponse {
+  status: "configured" | "not_configured";
+  hierarchy: PermanentFleetHierarchy | null;
+  generation: string | null;
+  revision: number | null;
+  apply_state:
+    | "not_configured"
+    | "restart_required"
+    | "startup_applied_liveness_unknown";
+  hot_applied?: false;
+  runtime_liveness?: "unknown_not_probed_by_startup";
+  profiles_reconciled?: boolean;
+  reconcile_at?: "next_manifest_apply_or_redeploy" | null;
+  projection_state?: {
+    persistent_profiles: "projected" | "desired_awaiting_manifest_apply";
+    budget_policy:
+      | "projected"
+      | "not_authored"
+      | "desired_awaiting_manifest_apply";
+  };
+  observations: PermanentFleetObservation[];
+  field_state?: Record<string, string>;
+}
+
+export interface PermanentFleetApplyResponse {
+  status: "ok" | "pending_human" | "error" | "denied";
+  generation?: string;
+  revision?: number;
+  apply_state?: "restart_required";
+  hot_applied?: false;
+  profiles_reconciled?: false;
+  reconcile_at?: "next_manifest_apply_or_redeploy";
+  hitl_request_id?: string;
+  reason?: string;
 }
 
 export interface ModelEndpointInfo {
@@ -66,10 +157,172 @@ export interface ModelEndpointInfo {
   kind: string;
   model: string;
   data_class: string;
+  is_active: boolean;
+  status: "active" | "retired";
 }
 
 export interface ModelEndpointsResponse {
   endpoints: ModelEndpointInfo[];
+}
+
+export interface ModelEndpointAuthorView extends ModelEndpointInfo {
+  base_url?: string | null;
+  fallback?: string | null;
+  references: {
+    capabilities: string[];
+    fallbacks: string[];
+  };
+}
+
+export interface ModelEndpointResponse {
+  endpoint: ModelEndpointAuthorView;
+}
+
+export interface ModelEndpointLifecycleResponse {
+  status: "ok" | "pending_human" | "error";
+  id?: string;
+  model_endpoint_status?: "active" | "retired";
+  hitl_request_id?: string;
+  reason?: string;
+}
+
+export type ModelPolicyEndpointState =
+  | "not_configured"
+  | "missing"
+  | "retired"
+  | "active";
+
+export interface ModelPolicyResponse {
+  policy: {
+    state: "unconfigured" | "configured" | "degraded";
+    source: "no_process_manifest" | "process_start_manifest";
+    generation: string | null;
+    default: {
+      endpoint_id: string | null;
+      state: ModelPolicyEndpointState;
+      serving_state: "inactive_no_consumer";
+    };
+    sensitive: {
+      endpoint_id: string | null;
+      state: ModelPolicyEndpointState;
+      serving_state:
+        | "not_configured"
+        | "active_process_policy"
+        | "refuses_sensitive_routing";
+      eligible: boolean;
+    };
+    prices: Array<{
+      model: string;
+      input_micros_per_token: number;
+      output_micros_per_token: number;
+    }>;
+    price_serving_state:
+      | "not_configured"
+      | "active_process_cost_accountant";
+    changes_apply_at: "process_restart";
+  };
+}
+
+export interface SpawnRulePolicyItem {
+  id: string;
+  priority: number;
+  intent_tags: string[];
+  capability: string;
+  skills_added: string[];
+  max_depth: number | null;
+}
+
+export interface SpawnRuleConflict {
+  priority: number;
+  rules: string[];
+  example_intent_tags: string[];
+}
+
+export interface SpawnRulePolicyResponse {
+  policy: {
+    state: "ready" | "conflicted" | "invalid_policy" | "policy_unavailable";
+    source: "process_start_manifest" | "config_revision" | null;
+    revision_id: number | null;
+    generation: string | null;
+    rules: SpawnRulePolicyItem[];
+    conflicts: SpawnRuleConflict[];
+    execution_input: "server_trusted_classification_only";
+  };
+}
+
+export interface SpawnRuleSimulationResponse {
+  status:
+    | "matched"
+    | "no_match"
+    | "conflict"
+    | "invalid_input"
+    | "invalid_policy"
+    | "policy_unavailable";
+  input_trust: "untrusted_preview_only";
+  selection: SpawnRulePolicyItem | null;
+  generation?: string;
+  reason?: string;
+}
+
+export interface HitlPolicyResponse {
+  policy: {
+    state: "unconfigured" | "configured";
+    source: "no_process_manifest" | "process_start_manifest";
+    generation: string | null;
+    blocking_verbs: string[];
+    approval_timeout_seconds: number | null;
+    routing: {
+      primary_channel: string | null;
+      notify_via: string[];
+      escalation_chain: string[];
+      serving_state: "inactive_no_consumer";
+    };
+    changes_apply_at: "process_restart";
+  };
+}
+
+export interface PrivacyPolicyResponse {
+  policy: {
+    state: "unconfigured" | "partial";
+    source: "no_process_manifest" | "process_start_manifest";
+    generation: string | null;
+    retention: {
+      days: number | null;
+      serving_state: "not_configured" | "closed_conversations_only";
+      coverage: string[];
+    };
+    redaction: {
+      configured: boolean;
+      fields: string[];
+      serving_state: "inactive_no_consumer";
+    };
+    residency: {
+      region: string | null;
+      serving_state: "inactive_no_consumer";
+    };
+    compliance_export: "account_summary_only";
+  };
+}
+
+export interface BackupStatusResponse {
+  backup: {
+    state:
+      | "unconfigured"
+      | "configuration_invalid"
+      | "never_observed"
+      | "unavailable"
+      | "invalid_marker"
+      | "fresh"
+      | "stale";
+    evidence_kind: "shared_success_marker";
+    maximum_age_seconds: number;
+    last_success_at: string | null;
+    age_seconds: number | null;
+    off_box_state: "unknown_not_in_marker";
+    encryption_state: "unknown_not_in_marker";
+    restore_readiness: "unavailable_no_restore_drill_receipt";
+    liveness_claimed: false;
+  };
 }
 
 export type WorkStatus =
@@ -78,7 +331,8 @@ export type WorkStatus =
   | "blocked"
   | "awaiting_human"
   | "done"
-  | "failed";
+  | "failed"
+  | "cancelled";
 
 export interface WorkItem {
   id: string;
@@ -91,6 +345,8 @@ export interface WorkItem {
   parent_id?: string | null;
   hatchet_run_id?: string | null;
   on_behalf_of?: string | null;
+  depth?: number;
+  workspace_id?: string | null;
 }
 
 export interface WorkResponse {
@@ -115,6 +371,26 @@ export interface WorkDetailResponse {
   audit: WorkAuditEvent[];
 }
 
+export interface CreateWorkRequest {
+  intent: string;
+  owner_member?: string | null;
+  parent_id?: string | null;
+  confidence?: number;
+  convergent?: boolean;
+  idempotency_key?: string;
+}
+
+export interface WorkMutationResponse {
+  status: "ok";
+  item: WorkItem;
+}
+
+export type WorkMutationResult =
+  | WorkMutationResponse
+  | PendingHumanResponse
+  | { status: "denied" | "error"; reason: string }
+  | { status: "degraded"; output: unknown };
+
 export type HITLKind = "approval" | "clarification" | "escalation" | "question";
 
 export interface HITLRequest {
@@ -131,6 +407,8 @@ export interface HITLRequest {
   requested_by?: string | null;
   requested_on_behalf_of?: string | null;
   inputs?: unknown;
+  secure?: boolean;
+  secure_purpose?: string | null;
 }
 
 export interface HITLListResponse {
@@ -139,7 +417,9 @@ export interface HITLListResponse {
 
 export interface RespondResult {
   status: string;
-  response_id: string;
+  response_id?: string;
+  run_id?: string;
+  reason?: string;
 }
 
 export interface InvokeRequest {
@@ -156,6 +436,10 @@ export interface PendingHumanResponse {
   hitl_request_id: string;
 }
 
+export interface InvokeApprovalStateResponse {
+  status: "pending" | "approved" | "rejected" | "expired" | "consumed";
+}
+
 // Compatibility author/admin routes use the same HITL gate as /v1/invoke, so
 // every high-consequence route may honestly return a 202 pause instead of its
 // ordinary success body.
@@ -166,6 +450,7 @@ export type InvokeResult =
   | { status: "ok"; output: unknown }
   | PendingHumanResponse
   | { status: "denied"; reason: string }
+  | { status: "unavailable"; reason: string }
   | { status: "degraded"; output: unknown }
   | { status: "error"; reason: string };
 
@@ -174,6 +459,15 @@ export interface SpawnRequest {
   skills?: string[];
   prefer?: Record<string, unknown>;
   context?: Record<string, unknown>;
+}
+
+export interface SpawnRuleReceipt {
+  id: string;
+  priority: number;
+  matched_intent_tags: string[];
+  capability: string;
+  skills_added: string[];
+  max_depth: number | null;
 }
 
 // Audit execution tree (boltrig/observability/tree.py). Shape is recursive and
@@ -237,6 +531,51 @@ export interface ConversationSearchResponse {
   next_offset: number | null;
 }
 
+export type FederatedSearchSource =
+  | "conversations"
+  | "executions"
+  | "knowledge"
+  | "memory"
+  | "audit";
+
+export type FederatedSearchSourceStatus =
+  | "ok"
+  | "denied"
+  | "unavailable";
+
+export interface FederatedSearchRequest {
+  query: string;
+  limit?: number;
+  sources?: FederatedSearchSource[];
+}
+
+export interface FederatedSearchHit {
+  source: FederatedSearchSource;
+  id: string;
+  title: string;
+  preview: string | null;
+  route: "chat" | "runs" | "knowledge" | "memory" | "operate";
+  route_id: string | null;
+  score?: number | null;
+  occurred_at?: string | null;
+  metadata: Record<string, unknown>;
+}
+
+export interface FederatedSearchSourceResult {
+  source: FederatedSearchSource;
+  status: FederatedSearchSourceStatus;
+  count: number;
+  truncated: boolean;
+  reason?: string;
+}
+
+export interface FederatedSearchResponse {
+  query: string;
+  limit: number;
+  results: FederatedSearchHit[];
+  sources: FederatedSearchSourceResult[];
+}
+
 export type ChatRole = "user" | "assistant" | "system" | string;
 
 // An inline, size-capped chat attachment ([2026] VJS-COUNTY 3). The send body
@@ -250,6 +589,17 @@ export interface ChatAttachment {
   media_type: string;
   data: string;
   size?: number;
+}
+
+export interface ChatAttachmentLimits {
+  max_count: number;
+  max_bytes: number;
+  max_total_bytes: number;
+  model_readable_media_types: string[];
+}
+
+export interface ChatConfigResponse {
+  attachments: ChatAttachmentLimits;
 }
 
 // A persisted message. `events` carries the structured turn (tool calls,
@@ -268,8 +618,24 @@ export interface ChatMessage {
   created_at: string;
 }
 
+export interface ConversationModelContext {
+  compacted: boolean;
+  covered_count: number;
+  recent_exact_count: number;
+  up_to_message_id?: string | null;
+  summary?: string | null;
+}
+
 export interface ConversationResponse {
   messages: ChatMessage[];
+  active_run_id?: string | null;
+  model_context?: ConversationModelContext;
+}
+
+export interface ChatFollowFrame {
+  cursor: number;
+  event: ChatEvent;
+  replay_truncated?: boolean;
 }
 
 export interface ChatRequest {
@@ -290,6 +656,11 @@ export interface ChatRequest {
   // authority or routing decision, and an unusable value is dropped rather than
   // failing the message. Lower-case, <=64 chars of [a-z0-9._:-] starting alnum.
   origin?: string;
+  // One administrator-approved, caller-visible routing profile. The server
+  // remains authoritative and may override this request under classification,
+  // availability, or cost policy; the selected profile is emitted as a
+  // model_routing event.
+  model_profile_id?: string;
 }
 
 // POST /v1/me/conversations/{cid}/messages/{mid}/regenerate: re-runs the last
@@ -323,6 +694,7 @@ export interface ChatMessageStart {
 export interface ChatTextDelta {
   type: "text_delta";
   delta: string;
+  degraded?: boolean;
 }
 export interface ChatReasoningDelta {
   type: "reasoning_delta";
@@ -388,6 +760,8 @@ export interface ChatQuestion {
   question_id: string;
   prompt: string;
   choices?: string[];
+  secure?: boolean;
+  purpose?: string;
 }
 export interface ChatSubagent {
   type: "subagent";
@@ -401,6 +775,12 @@ export interface ChatSubagent {
   role?: string;
   color?: string;
   step_count?: number;
+  // Server-derived policy receipt. Absent means ordinary capability selection;
+  // clients must never infer a rule from the capability or task text.
+  spawn_rule?: SpawnRuleReceipt;
+  // Familiar identity is optional birth configuration. Phenotype/mood is
+  // deliberately absent: clients derive it from current run/call facts.
+  familiar_genotype?: FamiliarGenotype | null;
 }
 export interface ChatHitlEvent {
   type: "hitl";
@@ -411,6 +791,9 @@ export interface ChatHitlEvent {
   verb?: string;
   call_id?: string;
   requested_by?: string;
+  secure?: boolean;
+  secure_purpose?: string | null;
+  purpose?: string;
 }
 export interface ChatMessageEnd {
   type: "message_end";
@@ -440,6 +823,18 @@ export interface ChatWorkflowRun {
   run_id: string;
   workflow_id: string;
   status: "completed" | "failed" | "paused";
+}
+
+// The non-secret explanation of the model route selected for this run. Provider
+// URLs, account identifiers, and credentials are never fields in this event.
+export interface ChatModelRouting {
+  type: "model_routing";
+  run_id: string;
+  selected_profile_id: string;
+  routing_class: string;
+  reason: string;
+  requested_profile_id?: string | null;
+  overridden: boolean;
 }
 
 /**
@@ -476,6 +871,32 @@ export interface ChatSteerConsumed {
   message_id?: string;
 }
 
+/** A newly persisted output is ready to fetch through the governed artifact API. */
+export interface ChatArtifact {
+  type: "artifact";
+  artifact_id: string;
+  name: string;
+  media_type: string;
+  size: number;
+  run_id?: string;
+}
+
+/** One or more runtime-declared outputs failed the bounded artifact contract. */
+export interface ChatArtifactRejected {
+  type: "artifact_rejected";
+  count: number;
+  run_id?: string;
+}
+
+/**
+ * A relay frame was intentionally withheld because it is not part of the
+ * reviewed public chat vocabulary or did not satisfy that vocabulary.
+ */
+export interface ChatEventUnavailable {
+  type: "event_unavailable";
+  reason: "unsupported_event" | "malformed_event";
+}
+
 export type ChatEvent =
   | ChatMessageStart
   | ChatTextDelta
@@ -492,7 +913,11 @@ export type ChatEvent =
   | ChatMessageEnd
   | ChatCancelled
   | ChatWorkflowStep
-  | ChatWorkflowRun;
+  | ChatWorkflowRun
+  | ChatModelRouting
+  | ChatArtifact
+  | ChatArtifactRejected
+  | ChatEventUnavailable;
 
 // POST /v1/hitl/{question_id}/answer: owner-only, fail-closed answer to an
 // agent's clarifying QUESTION. On success {status:"ok", question_id, response_id,
@@ -539,6 +964,7 @@ export interface SpawnResult {
   cost_micros?: number;
   new_work_items?: unknown[];
   effective_grants?: string[];
+  spawn_rule?: SpawnRuleReceipt;
   [key: string]: unknown;
 }
 
@@ -550,10 +976,22 @@ export interface SkillSummary {
   extends?: string | null;
   tool_grants: string[];
   locale: string;
+  is_active: boolean;
+  status: "active" | "archived";
 }
 
 export interface SkillsResponse {
   skills: SkillSummary[];
+}
+
+export interface SkillAuthorView extends SkillSummary {
+  prompt_fragment: string;
+  context_requirements: Record<string, unknown>;
+  description: string;
+}
+
+export interface SkillResponse {
+  skill: SkillAuthorView;
 }
 
 export interface UpsertSkillRequest {
@@ -564,6 +1002,7 @@ export interface UpsertSkillRequest {
   context_requirements?: Record<string, unknown>;
   extends?: string | null;
   locale?: string;
+  description?: string;
 }
 
 export interface TestSpawnRequest {
@@ -579,6 +1018,22 @@ export interface UpsertNounRequest {
   schema?: Record<string, unknown>;
 }
 
+export interface NounAuthorView {
+  id: string;
+  description: string;
+  schema: Record<string, unknown>;
+  is_active: boolean;
+  status: "active" | "archived";
+}
+
+export interface NounResponse {
+  noun: NounAuthorView;
+}
+
+export interface NounsResponse {
+  nouns: NounAuthorView[];
+}
+
 export interface UpsertVerbRequest {
   id: string;
   noun_id: string;
@@ -586,6 +1041,9 @@ export interface UpsertVerbRequest {
   output_schema?: Record<string, unknown>;
   description?: string;
   consequence?: "low" | "high";
+  degraded_mode?: Record<string, unknown>;
+  identity_mode?: "service-principal" | "delegated";
+  idempotency_mode?: "cacheable" | "disabled";
 }
 
 export type TargetTypeValue = "adapter" | "agent";
@@ -593,6 +1051,59 @@ export type TargetTypeValue = "adapter" | "agent";
 export interface SetBindingRequest {
   target_type: TargetTypeValue;
   target_ref: string;
+  rate_limit?: {
+    per: "minute" | "hour";
+    max: number;
+    scope?: "tenant" | "verb";
+  };
+}
+
+export interface VerbAuthorView {
+  id: string;
+  noun_id: string;
+  input_schema: Record<string, unknown>;
+  output_schema: Record<string, unknown>;
+  description: string;
+  consequence: "low" | "high";
+  degraded_mode?: Record<string, unknown> | null;
+  identity_mode: "service-principal" | "delegated";
+  idempotency_mode: "cacheable" | "disabled";
+  is_active: boolean;
+  status: "active" | "archived";
+  noun_status: "active" | "archived";
+}
+
+export interface VerbResponse {
+  verb: VerbAuthorView;
+  binding?: (VerbBinding & {
+    rate_limit?: {
+      per: "minute" | "hour";
+      max: number;
+      scope: "tenant" | "verb";
+    } | null;
+  }) | null;
+}
+
+export interface VerbInventoryItem extends VerbAuthorView {
+  binding?: (VerbBinding & {
+    rate_limit?: {
+      per: "minute" | "hour";
+      max: number;
+      scope: "tenant" | "verb";
+    } | null;
+  }) | null;
+}
+
+export interface VerbsResponse {
+  verbs: VerbInventoryItem[];
+}
+
+export interface AuthoredDefinitionLifecycleResponse {
+  status: "ok" | "pending_human" | "error";
+  id?: string;
+  definition_status?: "active" | "archived";
+  hitl_request_id?: string;
+  reason?: string;
 }
 
 // --- Adapter Studio ---------------------------------------------------------
@@ -631,8 +1142,49 @@ export interface ActivateAdapterResponse {
 
 export interface RegisterMcpRequest {
   id: string;
-  url?: string;
-  token?: string;
+  url: string;
+  allow_internal?: boolean;
+  credential_ref?: string;
+  credential_id?: string;
+  credential_store?: string;
+  credential_kind?: string;
+}
+
+export type McpCredentialMode = "preserve" | "replace" | "remove";
+
+export type UpdateMcpServerRequest =
+  | {
+      url: string;
+      allow_internal: boolean;
+      credential_mode: "preserve" | "remove";
+    }
+  | {
+      url: string;
+      allow_internal: boolean;
+      credential_mode: "replace";
+      credential_ref: string;
+      credential_id?: string;
+      credential_store?: string;
+      credential_kind?: string;
+    };
+
+export interface UpdateMcpServerResponse {
+  status: string;
+  id?: string;
+  state?: "inert";
+  updated?: boolean;
+  reprobe_required?: boolean;
+  config_revision?: number;
+  error?: string;
+  reason?: string;
+}
+
+export interface DeleteMcpServerResponse {
+  status: string;
+  id?: string;
+  deleted?: boolean;
+  error?: string;
+  reason?: string;
 }
 
 export interface AdapterRecord {
@@ -648,15 +1200,161 @@ export interface AdapterInventoryResponse {
   adapters: AdapterRecord[];
 }
 
+export type McpServerHealthStatus = "ok" | "degraded" | "down" | "unknown";
+export type McpServerOperability = "ready" | "degraded" | "unavailable";
+export type McpServerAction =
+  | "probe"
+  | "activate"
+  | "deactivate"
+  | "retire"
+  | "restore"
+  | "update"
+  | "delete";
+export type McpProbeFailureCode =
+  | "credential_unavailable"
+  | "egress_denied"
+  | "transport_unavailable"
+  | "protocol_invalid"
+  | "discovery_invalid"
+  | "unexpected_failure"
+  | (string & {});
+
+export interface McpProbeEvidence {
+  checked_at: string;
+  outcome: "succeeded" | "failed";
+  failure_code: McpProbeFailureCode | null;
+  tool_count: number;
+}
+
+export interface McpToolSnapshotEvidence {
+  status: "snapshot" | "never_discovered";
+  observed_at: string | null;
+  count: number;
+  publication_status:
+    | "published"
+    | "drifted"
+    | "inactive"
+    | "retired"
+    | "never_discovered";
+}
+
+export interface McpProbeHistoryItem extends McpProbeEvidence {
+  probe_id: string;
+}
+
+export interface McpServerSummary {
+  id: string;
+  config_revision: number;
+  version: string;
+  source: string;
+  state: "active" | "inert" | "retired";
+  activated: boolean;
+  runtime_loaded: boolean;
+  endpoint: {
+    origin: string | null;
+    path_redacted: boolean;
+    internal_egress_allowed: boolean;
+  };
+  credential_configured: boolean;
+  recorded_health: McpServerHealthStatus;
+  health: {
+    status: McpServerHealthStatus;
+    source: "durable_probe" | "cached_adapter_probe" | "unverified";
+    checked_at: string | null;
+  };
+  operability: {
+    status: McpServerOperability;
+    reason: string | null;
+  };
+  last_probe: McpProbeEvidence | null;
+  tool_snapshot: McpToolSnapshotEvidence;
+  available_actions: McpServerAction[];
+}
+
+export interface McpToolProjection {
+  id: string;
+  name: string;
+  description: string;
+  consequence: "low" | "high";
+  input_schema: Record<string, unknown>;
+  output_schema: Record<string, unknown>;
+}
+
+export interface McpServersResponse {
+  servers: McpServerSummary[];
+  truncated: boolean;
+}
+
+export interface McpServerDetailResponse {
+  server: McpServerSummary;
+  tools: McpToolProjection[];
+  tools_status: "snapshot" | "never_discovered";
+  tools_truncated: boolean;
+  probe_history: McpProbeHistoryItem[];
+  probe_history_truncated: boolean;
+}
+
 // --- Workflow Studio --------------------------------------------------------
 
 export type WorkflowSourceValue = "precreated" | "generated" | "learned";
+export type WorkflowLoopBindingSource = "item" | "index";
+
+/**
+ * A workflow step is intentionally open-ended: the kernel owns the complete
+ * step vocabulary, while clients may understand only a subset of its fields.
+ * Editors must retain keys they do not understand when replacing a workflow.
+ */
+export interface WorkflowStepDefinition extends Record<string, unknown> {
+  id: string;
+  action: string;
+  parents?: string[];
+  description?: string;
+  params?: Record<string, unknown>;
+  with?: Record<string, unknown>;
+  branch?: string;
+  /**
+   * In a flow.loop body, replace existing top-level capability params with the
+   * current typed item or zero-based index. The kernel validates the complete
+   * loop contract before any body action dispatches.
+   */
+  loop_bindings?: Record<string, WorkflowLoopBindingSource>;
+}
+
+export interface WorkflowDefinition extends Record<string, unknown> {
+  steps?: unknown[];
+}
+
+export type WorkflowScheduleObservedStatus =
+  | "inactive"
+  | "pending"
+  | "active"
+  | "needs_action"
+  | "unavailable"
+  | "degraded";
+
+export interface WorkflowScheduleState {
+  desired: {
+    status: "inactive" | "active";
+    cron?: string;
+    timezone?: string;
+  };
+  observed: {
+    status: WorkflowScheduleObservedStatus;
+    reason: string | null;
+    next_run_at: string | null;
+    last_scheduled_for: string | null;
+    observed_at: string | null;
+  };
+}
 
 export interface WorkflowSummary {
   id: string;
   version: string;
-  source: string;
+  source: WorkflowSourceValue;
   intent_tags: string[];
+  status: "active" | "archived";
+  schedule?: { cron: string; timezone: string } | null;
+  schedule_state?: WorkflowScheduleState;
 }
 
 export interface WorkflowsResponse {
@@ -666,16 +1364,19 @@ export interface WorkflowsResponse {
 export interface WorkflowDetail {
   id: string;
   version: string;
-  source: string;
-  definition: Record<string, unknown>;
+  source: WorkflowSourceValue;
+  definition: WorkflowDefinition;
   intent_tags: string[];
+  status: "active" | "archived";
+  schedule?: { cron: string; timezone: string } | null;
+  schedule_state?: WorkflowScheduleState;
 }
 
 export interface UpsertWorkflowRequest {
   id: string;
   version?: string;
-  source?: WorkflowSourceValue;
-  definition?: Record<string, unknown>;
+  /** Provenance is assigned and preserved by the kernel, never authored here. */
+  definition?: WorkflowDefinition;
   intent_tags?: string[];
 }
 
@@ -687,8 +1388,595 @@ export interface ScheduleWorkflowRequest {
 export interface ScheduleWorkflowResponse {
   status: string;
   id?: string;
-  schedule?: unknown;
+  schedule?: { type?: "cron"; cron: string; timezone: string };
+  schedule_state?: WorkflowScheduleState;
+  hitl_request_id?: string;
   reason?: string;
+}
+
+export type WorkflowScheduleOccurrenceStatus =
+  | "claimed"
+  | "retryable"
+  | "enqueued"
+  | "succeeded"
+  | "failed";
+
+export interface WorkflowScheduleOccurrence {
+  scheduled_for: string;
+  run_id: string;
+  status: WorkflowScheduleOccurrenceStatus;
+  claimed_at: string | null;
+  enqueued_at: string | null;
+  outcome_at: string | null;
+  engine_outcome:
+    | { status: "settled"; recovery: "not_applicable" }
+    | {
+        status: "pending_or_unknown";
+        recovery: "engine_terminal_reconciliation_unavailable";
+      }
+    | { status: "not_enqueued"; recovery: "not_applicable" };
+  reason: string | null;
+  retry: {
+    attempts: number;
+    manual_retries: number;
+    last_retry_at: string | null;
+  };
+}
+
+export interface WorkflowScheduleOccurrencesResponse {
+  workflow_id: string;
+  occurrences: WorkflowScheduleOccurrence[];
+  truncated: boolean;
+  backfill: {
+    status: "unavailable";
+    reason: "historical_backfill_not_supported_by_canonical_claim";
+  };
+}
+
+export interface RetryWorkflowScheduleOccurrenceResponse {
+  status: "ok" | "pending_human" | "error";
+  workflow_id?: string;
+  scheduled_for?: string;
+  run_id?: string;
+  occurrence_status?: "retryable";
+  manual_retries?: number;
+  hitl_request_id?: string;
+  reason?: string;
+}
+
+export interface WorkflowLifecycleResponse {
+  status: "ok" | "pending_human" | "error";
+  id?: string;
+  workflow_status?: "active" | "archived";
+  schedule?: { type?: "cron"; cron: string; timezone: string } | null;
+  hitl_request_id?: string;
+  reason?: string;
+}
+
+export type WorkflowTriggerSource = "webhook" | "channel";
+
+export interface WorkflowTriggerSummary {
+  id: string;
+  workflow_id: string;
+  workspace_id: string | null;
+  name: string;
+  source: WorkflowTriggerSource;
+  owner_id: string;
+  channel_id: string | null;
+  enabled: boolean;
+  secret_configured: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface WorkflowTriggersResponse {
+  workflow_id: string;
+  triggers: WorkflowTriggerSummary[];
+}
+
+export interface CreateWorkflowTriggerRequest {
+  name: string;
+  source: WorkflowTriggerSource;
+  channel_id?: string;
+}
+
+export interface WorkflowTriggerMutationResponse {
+  status: "ok" | "pending_human" | "error";
+  trigger_id?: string;
+  workflow_id?: string;
+  source?: WorkflowTriggerSource;
+  enabled?: boolean;
+  /** Present only in the successful create/rotate response; never listable. */
+  secret?: string;
+  webhook_path?: string;
+  hitl_request_id?: string;
+  reason?: string;
+}
+
+export interface WorkflowTriggerDelivery {
+  trigger_id: string;
+  event_digest: string;
+  status: string;
+  authority_subject: string | null;
+  run_id: string | null;
+  hitl_request_id: string | null;
+  reason: string | null;
+  created_at: string | null;
+}
+
+export interface WorkflowTriggerDeliveriesResponse {
+  workflow_id: string;
+  trigger_id: string;
+  deliveries: WorkflowTriggerDelivery[];
+}
+
+export type WorkflowTriggerFinalization =
+  | {
+      request_id: string;
+      action: "create";
+      state: "waiting" | "ready";
+      name: string;
+      source: "webhook";
+    }
+  | {
+      request_id: string;
+      action: "rotate";
+      state: "waiting" | "ready";
+      trigger_id: string;
+    };
+
+export interface WorkflowTriggerFinalizationsResponse {
+  workflow_id: string;
+  finalizations: WorkflowTriggerFinalization[];
+}
+
+// ===========================================================================
+// Worker contracts (decision 0021)
+// These are capability contracts, not availability claims. A catalogue entry,
+// enrolled device, call provider, or schedule reports its explicit state.
+// ===========================================================================
+
+export interface FamiliarGenotype {
+  source?: "agent_capability.name.v1";
+  seed?: number;
+  body?: string;
+  palette?: string[];
+  markings?: string[];
+  accessories?: string[];
+  voice_id?: string | null;
+}
+
+export interface ModelProfile {
+  id: string;
+  label: string;
+  description?: string;
+  routing_class: string;
+  data_classes: string[];
+  available: boolean;
+  unavailable_reason?: string | null;
+}
+
+export interface ModelProfilesResponse {
+  profiles: ModelProfile[];
+}
+
+export type ArtifactProvenanceKind =
+  | "agent"
+  | "tool"
+  | "workflow"
+  | "call"
+  | "system";
+
+export interface ArtifactProvenance {
+  kind: ArtifactProvenanceKind;
+  actor_ref?: string | null;
+  source_ref?: string | null;
+  tool_call_id?: string | null;
+}
+
+export interface Artifact {
+  id: string;
+  tenant_id?: string;
+  owner_id: string;
+  workspace_id?: string | null;
+  conversation_id?: string | null;
+  run_id?: string | null;
+  work_item_id?: string | null;
+  name: string;
+  digest: string;
+  media_type: string;
+  size: number;
+  revision: number;
+  previous_revision_id?: string | null;
+  provenance: ArtifactProvenance;
+  created_at: string;
+}
+
+export interface ArtifactsResponse {
+  artifacts: Artifact[];
+  next_cursor?: string | null;
+}
+
+export interface ArtifactListOptions {
+  conversationId?: string;
+  limit?: number;
+  cursor?: string;
+}
+
+export type DevicePresence = "online" | "offline" | "locked" | "revoked";
+export type DeviceAvailabilityMode = "unlocked_session" | "background";
+export type DeviceRootScope = "read" | "read_write";
+
+export interface DeviceRoot {
+  id: string;
+  label: string;
+  scope: DeviceRootScope;
+  command_enabled: boolean;
+  git_enabled: boolean;
+}
+
+export interface EnrolledDevice {
+  id: string;
+  label: string;
+  public_key_fingerprint: string;
+  presence: DevicePresence;
+  availability_mode: DeviceAvailabilityMode;
+  roots: DeviceRoot[];
+  last_seen_at?: string | null;
+  revoked_at?: string | null;
+}
+
+export interface DevicesResponse {
+  devices: EnrolledDevice[];
+}
+
+export interface DeviceEnrollmentStart {
+  authorization_code: string;
+  expires_at: string;
+  verification_uri: string;
+  lease_verifier: {
+    algorithm: string;
+    key_id: string;
+    public_key: string;
+  };
+}
+
+export interface DeviceLease {
+  id: string;
+  tenant_id: string;
+  device_id: string;
+  root_id: string;
+  owner_id: string;
+  verb: string;
+  action: Record<string, unknown>;
+  action_digest: string;
+  approval_id: string;
+  issued_at: string;
+  expires_at: string;
+  signing_key_id: string;
+  signature: string;
+  status: string;
+}
+
+export type OwnerDeviceLeaseStatus =
+  | "issued"
+  | "claimed"
+  | "completed"
+  | "failed"
+  | "expired";
+
+export interface OwnerDeviceLeaseReceipt {
+  code?: string;
+  byte_size?: number;
+  content_digest?: string;
+  reported_local_result_available?: boolean;
+  overwrite?: boolean;
+  duration_ms?: number;
+  exit_code?: number | null;
+  output_captured?: false;
+}
+
+export interface OwnerDeviceLease {
+  id: string;
+  device_id: string;
+  root_id: string;
+  verb: "device.file.read" | "device.file.write" | "device.command.run";
+  status: OwnerDeviceLeaseStatus;
+  issued_at: string;
+  expires_at: string;
+  settled_at: string | null;
+  receipt: OwnerDeviceLeaseReceipt | null;
+}
+
+export interface OwnerDeviceLeasesResponse {
+  leases: OwnerDeviceLease[];
+}
+
+export interface CreateDeviceRootRequest {
+  label: string;
+  scope: DeviceRootScope;
+  command_enabled?: boolean;
+  git_enabled?: boolean;
+}
+
+export interface DeviceRootResponse {
+  root: DeviceRoot;
+}
+
+export type AddonActivation = "active" | "inactive";
+export type AddonRequirementStatus =
+  | "ready"
+  | "missing"
+  | "degraded"
+  | "unavailable"
+  | "unverified";
+export type AddonRequirementReason =
+  | "not_configured"
+  | "record_missing"
+  | "not_loaded"
+  | "health_degraded"
+  | "health_down"
+  | "health_unverified"
+  | "component_missing"
+  | "credential_missing"
+  | "evidence_unavailable";
+export type AddonRequirementEvidence =
+  | "declaration"
+  | "configuration_presence"
+  | "credential_reference"
+  | "cached_adapter_health"
+  | "stack_status";
+export type AddonConfigurationStatus =
+  | "ready"
+  | "missing"
+  | "degraded"
+  | "unavailable"
+  | "unverified"
+  | "not_required";
+export type AddonRuntimeStatus =
+  | "ready"
+  | "degraded"
+  | "unavailable"
+  | "unverified"
+  | "inactive";
+
+export interface AddonRequirement {
+  id: string;
+  kind: "adapter" | "component" | "environment" | "credential_ref";
+  required: boolean;
+  status: AddonRequirementStatus;
+  reason: AddonRequirementReason | null;
+  evidence: AddonRequirementEvidence;
+}
+
+export interface RuntimeAddon {
+  id: string;
+  version: string;
+  installation: "installed";
+  activation: AddonActivation;
+  contributions: {
+    harness: boolean;
+    adapter: boolean;
+    consequence_hint: boolean;
+  };
+  configuration: {
+    status: AddonConfigurationStatus;
+    requirements: AddonRequirement[];
+  };
+  runtime: {
+    status: AddonRuntimeStatus;
+    reason: AddonRequirementReason | null;
+  };
+}
+
+export interface AddonsResponse {
+  scope: {
+    tenant_id: string;
+    workspace_id: string | null;
+  };
+  addons: RuntimeAddon[];
+}
+
+export type IntegrationTransport = "rest" | "mcp" | "channel_gateway" | "browser";
+export type IntegrationAuthKind = "oauth2" | "manual_secret" | "channel_pairing";
+export type IntegrationCertification =
+  | "uncertified"
+  | "certifying"
+  | "certified"
+  | "suspended";
+export type IntegrationConnectionHealth =
+  | "pending"
+  | "ok"
+  | "degraded"
+  | "down"
+  | "revoked";
+
+export interface IntegrationCatalogueEntry {
+  id: string;
+  label: string;
+  category:
+    | "communications"
+    | "work"
+    | "storage_design"
+    | "crm_sales"
+    | "finance"
+    | "analytics_operations"
+    | "browser";
+  transport: IntegrationTransport;
+  auth: IntegrationAuthKind[];
+  description: string;
+  certification: IntegrationCertification;
+  setup_copy?: string;
+  access_copy?: string;
+  available?: boolean;
+  availability_reason?: string | null;
+  setup_supported?: boolean;
+  setup_contract?: IntegrationManualSecretContract | null;
+  enabled_tools?: string[];
+  icon?: string;
+}
+
+export interface IntegrationSecretFieldContract {
+  name: string;
+  label: string;
+  input_kind: "api_key" | "password" | "text" | "token" | "username";
+  secret: boolean;
+  required: boolean;
+  min_length: number;
+  max_length: number;
+}
+
+export interface IntegrationManualSecretContract {
+  kind: "manual_secret";
+  version: string;
+  fields: IntegrationSecretFieldContract[];
+}
+
+export interface IntegrationCatalogueResponse {
+  integrations: IntegrationCatalogueEntry[];
+}
+
+export interface IntegrationAccount {
+  id: string;
+  label: string;
+  selected: boolean;
+}
+
+export interface IntegrationConnection {
+  id: string;
+  integration_id: string;
+  label: string;
+  health: IntegrationConnectionHealth;
+  credential_ref_present: boolean;
+  accounts: IntegrationAccount[];
+  enabled_tools: string[];
+  last_checked_at?: string | null;
+  created_at: string;
+}
+
+export interface IntegrationConnectionsResponse {
+  connections: IntegrationConnection[];
+}
+
+export interface IntegrationConnectionResponse {
+  connection: IntegrationConnection;
+}
+
+export interface IntegrationSecretSubmission {
+  fields: Record<string, string>;
+  label?: string;
+}
+
+export interface IntegrationSetupResponse {
+  status: "connected";
+  connection: IntegrationConnection;
+}
+
+export interface IntegrationOAuthStartResponse {
+  authorization_url: string;
+  state_expires_at: string;
+}
+
+export type CallStatus =
+  | "creating"
+  | "joining"
+  | "active"
+  | "reconnecting"
+  | "held"
+  | "ended"
+  | "realtime_unavailable"
+  | "failed";
+
+export interface CallParticipant {
+  id: string;
+  label: string;
+  kind: "user" | "agent" | "guest";
+  familiar_genotype?: FamiliarGenotype | null;
+}
+
+export interface RealtimeCall {
+  id: string;
+  conversation_id: string;
+  run_id?: string | null;
+  status: CallStatus;
+  provider_class: "realtime_voice";
+  participants: CallParticipant[];
+  started_at?: string | null;
+  ended_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  unavailable_reason?: string | null;
+  agent_profile_id?: string | null;
+  model_profile_id?: string | null;
+}
+
+export interface CallCreateRequest {
+  conversation_id?: string;
+  agent_profile_id?: string;
+  model_profile_id?: string;
+}
+
+export interface CallCreateResponse {
+  call: RealtimeCall;
+  media_token?: string;
+  media_token_expires_at?: string;
+  websocket_url?: string;
+  text_continuation_conversation_id?: string;
+}
+
+export interface CallTranscriptItem {
+  id: string;
+  participant_id: string;
+  text: string;
+  final: boolean;
+  created_at: string;
+}
+
+export interface CallEvent {
+  id: string;
+  call_id: string;
+  type:
+    | "participant_joined"
+    | "participant_left"
+    | "transcript"
+    | "tool_call"
+    | "tool_result"
+    | "hitl"
+    | "usage"
+    | "interrupted"
+    | "reconnected"
+    | "ended";
+  payload: Record<string, unknown>;
+  participant_id?: string | null;
+  created_at: string;
+}
+
+export interface CallEventsResponse {
+  events: CallEvent[];
+}
+
+export interface CallsResponse {
+  calls: RealtimeCall[];
+}
+
+export interface CurrentCallResponse {
+  call: RealtimeCall | null;
+}
+
+export interface CallUsage {
+  input_audio_bytes: number;
+  output_audio_bytes: number;
+  tool_calls: number;
+  provider_input_tokens: number;
+  provider_output_tokens: number;
+  estimated_cost_micros: number;
+  pricing_revision: string | null;
+  cost_status: "estimated" | "unpriced";
+}
+
+export interface CallUsageResponse {
+  call_id: string;
+  usage: CallUsage;
 }
 
 export interface TriggerWorkflowRequest {
@@ -819,6 +2107,68 @@ export interface CredentialsResponse {
 // /v1/channels. Management is admin-gated (the server 403s a non-author); the
 // ingress webhook authenticates by the channel's own signature, never here.
 
+export type ChannelAddressingTargetKind =
+  | "chief"
+  | "department"
+  | "workflow";
+
+export type ChannelAddressingTargetState =
+  | "available"
+  | "startup_constructed_liveness_unknown"
+  | "restart_required";
+
+export interface ChannelAddressingTarget {
+  id: string;
+  kind: ChannelAddressingTargetKind;
+  label: string;
+  state: ChannelAddressingTargetState;
+  runtime_liveness:
+    | "unknown_not_probed_by_catalogue"
+    | "not_applicable";
+}
+
+export interface ChannelAddressingCatalogue {
+  targets: ChannelAddressingTarget[];
+  supports_arbitrary_agent_pinning: false;
+  scope: {
+    workspace_id: string | null;
+    departments: "all" | string[];
+  };
+}
+
+export interface ChannelAddressingProjection {
+  configured_default_target: string | null;
+  effective_default_target: string;
+  default_target_state:
+    | ChannelAddressingTargetState
+    | "stale_or_unsupported";
+  routes: Array<{
+    thread: string;
+    target: string;
+    state: ChannelAddressingTargetState | "stale_or_unsupported";
+  }>;
+  valid: boolean;
+}
+
+export interface ChannelAddressingConfig {
+  default_target?: string;
+  routes?: Record<string, string>;
+  thread_field?: string;
+}
+
+export interface ChannelSelfOnboardConfig {
+  role: "member";
+  scope: {
+    departments: string[];
+  };
+  welcome?: string;
+}
+
+export interface ChannelPolicyConfig extends Record<string, unknown> {
+  addressing?: ChannelAddressingConfig;
+  self_onboard?: ChannelSelfOnboardConfig;
+}
+
 export interface ChannelSummary {
   id: string;
   platform: string;
@@ -826,29 +2176,96 @@ export interface ChannelSummary {
   transport: string;
   enabled: boolean;
   unpaired_behavior: string;
+  config: ChannelPolicyConfig;
+  addressing?: ChannelAddressingProjection;
+  credential_configured: boolean;
+  credentials_configured?: Record<string, boolean>;
+  provider?: {
+    id: string;
+    label: string;
+    transport: string;
+    credential_keys: string[];
+    provider_config_keys: string[];
+    required_provider_config: string[];
+    activation:
+      | "automatic"
+      | "external_pairing"
+      | "deployment_managed"
+      | "unsupported";
+    shipped: boolean;
+    capability: "shipped_adapter" | "unsupported";
+  };
+  gateway?: {
+    status: string;
+    gateway_id?: string;
+    desired_revision?: string;
+    observed_revision?: string;
+    reason_code?: string | null;
+    observed_at?: string | null;
+    ownership?: {
+      status:
+        | "active_lease"
+        | "expired_lease"
+        | "unclaimed"
+        | "not_applicable";
+      gateway_id: string | null;
+      lease_expires_at: string | null;
+      single_owner_enforced: boolean;
+      owner_lease_id_disclosed: false;
+      proves_process_liveness: false;
+    };
+  };
 }
 
 // channels present on success; {status:"denied", reason} when not an author.
 export interface ChannelsResponse {
   channels?: ChannelSummary[];
+  addressing_catalogue?: ChannelAddressingCatalogue;
   status?: string;
   reason?: string;
+}
+
+export interface ChannelGatewaySessionRequest {
+  channels: string[];
+  gateway_id?: string;
+  ttl_seconds?: number;
+}
+
+export interface ChannelGatewaySessionResponse {
+  status: "ok" | "denied" | "error";
+  token?: string;
+  channels?: string[];
+  gateway_id?: string;
+  expires_in?: number;
+  reason?: string;
+  bootstrap?: {
+    token_delivery: "show_once";
+    recovery: "replace_token_file_or_restart";
+    owner_election: "durable_per_channel_lease";
+    provider_credentials_included: false;
+  };
 }
 
 export interface ConnectChannelRequest {
   platform: string;
   name: string;
-  // Optional HMAC signing secret; stored kernel-side (SEC-05), never returned.
+  // Legacy inline HMAC input; new clients should pass a secret-store reference.
   signing_secret?: string;
+  signing_secret_ref?: string;
+  // Canonical socket-provider credential references. Values are secret-store
+  // names, never material; they are write-only and never returned by the API.
+  credential_refs?: Record<string, string>;
+  provider_config?: Record<string, unknown>;
   unpaired_behavior?: string;
   enabled?: boolean;
-  config?: Record<string, unknown>;
+  config?: ChannelPolicyConfig;
 }
 
 export interface ConnectChannelResponse {
   status: string;
   channel?: string;
   inbound_url?: string;
+  hitl_request_id?: string;
   reason?: string;
 }
 
@@ -856,7 +2273,9 @@ export interface ConfigureChannelRequest {
   name?: string;
   unpaired_behavior?: string;
   enabled?: boolean;
-  config?: Record<string, unknown>;
+  config?: ChannelPolicyConfig;
+  credential_refs?: Record<string, string>;
+  provider_config?: Record<string, unknown>;
 }
 
 export interface ChannelBindingSummary {
@@ -872,6 +2291,35 @@ export interface ChannelBindingsResponse {
   reason?: string;
 }
 
+export type ChannelDeliveryStatus =
+  | "queued"
+  | "in_flight"
+  | "retryable"
+  | "delivered"
+  | "terminal_failed";
+
+export interface ChannelDeliveryReceipt {
+  id: string;
+  channel_id: string;
+  status: ChannelDeliveryStatus;
+  attempts: number;
+  safe_reason: "delivery_failed" | null;
+  created_at: string | null;
+  updated_at: string | null;
+  next_attempt_at: string | null;
+}
+
+export interface ChannelDeliveriesResponse {
+  deliveries?: ChannelDeliveryReceipt[];
+  status?: string;
+  reason?: string;
+}
+
+export interface RetryChannelDeliveryResponse extends ChannelAck {
+  delivery?: ChannelDeliveryReceipt;
+  hitl_request_id?: string;
+}
+
 export interface PairChannelRequest {
   external_user_id: string;
   subject: string;
@@ -885,7 +2333,22 @@ export interface PairChannelResponse {
   status: string;
   pairing_id?: string;
   code?: string;
+  hitl_request_id?: string;
   reason?: string;
+}
+
+export interface ChannelPairFinalization {
+  request_id: string;
+  state: "waiting" | "ready";
+  external_user_id: string;
+  subject: string;
+  role: string;
+  ttl_minutes: number;
+}
+
+export interface ChannelPairFinalizationsResponse {
+  channel_id: string;
+  finalizations: ChannelPairFinalization[];
 }
 
 export interface BindChannelRequest {
@@ -897,12 +2360,14 @@ export interface BindChannelRequest {
 export interface BindChannelResponse {
   status: string;
   binding?: string;
+  hitl_request_id?: string;
   reason?: string;
 }
 
 // A minimal {status, reason} ack for channel mutations that return no body.
 export interface ChannelAck {
   status: string;
+  hitl_request_id?: string;
   reason?: string;
 }
 
@@ -924,6 +2389,10 @@ export interface BudgetItem {
   spent_tokens: number;
   cost_limit_micros: number | null;
   spent_micros: number;
+  usage_state: "current" | "run_context_required";
+  window_key: string | null;
+  window_started_at: string | null;
+  window_ends_at: string | null;
 }
 
 export interface BudgetPolicyRequest {
@@ -947,6 +2416,368 @@ export interface ConsolePlatformItem {
   message?: string;
   updated_at?: string;
   metadata?: Record<string, unknown>;
+}
+
+export type BackgroundJobName = "hitl_expiry" | "retention";
+export type BackgroundJobEvidenceState =
+  | "recent_succeeded_evidence"
+  | "recent_failed_evidence"
+  | "stale_succeeded_evidence"
+  | "stale_failed_evidence"
+  | "future_evidence";
+
+export interface BackgroundJobReceiptView {
+  job_name: BackgroundJobName;
+  process_instance_identity: string;
+  state: BackgroundJobEvidenceState;
+  last_outcome: "succeeded" | "failed";
+  last_attempt_at: string;
+  last_success_at: string | null;
+  last_failure_at: string | null;
+  failure_code: "sweep_failed" | null;
+  last_item_count: number;
+  interval_seconds: number;
+  lag_seconds: number;
+  stale_after_seconds: number;
+  evidence_kind: "bounded_attempt_receipt_not_liveness";
+  proves_liveness: false;
+  process_coverage: "bounded_receipts_not_replica_inventory";
+}
+
+export interface BackgroundJobEvidenceSummary {
+  status: "available" | "unavailable";
+  evidence_kind: "bounded_attempt_receipt_not_liveness";
+  proves_liveness: false;
+  process_coverage: "bounded_receipts_not_replica_inventory";
+  max_retained_process_receipts_per_job: number;
+  max_returned_receipts: number;
+}
+
+export interface EffectiveNetworkPolicyField {
+  enforcement: "enforced";
+  enabled?: boolean;
+  configured?: boolean;
+  entry_count?: number;
+}
+
+export interface EffectiveWebFetchNetworkPolicy {
+  surface: "web.fetch";
+  status: "enforced";
+  policy_snapshot: "adapter_process_start";
+  fields: Record<string, EffectiveNetworkPolicyField>;
+  controls: {
+    ssrf_preflight: "enforced";
+    redirects: "disabled";
+    dns_pinning: "enforced" | "proxy_resolution_delegated";
+  };
+}
+
+export interface NetworkPolicyCoverageItem {
+  surface: string;
+  status:
+    | "separate_policy"
+    | "partial_shared_controls"
+    | "provider_transport_only";
+  manifest_network_policy: "not_applied";
+  controls: string[];
+  limitation: string;
+}
+
+export interface EffectiveNetworkPolicyView {
+  status: "available" | "unavailable";
+  policy_source: "live_adapter_process_start_snapshot";
+  changes_require_restart: true;
+  universal_egress_control: false;
+  sensitive_values_redacted: true;
+  web_fetch: EffectiveWebFetchNetworkPolicy | null;
+  coverage: NetworkPolicyCoverageItem[];
+}
+
+export interface CodexAdmissionView {
+  status: "available";
+  evidence_kind: "process_composition_not_runtime_liveness";
+  rollout: {
+    policy_source: "immutable_off_scaffold" | "scaffold_not_composed";
+    mode: "off";
+    generation: number | null;
+    shadow_root_decisions: "active_execution_neutral" | "disabled";
+    root_execution: "legacy_only";
+    assignment_admission: "inactive_never_called";
+    canary_decision: "unavailable_rollout_off";
+  };
+  runtime: {
+    trusted_provider: "off" | "configured_development_only";
+    runtime_config_production_ready: boolean;
+    runtime_class_production_ready: boolean;
+    production_activation:
+      | "available"
+      | "refused_unresolved_isolation_controls";
+    preflight_evidence: "unavailable_no_durable_cell_receipts";
+    cell_liveness: "unavailable";
+  };
+  execution_changed_by_projection: false;
+  sensitive_values_redacted: true;
+}
+
+export interface PasswordResetDeliveryEvidence {
+  configuration: "configured" | "unavailable";
+  configuration_reason: "not_configured" | null;
+  evidence_status:
+    | "available"
+    | "restricted"
+    | "not_observed_in_bounded_tail";
+  last_attempt_at: string | null;
+  last_outcome:
+    | "accepted_by_notifier"
+    | "not_accepted_by_notifier"
+    | "notifier_unavailable"
+    | null;
+  evidence_kind: "bounded_audit_attempt_not_provider_receipt";
+  proves_recipient_delivery: false;
+  target_disclosed: false;
+  audit_tail_limit: number;
+}
+
+export interface LangfuseDeliveryView {
+  status: "available" | "unavailable";
+  evidence_kind: "process_local_attempt_counters_not_sink_health";
+  process_coverage: "api_spawner_only_not_replica_inventory";
+  sink_state: "enabled" | "disabled" | "unavailable";
+  reason:
+    | "configured"
+    | "disabled_by_config"
+    | "missing_keys"
+    | "package_unavailable"
+    | "client_initialization_failed"
+    | "status_source_unavailable";
+  attempt_count: number;
+  success_count: number;
+  failure_count: number;
+  last_attempt_at: string | null;
+  last_success_at: string | null;
+  last_failure_at: string | null;
+  delivery_lag: "unavailable";
+  liveness_claimed: false;
+  sensitive_values_redacted: true;
+}
+
+export type MemoryProjectionDeliveryState =
+  | "queued_not_yet_attempted"
+  | "retry_attempt_observed"
+  | "delivered"
+  | "delivered_after_retry"
+  | "enqueue_failed_retry_unsafe"
+  | "terminal_after_retry_cap"
+  | "terminal_failure_attempt_count_unknown";
+
+export type MemoryProjectionFailureCode =
+  | "enqueue_failed"
+  | "projection_operation_failed"
+  | "projection_not_configured"
+  | "invalid_projection_result";
+
+export interface MemoryProjectionDeliveryReceipt {
+  receipt_identity: string;
+  projection_identity: string;
+  operation: "remember" | "forget";
+  state: MemoryProjectionDeliveryState;
+  status: "pending" | "written" | "failed" | "deleted" | "delete_failed";
+  enqueue_attempts: number;
+  operation_attempts: number;
+  max_operation_attempts: number;
+  queued_at: string;
+  first_attempt_at: string | null;
+  last_attempt_at: string | null;
+  last_failure_at: string | null;
+  last_failure_code: MemoryProjectionFailureCode | null;
+  queue_wait_seconds: number | null;
+  pending_age_seconds: number | null;
+  terminal_at: string | null;
+  content_retained_in_receipt: false;
+  manual_retry:
+    | "unavailable_original_payload_not_retained"
+    | "not_applicable";
+}
+
+export interface MemoryProjectionQueuePosture {
+  status: "configured" | "no_projections" | "unavailable";
+  execution_mode:
+    | "inline_no_queue"
+    | "durable_executor"
+    | "local_inline_fallback"
+    | "external_executor_durability_unknown"
+    | "unknown";
+  configured_projection_count: number;
+  max_operation_attempts: number;
+  retry_scope: "single_task_invocation" | "unknown";
+  enqueue_retry: "disabled_ambiguous_acceptance" | "unknown";
+  payload_retention:
+    | "executor_owned_not_in_status_receipt"
+    | "not_observed";
+  manual_retry: "unavailable_original_payload_not_retained";
+  proves_worker_liveness: false;
+}
+
+export interface MemoryProjectionDeliveryView {
+  status: "available" | "unavailable";
+  evidence_kind: "bounded_status_receipts_not_queue_or_worker_liveness";
+  proves_queue_depth: false;
+  proves_worker_liveness: false;
+  queue_posture: MemoryProjectionQueuePosture;
+  receipts: MemoryProjectionDeliveryReceipt[];
+  max_returned_receipts: number;
+  truncated: boolean;
+  manual_retry: "unavailable_original_payload_not_retained";
+}
+
+export interface IdentityPolicyView {
+  status: "available" | "unavailable";
+  mode:
+    | "first_party_session"
+    | "cloudflare_access"
+    | "oidc"
+    | "development_header_trust"
+    | "deny_all";
+  oidc: {
+    manifest_trio_configured: boolean;
+    process_trio_configured: boolean;
+    manifest_trio_state: "absent" | "partial" | "complete";
+    process_trio_state: "absent" | "partial" | "complete";
+    serving_state:
+      | "active_manifest_and_process_match"
+      | "active_manifest"
+      | "active_process"
+      | "inactive_selected_other_auth_mode"
+      | "not_configured";
+    drift_policy: "exact_match_or_boot_refused";
+  };
+  generation: string | null;
+  changes_apply_at: "process_restart";
+  sensitive_values_redacted: true;
+}
+
+export interface PlatformStatusResponse {
+  generated_at: string;
+  tenant_id: string;
+  workspace_id?: string | null;
+  components: ConsolePlatformItem[];
+  runtimes: ConsolePlatformItem[];
+  background_jobs?: BackgroundJobReceiptView[];
+  background_job_evidence?: BackgroundJobEvidenceSummary;
+  network_policy?: EffectiveNetworkPolicyView;
+  codex_admission?: CodexAdmissionView;
+  password_reset_delivery?: PasswordResetDeliveryEvidence;
+  langfuse_delivery?: LangfuseDeliveryView;
+  memory_projection_delivery?: MemoryProjectionDeliveryView;
+  identity_policy?: IdentityPolicyView;
+}
+
+export type BirthProfileProcessKind = "api" | "fleet" | "hatchet";
+
+export type BirthProfileEvidenceState =
+  | "unavailable"
+  | "startup_observed_reference_unavailable"
+  | "stale_startup_liveness_unknown"
+  | "mismatched_startup_liveness_unknown"
+  | "matched_reference_liveness_unknown";
+
+export interface BirthProfileReference {
+  status:
+    | "unavailable"
+    | "startup_snapshot_liveness_unknown"
+    | "stale_startup_liveness_unknown";
+  source_process: "api";
+  reason: "api_startup_receipt_unavailable" | null;
+  basis: "latest_api_startup_receipt";
+  instance_identity: string | null;
+  manifest_generation: string | null;
+  addon_set_identity: string | null;
+  codex_provider_identity: string | null;
+  codex_provider_state: "off" | "configured" | "unavailable";
+  sensitive_role_identity: string | null;
+  sensitive_role_state: "absent" | "configured" | "unavailable";
+  observed_at: string | null;
+  expires_at: string | null;
+  liveness_claimed: false;
+}
+
+export interface BirthProfileObservation {
+  process_kind: BirthProfileProcessKind;
+  instance_identity: string | null;
+  evidence_state: BirthProfileEvidenceState;
+  reason: "no_startup_receipt" | null;
+  matches_reference: boolean | null;
+  mismatches: Array<
+    | "manifest_generation"
+    | "addon_set_identity"
+    | "codex_provider_identity"
+    | "sensitive_role_identity"
+  >;
+  manifest_generation: string | null;
+  addon_set_identity: string | null;
+  codex_provider_identity: string | null;
+  codex_provider_state: "off" | "configured" | "unavailable";
+  sensitive_role_identity: string | null;
+  sensitive_role_state: "absent" | "configured" | "unavailable";
+  receipt_kind: "startup_snapshot" | null;
+  observed_at: string | null;
+  expires_at: string | null;
+  liveness_claimed: false;
+}
+
+export interface BirthProfileResponse {
+  tenant_id: string;
+  status:
+    | "reference_unavailable"
+    | "observed_mismatch"
+    | "process_kind_unavailable"
+    | "stale_startup_evidence"
+    | "startup_profiles_match_reference_liveness_unknown";
+  reference: BirthProfileReference;
+  observations: BirthProfileObservation[];
+  summary: {
+    mismatch_count: number;
+    stale_count: number;
+    unavailable_count: number;
+    retained_instance_count: number;
+    max_retained_instances_per_process: number;
+    max_returned_instances: number;
+    liveness_claimed: false;
+    replica_coverage_claimed: false;
+  };
+}
+
+export interface ModelTelemetryResponse {
+  generated_at: string;
+  tenant_id: string;
+  workspace_id?: string | null;
+  scope: string[] | string;
+  models: ConsoleModelTelemetry[];
+}
+
+export interface AuditVerifyResponse {
+  tenant_id?: string;
+  workspace_id?: string | null;
+  chain_intact?: boolean;
+  chain_first_bad_seq?: number | null;
+  security_chain_intact?: boolean;
+  security_first_bad_seq?: number | null;
+  anchor_intact?: boolean;
+  anchor?: AuditAnchorEvidence | null;
+  intact?: boolean;
+  status?: string;
+  reason?: string;
+}
+
+export interface AuditAnchorEvidence {
+  id: string;
+  seq_start: number;
+  seq_end: number;
+  rollup_root_hash: string;
+  anchored_at: string;
+  is_dev_fallback: boolean;
+  rfc3161_token?: string | null;
+  kms_signature?: string | null;
 }
 
 export interface ConsoleModelTelemetry {
@@ -1032,6 +2863,9 @@ export interface AuditSearchResponse {
   stream?: "audit" | "security";
   results: AuditRow[];
   scope: string[] | string;
+  limit: number;
+  offset: number;
+  next_offset: number | null;
 }
 
 export interface AuditExportRow extends AuditRow {
@@ -1064,17 +2898,51 @@ export interface RunRow {
 
 export interface RunsResponse {
   runs: RunRow[];
+  limit?: number;
+  next_cursor?: string | null;
+  filters?: {
+    owner?: string | null;
+    on_behalf_of?: string | null;
+    label?: string | null;
+    source?: string | null;
+    external_ref?: string | null;
+  };
+}
+
+export interface RunTopologyNode {
+  run_id: string;
+  work_item: string;
+  parent_run_id?: string | null;
+  member?: string | null;
+  task: string;
+  status: string;
+  depth: number;
+  source?: string | null;
+  external_ref?: string | null;
+  on_behalf_of?: string | null;
+  attempts: number;
+  degraded: boolean;
+  cycle?: boolean;
+  children: RunTopologyNode[];
+}
+
+export interface RunTopologyResponse {
+  root: RunTopologyNode;
 }
 
 // --- Evaluation -------------------------------------------------------------
 
+export type EvalTargetKind = "skill" | "workflow";
+
 export interface EvalCaseItem {
   id: string;
-  target_kind: string;
+  target_kind: EvalTargetKind;
   target_ref: string;
   input: Record<string, unknown>;
   assertions: Record<string, unknown>;
   labels: string[];
+  is_active: boolean;
+  status: "active" | "archived";
 }
 
 export interface EvalCasesResponse {
@@ -1083,11 +2951,19 @@ export interface EvalCasesResponse {
 
 export interface CreateEvalCaseRequest {
   id?: string;
-  target_kind: string;
+  target_kind: EvalTargetKind;
   target_ref: string;
   input?: Record<string, unknown>;
   assertions?: Record<string, unknown>;
   labels?: string[];
+}
+
+export interface EvalCaseLifecycleResponse {
+  status: "ok" | "pending_human" | "error";
+  id?: string;
+  eval_case_status?: "active" | "archived";
+  hitl_request_id?: string;
+  reason?: string;
 }
 
 export interface RunEvalRequest {
@@ -1097,7 +2973,9 @@ export interface RunEvalRequest {
 export interface EvalRunDetail {
   checks?: Record<string, boolean>;
   effective_grants?: string[];
-  spawn_error?: string;
+  target?: { kind: string; ref: string };
+  target_error?: string;
+  workflow_status?: string;
   [key: string]: unknown;
 }
 
@@ -1106,6 +2984,8 @@ export interface EvalRunResult {
   passed?: boolean;
   score?: number;
   run_id?: string;
+  target_kind?: EvalTargetKind;
+  target_ref?: string;
   detail?: EvalRunDetail;
   error?: string;
 }
@@ -1116,6 +2996,10 @@ export interface EvalRunSummary {
   passed: boolean;
   score: number;
   run_id?: string;
+  target_kind?: EvalTargetKind;
+  target_ref?: string;
+  detail?: EvalRunDetail;
+  created_at?: string;
 }
 
 export interface EvalRunsResponse {
@@ -1181,6 +3065,7 @@ export interface UserProfile {
 export interface MeSettingsResponse {
   profile: UserProfile;
   settings: Record<string, unknown>;
+  setting_sources?: Record<string, "tenant_default" | "user_override">;
 }
 
 // PUT accepts either {key, value} or {settings: {k: v}}.
@@ -1206,6 +3091,9 @@ export interface ActivityRow {
 
 export interface MeActivityResponse {
   results: ActivityRow[];
+  limit: number;
+  offset: number;
+  next_offset: number | null;
 }
 
 export interface ExportConversation {
@@ -1231,6 +3119,7 @@ export interface MeExportResponse {
 export interface DeleteAck {
   status: string;
   id?: string;
+  conversation_status?: "active" | "closed";
   reason?: string;
 }
 
@@ -1294,10 +3183,43 @@ export interface MeNotificationItem {
   channel: string;
   target?: string | null;
   enabled: boolean;
+  deliverable: boolean;
+  last_delivery?: NotificationDeliveryStatus | null;
+}
+
+export interface NotificationEventOption {
+  id: string;
+  label: string;
+  description: string;
+}
+
+export interface NotificationTargetOption {
+  id: string;
+  label: string;
+}
+
+export interface NotificationTransportOption {
+  id: string;
+  platform: string;
+  label: string;
+  delivery_mode: "durable_outbox";
+  targets: NotificationTargetOption[];
+}
+
+export interface NotificationDeliveryStatus {
+  id: string;
+  status: "pending" | "in_flight" | "delivered" | "failed";
+  updated_at?: string | null;
+}
+
+export interface NotificationCatalogue {
+  events: NotificationEventOption[];
+  transports: NotificationTransportOption[];
 }
 
 export interface MeNotificationsResponse {
   prefs: MeNotificationItem[];
+  catalogue: NotificationCatalogue;
 }
 
 export interface PutMeNotificationRequest {
@@ -1306,6 +3228,13 @@ export interface PutMeNotificationRequest {
   channel: string;
   target?: string | null;
   enabled?: boolean;
+}
+
+export interface TestMeNotificationResponse {
+  status: string;
+  delivery_id?: string;
+  delivery_status?: "queued";
+  reason?: string;
 }
 
 export interface PersonalAgentView {
@@ -1357,6 +3286,9 @@ export interface AdminInvitation {
   intended_scope: Record<string, unknown>;
   status: string;
   invited_by: string;
+  workspace_id?: string | null;
+  provision_workspace_name?: string | null;
+  provision_org_name?: string | null;
   expires_at?: string | null;
 }
 
@@ -1371,12 +3303,16 @@ export interface CreateInvitationRequest {
   role?: string;
   scope?: Record<string, unknown>;
   ttl_days?: number;
+  workspace_id?: string;
+  provision_workspace_name?: string;
+  provision_org_name?: string;
 }
 
 export interface CreateInvitationResponse {
   status: string;
   id?: string;
   email?: string;
+  invite_token?: string;
   reason?: string;
 }
 
@@ -1416,10 +3352,15 @@ export interface MemoryFactsResponse {
   scopes: string[];
 }
 
+export interface MemoryFactResponse {
+  fact: MemoryFactView;
+}
+
 export interface MemoryRecallRequest {
   query: string;
   mode?: RecallMode;
   limit?: number;
+  owner_scope?: string;
 }
 
 // success: {facts, count}; denial / memory-off: {status, reason}.
@@ -1442,8 +3383,21 @@ export interface MemoryRememberRequest {
 
 export interface MemoryRememberResponse {
   status: string;
+  hitl_request_id?: string;
   fact_ids?: string[];
   owner_scope?: string;
+  reason?: string;
+}
+
+export interface MemoryImproveRequest {
+  target: string;
+  signal: "up" | "down";
+}
+
+export interface MemoryImproveResponse {
+  status: string;
+  hitl_request_id?: string;
+  adjusted?: number;
   reason?: string;
 }
 
@@ -1454,6 +3408,7 @@ export interface MemoryForgetRequest {
 
 export interface MemoryForgetResponse {
   status: string;
+  hitl_request_id?: string;
   erasure_id?: string;
   removed?: string[];
   facts_removed?: number;
@@ -1471,6 +3426,7 @@ export interface MemoryIngestRequest {
 
 export interface MemoryIngestResponse {
   status: string;
+  hitl_request_id?: string;
   id?: string;
   ingestion_status?: string;
   facts_added?: number;
@@ -1509,6 +3465,14 @@ export interface KnowledgeAsset {
 
 export interface KnowledgeAssetsResponse {
   assets: KnowledgeAsset[];
+  next_offset?: number | null;
+}
+
+export interface KnowledgeAssetDetailResponse {
+  asset: Omit<KnowledgeAsset, "segment_count" | "workspace_id">;
+  segments: Array<Record<string, unknown>>;
+  provenance: Record<string, unknown>;
+  projections: Array<Record<string, unknown>>;
 }
 
 export interface KnowledgeCitation {
@@ -1567,6 +3531,7 @@ export interface KnowledgeUploadResponse {
 export interface KnowledgeMutationResponse {
   asset_id?: string;
   status?: string;
+  operation_status?: string;
   provider?: KnowledgeProvider;
   hitl_request_id?: string;
   reason?: string;
@@ -1588,6 +3553,26 @@ export interface AuthUser {
 export interface LoginRequest {
   email: string;
   password: string;
+}
+
+export interface PasswordResetRequest {
+  email: string;
+}
+
+export interface PasswordResetRequestResponse {
+  status: string;
+  message?: string;
+  reason?: string;
+}
+
+export interface PasswordResetConfirmRequest {
+  token: string;
+  new_password: string;
+}
+
+export interface PasswordResetConfirmResponse {
+  status: string;
+  reason?: string;
 }
 
 // The login body is {status:"ok", csrf_token, user} on success, or a GENERIC
@@ -1732,6 +3717,15 @@ export interface CurrentOrgResponse {
   organisation: OrganisationView;
 }
 
+export interface MyOrganisationView {
+  id: string;
+  active: boolean;
+}
+
+export interface MyOrganisationsResponse {
+  organisations: MyOrganisationView[];
+}
+
 export interface UpdateOrgRequest {
   name?: string;
   slug?: string;
@@ -1767,6 +3761,7 @@ export interface AiKeyView {
   scope_id: string;
   provider: string;
   model: string;
+  base_url?: string | null;
   has_key: boolean;
   updated_at?: string | null;
 }
@@ -1782,11 +3777,35 @@ export interface SetAiKeyRequest {
   scope_id?: string;
   provider: string;
   model: string;
+  base_url?: string;
   api_key: string;
+}
+
+export type AiKeyProposalStatus =
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "expired"
+  | "consumed"
+  | "invalidated"
+  | "unavailable";
+
+export interface AiKeyProposalView {
+  id: string;
+  level: AiKeyLevel;
+  scope_id: string;
+  provider: string;
+  model: string;
+  base_url?: string | null;
+  status: AiKeyProposalStatus;
+  created_at: string;
+  expires_at: string;
 }
 
 export interface SetAiKeyResponse {
   status: string;
+  proposal?: AiKeyProposalView;
+  proposal_id?: string;
   level?: string;
   scope_id?: string;
   provider?: string;
@@ -1794,8 +3813,25 @@ export interface SetAiKeyResponse {
   reason?: string;
 }
 
+export interface AiKeyProposalsResponse {
+  proposals: AiKeyProposalView[];
+}
+
+export interface AiKeyProposalResponse {
+  status: AiKeyProposalStatus | "ok" | "error";
+  proposal?: AiKeyProposalView;
+  proposal_id?: string;
+  level?: string;
+  scope_id?: string;
+  provider?: string;
+  model?: string;
+  base_url?: string | null;
+  reason?: string;
+}
+
 export interface DeleteAiKeyResponse {
   status: string;
+  hitl_request_id?: string;
   level?: string;
   scope_id?: string;
   reason?: string;

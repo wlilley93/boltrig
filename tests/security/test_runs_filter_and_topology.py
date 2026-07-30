@@ -95,6 +95,89 @@ async def test_run_filters_narrow_within_the_visibility_fence():
     assert {w.id for w in eng_src} <= {w.id for w in eng}
 
 
+@pytest.mark.security
+@pytest.mark.invariant("SEC-69")
+async def test_execution_search_is_literal_bounded_and_preserves_hidden_wins():
+    kernel = await _seed()
+    searchable = WorkItem(
+        id=r"exec%_\visible",
+        tenant_id=T,
+        workspace_id="ws-1",
+        source="linear-source",
+        source_id=r"case%_\42",
+        intent="Quarterly Renewal Plan",
+        confidence=1.0,
+        convergent=True,
+        status=WorkStatus.FAILED,
+        owner_member="specialists",
+        hatchet_run_id="run-renewal-42",
+        on_behalf_of="alice-search",
+    )
+    await kernel.store.create_work_item(searchable)
+    await kernel.store.create_work_item(WorkItem(
+        id="collision-hidden",
+        tenant_id=T,
+        workspace_id="ws-1",
+        source="internal",
+        intent="hidden owner",
+        confidence=1.0,
+        convergent=True,
+        owner_member="marketing",
+        hatchet_run_id="run-collision",
+    ))
+    await kernel.store.create_work_item(WorkItem(
+        id="collision-visible",
+        tenant_id=T,
+        workspace_id="ws-1",
+        source="internal",
+        intent="resurrect-me",
+        confidence=1.0,
+        convergent=True,
+        owner_member="specialists",
+        hatchet_run_id="run-collision",
+    ))
+    rival = WorkItem(
+        id="rival-match",
+        tenant_id="rival",
+        workspace_id="ws-1",
+        source="internal",
+        intent="Quarterly Renewal Plan",
+        confidence=1.0,
+        convergent=True,
+        owner_member="specialists",
+    )
+    await kernel.store.create_work_item(rival)
+
+    for query in (
+        "quarterly renewal",
+        r"exec%_\visible",
+        "RUN-RENEWAL-42",
+        "specialists",
+        "ALICE-SEARCH",
+        "LINEAR-SOURCE",
+        r"case%_\42",
+        "FAILED",
+    ):
+        rows = await kernel.store.search_execution_items_scoped(
+            T,
+            query,
+            departments=["specialists"],
+            workspace_id="ws-1",
+            limit=10,
+        )
+        assert [row.id for row in rows] == [searchable.id]
+
+    # LIKE metacharacters stay literal, the caller-supplied bound is honoured,
+    # and an out-of-department alias prevents its visible twin resurfacing.
+    literal = await kernel.store.search_execution_items_scoped(
+        T, "%_\\", departments=["specialists"], workspace_id="ws-1", limit=1
+    )
+    assert [row.id for row in literal] == [searchable.id]
+    assert await kernel.store.search_execution_items_scoped(
+        T, "resurrect-me", departments=["specialists"], workspace_id="ws-1", limit=10
+    ) == []
+
+
 @pytest.mark.invariant("SEC-69")
 async def test_topology_reconstructs_subtree_and_excludes_hidden_descendant():
     kernel = await _seed()

@@ -107,6 +107,9 @@ class RuntimeEventKind(str, Enum):
     ITEM_STARTED = "item.started"
     ITEM_UPDATED = "item.updated"
     ITEM_COMPLETED = "item.completed"
+    NATIVE_SUBAGENT_STARTED = "subagent.started"
+    NATIVE_SUBAGENT_ACTIVITY = "subagent.activity"
+    NATIVE_SUBAGENT_COMPLETED = "subagent.completed"
     APPROVAL_REQUESTED = "approval.requested"
     # The runtime reporting what a turn actually consumed. Without this the fleet
     # has no usage signal at all from the sole agent runtime, so `price_micros`

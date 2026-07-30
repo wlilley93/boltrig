@@ -31,6 +31,9 @@ describe("Budgets", () => {
 
     await screen.findByText("Budget policy");
     expect(screen.getByText(/Workflow scope and window values are policy metadata/)).toBeTruthy();
+    expect(screen.getByText(/Realtime voice and direct paid-adapter usage are not debited/)).toBeTruthy();
+    expect(screen.getByText("monthly tag · manual reset")).toBeTruthy();
+    expect(screen.getByText("spawned-work hard stop")).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Token limit"), {
       target: { value: "2000" },
     });
@@ -80,5 +83,19 @@ describe("Budgets", () => {
         reset_cost: true,
       },
     });
+  });
+
+  it("labels an existing workflow budget as stored rather than enforced", async () => {
+    mockApi({
+      budgets: {
+        budgets: [{ ...BUDGET, id: "wf-support", scope_type: "workflow" }],
+        scope: "all",
+      },
+    });
+    render(<Budgets />);
+
+    await screen.findByText("wf-support");
+    expect(screen.getByText("stored only")).toBeTruthy();
+    expect(screen.queryByText("spawned-work hard stop")).toBeNull();
   });
 });

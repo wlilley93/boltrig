@@ -318,6 +318,7 @@ def test_quarantined_receipt_rejects_boolean_inventory_counts(field: str) -> Non
         NativeSubagentLimits(2, 2, 2),
     ),
 )
+@pytest.mark.invariant("SEC-159")
 def test_quarantined_admission_requires_all_native_limits_to_be_zero(
     limits: NativeSubagentLimits,
 ) -> None:

@@ -13,8 +13,10 @@ import importlib.util
 import json
 import os
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from types import SimpleNamespace
+import uuid
 
 import asyncpg
 import pytest
@@ -51,6 +53,52 @@ async def init_codec(conn: asyncpg.Connection) -> None:
     await conn.set_type_codec(
         "jsonb", encoder=json.dumps, decoder=json.loads, schema="pg_catalog"
     )
+
+
+@asynccontextmanager
+async def isolated_pool(
+    *, min_size: int, max_size: int
+) -> AsyncIterator[asyncpg.Pool]:
+    """Give one fixture a fresh schema while replaying the real migration chain.
+
+    ``ddl()`` intentionally contains unguarded CREATE statements where the
+    shipped migration does. Replaying that exact chain into a long-lived shared
+    schema makes test order decide whether setup succeeds. A unique schema keeps
+    those statements meaningful: every fixture still proves a clean deployment
+    build, and teardown removes its whole catalogue without weakening migrations
+    into test-only idempotent variants.
+    """
+
+    assert DSN is not None
+    schema = f"ledger_test_{uuid.uuid4().hex}"
+    admin = await asyncpg.connect(dsn=DSN)
+    try:
+        await admin.execute(f'CREATE SCHEMA "{schema}"')
+    finally:
+        await admin.close()
+
+    async def setup_isolated(conn: asyncpg.Connection) -> None:
+        # asyncpg resets session settings when a connection returns to the pool,
+        # so search_path belongs in ``setup`` (every checkout), not ``init``
+        # (once per physical connection).
+        await conn.execute(f'SET search_path TO "{schema}", public')
+
+    pool: asyncpg.Pool | None = None
+    try:
+        pool = await asyncpg.create_pool(
+            dsn=DSN, min_size=min_size, max_size=max_size,
+            init=init_codec, setup=setup_isolated,
+        )
+        assert pool is not None
+        yield pool
+    finally:
+        if pool is not None:
+            await pool.close()
+        admin = await asyncpg.connect(dsn=DSN)
+        try:
+            await admin.execute(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE')
+        finally:
+            await admin.close()
 
 
 def _load_migration(path: Path) -> object:
@@ -142,13 +190,11 @@ async def ledger_pool() -> AsyncIterator[asyncpg.Pool]:
     # max_size >= 8 so the concurrent compare-and-swap assert genuinely races two
     # connections on the advisory lock rather than queueing on one, and so the
     # lock-order proof contends on real backends rather than on the pool queue.
-    pool = await asyncpg.create_pool(dsn=DSN, min_size=2, max_size=8, init=init_codec)
-    assert pool is not None
-    async with pool.acquire() as conn:
-        await conn.execute(ddl())
-        await conn.execute(TRUNCATE)
-    yield pool
-    await pool.close()
+    async with isolated_pool(min_size=2, max_size=8) as pool:
+        async with pool.acquire() as conn:
+            await conn.execute(ddl())
+            await conn.execute(TRUNCATE)
+        yield pool
 
 
 @pytest.fixture
@@ -162,6 +208,7 @@ __all__ = [
     "TRUNCATE",
     "ddl",
     "init_codec",
+    "isolated_pool",
     "ledger",
     "ledger_pool",
     "migration_sql",

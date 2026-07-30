@@ -106,7 +106,8 @@ function BudgetPolicyForm({
           <p className="ux-hint">Changes pause for human approval before taking effect.</p>
           <p className="notice warn">
             Enforcement currently covers spawned agent work at organisation and department scope.
-            Workflow scope and window values are policy metadata; usage resets are operator-triggered.
+            Workflow scope and window values are policy metadata; usage resets are
+            operator-triggered. Realtime voice and direct paid-adapter usage are not debited.
           </p>
         </div>
       </div>
@@ -169,7 +170,11 @@ function BudgetPolicyForm({
             checked={hardStop}
             onChange={(event) => setHardStop(event.target.checked)}
           />
-          <span>Stop work at the limit</span>
+          <span>
+            {scopeType === "workflow"
+              ? "Stored hard-stop flag (not enforced)"
+              : "Stop spawned agent work at the limit"}
+          </span>
         </label>
       </div>
       <div className="form__actions">
@@ -216,10 +221,17 @@ function BudgetRow({
         <div className="kv">
           <code className="tag">{budget.scope_type}</code>
           <strong>{budget.id}</strong>
-          <span className="muted">{budget.window}</span>
-          {budget.hard_stop && (
-            <span className="badge badge--conseq-high" title="Spending stops at the limit.">
-              hard stop
+          <span className="muted">{budget.window} tag · manual reset</span>
+          {budget.scope_type === "workflow" ? (
+            <span className="badge" title="No runtime consumer debits workflow scopes yet.">
+              stored only
+            </span>
+          ) : budget.hard_stop && (
+            <span
+              className="badge badge--conseq-high"
+              title="Spawned agent work stops at the limit."
+            >
+              spawned-work hard stop
             </span>
           )}
         </div>

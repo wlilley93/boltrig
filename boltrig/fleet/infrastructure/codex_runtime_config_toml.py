@@ -60,6 +60,16 @@ CODEX_RUNTIME_DISABLED_FEATURES: Mapping[str, bool] = MappingProxyType(
         "workspace_dependencies": False,
     }
 )
+
+
+def codex_runtime_features(*, native_agents_enabled: bool) -> Mapping[str, bool]:
+    """The reviewed feature map with only stable V1 collaboration variable."""
+
+    if type(native_agents_enabled) is not bool:
+        raise TypeError("native_agents_enabled must be an exact bool")
+    features = dict(CODEX_RUNTIME_DISABLED_FEATURES)
+    features["multi_agent"] = native_agents_enabled
+    return MappingProxyType(features)
 _ROOT_KEYS = frozenset(
     {
         "agents",
@@ -113,12 +123,12 @@ def _root_lines(*, model_id: str, reasoning_effort: str) -> list[str]:
     ]
 
 
-def _policy_lines(*, agents_enabled: bool) -> list[str]:
+def _policy_lines(*, agent_max_threads: int, agent_max_depth: int) -> list[str]:
     return [
         "",
         "[agents]",
-        f"max_threads = {4 if agents_enabled else 1}",
-        "max_depth = 1",
+        f"max_threads = {agent_max_threads}",
+        f"max_depth = {agent_max_depth}",
         "",
         "[analytics]",
         "enabled = false",
@@ -223,16 +233,22 @@ def _render_codex_runtime_config(
     socket_name: str,
     proxy_port: int,
     features: Mapping[str, bool],
+    agent_max_threads: int,
+    agent_max_depth: int,
     skill_entries: tuple[tuple[str, bool], ...],
     mcp_server_url: str | None = None,
     mcp_bearer_env_var: str | None = None,
 ) -> str:
     """Render one complete ASCII TOML document from validated values."""
 
-    agents_enabled = features["multi_agent"]
     apps_enabled = features["apps"]
     lines = _root_lines(model_id=model_id, reasoning_effort=reasoning_effort)
-    lines.extend(_policy_lines(agents_enabled=agents_enabled))
+    lines.extend(
+        _policy_lines(
+            agent_max_threads=agent_max_threads,
+            agent_max_depth=agent_max_depth,
+        )
+    )
     lines.extend(_feature_lines(features, apps_enabled=apps_enabled))
     lines.extend(_mcp_lines(mcp_server_url, mcp_bearer_env_var))
     lines.extend(_skill_lines(skill_entries))
@@ -290,6 +306,9 @@ def runtime_config_matches_receipt(
     provider_id: str,
     skill_entries: tuple[tuple[str, bool], ...],
     skill_entries_digest: str,
+    native_agents_enabled: bool = False,
+    agent_max_threads: int = 1,
+    agent_max_depth: int = 1,
     mcp_server_url: str | None = None,
     mcp_bearer_env_var: str | None = None,
 ) -> bool:
@@ -309,7 +328,11 @@ def runtime_config_matches_receipt(
         helper_path=helper_path,
         socket_name=socket_name,
         proxy_port=proxy_port,
-        features=CODEX_RUNTIME_DISABLED_FEATURES,
+        features=codex_runtime_features(
+            native_agents_enabled=native_agents_enabled
+        ),
+        agent_max_threads=agent_max_threads,
+        agent_max_depth=agent_max_depth,
         skill_entries=parsed_entries,
         mcp_server_url=mcp_server_url,
         mcp_bearer_env_var=mcp_bearer_env_var,
@@ -324,5 +347,6 @@ __all__ = [
     "CODEX_RUNTIME_DISABLED_FEATURES",
     "CODEX_RUNTIME_PROVIDER_CONTRACT_DIGEST",
     "canonical_skill_entries_digest",
+    "codex_runtime_features",
     "runtime_config_matches_receipt",
 ]

@@ -37,7 +37,12 @@ import logging
 import os
 from typing import Any
 
-from boltrig.models import WorkStatus
+from boltrig.notification_catalogue import HITL_EXPIRED_EVENT
+from boltrig.models import WorkStatus, utcnow
+from boltrig.observability.background_jobs import (
+    new_background_process_identity,
+    record_background_attempt,
+)
 from boltrig.store import Store
 
 from .channel_notify import enqueue_user_notification
@@ -142,7 +147,7 @@ async def _notify_expired(store: Store, req: Any) -> None:
             store,
             req.tenant_id,
             subject,
-            "hitl_expired",
+            HITL_EXPIRED_EVENT,
             f"Request timed out unanswered: {req.question}",
         )
     except Exception:  # noqa: BLE001 - delivery is a side channel
@@ -159,6 +164,10 @@ async def expire_tenant_once(store: Store, tenant_id: str) -> int:
         # here is not clobbered, and one winner notifies/parks exactly once.
         if not await store.expire_hitl(tenant_id, req.id):
             continue
+        if req.verb == "control.ai_key.set":
+            await store.invalidate_ai_key_proposal_for_approval(
+                tenant_id, req.id, "expired", utcnow()
+            )
         expired += 1
         await _park_expired_item(store, req)
         await _retire_held_call(store, req)
@@ -167,10 +176,22 @@ async def expire_tenant_once(store: Store, tenant_id: str) -> int:
             "hitl expiry: request=%s tenant=%s timed out (work_item=%s)",
             req.id, tenant_id, req.work_item_id,
         )
+    # AI-key proposals deliberately expire no later than fifteen minutes even
+    # when the tenant's general approval timeout is longer. Remove their staged
+    # envelopes and retire the now-useless approval ids in the same sweep.
+    for approval_id in await store.expire_due_ai_key_secret_proposals(
+        tenant_id, utcnow()
+    ):
+        await store.expire_hitl(tenant_id, approval_id)
     return expired
 
 
-async def run_hitl_expiry_sweep(store: Store) -> int:
+async def run_hitl_expiry_sweep(
+    store: Store,
+    *,
+    process_instance_identity: str | None = None,
+    interval: float = DEFAULT_INTERVAL_SECONDS,
+) -> int:
     """Expire overdue PENDING HITL requests for EVERY tenant once.
 
     Enumerates tenants via ``store.list_orgs`` (an org's id IS its tenant_id),
@@ -179,12 +200,37 @@ async def run_hitl_expiry_sweep(store: Store) -> int:
     """
     expired = 0
     for org in await store.list_orgs():
+        attempted_at = utcnow()
         try:
-            expired += await expire_tenant_once(store, org.id)
+            tenant_expired = await expire_tenant_once(store, org.id)
         except asyncio.CancelledError:
             raise
         except Exception:  # one tenant's fault never stops the sweep (P9)
             log.exception("hitl expiry sweep failed for tenant=%s; continuing", org.id)
+            if process_instance_identity is not None:
+                await record_background_attempt(
+                    store,
+                    tenant_id=org.id,
+                    job_name="hitl_expiry",
+                    process_instance_identity=process_instance_identity,
+                    interval_seconds=interval,
+                    attempted_at=attempted_at,
+                    succeeded=False,
+                    item_count=0,
+                )
+        else:
+            expired += tenant_expired
+            if process_instance_identity is not None:
+                await record_background_attempt(
+                    store,
+                    tenant_id=org.id,
+                    job_name="hitl_expiry",
+                    process_instance_identity=process_instance_identity,
+                    interval_seconds=interval,
+                    attempted_at=attempted_at,
+                    succeeded=True,
+                    item_count=tenant_expired,
+                )
     return expired
 
 
@@ -192,15 +238,21 @@ async def run_hitl_expiry_forever(
     store: Store,
     *,
     interval: float = DEFAULT_INTERVAL_SECONDS,
+    process_instance_identity: str | None = None,
 ) -> None:
     """Loop :func:`run_hitl_expiry_sweep` forever; cancellable, idle-sleeping.
 
     A bad cycle is logged and the loop continues (P9), mirroring
     ``run_anchor_forever``; cancellation propagates for a clean shutdown.
     """
+    identity = process_instance_identity or new_background_process_identity()
     while True:
         try:
-            await run_hitl_expiry_sweep(store)
+            await run_hitl_expiry_sweep(
+                store,
+                process_instance_identity=identity,
+                interval=interval,
+            )
         except asyncio.CancelledError:
             raise
         except Exception:  # a bad cycle never kills the janitor (P9)

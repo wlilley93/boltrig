@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from boltrig.fleet.domain import NativeSubagentLimits
 from boltrig.fleet.infrastructure.codex_runtime_config import (
     CODEX_APP_SERVER_BASE_ARGUMENTS,
     CODEX_RUNTIME_CLI_VERSION,
@@ -51,6 +52,7 @@ def _request(
     *,
     selected: tuple[str, ...] = ("legal-review",),
     attestations: tuple[CodexRuntimeSurfaceAttestation, ...] = (),
+    native_subagents: NativeSubagentLimits = NativeSubagentLimits(),
 ) -> CodexRuntimeConfigRequest:
     cell = Path("/srv/boltrig/cells/cell-001")
     codex_home = cell / "codex"
@@ -68,6 +70,7 @@ def _request(
         skill_config_fragment=_skill_fragment(codex_home, selected),
         skill_inventory_digest=_DIGEST_C,
         surface_attestations=attestations,
+        native_subagents=native_subagents,
     )
 
 
@@ -218,6 +221,29 @@ def test_dynamic_surfaces_are_disabled_without_exact_attestations() -> None:
     assert features["plugin_sharing"] is False  # type: ignore[index]
     assert document["apps"] == {"_default": {"enabled": False}}
     assert document["agents"] == {"max_threads": 1, "max_depth": 1}
+
+
+@pytest.mark.invariant("SEC-159")
+def test_stable_v1_native_limits_are_bound_in_toml_receipt_and_argv() -> None:
+    limits = NativeSubagentLimits(max_concurrent=3, max_total=7, max_depth=2)
+    composed = compose_codex_runtime_config(_request(native_subagents=limits))
+    document = _document(composed)
+
+    assert document["features"]["multi_agent"] is True  # type: ignore[index]
+    assert document["agents"] == {"max_threads": 3, "max_depth": 2}
+    assert composed.receipt.native_subagents == limits
+    overrides = dict(
+        argument.split("=", 1)
+        for argument in composed.receipt.app_server_arguments[5::2]
+    )
+    assert overrides["features.multi_agent"] == "true"
+    assert overrides["agents.max_threads"] == "3"
+    assert overrides["agents.max_depth"] == "2"
+
+    # Even a self-consistent digest rewrite cannot widen either live-tree cap:
+    # the receipt re-render binds the requested values independently.
+    with pytest.raises(CodexRuntimeConfigError, match="inconsistent"):
+        _replace_config(composed, "max_threads = 3", "max_threads = 4")
 
 
 @pytest.mark.invariant("SEC-159")

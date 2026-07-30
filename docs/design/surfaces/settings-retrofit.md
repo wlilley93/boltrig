@@ -237,10 +237,10 @@ Load: `GET /v1/admin/config/{section}` (platform_routes.py:323-330; client.ts:38
 Field lists, grounded in the typed dataclasses (manifest.py):
 
 **privacy** (PrivacyConfig, manifest.py:172-179):
-- Redact personal data (`pii_redaction`) - `Segmented` Yes/No (P2: governance-adjacent boolean in a saved form, never a cheerful switch), default No. Hint: "Detected personal data is redacted from model inputs and logs."
-- Data residency (`data_residency`) - input, optional, example `eu`. Hint: "A residency label policy code can act on. Leave empty for no constraint."
-- Retention (`retention_days`) - a `Segmented` "Keep forever / Delete after..." where the second option reveals a `Stepper` (P8) min 1, unit "days", default 365 when first enabled. Maps to null vs int.
-- Fields to redact (`redact_fields`) - `ChipPicker` free-entry, mono chips, example `ssn`. Hint: "Field names scrubbed from payloads when redaction is on."
+- Redact personal data (`pii_redaction`) - `Segmented` Yes/No (P2: governance-adjacent boolean in a saved form, never a cheerful switch), default No. Current hint: "Stored policy flag. Automatic model/adapter-boundary PII redaction is not wired yet."
+- Data residency (`data_residency`) - input, optional, example `eu`. Current hint: "Stored residency label. It does not currently constrain processing or storage."
+- Retention (`retention_days`) - a `Segmented` "Use default / Delete closed conversations after..." where the second option reveals a `Stepper` (P8) min 1, unit "days". It controls the fleet janitor's hard-erasure of CLOSED conversations only; open conversations, work, memory and audit have separate lifecycles.
+- Fields to redact (`redact_fields`) - `ChipPicker` free-entry, mono chips, example `ssn`. Current hint: "Stored field names. They are not currently applied to model or adapter payloads."
 
 **network** (NetworkConfig, manifest.py:161-169):
 - Air-gapped (`air_gapped`) - `Segmented` Yes/No, default No; choosing Yes reveals an `InfoCallout tone="warn"`: "Air-gapped blocks all adapter egress. Adapters that call external systems will fail their health checks." (P21 rung 4: changes what happens next.)
@@ -250,10 +250,10 @@ Field lists, grounded in the typed dataclasses (manifest.py):
 - Blocked domains (`blocked_domains`) - same control. Hint: "Never reachable, even if allowed above. Deny wins." (deny-dominant, the kernel norm.)
 
 **hitl** (HitlConfig, manifest.py:150-158) - Tier 1 by law: everything here is consequence machinery (P18 "consequence/HITL-relevant fields are Tier 1"):
-- Primary channel (`primary_channel`) - `Select` over `NOTIFY_CHANNEL_OPTIONS` (ux.tsx:420-427), default slack (the dataclass default). Hint: "Where approval requests are raised first."
-- Also notify via (`notify_via`) - `ChipPicker` over the same channel set.
-- Approval timeout (`approval_timeout_seconds`) - `Stepper` unit "seconds", min 60, step 300, default 3600; meta slot humanizes ("= 1 hour"). Hint: "How long an approval waits before the escalation chain engages."
-- Escalation chain (`escalation_chain`) - **`OrderedPicker` (N17, new primitive, section 3)**: an ordered list of people; candidates from `GET /v1/admin/users` (email + role badge per row); numbered rows; reorder via up/down buttons and Alt+ArrowUp/Down (P36 addition); remove per row. Hint: "Who gets asked, in order, when an approval times out." Empty state inline: "No chain - timed-out approvals go nowhere. Add at least one person."
+- Primary channel (`primary_channel`) - `Select` over `NOTIFY_CHANNEL_OPTIONS` (ux.tsx:420-427), default slack (the dataclass default). Current hint: "Stored preferred channel. It does not currently deliver approval requests."
+- Also notify via (`notify_via`) - `ChipPicker` over the same channel set. It is stored policy and is not currently consumed by the HITL gate.
+- Approval timeout (`approval_timeout_seconds`) - `Stepper` unit "seconds", min 60, step 300, default 3600; meta slot humanizes ("= 1 hour"). Hint: "How long an approval may be answered before it times out." This timeout is enforced.
+- Escalation chain (`escalation_chain`) - **`OrderedPicker` (N17, new primitive, section 3)**: an ordered list of people; candidates from `GET /v1/admin/users` (email + role badge per row); numbered rows; reorder via up/down buttons and Alt+ArrowUp/Down (P36 addition); remove per row. Current hint: "Stored ordered escalation targets. Timed-out approvals do not traverse this chain yet."
 - Always-blocking verbs (`blocking_verbs`) - `ScopeBuilder` (P7) over the caller-scoped verb tree, consequence-high rows carrying the amber marker (lawful: this IS kernel governance, L4). Hint: "These verbs always pause for a person, whatever their consequence class."
 
 **models** (ModelsConfig, manifest.py:68-79, endpoint shape manifest.py:317-328):
@@ -387,7 +387,7 @@ Reads:
 8. A runtimes list read - upgrades the personal-agent runtime control to an EntityPicker (1.6).
 9. Personal-agent configure should stop minting a new id per save and accept `enabled` (platform_routes.py:526-528) - prerequisite for verb 4's params being honest.
 
-Explicit non-dependencies: PAT mint chat verb (deliberately excluded, 1.5/1.10); notification pref delete route (disable suffices, 1.4); an ordered-list backend change (escalation_chain is already an ordered array, manifest.py:157).
+Explicit non-dependencies: PAT mint chat verb (deliberately excluded, 1.5/1.10); notification pref delete route (disable suffices, 1.4); an ordered-list storage-shape change (`escalation_chain` is already an ordered array, manifest.py:157). A durable timeout-to-notification consumer is still required before that array may be presented as an active escalation chain.
 
 ## 6. Build order (an engineer's sequencing, no decisions left open)
 

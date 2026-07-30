@@ -9,9 +9,9 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test": "vitest",
-    "test:run": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test": "vitest tests",
+    "test:run": "vitest run tests",
+    "test:coverage": "vitest run tests --coverage"
   },
   "dependencies": {
     "@wlilley93/boltrig-web-sdk": "0.1.1",

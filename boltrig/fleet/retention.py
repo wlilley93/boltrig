@@ -45,6 +45,11 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
+from boltrig.observability.background_jobs import (
+    new_background_process_identity,
+    record_background_attempt,
+)
+
 log = logging.getLogger("boltrig.fleet.retention")
 
 # The default retention window (days) when the manifest carries no privacy
@@ -107,6 +112,7 @@ async def run_retention_forever(
     *,
     interval: float = DEFAULT_INTERVAL_SECONDS,
     clock: Callable[[], datetime] = _utcnow,
+    process_instance_identity: str | None = None,
 ) -> None:
     """Loop :func:`run_retention_once` forever; cancellable, idle-sleeping.
 
@@ -114,13 +120,41 @@ async def run_retention_forever(
     janitor (P9), mirroring the pump's ``run_forever``. Cancellation propagates so
     the task shuts down cleanly.
     """
+    identity = process_instance_identity or new_background_process_identity()
     while True:
+        attempted_at = clock()
         try:
-            await run_retention_once(store, tenant_id, retention_days, now=clock())
+            purged = await run_retention_once(
+                store,
+                tenant_id,
+                retention_days,
+                now=attempted_at,
+            )
         except asyncio.CancelledError:
             raise
         except Exception:  # a bad sweep never kills the janitor (P9)
             log.exception("retention sweep failed; continuing")
+            await record_background_attempt(
+                store,
+                tenant_id=tenant_id,
+                job_name="retention",
+                process_instance_identity=identity,
+                interval_seconds=interval,
+                attempted_at=attempted_at,
+                succeeded=False,
+                item_count=0,
+            )
+        else:
+            await record_background_attempt(
+                store,
+                tenant_id=tenant_id,
+                job_name="retention",
+                process_instance_identity=identity,
+                interval_seconds=interval,
+                attempted_at=attempted_at,
+                succeeded=True,
+                item_count=purged,
+            )
         await asyncio.sleep(interval)
 
 

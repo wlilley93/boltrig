@@ -7,9 +7,15 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
-from boltrig.models import AgentCapability, BoltrigError, InvocationContext, Skill
+from boltrig.models import (
+    COST_TIERS,
+    AgentCapability,
+    BoltrigError,
+    InvocationContext,
+    Skill,
+)
 
-_COST_ORDER: dict[str, int] = {"cheap": 0, "standard": 1, "expensive": 2}
+_COST_ORDER: dict[str, int] = {tier: index for index, tier in enumerate(COST_TIERS)}
 
 
 def display_task(task: str) -> str:
@@ -146,12 +152,49 @@ async def select_capability(
                 f"{skills} for tenant '{tenant_id}'"
             )
         return named[0]
+    preferred_runtime = prefer.get("runtime")
+    if preferred_runtime:
+        # ``script`` is the stable personal-agent API name for the
+        # deterministic ``python-script`` capability. Keep the alias at this
+        # authority boundary rather than leaking implementation names into
+        # persisted personal-agent configuration.
+        accepted_runtimes = (
+            {"script", "python-script"}
+            if preferred_runtime == "script"
+            else {preferred_runtime}
+        )
+        runtime_matches = [
+            cap for cap in capable if cap.runtime in accepted_runtimes
+        ]
+        if not runtime_matches:
+            raise NoCapableRuntime(
+                f"runtime '{preferred_runtime}' does not support skills "
+                f"{skills} for tenant '{tenant_id}'"
+            )
+        capable = runtime_matches
     preferred_tier = prefer.get("cost_tier")
     if preferred_tier:
         tier_matches = [cap for cap in capable if cap.cost_tier == preferred_tier]
         if tier_matches:
             capable = tier_matches
     return min(capable, key=lambda cap: (_COST_ORDER.get(cap.cost_tier, 99), cap.name))
+
+
+async def bound_capability_status(
+    store: Any, tenant_id: str, name: str
+) -> tuple[AgentCapability | None, bool]:
+    """Resolve an agent binding without confusing retirement with absence."""
+    active = next(
+        (item for item in await store.list_capabilities(tenant_id) if item.name == name),
+        None,
+    )
+    if active is not None:
+        return active, False
+    retired = any(
+        item.name == name and not item.is_active
+        for item in await store.list_all_capabilities(tenant_id)
+    )
+    return None, retired
 
 
 def context_payload(context: InvocationContext) -> dict[str, Any]:

@@ -48,7 +48,7 @@ class NativeObservationState:
         self._active.add(thread_id)
         return depth
 
-    def close(self, thread_id: str) -> None:
+    def close(self, thread_id: str) -> int:
         self.require_active(thread_id)
         if thread_id in self._turns or any(
             parent == thread_id and child in self._active
@@ -56,10 +56,29 @@ class NativeObservationState:
         ):
             raise CodexRuntimeProtocolError("native thread closed with active work")
         self._active.remove(thread_id)
+        return self._depths[thread_id]
 
     def require_active(self, thread_id: str) -> None:
         if thread_id not in self._active:
             raise CodexRuntimeProtocolError("notification thread is outside the active phase tree")
+
+    def require_known(self, thread_id: str) -> None:
+        if thread_id not in self._depths:
+            raise CodexRuntimeProtocolError("native thread is outside the observed phase tree")
+
+    def require_drained(self) -> None:
+        """Refuse root completion while any observed descendant work is still live.
+
+        This is an ordering proof over notifications, not an execution control:
+        App Server has already performed the reported transitions.  It therefore
+        remains a fail-closed admission prerequisite rather than evidence that the
+        configured native-agent ceilings were enforced before execution.
+        """
+
+        if self._active or self._turns or self._active_items:
+            raise CodexRuntimeProtocolError(
+                "native phase tree was not drained before root completion"
+            )
 
     def transition_turn(
         self,

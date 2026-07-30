@@ -63,6 +63,11 @@ class HITLRequest:
     # context and optional mutable-resource state.  A response is useful only for
     # an invocation that recomputes this exact fingerprint.
     request_fingerprint: str | None = None
+    # A context-independent digest of noun + verb + canonical validated params.
+    # The full request_fingerprint remains the authority and binds the initiator;
+    # this narrower companion lets a post-dispatch executor prove that the
+    # materialized action is exactly the one the consumed approval admitted.
+    action_digest: str | None = None
     # Object-level visibility is bound when the request is created. ``None`` is
     # org-wide/backward-compatible; a list (including empty) is the originating
     # principal's department scope and must never be widened by a reader.

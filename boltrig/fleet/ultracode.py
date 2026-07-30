@@ -8,7 +8,6 @@ stay on the existing fleet path.
 
 from __future__ import annotations
 
-import asyncio
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import replace
@@ -17,19 +16,15 @@ from typing import Any
 from boltrig.models import GrantSet, InvocationContext, TenantIsolation
 
 from .prompt_stack import wrap_untrusted
-from .spawn import build_spawner
 from .ultracode_memory import memory_prompt, recall_memory, remember_run_summary
-
-_MAX_PHASES = 20
-_MAX_AGENTS = 100
-_MAX_CONCURRENCY = 8
-_FINAL_CHECKPOINTS = {"completed", "degraded", "failed"}
+from .ultracode_phases import agent_step as _agent_step
+from .ultracode_phases import checkpoints as _checkpoints
+from .ultracode_phases import replayable as _is_replayable
+from .ultracode_phases import run_phases
+from .ultracode_spec import UltracodeSpecError as UltracodeSpecError
+from .ultracode_spec import validate_workflow as validate_workflow
 
 AgentRunner = Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]
-
-
-class UltracodeSpecError(ValueError):
-    """The workflow spec is not executable as a bounded Ultracode run."""
 
 
 def _context_from_envelope(env: dict[str, Any]) -> InvocationContext:
@@ -48,113 +43,6 @@ def _context_from_envelope(env: dict[str, Any]) -> InvocationContext:
         actor_tier=env.get("actor_tier", "ephemeral"),
         skills_loaded=tuple(env.get("skills_loaded") or ()),
         extra=dict(env.get("extra") or {}),
-    )
-
-
-def _require_id(item: dict[str, Any], kind: str) -> str:
-    value = item.get("id")
-    if not isinstance(value, str) or not value.strip():
-        raise UltracodeSpecError(f"{kind} missing id")
-    return value
-
-
-def validate_workflow(spec: dict[str, Any]) -> dict[str, Any]:
-    """Validate a bounded phased workflow spec and return a shallow copy."""
-    if not isinstance(spec, dict):
-        raise UltracodeSpecError("workflow must be an object")
-    defaults = spec.get("defaults") or {}
-    if not isinstance(defaults, dict):
-        raise UltracodeSpecError("workflow.defaults must be an object")
-    try:
-        max_agents = min(int(defaults.get("max_total_agents") or _MAX_AGENTS), _MAX_AGENTS)
-        max_concurrency = min(
-            int(defaults.get("max_phase_concurrency") or _MAX_CONCURRENCY),
-            _MAX_CONCURRENCY,
-        )
-    except (TypeError, ValueError) as exc:
-        raise UltracodeSpecError("workflow limits must be integers") from exc
-    if max_agents < 1 or max_concurrency < 1:
-        raise UltracodeSpecError("workflow limits must be positive")
-    phases = spec.get("phases")
-    if not isinstance(phases, list) or not phases:
-        raise UltracodeSpecError("workflow.phases must be a non-empty list")
-    if len(phases) > _MAX_PHASES:
-        raise UltracodeSpecError("workflow has too many phases")
-
-    seen_phases: set[str] = set()
-    seen_agents: set[str] = set()
-    agent_count = 0
-    for phase in phases:
-        if not isinstance(phase, dict):
-            raise UltracodeSpecError("phase must be an object")
-        phase_id = _require_id(phase, "phase")
-        if phase_id in seen_phases:
-            raise UltracodeSpecError(f"duplicate phase id '{phase_id}'")
-        deps = phase.get("depends_on") or []
-        if not isinstance(deps, list):
-            raise UltracodeSpecError(f"phase '{phase_id}' depends_on must be a list")
-        try:
-            phase_concurrency = int(phase.get("concurrency") or 1)
-        except (TypeError, ValueError) as exc:
-            raise UltracodeSpecError(f"phase '{phase_id}' concurrency must be an integer") from exc
-        if phase_concurrency < 1 or phase_concurrency > max_concurrency:
-            raise UltracodeSpecError(
-                f"phase '{phase_id}' concurrency exceeds max_phase_concurrency"
-            )
-        missing = [dep for dep in deps if dep not in seen_phases]
-        if missing:
-            raise UltracodeSpecError(
-                f"phase '{phase_id}' depends on missing/later phases: {missing}"
-            )
-        seen_phases.add(phase_id)
-
-        agents = phase.get("agents")
-        if not isinstance(agents, list) or not agents:
-            raise UltracodeSpecError(f"phase '{phase_id}' must contain agents")
-        agent_count += len(agents)
-        if agent_count > max_agents:
-            raise UltracodeSpecError("workflow has too many agents")
-        for agent in agents:
-            if not isinstance(agent, dict):
-                raise UltracodeSpecError("agent must be an object")
-            agent_id = f"{phase_id}.{_require_id(agent, 'agent')}"
-            if agent_id in seen_agents:
-                raise UltracodeSpecError(f"duplicate agent id '{agent_id}'")
-            seen_agents.add(agent_id)
-            if not (agent.get("prompt") or agent.get("objective")):
-                raise UltracodeSpecError(f"agent '{agent_id}' missing prompt/objective")
-    return dict(spec)
-
-
-def _emit(kernel: Any, tenant_id: str, run_id: str, event: dict[str, Any]) -> None:
-    relay = getattr(kernel, "events", None)
-    if relay is None:
-        return
-    try:
-        relay.publish(tenant_id, run_id, {"type": "ultracode", **event})
-    except Exception:
-        pass
-
-
-def _phase_step(phase_id: str) -> str:
-    return f"ultracode:{phase_id}"
-
-
-def _agent_step(phase_id: str, agent_id: str) -> str:
-    return f"ultracode:{phase_id}:{agent_id}"
-
-
-async def _checkpoints(kernel: Any, tenant: str, run_id: str) -> dict[str, Any]:
-    if not hasattr(kernel.store, "list_checkpoints"):
-        return {}
-    return {c.step: c for c in await kernel.store.list_checkpoints(tenant, run_id)}
-
-
-def _is_replayable(checkpoint: Any | None) -> bool:
-    return bool(
-        checkpoint
-        and checkpoint.status in _FINAL_CHECKPOINTS
-        and isinstance(checkpoint.output, dict)
     )
 
 
@@ -200,8 +88,13 @@ def _ctx_for(base: InvocationContext, run_id: str, phase: dict, agent: dict) -> 
         }
     )
     for key in (
-        "repo_root", "opencode_auto", "opencode_agent", "conversation_id",
-        "model_profile", "ai_profile", "model_profiles",
+        "repo_root",
+        "opencode_auto",
+        "opencode_agent",
+        "conversation_id",
+        "model_profile",
+        "ai_profile",
+        "model_profiles",
     ):
         if key in agent:
             extra[key] = agent[key]
@@ -239,16 +132,27 @@ async def _run_agent(
         partial_on_budget=False,
         grant_ceiling=context.grants if isinstance(context.grants, GrantSet) else None,
     )
-    return {"id": agent["id"], "status": result["status"], "degraded": result["degraded"],
-            "result": result}
+    return {
+        "id": agent["id"],
+        "status": result["status"],
+        "degraded": result["degraded"],
+        "result": result,
+    }
 
 
-async def run_ultracode_agent_body(kernel: Any, payload: dict[str, Any]) -> dict[str, Any]:
-    """Run one phase-agent from pure task data and checkpoint its output."""
+async def run_ultracode_agent_body(
+    kernel: Any,
+    payload: dict[str, Any],
+    *,
+    spawner: Any | None,
+) -> dict[str, Any]:
+    """Run one phase-agent through its composition-owned spawner."""
     ctx = _context_from_envelope(payload["ctx_envelope"])
     tenant = payload["tenant"]
     if tenant != ctx.tenant_id:
-        raise TenantIsolation(f"task payload tenant '{tenant}' != envelope tenant '{ctx.tenant_id}'")
+        raise TenantIsolation(
+            f"task payload tenant '{tenant}' != envelope tenant '{ctx.tenant_id}'"
+        )
     run_id = payload["run_id"]
     phase = dict(payload["phase"])
     agent = dict(payload["agent"])
@@ -258,10 +162,14 @@ async def run_ultracode_agent_body(kernel: Any, payload: dict[str, Any]) -> dict
         return dict(prior[step].output)
     if hasattr(kernel.store, "upsert_checkpoint"):
         await kernel.store.upsert_checkpoint(
-            tenant, run_id, step, "started",
+            tenant,
+            run_id,
+            step,
+            "started",
             output={"phase_id": phase["id"], "agent_id": agent["id"]},
         )
-    spawner = build_spawner(kernel)
+    if spawner is None:
+        raise RuntimeError("no composition-owned spawner wired for Ultracode agent")
     memory = await recall_memory(
         kernel,
         tenant,
@@ -293,13 +201,21 @@ async def run_ultracode_body(
     kernel: Any,
     payload: dict[str, Any],
     *,
+    spawner: Any | None = None,
     agent_runner: AgentRunner | None = None,
 ) -> dict[str, Any]:
-    """Run a phased Ultracode workflow from pure queue data."""
+    """Run a phased Ultracode workflow from pure queue data.
+
+    Inline execution requires the composition-owned ``spawner``. Durable
+    callers may instead supply ``agent_runner``; its registered child body must
+    carry that same spawner. Neither path constructs runtime authority here.
+    """
     ctx = _context_from_envelope(payload["ctx_envelope"])
     tenant = payload["tenant"]
     if tenant != ctx.tenant_id:
-        raise TenantIsolation(f"task payload tenant '{tenant}' != envelope tenant '{ctx.tenant_id}'")
+        raise TenantIsolation(
+            f"task payload tenant '{tenant}' != envelope tenant '{ctx.tenant_id}'"
+        )
     run_id = payload.get("run_id") or ctx.run_id or uuid.uuid4().hex
     workflow = payload.get("workflow")
     if payload.get("mastra_plan"):
@@ -309,72 +225,22 @@ async def run_ultracode_body(
     spec = validate_workflow(workflow)
     defaults = dict(spec.get("defaults") or {})
     goal = str(spec.get("goal") or payload.get("goal") or "")
-    prior: list[dict[str, Any]] = []
-    phase_records: list[dict[str, Any]] = []
-    replay = await _checkpoints(kernel, tenant, run_id)
-
     async def inline_agent_runner(agent_payload: dict[str, Any]) -> dict[str, Any]:
-        return await run_ultracode_agent_body(kernel, agent_payload)
-
-    for phase in spec["phases"]:
-        phase_step = _phase_step(phase["id"])
-        if _is_replayable(replay.get(phase_step)):
-            phase_record = dict(replay[phase_step].output)
-            phase_records.append(phase_record)
-            prior.append(phase_record)
-            _emit(kernel, tenant, run_id, {"status": "phase_replayed", "phase_id": phase["id"]})
-            if phase_record.get("status") == "failed":
-                break
-            continue
-        _emit(kernel, tenant, run_id, {"status": "phase_started", "phase_id": phase["id"]})
-        concurrency = max(1, min(int(phase.get("concurrency") or 1), _MAX_CONCURRENCY))
-        semaphore = asyncio.Semaphore(concurrency)
-
-        async def guarded(agent: dict[str, Any]) -> dict[str, Any]:
-            async with semaphore:
-                step = _agent_step(phase["id"], agent["id"])
-                if _is_replayable(replay.get(step)):
-                    _emit(kernel, tenant, run_id, {"status": "agent_replayed", "phase_id": phase["id"],
-                                          "agent_id": agent["id"]})
-                    return dict(replay[step].output)
-                _emit(kernel, tenant, run_id, {"status": "agent_started", "phase_id": phase["id"],
-                                      "agent_id": agent["id"]})
-                agent_payload = {
-                    "tenant": tenant,
-                    "run_id": run_id,
-                    "goal": goal,
-                    "defaults": defaults,
-                    "phase": phase,
-                    "agent": agent,
-                    "prior": list(prior),
-                    "ctx_envelope": payload["ctx_envelope"],
-                }
-                run_agent = agent_runner
-                if run_agent is None:
-                    run_agent = inline_agent_runner
-                record = await run_agent(agent_payload)
-                _emit(kernel, tenant, run_id, {"status": "agent_finished", "phase_id": phase["id"],
-                                      "agent_id": agent["id"], "degraded": record["degraded"]})
-                return record
-
-        agents = await asyncio.gather(*(guarded(agent) for agent in phase["agents"]))
-        phase_status = "completed"
-        if any(agent["status"] != "ok" for agent in agents):
-            phase_status = "failed"
-        elif any(agent["degraded"] for agent in agents):
-            phase_status = "degraded"
-        phase_record = {"id": phase["id"], "status": phase_status, "agents": agents}
-        phase_records.append(phase_record)
-        prior.append(phase_record)
-        if hasattr(kernel.store, "upsert_checkpoint"):
-            await kernel.store.upsert_checkpoint(
-                tenant, run_id, phase_step, phase_status, output=phase_record
-            )
-        replay[phase_step] = type("_Checkpoint", (), {"status": phase_status, "output": phase_record})()
-        _emit(kernel, tenant, run_id, {"status": "phase_finished", "phase_id": phase["id"],
-                              "phase_status": phase_status})
-        if phase_status == "failed":
-            break
+        return await run_ultracode_agent_body(
+            kernel,
+            agent_payload,
+            spawner=spawner,
+        )
+    phase_records = await run_phases(
+        kernel,
+        tenant=tenant,
+        run_id=run_id,
+        goal=goal,
+        defaults=defaults,
+        phases=spec["phases"],
+        context_envelope=payload["ctx_envelope"],
+        agent_runner=agent_runner or inline_agent_runner,
+    )
 
     overall = "completed"
     if any(phase["status"] == "failed" for phase in phase_records):

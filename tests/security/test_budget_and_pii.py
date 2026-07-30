@@ -14,7 +14,7 @@ from tests.conftest import TENANT
 async def test_budget_hard_stop_halts_before_exceeding(kernel):
     kernel.store.set_budget(
         Budget(id="dept:eng", tenant_id=TENANT, scope_type="department",
-               cost_limit_micros=1000, hard_stop=True)
+               cost_limit_micros=1000, hard_stop=True, window="daily")
     )
     # first reservation fits
     await kernel.cost.reserve(TENANT, ["dept:eng"], tokens=0, micros=900)
@@ -29,11 +29,12 @@ async def test_reserve_is_all_or_nothing_across_scopes(kernel):
     # tenant has headroom; the department is already at its hard-stop limit.
     kernel.store.set_budget(
         Budget(id=TENANT, tenant_id=TENANT, scope_type="tenant",
-               cost_limit_micros=10_000, hard_stop=True)
+               cost_limit_micros=10_000, hard_stop=True, window="daily")
     )
     kernel.store.set_budget(
         Budget(id="dept:eng", tenant_id=TENANT, scope_type="department",
-               cost_limit_micros=100, spent_micros=100, hard_stop=True)
+               cost_limit_micros=100, spent_micros=100, hard_stop=True,
+               window="daily")
     )
     with pytest.raises(BudgetExceeded):
         await kernel.cost.reserve(TENANT, [TENANT, "dept:eng"], tokens=0, micros=50)
@@ -52,13 +53,13 @@ async def test_reserve_honors_atomic_store_refusal(kernel, monkeypatch):
     # that refusal and raise, not silently run unmetered past the cap.
     kernel.store.set_budget(
         Budget(id="dept:eng", tenant_id=TENANT, scope_type="department",
-               cost_limit_micros=1000, hard_stop=True)
+               cost_limit_micros=1000, hard_stop=True, window="daily")
     )
 
-    async def racing_reserve(tenant_id, reservations):
+    async def racing_reserve(tenant_id, reservations, **kwargs):
         # stand in for a concurrent reserve that exhausted the hard stop between
         # our headroom read and this commit: refuse without debiting any scope.
-        return False
+        return None
 
     monkeypatch.setattr(kernel.store, "reserve_budgets_atomic", racing_reserve)
     with pytest.raises(BudgetExceeded):
@@ -74,7 +75,7 @@ async def test_reserve_honors_atomic_store_refusal(kernel, monkeypatch):
 async def test_soft_budget_does_not_halt(kernel):
     kernel.store.set_budget(
         Budget(id="t", tenant_id=TENANT, scope_type="tenant",
-               cost_limit_micros=100, hard_stop=False)
+               cost_limit_micros=100, hard_stop=False, window="daily")
     )
     # over the soft limit, but no exception
     await kernel.cost.reserve(TENANT, ["t"], tokens=0, micros=500)
@@ -92,7 +93,7 @@ async def test_soft_budget_fires_preemptive_alert_when_crossing_the_threshold():
     store = InMemoryStore()
     store.set_budget(
         Budget(id="dept:eng", tenant_id=TENANT, scope_type="department",
-               cost_limit_micros=1000, hard_stop=False)
+               cost_limit_micros=1000, hard_stop=False, window="daily")
     )
     acct = CostAccountant(store, alert=recorder)
     await acct.reserve(TENANT, ["dept:eng"], tokens=0, micros=800)
@@ -106,7 +107,7 @@ async def test_soft_budget_fires_preemptive_alert_when_crossing_the_threshold():
     store2 = InMemoryStore()
     store2.set_budget(
         Budget(id="dept:eng", tenant_id=TENANT, scope_type="department",
-               cost_limit_micros=1000, hard_stop=False)
+               cost_limit_micros=1000, hard_stop=False, window="daily")
     )
     acct2 = CostAccountant(store2, alert=recorder)
     await acct2.reserve(TENANT, ["dept:eng"], tokens=0, micros=700)
@@ -127,7 +128,7 @@ async def test_alert_callback_exception_does_not_fail_reservation():
     store = InMemoryStore()
     store.set_budget(
         Budget(id="dept:eng", tenant_id=TENANT, scope_type="department",
-               cost_limit_micros=1000, hard_stop=False)
+               cost_limit_micros=1000, hard_stop=False, window="daily")
     )
     acct = CostAccountant(store, alert=raising)
 
@@ -149,7 +150,7 @@ async def test_alert_callback_exception_does_not_fail_reservation():
     store2 = InMemoryStore()
     store2.set_budget(
         Budget(id="dept:eng", tenant_id=TENANT, scope_type="department",
-               cost_limit_micros=1000, hard_stop=False)
+               cost_limit_micros=1000, hard_stop=False, window="daily")
     )
     acct2 = CostAccountant(store2, alert=recorder)
     await acct2.reserve(TENANT, ["dept:eng"], tokens=0, micros=800)

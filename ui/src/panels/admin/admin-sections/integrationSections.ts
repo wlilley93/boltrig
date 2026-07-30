@@ -12,46 +12,69 @@ export const integrationSections: ReadonlyArray<AdminSection> = [
   {
     key: "spawn_rules",
     label: "Spawn rules",
-    blurb: "How an inbound task is matched to a runtime and a skill set.",
+    blurb:
+      "Live governed routing for tagged spawns. The unique highest-priority match selects capability, adds reviewed skills, and may tighten depth.",
     list: true,
     schema: {
       type: "object",
       properties: {
         items: {
           type: "array",
+          maxItems: 128,
           description:
-            "Each rule matches intent tags to a capability, a skill set and a max depth.",
+            "Rules are validated as one policy revision. Equal-priority matches fail closed; list order never breaks a tie.",
           items: {
             type: "object",
+            additionalProperties: false,
             properties: {
               name: { type: "string", description: "The rule's stable name." },
+              priority: {
+                type: "integer",
+                minimum: 0,
+                maximum: 1000,
+                description:
+                  "Explicit precedence. The unique highest matching value wins; ties are refused.",
+              },
               match: {
                 type: "object",
-                description: "The match predicate for inbound tasks.",
+                additionalProperties: false,
+                description:
+                  "Closed all-of predicate evaluated against prefer.intent_tags at governed spawn intake.",
                 properties: {
                   intent_tags: {
                     type: "array",
-                    items: { type: "string" },
-                    description: "Intent tags a task must carry for this rule to fire.",
+                    maxItems: 32,
+                    items: {
+                      type: "string",
+                      pattern: "^[a-z0-9][a-z0-9._-]{0,63}$",
+                    },
+                    description:
+                      "Every lower-case stable tag must be present for this rule to match.",
                   },
                 },
+                required: ["intent_tags"],
               },
               capability: {
                 type: "string",
-                description: "The ephemeral runtime (capability) this rule spawns.",
+                description:
+                  "Capability selected by the rule. A conflicting caller routing pin is refused.",
               },
               skills: {
                 type: "array",
+                maxItems: 32,
                 items: { type: "string" },
-                description: "The skills the spawned worker starts with.",
+                description:
+                  "Reviewed skills added to the request. Their tool grants remain capped by caller authority.",
               },
               max_depth: {
                 type: "integer",
                 minimum: 1,
                 maximum: 10,
-                description: "The max spawn depth for this rule.",
+                description:
+                  "Optional additional ceiling; the lower of this and capability max depth is enforced.",
               },
             },
+            required: ["name", "priority", "match", "capability"],
           },
         },
       },

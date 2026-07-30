@@ -20,6 +20,7 @@ from fastapi.responses import JSONResponse
 
 from boltrig.identity import hash_password, validate_password_strength, verify_password
 from boltrig.identity.passwords import WeakPassword
+from boltrig.api.auth_recovery_routes import register_recovery_routes
 from boltrig.kernel.web_security import client_ip as _client_ip
 from boltrig.models import RateLimited, SecurityEventType
 from boltrig.models.registry import RateLimit
@@ -96,6 +97,7 @@ async def _rotate(k, request, body, realm, user, cred) -> JSONResponse:
 def register_password_routes(app, *, principal_dep, get_kernel) -> None:
     K = Depends(get_kernel)
     P = Depends(principal_dep)
+    register_recovery_routes(app, get_kernel=get_kernel)
 
     @app.post("/v1/auth/change-password")
     async def change_password(body: dict, request: Request, k=K, p=P) -> JSONResponse:

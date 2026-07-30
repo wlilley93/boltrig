@@ -11,12 +11,22 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from typing import Any
 
+from boltrig.api.birth_profile_startup import (
+    publish_birth_profile_startup as _publish_birth_profile_startup_impl,
+)
+from boltrig.api.device_bootstrap import register_device_actions
+from boltrig.api.hitl_resume_bridge import resume_held_write_route
 from boltrig.config import apply_manifest, load_manifest, load_settings, production_signal
 from boltrig.config.environment import is_truthy
+from boltrig.config.integration_catalogue import (
+    provision_builtin_integration_catalogue,
+)
 from boltrig.fleet import make_agent_invoker, make_app_spawner
 from boltrig.knowledge import register_knowledge
 from boltrig.kernel import Kernel
+from boltrig.kernel.events import build_event_relay
 from boltrig.kernel.ratelimit import build_counter
 from boltrig.memory.bootstrap import register_memory as _register_memory
 from boltrig.store import InMemoryStore, Store
@@ -29,6 +39,7 @@ _MANIFEST_CANDIDATES = (
     "manifest.yaml",
     "manifest.example.yaml",
 )
+_MANIFEST_UNSET = object()
 
 
 def _find_manifest() -> str | None:
@@ -36,6 +47,8 @@ def _find_manifest() -> str | None:
     so it is honoured even when set after import (tests / dynamic config), then
     falling back to the well-known paths."""
     return _find((os.environ.get("BOLTRIG_MANIFEST", ""), *_MANIFEST_CANDIDATES))
+
+
 _SKILLS_DIR_CANDIDATES = ("/app/libraries/skills", "libraries/skills")
 
 
@@ -72,9 +85,7 @@ async def build_store() -> Store:
         # migration ordering merely by restarting.
         rls = is_truthy(os.environ.get("BOLTRIG_RLS"))
         log.info("DATABASE_URL set; using durable PostgresStore (rls=%s)", rls)
-        return await PostgresStore.connect(
-            settings.database_url, apply_schema=False, rls=rls
-        )
+        return await PostgresStore.connect(settings.database_url, apply_schema=False, rls=rls)
     return InMemoryStore()
 
 
@@ -91,6 +102,7 @@ async def _seed_default(kernel: Kernel) -> None:
     )
     if inspect.isawaitable(res):  # PostgresStore seed helper is async
         await res
+    await provision_builtin_integration_catalogue(kernel.store, _DEFAULT_TENANT)
     await kernel.register_adapter(_DEFAULT_TENANT, build_tickets())
     await kernel.register_adapter(_DEFAULT_TENANT, build_familiar())  # familiar.express (WL-3)
     if _desktop_hands_enabled():
@@ -99,8 +111,8 @@ async def _seed_default(kernel: Kernel) -> None:
     await _register_web_fetch(kernel, _DEFAULT_TENANT, {})
     await _register_skill_shelf(kernel, _DEFAULT_TENANT)
     await _register_channel_send(kernel, _DEFAULT_TENANT)
-    # Knowledge is default-OFF for manifest-less boots (symmetry with memory);
-    # the demo seed opts in explicitly so the demo tenant keeps its vault.
+    await register_device_actions(kernel, _DEFAULT_TENANT)
+    # Keep knowledge opt-in while preserving the demo tenant's vault.
     await register_knowledge(kernel, _DEFAULT_TENANT, {"enabled": True})
 
 
@@ -113,10 +125,8 @@ def _desktop_hands_enabled() -> bool:
 
 
 async def _register_desktop_hands(kernel: Kernel, tenant_id: str) -> None:
-    """Register the governed desktop-hands verbs (decision 0016, DH-1). desktop.*
-    runs the chokepoint like any verb; the handler only enqueues a command into
-    the shared HandsRegistry for the host executor to pull - registering it does
-    NOT grant it (the tenant ceiling + caller grants still decide)."""
+    """Register governed desktop hands through the ordinary chokepoint.
+    The handler queues work for the host executor; registration grants no authority."""
     from boltrig.adapters.builtin.desktop import build as build_desktop
 
     await kernel.register_adapter(tenant_id, build_desktop(kernel.hands_registry))
@@ -124,11 +134,10 @@ async def _register_desktop_hands(kernel: Kernel, tenant_id: str) -> None:
 
 
 async def _register_control_plane(kernel: Kernel, tenant_id: str) -> None:
-    """Register the control-plane adapter so config amendment flows through the
-    chokepoint (Round Seven, 5.1): control.* verbs are grant-checked, audited and
-    HITL-gateable like any other action (SEC-51). Loader + registry are injected
-    for governed adapter generation/activation; AdminConfig and WorkflowLibrary
-    are late-bound by platform_factory once their runtime collaborators exist."""
+    """Register config amendment through the governed control-plane chokepoint.
+
+    Loader and registry are injected here; runtime collaborators bind later.
+    """
     from boltrig.config.control_plane import build_control_plane_adapter
 
     await kernel.register_adapter(
@@ -196,40 +205,35 @@ async def _register_consumed_mcp(kernel: Kernel, tenant_id: str, mcp_cfg) -> Non
 async def _rehydrate_store_adapters(kernel: Kernel, tenant_id: str) -> None:
     """Rebuild live instances for adapter rows the control plane persisted.
 
-    The loader is in-memory only, so without this step a control-plane
-    registration (``control.mcp_server.register`` / ``control.adapter.generate``)
-    is a phantom row after every restart: present in the store, impossible to
-    activate, execute, deactivate, or delete. Only shapes the boot can rebuild
-    HONESTLY are rehydrated:
-
-    - ``boltrig.adapters.mcp_consumer`` rows rebuild from the registration in
-      ``spec_ref`` - JSON ``{"url", "allow_internal"}`` for current rows, a
-      plain url string for pre-flag rows (``control_rehydrate.consumer_spec``
-      reads both; the plain string gets the guarded default). The persisted
-      review-gate flag stands (``activated``), and the default credential-id
-      convention is re-bound from its persisted ref row so activation/execution
-      resolve the credential again (an explicit ``credential_id`` binding is
-      not recoverable; activation fails closed - re-register). A row with no
-      ``spec_ref`` lost its server address: skipped loudly - delete, re-register.
-    - anything else is skipped with a warning rather than reconstructed
-      halfway: generated adapters keep no rehydration source (their OpenAPI
-      document was inline at generation, and ``spec_ref`` is a reference
-      column, not a document store).
-
-    Rows already live (manifest ``mcp.consume`` registers them first) win. The
-    per-row rebuild itself is shared with the activation path's on-demand
-    rehydration (``config.control_rehydrate``).
+    MCP rows use their private endpoint registration; generated rows use their
+    bounded executable projection, never the whole OpenAPI document. Durable
+    review state stands. Invalid or unknown shapes warn and remain store-only;
+    rows already registered by this boot win.
     """
+
+    from boltrig.config.control_generated_adapter import (
+        is_generated_adapter_record,
+    )
     from boltrig.config.control_rehydrate import rehydrate_adapter_instance
 
     for record in await kernel.store.list_adapters(tenant_id):
         if kernel.loader.peek(tenant_id, record.id) is not None:
             continue  # the manifest registered this id this boot already
-        consumer = await rehydrate_adapter_instance(
+        adapter = await rehydrate_adapter_instance(
             kernel.store, kernel.credentials, kernel.loader, tenant_id, record
         )
-        if consumer is not None:
-            log.info("rehydrated mcp adapter '%s' from its store row", record.id)
+        if adapter is not None:
+            log.info(
+                "rehydrated %s adapter '%s' from its store row",
+                record.source,
+                record.id,
+            )
+        elif is_generated_adapter_record(record):
+            log.warning(
+                "generated adapter '%s' has no valid durable reconstruction "
+                "projection; delete and re-generate it",
+                record.id,
+            )
         elif record.module_ref != "boltrig.adapters.mcp_consumer":
             log.warning(
                 "adapter '%s' (module_ref %s) has no honest boot reconstruction; "
@@ -247,14 +251,17 @@ async def _rehydrate_store_adapters(kernel: Kernel, tenant_id: str) -> None:
 
 async def _seed_from_manifest(kernel: Kernel, manifest) -> None:
     await apply_manifest(kernel, manifest)
+    await provision_builtin_integration_catalogue(kernel.store, manifest.tenant_id)
     await _register_memory(kernel, manifest.tenant_id, manifest.section("memory"))
     await register_knowledge(kernel, manifest.tenant_id, manifest.section("knowledge"))
     await _register_control_plane(kernel, manifest.tenant_id)
     await _register_skill_shelf(kernel, manifest.tenant_id)
     await _register_channel_send(kernel, manifest.tenant_id)
+    await register_device_actions(kernel, manifest.tenant_id)
     if os.environ.get("BOLTRIG_EMOTION", "").strip() == "1":
         # desktop-only: the same box that publishes the phenotype accepts voluntary gestures (WL-3).
         from boltrig.adapters.builtin.familiar import build as build_familiar
+
         await kernel.register_adapter(manifest.tenant_id, build_familiar())
     if _desktop_hands_enabled():
         # governed hands on the desktop host (DH-1), only when the add-on is turned on
@@ -262,10 +269,17 @@ async def _seed_from_manifest(kernel: Kernel, manifest) -> None:
     await _register_consumed_mcp(kernel, manifest.tenant_id, manifest.section("mcp"))
     await _rehydrate_store_adapters(kernel, manifest.tenant_id)
     net = manifest.network
-    await _register_web_fetch(kernel, manifest.tenant_id, {
-        "air_gapped": net.air_gapped, "https_proxy": net.https_proxy,
-        "allowed_domains": net.allowed_domains, "blocked_domains": net.blocked_domains,
-    })
+    await _register_web_fetch(
+        kernel,
+        manifest.tenant_id,
+        {
+            "air_gapped": net.air_gapped,
+            "https_proxy": net.https_proxy,
+            "ca_bundle": net.ca_bundle,
+            "allowed_domains": net.allowed_domains,
+            "blocked_domains": net.blocked_domains,
+        },
+    )
     skills_dir = _find(_SKILLS_DIR_CANDIDATES)
     if skills_dir:
         from boltrig.skills import load_skills_dir
@@ -277,9 +291,7 @@ async def _seed_from_manifest(kernel: Kernel, manifest) -> None:
             log.warning("skill load failed: %s", exc)
 
 
-def wire_hitl_resume(
-    kernel: Kernel, *, executor=None, pump=None, resume_held_write=None
-) -> None:
+def wire_hitl_resume(kernel: Kernel, *, executor=None, pump=None, resume_held_write=None) -> None:
     """Bridge a HITL answer to the lane that can act on it (Beat 5, NFR-REL-03).
 
     On answer: push the scoped approval event (resumes a durable workflow-run
@@ -294,15 +306,18 @@ def wire_hitl_resume(
     from boltrig.fleet.hatchet_app import APPROVAL_EVENT_KEY
 
     async def _on_answer(request) -> None:
-        await _resume_held_write_route(kernel, resume_held_write, request)
+        await resume_held_write_route(kernel, resume_held_write, request)
         if executor is not None and request.run_id:
             try:
                 resp = await kernel.store.get_hitl_response(request.tenant_id, request.id)
                 await executor.push_event(
                     APPROVAL_EVENT_KEY,
-                    {"hitl_request_id": request.id, "run_id": request.run_id,
-                     "verb": request.verb,
-                     "decision": resp.decision if resp else None},
+                    {
+                        "hitl_request_id": request.id,
+                        "run_id": request.run_id,
+                        "verb": request.verb,
+                        "decision": resp.decision if resp else None,
+                    },
                     scope=request.run_id,
                 )
             except Exception:  # resume is best-effort; the answer stands (P9)
@@ -315,35 +330,6 @@ def wire_hitl_resume(
         await _harvest_hitl_signal(kernel, request)
 
     kernel.hitl.set_resume_notifier(_on_answer)
-
-
-async def _resume_held_write_route(kernel: Kernel, resume, request) -> None:
-    """The answer bridge's third route: replay a write held on THIS run.
-
-    Fires only for an APPROVAL whose run carries a ``held:``-prefixed paused
-    checkpoint, which is what makes it mutually exclusive with the durable route
-    above: a run the interpreter holds records its own paused checkpoint for the
-    step, and ``held_write_is_waiting`` stands down when another lane has claimed
-    the same request. Two claimants would race the ANSWERED -> CONSUMED CAS and
-    the loser would report a conflict about a write that did happen.
-
-    Injected as a callable exactly like ``executor`` and ``pump`` so the kernel
-    still never imports the fleet (P1). Fail-safe (P9): the answer stands, and
-    the approval is left claimable, if the replay itself faults.
-    """
-    from boltrig.kernel.held_call import held_write_is_waiting
-    from boltrig.models import HITLType
-
-    if resume is None or request.type != HITLType.APPROVAL or not request.run_id:
-        return
-    try:
-        if not await held_write_is_waiting(
-            kernel.store, request.tenant_id, request.run_id, request.id
-        ):
-            return
-        await resume(request.tenant_id, request.run_id, request.id)
-    except Exception:  # the recorded answer is the truth; a replay fault never voids it
-        log.warning("held-write resume failed", exc_info=True)
 
 
 async def _harvest_hitl_signal(kernel: Kernel, request) -> None:
@@ -365,11 +351,15 @@ async def _harvest_hitl_signal(kernel: Kernel, request) -> None:
         approving = resp.decision.strip().lower() in _APPROVING
         perms = await kernel.store.get_tenant_permissions(request.tenant_id)
         ctx = InvocationContext(
-            tenant_id=request.tenant_id, run_id=request.run_id,
-            grants=perms.grants, actor="hitl-harvest", actor_tier="tier1",
+            tenant_id=request.tenant_id,
+            run_id=request.run_id,
+            grants=perms.grants,
+            actor="hitl-harvest",
+            actor_tier="tier1",
         )
         await harvest_reuse_signal(
-            kernel, ctx,
+            kernel,
+            ctx,
             target=request.work_item_id or request.run_id,
             polarity="endorsement" if approving else "block",
             kind="hitl_verdict",
@@ -387,28 +377,49 @@ def _attach_hands_registry(kernel: Kernel) -> None:
     kernel.hands_registry = HandsRegistry()
 
 
-async def build_kernel_async() -> Kernel:
+async def build_kernel_async(
+    *,
+    codex_config: dict[str, object] | None = None,
+    sensitive_endpoint_id: str | None = None,
+    manifest_snapshot: Any = _MANIFEST_UNSET,
+    manifest_path: str | None = None,
+) -> Kernel:
     """Construct and fully wire a Kernel (store, adapters, capabilities, invoker).
 
-    H3 (K-19): enforce the audit-key guard on EVERY kernel-building path, not just
-    create_app. The fleet worker and Hatchet worker boot through here (not
-    create_app), so without this a production worker missing BOLTRIG_AUDIT_HMAC_KEY
-    would silently write forgeable audit rows under the in-source default key. Fail
-    hard before building anything; create_app keeps its own idempotent call."""
+    H3 (K-19): enforce the audit-key guard on API, fleet and Hatchet boot.
+    ``codex_config``, ``sensitive_endpoint_id`` and ``manifest_snapshot`` are
+    assembled once by the serving process and injected into every fleet spawner
+    it owns. A missing sensitive role remains fail-closed rather than falling
+    through to egress. Callers that omit ``manifest_snapshot`` retain the
+    standalone convenience behavior of loading the configured manifest here.
+    """
     refuse_default_audit_key_in_prod()
     store = await build_store()
-    # FR-KER-05: the SHARED rate-limit counter. Without this the kernel silently
-    # fell back to a per-process, per-boot in-memory counter while the record
-    # asserted Redis in three places, so a restart reset every bound and a second
-    # worker would have multiplied each by N
-    # ([2026] VJS-CC-BOLTRIG-RATE-LIMIT-WINDOW-001, D1/D3/D7).
+    # FR-KER-05: production's shared counter and relay use the same Redis URL;
+    # each factory independently refuses a production-local fallback.
     counter = build_counter(os.environ.get("REDIS_URL"))
-    manifest_path = _find_manifest()
-    if manifest_path:
-        manifest = load_manifest(manifest_path)
+    event_relay = build_event_relay(
+        os.environ.get("REDIS_URL"),
+        production=production_signal() is not None,
+        namespace=os.environ.get("BOLTRIG_EVENT_RELAY_NAMESPACE", "default"),
+    )
+    if manifest_snapshot is _MANIFEST_UNSET:
+        manifest_path = _find_manifest()
+        manifest = load_manifest(manifest_path) if manifest_path else None
+    else:
+        manifest = manifest_snapshot
+    if manifest is not None:
+        configured_sensitive_endpoint = manifest.models.sensitive_endpoint
+        if (
+            sensitive_endpoint_id is not None
+            and sensitive_endpoint_id != configured_sensitive_endpoint
+        ):
+            raise RuntimeError("sensitive model routing changed during process composition")
+        sensitive_endpoint_id = configured_sensitive_endpoint
         kernel = Kernel(
             store,
             counter=counter,
+            event_relay=event_relay,
             blocking_verbs=manifest.blocking_verbs(),
             approval_timeout_seconds=manifest.hitl.approval_timeout_seconds,
             development_posture=manifest.development_posture,
@@ -418,19 +429,26 @@ async def build_kernel_async() -> Kernel:
         await _seed_from_manifest(kernel, manifest)
         log.info("booted from manifest %s (tenant %s)", manifest_path, manifest.tenant_id)
     else:
-        kernel = Kernel(store, counter=counter)
+        kernel = Kernel(store, counter=counter, event_relay=event_relay)
         if _desktop_hands_enabled():
             _attach_hands_registry(kernel)
         await _seed_default(kernel)
         log.info("no manifest found; booted minimal demo tenant '%s'", _DEFAULT_TENANT)
 
-    kernel.set_agent_invoker(make_agent_invoker(kernel))  # US-KER-02
+    kernel.set_agent_invoker(
+        make_agent_invoker(
+            kernel,
+            codex_config=codex_config,
+            sensitive_endpoint_id=sensitive_endpoint_id,
+        )
+    )  # US-KER-02
     return kernel
 
 
 def build_kernel() -> Kernel:
     """Synchronous entrypoint for uvicorn/worker import-time construction."""
-    return asyncio.run(build_kernel_async())
+    codex_config = _build_shared_codex_config()
+    return asyncio.run(build_kernel_async(codex_config=codex_config))
 
 
 def _deny_all_resolver():
@@ -496,78 +514,31 @@ def refuse_default_audit_key_in_prod(env: dict | None = None) -> None:
         )
 
 
-def select_principal_resolver():
-    """Choose the auth resolver from the environment (SEC-01).
+def select_principal_resolver(manifest_snapshot: Any = _MANIFEST_UNSET):
+    """Choose the auth resolver from process and manifest trust policy (SEC-01).
 
-    OIDC when the OIDC_* trio is set; the header-trusting dev resolver only when
-    BOLTRIG_DEV_AUTH=1 (local dev); otherwise fail closed (refuse all requests).
+    Session and Cloudflare Access remain explicit process deployment modes. For
+    generic OIDC, the manifest trio is now a real input: it may supply the full
+    verifier configuration, must exactly match a simultaneously configured
+    environment trio, and a partial trio refuses boot. The header-trusting dev
+    resolver remains local-only; otherwise all requests are refused.
     """
     refuse_default_audit_key_in_prod()  # K-19: a default audit key in prod is fatal
     settings = load_settings()
-    if settings.session_auth_configured:
-        # First-party invite-only login ([2026] VJS-COUNTY 7, D3). Opt-in via
-        # BOLTRIG_AUTH_MODE=session; selected in place of Cloudflare Access. Verifies
-        # the Boltrig session cookie and resolves the Principal, fail-closed. The CF
-        # Access resolver stays in the code (below) so a deploy that has not opted in
-        # is unchanged - the prod cutover / CF-Access removal is Principal-gated (D10).
-        from boltrig.identity import build_session_resolver
-
-        tenant = settings.session_tenant or _DEFAULT_TENANT
-        log.info("first-party session auth enabled (tenant %s)", tenant)
-        return build_session_resolver(tenant)
-    if settings.cf_access_configured:
-        import json
-
-        from boltrig.identity import OidcVerifier, build_cf_access_resolver
-
-        team = settings.cf_access_team_domain
-        try:
-            role_map = json.loads(settings.cf_access_role_map) if settings.cf_access_role_map else {}
-        except (ValueError, TypeError):
-            log.error("CF_ACCESS_ROLE_MAP is not valid JSON; treating as empty (deny-by-default)")
-            role_map = {}
-        tenant = settings.cf_access_tenant or _DEFAULT_TENANT
-        # CF Access JWTs are verified against the team's certs; the issuer IS the
-        # team domain and the audience IS the application's AUD tag.
-        verifier = OidcVerifier(
-            issuer=team,
-            audience=settings.cf_access_aud,
-            jwks_uri=f"{team}/cdn-cgi/access/certs",
-        )
-        log.info("Cloudflare Access auth enabled (team %s, %d mapped emails)", team, len(role_map))
-        return build_cf_access_resolver(
-            verifier=verifier,
-            tenant_id=tenant,
-            role_map=role_map,
-            default_role=settings.cf_access_default_role,
-        )
-    if settings.oidc_configured:
-        from boltrig.identity import OidcVerifier, build_principal_resolver
-
+    if manifest_snapshot is _MANIFEST_UNSET:
         manifest_path = _find_manifest()
-        if manifest_path:
-            manifest = load_manifest(manifest_path)
-            mappings, tenant = list(manifest.role_mappings), manifest.tenant_id
-        else:
-            mappings, tenant = [], _DEFAULT_TENANT
-        verifier = OidcVerifier(
-            settings.oidc_issuer, settings.oidc_audience, settings.oidc_jwks_uri
-        )
-        log.info("OIDC auth enabled (issuer %s)", settings.oidc_issuer)
-        return build_principal_resolver(verifier=verifier, mappings=mappings, tenant_id=tenant)
-    if settings.dev_auth:
-        # IAM-09: dev auth must be IMPOSSIBLE in production. Refuse to start (not
-        # just warn) if a production signal is present alongside dev auth.
-        refuse_dev_auth_in_prod()
-        log.warning(
-            "BOLTRIG_DEV_AUTH=1: header-trusting dev auth is active. NOT for production (SEC-01)."
-        )
-        return None  # create_app default is the dev header resolver
-    log.warning(
-        "no OIDC_* config and BOLTRIG_DEV_AUTH unset: refusing all requests (fail-closed). "
-        "Set OIDC_ISSUER/OIDC_AUDIENCE/OIDC_JWKS_URI for production, or BOLTRIG_DEV_AUTH=1 for dev."
+        manifest = load_manifest(manifest_path) if manifest_path else None
+    else:
+        manifest = manifest_snapshot
+    from boltrig.api.auth_selection import select_auth_resolver
+
+    return select_auth_resolver(
+        settings,
+        manifest,
+        default_tenant=_DEFAULT_TENANT,
+        refuse_dev_auth_in_prod=refuse_dev_auth_in_prod,
+        deny_all_resolver=_deny_all_resolver,
     )
-    return _deny_all_resolver()
 
 
 def _build_shared_codex_config() -> "dict[str, object] | None":
@@ -595,13 +566,25 @@ def _build_shared_codex_config() -> "dict[str, object] | None":
     )
 
 
-def _build_chat_wiring(codex_config):
+async def _publish_birth_profile_startup(kernel: Kernel, **kwargs: Any) -> bool:
+    return await _publish_birth_profile_startup_impl(
+        kernel,
+        default_tenant=_DEFAULT_TENANT,
+        **kwargs,
+    )
+
+
+def _build_chat_wiring(
+    codex_config,
+    spawn_rules=(),
+    sensitive_endpoint_id: str | None = None,
+):
     """Return ``(chat_factory, resume_held_write)`` sharing ONE ChatService.
 
     The two are built together because the HITL answer bridge has to reach the
-    SAME service the SSE routes use: the event relay is per-Kernel and
-    in-process, so a held write replayed anywhere else would publish its
-    continuation into a stream the browser cannot subscribe to (decision 0018).
+    SAME service the SSE routes use in development, while production's Redis
+    relay permits another replica to observe the same continuation (decision
+    0018).
     Late-bound through a holder rather than by call order, so it does not matter
     which factory the app lifespan runs first."""
     from boltrig.fleet import build_spawner
@@ -611,6 +594,7 @@ def _build_chat_wiring(codex_config):
 
     def chat_factory(kernel):
         from boltrig.api.codex_execution import build_codex_execution_stack
+
         # the conversational service routes turns through the fleet (US-CONV-02);
         # the manifest chat knob decides a bare turn's skill set per caller role
         # ([2026] VJS-COUNTY 1) - no manifest means the fail-closed empty knob
@@ -623,9 +607,17 @@ def _build_chat_wiring(codex_config):
                 pass
         settings = load_settings()
         service = ChatService(
-            kernel.store, kernel.events,
+            kernel.store,
+            kernel.events,
             turn_executor=build_turn_executor(
-                kernel, build_spawner(kernel, codex_config=codex_config), chat_config=chat_cfg,
+                kernel,
+                build_spawner(
+                    kernel,
+                    codex_config=codex_config,
+                    sensitive_endpoint_id=sensitive_endpoint_id,
+                    spawn_rules=spawn_rules,
+                ),
+                chat_config=chat_cfg,
                 # Codex shadow stack (SEC-170): None when BOLTRIG_CODEX_LEDGER is off.
                 codex_execution=build_codex_execution_stack(settings, kernel.store),
             ),
@@ -647,87 +639,28 @@ def _build_chat_wiring(codex_config):
     return chat_factory, resume_held_write
 
 
-def build_app():
-    """Build the FastAPI app for uvicorn (target: boltrig.api.asgi:app).
+def build_app(
+    *,
+    addons_snapshot: Any = None,
+    password_reset_notifier: Any = None,
+    password_reset_readiness_probe: Any = None,
+):
+    """Build the FastAPI app lazily so resources attach to uvicorn's loop."""
+    from boltrig.api.app_composition import compose_api_app
 
-    The kernel is built by the app lifespan on the serving loop (not here), so
-    loop-bound resources like the asyncpg pool attach to uvicorn's loop."""
-    from boltrig.fleet import build_spawner
-    from boltrig.kernel.app import create_app
-
-    # Trusted read-only Codex built ONCE and shared by every spawner (see
-    # _build_shared_codex_config). None when off, keeping every path byte-identical.
-    codex_config = _build_shared_codex_config()
-    chat_factory, resume_held_write = _build_chat_wiring(codex_config)
-
-    def platform_factory(kernel):
-        # Round Three studios/admin/eval ride existing services (C2)
-        from boltrig.api.codex_execution import build_codex_execution_stack
-        from boltrig.api.readiness import ReadinessService
-        from boltrig.config.admin import AdminConfig
-        from boltrig.fleet import register_workers
-        from boltrig.fleet.eval import EvalRunner
-        from boltrig.fleet.model_gateway_status import ModelGatewayStatusProvider
-        from boltrig.fleet.stack_tool_status import StackToolStatusProvider
-        from boltrig.workflows import WorkflowLibrary
-
-        manifest_path = _find_manifest()
-        tenant = _DEFAULT_TENANT
-        if manifest_path:
-            try:
-                tenant = load_manifest(manifest_path).tenant_id
-            except Exception:
-                pass
-        spawner = build_spawner(kernel, codex_config=codex_config)
-        # Honest executor selection (US-EXE-05): record which executor serves this
-        # app and whether it is durable (Beat 4 extends the stamp; not wired here).
-        executor = register_workers(kernel)
-        log.info("workflow executor: %s (durable=%s)", type(executor).__name__, executor.durable)
-        # Beat 5: register the governed task bodies on the local executor (the
-        # Hatchet executor got its client-side handles in register_workers) and
-        # bridge HITL answers to the durable lane. No pump here - the API
-        # process is queue-side; the worker process wires its own (NFR-REL-03).
-        try:
-            from boltrig.fleet.hatchet_app import register_boltrig_tasks
-
-            register_boltrig_tasks(executor, kernel)
-            _wire_memory_projection_executor(kernel, tenant, executor)
-        except Exception:  # task registration must never break boot (P9)
-            log.warning("boltrig task registration failed", exc_info=True)
-        wire_hitl_resume(
-            kernel, executor=executor, resume_held_write=resume_held_write
-        )
-        admin = AdminConfig(kernel.store, tenant_id=tenant, path=manifest_path)
-        workflows = WorkflowLibrary(kernel.store, executor=executor, kernel=kernel)
-        # Share the ONE services with their governed control verbs so route and
-        # agent calls cannot drift into separate mutation paths (SEC-75).
-        control = kernel.loader.peek(tenant, "control")
-        if control is not None and hasattr(control, "set_admin"):
-            control.set_admin(admin)
-        if control is not None and hasattr(control, "set_workflows"):
-            control.set_workflows(workflows)
-        eval_runner = EvalRunner(kernel, spawner)
-        status = StackToolStatusProvider(ModelGatewayStatusProvider())
-        return {
-            "admin": admin,
-            "eval": eval_runner,
-            "spawner": spawner,
-            # Codex ledger scaffold (steps 1-2): None when BOLTRIG_CODEX_LEDGER off.
-            "codex_execution": build_codex_execution_stack(load_settings(), kernel.store),
-            "workflows": workflows,
-            "status": status,
-            "readiness": ReadinessService(
-                kernel,
-                tenant_id=tenant,
-                executor=executor,
-                status_provider=status,
-            ),
-        }
-
-    return create_app(
-        kernel_factory=build_kernel_async,
-        spawner_factory=lambda kernel: make_app_spawner(kernel, codex_config=codex_config),
-        principal_resolver=select_principal_resolver(),
-        chat_factory=chat_factory,
-        platform_factory=platform_factory,
+    return compose_api_app(
+        addons_snapshot=addons_snapshot,
+        password_reset_notifier=password_reset_notifier,
+        password_reset_readiness_probe=password_reset_readiness_probe,
+        default_tenant=_DEFAULT_TENANT,
+        build_shared_codex_config=_build_shared_codex_config,
+        find_manifest=_find_manifest,
+        load_manifest=load_manifest,
+        build_chat_wiring=_build_chat_wiring,
+        build_kernel_async=build_kernel_async,
+        make_app_spawner=make_app_spawner,
+        select_principal_resolver=select_principal_resolver,
+        publish_birth_profile_startup=_publish_birth_profile_startup,
+        wire_hitl_resume=wire_hitl_resume,
+        wire_memory_projection_executor=_wire_memory_projection_executor,
     )

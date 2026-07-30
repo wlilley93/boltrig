@@ -696,9 +696,11 @@ async def test_provider_ceiling_is_the_admitted_kernel_tools_union(tmp_path: Pat
         holder,
         frozenset(admission_value.kernel_tools)
         | frozenset(admission_value.compilation.policy.enabled_tools),
+        admission_value.compilation.policy.model.model_id,
     )
     try:
         assert proxy._allowed_tools == frozenset(_TOOLS)
+        assert proxy._allowed_model == admission_value.compilation.policy.model.model_id
     finally:
         await proxy.aclose()
 
@@ -895,4 +897,3 @@ def _assignment_for(suffix: str) -> PhaseAssignmentRef:
         workspace_id="ws-1",
     )
     return PhaseAssignmentRef(phase=phase, assignment_id=f"run-{suffix}-codex-assignment")
-

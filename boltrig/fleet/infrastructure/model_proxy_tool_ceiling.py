@@ -39,6 +39,21 @@ from __future__ import annotations
 import json
 
 from .codex_kernel_tools_phase import CODEX_MCP_NAMESPACE_NAME
+from .codex_native_collaboration_wire import (
+    CODEX_NATIVE_COLLAB_NAMESPACE_NAME,
+    CODEX_NATIVE_COLLAB_TOOLS,
+    NativeCollaborationWireGate,
+)
+from .model_proxy_ceiling_errors import (
+    ModelCeilingViolation,
+    ReasoningEffortCeilingViolation,
+    ToolCeilingViolation,
+)
+from .model_proxy_request_ceiling import (
+    MAX_MODEL_CALL_BODY_BYTES,
+    enforce_model_ceiling,
+    enforce_reasoning_effort_ceiling,
+)
 
 # The Responses API tool-call item type; SSE frames that carry one contain it, so
 # it is the cheapest exact marker to decide whether an event needs inspection.
@@ -54,17 +69,12 @@ _EVENT_DELIMITERS = (b"\r\n\r\n", b"\n\n")
 # namespace ONLY, so a qualified name can never smuggle a tool from elsewhere.
 _NAMESPACE_SEPARATORS = ("/", ".", "__")
 
-# A model-call body we cannot parse is one whose tool set we cannot check. The
-# cap is generous (a full read-only context is well under it) and exists so an
-# unbounded body can never be forwarded unverified.
-MAX_MODEL_CALL_BODY_BYTES = 32 * 1024 * 1024
-
-
-class ToolCeilingViolation(ValueError):
-    """A model-call body could not be verified against the cell's tool ceiling."""
-
-
-def enforce_tool_ceiling(body: bytes, allowed: frozenset[str]) -> bytes:
+def enforce_tool_ceiling(
+    body: bytes,
+    allowed: frozenset[str],
+    *,
+    allow_native_collaboration: bool = False,
+) -> bytes:
     """Return ``body`` with the tool set flattened + narrowed to the ceiling.
 
     An empty body passes through (a GET carries no tool set). Any other body must
@@ -79,6 +89,8 @@ def enforce_tool_ceiling(body: bytes, allowed: frozenset[str]) -> bytes:
         raise TypeError("body must be exact bytes")
     if type(allowed) is not frozenset:
         raise TypeError("allowed must be an exact frozenset")
+    if type(allow_native_collaboration) is not bool:
+        raise TypeError("allow_native_collaboration must be an exact bool")
     if not body:
         return body
     if len(body) > MAX_MODEL_CALL_BODY_BYTES:
@@ -95,7 +107,9 @@ def enforce_tool_ceiling(body: bytes, allowed: frozenset[str]) -> bytes:
     kept: list[object] = []
     seen: set[str] = set()
     for tool in declared:
-        for surviving in _surviving_tools(tool, allowed):
+        for surviving in _surviving_tools(
+            tool, allowed, allow_native_collaboration=allow_native_collaboration
+        ):
             name = _tool_name(surviving)
             if name is None or name in seen:
                 continue
@@ -111,7 +125,12 @@ def enforce_tool_ceiling(body: bytes, allowed: frozenset[str]) -> bytes:
     return json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
 
 
-def _surviving_tools(tool: object, allowed: frozenset[str]) -> list[object]:
+def _surviving_tools(
+    tool: object,
+    allowed: frozenset[str],
+    *,
+    allow_native_collaboration: bool,
+) -> list[object]:
     """The top-level tools one declared entry contributes after the ceiling.
 
     A function / built-in survives as itself iff its name is in the ceiling. The
@@ -125,12 +144,23 @@ def _surviving_tools(tool: object, allowed: frozenset[str]) -> list[object]:
     if not isinstance(tool, dict):
         return []
     if tool.get("type") == "namespace":
-        if tool.get("name") != CODEX_MCP_NAMESPACE_NAME:
-            return []
         nested = tool.get("tools")
         if not isinstance(nested, list):
             return []
-        return [item for item in nested if _tool_name(item) in allowed]
+        if tool.get("name") == CODEX_MCP_NAMESPACE_NAME:
+            return [item for item in nested if _tool_name(item) in allowed]
+        if (
+            allow_native_collaboration
+            and tool.get("name") == CODEX_NATIVE_COLLAB_NAMESPACE_NAME
+        ):
+            return [
+                item
+                for item in nested
+                if isinstance(item, dict)
+                and item.get("type") == "function"
+                and _tool_name(item) in CODEX_NATIVE_COLLAB_TOOLS
+            ]
+        return []
     return [tool] if _tool_name(tool) in allowed else []
 
 
@@ -158,12 +188,22 @@ class CodexResponseStreamProcessor:
     item whose JSON straddles chunk boundaries is rewritten intact.
     """
 
-    __slots__ = ("_allowed", "_buffer")
+    __slots__ = ("_allowed", "_buffer", "_native_gate")
 
-    def __init__(self, allowed: frozenset[str]) -> None:
+    def __init__(
+        self,
+        allowed: frozenset[str],
+        *,
+        native_gate: NativeCollaborationWireGate | None = None,
+    ) -> None:
         if type(allowed) is not frozenset:
             raise TypeError("allowed must be an exact frozenset")
+        if native_gate is not None and type(native_gate) is not NativeCollaborationWireGate:
+            raise TypeError("native_gate must be exact NativeCollaborationWireGate or None")
+        if native_gate is not None and allowed & CODEX_NATIVE_COLLAB_TOOLS:
+            raise ValueError("kernel and native collaboration tool names must not overlap")
         self._allowed = allowed
+        self._native_gate = native_gate
         self._buffer = b""
 
     def feed(self, chunk: bytes) -> bytes:
@@ -239,7 +279,11 @@ class CodexResponseStreamProcessor:
                 document = json.loads(payload)
             except json.JSONDecodeError as error:
                 raise ToolCeilingViolation("response data frame is not parseable JSON") from error
-            if self._bridge_function_calls(document):
+            complete = (
+                isinstance(document, dict)
+                and document.get("type") == "response.output_item.done"
+            )
+            if self._bridge_function_calls(document, complete=complete):
                 rewritten = "data: " + json.dumps(
                     document, ensure_ascii=False, separators=(",", ":")
                 )
@@ -249,7 +293,7 @@ class CodexResponseStreamProcessor:
             return event
         return "\n".join(lines).encode("utf-8")
 
-    def _bridge_function_calls(self, node: object) -> bool:
+    def _bridge_function_calls(self, node: object, *, complete: bool) -> bool:
         """Enforce + reattach the namespace on every ``function_call`` in ``node``.
 
         Returns whether ``node`` was mutated. Raises on an out-of-ceiling call.
@@ -258,42 +302,65 @@ class CodexResponseStreamProcessor:
         changed = False
         if isinstance(node, dict):
             if node.get("type") == "function_call":
-                changed = self._bridge_one_call(node) or changed
+                changed = self._bridge_one_call(node, complete=complete) or changed
             for value in node.values():
-                changed = self._bridge_function_calls(value) or changed
+                changed = self._bridge_function_calls(value, complete=complete) or changed
         elif isinstance(node, list):
             for item in node:
-                changed = self._bridge_function_calls(item) or changed
+                changed = self._bridge_function_calls(item, complete=complete) or changed
         return changed
 
-    def _bridge_one_call(self, call: dict) -> bool:
+    def _bridge_one_call(self, call: dict[str, object], *, complete: bool) -> bool:
         name = call.get("name")
         if not isinstance(name, str) or not name:
             # A nameless placeholder frame is not an executable call; leave it be.
             return False
-        bare = self._bare_verb(name)
-        if bare is None:
+        resolved = self._resolved_tool(name, call.get("namespace"))
+        if resolved is None:
             raise ToolCeilingViolation("upstream returned a tool call outside the ceiling")
-        if call.get("name") == bare and call.get("namespace") == CODEX_MCP_NAMESPACE_NAME:
-            return False
+        bare, namespace = resolved
+        changed = call.get("name") != bare or call.get("namespace") != namespace
         call["name"] = bare
-        call["namespace"] = CODEX_MCP_NAMESPACE_NAME
-        return True
+        call["namespace"] = namespace
+        if complete and namespace == CODEX_NATIVE_COLLAB_NAMESPACE_NAME:
+            assert self._native_gate is not None
+            self._native_gate.validate_complete_call(call)
+        return changed
 
-    def _bare_verb(self, name: str) -> str | None:
-        """The bare ceiling verb a returned call maps to, or None if barred.
+    def _resolved_tool(
+        self, name: str, declared_namespace: object
+    ) -> tuple[str, str] | None:
+        """The bare name + exact namespace a returned call maps to, or None.
 
         Accepts the bare name (the flattened form the model is offered) or, defensively,
-        a namespace-qualified form; every accepted qualifier is the pinned boltrig
-        namespace only.
+        an exact namespace-qualified form. A response that declares another
+        namespace is never silently rewritten into an admitted one.
         """
 
-        if name in self._allowed:
-            return name
-        for separator in _NAMESPACE_SEPARATORS:
-            prefix = f"{CODEX_MCP_NAMESPACE_NAME}{separator}"
-            if name.startswith(prefix) and name[len(prefix) :] in self._allowed:
-                return name[len(prefix) :]
+        candidates = [(CODEX_MCP_NAMESPACE_NAME, self._allowed)]
+        if self._native_gate is not None:
+            candidates.append(
+                (CODEX_NATIVE_COLLAB_NAMESPACE_NAME, CODEX_NATIVE_COLLAB_TOOLS)
+            )
+        if declared_namespace is not None:
+            if not isinstance(declared_namespace, str):
+                return None
+            for namespace, allowed in candidates:
+                if declared_namespace == namespace and name in allowed:
+                    return name, namespace
+            return None
+        bare_matches = [
+            (name, namespace)
+            for namespace, allowed in candidates
+            if name in allowed
+        ]
+        if len(bare_matches) == 1:
+            return bare_matches[0]
+        for namespace, allowed in candidates:
+            for separator in _NAMESPACE_SEPARATORS:
+                prefix = f"{namespace}{separator}"
+                if name.startswith(prefix) and name[len(prefix) :] in allowed:
+                    return name[len(prefix) :], namespace
         return None
 
 
@@ -315,7 +382,14 @@ def _tool_name(tool: object) -> str | None:
 
 __all__ = [
     "MAX_MODEL_CALL_BODY_BYTES",
+    "CODEX_NATIVE_COLLAB_NAMESPACE_NAME",
+    "CODEX_NATIVE_COLLAB_TOOLS",
     "CodexResponseStreamProcessor",
+    "ModelCeilingViolation",
+    "NativeCollaborationWireGate",
+    "ReasoningEffortCeilingViolation",
     "ToolCeilingViolation",
+    "enforce_model_ceiling",
+    "enforce_reasoning_effort_ceiling",
     "enforce_tool_ceiling",
 ]

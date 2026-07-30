@@ -8,7 +8,7 @@ from boltrig.kernel.control_routes import dispatch_control_route
 from ._shared import require_author
 
 
-def register(app, P, K) -> None:
+def _register_authoring_routes(app, P, K) -> None:
     @app.post("/v1/adapters/generate")
     async def gen_adapter(body: dict, request: Request, k=K, p=P) -> JSONResponse:
         require_author(p)
@@ -22,7 +22,19 @@ def register(app, P, K) -> None:
     @app.get("/v1/adapters/{adapter_id}/source")
     async def adapter_source(adapter_id: str, request: Request, k=K, p=P) -> JSONResponse:
         require_author(p)
-        adapter = await k.loader.get(p.tenant_id, adapter_id)
+        record = await k.store.get_adapter(p.tenant_id, adapter_id)
+        if record is None:
+            return JSONResponse({"error": "no_source"}, status_code=404)
+        from boltrig.config.control_generated_adapter import (
+            is_generated_adapter_record,
+            reconcile_generated_adapter,
+        )
+
+        adapter = (
+            await reconcile_generated_adapter(k.loader, p.tenant_id, record)
+            if is_generated_adapter_record(record)
+            else await k.loader.get(p.tenant_id, adapter_id)
+        )
         if adapter is None or not hasattr(adapter, "render_source"):
             return JSONResponse({"error": "no_source"}, status_code=404)
         return JSONResponse({"id": adapter_id, "source": adapter.render_source()})
@@ -62,3 +74,42 @@ def register(app, P, K) -> None:
         return {"adapters": [{"id": a.id, "runtime": a.runtime, "version": a.version,
                               "source": a.source, "activated": a.activated,
                               "health": k.loader.health_of(p.tenant_id, a.id)} for a in records]}
+
+
+def _register_lifecycle_routes(app, P, K) -> None:
+    @app.post("/v1/adapters/{adapter_id}/deactivate")
+    async def deactivate_adapter(
+        adapter_id: str, request: Request, k=K, p=P
+    ) -> JSONResponse:
+        require_author(p)
+        output, pending = await dispatch_control_route(
+            k,
+            p,
+            "control.adapter.deactivate",
+            {"adapter_id": adapter_id},
+            request=request,
+        )
+        if pending is not None:
+            return pending
+        return JSONResponse({"status": "ok", **(output or {})})
+
+    @app.delete("/v1/adapters/{adapter_id}")
+    async def delete_adapter(
+        adapter_id: str, request: Request, k=K, p=P
+    ) -> JSONResponse:
+        require_author(p)
+        output, pending = await dispatch_control_route(
+            k,
+            p,
+            "control.adapter.delete",
+            {"adapter_id": adapter_id},
+            request=request,
+        )
+        if pending is not None:
+            return pending
+        return JSONResponse({"status": "ok", **(output or {})})
+
+
+def register(app, P, K) -> None:
+    _register_authoring_routes(app, P, K)
+    _register_lifecycle_routes(app, P, K)

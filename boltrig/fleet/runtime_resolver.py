@@ -15,6 +15,10 @@ from .model_router import select_model_endpoint
 from .runtime import Runtime, build_runtime, runtime_for_provider
 
 
+class PinnedRuntimePolicyUnavailable(RuntimeError):
+    """A composed runtime cannot honestly satisfy an authored pinned profile."""
+
+
 def served_model_route(endpoint: ModelEndpoint | None) -> dict[str, str] | None:
     """The model that ACTUALLY served a call, for the audit record.
 
@@ -92,7 +96,53 @@ class RuntimeResolver:
         tenant_id: str,
         capability: AgentCapability,
         context: InvocationContext | None = None,
+        *,
+        pinned_policy: bool = False,
+        allow_kernel_tools: bool = True,
     ) -> Runtime:
+        """Resolve one runtime under either caller-routing or pinned profile policy.
+
+        ``pinned_policy`` is reserved for process-composed permanent profiles.  It
+        keeps the authored runtime/model endpoint authoritative while retaining
+        every shared safety boundary in this resolver: sensitive-data routing,
+        scoped credential resolution, the model gateway, the trusted Codex wall,
+        and typed unavailable runtimes.  In particular, a user's AI-key provider
+        choice or model-profile hint cannot silently turn an authored permanent
+        Codex head into a different runtime. ``allow_kernel_tools`` lets a caller
+        retain the same resolver/admission path while explicitly selecting the
+        read-only Codex phase; permanent routing/decomposition uses that posture
+        because its authored skills govern child selection, not side effects in
+        the routing call itself.
+        """
+        endpoint, api_key, runtime_override, model_route = await self._resolve_runtime_policy(
+            tenant_id,
+            capability,
+            context,
+            pinned_policy=pinned_policy,
+        )
+        self._require_pinned_codex_model(
+            capability,
+            endpoint,
+            pinned_policy=pinned_policy,
+        )
+        runtime = self._build_resolved_runtime(
+            capability,
+            endpoint,
+            api_key,
+            runtime_override,
+            allow_kernel_tools=allow_kernel_tools,
+        )
+        self._attach_model_route(runtime, capability, endpoint, model_route)
+        return runtime
+
+    async def _resolve_runtime_policy(
+        self,
+        tenant_id: str,
+        capability: AgentCapability,
+        context: InvocationContext | None,
+        *,
+        pinned_policy: bool,
+    ) -> tuple[ModelEndpoint | None, str | None, str | None, dict[str, str] | None]:
         sensitive = bool(context is not None and context.extra.get("data_class") == "sensitive")
         endpoint = await select_model_endpoint(
             self._kernel.store,
@@ -107,12 +157,17 @@ class RuntimeResolver:
         runtime_override: str | None = None
         model_route: dict[str, str] | None = None
 
-        if resolution is not None and not resolution.is_default and not sensitive:
+        if (
+            not pinned_policy
+            and resolution is not None
+            and not resolution.is_default
+            and not sensitive
+        ):
             runtime_override = runtime_for_provider(resolution.provider)
             if runtime_override is not None:
                 endpoint = _routed_endpoint(tenant_id, endpoint, resolution)
 
-        if context is not None and not sensitive:
+        if context is not None and not sensitive and not pinned_policy:
             profile = select_model_profile(dict(context.extra or {}))
             endpoint, profile_runtime, profile_route = apply_model_profile(
                 endpoint, profile, tenant_id=tenant_id
@@ -130,42 +185,81 @@ class RuntimeResolver:
             conversation_id=conversation_id,
             sensitive=sensitive,
         )
+        return endpoint, api_key, runtime_override, model_route
 
+    def _require_pinned_codex_model(
+        self,
+        capability: AgentCapability,
+        endpoint: ModelEndpoint | None,
+        *,
+        pinned_policy: bool,
+    ) -> None:
+        if (
+            pinned_policy
+            and capability.runtime == "codex"
+            and self._codex is not None
+            and endpoint is not None
+        ):
+            composed_model = str(self._codex.get("model_id") or "").strip()
+            if not composed_model or endpoint.model != composed_model:
+                raise PinnedRuntimePolicyUnavailable(
+                    "the composed Codex model does not satisfy the pinned profile"
+                )
+
+    def _build_resolved_runtime(
+        self,
+        capability: AgentCapability,
+        endpoint: ModelEndpoint | None,
+        api_key: str | None,
+        runtime_override: str | None,
+        *,
+        allow_kernel_tools: bool,
+    ) -> Runtime:
         def lookup(endpoint_id: str) -> ModelEndpoint | None:
             if endpoint is not None and endpoint.id == endpoint_id:
                 return endpoint
             return None
 
         endpoint_override = endpoint if runtime_override is not None else None
-        runtime = build_runtime(
+        return build_runtime(
             capability,
             lookup,
             opencode_config=self._opencode_config(capability, runtime_override),
             rivet_config=self._rivet_config(capability, runtime_override),
-            codex_config=self._codex_config(capability, runtime_override),
+            codex_config=self._codex_config(
+                capability,
+                runtime_override,
+                allow_kernel_tools=allow_kernel_tools,
+            ),
             api_key=api_key,
             runtime_override=runtime_override,
             endpoint_override=endpoint_override,
         )
-        # The model that actually served the call belongs in the record, not only when a model
-        # PROFILE happened to apply. Until now `model_route` was populated ONLY on the profile
-        # path, so an ordinary spawn audited `{runtime, capability}` and named no model at all -
-        # observed live on cvboltrig: 14 agent_spawn rows carrying token AND cost figures, and
-        # ZERO rows anywhere mentioning a model.
-        #
-        # That is not a missing nicety. Cost is priced BY model (the rate card is keyed
-        # `gpt-oss-120b`), so without it nobody can re-derive 4315 micros from the record - the
-        # cost figure becomes an assertion rather than a checkable one - and a regulator asking
-        # "which model decided this" has no answer at all. Derived from the RESOLVED endpoint, so
-        # it reports what was actually routed to rather than what was configured somewhere.
-        #
-        # A profile route still wins: it carries the richer {profile, tier, ...} attribution and is
-        # the more specific fact. This only fills the silence.
+
+    def _attach_model_route(
+        self,
+        runtime: Runtime,
+        capability: AgentCapability,
+        endpoint: ModelEndpoint | None,
+        model_route: dict[str, str] | None,
+    ) -> None:
+        """Record the model that actually served the call.
+
+        A profile route wins because it carries richer attribution. Otherwise the
+        resolved endpoint, or the composed Codex model for an endpoint-free Codex
+        profile, makes cost and decision provenance independently checkable.
+        """
         if model_route is None:
             model_route = served_model_route(endpoint)
+        if (
+            model_route is None
+            and capability.runtime == "codex"
+            and self._codex is not None
+            and self._codex.get("model_id")
+        ):
+            model_route = {"model": str(self._codex["model_id"])}
         if model_route:
             setattr(runtime, "model_route", model_route)
-        return runtime
 
     async def _resolve_ai_key(
         self, tenant_id: str, context: InvocationContext | None
@@ -217,7 +311,11 @@ class RuntimeResolver:
         }
 
     def _codex_config(
-        self, capability: AgentCapability, runtime_override: str | None
+        self,
+        capability: AgentCapability,
+        runtime_override: str | None,
+        *,
+        allow_kernel_tools: bool = True,
     ) -> dict[str, Any] | None:
         """The injected trusted-Codex config, gated ONLY on ``capability.runtime``.
 
@@ -240,7 +338,9 @@ class RuntimeResolver:
         if self._codex is None:
             return None
         cfg = dict(self._codex)
-        cfg["kernel_tools"] = "*" in (capability.supported_skills or [])
+        cfg["kernel_tools"] = (
+            allow_kernel_tools and "*" in (capability.supported_skills or [])
+        )
         cfg["issue_token"] = self._kernel.mcp.issue_run_token
         cfg["revoke_token"] = self._kernel.mcp.revoke
         cfg["mcp_url"] = (

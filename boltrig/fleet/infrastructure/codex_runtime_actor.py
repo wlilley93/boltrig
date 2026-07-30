@@ -5,13 +5,21 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
 
 from boltrig.fleet.domain import RuntimeEvent, RuntimeTurnRef
 
 from . import codex_protocol as wire
 from .codex_app_server import CodexAppServerClient
 from .codex_diagnostics import log_pump_crash
+from .codex_native_subagent_lifetime import (
+    cancel_native_subagent_lifetime,
+    native_subagent_lifetime_state,
+    observe_native_subagent_event,
+)
+from .codex_runtime_actor_support import (
+    CodexRuntimeTerminal,
+    redacted_notification_marker,
+)
 from .codex_runtime_event_state import CodexRuntimeProtocolError
 from .codex_runtime_events import CodexEventTranslator, is_runtime_invalidation
 
@@ -22,39 +30,9 @@ MAX_DEFERRED_NOTIFICATIONS = 64
 MAX_PUMP_CHECKPOINTS = 8
 
 
-@dataclass(frozen=True)
-class CodexRuntimeTerminal:
-    """Sanitized, durable first terminal cause for one runtime binding."""
-
-    category: str
-    message: str
-
-    def exception(self) -> Exception:
-        if self.category == "protocol":
-            return CodexRuntimeProtocolError(self.message)
-        return RuntimeError(self.message)
-
-
 TerminalCallback = Callable[
     ["CodexRuntimeActor", CodexRuntimeTerminal], Awaitable[None]
 ]
-
-
-def _redacted_marker(notification: wire.NotificationMessage) -> str:
-    """A bounded, content-free marker for an invalidating notification.
-
-    Only the MCP startup update's server name + state are surfaced (both are
-    config-derived, never model or user content); every other method degrades
-    to its name alone. Params are never logged wholesale.
-    """
-
-    if notification.method == "mcpServer/startupStatus/updated":
-        try:
-            params = notification.params.to_mapping()
-            return f"name={params.get('name')!r} status={params.get('status')!r}"
-        except Exception:
-            return "unparseable"
-    return "method-only"
 
 
 class CodexRuntimeActor:
@@ -68,6 +46,7 @@ class CodexRuntimeActor:
         on_terminal: TerminalCallback,
         max_buffered_events: int,
         benign_invalidation: Callable[[wire.NotificationMessage], bool] | None = None,
+        native_subagent_lifetime_seconds: float | None = None,
     ) -> None:
         if not 1 <= max_buffered_events <= MAX_BUFFERED_RUNTIME_EVENTS:
             raise ValueError("runtime event buffer is outside its bound")
@@ -77,6 +56,9 @@ class CodexRuntimeActor:
         self._translator = translator
         self._on_terminal = on_terminal
         self._benign_invalidation = benign_invalidation
+        self._native_lifetime = native_subagent_lifetime_state(
+            native_subagent_lifetime_seconds
+        )
         self._events: asyncio.Queue[RuntimeEvent] = asyncio.Queue(max_buffered_events)
         self._checkpoints: asyncio.Queue[asyncio.Future[None]] = asyncio.Queue(
             MAX_PUMP_CHECKPOINTS
@@ -230,22 +212,9 @@ class CodexRuntimeActor:
         async with self._lock:
             won = self._terminal is None
             if won:
-                self._terminal = terminal
-                self._terminal_event.set()
-                self._wake_checkpoints_locked()
+                self._set_terminal_locked(terminal)
         if won:
-            # Surface the FIRST terminal cause (content-free: the category and the
-            # static message are our own strings - "Codex notification pump
-            # failed", a protocol-rule string, or the redacted ancestry reason -
-            # never model or user content). Without this the pump-failure terminal
-            # was silent, which is why prior handovers could not tell a pump crash
-            # (e.g. an unhandled server request) from a benign end-of-turn.
-            logger.warning(
-                "codex runtime terminal: category=%s cause=%s",
-                terminal.category,
-                terminal.message,
-            )
-            await self._on_terminal(self, terminal)
+            await self._announce_terminal(terminal)
 
     def raise_if_terminal(self) -> None:
         if self._terminal is not None:
@@ -351,7 +320,7 @@ class CodexRuntimeActor:
                     logger.warning(
                         "codex runtime invalidation: method=%s marker=%s",
                         notification.method,
-                        _redacted_marker(notification),
+                        redacted_notification_marker(notification),
                     )
                     raise CodexRuntimeProtocolError(
                         "Codex quarantined runtime evidence was invalidated"
@@ -379,8 +348,37 @@ class CodexRuntimeActor:
             raise CodexRuntimeProtocolError(
                 "Codex normalized event queue overflowed"
             ) from None
+        observe_native_subagent_event(
+            self._native_lifetime, event, self._expire_native_lifetime
+        )
         if self._translator.root_started:
             self._root_event.set()
+
+    async def _expire_native_lifetime(self) -> None:
+        terminal = CodexRuntimeTerminal(
+            "limit", "Codex native subagent lifetime exceeded"
+        )
+        async with self._lock:
+            if self._terminal is not None or self._native_lifetime.active <= 0:
+                return
+            self._set_terminal_locked(terminal)
+        await self._announce_terminal(terminal)
+
+    def _set_terminal_locked(self, terminal: CodexRuntimeTerminal) -> None:
+        self._terminal = terminal
+        self._terminal_event.set()
+        self._wake_checkpoints_locked()
+        cancel_native_subagent_lifetime(self._native_lifetime)
+
+    async def _announce_terminal(self, terminal: CodexRuntimeTerminal) -> None:
+        # Surface the FIRST terminal cause (content-free: the category and static
+        # message are server-owned, never model or user content).
+        logger.warning(
+            "codex runtime terminal: category=%s cause=%s",
+            terminal.category,
+            terminal.message,
+        )
+        await self._on_terminal(self, terminal)
 
     def _wake_checkpoints_locked(self) -> None:
         while not self._checkpoints.empty():

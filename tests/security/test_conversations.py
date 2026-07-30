@@ -5,11 +5,11 @@ import asyncio
 import pytest
 from fastapi.testclient import TestClient
 
-from boltrig.fleet.chat import ChatService, ConversationForbidden
+from boltrig.fleet.chat import ChatService, ConversationClosed, ConversationForbidden
 from boltrig.kernel import Kernel
 from boltrig.kernel.app import create_app
 from boltrig.kernel.events import EventRelay
-from boltrig.models import Conversation
+from boltrig.models import Conversation, ConversationStatus
 from boltrig.store import InMemoryStore
 
 T = "acme"
@@ -78,13 +78,21 @@ def _hdr(subject: str, role: str = "engineer") -> dict:
             "x-boltrig-grants": "", "x-boltrig-departments": ""}
 
 
-def _http_client(owner: str = "alice", title: str = "first draft"):
+def _http_client(
+    owner: str = "alice",
+    title: str = "first draft",
+    status: ConversationStatus = ConversationStatus.ACTIVE,
+):
     """A TestClient over a kernel whose store holds one conversation."""
     store = InMemoryStore()
     asyncio.run(store.create_conversation(
-        Conversation(id="c1", tenant_id=T, user_id=owner, title=title)
+        Conversation(id="c1", tenant_id=T, user_id=owner, title=title, status=status)
     ))
-    chat = ChatService(store, EventRelay())
+    chat = ChatService(
+        store,
+        EventRelay(),
+        turn_executor=_stub_executor([{"type": "text_delta", "delta": "continued"}]),
+    )
     return TestClient(create_app(Kernel(store), chat_service=chat, platform={}))
 
 
@@ -136,3 +144,87 @@ def test_rename_rejects_overlong_title():
     c = _http_client()
     res = c.patch("/v1/me/conversations/c1", json={"title": "x" * 121}, headers=_hdr("alice"))
     assert res.status_code == 400
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-WRK-13")
+def test_closed_conversation_refuses_chat_until_owner_restores():
+    c = _http_client(status=ConversationStatus.CLOSED)
+    store = c.app.state.kernel.store
+
+    blocked = c.post(
+        "/v1/chat",
+        json={"message": "continue", "conversation_id": "c1"},
+        headers=_hdr("alice"),
+    )
+    assert blocked.status_code == 409
+    assert blocked.json() == {"status": "error", "reason": "conversation_closed"}
+    assert asyncio.run(store.list_messages(T, "c1")) == []
+
+    restored = c.post("/v1/me/conversations/c1/restore", json={}, headers=_hdr("alice"))
+    assert restored.status_code == 200
+    assert restored.json() == {
+        "status": "ok",
+        "id": "c1",
+        "conversation_status": "active",
+    }
+
+    continued = c.post(
+        "/v1/chat",
+        json={"message": "continue", "conversation_id": "c1"},
+        headers=_hdr("alice"),
+    )
+    assert continued.status_code == 200
+    assert [message.role.value for message in asyncio.run(store.list_messages(T, "c1"))] == [
+        "user",
+        "assistant",
+    ]
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-WRK-13")
+def test_restore_is_owner_scoped_idempotent_and_keys_only_audited():
+    c = _http_client(status=ConversationStatus.CLOSED)
+    store = c.app.state.kernel.store
+
+    denied = c.post("/v1/me/conversations/c1/restore", json={}, headers=_hdr("bob"))
+    assert denied.status_code == 403
+    assert asyncio.run(store.get_conversation(T, "c1")).status == ConversationStatus.CLOSED
+
+    first = c.post("/v1/me/conversations/c1/restore", json={}, headers=_hdr("alice"))
+    second = c.post("/v1/me/conversations/c1/restore", json={}, headers=_hdr("alice"))
+    assert first.status_code == second.status_code == 200
+    assert asyncio.run(store.get_conversation(T, "c1")).status == ConversationStatus.ACTIVE
+
+    restores = [
+        event for event in asyncio.run(store.audit_query(T, limit=200))
+        if event.verb == "data.conversation.restore"
+    ]
+    assert [event.detail for event in restores] == [
+        {"conversation_id": "c1", "changed": True},
+        {"conversation_id": "c1", "changed": False},
+    ]
+    assert "first draft" not in str([event.detail for event in restores])
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-WRK-13")
+async def test_service_guard_rejects_closed_conversation_before_any_write():
+    chat = _chat()
+    conv_id = await _start(chat, "alice")
+    conv = await chat._store.get_conversation(T, conv_id)
+    conv.status = ConversationStatus.CLOSED
+    await chat._store.update_conversation(conv)
+    before = list(await chat._store.list_messages(T, conv_id))
+
+    with pytest.raises(ConversationClosed):
+        async for _ in chat.handle_turn(
+            tenant_id=T,
+            user_id="alice",
+            role="engineer",
+            message="must not persist",
+            conversation_id=conv_id,
+        ):
+            pass
+
+    assert await chat._store.list_messages(T, conv_id) == before

@@ -22,12 +22,12 @@ from .manifest import (
     ModelsConfig,
     NetworkConfig,
     PrivacyConfig,
-    SpawnRule,
     apply_manifest,
     export_runtime_environment,
     load_manifest,
 )
 from .settings import Settings, load_settings
+from .spawn_rules import SpawnRule
 
 __all__ = [
     "Settings",

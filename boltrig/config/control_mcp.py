@@ -11,11 +11,33 @@ from __future__ import annotations
 
 import json
 from typing import Any
+from urllib.parse import urlsplit
+
+from boltrig.models import utcnow
 
 from .control_operations import ensure_adapter_id_available, record_inert_adapter
 from .control_safety import ControlConflict
 
 __all__ = ["bind_mcp_credential", "build_mcp_consumer", "register_mcp_consumer"]
+
+
+def _validated_mcp_url(value: Any) -> str:
+    raw = str(value or "").strip()
+    try:
+        parsed = urlsplit(raw)
+        hostname = parsed.hostname
+        parsed.port
+    except ValueError as exc:
+        raise ControlConflict("MCP server URL is invalid") from exc
+    if parsed.scheme.lower() not in {"http", "https"} or not hostname:
+        raise ControlConflict("MCP server URL must be absolute HTTP(S)")
+    if parsed.username is not None or parsed.password is not None:
+        raise ControlConflict("MCP server URL must not contain user credentials")
+    if parsed.query or parsed.fragment:
+        raise ControlConflict(
+            "MCP server URL must not contain query or fragment material"
+        )
+    return raw
 
 
 def build_mcp_consumer(params: dict[str, Any]) -> Any:
@@ -71,6 +93,7 @@ async def register_mcp_consumer(
     actor: str,
     credentials: Any = None,
 ) -> Any:
+    params = {**params, "url": _validated_mcp_url(params.get("url"))}
     await ensure_adapter_id_available(store, loader, tenant_id, params["id"])
     consumer = build_mcp_consumer(params)
     # The row's spec_ref is what boot rehydration rebuilds the consumer FROM,
@@ -80,15 +103,40 @@ async def register_mcp_consumer(
     # can never be rehydrated.
     spec_ref = None
     if params.get("url"):
-        spec_ref = json.dumps(
-            {"url": params["url"], "allow_internal": bool(params.get("allow_internal"))}
-        )
+        spec = {
+            "url": params["url"],
+            "allow_internal": bool(params.get("allow_internal")),
+            "credential_id": (
+                (
+                    params.get("credential_id")
+                    or f"{consumer.id}-mcp-token"
+                )
+                if params.get("credential_ref")
+                else None
+            ),
+        }
+        spec_ref = json.dumps(spec)
     await record_inert_adapter(
         store, tenant_id, consumer, created_by=actor, spec_ref=spec_ref
     )
+    lifecycle = await store.set_mcp_server_lifecycle(
+        tenant_id,
+        consumer.id,
+        expected_state=None,
+        expected_config_revision=None,
+        new_state="inactive",
+        changed_at=utcnow(),
+    )
+    if lifecycle is None:
+        raise ControlConflict("MCP lifecycle state already exists")
     if credentials is not None:
         await bind_mcp_credential(store, credentials, tenant_id, consumer.id, params)
     if loader.peek(tenant_id, consumer.id) is not None:
         raise ControlConflict("adapter id became live during registration")
     loader.register(tenant_id, consumer)
+    from .control_rehydrate import stamp_mcp_consumer
+
+    record = await store.get_adapter(tenant_id, consumer.id)
+    if record is not None:
+        stamp_mcp_consumer(consumer, record, lifecycle)
     return consumer

@@ -92,7 +92,7 @@ def test_harvest_reuse_signal_keeps_both_of_its_call_sites():
     """
     call_sites = (
         SRC / "api" / "bootstrap.py",          # HITL verdict -> endorsement / block
-        SRC / "kernel" / "access_routes.py",   # regenerate supersedes a reply
+        SRC / "kernel" / "account_profile_routes.py",  # regenerate supersedes a reply
     )
     for path in call_sites:
         assert path.exists(), f"{path} is gone; D4 protects its call site"

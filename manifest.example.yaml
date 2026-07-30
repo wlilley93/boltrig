@@ -215,26 +215,32 @@ ephemeral_runtimes:
     max_depth: 2
     cost_tier: standard
 
-# --- spawn rules: match a task to a runtime + skill set (S6) -----------------
+# --- spawn rules: all listed intent tags match; unique highest priority wins --
+# Equal-priority matches fail closed. Rules may add skills but never bypass the
+# caller-grant intersection, and max_depth can only tighten the capability cap.
 spawn_rules:
   - name: decompose-tickets
+    priority: 400
     match:
       intent_tags: ["planning", "decomposition"]
     capability: worker-cheap
     skills: ["analysis/ticket-decomposition"]
     max_depth: 2
   - name: write-back-to-jira
+    priority: 300
     match:
       intent_tags: ["integration", "jira"]
     capability: worker-cheap
     skills: ["integration/jira-writer"]
   - name: long-form-writing
+    priority: 200
     match:
       intent_tags: ["content", "writing"]
     capability: worker-cheap
     skills: ["writing/long-form"]
   # Route read-only analysis/research to the trusted Codex lane ([2026] VJS-CC-VJS 2).
   - name: read-only-analysis
+    priority: 100
     match:
       intent_tags: ["analysis", "research"]
     capability: codex-worker

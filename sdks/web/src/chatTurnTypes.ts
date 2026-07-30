@@ -2,7 +2,7 @@
 // shape that normalizeEvents folds the chat/run event stream into, and that the
 // card components render.
 
-import type { HITLKind } from "./types.js";
+import type { FamiliarGenotype, HITLKind, SpawnRuleReceipt } from "./types.js";
 
 export interface ToolEntry {
   key: string;
@@ -28,6 +28,8 @@ export interface QuestionEntry {
   questionId: string;
   prompt: string;
   choices: string[];
+  secure?: boolean;
+  securePurpose?: string;
 }
 
 export interface SubagentEntry {
@@ -36,13 +38,15 @@ export interface SubagentEntry {
   task: string;
   skills: string[];
   // Identity carried up from the subagent event when the backend provides it
-  // (brief sec 6.4). All optional; renderers fall back to the palette + a
-  // derived name/initials when the stream omits them.
+  // (brief sec 6.4). All optional; renderers stay neutral when the stream omits
+  // a canonical genotype instead of minting a second client-side identity.
   name?: string;
   role?: string;
   initials?: string;
   color?: string;
   stepCount?: number;
+  spawnRule?: SpawnRuleReceipt;
+  familiarGenotype?: FamiliarGenotype | null;
   /**
    * Settled by the paired `subagent_end` frame (G3), matched on `childRunId`.
    * `undefined` means still running - which is also what an un-upgraded kernel
@@ -89,4 +93,12 @@ export interface NormalizedTurn {
   timeline: TimelineEntry[];
   ended: boolean;
   cancelled: boolean;
+  degraded: boolean;
+  modelRouting?: {
+    selectedProfileId: string;
+    requestedProfileId?: string | null;
+    routingClass: string;
+    reason: string;
+    overridden: boolean;
+  };
 }

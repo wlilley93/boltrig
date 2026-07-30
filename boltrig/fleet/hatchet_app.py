@@ -40,7 +40,6 @@ module is in the fleet layer; the kernel and models import nothing from it.
 from __future__ import annotations
 
 import asyncio
-import logging
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -65,9 +64,8 @@ from .hatchet_ultracode import (
     register_hatchet_ultracode_tasks,
     register_local_ultracode_tasks,
 )
+from .hatchet_bootstrap import _default_bootstrap
 from .workers import HatchetExecutor
-
-log = logging.getLogger("boltrig.fleet.hatchet_app")
 
 __all__ = [
     "APPROVAL_EVENT_KEY",
@@ -193,15 +191,35 @@ async def run_workflow_body(
         workflow_id=payload["workflow_id"],
         workspace_id=ctx.workspace_id,
     )
-    return await run_workflow_definition(
-        kernel,
-        wf,
-        dict(payload.get("inputs") or {}),
-        ctx,
-        executor=executor,
-        run_id=payload.get("run_id"),
-        store=kernel.store,
-    )
+    run_id = payload.get("run_id")
+    try:
+        record = await run_workflow_definition(
+            kernel,
+            wf,
+            dict(payload.get("inputs") or {}),
+            ctx,
+            executor=executor,
+            run_id=run_id,
+            store=kernel.store,
+        )
+    except Exception:
+        # An infrastructure/task exception is not a terminal workflow verdict:
+        # Hatchet may retry it. Leave the logical occurrence in flight so the
+        # engine retry/checkpoint path can settle a real returned outcome later.
+        raise
+    if run_id and record.get("status") in {"completed", "failed"}:
+        succeeded = record["status"] == "completed"
+        finish_outcome = getattr(
+            kernel.store, "finish_workflow_schedule_outcome", None
+        )
+        if finish_outcome is not None:
+            await finish_outcome(
+                tenant,
+                run_id,
+                status="succeeded" if succeeded else "failed",
+                reason=None if succeeded else "workflow_execution_failed",
+            )
+    return record
 
 
 async def work_item_task_body(pump: Any, payload: dict[str, Any]) -> dict[str, Any]:
@@ -222,11 +240,20 @@ async def work_item_task_body(pump: Any, payload: dict[str, Any]) -> dict[str, A
     return {"handled": True, "item_id": payload["item_id"]}
 
 
-def register_boltrig_tasks(executor: Any, kernel: Any, pump: Any | None = None) -> None:
+def register_boltrig_tasks(
+    executor: Any,
+    kernel: Any,
+    pump: Any | None = None,
+    *,
+    spawner: Any | None = None,
+) -> None:
     """Register the task bodies on an executor with a ``register_task`` seam
     (the LocalDurableExecutor): the offline carriage of the same bodies the
     Hatchet worker serves (US-EXE-05). The pump registers its own work-item body
-    at construction; it is only added here when a pump is handed in."""
+    at construction; it is only added here when a pump is handed in. A serving
+    composition passes its one process-owned spawner through to Ultracode;
+    omission stays fail-closed rather than constructing a configless side path.
+    """
     register = getattr(executor, "register_task", None)
     if register is None:
         return
@@ -241,7 +268,7 @@ def register_boltrig_tasks(executor: Any, kernel: Any, pump: Any | None = None) 
     register(TASK_INVOKE, _invoke)
     register(TASK_WORKFLOW_RUN, _workflow_run)
     register_local_memory_projection_task(executor, kernel)
-    register_local_ultracode_tasks(executor, kernel)
+    register_local_ultracode_tasks(executor, kernel, spawner=spawner)
     if pump is not None:
 
         async def _work_item(payload: dict[str, Any]) -> dict[str, Any]:
@@ -250,47 +277,16 @@ def register_boltrig_tasks(executor: Any, kernel: Any, pump: Any | None = None) 
         register(TASK_WORK_ITEM, _work_item)
 
 
-# --- the worker-process resources ------------------------------------------------
-async def _default_bootstrap() -> dict[str, Any]:
-    """Build the worker-owned kernel + org pump, mirroring api/worker.py, ON THE
-    WORKER'S RUNNING LOOP (loop-bound resources like an asyncpg pool must attach
-    to the loop the tasks run on). The api import is function-local process
-    wiring, not a module-scope fleet -> api dependency. HITL answers recorded
-    through this kernel requeue parked work items (NFR-REL-03)."""
-    from boltrig.api.bootstrap import _find_manifest, build_kernel_async, wire_hitl_resume
-    from boltrig.api.codex_execution import build_codex_execution_stack
-    from boltrig.config import load_manifest, load_settings
-
-    from .pump import build_org
-    from .spawn import build_spawner
-
-    kernel = await build_kernel_async()
-    manifest = None
-    manifest_path = _find_manifest()
-    if manifest_path:
-        try:
-            manifest = load_manifest(manifest_path)
-        except Exception as exc:  # a broken manifest degrades to the default org (P9)
-            log.warning("manifest load failed (%s); using the default org", exc)
-    pump = build_org(
-        kernel, build_spawner(kernel), manifest,
-        # Codex shadow root admission (SEC-172): None when BOLTRIG_CODEX_LEDGER off.
-        codex_execution=build_codex_execution_stack(load_settings(), kernel.store),
-    )
-    wire_hitl_resume(kernel, pump=pump)
-    return {"kernel": kernel, "pump": pump}
-
-
 def build_hatchet_app(
     bootstrap: Any | None = None, hatchet: Any | None = None
 ) -> tuple[Any, dict[str, Any]]:
     """Build the Hatchet client + the three registered Boltrig tasks.
 
-    ``bootstrap`` is an async callable returning ``{"kernel": ..., "pump": ...}``;
-    it runs lazily inside the first task body (on the worker's loop), defaulting
-    to :func:`_default_bootstrap`. ``hatchet`` reuses an existing client (the
-    executor seam) instead of constructing one from HATCHET_CLIENT_* env.
-    Returns ``(hatchet, {task_name: workflow})`` keyed by registered task name.
+    ``bootstrap`` is an async callable returning ``{"kernel": ..., "pump": ...,
+    "spawner": ...}``; it runs lazily on the worker loop. A custom bootstrap that
+    omits ``spawner`` can serve non-agent tasks, but Ultracode fails closed.
+    ``hatchet`` may reuse an existing client. The returned workflow map is keyed
+    by registered task name.
     """
     from hatchet_sdk import Hatchet, UserEventCondition
 

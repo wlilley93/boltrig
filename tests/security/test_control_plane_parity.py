@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -52,10 +53,16 @@ from boltrig.models import (
     AdapterFailure,
     AdapterRecord,
     AgentCapability,
+    AiKeySecretProposal,
+    Channel,
+    ChannelBinding,
+    ChannelOutboxMessage,
+    EvalCase,
     GrantMissing,
     GrantSet,
     IdempotencyConflict,
     InvocationContext,
+    ModelEndpoint,
     PendingHuman,
     Noun,
     SchemaValidationError,
@@ -65,13 +72,21 @@ from boltrig.models import (
     User,
     Verb,
     VerbBinding,
+    WorkItem,
+    WorkStatus,
     Workspace,
     WorkflowDefinition,
+    WorkflowSchedule,
+    WorkflowScheduleOccurrence,
     WorkflowSource,
+    utcnow,
 )
+from boltrig.models.integrations import IntegrationConnection
 from boltrig.skills.loader import load_skills_dir
 from boltrig.store import InMemoryStore
 from boltrig.workflows import WorkflowLibrary
+from boltrig.workflows.scheduler import workflow_schedule_digest
+from boltrig.workflows.snapshot import workflow_snapshot_digest
 
 T = "acme"
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -92,6 +107,35 @@ _OPENAPI_SPEC = {
     },
 }
 
+_PERMANENT_HIERARCHY = {
+    "chief": {
+        "name": "chief-of-staff",
+        "routing_id": "cos",
+        "purpose": "Route work",
+        "brief": "",
+        "runtime": "codex",
+        "model_endpoint": None,
+        "supported_skills": ["*"],
+        "max_depth": 3,
+        "cost_tier": "standard",
+        "budget": None,
+    },
+    "departments": [
+        {
+            "name": "research-head",
+            "routing_id": "research",
+            "purpose": "Own research",
+            "brief": "",
+            "runtime": "codex",
+            "model_endpoint": None,
+            "supported_skills": ["research"],
+            "max_depth": 3,
+            "cost_tier": "standard",
+            "budget": None,
+        }
+    ],
+}
+
 # Every control verb with schema-valid params (used by the grant-denial loop).
 _VERB_PARAMS: dict[str, dict] = {
     "control.workflow.upsert": {"id": "wf-control", "definition": {"steps": []}},
@@ -100,36 +144,66 @@ _VERB_PARAMS: dict[str, dict] = {
         "cron": "0 9 * * 1-5",
         "timezone": "UTC",
     },
+    "control.workflow.schedule_occurrence.retry": {
+        "workflow_id": "wf-control",
+        "scheduled_for": "2026-07-29T09:00:00+00:00",
+        "run_id": "wfs_control",
+    },
+    "control.workflow.unschedule": {"workflow_id": "wf-control"},
+    "control.workflow.archive": {"workflow_id": "wf-control"},
+    "control.workflow.restore": {"workflow_id": "wf-control"},
     "control.workflow.trigger": {"workflow_id": "wf-control", "inputs": {}},
     "control.workflow.execute": {"workflow_id": "wf-control", "inputs": {}},
     "control.capability.upsert": {"name": "worker", "runtime": "script"},
+    "control.capability.retire": {"name": "lifecycle-worker"},
+    "control.capability.restore": {"name": "lifecycle-worker"},
     "control.model_endpoint.upsert": {
         "id": "local",
         "kind": "local",
         "model": "test",
     },
+    "control.model_endpoint.retire": {"id": "lifecycle-endpoint"},
+    "control.model_endpoint.restore": {"id": "lifecycle-endpoint"},
     "control.skill.upsert": {
         "id": "authoring/new-skill",
         "prompt_fragment": "do x",
         "tool_grants": ["ticket.read"],
     },
+    "control.skill.archive": {"id": "lifecycle-skill"},
+    "control.skill.restore": {"id": "lifecycle-skill"},
     "control.noun.define": {"id": "invoice", "description": "an invoice"},
+    "control.noun.archive": {"id": "lifecycle-noun"},
+    "control.noun.restore": {"id": "lifecycle-noun"},
     "control.verb.define": {"id": "invoice.read", "noun_id": "invoice"},
+    "control.verb.archive": {"id": "lifecycle-verb"},
+    "control.verb.restore": {"id": "lifecycle-verb"},
     "control.binding.set": {
-        "verb_id": "invoice.read",
+        "verb_id": "lifecycle-verb",
         "target_type": "adapter",
         "target_ref": "memory-tickets",
     },
     "control.adapter.generate": {"adapter_id": "generated", "spec": _OPENAPI_SPEC},
     "control.adapter.activate": {"adapter_id": "generated"},
     "control.mcp_server.register": {"id": "ext-mcp", "url": "https://mcp.example.com"},
-    "control.config.upsert": {"section": "hierarchy", "value": {"tiers": ["cos"]}},
-    "control.config.rollback": {"section": "hierarchy", "revision_id": 1},
+    "control.config.upsert": {"section": "privacy", "value": {"pii_redaction": True}},
+    "control.config.rollback": {"section": "privacy", "revision_id": 1},
+    "control.permanent_fleet.apply": {"hierarchy": _PERMANENT_HIERARCHY},
     "control.user.update": {"user_id": "target", "role": "member"},
     "control.user.deactivate": {"user_id": "target"},
     "control.invitation.create": {"email": "new@example.com", "role": "member"},
     "control.invitation.revoke": {"invite_id": "invite-1"},
+    "control.integration.connect": {
+        "integration_id": "tickets",
+        "label": "Support",
+        "secret": {"token": "not-projected"},
+    },
+    "control.integration.revoke": {"connection_id": "connection-1"},
     "control.notification.route": {"event_type": "approval", "channel": "email"},
+    "control.notification.test": {"id": "notification-1"},
+    "control.work.create": {"intent": "Governed work"},
+    "control.work.assign": {"item_id": "work-1", "owner_member": "engineering"},
+    "control.work.status": {"item_id": "work-1", "status": "blocked"},
+    "control.work.reparent": {"item_id": "work-1", "parent_id": None},
     "control.budget.upsert": {
         "scope_type": "tenant",
         "scope_id": T,
@@ -147,7 +221,8 @@ _VERB_PARAMS: dict[str, dict] = {
         "scope_id": T,
         "provider": "openai",
         "model": "test",
-        "api_key": "sk-test",
+        "proposal_id": "akp_" + "a" * 32,
+        "secret_digest": "b" * 64,
     },
     "control.ai_key.delete": {"level": "org", "scope_id": T},
     "control.org.update": {"name": "Acme"},
@@ -169,12 +244,23 @@ _VERB_PARAMS: dict[str, dict] = {
         "subject": "member",
     },
     "control.channel.unbind": {"channel_id": "channel-1", "binding_id": "binding-1"},
+    "control.channel.delivery.retry": {
+        "channel_id": "delivery-channel",
+        "message_id": "delivery-message",
+        "expected_updated_at": "2026-07-30T00:00:00+00:00",
+    },
+    "control.eval_case.archive": {"id": "lifecycle-eval"},
+    "control.eval_case.restore": {"id": "lifecycle-eval"},
     "control.eval_case.upsert": {"target_kind": "skill", "target_ref": "risky"},
 }
 
 _LOW_VERBS = {
     "control.adapter.generate",
     "control.mcp_server.register",
+    "control.integration.connect",
+    "control.notification.test",
+    "control.work.create",
+    "control.work.assign",
 }
 
 _HIGH_VERBS = {verb: params for verb, params in _VERB_PARAMS.items() if verb not in _LOW_VERBS}
@@ -201,7 +287,7 @@ def _ctx(grants: list[str], *, actor: str = "u", run_id: str = "run-35") -> Invo
         actor=actor,
         actor_tier="human",
         run_id=run_id,
-        extra={"principal_role": "superadmin"},
+        extra={"principal_role": "superadmin", "principal_scope": {"all": True}},
     )
 
 
@@ -299,19 +385,19 @@ async def test_control_verbs_write_the_same_state_as_the_direct_routes():
         assert consumer is not None and consumer.activated is False
 
     # config section - same revision recording as the PUT route, one AdminConfig
-    body = {"section": "hierarchy", "value": {"tiers": ["cos", "head"]}}
+    body = {"section": "privacy", "value": {"pii_redaction": True}}
     out = await _approved(kv, "control.config.upsert", body)
     r = await _approved_route(
         client,
         kr,
         "PUT",
-        "/v1/admin/config/hierarchy",
+        "/v1/admin/config/privacy",
         {"value": body["value"]},
     )
     assert r.status_code == 200
-    assert admin_v.section("hierarchy") == admin_r.section("hierarchy") == body["value"]
-    revs_v = await admin_v.history("hierarchy")
-    revs_r = await admin_r.history("hierarchy")
+    assert admin_v.section("privacy") == admin_r.section("privacy") == body["value"]
+    revs_v = await admin_v.history("privacy")
+    revs_r = await admin_r.history("privacy")
     assert [rv.payload for rv in revs_v] == [rr.payload for rr in revs_r]
     assert revs_v[0].id == out["revision"] and revs_v[0].actor == "u"
 
@@ -340,13 +426,95 @@ async def test_every_high_control_verb_is_hitl_held_and_writes_nothing_while_pen
     # verb reaches the pending-human hold rather than short-circuiting on a
     # missing resource. Neither seeded resource is one of the writes the
     # fail-closed assertions below check for.
-    await k.store.upsert_workflow(
-        WorkflowDefinition(
-            id="wf-control",
+    seed_workflow = WorkflowDefinition(
+        id="wf-control",
+        tenant_id=T,
+        version="1",
+        source=WorkflowSource.PRECREATED,
+        definition={"steps": []},
+    )
+    await k.store.upsert_workflow(seed_workflow)
+    await k.store.upsert_user(User(id="u", tenant_id=T, role="superadmin", scope={"all": True}))
+    seed_schedule = await k.store.upsert_workflow_schedule(
+        WorkflowSchedule(
             tenant_id=T,
-            version="1",
-            source=WorkflowSource.PRECREATED,
-            definition={"steps": []},
+            workflow_id=seed_workflow.id,
+            workspace_id=None,
+            cron="0 9 * * 1-5",
+            timezone="UTC",
+            authority_subject="u",
+            grant_ceiling=GrantSet.of(["*"]),
+        )
+    )
+    seed_occurrence, claimed = await k.store.claim_workflow_schedule_occurrence(
+        WorkflowScheduleOccurrence(
+            tenant_id=T,
+            workflow_id=seed_workflow.id,
+            scheduled_for=datetime.fromisoformat("2026-07-29T09:00:00+00:00"),
+            run_id="wfs_control",
+            status="claimed",
+            lease_owner="control-test",
+            workflow_sha256=workflow_snapshot_digest(seed_workflow),
+            schedule_sha256=workflow_schedule_digest(seed_schedule),
+        ),
+        lease_seconds=60,
+    )
+    assert claimed
+    assert await k.store.finish_workflow_schedule_occurrence(
+        T,
+        seed_workflow.id,
+        seed_occurrence.scheduled_for,
+        lease_owner=seed_occurrence.lease_owner,
+        status="failed",
+        engine_run_id=None,
+        reason="schedule_dispatch_failed",
+    )
+    await k.store.upsert_capability(
+        AgentCapability(
+            name="lifecycle-worker",
+            tenant_id=T,
+            runtime="script",
+            supported_skills=["*"],
+            max_depth=1,
+            is_ephemeral=True,
+            cost_tier="cheap",
+        )
+    )
+    await k.store.upsert_model_endpoint(
+        ModelEndpoint(
+            id="lifecycle-endpoint",
+            tenant_id=T,
+            kind="local",
+            model="test",
+        )
+    )
+    await k.store.upsert_eval_case(
+        EvalCase(
+            id="lifecycle-eval",
+            tenant_id=T,
+            target_kind="skill",
+            target_ref="review",
+            input={},
+            assertions={},
+        )
+    )
+    await k.store.upsert_skill(
+        Skill(
+            id="lifecycle-skill",
+            tenant_id=T,
+            version="1.0.0",
+            prompt_fragment="lifecycle fixture",
+        )
+    )
+    for noun_id in ("invoice", "lifecycle-noun"):
+        await k.store.upsert_noun(Noun(id=noun_id, tenant_id=T, description="lifecycle fixture"))
+    await k.store.upsert_verb(
+        Verb(
+            id="lifecycle-verb",
+            tenant_id=T,
+            noun_id="lifecycle-noun",
+            input_schema={},
+            output_schema={},
         )
     )
     await k.invoke(
@@ -363,12 +531,108 @@ async def test_every_high_control_verb_is_hitl_held_and_writes_nothing_while_pen
             slug="seed",
         )
     )
-    for verb, params in _HIGH_VERBS.items():
+    await k.store.upsert_integration_connection(
+        IntegrationConnection(
+            id="connection-1",
+            tenant_id=T,
+            integration_id="integration-1",
+            adapter_id="memory-tickets",
+            label="Seed connection",
+        )
+    )
+    await k.store.create_work_item(
+        WorkItem(
+            id="work-1",
+            tenant_id=T,
+            source="internal",
+            intent="Governed work",
+            confidence=1.0,
+            convergent=False,
+            status=WorkStatus.PENDING,
+        )
+    )
+    await k.store.upsert_channel(
+        Channel(
+            id="delivery-channel",
+            tenant_id=T,
+            platform="slack",
+            name="Delivery recovery fixture",
+            transport="socket",
+            credential_ref="opaque-delivery-credential",
+        )
+    )
+    await k.store.upsert_channel(
+        Channel(
+            id="channel-1",
+            tenant_id=T,
+            platform="webhook",
+            name="Control fixture",
+            transport="webhook",
+        )
+    )
+    await k.store.upsert_channel_binding(
+        ChannelBinding(
+            id="binding-1",
+            tenant_id=T,
+            channel_id="channel-1",
+            platform="webhook",
+            external_user_id="seed-sender",
+            subject="seed-member",
+            role="member",
+        )
+    )
+    await k.store.enqueue_channel_outbox(
+        ChannelOutboxMessage(
+            id="delivery-message",
+            tenant_id=T,
+            channel_id="delivery-channel",
+            payload={"text": "private fixture"},
+        )
+    )
+    await k.store.claim_channel_outbox(T, ["delivery-channel"], "gateway-fixture", 60, 1)
+    await k.store.fail_channel_outbox(
+        T,
+        "delivery-message",
+        "gateway-fixture",
+        "private provider error",
+        max_attempts=1,
+        backoff_seconds=1,
+    )
+    delivery = await k.store.get_channel_delivery_receipt(T, "delivery-channel", "delivery-message")
+    assert delivery is not None and delivery.updated_at is not None
+    high_verbs = copy.deepcopy(_HIGH_VERBS)
+    ai_key_params = high_verbs["control.ai_key.set"]
+    proposal_now = utcnow()
+    await k.store.create_ai_key_secret_proposal(
+        AiKeySecretProposal(
+            id=ai_key_params["proposal_id"],
+            tenant_id=T,
+            requested_by="u",
+            requested_on_behalf_of=None,
+            workspace_id=None,
+            level=ai_key_params["level"],
+            scope_id=ai_key_params["scope_id"],
+            provider=ai_key_params["provider"],
+            model=ai_key_params["model"],
+            base_url=None,
+            secret_ref=f"staged_ai_key:{ai_key_params['proposal_id']}",
+            secret_digest=ai_key_params["secret_digest"],
+            created_at=proposal_now,
+            expires_at=proposal_now + timedelta(minutes=10),
+            updated_at=proposal_now,
+        ),
+        "sk-control-parity",
+    )
+    high_verbs["control.channel.delivery.retry"]["expected_updated_at"] = (
+        delivery.updated_at.isoformat()
+    )
+    for verb, params in high_verbs.items():
         with pytest.raises(PendingHuman):
             await k.invoke("control", verb, params, _ctx(["*"]))
     # held means held: none of the writes happened (fail-closed while pending)
     assert await k.store.get_skill(T, "authoring/new-skill") is None
-    assert await k.store.get_noun(T, "invoice") is None
+    invoice = await k.store.get_noun(T, "invoice")
+    assert invoice is not None and invoice.description == "lifecycle fixture"
     assert await k.store.get_verb(T, "invoice.read") is None
     assert await k.store.get_binding(T, "invoice.read") is None
     assert admin.section("hierarchy") is None
@@ -410,6 +674,16 @@ async def test_expanded_control_plane_operations_are_functional_and_secret_safe(
     assert scheduled["schedule"]["cron"] == "0 9 * * 1-5"
     workflow = next(w for w in await k.store.list_workflows(T) if w.id == "wf-control")
     assert workflow.definition["schedule"] == scheduled["schedule"]
+    unscheduled = await _approved(k, "control.workflow.unschedule", {"workflow_id": "wf-control"})
+    assert unscheduled["schedule"] is None
+    workflow = next(w for w in await k.store.list_workflows(T) if w.id == "wf-control")
+    assert "schedule" not in workflow.definition
+    archived = await _approved(k, "control.workflow.archive", {"workflow_id": "wf-control"})
+    assert archived["workflow_status"] == "archived"
+    with pytest.raises(PermissionError, match="workflow_archived"):
+        await WorkflowLibrary(k.store).trigger(T, "wf-control", {})
+    restored = await _approved(k, "control.workflow.restore", {"workflow_id": "wf-control"})
+    assert restored["workflow_status"] == "active"
     triggered = await _approved(
         k, "control.workflow.trigger", {"workflow_id": "wf-control", "inputs": {}}
     )
@@ -456,10 +730,30 @@ async def test_expanded_control_plane_operations_are_functional_and_secret_safe(
         if event.get("type") == "tool_result"
     )
 
+    await k.store.upsert_channel(
+        Channel(
+            id="ch-notify",
+            tenant_id=T,
+            platform="slack",
+            name="Notifications",
+            transport="socket",
+        )
+    )
+    await k.store.upsert_channel_binding(
+        ChannelBinding(
+            id="bind-notify",
+            tenant_id=T,
+            channel_id="ch-notify",
+            platform="slack",
+            external_user_id="U-u",
+            subject="u",
+            role="member",
+        )
+    )
     routed = await _approved(
         k,
         "control.notification.route",
-        {"event_type": "approval", "channel": "email", "target": "new@example.com"},
+        {"event_type": "approval", "channel": "ch-notify", "target": "U-u"},
     )
     assert any(pref.id == routed["id"] for pref in await k.store.list_notification_prefs(T))
 

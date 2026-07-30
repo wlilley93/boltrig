@@ -122,7 +122,6 @@ async function saveWorkflow(
     const res = await api.upsertWorkflow({
       id,
       version: meta.version.trim() || "1.0.0",
-      source: meta.source,
       definition: { steps },
       intent_tags: csvToList(meta.tags),
     });

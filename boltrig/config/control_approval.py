@@ -5,17 +5,62 @@ from __future__ import annotations
 from typing import Any
 
 from boltrig.models import AdapterFailure, InvocationContext
-from boltrig.workflows.snapshot import workflow_snapshot_digest
 
-from .control_rehydrate import consumer_spec, rehydratable
-
-_WORKFLOW_ACTIONS = frozenset(
-    {
-        "control.workflow.schedule",
-        "control.workflow.trigger",
-        "control.workflow.execute",
-    }
+from .control_approval_adapters import (
+    MCP_LIFECYCLE_ACTIONS,
+    _store_adapter_view,
+    adapter_context,
+    integration_context,
+    mcp_server_context,
 )
+from .control_approval_registry import (
+    AUTHORED_DEFINITION_ACTIONS,
+    binding_upsert_context,
+    capability_upsert_context,
+    noun_context,
+    noun_upsert_context,
+    skill_context,
+    skill_upsert_context,
+    verb_context,
+    verb_upsert_context,
+)
+from .control_approval_workflows import (
+    CAPABILITY_ACTIONS,
+    EVAL_CASE_ACTIONS,
+    MODEL_ENDPOINT_ACTIONS,
+    WORKFLOW_ACTIONS,
+    WORKFLOW_TRIGGER_BINDING_ACTIONS,
+    budget_context,
+    capability_context,
+    eval_case_context,
+    eval_case_upsert_context,
+    model_endpoint_context,
+    model_endpoint_upsert_context,
+    workflow_context,
+    workflow_trigger_binding_context,
+)
+
+__all__ = [
+    "_store_adapter_view",
+    "control_approval_context",
+    "require_unchanged_approval_context",
+]
+
+
+async def _require_active_human_author(
+    store: Any, context: InvocationContext, message: str
+) -> None:
+    from boltrig.identity.rbac import can_author
+
+    role = str((context.extra or {}).get("principal_role") or "")
+    user = await store.get_user(context.tenant_id, context.actor)
+    if (
+        context.actor_tier != "human"
+        or not can_author(role)
+        or user is None
+        or user.status != "active"
+    ):
+        raise PermissionError(message)
 
 
 async def _preauthorize_high_consequence(
@@ -49,10 +94,36 @@ async def _preauthorize_high_consequence(
         from .control_compat import _managed_workspace
 
         await _managed_workspace(
-            store, context.tenant_id, str(params.get("workspace_id") or ""), context
+            store,
+            context.tenant_id,
+            str(params.get("workspace_id") or ""),
+            context,
         )
         return
-    if verb.startswith("control.channel.") or verb == "control.eval_case.upsert":
+    if verb in WORKFLOW_TRIGGER_BINDING_ACTIONS:
+        await _require_active_human_author(
+            store,
+            context,
+            "workflow trigger delegation requires an active human author",
+        )
+        return
+    if verb == "control.workflow.schedule_occurrence.retry":
+        await _require_active_human_author(
+            store,
+            context,
+            "workflow occurrence retry requires an active human author",
+        )
+        return
+    if verb.startswith(
+        (
+            "control.channel.",
+            "control.eval_case.",
+            "control.integration.",
+            "control.mcp_server.",
+            "control.permanent_fleet.",
+            "control.work.",
+        )
+    ):
         from boltrig.identity.rbac import can_author
 
         role = str((context.extra or {}).get("principal_role") or "")
@@ -66,153 +137,133 @@ async def _preauthorize_high_consequence(
         _scope(context.tenant_id, params)
 
 
-async def _budget_context(
-    store: Any, params: dict[str, Any], context: InvocationContext
-) -> dict[str, Any]:
-    budget = await store.get_budget(context.tenant_id, str(params["scope_id"]))
-    if budget is None:
-        return {"budget": None}
-    return {
-        "budget": {
-            "id": budget.id,
-            "scope_type": budget.scope_type,
-            "window": budget.window,
-            "hard_stop": budget.hard_stop,
-            "token_limit": budget.token_limit,
-            "cost_limit_micros": budget.cost_limit_micros,
-            "spent_tokens": budget.spent_tokens,
-            "spent_micros": budget.spent_micros,
-        }
+async def _definition_context(
+    store: Any,
+    verb: str,
+    params: dict[str, Any],
+    context: InvocationContext,
+) -> dict[str, Any] | None:
+    if verb in AUTHORED_DEFINITION_ACTIONS:
+        if verb.startswith("control.skill."):
+            return await skill_context(store, params, context)
+        if verb.startswith("control.noun."):
+            return await noun_context(store, params, context)
+        return await verb_context(store, params, context)
+    handlers = {
+        "control.skill.upsert": skill_upsert_context,
+        "control.noun.define": noun_upsert_context,
+        "control.verb.define": verb_upsert_context,
+        "control.binding.set": binding_upsert_context,
     }
+    handler = handlers.get(verb)
+    return None if handler is None else await handler(store, params, context)
 
 
-async def _workflow_context(
+async def _ai_key_context(
     store: Any, params: dict[str, Any], context: InvocationContext
 ) -> dict[str, Any]:
-    workflow_id = params["workflow_id"]
-    workflow = next(
-        (
-            item
-            for item in await store.list_workflows(context.tenant_id)
-            if item.id == workflow_id
-            and (item.workspace_id is None or item.workspace_id == context.workspace_id)
-        ),
-        None,
+    proposal = await store.get_ai_key_secret_proposal(
+        context.tenant_id, str(params.get("proposal_id") or "")
     )
-    if workflow is None:
-        raise AdapterFailure(
-            "workflow not found", status_code=404, reason="control_resource_not_found"
+    if (
+        proposal is None
+        or proposal.requested_by != context.actor
+        or proposal.requested_on_behalf_of != context.on_behalf_of
+        or proposal.workspace_id != context.workspace_id
+        or proposal.status != "pending"
+        or proposal.level != str(params.get("level") or "")
+        or proposal.scope_id != str(params.get("scope_id") or "")
+        or proposal.provider != str(params.get("provider") or "")
+        or proposal.model != str(params.get("model") or "")
+        or proposal.base_url != (str(params.get("base_url") or "").strip() or None)
+        or proposal.secret_digest != str(params.get("secret_digest") or "")
+    ):
+        raise PermissionError(
+            "AI-key proposal is unavailable or does not match this caller"
         )
-    return {"workflow_sha256": workflow_snapshot_digest(workflow)}
-
-
-_LIFECYCLE_ACTIONS = frozenset({"control.adapter.deactivate", "control.adapter.delete"})
-
-
-async def _store_adapter_view(
-    store: Any, record: Any, context: InvocationContext
-) -> dict[str, Any]:
-    """Approval fingerprint for an adapter row the loader has no instance of.
-
-    The lifecycle verbs use it so a non-rehydrated row stays governable, and
-    activation uses it for a rehydratable row (execution rebuilds the instance
-    on demand; discovery populating the verb set afterwards is the EXPECTED
-    post-approval effect, not drift). The verb list comes from the store's
-    owned binding/verb rows (empty for an inert row), sorted for a stable
-    fingerprint.
-    """
-    verbs = []
-    for verb in await store.list_verbs(context.tenant_id):
-        binding = await store.get_binding(context.tenant_id, verb.id)
-        if binding is not None and binding.target_ref == record.id:
-            verbs.append(
-                {
-                    "id": verb.id,
-                    "input": verb.input_schema,
-                    "output": verb.output_schema,
-                    "consequence": verb.consequence.value,
-                }
-            )
-    verbs.sort(key=lambda item: item["id"])
-    view = {
-        "adapter": {
-            "id": record.id,
-            "version": record.version,
-            "runtime": record.runtime,
-            "source": record.source,
-            "activated": bool(record.activated),
-            "verbs": verbs,
-        }
-    }
-    # SEC-61's waiver is justified by THIS approval: control_specs.py says the
-    # internal-egress flag "is always human-approved before any call" because
-    # registration is inert until the SEC-22 review gate. The approver was never
-    # shown it. `control.adapter.activate` takes only {adapter_id}, so the
-    # approval payload was an id, and this view emitted id/version/runtime/
-    # source/activated/verbs - no url, no allow_internal. A human was asked to
-    # approve "adapter mcp-x" and had no way to learn it would be permitted to
-    # reach 169.254.169.254.
-    #
-    # Adding them here does two things at once: the reviewer sees the waiver, and
-    # because this dict IS the approval fingerprint, a row whose url or flag
-    # changes between the pend and the apply no longer matches an approval given
-    # for the old value.
-    spec = consumer_spec(getattr(record, "spec_ref", None))
-    if spec.get("url") is not None or spec.get("allow_internal"):
-        view["adapter"]["target_url"] = spec.get("url")
-        view["adapter"]["allow_internal_egress"] = bool(spec.get("allow_internal"))
-    return view
-
-
-async def _adapter_context(
-    store: Any, loader: Any, verb: str, params: dict[str, Any], context: InvocationContext
-) -> dict[str, Any]:
-    if loader is None:
-        raise AdapterFailure(
-            "adapter loader not wired",
-            status_code=503,
-            reason="control_dependency_unavailable",
-        )
-    adapter = await loader.get(context.tenant_id, params["adapter_id"])
-    if adapter is None:
-        record = await store.get_adapter(context.tenant_id, params["adapter_id"])
-        if record is None:
-            raise AdapterFailure(
-                "adapter not found", status_code=404, reason="control_resource_not_found"
-            )
-        if verb in _LIFECYCLE_ACTIONS:
-            return await _store_adapter_view(store, record, context)
-        # activate: proceed to a pend only when execution can honestly rebuild
-        # the instance (control_rehydrate); an unreconstructible row fails
-        # loudly NOW, before any approval work is created.
-        if rehydratable(record):
-            return await _store_adapter_view(store, record, context)
-        raise AdapterFailure(
-            "adapter cannot be reconstructed from its store row; "
-            "delete and re-register it",
-            status_code=409,
-            reason="control_adapter_unrehydratable",
-        )
-    record = await store.get_adapter(context.tenant_id, params["adapter_id"])
-    verbs = [
-        {
-            "id": item.verb_id,
-            "input": item.input_schema,
-            "output": item.output_schema,
-            "consequence": item.consequence,
-        }
-        for item in adapter.describe()
-    ]
+    current = await store.get_ai_config(
+        context.tenant_id, proposal.level, proposal.scope_id
+    )
     return {
-        "adapter": {
-            "id": adapter.id,
-            "version": adapter.version,
-            "runtime": adapter.runtime,
-            "source": getattr(adapter, "source", None),
-            "activated": bool(record and record.activated),
-            "verbs": verbs,
-        }
+        "proposal": {
+            "id": proposal.id,
+            "status": proposal.status,
+            "expires_at": proposal.expires_at.isoformat(),
+            "secret_digest": proposal.secret_digest,
+        },
+        "current": (
+            None
+            if current is None
+            else {
+                "level": current.level,
+                "scope_id": current.scope_id,
+                "provider": current.provider,
+                "model": current.model,
+                "base_url": current.base_url,
+                "credential_ref": current.credential_ref,
+                "updated_at": current.updated_at.isoformat(),
+            }
+        ),
     }
+
+
+async def _resource_context(
+    store: Any,
+    loader: Any,
+    verb: str,
+    params: dict[str, Any],
+    context: InvocationContext,
+) -> dict[str, Any] | None:
+    if verb == "control.ai_key.set":
+        return await _ai_key_context(store, params, context)
+    if verb in WORKFLOW_ACTIONS:
+        return await workflow_context(store, verb, params, context)
+    if verb in WORKFLOW_TRIGGER_BINDING_ACTIONS:
+        return await workflow_trigger_binding_context(store, verb, params, context)
+    if verb in CAPABILITY_ACTIONS:
+        return await capability_context(store, params, context)
+    if verb == "control.capability.upsert":
+        return await capability_upsert_context(store, params, context)
+    if verb == "control.permanent_fleet.apply":
+        from .permanent_fleet import latest_permanent_fleet_revision
+
+        revision = await latest_permanent_fleet_revision(
+            store, context.tenant_id
+        )
+        return {
+            "generation": revision.version if revision else None,
+            "revision": revision.id if revision else None,
+        }
+    if verb in MODEL_ENDPOINT_ACTIONS:
+        return await model_endpoint_context(store, params, context)
+    if verb == "control.model_endpoint.upsert":
+        return await model_endpoint_upsert_context(store, params, context)
+    if verb in EVAL_CASE_ACTIONS:
+        return await eval_case_context(store, params, context)
+    if verb == "control.eval_case.upsert":
+        return await eval_case_upsert_context(store, params, context)
+    if verb.startswith("control.channel."):
+        from .control_channel_ops import channel_mutation_context
+
+        return await channel_mutation_context(store, verb, params, context)
+    definition = await _definition_context(store, verb, params, context)
+    if definition is not None:
+        return definition
+    if verb == "control.integration.revoke":
+        return await integration_context(store, params, context)
+    if verb in MCP_LIFECYCLE_ACTIONS:
+        return await mcp_server_context(
+            store, verb, params, context
+        )
+    if verb.startswith("control.adapter.") and verb != "control.adapter.generate":
+        return await adapter_context(store, loader, verb, params, context)
+    if verb.startswith("control.budget."):
+        return await budget_context(store, params, context)
+    if verb in {"control.work.status", "control.work.reparent"}:
+        from .control_work import approval_work_context
+
+        return await approval_work_context(store, verb, params, context)
+    return None
 
 
 async def control_approval_context(
@@ -225,6 +276,7 @@ async def control_approval_context(
     """Return state that must remain identical between approval and execution."""
     try:
         await _preauthorize_high_consequence(store, verb, params, context)
+        return await _resource_context(store, loader, verb, params, context)
     except PermissionError as exc:
         raise AdapterFailure(
             str(exc), status_code=403, reason="control_unauthorised"
@@ -233,17 +285,6 @@ async def control_approval_context(
         raise AdapterFailure(
             str(exc), status_code=404, reason="control_resource_not_found"
         ) from exc
-    if verb in _WORKFLOW_ACTIONS:
-        return await _workflow_context(store, params, context)
-    if verb in {
-        "control.adapter.activate",
-        "control.adapter.deactivate",
-        "control.adapter.delete",
-    }:
-        return await _adapter_context(store, loader, verb, params, context)
-    if verb.startswith("control.budget."):
-        return await _budget_context(store, params, context)
-    return None
 
 
 async def require_unchanged_approval_context(

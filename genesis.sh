@@ -71,6 +71,12 @@ gen_secret() {  # fill a blank/absent secret only (idempotent)
   set_env "$k" "$(head -c 32 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 48)"
   echo "  generated $k"
 }
+gen_ed25519_seed() {  # one unpadded base64url-encoded 32-byte seed
+  local k="$1"
+  [ -n "$(secret_of "$k")" ] && return 0
+  set_env "$k" "$(head -c 32 /dev/urandom | base64 | tr '+/' '-_' | tr -d '=\\n')"
+  echo "  generated $k"
+}
 wait_healthy() {  # wait_healthy SERVICE SECONDS
   local svc="$1" max="${2:-90}" i=0
   until [ "$(compose ps --format '{{.Health}}' "$svc" 2>/dev/null)" = "healthy" ]; do
@@ -92,6 +98,7 @@ echo "==> Phase 0: .env + blank internal secrets + config"
 [ -f manifest.yaml ] || cp manifest.example.yaml manifest.yaml
 gen_secret POSTGRES_PASSWORD
 gen_secret BOLTRIG_AUDIT_HMAC_KEY
+gen_ed25519_seed BOLTRIG_DEVICE_LEASE_SIGNING_KEY
 # Keep DATABASE_URL's credential segment consistent with the POSTGRES_* vars
 # (M9/SEC-69: they MUST match) and default the db/user to 'boltrig'.
 PGUSER="$(secret_of POSTGRES_USER)"; PGUSER="${PGUSER:-boltrig}"; set_env POSTGRES_USER "$PGUSER"

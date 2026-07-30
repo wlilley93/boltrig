@@ -22,6 +22,7 @@ from boltrig.models import (
 )
 
 from .held_call import name_redeemer
+from .approval_digest import approval_action_digest
 from .hitl import (
     HITLManager,
     approval_request_fingerprint,
@@ -49,6 +50,19 @@ def _approval_display_value(value: Any) -> Any:
     return "[redacted]" if secret_shaped(value) else value
 
 
+def _approval_display_inputs(verb: str, params: dict[str, Any]) -> Any:
+    canonical = canonical_approval_value(params)
+    if verb != "control.mcp_server.update":
+        return _approval_display_value(canonical)
+    # The exact raw parameters remain in the approval fingerprint and action
+    # digest, but endpoint paths and credential references are not approver
+    # display material. The resource context carries the safe requested view.
+    return {
+        "server_id": str(params.get("server_id") or ""),
+        "configuration": "[redacted; see requested_config]",
+    }
+
+
 def _approval_display_context(
     *, verb: str, params: dict[str, Any], context: InvocationContext,
     resource_context: Any,
@@ -59,7 +73,7 @@ def _approval_display_context(
         "requested_by": context.actor,
         "requested_on_behalf_of": context.on_behalf_of,
         "verb": verb,
-        "inputs": _approval_display_value(canonical_approval_value(params)),
+        "inputs": _approval_display_inputs(verb, params),
     }
     if resource_context is not None:
         payload["resource_context"] = _approval_display_value(resource_context)
@@ -151,11 +165,8 @@ async def enforce_approval(
         if approval_id is not None:
             spent = await hitl.get(context.tenant_id, approval_id)
             if spent is not None and spent.status == HITLStatus.CONSUMED:
-                # A spent approval must NEVER silently re-pend: its invocation
-                # already ran (succeeded or failed - e.g. the HITL-resume lane
-                # consumed it). Re-pending here loops forever - every retry
-                # spends nothing new yet returns a fresh 202 - so fail loudly
-                # and let the caller inspect the resource state instead.
+                # A spent approval must never silently re-pend; this invocation
+                # already ran, so the caller must inspect its resource state.
                 raise HITLStateConflict(
                     f"approval '{approval_id}' was already consumed; "
                     "its invocation already ran"
@@ -171,9 +182,8 @@ async def enforce_approval(
             verb=verb,
             requested_by=context.actor,
             request_fingerprint=fingerprint,
-            # The manifest's approval timeout travels with the manager (wired at
-            # the composition root), so a gate-raised approval expires instead of
-            # parking a run forever (SEC-14).
+            action_digest=approval_action_digest(noun=noun, verb=verb, params=params),
+            # Gate-created approvals inherit the configured timeout (SEC-14).
             timeout_seconds=hitl.approval_timeout_seconds,
             **hitl_scope_fields(context),
         )
@@ -183,6 +193,8 @@ async def enforce_approval(
         extra={
             **dict(context.extra),
             "approved_by": approved_by,
+            # Trusted evidence stamped only after the exact consume CAS succeeds.
+            "approval_request_id": approval_id,
             "approval_request_fingerprint": fingerprint,
             "approval_resource_context": resource,
         },

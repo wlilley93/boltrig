@@ -30,4 +30,4 @@ logging.getLogger(__name__).info(
 
 from .bootstrap import build_app  # noqa: E402  (logging must be live first)
 
-app = build_app()
+app = build_app(addons_snapshot=_ADDONS)

@@ -15,7 +15,7 @@ from boltrig.models import (
     ConversationMessage, ConversationStatus, ConversationSummary, EvalCase,
     EvalRun, HITLRequest, HITLResponse, HITLStatus, HITLType, IdempotencyMode,
     MemoryErasure, MemoryFact, MemoryIngestion, MemoryItem,
-    MemoryProjectionStatus, MessageRole, ModelEndpoint, NotificationPref, Noun,
+    MessageRole, ModelEndpoint, NotificationPref, Noun,
     Organisation, OrgMember, PersonalAccessToken, PersonalAgent,
     RateLimit, SecurityEvent, SecurityEventType, Skill, TargetType,
     TwoFactorChallenge, Urgency, User, UserInvitation, UserSession, UserSetting,
@@ -24,12 +24,14 @@ from boltrig.models import (
 )
 from boltrig.models.work import RunCheckpoint
 
+from .memory_projection_rows import _mem_projection as _mem_projection
+
 
 # --- row -> dataclass mappers (None-safe) ---------------------------------
 def _noun(r):
     return None if r is None else Noun(
         id=r["id"], tenant_id=r["tenant_id"], description=r["description"] or "",
-        schema=r["schema"] or {},
+        schema=r["schema"] or {}, is_active=bool(r["is_active"]),
     )
 
 
@@ -41,7 +43,7 @@ def _verb(r):
         input_schema=r["input_schema"], output_schema=r["output_schema"],
         description=r["description"] or "", consequence=Consequence(r["consequence"]),
         degraded_mode=r["degraded_mode"], identity_mode=r["identity_mode"],
-        idempotency_mode=IdempotencyMode(r["idempotency_mode"]),
+        idempotency_mode=IdempotencyMode(r["idempotency_mode"]), is_active=bool(r["is_active"]),
     )
 
 
@@ -74,7 +76,7 @@ def _skill(r):
         prompt_fragment=r["prompt_fragment"], tool_grants=list(r["tool_grants"] or []),
         context_requirements=r["context_requirements"] or {}, extends=r["extends"],
         locale=r["locale"] or "en",
-        description=(r["description"] if "description" in r else "") or "",
+        description=(r["description"] if "description" in r else "") or "", is_active=bool(r["is_active"]),
     )
 
 
@@ -94,7 +96,7 @@ def _endpoint(r):
         return None
     return ModelEndpoint(
         id=r["id"], tenant_id=r["tenant_id"], kind=r["kind"], model=r["model"],
-        base_url=r["base_url"], fallback=r["fallback"], data_class=r["data_class"],
+        base_url=r["base_url"], fallback=r["fallback"], data_class=r["data_class"], is_active=bool(r["is_active"]),
     )
 
 
@@ -116,7 +118,7 @@ def _hitl_req(r):
         status=HITLStatus(r["status"]), work_item_id=r["work_item_id"],
         options=list(r["options"] or []), assignee=r["assignee"], timeout_at=r["timeout_at"],
         verb=r["verb"], requested_by=r["requested_by"],
-        requested_on_behalf_of=r["requested_on_behalf_of"], request_fingerprint=r["request_fingerprint"], workspace_id=r["workspace_id"], department_scope=None if r["department_scope"] is None else list(r["department_scope"]),
+        requested_on_behalf_of=r["requested_on_behalf_of"], request_fingerprint=r["request_fingerprint"], action_digest=r["action_digest"], workspace_id=r["workspace_id"], department_scope=None if r["department_scope"] is None else list(r["department_scope"]),
         secure=bool(r["secure"]), secure_purpose=r["secure_purpose"],
     )
 
@@ -217,7 +219,7 @@ def _eval_case(r):
     return EvalCase(
         id=r["id"], tenant_id=r["tenant_id"], target_kind=r["target_kind"],
         target_ref=r["target_ref"], input=r["input"], assertions=r["assertions"],
-        labels=list(r["labels"] or []),
+        labels=list(r["labels"] or []), is_active=r["is_active"],
     )
 
 
@@ -280,17 +282,6 @@ def _mem_erasure(r):
         target=r["target"], scope=r["scope"], engine_confirmed=r["engine_confirmed"],
         transcript_handled=r["transcript_handled"], facts_removed=r["facts_removed"],
         created_at=r["created_at"], completed_at=r["completed_at"],
-    )
-
-
-def _mem_projection(r):
-    if r is None:
-        return None
-    return MemoryProjectionStatus(
-        id=r["id"], tenant_id=r["tenant_id"], projection_id=r["projection_id"],
-        operation=r["operation"], status=r["status"], fact_id=r["fact_id"],
-        target=r["target"], projection_ref=r["projection_ref"], error=r["error"],
-        created_at=r["created_at"], updated_at=r["updated_at"],
     )
 
 

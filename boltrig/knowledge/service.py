@@ -31,6 +31,8 @@ from .models import (
     now,
 )
 from .ports import StagedObject
+from .projections import UNAVAILABLE_PROVIDER_IDS, UNAVAILABLE_PROVIDER_REASON
+from .service_public import asset_type, projection_public, segment_public, stable_id
 
 
 def permitted_scopes(context) -> list[str]:
@@ -64,7 +66,9 @@ class KnowledgeService:
         if not filename or len(filename) > 240 or "/" in filename or "\\" in filename:
             raise ValueError("filename must be a plain name of at most 240 characters")
         scopes = permitted_scopes(context)
-        owner_scope = str(params.get("owner_scope") or f"user:{context.on_behalf_of or context.actor}")
+        owner_scope = str(
+            params.get("owner_scope") or f"user:{context.on_behalf_of or context.actor}"
+        )
         if owner_scope not in scopes:
             raise PermissionError(f"owner scope {owner_scope!r} is not permitted")
         upload = UploadSession(
@@ -92,8 +96,10 @@ class KnowledgeService:
         staged = await self.vault.stage(context.tenant_id, upload_id, data)
         updated = await self.repository.set_upload_staged(context.tenant_id, upload_id, staged)
         return {
-            "upload_id": updated.id, "status": updated.status,
-            "digest": updated.digest, "byte_size": updated.byte_size,
+            "upload_id": updated.id,
+            "status": updated.status,
+            "digest": updated.digest,
+            "byte_size": updated.byte_size,
         }
 
     async def commit_upload(self, upload_id: str, context) -> dict[str, Any]:
@@ -141,14 +147,14 @@ class KnowledgeService:
 
     def _bundle(self, upload: UploadSession, extraction, object_key: str) -> IngestionBundle:
         asset_id, revision_id = new_id("ast"), new_id("rev")
-        representation_id = _stable_id("rep", revision_id, "plain_text")
+        representation_id = stable_id("rep", revision_id, "plain_text")
         asset = Asset(
             id=asset_id,
             tenant_id=upload.tenant_id,
             workspace_id=upload.workspace_id,
             title=upload.title,
             filename=upload.filename,
-            asset_type=_asset_type(upload.media_type),
+            asset_type=asset_type(upload.media_type),
             owner_scope=upload.owner_scope,
             current_revision_id=revision_id,
             source_kind=upload.source_kind,
@@ -178,7 +184,7 @@ class KnowledgeService:
             for index, part in enumerate(extraction.parts, start=1)
         )
         occurrence = SourceOccurrence(
-            id=_stable_id("src", asset_id, upload.source_kind, upload.source_ref or upload.id),
+            id=stable_id("src", asset_id, upload.source_kind, upload.source_ref or upload.id),
             tenant_id=upload.tenant_id,
             asset_id=asset_id,
             source_kind=upload.source_kind,
@@ -210,7 +216,7 @@ class KnowledgeService:
     def _segment(self, asset, revision, representation, sequence, part) -> Segment:
         content_hash = hashlib.sha256(part.text.encode("utf-8")).hexdigest()
         return Segment(
-            id=_stable_id("seg", revision.id, str(sequence), content_hash),
+            id=stable_id("seg", revision.id, str(sequence), content_hash),
             tenant_id=asset.tenant_id,
             asset_id=asset.id,
             revision_id=revision.id,
@@ -226,7 +232,7 @@ class KnowledgeService:
         provider = "openai-compatible" if hasattr(self.embedder, "base_url") else "boltrig"
         vector = tuple(self.embedder.embed(segment.text))
         return Embedding(
-            id=_stable_id("emb", segment.id, provider, model_name, "1"),
+            id=stable_id("emb", segment.id, provider, model_name, "1"),
             tenant_id=segment.tenant_id,
             subject_type="segment",
             subject_id=segment.id,
@@ -240,10 +246,14 @@ class KnowledgeService:
 
     async def list_assets(self, params: dict[str, Any], context) -> dict[str, Any]:
         limit = min(max(int(params.get("limit", 50)), 1), 100)
+        offset = min(max(int(params.get("offset", 0)), 0), 1_000_000)
         rows = await self.repository.list_assets(
-            context.tenant_id, context.workspace_id, permitted_scopes(context), limit
+            context.tenant_id, context.workspace_id, permitted_scopes(context), limit + 1, offset
         )
-        return {"assets": rows}
+        return {
+            "assets": rows[:limit],
+            "next_offset": offset + limit if len(rows) > limit else None,
+        }
 
     async def get_asset(self, asset_id: str, context) -> dict[str, Any]:
         scopes = permitted_scopes(context)
@@ -251,9 +261,7 @@ class KnowledgeService:
         if asset is None:
             raise LookupError("asset not found")
         segments = await self.repository.segments_for_asset(context.tenant_id, asset_id, scopes)
-        provenance = await self.repository.provenance_for_asset(
-            context.tenant_id, asset_id, scopes
-        )
+        provenance = await self.repository.provenance_for_asset(context.tenant_id, asset_id, scopes)
         projections = await self.repository.list_projections(context.tenant_id, asset_id)
         return {
             "asset": {
@@ -266,9 +274,9 @@ class KnowledgeService:
                 "source_ref": asset.source_ref,
                 "created_at": asset.created_at.isoformat(),
             },
-            "segments": [_segment_public(segment) for segment in segments],
+            "segments": [segment_public(segment) for segment in segments],
             "provenance": provenance,
-            "projections": [_projection_public(row) for row in projections],
+            "projections": [projection_public(row) for row in projections],
         }
 
     async def original(self, asset_id: str, context) -> dict[str, Any]:
@@ -354,6 +362,21 @@ class KnowledgeService:
         provider = await self.repository.get_provider(context.tenant_id, provider_id)
         if provider is None:
             raise LookupError("provider not found")
+        if provider_id in UNAVAILABLE_PROVIDER_IDS:
+            if enabled:
+                raise ValueError(
+                    f"{provider.display_name} is unavailable: {UNAVAILABLE_PROVIDER_REASON}"
+                )
+            updated = replace(
+                provider,
+                enabled=False,
+                health="unavailable",
+                status="unavailable",
+                last_error=UNAVAILABLE_PROVIDER_REASON,
+                updated_at=now(),
+            )
+            await self.repository.save_provider(updated)
+            return {"provider": updated.public()}
         updated = replace(
             provider,
             enabled=enabled,
@@ -366,32 +389,3 @@ class KnowledgeService:
             await self.projections.refresh_health(context.tenant_id)
             updated = await self.repository.get_provider(context.tenant_id, provider_id) or updated
         return {"provider": updated.public()}
-
-
-def _stable_id(prefix: str, *parts: str) -> str:
-    digest = hashlib.sha256("\x00".join(parts).encode()).hexdigest()[:40]
-    return f"{prefix}_{digest}"
-
-
-def _asset_type(media_type: str) -> str:
-    return "pdf" if media_type.split(";", 1)[0].strip().lower() == "application/pdf" else "text"
-
-
-def _segment_public(segment: Segment) -> dict[str, Any]:
-    return {
-        "id": segment.id,
-        "sequence": segment.sequence,
-        "text": segment.text,
-        "locator": segment.locator,
-        "content_hash": segment.content_hash,
-    }
-
-
-def _projection_public(row) -> dict[str, Any]:
-    return {
-        "provider_id": row.provider_id,
-        "operation": row.operation,
-        "status": row.status,
-        "error": row.error,
-        "updated_at": row.updated_at.isoformat(),
-    }

@@ -12,6 +12,7 @@ set (skips cleanly offline, following the store-parity pattern).
 
 from __future__ import annotations
 
+import asyncio
 import os
 from datetime import timedelta
 
@@ -122,12 +123,68 @@ async def test_retention_purge_is_tenant_scoped(store):
     assert await store.list_messages("other", "theirs") != []
 
 
+@pytest.mark.store
+@pytest.mark.invariant("SEC-WRK-13")
+async def test_restore_transition_is_owner_scoped_and_idempotent_on_both_stores(store):
+    now = utcnow()
+    await _seed_conv(
+        store,
+        "restore-contract",
+        status=ConversationStatus.CLOSED,
+        updated_at=now - timedelta(days=1),
+    )
+
+    assert await store.restore_closed_conversation(
+        T, "missing", "alice", now
+    ) == (False, False, False)
+    assert await store.restore_closed_conversation(
+        T, "restore-contract", "bob", now
+    ) == (True, False, False)
+    assert await store.restore_closed_conversation(
+        T, "restore-contract", "alice", now
+    ) == (True, True, True)
+    assert await store.restore_closed_conversation(
+        T, "restore-contract", "alice", now
+    ) == (True, True, False)
+    restored = await store.get_conversation(T, "restore-contract")
+    assert restored is not None
+    assert restored.status == ConversationStatus.ACTIVE
+    assert restored.updated_at == now
+
+
+@pytest.mark.store
+@pytest.mark.invariant("SEC-WRK-13")
+async def test_restore_racing_retention_never_resurrects_a_purged_row(store):
+    now = utcnow()
+    cutoff = now - timedelta(days=30)
+    await _seed_conv(
+        store,
+        "restore-race",
+        status=ConversationStatus.CLOSED,
+        updated_at=now - timedelta(days=31),
+    )
+
+    restored, purged = await asyncio.gather(
+        store.restore_closed_conversation(T, "restore-race", "alice", now),
+        store.purge_closed_conversations(T, cutoff),
+    )
+    surviving = await store.get_conversation(T, "restore-race")
+
+    if restored == (True, True, True):
+        assert purged == 0
+        assert surviving is not None
+        assert surviving.status == ConversationStatus.ACTIVE
+    else:
+        assert restored == (False, False, False)
+        assert purged == 1
+        assert surviving is None
+        assert await store.list_messages(T, "restore-race") == []
+
+
 @pytest.mark.invariant("SEC-74")
 def test_purge_runs_select_and_deletes_in_one_transaction():
     # The hard-purge SELECT + three DELETEs must share ONE transaction, so a crash
     # mid-purge cannot strand a conversation whose messages are already erased.
-    import asyncio
-
     from boltrig.store.postgres import PostgresStore, set_current_tenant
 
     log: list = []

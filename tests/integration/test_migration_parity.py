@@ -134,9 +134,7 @@ _CATALOGUE_QUERIES = {
 def _normalise(value: object, schema: str) -> object:
     if not isinstance(value, str):
         return value
-    return value.replace(f'"{schema}".', '"<schema>".').replace(
-        f"{schema}.", "<schema>."
-    )
+    return value.replace(f'"{schema}".', '"<schema>".').replace(f"{schema}.", "<schema>.")
 
 
 async def _catalogue(conn: asyncpg.Connection, schema: str) -> dict[str, list[tuple]]:
@@ -233,11 +231,26 @@ async def test_data_bearing_rls_database_upgrades_from_previous_head() -> None:
         )
 
         scoped = [
+            "budget_usage",
             "channel_bindings",
             "channel_pairings",
             "memory_projection_statuses",
             "memory_vectors",
             "memory_vector_edges",
+            "realtime_calls",
+            "realtime_call_events",
+            "device_enrollments",
+            "devices",
+            "device_roots",
+            "device_leases",
+            "integration_catalogue",
+            "integration_connections",
+            "artifacts",
+            "password_reset_tokens",
+            "birth_profile_receipts",
+            "background_job_receipts",
+            "mcp_servers",
+            "mcp_probe_receipts",
         ]
         policies = await conn.fetch(
             """

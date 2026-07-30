@@ -13,6 +13,7 @@ import base64
 import types
 
 import pytest
+from fastapi.testclient import TestClient
 
 from boltrig.config.manifest import (
     DEFAULT_MAX_ATTACHMENTS,
@@ -28,6 +29,8 @@ from boltrig.fleet.chat import (
     build_turn_executor,
 )
 from boltrig.kernel.events import EventRelay
+from boltrig.kernel import Kernel
+from boltrig.kernel.app import create_app
 from boltrig.models import GrantSet, TenantPermissions
 from boltrig.store import InMemoryStore
 
@@ -117,6 +120,42 @@ def test_manifest_can_only_tighten_caps_never_loosen():
     assert tighten.max_attachment_bytes == 64
     # unspecified caps keep the code default
     assert tighten.max_total_attachment_bytes == DEFAULT_MAX_TOTAL_ATTACHMENT_BYTES
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-79")
+def test_authenticated_clients_receive_exact_attachment_limits_and_readability():
+    store = InMemoryStore()
+    config = ChatConfig(
+        max_attachments=3,
+        max_attachment_bytes=64,
+        max_total_attachment_bytes=128,
+    )
+    client = TestClient(
+        create_app(
+            Kernel(store),
+            chat_service=ChatService(store, EventRelay(), chat_config=config),
+        )
+    )
+
+    response = client.get(
+        "/v1/chat/config",
+        headers={
+            "x-boltrig-tenant": T,
+            "x-boltrig-subject": "alice",
+            "x-boltrig-role": "engineer",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "attachments": {
+            "max_count": 3,
+            "max_bytes": 64,
+            "max_total_bytes": 128,
+            "model_readable_media_types": ["text/*"],
+        }
+    }
 
 
 # --- SEC-80 / [2026] VJS-COUNTY 3 D1+D4: attachments ride the existing message path

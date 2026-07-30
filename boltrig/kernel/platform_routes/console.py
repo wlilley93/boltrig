@@ -14,7 +14,7 @@ from boltrig.store.base import MAX_OBSERVABILITY_PAGE
 from boltrig.kernel.hitl_response_auth import hitl_request_visible
 
 from ._shared import platform_state, scope_depts
-from .observability import _items, _read_status_provider
+from .platform_status import _items, _read_status_provider
 
 
 _MAX_LIMIT = 200
@@ -125,6 +125,18 @@ def _budget_row(b: Any) -> dict[str, Any]:
         "spent_tokens": b.spent_tokens,
         "cost_limit_micros": b.cost_limit_micros,
         "spent_micros": b.spent_micros,
+        "usage_state": b.usage_state,
+        "window_key": b.window_key,
+        "window_started_at": (
+            b.window_started_at.isoformat()
+            if b.window_started_at is not None
+            else None
+        ),
+        "window_ends_at": (
+            b.window_ends_at.isoformat()
+            if b.window_ends_at is not None
+            else None
+        ),
     }
 
 

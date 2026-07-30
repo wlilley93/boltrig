@@ -49,15 +49,30 @@ ROOTS_FILE = ROOT / "docs" / "refactoring" / "reachability-roots.json"
 
 
 def _sources() -> list[Path]:
-    """Tracked .py files under the package, so an untracked scratch file cannot change the
-    answer. The claim inventory learned this the hard way on the same day."""
+    """Cached and non-ignored new package files.
+
+    Ignored local scratch cannot change the answer, while a real new module is
+    included before its first staging operation. The claim inventory uses the
+    same boundary.
+    """
     import subprocess
 
     out = subprocess.run(
-        ["git", "-C", str(ROOT), "ls-files", "-z", "--", "boltrig/**/*.py"],
+        [
+            "git",
+            "-C",
+            str(ROOT),
+            "ls-files",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+            "-z",
+            "--",
+            "boltrig/**/*.py",
+        ],
         capture_output=True, check=True, text=True,
     ).stdout
-    # `.exists()` because `git ls-files` lists a path that is tracked, including one deleted
+    # `.exists()` because `git ls-files` lists a cached path, including one deleted
     # in the working tree and not yet staged. A half-finished deletion is not a source file, and
     # crashing on one makes the gate look broken at exactly the moment someone is using it.
     return sorted(p for p in (ROOT / n for n in out.split("\0") if n) if p.exists())

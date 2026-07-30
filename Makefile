@@ -23,6 +23,13 @@ PLAYWRIGHT_INSTALL_ARGS ?= chromium
 COMPOSE ?= docker compose
 COMPOSE_VALIDATE_ENV ?= .env.example
 COMPOSE_VALIDATE_POSTGRES_PASSWORD ?= boltrig-compose-validation-only
+# compose.worker-primary.yml asserts REDIS_URL with ${REDIS_URL:?...} because a
+# worker-primary production stack must not fall back to per-process counters.
+# That assertion is about DEPLOYMENT, and `config` cannot tell the two apart, so
+# the syntax check supplies a value the same way it supplies the password. The
+# assertion still fires for a real `up` with the variable unset - which is what
+# it is for - and is proven by tests/deploy/test_worker_primary_overlay.py.
+COMPOSE_VALIDATE_REDIS_URL ?= redis://boltrig-compose-validation-only:6379/0
 GITLEAKS_IMAGE ?= zricethezav/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
 ACTIONLINT_IMAGE ?= rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
 TRIVY_CONFIG_IMAGE ?= aquasec/trivy:0.72.0@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f
@@ -36,7 +43,7 @@ RELEASE_VALIDATE_IMAGES_ENV ?= tests/fixtures/release-images.env
 RELEASE_PROFILES ?= --profile backup
 
 .DEFAULT_GOAL := help
-.PHONY: help gate-status relock fleet-drift-all up down logs test lint architecture structure codex-protocol unwired-claims reachability prose-references commit-trailers tracked-symlinks refresh-canon-citations refresh-opbox-surface fleet-drift gate-coverage health-claims order-directives typecheck check python-quality ui-install ui-quality site-install site-quality ui-e2e compose-validate release-validate release-up doctor-fixture migration-parity python-audit sast iac-scan secret-scan actionlint security-source quality live-check lockfile-policy dependency-audit smoke invariants doctor migrate secure-up backup backup-schedule restore
+.PHONY: help gate-status relock fleet-drift-all up down logs test lint architecture structure codex-protocol unwired-claims reachability prose-references refresh-canon-citations refresh-opbox-surface fleet-drift gate-coverage health-claims order-directives typecheck check python-quality ui-install ui-quality worker-install worker-quality site-install site-quality ui-e2e worker-e2e compose-validate release-validate release-up worker-primary-validate worker-primary-up doctor-fixture migration-parity python-audit sast iac-scan secret-scan actionlint security-source quality live-check lockfile-policy dependency-audit smoke invariants doctor migrate secure-up backup backup-schedule restore commit-trailers tracked-symlinks
 
 help: ## List the available targets
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -68,8 +75,16 @@ logs: ## Tail logs for every service (SERVICE=kernel to scope it)
 # real failures. Do not reach for 127.0.0.1:5432 instead: on a box like this one
 # that is a DIFFERENT Postgres, and pointing the store suite at the wrong server
 # is the kind of mistake that only fails loudly by luck.
-test: ## Run the test suite (set BOLTRIG_TEST_DATABASE_URL to also run the Postgres tests)
-	$(PY) -m pytest -q
+test: ## Run the test suite against a real Postgres, standing one up if needed
+# NOT "also run the Postgres tests", which is what this said until 2026-07-30.
+# The database leg is ~187 tests including the RLS fence-drift guard, store
+# parity, migration parity and tenancy, and conftest now ENDS THE RUN NON-ZERO
+# when BOLTRIG_TEST_DATABASE_URL is absent - so the old opt-in text described a
+# target that fails. with_test_postgres.sh reuses an existing
+# BOLTRIG_TEST_DATABASE_URL (CI supplies one) and otherwise runs a disposable
+# pinned pgvector container, so the default local run verifies what CI verifies.
+# To decline deliberately: BOLTRIG_ALLOW_UNVERIFIED_POSTGRES=1 $(PY) -m pytest -q
+	scripts/with_test_postgres.sh $(PY) -m pytest -q
 
 lint: ## Run ruff over the Python source, scripts, and tests
 # The version check is the gate, and the lint is what it protects.
@@ -202,6 +217,16 @@ ui-quality: ui-install ## Audit, typecheck, test with coverage, and build the UI
 	cd ui && pnpm run test:coverage
 	cd ui && pnpm run build
 
+worker-install: lockfile-policy ## Install Worker from its frozen pnpm lockfile
+	cd apps/worker && corepack enable && pnpm install --frozen-lockfile --ignore-scripts
+	cd apps/worker && pnpm rebuild esbuild
+
+worker-quality: worker-install ## Audit, typecheck, test, and build the Worker web payload
+	cd apps/worker && pnpm audit --audit-level=high
+	cd apps/worker && pnpm run typecheck
+	cd apps/worker && pnpm run test
+	cd apps/worker && pnpm run build
+
 site-install: lockfile-policy ## Install the site from its frozen pnpm lockfile
 	cd site && corepack enable && pnpm install --frozen-lockfile --ignore-scripts
 	cd site && pnpm rebuild esbuild
@@ -220,6 +245,15 @@ ui-e2e: ui-install ## Run Chromium Playwright against the built UI and real in-m
 		BOLTRIG_E2E_KERNEL_PORT=$$1 \
 		BOLTRIG_E2E_UI_PORT=$$2 \
 		pnpm exec playwright test
+
+worker-e2e: ui-install worker-install ## Run Chromium Playwright against the built Worker and real in-memory kernel
+	cd ui && pnpm exec playwright install $(PLAYWRIGHT_INSTALL_ARGS)
+	@set -- $$($(PY) -c 'import socket; sockets = [socket.socket() for _ in range(2)]; [item.bind(("127.0.0.1", 0)) for item in sockets]; print(*(item.getsockname()[1] for item in sockets))'); \
+		cd ui && \
+		BOLTRIG_E2E_PYTHON=$(E2E_PYTHON) \
+		BOLTRIG_E2E_KERNEL_PORT=$$1 \
+		BOLTRIG_E2E_UI_PORT=$$2 \
+		pnpm exec playwright test --config playwright.worker.config.ts
 
 compose-validate: ## Validate base and secure Compose configurations
 	BOLTRIG_ENV_FILE=$(COMPOSE_VALIDATE_ENV) \
@@ -241,6 +275,13 @@ compose-validate: ## Validate base and secure Compose configurations
 	BOLTRIG_ENV_FILE=$(COMPOSE_VALIDATE_ENV) \
 		POSTGRES_PASSWORD=$(COMPOSE_VALIDATE_POSTGRES_PASSWORD) \
 		$(COMPOSE) -f docker-compose.yml -f deploy/compose.opbox-link.yml config --quiet
+	# Selecting Worker as root must remain a valid, single-edge deployment. This
+	# explicit overlay is also the entire rollback unit.
+	BOLTRIG_ENV_FILE=$(COMPOSE_VALIDATE_ENV) \
+		POSTGRES_PASSWORD=$(COMPOSE_VALIDATE_POSTGRES_PASSWORD) \
+		REDIS_URL=$(COMPOSE_VALIDATE_REDIS_URL) \
+		$(COMPOSE) -f docker-compose.yml -f deploy/compose.dev.yml \
+		-f deploy/compose.worker-primary.yml config --quiet
 	$(PY) scripts/validate_release_images.py $(RELEASE_VALIDATE_IMAGES_ENV)
 	BOLTRIG_ENV_FILE=$(COMPOSE_VALIDATE_ENV) \
 		POSTGRES_PASSWORD=$(COMPOSE_VALIDATE_POSTGRES_PASSWORD) \
@@ -257,6 +298,15 @@ compose-validate: ## Validate base and secure Compose configurations
 		-f docker-compose.yml -f deploy/compose.release.yml \
 		-f deploy/compose.secure.yml config --format json \
 		| $(PY) scripts/validate_release_compose.py --secure
+	BOLTRIG_ENV_FILE=$(COMPOSE_VALIDATE_ENV) \
+		POSTGRES_PASSWORD=$(COMPOSE_VALIDATE_POSTGRES_PASSWORD) \
+		$(COMPOSE) --env-file $(COMPOSE_VALIDATE_ENV) \
+		--profile backup --profile local --profile legacy \
+		--env-file $(RELEASE_VALIDATE_IMAGES_ENV) \
+		-f docker-compose.yml -f deploy/compose.release.yml \
+		-f deploy/compose.secure.yml -f deploy/compose.worker-primary.yml \
+		config --format json \
+		| $(PY) scripts/validate_release_compose.py --secure --worker-primary
 
 release-validate: ## Validate a downloaded digest-pinned release environment
 	$(PY) scripts/validate_release_images.py $(RELEASE_IMAGES_ENV)
@@ -275,6 +325,26 @@ release-up: release-validate ## Pull and start signed release images (secure + b
 		$(COMPOSE) --env-file $(RELEASE_ENV) --env-file $(RELEASE_IMAGES_ENV) \
 		$(RELEASE_PROFILES) -f docker-compose.yml -f deploy/compose.release.yml \
 		-f deploy/compose.secure.yml up -d --no-build
+
+worker-primary-validate: ## Validate the signed, secure Worker-root release topology
+	$(PY) scripts/validate_release_images.py $(RELEASE_IMAGES_ENV)
+	BOLTRIG_ENV_FILE=$(RELEASE_ENV) \
+		$(COMPOSE) --env-file $(RELEASE_ENV) --env-file $(RELEASE_IMAGES_ENV) \
+		$(RELEASE_PROFILES) -f docker-compose.yml -f deploy/compose.release.yml \
+		-f deploy/compose.secure.yml -f deploy/compose.worker-primary.yml \
+		config --format json \
+		| $(PY) scripts/validate_release_compose.py --secure --worker-primary
+
+worker-primary-up: worker-primary-validate ## Cut over root to Worker; Operator stays at /operator
+	BOLTRIG_ENV_FILE=$(RELEASE_ENV) \
+		$(COMPOSE) --env-file $(RELEASE_ENV) --env-file $(RELEASE_IMAGES_ENV) \
+		$(RELEASE_PROFILES) -f docker-compose.yml -f deploy/compose.release.yml \
+		-f deploy/compose.secure.yml -f deploy/compose.worker-primary.yml pull
+	BOLTRIG_ENV_FILE=$(RELEASE_ENV) \
+		$(COMPOSE) --env-file $(RELEASE_ENV) --env-file $(RELEASE_IMAGES_ENV) \
+		$(RELEASE_PROFILES) -f docker-compose.yml -f deploy/compose.release.yml \
+		-f deploy/compose.secure.yml -f deploy/compose.worker-primary.yml \
+		up -d --no-build
 
 doctor-fixture: ## Prove the secure production-doctor fixture has no failures
 	$(PY) -m pytest -q tests/unit/test_doctor.py::test_production_doctor_has_no_failures_for_secure_posture
@@ -312,7 +382,7 @@ actionlint: ## Lint GitHub Actions with the pinned actionlint image
 
 security-source: python-audit sast iac-scan secret-scan actionlint ## Run SCA, SAST, IaC, secret, and workflow gates
 
-quality: python-quality ui-quality site-quality compose-validate doctor-fixture ui-e2e migration-parity security-source ## Run the complete local release gate
+quality: python-quality ui-quality worker-quality site-quality compose-validate doctor-fixture ui-e2e worker-e2e migration-parity security-source ## Run the complete local release gate
 
 # The ONE npm-locked package, and why it is not pnpm. The whatsapp bridge depends
 # on `baileys`, a GIT-HOSTED package that both runs build scripts on install and
@@ -349,7 +419,7 @@ lockfile-policy: ## Enforce pnpm as the JavaScript package manager (one recorded
 	@test -f '$(LOCKFILE_POLICY_EXEMPT)' || { \
 		echo "stale exemption: $(LOCKFILE_POLICY_EXEMPT) no longer exists;"; \
 		echo "drop it from LOCKFILE_POLICY_EXEMPT in the Makefile"; exit 1; }
-	@test -f ui/pnpm-lock.yaml -a -f site/pnpm-lock.yaml -a -f sdks/node/pnpm-lock.yaml
+	@test -f ui/pnpm-lock.yaml -a -f apps/worker/pnpm-lock.yaml -a -f site/pnpm-lock.yaml -a -f sdks/node/pnpm-lock.yaml
 	@# Runs BEFORE the frozen install, deliberately: a shadowed exclusion entry
 	@# surfaces as ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION, which reads as "the
 	@# exemption is being ignored" rather than "your second entry disabled your
@@ -362,8 +432,9 @@ lockfile-policy: ## Enforce pnpm as the JavaScript package manager (one recorded
 	@# site-build-test-lint red. The stdlib is all this script needs.
 	@python3 scripts/check-release-age-exclusions.py
 
-dependency-audit: lockfile-policy ## Fail on high/critical UI and site dependency advisories
+dependency-audit: lockfile-policy ## Fail on high/critical frontend dependency advisories
 	cd ui && pnpm audit --audit-level=high
+	cd apps/worker && pnpm audit --audit-level=high
 	cd site && pnpm audit --audit-level=high
 
 live-check: ## Run opt-in live integration legs; requires services and credentials

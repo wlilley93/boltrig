@@ -107,6 +107,7 @@ class InMemoryKnowledgeRepository:
         workspace_id: str | None,
         scopes: list[str],
         limit: int,
+        offset: int = 0,
     ) -> list[dict]:
         assets = [
             asset
@@ -116,7 +117,9 @@ class InMemoryKnowledgeRepository:
             and self._allowed(tenant_id, asset.id, scopes)
         ]
         assets.sort(key=lambda item: item.created_at, reverse=True)
-        return [self._asset_public(asset) for asset in assets[:limit]]
+        return [
+            self._asset_public(asset) for asset in assets[offset : offset + limit]
+        ]
 
     def _asset_public(self, asset: Asset) -> dict:
         count = sum(

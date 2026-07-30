@@ -15,6 +15,7 @@ from typing import Any
 
 import yaml
 
+from boltrig.config.spawn_rules import parse_spawn_rules
 from boltrig.models import ConfigRevision
 
 
@@ -38,24 +39,41 @@ class AdminConfig:
         """Validate, apply, and version a manifest-section edit (FR-ADM-01)."""
         if value is None:
             raise ValueError(f"section '{name}' value may not be null")
-        self._doc[name] = value
+        if name == "hierarchy":
+            raise ValueError(
+                "hierarchy is governed by the permanent-fleet authoring surface"
+            )
+        if name == "spawn_rules":
+            parse_spawn_rules(value)
+        else:
+            self._doc[name] = value
         rev = ConfigRevision(
             tenant_id=self._tenant, kind="manifest_section", ref=name,
             version=uuid.uuid4().hex[:8], payload={"section": name, "value": value},
             actor=actor,
         )
-        return await self._store.add_config_revision(rev)
+        stored = await self._store.add_config_revision(rev)
+        if name == "spawn_rules":
+            self._doc[name] = value
+        return stored
 
     async def history(self, name: str) -> list[ConfigRevision]:
         return await self._store.list_config_revisions(self._tenant, "manifest_section", name)
 
     async def rollback(self, name: str, rev_id: int, actor: str) -> Any:
         """Restore a prior revision's value, recording the rollback (FR-ADM-02)."""
+        if name == "hierarchy":
+            raise ValueError(
+                "hierarchy is governed by the permanent-fleet authoring surface"
+            )
         rev = await self._store.get_config_revision(self._tenant, rev_id)
         if rev is None or rev.ref != name:
             raise ValueError(f"no revision {rev_id} for section '{name}'")
         value = rev.payload.get("value")
-        self._doc[name] = value
+        if name == "spawn_rules":
+            parse_spawn_rules(value)
+        else:
+            self._doc[name] = value
         restored = ConfigRevision(
             tenant_id=self._tenant, kind="manifest_section", ref=name,
             version=uuid.uuid4().hex[:8],
@@ -63,7 +81,21 @@ class AdminConfig:
             actor=actor, rolled_back=True,
         )
         await self._store.add_config_revision(restored)
+        if name == "spawn_rules":
+            self._doc[name] = value
         return value
+
+    def overlay_section(self, name: str, value: Any) -> None:
+        """Reflect an already-versioned canonical overlay in live exports.
+
+        This is deliberately not an authoring seam: the permanent-fleet control
+        operation validates and persists its typed revision first, then calls
+        this no-I/O projection so Admin export round-trips the same desired
+        hierarchy. Generic hierarchy PUT/rollback remain closed above.
+        """
+        if name != "hierarchy" or value is None:
+            raise ValueError("only a canonical hierarchy overlay is supported")
+        self._doc[name] = value
 
     def export_dict(self) -> dict[str, Any]:
         """The current live configuration as a manifest dict (C1 round-trip)."""

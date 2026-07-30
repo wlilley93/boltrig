@@ -1,9 +1,4 @@
-"""Test-only read-only ``AgentRuntime`` adapter for supervised Codex cells.
-
-The adapter is not production-selectable. It lacks phase-scoped model-proxy
-credentials, inherit-none subprocess proof, and complete effective App Server
-configuration attestation. Native Codex agents are therefore disabled.
-"""
+"""Test-only read-only ``AgentRuntime`` adapter for supervised Codex cells."""
 
 from __future__ import annotations
 
@@ -20,17 +15,17 @@ from boltrig.fleet.ports.runtime import (
 )
 
 from .codex_diagnostics import log_operation_failure
+from .codex_native_subagent_lifetime import (
+    DEFAULT_NATIVE_SUBAGENT_LIFETIME_SECONDS, validate_native_subagent_lifetime,
+)
 from .codex_runtime_actor import (
-    MAX_BUFFERED_RUNTIME_EVENTS,
-    CodexRuntimeActor,
-    CodexRuntimeTerminal,
+    MAX_BUFFERED_RUNTIME_EVENTS, CodexRuntimeActor, CodexRuntimeTerminal,
 )
 from .codex_runtime_admission import AdmittedCodexCell, CodexPhaseCellProvider
 from .codex_runtime_events import (
-    CodexEventTranslator,
-    CodexRuntimeProtocolError,
-    is_kernel_tools_mcp_startup_update,
+    CodexRuntimeProtocolError, is_kernel_tools_mcp_startup_update,
 )
+from .codex_runtime_translator_factory import build_codex_event_translator
 from .codex_runtime_state import (
     CodexThreadState,
     PhaseKey,
@@ -72,6 +67,7 @@ class CodexAgentRuntime(AgentRuntime):
         max_active_phases: int = MAX_ACTIVE_CODEX_PHASES,
         max_buffered_events: int = MAX_BUFFERED_RUNTIME_EVENTS,
         root_start_timeout_seconds: float = DEFAULT_ROOT_START_TIMEOUT_SECONDS,
+        native_subagent_lifetime_seconds: float = DEFAULT_NATIVE_SUBAGENT_LIFETIME_SECONDS,
         allow_test_only_runtime: bool = False,
     ) -> None:
         if type(allow_test_only_runtime) is not bool or not allow_test_only_runtime:
@@ -91,6 +87,9 @@ class CodexAgentRuntime(AgentRuntime):
         self._max_active = max_active_phases
         self._max_buffered_events = max_buffered_events
         self._root_start_timeout = root_timeout
+        self._native_subagent_lifetime = validate_native_subagent_lifetime(
+            native_subagent_lifetime_seconds
+        )
         self._state_lock = asyncio.Lock()
         self._pending_phases: set[PhaseKey] = set()
         self._states: dict[str, CodexThreadState] = {}
@@ -116,13 +115,11 @@ class CodexAgentRuntime(AgentRuntime):
             )
             thread_id = runtime_identifier("thread id", result.thread_id)
             ref = RuntimeThreadRef(spec.assignment, self.name, thread_id)
-            translator = CodexEventTranslator(
+            translator = build_codex_event_translator(
                 assignment=spec.assignment,
                 thread=ref,
                 cwd=admission.layout.workspace.as_posix(),
-                max_native_concurrent=0,
-                max_native_total=0,
-                max_native_depth=0,
+                policy=policy,
             )
             state = CodexThreadState(
                 leased.cell,
@@ -139,12 +136,14 @@ class CodexAgentRuntime(AgentRuntime):
                 translator=translator,
                 on_terminal=lambda _actor, terminal: self._retire(state, terminal),
                 max_buffered_events=self._max_buffered_events,
-                # The kernel-tools lane expects exactly the admitted boltrig MCP
-                # server's live-state startup updates; every other invalidation
-                # method (and any other server) stays fatal, read-only included.
                 benign_invalidation=(
                     is_kernel_tools_mcp_startup_update
                     if admission.kernel_tools
+                    else None
+                ),
+                native_subagent_lifetime_seconds=(
+                    self._native_subagent_lifetime
+                    if policy.native_subagents.max_total > 0
                     else None
                 ),
             )
@@ -434,4 +433,5 @@ __all__ = [
     "CodexAgentRuntime",
     "CodexRuntimeBindingError",
     "CodexRuntimeOperationError",
+    "DEFAULT_NATIVE_SUBAGENT_LIFETIME_SECONDS",
 ]
