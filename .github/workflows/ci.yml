@@ -168,8 +168,23 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "22"
+      # worker-e2e depends on ui-install as well as worker-install, because the
+      # Playwright binaries and the harness live under ui/. apps/worker resolves
+      # the SDK with `file:../../sdks/web` and needs no registry at all, but ui/
+      # takes the published @wlilley93 package, so this job needs the same token
+      # step ui-e2e has. Without it the run dies at ERR_PNPM_FETCH_401 before a
+      # single test executes - which is exactly how it failed on first landing.
+      - name: Authenticate pnpm to GitHub Packages
+        env:
+          GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          umask 077
+          printf '//npm.pkg.github.com/:_authToken=%s\n' "$GH_PACKAGES_TOKEN" >> "$HOME/.npmrc"
       - name: Worker e2e and accessibility (built artifact, explicit preview bind)
         run: make worker-e2e PY=python PLAYWRIGHT_INSTALL_ARGS="--with-deps chromium"
+      - name: Remove the registry token
+        if: always()
+        run: rm -f "$HOME/.npmrc"
 
   compose-validate:
     runs-on: ubuntu-24.04

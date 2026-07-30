@@ -17,7 +17,11 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 *.egg
-build/
+# ANCHORED. Unanchored `build/` matches a directory of that name ANYWHERE,
+# and it silently swallowed apps/worker/src/components/build/ - eight real
+# source components that CI could not find because they were never committed.
+# This rule is about setuptools output at the repository root, so it says so.
+/build/
 dist/
 .eggs/
 # Both forms, deliberately. A trailing slash matches a DIRECTORY only, and

@@ -23,6 +23,13 @@ PLAYWRIGHT_INSTALL_ARGS ?= chromium
 COMPOSE ?= docker compose
 COMPOSE_VALIDATE_ENV ?= .env.example
 COMPOSE_VALIDATE_POSTGRES_PASSWORD ?= boltrig-compose-validation-only
+# compose.worker-primary.yml asserts REDIS_URL with ${REDIS_URL:?...} because a
+# worker-primary production stack must not fall back to per-process counters.
+# That assertion is about DEPLOYMENT, and `config` cannot tell the two apart, so
+# the syntax check supplies a value the same way it supplies the password. The
+# assertion still fires for a real `up` with the variable unset - which is what
+# it is for - and is proven by tests/deploy/test_worker_primary_overlay.py.
+COMPOSE_VALIDATE_REDIS_URL ?= redis://boltrig-compose-validation-only:6379/0
 GITLEAKS_IMAGE ?= zricethezav/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
 ACTIONLINT_IMAGE ?= rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
 TRIVY_CONFIG_IMAGE ?= aquasec/trivy:0.72.0@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f
@@ -264,6 +271,7 @@ compose-validate: ## Validate base and secure Compose configurations
 	# explicit overlay is also the entire rollback unit.
 	BOLTRIG_ENV_FILE=$(COMPOSE_VALIDATE_ENV) \
 		POSTGRES_PASSWORD=$(COMPOSE_VALIDATE_POSTGRES_PASSWORD) \
+		REDIS_URL=$(COMPOSE_VALIDATE_REDIS_URL) \
 		$(COMPOSE) -f docker-compose.yml -f deploy/compose.dev.yml \
 		-f deploy/compose.worker-primary.yml config --quiet
 	$(PY) scripts/validate_release_images.py $(RELEASE_VALIDATE_IMAGES_ENV)
