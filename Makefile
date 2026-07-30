@@ -36,7 +36,7 @@ RELEASE_VALIDATE_IMAGES_ENV ?= tests/fixtures/release-images.env
 RELEASE_PROFILES ?= --profile backup
 
 .DEFAULT_GOAL := help
-.PHONY: help gate-status relock fleet-drift-all up down logs test lint architecture structure codex-protocol unwired-claims reachability prose-references commit-trailers refresh-canon-citations refresh-opbox-surface fleet-drift gate-coverage health-claims order-directives typecheck check python-quality ui-install ui-quality site-install site-quality ui-e2e compose-validate release-validate release-up doctor-fixture migration-parity python-audit sast iac-scan secret-scan actionlint security-source quality live-check lockfile-policy dependency-audit smoke invariants doctor migrate secure-up backup backup-schedule restore
+.PHONY: help gate-status relock fleet-drift-all up down logs test lint architecture structure codex-protocol unwired-claims reachability prose-references commit-trailers tracked-symlinks refresh-canon-citations refresh-opbox-surface fleet-drift gate-coverage health-claims order-directives typecheck check python-quality ui-install ui-quality site-install site-quality ui-e2e compose-validate release-validate release-up doctor-fixture migration-parity python-audit sast iac-scan secret-scan actionlint security-source quality live-check lockfile-policy dependency-audit smoke invariants doctor migrate secure-up backup backup-schedule restore
 
 help: ## List the available targets
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -175,15 +175,19 @@ commit-trailers: ## Every path cited in a commit Refs:/See: trailer existed when
 	$(PY) scripts/check_commit_trailers.py
 	$(PY) scripts/check_commit_trailers_selftest.py
 
+tracked-symlinks: ## No tracked symlink may dangle, loop, or escape the repo
+	$(PY) scripts/check_tracked_symlinks.py
+	$(PY) scripts/check_tracked_symlinks_selftest.py
+
 typecheck: ## Module-by-module strict mypy gate (see [tool.mypy])
 	$(PY) -m mypy
 
 gate-status: ## Is the gate on the default branch actually green right now?
 	@./scripts/gate-status.sh
 
-check: invariants lint architecture structure codex-protocol unwired-claims reachability typecheck test ## Run the local Python gates CI enforces
+check: invariants lint architecture structure codex-protocol unwired-claims reachability tracked-symlinks typecheck test ## Run the local Python gates CI enforces
 
-python-quality: invariants lint architecture structure codex-protocol unwired-claims reachability prose-references commit-trailers gate-coverage health-claims order-directives claims override-locks typecheck ## Run Python tests on Postgres with coverage override-locks typecheck
+python-quality: invariants lint architecture structure codex-protocol unwired-claims reachability prose-references commit-trailers tracked-symlinks gate-coverage health-claims order-directives claims override-locks typecheck ## Run Python tests on Postgres with coverage override-locks typecheck
 	scripts/with_test_postgres.sh $(PY) -m pytest -q \
 		--cov=boltrig --cov-report=term:skip-covered --cov-report=xml \
 		--cov-fail-under=$(COVERAGE_MIN)
