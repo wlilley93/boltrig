@@ -271,7 +271,7 @@ LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/models/grants.py:102	verb_id	Tru
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/models/memory.py:1	owner_scope	Round Five memory models: the governance + provenance control plane.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/models/workflow_schedules.py:12	grant_ceiling	One active cron desire and its last scheduler observation.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/models/workflow_triggers.py:14	secret_hash	One approved event source bound to one stored workflow.
-LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/store/distillation_reads.py:66	idle_before	Threads last touched before ``idle_before``, still open, NOT yet distilled.
+LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/store/distillation_reads.py:69	idle_before	Threads last touched before ``idle_before``, still open, NOT yet distilled.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/store/postgres.py:103	assume_role	SET LOCAL app.tenant_id from the request context.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/workflows/library.py:151	LookupError	Start a workflow and return a run descriptor (Hatchet seam).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/workflows/loop_contract.py:1	flow.loop	Closed declarative contract for bounded ``flow.loop`` expansion.
@@ -1151,6 +1151,7 @@ ORDINARY	NO-SUBJECT	comment	boltrig/store/channel_outbox.py:196		claim_work_item
 ORDINARY	NO-SUBJECT	comment	boltrig/store/channel_outbox.py:244		terminally failed (a poison message never hot-loops).
 ORDINARY	NO-SUBJECT	comment	boltrig/store/channels.py:108		control_channel_ops._bind_channel), so an id-arbitrated upsert never
 ORDINARY	NO-SUBJECT	comment	boltrig/store/channels.py:235		The PRIMARY KEY first, BEFORE anything is removed.
+ORDINARY	NO-SUBJECT	comment	boltrig/store/distillation_reads.py:55		caught this - the in-memory tests never touch the pool).
 ORDINARY	NO-SUBJECT	comment	boltrig/store/idempotency.py:130		twin, whose claim never awaits between its dict read and write, has no such
 ORDINARY	NO-SUBJECT	comment	boltrig/store/idempotency.py:183		a claim we never wrote - but say so, loudly.
 ORDINARY	NO-SUBJECT	comment	boltrig/store/idempotency.py:186		in fact FREE becomes a silently dropped idempotency guarantee.

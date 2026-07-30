@@ -50,18 +50,21 @@ class DistillationReadsPG:
         so a selection bug leaves this number visibly non-zero while acted stays
         zero, which is precisely the stalled signal SweepProgress escalates.
         """
-        idle_total = await self._pool.fetchval(
-            """SELECT count(*) FROM conversations
+        # fetchrow, not fetchval: _RlsPool exposes only fetch/fetchrow/execute,
+        # and it is the pool every store call goes through (the beelink deploy
+        # caught this - the in-memory tests never touch the pool).
+        idle_row = await self._pool.fetchrow(
+            """SELECT count(*) AS n FROM conversations
                WHERE tenant_id=$1 AND status='active' AND updated_at < $2""",
             tenant_id,
             idle_before,
         )
-        distilled = await self._pool.fetchval(
-            """SELECT count(*) FROM memory_ingestions
+        distilled_row = await self._pool.fetchrow(
+            """SELECT count(*) AS n FROM memory_ingestions
                WHERE tenant_id=$1 AND source_kind='conversation'""",
             tenant_id,
         )
-        return max(0, int(idle_total) - int(distilled))
+        return max(0, int(idle_row["n"]) - int(distilled_row["n"]))
 
     async def list_idle_conversations(
         self, tenant_id: str, idle_before: datetime, *, limit: int = 50

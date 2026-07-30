@@ -260,3 +260,35 @@ async def test_pending_counts_do_not_share_selections_logic():
         )
     )
     assert await store.count_pending_distillation(T, idle_before) == 2
+
+
+async def test_the_pg_count_uses_only_what_the_rls_pool_exposes():
+    """The beelink deploy 2026-07-30: count_pending_distillation called
+    ``_pool.fetchval``, and _RlsPool exposes only fetch/fetchrow/execute - the
+    sweep errored on every cycle while the in-memory tests were green, because
+    InMemoryStore never touches a pool. This drives the PG implementation
+    through a pool double with exactly the _RlsPool surface."""
+    from boltrig.store.distillation_reads import DistillationReadsPG
+
+    class _RlsSurfacePool:
+        """Only the three methods _RlsPool actually has. No fetchval."""
+
+        async def fetch(self, query, *args):
+            raise AssertionError("unexpected call")
+
+        async def fetchrow(self, query, *args):
+            if "FROM conversations" in query:
+                return {"n": 5}
+            if "FROM memory_ingestions" in query:
+                return {"n": 2}
+            raise AssertionError(f"unexpected query: {query}")
+
+        async def execute(self, query, *args):
+            raise AssertionError("unexpected call")
+
+    class _Store(DistillationReadsPG):
+        def __init__(self):
+            self._pool = _RlsSurfacePool()
+
+    pending = await _Store().count_pending_distillation("t1", NOW)
+    assert pending == 3
