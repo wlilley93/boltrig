@@ -133,8 +133,8 @@ def diagnose(detail: dict[str, Any] | None, schema: dict[str, Any] | None) -> di
 
 # --- the CALLER's half: what would have been accepted -----------------------
 #
-# ``audit_detail`` implements VJS-CC-BOLTRIG-SCHEMA-VALIDATION-LEDGER-001, which
-# settles what may enter the append-only ledger.
+# VJS-CC-BOLTRIG-SCHEMA-VALIDATION-LEDGER-001 settles what may enter the
+# append-only ledger, and ``audit_detail`` is what implements it.
 # The caller asks a different question - what should I have sent - which that
 # order leaves to be "derived at read time from the system of record, pinned by
 # a digest". ``caller_detail`` is that derivation.

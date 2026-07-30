@@ -136,12 +136,12 @@ def _exemption_would_end_itself(request: Any) -> bool:
 
 
 async def _alarm_development_posture(kernel: Any, principal: Any, request: Any) -> None:
-    """THE RECORD THE POSTURE DOES NOT REMOVE.
+    """THE RECORD THE POSTURE DOES NOT REMOVE: a ``SecurityWriter`` row.
 
     The second person's click is gone; this is not. It goes on the
-    tamper-evident SecurityWriter stream because it is the one signal saying a
-    control that normally takes two parties took one - so a party who was never
-    asked to approve can read afterwards what was done on their tenant.
+    tamper-evident ``SecurityWriter`` stream because it is the one signal saying
+    a control that normally takes two parties took one - so a party who was
+    never asked to approve can read afterwards what was done on their tenant.
 
     Fail-safe: the AuditWriter row written by the caller is the truth, and an
     alarm that could break an approval would be traded away the first time it did.

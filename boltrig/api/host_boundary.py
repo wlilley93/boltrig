@@ -62,11 +62,11 @@ async def write_host_boundary_security_event(
                 reason=reason,
                 actor=HOST_BOUNDARY_ACTOR,
                 actor_tier="host",
-                # The subject rides the COLUMN, not the detail. SecurityWriter
+                # The subject rides the COLUMN, not the detail. ``SecurityWriter``
                 # scrubs detail keys-only (K-20), so an email placed there comes
                 # back as a digest - and an identifier nobody can read is not
                 # attribution. It also keeps this stream from accumulating
-                # addresses in a ledger that is append-only by design.
+                # addresses: the ``SecurityWriter`` ledger is append-only.
                 on_behalf_of=subject,
                 detail=dict(detail or {}),
             )

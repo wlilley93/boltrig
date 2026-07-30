@@ -174,7 +174,8 @@ class AdapterConfig:
 #
 # Both the dataclass default and the parser fallback below must carry this, and
 # they must agree: a manifest that omits the key and a manifest that has no hitl
-# block at all are the same tenant posture, so they cannot resolve differently.
+# block at all are the same tenant posture, so both must resolve through
+# ``APPROVAL_TIMEOUT_SECONDS_FLOOR`` and cannot resolve differently.
 APPROVAL_TIMEOUT_SECONDS_FLOOR = 86400
 
 
