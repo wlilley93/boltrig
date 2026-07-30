@@ -54,6 +54,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="re-derive the audit hash chain (0 verifies, 1 does not, 2 could not look)",
     )
     p_audit.add_argument("--tenant", default=None, help="tenant to verify")
+    p_audit.add_argument(
+        "--from-seq",
+        type=int,
+        default=0,
+        help="verify only from this seq upward (prints the skipped range)",
+    )
 
     _add_identity_parsers(sub)
 
@@ -247,9 +253,12 @@ def _dispatch(args: argparse.Namespace) -> int:
     if args.cmd == "audit-verify":
         from .audit_verify import main as audit_verify_main
 
-        return audit_verify_main(
-            ["--tenant", args.tenant] if args.tenant else []
-        )
+        argv: list[str] = []
+        if args.tenant:
+            argv += ["--tenant", args.tenant]
+        if getattr(args, "from_seq", 0):
+            argv += ["--from-seq", str(args.from_seq)]
+        return audit_verify_main(argv)
 
     if args.cmd == "worker":
         from .worker import main as worker_main

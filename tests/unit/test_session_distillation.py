@@ -152,3 +152,49 @@ def test_the_seat_acts_on_behalf_of_the_thread_owner():
 
     other = _distillation_context("t1", "bob@example.com")
     assert other.on_behalf_of == "bob@example.com", "each thread gets its own seat"
+
+
+async def test_the_sweep_drains_a_backlog_LARGER_than_one_batch():
+    """A batch-sized limit must not wedge the sweep after the first pass.
+
+    THE DEFECT THIS PINS, measured live on the beelink 2026-07-30: the SQL applied
+    `LIMIT batch` ordered by updated_at, and already-distilled threads were filtered
+    out afterwards in Python. So the second sweep fetched the same oldest 20,
+    discarded all 20, and returned nothing - 20 of 89 written, then permanently
+    stuck, with zero errors and a healthy worker.
+
+    The existing idempotency test could not see it: with ONE conversation there is
+    no difference between "skips a distilled thread" and "is wedged by it". A
+    backlog test needs MORE items than the batch, which is the whole point.
+    """
+    store = InMemoryStore()
+    policy = policy_from_manifest(_manifest(on_session_end=True))
+    total = policy.batch * 2 + 3  # deliberately not a multiple of the batch
+    for i in range(total):
+        await _conv(store, f"c{i:03d}", minutes_idle=90 + i)
+
+    seen: list[str] = []
+    for sweep in range(6):
+        due = await select_conversations_to_distil(store, T, NOW, policy)
+        if not due:
+            break
+        assert len(due) <= policy.batch
+        for conv in due:
+            assert conv.id not in seen, f"{conv.id} handed out twice"
+            seen.append(conv.id)
+            await store.add_memory_ingestion(
+                MemoryIngestion(
+                    id=f"ing-{conv.id}",
+                    tenant_id=T,
+                    source_kind="conversation",
+                    source_ref=conv.id,
+                    owner_scope="user:u1",
+                    status="done",
+                )
+            )
+
+    assert len(seen) == total, (
+        f"the sweep drained only {len(seen)} of {total} - it wedged after the "
+        f"first batch instead of advancing"
+    )
+    assert await select_conversations_to_distil(store, T, NOW, policy) == []

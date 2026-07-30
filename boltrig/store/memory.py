@@ -794,12 +794,20 @@ class InMemoryStore(BudgetPolicyMem, BudgetUsageMem, WorkItemReadsMem, Idempoten
         return max(hits, key=lambda i: i.created_at) if hits else None
 
     async def list_idle_conversations(self, tenant_id, idle_before, *, limit=50):
+        # Excludes already-distilled threads HERE, before the limit, exactly as the
+        # Postgres twin does - filtering after the limit wedges the sweep.
+        distilled = {
+            i.source_ref
+            for (t, _), i in self._mem_ingest.items()
+            if t == tenant_id and i.source_kind == "conversation"
+        }
         out = [
             c
             for (t, _), c in self._convs.items()
             if t == tenant_id
             and getattr(c, "status", "active") == "active"
             and c.updated_at < idle_before
+            and c.id not in distilled
         ]
         return sorted(out, key=lambda c: c.updated_at)[: max(1, min(limit, 500))]
 

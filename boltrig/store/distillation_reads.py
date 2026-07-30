@@ -40,17 +40,29 @@ class DistillationReadsPG:
     async def list_idle_conversations(
         self, tenant_id: str, idle_before: datetime, *, limit: int = 50
     ) -> list[Any]:
-        """Threads last touched before ``idle_before`` and still open.
+        """Threads last touched before ``idle_before``, still open, NOT yet distilled.
 
         ``status='active'`` is deliberate: retention.py soft-closes a deleted
         thread to CLOSED, and a thread the user asked to delete must not then be
         distilled into 365-day memory. Oldest first, so a backlog drains in the
         order it accumulated rather than starving the oldest thread forever.
+
+        THE NOT EXISTS IS WHAT MAKES THE LIMIT MEAN ANYTHING. Filtering distilled
+        threads in Python AFTER a SQL LIMIT wedges the sweep permanently: the same
+        oldest N come back every time, all are discarded, and the rest are never
+        fetched. Measured on the beelink 2026-07-30 - 20 of 89 written, then
+        nothing, with no error and a healthy worker. The LIMIT has to apply to rows
+        that are genuinely eligible, which means the exclusion belongs here.
         """
         rows = await self._pool.fetch(
-            """SELECT * FROM conversations
-               WHERE tenant_id=$1 AND status='active' AND updated_at < $2
-               ORDER BY updated_at ASC LIMIT $3""",
+            """SELECT c.* FROM conversations c
+               WHERE c.tenant_id=$1 AND c.status='active' AND c.updated_at < $2
+                 AND NOT EXISTS (
+                   SELECT 1 FROM memory_ingestions i
+                    WHERE i.tenant_id = c.tenant_id
+                      AND i.source_kind = 'conversation'
+                      AND i.source_ref = c.id)
+               ORDER BY c.updated_at ASC LIMIT $3""",
             tenant_id,
             idle_before,
             max(1, min(limit, 500)),

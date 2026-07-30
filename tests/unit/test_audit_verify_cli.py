@@ -81,3 +81,51 @@ async def test_a_tampered_row_is_caught_and_named():
     ok, bad = await writer.verify(TENANT)
     assert ok is False
     assert bad == target.seq, f"expected the break named at {target.seq}, got {bad}"
+
+
+async def test_a_segment_verifies_only_when_seeded_from_the_preceding_row():
+    """``seed_prev`` is load-bearing, not convenience.
+
+    verify_chain returns at the FIRST bad row, so one unrepairable break makes
+    every later row permanently unchecked - measured on the beelink, where a
+    2026-07-24 key rotation with no recorded epoch left the walk aborting at seq
+    368 while 300 newer rows said nothing about themselves.
+
+    Segment mode fixes that, but only if the segment is seeded: its first row
+    chains to a hash OUTSIDE the window, so seeding prev as None reports a break
+    on a perfectly sound chain. That cry-wolf is what verify_chain's own docstring
+    warns about, and this pins both halves.
+    """
+    store, writer = await _writer_with_rows(12)
+    rows = sorted(await store.audit_query(TENANT, limit=100), key=lambda r: r.seq)
+    cut = rows[5]
+
+    whole_ok, _ = await writer.verify(TENANT)
+    assert whole_ok is True, "the chain must be sound before segmenting it"
+
+    # SEEDED: the segment above the cut verifies.
+    seeded_ok, seeded_bad = await writer.verify(
+        TENANT, start_after=cut.seq, seed_prev=cut.hash
+    )
+    assert seeded_ok is True, f"a seeded segment must verify, got first_bad={seeded_bad}"
+
+    # UNSEEDED: the same segment reports a break, on a chain that is fine.
+    unseeded_ok, unseeded_bad = await writer.verify(TENANT, start_after=cut.seq)
+    assert unseeded_ok is False, (
+        "an unseeded segment MUST cry wolf - if it did not, the seed would be "
+        "decoration and a real break could hide behind a window boundary"
+    )
+    assert unseeded_bad == rows[6].seq
+
+
+async def test_a_segment_still_catches_tampering_inside_it():
+    """Segment mode must not become a way to skip past a break silently."""
+    store, writer = await _writer_with_rows(12)
+    rows = sorted(await store.audit_query(TENANT, limit=100), key=lambda r: r.seq)
+    cut, victim = rows[3], rows[8]
+
+    object.__setattr__(victim, "hash", "0" * 64)
+
+    ok, bad = await writer.verify(TENANT, start_after=cut.seq, seed_prev=cut.hash)
+    assert ok is False
+    assert bad == victim.seq, "tampering ABOVE the cut must still be named"
