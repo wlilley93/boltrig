@@ -292,3 +292,55 @@ async def test_the_pg_count_uses_only_what_the_rls_pool_exposes():
 
     pending = await _Store().count_pending_distillation("t1", NOW)
     assert pending == 3
+
+
+async def test_the_sweep_records_a_DURABLE_receipt_not_only_a_log_line():
+    """A log line survives no restart and answers no operator query.
+
+    SweepProgress made the sweep visible in the log, which was a real improvement
+    over the seven minutes of silence that hid the 2026-07-30 wedge. It is still
+    the weaker half: nothing can ASK it anything. The background-job receipt
+    ledger is the durable half, and /readyz already reads it for the retention and
+    hitl_expiry janitors - so distillation records there too rather than growing a
+    third mechanism beside two that already work.
+    """
+    import asyncio
+
+    from boltrig.memory.session_distillation import run_distillation_forever
+    from boltrig.models import BACKGROUND_JOB_NAMES
+
+    assert "distillation" in BACKGROUND_JOB_NAMES, (
+        "an unregistered loop is invisible to /readyz no matter how well it logs"
+    )
+
+    store = InMemoryStore()
+    await _conv(store, "c1", minutes_idle=90)
+
+    class _Kernel:
+        def __init__(self, store):
+            self.store = store
+
+        async def invoke(self, *a, **k):  # never reached: no messages on the thread
+            raise AssertionError("not expected")
+
+    kernel = _Kernel(store)
+    policy = policy_from_manifest(_manifest(on_session_end=True))
+
+    task = asyncio.create_task(
+        run_distillation_forever(
+            kernel, T, policy, lambda uid: object(), interval=0.01, now_fn=lambda: NOW
+        )
+    )
+    for _ in range(200):
+        await asyncio.sleep(0.01)
+        if await store.list_background_job_receipts(T):
+            break
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+    receipts = await store.list_background_job_receipts(T)
+    assert receipts, "the sweep ran and left no durable evidence"
+    assert any(r.job_name == "distillation" for r in receipts)

@@ -162,6 +162,44 @@ async def distil_conversation(kernel: Any, tenant_id: str, conv: Any, context: A
     return True
 
 
+async def run_one_distillation_sweep(
+    kernel: Any,
+    tenant_id: str,
+    policy: DistillationPolicy,
+    context_factory: Any,
+    now: Any,
+    log: Any,
+) -> tuple[int, int, int]:
+    """One cycle: select, distil each, return (seen, acted, pending).
+
+    Split out of the forever-loop so a single cycle is testable without a task, a
+    clock or a cancel - and so the loop itself stays short enough to read, which
+    is what the structural ratchet is for.
+    """
+    due = await select_conversations_to_distil(kernel.store, tenant_id, now, policy)
+    # pending comes from a count that shares no logic with selection, so a bug
+    # INSIDE selection (the 2026-07-30 wedge filtered every candidate away) cannot
+    # also zero this number. Without it, seen=0 acted=0 reports "idle" for a sweep
+    # that is in fact stuck.
+    pending = await kernel.store.count_pending_distillation(
+        tenant_id, now - policy.idle_after
+    )
+    acted = 0
+    for conv in due:
+        try:
+            # The context is built PER THREAD, on behalf of its owner. A single
+            # generic seat cannot work: memory RBAC derives the permitted owner
+            # scopes from context.on_behalf_of, so a context with no principal is
+            # refused for every user. The check was right; the seat was wrong.
+            await distil_conversation(
+                kernel, tenant_id, conv, context_factory(conv.user_id)
+            )
+            acted += 1
+        except Exception:  # one bad thread must not stall the rest
+            log.exception("distillation failed for conversation %s", conv.id)
+    return len(due), acted, pending
+
+
 async def run_distillation_forever(
     kernel: Any,
     tenant_id: str,
@@ -184,6 +222,10 @@ async def run_distillation_forever(
 
     from boltrig.fleet.sweep_progress import SweepProgress
     from boltrig.models.base import utcnow
+    from boltrig.observability.background_jobs import (
+        new_background_process_identity,
+        record_background_attempt,
+    )
 
     log = logging.getLogger("boltrig.memory.session_distillation")
     clock = now_fn or utcnow
@@ -191,37 +233,37 @@ async def run_distillation_forever(
     # did, so a sweep that can see work and does none is visible in the log rather
     # than only in a database count somebody thought to check.
     progress = SweepProgress("session-distillation")
+    # SweepProgress writes to the LOG, which survives no restart and answers no
+    # operator query. The durable half is the background-job receipt ledger, which
+    # /readyz already reads for the retention and hitl_expiry janitors - so this
+    # loop now records there too rather than inventing a third mechanism.
+    identity = new_background_process_identity()
     while True:
+        attempted_at = clock()
+        succeeded = True
         try:
-            now = clock()
-            due = await select_conversations_to_distil(
-                kernel.store, tenant_id, now, policy
+            seen, acted, pending = await run_one_distillation_sweep(
+                kernel, tenant_id, policy, context_factory, clock(), log
             )
-            # pending comes from a count that shares no logic with selection, so
-            # a bug INSIDE selection (the 2026-07-30 wedge filtered every
-            # candidate away) cannot also zero this number. Without it, seen=0
-            # acted=0 reports "idle" for a sweep that is in fact stuck.
-            pending = await kernel.store.count_pending_distillation(
-                tenant_id, now - policy.idle_after
-            )
-            acted = 0
-            for conv in due:
-                try:
-                    # The context is built PER THREAD, on behalf of its owner.
-                    # A single generic seat cannot work: memory RBAC derives the
-                    # permitted owner scopes from context.on_behalf_of, so a
-                    # context with no principal is refused for every user - see
-                    # distillation_context above, and the beelink measurement in
-                    # its docstring. The check was right; the seat was wrong.
-                    await distil_conversation(
-                        kernel, tenant_id, conv, context_factory(conv.user_id)
-                    )
-                    acted += 1
-                except Exception:  # one bad thread must not stall the rest
-                    log.exception("distillation failed for conversation %s", conv.id)
-            progress.record(seen=len(due), acted=acted, pending=pending)
+            progress.record(seen=seen, acted=acted, pending=pending)
         except asyncio.CancelledError:
             raise
         except Exception:
+            succeeded = False
+            acted = 0
             log.exception("distillation sweep failed; continuing")
+        # Best-effort evidence, exactly as the retention janitor does it: it can
+        # never change the sweep outcome, and a failed write must not stall the
+        # loop. This is the DURABLE half - SweepProgress logs, which survive no
+        # restart and answer no operator query.
+        await record_background_attempt(
+            kernel.store,
+            tenant_id=tenant_id,
+            job_name="distillation",
+            process_instance_identity=identity,
+            interval_seconds=interval,
+            attempted_at=attempted_at,
+            succeeded=succeeded,
+            item_count=acted,
+        )
         await asyncio.sleep(interval)
