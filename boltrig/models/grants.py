@@ -121,6 +121,18 @@ class GrantSet:
         for pattern in self.allow:
             if other.permits_pattern(pattern):
                 allow.append(pattern)
+            elif pattern == "*":
+                # A broad CURRENT grant intersected with a captured narrow
+                # ceiling becomes that ceiling; dropping every exact entry here
+                # would make a real org-admin unable to exercise a deliberately
+                # narrowed delegation (workflow schedules/webhooks).
+                allow.extend(
+                    entry
+                    for entry in other.allow
+                    if entry != "*"
+                    and other.permits(entry.rstrip(".*"))
+                    and entry not in allow
+                )
             elif pattern.endswith(".*"):
                 allow.extend(
                     entry

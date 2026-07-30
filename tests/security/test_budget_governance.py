@@ -73,6 +73,7 @@ async def test_budget_policy_preserves_usage_and_reset_is_selective():
             cost_limit_micros=200,
             spent_tokens=40,
             spent_micros=80,
+            window="monthly",
         )
     )
 
@@ -88,16 +89,15 @@ async def test_budget_policy_preserves_usage_and_reset_is_selective():
             "window": "monthly",
         },
     )
-    assert upserted["budget"] == {
-        "id": TENANT,
-        "scope_type": "tenant",
-        "window": "monthly",
-        "hard_stop": False,
-        "token_limit": 500,
-        "spent_tokens": 40,
-        "cost_limit_micros": 900,
-        "spent_micros": 80,
-    }
+    assert upserted["budget"]["id"] == TENANT
+    assert upserted["budget"]["window"] == "monthly"
+    assert upserted["budget"]["hard_stop"] is False
+    assert upserted["budget"]["token_limit"] == 500
+    assert upserted["budget"]["spent_tokens"] == 40
+    assert upserted["budget"]["cost_limit_micros"] == 900
+    assert upserted["budget"]["spent_micros"] == 80
+    assert upserted["budget"]["usage_state"] == "current"
+    assert upserted["budget"]["window_key"].startswith("month:")
 
     reset = await _approved(
         kernel,

@@ -259,6 +259,39 @@ async def test_preferred_capability_chosen_when_capable():
     assert res["agent_type"] == "preferred-script"
 
 
+async def test_preferred_runtime_is_honoured_over_cost_order():
+    kernel = await _kernel_with_caps()
+    await kernel.store.upsert_capability(
+        AgentCapability("codex-worker", T, "codex", ["*"], 2, True, "expensive")
+    )
+    spawner = build_spawner(kernel)
+
+    res = await spawner.spawn(
+        T,
+        "decompose epic",
+        ["analysis/decompose"],
+        {"runtime": "codex"},
+        _ctx(),
+    )
+
+    assert res["agent_type"] == "codex-worker"
+
+
+async def test_script_runtime_alias_selects_python_script_capability():
+    kernel = await _kernel_with_caps()
+    spawner = build_spawner(kernel)
+
+    res = await spawner.spawn(
+        T,
+        "decompose epic",
+        ["analysis/decompose"],
+        {"runtime": "script"},
+        _ctx(),
+    )
+
+    assert res["agent_type"] == "script-worker"
+
+
 async def test_context_requirements_validated():
     kernel = await _kernel_with_caps()
     spawner = build_spawner(kernel)
@@ -360,6 +393,7 @@ async def test_observability_sink_runs_after_audit_persist(monkeypatch):
 
 
 @pytest.mark.invariant("US-FLT-04")
+@pytest.mark.invariant("SEC-WRK-10")
 async def test_subagent_open_is_settled_by_subagent_end_frame(monkeypatch):
     """G3 (SDK-CONTRACT §5): a subagent open frame is paired with a subagent_end
     carrying the SAME child_run_id on the SAME parent relay, so a consumer's
@@ -385,4 +419,15 @@ async def test_subagent_open_is_settled_by_subagent_end_frame(monkeypatch):
     assert len(opens) == 1 and len(ends) == 1
     # paired to the SAME child run id the open announced
     assert opens[0]["child_run_id"] == res["run_id"] == ends[0]["child_run_id"]
+    assert opens[0]["name"] == opens[0]["capability"]
+    assert opens[0]["familiar_genotype"]["source"] == (
+        "agent_capability.name.v1"
+    )
+    assert not {
+        "grants",
+        "runtime",
+        "model_endpoint",
+        "phenotype",
+        "mood",
+    } & set(opens[0]["familiar_genotype"])
     assert ends[0]["status"] in {"ok", "degraded"}

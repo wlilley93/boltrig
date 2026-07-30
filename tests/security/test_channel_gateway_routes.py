@@ -81,6 +81,15 @@ def _session(client: TestClient, channels: list[str]) -> str:
     return r.json()["token"]
 
 
+def _reconcile(client: TestClient, token: str) -> dict:
+    response = client.get(
+        "/v1/channels/gateway/reconcile",
+        headers={"x-boltrig-mcp-token": token},
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
 # --- the session mint ---------------------------------------------------------
 @pytest.mark.security
 @pytest.mark.invariant("SEC-177")
@@ -132,6 +141,8 @@ def test_outbox_claim_ack_fail_over_the_sidecar_token():
     c = _client(kernel)
     token = _session(c, ["ch-s1"])
     H = {"x-boltrig-mcp-token": token}
+    desired = _reconcile(c, token)
+    assert desired["channels"][0]["ownership"]["status"] == "owner"
     asyncio.run(store.enqueue_channel_outbox(
         ChannelOutboxMessage(id="m-1", tenant_id=T, channel_id="ch-s1",
                              payload={"text": "hi", "target": "C1"})
@@ -155,6 +166,94 @@ def test_outbox_claim_ack_fail_over_the_sidecar_token():
     # a revoked token stops working at once (the MCP seam's revoke)
     kernel.mcp.revoke(token)
     assert c.post("/v1/channels/gateway/outbox/claim", json={}, headers=H).status_code == 401
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-177")
+def test_only_owner_receives_resolved_secrets_heartbeat_and_outbox_work():
+    kernel, store = asyncio.run(_kernel())
+    # This test isolates ownership fencing from provider-specific completeness.
+    # The generic socket provider requires only the signing credential already
+    # present in the fixture.
+    asyncio.run(
+        store.upsert_channel(
+            Channel(
+                id="ch-s1",
+                tenant_id=T,
+                platform="generic",
+                name="Ops",
+                transport="socket",
+                credential_ref="cred-1",
+                config={"sender_field": "sender"},
+            )
+        )
+    )
+    c = _client(kernel)
+    first = _session(c, ["ch-s1"])
+    second_response = c.post(
+        "/v1/channels/gateway/session",
+        json={"channels": ["ch-s1"], "gateway_id": "gateway-standby"},
+        headers=_admin(),
+    )
+    assert second_response.status_code == 201
+    second = second_response.json()["token"]
+
+    owner = _reconcile(c, first)["channels"][0]
+    assert owner["state"] == "configured"
+    assert owner["secret"] == SECRET
+    standby = _reconcile(c, second)["channels"][0]
+    assert standby == {
+        "channel_id": "ch-s1",
+        "platform": "generic",
+        "revision": standby["revision"],
+        "state": "standby",
+        "reason_code": "gateway_owner_lease_held",
+        "provider_credentials_included": False,
+    }
+    assert SECRET not in repr(standby)
+
+    fenced_heartbeat = c.post(
+        "/v1/channels/gateway/heartbeat",
+        headers={"x-boltrig-mcp-token": second},
+        json={
+            "observations": [
+                {
+                    "channel_id": "ch-s1",
+                    "revision": standby["revision"],
+                    "status": "ready",
+                }
+            ]
+        },
+    )
+    assert fenced_heartbeat.json() == {
+        "status": "ok",
+        "accepted": 0,
+        "fenced": 1,
+    }
+    asyncio.run(
+        store.enqueue_channel_outbox(
+            ChannelOutboxMessage(
+                id="m-owner",
+                tenant_id=T,
+                channel_id="ch-s1",
+                payload={"text": "owner only"},
+            )
+        )
+    )
+    standby_claim = c.post(
+        "/v1/channels/gateway/outbox/claim",
+        json={},
+        headers={"x-boltrig-mcp-token": second},
+    )
+    assert standby_claim.json()["messages"] == []
+    owner_claim = c.post(
+        "/v1/channels/gateway/outbox/claim",
+        json={},
+        headers={"x-boltrig-mcp-token": first},
+    )
+    assert [item["id"] for item in owner_claim.json()["messages"]] == [
+        "m-owner"
+    ]
 
 
 # --- socket intake shares the ONE path ----------------------------------------

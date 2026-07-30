@@ -27,11 +27,9 @@ from tests.contracts.assignment_admission import (
     assert_concurrent_identical_admissions_are_coherent,
 )
 from tests.store.execution_ledger_pg import (
-    DSN,
     TRUNCATE,
     ddl,
-    init_codec,
-    migration_sql,
+    isolated_pool,
     pg_only,
 )
 from tests.unit.execution_ledger_fixtures import CLOCK_NOW
@@ -40,9 +38,12 @@ _ATTESTATION_TABLES = "capability_attestation_entries, capability_attestation_se
 
 
 def _schema() -> str:
-    """Both shipped schemas: the ledger's and the attestation store's own."""
+    """The whole shipped chain, including the attestation store's own schema."""
 
-    return ";\n".join((ddl(), *migration_sql("0030_capability_attestations")))
+    schema = ddl()
+    assert "capability_attestation_sets" in schema
+    assert "capability_attestation_entries" in schema
+    return schema
 
 
 @pytest.fixture
@@ -52,14 +53,12 @@ async def admission_pool() -> AsyncIterator[asyncpg.Pool]:
     # the pool and serialize before they ever reach PostgreSQL. Both stores share
     # this pool, exactly as a deployment binds them, so the sequence of
     # acquire/release across the two transactions is the real one.
-    pool = await asyncpg.create_pool(dsn=DSN, min_size=2, max_size=16, init=init_codec)
-    assert pool is not None
-    async with pool.acquire() as conn:
-        await conn.execute(_schema())
-        await conn.execute(TRUNCATE)
-        await conn.execute(f"TRUNCATE {_ATTESTATION_TABLES}")
-    yield pool
-    await pool.close()
+    async with isolated_pool(min_size=2, max_size=16) as pool:
+        async with pool.acquire() as conn:
+            await conn.execute(_schema())
+            await conn.execute(TRUNCATE)
+            await conn.execute(f"TRUNCATE {_ATTESTATION_TABLES}")
+        yield pool
 
 
 def _build(

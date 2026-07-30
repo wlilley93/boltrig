@@ -2,11 +2,43 @@
 // dev identity headers (x-boltrig-*) read from the identity store. Paths are
 // relative: the Vite dev server and the nginx prod image both proxy /v1 and
 // /healthz to the kernel.
+//
+// Every call into the kernel goes through BASE below - `request` here, plus the
+// three streaming fetches in api/sse.ts and api/domains/knowledge.ts, which
+// import it. That makes BASE the single place the console's mount point enters
+// the wire, which is why deriving it once is enough to mount the whole app
+// under a sub-path.
 
 import { getIdentity } from "@/identity";
 
-// Optional base prefix (e.g. when the UI is mounted under a sub-path).
-export const BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "");
+// The mount point of this console, as a path prefix ("" at the root,
+// "/boltrig" under a tenant app). Pure and exported so it can be tested without
+// a DOM.
+//
+// This is DERIVED rather than configured, and that is the point: one built
+// artefact serves at any mount, so a tenant never runs a differently-built
+// image and there is no mount path to remember, render or drift. See
+// docs/GOAL-console-mounts-with-its-stack.md (M1, M2).
+//
+// It is only safe because src/router.ts is a HASH router. Every deep link lives
+// in the fragment (#/runs/123), which the browser never sends, so pathname is
+// only ever the mount point itself. If this app ever adopts history routing,
+// this derivation breaks and the prefix must come from elsewhere.
+export function mountPrefix(pathname: string): string {
+  const segs = pathname.split("/");
+  // A trailing segment that names a file (index.html) belongs to the document,
+  // not to the mount. Without this, /boltrig/index.html derives
+  // "/boltrig/index.html" and every API call 404s.
+  if (segs.length > 0 && segs[segs.length - 1].includes(".")) segs.pop();
+  return segs.join("/").replace(/\/+$/, "");
+}
+
+// Build-time VITE_API_BASE still wins where a deployment needs to state the
+// prefix explicitly; unset, the prefix is derived at runtime.
+export const BASE = (
+  import.meta.env.VITE_API_BASE ??
+  (typeof window === "undefined" ? "" : mountPrefix(window.location.pathname))
+).replace(/\/$/, "");
 
 export class ApiError extends Error {
   readonly status: number;

@@ -98,6 +98,7 @@ async def _next_of_type(queue: asyncio.Queue, etype: str, timeout: float = 5.0) 
 @pytest.mark.security
 @pytest.mark.invariant("SEC-177")
 @pytest.mark.invariant("SEC-183")
+@pytest.mark.invariant("SEC-WRK-03")
 async def test_voice_adapter_round_trip_against_a_test_kernel():
     kernel, store, tickets = await _kernel()
     kernel_app = create_app(kernel)
@@ -109,11 +110,13 @@ async def test_voice_adapter_round_trip_against_a_test_kernel():
     sockets: asyncio.Queue = asyncio.Queue()   # accepted realtime conns
     received: asyncio.Queue = asyncio.Queue()  # client->server events
     seen_auth: list[str | None] = []
+    seen_paths: list[str] = []
 
     async def _realtime_handler(ws):
         request = getattr(ws, "request", None)
         headers = getattr(request, "headers", {}) or {}
         seen_auth.append(headers.get("authorization"))
+        seen_paths.append(str(getattr(request, "path", "")))
         await sockets.put(ws)
         try:
             async for raw in ws:
@@ -221,6 +224,50 @@ async def test_voice_adapter_round_trip_against_a_test_kernel():
         assert "hi back" in speak["response"]["instructions"]
         await _until(lambda: _settled(store))
         assert await store.claim_channel_outbox(T, ["ch-v1"], "late", 60, 10) == []
+
+        # --- browser-call boundary: fresh provider socket + caller tools only --
+        # A channel socket must never retain one user's provider conversation or
+        # tool token for the next browser caller. Activation closes the old xAI
+        # session, opens a fresh one, and refreshes tools from the redeemed
+        # caller-scoped token. Browser transcripts are normalized call events in
+        # production; they do NOT also enter the static channel-binding intake.
+        browser_token = kernel.mcp.issue_run_token(
+            T, GrantSet.of(["ticket.read"]), actor="alice",
+            extra={"realtime_call": "call-browser"},
+        )
+        adapter = daemon._adapters["ch-v1"]
+        await adapter.activate_call(
+            browser_token,
+            "call-browser",
+            {
+                "provider": "xai",
+                "model": "governed-realtime",
+                "agent_profile_id": "research-familiar",
+            },
+        )
+        browser_ws = await asyncio.wait_for(sockets.get(), timeout=5)
+        browser_update = await _next_of_type(received, "session.update")
+        assert {tool["name"] for tool in browser_update["session"]["tools"]} == {
+            "ticket_read"
+        }
+        assert seen_paths[1].endswith("?model=governed-realtime")
+        assert "research-familiar" in browser_update["session"]["instructions"]
+        before = len(await store.list_work_items(T))
+        await browser_ws.send(json.dumps({
+            "type": "conversation.item.input_audio_transcription.completed",
+            "item_id": "browser-item-1",
+            "transcript": "do not route through the static voice binding",
+        }))
+        await asyncio.sleep(0.05)
+        assert len(await store.list_work_items(T)) == before
+
+        # Detach clears the caller token and rotates provider conversation state
+        # again; this third accepted socket is not the browser caller's session.
+        await adapter.deactivate_call()
+        await asyncio.wait_for(sockets.get(), timeout=5)
+        await _next_of_type(received, "session.update")
+        assert len(seen_auth) == 3
+        assert seen_paths[2].endswith("?model=test-realtime")
     finally:
         await daemon.stop()
         await asgi.aclose()
@@ -263,3 +310,139 @@ def test_server_side_tool_config_is_rejected_at_init(key, tools):
 def test_missing_api_key_fails_closed():
     with pytest.raises(ValueError):
         xai_voice_adapter.XaiVoiceAdapter({"egress_allow": ["api.x.ai"]})
+
+
+def test_priced_usage_needs_an_explicit_pricing_revision():
+    with pytest.raises(ValueError, match="pricing_revision"):
+        xai_voice_adapter.XaiVoiceAdapter({
+            "api_key": "xai-test-key",
+            "egress_allow": ["api.x.ai"],
+            "input_audio_micros_per_minute": 1,
+        })
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-WRK-04")
+async def test_voice_usage_meter_and_exact_hitl_provider_call():
+    class FakeKernel:
+        async def mcp_call(self, method, params):
+            assert method == "tools/call"
+            return {
+                "result": {
+                    "content": [{"type": "text", "text": "pending approval: req-7"}],
+                    "isError": True,
+                    "_boltrig": {
+                        "status": "pending_human",
+                        "hitl_request_id": "req-7",
+                    },
+                }
+            }
+
+        async def get_call_hitl(self, call_id, request_id):
+            assert (call_id, request_id) == ("call-browser", "req-7")
+            return {"status": "ok", "request_id": request_id}
+
+    class FakeSocket:
+        def __init__(self):
+            self.sent = []
+
+        async def send(self, raw):
+            self.sent.append(json.loads(raw))
+
+    events = []
+
+    async def sink(event_type, payload, *, participant_id=None):
+        events.append((event_type, payload, participant_id))
+
+    audio = xai_voice_adapter.QueueAudio()
+    fake_kernel = FakeKernel()
+    adapter = xai_voice_adapter.XaiVoiceAdapter({
+        "api_key": "xai-test-key",
+        "egress_allow": ["api.x.ai"],
+        "kernel_client": fake_kernel,
+        "audio": audio,
+        "event_sink": sink,
+        # Deliberately simple acceptance rates: one micro per PCM byte at
+        # 24kHz/16-bit and seven micros per tool call.
+        "input_audio_micros_per_minute": 2_880_000,
+        "output_audio_micros_per_minute": 2_880_000,
+        "tool_call_micros": 7,
+        "pricing_revision": "test-rate-v1",
+    })
+    socket = FakeSocket()
+    adapter._ws = socket
+    adapter._browser_call_active = True
+    adapter._browser_call_id = "call-browser"
+    adapter._tool_names = {"ticket_create": "ticket.create"}
+
+    mic_task = asyncio.create_task(adapter._mic_loop())
+    try:
+        audio.feed_mic(b"i" * 100)
+
+        async def _input_sent():
+            return next(
+                (
+                    event
+                    for event in socket.sent
+                    if event.get("type") == "input_audio_buffer.append"
+                ),
+                None,
+            )
+
+        await _until(_input_sent)
+        await adapter._handle_event({
+            "type": "response.output_audio.delta",
+            "delta": base64.b64encode(b"o" * 50).decode("ascii"),
+        })
+        await adapter._forward_function_call({
+            "call_id": "provider-call-7",
+            "name": "ticket_create",
+            "arguments": json.dumps({"title": "exact"}),
+        })
+
+        async def _provider_resumed():
+            return next(
+                (
+                    event
+                    for event in socket.sent
+                    if event.get("type") == "conversation.item.create"
+                    and event.get("item", {}).get("call_id") == "provider-call-7"
+                ),
+                None,
+            )
+
+        resumed = await _until(_provider_resumed)
+        assert resumed["item"]["type"] == "function_call_output"
+        assert json.loads(resumed["item"]["output"]) == {
+            "status": "ok",
+            "approval_request_id": "req-7",
+        }
+        assert any(
+            kind == "hitl"
+            and payload["request_id"] == "req-7"
+            and payload["provider_call_id"] == "provider-call-7"
+            for kind, payload, _participant in events
+        )
+
+        await adapter._handle_event({
+            "type": "response.done",
+            "response": {
+                "usage": {"input_tokens": 12, "output_tokens": 8},
+            },
+        })
+        usage = [payload for kind, payload, _ in events if kind == "usage"]
+        assert sum(row["input_audio_bytes"] for row in usage) == 100
+        assert sum(row["output_audio_bytes"] for row in usage) == 50
+        assert sum(row["tool_calls"] for row in usage) == 1
+        assert sum(row["provider_input_tokens"] for row in usage) == 12
+        assert sum(row["provider_output_tokens"] for row in usage) == 8
+        assert sum(row["estimated_cost_micros"] for row in usage) == 157
+        assert {row["cost_status"] for row in usage} == {"estimated"}
+        assert {row["pricing_revision"] for row in usage} == {"test-rate-v1"}
+        assert base64.b64encode(b"i" * 100).decode("ascii") not in json.dumps(usage)
+        assert base64.b64encode(b"o" * 50).decode("ascii") not in json.dumps(usage)
+    finally:
+        adapter._stopping.set()
+        mic_task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await mic_task

@@ -76,6 +76,7 @@ def test_dev_admin_discovery_not_empty():
 
 @pytest.mark.security
 @pytest.mark.invariant("US-KER-05")
+@pytest.mark.invariant("SEC-WRK-10")
 def test_discovery_catalogue_is_grant_tenant_and_workspace_scoped():
     async def build():
         k = await _kernel()
@@ -172,6 +173,7 @@ def test_discovery_catalogue_is_grant_tenant_and_workspace_scoped():
         "input_schema",
         "output_schema",
         "consequence",
+        "idempotency_mode",
         "binding",
         "health",
     }
@@ -179,6 +181,7 @@ def test_discovery_catalogue_is_grant_tenant_and_workspace_scoped():
     assert create["input_schema"]["required"] == ["title"]
     assert create["output_schema"]["required"] == ["id"]
     assert create["consequence"] == "low"
+    assert create["idempotency_mode"] == "cacheable"
     assert create["binding"] == {
         "target_type": "adapter",
         "target_ref": "memory-tickets",
@@ -206,5 +209,14 @@ def test_discovery_catalogue_is_grant_tenant_and_workspace_scoped():
             "is_ephemeral": True,
             "cost_tier": "cheap",
             "model_endpoint": "local-model",
+            "familiar_genotype": {
+                "source": "agent_capability.name.v1",
+                "seed": 104173362,
+                "body": "pioneer",
+                "palette": ["#fce7f3", "#ec4899", "#831843"],
+                "markings": ["orbit"],
+                "accessories": ["signal-pin"],
+                "voice_id": None,
+            },
         }
     ]

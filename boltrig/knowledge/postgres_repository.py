@@ -108,6 +108,7 @@ class PostgresKnowledgeRepository:
         workspace_id: str | None,
         scopes: list[str],
         limit: int,
+        offset: int = 0,
     ) -> list[dict]:
         rows = await self._pool.fetch(
             """
@@ -120,9 +121,9 @@ class PostgresKnowledgeRepository:
               AND EXISTS (SELECT 1 FROM knowledge_asset_access x
                           WHERE x.tenant_id=a.tenant_id AND x.asset_id=a.id
                             AND x.scope=ANY($3::text[]))
-            GROUP BY a.tenant_id,a.id ORDER BY a.created_at DESC LIMIT $4
+            GROUP BY a.tenant_id,a.id ORDER BY a.created_at DESC LIMIT $4 OFFSET $5
             """,
-            tenant_id, workspace_id, scopes, limit,
+            tenant_id, workspace_id, scopes, limit, offset,
         )
         return [_asset_public(row) for row in rows]
 

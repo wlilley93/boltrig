@@ -153,6 +153,7 @@ def test_secure_answer_is_sealed_and_the_run_carries_only_the_reference():
     assert q_events and q_events[0]["secure"] is True
     assert q_events[0]["purpose"] == PURPOSE
     assert hitl_events and hitl_events[0]["secure"] is True
+    assert hitl_events[0]["secure_purpose"] == PURPOSE
 
     # the list projection marks it too (additive; a secure-input affordance)
     client = TestClient(create_app(k))
@@ -161,8 +162,10 @@ def test_secure_answer_is_sealed_and_the_run_carries_only_the_reference():
     assert rows and rows[0]["secure"] is True
     assert rows[0]["secure_purpose"] == PURPOSE
 
-    # the owner answers with the secret value
-    r = client.post(f"/v1/hitl/{qid}/answer", json={"answer": SECRET},
+    # The owner answers with exact opaque material. The surrounding spaces are
+    # deliberately significant: secure values are validated, never normalised.
+    submitted = f"  {SECRET}  "
+    r = client.post(f"/v1/hitl/{qid}/answer", json={"answer": submitted},
                     headers=_hdr("alice"))
     assert r.status_code == 200
     # no echo: the value appears nowhere in the answer response body
@@ -184,7 +187,7 @@ def test_secure_answer_is_sealed_and_the_run_carries_only_the_reference():
     assert SECRET not in json.dumps(raw)
     # ... and unseals kernel-side to exactly the submitted value
     unsealed = asyncio.run(store.get_credential_ref(T, run_scoped_cred_id("r1", PURPOSE)))
-    assert unsealed["value"] == SECRET
+    assert unsealed["value"] == submitted
     assert unsealed["run_id"] == "r1" and unsealed["purpose"] == PURPOSE
 
     # no echo in audit either: the answer audit row carries the secure marker,

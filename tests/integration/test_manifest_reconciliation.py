@@ -131,6 +131,32 @@ async def test_name_from_both_paths_becomes_manifest_and_reconciles(store):
     assert dual.is_active is False
 
 
+@pytest.mark.invariant("SEC-WRK-12")
+async def test_governed_status_and_status_preserving_edits_match_both_stores(store):
+    tenant = f"t-{uuid.uuid4().hex}"
+    await _upsert_control_plane(store, tenant, "recoverable")
+    retired = await store.set_capability_active(tenant, "recoverable", False)
+    assert retired is not None and retired.is_active is False
+    await store.upsert_capability(
+        AgentCapability(
+            name="recoverable",
+            tenant_id=tenant,
+            runtime="codex",
+            supported_skills=["*"],
+            max_depth=2,
+            is_ephemeral=False,
+            cost_tier="standard",
+            source="control-plane",
+        ),
+        preserve_status=True,
+    )
+    assert await store.list_capabilities(tenant) == []
+    edited = (await store.list_all_capabilities(tenant))[0]
+    assert edited.runtime == "codex" and edited.is_active is False
+    restored = await store.set_capability_active(tenant, "recoverable", True)
+    assert restored is not None and restored.is_active is True
+
+
 @pytest.mark.invariant("SEC-171")
 async def test_empty_manifest_aborts_without_confirm_and_succeeds_with_it(store):
     tenant = f"t-{uuid.uuid4().hex}"

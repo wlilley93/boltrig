@@ -251,6 +251,7 @@ async def test_teardown_revokes_grant_and_closes_proxy_and_ingress(
             upstream_base_url="http://gateway/v1",
             upstream_key="KERNEL-ONLY-KEY",
             client=client,
+            allowed_model=_MODEL_ID,
         )
         await proxy.start()
 
@@ -524,9 +525,10 @@ async def test_the_proxy_ceiling_is_derived_from_the_policy_not_a_default(
     store, broker = _store_broker()
     async with httpx.AsyncClient() as client:
         provider = _provider(broker=broker, store=store, client=client)
-        proxy = await provider._start_proxy(GenerationHolder(1), granted)
+        proxy = await provider._start_proxy(GenerationHolder(1), granted, _MODEL_ID)
         try:
             assert proxy._allowed_tools == granted
+            assert proxy._allowed_model == _MODEL_ID
         finally:
             await proxy.aclose()
 

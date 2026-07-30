@@ -40,7 +40,6 @@ from boltrig.models import (
 )
 from boltrig.store import InMemoryStore
 from boltrig.store.sealing import is_sealed
-from tests.approval import approved_request
 
 T = "acme"
 
@@ -253,6 +252,20 @@ def _hdr(role="org-admin", subject="admin"):
             "x-boltrig-role": role, "x-boltrig-grants": "*"}
 
 
+def _approved_ai_key(c, k, body, headers):
+    staged = c.put("/v1/ai-keys", headers=headers, json=body)
+    assert staged.status_code == 202, staged.text
+    assert "hitl_request_id" not in staged.json()
+    proposal_id = staged.json()["proposal"]["id"]
+    proposal = _run(k.store.get_ai_key_secret_proposal(T, proposal_id))
+    assert proposal is not None and proposal.approval_id
+    _run(k.hitl.answer(T, proposal.approval_id, "approve", "test-reviewer"))
+    return c.post(
+        f"/v1/ai-keys/proposals/{proposal_id}/finalize",
+        headers=headers,
+    )
+
+
 @pytest.mark.security
 @pytest.mark.invariant("SEC-113")
 def test_ai_key_is_sealed_never_returned_or_audited():
@@ -261,8 +274,26 @@ def test_ai_key_is_sealed_never_returned_or_audited():
     secret = "sk-topsecretkeyvalue0987654321"
     key_body = {"level": "org", "provider": "openai", "model": "gpt",
                 "api_key": secret}
-    resp = approved_request(
-        c, k, T, "PUT", "/v1/ai-keys", headers=_hdr(), json=key_body
+    staged = c.put("/v1/ai-keys", headers=_hdr(), json=key_body)
+    assert staged.status_code == 202
+    proposal_id = staged.json()["proposal"]["id"]
+    proposal = _run(store.get_ai_key_secret_proposal(T, proposal_id))
+    assert proposal is not None and proposal.approval_id
+
+    # Plaintext is absent from every staging and approval representation. The
+    # proposal row carries only an opaque sealed-reference id and a digest.
+    held = _run(store.get_hitl_request(T, proposal.approval_id))
+    raw_proposal = store._ai_key_proposals[(T, proposal_id)]
+    raw_stage = store._creds[(T, f"staged_ai_key:{proposal_id}")]
+    assert secret not in staged.text
+    assert secret not in repr(raw_proposal)
+    assert secret not in repr(held)
+    assert secret not in json.dumps(raw_stage)
+    assert is_sealed(raw_stage)
+
+    _run(k.hitl.answer(T, proposal.approval_id, "approve", "test-reviewer"))
+    resp = c.post(
+        f"/v1/ai-keys/proposals/{proposal_id}/finalize", headers=_hdr()
     )
     assert resp.status_code == 200
     # The response NEVER echoes the key.
@@ -295,6 +326,8 @@ def test_ai_key_is_sealed_never_returned_or_audited():
     assert lst["allow_own_ai_keys"] is True
     assert lst["ai_keys"][0]["has_key"] is True
     assert secret not in repr(lst)
+    consumed = _run(store.get_ai_key_secret_proposal(T, proposal_id))
+    assert consumed.status == "consumed" and consumed.secret_ref is None
 
 
 # --- SEC-115: the set-key route is role-scoped --------------------------------
@@ -314,8 +347,11 @@ def test_set_key_route_is_role_scoped():
         response = c.put("/v1/ai-keys", headers=hdr, json=body)
         if response.status_code != 202:
             return response
-        return approved_request(
-            c, k, T, "PUT", "/v1/ai-keys", headers=hdr, json=body, held=response
+        proposal_id = response.json()["proposal"]["id"]
+        proposal = _run(store.get_ai_key_secret_proposal(T, proposal_id))
+        _run(k.hitl.answer(T, proposal.approval_id, "approve", "test-reviewer"))
+        return c.post(
+            f"/v1/ai-keys/proposals/{proposal_id}/finalize", headers=hdr
         )
 
     # org level: a plain member is denied; an org-admin succeeds.

@@ -32,7 +32,7 @@ _SCOPED = (
     "model_endpoints,work_items,hitl_requests,hitl_responses,users,role_mappings,audit_log,"
     "idempotency_keys,budgets,credential_refs,tenant_permissions,conversations,config_revisions,"
     "eval_cases,eval_runs,notification_prefs,personal_agents,memory_items,mcp_servers,"
-    "conversation_messages,user_invitations,user_settings,user_sessions,memory_facts,"
+    "mcp_probe_receipts,conversation_messages,user_invitations,user_settings,user_sessions,memory_facts,"
     "memory_ingestions,memory_erasures,memory_projection_statuses,"
     "memory_vectors,memory_vector_edges,knowledge_uploads,knowledge_blobs,knowledge_assets,"
     "knowledge_source_occurrences,knowledge_revisions,knowledge_representations,"

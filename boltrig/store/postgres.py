@@ -1,7 +1,6 @@
 """PostgreSQL-backed Store (asyncpg). Satisfies ``store.base.Store`` (P0-1).
 
-Mirrors ``InMemoryStore`` method for method so the kernel cannot tell which store
-it runs on; the only difference is durability. Every query is scoped by
+Mirrors ``InMemoryStore`` method for method; only durability differs. Every query is scoped by
 ``tenant_id`` (SEC-08). JSONB columns round-trip as Python dict/list via a codec.
 Alembic is authoritative for production upgrades; ``schema.sql`` is an explicit
 fresh-database/test bootstrap used only when ``apply_schema=True``.
@@ -21,29 +20,39 @@ from .channels import ChannelStorePG
 from .channel_dedup import ChannelDedupStorePG
 from .channel_outbox import ChannelOutboxStorePG
 from .budget_policy import BudgetPolicyPG
+from .budget_usage import BudgetUsagePG
 from .capabilities import CapabilityStorePG
 from .guarded_writes import GuardedWritesPG
 from .idempotency import IdempotencyStorePG
 from .observability_reads import ObservabilityReadsPG
+from .password_resets import PasswordResetStorePG
+from .permanent_fleet import PermanentFleetStorePG
+from .birth_profiles import BirthProfileStorePG
+from .background_jobs import BackgroundJobStorePG
 from .sealing import seal_ref, unseal_ref
 from .work_items import WorkItemReadsPG, work_item_from_row
+from .workflow_triggers import WorkflowTriggerStorePG
+from .workflow_schedules import WorkflowScheduleStorePG
+from .authored_definitions_postgres import AuthoredDefinitionStorePG
+from .eval_cases import EvalCaseStorePG
+from .credential_references import CredentialReferencePresencePG
+from .ai_key_proposals import AiKeyProposalStorePG
+from .mcp_lifecycle import McpLifecycleStorePG
 from .rows import (
-    _adapter, _ai_config, _anchor, _audit, _binding, _budget, _checkpoint,
-    _conversation, _endpoint, _eval_case, _eval_run, _hitl_req, _hitl_resp,
+    _adapter, _ai_config, _anchor, _audit, _checkpoint,
+    _conversation, _endpoint, _hitl_req, _hitl_resp,
     _invitation, _mem_erasure, _mem_fact, _mem_ingestion, _mem_projection,
-    _memory, _message, _notif, _noun, _org, _org_member, _pat, _personal,
-    _revision, _security, _session, _setting, _skill, _summary, _tfa_challenge,
-    _user, _user_totp, _verb, _workflow, _workspace,
+    _memory, _message, _notif, _org, _org_member, _pat, _personal,
+    _revision, _security, _session, _setting, _summary, _tfa_challenge,
+    _user, _user_totp, _workflow, _workspace,
     _workspace_member,
 )
 from boltrig.models import (
     AdapterRecord,
     AuditEvent, AuditRollupAnchor,
-    Budget,
     ConfigRevision, Conversation,
     ConversationMessage, ConversationStatus,
-    ConversationSummary, EvalCase,
-    EvalRun, MemoryItem,
+    ConversationSummary, MemoryItem,
     MemoryErasure,
     MemoryFact,
     MemoryIngestion,
@@ -63,16 +72,12 @@ from boltrig.models import (
     HITLResponse,
     HITLStatus,
     ModelEndpoint,
-    Noun,
     AI_CONFIG_LEVELS,
     AiConfig,
     Organisation,
     OrgMember,
     SecurityEvent,
-    Skill,
     TenantPermissions,
-    Verb,
-    VerbBinding,
     WORKSPACE_ROLES,
     Workspace,
     WorkspaceMember,
@@ -80,7 +85,6 @@ from boltrig.models import (
     WorkItem,
 )
 from boltrig.models.errors import SchemaValidationError
-
 _SCHEMA = Path(__file__).with_name("schema.sql")
 _RLS = Path(__file__).with_name("rls.sql")
 
@@ -155,17 +159,23 @@ async def _init_conn(conn: asyncpg.Connection) -> None:
         "jsonb", encoder=json.dumps, decoder=json.loads, schema="pg_catalog"
     )
 
-
 class PostgresStore(
-    BudgetPolicyPG, WorkItemReadsPG, IdempotencyStorePG, GuardedWritesPG,
+    BudgetPolicyPG, BudgetUsagePG, WorkItemReadsPG, IdempotencyStorePG, GuardedWritesPG,
+    PermanentFleetStorePG,
+    BirthProfileStorePG,
+    BackgroundJobStorePG,
     ChannelStorePG, CapabilityStorePG, ObservabilityReadsPG,
-    ChannelDedupStorePG, ChannelOutboxStorePG,
+    ChannelDedupStorePG, ChannelOutboxStorePG, PasswordResetStorePG,
+    WorkflowTriggerStorePG, WorkflowScheduleStorePG,
+    AuthoredDefinitionStorePG,
+    EvalCaseStorePG,
+    CredentialReferencePresencePG,
+    AiKeyProposalStorePG,
+    McpLifecycleStorePG,
 ):
     """asyncpg-backed Store. Domain methods live in partial mixins
     (e.g. ``ChannelStorePG``) to keep this file under the structural floor;
     composed here so the public method surface is one class."""
-    """A durable Store. Construct via ``await PostgresStore.connect(dsn)``."""
-
     def __init__(self, pool: asyncpg.Pool) -> None:
         self._pool = pool
 
@@ -233,88 +243,6 @@ class PostgresStore(
                 await conn.execute("SELECT set_config('app.tenant_id', $1, true)", tenant_id)
                 yield conn
 
-    # --- registry ---------------------------------------------------------
-    async def get_noun(self, tenant_id, noun_id):
-        row = await self._pool.fetchrow(
-            "SELECT * FROM nouns WHERE tenant_id=$1 AND id=$2", tenant_id, noun_id
-        )
-        return _noun(row)
-
-    async def get_verb(self, tenant_id, verb_id):
-        row = await self._pool.fetchrow(
-            "SELECT * FROM verbs WHERE tenant_id=$1 AND id=$2", tenant_id, verb_id
-        )
-        return _verb(row)
-
-    async def list_verbs(self, tenant_id, noun_id=None):
-        if noun_id is None:
-            rows = await self._pool.fetch("SELECT * FROM verbs WHERE tenant_id=$1", tenant_id)
-        else:
-            rows = await self._pool.fetch(
-                "SELECT * FROM verbs WHERE tenant_id=$1 AND noun_id=$2", tenant_id, noun_id
-            )
-        return [_verb(r) for r in rows]
-
-    async def get_binding(self, tenant_id, verb_id):
-        row = await self._pool.fetchrow(
-            "SELECT * FROM verb_bindings WHERE tenant_id=$1 AND verb_id=$2", tenant_id, verb_id
-        )
-        return _binding(row)
-
-    async def upsert_noun(self, noun: Noun):
-        await self._pool.execute(
-            """INSERT INTO nouns (id, tenant_id, description, schema)
-               VALUES ($1,$2,$3,$4)
-               ON CONFLICT (tenant_id, id) DO UPDATE SET
-                 description=EXCLUDED.description, schema=EXCLUDED.schema, updated_at=now()""",
-            noun.id, noun.tenant_id, noun.description, noun.schema,
-        )
-
-    async def upsert_verb(self, verb: Verb):
-        await self._pool.execute(
-            """INSERT INTO verbs (id, tenant_id, noun_id, description, input_schema,
-                                  output_schema, consequence, identity_mode, degraded_mode,
-                                  idempotency_mode)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-               ON CONFLICT (tenant_id, id) DO UPDATE SET
-                 noun_id=EXCLUDED.noun_id, description=EXCLUDED.description,
-                 input_schema=EXCLUDED.input_schema, output_schema=EXCLUDED.output_schema,
-                 consequence=EXCLUDED.consequence, identity_mode=EXCLUDED.identity_mode,
-                 degraded_mode=EXCLUDED.degraded_mode,
-                 idempotency_mode=EXCLUDED.idempotency_mode, updated_at=now()""",
-            verb.id, verb.tenant_id, verb.noun_id, verb.description, verb.input_schema,
-            verb.output_schema, verb.consequence.value, verb.identity_mode, verb.degraded_mode,
-            verb.idempotency_mode.value,
-        )
-
-    async def upsert_binding(self, b: VerbBinding):
-        rl = {"per": b.rate_limit.per, "max": b.rate_limit.max, "scope": b.rate_limit.scope} \
-            if b.rate_limit else None
-        await self._pool.execute(
-            """INSERT INTO verb_bindings (verb_id, tenant_id, target_type, target_ref, rate_limit)
-               VALUES ($1,$2,$3,$4,$5)
-               ON CONFLICT (verb_id, tenant_id) DO UPDATE SET
-                 target_type=EXCLUDED.target_type, target_ref=EXCLUDED.target_ref,
-                 rate_limit=EXCLUDED.rate_limit, updated_at=now()""",
-            b.verb_id, b.tenant_id, b.target_type.value, b.target_ref, rl,
-        )
-
-    async def delete_noun(self, tenant_id, noun_id):
-        await self._pool.execute(
-            "DELETE FROM nouns WHERE tenant_id=$1 AND id=$2", tenant_id, noun_id
-        )
-
-    async def delete_verb(self, tenant_id, verb_id):
-        await self._pool.execute(
-            "DELETE FROM verbs WHERE tenant_id=$1 AND id=$2", tenant_id, verb_id
-        )
-
-    async def delete_binding(self, tenant_id, verb_id):
-        await self._pool.execute(
-            "DELETE FROM verb_bindings WHERE tenant_id=$1 AND verb_id=$2",
-            tenant_id, verb_id,
-        )
-
     # --- permissions ------------------------------------------------------
     async def get_tenant_permissions(self, tenant_id):
         row = await self._pool.fetchrow(
@@ -364,35 +292,6 @@ class PostgresStore(
         await self._pool.execute(
             "DELETE FROM adapters WHERE tenant_id=$1 AND id=$2", tenant_id, adapter_id
         )
-
-    async def upsert_skill(self, s: Skill):
-        await self._pool.execute(
-            """INSERT INTO skills (id, tenant_id, version, prompt_fragment, tool_grants,
-                                   context_requirements, extends, locale, description)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-               ON CONFLICT (tenant_id, id, version) DO UPDATE SET
-                 prompt_fragment=EXCLUDED.prompt_fragment, tool_grants=EXCLUDED.tool_grants,
-                 context_requirements=EXCLUDED.context_requirements, extends=EXCLUDED.extends,
-                 locale=EXCLUDED.locale, description=EXCLUDED.description, updated_at=now()""",
-            s.id, s.tenant_id, s.version, s.prompt_fragment, s.tool_grants,
-            s.context_requirements, s.extends, s.locale, s.description,
-        )
-
-    async def get_skill(self, tenant_id, skill_id):
-        row = await self._pool.fetchrow(
-            "SELECT * FROM skills WHERE tenant_id=$1 AND id=$2 ORDER BY version DESC LIMIT 1",
-            tenant_id, skill_id,
-        )
-        return _skill(row)
-
-    async def list_skills(self, tenant_id):
-        # Latest version per skill id for the tenant (the shelf).
-        rows = await self._pool.fetch(
-            """SELECT DISTINCT ON (id) * FROM skills WHERE tenant_id=$1
-               ORDER BY id, version DESC""",
-            tenant_id,
-        )
-        return [_skill(r) for r in rows]
 
     async def upsert_workflow(self, w: WorkflowDefinition):
         await self._pool.execute(
@@ -462,12 +361,14 @@ class PostgresStore(
 
     async def upsert_model_endpoint(self, e: ModelEndpoint):
         await self._pool.execute(
-            """INSERT INTO model_endpoints (id, tenant_id, kind, base_url, model, fallback, data_class)
-               VALUES ($1,$2,$3,$4,$5,$6,$7)
+            """INSERT INTO model_endpoints
+                 (id, tenant_id, kind, base_url, model, fallback, data_class, is_active)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
                ON CONFLICT (tenant_id, id) DO UPDATE SET
                  kind=EXCLUDED.kind, base_url=EXCLUDED.base_url, model=EXCLUDED.model,
                  fallback=EXCLUDED.fallback, data_class=EXCLUDED.data_class, updated_at=now()""",
             e.id, e.tenant_id, e.kind, e.base_url, e.model, e.fallback, e.data_class,
+            e.is_active,
         )
 
     async def get_model_endpoint(self, tenant_id, ep_id):
@@ -481,6 +382,14 @@ class PostgresStore(
             "SELECT * FROM model_endpoints WHERE tenant_id=$1 ORDER BY id", tenant_id
         )
         return [_endpoint(r) for r in rows]
+
+    async def set_model_endpoint_active(self, tenant_id, ep_id, active):
+        row = await self._pool.fetchrow(
+            """UPDATE model_endpoints SET is_active=$3, updated_at=now()
+               WHERE tenant_id=$1 AND id=$2 RETURNING *""",
+            tenant_id, ep_id, bool(active),
+        )
+        return _endpoint(row)
 
     # --- work items -------------------------------------------------------
     async def create_work_item(self, w: WorkItem):
@@ -646,14 +555,14 @@ class PostgresStore(
         await self._pool.execute(
             """INSERT INTO hitl_requests (id, tenant_id, run_id, work_item_id, type, urgency,
                                           context, question, options, assignee, status, timeout_at,
-                                          verb, requested_by, requested_on_behalf_of, request_fingerprint, workspace_id, department_scope,
+                                          verb, requested_by, requested_on_behalf_of, request_fingerprint, action_digest, workspace_id, department_scope,
                                           secure, secure_purpose)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
                ON CONFLICT (tenant_id, id) DO UPDATE SET
                  status=EXCLUDED.status, updated_at=now()""",
             r.id, r.tenant_id, r.run_id, r.work_item_id, r.type.value, r.urgency.value,
             r.context, r.question, r.options, r.assignee, r.status.value, r.timeout_at,
-            r.verb, r.requested_by, r.requested_on_behalf_of, r.request_fingerprint, r.workspace_id, r.department_scope,
+            r.verb, r.requested_by, r.requested_on_behalf_of, r.request_fingerprint, r.action_digest, r.workspace_id, r.department_scope,
             r.secure, r.secure_purpose,
         )
 
@@ -688,6 +597,25 @@ class PostgresStore(
             tenant_id, HITLStatus.PENDING.value,
         )
         return [_hitl_req(r) for r in rows]
+
+    async def list_hitl_requests_for_requester(
+        self, tenant_id, requested_by, statuses, *, limit=20
+    ):
+        values = [
+            status.value if isinstance(status, HITLStatus) else str(status)
+            for status in statuses
+        ]
+        rows = await self._pool.fetch(
+            """SELECT * FROM hitl_requests
+               WHERE tenant_id=$1 AND requested_by=$2 AND status=ANY($3::text[])
+               ORDER BY updated_at DESC,id
+               LIMIT $4""",
+            tenant_id,
+            requested_by,
+            values,
+            max(0, min(int(limit), 100)),
+        )
+        return [_hitl_req(row) for row in rows]
 
     async def answer_hitl(self, resp: HITLResponse):
         async with self._pool.acquire() as conn:
@@ -838,98 +766,6 @@ class PostgresStore(
             )
         return [_anchor(r) for r in reversed(rows)]  # ascending, like InMemoryStore
 
-    # --- budgets ----------------------------------------------------------
-    async def get_budget(self, tenant_id, scope_id):
-        row = await self._pool.fetchrow(
-            "SELECT * FROM budgets WHERE tenant_id=$1 AND id=$2", tenant_id, scope_id
-        )
-        return _budget(row)
-
-    async def list_budgets(self, tenant_id):
-        rows = await self._pool.fetch("SELECT * FROM budgets WHERE tenant_id=$1", tenant_id)
-        return [_budget(r) for r in rows]
-
-    async def set_budget(self, b: Budget) -> None:
-        """Compatibility alias; new callers use upsert_budget_policy."""
-        await self.upsert_budget_policy(b)
-
-    async def reconcile_budget(self, tenant_id, scope_id, delta_tokens, delta_micros):
-        """Post-run cost true-up (FR-COST-03, audit M14): apply a SIGNED delta to
-        the scope's accumulators atomically (FOR UPDATE), each floored at 0. No
-        hard-stop gate - this corrects the ledger for a call that already ran. No
-        budget row -> no-op (unmetered), the same rule the reserve applies."""
-        async with self._pool.acquire() as conn:
-            async with conn.transaction():
-                await _apply_guc(conn)  # RLS-live: scope this explicit transaction
-                row = await conn.fetchrow(
-                    """SELECT spent_tokens, spent_micros
-                       FROM budgets WHERE tenant_id=$1 AND id=$2 FOR UPDATE""",
-                    tenant_id, scope_id,
-                )
-                if row is None:
-                    return  # unmetered
-                new_tokens = max(0, row["spent_tokens"] + delta_tokens)
-                new_micros = max(0, row["spent_micros"] + delta_micros)
-                await conn.execute(
-                    """UPDATE budgets SET spent_tokens=$3, spent_micros=$4, updated_at=now()
-                       WHERE tenant_id=$1 AND id=$2""",
-                    tenant_id, scope_id, new_tokens, new_micros,
-                )
-
-    async def reserve_budgets_atomic(self, tenant_id, reservations):
-        """Transactional multi-scope reserve (audit H4, Phase 6, FR-COST-05):
-        all-or-nothing debit across every scope in ONE transaction. Every scope's
-        budget row is locked FOR UPDATE in a DETERMINISTIC order (sorted by
-        scope_id), so two concurrent reserves on overlapping scopes always take the
-        locks in the same order and cannot deadlock; each hard stop is re-checked
-        under its lock. The moment a hard-stop scope has no headroom we return False
-        BEFORE issuing any UPDATE, so the (write-empty) transaction commits nothing -
-        no partial debit. Only when every scope has headroom do we apply all debits
-        and return True. A scope with no budget row is a no-op (unmetered), mirroring
-        a reserve."""
-        # Aggregate per scope (a scope named twice is locked + debited once, its
-        # amounts summed). Negative amounts floor to 0 (a refund is reconcile's job).
-        agg: dict[str, tuple[int, int]] = {}
-        for scope_id, tokens, micros in reservations:
-            t, m = agg.get(scope_id, (0, 0))
-            agg[scope_id] = (t + max(0, tokens), m + max(0, micros))
-        async with self._pool.acquire() as conn:
-            async with conn.transaction():
-                await _apply_guc(conn)  # RLS-live: scope this explicit transaction
-                planned: list[tuple[str, int, int]] = []
-                # Lock in a stable order to avoid deadlock between concurrent reserves.
-                for scope_id in sorted(agg):
-                    tokens, micros = agg[scope_id]
-                    row = await conn.fetchrow(
-                        """SELECT token_limit, cost_limit_micros, hard_stop,
-                                  spent_tokens, spent_micros
-                           FROM budgets WHERE tenant_id=$1 AND id=$2 FOR UPDATE""",
-                        tenant_id, scope_id,
-                    )
-                    if row is None:
-                        continue  # unmetered scope -> skip (no-op)
-                    new_tokens = row["spent_tokens"] + tokens
-                    new_micros = row["spent_micros"] + micros
-                    over = (
-                        row["token_limit"] is not None and new_tokens > row["token_limit"]
-                    ) or (
-                        row["cost_limit_micros"] is not None
-                        and new_micros > row["cost_limit_micros"]
-                    )
-                    if over and row["hard_stop"]:
-                        # No UPDATE has run yet, so the transaction that now commits
-                        # writes nothing - all-or-nothing holds with no partial debit.
-                        return False
-                    planned.append((scope_id, new_tokens, new_micros))
-                for scope_id, new_tokens, new_micros in planned:
-                    await conn.execute(
-                        """UPDATE budgets SET spent_tokens=$3, spent_micros=$4,
-                               updated_at=now()
-                           WHERE tenant_id=$1 AND id=$2""",
-                        tenant_id, scope_id, new_tokens, new_micros,
-                    )
-                return True
-
     # --- credential references (sealed at rest, SEC-04 - see store/sealing.py) ---
     async def get_credential_ref(self, tenant_id, cred_id):
         row = await self._pool.fetchrow(
@@ -1059,6 +895,39 @@ class PostgresStore(
             c.tenant_id, c.id, c.title, c.status.value, c.updated_at,
         )
 
+    async def restore_closed_conversation(
+        self, tenant_id, conv_id, user_id, restored_at
+    ):
+        # The target CTE locks the lifecycle row, and the conditional UPDATE is in
+        # the same statement. This returns honest found/owned/changed semantics
+        # without a read-then-write window in which retention could delete it.
+        row = await self._pool.fetchrow(
+            """WITH target AS MATERIALIZED (
+                   SELECT tenant_id, id, user_id, status
+                     FROM conversations
+                    WHERE tenant_id=$1 AND id=$2
+                      FOR UPDATE
+               ),
+               updated AS (
+                   UPDATE conversations AS c
+                      SET status=$4, updated_at=$5
+                     FROM target AS t
+                    WHERE c.tenant_id=t.tenant_id AND c.id=t.id
+                      AND t.user_id=$3 AND t.status=$6
+                   RETURNING 1
+               )
+               SELECT EXISTS(SELECT 1 FROM target) AS found,
+                      COALESCE((SELECT user_id=$3 FROM target), FALSE) AS owned,
+                      EXISTS(SELECT 1 FROM updated) AS changed""",
+            tenant_id,
+            conv_id,
+            user_id,
+            ConversationStatus.ACTIVE.value,
+            restored_at,
+            ConversationStatus.CLOSED.value,
+        )
+        return bool(row["found"]), bool(row["owned"]), bool(row["changed"])
+
     async def add_message(self, m: ConversationMessage):
         await self._pool.execute(
             """INSERT INTO conversation_messages
@@ -1128,7 +997,8 @@ class PostgresStore(
                 await _apply_guc(conn)  # RLS-live: scope this explicit transaction
                 rows = await conn.fetch(
                     """SELECT id FROM conversations
-                       WHERE tenant_id=$1 AND status=$2 AND updated_at <= $3""",
+                       WHERE tenant_id=$1 AND status=$2 AND updated_at <= $3
+                       FOR UPDATE""",
                     tenant_id, ConversationStatus.CLOSED.value, older_than,
                 )
                 conv_ids = [r["id"] for r in rows]
@@ -1174,46 +1044,6 @@ class PostgresStore(
             "SELECT * FROM config_revisions WHERE tenant_id=$1 AND id=$2", tenant_id, rev_id
         )
         return _revision(row)
-
-    # --- eval ---
-    async def upsert_eval_case(self, c: EvalCase):
-        await self._pool.execute(
-            """INSERT INTO eval_cases (id, tenant_id, target_kind, target_ref, input, assertions, labels)
-               VALUES ($1,$2,$3,$4,$5,$6,$7)
-               ON CONFLICT (tenant_id, id) DO UPDATE SET
-                 target_kind=EXCLUDED.target_kind, target_ref=EXCLUDED.target_ref,
-                 input=EXCLUDED.input, assertions=EXCLUDED.assertions, labels=EXCLUDED.labels""",
-            c.id, c.tenant_id, c.target_kind, c.target_ref, c.input, c.assertions, c.labels,
-        )
-
-    async def get_eval_case(self, tenant_id, case_id):
-        row = await self._pool.fetchrow(
-            "SELECT * FROM eval_cases WHERE tenant_id=$1 AND id=$2", tenant_id, case_id
-        )
-        return _eval_case(row)
-
-    async def list_eval_cases(self, tenant_id):
-        rows = await self._pool.fetch("SELECT * FROM eval_cases WHERE tenant_id=$1", tenant_id)
-        return [_eval_case(r) for r in rows]
-
-    async def add_eval_run(self, r: EvalRun):
-        await self._pool.execute(
-            """INSERT INTO eval_runs (id, tenant_id, case_id, passed, score, run_id, detail)
-               VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (tenant_id, id) DO NOTHING""",
-            r.id, r.tenant_id, r.case_id, r.passed, r.score, r.run_id, r.detail,
-        )
-
-    async def list_eval_runs(self, tenant_id, case_id=None):
-        if case_id is None:
-            rows = await self._pool.fetch(
-                "SELECT * FROM eval_runs WHERE tenant_id=$1 ORDER BY created_at DESC", tenant_id
-            )
-        else:
-            rows = await self._pool.fetch(
-                "SELECT * FROM eval_runs WHERE tenant_id=$1 AND case_id=$2 ORDER BY created_at DESC",
-                tenant_id, case_id,
-            )
-        return [_eval_run(r) for r in rows]
 
     # --- notifications ---
     async def upsert_notification_pref(self, p: NotificationPref):
@@ -1372,13 +1202,27 @@ class PostgresStore(
         await self._pool.execute(
             """INSERT INTO memory_projection_statuses
                (id, tenant_id, projection_id, operation, status, fact_id, target,
-                projection_ref, error, created_at, updated_at)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+                projection_ref, error, enqueue_attempts, operation_attempts,
+                max_operation_attempts, first_attempt_at, last_attempt_at,
+                last_failure_at, failure_code, created_at, updated_at)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,
+                       $16,$17,$18)
                ON CONFLICT (tenant_id, id) DO UPDATE SET
                  status=EXCLUDED.status, projection_ref=EXCLUDED.projection_ref,
-                 error=EXCLUDED.error, updated_at=EXCLUDED.updated_at""",
+                 error=EXCLUDED.error,
+                 enqueue_attempts=EXCLUDED.enqueue_attempts,
+                 operation_attempts=EXCLUDED.operation_attempts,
+                 max_operation_attempts=EXCLUDED.max_operation_attempts,
+                 first_attempt_at=EXCLUDED.first_attempt_at,
+                 last_attempt_at=EXCLUDED.last_attempt_at,
+                 last_failure_at=EXCLUDED.last_failure_at,
+                 failure_code=EXCLUDED.failure_code,
+                 updated_at=EXCLUDED.updated_at""",
             s.id, s.tenant_id, s.projection_id, s.operation, s.status, s.fact_id,
-            s.target, s.projection_ref, s.error, s.created_at, s.updated_at,
+            s.target, s.projection_ref, s.error, s.enqueue_attempts,
+            s.operation_attempts, s.max_operation_attempts, s.first_attempt_at,
+            s.last_attempt_at, s.last_failure_at, s.failure_code, s.created_at,
+            s.updated_at,
         )
 
     async def list_memory_projection_statuses(self, tenant_id, fact_id=None, limit=50):

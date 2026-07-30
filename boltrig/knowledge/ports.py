@@ -66,6 +66,7 @@ class KnowledgeRepository(Protocol):
         workspace_id: str | None,
         scopes: list[str],
         limit: int,
+        offset: int = 0,
     ) -> list[dict]: ...
 
     async def segments_for_asset(

@@ -1,5 +1,10 @@
 # 0012 - Boltrig, Codex, and Opbox ownership
 
+> Amended by decision 0021: Codex remains the only general target agent runtime.
+> A narrowly scoped `realtime_voice` dialogue/media exception may request only
+> kernel-generated tools that re-enter the dispatcher; it owns no authority,
+> workflow, connector, memory, or durable credential.
+
 - Status: accepted
 - Date: 2026-07-15
 - Supersedes: the runtime and workflow-ownership decision in 0010

@@ -10,7 +10,7 @@ Production runs the exact first-party image digests verified by the release
 workflow; it does not rebuild mutable source on the target host. Check out or
 transfer the protected release tag so its Compose manifests and migration chain
 match the images, then download `boltrig-images.env` from that GitHub release.
-The file contains exactly the kernel, fleet, UI, and backup
+The file contains exactly the kernel, fleet, Operator UI, Worker UI, and backup
 `image@sha256` references.
 
 With the normal production configuration in `.env`:
@@ -27,6 +27,59 @@ uses `--no-build`. The release overlay also removes the developer bind mount of
 `scripts/backup.sh`, so the signed backup image cannot be replaced by mutable
 host source. Set `RELEASE_PROFILES=` only when backup scheduling is provided and
 verified by an external operator mechanism.
+
+### Reversible Worker primary-surface cutover
+
+Worker is shipped and signed with every release, but the ordinary release
+continues to serve standalone Operator. After Worker acceptance has passed for
+the deployment, validate and select the explicit final overlay:
+
+```bash
+make worker-primary-validate \
+  RELEASE_IMAGES_ENV=boltrig-images.env RELEASE_ENV=.env
+make worker-primary-up \
+  RELEASE_IMAGES_ENV=boltrig-images.env RELEASE_ENV=.env
+```
+
+This changes only Caddy's internal presentation upstream. Worker becomes `/`,
+while the maintained Operator build remains available at `/operator/` from the
+same image. The kernel, dispatcher, database, identities, conversations and run
+state do not move.
+
+Rollback is presentation-only: remove `deploy/compose.worker-primary.yml` from
+the Compose invocation and run the ordinary `make release-up` target. The
+Caddyfile's default upstream is still the standalone `ui:80` service. Keep the
+standalone Operator image and its `operator-standalone` profile through the
+Worker operational soak.
+
+### Channel-gateway bootstrap and failover
+
+Worker is the canonical channel configuration surface. Author each socket
+channel there with write-only secret-store reference names, then issue the
+show-once token for the exact channel set from its detail panel. Mount the token
+read-only at `CHANNEL_GATEWAY_TOKEN_FILE`; leave
+`CHANNEL_GATEWAY_CHANNELS` empty outside development. The environment-token
+alternative is restart-only and must not be configured at the same time.
+
+Before declaring a gateway ready:
+
+1. confirm the kernel migration head is `0062`;
+2. confirm `GET /ready` succeeds (not merely `/health`);
+3. confirm each enabled socket channel has the intended owner label and an
+   unexpired lease, then separately prove real provider send/receive;
+4. for replacement, stop or fence the old owner and allow its 45-second
+   per-channel lease to expire before expecting the standby to receive secrets;
+5. exercise at least one real duplicate-session/failover acceptance cycle for
+   each deployed provider.
+
+The lease proves single ownership, not process liveness or provider delivery.
+Signal and WhatsApp still require external device/account pairing. Token-file
+replacement can recover after an authorization refusal; environment tokens
+require restart. The MCP token registry is process-local, so gateway requests
+must remain sticky to the kernel replica that minted the token (or the
+deployment must use one kernel API replica) until a reviewed shared registry
+or workload-identity contract replaces that limitation. The gateway does not
+mint its own identity or token.
 
 ## `git pull` on the deployment tree IS a deploy step
 
@@ -257,6 +310,68 @@ probes.
 `BOLTRIG_STACK_TOOL_PROBE_TIMEOUT` tune the bounded worker receipt loop; see
 `.env.example` for defaults and limits.
 
+Password-reset delivery is disabled in the standard ASGI composition. An
+embedding deployment may inject a reviewed async notifier and a bounded,
+redacted readiness probe through
+`build_app(password_reset_notifier=...,
+password_reset_readiness_probe=...)`. Set
+`BOLTRIG_REQUIRE_PASSWORD_RESET_DELIVERY=1` only when first-party session
+recovery is required; readiness then fails unless both callables are composed
+and the probe returns exactly `true`. The probe result establishes only adapter
+posture. The authenticated Operate projection likewise reports a bounded,
+recipient-free notifier attempt—not a provider receipt or proof of inbox
+delivery. Keep provider credentials in the deployment secret store and validate
+real delivery, bounce handling and provider receipts in staging before cutover.
+
+## Signed Worker desktop updates
+
+Desktop update trust is fixed at Worker build time. Release builds that should
+offer updates must set both:
+
+```env
+BOLTRIG_UPDATER_ENDPOINT=https://<release-host>/<manifest-path>
+BOLTRIG_UPDATER_PUBLIC_KEY=<complete Tauri updater public key>
+```
+
+The endpoint must be HTTPS and may use Tauri's `{{target}}`, `{{arch}}`, and
+`{{current_version}}` manifest placeholders. The public-key value is the
+complete Tauri updater public key, not a path to a mutable file. These values
+are compiled into the desktop binary; they are never accepted from the
+webview. A build without either value remains usable but Settings truthfully
+reports desktop updates as unavailable.
+
+`apps/worker/src-tauri/tauri.conf.json` enables
+`bundle.createUpdaterArtifacts`, so the protected desktop release job must
+provide `TAURI_SIGNING_PRIVATE_KEY` and, when applicable,
+`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` only within that job. Never commit,
+compile, or copy the updater private key into a Worker package. Publish the
+generated installer, signature, and update manifest atomically to the compiled
+release endpoint.
+
+Before enabling desktop-primary distribution, exercise check, download,
+signature verification, installation, and restart using packaged macOS,
+Windows, and Linux builds. Verify an invalid signature, changed version,
+missing manifest, offline endpoint, and unconfigured build all fail closed
+without replacing the running application.
+
+## Worker OAuth return registration
+
+The desktop bundle statically registers
+`boltrig-worker://oauth/callback`. On Linux, and for Windows development builds,
+Worker also asks Tauri to register the configured scheme at runtime. A
+registration failure is shown as unavailable rather than inferred ready.
+Packaged macOS builds must be installed before testing their static scheme
+registration.
+
+This scheme is not a provider callback. A future certified provider must first
+return its authorization code to a reviewed kernel-owned HTTPS callback. Only
+after server-side code exchange may the kernel redirect an opaque state plus
+opaque result handle (or `access_denied`) to Worker. The native parser rejects
+provider authorization codes, access tokens, refresh tokens and identity tokens
+in the custom-scheme URL. Until that kernel exchange and a provider-specific
+authorization-origin allowlist exist, Worker opens no provider authorization
+page and reports provider exchange unavailable.
+
 ## Checklist
 
 - [ ] Protected release selected; downloaded `boltrig-images.env` passes
@@ -273,6 +388,16 @@ probes.
       `browser-use` CLIs
 - [ ] `/readyz` is 200 only after the fleet worker has published fresh live-tool
       evidence; stopping the worker or Chromium makes it return 503 after TTL
+- [ ] when first-party password recovery is required, a reviewed notifier and
+      bounded readiness probe are injected,
+      `BOLTRIG_REQUIRE_PASSWORD_RESET_DELIVERY=1`, and real staging
+      delivery/bounce/provider-receipt acceptance is recorded
 - [ ] real OIDC configured (`OIDC_*`), `BOLTRIG_DEV_AUTH` unset (SEC-01)
 - [ ] verified off-box database snapshot and restore rehearsal completed before
       `make migrate`; current Alembic revision recorded
+- [ ] desktop updater endpoint/public key compiled into release builds, signing
+      private key confined to the protected build job, and packaged
+      cross-platform update acceptance completed
+- [ ] packaged desktop scheme registration tested on macOS, Windows and Linux;
+      no provider OAuth is advertised until its kernel callback/exchange and
+      authorization-origin allowlist pass certification

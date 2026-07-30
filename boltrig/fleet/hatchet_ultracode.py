@@ -35,11 +35,16 @@ class UltracodeAgentInput(BaseModel):
     ctx_envelope: dict[str, Any]
 
 
-async def ultracode_agent_body(kernel: Any, payload: dict[str, Any]) -> dict[str, Any]:
+async def ultracode_agent_body(
+    kernel: Any,
+    payload: dict[str, Any],
+    *,
+    spawner: Any | None,
+) -> dict[str, Any]:
     """Run one Ultracode phase-agent child body through the fleet spawner."""
     from boltrig.fleet.ultracode import run_ultracode_agent_body
 
-    return await run_ultracode_agent_body(kernel, payload)
+    return await run_ultracode_agent_body(kernel, payload, spawner=spawner)
 
 
 async def _hatchet_ultracode_agent_runner(
@@ -54,14 +59,19 @@ async def _hatchet_ultracode_agent_runner(
     return await run(payload)
 
 
-def register_local_ultracode_tasks(executor: Any, kernel: Any) -> None:
+def register_local_ultracode_tasks(
+    executor: Any,
+    kernel: Any,
+    *,
+    spawner: Any | None,
+) -> None:
     """Register Ultracode parent/child bodies on the local executor seam."""
     register = getattr(executor, "register_task", None)
     if register is None:
         return
 
     async def _ultracode_agent(payload: dict[str, Any]) -> dict[str, Any]:
-        return await ultracode_agent_body(kernel, payload)
+        return await ultracode_agent_body(kernel, payload, spawner=spawner)
 
     async def _ultracode_run(payload: dict[str, Any]) -> dict[str, Any]:
         from boltrig.fleet.ultracode import run_ultracode_body
@@ -91,7 +101,11 @@ def register_hatchet_ultracode_tasks(
     @hatchet.task(name=TASK_ULTRACODE_AGENT, input_validator=UltracodeAgentInput)
     async def ultracode_agent(inp: UltracodeAgentInput, ctx) -> dict:
         res = await resources()
-        return await ultracode_agent_body(res["kernel"], inp.model_dump())
+        return await ultracode_agent_body(
+            res["kernel"],
+            inp.model_dump(),
+            spawner=res.get("spawner"),
+        )
 
     @hatchet.durable_task(
         name=TASK_ULTRACODE_RUN,
@@ -104,17 +118,17 @@ def register_hatchet_ultracode_tasks(
 
         async def _agent_runner(agent_payload: dict[str, Any]) -> dict[str, Any]:
             async def _inline(payload: dict[str, Any]) -> dict[str, Any]:
-                return await ultracode_agent_body(res["kernel"], payload)
+                return await ultracode_agent_body(
+                    res["kernel"],
+                    payload,
+                    spawner=res.get("spawner"),
+                )
 
-            return await _hatchet_ultracode_agent_runner(
-                ultracode_agent, agent_payload, _inline
-            )
+            return await _hatchet_ultracode_agent_runner(ultracode_agent, agent_payload, _inline)
 
         from boltrig.fleet.ultracode import run_ultracode_body
 
-        return await run_ultracode_body(
-            res["kernel"], inp.model_dump(), agent_runner=_agent_runner
-        )
+        return await run_ultracode_body(res["kernel"], inp.model_dump(), agent_runner=_agent_runner)
 
     return {
         TASK_ULTRACODE_RUN: ultracode_run,

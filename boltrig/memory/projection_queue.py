@@ -7,22 +7,28 @@ on the existing executor seam instead of blocking the request path.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
-from boltrig.models import GrantSet, InvocationContext, TenantIsolation
+from boltrig.models import GrantSet, InvocationContext, TenantIsolation, utcnow
 
 from .engine import EngineFact
+from .projection_delivery_attempts import (
+    failure_row,
+    run_forget_delivery,
+    run_remember_delivery,
+)
 from .projections import (
     MemoryProjection,
     MemoryProjectionFanout,
-    _check_status,
     _public,
     _row,
-    _short_error,
 )
 
 _DEFAULT_TASK_NAME = "boltrig-memory-projection"
 _QUEUED_MODES = {"async", "queue", "queued", "worker", "workers"}
+_DEFAULT_MAX_OPERATION_ATTEMPTS = 3
+_MAX_OPERATION_ATTEMPTS = 5
 
 
 def is_queued_projection_mode(value: Any) -> bool:
@@ -40,18 +46,48 @@ class QueuedMemoryProjectionFanout(MemoryProjectionFanout):
         primary_projection_id: str = "mem0",
         executor: Any = None,
         task_name: str = _DEFAULT_TASK_NAME,
+        max_operation_attempts: int = _DEFAULT_MAX_OPERATION_ATTEMPTS,
     ) -> None:
         super().__init__(
             store, projections, primary_projection_id=primary_projection_id
         )
         self._executor = executor
         self._task_name = task_name
+        attempts = int(max_operation_attempts)
+        if attempts < 1 or attempts > _MAX_OPERATION_ATTEMPTS:
+            raise ValueError(
+                f"max_operation_attempts must be between 1 and {_MAX_OPERATION_ATTEMPTS}"
+            )
+        self._max_operation_attempts = attempts
 
     def register_executor(self, executor: Any, *, task_name: str | None = None) -> None:
         """Attach an executor; fleet owns task registration for this task name."""
         if task_name:
             self._task_name = task_name
         self._executor = executor
+
+    def projection_delivery_posture(self) -> dict[str, Any]:
+        """Return safe facts about this live queue seam, never its task payloads."""
+        durable = getattr(self._executor, "durable", None)
+        if self._executor is None:
+            execution_mode = "inline_no_queue"
+        elif durable is True:
+            execution_mode = "durable_executor"
+        elif durable is False:
+            execution_mode = "local_inline_fallback"
+        else:
+            execution_mode = "external_executor_durability_unknown"
+        return {
+            "status": "configured" if self._projections else "no_projections",
+            "execution_mode": execution_mode,
+            "configured_projection_count": len(self._projections),
+            "max_operation_attempts": self._max_operation_attempts,
+            "retry_scope": "single_task_invocation",
+            "enqueue_retry": "disabled_ambiguous_acceptance",
+            "payload_retention": "executor_owned_not_in_status_receipt",
+            "manual_retry": "unavailable_original_payload_not_retained",
+            "proves_worker_liveness": False,
+        }
 
     async def remember(
         self, tenant_id: str, fact: EngineFact, context: InvocationContext
@@ -66,6 +102,7 @@ class QueuedMemoryProjectionFanout(MemoryProjectionFanout):
                 status="pending",
                 fact_id=fact.id,
                 target=None,
+                max_operation_attempts=self._max_operation_attempts,
                 row_id=row_id,
             )
             await self._upsert(pending)
@@ -102,6 +139,7 @@ class QueuedMemoryProjectionFanout(MemoryProjectionFanout):
                     fact_id=fact_id,
                     target=fact_id,
                     projection_ref=projection_ref,
+                    max_operation_attempts=self._max_operation_attempts,
                     row_id=row_id,
                 )
                 await self._upsert(pending)
@@ -122,96 +160,47 @@ class QueuedMemoryProjectionFanout(MemoryProjectionFanout):
         _fence(payload)
         operation = str(payload.get("operation") or "")
         if operation == "remember":
-            return await self._process_remember(payload)
+            return await run_remember_delivery(
+                self,
+                payload,
+                _fact_from_payload(payload["fact"]),
+                _context_from_payload(payload["ctx_envelope"]),
+            )
         if operation == "forget":
-            return await self._process_forget(payload)
+            return await run_forget_delivery(
+                self,
+                payload,
+                _context_from_payload(payload["ctx_envelope"]),
+            )
         raise ValueError(f"unknown memory projection operation {operation!r}")
 
     async def _submit_or_run(self, payload: dict[str, Any], pending) -> dict[str, Any]:
         if self._executor is None:
             return await self.process(payload)
+        enqueued = replace(
+            pending,
+            enqueue_attempts=1,
+            updated_at=utcnow(),
+        )
+        await self._upsert(enqueued)
         try:
             await self._executor.enqueue(self._task_name, payload)
-        except Exception as exc:
-            final = _failure_row(payload, _short_error(exc))
+        except Exception:
+            final = failure_row(
+                payload,
+                "enqueue_failed",
+                enqueue_attempts=1,
+                max_operation_attempts=self._max_operation_attempts,
+            )
             await self._upsert(final)
             return _public(final)
-        return _public(pending)
-
-    async def _process_remember(self, payload: dict[str, Any]) -> dict[str, Any]:
-        fact = _fact_from_payload(payload["fact"])
-        try:
-            projection = self._projection(str(payload["projection_id"]))
-            result = await projection.remember(
-                str(payload["tenant_id"]), fact, _context_from_payload(payload["ctx_envelope"])
-            )
-            status = _check_status("remember", result.status, final=True)
-            final = _row(
-                tenant_id=str(payload["tenant_id"]),
-                projection_id=projection.id,
-                operation="remember",
-                status=status,
-                fact_id=fact.id,
-                target=None,
-                projection_ref=result.projection_ref,
-                error=result.error,
-                row_id=str(payload["row_id"]),
-            )
-        except Exception as exc:
-            final = _failure_row(payload, _short_error(exc))
-        await self._upsert(final)
-        return _public(final)
-
-    async def _process_forget(self, payload: dict[str, Any]) -> dict[str, Any]:
-        fact_id = str(payload["fact_id"])
-        projection_ref = payload.get("projection_ref")
-        try:
-            projection = self._projection(str(payload["projection_id"]))
-            result = await projection.forget(
-                str(payload["tenant_id"]),
-                fact_id=fact_id,
-                projection_ref=projection_ref,
-                context=_context_from_payload(payload["ctx_envelope"]),
-            )
-            status = _check_status("forget", result.status, final=True)
-            final = _row(
-                tenant_id=str(payload["tenant_id"]),
-                projection_id=projection.id,
-                operation="forget",
-                status=status,
-                fact_id=fact_id,
-                target=fact_id,
-                projection_ref=result.projection_ref or projection_ref,
-                error=result.error,
-                row_id=str(payload["row_id"]),
-            )
-        except Exception as exc:
-            final = _failure_row(payload, _short_error(exc))
-        await self._upsert(final)
-        return _public(final)
+        return _public(enqueued)
 
     def _projection(self, projection_id: str) -> MemoryProjection:
         for projection in self._projections:
             if projection.id == projection_id:
                 return projection
         raise LookupError(f"unknown memory projection {projection_id!r}")
-
-
-def _failure_row(payload: dict[str, Any], error: str):
-    operation = str(payload.get("operation") or "")
-    fact_id = payload.get("fact_id") or (payload.get("fact") or {}).get("id")
-    return _row(
-        tenant_id=str(payload.get("tenant_id") or ""),
-        projection_id=str(payload.get("projection_id") or ""),
-        operation=operation,
-        status="failed" if operation == "remember" else "delete_failed",
-        fact_id=str(fact_id) if fact_id is not None else None,
-        target=str(fact_id) if operation == "forget" and fact_id is not None else None,
-        projection_ref=payload.get("projection_ref"),
-        error=error,
-        row_id=str(payload.get("row_id") or ""),
-    )
-
 
 def _fence(payload: dict[str, Any]) -> None:
     env = payload.get("ctx_envelope") or {}

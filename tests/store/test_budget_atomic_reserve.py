@@ -77,6 +77,7 @@ def _budget(scope_id: str, *, limit: int, spent: int = 0, hard: bool = True) -> 
     return Budget(
         id=scope_id, tenant_id=T, scope_type="department",
         cost_limit_micros=limit, spent_micros=spent, hard_stop=hard,
+        window="daily",
     )
 
 
@@ -90,7 +91,7 @@ async def test_multi_scope_reserve_is_all_or_nothing(store):
     await _set_budget(store, _budget("dept:eng", limit=100, spent=100))
 
     ok = await store.reserve_budgets_atomic(T, [("tenant", 0, 50), ("dept:eng", 0, 50)])
-    assert ok is False  # the second scope refuses -> the whole reserve refuses
+    assert ok is None  # the second scope refuses -> the whole reserve refuses
     # the FIRST scope must NOT have been debited (the partial-reserve bug is gone).
     assert (await store.get_budget(T, "tenant")).spent_micros == 0
     assert (await store.get_budget(T, "dept:eng")).spent_micros == 100
@@ -110,13 +111,13 @@ async def test_reserve_debits_every_scope_when_all_fit(store):
     await _set_budget(store, _budget("dept:eng", limit=1_000))
 
     ok = await store.reserve_budgets_atomic(T, [("tenant", 0, 200), ("dept:eng", 0, 200)])
-    assert ok is True
+    assert ok is not None
     assert (await store.get_budget(T, "tenant")).spent_micros == 200
     assert (await store.get_budget(T, "dept:eng")).spent_micros == 200
 
     # a scope with no budget row is a no-op (unmetered), mirroring consume_budget.
     ok2 = await store.reserve_budgets_atomic(T, [("tenant", 0, 100), ("no-budget", 0, 999)])
-    assert ok2 is True
+    assert ok2 is not None
     assert (await store.get_budget(T, "tenant")).spent_micros == 300
     assert await store.get_budget(T, "no-budget") is None
 
@@ -141,7 +142,7 @@ async def test_concurrent_multi_scope_reserves_cannot_partially_debit(store):
         return_exceptions=True,
     )
     refused = [r for r in results if isinstance(r, BudgetExceeded)]
-    won = [r for r in results if r is None]
+    won = [r for r in results if not isinstance(r, BaseException)]
     assert len(refused) == 1 and len(won) == 1  # exactly one full reserve, one refused
 
     # the shared scope reflects EXACTLY ONE reserve - never two, never a partial.

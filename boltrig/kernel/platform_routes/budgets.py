@@ -20,6 +20,18 @@ def _row(budget):
         "spent_tokens": budget.spent_tokens,
         "cost_limit_micros": budget.cost_limit_micros,
         "spent_micros": budget.spent_micros,
+        "usage_state": budget.usage_state,
+        "window_key": budget.window_key,
+        "window_started_at": (
+            budget.window_started_at.isoformat()
+            if budget.window_started_at is not None
+            else None
+        ),
+        "window_ends_at": (
+            budget.window_ends_at.isoformat()
+            if budget.window_ends_at is not None
+            else None
+        ),
     }
 
 

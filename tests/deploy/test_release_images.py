@@ -29,7 +29,7 @@ def _valid_environment() -> dict[str, str]:
 
 @pytest.mark.security
 @pytest.mark.invariant("SEC-137")
-def test_release_image_environment_requires_exactly_four_digest_refs(tmp_path: Path) -> None:
+def test_release_image_environment_requires_every_first_party_digest(tmp_path: Path) -> None:
     path = tmp_path / "boltrig-images.env"
     values = _valid_environment()
     _write_environment(path, values)
@@ -56,8 +56,13 @@ def test_release_image_environment_requires_exactly_four_digest_refs(tmp_path: P
 def _compose_document() -> dict:
     services = {
         name: {"image": f"registry.invalid/boltrig/{name}@sha256:{'1' * 64}"}
-        for name in ("kernel", "fleet-worker", "ui", "backup")
+        for name in ("kernel", "fleet-worker", "ui", "worker-ui", "backup")
     }
+    for name in ("kernel", "fleet-worker"):
+        services[name]["environment"] = {
+            "BOLTRIG_PRODUCTION": "1",
+            "REDIS_URL": "redis://redis:6379/0",
+        }
     services["backup"]["volumes"] = [{"target": "/backups"}]
     services["local-model"] = {"ports": [{"host_ip": "127.0.0.1"}]}
     return {"services": services}
@@ -90,3 +95,28 @@ def test_release_compose_validator_rejects_builds_tags_and_source_mounts() -> No
         validate_release_compose(document, secure=True)
     document["services"]["local-model"]["ports"] = []
     validate_release_compose(document, secure=True)
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-137")
+def test_worker_primary_release_requires_a_pinned_worker_image() -> None:
+    document = _compose_document()
+    validate_release_compose(document, secure=False, worker_primary=True)
+
+    document["services"].pop("worker-ui")
+    with pytest.raises(ValueError, match="worker-primary release has no worker-ui"):
+        validate_release_compose(document, secure=False, worker_primary=True)
+
+    document = _compose_document()
+    document["services"]["worker-ui"]["image"] = "registry.invalid/worker-ui:latest"
+    with pytest.raises(ValueError, match="not pinned by image digest"):
+        validate_release_compose(document, secure=False, worker_primary=True)
+
+    for key, reason in (
+        ("BOLTRIG_PRODUCTION", "production signal"),
+        ("REDIS_URL", "REDIS_URL"),
+    ):
+        document = _compose_document()
+        document["services"]["kernel"]["environment"].pop(key)
+        with pytest.raises(ValueError, match=reason):
+            validate_release_compose(document, secure=False, worker_primary=True)

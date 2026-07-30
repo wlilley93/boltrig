@@ -33,7 +33,7 @@ from collections.abc import Mapping
 
 from boltrig.models.registry import Consequence
 
-from . import Addon, register
+from . import Addon, AddonRequirement, register
 
 _RISK = re.compile(r"\briskClass=(READ|WRITE|SENSITIVE|MONEY|DESTRUCTIVE)\b")
 _RISK_HIGH = frozenset({"WRITE", "SENSITIVE", "MONEY", "DESTRUCTIVE"})
@@ -79,6 +79,13 @@ ADDON = register(
         harness=HARNESS,
         adapter_id=ADAPTER_ID,
         consequence_hint=risk_class_hint,
+        requirements=(
+            AddonRequirement(
+                id="opbox-adapter",
+                kind="adapter",
+                ref=ADAPTER_ID,
+            ),
+        ),
     )
 )
 

@@ -43,6 +43,9 @@ class Noun:
     tenant_id: TenantId
     description: str = ""
     schema: dict[str, Any] = field(default_factory=dict)
+    # Recoverable author withdrawal; archived nouns remain stored but are not
+    # discoverable, bindable, or invocable.
+    is_active: bool = True
 
 
 @dataclass(frozen=True)
@@ -61,6 +64,8 @@ class Verb:
     # service-principal | delegated (US-IAM-03). delegated => OAuth on-behalf-of.
     identity_mode: str = "service-principal"
     idempotency_mode: IdempotencyMode = IdempotencyMode.CACHEABLE
+    # The binding is retained on archival so restore is lossless.
+    is_active: bool = True
 
 
 @dataclass(frozen=True)

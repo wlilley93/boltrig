@@ -123,11 +123,25 @@ class BudgetExceeded(BoltrigError):
     reason = "budget_exceeded"
 
 
+class BudgetWindowUnavailable(BudgetExceeded):
+    """A run-window budget was reached without an exact run identity."""
+
+    status_code = 409
+    reason = "budget_window_unavailable"
+
+
 class DepthExceeded(BoltrigError):
     """A spawn beyond max recursion depth was attempted (FR-EXE-03)."""
 
     status_code = 429
     reason = "depth_exceeded"
+
+
+class SpawnRulePolicyInvalid(BoltrigError):
+    """The current spawn-rule snapshot cannot produce one governed route."""
+
+    status_code = 409
+    reason = "spawn_rule_policy_invalid"
 
 
 class ContextRequirementsUnmet(BoltrigError):
@@ -153,6 +167,20 @@ class SensitiveDataMisrouted(BoltrigError):
 
     status_code = 403
     reason = "sensitive_data_misrouted"
+
+
+class ModelEndpointUnavailable(BoltrigError):
+    """A configured model endpoint is missing or explicitly withdrawn."""
+
+    status_code = 409
+    reason = "model_endpoint_unavailable"
+
+
+class EvalCaseArchived(BoltrigError):
+    """An archived evaluation case cannot start a new run."""
+
+    status_code = 409
+    reason = "eval_case_archived"
 
 
 class NetworkPolicyViolation(BoltrigError):

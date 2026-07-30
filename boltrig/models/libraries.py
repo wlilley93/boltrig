@@ -7,6 +7,7 @@ These are *data*. Adding one never changes kernel or agent-runtime code (P1, P7)
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum
 from typing import Any
 
@@ -18,6 +19,16 @@ from .base import (
     WorkflowId,
     WorkspaceId,
 )
+
+# One vocabulary from authoring through selection and fallback pricing.  Unknown
+# tiers must not quietly sort after "expensive" while billing as "standard".
+COST_TIERS: tuple[str, ...] = ("cheap", "standard", "expensive")
+
+
+def validate_cost_tier(value: str) -> str:
+    if value not in COST_TIERS:
+        raise ValueError(f"cost_tier must be one of {', '.join(COST_TIERS)}; got {value!r}")
+    return value
 
 
 class AdapterHealth(str, Enum):
@@ -56,6 +67,9 @@ class Skill:
     # exposes for browsing (progressive disclosure) WITHOUT the prompt_fragment
     # body. Empty is allowed; the registry falls back to the id.
     description: str = ""
+    # Archival preserves every version and dependency edge while preventing
+    # selection until an explicit governed restore.
+    is_active: bool = True
 
 
 @dataclass
@@ -81,11 +95,30 @@ class AgentCapability:
     # list_capabilities so select_capability can never route to it.
     is_active: bool = True
 
+    def __post_init__(self) -> None:
+        validate_cost_tier(self.cost_tier)
+
 
 class WorkflowSource(str, Enum):
     PRECREATED = "precreated"
     GENERATED = "generated"
     LEARNED = "learned"
+
+
+class WorkflowLoopBindingSource(str, Enum):
+    """The only runtime values a declarative loop may bind into body params."""
+
+    ITEM = "item"
+    INDEX = "index"
+
+
+WORKFLOW_LOOP_BINDING_SOURCES: tuple[str, ...] = tuple(
+    source.value for source in WorkflowLoopBindingSource
+)
+WORKFLOW_LOOP_MAX_ITEMS = 100
+WORKFLOW_LOOP_MAX_BINDINGS = 32
+WORKFLOW_LOOP_MAX_BOUND_BYTES = 256 * 1024
+WORKFLOW_LOOP_BINDING_KEY_PATTERN = r"^[A-Za-z_][A-Za-z0-9_-]{0,63}$"
 
 
 @dataclass
@@ -125,8 +158,12 @@ class ModelEndpoint:
     kind: str  # 'anthropic' | 'openai' | 'ollama' | 'vllm'
     model: str  # pinned model/version
     base_url: str | None = None
-    fallback: str | None = None  # endpoint id used if this is unavailable
+    # Stored reference for an explicit, future health-based failover decision.
+    # The router does not silently traverse it, especially when this endpoint is
+    # retired: withdrawal is a hard stop until an explicit restore.
+    fallback: str | None = None
     data_class: str = "standard"  # standard | sensitive (sensitive => local only)
+    is_active: bool = True
 
 
 @dataclass
@@ -138,6 +175,27 @@ class Budget:
     cost_limit_micros: int | None = None
     hard_stop: bool = True
     window: str = "run"  # run | daily | monthly
-    # running accumulators (mirrors the spent_* columns in schema.sql)
+    # Usage view projected from the exact budget_usage bucket. The legacy
+    # budgets.spent_* columns remain zero after migration.
     spent_tokens: int = 0
     spent_micros: int = 0
+    # Exact usage-bucket evidence. A run policy read outside an execution has no
+    # honest current bucket, so it reports run_context_required rather than
+    # presenting a synthetic zero as live usage.
+    usage_state: str = "current"  # current | run_context_required
+    window_key: str | None = None
+    window_started_at: datetime | None = None
+    window_ends_at: datetime | None = None
+    reset_generation: int = 0
+
+
+@dataclass(frozen=True)
+class BudgetWindowRef:
+    """Exact durable usage bucket selected under a locked budget policy."""
+
+    scope_id: str
+    window: str
+    window_key: str
+    started_at: datetime
+    ends_at: datetime | None
+    reset_generation: int

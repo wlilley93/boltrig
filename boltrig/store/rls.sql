@@ -82,30 +82,41 @@ DECLARE
     -- anchors. Both carry a real tenant_id, so the generic tenant_id policy fences
     -- them (a null GUC -> zero rows, fail-closed) exactly like audit_log.
     'security_log','audit_rollup_anchors',
-    'budgets','credential_refs','tenant_permissions','conversations',
-    'config_revisions','eval_cases','eval_runs','notification_prefs',
-    'personal_agents','memory_items','mcp_servers','conversation_messages',
+    'budgets','budget_usage','credential_refs','tenant_permissions','conversations',
+    'config_revisions','permanent_fleet_observations','birth_profile_receipts',
+    'background_job_receipts',
+    'eval_cases','eval_runs','notification_prefs',
+    'personal_agents','memory_items','mcp_servers','mcp_probe_receipts',
+    'conversation_messages',
     'conversation_summaries',
-    'user_invitations','user_credentials','user_settings','user_sessions','memory_facts',
+    'user_invitations','user_credentials','password_reset_tokens',
+    'user_settings','user_sessions','memory_facts',
     -- TOTP two-factor ([2026] VJS-COUNTY 10): all three carry a tenant_id column, so
     -- the generic tenant_id policy binds them (the sealed secret lives in the already-
     -- scoped credential_refs table, not here).
     'user_totp','user_recovery_codes','two_factor_challenges',
     'memory_ingestions','memory_erasures','memory_projection_statuses',
     'memory_vectors','memory_vector_edges',
-    'channel_bindings','channel_pairings','run_checkpoints','fanout_counters',
+    'channel_bindings','channel_pairings','channel_gateway_status',
+    'channel_gateway_leases',
+    'run_checkpoints','fanout_counters',
     'run_cancel_requests',
     -- Decision 0003 Phase 2: durable intake dedup markers + the socket-class
     -- outbound hand-off. Both carry a real tenant_id resolved from the VERIFIED
     -- channel before the write, so the generic tenant_id policy fences them.
     'channel_deliveries','channel_outbox',
+    'workflow_triggers','workflow_trigger_deliveries',
+    'workflow_schedules','workflow_schedule_occurrences',
+    'realtime_calls','realtime_call_events',
+    'device_enrollments','devices','device_roots','device_leases',
+    'integration_catalogue','integration_connections',
     -- Org -> workspace tenancy ([2026] VJS-COUNTY 8). These three carry a real
     -- tenant_id column, so the generic tenant_id policy binds them. organisations
     -- is handled separately below (its isolation column is id, which IS tenant_id).
     'workspaces','org_members','workspace_members',
     -- D5: per-org/workspace/user AI keys - tenant_id-scoped like the rest (the raw
     -- key is not here; it lives in the RLS-fenced credential_refs table).
-    'ai_configs',
+    'ai_configs','ai_key_secret_proposals',
     -- Workflow run records (design brief 22.1): tenant-scoped observability rows
     -- fed by execute_workflow. Same generic tenant_id policy binds them.
     'workflow_run_records',
@@ -134,7 +145,10 @@ DECLARE
     'knowledge_representations','knowledge_segments','knowledge_embeddings',
     'knowledge_asset_access',
     'knowledge_providers','knowledge_projection_statuses','knowledge_jobs',
-    'knowledge_projection_outbox'
+    'knowledge_projection_outbox',
+    -- Immutable artifact bytes and metadata share one owner/workspace-scoped row;
+    -- tenant RLS remains the database backstop under the application fence.
+    'artifacts'
   ];
 BEGIN
   FOREACH t IN ARRAY scoped LOOP

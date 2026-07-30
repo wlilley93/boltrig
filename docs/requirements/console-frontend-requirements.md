@@ -201,7 +201,7 @@ Purpose: compose what agents can do: skills, router authoring (nouns/verbs/bindi
 |---|---|---|---|---|---|
 | Upsert | id | text (required) | any | empty | `POST /v1/workflows` `id` |
 | Upsert | version | text | semver | `1.0.0` | `version` |
-| Upsert | source | select | precreated, generated, learned | precreated | `source` |
+| Upsert | source | read-only provenance | precreated, generated, learned | precreated for a new authored definition | omitted from `POST /v1/workflows`; assigned/preserved by the kernel |
 | Upsert | definition / steps | textarea JSON | object | `{}` | `definition` |
 | Upsert | intent_tags | text (comma list) | any | empty | `intent_tags` |
 | Schedule | Workflow | select from `GET /v1/workflows` | existing ids | empty | path of `POST /v1/workflows/{id}/schedule` |
@@ -215,7 +215,7 @@ Purpose: compose what agents can do: skills, router authoring (nouns/verbs/bindi
 | View runs | Workflow | select | existing ids | empty | `GET /v1/workflows/{id}/runs` |
 | Verb palette | click-to-copy rows | scoped verbs | n/a | copies verb id to clipboard for use as a step `action` |
 
-12. REQ-CON-STU-12 (built): Upsert saves `{id, version, source, definition, intent_tags}`, validating the definition JSON client-side and reloading the workflow list on ok.
+12. REQ-CON-STU-12 (built): Upsert saves `{id, version, definition, intent_tags}`, validating the definition JSON client-side and reloading the workflow list on ok. `source` remains read-only and kernel-owned.
 13. REQ-CON-STU-13 (built): Trigger renders the returned run descriptor with engine badge, durable/in-process badge, status badge, a RunLink when `run_id` is present and the raw descriptor JSON; a descriptor carrying `error` renders as the error.
 14. REQ-CON-STU-14 (built): Execute runs the stored steps synchronously through the chokepoint and renders the run record: overall status badge (completed=ok, failed=down, paused=degraded), RunLink, workflow id and version, and per-step rows with id, action, status badge, failure reason and output JSON.
 15. REQ-CON-STU-15 (built): View runs lists the run ids returned by `GET /v1/workflows/{id}/runs` each as a RunLink.
@@ -227,7 +227,7 @@ Purpose: visual editor over the identical `definition.steps` contract (`{id, par
 
 | Control | Type | Allowed values | Default | Maps to |
 |---|---|---|---|---|
-| Workflow id / version / source / intent_tags | as form view | as form view | `1.0.0`, precreated | `POST /v1/workflows` |
+| Workflow id / version / source / intent_tags | source is read-only; other fields as form view | as form view | `1.0.0`, kernel-assigned precreated | `POST /v1/workflows` omits source |
 | Save / Run / Clear | buttons | n/a | n/a | Save = upsert `{definition:{steps}}`; Run = `POST /v1/workflows/{id}/execute` with `{}` inputs; Clear empties the canvas |
 | existing run id + View run | text + button | run id | empty | opens the live run canvas for the current workflow id |
 | Verb palette | click-to-add rows + search box (shown when more than 6 verbs) | scoped verbs, filter on id or noun | empty filter | adds a step node; node kind derived from binding (agent bound = agent, adapter bound = service, else kernel-run) |
@@ -505,13 +505,13 @@ Purpose: account, appearance, notifications, developer/connections, personal age
 
 | Field | Type | Allowed values | Default | Maps to |
 |---|---|---|---|---|
-| event type | select | approval, escalation, work_status, budget_alert, error | approval | `PUT /v1/me/notifications` `event_type` |
-| channel | select | in_app, email, slack, teams, webhook, pager | in_app | `channel` |
-| target | text | address / channel / url | empty | `target` |
+| event type | server select | exact `catalogue.events` (`approval`, `escalation`, `hitl_expired`, `work_status`) | first available | `PUT /v1/me/notifications` `event_type` |
+| channel | server select | enabled socket channels in `catalogue.transports` with a verified caller binding | first available | exact channel id in `channel` |
+| target | server select | verified targets for the selected transport | first available | `target` |
 | enabled | select | enabled, disabled | enabled | `enabled` |
 | per-row Enable/Disable | button | toggles `enabled`, re-sending the row with its `id` | n/a | same endpoint |
 
-4. REQ-CON-SET-04 (built): Notification routings are listed from `GET /v1/me/notifications` and created or toggled via `PUT /v1/me/notifications` (the scope-locked, audited endpoint; the old `/v1/notifications/prefs` pair was removed), with denials rendered inline.
+4. REQ-CON-SET-04 (built): Notification routings and their last durable delivery state are listed from `GET /v1/me/notifications` and created or toggled via `PUT /v1/me/notifications` (the scope-locked, audited endpoint; the old `/v1/notifications/prefs` pair was removed). A static self-bound test uses `POST /v1/me/notifications/{id}/test`. Worker renders only the server catalogue; it does not offer in-app, email, arbitrary targets, or event names without a real producer/delivery path.
 
 ### A17.4 Developer & Connections
 

@@ -18,10 +18,19 @@ from boltrig.fleet.domain import (
 
 from . import codex_protocol as wire
 from .codex_cell_policy import CODEX_CLI_VERSION
-from .codex_runtime_config_toml import CODEX_MCP_SERVER_NAME
+from .codex_native_subagent_events import (
+    native_item_payload,
+    native_thread_ref,
+    validate_native_event_policy,
+)
 from .codex_runtime_event_state import (
     CodexRuntimeProtocolError,
     NativeObservationState,
+)
+from .codex_runtime_invalidation import (
+    LIFECYCLE_METHODS as _LIFECYCLE_METHODS,
+    is_kernel_tools_mcp_startup_update,
+    is_runtime_invalidation,
 )
 
 _IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
@@ -49,81 +58,30 @@ _ITEM_TYPES = frozenset(
     }
 )
 _NATIVE_ITEM_TYPES = frozenset({"collabAgentToolCall", "subAgentActivity"})
-_LIFECYCLE_METHODS = frozenset(
-    {
-        "error",
-        "item/completed",
-        "item/started",
-        "thread/closed",
-        "thread/started",
-        # Codex reports what a turn consumed here and NOWHERE else. Left out of this
-        # set it fell through to UNKNOWN and the numbers were discarded, so the fleet
-        # priced every Codex turn at zero tokens.
-        "thread/tokenUsage/updated",
-        "turn/completed",
-        "turn/started",
-        "warning",
-    }
-)
 MAX_RUNTIME_EVENTS = 1_000_000
 MAX_ITEMS_PER_PHASE = 4096
-_INVALIDATION_METHODS = frozenset(
-    {
-        "app/list/updated",
-        "configWarning",
-        "externalAgentConfig/import/completed",
-        "externalAgentConfig/import/progress",
-        "fs/changed",
-        "hook/completed",
-        "hook/started",
-        "mcpServer/oauthLogin/completed",
-        "mcpServer/startupStatus/updated",
-        "model/rerouted",
-        "skills/changed",
-        "thread/settings/updated",
-    }
-)
-
-
-def is_runtime_invalidation(method: str) -> bool:
-    """Return whether a notification invalidates quarantined phase evidence."""
-
-    return method in _INVALIDATION_METHODS
-
-
-def is_kernel_tools_mcp_startup_update(notification: wire.NotificationMessage) -> bool:
-    """Whether an invalidation-class notification is the ONE the kernel-tools
-    lane expects: the admitted ``boltrig`` MCP server reaching a live state.
-
-    The preflight attested the inventory (exactly this server, bearer auth, no
-    resources, tools within the admitted ceiling), so its startup updates carry
-    no new evidence. Anything else stays fatal: another server's update, a
-    failure/cancellation of ours (the tool path died - the turn must degrade),
-    or any other invalidation method. The server name itself is argv-pinned, so
-    a rewritten per-cell config cannot borrow it (VJS-CC-VJS 6 H5).
-    """
-
-    if notification.method != "mcpServer/startupStatus/updated":
-        return False
-    params = notification.params.to_mapping()
-    return (
-        params.get("name") == CODEX_MCP_SERVER_NAME
-        and params.get("status") in {"starting", "ready"}
-    )
 
 
 class CodexEventTranslator:
-    """Normalize observations; native limits are detection tripwires, not controls."""
+    """Normalize observations; native limits are detection tripwires, not controls.
 
+    Native thread and collaboration items become explicit, content-free events:
+    thread identifiers are assignment-salted references, while prompts, paths,
+    state messages, and provider content are dropped; this is lifecycle, not admission control.
+
+    In particular, a notification arrives after App Server has begun the action.
+    Exceeding a limit therefore terminates the phase but cannot prove the action
+    was prevented. Production admission stays disabled until every configured
+    ceiling also has a pre-execution enforcement point.
+    """
     def __init__(
         self,
         *,
         assignment: PhaseAssignmentRef,
         thread: RuntimeThreadRef,
         cwd: str,
-        max_native_concurrent: int,
-        max_native_total: int,
-        max_native_depth: int,
+        max_native_concurrent: int, max_native_total: int, max_native_depth: int,
+        model_id: str, reasoning_effort: str,
     ) -> None:
         if thread.assignment != assignment:
             raise ValueError("event translator bindings disagree")
@@ -138,15 +96,16 @@ class CodexEventTranslator:
             or (max_native_total == 0) != (max_native_depth == 0)
         ):
             raise ValueError("native subagent limits are inconsistent")
+        validate_native_event_policy(model_id, reasoning_effort)
         self._assignment = assignment
         self._assignment_digest = hashlib.sha256(
             assignment.assignment_id.encode("utf-8")
         ).hexdigest()[:24]
         self._thread = thread
         self._cwd = cwd
-        self._max_native_concurrent = max_native_concurrent
         self._max_native_total = max_native_total
-        self._max_native_depth = max_native_depth
+        self._model_id = model_id
+        self._reasoning_effort = reasoning_effort
         self._current_turn: RuntimeTurnRef | None = None
         self._root_started = False
         self._turn_started = False
@@ -240,18 +199,25 @@ class CodexEventTranslator:
         parent_id = _identifier("native parent thread id", parent)
         depth = self._native.start(self._thread.thread_id, thread_id, parent_id)
         return self._event(
-            RuntimeEventKind.UNKNOWN,
-            payload={"native_depth": depth, "observation": "native_thread_started"},
+            RuntimeEventKind.NATIVE_SUBAGENT_STARTED,
+            payload={
+                "native_depth": depth,
+                "native_parent_ref": self._native_ref(parent_id),
+                "native_thread_ref": self._native_ref(thread_id),
+            },
         )
 
     def _thread_closed(self, params: Mapping[str, JSONValue]) -> RuntimeEvent:
         thread_id = _identifier("thread id", params.get("threadId"))
         if thread_id == self._thread.thread_id:
             raise CodexRuntimeProtocolError("phase thread closed outside Boltrig lifecycle")
-        self._native.close(thread_id)
+        depth = self._native.close(thread_id)
         return self._event(
-            RuntimeEventKind.UNKNOWN,
-            payload={"observation": "native_thread_closed"},
+            RuntimeEventKind.NATIVE_SUBAGENT_COMPLETED,
+            payload={
+                "native_depth": depth,
+                "native_thread_ref": self._native_ref(thread_id),
+            },
         )
 
     def _token_usage(self, params: Mapping[str, JSONValue]) -> RuntimeEvent:
@@ -306,6 +272,7 @@ class CodexEventTranslator:
             return self._event(RuntimeEventKind.TURN_STARTED, turn=expected)
         if status == "inProgress" or not self._turn_started or self._active_items:
             raise CodexRuntimeProtocolError("completed turn is still in progress")
+        self._native.require_drained()
         event = self._event(
             RuntimeEventKind.TURN_COMPLETED,
             turn=expected,
@@ -347,7 +314,7 @@ class CodexEventTranslator:
             if type(text) is str:
                 self._latest_agent_message_text = text
         if item_type in _NATIVE_ITEM_TYPES:
-            raise CodexRuntimeProtocolError("native agent activity is not admitted")
+            return self._native_item_event(method, item_type, item_id, item, turn)
         kind = (
             RuntimeEventKind.ITEM_STARTED
             if method == "item/started"
@@ -406,6 +373,39 @@ class CodexEventTranslator:
         if self._current_turn is None or self._current_turn.turn_id != turn_id:
             raise CodexRuntimeProtocolError("notification turn does not match the active turn")
         return self._current_turn
+
+    def _native_item_event(
+        self,
+        method: str,
+        item_type: str,
+        item_id: str,
+        item: Mapping[str, JSONValue],
+        turn: RuntimeTurnRef,
+    ) -> RuntimeEvent:
+        if self._max_native_total == 0:
+            raise CodexRuntimeProtocolError("native agent activity is not admitted")
+        payload = native_item_payload(
+            method,
+            item_type,
+            item,
+            assignment_id=self._assignment.assignment_id,
+            root_id=self._thread.thread_id,
+            max_total=self._max_native_total,
+            model_id=self._model_id,
+            reasoning_effort=self._reasoning_effort,
+            thread_knowledge=self._native,
+        )
+        return self._event(
+            RuntimeEventKind.NATIVE_SUBAGENT_ACTIVITY,
+            turn=turn,
+            item_id=item_id,
+            payload=payload,
+        )
+
+    def _native_ref(self, thread_id: str) -> str:
+        return native_thread_ref(
+            self._assignment.assignment_id, self._thread.thread_id, thread_id
+        )
 
     def _transition_item(self, method: str, item_id: str, item_type: str) -> None:
         if method == "item/started":

@@ -13,6 +13,7 @@ from typing import Any
 from boltrig.adapters.base import Adapter
 from boltrig.models import (
     Consequence,
+    derive_familiar_genotype,
     IdempotencyMode,
     InvocationContext,
     Noun,
@@ -64,6 +65,8 @@ class KernelRegistry:
     async def bind_verb_to_agent(self, tenant_id: str, verb_id: str, agent_capability: str) -> None:
         """Re-point a verb at a reasoning agent instead of an adapter (US-KER-02).
         The caller's interface is unchanged (P4)."""
+        if await self._store.get_verb(tenant_id, verb_id) is None:
+            raise LookupError("verb or noun is missing or archived")
         await self._store.upsert_binding(
             VerbBinding(
                 verb_id=verb_id,
@@ -117,6 +120,9 @@ class KernelRegistry:
                 "is_ephemeral": capability.is_ephemeral,
                 "cost_tier": capability.cost_tier,
                 "model_endpoint": capability.model_endpoint,
+                "familiar_genotype": derive_familiar_genotype(
+                    capability.name
+                ).as_view(),
             }
             for capability in await self._store.list_capabilities(tenant_id)
         ]
@@ -156,6 +162,7 @@ class KernelRegistry:
                     "input_schema": v.input_schema,
                     "output_schema": v.output_schema,
                     "consequence": v.consequence.value,
+                    "idempotency_mode": v.idempotency_mode.value,
                     "binding": (
                         {"target_type": binding.target_type.value, "target_ref": binding.target_ref}
                         if binding

@@ -12,6 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from boltrig.kernel.app import create_app
+from boltrig.kernel.approval_digest import approval_action_digest
 from boltrig.kernel.hitl import approval_request_fingerprint
 from boltrig.kernel.ratelimit import RateLimiter
 from boltrig.models import (
@@ -73,6 +74,14 @@ async def test_approval_records_literal_inputs_without_storing_secrets(gated_ker
         "version": 1,
     }
     assert "sk-not-stored" not in request.context
+    assert request.action_digest == approval_action_digest(
+        noun="ticket",
+        verb="ticket.create",
+        params={
+            "title": "ship the release",
+            "metadata": {"region": "eu-west", "api_key": "sk-not-stored"},
+        },
+    )
 
 
 @pytest.mark.security

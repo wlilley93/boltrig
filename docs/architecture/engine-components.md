@@ -149,17 +149,17 @@ The dispatcher also publishes paired `tool_call`/`tool_result` (and `hitl`) even
 
 ### 1.9 Budget and cost
 
-**One line.** Token and cost ceilings per scope; a hard-stop budget refuses to commit a call that would exceed it, a soft one records overage and alerts.
+**One line.** Token and cost ceilings for model-backed agent runs; a hard-stop tenant or carried department budget refuses the run before it starts, while a soft one records overage and alerts.
 
-**Plain language.** A prepaid card per department. Before an agent run starts, the engine checks the card can cover the estimate; a hard-stop card declines, a soft card lets it through but flags the overspend. At 80 percent usage an alert fires pre-emptively. Cost is attributed into audit rows so the execution tree can total spend per run.
+**Plain language.** A prepaid card for the tenant and, when the run carries one, its department. Before a spawned or agent-bound model run starts, the engine checks the card can cover an estimate; a hard-stop card declines, a soft card lets it through but flags the overspend. At 80 percent usage an alert fires pre-emptively. Runtime token usage then reconciles the estimate, and cost is attributed into audit rows so the execution tree can total spend per run. Chat enters through the spawner and therefore uses the tenant card.
 
 **Key files.** `boltrig/kernel/cost.py` (`CostAccountant.reserve`, alert at `_ALERT_FRACTION = 0.8`); budgets are seeded from manifest hierarchy tiers by `apply_manifest`.
 
-**Public surface.** `GET /v1/cost`, `GET /v1/budgets`.
+**Public surface.** `GET /v1/cost`, `GET /v1/budgets`, plus governed budget upsert/reset routes.
 
 **Governed by.** FR-COST-02 (hard stop halts before exceeding; soft records overage only).
 
-**Maturity.** Wired-but-thin in one specific sense: `reserve` is called only from the fleet spawner (`boltrig/fleet/spawn.py`, via `Kernel.cost`) with tenant and department scopes. The dispatcher holds no `CostAccountant`, so there is no per-verb budget check at the chokepoint, and the workflow/agent-type scopes described in the docstring are not passed at enforcement time.
+**Maturity.** Wired-but-thin. `boltrig/fleet/spawn.py` reserves and reconciles both ordinary spawns and agent-bound verb runs, using tenant plus optional department ids. Run budgets are isolated by exact hashed run identity; daily and monthly budgets use durable UTC buckets and roll automatically. Exact reservation receipts keep post-run true-up in the originally charged bucket across a UTC boundary, while reset generations make a governed calendar reset a clean cutoff. The dispatcher still has no general priced-verb hook: adapter steps and realtime voice provider sessions do not debit these budgets. Workflow execution never adds its workflow id.
 
 ### 1.10 Egress guard
 
@@ -177,17 +177,17 @@ The dispatcher also publishes paired `tool_call`/`tool_result` (and `hitl`) even
 
 ### 1.11 PII and secret screening
 
-**One line.** Deterministic, model-free scanning that redacts personal data before it leaves the boundary and hard-blocks secrets from ever being recorded.
+**One line.** Deterministic, model-free PII redaction exists as a tested primitive but is not wired to every outbound boundary; audit identity scrubbing and memory secret blocking are separate live controls.
 
-**Plain language.** Two filters at the exit door. The first blurs personal details (emails, card numbers, SSNs, phones, IPs) before content goes to an external model: redaction by default, upgradeable to "route to a local model" via the model router. The second is stricter: anything that looks like an API key, bearer token, or password is not redacted but refused outright, so it can never enter the audit log or the memory system.
+**Plain language.** The code can identify and replace common personal details (emails, card numbers, SSNs, phones and IPs), but no production model/adapter path calls that general redactor today. The audit writer independently scrubs identity fields, and memory independently refuses secret-shaped content. Sensitive-to-local model routing is also live, but it is driven by the invocation data class and model endpoint metadata, not by `privacy.pii_redaction`, `privacy.redact_fields` or `privacy.data_residency`.
 
-**Key files.** `boltrig/kernel/pii.py` (`_PATTERNS` for PII, `_SECRET_PATTERNS` and `contains_secret` for the hard block); consumed by the audit writer and the memory adapter.
+**Key files.** `boltrig/kernel/pii.py` (`_PATTERNS` and `redact` for the currently unconsumed general PII primitive, `_SECRET_PATTERNS` and `contains_secret` for the live memory hard block); `boltrig/kernel/audit.py` for the separate live audit scrubber.
 
-**Public surface.** None; invoked at the boundaries.
+**Public surface.** None.
 
-**Governed by.** SEC-13 (PII detected and redacted before leaving), K-20 (audit scrubbing), SEC-42 (secrets never become memory), SEC-05.
+**Governed by.** SEC-13 (redactor primitive only), K-20 (audit scrubbing), SEC-42 (secrets never become memory), SEC-05.
 
-**Maturity.** Production-grade for what it is: conservative regex patterns, explicitly meant to be tuned per deployment, not a trained classifier.
+**Maturity.** Mixed: audit scrubbing and memory secret blocking are live; general outbound PII redaction remains an unwired seam.
 
 ### 1.12 HTTP front door and web hardening
 
@@ -341,7 +341,7 @@ recovered from a file the deletion removed.
 
 **One line.** A chat turn becomes a governed work item and a spawned run whose live events stream back over SSE and are persisted.
 
-**Plain language.** The reception phone line with a live intercom. When a message arrives, the service checks you may use this thread (owner-scoped; only org-admin and compliance may read others'), persists your message, mints a run id, and starts the turn in the background while forwarding every event from the relay to your browser as it happens: text deltas, tool calls, sub-agent announcements, inline approval cards. When the run ends, the assistant message (with the full event list) is persisted, so a dropped client can re-attach to the same run and replay what it missed. The relay itself is an in-memory, single-process fan-out with a 500-event backlog per stream, by design a thin stand-in for Redis pub/sub in a multi-replica deployment. Publishers: the chat executor, the spawner, the dispatch chokepoint, and (relayed) the Pi gateway.
+**Plain language.** The reception phone line with a live intercom. When a message arrives, the service checks you may use this thread (owner-scoped; only org-admin and compliance may read others'), persists your message, mints a run id, and starts the turn in the background while forwarding every event from the relay to your browser as it happens: text deltas, tool calls, sub-agent announcements, inline approval cards. When the run ends, the assistant message (with the full event list) is persisted, so a dropped client can re-attach to the same run and replay what it missed. Offline development uses the bounded in-memory relay. Production requires the Redis Streams backend, sharing the 500-event-per-stream replay window, completion markers, active-run truth and conversation hand-off lock across replicas; the shipped Redis service persists them with AOF. Publishers: the chat executor, the spawner, the dispatch chokepoint, and (relayed) the Pi gateway.
 
 **Key files.** `boltrig/fleet/chat.py` (`ChatService`, `build_turn_executor`, `sse`), `boltrig/kernel/events.py` (`EventRelay`).
 
@@ -607,11 +607,11 @@ recovered from a file the deletion removed.
 
 **Key files.** `boltrig/workflows/library.py` (`WorkflowLibrary`); constructed at boot with the store, the executor from `register_workers`, and the kernel.
 
-**Public surface.** `GET /v1/workflows` and `/{wf_id}`, `POST /v1/workflows`, `POST /v1/workflows/{wf_id}/trigger`, `/execute`, `/schedule`, `GET /v1/workflows/{wf_id}/runs`.
+**Public surface.** `GET /v1/workflows` and `/{wf_id}`, `POST /v1/workflows`, `POST /v1/workflows/{wf_id}/trigger`, `/execute`, `/schedule`, `GET /v1/workflows/{wf_id}/runs`, and bounded author-only `GET /v1/workflows/{wf_id}/schedule/occurrences` plus exact approved terminal-failure retry.
 
 **Governed by.** FR-WFS-04 (a registered workflow becomes a live durable run).
 
-**Maturity.** Production-grade for register/get/trigger/execute; `match` is tested but unwired (scaffold in the serving sense).
+**Maturity.** Production-grade for register/get/trigger/execute and schedule occurrence observation/recovery. Occurrence enqueue remains honestly at-least-once; an interpreter-returned completion settles the same logical receipt, including a task-before-enqueue-record race. An infrastructure exception remains visibly `pending_or_unknown` because Hatchet may retry it and no terminal engine-status reconciliation callback is wired. Selected historical backfill is explicitly unavailable because it would require a separate authority-bearing queue. `match` is tested but unwired (scaffold in the serving sense).
 
 ### 4.3 Workflow generator and learning
 
@@ -770,11 +770,11 @@ Also registered at boot but living elsewhere: the control-plane adapter (1.16), 
 
 **One line.** The org-chart config is genuinely wired for capabilities and budgets; several other parsed policy fields have no consumer at enforcement time.
 
-**Verified detail.** Tier profiles ARE consumed: they seed `AgentCapability` and `Budget` rows, and `cost_tier`/`max_depth` have many downstream consumers. But the following parse into the typed manifest and are then consulted by nothing outside the parser: `spawn_rules` (declared match-pattern to runtime/skills routing, zero consumers), `hitl.escalation_chain`, `privacy.data_residency`, `privacy.retention_days`, `privacy.redact_fields`, `locale_default`, `timezone_default`. And budget enforcement is confined to the spawn path (1.9). So the honest statement is: hierarchy wired, spawn rules and the privacy/escalation details parsed but unwired.
+**Verified detail.** Tier profiles ARE consumed: they seed `AgentCapability` and `Budget` rows, and `cost_tier`/`max_depth` have many downstream consumers. Spawn rules are also live at the governed `Spawner` intake: a closed all-of intent-tag matcher selects one unique highest explicit priority from the manifest or latest validated Operator revision, copies its bounded receipt through child context/audit/result, and fails closed on ties, conflicts, malformed revisions or stale targets. Rule skills do not widen authority because loaded grants still intersect the parent/caller ceiling, and rule depth can only tighten the capability ceiling. This is not automatic task classification: ordinary Chat, evaluation and personal-agent calls supply no intent tags today. `privacy.retention_days` is consumed only by the fleet janitor that hard-erases CLOSED conversations; it is not a general retention policy for open conversations, work, memory or audit. The following parse into the typed manifest and are then consulted by nothing outside the parser: `hitl.escalation_chain`, `privacy.pii_redaction`, `privacy.data_residency`, `privacy.redact_fields`, `locale_default`, `timezone_default`. Budget enforcement is confined to model-backed agent execution through `Spawner`/agent-bound invocation, with tenant and optional department scope; no workflow-scope debit, automatic window rollover, realtime-voice provider debit or general per-verb provider debit exists.
 
 **Key files.** `boltrig/config/manifest.py`; enforcement sites (or their absence) across `boltrig/fleet/spawn.py` and `boltrig/kernel/`.
 
-**Maturity.** Wired-but-thin as a whole, with the specific dead fields named above.
+**Maturity.** Wired-but-thin as a whole, with the exact live subset and dead fields named above.
 
 ### 7.3 Env settings
 
@@ -888,7 +888,7 @@ The approved engine plan closes the gap between the governance shell (largely pr
 
 **2. Durable tasks re-entering the chokepoint.** Partially landed: `boltrig-workflow-run` now runs every step through `kernel.invoke` inside an `executor.run_step` boundary WITH checkpoint-resume and per-step idempotency keys (2.12), so a durably resumed run re-enters the chokepoint per step and never re-executes completed work. What remains: `HatchetExecutor.run_step` still awaits functions directly — the SDK exposes no durable child-step API — so per-step ENGINE durability (each step its own retriable Hatchet unit) is the open seam, closed either by an SDK upgrade or by registering one Hatchet task per step.
 
-**3. The delegation pump.** Intake works (1.13, 2.13) and the org chart exists as code (2.1, 2.2), but the fleet worker's loop is a keepalive and neither ChiefOfStaff nor DepartmentHead is ever invoked in serving (8.2). The plan wires the pump: the worker polls pending work items, the ChiefOfStaff routes them, DepartmentHeads decompose and fan out under their caps, and the manifest's currently-dead `spawn_rules` (7.2) get their consumer.
+**3. The delegation pump.** Intake works (1.13, 2.13) and the org chart exists as code (2.1, 2.2), but the fleet worker's loop is a keepalive and neither ChiefOfStaff nor DepartmentHead is ever invoked in serving (8.2). The plan wires the pump: the worker polls pending work items, the ChiefOfStaff routes them, and DepartmentHeads decompose and fan out under their caps. Spawn rules now have their governed `Spawner` consumer (7.2); making the pump activate them automatically still requires a canonical server-owned intent-tag source.
 
 **4. The learning loop.** The flywheel edge exists as dead code: `learn_from_success` is never called, `WorkflowLibrary.match` has no serving caller, and synthesis never runs on a miss (4.2, 4.3). The plan closes the loop: on intent, match a stored workflow; on a miss, synthesise one (reasoned when a runtime is present, deterministic otherwise, US-WFL-02); on success, re-save it as learned so the next match finds it. Output finally becomes input.
 

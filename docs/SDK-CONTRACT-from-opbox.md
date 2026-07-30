@@ -146,6 +146,8 @@ There is NO single roster endpoint. The console composes it (`ui/src/panels/agen
 | Model endpoints | `GET /v1/model-endpoints` (access_routes.py:650) | `{endpoints:[{id,kind,model,data_class}]}` (never base_url) | bearer; tenant |
 | Skills | `GET /v1/skills` (skills.py:12) | `{skills:[{id,version,extends,tool_grants,locale}]}` | bearer; tenant |
 | Capabilities | `GET /v1/capabilities?noun` (app.py:603) | grant-filtered `{verbs:[VerbInfo], nouns?, workflows?, agent_capabilities?}` | bearer; grant-filtered |
+| Agent capability author inventory | `GET /v1/agent-capabilities` | `{agent_capabilities:[{name,runtime,supported_skills,max_depth,is_ephemeral,cost_tier,model_endpoint,source,is_active,status,familiar_genotype}]}` including retired rows | bearer; author |
+| Agent capability lifecycle | `POST /v1/agent-capabilities/{name}/{retire,restore}` | governed `control.capability.{retire,restore}`; 202 pending-human or `{status:"ok",id,capability_status}` | bearer; author; high consequence |
 | Budgets (per agent) | `GET /v1/budgets` (budgets.py:27) | see 1.7 | bearer; dept |
 | Work (per agent) | `GET /v1/work` (1.4) | see 1.4 | bearer; dept+ws |
 
@@ -173,7 +175,7 @@ reused inline in chat, in the run drawer, and in the approvals panel.
 | Primitive | Endpoint(s) | Shape | Auth/scoping |
 |---|---|---|---|
 | Cost rollup | `GET /v1/cost` (observability.py:123) | `{total_cost_micros, by_actor{}, scope}` | bearer; dept+ws |
-| Budgets | `GET /v1/budgets` (budgets.py:27) | `{budgets:[{id,scope_type(tenant|department|workflow),window(run|daily|monthly),hard_stop,token_limit,spent_tokens,cost_limit_micros,spent_micros}], scope}` | bearer; dept |
+| Budgets | `GET /v1/budgets` (budgets.py:27) | `{budgets:[{id,scope_type(tenant|department|workflow),window(run|daily|monthly),hard_stop,token_limit,spent_tokens,cost_limit_micros,spent_micros,usage_state,window_key,window_started_at,window_ends_at}], scope}`; run policies read without execution context return `usage_state: run_context_required` and no synthetic aggregate | bearer; dept |
 | Upsert budget | `PUT /v1/budgets/{scope_type}/{scope_id}` (budgets.py:41) | governed `control.budget.upsert` (may 202 pending) | bearer; author |
 | Reset budget | `POST /v1/budgets/{scope_type}/{scope_id}/reset` (budgets.py:53) | governed `control.budget.reset` | bearer; author |
 | Model telemetry | `GET /v1/model/telemetry?limit` (observability.py:182) | `{models:[...], scope}` | bearer; dept+ws |
@@ -191,6 +193,11 @@ reused inline in chat, in the run drawer, and in the approvals panel.
 | Schedule | `POST /v1/workflows/{id}/schedule` (workflows.py:91) | governed `control.workflow.schedule` | bearer; author |
 | Trigger | `POST /v1/workflows/{id}/trigger` (workflows.py:112) | `control.workflow.trigger` (runs under caller grants, no author gate) | bearer |
 | Execute | `POST /v1/workflows/{id}/execute` (workflows.py:126) | `control.workflow.execute` | bearer |
+| Trigger bindings | `GET/POST /v1/workflows/{id}/triggers` | list bindings or governed create; webhook create returns its secret once after approval finalization | bearer; author |
+| Trigger lifecycle | `POST /v1/workflows/{id}/triggers/{trigger_id}/{enable\|disable\|rotate}` | governed mutation; webhook rotate returns its replacement secret once | bearer; author |
+| Trigger receipts | `GET /v1/workflows/{id}/triggers/{trigger_id}/deliveries` | bounded delivery receipts with status, run/HITL references and redacted reason | bearer; author |
+| Trigger finalization recovery | `GET /v1/workflows/{id}/trigger-finalizations` | caller-owned pending/approved create/rotate actions, never secret material | bearer; author |
+| Webhook delivery | `POST /v1/automation-hooks/{tenant_id}/{trigger_id}` | secret header plus stable delivery id; current owner authority is re-evaluated and the event stays nested untrusted input | trigger secret |
 
 Live run canvas overlays `workflow_step`/`workflow_run` frames (1.2) from `GET
 /v1/runs/{id}/events?follow=1` onto nodes by `id===step_id`; `WorkflowRunRecord`
@@ -273,7 +280,7 @@ own adapter/registration state.
 | Sessions | `GET /v1/me/sessions`; `DELETE /v1/me/sessions/{id}` (access_routes.py:460-477) | `{sessions:[{id,client,revoked,created_at,last_seen_at}]}` | bearer; self (identity realm) |
 | Connections | `GET /v1/me/connections` (access_routes.py:427) | `{rest_base,mcp_endpoint,auth,snippets{claude_code,curl},note}` | bearer |
 | Active context/org | `POST /v1/me/active-context`; `POST /v1/me/active-org` (access_routes.py:500-546) | `{status,workspace_id|org_id}` | bearer + first-party session |
-| Notifications | `GET/PUT /v1/me/notifications` (access_routes.py:752) | `{prefs:[{id,event_type,channel,target,enabled}]}` | bearer; self |
+| Notifications | `GET/PUT /v1/me/notifications`, `POST /v1/me/notifications/{id}/test` | `{catalogue:{events,transports},prefs:[{id,event_type,channel,target,enabled,deliverable,last_delivery}]}`; catalogue events are exact producers and transports are verified caller-bound socket channels | bearer; self; writes and static tests dispatch through `control.notification.*` |
 | Personal agent | `GET/POST/DELETE /v1/me/agent`; `POST /v1/me/agent/invoke` (personal.py) | `{id,runtime(codex|script),skills[]}`; invoke -> spawner result (delegated-only SEC-30) | bearer; self |
 
 ### 1.15 Org / Workspaces / Directory / AI keys (admin)

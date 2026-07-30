@@ -22,8 +22,15 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Awaitable, Callable, Mapping
+from dataclasses import dataclass
+from datetime import datetime
 
-from boltrig.models import BudgetExceeded
+from boltrig.models import (
+    BudgetExceeded,
+    BudgetWindowRef,
+    BudgetWindowUnavailable,
+    utcnow,
+)
 from boltrig.store import Store
 
 log = logging.getLogger("boltrig.kernel.cost")
@@ -45,6 +52,16 @@ _TIER_MICROS_PER_TOKEN: dict[str, int] = {"cheap": 1, "standard": 5, "expensive"
 # behaviour, ever appears in this table.
 Rate = float | Mapping[str, float]
 PriceTable = Mapping[str, Rate]
+
+
+@dataclass(frozen=True)
+class BudgetReservation:
+    """Exact usage buckets selected atomically for one estimated model call."""
+
+    tenant_id: str
+    run_id: str | None
+    reserved_at: datetime
+    windows: tuple[BudgetWindowRef, ...]
 
 
 def _as_rate(value: object) -> float | None:
@@ -225,25 +242,31 @@ class CostAccountant:
         )
 
     async def reserve(
-        self, tenant_id: str, scope_ids: list[str], tokens: int, micros: int
-    ) -> None:
-        """Reserve budget across every relevant scope (tenant, department,
-        workflow). Raises ``BudgetExceeded`` if any hard-stop scope would be
-        exceeded - and reserves on NONE of them in that case.
+        self,
+        tenant_id: str,
+        scope_ids: list[str],
+        tokens: int,
+        micros: int,
+        *,
+        run_id: str | None = None,
+        at: datetime | None = None,
+    ) -> BudgetReservation:
+        """Reserve every relevant scope or raise without charging any.
 
-        True all-or-nothing (audit H4, engine-plan Phase 6): the debit runs in a
-        single transactional multi-scope reserve (``store.reserve_budgets_atomic``,
-        FR-COST-05) that locks every scope FOR UPDATE, re-checks each hard stop, and
-        commits every debit or none. This replaces the old per-scope
-        ``consume_budget`` loop, which - even with the fail-fast read below - could
-        still leave scope A debited when scope B refused under a concurrent
-        reservation (a partial reserve for a call that never ran). The fail-fast
-        read (step 1) stays as a cheap early-out with a precise scope-named error;
-        the atomic reserve (step 3) is the authoritative guarantee."""
+        The store's locked multi-scope operation is authoritative; the preceding
+        reads provide precise early errors and soft alerts only (FR-COST-05).
+        """
+        reserved_at = at or utcnow()
         budgets = {}
         for scope_id in scope_ids:
-            b = await self._store.get_budget(tenant_id, scope_id)
+            b = await self._store.get_budget(
+                tenant_id, scope_id, run_id=run_id, at=reserved_at
+            )
             if b is not None:
+                if b.usage_state != "current":
+                    raise BudgetWindowUnavailable(
+                        f"run-window budget '{scope_id}' requires an exact run id"
+                    )
                 budgets[scope_id] = b
 
         # 1. fail-fast: if ANY hard-stop scope lacks headroom, reserve on none.
@@ -282,22 +305,25 @@ class CostAccountant:
         # debits EVERY scope or NONE. This is the authoritative all-or-nothing: even
         # when step 1's unlocked read saw headroom, a concurrent reserve may have
         # consumed it between that read and this commit - the atomic reserve then
-        # returns False without debiting ANY scope, closing the partial-debit window
+        # returns None without debiting ANY scope, closing the partial-debit window
         # the old per-scope loop left open (scope A debited, scope B refused, A stays
         # charged for a call that never ran).
-        committed = await self._store.reserve_budgets_atomic(
-            tenant_id, [(scope_id, tokens, micros) for scope_id in scope_ids]
+        windows = await self._store.reserve_budgets_atomic(
+            tenant_id,
+            [(scope_id, tokens, micros) for scope_id in scope_ids],
+            run_id=run_id,
+            at=reserved_at,
         )
-        if not committed:
+        if windows is None:
             raise BudgetExceeded(
                 f"budget hard-stop reached for tenant '{tenant_id}' "
                 "under a concurrent reservation"
             )
+        return BudgetReservation(tenant_id, run_id, reserved_at, windows)
 
     async def reconcile(
         self,
-        tenant_id: str,
-        scope_ids: list[str],
+        reservation: BudgetReservation,
         delta_tokens: int,
         delta_micros: int,
     ) -> None:
@@ -315,7 +341,10 @@ class CostAccountant:
         one."""
         if delta_tokens == 0 and delta_micros == 0:
             return  # the estimate was exact - nothing to true up
-        for scope_id in scope_ids:
+        for window in reservation.windows:
             await self._store.reconcile_budget(
-                tenant_id, scope_id, delta_tokens, delta_micros
+                reservation.tenant_id,
+                window,
+                delta_tokens,
+                delta_micros,
             )

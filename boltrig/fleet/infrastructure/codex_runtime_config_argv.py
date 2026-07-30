@@ -55,7 +55,7 @@ _OVERRIDE_FLAG = "-c"
 # emitting a path whose parse we have not verified.
 _BARE_KEY = re.compile(r"[A-Za-z0-9_-]+\Z")
 _KEY_PATH = re.compile(r"[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*\Z")
-_PINNED_SCALAR_KEYS = 10
+_PINNED_SCALAR_KEYS = 12
 MAX_APP_SERVER_ARGUMENTS = len(CODEX_APP_SERVER_BASE_ARGUMENTS) + 2 * (
     _PINNED_SCALAR_KEYS + len(CODEX_RUNTIME_DISABLED_FEATURES)
 )
@@ -86,6 +86,8 @@ def _pinned_assignments(
     socket_name: str,
     proxy_port: int,
     features: Mapping[str, bool],
+    agent_max_threads: int,
+    agent_max_depth: int,
     mcp_server_url: str | None = None,
     mcp_bearer_env_var: str | None = None,
 ) -> tuple[tuple[str, str], ...]:
@@ -96,6 +98,8 @@ def _pinned_assignments(
         ("model_provider", _toml_string(CODEX_MODEL_PROVIDER_ID)),
         ("approval_policy", _toml_string("never")),
         ("sandbox_mode", _toml_string("read-only")),
+        ("agents.max_threads", str(agent_max_threads)),
+        ("agents.max_depth", str(agent_max_depth)),
         (f"{provider}.name", _toml_string(CODEX_RUNTIME_PROVIDER_NAME)),
         (f"{provider}.wire_api", _toml_string(CODEX_RUNTIME_WIRE_API)),
         (f"{provider}.base_url", _toml_string(f"http://127.0.0.1:{proxy_port}/v1")),
@@ -132,6 +136,8 @@ def codex_app_server_arguments(
     socket_name: str,
     proxy_port: int,
     features: Mapping[str, bool] = CODEX_RUNTIME_DISABLED_FEATURES,
+    agent_max_threads: int = 1,
+    agent_max_depth: int = 1,
     mcp_server_url: str | None = None,
     mcp_bearer_env_var: str | None = None,
 ) -> tuple[str, ...]:
@@ -150,6 +156,10 @@ def codex_app_server_arguments(
         or not _printable_ascii(socket_name)
         or type(proxy_port) is not int
         or not 1 <= proxy_port <= 65535
+        or type(agent_max_threads) is not int
+        or not 1 <= agent_max_threads <= 16
+        or type(agent_max_depth) is not int
+        or not 1 <= agent_max_depth <= 4
     ):
         raise CodexAppServerArgumentError("pinned argv inputs are not printable ASCII")
     if mcp_server_url is not None and not _printable_ascii(mcp_server_url):
@@ -170,6 +180,8 @@ def codex_app_server_arguments(
         socket_name=socket_name,
         proxy_port=proxy_port,
         features=features,
+        agent_max_threads=agent_max_threads,
+        agent_max_depth=agent_max_depth,
         mcp_server_url=mcp_server_url,
         mcp_bearer_env_var=mcp_bearer_env_var,
     ):

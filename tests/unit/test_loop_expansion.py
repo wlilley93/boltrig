@@ -48,7 +48,13 @@ def test_loop_body_excludes_mixed_parent_steps():
 def test_expand_clones_body_once_per_item_and_rewires_parents():
     steps = [
         _step("loop", [], "flow.loop"),
-        _step("a", ["loop"], action="ticket.create"),
+        _step(
+            "a",
+            ["loop"],
+            action="ticket.create",
+            params={"payload": None, "position": None},
+            loop_bindings={"payload": "item", "position": "index"},
+        ),
         _step("b", ["a"], action="ticket.update"),
     ]
     new, body = expand_loop(steps, "loop", ["x", "y", "z"])
@@ -62,15 +68,19 @@ def test_expand_clones_body_once_per_item_and_rewires_parents():
     # parent rewiring: a__1's parent is the loop; b__1's parent is a__1 (same iter)
     assert by["a__1"]["parents"] == ["loop"]
     assert by["b__1"]["parents"] == ["a__1"]
-    # item injection
-    assert by["a__2"]["params"]["__loop_item"] == "z"
-    assert by["a__2"]["params"]["__loop_index"] == 2
+    # Closed whole-value bindings preserve JSON types and never add metadata.
+    assert by["a__2"]["params"] == {"payload": "z", "position": 2}
+    assert by["a__2"]["loop_bindings"] == {
+        "payload": "item",
+        "position": "index",
+    }
 
 
-def test_expand_no_items_returns_unchanged():
+def test_expand_no_items_removes_body_for_zero_dispatches():
     steps = [_step("loop", [], "flow.loop"), _step("a", ["loop"])]
     new, body = expand_loop(steps, "loop", [])
-    assert new is steps and body == []
+    assert [step["id"] for step in new] == ["loop"]
+    assert body == ["a"]
 
 
 def test_aggregate_collapses_clones_onto_originals():
@@ -79,9 +89,15 @@ def test_aggregate_collapses_clones_onto_originals():
         "a__0": {"status": "ok", "output": {"id": "t0"}},
         "a__1": {"status": "ok", "output": {"id": "t1"}},
     }
-    aggregate_loop_results(results, ["a"], 2)
+    aggregate_loop_results(
+        results,
+        ["a"],
+        2,
+        actions={"a": "ticket.create"},
+    )
     assert "a__0" not in results and "a__1" not in results
     assert results["a"]["status"] == "ok"
+    assert results["a"]["action"] == "ticket.create"
     assert results["a"]["output"]["count"] == 2
     assert results["a"]["output"]["iterations"] == [{"id": "t0"}, {"id": "t1"}]
 

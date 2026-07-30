@@ -36,7 +36,7 @@ RELEASE_VALIDATE_IMAGES_ENV ?= tests/fixtures/release-images.env
 RELEASE_PROFILES ?= --profile backup
 
 .DEFAULT_GOAL := help
-.PHONY: help gate-status relock fleet-drift-all up down logs test lint architecture structure codex-protocol unwired-claims reachability prose-references refresh-canon-citations refresh-opbox-surface fleet-drift gate-coverage health-claims order-directives typecheck check python-quality ui-install ui-quality site-install site-quality ui-e2e compose-validate release-validate release-up doctor-fixture migration-parity python-audit sast iac-scan secret-scan actionlint security-source quality live-check lockfile-policy dependency-audit smoke invariants doctor migrate secure-up backup backup-schedule restore
+.PHONY: help gate-status relock fleet-drift-all up down logs test lint architecture structure codex-protocol unwired-claims reachability prose-references refresh-canon-citations refresh-opbox-surface fleet-drift gate-coverage health-claims order-directives typecheck check python-quality ui-install ui-quality worker-install worker-quality site-install site-quality ui-e2e worker-e2e compose-validate release-validate release-up worker-primary-validate worker-primary-up doctor-fixture migration-parity python-audit sast iac-scan secret-scan actionlint security-source quality live-check lockfile-policy dependency-audit smoke invariants doctor migrate secure-up backup backup-schedule restore
 
 help: ## List the available targets
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -194,6 +194,16 @@ ui-quality: ui-install ## Audit, typecheck, test with coverage, and build the UI
 	cd ui && pnpm run test:coverage
 	cd ui && pnpm run build
 
+worker-install: lockfile-policy ## Install Worker from its frozen pnpm lockfile
+	cd apps/worker && corepack enable && pnpm install --frozen-lockfile --ignore-scripts
+	cd apps/worker && pnpm rebuild esbuild
+
+worker-quality: worker-install ## Audit, typecheck, test, and build the Worker web payload
+	cd apps/worker && pnpm audit --audit-level=high
+	cd apps/worker && pnpm run typecheck
+	cd apps/worker && pnpm run test
+	cd apps/worker && pnpm run build
+
 site-install: lockfile-policy ## Install the site from its frozen pnpm lockfile
 	cd site && corepack enable && pnpm install --frozen-lockfile --ignore-scripts
 	cd site && pnpm rebuild esbuild
@@ -212,6 +222,15 @@ ui-e2e: ui-install ## Run Chromium Playwright against the built UI and real in-m
 		BOLTRIG_E2E_KERNEL_PORT=$$1 \
 		BOLTRIG_E2E_UI_PORT=$$2 \
 		pnpm exec playwright test
+
+worker-e2e: ui-install worker-install ## Run Chromium Playwright against the built Worker and real in-memory kernel
+	cd ui && pnpm exec playwright install $(PLAYWRIGHT_INSTALL_ARGS)
+	@set -- $$($(PY) -c 'import socket; sockets = [socket.socket() for _ in range(2)]; [item.bind(("127.0.0.1", 0)) for item in sockets]; print(*(item.getsockname()[1] for item in sockets))'); \
+		cd ui && \
+		BOLTRIG_E2E_PYTHON=$(E2E_PYTHON) \
+		BOLTRIG_E2E_KERNEL_PORT=$$1 \
+		BOLTRIG_E2E_UI_PORT=$$2 \
+		pnpm exec playwright test --config playwright.worker.config.ts
 
 compose-validate: ## Validate base and secure Compose configurations
 	BOLTRIG_ENV_FILE=$(COMPOSE_VALIDATE_ENV) \
@@ -233,6 +252,12 @@ compose-validate: ## Validate base and secure Compose configurations
 	BOLTRIG_ENV_FILE=$(COMPOSE_VALIDATE_ENV) \
 		POSTGRES_PASSWORD=$(COMPOSE_VALIDATE_POSTGRES_PASSWORD) \
 		$(COMPOSE) -f docker-compose.yml -f deploy/compose.opbox-link.yml config --quiet
+	# Selecting Worker as root must remain a valid, single-edge deployment. This
+	# explicit overlay is also the entire rollback unit.
+	BOLTRIG_ENV_FILE=$(COMPOSE_VALIDATE_ENV) \
+		POSTGRES_PASSWORD=$(COMPOSE_VALIDATE_POSTGRES_PASSWORD) \
+		$(COMPOSE) -f docker-compose.yml -f deploy/compose.dev.yml \
+		-f deploy/compose.worker-primary.yml config --quiet
 	$(PY) scripts/validate_release_images.py $(RELEASE_VALIDATE_IMAGES_ENV)
 	BOLTRIG_ENV_FILE=$(COMPOSE_VALIDATE_ENV) \
 		POSTGRES_PASSWORD=$(COMPOSE_VALIDATE_POSTGRES_PASSWORD) \
@@ -249,6 +274,15 @@ compose-validate: ## Validate base and secure Compose configurations
 		-f docker-compose.yml -f deploy/compose.release.yml \
 		-f deploy/compose.secure.yml config --format json \
 		| $(PY) scripts/validate_release_compose.py --secure
+	BOLTRIG_ENV_FILE=$(COMPOSE_VALIDATE_ENV) \
+		POSTGRES_PASSWORD=$(COMPOSE_VALIDATE_POSTGRES_PASSWORD) \
+		$(COMPOSE) --env-file $(COMPOSE_VALIDATE_ENV) \
+		--profile backup --profile local --profile legacy \
+		--env-file $(RELEASE_VALIDATE_IMAGES_ENV) \
+		-f docker-compose.yml -f deploy/compose.release.yml \
+		-f deploy/compose.secure.yml -f deploy/compose.worker-primary.yml \
+		config --format json \
+		| $(PY) scripts/validate_release_compose.py --secure --worker-primary
 
 release-validate: ## Validate a downloaded digest-pinned release environment
 	$(PY) scripts/validate_release_images.py $(RELEASE_IMAGES_ENV)
@@ -267,6 +301,26 @@ release-up: release-validate ## Pull and start signed release images (secure + b
 		$(COMPOSE) --env-file $(RELEASE_ENV) --env-file $(RELEASE_IMAGES_ENV) \
 		$(RELEASE_PROFILES) -f docker-compose.yml -f deploy/compose.release.yml \
 		-f deploy/compose.secure.yml up -d --no-build
+
+worker-primary-validate: ## Validate the signed, secure Worker-root release topology
+	$(PY) scripts/validate_release_images.py $(RELEASE_IMAGES_ENV)
+	BOLTRIG_ENV_FILE=$(RELEASE_ENV) \
+		$(COMPOSE) --env-file $(RELEASE_ENV) --env-file $(RELEASE_IMAGES_ENV) \
+		$(RELEASE_PROFILES) -f docker-compose.yml -f deploy/compose.release.yml \
+		-f deploy/compose.secure.yml -f deploy/compose.worker-primary.yml \
+		config --format json \
+		| $(PY) scripts/validate_release_compose.py --secure --worker-primary
+
+worker-primary-up: worker-primary-validate ## Cut over root to Worker; Operator stays at /operator
+	BOLTRIG_ENV_FILE=$(RELEASE_ENV) \
+		$(COMPOSE) --env-file $(RELEASE_ENV) --env-file $(RELEASE_IMAGES_ENV) \
+		$(RELEASE_PROFILES) -f docker-compose.yml -f deploy/compose.release.yml \
+		-f deploy/compose.secure.yml -f deploy/compose.worker-primary.yml pull
+	BOLTRIG_ENV_FILE=$(RELEASE_ENV) \
+		$(COMPOSE) --env-file $(RELEASE_ENV) --env-file $(RELEASE_IMAGES_ENV) \
+		$(RELEASE_PROFILES) -f docker-compose.yml -f deploy/compose.release.yml \
+		-f deploy/compose.secure.yml -f deploy/compose.worker-primary.yml \
+		up -d --no-build
 
 doctor-fixture: ## Prove the secure production-doctor fixture has no failures
 	$(PY) -m pytest -q tests/unit/test_doctor.py::test_production_doctor_has_no_failures_for_secure_posture
@@ -304,7 +358,7 @@ actionlint: ## Lint GitHub Actions with the pinned actionlint image
 
 security-source: python-audit sast iac-scan secret-scan actionlint ## Run SCA, SAST, IaC, secret, and workflow gates
 
-quality: python-quality ui-quality site-quality compose-validate doctor-fixture ui-e2e migration-parity security-source ## Run the complete local release gate
+quality: python-quality ui-quality worker-quality site-quality compose-validate doctor-fixture ui-e2e worker-e2e migration-parity security-source ## Run the complete local release gate
 
 # The ONE npm-locked package, and why it is not pnpm. The whatsapp bridge depends
 # on `baileys`, a GIT-HOSTED package that both runs build scripts on install and
@@ -341,7 +395,7 @@ lockfile-policy: ## Enforce pnpm as the JavaScript package manager (one recorded
 	@test -f '$(LOCKFILE_POLICY_EXEMPT)' || { \
 		echo "stale exemption: $(LOCKFILE_POLICY_EXEMPT) no longer exists;"; \
 		echo "drop it from LOCKFILE_POLICY_EXEMPT in the Makefile"; exit 1; }
-	@test -f ui/pnpm-lock.yaml -a -f site/pnpm-lock.yaml -a -f sdks/node/pnpm-lock.yaml
+	@test -f ui/pnpm-lock.yaml -a -f apps/worker/pnpm-lock.yaml -a -f site/pnpm-lock.yaml -a -f sdks/node/pnpm-lock.yaml
 	@# Runs BEFORE the frozen install, deliberately: a shadowed exclusion entry
 	@# surfaces as ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION, which reads as "the
 	@# exemption is being ignored" rather than "your second entry disabled your
@@ -354,8 +408,9 @@ lockfile-policy: ## Enforce pnpm as the JavaScript package manager (one recorded
 	@# site-build-test-lint red. The stdlib is all this script needs.
 	@python3 scripts/check-release-age-exclusions.py
 
-dependency-audit: lockfile-policy ## Fail on high/critical UI and site dependency advisories
+dependency-audit: lockfile-policy ## Fail on high/critical frontend dependency advisories
 	cd ui && pnpm audit --audit-level=high
+	cd apps/worker && pnpm audit --audit-level=high
 	cd site && pnpm audit --audit-level=high
 
 live-check: ## Run opt-in live integration legs; requires services and credentials

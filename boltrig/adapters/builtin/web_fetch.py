@@ -31,6 +31,7 @@ fully testable offline, and a blocked target is refused BEFORE any network call.
 
 from __future__ import annotations
 
+import ssl
 from typing import Any
 from urllib.parse import urlparse
 
@@ -58,6 +59,59 @@ class WebFetchAdapter:
 
     def __init__(self, network_config: dict[str, Any] | None = None) -> None:
         self._config = dict(network_config or {})
+        ca_bundle = self._config.get("ca_bundle")
+        # Build the context once at process start.  A missing or malformed
+        # operator-supplied bundle fails closed instead of silently falling back
+        # to public roots.  The path/context never enters results or posture.
+        self._tls_verify: ssl.SSLContext | bool = (
+            ssl.create_default_context(cafile=str(ca_bundle))
+            if ca_bundle
+            else True
+        )
+
+    def network_policy_posture(self) -> dict[str, Any]:
+        """Return the redacted policy this live adapter actually consumes."""
+        allowed = tuple(self._config.get("allowed_domains") or ())
+        blocked = tuple(self._config.get("blocked_domains") or ())
+        proxy_configured = bool(self._config.get("https_proxy"))
+        return {
+            "surface": "web.fetch",
+            "status": "enforced",
+            "policy_snapshot": "adapter_process_start",
+            "fields": {
+                "air_gapped": {
+                    "enforcement": "enforced",
+                    "enabled": bool(self._config.get("air_gapped")),
+                },
+                "https_proxy": {
+                    "enforcement": "enforced",
+                    "configured": proxy_configured,
+                },
+                "ca_bundle": {
+                    "enforcement": "enforced",
+                    "configured": bool(self._config.get("ca_bundle")),
+                },
+                "allowed_domains": {
+                    "enforcement": "enforced",
+                    "configured": bool(allowed),
+                    "entry_count": len(allowed),
+                },
+                "blocked_domains": {
+                    "enforcement": "enforced",
+                    "configured": bool(blocked),
+                    "entry_count": len(blocked),
+                },
+            },
+            "controls": {
+                "ssrf_preflight": "enforced",
+                "redirects": "disabled",
+                "dns_pinning": (
+                    "proxy_resolution_delegated"
+                    if proxy_configured
+                    else "enforced"
+                ),
+            },
+        }
 
     def describe(self) -> list[VerbSpec]:
         return [
@@ -100,14 +154,23 @@ class WebFetchAdapter:
             # not apply; the guard above (over the local resolution) stands.
             import httpx
 
-            client = httpx.AsyncClient(follow_redirects=False, timeout=15.0, proxy=proxy)
+            client = httpx.AsyncClient(
+                follow_redirects=False,
+                timeout=15.0,
+                proxy=proxy,
+                verify=self._tls_verify,
+            )
         else:
             # SSRF/rebinding (H2/SEC-61): pin the connection to an already-vetted
             # IP from the single resolution above so httpx cannot re-resolve to
             # internal space at connect time.
             from boltrig.adapters.egress import pinned_async_client_for_ip
 
-            client = pinned_async_client_for_ip(resolved[0], timeout=15.0)
+            client = pinned_async_client_for_ip(
+                resolved[0],
+                timeout=15.0,
+                verify=self._tls_verify,
+            )
         async with client:
             resp = await client.get(url)
         body = resp.content[:cap]

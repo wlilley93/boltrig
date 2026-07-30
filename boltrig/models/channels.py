@@ -19,27 +19,15 @@ from datetime import datetime
 from typing import Any
 
 from .base import TenantId, UserId
-
-# The webhook (request/response) class is in-kernel (Phase 1); the socket
-# (persistent-connection) class is the severed sidecar (Phase 2). A platform's
-# transport is fixed here so the ingress path is chosen deterministically.
-WEBHOOK_PLATFORMS: tuple[str, ...] = ("webhook", "msteams")
-SOCKET_PLATFORMS: tuple[str, ...] = (
-    "slack",
-    "discord",
-    "telegram",
-    "whatsapp",
-    "signal",
+from .channel_providers import (
+    CHANNEL_PLATFORMS as CHANNEL_PLATFORMS,
+    SOCKET_PLATFORMS as SOCKET_PLATFORMS,
+    WEBHOOK_PLATFORMS as WEBHOOK_PLATFORMS,
+    transport_for as transport_for,
 )
-CHANNEL_PLATFORMS: tuple[str, ...] = WEBHOOK_PLATFORMS + SOCKET_PLATFORMS
 
 # What to do with a verified sender that has no channel binding yet.
 UNPAIRED_BEHAVIORS: tuple[str, ...] = ("reject", "ignore", "pair")
-
-
-def transport_for(platform: str) -> str:
-    """The transport class ('webhook' | 'socket') for a platform (decision 0003)."""
-    return "webhook" if platform in WEBHOOK_PLATFORMS else "socket"
 
 
 @dataclass
@@ -48,7 +36,7 @@ class Channel:
 
     id: str
     tenant_id: TenantId
-    platform: str  # slack | discord | whatsapp | telegram | signal | webhook | msteams
+    platform: str  # slack | discord | whatsapp | telegram | signal | voice | webhook | msteams
     name: str
     transport: str  # "webhook" | "socket" (derived from platform via transport_for)
     # SEC-04: a reference into the secret store (webhook signing secret, bot token,
@@ -58,8 +46,8 @@ class Channel:
     # Addressing (Phase 2, routing data - never authority):
     #   config["addressing"] = {
     #     "default_target": "cos",              # tier-1 chief of staff (default)
-    #     "routes": {"<chat/thread id>": "<target>"},  # pin a chat to a subagent
-    #                                           # or to "workflow:<wf_id>" (SEC-178)
+    #     "routes": {"<chat/thread id>": "<target>"},  # permanent department
+    #                                           # or "workflow:<wf_id>" (SEC-178)
     #     "thread_field": "chat",               # body field holding the chat id
     #   }
     # Self-serve onboarding (SEC-180, OFF by default - absent key means the
@@ -74,6 +62,37 @@ class Channel:
     unpaired_behavior: str = "reject"  # reject | ignore | pair
     enabled: bool = True
     created_at: datetime | None = None
+
+
+@dataclass
+class ChannelGatewayStatus:
+    """Last durable, secret-free observation reported by a severed gateway."""
+
+    tenant_id: TenantId
+    channel_id: str
+    gateway_id: str
+    desired_revision: str
+    observed_revision: str
+    status: str
+    reason_code: str | None = None
+    observed_at: datetime | None = None
+
+
+@dataclass
+class ChannelGatewayLease:
+    """Kernel-private ownership fence for one socket channel.
+
+    ``owner_lease_id`` is the opaque id of the short-lived MCP run token. It is
+    persisted for compare-and-swap ownership but never projected to a browser,
+    audit detail, provider adapter, or gateway status response.
+    """
+
+    tenant_id: TenantId
+    channel_id: str
+    gateway_id: str
+    owner_lease_id: str
+    lease_expires_at: datetime
+    updated_at: datetime | None = None
 
 
 @dataclass
@@ -117,6 +136,37 @@ class ChannelOutboxMessage:
     last_error: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class ChannelDeliveryReceipt:
+    """Secret- and payload-free caller projection of one outbound delivery."""
+
+    id: str
+    tenant_id: TenantId
+    channel_id: str
+    status: str  # queued | in_flight | retryable | delivered | terminal_failed
+    attempts: int
+    safe_reason: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    next_attempt_at: datetime | None = None
+
+    def __post_init__(self) -> None:
+        if self.status not in {
+            "queued",
+            "in_flight",
+            "retryable",
+            "delivered",
+            "terminal_failed",
+        }:
+            raise ValueError("channel delivery receipt status is invalid")
+        if self.attempts < 0:
+            raise ValueError("channel delivery attempts cannot be negative")
+        if self.safe_reason not in {None, "delivery_failed"}:
+            raise ValueError("channel delivery reason is not public")
+        if self.status not in {"retryable", "terminal_failed"} and self.safe_reason:
+            raise ValueError("successful or active delivery cannot have a failure reason")
 
 
 @dataclass

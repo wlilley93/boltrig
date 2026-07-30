@@ -23,6 +23,9 @@ deploy/rclone/
 # The UI builds from its own context (./ui); exclude its node_modules here.
 ui/node_modules
 ui/dist
+apps/worker/node_modules
+apps/worker/dist
+apps/worker/src-tauri/target
 node_modules
 
 # Docs + tests are not needed at runtime.

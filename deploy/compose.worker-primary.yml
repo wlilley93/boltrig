@@ -1,0 +1,44 @@
+# Reversible decision-0021 primary-surface cutover.
+#
+# Layer this LAST, after the base and either dev or secure/release overlays:
+#
+#   docker compose --env-file .env --env-file boltrig-images.env \
+#     -f docker-compose.yml -f deploy/compose.release.yml \
+#     -f deploy/compose.secure.yml -f deploy/compose.worker-primary.yml up -d
+#
+# Worker becomes the root presentation and continues to package the maintained
+# Operator at /operator/. Removing this overlay is the rollback: Caddy's default
+# upstream returns to the standalone ui service without a data migration.
+services:
+  kernel:
+    environment:
+      BOLTRIG_PRODUCTION: "1"
+      REDIS_URL: ${REDIS_URL:?Worker-primary production requires REDIS_URL}
+
+  fleet-worker:
+    environment:
+      BOLTRIG_PRODUCTION: "1"
+      REDIS_URL: ${REDIS_URL:?Worker-primary production requires REDIS_URL}
+
+  caddy:
+    environment:
+      BOLTRIG_FRONTEND_UPSTREAM: worker-ui:80
+    depends_on: !override
+      kernel:
+        condition: service_healthy
+      worker-ui:
+        condition: service_healthy
+
+  worker-ui:
+    # The base service is profile-gated while it is a candidate. Selecting this
+    # overlay is the explicit production enablement, so no profile flag is needed.
+    profiles: !reset []
+    # Caddy is the only public edge in both dev and secure postures.
+    ports: !override []
+
+  ui:
+    # The standalone Operator image stays available as an explicit rollback
+    # profile, while the Worker image serves the same maintained build beneath
+    # /operator/ during normal operation.
+    profiles: ["operator-standalone"]
+    ports: !override []

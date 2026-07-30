@@ -36,14 +36,17 @@ from __future__ import annotations
 
 import uuid
 
+from boltrig.notification_catalogue import (
+    APPROVAL_EVENT,
+    NOTIFICATION_EVENT_IDS,
+    NOTIFICATION_PLATFORM_ALIASES,
+    WORK_STATUS_EVENT,
+)
 from boltrig.models import ChannelOutboxMessage
 
 # notification_prefs.channel names a platform family; map it to the channel
 # platform ids (decision 0003's names). Unknown names match nothing (a pref for
 # a platform with no channels is simply undeliverable today).
-_PLATFORM_ALIASES = {"teams": "msteams"}
-
-
 async def _pref_subjects(store, tenant_id: str, pref, subject: str) -> list[str]:
     """The recipient subjects a matching pref addresses (SEC-179).
 
@@ -81,6 +84,8 @@ async def enqueue_user_notification(
     user is a delivery gap, never an error). ``source_route`` (an intake
     ``reply_route``) pins the delivery to the originating thread when the
     notification concerns that same channel (round-trip integrity)."""
+    if event_type not in NOTIFICATION_EVENT_IDS:
+        return []
     prefs = await store.list_notification_prefs(tenant_id)
     matching = [p for p in prefs if p.enabled and p.event_type == event_type]
     if not matching:
@@ -90,9 +95,10 @@ async def enqueue_user_notification(
         subjects = await _pref_subjects(store, tenant_id, pref, subject)
         if not subjects:
             continue
-        platform = _PLATFORM_ALIASES.get(pref.channel, pref.channel)
+        platform = NOTIFICATION_PLATFORM_ALIASES.get(pref.channel, pref.channel)
         for ch in await store.list_channels(tenant_id):
-            if not ch.enabled or ch.platform != platform or ch.transport != "socket":
+            route_matches = pref.channel == ch.id or ch.platform == platform
+            if not ch.enabled or not route_matches or ch.transport != "socket":
                 continue
             bindings = await store.list_channel_bindings(tenant_id, ch.id)
             for member in subjects:
@@ -137,7 +143,7 @@ async def enqueue_approval_fanout(
             continue
         notified.add(responder)
         enqueued += await enqueue_user_notification(
-            store, request.tenant_id, responder, "approval", request.question
+            store, request.tenant_id, responder, APPROVAL_EVENT, request.question
         )
     return enqueued
 
@@ -153,6 +159,6 @@ async def notify_work_item_result(store, item, text: str | None = None) -> list[
         return []
     summary = text or f"Run {item.id} finished with status {item.status.value}"
     return await enqueue_user_notification(
-        store, item.tenant_id, item.on_behalf_of, "work_status", summary,
+        store, item.tenant_id, item.on_behalf_of, WORK_STATUS_EVENT, summary,
         source_route=item.reply_route,
     )

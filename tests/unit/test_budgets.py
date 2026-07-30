@@ -6,6 +6,7 @@ Tenant isolation is the load-bearing property here.
 """
 
 from fastapi.testclient import TestClient
+from datetime import datetime
 
 from boltrig.kernel import Kernel
 from boltrig.kernel.app import create_app
@@ -22,14 +23,27 @@ def _client():
     store.set_tenant_permissions(TenantPermissions(OTHER, GrantSet.of(["*"])))
     store.set_budget(
         Budget(id=T, tenant_id=T, scope_type="tenant", token_limit=1000,
-               spent_tokens=250, cost_limit_micros=5_000_000, spent_micros=1_000_000)
+               spent_tokens=250, cost_limit_micros=5_000_000,
+               spent_micros=1_000_000, window="daily")
     )
     store.set_budget(
         Budget(id="wf-onboarding", tenant_id=T, scope_type="workflow", token_limit=500,
-               spent_tokens=100)
+               spent_tokens=100, window="daily")
+    )
+    store.set_budget(
+        Budget(
+            id="per-run",
+            tenant_id=T,
+            scope_type="department",
+            token_limit=50,
+            window="run",
+        )
     )
     # a different tenant's budget must never appear in T's view
-    store.set_budget(Budget(id=OTHER, tenant_id=OTHER, scope_type="tenant", token_limit=9))
+    store.set_budget(Budget(
+        id=OTHER, tenant_id=OTHER, scope_type="tenant",
+        token_limit=9, window="daily",
+    ))
     k = Kernel(store)
     return TestClient(create_app(k, platform={}))
 
@@ -49,6 +63,20 @@ def test_budgets_are_tenant_isolated_with_burndown():
     assert tb["token_limit"] == 1000 and tb["spent_tokens"] == 250
     assert tb["cost_limit_micros"] == 5_000_000 and tb["spent_micros"] == 1_000_000
     assert tb["hard_stop"] is True
+    assert tb["usage_state"] == "current"
+    assert tb["window_key"].startswith("day:")
+    assert tb["window_started_at"] is not None
+    assert tb["window_ends_at"] is not None
+    assert datetime.fromisoformat(tb["window_ends_at"]) > datetime.fromisoformat(
+        tb["window_started_at"]
+    )
+
+    per_run = next(b for b in body["budgets"] if b["id"] == "per-run")
+    assert per_run["usage_state"] == "run_context_required"
+    assert per_run["spent_tokens"] == per_run["spent_micros"] == 0
+    assert per_run["window_key"] is None
+    assert per_run["window_started_at"] is None
+    assert per_run["window_ends_at"] is None
 
 
 def test_budgets_other_tenant_sees_only_its_own():

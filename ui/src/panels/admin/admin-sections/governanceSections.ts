@@ -11,19 +11,22 @@ export const governanceSections: ReadonlyArray<AdminSection> = [
   {
     key: "hitl",
     label: "Approvals (HITL)",
-    blurb: "Where approvals route and which verbs always pause for a human.",
+    blurb:
+      "Approval timeout and blocking verbs are enforced. Channel and escalation routing remain stored policy.",
     schema: {
       type: "object",
       properties: {
         primary_channel: {
           type: "string",
           enum: CHANNELS,
-          description: "The channel approval requests are sent to first.",
+          description:
+            "Stored preferred channel. It does not currently deliver approval requests.",
         },
         notify_via: {
           type: "array",
           items: { type: "string", enum: CHANNELS },
-          description: "The channels approval notifications are delivered on.",
+          description:
+            "Stored notification preferences. They are not currently consumed by the HITL gate.",
         },
         approval_timeout_seconds: {
           type: "integer",
@@ -34,7 +37,8 @@ export const governanceSections: ReadonlyArray<AdminSection> = [
         escalation_chain: {
           type: "array",
           items: { type: "string" },
-          description: "The agents an unanswered approval escalates through, in order.",
+          description:
+            "Stored ordered escalation targets. Timed-out approvals do not traverse this chain yet.",
         },
         blocking_verbs: {
           type: "array",
@@ -73,29 +77,34 @@ export const governanceSections: ReadonlyArray<AdminSection> = [
   {
     key: "privacy",
     label: "Privacy & data",
-    blurb: "Data-handling posture: redaction, residency and retention.",
+    blurb:
+      "Conversation deletion retention is enforced. PII redaction fields and residency labels remain stored policy.",
     schema: {
       type: "object",
       properties: {
         pii_redaction: {
           type: "boolean",
-          description: "Redact detected PII before it reaches a model or an adapter.",
+          description:
+            "Stored policy flag. Automatic model/adapter-boundary PII redaction is not wired yet.",
         },
         data_residency: {
           type: "string",
           enum: RESIDENCY,
-          description: "Where this tenant's data may be processed and stored.",
+          description:
+            "Stored residency label. It does not currently constrain processing or storage.",
         },
         retention_days: {
           type: "integer",
-          minimum: 0,
+          minimum: 1,
           maximum: 3650,
-          description: "Days to retain conversation and work data.",
+          description:
+            "Days after a conversation is closed before the fleet janitor hard-erases it. Open conversations, work, memory and audit use separate lifecycles.",
         },
         redact_fields: {
           type: "array",
           items: { type: "string" },
-          description: "Field names always redacted (email, phone, ...).",
+          description:
+            "Stored field names. They are not currently applied to model or adapter payloads.",
         },
       },
     },

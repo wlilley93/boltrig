@@ -46,7 +46,7 @@ def test_the_pinned_argv_extends_the_base_and_is_byte_stable() -> None:
     assert first[:4] == CODEX_APP_SERVER_BASE_ARGUMENTS
     assert first == _arguments()
     # Four base arguments plus a -c pair for each pinned key and each feature.
-    assert len(first) == 4 + 2 * (8 + len(CODEX_RUNTIME_DISABLED_FEATURES))
+    assert len(first) == 4 + 2 * (10 + len(CODEX_RUNTIME_DISABLED_FEATURES))
     assert len(first) <= MAX_APP_SERVER_ARGUMENTS
 
 
@@ -57,6 +57,8 @@ def test_every_security_critical_key_the_court_named_is_pinned() -> None:
     assert overrides["model_provider"] == '"boltrig_model_proxy"'
     assert overrides["approval_policy"] == '"never"'
     assert overrides["sandbox_mode"] == '"read-only"'
+    assert overrides["agents.max_threads"] == "1"
+    assert overrides["agents.max_depth"] == "1"
     assert overrides[f"{provider}.base_url"] == '"http://127.0.0.1:41234/v1"'
     assert overrides[f"{provider}.auth.command"] == f'"{_HELPER}"'
     # name and wire_api are pinned because a provider table assembled purely from

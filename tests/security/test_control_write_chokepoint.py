@@ -28,14 +28,19 @@ import pytest
 _REPO = pathlib.Path(__file__).resolve().parents[2]
 _KERNEL = _REPO / "boltrig" / "kernel"
 
-# Every console HTTP surface that contains, or historically contained, a direct
-# Store mutation. The two top-level route modules stay in the ratchet even after
-# their debt reaches zero so a regression cannot silently reintroduce a write.
-_TOP_LEVEL = ("access_routes.py", "channel_routes.py")
+# Every top-level console HTTP surface that contains, or historically contained,
+# a direct Store mutation. Extracted route modules remain explicit scan roots;
+# moving a sanctioned write must never move it outside the ratchet.
+_TOP_LEVEL = (
+    "access_routes.py",
+    "account_profile_routes.py",
+    "channel_routes.py",
+    "conversation_account_routes.py",
+)
 
 
 def _scanned_modules() -> list[pathlib.Path]:
-    """The modules under scan: the top-level route modules plus EVERY
+    """The modules under scan: the pinned top-level route modules plus EVERY
     platform_routes module, globbed from disk so a newly added module is scanned
     automatically and cannot evade the ratchet by being absent from a list."""
     return [_KERNEL / name for name in _TOP_LEVEL] + sorted(
@@ -47,7 +52,9 @@ def _scanned_modules() -> list[pathlib.Path]:
 # of these verbs. Reads (get_/list_/find_/audit_query) are not writes and are
 # ignored. Any receiver expression counts (k.store, self._store, a local alias),
 # so a write routed through a differently-named variable cannot evade the scan.
-_MUTATOR = re.compile(r"^(upsert|update|create|add|remove|delete|set|mark|request|bump|consume)_")
+_MUTATOR = re.compile(
+    r"^(upsert|update|create|add|remove|delete|set|mark|request|bump|consume|restore)_"
+)
 
 # The COMPLETE set of sanctioned direct writes, keyed by a STABLE scan key
 # (module, enclosing_function, method) - never a line number, so the freeze
@@ -57,10 +64,29 @@ _MUTATOR = re.compile(r"^(upsert|update|create|add|remove|delete|set|mark|reques
 SANCTIONED_DIRECT_WRITES: frozenset[tuple[str, str, str]] = frozenset(
     {
         # --- stay-direct-by-design: caller's OWN scope + channel ingress ------
-        ("access_routes.py", "put_settings", "upsert_user_setting"),
-        ("access_routes.py", "delete_my_conversation", "update_conversation"),
-        ("access_routes.py", "rename_my_conversation", "update_conversation"),
-        ("access_routes.py", "regenerate_message", "mark_message_superseded"),
+        ("account_profile_routes.py", "put_settings", "upsert_user_setting"),
+        (
+            "conversation_account_routes.py",
+            "_close_conversation",
+            "update_conversation",
+        ),
+        # Restoring a retained conversation is the inverse caller-owned lifecycle
+        # transition: exact tenant + owner scope, idempotent, and keys-only audited.
+        (
+            "conversation_account_routes.py",
+            "_restore_conversation",
+            "restore_closed_conversation",
+        ),
+        (
+            "conversation_account_routes.py",
+            "_rename_conversation",
+            "update_conversation",
+        ),
+        (
+            "account_profile_routes.py",
+            "regenerate_message",
+            "mark_message_superseded",
+        ),
         ("access_routes.py", "cancel_run", "request_run_cancel"),
         ("access_routes.py", "revoke_my_token", "update_pat"),
         ("access_routes.py", "revoke_my_session", "update_session"),
@@ -68,7 +94,6 @@ SANCTIONED_DIRECT_WRITES: frozenset[tuple[str, str, str]] = frozenset(
         ("access_routes.py", "switch_active_org", "update_session"),
         # channel INGRESS: authenticated by the channel signature, not a
         # principal; the intake + pairing internals are the ingress seam.
-        ("channel_routes.py", "channel_inbound", "create_work_item"),
         ("channel_routes.py", "_consume_pairing", "bump_channel_pairing_attempts"),
         ("channel_routes.py", "_consume_pairing", "consume_channel_pairing"),
         ("channel_routes.py", "_consume_pairing", "upsert_channel_binding"),
@@ -85,6 +110,10 @@ SANCTIONED_DIRECT_WRITES: frozenset[tuple[str, str, str]] = frozenset(
         # OWN personal agent requires no control.* grant (SEC-30); it is audited
         # via audit_authoring.
         ("personal.py", "delete_personal_agent", "delete_personal_agent"),
+        # A GET health probe persists only server-derived adapter health and its
+        # observation timestamp. It changes no authority, credentials, binding,
+        # or user-selected configuration.
+        ("integrations.py", "connection_health", "upsert_integration_connection"),
     }
 )
 
@@ -154,5 +183,6 @@ def test_control_plane_direct_writes_are_all_sanctioned():
         + "\n".join(f"  {m}::{fn} -> {meth}" for m, fn, meth in sorted(stale))
     )
 
-    # Tripwire on the closed ledger: only 16 self-scope/ingress writes remain.
-    assert len(SANCTIONED_DIRECT_WRITES) == 16
+    # Tripwire on the closed ledger: only 18 self-scope/ingress/derived-health
+    # writes remain.
+    assert len(SANCTIONED_DIRECT_WRITES) == 17

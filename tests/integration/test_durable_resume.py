@@ -60,6 +60,7 @@ class SpyAdapter:
 
     def __init__(self) -> None:
         self.calls: dict[str, int] = {}
+        self.params: dict[str, list[dict]] = {}
         self.crash_once: set[str] = set()
 
     def describe(self) -> list[VerbSpec]:
@@ -82,6 +83,7 @@ class SpyAdapter:
 
     async def execute(self, verb_id, params, credential, context) -> Result:
         self.calls[verb_id] = self.calls.get(verb_id, 0) + 1
+        self.params.setdefault(verb_id, []).append(copy.deepcopy(params))
         if verb_id in self.crash_once:
             self.crash_once.discard(verb_id)
             raise RuntimeError("simulated crash")
@@ -330,6 +332,130 @@ async def test_combined_path_hitl_pause_resume_stays_exactly_once():
     assert third["status"] == "completed"
     assert spy.calls == {"danger.go": 1}
     assert {s["id"]: s for s in third["steps"]}["g1"].get("replayed") is True
+
+
+@pytest.mark.invariant("FR-WFL-19")
+async def test_loop_replay_uses_stable_iteration_checkpoints():
+    kernel, spy = await _build()
+    workflow = _workflow(
+        "wf-loop-replay",
+        [
+            {
+                "id": "loop",
+                "action": "flow.loop",
+                "params": {"items": [{"value": "a"}, {"value": "b"}]},
+            },
+            {
+                "id": "body",
+                "action": "job.one",
+                "parents": ["loop"],
+                "params": {"payload": None, "position": None},
+                "loop_bindings": {"payload": "item", "position": "index"},
+            },
+        ],
+    )
+    await kernel.store.upsert_workflow(workflow)
+    run_id = "run-loop-replay"
+    payload = {
+        "tenant": T,
+        "workflow_id": workflow.id,
+        "inputs": {},
+        "ctx_envelope": _envelope(run_id),
+        "run_id": run_id,
+        "workflow_snapshot": build_workflow_snapshot(workflow),
+    }
+    executor = LocalDurableExecutor()
+
+    first = await run_workflow_body(kernel, dict(payload), executor=executor)
+    second = await run_workflow_body(kernel, dict(payload), executor=executor)
+
+    assert first["status"] == second["status"] == "completed"
+    assert spy.calls == {"job.one": 2}
+    assert spy.params["job.one"] == [
+        {"payload": {"value": "a"}, "position": 0},
+        {"payload": {"value": "b"}, "position": 1},
+    ]
+    by_id = {step["id"]: step for step in second["steps"]}
+    assert by_id["loop"]["replayed"] is True
+    assert by_id["body"]["output"]["count"] == 2
+    assert [step.name for step in executor.steps] == [
+        "workflow:wf-loop-replay:body__0",
+        "workflow:wf-loop-replay:body__1",
+    ]
+    checkpoints = {
+        checkpoint.step: checkpoint.status
+        for checkpoint in await kernel.store.list_checkpoints(T, run_id)
+    }
+    assert checkpoints == {
+        "wf-loop-replay:loop": "ok",
+        "wf-loop-replay:body__0": "ok",
+        "wf-loop-replay:body__1": "ok",
+    }
+
+
+@pytest.mark.invariant("FR-WFL-19")
+async def test_loop_hitl_approves_each_bound_iteration_exactly_once():
+    kernel, spy = await _build()
+    workflow = _workflow(
+        "wf-loop-hitl",
+        [
+            {
+                "id": "loop",
+                "action": "flow.loop",
+                "params": {"items": ["first", "second"]},
+            },
+            {
+                "id": "body",
+                "action": "danger.go",
+                "parents": ["loop"],
+                "params": {"value": None, "position": None},
+                "loop_bindings": {"value": "item", "position": "index"},
+            },
+        ],
+    )
+    await kernel.store.upsert_workflow(workflow)
+    run_id = "run-loop-hitl"
+    payload = {
+        "tenant": T,
+        "workflow_id": workflow.id,
+        "inputs": {},
+        "ctx_envelope": _envelope(run_id),
+        "run_id": run_id,
+        "workflow_snapshot": build_workflow_snapshot(workflow),
+    }
+
+    first = await run_workflow_body(kernel, dict(payload))
+    assert first["status"] == "paused"
+    assert spy.calls == {}
+    first_request = (await kernel.hitl.list_pending(T))[0]
+    await kernel.hitl.answer(T, first_request.id, "approve", "will@acme")
+
+    second = await run_workflow_body(kernel, dict(payload))
+    assert second["status"] == "paused"
+    assert spy.calls == {"danger.go": 1}
+    second_request = (await kernel.hitl.list_pending(T))[0]
+    assert second_request.id != first_request.id
+    await kernel.hitl.answer(T, second_request.id, "approve", "will@acme")
+
+    third = await run_workflow_body(kernel, dict(payload))
+    fourth = await run_workflow_body(kernel, dict(payload))
+
+    assert third["status"] == fourth["status"] == "completed"
+    assert spy.calls == {"danger.go": 2}
+    assert spy.params["danger.go"] == [
+        {"value": "first", "position": 0},
+        {"value": "second", "position": 1},
+    ]
+    checkpoints = {
+        checkpoint.step: checkpoint.status
+        for checkpoint in await kernel.store.list_checkpoints(T, run_id)
+        if checkpoint.step.startswith("wf-loop-hitl:")
+    }
+    assert checkpoints == {
+        "wf-loop-hitl:loop": "ok",
+        "wf-loop-hitl:body__0": "ok",
+        "wf-loop-hitl:body__1": "ok",
+    }
 
 
 @pytest.mark.invariant("SEC-138")

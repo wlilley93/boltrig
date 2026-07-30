@@ -14,10 +14,11 @@ from typing import Any
 from boltrig.models import (
     AI_CONFIG_LEVELS,
     WORKSPACE_ROLES,
-    AiConfig,
     Workspace,
     WorkspaceMember,
+    utcnow,
 )
+from .control_safety import ControlConflict
 
 _ADMIN_ROLES = frozenset({"org-admin", "superadmin", "admin"})
 _WORKSPACE_ADMIN_ROLES = frozenset({"owner", "admin"})
@@ -116,30 +117,52 @@ async def _set_ai_key(store: Any, tenant_id: str, params: dict[str, Any], contex
     await _authorise_ai_key(store, tenant_id, level, scope_id, context)
     provider = str(params["provider"]).strip()
     model = str(params["model"]).strip()
-    api_key = str(params["api_key"]).strip()
-    if not provider or not model or not api_key:
-        raise ValueError("provider, model and api_key are required")
-    base_url = str(params.get("base_url") or "").strip() or None
-    credential_ref = f"cred_ai_{uuid.uuid4().hex[:16]}"
-    await store.set_credential_ref(tenant_id, credential_ref, {"secret": api_key})
-    await store.set_ai_config(
-        AiConfig(
-            tenant_id=tenant_id,
-            level=level,
-            scope_id=scope_id,
-            provider=provider,
-            model=model,
-            credential_ref=credential_ref,
-            base_url=base_url,
+    proposal_id = str(params["proposal_id"]).strip()
+    secret_digest = str(params["secret_digest"]).strip()
+    if not provider or not model or not proposal_id or not secret_digest:
+        raise ValueError(
+            "provider, model, proposal_id and secret_digest are required"
         )
+    base_url = str(params.get("base_url") or "").strip() or None
+    proposal = await store.get_ai_key_secret_proposal(tenant_id, proposal_id)
+    approval_id = str((context.extra or {}).get("approval_request_id") or "")
+    if (
+        proposal is None
+        or proposal.approval_id != approval_id
+        or not approval_id
+        or not (context.extra or {}).get("approved_by")
+    ):
+        raise PermissionError("exact AI-key proposal approval evidence is missing")
+    from .control_approval import require_unchanged_approval_context
+
+    await require_unchanged_approval_context(
+        store, None, "control.ai_key.set", params, context
     )
+    config = await store.consume_ai_key_secret_proposal(
+        tenant_id,
+        proposal_id,
+        requested_by=context.actor,
+        requested_on_behalf_of=context.on_behalf_of,
+        workspace_id=context.workspace_id,
+        level=level,
+        scope_id=scope_id,
+        provider=provider,
+        model=model,
+        base_url=base_url,
+        secret_digest=secret_digest,
+        now=utcnow(),
+    )
+    if config is None:
+        raise ControlConflict(
+            "AI-key proposal changed, expired or was already consumed"
+        )
     return {
         "level": level,
         "scope_id": scope_id,
         "provider": provider,
         "model": model,
         "base_url": base_url,
-        "credential_ref": credential_ref,
+        "proposal_id": proposal_id,
     }
 
 

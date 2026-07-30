@@ -56,6 +56,10 @@ _BLOCKING: tuple[tuple[str, str, str], ...] = (
 # the run ENDING without saying they did not happen.
 _LOUD: tuple[tuple[str, str], ...] = (
     ("BOLTRIG_PER_CELL_IMAGE", "the per-cell UID escalation gates (J7/J9)"),
+    (
+        "BOLTRIG_TEST_REDIS_URL",
+        "the real-Redis multi-client conversation continuity leg",
+    ),
     ("HATCHET_CLIENT_TOKEN", "the live durable-engine legs"),
     ("BOLTRIG_COGNEE_LIVE", "the live knowledge-graph legs"),
     ("BOLTRIG_LIVE_SMOKE", "the live adapter reads"),
@@ -166,6 +170,7 @@ _ENV_STRIP_PREFIXES = (
 _ENV_STRIP_EXACT = frozenset({"DATABASE_URL", "REDIS_URL", "ENV", "APP_ENV"})
 _ENV_KEEP = frozenset({
     "BOLTRIG_TEST_DATABASE_URL",
+    "BOLTRIG_TEST_REDIS_URL",
     "BOLTRIG_ALLOW_UNVERIFIED_POSTGRES",
     "BOLTRIG_ALLOW_UNVERIFIED_RATELIMIT",
     "BOLTRIG_PER_CELL_IMAGE",

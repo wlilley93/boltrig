@@ -17,6 +17,19 @@ RUN --mount=type=secret,id=gh_npmrc,target=/root/.npmrc \
     pnpm install --frozen-lockfile --ignore-scripts && pnpm rebuild esbuild
 
 COPY . .
+# Emit RELATIVE asset URLs (./assets/...) rather than absolute (/assets/...), so
+# this one image serves correctly at "/" and under any sub-path mount such as
+# <tenant-host>/boltrig/ with no rebuild and no per-mount tag. The API prefix is
+# derived at runtime from the same mount (src/api/transport.ts, mountPrefix).
+#
+# NOT "/boltrig/": baking a mount path into the image is what produces "which
+# image does this client run" as a question with more than one answer. The mount
+# is data. See docs/GOAL-console-mounts-with-its-stack.md (M1, M2).
+#
+# The worker candidate image sets this to /operator/ for its own packaging
+# (apps/worker/Dockerfile, invariant WRK-01); vite.config.ts still defaults to
+# "/" for local development, and neither is disturbed.
+ENV BOLTRIG_UI_BASE=./
 RUN pnpm run build
 
 FROM nginx:1.30.4-alpine@sha256:97d490c12ba55b4946b01546d1c3ed324e8d41ab1c9fcb2a616aa470620e5b46 AS runtime

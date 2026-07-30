@@ -82,6 +82,9 @@ def test_audit_search_is_workspace_scoped_fail_closed():
     # ws-1 (own) + None (org-wide) visible; ws-2 NEVER.
     assert seen_ws == {"ws-1", None}
     assert all(r["workspace_id"] != "ws-2" for r in rows)
+    assert client.get(
+        "/v1/audit/search", params={"query": "carol"}
+    ).json()["results"] == []
 
 
 @pytest.mark.security
@@ -104,6 +107,100 @@ def test_audit_search_filters_by_user_and_resource():
     assert client.get(
         "/v1/audit/search", params={"status": "does-not-exist"}
     ).json()["results"] == []
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-123")
+@pytest.mark.parametrize(
+    "query",
+    (
+        "casekeeper",
+        "approval.run",
+        "needs_review",
+        "run-abc",
+        "parent-xyz",
+        "invoice",
+        r"case%_\42",
+    ),
+)
+def test_audit_free_text_search_matches_only_allowlisted_structural_fields(query):
+    k, app, _ = _app(workspace=None)
+    target = _row(
+        actor="CaseKeeper",
+        workspace=None,
+        resource="Invoice",
+        resource_id=r"Case%_\42",
+        verb="Approval.Run",
+    )
+    target.status = "needs_review"
+    target.run_id = "RUN-ABC"
+    target.parent_run_id = "PARENT-XYZ"
+    target.detail = {"secret_note": "must-never-be-searchable"}
+    _run(k.audit.write(target))
+    _run(k.audit.write(_row(
+        actor="other",
+        workspace=None,
+        resource="ticket",
+        resource_id="CaseABZ42",
+        verb="ticket.create",
+    )))
+
+    rows = TestClient(app).get(
+        "/v1/audit/search", params={"query": query}
+    ).json()["results"]
+    assert [row["resource_id"] for row in rows] == [r"Case%_\42"]
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-123")
+def test_audit_free_text_is_literal_and_does_not_search_detail():
+    k, app, _ = _app(workspace=None)
+    _run(k.audit.write(_row(
+        actor="literal",
+        workspace=None,
+        resource_id=r"Case%_\42",
+    )))
+    detail_only = _row(actor="other", workspace=None, resource_id="safe")
+    detail_only.detail = {"secret_note": "needle-only-in-detail"}
+    _run(k.audit.write(detail_only))
+    _run(k.audit.write(_row(
+        actor="wildcard-decoy",
+        workspace=None,
+        resource_id="CaseABZ42",
+    )))
+    client = TestClient(app)
+
+    literal = client.get(
+        "/v1/audit/search", params={"query": "%_\\"}
+    ).json()["results"]
+    assert [row["resource_id"] for row in literal] == [r"Case%_\42"]
+    assert client.get(
+        "/v1/audit/search", params={"query": "needle-only-in-detail"}
+    ).json()["results"] == []
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-ACCOUNT-AUDIT-PAGE-01")
+def test_audit_search_filters_before_pagination_without_changing_chain_verify():
+    k, app, _ = _app(workspace=None)
+    for index in range(4):
+        _run(k.audit.write(_row(
+            actor="alice" if index % 2 == 0 else "bob", workspace=None,
+            resource_id=f"T-{index}",
+        )))
+    client = TestClient(app)
+
+    first = client.get("/v1/audit/search", params={"actor": "alice", "limit": 1}).json()
+    second = client.get(
+        "/v1/audit/search", params={"actor": "alice", "limit": 1, "offset": 1},
+    ).json()
+
+    assert [row["resource_id"] for row in first["results"]] == ["T-2"]
+    assert first["next_offset"] == 1
+    assert [row["resource_id"] for row in second["results"]] == ["T-0"]
+    assert second["next_offset"] is None
+    # Browsing pages never substitutes for or truncates the full chain scan.
+    assert client.get("/v1/audit/verify").json()["chain_intact"] is True
 
 
 @pytest.mark.security

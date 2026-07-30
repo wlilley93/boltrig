@@ -126,3 +126,29 @@ def test_adapter_studio_review_gate():
     assert adapter.review_gate.reviewer == "security@acme"
     disco2 = c.get("/v1/capabilities", headers=_hdr("org-admin", grants="*")).json()
     assert any(v["id"] == "pet.list" for v in disco2["verbs"])
+
+    # Worker exposes the governed reverse lifecycle too. Both operations enter
+    # the same independent-human gate; no direct route mutates adapter rows.
+    held_down = c.post(
+        "/v1/adapters/petstore/deactivate", headers=_hdr("org-admin")
+    )
+    assert held_down.status_code == 202
+    down_id = held_down.json()["hitl_request_id"]
+    asyncio.run(k.hitl.answer(T, down_id, "approve", "security@acme"))
+    down = c.post(
+        "/v1/adapters/petstore/deactivate",
+        headers={**_hdr("org-admin"), "x-boltrig-approval-id": down_id},
+    )
+    assert down.status_code == 200 and down.json()["activated"] is False
+
+    held_delete = c.delete(
+        "/v1/adapters/petstore", headers=_hdr("org-admin")
+    )
+    assert held_delete.status_code == 202
+    delete_id = held_delete.json()["hitl_request_id"]
+    asyncio.run(k.hitl.answer(T, delete_id, "approve", "security@acme"))
+    deleted = c.delete(
+        "/v1/adapters/petstore",
+        headers={**_hdr("org-admin"), "x-boltrig-approval-id": delete_id},
+    )
+    assert deleted.status_code == 200 and deleted.json()["deleted"] is True

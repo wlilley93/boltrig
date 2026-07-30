@@ -159,3 +159,28 @@ class TwoFactorChallenge:
     user_id: UserId
     expires_at: datetime
     created_at: datetime = field(default_factory=utcnow)
+
+
+# --- password recovery (SEC-AUTH-RECOVERY-01) -------------------------------
+@dataclass
+class PasswordResetToken:
+    """The durable, single-use password-reset claim.
+
+    Only ``token_hash`` is persisted. The plaintext reset secret exists solely in
+    the delivery notice and is never represented by this store-facing model.
+    """
+
+    tenant_id: TenantId
+    user_id: UserId
+    token_hash: str
+    expires_at: datetime
+    created_at: datetime = field(default_factory=utcnow)
+    consumed_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class PasswordResetResult:
+    """Bounded result of an atomic reset, safe for audit and API control flow."""
+
+    user_id: UserId
+    revoked_sessions: int

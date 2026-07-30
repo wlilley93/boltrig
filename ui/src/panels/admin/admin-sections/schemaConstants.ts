@@ -4,14 +4,14 @@
 
 export const RESIDENCY = ["eu", "us", "global"];
 export const CHANNELS = ["teams", "email", "slack"];
-export const COST_TIER = ["cheap", "standard", "premium"];
+export const COST_TIER = ["cheap", "standard", "expensive"];
 export const BUDGET_WINDOW = ["daily", "weekly", "monthly"];
 export const ENDPOINT_KIND = ["anthropic", "vllm", "openai"];
 export const DATA_CLASS = ["standard", "sensitive"];
 export const ADAPTER_RUNTIME = ["http", "sql", "script"];
 export const CREDENTIAL_KIND = ["oauth", "api_key", "basic"];
 export const RETRIEVAL_MODE = ["similarity", "graph_completion"];
-export const EVAL_TARGET_KIND = ["skill", "agent", "workflow"];
+export const EVAL_TARGET_KIND = ["skill", "workflow"];
 
 // The reusable budget sub-schema (a tier's spend cap): SchemaFormV2 renders it as
 // a nested inset group wherever it appears (tier1 and each tier2 row).

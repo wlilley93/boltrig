@@ -36,7 +36,12 @@ from boltrig.fleet.domain.model_proxy_grant import StoredModelProxyGrant
 from boltrig.fleet.infrastructure.model_proxy_tool_ceiling import (
     MAX_MODEL_CALL_BODY_BYTES,
     CodexResponseStreamProcessor,
+    ModelCeilingViolation,
+    NativeCollaborationWireGate,
+    ReasoningEffortCeilingViolation,
     ToolCeilingViolation,
+    enforce_model_ceiling,
+    enforce_reasoning_effort_ceiling,
     enforce_tool_ceiling,
 )
 
@@ -109,11 +114,36 @@ class PerCellModelProxyServer:
         upstream_base_url: str,
         upstream_key: str,
         client: httpx.AsyncClient,
+        allowed_model: str,
         allowed_tools: frozenset[str] = frozenset(),
+        allowed_reasoning_effort: str | None = None,
+        native_collaboration: NativeCollaborationWireGate | None = None,
     ) -> None:
         if type(allowed_tools) is not frozenset:
             raise TypeError("allowed_tools must be an exact frozenset")
+        if type(allowed_model) is not str or not allowed_model:
+            raise TypeError("allowed_model must be a non-empty string")
+        if allowed_reasoning_effort is not None and (
+            type(allowed_reasoning_effort) is not str or not allowed_reasoning_effort
+        ):
+            raise TypeError("allowed_reasoning_effort must be a non-empty string or None")
+        if native_collaboration is not None:
+            if type(native_collaboration) is not NativeCollaborationWireGate:
+                raise TypeError(
+                    "native_collaboration must be exact NativeCollaborationWireGate or None"
+                )
+            if (
+                native_collaboration.allowed_model != allowed_model
+                or native_collaboration.allowed_reasoning_effort
+                != allowed_reasoning_effort
+            ):
+                raise ValueError(
+                    "native collaboration model and effort must match proxy ceilings"
+                )
+        self._allowed_model = allowed_model
+        self._allowed_reasoning_effort = allowed_reasoning_effort
         self._allowed_tools = allowed_tools
+        self._native_collaboration = native_collaboration
         self._verify = verify_bearer
         self._base = upstream_base_url.rstrip("/")
         self._key = upstream_key
@@ -174,7 +204,22 @@ class PerCellModelProxyServer:
             # The cell's tool ceiling is enforced HERE, not trusted to the
             # runtime's own config: Codex 0.144.3 cannot suppress its built-in
             # tools, and this proxy is the one point every model call traverses.
-            body = enforce_tool_ceiling(await _capped_body(request), self._allowed_tools)
+            body = enforce_model_ceiling(
+                await _capped_body(request), self._allowed_model
+            )
+            if self._allowed_reasoning_effort is not None:
+                body = enforce_reasoning_effort_ceiling(
+                    body, self._allowed_reasoning_effort
+                )
+            body = enforce_tool_ceiling(
+                body,
+                self._allowed_tools,
+                allow_native_collaboration=self._native_collaboration is not None,
+            )
+        except ModelCeilingViolation:
+            return JSONResponse({"error": "model_ceiling"}, status_code=400)
+        except ReasoningEffortCeilingViolation:
+            return JSONResponse({"error": "reasoning_effort_ceiling"}, status_code=400)
         except ToolCeilingViolation:
             return JSONResponse({"error": "tool_ceiling"}, status_code=400)
         headers = {
@@ -221,7 +266,9 @@ class PerCellModelProxyServer:
         tool call.
         """
 
-        processor = CodexResponseStreamProcessor(self._allowed_tools)
+        processor = CodexResponseStreamProcessor(
+            self._allowed_tools, native_gate=self._native_collaboration
+        )
         try:
             async for chunk in upstream.aiter_raw():
                 yield processor.feed(chunk)

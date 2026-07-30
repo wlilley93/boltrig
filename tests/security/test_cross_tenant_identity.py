@@ -183,6 +183,15 @@ def test_org_switch_is_reauthorized_and_no_cross_org_read(monkeypatch):
     csrf = _login(c).json()["csrf_token"]
     hdr = {"x-boltrig-csrf": csrf}
 
+    # The Worker gets an owned, discoverable selector instead of requiring a raw
+    # org id. This index is only a candidate list; the switch below still
+    # re-authorises the target membership.
+    orgs = c.get("/v1/me/orgs").json()["organisations"]
+    assert orgs == [
+        {"id": REALM, "active": True},
+        {"id": ORG_B, "active": False},
+    ]
+
     # The deterministic default active org is the realm; the request reads ONLY the
     # realm's datum, never ORG_B's (one active tenant per request, no cross-org read).
     s1 = c.get("/v1/me/settings").json()

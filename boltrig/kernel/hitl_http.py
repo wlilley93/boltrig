@@ -164,10 +164,14 @@ async def answer_hitl_question(
     # write when ownership cannot be confirmed.
     if item is None or item.on_behalf_of != principal.subject:
         raise HTTPException(status_code=403, detail="not your run")
-    text = answer.strip() if isinstance(answer, str) else ""
-    if not text:
+    secure = bool(getattr(req, "secure", False))
+    if not isinstance(answer, str) or (not answer if secure else not answer.strip()):
         raise HTTPException(status_code=400, detail="answer is required")
-    if getattr(req, "secure", False):
+    # A secure value is opaque material: leading/trailing bytes may be part of a
+    # token or passphrase, so validate presence without normalising it. Ordinary
+    # conversational answers retain their historical whitespace normalisation.
+    text = answer if secure else answer.strip()
+    if secure:
         # SEC-181 secure input: the value is sealed INSIDE the kernel as a
         # run+purpose-scoped credential (envelope-sealed at rest by the store
         # seam, SEC-04) and ONLY the reference is enveloped + recorded as the
@@ -194,7 +198,7 @@ async def answer_hitl_question(
         "question_id": request_id,
         "response_id": resp.id,
         "run_id": req.run_id,
-        "secure": bool(getattr(req, "secure", False)),
+        "secure": secure,
         "answer_len": answer_len,
         # None when there is no live relay for this run; the route omits it then.
         "resume_since": resume_since,

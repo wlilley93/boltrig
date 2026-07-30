@@ -16,26 +16,46 @@ from boltrig.config.control_plane import safe_consequence  # noqa: F401
 
 def register_platform_routes(app, *, principal_dep, get_kernel) -> None:
     from fastapi import Depends
+    from boltrig.kernel.call_routes import register_call_routes
+    from boltrig.kernel.device_routes import register_device_routes
 
     from . import (
+        addons,
         adapters,
         admin,
+        agent_capabilities,
+        artifacts,
+        backup_status,
+        birth_profile,
         budgets,
         console,
         eval_routes,
+        hitl_policy,
         knowledge,
+        integrations,
+        mcp_servers,
         memory,
+        model_endpoints,
+        model_profiles,
         observability,
         personal,
+        permanent_fleet,
+        privacy_policy,
         router,
         skills,
+        spawn_rules,
+        work,
         workflows,
     )
 
     P = Depends(principal_dep)
     K = Depends(get_kernel)
     for module in (
-        skills, router, adapters, workflows, admin, budgets, observability, console,
-        eval_routes, personal, memory, knowledge,
+        skills, router, addons, adapters, mcp_servers, agent_capabilities, workflows, admin, artifacts, birth_profile,
+        backup_status, budgets, observability, console,
+        eval_routes, hitl_policy, personal, permanent_fleet, privacy_policy, memory, knowledge, integrations, model_endpoints, model_profiles,
+        spawn_rules, work,
     ):
         module.register(app, P, K)
+    register_call_routes(app, principal_dep=principal_dep, get_kernel=get_kernel)
+    register_device_routes(app, principal_dep=principal_dep, get_kernel=get_kernel)

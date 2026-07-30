@@ -49,6 +49,7 @@ def _server(verify: Any, client: httpx.AsyncClient) -> PerCellModelProxyServer:
         upstream_base_url="http://gateway/v1",
         upstream_key="KERNEL-ONLY-KEY",
         client=client,
+        allowed_model="gpt-5.2-codex",
     )
 
 
@@ -72,12 +73,82 @@ async def test_the_tool_ceiling_is_enforced_before_the_call_leaves_the_box() -> 
                 f"http://127.0.0.1:{port}/v1/responses",
                 headers={"authorization": "Bearer good-bearer"},
                 content=(
-                    b'{"input":"hi","tools":[{"type":"function","name":"exec_command"}]}'
+                    b'{"model":"gpt-5.2-codex","input":"hi",'
+                    b'"tools":[{"type":"function","name":"exec_command"}]}'
                 ),
             )
         assert resp.status_code == 200
         assert b"exec_command" not in captured["body"]
         assert b'"tools"' not in captured["body"]
+    finally:
+        await server.aclose()
+
+
+async def test_a_native_child_cannot_select_another_model() -> None:
+    captured: dict[str, Any] = {}
+
+    async def verify(token: str) -> bool:
+        return True
+
+    server = _server(verify, _upstream(captured))
+    port = await server.start()
+    try:
+        async with httpx.AsyncClient() as caller:
+            response = await caller.post(
+                f"http://127.0.0.1:{port}/v1/responses",
+                headers={"authorization": "Bearer good-bearer"},
+                content=b'{"model":"other-provider/model","input":"hi"}',
+            )
+        assert response.status_code == 400
+        assert response.json() == {"error": "model_ceiling"}
+        assert "url" not in captured
+    finally:
+        await server.aclose()
+
+
+async def test_root_and_native_child_requests_must_carry_the_pinned_effort() -> None:
+    captured: dict[str, Any] = {}
+
+    async def verify(token: str) -> bool:
+        return True
+
+    server = PerCellModelProxyServer(
+        verify_bearer=verify,
+        upstream_base_url="http://gateway/v1",
+        upstream_key="KERNEL-ONLY-KEY",
+        client=_upstream(captured),
+        allowed_model="gpt-5.2-codex",
+        allowed_reasoning_effort="high",
+    )
+    port = await server.start()
+    try:
+        async with httpx.AsyncClient() as caller:
+            for body in (
+                b'{"model":"gpt-5.2-codex","input":"hi"}',
+                (
+                    b'{"model":"gpt-5.2-codex","input":"hi",'
+                    b'"reasoning":{"effort":"medium"}}'
+                ),
+            ):
+                response = await caller.post(
+                    f"http://127.0.0.1:{port}/v1/responses",
+                    headers={"authorization": "Bearer good-bearer"},
+                    content=body,
+                )
+                assert response.status_code == 400
+                assert response.json() == {"error": "reasoning_effort_ceiling"}
+                assert "url" not in captured
+
+            accepted = await caller.post(
+                f"http://127.0.0.1:{port}/v1/responses",
+                headers={"authorization": "Bearer good-bearer"},
+                content=(
+                    b'{"model":"gpt-5.2-codex","input":"hi",'
+                    b'"reasoning":{"effort":"high","summary":"auto"}}'
+                ),
+            )
+        assert accepted.status_code == 200
+        assert b'"effort":"high"' in captured["body"]
     finally:
         await server.aclose()
 
@@ -145,13 +216,13 @@ async def test_valid_bearer_forwards_with_the_kernel_key_injected() -> None:
             resp = await caller.post(
                 f"http://127.0.0.1:{port}/v1/responses",
                 headers={"authorization": "Bearer good-bearer"},
-                content=b'{"input":"hi"}',
+                content=b'{"model":"gpt-5.2-codex","input":"hi"}',
             )
         assert resp.status_code == 200
         assert captured["url"] == "http://gateway/v1/responses"
         # the cell's bearer is dropped; the kernel-only key is injected upstream
         assert captured["auth"] == "Bearer KERNEL-ONLY-KEY"
-        assert captured["body"] == b'{"input":"hi"}'
+        assert captured["body"] == b'{"model":"gpt-5.2-codex","input":"hi"}'
     finally:
         await server.aclose()
 
@@ -186,7 +257,7 @@ async def test_unverified_bearer_is_rejected() -> None:
             resp = await caller.post(
                 f"http://127.0.0.1:{port}/v1/responses",
                 headers={"authorization": "Bearer nope"},
-                content=b"{}",
+                content=b'{"model":"gpt-5.2-codex"}',
             )
         assert resp.status_code == 401
         assert "url" not in captured
@@ -205,7 +276,7 @@ async def test_verifier_error_fails_closed() -> None:
             resp = await caller.post(
                 f"http://127.0.0.1:{port}/v1/responses",
                 headers={"authorization": "Bearer x"},
-                content=b"{}",
+                content=b'{"model":"gpt-5.2-codex"}',
             )
         assert resp.status_code == 401
     finally:
@@ -223,7 +294,7 @@ async def test_upstream_failure_is_a_bounded_502() -> None:
             resp = await caller.post(
                 f"http://127.0.0.1:{port}/v1/responses",
                 headers={"authorization": "Bearer good"},
-                content=b"{}",
+                content=b'{"model":"gpt-5.2-codex"}',
             )
         assert resp.status_code == 502
         assert "KERNEL-ONLY-KEY" not in resp.text
@@ -298,7 +369,7 @@ async def test_an_unsolicited_tool_call_in_the_response_is_truncated_not_relayed
             resp = await caller.post(
                 f"http://127.0.0.1:{port}/v1/responses",
                 headers={"authorization": "Bearer good-bearer"},
-                content=b'{"input":"hi"}',
+                content=b'{"model":"gpt-5.2-codex","input":"hi"}',
             )
         assert b"exec_command" not in resp.content
         assert b"function_call" not in resp.content
@@ -329,7 +400,7 @@ async def test_a_traversing_path_cannot_escape_the_v1_base() -> None:
                     "POST",
                     f"http://127.0.0.1:{port}/v1/{tail}",
                     headers={"authorization": "Bearer good-bearer"},
-                    content=b"{}",
+                    content=b'{"model":"gpt-5.2-codex"}',
                     extensions={"target": f"/v1/{tail}".encode()},
                 )
             assert resp.status_code == 400, tail

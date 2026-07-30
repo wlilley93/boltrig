@@ -15,6 +15,8 @@ guarantees:
           reply is neither summarised into the summary nor present in the tail.
   SEC-93  below the threshold the composition is unchanged (full verbatim history,
           identical to the pre-compaction continuity render).
+  FR-CONV-08 the owner-facing conversation projection describes the exact summary
+          boundary and recent verbatim tail used by the next model turn.
 """
 
 from __future__ import annotations
@@ -191,3 +193,53 @@ def test_below_threshold_composition_is_unchanged():
     off = ChatConfig(compaction_threshold=0, compaction_keep_recent=0)
     big = [_msg(f"m{i}", MessageRole.USER, f"p{i}") for i in range(50)]
     assert compose_turn_task(big, "x", summary=summary, config=off) == render_transcript(big)
+
+
+# --------------------------------------------------------------------------- #
+# FR-CONV-08  the owner can inspect the exact model-context compaction boundary
+# --------------------------------------------------------------------------- #
+@pytest.mark.invariant("FR-CONV-08")
+async def test_compaction_view_matches_the_exact_next_turn_boundary():
+    store = InMemoryStore()
+    messages = await _seed_conversation(store, _alternating(3))
+    cfg = ChatConfig(compaction_threshold=4, compaction_keep_recent=2)
+    chat = ChatService(store, EventRelay(), chat_config=cfg)
+    await chat._maybe_compact(T, CID)
+
+    summary = await store.get_latest_conversation_summary(T, CID)
+    assert summary is not None
+    view = await chat.context_compaction_view(T, CID, messages)
+
+    assert view == {
+        "compacted": True,
+        "covered_count": 4,
+        "recent_exact_count": 2,
+        "up_to_message_id": "m3",
+        "summary": summary.summary,
+    }
+    task = compose_turn_task(messages, "ignored", summary=summary, config=cfg)
+    assert summary.summary in task
+    assert "user-probe-2" in task
+    assert "assistant-probe-2" in task
+    # The covered probe occurs once inside the summary, never a second time as
+    # verbatim transcript text; the recent probes are the exact tail.
+    assert task.count("user-probe-0") == 1
+
+
+@pytest.mark.invariant("FR-CONV-08")
+async def test_compaction_view_is_honestly_inactive_without_a_usable_boundary():
+    store = InMemoryStore()
+    messages = await _seed_conversation(store, _alternating(1))
+    chat = ChatService(
+        store,
+        EventRelay(),
+        chat_config=ChatConfig(compaction_threshold=4, compaction_keep_recent=2),
+    )
+
+    assert await chat.context_compaction_view(T, CID, messages) == {
+        "compacted": False,
+        "covered_count": 0,
+        "recent_exact_count": 2,
+        "up_to_message_id": None,
+        "summary": None,
+    }

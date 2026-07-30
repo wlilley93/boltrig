@@ -2,6 +2,7 @@
 
 import pytest
 
+from boltrig.fleet import build_spawner
 from boltrig.fleet.hatchet_app import (
     TASK_ULTRACODE_AGENT,
     TASK_ULTRACODE_RUN,
@@ -77,6 +78,7 @@ def _workflow() -> dict:
         ],
     }
 
+
 @pytest.mark.invariant("FR-WFL-12")
 def test_ultracode_validation_rejects_missing_prompt():
     with pytest.raises(UltracodeSpecError):
@@ -86,11 +88,14 @@ def test_ultracode_validation_rejects_missing_prompt():
 @pytest.mark.invariant("FR-WFL-12")
 def test_ultracode_validation_rejects_excessive_concurrency():
     with pytest.raises(UltracodeSpecError, match="max_phase_concurrency"):
-        validate_workflow({
-            "defaults": {"max_phase_concurrency": 1},
-            "phases": [{"id": "phase-01", "concurrency": 2,
-                        "agents": [{"id": "a", "prompt": "x"}]}],
-        })
+        validate_workflow(
+            {
+                "defaults": {"max_phase_concurrency": 1},
+                "phases": [
+                    {"id": "phase-01", "concurrency": 2, "agents": [{"id": "a", "prompt": "x"}]}
+                ],
+            }
+        )
 
 
 @pytest.mark.invariant("FR-WFL-13")
@@ -103,17 +108,20 @@ async def test_ultracode_run_executes_phases_through_preferred_capability():
         "run_id": "uc-run",
     }
 
-    record = await run_ultracode_body(kernel, payload)
+    record = await run_ultracode_body(
+        kernel,
+        payload,
+        spawner=build_spawner(kernel, codex_config=None),
+    )
 
     assert record["status"] == "completed"
     assert [phase["id"] for phase in record["phases"]] == [
-        "phase-01-discovery", "phase-02-plan",
+        "phase-01-discovery",
+        "phase-02-plan",
     ]
     agents = [agent for phase in record["phases"] for agent in phase["agents"]]
     assert {agent["result"]["agent_type"] for agent in agents} == {"opencode-worker"}
-    checkpoints = {
-        c.step: c.status for c in await kernel.store.list_checkpoints(T, "uc-run")
-    }
+    checkpoints = {c.step: c.status for c in await kernel.store.list_checkpoints(T, "uc-run")}
     assert checkpoints == {
         "ultracode:phase-01-discovery": "completed",
         "ultracode:phase-02-plan": "completed",
@@ -121,9 +129,21 @@ async def test_ultracode_run_executes_phases_through_preferred_capability():
         "ultracode:phase-01-discovery:risk": "completed",
         "ultracode:phase-02-plan:plan": "completed",
     }
-    assert any(
-        e.get("status") == "phase_finished" for e in kernel.events.snapshot(T, "uc-run")
-    )
+    assert any(e.get("status") == "phase_finished" for e in kernel.events.snapshot(T, "uc-run"))
+
+
+@pytest.mark.invariant("CODEX-COMPOSITION-1")
+async def test_ultracode_run_without_a_composition_spawner_fails_closed():
+    kernel = await _kernel()
+    payload = {
+        "tenant": T,
+        "workflow": _workflow(),
+        "ctx_envelope": context_to_envelope(_ctx()),
+        "run_id": "uc-no-spawner",
+    }
+
+    with pytest.raises(RuntimeError, match="no composition-owned spawner"):
+        await run_ultracode_body(kernel, payload)
 
 
 @pytest.mark.invariant("FR-WFL-13")
@@ -136,26 +156,28 @@ async def test_mastra_plan_payload_compiles_and_runs_through_ultracode_spine():
             "goal": "Plan from a graph-shaped orchestration contract.",
             "defaults": {"capability": "opencode-worker", "max_total_agents": 3},
             "steps": [
-                {"id": "discover", "agents": [
-                    {"id": "map", "instructions": "Map the repo."}
-                ]},
-                {"id": "plan", "after": ["discover"], "agents": [
-                    {"id": "synth", "instructions": "Synthesize a plan."}
-                ]},
+                {"id": "discover", "agents": [{"id": "map", "instructions": "Map the repo."}]},
+                {
+                    "id": "plan",
+                    "after": ["discover"],
+                    "agents": [{"id": "synth", "instructions": "Synthesize a plan."}],
+                },
             ],
         },
         "ctx_envelope": context_to_envelope(_ctx("mastra-run")),
         "run_id": "mastra-run",
     }
 
-    record = await run_ultracode_body(kernel, payload)
+    record = await run_ultracode_body(
+        kernel,
+        payload,
+        spawner=build_spawner(kernel, codex_config=None),
+    )
 
     assert record["workflow_name"] == "mastra-demo"
     assert record["status"] == "completed"
     assert [phase["id"] for phase in record["phases"]] == ["discover", "plan"]
-    checkpoints = {
-        c.step: c.status for c in await kernel.store.list_checkpoints(T, "mastra-run")
-    }
+    checkpoints = {c.step: c.status for c in await kernel.store.list_checkpoints(T, "mastra-run")}
     assert checkpoints["ultracode:discover:map"] == "completed"
     assert checkpoints["ultracode:plan:synth"] == "completed"
 
@@ -164,7 +186,11 @@ async def test_mastra_plan_payload_compiles_and_runs_through_ultracode_spine():
 async def test_ultracode_run_registered_on_local_durable_executor():
     kernel = await _kernel()
     executor = LocalDurableExecutor()
-    register_boltrig_tasks(executor, kernel)
+    register_boltrig_tasks(
+        executor,
+        kernel,
+        spawner=build_spawner(kernel, codex_config=None),
+    )
     payload = {
         "tenant": T,
         "workflow": {"phases": [{"id": "phase-01", "agents": [{"id": "a", "prompt": "x"}]}]},
@@ -205,13 +231,15 @@ async def test_ultracode_replays_completed_phase_checkpoint():
         "run_id": "uc-replay",
     }
 
-    record = await run_ultracode_body(kernel, payload)
+    record = await run_ultracode_body(
+        kernel,
+        payload,
+        spawner=build_spawner(kernel, codex_config=None),
+    )
 
     assert record["status"] == "completed"
     assert record["phases"] == [phase_record]
-    assert any(
-        e.get("status") == "phase_replayed" for e in kernel.events.snapshot(T, "uc-replay")
-    )
+    assert any(e.get("status") == "phase_replayed" for e in kernel.events.snapshot(T, "uc-replay"))
 
 
 @pytest.mark.invariant("FR-WFL-15")
@@ -230,7 +258,11 @@ async def test_ultracode_replays_completed_agent_checkpoint():
         "run_id": "uc-agent-replay",
     }
 
-    record = await run_ultracode_body(kernel, payload)
+    record = await run_ultracode_body(
+        kernel,
+        payload,
+        spawner=build_spawner(kernel, codex_config=None),
+    )
 
     assert record["status"] == "completed"
     assert record["phases"][0]["agents"] == [agent_record]

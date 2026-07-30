@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 from typing import cast
@@ -19,9 +20,13 @@ from boltrig.fleet.infrastructure.codex_runtime_events import (
     CodexEventTranslator,
     CodexRuntimeProtocolError,
 )
+from boltrig.fleet.infrastructure.codex_runtime_actor import (
+    CodexRuntimeActor,
+    CodexRuntimeTerminal,
+)
 
 from .codex_app_server_fakes import thread_payload
-from .codex_runtime_fakes import admission
+from .codex_runtime_fakes import FakeCodexClient, admission
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCHEMA_PATH = REPO_ROOT / "schemas/codex/0.144.3/codex_app_server_protocol.v2.schemas.json"
@@ -34,7 +39,10 @@ def _notification(method: str, params: dict[str, object]) -> wire.NotificationMe
     )
 
 
-def _translator() -> tuple[CodexEventTranslator, RuntimeThreadRef, RuntimeTurnRef]:
+def _translator(
+    *,
+    limits: tuple[int, int, int] = (1, 3, 2),
+) -> tuple[CodexEventTranslator, RuntimeThreadRef, RuntimeTurnRef]:
     exact = admission()
     thread = RuntimeThreadRef(exact.assignment, "codex_app_server", "thread-1")
     turn = RuntimeTurnRef(thread, "turn-1")
@@ -42,9 +50,11 @@ def _translator() -> tuple[CodexEventTranslator, RuntimeThreadRef, RuntimeTurnRe
         assignment=exact.assignment,
         thread=thread,
         cwd=exact.layout.workspace.as_posix(),
-        max_native_concurrent=1,
-        max_native_total=3,
-        max_native_depth=2,
+        max_native_concurrent=limits[0],
+        max_native_total=limits[1],
+        max_native_depth=limits[2],
+        model_id="gpt-5.2-codex",
+        reasoning_effort="high",
     )
     translator.translate(
         _notification(
@@ -98,6 +108,28 @@ def _stable_fixtures() -> list[dict[str, object]]:
             "params": {
                 "threadId": "thread-1",
                 "turn": {"id": "turn-1", "items": [], "status": "completed"},
+            },
+        },
+        {
+            "method": "item/started",
+            "params": {
+                "item": {
+                    "agentsStates": {"native-1": {"status": "running"}},
+                    "id": "collab-1", "receiverThreadIds": ["native-1"],
+                    "senderThreadId": "thread-1", "status": "inProgress",
+                    "tool": "spawnAgent", "type": "collabAgentToolCall",
+                },
+                "startedAtMs": 3, "threadId": "thread-1", "turnId": "turn-1",
+            },
+        },
+        {
+            "method": "item/started",
+            "params": {
+                "item": {
+                    "agentPath": "agents/researcher", "agentThreadId": "native-1",
+                    "id": "activity-1", "kind": "started", "type": "subAgentActivity",
+                },
+                "startedAtMs": 4, "threadId": "thread-1", "turnId": "turn-1",
             },
         },
     ]
@@ -158,9 +190,209 @@ def test_native_observation_tripwire_tracks_active_parent_ordering() -> None:
     )
     restarted = translator.translate(_notification("thread/started", {"thread": second}))
 
-    assert started.payload.to_mapping()["observation"] == "native_thread_started"
-    assert closed.payload.to_mapping()["observation"] == "native_thread_closed"
-    assert restarted.kind is RuntimeEventKind.UNKNOWN
+    assert started.kind is RuntimeEventKind.NATIVE_SUBAGENT_STARTED
+    assert closed.kind is RuntimeEventKind.NATIVE_SUBAGENT_COMPLETED
+    assert restarted.kind is RuntimeEventKind.NATIVE_SUBAGENT_STARTED
+    assert started.payload.to_mapping()["native_thread_ref"] != "native-1"
+    assert closed.payload.to_mapping()["native_thread_ref"] == (
+        started.payload.to_mapping()["native_thread_ref"]
+    )
+
+
+@pytest.mark.invariant("SEC-159")
+def test_root_completion_requires_the_observed_native_tree_to_be_drained() -> None:
+    translator, thread, turn = _translator()
+    translator.translate(
+        _notification(
+            "turn/started",
+            {"threadId": thread.thread_id, "turn": _turn_value(turn, "inProgress")},
+        )
+    )
+    child = thread_payload("native-1", cwd="/srv/boltrig/cells/cell-1/workspace")
+    child["parentThreadId"] = thread.thread_id
+    translator.translate(_notification("thread/started", {"thread": child}))
+
+    with pytest.raises(CodexRuntimeProtocolError, match="tree was not drained"):
+        translator.translate(
+            _notification(
+                "turn/completed",
+                {"threadId": thread.thread_id, "turn": _turn_value(turn, "completed")},
+            )
+        )
+
+    translator.translate(
+        _notification("thread/closed", {"threadId": "native-1"})
+    )
+    completed = translator.translate(
+        _notification(
+            "turn/completed",
+            {"threadId": thread.thread_id, "turn": _turn_value(turn, "completed")},
+        )
+    )
+
+    assert completed.kind is RuntimeEventKind.TURN_COMPLETED
+
+
+@pytest.mark.asyncio
+@pytest.mark.invariant("SEC-159")
+async def test_native_lifetime_expiry_terminates_the_phase_before_completion() -> None:
+    translator, thread, _turn = _translator()
+    client = FakeCodexClient()
+    terminals: list[CodexRuntimeTerminal] = []
+    terminal_seen = asyncio.Event()
+
+    async def on_terminal(
+        _actor: CodexRuntimeActor, terminal: CodexRuntimeTerminal
+    ) -> None:
+        terminals.append(terminal)
+        terminal_seen.set()
+        await client.notify("warning", {"message": "terminal wake"})
+
+    actor = CodexRuntimeActor(
+        client=cast(object, client),  # type: ignore[arg-type]
+        translator=translator,
+        on_terminal=on_terminal,
+        max_buffered_events=8,
+        native_subagent_lifetime_seconds=0.01,
+    )
+    actor.start()
+    child = thread_payload("native-1", cwd="/srv/boltrig/cells/cell-1/workspace")
+    child["parentThreadId"] = thread.thread_id
+    await client.notify("thread/started", {"thread": child})
+
+    await asyncio.wait_for(terminal_seen.wait(), timeout=1)
+    assert terminals == [
+        CodexRuntimeTerminal("limit", "Codex native subagent lifetime exceeded")
+    ]
+    assert actor.terminal == terminals[0]
+    assert actor.pump_task is not None
+    await asyncio.wait_for(actor.pump_task, timeout=1)
+
+
+@pytest.mark.asyncio
+async def test_native_lifetime_timer_is_cancelled_when_the_tree_drains() -> None:
+    translator, thread, _turn = _translator()
+    client = FakeCodexClient()
+
+    async def on_terminal(
+        _actor: CodexRuntimeActor, _terminal: CodexRuntimeTerminal
+    ) -> None:
+        await client.notify("warning", {"message": "terminal wake"})
+
+    actor = CodexRuntimeActor(
+        client=cast(object, client),  # type: ignore[arg-type]
+        translator=translator,
+        on_terminal=on_terminal,
+        max_buffered_events=8,
+        native_subagent_lifetime_seconds=0.02,
+    )
+    actor.start()
+    child = thread_payload("native-1", cwd="/srv/boltrig/cells/cell-1/workspace")
+    child["parentThreadId"] = thread.thread_id
+    await client.notify("thread/started", {"thread": child})
+    await client.notify("thread/closed", {"threadId": "native-1"})
+    await asyncio.sleep(0.05)
+
+    assert actor.terminal is None
+    await actor.fail(CodexRuntimeTerminal("closed", "Codex thread closed"))
+    assert actor.pump_task is not None
+    await asyncio.wait_for(actor.pump_task, timeout=1)
+
+
+def test_collab_items_emit_bounded_structured_activity_without_content() -> None:
+    translator, thread, turn = _translator()
+    translator.translate(
+        _notification(
+            "turn/started",
+            {"threadId": thread.thread_id, "turn": _turn_value(turn, "inProgress")},
+        )
+    )
+    item: dict[str, object] = {
+        "agentsStates": {
+            "native-1": {"message": "SECRET CHILD OUTPUT", "status": "running"},
+        },
+        "id": "collab-1",
+        "model": "gpt-5.2-codex",
+        "prompt": "SECRET CHILD PROMPT",
+        "reasoningEffort": "high",
+        "receiverThreadIds": ["native-1"],
+        "senderThreadId": thread.thread_id,
+        "status": "inProgress",
+        "tool": "spawnAgent",
+        "type": "collabAgentToolCall",
+    }
+    started = translator.translate(
+        _notification(
+            "item/started",
+            {
+                "item": item,
+                "startedAtMs": 1,
+                "threadId": thread.thread_id,
+                "turnId": turn.turn_id,
+            },
+        )
+    )
+    item["status"] = "completed"
+    completed = translator.translate(
+        _notification(
+            "item/completed",
+            {
+                "completedAtMs": 2,
+                "item": item,
+                "threadId": thread.thread_id,
+                "turnId": turn.turn_id,
+            },
+        )
+    )
+
+    assert started.kind is RuntimeEventKind.NATIVE_SUBAGENT_ACTIVITY
+    assert completed.kind is RuntimeEventKind.NATIVE_SUBAGENT_ACTIVITY
+    payload = completed.payload.to_mapping()
+    assert payload["action"] == "spawnAgent"
+    assert payload["lifecycle"] == "completed"
+    assert payload["native_sender_ref"] == "root"
+    assert payload["native_receiver_refs"] != ["native-1"]
+    assert "SECRET" not in repr(payload)
+    assert "gpt-5.2-codex" not in repr(payload)
+
+
+def test_collab_items_fail_closed_when_native_agents_are_disabled_or_widen_model() -> None:
+    for limits, model in (
+        ((0, 0, 0), "gpt-5.2-codex"),
+        ((1, 3, 2), "different/model"),
+    ):
+        translator, thread, turn = _translator(limits=limits)
+        translator.translate(
+            _notification(
+                "turn/started",
+                {"threadId": thread.thread_id, "turn": _turn_value(turn, "inProgress")},
+            )
+        )
+        item = {
+            "agentsStates": {},
+            "id": "collab-1",
+            "model": model,
+            "prompt": "hidden",
+            "reasoningEffort": "high",
+            "receiverThreadIds": ["native-1"],
+            "senderThreadId": thread.thread_id,
+            "status": "inProgress",
+            "tool": "spawnAgent",
+            "type": "collabAgentToolCall",
+        }
+        expected = "not admitted" if limits == (0, 0, 0) else "model ceiling"
+        with pytest.raises(CodexRuntimeProtocolError, match=expected):
+            translator.translate(
+                _notification(
+                    "item/started",
+                    {
+                        "item": item,
+                        "startedAtMs": 1,
+                        "threadId": thread.thread_id,
+                        "turnId": turn.turn_id,
+                    },
+                )
+            )
 
 
 @pytest.mark.parametrize(

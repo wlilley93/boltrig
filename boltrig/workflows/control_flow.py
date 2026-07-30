@@ -10,8 +10,8 @@ routing the interpreter owns itself:
 * ``flow.branch``   - a conditional: evaluates a declarative predicate against
                       parent outputs and records a ``branch`` label; descendant
                       steps that declare a matching ``branch`` run, the rest skip.
-* ``flow.loop``     - recognises an iteration source and records the item count
-                      (full per-item body expansion is a later enhancement).
+* ``flow.loop``     - expands a bounded self-contained body for each item and
+                      applies closed item/index bindings to capability params.
 * ``code.run``      - recognised but NOT executed: arbitrary script execution is
                       unsafe without a sandbox, so it records its intent only.
 
@@ -28,6 +28,13 @@ resolved against a parent step's recorded output.
 from __future__ import annotations
 
 from typing import Any
+
+from .loop_contract import (
+    LoopItemsError,
+    bind_loop_params,
+    loop_body_ids,
+    resolve_bounded_items,
+)
 
 # Nouns the interpreter resolves locally instead of dispatching as capabilities.
 CONTROL_NOUNS = frozenset({"trigger", "flow", "code"})
@@ -122,8 +129,8 @@ def eval_predicate(params: dict[str, Any], results: dict[str, dict[str, Any]]) -
     return _compare(left, op, right)
 
 
-def resolve_items(params: dict[str, Any], results: dict[str, dict[str, Any]]) -> list[Any]:
-    """Resolve the iteration source for a loop: a literal list or a $ref."""
+def resolve_items(params: dict[str, Any], results: dict[str, dict[str, Any]]) -> list[Any] | None:
+    """Resolve a validated literal list or ancestor-output reference."""
     items = params.get("items", _MISSING)
     if items is _MISSING:
         items = params.get("items_from", _MISSING)
@@ -131,7 +138,7 @@ def resolve_items(params: dict[str, Any], results: dict[str, dict[str, Any]]) ->
             items = resolve_ref(items, results)
     if isinstance(items, list):
         return items
-    return []
+    return None
 
 
 def run_control_step(
@@ -142,10 +149,10 @@ def run_control_step(
 ) -> dict[str, Any]:
     """Execute a control-plane step locally. Returns ``{status, output}``.
 
-    ``status`` is ``"ok"`` for every recognised control kind (they cannot fail
-    a run); an unrecognised control action records ``skipped`` so the caller
-    can treat it uniformly. ``output`` carries the step's record (a branch
-    label, a loop item count, the passthrough inputs, etc.).
+    ``status`` is ``"ok"`` for recognised control kinds except a dynamic loop
+    whose runtime items violate the bounded contract; an unrecognised control
+    action records ``skipped``. ``output`` carries the step's record (a branch
+    label, a loop item count and digest, the passthrough inputs, etc.).
     """
     noun, verb = split_action(action)
     if noun == "trigger" and verb == "start":
@@ -157,14 +164,25 @@ def run_control_step(
         return {"status": "ok", "output": {"branch": outcome}}
     if noun == "flow" and verb == "loop":
         items = resolve_items(params, results)
-        overflow = max(0, len(items) - MAX_LOOP_ITEMS)
-        items = items[:MAX_LOOP_ITEMS]
-        output: dict[str, Any] = {"items": len(items), "count": len(items)}
-        if overflow:
-            # The excess items are never dispatched (MAX_LOOP_ITEMS): recorded
+        if items is None:
+            return {
+                "status": "failed",
+                "output": {"reason": "loop_items_unavailable"},
+            }
+        try:
+            bounded = resolve_bounded_items(items)
+        except LoopItemsError as exc:
+            return {"status": "failed", "output": {"reason": exc.reason}}
+        output: dict[str, Any] = {
+            "items": len(bounded.items),
+            "count": len(bounded.items),
+            "items_digest": bounded.digest,
+        }
+        if bounded.overflow:
+            # Excess items beyond the canonical cap are never dispatched: recorded
             # as skipped so the cap is observable in the run record.
-            output["skipped_overflow"] = overflow
-        return {"status": "ok", "output": output, "_items": items}
+            output["skipped_overflow"] = bounded.overflow
+        return {"status": "ok", "output": output, "_items": bounded.items}
     if noun == "code" and verb == "run":
         # Arbitrary script execution is unsafe without a sandbox; record intent.
         script = params.get("script") or params.get("code") or ""
@@ -203,8 +221,9 @@ def branch_matches(
 # --- Loop body iteration (flow.loop) -----------------------------------------
 # A flow.loop step with a resolved items list iterates its body: the maximal
 # descendant sub-graph whose every step has ALL its parents inside {loop} u body.
-# The body is cloned once per item; clones carry __loop_item/__loop_index and
-# parents rewired to the same iteration's clones. A step that mixes a body parent
+# The body is cloned once per item; closed ``loop_bindings`` replace whole
+# top-level params with the typed item/index, and parents are rewired to the
+# same iteration's clones. A step that mixes a body parent
 # with an external parent falls outside the body (it would be ambiguous to
 # iterate) and is skipped with a clear reason. Self-contained bodies iterate
 # fully; this covers the common map/for-each pattern.
@@ -212,31 +231,6 @@ def branch_matches(
 # Items come from prior step output (adapter/agent-influenced), so an unbounded
 # list would fan out into an unbounded number of dispatches per run: cap the
 # iterations a single flow.loop expands into and record the excess as skipped.
-MAX_LOOP_ITEMS = 100
-
-
-def loop_body_ids(steps: list[dict[str, Any]], loop_id: str) -> list[str]:
-    """The iterable body of ``loop_id``: descendant step ids (topo order) whose
-    parents are all inside {loop_id} u the body itself."""
-    by_id = {s["id"]: s for s in steps}
-    if loop_id not in by_id:
-        return []
-    children: dict[str, list[str]] = {sid: [] for sid in by_id}
-    for s in steps:
-        for p in s.get("parents", []) or []:
-            if p in children:
-                children[p].append(s["id"])
-    body: list[str] = []
-    frontier = list(children.get(loop_id, []))
-    while frontier:
-        sid = frontier.pop(0)
-        if sid in body:
-            continue
-        parents = by_id[sid].get("parents", []) or []
-        if all(p == loop_id or p in body for p in parents):
-            body.append(sid)
-            frontier.extend(children.get(sid, []))
-    return body
 
 
 def expand_loop(
@@ -244,11 +238,11 @@ def expand_loop(
 ) -> tuple[list[dict[str, Any]], list[str]]:
     """Return ``(new_ordered, body_ids)`` with ``loop_id``'s body cloned once per
     item. Body originals are removed and replaced by per-item clones placed right
-    after the loop step. When items is empty or there is no body, returns the
-    list unchanged with an empty body.
+    after the loop step. An empty item list removes the body and aggregates zero
+    iterations; only a loop with no body returns the list unchanged.
     """
     body = loop_body_ids(ordered, loop_id)
-    if not body or not items:
+    if not body:
         return ordered, []
     by_id = {s["id"]: s for s in ordered}
     clones: list[dict[str, Any]] = []
@@ -259,13 +253,9 @@ def expand_loop(
                 p if (p == loop_id or p not in body) else f"{p}__{k}"
                 for p in (orig.get("parents") or [])
             ]
-            clone = dict(orig)
+            clone = bind_loop_params(orig, item=item, index=k)
             clone["id"] = f"{sid}__{k}"
             clone["parents"] = parents
-            params = dict(orig.get("params") or {})
-            params["__loop_item"] = item
-            params["__loop_index"] = k
-            clone["params"] = params
             clones.append(clone)
     new_ordered: list[dict[str, Any]] = []
     for s in ordered:
@@ -283,6 +273,8 @@ def aggregate_loop_results(
     results: dict[str, dict[str, Any]],
     body_ids: list[str],
     item_count: int,
+    *,
+    actions: dict[str, str] | None = None,
 ) -> None:
     """Collapse per-item clone results back onto each original body step id so the
     run record (keyed by original step id) reflects the iteration. Sets
@@ -299,7 +291,7 @@ def aggregate_loop_results(
                 all_ok = False
             iterations.append(clone.get("output"))
         results[sid] = {
+            "action": (actions or {}).get(sid),
             "status": "ok" if all_ok else "failed",
             "output": {"iterations": iterations, "count": item_count},
         }
-

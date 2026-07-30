@@ -31,6 +31,10 @@ const KERNEL_PROXY = {
 };
 
 export default defineConfig({
+  // The maintained Operator build is also packaged beneath /operator/ in the
+  // profile-gated Worker candidate image. The default remains "/" for the
+  // current standalone UI image and local development.
+  base: process.env.BOLTRIG_UI_BASE || "/",
   plugins: [react(), enforceChunkBudget()],
   resolve: {
     alias: {

@@ -10,6 +10,20 @@
 {$BOLTRIG_DOMAIN:localhost} {
 	encode gzip
 
+	# First-party browser surfaces share one restrictive edge policy. Voice media
+	# stays same-origin through Worker's /voice WebSocket proxy, so microphone may
+	# be granted to self without opening camera, geolocation or arbitrary connect
+	# destinations. style-src keeps inline declarations because both maintained
+	# React clients use bounded component style props.
+	header {
+		Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		Permissions-Policy "camera=(), geolocation=(), microphone=(self)"
+		Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; media-src 'self' blob:; worker-src 'self' blob:"
+	}
+
 	# kernel API + health (the dispatch chokepoint)
 	handle /v1/* {
 		reverse_proxy kernel:8000
@@ -18,8 +32,12 @@
 		reverse_proxy kernel:8000
 	}
 
-	# everything else is the React console
+	# Everything else is the selected first-party presentation. The ordinary
+	# deployment leaves this unset and reaches the maintained Operator image.
+	# Decision 0021's explicit worker-primary overlay sets it to worker-ui:80;
+	# that image still packages Operator at /operator/ for rollback and advanced
+	# administration. This is deployment data, never a client-side redirect.
 	handle {
-		reverse_proxy ui:80
+		reverse_proxy {$BOLTRIG_FRONTEND_UPSTREAM:ui:80}
 	}
 }

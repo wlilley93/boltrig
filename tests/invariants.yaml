@@ -21,6 +21,19 @@
 # are Boltrig-local (from the SRS) and never restate a K-*.
 
 invariants:
+  CODEX-COMPOSITION-1:
+    description: 'Each serving process constructs at most one trusted Codex provider and loads at most one manifest snapshot, then injects that exact configuration plus the snapshot''s sensitive/local model-routing role into every packaged spawner it owns: API kernel-bound verbs, Chat, platform/eval, direct spawn, standalone fleet pump, default Hatchet pump and Ultracode tasks. The same snapshot seeds API authentication and kernel policy and is the only source manifest overlaid for durable-fleet construction, so a file change cannot split kernel and pump routing. A source gate rejects any new packaged build_spawner call without explicit codex_config and sensitive_endpoint_id policy, while missing Ultracode composition fails closed rather than constructing a side provider. A sensitive request may use its already-sensitive bound endpoint or the composed local role; an absent role remains a refusal, never standard-provider fallback. The trusted factory remains a total no-op when its flag is off, legacy runtimes remain off, and production admission remains unchanged.'
+    tests:
+      - tests/unit/test_codex_trusted_composition.py::test_returns_none_when_codex_trusted_off
+      - tests/unit/test_codex_trusted_composition.py::test_make_app_spawner_threads_codex_and_sensitive_policy_to_resolver
+      - tests/unit/test_codex_trusted_composition.py::test_make_agent_invoker_threads_runtime_policy_to_resolver
+      - tests/unit/test_codex_trusted_composition.py::test_api_composition_shares_one_codex_config_with_every_factory
+      - tests/unit/test_codex_trusted_composition.py::test_kernel_uses_the_composition_manifest_snapshot_without_rereading
+      - tests/unit/test_codex_trusted_composition.py::test_standalone_worker_shares_one_codex_provider_with_its_spawner
+      - tests/unit/test_codex_trusted_composition.py::test_default_hatchet_bootstrap_shares_one_codex_provider_with_its_spawner
+      - tests/unit/test_codex_trusted_composition.py::test_local_ultracode_task_uses_only_its_composition_owned_spawner
+      - tests/unit/test_codex_trusted_composition.py::test_every_packaged_build_spawner_call_explicitly_threads_runtime_policy
+      - tests/integration/test_ultracode_run.py::test_ultracode_run_without_a_composition_spawner_fails_closed
   CODEX-APPROVAL-1:
     description: 'An inbound codex server-initiated request (its per-tool-call item/tool/requestUserInput approval) is answered on a side task and NEVER terminates the single-reader notification pump ([2026] VJS-COUNTY 12; AGENTS.md graceful degradation).'
     tests:
@@ -130,14 +143,23 @@ invariants:
       - tests/unit/test_skill_discovery.py::test_unselected_bundled_skill_must_be_disabled
       - tests/unit/test_skill_discovery.py::test_digest_drift_after_materialization_fails_closed
   SEC-159:
-    description: 'Codex runtime configuration is deterministically composed from a private revalidated request snapshot with secretless command authentication, read-only sandboxing, approvals and every reviewed dynamic surface disabled, lexically cell-local helper and skill paths, and exact receipt-to-TOML coherence; coherent forgeries cannot widen helper or skill policy, request repr is redacted and pickle/copy serialization is blocked, and production readiness remains false until trusted-root, no-symlink, and evidence verification are wired.'
+    description: 'Codex runtime configuration is deterministically composed from a private revalidated request snapshot with secretless command authentication, read-only sandboxing, approvals and every reviewed dynamic surface disabled by default, lexically cell-local helper and skill paths, and exact receipt-to-TOML coherence. Stable V1 collaboration is the sole typed exception: exact thread/depth limits are bound into TOML, receipt and live argv, every Responses request is effort-pinned, spawn calls are prevalidated against the model/effort and a cell-lifetime total, lifetime expiry terminates the phase, and the observed descendant tree must drain before root completion is accepted. Coherent forgeries cannot widen helper or skill policy, request repr is redacted and pickle/copy serialization is blocked. Native subagent admission remains exactly zero until the pinned App Server and production cleanup/configuration controls pass end-to-end acceptance; production readiness also remains false until trusted-root, no-symlink, and evidence verification are wired.'
     tests:
       - tests/unit/test_codex_runtime_config.py::test_composes_exact_secretless_read_only_config_and_receipt
+      - tests/unit/test_codex_runtime_config.py::test_stable_v1_native_limits_are_bound_in_toml_receipt_and_argv
       - tests/unit/test_codex_runtime_config.py::test_caller_constructible_surface_digests_never_grant_dynamic_surfaces
       - tests/unit/test_codex_runtime_config_adversarial.py::test_compose_revalidates_a_request_mutated_after_construction
       - tests/unit/test_codex_runtime_config_adversarial.py::test_compose_uses_a_private_snapshot_after_validation
       - tests/unit/test_codex_runtime_config_adversarial.py::test_self_consistent_receipt_cannot_move_helper_into_the_cell_root
       - tests/unit/test_codex_runtime_config_adversarial.py::test_self_consistent_receipt_cannot_widen_skill_policy
+      - tests/unit/test_codex_runtime_admission_hardening.py::test_quarantined_admission_requires_all_native_limits_to_be_zero
+      - tests/unit/test_model_proxy_tool_ceiling.py::test_native_spawn_is_prevalidated_and_charged_once_across_response_streams
+      - tests/unit/test_model_proxy_tool_ceiling.py::test_native_spawn_rejects_unadmitted_overrides_before_execution
+      - tests/unit/test_codex_runtime_notifications.py::test_native_lifetime_expiry_terminates_the_phase_before_completion
+      - tests/unit/test_codex_runtime_notifications.py::test_root_completion_requires_the_observed_native_tree_to_be_drained
+      - tests/integration/test_codex_cell_smoke.py::test_exact_pinned_binary_accepts_stable_v1_collaboration_limits
+    service_gated:
+      - tests/integration/test_codex_cell_smoke.py::test_exact_pinned_binary_accepts_stable_v1_collaboration_limits
   SEC-161:
     description: 'Capability-effect attestations can only reject an existing exact assignment authority snapshot - admission binds tenant, workspace, root, phase, assignment, authority evaluation id/digest/generation, catalog generation/digest, and the complete verb-definition/classification set; only READ_ONLY_NO_EXTERNAL_EFFECT with LOW consequence, or an exact empty no-tool set, admits, while egress, mutation, high consequence, drift, partial/broader evidence, subclass spoofing, and malformed evidence fail closed.'
     tests:
@@ -209,20 +231,27 @@ invariants:
       - tests/store/test_channel_durability.py::test_outbox_claim_honours_channel_set_and_lease_expiry
       - tests/store/test_channel_durability.py::test_outbox_fail_backs_off_then_terminates
   SEC-177:
-    description: 'The channel gateway owns no policy/grants/persistent credential - it re-enters over a run-scoped token from the MCP seam (admin-minted, socket-channels-only, channel-set-bounded, revocable), signs intake with the connect-time secret over the ONE intake route, and the generic adapter proves both links end to end.'
+    description: 'The channel gateway owns no policy, grants or credential authority. It re-enters over a show-once run-scoped token from the MCP seam (author-minted, socket-channels-only, channel-set-bounded, revocable and no-verb), and a durable tenant/channel lease elects exactly one private token owner before resolved provider credentials, heartbeat, outbox or call links are admitted. Standbys receive no provider credential; Worker exposes only a safe gateway label and lease expiry, never the owner lease id or a liveness claim. Canonical production rejects static channel snapshots, a changed valid mounted token file can recover after authorization refusal, and the Compose healthcheck consults /ready. The gateway signs intake over the ONE route and the generic adapter proves both links end to end. Token-file placement, process-local MCP token routing and real provider failover remain deployment acceptance.'
     tests:
       - tests/security/test_channel_gateway_routes.py::test_session_mint_is_admin_gated_and_socket_only
       - tests/security/test_channel_gateway_routes.py::test_outbox_links_require_a_sidecar_run_token
       - tests/security/test_channel_gateway_routes.py::test_outbox_claim_ack_fail_over_the_sidecar_token
+      - tests/security/test_channel_gateway_routes.py::test_only_owner_receives_resolved_secrets_heartbeat_and_outbox_work
       - tests/security/test_channel_gateway_routes.py::test_socket_intake_uses_the_one_signed_route_with_durable_dedup
       - tests/security/test_channel_gateway_roundtrip.py::test_generic_adapter_round_trip_against_a_test_kernel
+      - tests/security/test_channel_socket_provisioning.py::test_worker_authored_slack_refs_reconcile_without_browser_secret_exposure
+      - tests/security/test_channel_socket_provisioning.py::test_socket_plaintext_secret_is_refused
+      - tests/store/test_channel_durability.py::test_gateway_owner_lease_is_single_winner_expiring_and_tenant_scoped
+      - tests/security/test_channel_gateway_recovery.py::test_gateway_hot_loads_only_a_changed_valid_token_file
+      - tests/security/test_channel_gateway_recovery.py::test_gateway_refuses_ambiguous_token_sources_and_production_static_specs
+      - tests/security/test_channel_gateway_recovery.py::test_compose_probes_gateway_readiness_and_declares_file_recovery
       - tests/security/test_channel_slack_roundtrip.py::test_slack_adapter_round_trip_against_a_test_kernel
       - tests/security/test_channel_telegram_roundtrip.py::test_telegram_adapter_round_trip_against_a_test_kernel
       - tests/security/test_channel_discord_roundtrip.py::test_discord_adapter_round_trip_against_a_test_kernel
       - tests/security/test_channel_signal_roundtrip.py::test_signal_adapter_round_trip_against_a_test_kernel
       - tests/security/test_channel_xai_voice_roundtrip.py::test_voice_adapter_round_trip_against_a_test_kernel
   SEC-178:
-    description: 'Channel addressing is routing data, not authority - intake resolves the target (explicit sender target, else the channel config chat->target mapping, else the tier-1 CoS default) and stamps it plus the reply route on the work item; identity stays binding-row-authoritative. A target of the form "workflow:<wf_id>" is honored by the pump BEFORE any CoS routing: the named workflow is triggered through the durable library path (checkpointed, engine task) under the SENDER''s grants - every step chokepoint-checked - and an unknown workflow fails closed exactly like an unroutable department (parked AWAITING_HUMAN with a HITL filed), never a silent fallthrough to CoS routing.'
+    description: 'Channel addressing is routing data, not authority - intake resolves the target (explicit sender target, else the channel config chat->target mapping, else the tier-1 CoS default) and stamps it plus the reply route on the work item; identity stays binding-row-authoritative. Governed authoring validates targets against a backend-owned, caller-scoped catalogue of CoS, visible permanent departments and active workspace-visible workflows; existing unknown values project as stale_or_unsupported and arbitrary capability/agent pinning is never advertised. A target of the form "workflow:<wf_id>" is honored by the pump BEFORE any CoS routing: the named workflow is triggered through the durable library path (checkpointed, engine task) under the SENDER''s grants - every step chokepoint-checked - and an unknown workflow fails closed exactly like an unroutable department (parked AWAITING_HUMAN with a HITL filed), never a silent fallthrough to CoS routing.'
     tests:
       - tests/security/test_channel_addressing.py::test_intake_defaults_to_the_tier1_chief_of_staff
       - tests/security/test_channel_addressing.py::test_an_explicit_target_addresses_a_tier2_subagent
@@ -230,15 +259,18 @@ invariants:
       - tests/security/test_channel_addressing.py::test_a_config_mapped_workflow_target_triggers_the_workflow
       - tests/security/test_channel_addressing.py::test_an_unknown_workflow_target_parks_for_a_human
       - tests/security/test_channel_addressing.py::test_a_bare_workflow_prefix_is_not_a_workflow_target
+      - tests/security/test_channel_addressing_catalogue.py::test_channel_inventory_projects_scoped_targets_and_stale_routes_honestly
+      - tests/security/test_channel_addressing_catalogue.py::test_authored_channel_targets_are_validated_against_runtime_contract
       - tests/security/test_pump_principal_authority.py::test_an_addressed_item_routes_to_its_named_head_not_the_inferred_one
       - tests/security/test_pump_principal_authority.py::test_an_unknown_target_falls_back_to_the_inferred_route
   SEC-180:
-    description: 'Self-serve onboarding for customer-facing channels is opt-in config, never authority - an unknown VERIFIED sender on a channel whose config carries self_onboard is bound at the configured CONSTRAINED role (never above member; an over-broad config role disables onboarding fail-closed) as a synthetic external:<platform>:<id> subject with NO user record, so the resolved principal''s grant ceiling is the member tier''s (operates, but control.* configure/administer verbs are denied). The onboarding is a first-class audited event (who / platform id / role), rate-limited per channel before any binding is minted, and can enqueue a static welcome to the durable outbox. Off by default: a channel without self_onboard rejects an unpaired sender exactly as before.'
+    description: 'Self-serve onboarding for customer-facing channels is opt-in config, never authority - governed authoring accepts only the member role and a unique department list within the author''s current scope; an unknown VERIFIED sender is bound as a synthetic external:<platform>:<id> subject with NO user record, so the resolved principal''s grant ceiling is the member tier''s (operates, but control.* configure/administer verbs are denied). The onboarding is a first-class audited event (who / platform id / role), rate-limited per channel before any binding is minted, and can enqueue a bounded static welcome to the durable outbox. Off by default: a channel without self_onboard rejects an unpaired sender exactly as before.'
     tests:
       - tests/security/test_channel_self_onboard.py::test_a_stranger_onboards_at_exactly_the_configured_constrained_role
       - tests/security/test_channel_self_onboard.py::test_onboarding_is_rate_limited_per_channel
       - tests/security/test_channel_self_onboard.py::test_off_by_default_and_an_over_broad_role_never_onboards
       - tests/security/test_channel_self_onboard.py::test_an_existing_binding_is_never_onboarded_over
+      - tests/security/test_channel_addressing_catalogue.py::test_self_onboarding_policy_is_member_only_and_author_scope_bounded
   SEC-182:
     description: 'The four-eyes independent-approver rule (SEC-14) has exactly one bootstrap exemption - on a tenant with a single active author-tier user, that user may self-approve (otherwise no high-consequence control verb, including the invitation flow that adds a second human, could ever complete); every exempted self-approval writes a hitl.sole_author_approval audit flag, and the exemption lapses automatically when a second active author exists, never applies to non-authors or deactivated accounts, and never lifts the assignment, humanity, or live-grant requirements.'
     tests:
@@ -490,7 +522,7 @@ invariants:
     tests:
       - tests/integration/test_generated_adapter.py::test_generator_derives_verbs_from_openapi
   SEC-22:
-    description: 'A generated / consumed adapter is inert until a human review gate activates it, and its lifecycle stays governed after activation - control.adapter.deactivate suspends a live adapter by unpublishing its owned verbs (dispatch refuses exactly as for a never-registered verb, and the review gate must re-run to reactivate), and control.adapter.delete removes a non-live adapter''s rows (adapter, owned verbs/bindings, orphaned nouns, an unshared credential ref) while refusing a live one fail-closed. Registration persists what boot needs to rebuild the instance (an MCP consumer''s url in the row''s spec_ref), boot rehydrates control-plane-registered consumers from their rows (skipping loudly what it cannot reconstruct honestly), and the lifecycle verbs govern even a non-rehydrated store-only row via the approval-context store fallback.'
+    description: 'A generated / consumed adapter is inert until a human review gate activates it, and its lifecycle stays governed after activation. Generic adapters retain governed activate/deactivate/delete controls. Generated adapters persist a bounded executable projection rather than the raw OpenAPI document, so unused security schemes, examples and extensions are not reconstruction state; boot, author source inspection, approval and cross-replica dispatch reconstruct the exact durable generation while inactive state overrides stale live replicas. External MCP servers use dedicated probe/activate/deactivate/retire/restore controls: deactivate unpublishes owned verbs, retire preserves registration, credentials, snapshots and probe history, and generic adapter controls cannot bypass that state machine. Unreconstructible rows are skipped loudly and lifecycle controls govern store-only rows through the approval-context store fallback.'
     tests:
       - tests/integration/test_generated_adapter.py::test_generated_adapter_inert_until_reviewed
       - tests/integration/test_mcp_consumer.py::test_consumed_server_inert_until_reviewed
@@ -499,16 +531,18 @@ invariants:
       - tests/security/test_adapter_lifecycle.py::test_deactivate_is_a_clean_noop_on_an_inert_adapter
       - tests/security/test_adapter_lifecycle.py::test_an_unknown_adapter_is_a_governed_not_found
       - tests/security/test_adapter_lifecycle.py::test_delete_refuses_a_live_adapter
-      - tests/security/test_adapter_lifecycle.py::test_delete_reverses_registration_exactly
+      - tests/security/test_adapter_lifecycle.py::test_retire_preserves_registration_and_history
       - tests/security/test_adapter_lifecycle.py::test_delete_refuses_the_control_adapter_itself
       - tests/security/test_adapter_lifecycle.py::test_registration_persists_the_url_for_boot_rehydration
       - tests/security/test_adapter_lifecycle.py::test_boot_rehydrates_a_control_plane_registered_consumer
       - tests/security/test_adapter_lifecycle.py::test_boot_skips_rows_it_cannot_reconstruct_loudly
+      - tests/security/test_adapter_lifecycle.py::test_generated_adapter_is_durable_across_restart_and_replicas
       - tests/security/test_adapter_lifecycle.py::test_lifecycle_verbs_govern_a_store_only_phantom_row
       - tests/security/test_adapter_lifecycle.py::test_phantom_row_activate_rehydrates_on_demand
       - tests/security/test_adapter_lifecycle.py::test_phantom_row_without_a_url_fails_loudly_and_typed
       - tests/security/test_mcp_consumer_activation.py::test_approval_for_the_inert_adapter_covers_discovery
       - tests/store/test_store_parity.py::test_adapter_lifecycle_deletes_are_idempotent_and_tenant_scoped
+      - tests/store/test_store_parity.py::test_generated_adapter_projection_roundtrips_on_both_stores
   FR-MCP-03:
     description: 'An external MCP server is consumed as an adapter - its tools register as verbs.'
     tests:
@@ -898,24 +932,30 @@ invariants:
       - tests/security/test_rate_limit_backend.py::test_both_backends_admit_and_refuse_the_identical_sequence
       - tests/security/test_rate_limit_backend.py::test_the_shared_counter_survives_a_kernel_restart
   FR-COST-02:
-    description: 'A hard-stop budget halts before exceeding; a soft budget records overage only.'
+    description: 'A hard-stop budget halts before exceeding; a soft budget records overage only. Run usage is isolated by exact hashed run identity and a configured run policy without an exact run id fails closed; daily and monthly usage selects durable UTC buckets and rolls automatically at the calendar boundary.'
     tests:
       - tests/security/test_budget_and_pii.py::test_budget_hard_stop_halts_before_exceeding
       - tests/security/test_budget_and_pii.py::test_soft_budget_does_not_halt
       - tests/security/test_budget_and_pii.py::test_reserve_honors_atomic_store_refusal
+      - tests/store/test_budget_windows.py::test_daily_window_rolls_at_the_utc_boundary
+      - tests/store/test_budget_windows.py::test_monthly_window_rolls_at_the_utc_boundary
+      - tests/store/test_budget_windows.py::test_run_window_is_exact_isolated_and_requires_a_run_id
   US-COST-02:
     description: 'A soft (non-hard-stop) budget fires exactly one pre-emptive alert when a reservation crosses the 0.8 threshold, and none below it.'
     tests:
       - tests/security/test_budget_and_pii.py::test_soft_budget_fires_preemptive_alert_when_crossing_the_threshold
   FR-COST-03:
-    description: 'The budget ledger is trued-up to ACTUAL usage post-run - the pre-run estimate is reconciled by the signed (actual - estimate) delta, and a degraded/zero-usage run refunds the whole estimate (audit M14).'
+    description: 'The budget ledger is trued-up to ACTUAL usage post-run - the pre-run estimate is reconciled by the signed (actual - estimate) delta, and a degraded/zero-usage run refunds the whole estimate (audit M14). The exact reservation receipt pins reconciliation to the bucket originally charged even across a UTC boundary; a governed reset generation makes an older in-flight receipt a no-op instead of repopulating cleared usage.'
     tests:
       - tests/security/test_cost_trueup.py::test_budget_trued_up_to_actual_after_run
       - tests/security/test_cost_trueup.py::test_degraded_run_refunds_the_estimate
+      - tests/store/test_budget_windows.py::test_true_up_stays_in_the_exact_reserved_window_across_midnight
+      - tests/store/test_budget_windows.py::test_manual_reset_invalidates_an_older_true_up_receipt
   FR-COST-04:
-    description: 'Cost is priced from a policy-as-data per-model price table - an explicit per-model micros-per-token rate wins, an unpriced model falls back to the cost-tier default (audit M14).'
+    description: 'Cost is priced from a policy-as-data per-model price table - an explicit per-model micros-per-token rate wins, an unpriced model falls back to the cost-tier default (audit M14). The authoring and manifest vocabulary is closed to cheap, standard and expensive, so an invented tier cannot sort as unknown while billing through a different fallback.'
     tests:
       - tests/security/test_cost_trueup.py::test_model_price_from_config_overrides_tier_default
+      - tests/security/test_cost_trueup.py::test_cost_tier_vocabulary_is_closed_across_manifest_and_control
   FR-COST-05:
     description: 'The multi-scope budget reserve is transactional - debiting every scope in one all-or-nothing step so a concurrent reserve can never leave one scope charged for a call another scope refused (audit H4, engine-plan Phase 6). Verified on both store backends.'
     tests:
@@ -1081,7 +1121,6 @@ invariants:
       - tests/integration/test_control_flow.py::test_branch_runs_only_the_matching_arm
       - tests/integration/test_control_flow.py::test_branch_false_arm_runs_when_predicate_is_false
       - tests/integration/test_control_flow.py::test_loop_records_item_count_without_crashing
-      - tests/integration/test_control_flow.py::test_loop_iterates_body_once_per_item
       - tests/integration/test_control_flow.py::test_loop_with_dynamic_items_from_parent_output
       - tests/integration/test_control_flow.py::test_code_run_is_recognised_but_not_executed
   SEC-50:
@@ -1206,6 +1245,14 @@ invariants:
       - tests/store/test_store_parity.py::test_audit_query_scoped_page_is_clamped
       - tests/store/test_store_parity.py::test_list_work_items_by_refs_matches_ids_and_hatchet_aliases
       - tests/store/test_store_parity.py::test_list_run_items_scoped_pushes_run_scope_into_the_store
+  SEC-ACCOUNT-AUDIT-PAGE-01:
+    description: 'Own-account activity applies actor/on_behalf_of identity inside the tenant-scoped store read before a bounded newest-first LIMIT/OFFSET page, so another actor cannot crowd the caller out of the tail and no tenant-wide slice reaches the route. Audit and security browser filters likewise compose with the existing department/workspace scope inside the store before pagination. These view reads never replace or narrow audit_scan/security_scan, so full hash-chain verification semantics are unchanged.'
+    tests:
+      - tests/security/test_account_activity_pagination.py::test_account_activity_filters_identity_before_limit_and_pages_newest_first
+      - tests/security/test_account_activity_pagination.py::test_account_activity_rejects_unbounded_pages
+      - tests/security/test_audit_browser.py::test_audit_search_filters_before_pagination_without_changing_chain_verify
+      - tests/store/test_store_parity.py::test_account_activity_filters_before_offset_page_on_both_stores
+      - tests/store/test_store_parity.py::test_audit_and_security_search_filter_before_pages_on_both_stores
   SEC-70:
     description: 'The durable and sensitive control plane is not LAN-exposed and the DB carries no baked default credential - Hatchet''s engine (plaintext gRPC + API), its unauthenticated dashboard, and the sensitive-data local model bind operator ports to 127.0.0.1 in the base compose and are dropped entirely (ports []) by the secure overlay, and POSTGRES_PASSWORD uses the compose required-var form so the stack refuses to start unset while the Hatchet DSN interpolates the password rather than hardcoding boltrig:boltrig (M8/M9).'
     tests:
@@ -1282,14 +1329,34 @@ invariants:
     tests:
       - tests/kernel/test_event_relay.py::test_closed_streams_are_bounded_and_oldest_forgotten
       - tests/kernel/test_event_relay.py::test_open_streams_are_never_evicted
+      - tests/kernel/test_redis_event_relay.py::test_redis_closed_retention_is_bounded_and_tenant_scoped
+  NFR-CONV-03:
+    description: 'Production composition fails closed without Redis and uses one tenant-scoped Redis Stream relay for bounded cursor replay, live tailing and completion across replicas; the same relay owns shared active-run truth and a per-conversation lock so another replica can authorize reattachment without admitting a parallel turn. Development retains the deterministic in-memory backend. Both backends preserve monotonic cursor, trim and reopen semantics, and a separate service-gated test exercises two real Redis clients.'
+    tests:
+      - tests/kernel/test_redis_event_relay.py::test_relay_backends_preserve_bounded_cursor_and_reopen_semantics
+      - tests/kernel/test_redis_event_relay.py::test_two_redis_replicas_share_replay_live_close_and_active_run_truth
+      - tests/kernel/test_redis_event_relay.py::test_chat_projection_on_replica_b_follows_replica_a_canonical_run
+      - tests/kernel/test_redis_event_relay.py::test_two_chat_replicas_admit_one_turn_and_durably_queue_the_steer
+      - tests/kernel/test_redis_event_relay.py::test_direct_input_is_durable_before_another_replica_can_append_a_steer
+      - tests/kernel/test_redis_event_relay.py::test_turn_admission_rolls_back_cleanly_at_each_storage_boundary
+      - tests/kernel/test_redis_event_relay.py::test_evicted_closed_stream_keeps_a_bounded_completion_tombstone
+      - tests/kernel/test_redis_event_relay.py::test_live_subscriber_fails_loudly_when_it_falls_behind_the_trim_window
+      - tests/kernel/test_redis_event_relay.py::test_conversation_lock_renews_while_a_store_write_is_slow
+      - tests/kernel/test_redis_event_relay.py::test_next_turn_never_overwrites_a_successor_after_lease_loss
+      - tests/kernel/test_redis_event_relay.py::test_stale_run_stops_when_active_lease_refresh_loses_ownership
+      - tests/kernel/test_redis_event_relay.py::test_production_factory_refuses_an_in_memory_fallback
+      - tests/kernel/test_redis_event_relay.py::test_redis_relay_closes_both_clients_on_shutdown
+      - tests/emotion/test_relay.py::test_emotion_observes_the_shared_redis_relay_without_a_second_backlog
+      - tests/emotion/test_relay.py::test_broken_emotion_initialization_returns_the_supplied_shared_backend
 
   # --- Chat attachments ([2026] VJS-COUNTY 3) --------------------------------
   SEC-79:
-    description: 'Inline attachment caps are enforced fail-closed at chat intake - an over-cap turn (count, per-attachment decoded bytes, or total decoded bytes) is rejected whole before add_message and before any stream yield with nothing persisted, over-cap input is never truncated, and a manifest can only tighten a cap below its conservative non-zero code default (min(default, manifest)), never loosen it.'
+    description: 'Inline attachment caps are enforced fail-closed at chat intake - an over-cap turn (count, per-attachment decoded bytes, or total decoded bytes) is rejected whole before add_message and before any stream yield with nothing persisted, over-cap input is never truncated, and a manifest can only tighten a cap below its conservative non-zero code default (min(default, manifest)), never loosen it. Authenticated clients receive the exact active caps and the server-derived media readability contract for safe preflight.'
     tests:
       - tests/security/test_chat_attachments.py::test_over_cap_turn_is_rejected_with_nothing_persisted
       - tests/security/test_chat_attachments.py::test_per_attachment_and_total_byte_caps_enforced_on_decoded_bytes
       - tests/security/test_chat_attachments.py::test_manifest_can_only_tighten_caps_never_loosen
+      - tests/security/test_chat_attachments.py::test_authenticated_clients_receive_exact_attachment_limits_and_readability
   SEC-80:
     description: 'Attachment content reaches the model only as data - an agent-readable text/* attachment is enveloped via wrap_untrusted(kind=attachment) into the task, and every non-text attachment persists record-only and is never decoded into the task or model input.'
     tests:
@@ -1370,6 +1437,8 @@ invariants:
       - tests/integration/test_chat.py::test_second_user_cannot_steer_an_in_flight_conversation
       - tests/integration/test_chat.py::test_cancel_wins_over_the_queue
       - tests/integration/test_chat.py::test_http_steer_returns_202_queued_and_stream_carries_both_turns
+      - tests/kernel/test_redis_event_relay.py::test_direct_input_is_durable_before_another_replica_can_append_a_steer
+      - tests/kernel/test_redis_event_relay.py::test_turn_admission_rolls_back_cleanly_at_each_storage_boundary
   SEC-88:
     description: 'Chat tool events never leak verb values (K-20 bounded observability on the user-facing surface) - a secret/untrusted value passed to a verb appears nowhere on the chat stream nor in the persisted turn events (only key names + counts do), while the full payload still exists on the run relay for the canvas + durable audit.'
     tests:
@@ -1398,6 +1467,11 @@ invariants:
     description: 'Below the threshold the composition is unchanged - with fewer than compaction_threshold live messages (or compaction disabled) compose_turn_task renders the full verbatim history byte-identical to the pre-compaction continuity render, even when a summary row exists, so short conversations are never altered.'
     tests:
       - tests/security/test_conversation_compaction.py::test_below_threshold_composition_is_unchanged
+  FR-CONV-08:
+    description: 'The authenticated owner-facing conversation projection reports the exact model-context compaction state used by the next turn: whether compaction is active, the covered count and boundary, the recent verbatim count, and the real derived summary. It reports inactive rather than inventing a boundary when compaction is disabled, below threshold, missing, stale, or covers no tail; Worker keeps the complete durable transcript visible alongside that disclosure.'
+    tests:
+      - tests/security/test_conversation_compaction.py::test_compaction_view_matches_the_exact_next_turn_boundary
+      - tests/security/test_conversation_compaction.py::test_compaction_view_is_honestly_inactive_without_a_usable_boundary
 
   # --- Conversation history: pagination + owner-scoped search (US-CONV-09/10) --
   FR-CONV-07:
@@ -1544,7 +1618,7 @@ invariants:
     tests:
       - tests/security/test_ai_keys.py::test_allow_own_false_ignores_workspace_and_user_keys
   SEC-113:
-    description: 'An AI key is stored ONLY as a sealed credential ref and never returned or audited in plaintext (D5, SEC-05/K-20) - the governed PUT /v1/ai-keys accepts the key once, stores it through set_credential_ref (the ai_configs row holds only the credential_ref), never echoes it in the response or the list view, and writes a keys-only audit row (level/scope/provider/model + the ref id) so the raw key appears in no audit detail; the key remains retrievable only kernel-side from the sealed store.'
+    description: 'An AI key is stored ONLY as a sealed credential ref and never returned or audited in plaintext (D5, SEC-05/K-20) - the governed PUT /v1/ai-keys accepts the key once, envelope-seals it before approval under an opaque proposal (the proposal and ai_configs rows have no plaintext field), never echoes it in response or list views, and writes keys-only audit rows so the raw key appears in no audit detail; after exact approval, material remains retrievable only kernel-side from the sealed store.'
     tests:
       - tests/security/test_ai_keys.py::test_ai_key_is_sealed_never_returned_or_audited
   SEC-114:
@@ -1603,6 +1677,34 @@ invariants:
     description: 'list_workflows returns exactly one current definition (the latest version) per workflow id, identically on the in-memory and Postgres stores - the durable store collapses versioned rows the same way list_skills/get_skill do, so callers matching a workflow by id never see duplicate or stale versions.'
     tests:
       - tests/store/test_store_parity.py::test_list_workflows_returns_latest_version_per_id_on_both_stores
+  FR-WFL-19:
+    description: 'flow.loop is a closed bounded data contract: exactly one literal or ancestor-output item source is validated before any action dispatch, nested loops and malformed bindings fail closed, and at most 100 selected items / 256 KiB bind whole typed values into predeclared top-level params. Stable per-iteration ids use a reserved clone-id namespace to preserve distinct schema checks, grants, HITL requests, idempotency keys, audit and checkpoint replay; empty input executes zero body actions, and authored invalid contracts are refused before persistence.'
+    tests:
+      - tests/integration/test_control_flow.py::test_loop_binding_substitutes_typed_item_and_index
+      - tests/integration/test_control_flow.py::test_empty_loop_dispatches_no_body_actions
+      - tests/integration/test_control_flow.py::test_invalid_loop_contract_dispatches_nothing
+      - tests/integration/test_durable_resume.py::test_loop_replay_uses_stable_iteration_checkpoints
+      - tests/integration/test_durable_resume.py::test_loop_hitl_approves_each_bound_iteration_exactly_once
+      - tests/security/test_workflow_lifecycle.py::test_authored_loop_contract_rejects_invalid_bindings_before_save
+  FR-WFL-20:
+    description: 'A workflow cron is canonical stored desired state with explicit observed reconciliation, never inert metadata presented as live. Every tick re-authorizes the captured human against current status, workspace membership and grants intersected with the captured ceiling; missing authority and a non-durable executor report needs_action/unavailable and execute nothing. Timezone calculation handles DST gaps/folds and standard DOM/DOW OR semantics, catch-up is bounded, and a tenant/workflow/UTC-occurrence row is atomically lease-claimed across replicas with a deterministic logical run id that terminal restart replay cannot duplicate. The Hatchet enqueue/store boundary is honestly at-least-once: an ambiguous crash may resubmit that same logical run id, relying on existing workflow checkpoints and per-step idempotency rather than claiming physical exactly-once external effects.'
+    tests:
+      - tests/security/test_workflow_scheduler.py::test_schedule_reauthorizes_current_grants_intersected_with_captured_ceiling
+      - tests/security/test_workflow_scheduler.py::test_missing_authority_and_non_durable_executor_are_observed_not_invented
+      - tests/security/test_workflow_scheduler.py::test_replicas_claim_once_restart_does_not_duplicate_a_terminal_occurrence
+      - tests/security/test_workflow_scheduler.py::test_ambiguous_enqueue_reclaim_is_at_least_once_with_one_logical_run_id
+      - tests/security/test_workflow_scheduler.py::test_missed_occurrence_catch_up_is_bounded_and_reports_truncation
+      - tests/security/test_workflow_scheduler.py::test_timezone_cron_handles_dst_gaps_folds_and_standard_dom_dow_or
+      - tests/security/test_workflow_scheduler.py::test_legacy_definition_schedule_projects_needs_action
+      - tests/store/test_workflow_schedule_store_parity.py::test_schedule_desire_and_occurrence_claim_match_on_both_stores
+  FR-WFL-21:
+    description: 'Workflow schedule occurrence recovery is a bounded author-scoped receipt lifecycle, not scheduler internals or a second queue. The projection carries only the stable logical run id, occurrence/enqueue/outcome times, closed status, retry counters and a sanitized reason; it omits workflow inputs, grant snapshots, digests, engine ids, lease ownership and raw errors. Only an exact terminal failed occurrence bound to the unchanged active workflow and caller-owned schedule snapshots may enter a capped manual retry after independent approval, and scheduler reconciliation re-authorizes current user, workspace and grants before submitting the same run id across the honestly at-least-once Hatchet boundary. The common workflow task body settles interpreter-returned completed/failed receipts while pauses remain in flight; infrastructure exceptions remain explicitly pending_or_unknown because Hatchet may retry and no terminal engine-status reconciliation exists. Selected historical backfill is explicitly unavailable because it cannot reuse the observed-occurrence claim without widening authority.'
+    tests:
+      - tests/security/test_workflow_occurrence_lifecycle.py::test_receipts_are_author_scoped_bounded_and_metadata_only
+      - tests/security/test_workflow_occurrence_lifecycle.py::test_pending_approval_replays_only_the_exact_failed_occurrence
+      - tests/security/test_workflow_occurrence_lifecycle.py::test_retry_reconciliation_reuses_the_canonical_run_id
+      - tests/security/test_workflow_occurrence_lifecycle.py::test_workflow_task_body_settles_terminal_schedule_outcomes
+      - tests/store/test_workflow_schedule_store_parity.py::test_schedule_desire_and_occurrence_claim_match_on_both_stores
   SEC-116:
     description: 'Workspace scoping only NARROWS which workflows a workspace sees, never widens authority (COUNTY 5, D2) - a workflow scoped to another workspace is fail-closed UNKNOWN on the get / trigger / execute paths (get returns None, trigger and execute raise LookupError) so it can never be resolved or run cross-workspace, while the visibility filter never mutates the record (a visible workflow is byte-for-byte what was stored, adding no grant/scope) and workspace_id is the sole scoping field, carrying no execution authority.'
     tests:
@@ -1726,7 +1828,7 @@ invariants:
       - tests/deploy/test_compose_hardening.py::test_release_publishes_only_scanned_signed_digest_images_with_sboms
       - tests/deploy/test_compose_hardening.py::test_release_requires_canonical_success_for_the_exact_commit
       - tests/deploy/test_compose_hardening.py::test_release_compose_uses_only_required_digest_images_without_builds
-      - tests/deploy/test_release_images.py::test_release_image_environment_requires_exactly_four_digest_refs
+      - tests/deploy/test_release_images.py::test_release_image_environment_requires_every_first_party_digest
       - tests/deploy/test_release_images.py::test_release_compose_validator_rejects_builds_tags_and_source_mounts
   IAC-002:
     description: 'Production Python images consume hash-locked runtime dependencies without invoking an unlocked PEP 517 build environment, and application source runs directly from the read-only image tree.'
@@ -1748,7 +1850,7 @@ invariants:
       - tests/deploy/test_release_can_actually_publish.py::test_the_write_probe_creates_nothing
       - tests/deploy/test_release_can_actually_publish.py::test_a_bad_credential_reports_the_remedy_rather_than_crashing
       - tests/deploy/test_release_can_actually_publish.py::test_every_registry_login_prefers_a_pat_when_one_exists
-      - tests/deploy/test_release_can_actually_publish.py::test_the_ui_candidate_is_given_the_packages_token_it_mounts
+      - tests/deploy/test_release_can_actually_publish.py::test_frontend_candidates_receive_the_packages_token_they_mount
       - tests/deploy/test_release_can_actually_publish.py::test_the_release_vuln_gate_reads_the_same_acceptances_as_the_security_gate
       - tests/deploy/test_release_can_actually_publish.py::test_promotion_still_happens_only_after_every_candidate_is_verified
   IAC-006:
@@ -1762,9 +1864,10 @@ invariants:
     tests:
       - tests/deploy/test_compose_hardening.py::test_compose_validation_is_clean_checkout_safe
   FR-OPS-03:
-    description: '/healthz remains liveness while unauthenticated /readyz is a bounded, redacted, fail-closed deep readiness gate - production requires reachable Postgres and Redis plus the exact packaged Alembic head, a live control adapter whose complete verb surface is persisted and bound back to that actual adapter with every required runtime collaborator wired, complete stack-tool posture, a kernel-local Herdr execution probe, and a fresh HMAC-authenticated deployment-scoped fleet receipt proving fleet-local Browser Use and Chromium CDP health without assuming shared containers (OpenCode dropped with decision 0012); concurrent calls are coalesced and briefly cached; optional Hatchet/model-gateway probes become required when enabled; failures return redacted 503 responses and the packaged head is graph-checked against Alembic.'
+    description: '/healthz remains liveness while unauthenticated /readyz is a bounded, redacted, fail-closed deep readiness gate - production requires reachable Postgres and Redis plus the exact packaged Alembic head, a live control adapter whose complete verb surface is persisted and bound back to that actual adapter with every required runtime collaborator wired, complete stack-tool posture, a kernel-local Herdr execution probe, and a fresh HMAC-authenticated deployment-scoped fleet receipt proving fleet-local Browser Use and Chromium CDP health without assuming shared containers (OpenCode dropped with decision 0012); concurrent calls are coalesced and briefly cached; optional Hatchet/model-gateway probes become required when enabled, and password-reset delivery can be made required only with both an injected notifier and a bounded redacted readiness probe; failures return redacted 503 responses and the packaged head is graph-checked against Alembic.'
     tests:
       - tests/unit/test_readiness.py::test_readyz_keeps_optional_dependencies_disabled_in_development
+      - tests/unit/test_readiness.py::test_password_reset_delivery_readiness_requires_notifier_and_probe
       - tests/unit/test_readiness.py::test_readyz_requires_postgres_redis_and_migration_head_in_production
       - tests/unit/test_readiness.py::test_readyz_probes_every_enabled_dependency
       - tests/unit/test_readiness.py::test_readyz_requires_persisted_control_verbs_and_control_owned_bindings
@@ -1842,6 +1945,7 @@ invariants:
     description: 'A gate cannot pass by looking at nothing, and a waiver cannot outlive anyone - every tree scan in scripts/ declares a floor and FAILS when it finds fewer (an empty glob has no offenders, so a truncated checkout or a narrow build context turns "could not look" into green), and every entry in the unwired-claims waiver file carries an owner, a reason and an expiry, with a blank, unowned or expired waiver a failure in itself; and no product-behaviour environment variable reaches a test from the launching shell, so a control''s verdict is never a fact about a terminal.'
     tests:
       - tests/unit/test_claim_gates.py::test_a_scan_that_finds_nothing_is_a_failure_not_a_pass
+      - tests/unit/test_claim_gates.py::test_source_gates_include_new_nonignored_files_before_staging
       - tests/unit/test_claim_gates.py::test_the_unwired_waiver_file_can_be_held_to
       - tests/unit/test_claim_gates.py::test_the_repositorys_own_unwired_waivers_are_well_formed
       - tests/unit/test_claim_gates.py::test_the_operators_shell_cannot_colour_a_test
@@ -1881,7 +1985,7 @@ invariants:
       - tests/security/test_work_workspace_scope.py::test_tree_assembly_bounds_self_and_multi_node_cycles
       - tests/security/test_audit_tree_scope.py::test_no_active_workspace_sees_only_org_wide_audit_rows
   SEC-143:
-    description: 'Budget policy and usage resets are high-consequence control-plane operations - policy changes preserve accumulated usage, resets require an audited reason and select explicit counters, tenant scopes cannot cross the authenticated organisation, non-admin callers are denied even with broad grants, and memory/Postgres expose one asynchronous contract.'
+    description: 'Budget policy and usage resets are high-consequence control-plane operations - policy changes preserve accumulated usage, calendar-window resets require an audited reason and select explicit counters, tenant scopes cannot cross the authenticated organisation, non-admin callers are denied even with broad grants, and memory/Postgres expose one asynchronous contract. A run window cannot be reset without exact run context; the ordinary policy surface deliberately does not reinterpret it as an aggregate.'
     tests:
       - tests/security/test_budget_governance.py::test_budget_policy_preserves_usage_and_reset_is_selective
       - tests/security/test_budget_governance.py::test_budget_http_mutations_are_held_and_tenant_bound
@@ -1953,6 +2057,8 @@ invariants:
     description: 'Emotion is strictly downstream of dispatch - the kernel''s only emotion touch is the relay factory seam in kernel/__init__.py, and dispatch outcomes (results, audit rows, run events) are identical with the emotion relay attached vs the plain relay.'
     tests:
       - tests/emotion/test_relay.py::test_dispatch_outcomes_are_identical_with_and_without_the_emotion_relay
+      - tests/emotion/test_relay.py::test_emotion_observes_the_shared_redis_relay_without_a_second_backlog
+      - tests/emotion/test_relay.py::test_broken_emotion_initialization_returns_the_supplied_shared_backend
       - tests/emotion/test_relay.py::test_no_kernel_module_imports_the_emotion_package
   EMO-2:
     description: 'Emotion state contains no message content - engine snapshots and the phenotype file are keys and numbers only, and a sentinel pumped through publish never reaches either.'
@@ -2007,9 +2113,9 @@ invariants:
       - tests/knowledge/test_object_vault.py::test_s3_vault_enforces_the_same_digest_prefix_and_erasure_contract
       - tests/knowledge/test_postgres_knowledge.py::test_postgres_knowledge_round_trip_provenance_search_and_erase
   KNO-04:
-    description: 'Cognee is bundled and enabled by default, while Supermemory and Mem0 are disabled governed add-ons whose enablement never changes canonical authority.'
+    description: 'Cognee is bundled and enabled by default. Supermemory and Mem0 remain non-authoritative catalogue entries but are explicitly unavailable until credential-backed projection adapters exist: startup repairs stale enabled rows, the service refuses enablement and both user interfaces disable the action rather than accepting guaranteed failure.'
     tests:
-      - tests/knowledge/test_knowledge_service.py::test_cognee_is_default_and_addons_enable_without_becoming_authority
+      - tests/knowledge/test_knowledge_service.py::test_cognee_is_default_and_unimplemented_addons_refuse_enablement
       - tests/deploy/test_compose_hardening.py::test_knowledge_and_bundled_cognee_have_stack_owned_persistent_storage
 
   # --- wayland add-on: voluntary expression through the chokepoint ---
@@ -2083,3 +2189,365 @@ invariants:
       - tests/security/test_access_views_carry_no_secret.py::test_the_org_view_carries_the_policy_flags_and_nothing_nested_in_settings
       - tests/security/test_access_views_carry_no_secret.py::test_each_view_publishes_exactly_these_keys_and_no_others
       - tests/security/test_access_views_carry_no_secret.py::test_the_user_directory_view_carries_no_credential_material
+  SEC-193:
+    description: 'Workflow retirement is recoverable and governed: unschedule removes only the schedule, archive preserves the versioned definition while removing its schedule, and restore is the only lifecycle operation that makes it active again. Archived workflows cannot be scheduled, matched, queued through Hatchet, or executed inline; lifecycle mutations use the same control dispatcher and exact mutable-resource approval digest as every other high-consequence workflow action. List and detail projections report explicit status and schedule without exposing a hard-delete seam.'
+    tests:
+      - tests/security/test_workflow_lifecycle.py::test_archive_is_recoverable_and_blocks_every_execution_seam
+      - tests/security/test_workflow_lifecycle.py::test_list_and_detail_surface_lifecycle_without_deleting_archive
+      - tests/security/test_control_approval_binding.py::test_resource_change_between_gate_and_adapter_execute_fails_closed
+  SEC-194:
+    description: 'Spawn rules are a closed, deterministic and authority-neutral routing policy: strict schema validation rejects unknown or malformed data, the unique highest explicit priority all-of intent-tag match is consumed once at governed spawn intake, ties, conflicting routing pins, corrupt revisions and stale targets fail closed, the rule depth only tightens the capability ceiling, rule-added skill grants remain intersected with caller authority, and bounded server-derived rule identity/effects are copied into child context, audit and public receipt. Worker reads that same effective revision, finds reachable ties and simulates matching without creating trusted classification, authority, spend or execution.'
+    tests:
+      - tests/security/test_spawn_rule_enforcement.py::test_spawn_rule_schema_and_priority_are_closed_and_deterministic
+      - tests/security/test_spawn_rule_enforcement.py::test_worker_inventory_and_simulator_use_effective_rules_without_executing
+      - tests/security/test_spawn_rule_enforcement.py::test_selected_rule_is_consumed_once_and_receipted_without_widening
+      - tests/security/test_spawn_rule_enforcement.py::test_rule_ties_conflicting_pins_stale_targets_and_depth_fail_closed
+      - tests/security/test_spawn_rule_enforcement.py::test_governed_revision_replaces_base_policy_and_invalid_edits_do_not_land
+  SEC-AUTH-RECOVERY-01:
+    description: 'Password recovery is public but non-enumerating and fail-closed: reset bearers are random, expiring, persisted only by SHA-256 digest and consumable exactly once; absent delivery mints nothing; successful redemption atomically rotates the credential, clears the provisioning clamp, revokes every browser session and pending password-authenticated 2FA challenge, and neither password nor bearer enters audit, security events, logs, or API responses. Notifier acceptance is never represented as provider or inbox delivery; authenticated author/admin posture exposes only a bounded recipient-free audit attempt, while non-authors receive restricted evidence so the projection cannot become an account-enumeration oracle.'
+    tests:
+      - tests/security/test_password_recovery.py::test_request_is_non_enumerating_hash_only_and_fails_closed_without_delivery
+      - tests/security/test_password_recovery.py::test_delivery_attempt_evidence_cannot_become_an_account_enumeration_or_receipt
+      - tests/security/test_password_recovery.py::test_reset_is_one_use_revokes_sessions_and_never_audits_secrets
+      - tests/security/test_password_recovery.py::test_expired_and_invalid_tokens_share_one_rejection_and_requests_are_limited
+      - tests/store/test_password_reset_store_parity.py::test_password_reset_lifecycle_matches_on_both_stores
+  WRK-01:
+    description: 'Boltrig has two supported first-party clients over one governed SDK/event vocabulary: Worker is the task-oriented primary candidate and Operator retains the advanced spatial deck. The exact one-time OpenWorker baseline and MIT attribution are recorded, and realtime_voice is an explicit narrow amendment rather than a silent second general runtime.'
+    tests:
+      - tests/security/test_worker_surface_boundary.py::test_worker_and_operator_decision_is_landed_with_attribution
+  WRK-02:
+    description: 'Worker primary-surface cutover is an explicit, reversible edge-topology selection: the ordinary deployment still defaults to standalone Operator, the worker-primary overlay changes only Caddy''s internal upstream, removes direct frontend host ports, packages maintained Operator at /operator/, and retains standalone Operator as a rollback profile. Worker is produced by the same protected release workflow as every first-party service and may enter production only by a digest-pinned signed image reference.'
+    tests:
+      - tests/security/test_worker_surface_boundary.py::test_worker_primary_cutover_is_explicit_edge_only_and_reversible
+      - tests/security/test_worker_surface_boundary.py::test_worker_is_a_signed_digest_pinned_first_party_release_image
+  WRK-03:
+    description: 'The built Worker primary surface is exercised against the real in-memory kernel in a required Chromium acceptance gate. The gate proves authenticated route boot, task-first navigation, the Operator escape hatch, governed chat streaming, and no serious or critical accessibility violations across every Worker route.'
+    tests:
+      - tests/security/test_worker_surface_boundary.py::test_worker_built_artifact_has_a_gating_browser_and_accessibility_acceptance
+  WRK-04:
+    description: 'Worker preserves the audit verifier evidence instead of collapsing it to a green label: the shared SDK carries the latest anchor identity, sequence range, time and evidence kind; Worker distinguishes an intact but unanchored chain, a local development fallback and externally signed evidence, and an unavailable verification never becomes a conclusion.'
+    tests:
+      - tests/security/test_worker_surface_boundary.py::test_worker_preserves_audit_anchor_evidence_and_labels_its_strength
+  WRK-05:
+    description: 'Worker-primary completeness is audited beyond HTTP routes: every non-HTTP subsystem is ledgered across discover, configure, operate, observe and recover, with explicit UI-gap, backend-contract-gap, complete-observation or deployment-only classification so a flat row, saved setting or readiness badge cannot masquerade as a working lifecycle.'
+    tests:
+      - tests/security/test_worker_surface_boundary.py::test_worker_parity_includes_every_non_http_lifecycle_dimension
+  WRK-06:
+    description: 'Every top-level and nested manifest field and accepted extra section, named fleet background task, CLI command, native Tauri command, governed Worker control that renders an approval pause, and explicitly retained internal or legacy seam has a closed discover/configure/operate/observe/recover classification. This prevents a covered parent section, HTTP route or pending badge from hiding an inert policy field, non-HTTP gap or caller-lane action that cannot actually finalize, and prevents operational or dormant code from being promoted as a product feature.'
+    tests:
+      - tests/security/test_worker_feature_ledger.py::test_every_manifest_feature_source_has_a_worker_lifecycle_classification
+      - tests/security/test_worker_feature_ledger.py::test_every_native_command_is_classified_and_registered
+      - tests/security/test_worker_feature_ledger.py::test_every_named_fleet_background_task_is_classified
+      - tests/security/test_worker_feature_ledger.py::test_non_http_feature_rows_are_closed_and_missing_states_explain_the_gap
+  SEC-WRK-01:
+    description: 'The Worker desktop payload is a thin enrolled client, not a local authority: it ships no OpenWorker Python or aisuite agent, provider-key path, sidecar binary, arbitrary command primitive, or caller-chosen native write path. Artifact materialisation is bounded and destination selection is performed by a native user dialog. Desktop updates accept no endpoint, verification key, signature, package URL or installer bytes from the webview: fixed HTTPS release trust is compiled into the binary, packages are signature-verified natively, and an unconfigured build or browser remains explicitly unavailable. Native OAuth return registers one fixed custom scheme and correlates only an exact expiring in-memory state with a kernel-brokered opaque result; provider authorization codes and tokens are rejected, raw deep-link reads are denied to the webview, and absent provider exchange remains explicit.'
+    tests:
+      - tests/security/test_worker_surface_boundary.py::test_worker_ships_no_openworker_agent_server_or_provider_secret_path
+      - tests/security/test_worker_surface_boundary.py::test_desktop_native_boundary_has_no_arbitrary_path_or_command_primitive
+      - tests/security/test_worker_surface_boundary.py::test_desktop_updater_accepts_no_webview_release_trust_or_unsigned_path
+      - tests/security/test_worker_surface_boundary.py::test_desktop_oauth_return_accepts_only_kernel_brokered_opaque_results
+  SEC-WRK-02:
+    description: 'A Worker model-profile selection is a preference among server-held approved profiles, not a caller route or credential. The profile catalogue exposes only id, label, coarse routing class, data-class eligibility and availability; provider/model/base URL and credentials never reach it. The selected profile and a bounded non-secret reason may appear in the structured run stream.'
+    tests:
+      - tests/security/test_worker_model_profiles.py::test_visible_model_profiles_expose_no_provider_endpoint_or_credential
+      - tests/security/test_worker_model_profiles.py::test_chat_threads_only_an_approved_profile_name_and_emits_non_secret_route
+      - tests/security/test_worker_model_profiles.py::test_model_profile_endpoint_requires_principal_and_returns_safe_projection
+  SEC-WRK-03:
+    description: 'Worker realtime voice is a bounded media surface, never a second authority: the browser receives only a short-lived single-use media bearer; the severed gateway redeems it under the existing tenant/channel-scoped gateway token; only then does the kernel mint a short-lived MCP token from the authenticated caller grant snapshot, and every function still re-enters the ordinary MCP/dispatcher chokepoint. Concurrent browser calls use a bounded pool of call-id-keyed provider adapters, PCM bridges, caller-token views, tool maps, HITL tasks and usage meters; capacity refuses a new call without evicting an active one, and exact-call teardown cannot rotate or stop another caller or the static channel. Call metadata and normalized transcript/tool/lifecycle events are tenant- and owner-scoped and durable, while raw microphone/synthesized audio is accepted only as bounded ephemeral WebSocket PCM and cannot enter the event store. Missing voice configuration returns typed realtime_unavailable with the existing text conversation, and reconnect rotates rather than reuses the spent bearer.'
+    tests:
+      - tests/security/test_realtime_call_routes.py::test_media_bearer_is_single_use_channel_bounded_and_mints_only_caller_tools
+      - tests/security/test_realtime_call_routes.py::test_call_metadata_and_normalized_events_are_owner_scoped_and_never_store_audio
+      - tests/security/test_realtime_call_routes.py::test_unavailable_voice_is_typed_and_keeps_the_text_conversation
+      - tests/security/test_realtime_call_routes.py::test_reconnect_rotates_the_spent_media_bearer
+      - tests/security/test_channel_xai_voice_roundtrip.py::test_voice_adapter_round_trip_against_a_test_kernel
+      - tests/security/test_channel_voice_concurrency.py::test_browser_voice_calls_are_isolated_bounded_and_released_exactly
+  SEC-WRK-05:
+    description: 'The Worker/Operator browser edge is closed by default while still permitting user-initiated same-origin voice: CSP restricts scripts and network connections to self, forbids objects and framing, and the Permissions Policy permits microphone only for self while denying camera and geolocation. Both the production Caddy edge and the combined Worker nginx image carry the policy, so bypassing one layer does not silently widen the browser.'
+    tests:
+      - tests/security/test_worker_surface_boundary.py::test_worker_edge_allows_same_origin_voice_without_opening_browser_capabilities
+  SEC-WRK-04:
+    description: 'A realtime voice approval parks the exact provider call without creating side authority: the server-minted call run id makes the ordinary dispatcher seal the canonical verb/params in the existing held-call mechanism, an answer replays that seal exactly once through the unchanged dispatcher, and only a normalized resolution is projected back to the owning tenant/channel-scoped call. Voice usage is content-free and durable (PCM byte counts, provider token counts and tool-call counts only); cost is labelled estimated only when explicit revisioned rates are configured, otherwise unpriced, and no audio payload enters the ledger.'
+    tests:
+      - tests/security/test_realtime_call_routes.py::test_voice_hitl_answer_resumes_the_exact_sealed_call_and_projects_resolution
+      - tests/security/test_realtime_call_routes.py::test_voice_usage_is_content_free_owner_scoped_and_explicitly_priced
+      - tests/security/test_channel_xai_voice_roundtrip.py::test_voice_usage_meter_and_exact_hitl_provider_call
+  SEC-WRK-06:
+    description: 'The integration surface is tenant-scoped reviewed data over the canonical adapter/verb registry, not a frontend-owned connector claim. Default and manifest boot deterministically reconcile only three reviewed first-party definitions (Jira, Runpod and xAI Voice) with closed manual-secret contracts, without upgrading or replacing unrelated preview rows; certification covers shipped adapter/contract shape while actual connectability still derives from that tenant''s registered, activated and acceptably healthy adapter. Public catalogue tools, connection projections, health and author-only revocation remain registry/store derived. A certified setup route accepts exactly its bounded string fields and delegates to control.integration.connect; only that dispatched operation derives account labels from declared non-secret fields and atomically creates one envelope-sealed credential plus at most one active connection per adapter. Dynamic resolution reads that active persisted reference kernel-side on every call, so fresh processes and replicas require no local rebind; a missing credential or ambiguous active state fails closed. Revocation atomically clears the active connection and deletes only material it owns. The submitted fields remain beneath one secret-shaped dispatcher parameter, so provider-specific names and values never reach event, approval, response or audit projections. Uncertified, undeclared, OAuth-without-provider-contract, and arbitrary-field setup still fail closed.'
+    tests:
+      - tests/unit/test_integration_catalogue_provisioning.py::test_certified_builtin_catalogue_provisioning_is_deterministic_and_scoped
+      - tests/unit/test_integration_catalogue_provisioning.py::test_certified_builtin_contracts_are_closed_and_match_shipped_credentials
+      - tests/security/test_integration_connections.py::test_catalogue_and_connections_derive_only_safe_reviewed_registry_state
+      - tests/security/test_integration_connections.py::test_unsupported_setup_rejects_secrets_and_oauth_without_creating_state
+      - tests/security/test_integration_connections.py::test_certified_manual_contract_seals_once_and_projects_only_account_metadata
+      - tests/security/test_integration_connections.py::test_manual_contract_rejects_unknown_missing_and_non_author_fields_without_state
+      - tests/security/test_integration_connections.py::test_direct_control_setup_keeps_every_provider_field_out_of_projections
+      - tests/security/test_integration_connections.py::test_atomic_setup_failure_leaves_neither_connection_nor_credential
+      - tests/security/test_integration_connections.py::test_ambiguous_active_connection_state_fails_closed
+      - tests/security/test_integration_connections.py::test_process_and_durable_credential_disagreement_fails_closed
+      - tests/security/test_integration_connections.py::test_health_is_registry_derived_and_revoke_drops_only_the_owned_reference
+      - tests/store/test_store_parity.py::test_integration_catalogue_and_connection_state_match_on_both_stores
+      - tests/store/test_store_parity.py::test_atomic_integration_credential_lifecycle_matches_on_both_stores
+      - tests/store/test_integration_atomicity.py::test_pg_create_rolls_back_staged_credential_on_conflict_or_failure
+      - tests/store/test_integration_atomicity.py::test_pg_revoke_rolls_back_connection_when_owned_credential_delete_fails
+  SEC-WRK-07:
+    description: 'A Worker desktop device is owner- and tenant-enrolled with digest-only, expiring, rotatable session secrets and an Ed25519 verifier bootstrap. The bounded device.file.read, device.file.write, and device.command.run verbs are registered through the canonical adapter/binding path; native roots are opaque IDs plus relative paths, write leases bind an exact content digest, and command leases use argv only and remain disabled per root by default. Every signed lease requires a consumed non-self-approved dispatcher approval for the exact canonical action, one approval can materialize once, cancellation or revocation prevents pending work from being claimed, and the issued-to-claimed-to-settled lifecycle uses atomic single-use claim fencing.'
+    tests:
+      - tests/security/test_device_dispatch_adapter.py::test_device_verbs_register_as_high_consequence_adapter_data
+      - tests/security/test_device_dispatch_adapter.py::test_dispatch_consumes_exact_nonself_approval_and_materializes_once
+      - tests/security/test_device_dispatch_adapter.py::test_write_and_command_dispatch_bind_every_exact_action_field
+      - tests/security/test_device_dispatch_adapter.py::test_self_approval_never_materializes_a_device_lease
+      - tests/security/test_device_dispatch_adapter.py::test_schema_root_policy_and_command_opt_in_fail_before_approval
+      - tests/security/test_device_dispatch_adapter.py::test_cancelled_run_cannot_materialize_or_claim_a_device_lease
+      - tests/security/test_device_dispatch_adapter.py::test_boot_registration_is_key_gated_and_uses_canonical_registry
+      - tests/security/test_device_leases.py::test_enrollment_and_sessions_are_single_use_digest_only_and_owner_scoped
+      - tests/security/test_device_leases.py::test_no_direct_user_lease_materialization_route_exists
+      - tests/security/test_device_leases.py::test_signed_lease_requires_consumed_exact_action_and_is_single_use
+      - tests/security/test_device_leases.py::test_paths_write_digests_and_command_opt_in_fail_closed
+      - tests/security/test_device_leases.py::test_ed25519_verifier_rejects_any_tampered_lease_field
+      - tests/store/test_device_store_parity.py::test_device_lifecycle_and_lease_cas_match_on_both_stores
+  SEC-WRK-08:
+    description: 'Worker artifacts are immutable content-addressed bytes with bounded safe leaf names, exact digest/size checks, explicit closed provenance and linear revision metadata. Metadata and download reads fail closed across tenant, effective owner and active-workspace scope; responses disclose no server/native path, downloaded bytes are reverified, and there is no caller upload route or inferred free-form model-text producer. The one canonical structured runtime-result seam accepts strict bounded base64 declarations and rebuilds ownership, scope and provenance from server context.'
+    tests:
+      - tests/security/test_artifact_routes.py::test_artifact_list_and_detail_are_owner_tenant_and_workspace_scoped
+      - tests/security/test_artifact_routes.py::test_artifact_download_verifies_bytes_and_never_accepts_an_upload
+      - tests/security/test_artifact_routes.py::test_artifact_contract_rejects_paths_and_non_content_addressed_bytes
+      - tests/security/test_artifact_routes.py::test_artifact_production_has_one_canonical_runtime_seam
+      - tests/unit/test_result_artifact_production.py::test_structured_agent_artifact_is_recorded_with_server_provenance
+      - tests/store/test_artifact_store_parity.py::test_artifact_lifecycle_and_scope_match_on_both_stores
+  SEC-WRK-09:
+    description: 'Worker live continuity is a conversation-scoped bounded projection: the authorized server resolves the active run, cursor-bearing replay exposes no caller-selected run id or raw tool arguments/results, reports bounded-backlog truncation explicitly, and same-surface follow-up instructions enter only through the canonical serialized chat steer queue.'
+    tests:
+      - tests/integration/test_chat.py::test_active_run_truth_is_tenant_and_conversation_scoped
+      - tests/integration/test_chat.py::test_conversation_follow_is_server_selected_cursor_bounded_and_projected
+      - tests/integration/test_chat.py::test_http_steer_returns_202_queued_and_stream_carries_both_turns
+      - tests/unit/test_event_relay_since.py::test_cursor_bearing_subscription_keeps_event_payloads_unchanged
+  SEC-WRK-10:
+    description: 'A Worker Familiar genotype is a versioned, deterministic, identity-only projection of the authoritative AgentCapability.name: capability discovery and actual selected-subagent events use the same server derivation, while runtime, skills, grants, model, cost, phenotype and mood cannot enter it. Worker agent cards consume that projection instead of inventing a client palette. No top-level/root identity is inferred: the Chat header remains a neutral activity indicator until an authoritative current-agent seam exists.'
+    tests:
+      - tests/unit/test_familiar_identity.py::test_agent_capability_name_derives_one_pinned_versioned_genotype
+      - tests/unit/test_familiar_identity.py::test_genotype_projection_contains_no_authority_or_runtime_state
+      - tests/security/test_discovery_scope.py::test_discovery_catalogue_is_grant_tenant_and_workspace_scoped
+      - tests/integration/test_fleet_spawn.py::test_subagent_open_is_settled_by_subagent_end_frame
+      - tests/security/test_realtime_call_routes.py::test_voice_call_cannot_invent_an_agent_identity_from_a_profile_label
+  SEC-WRK-11:
+    description: 'Worker notification routing is a server-declared projection of the exact events Boltrig produces and the enabled socket channels with a verified binding for the caller; in-app, email and unproduced event names are never advertised as working. Route replacement is owner-scoped and validated inside the governed control operation. A static test delivery traverses the same dispatcher and credential-free durable outbox, and its queued, in-flight, delivered or failed receipt remains tenant- and subject-scoped.'
+    tests:
+      - tests/security/test_notification_surface.py::test_notification_catalogue_exposes_only_real_events_and_bound_transports
+      - tests/security/test_notification_surface.py::test_notification_routes_are_replacement_safe_and_report_delivery_status
+      - tests/security/test_notification_surface.py::test_notification_write_rejects_unproduced_events_and_unverified_targets
+      - tests/store/test_channel_durability.py::test_notification_receipts_are_subject_scoped_on_both_stores
+  SEC-WRK-12:
+    description: 'Agent capability retirement is recoverable and governed: author inventory retains inactive rows while caller discovery and capability selection expose only active profiles; retire and restore are high-consequence control verbs bound to the exact mutable profile snapshot, ordinary profile edits preserve retirement, and an agent-bound verb cannot bypass retirement through the legacy script fallback. The lifecycle row semantics match in-memory and PostgreSQL stores.'
+    tests:
+      - tests/security/test_capability_lifecycle.py::test_author_inventory_retains_inactive_profiles_but_discovery_does_not
+      - tests/security/test_capability_lifecycle.py::test_retire_blocks_every_capability_route_and_only_restore_reactivates
+      - tests/security/test_capability_lifecycle.py::test_capability_approval_is_bound_to_the_exact_mutable_profile
+      - tests/integration/test_manifest_reconciliation.py::test_governed_status_and_status_preserving_edits_match_both_stores
+  SEC-WRK-14:
+    description: 'Model endpoint withdrawal is recoverable and governed: active and retired rows retain their full configuration and references in author inventory; retire and restore are high-consequence controls bound to the exact endpoint and reference snapshot; ordinary replacement preserves retirement; direct routing, capability binding and fallback binding fail closed for a retired or missing endpoint, and a stored fallback never bypasses withdrawal. Lifecycle behavior matches in-memory and PostgreSQL stores.'
+    tests:
+      - tests/security/test_model_endpoint_lifecycle.py::test_author_inventory_keeps_both_states_and_exposes_retained_references
+      - tests/security/test_model_endpoint_lifecycle.py::test_process_model_policy_projection_names_real_consumers_without_topology
+      - tests/security/test_model_endpoint_lifecycle.py::test_retirement_preserves_configuration_and_every_reference_fails_closed
+      - tests/security/test_model_endpoint_lifecycle.py::test_endpoint_lifecycle_approval_is_bound_to_the_exact_mutable_state
+      - tests/store/test_store_parity.py::test_model_endpoint_lifecycle_matches_on_both_stores
+  SEC-WRK-20:
+    description: 'External workflow triggers are approved durable bindings, never a public synthetic-principal bypass: webhook secrets are high-entropy, show-once and hash-only; every webhook delivery reauthorizes its stored human delegator against current active user/workspace authority and intersects that with the binding-time grant ceiling; connected-channel delivery derives authority only from the signature-verified current sender binding. Event bodies remain untrusted workflow input, archived workflows and revoked identities fail closed, and a per-trigger plus source-event digest drives canonical control.workflow.trigger idempotency and keys-only replay receipts.'
+    tests:
+      - tests/security/test_workflow_triggers.py::test_webhook_secret_is_show_once_and_delivery_reauthorizes_current_owner
+      - tests/security/test_workflow_triggers.py::test_channel_trigger_uses_verified_current_sender_not_binding_author
+      - tests/security/test_workflow_triggers.py::test_archived_workflow_fails_closed_before_external_dispatch
+      - tests/security/test_workflow_triggers.py::test_webhook_trigger_rate_limit_bounds_unique_event_spend
+      - tests/security/test_workflow_triggers.py::test_workspace_trigger_rechecks_current_membership_before_dispatch
+      - tests/security/test_workflow_triggers.py::test_trigger_lifecycle_is_governed_and_rotation_revokes_old_secret
+      - tests/security/test_workflow_triggers.py::test_secret_bearing_approval_requires_origin_surface_finalization
+      - tests/security/test_workflow_triggers.py::test_origin_finalization_is_discoverable_after_navigation_without_secret_storage
+      - tests/store/test_workflow_trigger_store_parity.py::test_trigger_binding_and_receipt_semantics_match_on_both_stores
+  SEC-WRK-13:
+    description: 'Conversation close is a recoverable, explicit lifecycle rather than an ambiguous active row: a CLOSED conversation remains retained only for its configured grace window, accepts no new chat turn or regenerate write, and can return to ACTIVE only through the idempotent tenant-and-owner-scoped restore route. Restore is keys-only audited, never widens authority, and Worker renders CLOSED rows distinctly with restore instead of an ordinary continuation action.'
+    tests:
+      - tests/security/test_conversations.py::test_closed_conversation_refuses_chat_until_owner_restores
+      - tests/security/test_conversations.py::test_restore_is_owner_scoped_idempotent_and_keys_only_audited
+      - tests/security/test_conversations.py::test_service_guard_rejects_closed_conversation_before_any_write
+      - tests/security/test_chat_regenerate.py::test_regenerate_refuses_a_closed_conversation_until_restore
+      - tests/security/test_worker_surface_boundary.py::test_worker_renders_closed_conversations_as_restore_only
+      - tests/store/test_retention_purge.py::test_restore_transition_is_owner_scoped_and_idempotent_on_both_stores
+      - tests/store/test_retention_purge.py::test_restore_racing_retention_never_resurrects_a_purged_row
+  SEC-WRK-15:
+    description: 'The Worker Work lifecycle has one mutation implementation: create and assign/unassign, plus approved status and reparent operations, are registered control.work verbs and every HTTP action delegates through the canonical dispatcher. Created rows are internal canonical Boltrig work in the authenticated active workspace; the surface never claims or attempts source-system writeback, and audit detail is bounded to parameter key names.'
+    tests:
+      - tests/security/test_work_lifecycle.py::test_work_create_assign_status_and_audit_are_canonical
+  SEC-WRK-16:
+    description: 'High-consequence Work status and reparent approvals bind the exact visible mutable item snapshot, including status, assignment, graph depth, workspace and lease state. A changed resource cannot consume the prior approval and is held for a fresh decision rather than executing under stale authority.'
+    tests:
+      - tests/security/test_work_lifecycle.py::test_work_approval_is_bound_to_the_exact_mutable_item
+      - tests/security/test_work_lifecycle.py::test_work_change_between_gate_and_adapter_write_fails_closed
+  SEC-WRK-17:
+    description: 'Governed Work writes fail closed outside tenant, department and active-workspace visibility; reject missing parents, graph cycles and depth overflow; update an entire reparented subtree depth atomically; and never mutate an in-flight or actively leased target or descendant. The graph and lease contract behaves identically in memory and PostgreSQL.'
+    tests:
+      - tests/security/test_work_lifecycle.py::test_scope_cycle_and_live_lease_mutations_fail_closed
+      - tests/store/test_store_parity.py::test_governed_work_graph_and_lease_fence_match_on_both_stores
+  SEC-WRK-18:
+    description: 'Evaluation-case archival is recoverable and governed: active and archived cases remain author-visible with their complete fixtures and durable run history; archive and restore are high-consequence controls bound to the exact mutable fixture snapshot; ordinary fixture edits preserve archival state; and archived cases fail closed before both HTTP and direct evaluation execution until explicitly restored. Lifecycle behavior matches in-memory and PostgreSQL stores.'
+    tests:
+      - tests/security/test_eval_case_lifecycle.py::test_author_inventory_retains_archived_cases_and_lifecycle_is_governed
+      - tests/security/test_eval_case_lifecycle.py::test_archive_preserves_fixture_and_history_and_blocks_every_run_path
+      - tests/security/test_eval_case_lifecycle.py::test_eval_case_lifecycle_approval_is_bound_to_exact_fixture_state
+      - tests/store/test_store_parity.py::test_eval_case_lifecycle_matches_on_both_stores
+  SEC-WRK-19:
+    description: 'Authored skill, noun and verb withdrawal is recoverable and governed: author inventory retains archived definitions, skill versions and inheritance edges, noun/verb relationships and bindings; archive and restore are exact-snapshot high-consequence controls, and ordinary upserts preserve lifecycle state. Archived skills and inherited archived parents cannot be selected, while archived verbs or verbs beneath archived nouns cannot be discovered, newly bound or invoked. The reserved control noun and every control.* verb are lifecycle-protected so the restore surface cannot be bricked. Memory and PostgreSQL share the same semantics, and adapter-owned hard delete remains an internal cleanup seam only.'
+    tests:
+      - tests/security/test_authored_definition_lifecycle.py::test_author_inventory_retains_archived_definitions_and_runtime_omits_them
+      - tests/security/test_authored_definition_lifecycle.py::test_noun_and_verb_archive_fail_closed_and_restore_losslessly
+      - tests/security/test_authored_definition_lifecycle.py::test_skill_archive_blocks_leaf_and_inherited_selection_until_restore
+      - tests/security/test_authored_definition_lifecycle.py::test_lifecycle_approval_is_exact_and_reserved_control_surface_is_protected
+      - tests/store/test_store_parity.py::test_authored_definition_lifecycle_matches_on_both_stores
+  SEC-WRK-21:
+    description: 'The dedicated external-MCP operations surface is author-only and projects durable lifecycle, bounded tool snapshots and content-free probe receipts without ordinary reads contacting a server or resolving credentials. Endpoint details, approvals, audit and public output expose only a sanitized origin, path-redaction marker, egress posture and digests; remote content, URL paths and secret references never cross the boundary. Probes and activation are fenced to one approved configuration revision, active drift survives deactivation, and stale remote results cannot write evidence or authority. Full-replacement update and non-active delete use exact approval plus atomic created/updated/spec/credential/revision CAS; update invalidates discovery and requires re-probe, while same-id recreation cannot inherit an old approval. Every replica reconciles endpoint, credential, generation and active state from the store before MCP dispatch, and generic adapter controls cannot bypass this state machine.'
+    tests:
+      - tests/security/test_mcp_server_surface.py::test_mcp_projection_is_author_scoped_cached_and_secret_safe
+      - tests/security/test_mcp_server_surface.py::test_mcp_lifecycle_aliases_dispatch_canonical_controls_and_tools
+      - tests/security/test_mcp_server_surface.py::test_failed_probe_is_content_free_and_changes_no_authority
+      - tests/security/test_mcp_server_surface.py::test_active_probe_reports_catalogue_drift_without_hot_publish
+      - tests/security/test_mcp_server_surface.py::test_activation_catalogue_change_records_snapshot_and_forces_reapproval
+      - tests/security/test_mcp_server_surface.py::test_generic_adapter_lifecycle_cannot_bypass_mcp_receipts
+      - tests/security/test_mcp_server_surface.py::test_missing_endpoint_offers_no_probe_or_activation
+      - tests/security/test_mcp_server_surface.py::test_mcp_update_is_exact_secret_safe_and_requires_reprobe
+      - tests/security/test_mcp_server_surface.py::test_mcp_delete_is_dedicated_recoverable_and_state_fenced
+      - tests/security/test_mcp_server_surface.py::test_mcp_update_validates_full_replacement_and_exact_approval
+      - tests/security/test_mcp_server_surface.py::test_old_delete_approval_cannot_target_recreated_same_id
+      - tests/security/test_adapter_lifecycle.py::test_mcp_probe_update_race_discards_stale_remote_result
+      - tests/security/test_adapter_lifecycle.py::test_mcp_activation_update_race_publishes_no_stale_authority
+      - tests/security/test_adapter_lifecycle.py::test_cross_replica_mcp_dispatch_reconciles_endpoint_and_credential
+      - tests/security/test_adapter_lifecycle.py::test_authoritative_provider_preserves_non_mcp_dispatch
+  SEC-WRK-22:
+    description: 'Worker-primary parity is an exact backend-to-SDK-to-component ledger rather than a route-count claim: every HTTP method/path is either operated by a named shared-SDK method from a real Worker source, served by a documented richer Worker projection, or assigned one explicit non-UI boundary. New routes and uncalled public SDK methods fail the gate until classified; unsupported raw integration-secret submission remains hidden.'
+    tests:
+      - tests/security/test_worker_route_ledger.py::test_every_http_route_has_an_exact_worker_or_non_ui_classification
+      - tests/security/test_worker_route_ledger.py::test_every_worker_route_names_a_real_sdk_contract_and_component_callsite
+      - tests/security/test_worker_route_ledger.py::test_every_sdk_method_is_used_by_worker_or_explicitly_classified
+  SEC-WRK-23:
+    description: 'Worker federated search composes only canonical source authorities: conversations remain tenant-and-owner scoped; executions retain department and active-workspace hidden-wins; Knowledge and Memory re-enter governed verbs with server-derived scopes; and Audit searches only allowlisted metadata after visibility filtering. Results are independently bounded and source-grouped, source-local scores never become cross-domain ranking, expected denial or unavailability stays local to that source, unexpected faults are not disguised, and exact memory destinations reauthorize tenant plus owner scope while hidden and missing identifiers remain indistinguishable.'
+    tests:
+      - tests/security/test_federated_search.py::test_federated_search_groups_sources_without_widening_scope
+      - tests/security/test_federated_search.py::test_federated_search_reports_expected_partial_failures_only
+      - tests/security/test_federated_search.py::test_federated_search_keeps_source_scores_local_and_marks_truncation
+      - tests/security/test_memory_fact_detail.py::test_memory_fact_detail_reauthorizes_tenant_and_owner_scope
+  SEC-WRK-24:
+    description: 'Evaluation targets use one closed skill-or-workflow vocabulary from governed authoring through runtime and clients. Skill cases enter only the grant-capped spawner; workflow cases enter only the existing governed workflow interpreter, whose capability steps still traverse the kernel chokepoint under the caller ceiling and re-authorized active-workspace context; forged or legacy unknown kinds execute nothing. Every durable run captures its exact target and verdict detail so later fixture edits cannot rewrite history, and the history API and shared SDK project that snapshot without inference.'
+    tests:
+      - tests/security/test_eval_target_integrity.py::test_target_kind_is_closed_at_authoring_and_forged_rows_fail_closed
+      - tests/security/test_eval_target_integrity.py::test_workflow_target_uses_governed_interpreter_and_history_keeps_snapshot
+  SEC-WRK-25:
+    description: 'Workflow provenance is kernel-owned: the public control.workflow.upsert schema accepts no source field and fails before approval or persistence when one is supplied; defense-in-depth rejects direct authored-helper forgery; new authored records are canonically precreated; ordinary edits preserve an existing generated or learned value plus its internal origin-task evidence; and only the internal typed synthesis and learning paths mint those values.'
+    tests:
+      - tests/security/test_workflow_lifecycle.py::test_authored_upsert_cannot_forge_internal_workflow_provenance
+  SEC-WRK-26:
+    description: 'Runtime add-on inventory is a read-only authenticated kernel projection of the exact process registry and fail-closed activation resolver. Requirement state is derived only from tenant/workspace-scoped persisted or already-cached evidence; unknown and evaluator failure never become ready, listing initiates no provider I/O or credential resolution, and private declarations, references, values, paths and exceptions never serialize.'
+    tests:
+      - tests/security/test_addon_inventory.py::test_inventory_uses_exact_registry_activation_and_closed_aggregation
+      - tests/security/test_addon_inventory.py::test_inventory_evidence_is_tenant_and_workspace_scoped
+      - tests/security/test_addon_inventory.py::test_inventory_redacts_private_declarations_and_evaluator_faults
+  SEC-WRK-28:
+    description: 'The generic Worker capability runner is a closed projection of caller-scoped registry data, never a raw dispatcher console: only a discovered noun/verb with a live binding can be submitted; params are generated and validated from a bounded safe JSON-Schema subset; arbitrary context, approval, raw JSON, reserved property names and secret/binary-shaped fields have no input seam. Unsupported schemas remain visibly unavailable. Every attempt uses canonical /v1/invoke and preserves completed, pending-human, denied, unavailable, degraded and error receipts distinctly, while output is projected through declared safe schema fields only. A direct high-consequence pause is finalized only from the exact component-held noun/verb/typed params plus its internally held approval id after a requester-owned state projection reports approved; changing the capability or params invalidates that continuation. Rejected, expired and consumed states never become success. A cacheable verb keeps one idempotency key through pending, approved replay and ambiguous transport retry, while a disabled or unreported replay mode never claims safe recovery.'
+    tests:
+      - tests/security/test_invoke_finalization.py::test_caller_owned_approval_state_finalizes_the_exact_invocation_once
+      - tests/security/test_invoke_finalization.py::test_caller_approval_state_projects_rejection_and_expiry_without_params
+      - tests/security/test_invoke_finalization.py::test_worker_runner_has_no_raw_authority_or_changed_request_replay_surface
+  SEC-WRK-29:
+    description: 'Worker channel delivery recovery is a caller-scoped metadata lifecycle, not gateway access: bounded receipts expose only queued, in-flight, retryable, delivered or terminal-failed state, timestamps, attempts and one generic safe reason. Payloads, destinations, credentials, raw errors, gateway tokens and lease owners never enter the projection. Only an author may request a governed terminal-failed-to-queued transition, bound to the exact delivery and channel-configuration snapshot; retryable, delivered, queued, stale and changed rows cannot be arbitrarily requeued. Gateway token bootstrap and single-owner election remain deployment-only and separate.'
+    tests:
+      - tests/store/test_channel_durability.py::test_delivery_receipts_are_safe_scoped_and_exactly_retry_terminal_failure
+      - tests/security/test_channel_delivery_lifecycle.py::test_delivery_receipts_are_author_scoped_bounded_and_metadata_only
+      - tests/security/test_channel_delivery_lifecycle.py::test_only_the_approved_exact_terminal_snapshot_can_be_requeued
+      - tests/security/test_channel_delivery_lifecycle.py::test_retry_approval_fails_closed_when_channel_configuration_changes
+  SEC-WRK-30:
+    description: 'API, standalone fleet and Hatchet publish tenant-scoped per-boot startup receipts from the exact effective manifest, active add-on set, trusted Codex configuration and sensitive-role selection they compose. Public identities are opaque and redact hosts, paths, URLs, owners, credential references and secrets. Every retained instance is compared only with the latest API startup reference, never an authoritative desired state; missing, mismatched and stale evidence remain distinct, bounded startup snapshots and never claim current liveness, complete replica inventory or fleet parity. Permanent Chief/Department runtime profiles use the same process-owned resolver lazily, pin authored runtime/model policy against caller overrides, keep the trusted wall and production_ready=False authoritative, and expose only typed redacted failure evidence. Memory and PostgreSQL atomically prune to the same hard newest-per-process cap and bound every read deterministically behind the tenant fence, and Worker Operate consumes the canonical authenticated projection without collapsing independent posture sources.'
+    tests:
+      - tests/security/test_birth_profile_receipts.py::test_projection_compares_every_instance_to_a_reference_without_claiming_parity
+      - tests/security/test_birth_profile_receipts.py::test_stale_and_absent_processes_are_explicitly_unavailable
+      - tests/security/test_birth_profile_receipts.py::test_route_is_tenant_scoped_and_returns_only_opaque_identities
+      - tests/security/test_birth_profile_receipts.py::test_receipt_contract_rejects_unbounded_or_incoherent_evidence
+      - tests/security/test_birth_profile_receipts.py::test_boot_identity_does_not_derive_from_hostname
+      - tests/security/test_birth_profile_receipts.py::test_receipt_persistence_is_per_instance_and_rls_fenced
+      - tests/store/test_birth_profile_store_parity.py::test_all_boot_instance_receipts_are_tenant_scoped_on_both_stores
+      - tests/store/test_birth_profile_store_parity.py::test_repeated_boots_are_pruned_and_queried_with_a_hard_bound
+      - tests/store/test_birth_profile_store_parity.py::test_postgres_write_prunes_atomically_and_read_has_a_literal_bound
+      - tests/unit/test_codex_trusted_composition.py::test_builds_provider_when_all_three_set
+      - tests/unit/test_codex_trusted_composition.py::test_api_composition_shares_one_codex_config_with_every_factory
+      - tests/unit/test_codex_trusted_composition.py::test_standalone_worker_shares_one_codex_provider_with_its_spawner
+      - tests/unit/test_codex_trusted_composition.py::test_default_hatchet_bootstrap_shares_one_codex_provider_with_its_spawner
+      - tests/unit/test_codex_trusted_composition.py::test_hatchet_failed_manifest_overlay_cannot_claim_startup_parity
+      - tests/unit/test_permanent_runtime.py::test_permanent_profile_is_pinned_metered_and_redacted_in_audit
+      - tests/unit/test_permanent_runtime.py::test_refused_runtime_resolution_is_typed_refunded_and_deterministic
+      - tests/security/test_worker_route_ledger.py::test_every_worker_route_names_a_real_sdk_contract_and_component_callsite
+  SEC-WRK-31:
+    description: 'The ordinary Worker Chat stream is a closed browser contract rather than a transparent view of the internal run relay: each admitted event is projected field by field, tool payloads and unreviewed nested values never cross, and unknown or malformed runtime frames collapse to one content-free notice that does not reflect their internal type. Artifact availability and rejection are typed shared-SDK lifecycle frames; Worker refreshes artifact metadata only through the scoped artifact API and explicitly surfaces rejected or withheld activity.'
+    tests:
+      - tests/unit/test_chat_event_projection.py::test_unknown_internal_frame_collapses_without_reflecting_type_or_payload
+      - tests/unit/test_chat_event_projection.py::test_tool_frames_keep_only_reviewed_summary_fields
+      - tests/unit/test_chat_event_projection.py::test_artifact_frames_are_typed_receipts_without_content_bytes
+      - tests/unit/test_chat_event_projection.py::test_malformed_reviewed_frame_fails_to_a_content_free_notice
+      - tests/unit/test_chat_event_projection.py::test_nested_subagent_receipts_drop_unreviewed_fields
+  SEC-WRK-32:
+    description: 'Non-secret fixed Worker mutations use one exact caller-owned approval finalizer: component memory retains only a cloned typed route input and internal approval id, requester-owned state must report approved before replay through the same SDK method, and edits, selection changes or refresh invalidate the held continuation. Pending, rejected, expired, consumed, invalidated and unavailable outcomes stay distinct and never imply that a mutation applied. Secret-bearing AI-key set remains excluded from this generic mechanism and uses SEC-WRK-33 instead.'
+    tests:
+      - tests/security/test_fixed_control_finalization.py::test_fixed_control_families_use_the_shared_exact_finalizer
+      - tests/security/test_fixed_control_finalization.py::test_secret_bearing_ai_key_flow_is_not_a_generic_retained_mutation
+      - tests/security/test_model_endpoint_lifecycle.py::test_direct_endpoint_route_finalizes_with_caller_held_approval
+      - tests/security/test_permanent_fleet.py::test_direct_fleet_route_finalizes_with_caller_held_approval
+      - tests/security/test_authored_definition_lifecycle.py::test_direct_authored_routes_finalize_with_caller_held_approval
+      - tests/security/test_memory_approval_finalization.py::test_batch_ingestion_replays_as_one_exact_governed_operation
+      - tests/security/test_memory_approval_finalization.py::test_source_erasure_exposes_and_consumes_its_approval_handle
+      - tests/security/test_knowledge_approval_finalization.py::test_provider_change_replays_only_with_the_exact_approved_route_input
+      - tests/security/test_work_lifecycle.py::test_work_create_assign_status_and_audit_are_canonical
+      - tests/security/test_work_lifecycle.py::test_work_approval_is_bound_to_the_exact_mutable_item
+  SEC-WRK-33:
+    description: 'AI-key set has a purpose-built seal-before-approval lane. Plaintext is synchronously cleared from the uncontrolled Worker input and atomically envelope-sealed under a short-lived opaque proposal before any approval, audit or response is created. The proposal and HITL bind requester, tenant, active workspace, level, scope, provider, model, base URL, opaque staged identity and digest without storing or projecting plaintext or raw approval authority. Requester-only status survives navigation/restart; exact approved finalization reauthorizes current policy and approved resource snapshot, consumes once, installs the sealed reference and removes staging. Reject, expiry, edit, scope drift, policy drift, snapshot drift and ambiguous consumed state clear or invalidate staging without inferring installation. Non-secret delete uses the shared SEC-WRK-32 finalizer.'
+    tests:
+      - tests/security/test_ai_key_secret_proposals.py::test_secret_is_sealed_before_approval_and_exactly_once_consumed
+      - tests/security/test_ai_key_secret_proposals.py::test_reject_expiry_and_edit_invalidation_remove_staged_material
+      - tests/security/test_ai_key_secret_proposals.py::test_status_and_finalization_are_requester_only_and_restart_recoverable
+      - tests/security/test_ai_key_secret_proposals.py::test_policy_or_current_config_drift_refuses_and_clears_staging
+      - tests/security/test_ai_key_secret_proposals.py::test_worker_retains_only_the_opaque_proposal_after_secret_intake
+      - tests/store/test_ai_key_secret_proposals.py::test_staged_secret_lifecycle_matches_on_both_stores
+      - tests/store/test_ai_key_secret_proposals.py::test_invalidation_deletes_only_the_exact_staged_reference
+  SEC-WRK-34:
+    description: 'HITL expiry and closed-conversation retention loops persist bounded tenant-and-opaque-process attempt history with last attempt, last success, last failure, safe failure code, item count and configured interval. Raw exceptions, host identity, topology and secrets never enter the receipt or projection. Memory and PostgreSQL prune deterministically to the same hard per-job process cap. Readiness consumes only an optional newest-receipt summary, and authenticated Worker Operate shows every retained receipt with derived lag while explicitly refusing to claim current process liveness or complete replica coverage.'
+    tests:
+      - tests/security/test_background_job_health.py::test_janitor_loops_record_attempts_and_only_a_safe_failure_code
+      - tests/security/test_background_job_health.py::test_worker_correlates_both_jobs_with_one_random_process_identity
+      - tests/security/test_background_job_health.py::test_readiness_is_optional_attempt_evidence_not_a_liveness_claim
+      - tests/security/test_background_job_health.py::test_authenticated_platform_projection_is_tenant_scoped_and_opaque
+      - tests/security/test_background_job_health.py::test_worker_copy_never_upgrades_attempt_receipts_to_process_health
+      - tests/store/test_background_job_receipts.py::test_attempt_history_merges_without_leaking_failures_on_both_stores
+      - tests/store/test_background_job_receipts.py::test_attempt_receipts_are_pruned_to_a_deterministic_hard_bound
+  SEC-WRK-35:
+    description: 'The live web.fetch adapter enforces the complete manifest network snapshot, including the operator CA bundle on both direct pinned and proxied TLS paths, without changing the SSRF, domain, air-gap or redirect boundary. Authenticated platform status and Worker expose only configured/enabled state and rule counts, never raw proxy, CA, domain or endpoint values, and explicitly distinguish browser, external MCP, other HTTP adapters, model providers and embeddings as separate or partial surfaces rather than claiming a universal egress firewall.'
+    tests:
+      - tests/security/test_worker_network_policy.py::test_ca_bundle_reaches_direct_and_proxy_tls_without_changing_policy
+      - tests/security/test_worker_network_policy.py::test_pinned_transport_owns_custom_tls_verifier
+      - tests/security/test_worker_network_policy.py::test_authenticated_projection_is_redacted_and_marks_every_separate_surface
+      - tests/security/test_worker_network_policy.py::test_worker_contract_refuses_universal_coverage_or_raw_network_authoring
+  SEC-WRK-36:
+    description: 'Queued memory projections persist a tenant-scoped bounded attempt receipt, cap provider delivery attempts inside the original task contract, resume from the persisted cap after redelivery, and treat ambiguous enqueue acceptance as unsafe to retry. Authenticated platform status and Worker expose only opaque, content-free bounded receipts with receipt age and first-attempt wait; they never claim queue depth or worker liveness. A terminal duplicate is a no-op, raw provider errors and payload content never enter delivery evidence, and manual replay stays unavailable until Boltrig owns an exact governed reconstruction contract for the original payload.'
+    tests:
+      - tests/security/test_memory_projection_delivery.py::test_transient_projection_retries_with_bounded_content_free_evidence
+      - tests/security/test_memory_projection_delivery.py::test_poison_projection_stops_at_cap_and_duplicate_delivery_is_a_noop
+      - tests/security/test_memory_projection_delivery.py::test_redelivery_resumes_the_persisted_attempt_budget
+      - tests/security/test_memory_projection_delivery.py::test_ambiguous_enqueue_failure_is_not_retried
+      - tests/security/test_memory_projection_delivery.py::test_platform_projection_is_tenant_scoped_bounded_and_redacted
+      - tests/store/test_store_parity.py::test_memory_projection_status_upserts_and_filters_on_both_stores
+  SEC-WRK-27:
+    description: 'The permanent fleet has one closed, versioned desired hierarchy and a separate worker-observation contract. Non-ephemeral capability rows are persistent profiles, never liveness evidence. A governed edit appends desired state only, round-trips through Admin manifest export, and reports restart plus next-manifest-apply projection honestly; profile and budget reconciliation remains at that safe boundary and preserves governed rows and spend. At startup build_org consumes the exact Chief/Department routing identity, supported skills, purpose, brief, runtime, model endpoint, depth and cost policy into lazy permanent runtime profiles. Runtime resolution remains per-call, pinned, metered and audited, so startup observations report construction with runtime liveness explicitly unknown and never imply a hot apply, a current worker, a reachable endpoint or an admitted Codex cell. Observation persistence is tenant-scoped and equivalent in memory and PostgreSQL.'
+    tests:
+      - tests/security/test_permanent_fleet.py::test_desired_write_is_single_revision_and_projects_only_on_manifest_apply
+      - tests/security/test_permanent_fleet.py::test_startup_snapshot_never_claims_current_worker_liveness_or_inactive_fields
+      - tests/security/test_permanent_fleet.py::test_closed_hierarchy_and_revision_failure_leave_no_false_desired_state
+      - tests/fleet/test_worker_janitors.py::test_default_org_does_not_claim_permanent_fleet_startup_parity
+      - tests/unit/test_codex_trusted_composition.py::test_hatchet_failed_manifest_overlay_cannot_claim_startup_parity
+      - tests/unit/test_permanent_runtime.py::test_permanent_profile_is_pinned_metered_and_redacted_in_audit
+      - tests/unit/test_permanent_runtime.py::test_refused_runtime_resolution_is_typed_refunded_and_deterministic
+      - tests/unit/test_permanent_fleet_store.py::test_memory_observation_is_tenant_scoped_and_latest_per_worker
+      - tests/unit/test_permanent_fleet_store.py::test_observation_contract_rejects_false_or_overlapping_evidence
+      - tests/store/test_postgres_store.py::test_pg_permanent_fleet_observation_is_tenant_scoped_and_upserted

@@ -1,0 +1,10 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Least-privilege capabilities for the Boltrig Worker window.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "deep-link:deny-get-current"
+  ]
+}

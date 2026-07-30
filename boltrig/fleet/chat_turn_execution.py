@@ -1,0 +1,304 @@
+"""Production work-item execution behind the chat turn seam."""
+
+from __future__ import annotations
+
+import contextlib
+from typing import TYPE_CHECKING, Any
+
+from boltrig.config.manifest import ChatConfig
+from boltrig.models import (
+    EMPTY_GRANTS,
+    BoltrigError,
+    InvocationContext,
+    WorkItem,
+    WorkStatus,
+)
+
+from .chat_attachments import attachment_task_supplement
+from .chat_authority import seal_on_behalf_bearer, warn_if_no_usable_authority
+from .chat_model_routing import publish_model_routing
+from .chat_origin import normalised_origin
+from .continuity import (
+    compaction_enabled,
+    compose_turn_task,
+    continuity_enabled,
+)
+from .prompt_stack import wrap_untrusted
+from .pump import persist_new_work_items
+from .result import reply_text
+from boltrig.kernel.held_call import sweep_run_credentials_if_settled
+
+if TYPE_CHECKING:
+    from boltrig.api.codex_execution import CodexExecutionStack
+
+
+async def _settle_turn(kernel: Any, item: WorkItem, tenant_id: str, run_id: str):
+    await kernel.store.update_work_item(item)
+    with contextlib.suppress(Exception):
+        await sweep_run_credentials_if_settled(kernel.store, tenant_id, run_id)
+
+
+async def _turn_skills(kernel, cfg, tenant_id: str, role: str) -> list[str]:
+    skills = []
+    for skill_id in cfg.skills_by_role.get(role, cfg.default_skills):
+        if await kernel.store.get_skill(tenant_id, skill_id) is not None:
+            skills.append(skill_id)
+    return skills
+
+
+def _work_item(
+    tenant_id: str,
+    user_id: str,
+    run_id: str,
+    message: str,
+    origin: str | None,
+    workspace_id: str | None,
+) -> WorkItem:
+    return WorkItem(
+        id=run_id,
+        tenant_id=tenant_id,
+        source="chat",
+        intent=message,
+        source_id=normalised_origin(origin),
+        confidence=1.0,
+        convergent=False,
+        status=WorkStatus.IN_FLIGHT,
+        owner_member="chief-of-staff",
+        hatchet_run_id=run_id,
+        on_behalf_of=user_id,
+        workspace_id=workspace_id,
+    )
+
+
+def _invocation_context(
+    *,
+    tenant_id,
+    user_id,
+    role,
+    ceiling,
+    conversation_id,
+    run_id,
+    workspace_id,
+    scope,
+    model_profile_id,
+) -> InvocationContext:
+    return InvocationContext(
+        tenant_id=tenant_id,
+        grants=ceiling,
+        actor="chief-of-staff",
+        actor_tier="tier1",
+        run_id=run_id,
+        on_behalf_of=user_id,
+        workspace_id=workspace_id,
+        extra={
+            "conversation_id": conversation_id,
+            "principal_role": role,
+            **({"principal_scope": dict(scope)} if scope is not None else {}),
+            **({"model_profile": model_profile_id} if model_profile_id else {}),
+        },
+    )
+
+
+async def _turn_task(
+    kernel,
+    cfg,
+    use_continuity,
+    tenant_id,
+    conversation_id,
+    user_id,
+    message,
+    attachments,
+) -> str:
+    task = wrap_untrusted("channel_inbound", user_id or "user", message)
+    if use_continuity:
+        history = await kernel.store.list_messages(tenant_id, conversation_id)
+        summary = None
+        if compaction_enabled(cfg):
+            summary = await kernel.store.get_latest_conversation_summary(
+                tenant_id, conversation_id
+            )
+        task = compose_turn_task(history, message, summary=summary, config=cfg)
+    return task + attachment_task_supplement(attachments)
+
+
+def _publish_reply(relay, run_id, model_profile_id, result, item) -> None:
+    publish_model_routing(relay, run_id, model_profile_id, result)
+    reply = reply_text(result)
+    item.degraded = bool(result.get("degraded"))
+    if item.degraded:
+        if not reply.startswith("degraded"):
+            reply = f"(degraded) {reply}"
+        relay.publish(
+            run_id,
+            {"type": "text_delta", "delta": reply, "degraded": True},
+        )
+        return
+    already_text = any(
+        event.get("type") == "text_delta" for event in relay.snapshot(run_id)
+    )
+    if not already_text:
+        relay.publish(run_id, {"type": "text_delta", "delta": reply})
+
+
+async def _spawn_turn(
+    kernel,
+    spawner,
+    relay,
+    item,
+    tenant_id,
+    task,
+    skills,
+    context,
+    model_profile_id,
+):
+    try:
+        result = await spawner.spawn(
+            tenant_id, task, skills, {}, context, partial_on_budget=True
+        )
+        _publish_reply(relay, item.id, model_profile_id, result, item)
+        await persist_new_work_items(
+            kernel.store, item, result.get("new_work_items"), source="chat"
+        )
+        item.status = WorkStatus.DONE
+    except BoltrigError as exc:
+        relay.publish(
+            item.id, {"type": "text_delta", "delta": f"({exc.reason})"}
+        )
+        item.status = WorkStatus.FAILED
+    except Exception as exc:
+        relay.publish(
+            item.id,
+            {
+                "type": "text_delta",
+                "delta": f"(turn error: {type(exc).__name__})",
+            },
+        )
+        item.status = WorkStatus.FAILED
+        item.result = {"error": type(exc).__name__}
+    await _settle_turn(kernel, item, tenant_id, item.id)
+
+
+async def _execute_turn(
+    kernel,
+    spawner,
+    cfg,
+    use_continuity,
+    codex_execution,
+    *,
+    tenant_id,
+    user_id,
+    role,
+    grants,
+    conversation_id,
+    run_id,
+    message,
+    relay,
+    attachments,
+    workspace_id,
+    scope,
+    on_behalf_bearer,
+    origin,
+    model_profile_id,
+):
+    skills = await _turn_skills(kernel, cfg, tenant_id, role)
+    ceiling = grants if grants is not None else EMPTY_GRANTS
+    warn_if_no_usable_authority(role, ceiling, skills)
+    item = _work_item(
+        tenant_id, user_id, run_id, message, origin, workspace_id
+    )
+    await kernel.store.create_work_item(item)
+    if on_behalf_bearer:
+        await seal_on_behalf_bearer(
+            kernel.credentials,
+            tenant_id,
+            run_id,
+            on_behalf_bearer,
+            user_id,
+        )
+    if codex_execution is not None:
+        await codex_execution.shadow_admit(tenant_id, workspace_id, run_id)
+    context = _invocation_context(
+        tenant_id=tenant_id,
+        user_id=user_id,
+        role=role,
+        ceiling=ceiling,
+        conversation_id=conversation_id,
+        run_id=run_id,
+        workspace_id=workspace_id,
+        scope=scope,
+        model_profile_id=model_profile_id,
+    )
+    task = await _turn_task(
+        kernel,
+        cfg,
+        use_continuity,
+        tenant_id,
+        conversation_id,
+        user_id,
+        message,
+        attachments,
+    )
+    await _spawn_turn(
+        kernel,
+        spawner,
+        relay,
+        item,
+        tenant_id,
+        task,
+        skills,
+        context,
+        model_profile_id,
+    )
+
+
+def build_turn_executor(
+    kernel,
+    spawner,
+    *,
+    continuity: bool | None = None,
+    chat_config: ChatConfig | None = None,
+    codex_execution: CodexExecutionStack | None = None,
+):
+    use_continuity = continuity_enabled() if continuity is None else continuity
+    cfg = chat_config if chat_config is not None else ChatConfig()
+
+    async def executor(
+        *,
+        tenant_id,
+        user_id,
+        role,
+        grants,
+        conversation_id,
+        run_id,
+        message,
+        relay,
+        attachments=None,
+        workspace_id=None,
+        scope=None,
+        on_behalf_bearer=None,
+        origin=None,
+        model_profile_id=None,
+    ):
+        await _execute_turn(
+            kernel,
+            spawner,
+            cfg,
+            use_continuity,
+            codex_execution,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            role=role,
+            grants=grants,
+            conversation_id=conversation_id,
+            run_id=run_id,
+            message=message,
+            relay=relay,
+            attachments=attachments,
+            workspace_id=workspace_id,
+            scope=scope,
+            on_behalf_bearer=on_behalf_bearer,
+            origin=origin,
+            model_profile_id=model_profile_id,
+        )
+
+    return executor

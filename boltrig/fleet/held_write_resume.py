@@ -9,9 +9,9 @@ the ORIGINAL run identity - which is what makes ``approval_request_fingerprint``
 match by construction and leaves ``consume_approved_by`` as the sole authority on
 exactly-once (SEC-14).
 
-It must run in the process that owns the run's ``EventRelay``: the relay is
-per-Kernel and in-process, so a publisher in another process publishes into a
-stream nobody can subscribe to.
+It must publish through the deployment's run ``EventRelay``. Redis shares that
+relay across production replicas; development still uses the same local Kernel
+instance so the browser and resume publisher meet on one stream.
 
 Candour, never silence and never a silent re-pend. Three residual paths are
 recorded on the run stream AND in the audit trail rather than swallowed: the
@@ -271,9 +271,16 @@ async def resume_held_write(
     # seal behind would outlive its run (Order 7 applies to every outcome, not only
     # redeemed ones).
     if not await kernel.hitl.is_approved(tenant_id, request_id):
+        held = await read_held_call(store, tenant_id, run_id, request_id)
         relay.reopen(tenant_id, stream)
         declined = _frames(None, "declined", "That was declined, so I have not carried it out.")
         await _publish(relay, tenant_id, stream, declined)
+        if held is not None:
+            from boltrig.kernel.realtime_call_bridge import (
+                project_realtime_hitl_outcome,
+            )
+
+            await project_realtime_hitl_outcome(store, held, "declined")
         await settle_held_call(store, tenant_id, run_id, request_id)
         return {"status": "declined"}
     held = await read_held_call(store, tenant_id, run_id, request_id)
@@ -285,6 +292,14 @@ async def resume_held_write(
     relay.reopen(tenant_id, stream)
     status, text, detail = await _invoke_held(kernel, held, stream)
     await _record(kernel, held, stream, status, detail)
+    from boltrig.kernel.realtime_call_bridge import project_realtime_hitl_outcome
+
+    await project_realtime_hitl_outcome(
+        store,
+        held,
+        status,
+        new_request_id=detail.get("new_hitl_request_id"),
+    )
     # Retire the hold on EVERY outcome (Order 7): redeemed, conflicted, re-pended
     # under a new request, or failed. The chat lane never calls sweep_run_scoped,
     # so a seal left behind here outlives its run.

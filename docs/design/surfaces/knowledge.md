@@ -60,13 +60,14 @@ The `knowledge/retrieval` skill is read-only and labels retrieved material
 | Provider | Shipped state | Authority |
 |---|---|---|
 | Cognee | Bundled and enabled | Rebuildable compiler only |
-| Supermemory | Catalogue add-on, disabled | External projection only |
-| Mem0 | Catalogue add-on, disabled | Compatibility projection only |
+| Supermemory | Visible, unavailable | External projection only |
+| Mem0 | Visible, unavailable | Compatibility projection only |
 
-Enable and disable actions run through high-consequence governed verbs. The
-single action changes provider state, not canonical storage. Supermemory and
-Mem0 still require a credential-backed connection before they can process data;
-until then an enabled entry reports degraded rather than pretending to work.
+Cognee enable and disable actions run through high-consequence governed verbs.
+The action changes provider state, not canonical storage. Supermemory and Mem0
+have no credential-backed projection adapter in this build, so their controls
+are disabled and the service refuses enablement. Older persisted enabled rows
+are reconciled to unavailable rather than permitted to fail every compile.
 
 ## 6. Codex and MCP contract
 

@@ -4,38 +4,21 @@ from __future__ import annotations
 
 from typing import Any
 
-from boltrig.models import WorkItem, WorkStatus
 from boltrig.models.work import work_item_run_id
 
-from dataclasses import replace
-
 from .base import clamp_work_page
+from .execution_search import ExecutionSearchMem, ExecutionSearchPG
+from .work_item_rows import (
+    detached_work_item as _detached,
+    work_item_from_row,
+)
 from .workspace_scope import (
     append_work_workspace_clause,
     work_item_workspace_visible,
 )
 
 
-def _detached(item):
-    """A caller-owned COPY of a stored work item.
-
-    The memory store used to hand back the LIVE object, so a caller mutating a
-    returned row changed the store with no write call, and any conditional write
-    would compare a stored object against itself and always agree. Postgres has
-    always returned a fresh object built by ``work_item_from_row``, so this is a
-    parity REPAIR, not a new divergence
-    ([2026] VJS-CC-BOLTRIG-WORK-ITEM-LEASE-FENCE-001 D6).
-
-    ``replace`` with no changes is a shallow copy: the dataclass fields are rebound
-    onto a new object, which is what the fence needs (it compares scalars). Nested
-    dicts like ``constraints``/``raw``/``result`` stay shared, matching how the
-    Postgres row decoder also yields fresh containers per read only at the top
-    level. Callers must not mutate those in place either way.
-    """
-    return replace(item) if item is not None else None
-
-
-class WorkItemReadsMem:
+class WorkItemReadsMem(ExecutionSearchMem):
     async def get_work_item(
         self, tenant_id, item_id, workspace_id=None, enforce_workspace=False
     ):
@@ -154,8 +137,7 @@ class WorkItemReadsMem:
         page = out[: clamp_work_page(limit)] if limit is not None else out
         return [_detached(w) for w in page]
 
-
-class WorkItemReadsPG:
+class WorkItemReadsPG(ExecutionSearchPG):
     async def get_work_item(
         self, tenant_id, item_id, workspace_id=None, enforce_workspace=False
     ):
@@ -294,33 +276,3 @@ class WorkItemReadsPG:
             sql += f" LIMIT ${len(args)}"
         rows = await self._pool.fetch(sql, *args)
         return [work_item_from_row(row) for row in rows]
-
-
-def work_item_from_row(row: Any) -> WorkItem | None:
-    if row is None:
-        return None
-    return WorkItem(
-        id=row["id"],
-        tenant_id=row["tenant_id"],
-        workspace_id=row["workspace_id"],
-        source=row["source"],
-        intent=row["intent"],
-        confidence=row["confidence"],
-        convergent=row["convergent"],
-        status=WorkStatus(row["status"]),
-        source_id=row["source_id"],
-        owner_member=row["owner_member"],
-        parent_id=row["parent_id"],
-        hatchet_run_id=row["hatchet_run_id"],
-        depth=row["depth"],
-        on_behalf_of=row["on_behalf_of"],
-        constraints=row["constraints"] or {},
-        raw=row["raw"] or {},
-        attempts=row["attempts"],
-        degraded=row["degraded"],
-        result=row["result"],
-        lease_owner=row["lease_owner"],
-        lease_expires_at=row["lease_expires_at"],
-        target=row["target"],
-        reply_route=row["reply_route"],
-    )

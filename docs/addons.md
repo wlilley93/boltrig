@@ -24,6 +24,13 @@ Addon(
     harness="...",              # prompt fragment (<= 4096 bytes), optional
     adapter_id="billandben",    # the on-behalf adapter, optional
     consequence_hint=fn,        # read THIS server's risk vocabulary, optional
+    requirements=(              # kernel-evaluated readiness data, optional
+        AddonRequirement(
+            id="billandben-adapter",
+            kind="adapter",
+            ref="billandben",
+        ),
+    ),
 )
 ```
 
@@ -50,6 +57,26 @@ Addon(
   wherever the flag was unset, and re-activating the adapter overwrote a stored
   `high` with it. Activation stays meaningful where it belongs - the harness text,
   which is compiled into an attested, hashed birth profile.
+- **`requirements`** is declarative readiness data. A requirement may name a
+  tenant-scoped adapter record, a cached stack-status component, deployment
+  setting presence, or a tenant-scoped credential reference. The kernel
+  evaluates those names but never returns them. Requirements cannot carry
+  callbacks, verbs, grants or credential material.
+
+## Authenticated runtime inventory
+
+`GET /v1/addons` lists every add-on registered in the running build, whether
+active or inactive, and evaluates its requirements in the authenticated
+principal's tenant and active workspace. It accepts no caller-supplied scope.
+Worker consumes this route in Integrations under **Runtime add-ons**.
+
+The projection distinguishes ready, missing, degraded, unavailable, unverified
+and inactive state. It uses persisted records and already-cached health only:
+listing never probes an adapter, status provider or credential secret. Harness
+text, requirement references, environment names/values, credential metadata,
+entry-point paths and evaluator exceptions are never serialized. Activation,
+installation and configuration remain deployment or governed control-plane
+concerns; the inventory route is read-only.
 
 ## Registering one out of tree
 

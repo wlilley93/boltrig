@@ -129,7 +129,7 @@ export function AgentCreateCard({
           options={[
             { value: "cheap", label: "Cheap", body: "Lowest-cost bulk work" },
             { value: "standard", label: "Standard", body: "Default balance" },
-            { value: "premium", label: "Premium", body: "Strongest model lane" },
+            { value: "expensive", label: "Expensive", body: "Highest-cost model lane" },
           ]}
         />
       </Field>

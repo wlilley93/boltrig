@@ -72,16 +72,31 @@ async def test_missing_mutable_resource_fails_before_creating_approval() -> None
 
 @pytest.mark.security
 @pytest.mark.invariant("SEC-138")
+@pytest.mark.invariant("SEC-193")
+@pytest.mark.parametrize(
+    ("verb", "params"),
+    [
+        (
+            "control.workflow.trigger",
+            {"workflow_id": "mutable-workflow", "inputs": {}},
+        ),
+        (
+            "control.workflow.archive",
+            {"workflow_id": "mutable-workflow"},
+        ),
+    ],
+)
 async def test_resource_change_between_gate_and_adapter_execute_fails_closed(
     monkeypatch: pytest.MonkeyPatch,
+    verb: str,
+    params: dict,
 ) -> None:
     kernel = await _kernel()
     original = _workflow("first.action")
     changed = _workflow("changed.action")
     await kernel.store.upsert_workflow(original)
-    params = {"workflow_id": original.id, "inputs": {}}
     with pytest.raises(PendingHuman) as held:
-        await kernel.invoke("control", "control.workflow.trigger", params, _context())
+        await kernel.invoke("control", verb, params, _context())
     request_id = held.value.hitl_request_id
     await kernel.hitl.answer(TENANT, request_id, "approve", "independent-reviewer")
 
@@ -97,7 +112,7 @@ async def test_resource_change_between_gate_and_adapter_execute_fails_closed(
     with pytest.raises(AdapterFailure) as caught:
         await kernel.invoke(
             "control",
-            "control.workflow.trigger",
+            verb,
             params,
             _context(),
             approval_id=request_id,

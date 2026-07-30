@@ -285,6 +285,13 @@ ALLOW: dict[tuple[str, str], str] = {
         "the audit-key guard compared against the in-source default only and missed "
         "the placeholder .env.example actually shipped. See the finding above."
     ),
+    ("scripts/govern.py", "[2026] VJS-CC-BOLTRIG-OPERATOR-SEAT-001"): (
+        "The order was filed in commit 2640b0c on the operator-seat line of "
+        "development, but its case file is not present on this branch. The live "
+        "script accurately names the sole-author exemption it reports; the "
+        "citation is allowed rather than reconstructing judicial particulars "
+        "from git history."
+    ),
     ("*", "[2026] VJS-CC NANKLE-CONSOLIDATION 001"): (
         "The founding ruling under which this repository exists at all, cited as "
         "BINDING by README.md, docs/ARCHITECTURE.md and docs/invariants.md - the "

@@ -29,15 +29,20 @@ class ConfigRevision:
 
 
 # --- evaluation harness (Epic EVAL) ------------------------------------------
+EVAL_TARGET_KINDS: tuple[str, ...] = ("skill", "workflow")
+
+
 @dataclass
 class EvalCase:
     id: str
     tenant_id: TenantId
-    target_kind: str  # skill | workflow | conversation
+    target_kind: str  # one of EVAL_TARGET_KINDS
     target_ref: str
     input: dict[str, Any]
     assertions: dict[str, Any]  # expected output / must-call / must-not / rubric
     labels: list[str] = field(default_factory=list)
+    # Archival is recoverable: fixture content and historical runs stay intact.
+    is_active: bool = True
 
 
 @dataclass
@@ -59,8 +64,8 @@ class NotificationPref:
     tenant_id: TenantId
     scope_kind: str  # user | team
     scope_ref: str
-    event_type: str  # approval | escalation | work_status | budget_alert | error
-    channel: str  # slack | teams | email | webhook | pager | in_app
+    event_type: str  # server-declared producer event (notification_catalogue)
+    channel: str  # exact enabled socket channel id; legacy rows may name a platform
     target: str | None = None
     enabled: bool = True
 

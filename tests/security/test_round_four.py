@@ -18,7 +18,14 @@ from boltrig.identity.auth import build_principal_resolver
 from boltrig.identity.provisioning import provision_user
 from boltrig.kernel import Kernel
 from boltrig.kernel.app import create_app
-from boltrig.models import GrantSet, RoleMapping, TenantPermissions, UserInvitation, utcnow
+from boltrig.models import (
+    GrantSet,
+    Noun,
+    RoleMapping,
+    TenantPermissions,
+    UserInvitation,
+    utcnow,
+)
 from boltrig.store import InMemoryStore
 
 T = "acme"
@@ -187,6 +194,11 @@ def test_no_unauthenticated_access_to_tokens():
 @pytest.mark.invariant("SEC-39")
 def test_authored_verbs_safe_by_default():
     k = asyncio.run(_kernel())
+    asyncio.run(
+        k.store.upsert_noun(
+            Noun(id="widget", tenant_id=T, description="Authored verb fixture")
+        )
+    )
     c = _client(k)
 
     def author(body: dict) -> dict:

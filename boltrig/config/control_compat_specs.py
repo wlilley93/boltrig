@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from boltrig.adapters.base import VerbSpec
+from boltrig.models import EVAL_TARGET_KINDS
 
 _OBJ: dict[str, Any] = {"type": "object"}
 _STRING: dict[str, Any] = {"type": "string"}
@@ -19,17 +20,21 @@ def _spec(
     required: tuple[str, ...],
     description: str,
     *,
+    consequence: str = "high",
     idempotency_mode: str = "cacheable",
+    additional: bool = True,
 ) -> VerbSpec:
     schema: dict[str, Any] = {"type": "object", "properties": properties}
     if required:
         schema["required"] = list(required)
+    if not additional:
+        schema["additionalProperties"] = False
     return VerbSpec(
         verb_id=verb_id,
         noun_id="control",
         input_schema=schema,
         output_schema=_OBJ,
-        consequence="high",
+        consequence=consequence,
         description=description,
         idempotency_mode=idempotency_mode,
     )
@@ -44,11 +49,20 @@ def _tenancy_specs() -> list[VerbSpec]:
                 "scope_id": _STRING,
                 "provider": _STRING,
                 "model": _STRING,
-                "api_key": _STRING,
                 "base_url": _STRING,
+                "proposal_id": _STRING,
+                "secret_digest": _STRING,
             },
-            ("level", "scope_id", "provider", "model", "api_key"),
-            "Set a scoped model-provider key through the sealed credential store",
+            (
+                "level",
+                "scope_id",
+                "provider",
+                "model",
+                "proposal_id",
+                "secret_digest",
+            ),
+            "Consume one caller-bound envelope-sealed AI-key proposal",
+            additional=False,
         ),
         _spec(
             "control.ai_key.delete",
@@ -106,9 +120,15 @@ def _tenancy_specs() -> list[VerbSpec]:
 
 
 def _channel_specs() -> list[VerbSpec]:
+    credential_refs = {
+        "type": "object",
+        "additionalProperties": {"type": "string", "minLength": 1},
+    }
     configuration = {
         "name": _STRING,
         "config": _OBJ,
+        "provider_config": _OBJ,
+        "credential_refs": credential_refs,
         "enabled": _BOOL,
         "unpaired_behavior": _STRING,
     }
@@ -121,9 +141,15 @@ def _channel_specs() -> list[VerbSpec]:
     return [
         _spec(
             "control.channel.connect",
-            {"platform": _STRING, "signing_secret": _STRING, **configuration},
+            {
+                "platform": _STRING,
+                # Legacy webhook compatibility only. Socket providers refuse it.
+                "signing_secret": _STRING,
+                "signing_secret_ref": _STRING,
+                **configuration,
+            },
             ("platform", "name"),
-            "Connect a governed inbound messaging channel",
+            "Connect a governed channel using provider-specific secret-store references",
         ),
         _spec(
             "control.channel.configure",
@@ -156,20 +182,75 @@ def _channel_specs() -> list[VerbSpec]:
             ("channel_id", "binding_id"),
             "Remove an external-sender binding from a channel",
         ),
+        _spec(
+            "control.channel.delivery.retry",
+            {
+                "channel_id": _STRING,
+                "message_id": _STRING,
+                "expected_updated_at": _STRING,
+            },
+            ("channel_id", "message_id", "expected_updated_at"),
+            "Retry one exact terminal failed channel delivery after configuration repair",
+            additional=False,
+        ),
     ]
 
 
 def compatibility_specs() -> list[VerbSpec]:
-    """Compatibility writes use the same high-consequence policy as control APIs."""
+    """Compatibility writes are high consequence except explicit inert/intake seams."""
     return [
         *_tenancy_specs(),
         *_channel_specs(),
         _spec(
+            "control.integration.connect",
+            {
+                "integration_id": _STRING,
+                "label": _STRING,
+                # The provider-specific closed contract is enforced again by
+                # the adapter. This secret-shaped key makes the dispatcher
+                # redact the entire submitted contract from projections.
+                "secret": _OBJ,
+            },
+            ("integration_id", "label", "secret"),
+            "Seal a certified provider contract and bind one integration connection",
+            consequence="low",
+            additional=False,
+            idempotency_mode="disabled",
+        ),
+        _spec(
+            "control.integration.revoke",
+            {"connection_id": _STRING},
+            ("connection_id",),
+            "Revoke an integration connection and detach its owned credential reference",
+            additional=False,
+        ),
+        _spec(
+            "control.eval_case.archive",
+            {"id": _STRING},
+            ("id",),
+            "Archive an evaluation case without deleting its fixture or run history",
+            additional=False,
+        ),
+        _spec(
+            "control.eval_case.restore",
+            {"id": _STRING},
+            ("id",),
+            "Restore an archived evaluation case",
+            additional=False,
+        ),
+        _spec(
             "control.eval_case.upsert",
             {
                 "id": _STRING,
-                "target_kind": _STRING,
-                "target_ref": _STRING,
+                "target_kind": {
+                    "type": "string",
+                    "enum": list(EVAL_TARGET_KINDS),
+                },
+                "target_ref": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": r".*\S.*",
+                },
                 "input": _OBJ,
                 "assertions": _OBJ,
                 "labels": _STRINGS,

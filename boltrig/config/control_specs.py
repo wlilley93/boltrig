@@ -9,6 +9,9 @@ from __future__ import annotations
 from typing import Any
 
 from boltrig.adapters.base import VerbSpec
+from boltrig.models import COST_TIERS
+
+from .control_workflow_specs import permanent_fleet_specs, workflow_specs
 
 _OBJ: dict[str, Any] = {"type": "object"}
 _STRING: dict[str, Any] = {"type": "string"}
@@ -50,41 +53,6 @@ def _spec(
     )
 
 
-def _workflow_specs() -> list[VerbSpec]:
-    return [
-        _spec(
-            "control.workflow.upsert",
-            {
-                "id": _STRING,
-                "version": _STRING,
-                "source": _STRING,
-                "definition": _OBJ,
-                "intent_tags": _STRINGS,
-            },
-            ("id",),
-            "Author or replace a workspace-scoped workflow definition",
-        ),
-        _spec(
-            "control.workflow.schedule",
-            {"workflow_id": _STRING, "cron": _STRING, "timezone": _STRING},
-            ("workflow_id", "cron"),
-            "Validate and persist a workflow cron schedule",
-        ),
-        _spec(
-            "control.workflow.trigger",
-            {"workflow_id": _STRING, "inputs": _OBJ},
-            ("workflow_id",),
-            "Queue a stored workflow on the configured executor",
-        ),
-        _spec(
-            "control.workflow.execute",
-            {"workflow_id": _STRING, "inputs": _OBJ},
-            ("workflow_id",),
-            "Execute a stored workflow through governed step dispatch",
-        ),
-    ]
-
-
 def _profile_specs() -> list[VerbSpec]:
     return [
         _spec(
@@ -95,12 +63,22 @@ def _profile_specs() -> list[VerbSpec]:
                 "supported_skills": _STRINGS,
                 "max_depth": {"type": "integer"},
                 "is_ephemeral": {"type": "boolean"},
-                "cost_tier": _STRING,
+                "cost_tier": {"type": "string", "enum": list(COST_TIERS)},
                 "model_endpoint": _STRING,
             },
             ("name", "runtime"),
             "Author or replace an agent capability profile",
         ),
+        *[
+            _spec(
+                f"control.capability.{action}",
+                {"name": _STRING},
+                ("name",),
+                f"{action.title()} an agent capability without deleting it",
+                additional=False,
+            )
+            for action in ("retire", "restore")
+        ],
         _spec(
             "control.model_endpoint.upsert",
             {
@@ -114,59 +92,101 @@ def _profile_specs() -> list[VerbSpec]:
             ("id", "kind", "model"),
             "Author or replace a model endpoint",
         ),
+        *[
+            _spec(
+                f"control.model_endpoint.{action}",
+                {"id": _STRING},
+                ("id",),
+                f"{action.title()} a model endpoint without deleting its configuration",
+                additional=False,
+            )
+            for action in ("retire", "restore")
+        ],
     ]
 
 
 def _registry_specs() -> list[VerbSpec]:
+    from .control_registry_specs import registry_specs
+
+    return registry_specs()
+
+
+def _mcp_registration_spec() -> VerbSpec:
+    return _spec(
+        "control.mcp_server.register",
+        {
+            "id": _STRING,
+            "url": _STRING,
+            # Reviewed SEC-61 waiver for an operator-vetted internal server.
+            "allow_internal": {"type": "boolean"},
+            # References name secret-store keys; raw material has no field.
+            "credential_ref": _STRING,
+            "credential_id": _STRING,
+            "credential_store": _STRING,
+            "credential_kind": _STRING,
+        },
+        ("id", "url"),
+        "Register an external MCP server, inert until human review",
+        consequence="low",
+        additional=False,
+    )
+
+
+def _mcp_update_spec() -> VerbSpec:
+    return _spec(
+        "control.mcp_server.update",
+        {
+            "server_id": _STRING,
+            "url": {"type": "string", "maxLength": 2048},
+            "allow_internal": {"type": "boolean"},
+            "credential_mode": {
+                "type": "string",
+                "enum": ["preserve", "replace", "remove"],
+            },
+            "credential_ref": {"type": "string", "maxLength": 1024},
+            "credential_id": {"type": "string", "maxLength": 200},
+            "credential_store": {"type": "string", "maxLength": 100},
+            "credential_kind": {"type": "string", "maxLength": 100},
+        },
+        ("server_id", "url", "allow_internal", "credential_mode"),
+        "Replace an inactive MCP server configuration and require re-probing",
+        additional=False,
+    )
+
+
+def _mcp_lifecycle_specs() -> list[VerbSpec]:
+    descriptions = {
+        "probe": "Probe an MCP server and retain a bounded discovery receipt",
+        "activate": "Activate an inactive MCP server from its approved tool snapshot",
+        "deactivate": "Deactivate an MCP server while preserving its published tool snapshot",
+        "retire": "Retire an inactive MCP server without deleting its history",
+        "restore": "Restore a retired MCP server to inactive state",
+        "delete": "Delete a non-active MCP server and its retained history",
+    }
     return [
         _spec(
-            "control.skill.upsert",
-            {
-                "id": _STRING,
-                "version": _STRING,
-                "prompt_fragment": _STRING,
-                "tool_grants": _STRINGS,
-                "context_requirements": _OBJ,
-                "extends": _STRING,
-                "locale": _STRING,
-            },
-            ("id",),
-            "Author or replace a skill",
-        ),
-        _spec(
-            "control.noun.define",
-            {"id": _STRING, "description": _STRING, "schema": _OBJ},
-            ("id",),
-            "Define or replace a noun",
-        ),
-        _spec(
-            "control.verb.define",
-            {
-                "id": _STRING,
-                "noun_id": _STRING,
-                "input_schema": _OBJ,
-                "output_schema": _OBJ,
-                "description": _STRING,
-                "consequence": {"type": "string", "enum": ["low", "high"]},
-                "idempotency_mode": {"type": "string", "enum": ["cacheable", "disabled"]},
-            },
-            ("id", "noun_id"),
-            "Define or replace a verb with safe consequence defaults",
-        ),
-        _spec(
-            "control.binding.set",
-            {
-                "verb_id": _STRING,
-                "target_type": {"type": "string", "enum": ["adapter", "agent"]},
-                "target_ref": _STRING,
-            },
-            ("verb_id", "target_type", "target_ref"),
-            "Bind a verb to an adapter or reasoning-agent profile",
-        ),
+            f"control.mcp_server.{action}",
+            {"server_id": _STRING},
+            ("server_id",),
+            description,
+            additional=False,
+        )
+        for action, description in descriptions.items()
     ]
 
 
 def _adapter_specs() -> list[VerbSpec]:
+    lifecycle = (
+        ("activate", "Activate a reviewed adapter and publish its verb bindings"),
+        (
+            "deactivate",
+            "Suspend a live adapter and unpublish its verbs pending re-review",
+        ),
+        (
+            "delete",
+            "Delete a non-live adapter with its registry rows and credential ref",
+        ),
+    )
     return [
         _spec(
             "control.adapter.generate",
@@ -175,48 +195,18 @@ def _adapter_specs() -> list[VerbSpec]:
             "Generate and register an inert adapter from an OpenAPI document",
             consequence="low",
         ),
-        _spec(
-            "control.adapter.activate",
-            {"adapter_id": _STRING},
-            ("adapter_id",),
-            "Activate a reviewed adapter and publish its verb bindings",
-        ),
-        _spec(
-            "control.adapter.deactivate",
-            {"adapter_id": _STRING},
-            ("adapter_id",),
-            "Suspend a live adapter and unpublish its verbs pending re-review",
-        ),
-        _spec(
-            "control.adapter.delete",
-            {"adapter_id": _STRING},
-            ("adapter_id",),
-            "Delete a non-live adapter with its registry rows and credential ref",
-        ),
-        _spec(
-            "control.mcp_server.register",
-            {
-                "id": _STRING,
-                "url": _STRING,
-                # Human-reviewed opt-in for an operator-vetted INTERNAL server
-                # (e.g. a docker-network address): waives exactly the egress
-                # guard's internal-address refusal (SEC-61). Registration is
-                # inert until the SEC-22 review gate, so the flag is always
-                # human-approved before any call. Never for agent-influenced
-                # URLs.
-                "allow_internal": {"type": "boolean"},
-                # credential params NAME a secret-store key (bind_mcp_credential);
-                # raw secret material has no param here and stays refused.
-                "credential_ref": _STRING,
-                "credential_id": _STRING,
-                "credential_store": _STRING,
-                "credential_kind": _STRING,
-            },
-            ("id",),
-            "Register an external MCP server, inert until human review",
-            consequence="low",
-            additional=False,
-        ),
+        *[
+            _spec(
+                f"control.adapter.{action}",
+                {"adapter_id": _STRING},
+                ("adapter_id",),
+                description,
+            )
+            for action, description in lifecycle
+        ],
+        _mcp_registration_spec(),
+        _mcp_update_spec(),
+        *_mcp_lifecycle_specs(),
     ]
 
 
@@ -284,6 +274,16 @@ def _administration_specs() -> list[VerbSpec]:
             },
             ("event_type", "channel"),
             "Create or update the delegated user's notification route",
+            additional=False,
+        ),
+        _spec(
+            "control.notification.test",
+            {"id": _STRING},
+            ("id",),
+            "Queue a static test to the delegated user's verified notification route",
+            consequence="low",
+            additional=False,
+            idempotency_mode="disabled",
         ),
     ]
 
@@ -334,13 +334,16 @@ def _budget_specs() -> list[VerbSpec]:
 def control_specs() -> list[VerbSpec]:
     """Return the complete caller-discoverable control-plane verb catalogue."""
     from .control_compat_specs import compatibility_specs
+    from .control_work_specs import work_specs
 
     return [
-        *_workflow_specs(),
+        *workflow_specs(),
         *_profile_specs(),
+        *permanent_fleet_specs(),
         *_registry_specs(),
         *_adapter_specs(),
         *_administration_specs(),
         *_budget_specs(),
+        *work_specs(),
         *compatibility_specs(),
     ]

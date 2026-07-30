@@ -9,8 +9,10 @@ a clean-room reference implementation of the "Hermes Fleet" SRS (the kernel
 doctrine: one dispatch chokepoint, stable nouns and verbs, everything-as-data).
 
 > **Runtime direction (2026-07-21):** Codex is the only target agent runtime
-> under decision 0012. Pi, Hermes, OpenCode, and related paths remain staged
-> cutover and rollback residue until the production Codex gates pass.
+> under decision 0012. Its supervised proxy/event contract is wired, but the
+> production cutover and Codex-native collaboration admission are not yet green.
+> Pi, Hermes, OpenCode, and related paths remain staged rollback residue, not
+> alternate product runtimes.
 
 The kernel core is implemented and tested with the Python suite, opt-in Postgres
 and live-adapter legs, and a machine-checked binding-invariant gate at debt 0.
@@ -84,11 +86,14 @@ Three additions sit on the same thin core (the dispatch sequence is unchanged):
   advertised as MCP tools and adapter-declared resources over a run-scoped token;
   every call runs the full chokepoint. Any MCP-capable client can use the same
   governed surface without bespoke glue.
-- **Codex is the one wired agent runtime.** The Pi sidecar lane that used to sit
+- **Codex is the one target agent runtime.** The Pi sidecar lane that used to sit
   here is RETIRED (`docs/decisions/0020-retire-the-pi-lane.md`, on the authority of
   [2026] VJS-PC 20 L1). The multi-runtime routing seam stays live and five
   non-Codex lanes remain re-wirable by configuration alone, which is the condition
-  that grant carries.
+  that grant carries. Production readiness still fails closed until the pinned
+  Codex binary, identity/proxy, cancellation and acceptance gates pass; native
+  Codex collaboration remains admission-disabled while its lifetime/depth/thread,
+  effort, drain, bearer-revocation and durable-projection guarantees are completed.
 - **Conversational layer** (`boltrig/fleet/chat.py`, `POST /v1/chat` + a fourth
   Chat panel): a turn routes through the fleet and streams reasoning/tool/
   sub-agent/inline-HITL events; conversations persist and are owner-scoped.
@@ -214,6 +219,18 @@ service or credentials to exercise):
   full long/recursive run-resume needs a running Hatchet engine (the
   `hatchet-engine` service + `[durable]` extra). Without it the fleet still runs
   and degrades (P9); the local executor is the offline fallback.
+- **Worker primary surface.** The task-first Worker client and reversible signed
+  release overlay are implemented, with the canonical coverage ledger in
+  `docs/WORKER-PARITY.md`. Production-primary status still depends on Codex,
+  connector, voice, desktop-action and staging acceptance.
+- **Desktop device actions.** Owner enrollment, opaque roots, stable Ed25519
+  verifier bootstrap, exact-action leases, atomic claim/settlement, revocation,
+  Postgres/RLS and provisioning are implemented and tested. Ordinary dispatcher
+  bindings plus the Tauri verifier/executor and staging run remain the
+  end-to-end leg.
+- **Realtime voice.** Governed calls, HITL hold/resume, channel-gateway media,
+  transcript/events and usage receipts are implemented; credentialed xAI,
+  multi-call and Tauri staging remain.
 - **Live IdP.** OIDC verification is implemented and tested against minted tokens;
   pointing it at a real Azure AD / Okta / Google issuer is the remaining leg.
 - **Live MS Graph / Jira / CRM adapters.** The builtin adapters are real HTTP/SQL
@@ -237,6 +254,7 @@ service or credentials to exercise):
 boltrig/        kernel, models, store, adapters, fleet, skills, workflows,
                knowledge, work, identity, config, observability
 ui/            React console (Router, Kanban, Approvals)
+apps/worker/   task-first React/Tauri client (primary-surface candidate)
 site/          Next.js site + lightweight console overview
 libraries/     skills + workflows + prompts (data, not code)
 deploy/        kernel.Dockerfile, fleet.Dockerfile

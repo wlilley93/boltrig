@@ -27,6 +27,19 @@ test("normalizeEvents: message_start + text_deltas accumulate; message_end ends 
   assert.equal(t.ended, true);
 });
 
+test("normalizeEvents: degraded text remains explicit turn state", () => {
+  const turn = normalizeEvents([
+    {
+      type: "text_delta",
+      delta: "degraded (codex: unavailable)",
+      degraded: true,
+    },
+  ]);
+
+  assert.equal(turn.degraded, true);
+  assert.equal(turn.text, "degraded (codex: unavailable)");
+});
+
 // --- G3: a delegation must SETTLE, in both frontends ------------------------
 // The union omitted subagent_end and the reducer had no case for it, so the
 // console silently dropped a frame the kernel emits and opbox already handles:
@@ -45,6 +58,29 @@ test("normalizeEvents: subagent_end settles the matching node in place", () => {
     t.subagents.find((s) => s.childRunId === "c2")?.status,
     undefined,
     "an unsettled sibling stays running",
+  );
+});
+
+test("normalizeEvents: preserves a server-derived spawn-rule receipt", () => {
+  const t = normalizeEvents([
+    {
+      type: "subagent",
+      child_run_id: "c1",
+      task: "research",
+      spawn_rule: {
+        id: "research-route",
+        priority: 50,
+        matched_intent_tags: ["analysis", "research"],
+        capability: "codex-worker",
+        skills_added: ["analysis/research"],
+        max_depth: 2,
+      },
+    },
+  ] as ChatEvent[]);
+  assert.equal(t.subagents[0]?.spawnRule?.id, "research-route");
+  assert.deepEqual(
+    t.subagents[0]?.spawnRule?.matched_intent_tags,
+    ["analysis", "research"],
   );
 });
 
@@ -75,4 +111,49 @@ test("normalizeEvents: steer frames are lifecycle, not turn content", () => {
     { type: "steer_consumed", run_id: "r1", message_id: "m1" },
   ] as ChatEvent[]);
   assert.equal(t.text, "hi", "a steer must not alter the turn text");
+});
+
+test("normalizeEvents: artifact and withheld frames are lifecycle, not turn content", () => {
+  const t = normalizeEvents([
+    { type: "text_delta", delta: "done" },
+    {
+      type: "artifact",
+      artifact_id: "a1",
+      name: "answer.txt",
+      media_type: "text/plain",
+      size: 4,
+    },
+    { type: "artifact_rejected", count: 1 },
+    { type: "event_unavailable", reason: "unsupported_event" },
+  ] as ChatEvent[]);
+  assert.equal(t.text, "done");
+  assert.deepEqual(t.tools, []);
+  assert.deepEqual(t.subagents, []);
+});
+
+test("normalizeEvents: secure questions retain their one-time input purpose", () => {
+  const direct = normalizeEvents([
+    {
+      type: "question",
+      question_id: "q-direct",
+      prompt: "Paste the key",
+      secure: true,
+      purpose: "provider-api-key",
+    },
+  ] as ChatEvent[]);
+  assert.equal(direct.questions[0]?.secure, true);
+  assert.equal(direct.questions[0]?.securePurpose, "provider-api-key");
+
+  const paused = normalizeEvents([
+    {
+      type: "hitl",
+      hitl_request_id: "q-hitl",
+      kind: "question",
+      question: "Paste the webhook",
+      secure: true,
+      secure_purpose: "webhook-url",
+    },
+  ] as ChatEvent[]);
+  assert.equal(paused.questions[0]?.secure, true);
+  assert.equal(paused.questions[0]?.securePurpose, "webhook-url");
 });

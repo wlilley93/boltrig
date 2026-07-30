@@ -5,7 +5,6 @@ satisfies it for dev/tests; a Postgres-backed store (schema in ``schema.sql``)
 satisfies the same Protocol for production. Tenant isolation (SEC-08) is a
 contract of every method: an id lookup is always scoped by ``tenant_id``.
 """
-
 from __future__ import annotations
 
 from datetime import datetime
@@ -14,12 +13,10 @@ from typing import Any, Protocol, runtime_checkable
 from boltrig.models import (
     AdapterRecord,
     AiConfig, AuditEvent,
-    AuditRollupAnchor, Budget,
-    Channel, ChannelBinding,
+    AuditRollupAnchor, Budget, BudgetWindowRef,
+    Channel, ChannelBinding, ChannelDeliveryReceipt,
     ChannelOutboxMessage, ChannelPairing, ConfigRevision,
-    Conversation, ConversationMessage,
-    ConversationSummary, EvalCase,
-    EvalRun, HITLRequest,
+    HITLRequest,
     MemoryErasure,
     MemoryFact,
     MemoryIngestion,
@@ -32,9 +29,7 @@ from boltrig.models import (
     PersonalAgent,
     HITLResponse,
     ModelEndpoint,
-    Noun,
     SecurityEvent,
-    Skill,
     Workspace,
     WorkspaceMember,
     TenantPermissions,
@@ -44,8 +39,6 @@ from boltrig.models import (
     UserSession,
     UserSetting,
     UserTotp,
-    Verb,
-    VerbBinding,
     WorkflowDefinition,
     WorkItem,
     WorkStatus,
@@ -55,11 +48,24 @@ from .guarded_writes import GuardedWritesContract
 from .idempotency_contract import IdempotencyStoreContract
 from .budget_policy import BudgetPolicyContract
 from .capabilities import CapabilityStoreContract
-# --- resource-bounding ceilings (M7 / M9 DoS-bounding, SEC-69) --------------
-# A list read must never be able to return an unbounded slice: an ever-growing
-# tenant table would otherwise let one caller exhaust memory/latency. The store
-# clamps every explicit page to MAX_WORK_PAGE; the HTTP surface asks for
-# DEFAULT_WORK_PAGE by default. limit=None on the store keeps the legacy
+from .realtime_call_contract import RealtimeCallStoreContract
+from .password_reset_contract import PasswordResetStoreContract
+from .permanent_fleet import PermanentFleetStoreContract
+from .birth_profiles import BirthProfileStoreContract
+from .background_jobs import BackgroundJobStoreContract
+from .audit_read_contract import AuditReadContract
+from .workflow_trigger_contract import WorkflowTriggerStoreContract
+from .workflow_schedule_contract import WorkflowScheduleStoreContract
+from .authored_definitions_contract import AuthoredDefinitionStoreContract
+from .eval_cases import EvalCaseStoreContract
+from .execution_search_contract import ExecutionSearchContract
+from .credential_references import CredentialReferenceContract
+from .ai_key_proposals import AiKeyProposalStoreContract
+from .channel_gateway_contract import ChannelGatewayStateContract
+from .conversation_contract import ConversationStoreContract
+from .mcp_lifecycle import McpLifecycleStoreContract
+# List pages clamp to MAX_WORK_PAGE/DEFAULT_WORK_PAGE so growing tenants stay bounded.
+# limit=None on the store keeps the legacy
 # full-slice contract for internal callers (e.g. the own-data export) that must
 # see every row, and is never reachable from the /v1/work HTTP surface.
 MAX_WORK_PAGE = 500
@@ -89,25 +95,16 @@ def clamp_memory_list(limit: int) -> int:
     """Clamp a caller-supplied memory-list page size into [1, MAX_MEMORY_LIST]."""
     return max(1, min(int(limit), MAX_MEMORY_LIST))
 
-
 @runtime_checkable
-class Store(BudgetPolicyContract, IdempotencyStoreContract, GuardedWritesContract,
-            CapabilityStoreContract, Protocol):
-    # --- registry ---
-    async def get_noun(self, tenant_id: str, noun_id: str) -> Noun | None: ...
-    async def get_verb(self, tenant_id: str, verb_id: str) -> Verb | None: ...
-    async def list_verbs(self, tenant_id: str, noun_id: str | None = None) -> list[Verb]: ...
-    async def get_binding(self, tenant_id: str, verb_id: str) -> VerbBinding | None: ...
-    async def upsert_noun(self, noun: Noun) -> None: ...
-    async def upsert_verb(self, verb: Verb) -> None: ...
-    async def upsert_binding(self, binding: VerbBinding) -> None: ...
-    # Governed adapter lifecycle (SEC-22): control.adapter.deactivate/delete
-    # unpublish and remove registry rows. Deletes are idempotent no-ops on an
-    # absent row and tenant-scoped like every method (SEC-08).
-    async def delete_noun(self, tenant_id: str, noun_id: str) -> None: ...
-    async def delete_verb(self, tenant_id: str, verb_id: str) -> None: ...
-    async def delete_binding(self, tenant_id: str, verb_id: str) -> None: ...
-
+class Store(BudgetPolicyContract, PermanentFleetStoreContract, BirthProfileStoreContract,
+            BackgroundJobStoreContract, AuditReadContract, IdempotencyStoreContract, GuardedWritesContract,
+            CapabilityStoreContract, RealtimeCallStoreContract, PasswordResetStoreContract,
+            WorkflowTriggerStoreContract, WorkflowScheduleStoreContract,
+            AuthoredDefinitionStoreContract,
+            EvalCaseStoreContract, ExecutionSearchContract,
+            CredentialReferenceContract, AiKeyProposalStoreContract,
+            ChannelGatewayStateContract, ConversationStoreContract,
+            McpLifecycleStoreContract, Protocol):
     # --- permissions ---
     async def get_tenant_permissions(self, tenant_id: str) -> TenantPermissions: ...
 
@@ -116,14 +113,14 @@ class Store(BudgetPolicyContract, IdempotencyStoreContract, GuardedWritesContrac
     async def get_adapter(self, tenant_id: str, adapter_id: str) -> AdapterRecord | None: ...
     async def list_adapters(self, tenant_id: str) -> list[AdapterRecord]: ...
     async def delete_adapter(self, tenant_id: str, adapter_id: str) -> None: ...
-    async def upsert_skill(self, skill: Skill) -> None: ...
-    async def get_skill(self, tenant_id: str, skill_id: str) -> Skill | None: ...
-    async def list_skills(self, tenant_id: str) -> list[Skill]: ...
     async def upsert_workflow(self, wf: WorkflowDefinition) -> None: ...
     async def list_workflows(self, tenant_id: str) -> list[WorkflowDefinition]: ...
     async def upsert_model_endpoint(self, ep: ModelEndpoint) -> None: ...
     async def get_model_endpoint(self, tenant_id: str, ep_id: str) -> ModelEndpoint | None: ...
     async def list_model_endpoints(self, tenant_id: str) -> list[ModelEndpoint]: ...
+    async def set_model_endpoint_active(
+        self, tenant_id: str, ep_id: str, active: bool
+    ) -> ModelEndpoint | None: ...
     # Observability-only rows feed stats; write failure never voids execution.
     async def record_workflow_run(self, tenant_id: str, workflow_id: str, run_id: str, status: str) -> None: ...
     async def list_workflow_run_ids(self, tenant_id: str, workflow_id: str, limit: int = 100) -> list[str]: ...
@@ -207,7 +204,6 @@ class Store(BudgetPolicyContract, IdempotencyStoreContract, GuardedWritesContrac
         limit: int | None = None,
         cursor: str | None = None,
     ) -> list[WorkItem]: ...
-
     # atomic pending -> in_flight claim with a lease: one winner per item across
     # concurrent claimers; an expired lease is reclaimable; attempts increments
     # per claim (US-FLT-05). Mirrors the consume_hitl CAS shape.
@@ -249,6 +245,14 @@ class Store(BudgetPolicyContract, IdempotencyStoreContract, GuardedWritesContrac
     async def create_hitl_request(self, req: HITLRequest) -> None: ...
     async def get_hitl_request(self, tenant_id: str, req_id: str) -> HITLRequest | None: ...
     async def list_pending_hitl(self, tenant_id: str) -> list[HITLRequest]: ...
+    async def list_hitl_requests_for_requester(
+        self,
+        tenant_id: str,
+        requested_by: str,
+        statuses: list[str],
+        *,
+        limit: int = 20,
+    ) -> list[HITLRequest]: ...
     async def answer_hitl(self, resp: HITLResponse) -> HITLRequest | None: ...
     async def get_hitl_response(self, tenant_id: str, request_id: str) -> HITLResponse | None: ...
     # atomic ANSWERED -> CONSUMED; True only for the caller that won the CAS (SEC-14).
@@ -308,21 +312,39 @@ class Store(BudgetPolicyContract, IdempotencyStoreContract, GuardedWritesContrac
     ) -> list[AuditRollupAnchor]: ...
 
     # --- budgets ---
-    async def get_budget(self, tenant_id: str, scope_id: str) -> Budget | None: ...
-    async def list_budgets(self, tenant_id: str) -> list[Budget]: ...
+    async def get_budget(
+        self,
+        tenant_id: str,
+        scope_id: str,
+        *,
+        run_id: str | None = None,
+        at: datetime | None = None,
+    ) -> Budget | None: ...
+    async def list_budgets(
+        self,
+        tenant_id: str,
+        *,
+        run_id: str | None = None,
+        at: datetime | None = None,
+    ) -> list[Budget]: ...
     # Post-run cost true-up (FR-COST-03, audit M14): apply a SIGNED delta to the
     # scope's accumulators atomically (FOR UPDATE in postgres, under the lock in
     # memory), each floored at 0. Unlike a reserve this never gates on the
     # hard stop - it corrects the ledger for a call that already ran. A scope with
     # no budget row is a no-op (unmetered), the same as a reserve.
     async def reconcile_budget(
-        self, tenant_id: str, scope_id: str, delta_tokens: int, delta_micros: int
+        self,
+        tenant_id: str,
+        window: BudgetWindowRef,
+        delta_tokens: int,
+        delta_micros: int,
     ) -> None: ...
     # Transactional multi-scope reserve (audit H4, engine-plan Phase 6, FR-COST-05):
     # debit EVERY scope in ``reservations`` (each a (scope_id, tokens, micros)
     # triple) in ONE all-or-nothing step. Either every hard-stop scope has headroom
-    # and all are debited (returns True), or the first hard-stop scope with no
-    # headroom aborts the whole thing and NONE is debited (returns False). Postgres
+    # and all are debited (returning their exact window references), or the first
+    # hard-stop scope with no headroom aborts and NONE is debited (returns None).
+    # Postgres
     # locks every scope's row FOR UPDATE in a deterministic order (sorted by
     # scope_id, so concurrent reserves on overlapping scopes cannot deadlock) and
     # re-checks each hard stop under the lock; memory applies the same semantics
@@ -333,24 +355,13 @@ class Store(BudgetPolicyContract, IdempotencyStoreContract, GuardedWritesContrac
     # caller since reserve_budgets_atomic replaced it, while six docstrings across
     # the three store files still anchored their semantics on it.
     async def reserve_budgets_atomic(
-        self, tenant_id: str, reservations: list[tuple[str, int, int]]
-    ) -> bool: ...
-
-    # --- credential references (sealed at rest; never plaintext, SEC-04) ---
-    async def get_credential_ref(self, tenant_id: str, cred_id: str) -> dict[str, Any] | None: ...
-
-    async def delete_credential_ref(self, tenant_id: str, cred_id: str) -> None:
-        """Delete one credential reference row (governed adapter delete). The
-        caller checks nothing else references the id first; the delete itself
-        is an idempotent no-op on an absent row. Tenant-scoped (SEC-08)."""
-        ...
-
-    async def delete_credential_refs_for_run(self, tenant_id: str, run_id: str) -> int:
-        """Delete every run-scoped secure-input credential of one run (SEC-181
-        lifecycle): rows whose id carries the ``run:<run_id>:`` prefix minted by
-        ``CredentialResolver.seal_run_scoped_value``. Returns the count deleted.
-        Tenant-scoped like every method (SEC-08)."""
-        ...
+        self,
+        tenant_id: str,
+        reservations: list[tuple[str, int, int]],
+        *,
+        run_id: str | None = None,
+        at: datetime | None = None,
+    ) -> tuple[BudgetWindowRef, ...] | None: ...
 
     # --- Round Three: versioned config, eval, customisation, memory ---
     async def add_config_revision(self, rev: ConfigRevision) -> ConfigRevision: ...
@@ -358,11 +369,6 @@ class Store(BudgetPolicyContract, IdempotencyStoreContract, GuardedWritesContrac
         self, tenant_id: str, kind: str, ref: str
     ) -> list[ConfigRevision]: ...
     async def get_config_revision(self, tenant_id: str, rev_id: int) -> ConfigRevision | None: ...
-    async def upsert_eval_case(self, case: EvalCase) -> None: ...
-    async def get_eval_case(self, tenant_id: str, case_id: str) -> EvalCase | None: ...
-    async def list_eval_cases(self, tenant_id: str) -> list[EvalCase]: ...
-    async def add_eval_run(self, run: EvalRun) -> None: ...
-    async def list_eval_runs(self, tenant_id: str, case_id: str | None = None) -> list[EvalRun]: ...
     async def upsert_notification_pref(self, pref: NotificationPref) -> None: ...
     async def list_notification_prefs(self, tenant_id: str) -> list[NotificationPref]: ...
     async def upsert_personal_agent(self, agent: PersonalAgent) -> None: ...
@@ -423,6 +429,20 @@ class Store(BudgetPolicyContract, IdempotencyStoreContract, GuardedWritesContrac
         self, tenant_id: str, message_id: str, worker_id: str, error: str | None,
         *, max_attempts: int, backoff_seconds: int,
     ) -> bool: ...
+    # Caller-safe delivery lifecycle. These reads never return payload,
+    # credential or gateway lease fields. Manual retry is an exact terminal
+    # failed -> queued CAS; automatic gateway retry remains the owner of every
+    # non-terminal row.
+    async def list_channel_delivery_receipts(
+        self, tenant_id: str, channel_id: str, limit: int = 50
+    ) -> list["ChannelDeliveryReceipt"]: ...
+    async def get_channel_delivery_receipt(
+        self, tenant_id: str, channel_id: str, message_id: str
+    ) -> "ChannelDeliveryReceipt | None": ...
+    async def retry_terminal_channel_delivery(
+        self, tenant_id: str, channel_id: str, message_id: str,
+        expected_updated_at: datetime,
+    ) -> "ChannelDeliveryReceipt | None": ...
     async def add_memory_item(self, item: MemoryItem) -> None: ...
     async def query_memory(
         self, tenant_id: str, owner_scopes: list[str], kind: str | None = None, limit: int = 20
@@ -599,59 +619,3 @@ class Store(BudgetPolicyContract, IdempotencyStoreContract, GuardedWritesContrac
     async def get_ai_config(self, tenant_id: str, level: str, scope_id: str) -> AiConfig | None: ...
     async def list_ai_configs(self, tenant_id: str) -> list[AiConfig]: ...
     async def delete_ai_config(self, tenant_id: str, level: str, scope_id: str) -> None: ...
-
-    # --- conversations (Round Two, SEC-25 tenant + owner scoped) ---
-    async def create_conversation(self, conv: Conversation) -> None: ...
-    async def get_conversation(self, tenant_id: str, conv_id: str) -> Conversation | None: ...
-    async def list_conversations(self, tenant_id: str, user_id: str) -> list[Conversation]: ...
-    # Paginated conversation list (US-CONV-09). Same owner scope as
-    # ``list_conversations`` (tenant + user), stable ordering updated_at DESC with an
-    # id ASC tiebreak so a page boundary is deterministic. Returns the page's items
-    # plus the next offset (None when the list is exhausted). ``limit`` is the
-    # already-resolved page size (the caller clamps it under the config ceiling);
-    # ``offset`` is 0-based. Parameterised - never string-interpolated.
-    async def list_conversations_page(
-        self, tenant_id: str, user_id: str, *, limit: int, offset: int = 0
-    ) -> tuple[list[Conversation], int | None]: ...
-    # Owner-scoped conversation search (US-CONV-10). Case-insensitive substring
-    # match over the CALLER'S OWN conversations only (tenant + user) - it can never
-    # surface another user's thread. A conversation matches when its title matches OR
-    # any of its LIVE (non-superseded, [2026] VJS-COUNTY 4) messages' content matches;
-    # a superseded turn is never a live hit. Returns (Conversation, snippet) pairs
-    # (snippet = the matched live message content, or None when only the title
-    # matched) with the same stable ordering + next offset as the list page. The
-    # query is a bound parameter with LIKE metacharacters escaped, so there is no SQL
-    # injection or wildcard-injection surface.
-    async def search_conversations(
-        self, tenant_id: str, user_id: str, query: str, *, limit: int, offset: int = 0
-    ) -> tuple[list[tuple[Conversation, str | None]], int | None]: ...
-    async def update_conversation(self, conv: Conversation) -> None: ...
-    async def add_message(self, message: ConversationMessage) -> None: ...
-    async def list_messages(self, tenant_id: str, conv_id: str) -> list[ConversationMessage]: ...
-    # Append-plus-supersede marker ([2026] VJS-COUNTY 4): set ONLY superseded_by on
-    # the message, freezing everything else (content/events/run_id/created_at are
-    # immutable). This is the marker-only write regenerate uses; add_message stays
-    # insert-only, so there is no general-purpose message update. Tenant-scoped
-    # (SEC-08).
-    async def mark_message_superseded(
-        self, tenant_id: str, message_id: str, superseded_by: str
-    ) -> None: ...
-    # Append-only DERIVED conversation summaries (long-conversation compaction).
-    # ``add_conversation_summary`` is INSERT-only - it NEVER mutates a frozen
-    # message; a re-compaction appends a fresh row covering more messages.
-    # ``get_latest_conversation_summary`` returns the summary covering the most
-    # messages (the widest boundary), or None when the conversation has never been
-    # compacted. Tenant-scoped (SEC-08).
-    async def add_conversation_summary(self, summary: "ConversationSummary") -> None: ...
-    async def get_latest_conversation_summary(
-        self, tenant_id: str, conversation_id: str
-    ) -> "ConversationSummary | None": ...
-    # Right-to-erasure (M11 / SEC-74): HARD-DELETE every CLOSED conversation whose
-    # close/update timestamp is at or before ``older_than``, together with its
-    # conversation_messages, and return how many conversations were purged. The
-    # soft-close (DELETE /v1/me/conversations/{id}) only sets status=CLOSED; this
-    # is the durable erasure the retention worker drives past the retention window
-    # so a deleted thread's body does not persist indefinitely. Tenant-scoped
-    # (SEC-08). The audit log is EXEMPT - erasing the tamper-evident hash chain
-    # (SEC-16) would break verify() and the accountability record.
-    async def purge_closed_conversations(self, tenant_id: str, older_than: datetime) -> int: ...

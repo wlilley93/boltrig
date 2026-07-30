@@ -2,8 +2,8 @@
 
 The severed terminator for the **socket (persistent-connection)** channel class
 (decision 0003, Phase 2): Slack Socket Mode, Telegram long-poll, Discord WS and
-Signal are shipped alongside the reference **generic** custom interface;
-WhatsApp is in flight. It is deliberately NOT part of the `boltrig` package: `boltrig/kernel` and
+Signal, WhatsApp and the reference **generic** custom interface are shipped.
+It is deliberately NOT part of the `boltrig` package: `boltrig/kernel` and
 `boltrig/models` import nothing from here and it imports nothing from them
 (SEC-28, machine-enforced). The only coupling is the wire protocol below.
 
@@ -23,19 +23,36 @@ An async daemon supervising one platform adapter per configured channel:
    `.../fail` (kernel-side backoff retry, terminal `failed` at the attempt cap).
 
 Adapters run under a lifecycle supervisor: a start failure or crash retries
-with exponential backoff; `GET /health` is a liveness probe, `GET /status`
-reports served channels and token health (never secrets).
+with exponential backoff. With no static `CHANNEL_GATEWAY_CHANNELS` snapshot,
+the daemon pulls its token-scoped desired state from
+`GET /v1/channels/gateway/reconcile`, applies add/change/remove diffs, and posts
+secret-free observations to `POST /v1/channels/gateway/heartbeat`. Reconcile
+first atomically claims or renews a 45-second durable lease for each channel.
+Only that owner receives resolved provider credentials or may heartbeat, claim
+outbox rows, redeem call media, or append call state. A standby receives only
+safe desired-state metadata and stops any adapter it no longer owns.
+`GET /health` is liveness, `GET /ready` is token/adapter convergence, and
+`GET /status` reports bounded observations (never secrets).
 
 ## Boundaries (decision 0003, binding conditions 2 + 7)
 
-- **No policy, no grants, no persistent credential.** The gateway can only
+- **No policy, no grants, no credential authority.** The gateway can only
   (a) push signed intake and (b) pump its own outbox. It cannot invoke a verb.
-- **Connect-time secret injection only.** The run-scoped token
-  (`CHANNEL_GATEWAY_TOKEN`) and the per-channel secrets
-  (`CHANNEL_GATEWAY_CHANNELS`) arrive as env at spawn and are never logged.
-  An admin mints the token once via `POST /v1/channels/gateway/session`;
-  it is TTL-bounded - when it lapses the outbound pump refuses and a supervised
-  respawn re-injects a fresh token.
+- **Memory-only resolved channel credentials.** The run-scoped token
+  arrives through exactly one configured token source. In canonical mode the
+  kernel resolves Worker-authored secret-store references only after the
+  authenticated gateway wins the durable channel lease; material stays in
+  daemon memory and is never logged. `CHANNEL_GATEWAY_CHANNELS` remains a
+  development/test compatibility fallback and is rejected in production.
+  An author mints the show-once token in Worker (the underlying route is
+  `POST /v1/channels/gateway/session`). It is TTL-bounded. A changed valid
+  `CHANNEL_GATEWAY_TOKEN_FILE` is hot-loaded after a 401; an environment token
+  requires restart.
+- **One owner per channel.** Election is atomic in the kernel store and keyed by
+  tenant plus channel. The lease owner is the private MCP token lease id, never
+  a browser-visible bearer. Worker may show the safe gateway label and lease
+  expiry, but that is bounded ownership evidence—not process liveness or
+  provider certification.
 - **Egress restricted** to the kernel intake + the platform endpoints, both in
   code (`egress.py`, allow-listed hosts) and at the container network layer
   (see the `Dockerfile` header and the compose entry).
@@ -45,17 +62,34 @@ reports served channels and token health (never secrets).
 | Variable | Meaning |
 | --- | --- |
 | `BOLTRIG_KERNEL_URL` | kernel base URL (default `http://localhost:8000`) |
-| `CHANNEL_GATEWAY_TOKEN` | run-scoped token (from the session mint route) |
-| `CHANNEL_GATEWAY_CHANNELS` | JSON list: `[{"channel_id", "platform", "secret", "config": {...}}]` |
+| `CHANNEL_GATEWAY_TOKEN` | restart-only run-scoped token; mutually exclusive with `CHANNEL_GATEWAY_TOKEN_FILE` |
+| `CHANNEL_GATEWAY_TOKEN_FILE` | path to a read-only mounted token file; a changed valid value hot-loads after authorization refusal |
+| `CHANNEL_GATEWAY_CHANNELS` | development/test-only static JSON compatibility; rejected in production |
 | `CHANNEL_GATEWAY_EGRESS_ALLOW` | comma-separated allow-listed hosts (kernel + platforms) |
 | `CHANNEL_GATEWAY_POLL_SECONDS` | idle outbox poll cadence (default `2`) |
+| `CHANNEL_GATEWAY_RECONCILE_SECONDS` | desired-state pull/heartbeat cadence (default `10`) |
+| `CHANNEL_GATEWAY_MAX_BROWSER_CALLS` | maximum simultaneous isolated browser voice sessions per gateway (default `8`, minimum `1`) |
 
-Example (the reference generic adapter on localhost):
+Development-only static compatibility example (the reference generic adapter
+on localhost):
 
 ```json
 [{"channel_id": "ch_demo", "platform": "generic", "secret": "whsec_...",
   "config": {"listen_host": "127.0.0.1", "listen_port": 9090}}]
 ```
+
+Canonical operation leaves `CHANNEL_GATEWAY_CHANNELS` empty. An admin authors
+the channel in Worker using write-only reference names and mints a gateway
+session for the explicit channel ids. Prefer placing that short-lived token in
+a read-only mounted file. Token placement remains an operator/deployment
+action: this implementation does not invent autonomous workload identity or a
+second token-minting authority. The MCP token registry is currently local to
+the kernel process, so a multi-replica deployment must keep gateway calls on
+the API replica that minted the token (or run one API replica) until a reviewed
+shared token registry or workload-identity contract is accepted. Signal and
+WhatsApp device/account linking also remain external pairing actions; their
+observed state is `needs_action` until the gateway can prove more than
+adapter/process readiness.
 
 ## The generic custom interface (reference adapter)
 
@@ -147,12 +181,51 @@ and `api_base`/`http_url` overrides for tests.
   the chokepoint) is REJECTED at adapter init.
 - **Local audio seam**: no sound card is hardcoded. `config["audio"]` takes a
   `LocalAudio` implementation (`read_frame` / `write_frame` / `interrupt`);
-  the default `NullAudio` makes it a transcript-only surface. A real device -
-  or the hey-nabu box - plugs in there.
+  the default `NullAudio` makes it a transcript-only surface. For browser
+  calls, `/v1/calls/{id}/media` accepts the one-time bearer in its first
+  WebSocket frame and creates an isolated provider adapter plus bounded
+  `BrowserAudio` bridge for that call; PCM remains in memory. A custom real
+  device - or the hey-nabu box - can still inject its own audio implementation,
+  but that configured physical-device channel is not a browser-media target.
+- **Concurrent-call isolation**: provider dialogue, caller-scoped kernel-token
+  view, tool map, pending HITL work, usage meter and PCM queues are all
+  call-id keyed and never shared with the static channel or another browser
+  caller. `CHANNEL_GATEWAY_MAX_BROWSER_CALLS` bounds the pool; overflow closes
+  the new WebSocket with `4429` and never evicts an active call. `/status`
+  reports only the active count and configured capacity.
+- **Call authority**: the daemon-wide gateway token has no verb grants. Media
+  redemption is tenant/channel bounded and returns a separate short-lived MCP
+  token derived from the authenticated call owner's grant snapshot; the adapter
+  refreshes `session.tools` from that token before the browser is marked ready.
+- **Durability**: transcript, tool-name/result-status and lifecycle events are
+  normalized into the kernel call store. Raw input/output PCM is never submitted
+  to that route and the kernel event projection drops any non-allowlisted field.
+- **Exact-call HITL**: every browser call has a server-minted run id. If
+  `tools/call` returns `pending_human`, the adapter withholds the provider's
+  `function_call_output` and emits the request id; the ordinary dispatcher has
+  already sealed the canonical verb/params in its existing held-call record.
+  Approval replays that seal exactly once through the dispatcher. A
+  content-free outcome event lets the gateway resume the same in-memory
+  provider call id. A gateway/provider disconnect does not prevent the approved
+  action from resuming server-side, but there is then no old provider socket to
+  narrate into; the durable call events remain the source of truth.
+- **Usage and estimated cost**: the gateway records only PCM byte counts,
+  provider-reported input/output token counts, and tool-call counts as
+  normalized `usage` events. `GET /v1/calls/{id}/usage` returns a complete
+  owner-scoped aggregate. Optional channel config keys
+  `input_audio_micros_per_minute`, `output_audio_micros_per_minute`, and
+  `tool_call_micros` produce an `estimated` micro-cost tagged by the required
+  operational label `pricing_revision`; with zero/absent rates the cost is
+  explicitly `unpriced`. This is observability, not a provider-invoice
+  reconciliation or a hard voice-budget gate.
 - **Shape**: a completed transcript becomes
   `{"id": <item_id>, "sender": <configured speaker>, "text", "thread"}`; the
   speaker is bound kernel-side to a Principal like any platform user.
   Outbound `channel.send` text is spoken back through the live session.
+
+Credentialed xAI staging, invoice reconciliation, and hard per-call/daily
+voice budget enforcement remain acceptance gaps. The fake-provider suite proves
+tool/HITL correlation and metering arithmetic without claiming those live seams.
 
 ## Automation webhooks (machine sources: CI, monitoring)
 
@@ -219,7 +292,7 @@ is about where authority enters, not where results leave.
 
 ```bash
 pip install --require-hashes -r requirements.txt
-CHANNEL_GATEWAY_CHANNELS='[...]' CHANNEL_GATEWAY_TOKEN='...' \
+CHANNEL_GATEWAY_TOKEN_FILE=/run/secrets/boltrig-channel-gateway-token \
   uvicorn app:app --host 0.0.0.0 --port 8091
 # or
 docker build -t boltrig-channel-gateway . && docker run -p 8091:8091 boltrig-channel-gateway
@@ -242,7 +315,7 @@ image (condition 9) and the `whatsapp` adapter talks to it over loopback HTTP.
 Neither side owns policy - the Hermes allowlist/self-chat logic was stripped;
 who-may-talk is the kernel's binding rows.
 
-Channel config (inside `CHANNEL_GATEWAY_CHANNELS`):
+Worker-authored channel provider config:
 
 ```json
 [{"channel_id": "ch_wa", "platform": "whatsapp", "secret": "whsec_...",

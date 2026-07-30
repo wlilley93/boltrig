@@ -387,14 +387,13 @@ async def test_an_internal_server_connects_with_the_reviewed_waiver(monkeypatch)
     assert result.ok and result.output == {"text": "done"}
 
 
-# --- verb namespacing: <adapter_id>.<tool_name>, skip what can't publish ---
+# --- verb namespacing: <adapter_id>.<tool_name>, sanitize skipped names ---
 
 
 @pytest.mark.invariant("FR-MCP-03")
-async def test_unpublishable_tool_names_are_skipped_with_a_warning(caplog):
-    """Names that can't be verb ids after prefixing - a '/' (a presentation
-    meta-tool like opbox/expand_tools), whitespace, empty - are SKIPPED with a
-    warning, never published and never an activation error."""
+async def test_unpublishable_tool_names_are_skipped_without_logging_content(caplog):
+    """Unpublishable names are skipped without echoing server-controlled tool
+    names into logs."""
     import logging
 
     async def rpc(request):
@@ -408,10 +407,11 @@ async def test_unpublishable_tool_names_are_skipped_with_a_warning(caplog):
     with caplog.at_level(logging.WARNING, logger="boltrig.adapters.mcp_consumer"):
         specs = await McpConsumerAdapter(id="opbox", rpc=rpc).connect(_cred())
 
+    warnings = [r.message for r in caplog.records if r.levelno >= logging.WARNING]
     assert [s.verb_id for s in specs] == ["opbox.matter.list"]
-    skipped = [r.message for r in caplog.records if r.levelno >= logging.WARNING]
-    assert len(skipped) == 3
-    assert any("opbox/expand_tools" in message for message in skipped)
+    assert len(warnings) == 3
+    assert all("opbox/expand_tools" not in message for message in warnings)
+    assert all("weird name" not in message for message in warnings)
 
 
 @pytest.mark.invariant("FR-MCP-03")

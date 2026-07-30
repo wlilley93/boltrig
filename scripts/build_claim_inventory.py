@@ -70,22 +70,35 @@ OUT = ROOT / "docs" / "claim-inventory.tsv"
 
 
 def tracked(pattern: str) -> list[Path]:
-    """Files matching a pathspec that git TRACKS. The source set, and not a directory walk.
+    """Tracked or non-ignored new files matching a pathspec, not a directory walk.
 
     This function exists because the first version walked the filesystem and the census could
     only regenerate on one machine. `docker-compose.override.yml` is gitignored and holds local
     development config; it contributed two rows here and none in CI, so the gate that measures
     environment-dependent claims was itself environment-dependent. Tier 3 of this goal is
-    exactly that family, and it arrived inside the tool measuring it.
+    exactly that family, and it arrived inside the tool measuring it. Non-ignored new source
+    files must still count before their first commit; otherwise a large feature can pass the
+    census solely because its modules have not been staged yet.
 
     A fallback to `rglob` when git is unavailable was considered and refused: a fallback that
     changes the answer is the same defect wearing a different hat. Without git this raises.
     """
     out = subprocess.run(
-        ["git", "-C", str(ROOT), "ls-files", "-z", "--", pattern],
+        [
+            "git",
+            "-C",
+            str(ROOT),
+            "ls-files",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+            "-z",
+            "--",
+            pattern,
+        ],
         capture_output=True, check=True, text=True,
     ).stdout
-    # `.exists()` because `git ls-files` lists a tracked path even when the working tree has
+    # `.exists()` because `git ls-files` lists a cached path even when the working tree has
     # deleted it and the deletion is not yet staged. A half-finished deletion is not a source.
     return sorted(p for p in (ROOT / name for name in out.split("\0") if name) if p.exists())
 

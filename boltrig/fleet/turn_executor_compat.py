@@ -15,7 +15,9 @@ from typing import Any
 # inside every legacy-signature executor, which _safe_exec degrades rather than
 # raises, so the turn answered "(turn error: TypeError)" and nothing said why.
 # Anything threaded into the executor call belongs in this set the same day.
-_OPTIONAL_KWARGS = frozenset({"scope", "workspace_id", "on_behalf_bearer", "origin"})
+_OPTIONAL_KWARGS = frozenset({
+    "scope", "workspace_id", "on_behalf_bearer", "origin", "model_profile_id",
+})
 _KEYWORD_KINDS = frozenset(
     {
         inspect.Parameter.POSITIONAL_OR_KEYWORD,

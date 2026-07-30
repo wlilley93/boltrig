@@ -19,14 +19,17 @@ import pathlib
 import time
 from typing import Any
 
+import fakeredis
 import pytest
+from fakeredis import aioredis as fake_aioredis
 
 from boltrig.adapters.builtin.memory_tickets import build as build_tickets
 from boltrig.emotion.engine import Appraisal, EmotionModel
-from boltrig.emotion.relay import EmotionRelay
+from boltrig.emotion.relay import EmotionRelay, build_event_relay
 from boltrig.emotion.tables import load_emotion_tables
 from boltrig.kernel import Kernel
 from boltrig.kernel.events import EventRelay
+from boltrig.kernel.redis_event_relay import RedisEventRelay
 from boltrig.models import GrantSet, SchemaValidationError, TenantPermissions
 from boltrig.store import InMemoryStore
 from tests.conftest import TENANT, make_ctx
@@ -153,6 +156,58 @@ async def test_dispatch_outcomes_are_identical_with_and_without_the_emotion_rela
     repl_a.update(_call_id_placeholders(events_a))
     repl_b.update(_call_id_placeholders(events_b))
     assert _canon(events_a, repl_a) == _canon(events_b, repl_b)
+
+
+@pytest.mark.kernel
+@pytest.mark.invariant("EMO-1")
+@pytest.mark.invariant("NFR-CONV-03")
+def test_emotion_observes_the_shared_redis_relay_without_a_second_backlog(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("BOLTRIG_EMOTION", "1")
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path / "runtime"))
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    server = fakeredis.FakeServer()
+    backend = RedisEventRelay(
+        fakeredis.FakeRedis(server=server, decode_responses=True),
+        fake_aioredis.FakeRedis(server=server, decode_responses=True),
+        namespace="emotion-shared",
+    )
+
+    kernel = Kernel(InMemoryStore(), event_relay=backend)
+    assert isinstance(kernel.events, EmotionRelay)
+    assert kernel.events.shared is True
+    try:
+        event = {"type": "tool_call", "status": "running", "call_id": "c1"}
+        kernel.events.publish(TENANT, "run-1", event)
+        assert kernel.events.snapshot(TENANT, "run-1") == [event]
+        assert backend.snapshot(TENANT, "run-1") == [event]
+        assert backend.max_seq(TENANT, "run-1") == 1
+    finally:
+        kernel.events.stop()
+
+
+@pytest.mark.kernel
+@pytest.mark.invariant("EMO-1")
+@pytest.mark.invariant("NFR-CONV-03")
+def test_broken_emotion_initialization_returns_the_supplied_shared_backend(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("BOLTRIG_EMOTION", "1")
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    monkeypatch.setattr(
+        "boltrig.emotion.relay.load_emotion_tables",
+        lambda: (_ for _ in ()).throw(RuntimeError("broken tables")),
+    )
+    server = fakeredis.FakeServer()
+    backend = RedisEventRelay(
+        fakeredis.FakeRedis(server=server, decode_responses=True),
+        fake_aioredis.FakeRedis(server=server, decode_responses=True),
+        namespace="emotion-fallback",
+    )
+
+    assert build_event_relay(backend=backend) is backend
+    assert backend.shared is True
 
 
 @pytest.mark.security

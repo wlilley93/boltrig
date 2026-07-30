@@ -58,8 +58,7 @@ A high-consequence step that the HITL gate holds is recorded as ``paused``.
   replay-cached.
 
 The interpreter is generic: a step's ``action`` is a fully-qualified verb id
-(``"<noun>.<verb>"``); what it resolves to (adapter or agent) is the registry's
-business, not the interpreter's. Imports only models; severable from the kernel.
+resolved by the registry, not by the interpreter.
 """
 
 from __future__ import annotations
@@ -69,6 +68,8 @@ from typing import Any
 
 from boltrig.models import InvocationContext, BoltrigError, IdempotencyConflict
 from . import control_flow, run_events
+from .loop_contract import selected_params
+from .loop_execution import LoopWalk, invalid_loop_run_record
 
 
 def _topological_order(steps: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -162,6 +163,12 @@ async def run_workflow_definition(
         # would cross-replay one workflow's step outputs into the other.
         return f"{wf.id}:{step}"
 
+    invalid = invalid_loop_run_record(
+        definition, steps=steps, wf=wf, inputs=inputs, run_id=rid,
+        relay=relay, emit_step=_emit_step)
+    if invalid is not None:
+        return invalid
+
     ordered, unrunnable = _topological_order(steps)
     results: dict[str, dict[str, Any]] = {}
     failed_or_skipped: set[str] = {s["id"] for s in unrunnable}
@@ -176,12 +183,14 @@ async def run_workflow_definition(
                     "status": "skipped", "reason": "missing_parent_or_cycle"})
 
     paused = False
-    expanded: list[tuple[list[str], int]] = []  # (body_ids, item_count) per loop
-    loop_bodies: set[str] = set()  # original body ids replaced by per-item clones
+    loops = LoopWalk()
     idx = 0
     while idx < len(ordered):
         step = ordered[idx]
         step_id = step["id"]
+        action = step.get("action", "")
+        _, step_params = selected_params(step)
+        params = step_params or {}
         done = prior.get(_ck(step_id))
         if done is not None and done.status == "ok":
             # NFR-REL-02: a completed step replays its recorded output on a
@@ -190,6 +199,19 @@ async def run_workflow_definition(
                                 "output": done.output, "replayed": True}
             _emit_step({"step_id": step_id, "action": step.get("action"),
                         "status": "ok", "replayed": True})
+            if action == "flow.loop":
+                ordered = loops.replay_completed(
+                    ordered,
+                    step_id=step_id,
+                    action=action,
+                    params=params,
+                    results=results,
+                    inputs=inputs,
+                    recorded_output=done.output,
+                    failed_or_skipped=failed_or_skipped,
+                    failed=failed,
+                    emit_step=_emit_step,
+                )
             idx += 1
             continue
         # A step whose parent failed/was skipped cannot run (fail-closed).
@@ -205,7 +227,7 @@ async def run_workflow_definition(
         # falls OUTSIDE the expanded body (control_flow.loop_body_ids): its body
         # parent was replaced by per-item clones, so its refs to that parent
         # cannot resolve. Skip it rather than dispatch with null refs.
-        if any(p in loop_bodies for p in step.get("parents", []) or []):
+        if any(p in loops.original_body_ids for p in step.get("parents", []) or []):
             results[step_id] = {"action": step.get("action"), "status": "skipped",
                                 "reason": "mixed_loop_parent"}
             failed_or_skipped.add(step_id)
@@ -225,15 +247,7 @@ async def run_workflow_definition(
             idx += 1
             continue
 
-        action = step.get("action", "")
         noun, verb = _split_action(action)
-        params = step.get("params") or step.get("with") or {}
-        # Loop clones carry __loop_item/__loop_index metadata (see
-        # control_flow.expand_loop). Nothing substitutes them into param values,
-        # so they are dispatch metadata only: strip them before the params hit
-        # schema validation (a verb with additionalProperties: false would
-        # otherwise reject every clone).
-        params = {k: v for k, v in params.items() if not k.startswith("__loop_")}
 
         # Control-plane steps (trigger/flow/code) are resolved locally by the
         # interpreter, NOT dispatched through kernel.invoke: they are internal
@@ -246,21 +260,16 @@ async def run_workflow_definition(
                                 "output": coutcome.get("output")}
             if coutcome["status"] != "ok":
                 failed_or_skipped.add(step_id)
+                failed.add(step_id)
             elif checkpointing:
                 await store.upsert_checkpoint(
                     wf.tenant_id, rid, _ck(step_id), "ok", output=coutcome.get("output")
                 )
-            _emit_step({"step_id": step_id, "action": action,
-                        "status": coutcome["status"]})
+            _emit_step({"step_id": step_id, "action": action, "status": coutcome["status"]})
             # Loop body iteration: a flow.loop with a non-empty items list
             # expands its body into the walk so each item runs the body once.
             # The body is the loop's self-contained descendant sub-graph.
-            loop_items = coutcome.get("_items") if coutcome["status"] == "ok" else None
-            if loop_items:
-                ordered, body_ids = control_flow.expand_loop(ordered, step_id, loop_items)
-                if body_ids:
-                    expanded.append((body_ids, len(loop_items)))
-                    loop_bodies.update(body_ids)
+            ordered = loops.expand_outcome(ordered, step_id, coutcome)
             idx += 1
             continue
 
@@ -269,9 +278,7 @@ async def run_workflow_definition(
         # A resumed paused step re-invokes with its approval id: the kernel's
         # consume-if-approved CAS makes the gated execution exactly-once
         # (NFR-REL-03, SEC-14); a second resume finds the approval spent.
-        approval_id = (
-            done.hitl_request_id if done is not None and done.status == "paused" else None
-        )
+        approval_id = done.hitl_request_id if done is not None and done.status == "paused" else None
 
         # The checkpoint seam's other half (NFR-REL-02): a deterministic
         # per-step idempotency key, so a step whose verb COMPLETED but whose
@@ -305,9 +312,7 @@ async def run_workflow_definition(
                 # standard engine-retry semantics, at-least-once for the
                 # genuinely interrupted step (NFR-REL-02) - exactly what an
                 # unkeyed dispatch already accepted.
-                return await kernel.invoke(
-                    noun, verb, params, run_ctx, approval_id=approval_id
-                )
+                return await kernel.invoke(noun, verb, params, run_ctx, approval_id=approval_id)
 
         boundary = f"workflow:{wf.id}:{step_id}"
         try:
@@ -336,8 +341,7 @@ async def run_workflow_definition(
             results[step_id] = {"action": action, "status": status, "reason": reason}
             if hitl_id:
                 results[step_id]["hitl_request_id"] = hitl_id
-            _emit_step({"step_id": step_id, "action": action, "status": status,
-                        "reason": reason})
+            _emit_step({"step_id": step_id, "action": action, "status": status, "reason": reason})
             if status == "paused" and checkpointing:
                 # NFR-REL-03: the pause is durable - the request id is the
                 # approval id the resumed run re-invokes with; stop the walk.
@@ -356,8 +360,7 @@ async def run_workflow_definition(
 
     # Collapse per-item loop-clone results back onto each original body step so
     # the run record (keyed by original step id) reflects the iteration.
-    for body_ids, item_count in expanded:
-        control_flow.aggregate_loop_results(results, body_ids, item_count)
+    loops.aggregate(results)
 
     if paused:
         overall = "paused"
@@ -373,9 +376,6 @@ async def run_workflow_definition(
         "tenant_id": wf.tenant_id,
         "version": wf.version,
         "status": overall,
-        "steps": [
-            {"id": s["id"], **results.get(s["id"], {"status": "skipped"})}
-            for s in steps
-        ],
+        "steps": [{"id": s["id"], **results.get(s["id"], {"status": "skipped"})} for s in steps],
         "inputs": dict(inputs or {}),
     }

@@ -18,6 +18,7 @@ from boltrig.addons import (
     MAX_ADDON_HARNESS_BYTES,
     Addon,
     AddonError,
+    AddonRequirement,
     active_addons,
     adapter_id_for,
     composed_version,
@@ -220,7 +221,38 @@ def test_an_addon_declares_no_verbs_grants_or_credentials() -> None:
     design should be revisited rather than the assertion relaxed.
     """
     fields = set(Addon.__dataclass_fields__)
-    assert fields == {"name", "version", "harness", "adapter_id", "consequence_hint"}
+    assert fields == {
+        "name",
+        "version",
+        "harness",
+        "adapter_id",
+        "consequence_hint",
+        "requirements",
+    }
+
+
+def test_addon_requirements_are_closed_declarative_data() -> None:
+    requirement = AddonRequirement(
+        id="adapter-ready",
+        kind="adapter",
+        ref="private-adapter-ref",
+    )
+    assert requirement.required is True
+    assert "private-adapter-ref" not in repr(requirement)
+    with pytest.raises(AddonError, match="kind"):
+        AddonRequirement(id="remote-probe", kind="callback", ref="https://secret")
+    with pytest.raises(AddonError, match="tuple"):
+        Addon(
+            name="invalid",
+            version="1.0.0",
+            requirements=[requirement],  # type: ignore[arg-type]
+        )
+    with pytest.raises(AddonError, match="unique"):
+        Addon(
+            name="duplicate",
+            version="1.0.0",
+            requirements=(requirement, requirement),
+        )
 
 
 def test_two_addons_cannot_both_claim_the_on_behalf_adapter() -> None:

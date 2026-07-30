@@ -33,8 +33,9 @@ const providers = {
       role: "managed_context",
       enabled: false,
       bundled: false,
-      health: "unknown",
-      status: "available",
+      health: "unavailable",
+      status: "unavailable",
+      last_error: "Credential-backed projection adapter is not implemented in this build.",
     },
   ],
 };
@@ -94,18 +95,17 @@ describe("KnowledgePanel", () => {
     expect(api.knowledgeSearch).toHaveBeenCalledWith("shackle");
   });
 
-  it("presents Cognee as bundled and enables an add-on with one governed action", async () => {
+  it("presents Cognee as bundled and keeps unimplemented add-ons unavailable", async () => {
     mockApi({
       knowledgeAssets: { assets: [] },
       knowledgeProviders: providers,
-      setKnowledgeProvider: { provider: { ...providers.providers[1], enabled: true } },
     });
     render(<KnowledgePanel />);
     fireEvent.click(screen.getByRole("tab", { name: "Providers" }));
     await screen.findByText("Bundled default");
-    const enable = screen.getAllByRole("button", { name: "Enable" })[0];
-    fireEvent.click(enable);
-    await waitFor(() => expect(api.setKnowledgeProvider).toHaveBeenCalledWith("supermemory", true));
+    const unavailable = screen.getByRole("button", { name: "Unavailable" });
+    expect(unavailable.hasAttribute("disabled")).toBe(true);
+    expect(api.setKnowledgeProvider).not.toHaveBeenCalled();
   });
 
   it("uploads a selected document into canonical Knowledge", async () => {

@@ -200,7 +200,9 @@ def test_stack_tool_status_reports_shipped_tools_without_user_paths():
         "BOLTRIG_BROWSER_CLOUD_API_KEY": "stack-key",
         "BOLTRIG_BROWSER_CLOUD_PROFILE_ID": "stack-profile",
     }
-    resp = _client({"status": StackToolStatusProvider(_StatusProvider(), env=env)}).get(
+    provider = StackToolStatusProvider(_StatusProvider(), env=env)
+    assert provider.cached_snapshot(tenant_id=T, workspace_id=None) is None
+    resp = _client({"status": provider}).get(
         "/v1/platform/status", headers={"authorization": "Bearer good"}
     )
     assert resp.status_code == 200
@@ -225,6 +227,16 @@ def test_stack_tool_status_reports_shipped_tools_without_user_paths():
     assert ".opencode" not in rendered
     assert "stack-key" not in rendered
     assert "stack-profile" not in rendered
+    cached = provider.cached_snapshot(tenant_id=T, workspace_id=None)
+    assert cached is not None
+    assert {item["id"] for item in cached["components"]} >= {
+        "herdr",
+        "opencode",
+        "browser-cli",
+    }
+    cached["components"].clear()
+    assert provider.cached_snapshot(tenant_id=T, workspace_id=None)["components"]
+    assert provider.cached_snapshot(tenant_id=T, workspace_id="other") is None
 
 
 @pytest.mark.security

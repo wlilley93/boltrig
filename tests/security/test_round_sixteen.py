@@ -216,8 +216,12 @@ async def test_worker_boot_refuses_default_audit_key_under_prod_signal(monkeypat
     # signal also requires a real BOLTRIG_SEAL_KEY (manifest credential seeding
     # seals at the store seam during boot).
     monkeypatch.setenv("BOLTRIG_SEAL_KEY", "a-real-seal-key")
+    # Production composition also refuses the single-process event relay. The
+    # clients are lazy, so this wiring assertion remains offline.
+    monkeypatch.setenv("REDIS_URL", "redis://readiness.invalid/0")
     kernel = await build_kernel_async()
     assert kernel is not None
+    assert kernel.events.shared is True
 
 
 @pytest.mark.invariant("K-19")

@@ -36,6 +36,8 @@ _COMPAT_VERBS = frozenset(
         "control.channel.pair",
         "control.channel.bind",
         "control.channel.unbind",
+        "control.eval_case.archive",
+        "control.eval_case.restore",
         "control.eval_case.upsert",
     }
 )

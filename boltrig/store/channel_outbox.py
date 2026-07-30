@@ -18,11 +18,94 @@ Host-class contract:
 
 from __future__ import annotations
 
-from boltrig.models import ChannelOutboxMessage, utcnow
+from boltrig.models import ChannelDeliveryReceipt, ChannelOutboxMessage, utcnow
+from .realtime_calls import RealtimeCallStoreMem, RealtimeCallStorePG
 
 # Backoff multiplier ceiling: attempts grow unbounded across reclaim cycles, so
 # the exponential factor is capped (max delay = backoff_seconds * 64).
 _BACKOFF_CAP = 64
+_MAX_RECEIPTS = 100
+
+
+def _public_status(status: str, attempts: int) -> str:
+    if status == "pending":
+        return "retryable" if attempts > 0 else "queued"
+    if status == "failed":
+        return "terminal_failed"
+    if status in {"in_flight", "delivered"}:
+        return status
+    raise ValueError("unknown channel outbox status")
+
+
+def _delivery_receipt(
+    *,
+    message_id,
+    tenant_id,
+    channel_id,
+    status,
+    attempts,
+    has_error,
+    created_at,
+    updated_at,
+    next_attempt_at,
+) -> ChannelDeliveryReceipt:
+    public_status = _public_status(status, attempts)
+    return ChannelDeliveryReceipt(
+        id=message_id,
+        tenant_id=tenant_id,
+        channel_id=channel_id,
+        status=public_status,
+        attempts=attempts,
+        safe_reason=(
+            "delivery_failed"
+            if has_error and public_status in {"retryable", "terminal_failed"}
+            else None
+        ),
+        created_at=created_at,
+        updated_at=updated_at,
+        next_attempt_at=(
+            next_attempt_at if public_status == "retryable" else None
+        ),
+    )
+
+
+def _pg_receipt(row):
+    if row is None:
+        return None
+    return _delivery_receipt(
+        message_id=row["id"],
+        tenant_id=row["tenant_id"],
+        channel_id=row["channel_id"],
+        status=row["status"],
+        attempts=row["attempts"],
+        has_error=row["has_error"],
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
+        next_attempt_at=row["next_attempt_at"],
+    )
+
+
+def _mem_receipt(message):
+    if message is None:
+        return None
+    return _delivery_receipt(
+        message_id=message.id,
+        tenant_id=message.tenant_id,
+        channel_id=message.channel_id,
+        status=message.status,
+        attempts=message.attempts,
+        has_error=bool(message.last_error),
+        created_at=message.created_at,
+        updated_at=message.updated_at,
+        next_attempt_at=message.next_attempt_at,
+    )
+
+
+_RECEIPT_COLUMNS = """
+    id, tenant_id, channel_id, status, attempts,
+    (last_error IS NOT NULL AND last_error <> '') AS has_error,
+    created_at, updated_at, next_attempt_at
+"""
 
 
 def _outbox_message(r):
@@ -37,7 +120,7 @@ def _outbox_message(r):
     )
 
 
-class ChannelOutboxStorePG:
+class ChannelOutboxStorePG(RealtimeCallStorePG):
     """Channel outbox methods for ``PostgresStore`` (uses ``self._pool``)."""
 
     async def enqueue_channel_outbox(self, message):
@@ -49,6 +132,62 @@ class ChannelOutboxStorePG:
             message.id, message.tenant_id, message.channel_id, message.payload,
             message.created_at,
         )
+
+    async def list_notification_outbox(self, tenant_id, subject, limit=100):
+        rows = await self._pool.fetch(
+            """SELECT * FROM channel_outbox
+               WHERE tenant_id=$1
+                 AND payload->>'subject'=$2
+                 AND payload ? 'event'
+               ORDER BY created_at DESC, id DESC LIMIT $3""",
+            tenant_id, subject, max(1, min(int(limit), 500)),
+        )
+        return [_outbox_message(row) for row in rows]
+
+    async def list_channel_delivery_receipts(
+        self, tenant_id, channel_id, limit=50
+    ):
+        rows = await self._pool.fetch(
+            f"""SELECT {_RECEIPT_COLUMNS}
+                FROM channel_outbox
+                WHERE tenant_id=$1 AND channel_id=$2
+                ORDER BY created_at DESC, id DESC LIMIT $3""",
+            tenant_id,
+            channel_id,
+            max(1, min(int(limit), _MAX_RECEIPTS)),
+        )
+        return [_pg_receipt(row) for row in rows]
+
+    async def get_channel_delivery_receipt(
+        self, tenant_id, channel_id, message_id
+    ):
+        row = await self._pool.fetchrow(
+            f"""SELECT {_RECEIPT_COLUMNS}
+                FROM channel_outbox
+                WHERE tenant_id=$1 AND channel_id=$2 AND id=$3""",
+            tenant_id,
+            channel_id,
+            message_id,
+        )
+        return _pg_receipt(row)
+
+    async def retry_terminal_channel_delivery(
+        self, tenant_id, channel_id, message_id, expected_updated_at
+    ):
+        row = await self._pool.fetchrow(
+            f"""UPDATE channel_outbox
+                SET status='pending', attempts=0, next_attempt_at=NULL,
+                    last_error=NULL, lease_owner=NULL, lease_expires_at=NULL,
+                    updated_at=now()
+                WHERE tenant_id=$1 AND channel_id=$2 AND id=$3
+                  AND status='failed' AND updated_at=$4
+                RETURNING {_RECEIPT_COLUMNS}""",
+            tenant_id,
+            channel_id,
+            message_id,
+            expected_updated_at,
+        )
+        return _pg_receipt(row)
 
     async def claim_channel_outbox(
         self, tenant_id, channel_ids, worker_id, lease_seconds, limit
@@ -119,12 +258,69 @@ class ChannelOutboxStorePG:
         return row is not None
 
 
-class ChannelOutboxStoreMem:
+class ChannelOutboxStoreMem(RealtimeCallStoreMem):
     """Channel outbox methods for ``InMemoryStore`` (uses ``self._chan_outbox``)."""
 
     async def enqueue_channel_outbox(self, message):
+        now = utcnow()
         message.status = "pending"
+        message.attempts = 0
+        message.lease_owner = None
+        message.lease_expires_at = None
+        message.next_attempt_at = None
+        message.last_error = None
+        message.created_at = message.created_at or now
+        message.updated_at = now
         self._chan_outbox[(message.tenant_id, message.id)] = message
+
+    async def list_notification_outbox(self, tenant_id, subject, limit=100):
+        matched = [
+            message
+            for (tenant, _), message in self._chan_outbox.items()
+            if tenant == tenant_id
+            and message.payload.get("subject") == subject
+            and message.payload.get("event")
+        ]
+        return list(reversed(matched[-max(1, min(int(limit), 500)):]))
+
+    async def list_channel_delivery_receipts(
+        self, tenant_id, channel_id, limit=50
+    ):
+        matched = [
+            message
+            for (tenant, _), message in self._chan_outbox.items()
+            if tenant == tenant_id and message.channel_id == channel_id
+        ]
+        cap = max(1, min(int(limit), _MAX_RECEIPTS))
+        return [_mem_receipt(message) for message in reversed(matched[-cap:])]
+
+    async def get_channel_delivery_receipt(
+        self, tenant_id, channel_id, message_id
+    ):
+        message = self._chan_outbox.get((tenant_id, message_id))
+        if message is None or message.channel_id != channel_id:
+            return None
+        return _mem_receipt(message)
+
+    async def retry_terminal_channel_delivery(
+        self, tenant_id, channel_id, message_id, expected_updated_at
+    ):
+        message = self._chan_outbox.get((tenant_id, message_id))
+        if (
+            message is None
+            or message.channel_id != channel_id
+            or message.status != "failed"
+            or message.updated_at != expected_updated_at
+        ):
+            return None
+        message.status = "pending"
+        message.attempts = 0
+        message.next_attempt_at = None
+        message.last_error = None
+        message.lease_owner = None
+        message.lease_expires_at = None
+        message.updated_at = utcnow()
+        return _mem_receipt(message)
 
     async def claim_channel_outbox(
         self, tenant_id, channel_ids, worker_id, lease_seconds, limit

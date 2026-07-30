@@ -14,8 +14,13 @@ unused.
 
 from __future__ import annotations
 
-from boltrig.fleet.runtime_resolver import RuntimeResolver
-from boltrig.models import AgentCapability, GrantSet
+import pytest
+
+from boltrig.fleet.runtime_resolver import (
+    PinnedRuntimePolicyUnavailable,
+    RuntimeResolver,
+)
+from boltrig.models import AgentCapability, GrantSet, InvocationContext
 
 
 def _capability(runtime: str, supported_skills: list[str] | None = None) -> AgentCapability:
@@ -74,6 +79,17 @@ def test_codex_config_marks_the_kernel_tools_lane_for_star_skills() -> None:
     assert resolved["revoke_token"] == resolver._kernel.mcp.revoke
     assert resolved["mcp_url"] == "http://kernel:8000/v1/mcp"
     assert callable(resolved["compile_tool_ceiling"])
+
+
+def test_explicit_read_only_resolution_suppresses_star_kernel_tools() -> None:
+    resolver = _resolver({"trusted": True})
+    resolved = resolver._codex_config(
+        _capability("codex", ["*"]),
+        None,
+        allow_kernel_tools=False,
+    )
+    assert resolved is not None
+    assert resolved["kernel_tools"] is False
 
 
 def test_codex_config_never_triggers_on_runtime_override() -> None:
@@ -213,3 +229,82 @@ async def test_resolve_says_nothing_when_no_endpoint_resolves():
     resolver = RuntimeResolver(_KernelWithStore(None))
     runtime = await resolver.runtime_for("tenant-1", _capability("script"), None)
     assert getattr(runtime, "model_route", None) is None
+
+
+async def test_pinned_policy_ignores_caller_provider_and_model_profile_overrides(
+    monkeypatch,
+):
+    """Permanent profiles keep their authored runtime/model selection.
+
+    Caller AI configuration still resolves for credential policy, but its provider
+    and model cannot turn an authored permanent script/Codex profile into another
+    runtime.  The same applies to a request model-profile hint.
+    """
+    import boltrig.identity as identity
+    from boltrig.fleet.runtime import ScriptRuntime
+    from boltrig.identity import AiKeyResolution
+
+    async def configured_key(*args, **kwargs):
+        return AiKeyResolution(
+            level="user",
+            credential_ref="sealed-key",
+            provider="openai",
+            model="caller-model",
+            base_url="https://caller.invalid",
+        )
+
+    async def key_material(*args, **kwargs):
+        return "secret-material"
+
+    monkeypatch.setattr(identity, "resolve_ai_key", configured_key)
+    monkeypatch.setattr(identity, "load_ai_key_material", key_material)
+    resolver = RuntimeResolver(_KernelWithStore(_endpoint()))
+    capability = _cap_with_endpoint()
+    context = InvocationContext(
+        tenant_id="tenant-1",
+        actor="head",
+        actor_tier="tier2",
+        workspace_id="workspace",
+        on_behalf_of="alice",
+        extra={"model_profile": "caller-profile"},
+    )
+
+    runtime = await resolver.runtime_for(
+        "tenant-1", capability, context, pinned_policy=True
+    )
+
+    assert isinstance(runtime, ScriptRuntime)
+    assert runtime.model_route == {
+        "model": "gpt-oss-120b",
+        "provider": "openai",
+    }
+
+
+async def test_pinned_codex_profile_refuses_a_different_composed_model():
+    resolver = RuntimeResolver(
+        _KernelWithStore(_endpoint()),
+        codex_config={
+            "trusted": True,
+            "provider": object(),
+            "stack_root": object(),
+            "model_id": "different-model",
+        },
+    )
+    resolver._resolve_ai_key = lambda *args, **kwargs: _none_key()  # type: ignore[method-assign]
+    capability = replace_capability(
+        _capability("codex", ["analysis/*"]),
+        model_endpoint="cerebras",
+        is_ephemeral=False,
+    )
+
+    with pytest.raises(PinnedRuntimePolicyUnavailable):
+        await resolver.runtime_for(
+            "tenant-1",
+            capability,
+            InvocationContext(tenant_id="tenant-1", actor="head"),
+            pinned_policy=True,
+        )
+
+
+async def _none_key():
+    return None, None

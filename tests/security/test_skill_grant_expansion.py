@@ -44,6 +44,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from boltrig.config.control_specs import control_specs
 from boltrig.fleet.infrastructure.codex_kernel_tools_phase import MAX_KERNEL_TOOLS
 from boltrig.models.grants import GrantSet
 
@@ -72,6 +73,18 @@ def _load_rows() -> tuple[tuple[str, str, str], ...]:
 
 def _load_surface() -> tuple[str, ...]:
     return tuple(verb for verb, _adapter, _runtime in _load_rows())
+
+
+@pytest.mark.security
+def test_vendored_control_surface_matches_the_registered_catalogue():
+    """A new governed verb cannot remain invisible to the selection gates."""
+    vendored = {
+        verb
+        for verb, adapter, runtime in _load_rows()
+        if adapter == "control" and runtime == "script"
+    }
+    registered = {spec.verb_id for spec in control_specs()}
+    assert vendored == registered
 
 
 def _load_skills() -> list[tuple[str, list[str]]]:

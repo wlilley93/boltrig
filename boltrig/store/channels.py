@@ -17,8 +17,13 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from boltrig.models import Channel, ChannelBinding, ChannelPairing
+from boltrig.models import (
+    Channel,
+    ChannelBinding,
+    ChannelPairing,
+)
 
+from .channel_gateway_state import ChannelGatewayStateMem, ChannelGatewayStatePG
 
 # --- Postgres row mappers (moved verbatim from store/postgres.py) ---
 
@@ -55,7 +60,7 @@ def _channel_pairing(r):
     )
 
 
-class ChannelStorePG:
+class ChannelStorePG(ChannelGatewayStatePG):
     """Channel methods for ``PostgresStore`` (uses ``self._pool``)."""
 
     async def upsert_channel(self, channel):
@@ -185,7 +190,7 @@ class ChannelStorePG:
         return _channel_pairing(row)
 
 
-class ChannelStoreMem:
+class ChannelStoreMem(ChannelGatewayStateMem):
     """Channel methods for ``InMemoryStore`` (uses ``self._channels`` etc.)."""
 
     async def upsert_channel(self, channel):
@@ -217,6 +222,8 @@ class ChannelStoreMem:
                 self._chan_bindings.pop(k, None)
             for k in [k for k, p in self._chan_pairings.items() if p.channel_id == channel_id]:
                 self._chan_pairings.pop(k, None)
+            self._chan_gateway_status.pop((tenant_id, channel_id), None)
+            self._chan_gateway_leases.pop((tenant_id, channel_id), None)
 
     async def upsert_channel_binding(self, binding):
         # Mirrors the PG ON CONFLICT (tenant_id, channel_id, external_user_id)

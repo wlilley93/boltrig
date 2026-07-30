@@ -140,7 +140,10 @@ def _upload_specs() -> list[VerbSpec]:
 
 def _retrieval_specs() -> list[VerbSpec]:
     return [
-            _verb("knowledge.asset.list", {"limit": {"type": "integer", "minimum": 1}}, [],
+            _verb("knowledge.asset.list", {
+                "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+                "offset": {"type": "integer", "minimum": 0, "maximum": 1000000},
+            }, [],
                   "List accessible Knowledge assets"),
             _verb("knowledge.asset.get", {"asset_id": _ID}, ["asset_id"],
                   "Read an accessible asset and its stable segments"),

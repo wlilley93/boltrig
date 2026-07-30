@@ -11,6 +11,7 @@ from __future__ import annotations
 import inspect
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any, Protocol
 
 from boltrig.models import InvocationContext, MemoryProjectionStatus, utcnow
@@ -101,6 +102,13 @@ def _row(
     target: str | None,
     projection_ref: str | None = None,
     error: str | None = None,
+    enqueue_attempts: int = 0,
+    operation_attempts: int = 0,
+    max_operation_attempts: int = 1,
+    first_attempt_at: datetime | None = None,
+    last_attempt_at: datetime | None = None,
+    last_failure_at: datetime | None = None,
+    failure_code: str | None = None,
     row_id: str | None = None,
 ) -> MemoryProjectionStatus:
     _check_status(operation, status)
@@ -116,6 +124,13 @@ def _row(
         target=target,
         projection_ref=projection_ref,
         error=error,
+        enqueue_attempts=enqueue_attempts,
+        operation_attempts=operation_attempts,
+        max_operation_attempts=max_operation_attempts,
+        first_attempt_at=first_attempt_at,
+        last_attempt_at=last_attempt_at,
+        last_failure_at=last_failure_at,
+        failure_code=failure_code,
         created_at=now,
         updated_at=now,
     )

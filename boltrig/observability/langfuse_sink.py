@@ -11,7 +11,8 @@ import inspect
 import os
 import asyncio
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any, Protocol
 
 from boltrig.config.environment import is_truthy
@@ -38,8 +39,14 @@ class ObservabilitySink(Protocol):
     ) -> None:
         """Mirror one agent-spawn trace event."""
 
+    def status_snapshot(self) -> dict[str, Any]:
+        """Return content-free, process-local delivery attempt evidence."""
 
+
+@dataclass
 class NoopObservabilitySink:
+    reason: str = "disabled_by_config"
+
     async def record_spawn(
         self,
         *,
@@ -55,6 +62,18 @@ class NoopObservabilitySink:
         latency_ms: int | None = None,
     ) -> None:
         return None
+
+    def status_snapshot(self) -> dict[str, Any]:
+        return {
+            "sink_state": "disabled",
+            "reason": self.reason,
+            "attempt_count": 0,
+            "success_count": 0,
+            "failure_count": 0,
+            "last_attempt_at": None,
+            "last_success_at": None,
+            "last_failure_at": None,
+        }
 
 
 def _short(value: Any, *, limit: int = 160) -> str:
@@ -125,6 +144,12 @@ async def _maybe_await(value: Any) -> None:
 class LangfuseObservabilitySink:
     client: Any
     timeout_s: float = 0.25
+    attempt_count: int = field(default=0, init=False)
+    success_count: int = field(default=0, init=False)
+    failure_count: int = field(default=0, init=False)
+    last_attempt_at: str | None = field(default=None, init=False)
+    last_success_at: str | None = field(default=None, init=False)
+    last_failure_at: str | None = field(default=None, init=False)
 
     async def record_spawn(
         self,
@@ -152,10 +177,16 @@ class LangfuseObservabilitySink:
             model_route=model_route,
             latency_ms=latency_ms,
         )
+        self.attempt_count += 1
+        self.last_attempt_at = datetime.now(UTC).isoformat()
         try:
             await asyncio.wait_for(self._emit(payload), timeout=self.timeout_s)
         except Exception:
+            self.failure_count += 1
+            self.last_failure_at = datetime.now(UTC).isoformat()
             return None
+        self.success_count += 1
+        self.last_success_at = datetime.now(UTC).isoformat()
 
     async def _emit(self, payload: dict[str, Any]) -> None:
         client = self.client
@@ -184,11 +215,24 @@ class LangfuseObservabilitySink:
                 )
             await self._flush()
             return
+        raise RuntimeError("unsupported Langfuse client")
 
     async def _flush(self) -> None:
         flush = getattr(self.client, "flush", None)
         if callable(flush):
             await _maybe_await(flush())
+
+    def status_snapshot(self) -> dict[str, Any]:
+        return {
+            "sink_state": "enabled",
+            "reason": "configured",
+            "attempt_count": self.attempt_count,
+            "success_count": self.success_count,
+            "failure_count": self.failure_count,
+            "last_attempt_at": self.last_attempt_at,
+            "last_success_at": self.last_success_at,
+            "last_failure_at": self.last_failure_at,
+        }
 
 
 def build_observability_sink(
@@ -202,15 +246,15 @@ def build_observability_sink(
     env = os.environ if env is None else env
     enabled = _short(env.get("BOLTRIG_LANGFUSE_ENABLED") or env.get("LANGFUSE_ENABLED"))
     if not is_truthy(enabled):
-        return NoopObservabilitySink()
+        return NoopObservabilitySink(reason="disabled_by_config")
     public_key = _short(env.get("LANGFUSE_PUBLIC_KEY"))
     secret_key = _short(env.get("LANGFUSE_SECRET_KEY"))
     if not public_key or not secret_key:
-        return NoopObservabilitySink()
+        return NoopObservabilitySink(reason="missing_keys")
     try:
         from langfuse import Langfuse  # type: ignore
     except Exception:
-        return NoopObservabilitySink()
+        return NoopObservabilitySink(reason="package_unavailable")
 
     kwargs: dict[str, str] = {"public_key": public_key, "secret_key": secret_key}
     host = _short(env.get("LANGFUSE_HOST"))
@@ -219,4 +263,4 @@ def build_observability_sink(
     try:
         return LangfuseObservabilitySink(Langfuse(**kwargs))
     except Exception:
-        return NoopObservabilitySink()
+        return NoopObservabilitySink(reason="client_initialization_failed")

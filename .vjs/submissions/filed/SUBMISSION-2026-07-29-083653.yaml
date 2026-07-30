@@ -102,6 +102,28 @@ facts: |
   in development") which no mechanism can verify, while the record shows an active non-operator
   admin and client-owned data on the tenant.
 
+  ## SUPERVENING FACT, entered before any bench read this file
+
+  Since filing, the Principal instructed that the flag be built, reaffirmed after the advocate
+  put the objections, and directed the advocate to stop arguing it. It WAS built and it is
+  LIVE: boltrig 881a9df (v0.4.25) adds a per-tenant `development_posture`, and Classical Visas
+  declares it (expires 2026-08-12). It has been RELIED ON ONCE - to self-approve
+  `control.adapter.activate`, which re-registered the opbox adapter from 99 verbs to 443 and
+  corrected a stale schema behind 42% of that tenant's tool-call failures.
+
+  So the court is not asked whether this MAY be done. It is asked whether what was done is
+  lawful, and on what conditions it may stand. The advocate records that squarely rather than
+  letting a bench rule in ignorance of it, which would be per incuriam and void.
+
+  As shipped it lifts INDEPENDENCE only: it never admits a non-human approver, never lifts the
+  grant check, reaches `control.*` only, lowers no consequence, refuses under any production
+  signal, requires an expiry, admits superadmin only, and records every reliance on both the
+  audit chain and the tamper-evident security stream.
+
+  The advocate discloses one fact adverse to the posture as applied: Classical Visas returns NO
+  production signal despite serving a real client on a public domain, so the observed condition
+  admits it because an environment variable is unset, not because the tenant is in development.
+
   No option is preferred. The advocate held a view and withheld it. Option E is the Principal's,
   reproduced without endorsement.
 requested_order: TBD

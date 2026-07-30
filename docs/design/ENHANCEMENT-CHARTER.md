@@ -15,7 +15,7 @@ work is polish/enhance) vs **open** (IA still in flux, may need a spec + sign-of
 | Rank | Surface | Strategic weight | Grade | Structure | Altitude allowed | Notes |
 |---|---|---|---|---|---|---|
 | 1 | **Chat** | Flagship + default landing; the L2 reference client | B+ | settled (full spec exists) | Enhance | Build to the written chat surface spec; streaming/HITL correctness is no-rewrite |
-| 2 | **Automations / Workflow canvas** | Core product loop | B | settled | Enhance | Real run stats already wired; finish run-record fidelity + `flow.loop` UI |
+| 2 | **Automations / Workflow canvas** | Core product loop | B | settled | Enhance | Real run stats and bounded typed `flow.loop` authoring are wired; continue canvas/run-record fidelity work |
 | 3 | **Approvals (HITL)** | Governance-critical; where D6/D7 live | B- | settled | Enhance | Must render the AMENDMENTS approval contract exactly; smallest tolerance for drift |
 | 4 | **Agent Studio / builder** | Authoring surface for the fleet | B- | settled (`surfaces/agent-builder.md`) | Enhance | Org-first fleet authoring with one slide per agent |
 | 5 | **Knowledge** | Canonical evidence shared with Codex (decision 0015) | C+ | settled (`surfaces/knowledge.md`) | Enhance | Library first, immutable citations, Cognee as visible rebuildable compiler |

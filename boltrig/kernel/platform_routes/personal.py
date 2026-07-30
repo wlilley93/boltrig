@@ -32,9 +32,16 @@ def register(app, P, K) -> None:
     async def get_personal_agent(k=K, p=P) -> JSONResponse:
         agent = await k.store.get_personal_agent(p.tenant_id, p.subject)
         if agent is None:
-            return JSONResponse({"error": "no_personal_agent"}, status_code=404)
+            return JSONResponse({"agent": None})
         return JSONResponse(
-            {"id": agent.id, "runtime": agent.runtime, "skills": list(agent.skills)}
+            {
+                "agent": {
+                    "id": agent.id,
+                    "runtime": agent.runtime,
+                    "skills": list(agent.skills),
+                    "enabled": agent.enabled,
+                }
+            }
         )
 
     @app.delete("/v1/me/agent")
@@ -58,7 +65,14 @@ def register(app, P, K) -> None:
         from dataclasses import replace
 
         ctx = replace(ctx, on_behalf_of=p.subject)
-        result = await spawner.spawn(p.tenant_id, body.get("message", ""), list(agent.skills),
-                                     {}, ctx, partial_on_budget=True, grant_ceiling=p.grants)
+        result = await spawner.spawn(
+            p.tenant_id,
+            body.get("message", ""),
+            list(agent.skills),
+            {"runtime": agent.runtime},
+            ctx,
+            partial_on_budget=True,
+            grant_ceiling=p.grants,
+        )
         await audit_authoring(k, p, "personal_agent.invoke", {"run_id": result.get("run_id")})
         return JSONResponse(result)

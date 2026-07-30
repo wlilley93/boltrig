@@ -15,7 +15,6 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import re
 import sys
 import tomllib
 from collections.abc import AsyncIterator
@@ -23,16 +22,13 @@ from typing import Any
 
 import httpx
 
+from .chat_cli_gateway import clean_target, decode_frame, encode_frame
+from .chat_cli_http import http_error, queued_chat_event
+
 DEFAULT_SERVER = "http://127.0.0.1:8000"
-DEFAULT_CONFIG_PATH = os.path.join(
-    os.path.expanduser("~"), ".config", "boltrig", "cli.toml"
-)
+DEFAULT_CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".config", "boltrig", "cli.toml")
 ENV_TOKEN = "BOLTRIG_CLI_TOKEN"
 ENV_SERVER = "BOLTRIG_CLI_SERVER"
-
-# A target slug is short, safe-charset routing data (same rule as the kernel's
-# channel_routes._clean_target) - checked client-side so a typo fails here.
-_TARGET_RE = re.compile(r"[A-Za-z0-9._:-]{1,64}\Z")
 
 _HELP = """commands:
   /approve <id>          approve a pending HITL request
@@ -61,7 +57,9 @@ def load_config(path: str) -> dict[str, Any]:
 
 
 def resolve_setting(
-    flag: str | None, env_value: str | None, config_value: Any,
+    flag: str | None,
+    env_value: str | None,
+    config_value: Any,
     default: str | None = None,
 ) -> str | None:
     """Flag > env > config file > default; the first non-empty string wins."""
@@ -82,7 +80,7 @@ class SseParser:
         if line == "":
             return self.flush()
         if line.startswith("data:"):
-            self._data.append(line[len("data:"):].lstrip(" "))
+            self._data.append(line[len("data:") :].lstrip(" "))
         return None  # comments / event: / id: fields carry nothing we render
 
     def flush(self) -> dict[str, Any] | None:
@@ -122,19 +120,22 @@ def render_event(event: dict[str, Any]) -> str | None:
     if etype == "hitl":
         rid = event.get("hitl_request_id") or "?"
         kind, question = event.get("kind") or "approval", event.get("question") or ""
-        return (f"\n*** HUMAN INPUT NEEDED ({kind}): {question}\n"
-                f"*** respond: /approve {rid}  or  /deny {rid}\n")
+        return (
+            f"\n*** HUMAN INPUT NEEDED ({kind}): {question}\n"
+            f"*** respond: /approve {rid}  or  /deny {rid}\n"
+        )
     if etype == "question":
         qid, prompt = event.get("question_id") or "?", event.get("prompt") or ""
         choices = event.get("choices") or []
         hint = f" (choices: {', '.join(str(c) for c in choices)})" if choices else ""
-        return (f"\n*** QUESTION: {prompt}{hint}\n"
-                f"*** answer: /answer {qid} <your answer>\n")
+        return f"\n*** QUESTION: {prompt}{hint}\n*** answer: /answer {qid} <your answer>\n"
     if etype == "subagent":
         name = event.get("name") or event.get("child_run_id") or "?"
         return f"\n[subagent] {name}: {event.get('task') or ''}\n"
     if etype == "cancelled":
         return "\n(cancelled)\n"
+    if etype == "queued":
+        return "\n(instruction queued behind the active turn)\n"
     if etype == "message_end":
         return "\n"
     return None
@@ -150,34 +151,12 @@ def parse_command(line: str) -> tuple[str, str] | None:
     return (name, rest.strip()) if name else None
 
 
-def clean_target(value: Any) -> str | None:
-    """A target slug or None (the kernel's channel_routes._clean_target rule)."""
-    slug = str(value or "").strip()
-    return slug if _TARGET_RE.fullmatch(slug) else None
-
-
-# The gateway frame codec, duplicated from services/channel_gateway/clients/
-# custom_surface.py (the SEC-28-sanctioned idiom - never import the severed service).
-def encode_frame(sender: str, text: str, message_id: str, target: str | None = None) -> bytes:
-    """One inbound JSON-lines frame; the loop uses a per-process monotonic id."""
-    frame: dict[str, Any] = {"id": message_id, "sender": sender, "text": text}
-    if target:
-        frame["target"] = target
-    return (json.dumps(frame, separators=(",", ":")) + "\n").encode()
-
-
-def decode_frame(line: bytes) -> dict[str, Any] | None:
-    """One outbound line, or None - a malformed line is dropped, never fatal."""
-    try:
-        message = json.loads(line.decode("utf-8"))
-    except (UnicodeDecodeError, ValueError):
-        return None
-    return message if isinstance(message, dict) else None
-
-
 async def stream_turn(
-    client: httpx.AsyncClient, server: str, token: str,
-    message: str, conversation_id: str | None,
+    client: httpx.AsyncClient,
+    server: str,
+    token: str,
+    message: str,
+    conversation_id: str | None,
 ) -> AsyncIterator[dict[str, Any]]:
     """POST one chat turn and yield its SSE events as they arrive."""
     body: dict[str, Any] = {"message": message}
@@ -188,7 +167,11 @@ async def stream_turn(
             "POST", f"{server}/v1/chat", json=body, headers={"Authorization": f"Bearer {token}"}
         ) as resp:
             if resp.status_code != 200:
-                raise ChatCliError(_http_error(resp.status_code, await resp.aread()))
+                response_body = await resp.aread()
+                if queued := queued_chat_event(resp.status_code, response_body):
+                    yield queued
+                    return
+                raise ChatCliError(http_error(resp.status_code, response_body))
             async for event in parse_sse(resp.aiter_lines()):
                 yield event
     except httpx.HTTPError as exc:
@@ -202,16 +185,16 @@ async def respond_hitl(
     client: httpx.AsyncClient, server: str, token: str, request_id: str, decision: str
 ) -> dict[str, Any]:
     """Approve/deny a pending HITL request via /v1/hitl/{id}/respond."""
-    return await _post(client, f"{server}/v1/hitl/{request_id}/respond", token,
-                       {"decision": decision, "notes": ""})
+    return await _post(
+        client, f"{server}/v1/hitl/{request_id}/respond", token, {"decision": decision, "notes": ""}
+    )
 
 
 async def answer_question(
     client: httpx.AsyncClient, server: str, token: str, question_id: str, answer: str
 ) -> dict[str, Any]:
     """Answer an agent's clarifying question via /v1/hitl/{id}/answer."""
-    return await _post(client, f"{server}/v1/hitl/{question_id}/answer", token,
-                       {"answer": answer})
+    return await _post(client, f"{server}/v1/hitl/{question_id}/answer", token, {"answer": answer})
 
 
 async def _post(
@@ -222,25 +205,12 @@ async def _post(
     except httpx.HTTPError as exc:
         raise ChatCliError(f"request failed ({type(exc).__name__})") from exc
     if resp.status_code != 200:
-        raise ChatCliError(_http_error(resp.status_code, resp.content))
+        raise ChatCliError(http_error(resp.status_code, resp.content))
     try:
         payload = resp.json()
     except ValueError:
         payload = {}
     return payload if isinstance(payload, dict) else {}
-
-
-def _http_error(status: int, body: bytes) -> str:
-    """A one-line, user-facing HTTP failure. The token is never part of it."""
-    try:
-        payload = json.loads(body.decode("utf-8", "replace"))
-    except ValueError:
-        payload = {}
-    reason = payload.get("reason") or payload.get("error") if isinstance(payload, dict) else ""
-    if status in (401, 403):
-        return (f"authentication failed (HTTP {status}) - check the token "
-                "(--token / BOLTRIG_CLI_TOKEN / ~/.config/boltrig/cli.toml)")
-    return f"request failed (HTTP {status}){f': {reason}' if reason else ''}"
 
 
 async def _read_input(prompt: str) -> str | None:
@@ -256,11 +226,18 @@ async def _head_loop(args: Any) -> int:
     config = load_config(config_path)
     token = resolve_setting(args.token, os.environ.get(ENV_TOKEN), config.get("token"))
     if token is None:
-        print("no token: pass --token, set BOLTRIG_CLI_TOKEN, or add token = \"...\" "
-              f"to {config_path} (mint a PAT from your account)", file=sys.stderr)
+        print(
+            'no token: pass --token, set BOLTRIG_CLI_TOKEN, or add token = "..." '
+            f"to {config_path} (mint a PAT from your account)",
+            file=sys.stderr,
+        )
         return 2
-    server = resolve_setting(args.server, os.environ.get(ENV_SERVER),
-                             config.get("server"), DEFAULT_SERVER) or DEFAULT_SERVER
+    server = (
+        resolve_setting(
+            args.server, os.environ.get(ENV_SERVER), config.get("server"), DEFAULT_SERVER
+        )
+        or DEFAULT_SERVER
+    )
     server = server.rstrip("/")
     conversation_id = args.conversation
     print(f"boltrig chat -> {server} (PAT auth). /help for commands, /quit to exit.")
@@ -278,8 +255,7 @@ async def _head_loop(args: Any) -> int:
                     break
                 continue
             try:
-                async for event in stream_turn(client, server, token, text,
-                                               conversation_id):
+                async for event in stream_turn(client, server, token, text, conversation_id):
                     if event.get("type") == "message_start":
                         conversation_id = event.get("conversation_id") or conversation_id
                     if (chunk := render_event(event)) is not None:
@@ -327,17 +303,19 @@ async def _gateway_loop(args: Any) -> int:
         return 2
     sender = args.sender_id
     try:
-        reader, writer = await asyncio.open_connection(
-            args.gateway_host, args.gateway_port
-        )
+        reader, writer = await asyncio.open_connection(args.gateway_host, args.gateway_port)
     except OSError as exc:
-        print(f"cannot reach the channel gateway at "
-              f"{args.gateway_host}:{args.gateway_port} ({exc})", file=sys.stderr)
+        print(
+            f"cannot reach the channel gateway at {args.gateway_host}:{args.gateway_port} ({exc})",
+            file=sys.stderr,
+        )
         return 2
     recv = asyncio.create_task(_gateway_recv(reader))
-    print(f"boltrig chat -> gateway {args.gateway_host}:{args.gateway_port} "
-          f"as {sender!r} (target: {target or 'channel default (cos)'}). "
-          "/target <slug> to address, /quit to exit.")
+    print(
+        f"boltrig chat -> gateway {args.gateway_host}:{args.gateway_port} "
+        f"as {sender!r} (target: {target or 'channel default (cos)'}). "
+        "/target <slug> to address, /quit to exit."
+    )
     seq = 0
     try:
         while True:

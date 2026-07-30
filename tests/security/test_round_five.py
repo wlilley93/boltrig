@@ -118,6 +118,64 @@ def test_kernel_is_the_isolation_boundary():
                     headers=_h("alice"))
     assert denied.status_code == 403
 
+    # Feedback is a write to recall ranking. It must cross the same kernel scope
+    # boundary rather than letting a guessed id reweight another user's fact.
+    denied_improve = c.post(
+        "/v1/memory/improve",
+        json={"target": "b1", "signal": "down"},
+        headers=_h("alice"),
+    )
+    assert denied_improve.status_code == 403
+
+    own = c.post(
+        "/v1/memory/remember",
+        json={"content": "Alice prefers annual renewal"},
+        headers=_h("alice"),
+    )
+    own_fact = own.json()["fact_ids"][0]
+    improved = c.post(
+        "/v1/memory/improve",
+        json={"target": own_fact, "signal": "up"},
+        headers=_h("alice"),
+    )
+    assert improved.status_code == 200
+    assert improved.json() == {"status": "ok", "adjusted": 1}
+    invalid_signal = c.post(
+        "/v1/memory/improve",
+        json={"target": own_fact, "signal": "definitely believe this"},
+        headers=_h("alice"),
+    )
+    assert invalid_signal.status_code == 400
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-40")
+def test_recall_can_narrow_but_never_expand_server_derived_scopes():
+    k, _, engine = asyncio.run(_kernel())
+    asyncio.run(engine.remember(T, [
+        EngineFact(id="user-fact", owner_scope="user:alice", kind="entity",
+                   content="migration user note"),
+        EngineFact(id="org-fact", owner_scope="org", kind="entity",
+                   content="migration org note"),
+    ]))
+    c = _client(k)
+
+    narrowed = c.post(
+        "/v1/memory/recall",
+        json={"query": "migration", "owner_scope": "user:alice"},
+        headers=_h("alice", role="org-admin"),
+    )
+    assert narrowed.status_code == 200
+    assert {fact["owner_scope"] for fact in narrowed.json()["facts"]} == {
+        "user:alice"
+    }
+    denied = c.post(
+        "/v1/memory/recall",
+        json={"query": "migration", "owner_scope": "user:bob"},
+        headers=_h("alice"),
+    )
+    assert denied.status_code == 403
+
 
 # --- SEC-41: memory informs, never grants authority --------------------------
 @pytest.mark.security

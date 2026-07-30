@@ -12,6 +12,7 @@ from boltrig.observability.langfuse_sink import (
     build_observability_sink,
     spawn_trace_payload,
 )
+from boltrig.observability.langfuse_status import langfuse_delivery_projection
 
 
 pytestmark = pytest.mark.security
@@ -110,6 +111,16 @@ async def test_langfuse_sink_emits_event_and_flushes():
     assert client.events[0]["name"] == "boltrig.agent.spawn"
     assert client.events[0]["metadata"]["capability"] == "opencode-worker"
     assert client.flushed is True
+    assert sink.status_snapshot() == {
+        "sink_state": "enabled",
+        "reason": "configured",
+        "attempt_count": 1,
+        "success_count": 1,
+        "failure_count": 0,
+        "last_attempt_at": sink.last_attempt_at,
+        "last_success_at": sink.last_success_at,
+        "last_failure_at": None,
+    }
 
 
 @pytest.mark.invariant("FR-OBS-13")
@@ -129,6 +140,9 @@ async def test_langfuse_sink_failure_is_swallowed():
         tokens=1,
         cost_micros=2,
     )
+    assert sink.status_snapshot()["attempt_count"] == 1
+    assert sink.status_snapshot()["failure_count"] == 1
+    assert sink.status_snapshot()["success_count"] == 0
 
 
 @pytest.mark.invariant("FR-OBS-13")
@@ -152,4 +166,33 @@ async def test_langfuse_sink_timeout_is_swallowed():
 
 @pytest.mark.invariant("FR-OBS-13")
 def test_langfuse_builder_defaults_to_noop_without_keys():
-    assert isinstance(build_observability_sink({}), NoopObservabilitySink)
+    sink = build_observability_sink({})
+    assert isinstance(sink, NoopObservabilitySink)
+    assert sink.status_snapshot()["reason"] == "disabled_by_config"
+
+
+def test_langfuse_projection_is_bounded_and_rejects_unknown_fields():
+    class _Spawner:
+        def observability_status(self):
+            return {
+                "sink_state": "enabled",
+                "reason": "configured",
+                "attempt_count": 4,
+                "success_count": 3,
+                "failure_count": 1,
+                "last_attempt_at": "2026-07-29T12:00:00+00:00",
+                "last_success_at": "2026-07-29T11:59:00+00:00",
+                "last_failure_at": "2026-07-29T11:58:00+00:00",
+                "secret_key": "NEVER-SERIALIZE",
+                "host": "https://trace.private",
+            }
+
+    projected = langfuse_delivery_projection(_Spawner())
+    assert projected["status"] == "available"
+    assert projected["attempt_count"] == 4
+    assert projected["success_count"] == 3
+    assert projected["failure_count"] == 1
+    assert projected["delivery_lag"] == "unavailable"
+    assert projected["liveness_claimed"] is False
+    assert "NEVER-SERIALIZE" not in repr(projected)
+    assert "trace.private" not in repr(projected)

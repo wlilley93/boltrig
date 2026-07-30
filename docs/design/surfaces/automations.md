@@ -25,7 +25,7 @@ One provider mounted at the automations row, keyed by `:wfid` from the route (DE
 ```ts
 interface AutomationsDraft {
   wfId: string;
-  meta: { version: string; source: WorkflowSource; intent_tags: string[] };
+  meta: { version: string; readonly source: WorkflowSource; intent_tags: string[] };
   loaded: { steps: WorkflowStep[]; meta: Meta } | null; // null = never-saved local draft
   nodes: StepNode[]; edges: Edge[];   // THE working truth
   dirty: boolean;                     // graphToSteps(nodes,edges) + meta !== loaded
@@ -50,7 +50,7 @@ Explicit Save only. The verb exists; the console uses it over the coexisting dir
 ```
 POST /v1/invoke   (client.ts:184-186; result union app.py:259-283; InvokeRequest types.ts:86-93)
 { noun: "control", verb: "control.workflow.upsert",
-  params: { id, version, source, definition: { steps: graphToSteps(nodes, edges) }, intent_tags },
+  params: { id, version, definition: { steps: graphToSteps(nodes, edges) }, intent_tags },
   idempotency_key: <uuid minted per save attempt> }
 ```
 
@@ -110,7 +110,7 @@ Data: `GET /v1/workflows` -> `{workflows:[{id, version, source, intent_tags}]}` 
 
 - **Workflow id** (Field, N8): mono input, required, the surface's ONE blank field (P12 case 4), autofocused. Hint: "Lowercase, dots, dashes. This is the workflow's permanent id." Example: `` e.g. `invoice-triage` ``. Validated on blur (P13) against `^[a-z0-9][a-z0-9._-]*$`; uniqueness checked against the loaded list, error copy "That id is taken" (P22: never blame the user). Meta slot shows the check result.
 - **Intent tags** (optional, Tier 2): ChipPicker (N3, P5), free-entry variant, candidates = union of existing workflows' intent_tags. Hint: "Helps agents find this workflow for matching tasks."
-- `source` and `version` are NOT shown (fixes debt W3): source defaults `precreated`, version `1.0.0`, kernel-mirrored defaults (control_plane.py:97-98, P12 source 1). Both editable later in the canvas meta disclosure.
+- `source` and `version` are NOT shown (fixes debt W3): the kernel assigns `precreated` provenance and defaults version to `1.0.0`. Version is editable later in the canvas meta disclosure; source remains a read-only badge because only internal synthesis and learning paths may change provenance.
 - Primary action: `Create draft`. **Decisive call: creation is LOCAL.** It mints an AutomationsDraft with zero steps (`loaded: null`) and navigates to `#/automations/<id>`; no server write happens until the first Save. Rationale: `control.workflow.upsert` is consequence-high; saving an empty shell would fire a HITL round trip before anything is authored (P16's never-autosave logic applied to creation). The canvas slide shows a `draft - not saved` badge until first Save. A reload before saving loses the draft; the `beforeunload` guard (0.4) covers it.
 
 Chat parity: "Create a workflow called invoice-triage" -> orchestrator invokes `control.workflow.upsert {id:"invoice-triage", definition:{steps:[...]}}` -> 202 pending_human -> inline hitl card in chat (P33).

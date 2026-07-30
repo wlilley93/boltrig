@@ -42,7 +42,7 @@ from boltrig.work import normalise
 from boltrig.workflows.generator import learn_from_success
 from boltrig.workflows.library import WorkflowLibrary
 
-from . import lease_token
+from . import lease_token, permanent_runtime as permanent
 from .authority import context_for, reflection_context, route_to_head
 from .chief_of_staff import ChiefOfStaff, Department
 from .department_head import DepartmentHead, tree_root_id
@@ -740,7 +740,7 @@ def build_org(
             skills,
             [],
             DEFAULT_SPAWN_BUDGET,
-            spawner=spawner,
+            spawner=spawner, runtime=permanent.head(spawner, manifest, tier, name),
             store=kernel.store,
         )
     if not heads:  # P9: no hierarchy -> the minimal default org, never a crash
@@ -749,7 +749,7 @@ def build_org(
             "general", [], [], DEFAULT_SPAWN_BUDGET,
             spawner=spawner, store=kernel.store,
         )
-    chief = ChiefOfStaff(kernel, departments)
+    chief = ChiefOfStaff(kernel, departments, runtime=permanent.chief(spawner, manifest))
     return WorkPump(
         kernel, spawner, chief, heads, executor,
         max_attempts=max_attempts, lease_seconds=lease_seconds,

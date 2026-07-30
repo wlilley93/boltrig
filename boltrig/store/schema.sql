@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS nouns (
     tenant_id   TEXT NOT NULL,
     description TEXT,
     schema      JSONB,
+    is_active   BOOLEAN NOT NULL DEFAULT true,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (tenant_id, id)
@@ -35,6 +36,7 @@ CREATE TABLE IF NOT EXISTS verbs (
     identity_mode TEXT NOT NULL DEFAULT 'service-principal', -- service-principal | delegated
     idempotency_mode TEXT NOT NULL DEFAULT 'cacheable', -- cacheable | disabled
     degraded_mode JSONB,
+    is_active     BOOLEAN NOT NULL DEFAULT true,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (tenant_id, id),
@@ -71,6 +73,56 @@ CREATE TABLE IF NOT EXISTS adapters (
     PRIMARY KEY (tenant_id, id)
 );
 
+-- Decision 0021: reviewed integration presentation data is separate from the
+-- executable adapter registry. Certification/auth metadata is explicit data;
+-- tenant connection rows carry only a credential reference, never material.
+CREATE TABLE IF NOT EXISTS integration_catalogue (
+    id              TEXT NOT NULL,
+    tenant_id       TEXT NOT NULL,
+    label           TEXT NOT NULL,
+    category        TEXT NOT NULL CHECK (category IN (
+                      'communications','work','storage_design','crm_sales',
+                      'finance','analytics_operations','browser')),
+    transport       TEXT NOT NULL CHECK (transport IN (
+                      'rest','mcp','channel_gateway','browser')),
+    auth            JSONB NOT NULL DEFAULT '[]'::jsonb,
+    description     TEXT NOT NULL,
+    certification   TEXT NOT NULL DEFAULT 'uncertified' CHECK (certification IN (
+                      'uncertified','certifying','certified','suspended')),
+    adapter_id      TEXT,
+    secret_contract JSONB,
+    setup_copy      TEXT,
+    access_copy     TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, id)
+);
+
+CREATE TABLE IF NOT EXISTS integration_connections (
+    id                 TEXT NOT NULL,
+    tenant_id          TEXT NOT NULL,
+    integration_id     TEXT NOT NULL,
+    adapter_id         TEXT NOT NULL,
+    label              TEXT NOT NULL,
+    health             TEXT NOT NULL DEFAULT 'pending' CHECK (health IN (
+                         'pending','ok','degraded','down','revoked')),
+    credential_ref     TEXT,
+    credential_owned   BOOLEAN NOT NULL DEFAULT false,
+    accounts           JSONB NOT NULL DEFAULT '[]'::jsonb,
+    last_checked_at    TIMESTAMPTZ,
+    revoked_at         TIMESTAMPTZ,
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, id),
+    FOREIGN KEY (tenant_id, integration_id)
+      REFERENCES integration_catalogue(tenant_id, id) ON DELETE RESTRICT
+);
+CREATE INDEX IF NOT EXISTS integration_connections_integration_idx
+  ON integration_connections(tenant_id, integration_id, created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS integration_connections_one_active_adapter_idx
+  ON integration_connections(tenant_id, adapter_id)
+  WHERE health <> 'revoked';
+
 CREATE TABLE IF NOT EXISTS skills (
     id                   TEXT NOT NULL,
     tenant_id            TEXT NOT NULL,
@@ -81,6 +133,7 @@ CREATE TABLE IF NOT EXISTS skills (
     extends              TEXT,                          -- parent skill id
     locale               TEXT DEFAULT 'en',
     description          TEXT NOT NULL DEFAULT '',      -- the shelf label (when-to-use)
+    is_active            BOOLEAN NOT NULL DEFAULT true,
     created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (tenant_id, id, version)
@@ -139,6 +192,7 @@ CREATE TABLE IF NOT EXISTS model_endpoints (
     model       TEXT NOT NULL,
     fallback    TEXT,
     data_class  TEXT NOT NULL DEFAULT 'standard',       -- standard | sensitive
+    is_active   BOOLEAN NOT NULL DEFAULT TRUE,           -- reversible governed withdrawal
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (tenant_id, id)
@@ -245,6 +299,7 @@ CREATE TABLE IF NOT EXISTS hitl_requests (
     requested_by TEXT,                                  -- SEC-14: who raised it (anti-self-approval)
     requested_on_behalf_of TEXT,                        -- SEC-14: delegated initiator identity
     request_fingerprint TEXT,                           -- SEC-14: exact canonical request binding
+    action_digest TEXT,                                 -- exact noun+verb+validated params for post-dispatch materialisation
     workspace_id TEXT,                                  -- SEC-141: originating workspace (NULL = org-wide)
     department_scope JSONB,                             -- SEC-141: originating department ids
     secure       BOOLEAN NOT NULL DEFAULT false,        -- SEC-181: secure-input question (answer is sealed, never recorded)
@@ -258,6 +313,7 @@ ALTER TABLE hitl_requests ADD COLUMN IF NOT EXISTS verb TEXT;
 ALTER TABLE hitl_requests ADD COLUMN IF NOT EXISTS requested_by TEXT;
 ALTER TABLE hitl_requests ADD COLUMN IF NOT EXISTS requested_on_behalf_of TEXT;
 ALTER TABLE hitl_requests ADD COLUMN IF NOT EXISTS request_fingerprint TEXT;
+ALTER TABLE hitl_requests ADD COLUMN IF NOT EXISTS action_digest TEXT;
 ALTER TABLE hitl_requests ADD COLUMN IF NOT EXISTS workspace_id TEXT;
 ALTER TABLE hitl_requests ADD COLUMN IF NOT EXISTS department_scope JSONB;
 ALTER TABLE hitl_requests ADD COLUMN IF NOT EXISTS secure BOOLEAN NOT NULL DEFAULT false;
@@ -333,6 +389,8 @@ CREATE INDEX IF NOT EXISTS audit_ts_idx ON audit_log (tenant_id, ts);
 CREATE INDEX IF NOT EXISTS audit_run_idx ON audit_log (run_id);
 CREATE INDEX IF NOT EXISTS audit_ws_idx ON audit_log (tenant_id, workspace_id);
 CREATE INDEX IF NOT EXISTS audit_actor_idx ON audit_log (tenant_id, actor);
+CREATE INDEX IF NOT EXISTS audit_actor_page_idx ON audit_log (tenant_id, actor, seq DESC);
+CREATE INDEX IF NOT EXISTS audit_behalf_page_idx ON audit_log (tenant_id, on_behalf_of, seq DESC);
 
 -- The distinct SecurityEvent stream ([2026] VJS-COUNTY 9, D3): its OWN
 -- append-only, hash-chained table for security SIGNALS (login failures,
@@ -414,12 +472,31 @@ CREATE TABLE IF NOT EXISTS budgets (
     cost_limit_micros BIGINT,
     hard_stop         BOOLEAN NOT NULL DEFAULT true,
     "window"          TEXT NOT NULL DEFAULT 'run',      -- run | daily | monthly (quoted: reserved word)
-    spent_tokens      BIGINT NOT NULL DEFAULT 0,
-    spent_micros      BIGINT NOT NULL DEFAULT 0,
+    spent_tokens      BIGINT NOT NULL DEFAULT 0,        -- legacy; live usage is budget_usage
+    spent_micros      BIGINT NOT NULL DEFAULT 0,        -- legacy; live usage is budget_usage
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (tenant_id, id)
 );
+
+CREATE TABLE IF NOT EXISTS budget_usage (
+    tenant_id          TEXT NOT NULL,
+    scope_id           TEXT NOT NULL,
+    window_key         TEXT NOT NULL,
+    window_started_at  TIMESTAMPTZ NOT NULL,
+    window_ends_at     TIMESTAMPTZ,
+    reset_generation   BIGINT NOT NULL DEFAULT 0 CHECK (reset_generation >= 0),
+    spent_tokens       BIGINT NOT NULL DEFAULT 0 CHECK (spent_tokens >= 0),
+    spent_micros       BIGINT NOT NULL DEFAULT 0 CHECK (spent_micros >= 0),
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, scope_id, window_key),
+    FOREIGN KEY (tenant_id, scope_id)
+        REFERENCES budgets(tenant_id, id) ON DELETE CASCADE,
+    CHECK (window_ends_at IS NULL OR window_ends_at > window_started_at)
+);
+CREATE INDEX IF NOT EXISTS budget_usage_current_idx
+    ON budget_usage (tenant_id, scope_id, window_started_at DESC);
 
 -- Secret references only - never plaintext secrets at rest (SEC-04, FR-SEC-02).
 -- ``data`` holds the reference dict the resolver consumes, SEALED at the store
@@ -480,6 +557,142 @@ CREATE TABLE IF NOT EXISTS config_revisions (
 );
 CREATE INDEX IF NOT EXISTS config_revisions_idx ON config_revisions (tenant_id, kind, ref, created_at);
 
+-- A worker's secret-free acknowledgement that it constructed one exact
+-- permanent-fleet generation.  Desired state remains the versioned
+-- config_revisions row; this table is observation only.
+CREATE TABLE IF NOT EXISTS permanent_fleet_observations (
+    tenant_id       TEXT NOT NULL,
+    worker_id       TEXT NOT NULL
+                    CHECK (worker_id ~ '^[A-Za-z0-9._:-]{1,128}$'),
+    generation      TEXT NOT NULL
+                    CHECK (generation ~ '^pf_[a-f0-9]{24}$'),
+    status          TEXT NOT NULL CHECK (status IN ('applied','degraded')),
+    apply_mode      TEXT NOT NULL DEFAULT 'startup_snapshot'
+                    CHECK (apply_mode = 'startup_snapshot'),
+    applied_fields  JSONB NOT NULL DEFAULT '[]'::jsonb,
+    inactive_fields JSONB NOT NULL DEFAULT '[]'::jsonb,
+    observed_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, worker_id),
+    CONSTRAINT permanent_fleet_observation_array_shape CHECK (
+      jsonb_typeof(applied_fields) = 'array'
+      AND jsonb_typeof(inactive_fields) = 'array'
+    )
+);
+CREATE INDEX IF NOT EXISTS permanent_fleet_observed_idx
+  ON permanent_fleet_observations (tenant_id, observed_at DESC);
+
+-- Redacted startup composition per boot instance.  Identities are opaque
+-- digests over random boot entropy; no host name, path, URL, credential ref,
+-- owner data or secret is stored here.  Expiry marks evidence stale and never
+-- acts as a process heartbeat or a replica inventory.
+CREATE TABLE IF NOT EXISTS birth_profile_receipts (
+    tenant_id                TEXT NOT NULL,
+    process_kind             TEXT NOT NULL
+                             CHECK (process_kind IN ('api','fleet','hatchet')),
+    instance_identity        TEXT NOT NULL
+                             CHECK (instance_identity ~ '^bi_[a-f0-9]{24}$'),
+    manifest_generation      TEXT NOT NULL
+                             CHECK (manifest_generation ~ '^mf_[a-f0-9]{24}$'),
+    addon_set_identity       TEXT NOT NULL
+                             CHECK (addon_set_identity ~ '^as_[a-f0-9]{24}$'),
+    codex_provider_identity  TEXT NOT NULL
+                             CHECK (
+                               codex_provider_identity = 'cp_off_v1'
+                               OR codex_provider_identity ~ '^cp_[a-f0-9]{24}$'
+                             ),
+    codex_provider_state     TEXT NOT NULL
+                             CHECK (codex_provider_state IN ('off','configured')),
+    sensitive_role_identity  TEXT NOT NULL
+                             CHECK (
+                               sensitive_role_identity = 'sr_absent_v1'
+                               OR sensitive_role_identity ~ '^sr_[a-f0-9]{24}$'
+                             ),
+    sensitive_role_state     TEXT NOT NULL
+                             CHECK (sensitive_role_state IN ('absent','configured')),
+    receipt_kind             TEXT NOT NULL DEFAULT 'startup_snapshot'
+                             CHECK (receipt_kind = 'startup_snapshot'),
+    observed_at              TIMESTAMPTZ NOT NULL,
+    expires_at               TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (tenant_id, process_kind, instance_identity),
+    CONSTRAINT birth_profile_codex_shape CHECK (
+      (codex_provider_state = 'off' AND codex_provider_identity = 'cp_off_v1')
+      OR
+      (codex_provider_state = 'configured'
+       AND codex_provider_identity ~ '^cp_[a-f0-9]{24}$')
+    ),
+    CONSTRAINT birth_profile_sensitive_shape CHECK (
+      (sensitive_role_state = 'absent'
+       AND sensitive_role_identity = 'sr_absent_v1')
+      OR
+      (sensitive_role_state = 'configured'
+       AND sensitive_role_identity ~ '^sr_[a-f0-9]{24}$')
+    ),
+    CONSTRAINT birth_profile_expiry_bounded CHECK (
+      expires_at > observed_at
+      AND expires_at <= observed_at + interval '1 hour'
+    )
+);
+CREATE INDEX IF NOT EXISTS birth_profile_receipts_observed_idx
+  ON birth_profile_receipts (tenant_id, observed_at DESC);
+
+-- Bounded attempt history for maintenance loops owned by the fleet process.
+-- The random process identity carries no host metadata.  These rows are not a
+-- heartbeat and cannot prove liveness or complete replica coverage.
+CREATE TABLE IF NOT EXISTS background_job_receipts (
+    tenant_id                 TEXT NOT NULL,
+    job_name                  TEXT NOT NULL
+                              CHECK (job_name IN ('hitl_expiry','retention')),
+    process_instance_identity TEXT NOT NULL
+                              CHECK (
+                                process_instance_identity
+                                ~ '^bjp_[a-f0-9]{24}$'
+                              ),
+    interval_seconds          INTEGER NOT NULL
+                              CHECK (
+                                interval_seconds >= 1
+                                AND interval_seconds <= 604800
+                              ),
+    last_attempt_at           TIMESTAMPTZ NOT NULL,
+    last_success_at           TIMESTAMPTZ,
+    last_failure_at           TIMESTAMPTZ,
+    last_outcome              TEXT NOT NULL
+                              CHECK (last_outcome IN ('succeeded','failed')),
+    failure_code              TEXT,
+    last_item_count           INTEGER NOT NULL DEFAULT 0
+                              CHECK (
+                                last_item_count >= 0
+                                AND last_item_count <= 1000000
+                              ),
+    receipt_kind              TEXT NOT NULL
+                              DEFAULT 'attempt_history_not_liveness'
+                              CHECK (
+                                receipt_kind = 'attempt_history_not_liveness'
+                              ),
+    PRIMARY KEY (
+      tenant_id,job_name,process_instance_identity
+    ),
+    CONSTRAINT background_job_timestamp_shape CHECK (
+      (last_success_at IS NULL OR last_success_at <= last_attempt_at)
+      AND
+      (last_failure_at IS NULL OR last_failure_at <= last_attempt_at)
+    ),
+    CONSTRAINT background_job_outcome_shape CHECK (
+      (
+        last_outcome='succeeded'
+        AND last_success_at=last_attempt_at
+        AND failure_code IS NULL
+      )
+      OR
+      (
+        last_outcome='failed'
+        AND last_failure_at=last_attempt_at
+        AND failure_code='sweep_failed'
+      )
+    )
+);
+CREATE INDEX IF NOT EXISTS background_job_receipts_attempt_idx
+  ON background_job_receipts (tenant_id,job_name,last_attempt_at DESC);
+
 -- Round Three: evaluation harness (Epic EVAL)
 CREATE TABLE IF NOT EXISTS eval_cases (
     id          TEXT NOT NULL,
@@ -489,6 +702,7 @@ CREATE TABLE IF NOT EXISTS eval_cases (
     input       JSONB NOT NULL,
     assertions  JSONB NOT NULL,
     labels      JSONB,
+    is_active   BOOLEAN NOT NULL DEFAULT true,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (tenant_id, id)
 );
@@ -550,6 +764,38 @@ CREATE TABLE IF NOT EXISTS channels (
 );
 CREATE INDEX IF NOT EXISTS channels_tenant_idx ON channels (tenant_id);
 
+-- Secret-free desired/observed evidence from the severed socket gateway.
+-- This is operational evidence, not authority: the authored Channel row remains
+-- the desired state and the gateway token's explicit channel set remains its
+-- ceiling.
+CREATE TABLE IF NOT EXISTS channel_gateway_status (
+    tenant_id         TEXT NOT NULL,
+    channel_id        TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+    gateway_id        TEXT NOT NULL,
+    desired_revision  TEXT NOT NULL,
+    observed_revision TEXT NOT NULL,
+    status            TEXT NOT NULL,
+    reason_code       TEXT,
+    observed_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, channel_id)
+);
+CREATE INDEX IF NOT EXISTS channel_gateway_status_observed_idx
+  ON channel_gateway_status (tenant_id, observed_at DESC);
+
+-- Durable per-channel gateway ownership fence. The token lease id is
+-- kernel-private and never projected through the browser-safe channel view.
+CREATE TABLE IF NOT EXISTS channel_gateway_leases (
+    tenant_id        TEXT NOT NULL,
+    channel_id       TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+    gateway_id       TEXT NOT NULL,
+    owner_lease_id   TEXT NOT NULL,
+    lease_expires_at TIMESTAMPTZ NOT NULL,
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, channel_id)
+);
+CREATE INDEX IF NOT EXISTS channel_gateway_leases_expiry_idx
+  ON channel_gateway_leases (tenant_id, lease_expires_at);
+
 -- Channel bindings: a verified external sender mapped to an internal identity,
 -- per tenant. RLS-scoped - tenant comes from the resolved channel, never the
 -- message body (decision 0003).
@@ -600,6 +846,135 @@ CREATE TABLE IF NOT EXISTS channel_deliveries (
 CREATE INDEX IF NOT EXISTS channel_deliveries_expiry_idx
     ON channel_deliveries (tenant_id, expires_at);
 
+-- Approved event-source bindings for stored workflows. Webhook bearer material
+-- is hash-only and shown once; channel bindings reuse the independently signed
+-- channel ingress. The grant snapshot is a ceiling, never a durable grant.
+CREATE TABLE IF NOT EXISTS workflow_triggers (
+    id             TEXT NOT NULL,
+    tenant_id      TEXT NOT NULL,
+    workflow_id    TEXT NOT NULL,
+    workspace_id   TEXT,
+    name           TEXT NOT NULL,
+    source         TEXT NOT NULL CHECK (source IN ('webhook','channel')),
+    owner_id       TEXT NOT NULL,
+    grant_allow    JSONB NOT NULL DEFAULT '[]'::jsonb,
+    grant_deny     JSONB NOT NULL DEFAULT '[]'::jsonb,
+    channel_id     TEXT REFERENCES channels(id) ON DELETE CASCADE,
+    secret_hash    TEXT,
+    enabled        BOOLEAN NOT NULL DEFAULT true,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id,id),
+    UNIQUE (tenant_id,workflow_id,name),
+    CONSTRAINT workflow_trigger_shape CHECK (
+      (source='webhook' AND channel_id IS NULL
+        AND secret_hash ~ '^[0-9a-f]{64}$')
+      OR
+      (source='channel' AND channel_id IS NOT NULL AND secret_hash IS NULL)
+    ),
+    CONSTRAINT workflow_trigger_grants_arrays CHECK (
+      jsonb_typeof(grant_allow)='array' AND jsonb_typeof(grant_deny)='array'
+    )
+);
+CREATE INDEX IF NOT EXISTS workflow_triggers_workflow_idx
+  ON workflow_triggers(tenant_id,workflow_id,created_at,id);
+CREATE INDEX IF NOT EXISTS workflow_triggers_channel_idx
+  ON workflow_triggers(tenant_id,channel_id,enabled)
+  WHERE source='channel';
+
+-- One immutable receipt per trigger + source event. The digest is derived from
+-- the source event id; payload bodies and raw ids are not retained here.
+CREATE TABLE IF NOT EXISTS workflow_trigger_deliveries (
+    tenant_id           TEXT NOT NULL,
+    trigger_id          TEXT NOT NULL,
+    source_event_digest TEXT NOT NULL,
+    status              TEXT NOT NULL,
+    authority_subject   TEXT,
+    run_id              TEXT,
+    hitl_request_id     TEXT,
+    reason              TEXT,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id,trigger_id,source_event_digest),
+    FOREIGN KEY (tenant_id,trigger_id)
+      REFERENCES workflow_triggers(tenant_id,id) ON DELETE CASCADE,
+    CONSTRAINT workflow_trigger_event_digest_sha256
+      CHECK (source_event_digest ~ '^[0-9a-f]{64}$')
+);
+CREATE INDEX IF NOT EXISTS workflow_trigger_deliveries_recent_idx
+  ON workflow_trigger_deliveries(tenant_id,trigger_id,created_at DESC);
+
+-- Canonical active workflow schedule desired state. The captured subject and
+-- grant arrays are only a revocable ceiling: the scheduler re-authorizes the
+-- current User and workspace membership before every occurrence.
+CREATE TABLE IF NOT EXISTS workflow_schedules (
+    tenant_id          TEXT NOT NULL,
+    workflow_id        TEXT NOT NULL,
+    workspace_id       TEXT,
+    cron               TEXT NOT NULL,
+    timezone           TEXT NOT NULL,
+    authority_subject  TEXT,
+    grant_allow        JSONB NOT NULL DEFAULT '[]'::jsonb,
+    grant_deny         JSONB NOT NULL DEFAULT '[]'::jsonb,
+    observed_status    TEXT NOT NULL DEFAULT 'pending'
+                       CHECK (observed_status IN (
+                         'pending','active','needs_action',
+                         'unavailable','degraded'
+                       )),
+    observed_reason    TEXT,
+    next_due_at        TIMESTAMPTZ,
+    last_scheduled_for TIMESTAMPTZ,
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    observed_at        TIMESTAMPTZ,
+    PRIMARY KEY (tenant_id,workflow_id),
+    CONSTRAINT workflow_schedule_grants_arrays CHECK (
+      jsonb_typeof(grant_allow)='array' AND jsonb_typeof(grant_deny)='array'
+    )
+);
+CREATE INDEX IF NOT EXISTS workflow_schedules_due_idx
+  ON workflow_schedules(tenant_id,next_due_at,workflow_id);
+
+-- One durable logical run identity per due occurrence. Claims are atomic and
+-- lease-fenced across replicas; terminal rows survive unschedule/restart.
+CREATE TABLE IF NOT EXISTS workflow_schedule_occurrences (
+    tenant_id        TEXT NOT NULL,
+    workflow_id      TEXT NOT NULL,
+    scheduled_for    TIMESTAMPTZ NOT NULL,
+    run_id           TEXT NOT NULL,
+    status           TEXT NOT NULL CHECK (status IN (
+                       'claimed','retryable','queued','succeeded','failed'
+                     )),
+    lease_owner      TEXT,
+    lease_expires_at TIMESTAMPTZ,
+    engine_run_id    TEXT,
+    reason           TEXT,
+    attempts         INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+    workflow_sha256  TEXT,
+    schedule_sha256  TEXT,
+    claimed_at       TIMESTAMPTZ,
+    enqueued_at      TIMESTAMPTZ,
+    outcome_at       TIMESTAMPTZ,
+    manual_retries   INTEGER NOT NULL DEFAULT 0,
+    last_retry_at    TIMESTAMPTZ,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id,workflow_id,scheduled_for),
+    UNIQUE (tenant_id,run_id),
+    CONSTRAINT workflow_schedule_occurrence_manual_retries
+      CHECK (manual_retries >= 0),
+    CONSTRAINT workflow_schedule_occurrence_lease_shape CHECK (
+      (status='claimed' AND lease_owner IS NOT NULL
+                        AND lease_expires_at IS NOT NULL)
+      OR
+      (status<>'claimed' AND lease_owner IS NULL
+                         AND lease_expires_at IS NULL)
+    )
+);
+CREATE INDEX IF NOT EXISTS workflow_schedule_occurrences_claim_idx
+  ON workflow_schedule_occurrences(
+    tenant_id,status,lease_expires_at,scheduled_for
+  );
+
 -- Channel outbox: the durable outbound hand-off for socket-class channels
 -- (decision 0003 Phase 2). The kernel enqueues; the severed sidecar claims
 -- (leased, one winner - the work_items claim shape), delivers over its held
@@ -624,6 +999,130 @@ CREATE TABLE IF NOT EXISTS channel_outbox (
 CREATE INDEX IF NOT EXISTS channel_outbox_claim_idx
     ON channel_outbox (tenant_id, channel_id, status, created_at);
 
+-- Decision 0021: durable realtime-call metadata and normalized events. Provider
+-- media never enters these tables. The bearer column contains only a sha256
+-- digest and is cleared atomically on the first successful gateway claim.
+CREATE TABLE IF NOT EXISTS realtime_calls (
+    id                       TEXT NOT NULL,
+    tenant_id                TEXT NOT NULL,
+    conversation_id          TEXT NOT NULL,
+    owner_id                 TEXT NOT NULL,
+    channel_id               TEXT REFERENCES channels(id) ON DELETE SET NULL,
+    status                   TEXT NOT NULL,
+    participants             JSONB NOT NULL DEFAULT '[]'::jsonb,
+    tool_context             JSONB NOT NULL DEFAULT '{}'::jsonb,
+    provider_class           TEXT NOT NULL DEFAULT 'realtime_voice',
+    run_id                   TEXT,
+    agent_profile_id         TEXT,
+    model_profile_id         TEXT,
+    media_token_hash         TEXT,
+    media_token_expires_at   TIMESTAMPTZ,
+    started_at               TIMESTAMPTZ,
+    ended_at                 TIMESTAMPTZ,
+    unavailable_reason       TEXT,
+    created_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, id),
+    FOREIGN KEY (tenant_id, conversation_id)
+      REFERENCES conversations(tenant_id, id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS realtime_calls_owner_idx
+  ON realtime_calls(tenant_id, owner_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS realtime_calls_media_claim_idx
+  ON realtime_calls(tenant_id, media_token_hash)
+  WHERE media_token_hash IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS realtime_call_events (
+    id               TEXT NOT NULL,
+    tenant_id        TEXT NOT NULL,
+    call_id          TEXT NOT NULL,
+    type             TEXT NOT NULL,
+    participant_id   TEXT,
+    payload          JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, id),
+    FOREIGN KEY (tenant_id, call_id)
+      REFERENCES realtime_calls(tenant_id, id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS realtime_call_events_call_idx
+  ON realtime_call_events(tenant_id, call_id, created_at, id);
+
+-- Decision 0021 desktop device boundary. Enrollment/session tokens and claim
+-- tokens are digest-only. Leases are immutable exact-action envelopes whose
+-- one approval id and issued->claimed->settled lifecycle are database-fenced.
+CREATE TABLE IF NOT EXISTS device_enrollments (
+    id TEXT NOT NULL, tenant_id TEXT NOT NULL, owner_id TEXT NOT NULL,
+    label TEXT NOT NULL, authorization_code_hash TEXT NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL, consumed_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id,id), UNIQUE (tenant_id,authorization_code_hash),
+    CONSTRAINT device_enrollment_hash_sha256
+      CHECK (authorization_code_hash ~ '^[0-9a-f]{64}$')
+);
+CREATE TABLE IF NOT EXISTS devices (
+    id TEXT NOT NULL, tenant_id TEXT NOT NULL, owner_id TEXT NOT NULL,
+    label TEXT NOT NULL, public_key TEXT NOT NULL,
+    public_key_fingerprint TEXT NOT NULL, lease_verify_key_id TEXT NOT NULL,
+    availability_mode TEXT NOT NULL DEFAULT 'unlocked_session',
+    presence TEXT NOT NULL DEFAULT 'offline',
+    session_token_hash TEXT, session_expires_at TIMESTAMPTZ,
+    last_seen_at TIMESTAMPTZ, revoked_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id,id), UNIQUE (tenant_id,session_token_hash),
+    CONSTRAINT device_availability_mode_valid
+      CHECK (availability_mode IN ('unlocked_session')),
+    CONSTRAINT device_presence_valid
+      CHECK (presence IN ('offline','online','locked','revoked')),
+    CONSTRAINT device_session_hash_sha256
+      CHECK (session_token_hash IS NULL OR session_token_hash ~ '^[0-9a-f]{64}$')
+);
+CREATE INDEX IF NOT EXISTS devices_owner_idx
+  ON devices(tenant_id,owner_id,created_at);
+CREATE TABLE IF NOT EXISTS device_roots (
+    id TEXT NOT NULL, tenant_id TEXT NOT NULL, device_id TEXT NOT NULL,
+    label TEXT NOT NULL, scope TEXT NOT NULL,
+    command_enabled BOOLEAN NOT NULL DEFAULT false,
+    git_enabled BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(), revoked_at TIMESTAMPTZ,
+    PRIMARY KEY (tenant_id,id), UNIQUE (tenant_id,id,device_id),
+    CONSTRAINT device_root_scope_valid CHECK (scope IN ('read','read_write')),
+    FOREIGN KEY (tenant_id,device_id) REFERENCES devices(tenant_id,id)
+      ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS device_roots_device_idx
+  ON device_roots(tenant_id,device_id,created_at);
+CREATE TABLE IF NOT EXISTS device_leases (
+    id TEXT NOT NULL, tenant_id TEXT NOT NULL, device_id TEXT NOT NULL,
+    root_id TEXT NOT NULL, owner_id TEXT NOT NULL, verb TEXT NOT NULL,
+    action JSONB NOT NULL, action_digest TEXT NOT NULL,
+    approval_id TEXT NOT NULL, issued_at TIMESTAMPTZ NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL, signature TEXT NOT NULL,
+    signing_key_id TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'issued',
+    claim_token_hash TEXT, claim_expires_at TIMESTAMPTZ,
+    claimed_at TIMESTAMPTZ, settled_at TIMESTAMPTZ, receipt JSONB,
+    PRIMARY KEY (tenant_id,id), UNIQUE (tenant_id,approval_id),
+    CONSTRAINT device_lease_verb_valid
+      CHECK (verb IN ('device.file.read','device.file.write','device.command.run')),
+    CONSTRAINT device_lease_status_valid
+      CHECK (status IN ('issued','claimed','completed','failed','expired')),
+    CONSTRAINT device_lease_action_object
+      CHECK (jsonb_typeof(action) = 'object'),
+    CONSTRAINT device_lease_digest_sha256
+      CHECK (action_digest ~ '^[0-9a-f]{64}$'),
+    CONSTRAINT device_lease_claim_hash_sha256
+      CHECK (claim_token_hash IS NULL OR claim_token_hash ~ '^[0-9a-f]{64}$'),
+    FOREIGN KEY (tenant_id,device_id) REFERENCES devices(tenant_id,id)
+      ON DELETE CASCADE,
+    FOREIGN KEY (tenant_id,root_id,device_id)
+      REFERENCES device_roots(tenant_id,id,device_id)
+      ON DELETE CASCADE,
+    FOREIGN KEY (tenant_id,approval_id) REFERENCES hitl_requests(tenant_id,id)
+      ON DELETE RESTRICT
+);
+CREATE INDEX IF NOT EXISTS device_leases_pending_idx
+  ON device_leases(tenant_id,device_id,status,issued_at);
+
 -- Round Three (optional): memory & knowledge (Epic MEM). owner_scope is the RBAC
 -- boundary; sensitive memory follows sensitive-routing (SEC-31).
 CREATE TABLE IF NOT EXISTS memory_items (
@@ -640,19 +1139,66 @@ CREATE TABLE IF NOT EXISTS memory_items (
 );
 CREATE INDEX IF NOT EXISTS memory_scope_idx ON memory_items (tenant_id, owner_scope, kind);
 
--- Round Two (optional): external MCP servers Boltrig consumes as adapters
--- (US-MCP-03). Inert (pending_review) until activated through the review gate.
+-- External MCP lifecycle is durable independently of the runtime adapter
+-- instance. url/transport/credential are nullable legacy registration fields;
+-- current registration authority remains the governed adapters/credential_refs
+-- rows. Probe evidence below deliberately stores no credential or raw error.
 CREATE TABLE IF NOT EXISTS mcp_servers (
     id          TEXT NOT NULL,
     tenant_id   TEXT NOT NULL,
-    url         TEXT NOT NULL,
-    transport   TEXT NOT NULL,                          -- stdio | http
-    credential  TEXT,                                   -- secret reference (refs only)
-    status      TEXT NOT NULL DEFAULT 'pending_review', -- pending_review | active | disabled
+    url         TEXT,
+    transport   TEXT,
+    credential  TEXT,
+    status      TEXT NOT NULL DEFAULT 'inactive'
+                CONSTRAINT mcp_servers_status_check
+                CHECK (status IN ('inactive', 'active', 'retired')),
+    config_revision BIGINT NOT NULL DEFAULT 1
+                CONSTRAINT mcp_servers_config_revision_check
+                CHECK (config_revision >= 1),
+    last_known_tools JSONB NOT NULL DEFAULT '[]'::jsonb
+                CONSTRAINT mcp_servers_tools_array_check
+                CHECK (jsonb_typeof(last_known_tools) = 'array'),
+    tools_observed_at TIMESTAMPTZ,
+    retired_at  TIMESTAMPTZ,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    PRIMARY KEY (tenant_id, id)
+    CONSTRAINT mcp_servers_retired_at_check CHECK (
+      (status = 'retired' AND retired_at IS NOT NULL)
+      OR (status <> 'retired' AND retired_at IS NULL)
+    ),
+    PRIMARY KEY (tenant_id, id),
+    CONSTRAINT mcp_servers_adapter_fkey
+      FOREIGN KEY (tenant_id, id) REFERENCES adapters(tenant_id, id)
+      ON DELETE CASCADE
 );
+CREATE INDEX IF NOT EXISTS mcp_servers_lifecycle_idx
+  ON mcp_servers (tenant_id, status, id);
+
+CREATE TABLE IF NOT EXISTS mcp_probe_receipts (
+    tenant_id   TEXT NOT NULL,
+    server_id   TEXT NOT NULL,
+    probe_id    TEXT NOT NULL,
+    outcome     TEXT NOT NULL CHECK (outcome IN ('succeeded', 'failed')),
+    failure_code TEXT CHECK (
+      failure_code IS NULL OR failure_code IN (
+        'credential_unavailable', 'egress_denied', 'transport_unavailable',
+        'protocol_invalid', 'discovery_invalid', 'unexpected_failure'
+      )
+    ),
+    observed_at TIMESTAMPTZ NOT NULL,
+    tool_count  INTEGER NOT NULL CHECK (tool_count BETWEEN 0 AND 500),
+    receipt_kind TEXT NOT NULL DEFAULT 'content_free_probe_attempt'
+                 CHECK (receipt_kind = 'content_free_probe_attempt'),
+    CHECK (
+      (outcome = 'succeeded' AND failure_code IS NULL)
+      OR (outcome = 'failed' AND failure_code IS NOT NULL)
+    ),
+    PRIMARY KEY (tenant_id, server_id, probe_id),
+    FOREIGN KEY (tenant_id, server_id) REFERENCES mcp_servers(tenant_id, id)
+      ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS mcp_probe_receipts_recent_idx
+  ON mcp_probe_receipts (tenant_id, server_id, observed_at DESC, probe_id DESC);
 
 CREATE TABLE IF NOT EXISTS conversation_messages (
     id              TEXT NOT NULL,
@@ -779,6 +1325,24 @@ CREATE TABLE IF NOT EXISTS user_credentials (
     updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (tenant_id, user_id)
 );
+
+-- Password recovery (SEC-AUTH-RECOVERY-01). One row per recoverable identity
+-- means issuing a new token invalidates the previous token. The bearer secret is
+-- never stored: token_hash is its SHA-256 digest. Consumption and all dependent
+-- credential/session writes happen in one store statement.
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    tenant_id   TEXT NOT NULL,
+    user_id     TEXT NOT NULL,
+    token_hash  TEXT NOT NULL,
+    expires_at  TIMESTAMPTZ NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    consumed_at TIMESTAMPTZ,
+    PRIMARY KEY (tenant_id, user_id),
+    CONSTRAINT password_reset_token_hash_sha256
+      CHECK (token_hash ~ '^[0-9a-f]{64}$')
+);
+CREATE UNIQUE INDEX IF NOT EXISTS password_reset_token_hash_idx
+    ON password_reset_tokens (token_hash);
 
 -- Per-user settings/preferences (SET-*).
 CREATE TABLE IF NOT EXISTS user_settings (
@@ -975,6 +1539,55 @@ CREATE TABLE IF NOT EXISTS ai_configs (
     PRIMARY KEY (tenant_id, level, scope_id)
 );
 
+-- Short-lived AI-key intake. Secret material is envelope-sealed in the
+-- credential_refs row named by secret_ref; this proposal contains only bounded
+-- routing metadata, a one-way digest and caller/approval bindings.
+CREATE TABLE IF NOT EXISTS ai_key_secret_proposals (
+    id                     TEXT NOT NULL
+                           CHECK (id ~ '^akp_[a-f0-9]{32}$'),
+    tenant_id              TEXT NOT NULL,
+    requested_by           TEXT NOT NULL,
+    requested_on_behalf_of TEXT,
+    workspace_id           TEXT,
+    level                  TEXT NOT NULL
+                           CHECK (level IN ('org','workspace','user')),
+    scope_id               TEXT NOT NULL,
+    provider               TEXT NOT NULL,
+    model                  TEXT NOT NULL,
+    base_url               TEXT,
+    secret_ref             TEXT,
+    secret_digest          TEXT NOT NULL
+                           CHECK (secret_digest ~ '^[a-f0-9]{64}$'),
+    status                 TEXT NOT NULL DEFAULT 'pending'
+                           CHECK (status IN (
+                             'pending','consumed','rejected','expired','invalidated'
+                           )),
+    approval_id            TEXT,
+    created_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expires_at             TIMESTAMPTZ NOT NULL,
+    updated_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
+    consumed_at            TIMESTAMPTZ,
+    PRIMARY KEY (tenant_id,id),
+    FOREIGN KEY (tenant_id,approval_id)
+      REFERENCES hitl_requests(tenant_id,id),
+    CONSTRAINT ai_key_secret_proposal_bounded_expiry CHECK (
+      expires_at > created_at
+      AND expires_at <= created_at + interval '15 minutes'
+    ),
+    CONSTRAINT ai_key_secret_proposal_state_shape CHECK (
+      (status='pending' AND secret_ref IS NOT NULL AND consumed_at IS NULL)
+      OR
+      (status='consumed' AND secret_ref IS NULL AND consumed_at IS NOT NULL)
+      OR
+      (status IN ('rejected','expired','invalidated')
+       AND secret_ref IS NULL AND consumed_at IS NULL)
+    )
+);
+CREATE INDEX IF NOT EXISTS ai_key_secret_proposals_requester_idx
+    ON ai_key_secret_proposals (
+      tenant_id,requested_by,requested_on_behalf_of,created_at DESC
+    );
+
 -- ===========================================================================
 -- Round Five: structured memory governance + provenance control plane (Epic MEM).
 -- The swappable Memory Engine owns the graph/vector store; Boltrig governs scope,
@@ -1041,9 +1654,32 @@ CREATE TABLE IF NOT EXISTS memory_projection_statuses (
     target         TEXT,
     projection_ref TEXT,
     error          TEXT,
+    enqueue_attempts INTEGER NOT NULL DEFAULT 0,
+    operation_attempts INTEGER NOT NULL DEFAULT 0,
+    max_operation_attempts INTEGER NOT NULL DEFAULT 1,
+    first_attempt_at TIMESTAMPTZ,
+    last_attempt_at TIMESTAMPTZ,
+    last_failure_at TIMESTAMPTZ,
+    failure_code TEXT,
     created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
-    PRIMARY KEY (tenant_id, id)
+    PRIMARY KEY (tenant_id, id),
+    CONSTRAINT memory_projection_enqueue_attempts_check
+      CHECK (enqueue_attempts BETWEEN 0 AND 1),
+    CONSTRAINT memory_projection_operation_attempts_check
+      CHECK (
+        max_operation_attempts BETWEEN 1 AND 5
+        AND operation_attempts BETWEEN 0 AND max_operation_attempts
+      ),
+    CONSTRAINT memory_projection_failure_code_check
+      CHECK (
+        failure_code IS NULL OR failure_code IN (
+          'enqueue_failed',
+          'projection_operation_failed',
+          'projection_not_configured',
+          'invalid_projection_result'
+        )
+      )
 );
 CREATE INDEX IF NOT EXISTS memory_projection_statuses_fact_idx
     ON memory_projection_statuses (tenant_id, fact_id, projection_id);
@@ -1661,3 +2297,51 @@ CREATE TABLE IF NOT EXISTS knowledge_projection_outbox (
 );
 CREATE INDEX IF NOT EXISTS knowledge_projection_outbox_pending_idx
   ON knowledge_projection_outbox(tenant_id,status,created_at);
+
+-- Immutable Worker artifacts. Bytes are content-addressed and never named by a
+-- native/server path; the only public surface is owner/workspace-scoped reads.
+CREATE TABLE IF NOT EXISTS artifacts (
+    id TEXT NOT NULL, tenant_id TEXT NOT NULL, owner_id TEXT NOT NULL,
+    workspace_id TEXT, conversation_id TEXT, run_id TEXT, work_item_id TEXT,
+    name TEXT NOT NULL, digest TEXT NOT NULL, media_type TEXT NOT NULL,
+    size BIGINT NOT NULL, revision INT NOT NULL,
+    previous_revision_id TEXT, provenance JSONB NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(), content BYTEA NOT NULL,
+    PRIMARY KEY (tenant_id,id),
+    UNIQUE (tenant_id,previous_revision_id),
+    CONSTRAINT artifact_name_safe CHECK (
+      octet_length(name) BETWEEN 1 AND 255
+      AND name NOT IN ('.','..') AND name !~ '[\\/]'
+      AND name !~ '[[:cntrl:]]'
+    ),
+    CONSTRAINT artifact_digest_sha256 CHECK (digest ~ '^[0-9a-f]{64}$'),
+    CONSTRAINT artifact_media_type_valid CHECK (
+      media_type ~ '^[a-z0-9!#$&^_.+-]+/[a-z0-9!#$&^_.+-]+$'
+    ),
+    CONSTRAINT artifact_size_bounded CHECK (
+      size BETWEEN 0 AND 104857600 AND octet_length(content)=size
+    ),
+    CONSTRAINT artifact_revision_valid CHECK (
+      revision BETWEEN 1 AND 1000000
+      AND ((revision=1) = (previous_revision_id IS NULL))
+    ),
+    CONSTRAINT artifact_provenance_valid CHECK (
+      jsonb_typeof(provenance)='object'
+      AND provenance->>'kind' IN ('agent','tool','workflow','call','system')
+    ),
+    FOREIGN KEY (tenant_id,workspace_id)
+      REFERENCES workspaces(tenant_id,id) ON DELETE RESTRICT,
+    FOREIGN KEY (tenant_id,conversation_id)
+      REFERENCES conversations(tenant_id,id) ON DELETE RESTRICT,
+    FOREIGN KEY (tenant_id,previous_revision_id)
+      REFERENCES artifacts(tenant_id,id) ON DELETE RESTRICT
+);
+CREATE INDEX IF NOT EXISTS artifacts_owner_created_idx
+  ON artifacts(tenant_id,owner_id,created_at DESC,id DESC);
+CREATE INDEX IF NOT EXISTS artifacts_conversation_idx
+  ON artifacts(tenant_id,owner_id,conversation_id,created_at DESC,id DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS artifacts_revision_idx
+  ON artifacts(
+    tenant_id,owner_id,COALESCE(workspace_id,''),
+    COALESCE(conversation_id,''),name,revision
+  );

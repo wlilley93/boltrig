@@ -38,6 +38,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 
 ENV_VAR = "BOLTRIG_ADDONS"
+REQUIREMENT_KINDS = ("adapter", "component", "environment", "credential_ref")
 
 # Per-addon harness bound. See ``Addon.__post_init__``: this protects the
 # governance floor's salience, not just the birth-policy byte cap.
@@ -46,6 +47,43 @@ MAX_ADDON_HARNESS_BYTES = 4096
 
 class AddonError(RuntimeError):
     """An addon was requested that is not registered, or is not a valid addon."""
+
+
+@dataclass(frozen=True)
+class AddonRequirement:
+    """One declarative, kernel-evaluated add-on readiness requirement.
+
+    ``ref`` is private evaluation input. Public projections expose only ``id``
+    and ``kind`` so deployment-variable names and credential references never
+    leave the kernel.
+    """
+
+    id: str
+    kind: str
+    ref: str = field(repr=False)
+    required: bool = True
+
+    def __post_init__(self) -> None:
+        if (
+            not self.id
+            or len(self.id) > 128
+            or not self.id.replace("-", "").replace("_", "").replace(".", "").isalnum()
+        ):
+            raise AddonError(
+                "addon requirement id must be bounded alphanumeric text "
+                "(hyphens, underscores and dots allowed)"
+            )
+        if self.kind not in REQUIREMENT_KINDS:
+            raise AddonError(
+                "addon requirement kind must be one of: "
+                + ", ".join(REQUIREMENT_KINDS)
+            )
+        if not isinstance(self.ref, str) or not self.ref.strip() or len(self.ref) > 256:
+            raise AddonError("addon requirement ref must be non-empty bounded text")
+        if "\x00" in self.ref:
+            raise AddonError("addon requirement ref cannot contain NUL")
+        if type(self.required) is not bool:
+            raise AddonError("addon requirement required must be a boolean")
 
 
 @dataclass(frozen=True)
@@ -59,6 +97,7 @@ class Addon:
     consequence_hint: Callable[[Mapping[str, object]], str | None] | None = field(
         default=None, compare=False
     )
+    requirements: tuple[AddonRequirement, ...] = ()
 
     def __post_init__(self) -> None:
         # The name and version travel INTO a pinned semver's build metadata, so
@@ -79,6 +118,14 @@ class Addon:
             raise AddonError(
                 f"addon {self.name!r} harness exceeds {MAX_ADDON_HARNESS_BYTES} bytes"
             )
+        if not isinstance(self.requirements, tuple) or any(
+            not isinstance(requirement, AddonRequirement)
+            for requirement in self.requirements
+        ):
+            raise AddonError("addon requirements must be a tuple of AddonRequirement")
+        requirement_ids = [requirement.id for requirement in self.requirements]
+        if len(requirement_ids) != len(set(requirement_ids)):
+            raise AddonError(f"addon {self.name!r} requirement ids must be unique")
 
 
 _REGISTRY: dict[str, Addon] = {}
@@ -287,8 +334,10 @@ load_builtin_addons()
 
 __all__ = [
     "ENV_VAR",
+    "REQUIREMENT_KINDS",
     "Addon",
     "AddonError",
+    "AddonRequirement",
     "active_addons",
     "adapter_id_for",
     "composed_version",

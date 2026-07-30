@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import uuid
-from dataclasses import replace
 from typing import Any, cast
 
 from boltrig.models import (
@@ -11,15 +10,13 @@ from boltrig.models import (
     AdapterRecord,
     Consequence,
     IdempotencyMode,
-    NotificationPref,
     Noun,
+    RateLimit,
     Skill,
     TargetType,
     UserInvitation,
     Verb,
     VerbBinding,
-    WorkflowDefinition,
-    WorkflowSource,
     utcnow,
 )
 from .control_safety import (
@@ -73,6 +70,7 @@ async def upsert_skill_record(store: Any, tenant_id: str, params: dict[str, Any]
         context_requirements=params.get("context_requirements", {}),
         extends=params.get("extends"),
         locale=params.get("locale", "en"),
+        description=params.get("description", ""),
     )
     await store.upsert_skill(skill)
     return skill
@@ -99,6 +97,8 @@ async def upsert_verb_record(store: Any, tenant_id: str, params: dict[str, Any])
         output_schema=params.get("output_schema", {}),
         description=params.get("description", ""),
         consequence=Consequence(consequence),
+        degraded_mode=params.get("degraded_mode"),
+        identity_mode=params.get("identity_mode", "service-principal"),
         idempotency_mode=IdempotencyMode(params.get("idempotency_mode", "cacheable")),
     )
     await store.upsert_verb(verb)
@@ -108,11 +108,13 @@ async def upsert_verb_record(store: Any, tenant_id: str, params: dict[str, Any])
 async def set_binding_record(
     store: Any, tenant_id: str, verb_id: str, params: dict[str, Any]
 ) -> VerbBinding:
+    rate_limit = params.get("rate_limit")
     binding = VerbBinding(
         verb_id=verb_id,
         tenant_id=tenant_id,
         target_type=TargetType(params["target_type"]),
         target_ref=params["target_ref"],
+        rate_limit=RateLimit(**rate_limit) if isinstance(rate_limit, dict) else None,
     )
     await store.upsert_binding(binding)
     return binding
@@ -156,12 +158,29 @@ async def generate_adapter_record(
     actor: str,
 ) -> Any:
     from boltrig.adapters.generator import generate_adapter_from_spec
+    from .control_generated_adapter import (
+        generated_adapter_from_record,
+        generated_adapter_projection,
+        stamp_generated_adapter,
+    )
 
     await ensure_adapter_id_available(store, loader, tenant_id, params["adapter_id"])
     adapter = generate_adapter_from_spec(params["spec"], adapter_id=params["adapter_id"])
-    await record_inert_adapter(store, tenant_id, adapter, created_by=actor)
+    spec_ref = generated_adapter_projection(adapter)
+    await record_inert_adapter(
+        store,
+        tenant_id,
+        adapter,
+        created_by=actor,
+        spec_ref=spec_ref,
+    )
     if loader.peek(tenant_id, adapter.id) is not None:
         raise ControlConflict("adapter id became live during registration")
+    record = await store.get_adapter(tenant_id, adapter.id)
+    if record is None:
+        raise ControlConflict("generated adapter registration was not retained")
+    adapter = generated_adapter_from_record(record)
+    stamp_generated_adapter(adapter, record)
     loader.register(tenant_id, adapter)
     return adapter
 
@@ -176,7 +195,19 @@ async def activate_adapter_record(
     reviewer: str,
     credentials: Any = None,
 ) -> list[str]:
-    adapter = await loader.get(tenant_id, adapter_id)
+    record = await store.get_adapter(tenant_id, adapter_id)
+    if record is None:
+        raise LookupError("adapter not found")
+    from .control_generated_adapter import (
+        is_generated_adapter_record,
+        reconcile_generated_adapter,
+    )
+
+    adapter = (
+        await reconcile_generated_adapter(loader, tenant_id, record)
+        if is_generated_adapter_record(record)
+        else await loader.get(tenant_id, adapter_id)
+    )
     if adapter is None:
         # A store row this kernel never rebuilt (another replica's
         # registration, or a boot skip): rebuild it on demand when the row
@@ -184,9 +215,6 @@ async def activate_adapter_record(
         # otherwise - never pend or fail opaquely on a row that exists.
         from .control_rehydrate import rehydrate_adapter_instance
 
-        record = await store.get_adapter(tenant_id, adapter_id)
-        if record is None:
-            raise LookupError("adapter not found")
         adapter = await rehydrate_adapter_instance(
             store, credentials, loader, tenant_id, record
         )
@@ -214,66 +242,13 @@ async def activate_adapter_record(
     if activate is not None:
         activate(reviewer)
     verbs = await registry.register_adapter_verbs(tenant_id, adapter)
-    record = await store.get_adapter(tenant_id, adapter_id)
-    if record is None:
-        record = AdapterRecord(
-            id=adapter.id,
-            tenant_id=tenant_id,
-            version=getattr(adapter, "version", "0"),
-            runtime=getattr(adapter, "runtime", "script"),
-            source=getattr(adapter, "source", "generated"),
-            module_ref=type(adapter).__module__,
-        )
     record.activated = True
     await store.upsert_adapter(record)
+    if is_generated_adapter_record(record):
+        from .control_generated_adapter import stamp_generated_adapter
+
+        stamp_generated_adapter(adapter, record)
     return cast(list[str], verbs)
-
-
-async def upsert_workflow_record(
-    store: Any,
-    tenant_id: str,
-    params: dict[str, Any],
-    *,
-    workspace_id: str | None,
-) -> WorkflowDefinition:
-    workflow = WorkflowDefinition(
-        id=params["id"],
-        tenant_id=tenant_id,
-        version=params.get("version", "1.0.0"),
-        source=WorkflowSource(params.get("source", "precreated")),
-        definition=params.get("definition", {}),
-        intent_tags=params.get("intent_tags", []),
-        workspace_id=workspace_id,
-    )
-    await store.upsert_workflow(workflow)
-    return workflow
-
-
-async def schedule_workflow_record(
-    store: Any,
-    tenant_id: str,
-    params: dict[str, Any],
-    *,
-    workspace_id: str | None,
-) -> dict[str, Any]:
-    from boltrig.workflows.generator import schedule_spec
-
-    workflow = next(
-        (
-            item
-            for item in await store.list_workflows(tenant_id)
-            if item.id == params["workflow_id"]
-            and (item.workspace_id is None or item.workspace_id == workspace_id)
-        ),
-        None,
-    )
-    if workflow is None:
-        raise LookupError("workflow not found")
-    schedule = schedule_spec(params["cron"], params.get("timezone", "UTC"))
-    definition = dict(workflow.definition)
-    definition["schedule"] = schedule
-    await store.upsert_workflow(replace(workflow, definition=definition))
-    return schedule
 
 
 def _principal_role(context: Any) -> str:
@@ -370,21 +345,3 @@ async def revoke_invitation_record(
     invitation.status = "revoked"
     await store.update_invitation(invitation)
     return invitation
-
-
-async def route_notification_record(
-    store: Any, tenant_id: str, params: dict[str, Any], *, context: Any
-) -> NotificationPref:
-    subject = context.on_behalf_of or context.actor
-    preference = NotificationPref(
-        id=params.get("id") or uuid.uuid4().hex,
-        tenant_id=tenant_id,
-        scope_kind="user",
-        scope_ref=subject,
-        event_type=params["event_type"],
-        channel=params["channel"],
-        target=params.get("target"),
-        enabled=params.get("enabled", True),
-    )
-    await store.upsert_notification_pref(preference)
-    return preference

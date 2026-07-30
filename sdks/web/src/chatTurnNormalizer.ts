@@ -10,6 +10,7 @@ import type {
   ChatHitlEvent,
   ChatMessageEnd,
   ChatMessageStart,
+  ChatModelRouting,
   ChatQuestion,
   ChatReasoningDelta,
   ChatSubagent,
@@ -36,6 +37,7 @@ interface Accumulator {
   reasoning: string;
   ended: boolean;
   cancelled: boolean;
+  degraded: boolean;
   tools: ToolEntry[];
   subagents: SubagentEntry[];
   hitls: HitlEntry[];
@@ -43,6 +45,7 @@ interface Accumulator {
   steps: StepEntry[];
   stepIndex: Map<string, StepEntry>;
   timeline: TimelineEntry[];
+  modelRouting?: NormalizedTurn["modelRouting"];
 }
 
 export function normalizeEvents(events: ChatEvent[]): NormalizedTurn {
@@ -82,6 +85,9 @@ export function normalizeEvents(events: ChatEvent[]): NormalizedTurn {
       case "message_end":
         handleMessageEnd(ev, acc);
         break;
+      case "model_routing":
+        handleModelRouting(ev, acc);
+        break;
       case "cancelled":
         handleCancelled(ev, acc);
         break;
@@ -92,6 +98,12 @@ export function normalizeEvents(events: ChatEvent[]): NormalizedTurn {
       // dropped by silence.
       case "steer_queued":
       case "steer_consumed":
+      // Artifact frames trigger a governed list refresh in the surface that
+      // owns artifact state. A withheld internal frame is a visible continuity
+      // notice there; neither is executable turn content.
+      case "artifact":
+      case "artifact_rejected":
+      case "event_unavailable":
         break;
     }
   });
@@ -104,6 +116,7 @@ function createAccumulator(): Accumulator {
     reasoning: "",
     ended: false,
     cancelled: false,
+    degraded: false,
     tools: [],
     subagents: [],
     hitls: [],
@@ -128,6 +141,8 @@ function buildTurn(acc: Accumulator): NormalizedTurn {
     timeline: acc.timeline,
     ended: acc.ended,
     cancelled: acc.cancelled,
+    degraded: acc.degraded,
+    modelRouting: acc.modelRouting,
   };
 }
 
@@ -138,6 +153,7 @@ function handleMessageStart(ev: ChatMessageStart, acc: Accumulator) {
 
 function handleTextDelta(ev: ChatTextDelta, acc: Accumulator) {
   acc.text += ev.delta;
+  if (ev.degraded === true) acc.degraded = true;
 }
 
 function handleReasoningDelta(ev: ChatReasoningDelta, acc: Accumulator) {
@@ -197,9 +213,21 @@ function handleSubagent(ev: ChatSubagent, index: number, acc: Accumulator) {
     role: ev.role,
     color: ev.color,
     stepCount: ev.step_count,
+    spawnRule: ev.spawn_rule,
+    familiarGenotype: ev.familiar_genotype,
   };
   acc.subagents.push(entry);
   acc.timeline.push({ kind: "subagent", key: entry.key, entry });
+}
+
+function handleModelRouting(ev: ChatModelRouting, acc: Accumulator) {
+  acc.modelRouting = {
+    selectedProfileId: ev.selected_profile_id,
+    requestedProfileId: ev.requested_profile_id,
+    routingClass: ev.routing_class,
+    reason: ev.reason,
+    overridden: ev.overridden,
+  };
 }
 
 /**
@@ -232,6 +260,10 @@ function handleHitl(ev: ChatHitlEvent, acc: Accumulator) {
         questionId: ev.hitl_request_id,
         prompt: ev.question ?? "The agent needs an answer.",
         choices: ev.options ?? [],
+        secure: ev.secure === true,
+        securePurpose: ev.secure === true
+          ? ev.purpose ?? ev.secure_purpose ?? undefined
+          : undefined,
       };
       acc.questions.push(question);
       acc.timeline.push({ kind: "question", key: `q${question.questionId}`, entry: question });
@@ -259,12 +291,16 @@ function handleQuestion(ev: ChatQuestion, acc: Accumulator) {
   if (existing) {
     existing.prompt = ev.prompt;
     existing.choices = ev.choices ?? [];
+    existing.secure = ev.secure === true;
+    existing.securePurpose = ev.secure === true ? ev.purpose : undefined;
     return;
   }
   const entry: QuestionEntry = {
     questionId: ev.question_id,
     prompt: ev.prompt,
     choices: ev.choices ?? [],
+    secure: ev.secure === true,
+    securePurpose: ev.secure === true ? ev.purpose : undefined,
   };
   acc.questions.push(entry);
   acc.timeline.push({ kind: "question", key: `q${ev.question_id}`, entry });

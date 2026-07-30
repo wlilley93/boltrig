@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from boltrig.fleet import build_spawner
 from boltrig.fleet.hatchet_app import context_to_envelope
 from boltrig.fleet.ultracode import run_ultracode_body
 from boltrig.kernel import Kernel
@@ -99,13 +100,15 @@ class _Mem0Projection:
         return ProjectionResult.written(f"mem0:{fact.id}")
 
     async def recall(self, tenant_id, query, *, scopes, mode, limit, max_hops, context):
-        self.recall_calls.append({
-            "tenant_id": tenant_id,
-            "query": query,
-            "scopes": list(scopes),
-            "mode": mode,
-            "limit": limit,
-        })
+        self.recall_calls.append(
+            {
+                "tenant_id": tenant_id,
+                "query": query,
+                "scopes": list(scopes),
+                "mode": mode,
+                "limit": limit,
+            }
+        )
         return [
             ProjectionRecallHit(
                 fact_id="semantic-memory",
@@ -137,7 +140,9 @@ async def test_ultracode_injects_only_scoped_memory_into_agent_prompt():
     )
 
     record = await run_ultracode_body(
-        kernel, _payload("uc-memory", context=_ctx("uc-memory"))
+        kernel,
+        _payload("uc-memory", context=_ctx("uc-memory")),
+        spawner=build_spawner(kernel, codex_config=None),
     )
 
     task = record["phases"][0]["agents"][0]["result"]["output"]["task"]
@@ -168,7 +173,9 @@ async def test_ultracode_recall_uses_mem0_projection_when_configured():
     )
 
     record = await run_ultracode_body(
-        kernel, _payload("uc-mem0", context=_ctx("uc-mem0"))
+        kernel,
+        _payload("uc-mem0", context=_ctx("uc-mem0")),
+        spawner=build_spawner(kernel, codex_config=None),
     )
 
     task = record["phases"][0]["agents"][0]["result"]["output"]["task"]
@@ -182,13 +189,13 @@ async def test_ultracode_recall_uses_mem0_projection_when_configured():
 @pytest.mark.invariant("FR-WFL-16")
 async def test_ultracode_memory_injection_requires_recall_grant():
     kernel = await _kernel()
-    await kernel.store.add_memory_fact(
-        _fact("in-scope", "This memory requires the recall grant.")
-    )
+    await kernel.store.add_memory_fact(_fact("in-scope", "This memory requires the recall grant."))
     ctx = _ctx("uc-memory-denied", grants=GrantSet.of(["ticket.read"]))
 
     record = await run_ultracode_body(
-        kernel, _payload("uc-memory-denied", context=ctx)
+        kernel,
+        _payload("uc-memory-denied", context=ctx),
+        spawner=build_spawner(kernel, codex_config=None),
     )
 
     task = record["phases"][0]["agents"][0]["result"]["output"]["task"]
@@ -205,7 +212,11 @@ async def test_ultracode_stores_run_summary_through_memory_adapter():
     payload = _payload("uc-summary", context=_ctx("uc-summary"))
     payload["workflow"]["defaults"] = {"capability": "opencode-worker"}
 
-    await run_ultracode_body(kernel, payload)
+    await run_ultracode_body(
+        kernel,
+        payload,
+        spawner=build_spawner(kernel, codex_config=None),
+    )
 
     facts = await kernel.store.list_memory_facts(T, ["user:will"], kind="summary")
     assert len(facts) == 1

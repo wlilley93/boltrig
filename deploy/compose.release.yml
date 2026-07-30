@@ -26,6 +26,11 @@ services:
     image: ${BOLTRIG_UI_IMAGE:?set BOLTRIG_UI_IMAGE to an image@sha256 digest}
     pull_policy: always
 
+  worker-ui:
+    build: !reset null
+    image: ${BOLTRIG_WORKER_UI_IMAGE:?set BOLTRIG_WORKER_UI_IMAGE to an image@sha256 digest}
+    pull_policy: always
+
   backup:
     build: !reset null
     image: ${BOLTRIG_BACKUP_IMAGE:?set BOLTRIG_BACKUP_IMAGE to an image@sha256 digest}
@@ -34,4 +39,5 @@ services:
     # Keep mutable source mounts in the developer base manifest, never here.
     volumes: !override
       - ${BACKUP_DIR:-./backups}:/backups
+      - backup_health:/backup-health
       - ${RCLONE_CONFIG_DIR:-./deploy/rclone}:/root/.config/rclone:ro

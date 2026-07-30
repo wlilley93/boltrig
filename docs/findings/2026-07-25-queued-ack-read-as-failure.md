@@ -1,8 +1,7 @@
 # A durably-accepted chat message reported as a failure
 
 Date: 2026-07-25
-Status: Console and Node SDK FIXED. One sibling OPEN, deliberately, with the
-reason recorded below.
+Status: FIXED in Console, Node SDK and terminal Chat.
 
 ## The defect
 
@@ -18,19 +17,17 @@ Three clients got it wrong, in two different directions:
   message rendered as a turn that completed with no reply. Fixed: `streamChat`
   returns the ack, and the sender announces it.
 - **`sdks/node/src/head.ts`** raised `request failed (HTTP 202)`. Fixed.
-- **`boltrig/api/chat_cli.py`** raises `request failed (HTTP 202)`. **Still open.**
+- **`boltrig/api/chat_cli.py`** previously raised `request failed (HTTP 202)`.
+  Fixed by accepting only a JSON `202` whose status is exactly `queued` and
+  rendering an explicit queued-behind-the-active-turn event. Other `202`
+  responses remain errors.
 
-## Why the CLI one is still open
+## Why the CLI fix was split
 
-Not because it is acceptable. Because `boltrig/api/chat_cli.py` sits at exactly
-400 lines, the structure gate's file limit, with no exemption. The fix needs the
-202 branch plus a `render_event` arm (without one the CLI prints nothing at all,
-which is a different lie), and there is no version of it that fits in zero lines.
-
-The choice was: mint a new structural exemption for a file that has never needed
-one, in order to land an out-of-scope sibling fix, or leave the sibling recorded
-and let it be done as part of the split that file already needs. The second is
-the smaller debt. It is written down here rather than left to be rediscovered.
+`boltrig/api/chat_cli.py` was already at the structure gate's file limit. The
+bounded HTTP-body interpretation now lives in `boltrig/api/chat_cli_http.py`;
+the streaming and rendering behavior remains in the terminal client. No
+structural exemption was added.
 
 This is also how I found that I had already broken the gate: I committed the
 console fix WITH the chat_cli change and ran only `make ui-quality`, not `make

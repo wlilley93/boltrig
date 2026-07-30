@@ -274,6 +274,14 @@ function Providers({
   const [message, setMessage] = useState<string | null>(null);
   async function toggle(provider: KnowledgeProvider) {
     setMessage(null);
+    if (provider.status === "unavailable") {
+      setMessage(
+        provider.last_error
+          ? `${provider.display_name} is unavailable: ${provider.last_error}`
+          : `${provider.display_name} is unavailable in this build.`,
+      );
+      return;
+    }
     try {
       const result = await api.setKnowledgeProvider(provider.id, !provider.enabled);
       setMessage(
@@ -303,8 +311,14 @@ function Providers({
               <div className="knowledge-provider__state">
                 {provider.bundled && <span className="badge badge--ok">Bundled default</span>}
                 <span className={`badge ${provider.health === "ok" ? "badge--ok" : ""}`}>{provider.status}</span>
-                <button type="button" className="btn" onClick={() => toggle(provider)}>
-                  {provider.enabled ? "Disable" : "Enable"}
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={provider.status === "unavailable"}
+                  title={provider.status === "unavailable" ? provider.last_error ?? "Unavailable in this build" : undefined}
+                  onClick={() => toggle(provider)}
+                >
+                  {provider.status === "unavailable" ? "Unavailable" : provider.enabled ? "Disable" : "Enable"}
                 </button>
               </div>
             </div>
@@ -312,7 +326,7 @@ function Providers({
           {message && <p className="muted" role="status">{message}</p>}
         </div>
       </div>
-      <Hint>Cognee ships enabled as the rebuildable compiler. Mem0 and Supermemory become active with one governed enable action after their credential-backed adapter is configured.</Hint>
+      <Hint>Cognee ships enabled as the rebuildable compiler. Mem0 and Supermemory are unavailable in this build; enablement requires a credential-backed projection adapter.</Hint>
     </div>
   );
 }
