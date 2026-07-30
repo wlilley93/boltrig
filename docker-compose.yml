@@ -231,11 +231,24 @@ services:
       # Reflection is the ONLY automatic memory writer in the stack: fleet/pump.py
       # calls memory.remember with a distilled lesson when a work item reaches a
       # terminal status, under the bounded REFLECTION_GRANTS seat (exactly that one
-      # verb). It reads BOLTRIG_REFLECT, and until now that variable was not plumbed
-      # into this service at all, so it could not be set without editing this file -
-      # and it was set nowhere. Measured 2026-07-30: 90 terminal work items on the
-      # beelink and 69 on the CV tenant, and ZERO memory_items on either. A memory
+      # verb). It reads BOLTRIG_REFLECT, and that variable was set NOWHERE, so the
+      # gate was closed on every box. Measured 2026-07-30: 90 terminal work items on
+      # the beelink and 69 on the CV tenant, and ZERO memory_items on either. A memory
       # subsystem that never records anything looks identical to one switched off.
+      #
+      # CORRECTION to what I first wrote here, which said the variable "was not
+      # plumbed into this service at all, so it could not be set without editing this
+      # file". That was wrong, and the error is worth keeping because it is the kind
+      # that survives review: this service takes `env_file: ${BOLTRIG_ENV_FILE:-.env}`,
+      # and env_file passes EVERY key in that file into the container. So
+      # BOLTRIG_REFLECT=1 in .env alone would always have worked. Verified by
+      # experiment rather than by reading: AGENT_SP_ID is in .env, appears in NO
+      # compose environment: block, and is present in the running container.
+      #
+      # The real defect was narrower and is still real - the switch for the only
+      # automatic memory writer was undocumented, absent from .env.example, and set on
+      # no deployment, so nobody could know it existed. Naming it explicitly here is
+      # documentation and a default, NOT the thing that makes it settable.
       #
       # Defaulted OFF deliberately. Reflection RETAINS derived content (manifest
       # memory.retention_days is 365), so switching it on for a tenant is a data
