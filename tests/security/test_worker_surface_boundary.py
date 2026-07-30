@@ -10,16 +10,58 @@ ROOT = Path(__file__).resolve().parents[2]
 WORKER = ROOT / "apps" / "worker"
 
 
+def _corpus(paths, *, what: str, at_least: int) -> str:
+    """Read a globbed corpus, refusing to return an EMPTY one.
+
+    Every assertion below this line is of the form "X is not in the source", and
+    a substring is never in an empty string - so a corpus that failed to
+    materialise turns the whole test green while proving nothing. This was not
+    hypothetical: `apps/worker` was untracked for two days while these tests
+    were being written, so on any clean clone `rglob` yielded nothing and the
+    negative assertions passed over a corpus of zero bytes.
+
+    Tracking the directory fixed that instance. It does not fix the SHAPE, which
+    is the one this repository keeps rediscovering: a check that cannot fail.
+    So the corpus itself is asserted, with a floor rather than merely non-empty,
+    because one stray file would satisfy "not empty" just as vacuously.
+    """
+    files = [p for p in paths if p.is_file()]
+    assert len(files) >= at_least, (
+        f"{what}: found {len(files)} file(s), expected at least {at_least}. "
+        "The assertions that follow are all NEGATIVE, so an empty or truncated "
+        "corpus would pass them without reading anything. Refusing instead: "
+        f"check that {WORKER.relative_to(ROOT)} is present and tracked."
+    )
+    return "\n".join(p.read_text(encoding="utf-8", errors="ignore").lower() for p in files)
+
+
+@pytest.mark.invariant("SEC-WRK-01")
+def test_the_corpus_guard_refuses_an_absent_or_truncated_source_tree(tmp_path):
+    """The guard above, shown failing. Otherwise it is prose about a hazard.
+
+    Three cases, because "not empty" is not the property wanted: a missing
+    directory, a directory with too few files to be the real tree, and the
+    control that the real tree passes.
+    """
+    with pytest.raises(AssertionError, match="found 0 file"):
+        _corpus((tmp_path / "nothing").rglob("*"), what="a missing tree", at_least=1)
+
+    (tmp_path / "one.ts").write_text("x", encoding="utf-8")
+    with pytest.raises(AssertionError, match="found 1 file.*expected at least 20"):
+        _corpus(tmp_path.rglob("*"), what="a truncated tree", at_least=20)
+
+    assert _corpus(tmp_path.rglob("*"), what="the control", at_least=1) == "x"
+
+
 @pytest.mark.invariant("SEC-WRK-01")
 def test_worker_ships_no_openworker_agent_server_or_provider_secret_path():
-    source = "\n".join(
-        path.read_text(encoding="utf-8", errors="ignore").lower()
-        for path in (WORKER / "src").rglob("*")
-        if path.is_file()
+    source = _corpus(
+        (WORKER / "src").rglob("*"), what="the Worker web source", at_least=20
     )
-    rust = "\n".join(
-        path.read_text(encoding="utf-8").lower()
-        for path in (WORKER / "src-tauri" / "src").glob("*.rs")
+    rust = _corpus(
+        (WORKER / "src-tauri" / "src").glob("*.rs"),
+        what="the Tauri native source",
+        at_least=1,
     )
     config = (WORKER / "src-tauri" / "tauri.conf.json").read_text(encoding="utf-8").lower()
 

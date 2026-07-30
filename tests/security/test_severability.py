@@ -85,7 +85,16 @@ def test_channel_gateway_imports_no_boltrig_package_code():
     # POSTs + the run-scoped outbox links), never a package import.
     offenders: list[str] = []
     pattern = re.compile(r"^\s*(?:from|import)\s+boltrig(?:\.|\b)")
-    for path in _CHANNEL_GATEWAY.rglob("*.py"):
+    # The same "scanned nothing" floor the other sweeps in this file carry, and
+    # for the same reason: the only assertion here is that a list is EMPTY, so a
+    # gateway that moved, was renamed, or lost its sources would satisfy it
+    # forever without a line being read.
+    gateway_sources = sorted(_CHANNEL_GATEWAY.rglob("*.py"))
+    assert len(gateway_sources) >= 5, (
+        f"scanned nothing: {_CHANNEL_GATEWAY} yielded {len(gateway_sources)} "
+        "Python file(s), and the severance check below is negative-only"
+    )
+    for path in gateway_sources:
         for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             if pattern.match(line):
                 offenders.append(f"{path}:{n}: {line.strip()}")

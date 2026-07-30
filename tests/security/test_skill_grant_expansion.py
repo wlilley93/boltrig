@@ -95,6 +95,13 @@ def _load_skills() -> list[tuple[str, list[str]]]:
         grants = doc.get("tool_grants") or []
         if isinstance(grants, list):
             out.append((str(path.relative_to(_REPO)), [g for g in grants if isinstance(g, str)]))
+    # Every caller of this loops over the result and asserts something about each
+    # skill. An empty list makes all of those bodies unreachable and every one of
+    # them green, so the sweep proves it read the shipped set rather than nothing.
+    assert len(out) >= 5, (
+        f"scanned nothing: {_SKILLS} yielded {len(out)} skill(s) with tool_grants, "
+        "and every grant assertion below iterates over this list"
+    )
     return out
 
 
