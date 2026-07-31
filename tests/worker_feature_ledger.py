@@ -706,6 +706,11 @@ CLI_COMMAND_FEATURES: dict[str, FeatureCoverage] = {
         ("worker", "deployment", "deployment", "worker", "deployment"),
         "The box-level twin is operational; ordinary scoped token lifecycle is present in Worker.",
     ),
+    "config-validate": _coverage(
+        "boltrig/api/cli.py:config-validate",
+        ("deployment", "deployment", "deployment", "deployment", "deployment"),
+        "Manifest pre-flight against the candidate image (task #59) is a deploy-recipe step; nothing about it belongs in Worker.",
+    ),
     "smoke": _coverage(
         "boltrig/api/cli.py:smoke",
         ("deployment", "deployment", "deployment", "deployment", "deployment"),

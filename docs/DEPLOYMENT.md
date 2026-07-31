@@ -128,6 +128,33 @@ has not pulled. Staleness is scoped to the mounted path, so an unrelated merge d
 not turn it red; a detached HEAD on a deployment tree is reported as the finding it
 is. It needs a box, so it is an operator command and never a CI gate.
 
+## Validate the manifest with the CANDIDATE image before swapping (task #59)
+
+The database has a version chain, a recorded head, and a parity gate. The
+manifest has none of those, and on 2026-07-31 that asymmetry crash-looped a
+production kernel on a required spawn-rule field after a flawless database
+pre-flight. So before pointing a stack at a new image, parse each target's
+manifest with the code that will read it:
+
+```bash
+docker run --rm --env-file <stack .env> \
+  -v /path/to/manifest.yaml:/m.yaml:ro \
+  ghcr.io/wlilley93/boltrig-kernel:<candidate tag> \
+  boltrig config-validate /m.yaml
+```
+
+Exit 0 means the process will get past config with this build - nothing more
+(credentials and endpoints are the doctor's and readiness's jobs). Exit 1 names
+the rejection; exit 2 is operator error (no such file). Pass the stack's env
+file: `${VAR}` interpolation resolves against the validating process, so a bare
+run can fail on a variable that IS set in production - a false red, never a
+false green, but a needless one.
+
+The standing half of the same gate runs in CI:
+`tests/unit/test_config_validate_cli.py` parses `manifest.example.yaml` with the
+shipping loader on every push, so a commit that adds a required field without a
+default goes red in the suite before any box meets it.
+
 ## TLS in transit (SEC-10)
 
 Run the secure overlay, which puts a Caddy TLS terminator in front of the UI and

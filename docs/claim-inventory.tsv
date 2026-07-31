@@ -305,6 +305,7 @@ LOAD-BEARING	SUBJECT-REACHED	comment	boltrig/api/auth_routes.py:480	_audit	Keys-
 LOAD-BEARING	SUBJECT-REACHED	comment	boltrig/api/auth_routes.py:611	_audit	Keys-only via `_audit` (D5): enrollment-begin only, NEVER the secret, the otpauth
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/api/bootstrap.py:201	mcp.consume	Register external MCP servers declared in the bundle's manifest (`mcp.consume`), each INERT pending review (SEC-22) - the review/activate route still gates them.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/api/codex_execution.py:76	RootEngineDecision	Record one shadow ``RootEngineDecision`` for a chat root, execution-neutral.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/api/config_validate.py:1	load_manifest	``boltrig config-validate`` - parse a manifest with the SHIPPING code (task #59).
 LOAD-BEARING	SUBJECT-REACHED	comment	boltrig/api/host_boundary.py:69	SecurityWriter	addresses: the ``SecurityWriter`` ledger is append-only.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/api/mint_token.py:1	resolve_pat_principal	``boltrig mint-token`` - mint a Personal Access Token for an EXISTING user.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/api/readiness.py:35	browser_automation_wanted	The stack tools THIS tenant's readiness may require.
