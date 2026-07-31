@@ -12,6 +12,7 @@ from .channels import ChannelStoreMem
 from .channel_dedup import ChannelDedupStoreMem
 from .channel_outbox import ChannelOutboxStoreMem
 from .budget_policy import BudgetPolicyMem
+from .distillation_reads_memory import DistillationReadsMem
 from .budget_usage import BudgetUsageMem
 from .capabilities import CapabilityStoreMem
 from .guarded_writes import GuardedWritesMem
@@ -93,7 +94,7 @@ def _norm_email_key(value) -> str:
     normalisation ([2026] VJS-COUNTY 11)."""
     return value.strip().lower() if isinstance(value, str) else ""
 
-class InMemoryStore(BudgetPolicyMem, BudgetUsageMem, WorkItemReadsMem, IdempotencyStoreMem,
+class InMemoryStore(DistillationReadsMem, BudgetPolicyMem, BudgetUsageMem, WorkItemReadsMem, IdempotencyStoreMem,
                     GuardedWritesMem, ChannelStoreMem, CapabilityStoreMem,
                     PermanentFleetStoreMem, BirthProfileStoreMem,
                     BackgroundJobStoreMem,
@@ -792,46 +793,6 @@ class InMemoryStore(BudgetPolicyMem, BudgetUsageMem, WorkItemReadsMem, Idempoten
             if t == tenant_id and i.source_kind == source_kind and i.source_ref == source_ref
         ]
         return max(hits, key=lambda i: i.created_at) if hits else None
-
-    async def count_pending_distillation(self, tenant_id, idle_before):
-        # Two plain counts, sharing no logic with list_idle_conversations: the
-        # pending signal must stay non-zero even if selection has a bug that
-        # filters every candidate away (the 2026-07-30 wedge).
-        idle_total = len(
-            [
-                c
-                for (t, _), c in self._convs.items()
-                if t == tenant_id
-                and getattr(c, "status", "active") == "active"
-                and c.updated_at < idle_before
-            ]
-        )
-        distilled = len(
-            {
-                i.source_ref
-                for (t, _), i in self._mem_ingest.items()
-                if t == tenant_id and i.source_kind == "conversation"
-            }
-        )
-        return max(0, idle_total - distilled)
-
-    async def list_idle_conversations(self, tenant_id, idle_before, *, limit=50):
-        # Excludes already-distilled threads HERE, before the limit, exactly as the
-        # Postgres twin does - filtering after the limit wedges the sweep.
-        distilled = {
-            i.source_ref
-            for (t, _), i in self._mem_ingest.items()
-            if t == tenant_id and i.source_kind == "conversation"
-        }
-        out = [
-            c
-            for (t, _), c in self._convs.items()
-            if t == tenant_id
-            and getattr(c, "status", "active") == "active"
-            and c.updated_at < idle_before
-            and c.id not in distilled
-        ]
-        return sorted(out, key=lambda c: c.updated_at)[: max(1, min(limit, 500))]
 
     async def list_memory_ingestions(self, tenant_id, limit=50):
         out = [i for (t, _), i in self._mem_ingest.items() if t == tenant_id]

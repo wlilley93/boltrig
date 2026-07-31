@@ -26,13 +26,22 @@ from boltrig.kernel import Kernel
 from boltrig.memory import LocalMemoryEngine
 from boltrig.memory.adapter import build_memory_adapter
 from boltrig.memory.session_distillation import (
-    already_distilled,
     distil_conversation,
     distillation_context,
 )
+
 from boltrig.models import GrantSet, TenantPermissions
 from boltrig.models.conversation import Conversation, ConversationMessage, MessageRole
 from boltrig.store import InMemoryStore
+
+
+async def already_distilled(store, tenant_id, conversation_id):
+    """Local shim: the helper moved into the store's selection predicate with
+    #43. The receipt-existence property these assertions pin is unchanged."""
+    receipt = await store.get_memory_ingestion_by_source(
+        tenant_id, "conversation", conversation_id
+    )
+    return receipt is not None
 
 T = "t-distil-write"
 NOW = datetime(2026, 7, 30, 12, 0, tzinfo=timezone.utc)
