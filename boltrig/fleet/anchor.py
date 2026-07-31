@@ -160,17 +160,72 @@ async def run_anchor_forever(
     enumeration return an empty list, and it produced no output whatsoever - the
     only evidence was an audit chain that had quietly stopped being anchored.
     """
+    from boltrig.models.base import utcnow
+    from boltrig.observability.background_jobs import new_background_process_identity
+
     progress = SweepProgress("audit-anchor")
+    # SweepProgress writes to the LOG, which survives no restart and answers no
+    # operator query. The durable half is the receipt ledger /readyz reads. At a
+    # DAILY interval the log is especially weak evidence: a rotated log means the
+    # last thing this janitor said is simply gone.
+    identity = new_background_process_identity()
     while True:
+        attempted_at = utcnow()
+        succeeded = True
+        sealed = 0
         try:
             outcome = await run_anchor_sweep_detailed(store, anchorer)
         except asyncio.CancelledError:
             raise
         except Exception:  # a bad cycle never kills the janitor (P9)
+            succeeded = False
             log.exception("audit-anchor sweep cycle failed; continuing")
         else:
             _report(progress, outcome)
+            sealed = outcome.sealed
+            # A tenant that raised is a failed sweep for that tenant. Zero tenants
+            # needs no clause here and must not get one: _record iterates the same
+            # empty list and writes NOTHING, so readiness reports the case as
+            # `attempt_evidence_not_observed` - absent evidence, which is the honest
+            # description of a janitor that cannot see the fleet. A `tenants > 0`
+            # term would read as load-bearing while never being able to be false.
+            succeeded = outcome.failed == 0
+        await _record(store, identity, interval, attempted_at, succeeded, sealed)
         await asyncio.sleep(interval)
+
+
+async def _record(
+    store: Any,
+    identity: str,
+    interval: float,
+    attempted_at: Any,
+    succeeded: bool,
+    sealed: int,
+) -> None:
+    """Write one attempt receipt per tenant this janitor is responsible for.
+
+    Receipts are tenant-scoped, so a sweep that enumerated NO tenants has nowhere
+    to write - which is precisely the failure. The readiness surface catches it as
+    stale evidence instead, exactly as it caught the hitl-expiry outage.
+    """
+    from boltrig.observability.background_jobs import record_background_attempt
+
+    try:
+        orgs = await store.list_orgs()
+    except Exception:  # evidence must never change the sweep outcome
+        log.warning("audit-anchor could not enumerate tenants for evidence", exc_info=True)
+        return
+    for org in orgs:
+        await record_background_attempt(
+            store,
+            tenant_id=org.id,
+            job_name="anchor",
+            process_instance_identity=identity,
+            interval_seconds=interval,
+            attempted_at=attempted_at,
+            succeeded=succeeded,
+            item_count=sealed,
+        )
 
 
 def _report(progress: SweepProgress, outcome: AnchorSweepOutcome) -> None:

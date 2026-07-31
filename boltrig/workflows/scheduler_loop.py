@@ -74,9 +74,20 @@ async def run_workflow_scheduler_forever(
 
     A bad cycle is logged and the loop continues (P9); cancellation propagates.
     """
+    from boltrig.observability.background_jobs import (
+        new_background_process_identity,
+        record_background_attempt,
+    )
+
     clock = now_fn or (lambda: datetime.now(timezone.utc))
     progress = SweepProgress("workflow-scheduler")
+    # The durable half: SweepProgress logs, and a log answers no operator query and
+    # survives no restart. /readyz reads the receipt ledger.
+    identity = new_background_process_identity()
     while True:
+        attempted_at = clock()
+        succeeded = True
+        queued = 0
         try:
             now = clock()
             # Read the desire BEFORE reconciling, so a reconcile that consumes the
@@ -94,9 +105,22 @@ async def run_workflow_scheduler_forever(
         except asyncio.CancelledError:
             raise
         except Exception:
+            succeeded = False
             log.warning("workflow schedule reconciliation failed", exc_info=True)
         else:
             progress.record(seen=overdue, acted=queued)
+        # Best-effort evidence, exactly as the retention janitor does it: it can
+        # never change the outcome, and a failed write must not stall the loop.
+        await record_background_attempt(
+            store,
+            tenant_id=tenant_id,
+            job_name="workflow_scheduler",
+            process_instance_identity=identity,
+            interval_seconds=interval,
+            attempted_at=attempted_at,
+            succeeded=succeeded,
+            item_count=queued,
+        )
         await asyncio.sleep(interval)
 
 

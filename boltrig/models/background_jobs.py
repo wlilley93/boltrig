@@ -19,7 +19,20 @@ from .base import TenantId
 # how carefully it logs. `distillation` was added 2026-07-30 after its sweep
 # wedged for seven minutes in total silence - it had been writing to logs only,
 # which survive no restart and no operator query.
-BACKGROUND_JOB_NAMES = ("hitl_expiry", "retention", "distillation")
+# `anchor`, `workflow_scheduler` and `pump` were added 2026-07-31, once the
+# tolerant reader (_receipts_skipping_unknown) was DEPLOYED. Order matters: adding a
+# name is NOT backward compatible, and a kernel that predates one raised ValueError
+# mapping the row and took the ENTIRE readiness read down, so /readyz reported
+# attempt_evidence_unavailable for every job rather than for the one it could not
+# parse. Never widen this tuple before the reader that survives it is running.
+BACKGROUND_JOB_NAMES = (
+    "hitl_expiry",
+    "retention",
+    "distillation",
+    "anchor",
+    "workflow_scheduler",
+    "pump",
+)
 BACKGROUND_JOB_OUTCOMES = ("succeeded", "failed")
 BACKGROUND_JOB_RECEIPTS_PER_JOB = 4
 BACKGROUND_JOB_MAX_RETURNED_RECEIPTS = (

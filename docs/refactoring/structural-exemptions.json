@@ -156,7 +156,7 @@
       "expires": "2026-12-31"
     },
     "boltrig/fleet/pump.py": {
-      "max_file_lines": 757,
+      "max_file_lines": 755,
       "max_function_lines": 78,
       "over_limit_functions": [],
       "owner": "fleet-maintainers",

@@ -192,8 +192,12 @@ def test_authenticated_platform_projection_is_tenant_scoped_and_opaque():
         # would make this assertion unable to notice a change in what the
         # authenticated projection exposes, which is the one thing it is here to
         # catch. It moved 8 -> 12 on 2026-07-30 when `distillation` was registered
-        # as a third background job, and this test is how that surfaced.
-        "max_returned_receipts": 12,
+        # as a third background job, and this test is how that surfaced. It moved
+        # 12 -> 24 on 2026-07-31 when `anchor`, `workflow_scheduler` and `pump` were
+        # registered: six jobs at four retained receipts each. That DOUBLED the
+        # authenticated payload's bound, which is a deliberate decision and not a
+        # side effect - exactly what keeping this a literal is for.
+        "max_returned_receipts": 24,
     }
     assert [row["process_instance_identity"] for row in body["background_jobs"]] == [
         PROCESS

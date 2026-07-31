@@ -273,17 +273,15 @@ class WorkPump:
         return True
 
     async def run_forever(self, tenant_id: str, interval: float = 2.0) -> None:
-        """Loop :meth:`run_once` with a short idle sleep; cancellable (P9)."""
-        while True:
-            try:
-                busy = await self.run_once(tenant_id)
-            except asyncio.CancelledError:
-                raise
-            except Exception:  # a bad cycle never kills the pump (P9)
-                log.exception("pump cycle failed; continuing")
-                busy = False
-            if not busy:
-                await asyncio.sleep(interval)
+        """Loop :meth:`run_once` with a short idle sleep; cancellable (P9).
+
+        The body lives in :mod:`boltrig.fleet.pump_progress` with the throughput
+        evidence it publishes, and with the account of why this loop reports a FACT
+        rather than the STALLED verdict the other sweeps can justify.
+        """
+        from .pump_progress import run_pump_forever
+
+        await run_pump_forever(self, tenant_id, interval=interval)
 
     # --- one item, end to end -----------------------------------------------------
     async def handle_claimed_item(self, item: WorkItem) -> WorkItem:

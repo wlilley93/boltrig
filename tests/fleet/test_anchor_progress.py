@@ -14,12 +14,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime, timezone
 from dataclasses import dataclass
 
 import pytest
 
 from boltrig.fleet.anchor import AnchorSweepOutcome, run_anchor_sweep_detailed
 from boltrig.fleet.sweep_progress import STALL_CYCLES
+
+
+NOW = datetime(2026, 7, 31, 12, 0, tzinfo=timezone.utc)
 
 
 @dataclass
@@ -128,3 +132,63 @@ def test_a_quiet_deployment_is_not_slandered_as_stalled():
 @pytest.mark.parametrize("tenants,failed,expected", [(3, 0, 3), (3, 3, 0), (0, 0, 0)])
 def test_handled_is_tenants_minus_failures(tenants, failed, expected):
     assert AnchorSweepOutcome(tenants, 0, failed).handled == expected
+
+
+class _RecordingStore(_Store):
+    def __init__(self, orgs):
+        super().__init__(orgs)
+        self.receipts = []
+
+    async def record_background_job_attempt(self, **kw):
+        self.receipts.append(kw)
+        return None
+
+
+@pytest.mark.asyncio
+async def test_zero_tenants_leaves_ABSENT_evidence_not_a_success_receipt():
+    """The honest reading of a janitor that cannot see the fleet.
+
+    Receipts are tenant-scoped, so a sweep that enumerated no tenants has nowhere
+    to write one. That is deliberately NOT patched over with a synthetic row:
+    /readyz then reports `attempt_evidence_not_observed`, which says "nothing has
+    been recorded" rather than "the last run was fine". Recording a success here
+    would reproduce the exact failure - nine hours of doing nothing while looking
+    healthy - inside the mechanism built to expose it.
+    """
+    from boltrig.fleet.anchor import _record
+
+    store = _RecordingStore([])
+    await _record(store, "bjp_" + "a" * 24, 86400.0, NOW, True, 0)
+    assert store.receipts == [], "no tenant means no receipt, not a fabricated one"
+
+
+@pytest.mark.asyncio
+async def test_one_receipt_per_tenant_carries_the_sealed_count():
+    from boltrig.fleet.anchor import _record
+
+    store = _RecordingStore([_Org("a"), _Org("b")])
+    await _record(store, "bjp_" + "b" * 24, 86400.0, NOW, True, 3)
+
+    assert [r["tenant_id"] for r in store.receipts] == ["a", "b"]
+    assert all(r["job_name"] == "anchor" for r in store.receipts)
+    assert all(r["item_count"] == 3 for r in store.receipts)
+
+
+@pytest.mark.asyncio
+async def test_a_failing_tenant_makes_the_receipt_a_failure():
+    """succeeded is failed==0, so one bad tenant is visible on /readyz."""
+    outcome = AnchorSweepOutcome(tenants=2, sealed=1, failed=1)
+    assert (outcome.failed == 0) is False
+    assert outcome.handled == 1
+
+
+@pytest.mark.asyncio
+async def test_evidence_failure_never_changes_the_sweep_outcome():
+    """A store that cannot enumerate must not take the janitor down (P9)."""
+    from boltrig.fleet.anchor import _record
+
+    class _Broken:
+        async def list_orgs(self):
+            raise RuntimeError("db gone")
+
+    await _record(_Broken(), "bjp_" + "c" * 24, 86400.0, NOW, True, 0)  # must not raise
