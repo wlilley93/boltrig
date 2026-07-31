@@ -546,19 +546,19 @@ memory:
   fanout:
     mode: ledger_then_projection       # commit once, then write projections
     execution: inline                  # inline | queued; queued uses Hatchet/local executor tasks
-    # NOT READ BY ANY CODE (measured 2026-07-30). Left in place rather than
-    # deleted so an existing manifest still parses, but the comments now say what
-    # actually happens instead of what the field name implies.
-    #
-    # retry_failed: retry is a property of `execution: queued`, which bounds
-    # attempts at 3. Under the default `execution: inline` there is NO retry loop
-    # at all, so a failed projection is not reattempted whatever this says. Tracked
-    # on task #40; the fix is either to honour the flag or to move retry inline.
+    # READ since 2026-07-31 (task #40; build_memory_projection_fanout). True:
+    # under `execution: queued` failed operations retry within the bounded budget
+    # (max_operation_attempts, 3); under `execution: inline` a failed backend
+    # call gets exactly ONE bounded reattempt - inline runs on the request path,
+    # so a retry LOOP would turn a down backend into a hung verb. False: a single
+    # attempt in both modes, failing fast, and the status row records
+    # max_operation_attempts=1 so a reader can see fast-fail was chosen.
     retry_failed: true
-    # record_projection_status: this one is TRUE, just not optional - status is
-    # recorded unconditionally (memory/projection_delivery_attempts.py). Setting it
-    # false would be silently ignored.
-    record_projection_status: true
+    # record_projection_status was DELETED 2026-07-31 (task #40): status is
+    # recorded unconditionally (memory/projection_delivery_attempts.py), which is
+    # the receipt discipline GOALS 1-2 mandate - a knob to switch observability
+    # off is not a feature. An existing manifest still carrying the key parses;
+    # the key is simply not read, and never was.
   embedding_endpoint: local-sensitive  # sensitive-safe default (SEC-43)
   extraction_endpoint: local-sensitive # entity/relationship extraction model
   local_endpoints: [local-sensitive]   # endpoints treated as on-box for residency

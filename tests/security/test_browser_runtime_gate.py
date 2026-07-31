@@ -119,8 +119,10 @@ def _stub_path(tmp_path: Path, *, wanted: bool) -> Path:
         "esac\n",
         encoding="utf-8",
     )
+    # The stub stays alive only long enough to be observably "running"; a long
+    # sleep here holds file descriptors and pads the wall clock for nothing.
     (binder / "chromium").write_text(
-        f"#!/bin/sh\ntouch {marker}\nsleep 5\n", encoding="utf-8"
+        f"#!/bin/sh\ntouch {marker}\nsleep 2\n", encoding="utf-8"
     )
     (binder / "browser-use").write_text("#!/bin/sh\ncat > /dev/null\nexit 0\n", encoding="utf-8")
     for name in ("python", "chromium", "browser-use"):
@@ -137,7 +139,10 @@ def _run_entrypoint(tmp_path: Path, *, wanted: bool) -> tuple[int, bool]:
         ["sh", str(REPO / "scripts" / "fleet-entrypoint.sh"), "true"],
         env=env,
         capture_output=True,
-        timeout=60,
+        # Generous on purpose: this test runs inside a fully parallel suite on a
+        # box that may also be building; 60s blew once under load (2026-07-31)
+        # and a timeout here reads as the GATE failing, which it was not.
+        timeout=180,
     )
     return proc.returncode, (tmp_path / "chromium-started").exists()
 
