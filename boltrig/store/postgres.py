@@ -89,17 +89,17 @@ from boltrig.models.errors import SchemaValidationError
 _SCHEMA = Path(__file__).with_name("schema.sql")
 _RLS = Path(__file__).with_name("rls.sql")
 
-# The tenant a call acts for, and the binding that keeps _apply_guc and the
-# method's own argument from ever disagreeing, live in tenant_scope.
-# Re-exported here because callers and tests import them from this module.
-from .tenant_scope import (  # noqa: E402,F401  (deliberate re-export)
-    _bind_tenant_from_argument,
-    _current_tenant,
-    _tenant_of,
-    bind_conn_to_tenant,
-    bind_tenant_on_store_methods,
-    pool_assumes_app_role,
-    set_current_tenant,
+# Tenant binding lives in tenant_scope; re-exported because callers import it from
+# here. `X as X` is REQUIRED - mypy disallows implicit re-export, so a plain import
+# is private to this module and every caller fails typecheck (broke CI 2026-07-31).
+from .tenant_scope import (  # noqa: E402,F401
+    _bind_tenant_from_argument as _bind_tenant_from_argument,
+    _current_tenant as _current_tenant,
+    _tenant_of as _tenant_of,
+    bind_conn_to_tenant as bind_conn_to_tenant,
+    bind_tenant_on_store_methods as bind_tenant_on_store_methods,
+    pool_assumes_app_role as pool_assumes_app_role,
+    set_current_tenant as set_current_tenant,
 )
 
 
