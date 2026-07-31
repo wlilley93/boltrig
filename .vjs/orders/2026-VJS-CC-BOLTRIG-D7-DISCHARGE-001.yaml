@@ -1,0 +1,51 @@
+id: 2026-VJS-CC-BOLTRIG-D7-DISCHARGE-001
+court: county
+jurisdiction: default
+repo_code: boltrig
+status: binding
+issue: d7-discharge
+holding: |
+  D7 of [2026] VJS-CC-BOLTRIG-DEVELOPMENT-POSTURE-001 is VARIED, not waived. The
+  Principal's personal relay of the drafted notice discharges the DUTY; the
+  CHECKABLE (a channel_outbox row addressed to the client) is substituted by this
+  court with a pair that keeps both properties the original had: performance of
+  the telling, and a machine-verifiable row discoverable from the client's own
+  tenant database.
+
+  THE RATIO. A directive's checkable proves its duty and is not the duty. Where
+  the route the checkable assumed becomes unavailable or a lawful route performs
+  the duty more fully, the court may vary the checkable - but only to another
+  machine-verifiable record of equal or greater discoverability to the protected
+  party, never to prose, and ONLY the court may make the substitution. A party
+  burdened by a directive who performs the duty by another route must return for
+  the variation before claiming discharge.
+
+  The advocate's proposed substitute (a dated repository record of the relay) was
+  REFUSED as insufficient alone: the client can discover an outbox row from her
+  own deployment; she cannot discover a file in a repository she has never seen,
+  and a variation landing on prose is the defect the checkable existed to prevent.
+
+directives:
+- id: V1
+  actor: principal
+  must: relay_the_drafted_notice_docs_findings_2026_07_31_cv_client_notice_D7_md_pinned_by_sha256_at_the_moment_of_relay_to_the_client_through_his_own_channel_and_state_the_date_and_channel_class_for_the_record_a_summary_of_the_notice_is_not_the_notice
+  when: null
+- id: V2
+  actor: lexby
+  must: after_V1_write_a_host_boundary_security_event_on_the_cv_tenant_reason_d7_notice_relayed_detail_carrying_the_notice_sha256_the_channel_class_the_relay_date_as_stated_by_the_principal_and_the_audit_sequence_range_262_266_checkable_a_select_on_the_cv_tenant_database_returning_that_row_a_repository_note_with_no_corresponding_tenant_row_satisfies_nothing
+  when: null
+
+assent_source: principal_direction
+implementation_status: OPEN
+implementation_note: |
+  Convened 2026-07-31 (SUBMISSION-2026-07-31-170419,
+  CONVENING-county-2026-07-31-170433) after the Principal directed "You relay it
+  yourself" and the advocate declined to substitute the checkable on his own
+  authority. Opinion: docs/vjs/2026-VJS-CC-BOLTRIG-D7-DISCHARGE-001-opinion.md.
+
+  V2's mechanism is built and tested ahead of need: scripts/record_d7_relay.py
+  writes the security event through write_host_boundary_security_event with the
+  exact detail shape the directive names, and refuses to run without the relay
+  date and channel class (the V1 facts only the Principal can supply). It has
+  NOT been run: V1 has not happened yet, and a row asserting a relay that has
+  not happened is the inverse of the expired-unheard defect.

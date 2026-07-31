@@ -78,6 +78,7 @@ def test_a_fully_declared_posture_permits_the_diversion() -> None:
 
 
 # --- C1: an AFFIRMATIVE development signal ---------------------------------
+# Binds directive C1 of [2026] VJS-CC-BOLTRIG-DEV-EGRESS-LOOPBACK-001.
 
 
 def test_c1_absence_of_a_production_signal_does_not_enable_the_diversion() -> None:
@@ -109,6 +110,7 @@ def test_c1_a_production_signal_beats_the_declaration() -> None:
 
 
 # --- C2: no real ingress posture -------------------------------------------
+# Binds directive C2 of [2026] VJS-CC-BOLTRIG-DEV-EGRESS-LOOPBACK-001.
 
 
 def test_c2_real_ingress_refuses_the_diversion_regardless_of_the_dev_tag() -> None:
@@ -134,6 +136,7 @@ def test_c2_the_runtime_reads_all_three_ingress_limbs() -> None:
 
 
 # --- C5: a mandatory, honoured expiry ---------------------------------------
+# Binds directive C5 of [2026] VJS-CC-BOLTRIG-DEV-EGRESS-LOOPBACK-001.
 
 
 def test_c5_an_unbounded_posture_is_refused() -> None:
@@ -169,6 +172,7 @@ def test_a_diversion_with_nowhere_to_go_is_refused() -> None:
 
 
 # --- C3: the disclosure, on all three surfaces -----------------------------
+# Binds directive C3 of [2026] VJS-CC-BOLTRIG-DEV-EGRESS-LOOPBACK-001.
 
 
 def test_c3_the_notice_names_both_the_true_destination_and_the_silence() -> None:
@@ -305,6 +309,7 @@ def test_c3_the_disclosure_is_part_of_the_approval_fingerprint() -> None:
 
 
 # --- C4: the record says diverted, and no reader can read "sent" -----------
+# Binds directive C4 of [2026] VJS-CC-BOLTRIG-DEV-EGRESS-LOOPBACK-001.
 
 
 @pytest.mark.asyncio

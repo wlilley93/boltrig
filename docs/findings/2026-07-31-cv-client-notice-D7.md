@@ -66,20 +66,24 @@ reduced.
 
 ## How this sits with the order's checkable
 
-D7 states its checkable as **a `channel_outbox` row addressed to
-`info@classicalvisas.com`** referencing the audit row and the re-registration, and
-adds that "a `hitl_requests` row that expired unheard satisfies nothing".
+DECIDED: **[2026] VJS-CC-BOLTRIG-D7-DISCHARGE-001** (2026-07-31) varied D7 rather
+than waiving it. The Principal's relay discharges the duty; the checkable is
+substituted by the court with a pair that keeps the original's property (a row the
+client can discover from her own deployment):
 
-The Principal has directed that he relay this himself rather than have the stack
-send it. That discharges the **duty** - the act is put to the party it was taken
-from - but it cannot produce the row the order names, so the directive cannot be
-closed as `satisfied` on its own terms by this route.
+- **V1** - the Principal relays THIS notice, pinned by sha256 at the moment of
+  relay, and states the date and channel class for the record. A summary of the
+  notice is not the notice.
+- **V2** - after V1, `scripts/record_d7_relay.py` writes a host-boundary security
+  event on the cv tenant (`reason=d7_notice_relayed`) carrying the notice digest,
+  channel class, relay date, and the audit range 262-266. Checkable exactly as the
+  original was: a select on the cv tenant database returning that row.
 
-The court was plainly alive to hollow discharge when it wrote that sentence, so
-the substitution is not mine to make. This is filed for the court as a question of
-whether a discharge outside the system satisfies D7, and if so what evidence
-stands in for the outbox row. Until it rules, D7 remains **open** with this notice
-drafted and the Principal's chosen route recorded.
+The script requires the V1 facts and refuses blanks, so the pair cannot close out
+of order. A repository note with no corresponding tenant row satisfies nothing.
 
 Nothing has been sent. The standing engineering instruction against email to this
 client is untouched by any of the above.
+
+**For the Principal: when you have relayed it, say so with the date and the
+channel class (e.g. "relayed 2026-08-01, in person"), and V2 runs then.**
