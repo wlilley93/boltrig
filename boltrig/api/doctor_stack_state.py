@@ -26,7 +26,7 @@ def stack_state_checks(
     checks: list[StackStateCheck] = []
     herdr_needed = _needs_herdr(manifest)
     opencode_needed = _needs_opencode(manifest)
-    browser_needed = _needs_browser_cli(manifest)
+    browser_needed = needs_browser_cli(manifest)
     herdr_home = (env.get("BOLTRIG_HERDR_HOME") or "").strip()
     opencode_home = (env.get("BOLTRIG_OPENCODE_HOME") or "").strip()
     browser_home = (env.get("BOLTRIG_BROWSER_CLI_HOME") or "").strip()
@@ -90,7 +90,15 @@ def _needs_opencode(manifest: FleetManifest) -> bool:
     return any(endpoint.kind == "opencode" for endpoint in manifest.models.endpoints)
 
 
-def _needs_browser_cli(manifest: FleetManifest) -> bool:
+def needs_browser_cli(manifest: FleetManifest) -> bool:
+    """Whether this tenant declares browser automation at all.
+
+    Public because it is no longer only a doctor question. The fleet entrypoint
+    starts Chromium on this answer and the readiness gate requires the tool on
+    it (``boltrig.fleet.browser_runtime``), so a second copy of the three limbs
+    below would let the process that RUNS the browser and the gate that DEMANDS
+    it drift apart.
+    """
     stack = manifest.section("stack")
     if str(stack.get("browser_automation") or "").lower() == "browser_cli":
         return True
