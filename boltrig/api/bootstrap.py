@@ -19,6 +19,15 @@ from boltrig.api.birth_profile_startup import (
 from boltrig.api.device_bootstrap import register_device_actions
 from boltrig.api.hitl_resume_bridge import resume_held_write_route
 from boltrig.config import apply_manifest, load_manifest, load_settings, production_signal
+
+# Re-exported: the guards moved to boot_guards.py, and several tests monkeypatch
+# them THROUGH this module (`monkeypatch.setattr(bootstrap, ...)`). `X as X` is
+# required - mypy disallows implicit re-export, so a plain import is private here
+# and every caller fails typecheck.
+from .boot_guards import (  # noqa: F401
+    refuse_default_audit_key_in_prod as refuse_default_audit_key_in_prod,
+    refuse_dev_auth_in_prod as refuse_dev_auth_in_prod,
+)
 from boltrig.config.environment import is_truthy
 from boltrig.config.integration_catalogue import (
     provision_builtin_integration_catalogue,
@@ -163,13 +172,19 @@ async def _register_web_fetch(kernel: Kernel, tenant_id: str, network_cfg) -> No
     log.info("web.fetch verb registered (governed internet access, SSRF-guarded)")
 
 
-async def _register_channel_send(kernel: Kernel, tenant_id: str) -> None:
+async def _register_channel_send(kernel: Kernel, tenant_id: str, manifest=None) -> None:
     """Register the governed outbound channel verb (decision 0003). channel.send
     runs the chokepoint like any verb: consequence=high (HITL by default, SEC-39),
-    grant-checked, audited; the kernel executes the outbound send directly."""
+    grant-checked, audited; the kernel executes the outbound send directly. A
+    registration with no manifest gets no diversion resolver, so the demo tenant
+    and every bare boot send normally (``announced_diversion_fn``)."""
     from boltrig.adapters.builtin.channel_send import build_channel_send
+    from boltrig.kernel.dev_egress_runtime import announced_diversion_fn
 
-    await kernel.register_adapter(tenant_id, build_channel_send(kernel.store))
+    diversion = announced_diversion_fn(manifest)
+    await kernel.register_adapter(
+        tenant_id, build_channel_send(kernel.store, diversion=diversion)
+    )
     log.info("channel.send verb registered (governed outbound, HITL by default)")
 
 
@@ -256,7 +271,7 @@ async def _seed_from_manifest(kernel: Kernel, manifest) -> None:
     await register_knowledge(kernel, manifest.tenant_id, manifest.section("knowledge"))
     await _register_control_plane(kernel, manifest.tenant_id)
     await _register_skill_shelf(kernel, manifest.tenant_id)
-    await _register_channel_send(kernel, manifest.tenant_id)
+    await _register_channel_send(kernel, manifest.tenant_id, manifest)
     await register_device_actions(kernel, manifest.tenant_id)
     if os.environ.get("BOLTRIG_EMOTION", "").strip() == "1":
         # desktop-only: the same box that publishes the phenotype accepts voluntary gestures (WL-3).
@@ -459,59 +474,6 @@ def _deny_all_resolver():
         raise HTTPException(status_code=401, detail="authentication is not configured")
 
     return resolver
-
-
-def refuse_dev_auth_in_prod(env: dict | None = None) -> None:
-    """Abort if dev auth is enabled with any production signal (IAM-09).
-
-    The header-trusting resolver is a debug bypass; leaving it reachable in
-    production is the #1 fast-build failure. Fail hard, do not merely warn."""
-    signal = production_signal(env)
-    if signal is not None:
-        raise RuntimeError(
-            f"FATAL: BOLTRIG_DEV_AUTH is set with a production signal ({signal}). "
-            "Dev auth is a header-trusting bypass and must never run in production "
-            "(IAM-09). Unset BOLTRIG_DEV_AUTH and configure OIDC_*."
-        )
-
-
-def refuse_default_audit_key_in_prod(env: dict | None = None) -> None:
-    """Abort if the audit-chain HMAC key is unset/default with a production signal
-    (K-19). The hash chain is only tamper-evident while the key is secret; shipping
-    the in-source `dev-insecure-audit-key` in prod makes the chain forgeable. Fail
-    hard, mirroring refuse_dev_auth_in_prod."""
-    import os
-
-    from boltrig.config.weak_secrets import is_placeholder_secret
-
-    e = env if env is not None else os.environ
-    signal = production_signal(e)
-    key = e.get("BOLTRIG_AUDIT_HMAC_KEY")
-    # [2026] VJS-CC-BOLTRIG-AUDIT-KEY-PROVISIONING-001. This used to compare
-    # against the IN-SOURCE default and blank only, so the value .env.example
-    # actually shipped (change-me-to-a-long-random-secret) tripped NEITHER this
-    # fatal nor the warning below. A deployment following the documented
-    # `cp .env.example .env` therefore ran the audit chain keyed by a public
-    # constant in this repository while reporting itself tamper-evident. The
-    # shared predicate knows every placeholder the project has ever shipped.
-    if signal is not None and is_placeholder_secret(key):
-        raise RuntimeError(
-            f"FATAL: BOLTRIG_AUDIT_HMAC_KEY is unset/default with a production signal "
-            f"({signal}). The audit chain is forgeable without a secret key (K-19). "
-            "Set a strong BOLTRIG_AUDIT_HMAC_KEY."
-        )
-    if is_placeholder_secret(key):
-        # No production signal, so this is not fatal - but the 2026-07-02 audit
-        # called H3 "silently defaults", and the silence is the part that makes it
-        # dangerous. Nothing sets a production signal by default (compose emits an
-        # empty BOLTRIG_PRODUCTION), so a real deployment can reach here and run a
-        # hash chain keyed by a public constant in this repository, believing the
-        # audit log is tamper-evident. Say so, every boot.
-        log.warning(
-            "audit chain is using the IN-SOURCE default HMAC key: it is NOT "
-            "tamper-evident. Anyone with this repository can forge the chain. "
-            "Set BOLTRIG_AUDIT_HMAC_KEY (and a production signal) before trusting it."
-        )
 
 
 def select_principal_resolver(manifest_snapshot: Any = _MANIFEST_UNSET):
