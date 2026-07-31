@@ -41,13 +41,18 @@ misconfigurations:
 
 vulnerabilities:
   - id: CVE-2026-16804
+    purls: &chromium_purls
+      - "pkg:deb/debian/chromium*"
+      - "pkg:deb/debian/chromium-common*"
     expired_at: 2026-09-11
     statement: &chromium_statement >-
-      SCOPE: no `paths` filter, deliberately. These are dpkg (OS package) findings and
-      trivy attributes them to the PACKAGE, not a file, so a `paths` entry can never
-      match and the ignore is inert - the first attempt used `usr/bin/chromium` and the
-      gate stayed red, which is how this was found. chromium appears only in the fleet
-      image, so an id-scoped ignore is bounded in practice.
+      SCOPED BY PURL, NOT BY PATH, and that distinction is load-bearing. These are dpkg
+      findings: trivy attributes them to the PACKAGE, not a file, so a `paths` entry can
+      never match and the ignore is silently INERT - the first attempt used
+      `usr/bin/chromium`, the gate stayed red, and that is how this was found. `purls`
+      scopes to pkg:deb/debian/chromium* only, which honours the scoping the ratio of
+      [2026] VJS-CC-BOLTRIG-SUPPLY-CHAIN-ADVISORY-ACCEPTANCE-001 requires while actually
+      matching. This is NOT a global ignore.
       chromium 150.0.7871.181-1~deb12u1 in the fleet image, which ships it for the
       browser-cli adapter (browser-use). Trivy reports "fixed 151.0.7922.47-1", but
       that is the UPSTREAM CHROME version, not a Debian package: measured 2026-07-31,
@@ -74,12 +79,15 @@ vulnerabilities:
       an unscanned image was deployed to both prod stacks on 2026-07-31 while branch
       protection was being bypassed - silence is what this file exists to prevent.
   - id: CVE-2026-16805
+    purls: *chromium_purls
     expired_at: 2026-09-11
     statement: *chromium_statement
   - id: CVE-2026-16806
+    purls: *chromium_purls
     expired_at: 2026-09-11
     statement: *chromium_statement
   - id: CVE-2026-16807
+    purls: *chromium_purls
     expired_at: 2026-09-11
     statement: *chromium_statement
   - id: GHSA-hrxh-6v49-42gf

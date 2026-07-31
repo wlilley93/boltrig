@@ -45,9 +45,24 @@ def test_iac_scan_is_pinned_offline_blocking_and_ci_enforced() -> None:
     assert exceptions
     assert all(item.get("paths") and item.get("expired_at") and item.get("statement") for item in exceptions)
     # 2026-VJS-CC-BOLTRIG-SUPPLY-CHAIN-ADVISORY-ACCEPTANCE-001 D1: a vulnerability
-    # acceptance is scoped to the operative path - an entry with no paths (a
-    # global ignore) or no expiry fails here, so CVE-2026-56852 can never be
-    # silenced where x/text is reachable in another artefact.
+    # acceptance is SCOPED - an entry with no scope (a global ignore) or no expiry
+    # fails here, so CVE-2026-56852 can never be silenced where x/text is reachable
+    # in another artefact.
+    #
+    # SCOPE IS `paths` OR `purls`, AND REQUIRING paths ALONE WAS A BUG IN THIS GATE.
+    # trivy attributes an embedded binary's finding to a FILE (usr/local/bin/rclone)
+    # but an OS-package finding to the PACKAGE, with no PkgPath at all. So a `paths`
+    # entry on a dpkg CVE can never match and the ignore is silently INERT: the gate
+    # was mandating a shape guaranteed not to work for that whole class, and would
+    # have forced any OS-package acceptance to be decorative. Measured 2026-07-31 on
+    # the chromium advisories - `paths: usr/bin/chromium` loaded fine and suppressed
+    # nothing. `purls` is the scoping trivy honours for packages, so either is
+    # accepted and NEITHER is optional.
     vulnerabilities = ignore["vulnerabilities"]
     assert vulnerabilities
-    assert all(item.get("paths") and item.get("expired_at") and item.get("statement") for item in vulnerabilities)
+    assert all(
+        (item.get("paths") or item.get("purls"))
+        and item.get("expired_at")
+        and item.get("statement")
+        for item in vulnerabilities
+    )
