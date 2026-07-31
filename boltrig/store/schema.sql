@@ -642,7 +642,7 @@ CREATE TABLE IF NOT EXISTS background_job_receipts (
     tenant_id                 TEXT NOT NULL,
     job_name                  TEXT NOT NULL
                               CHECK (job_name IN ('hitl_expiry','retention','distillation',
-                                                  'anchor','workflow_scheduler','pump')),
+                                                  'anchor','workflow_scheduler','pump', 'reflection')),
     process_instance_identity TEXT NOT NULL
                               CHECK (
                                 process_instance_identity

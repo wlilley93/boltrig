@@ -121,14 +121,35 @@ async def run_pump_forever(pump: Any, tenant_id: str, *, interval: float = 2.0) 
             failed = True
         throughput.observe(busy=busy, failed=failed)
         if throughput.due():
+            window_seconds = throughput.window_seconds
+            receipt = throughput.take()
             await record_background_attempt(
                 pump._store,
                 tenant_id=tenant_id,
                 job_name="pump",
                 process_instance_identity=identity,
-                interval_seconds=throughput.window_seconds,
-                **throughput.take(),
+                interval_seconds=window_seconds,
+                **receipt,
             )
+            # #29: reflection's own evidence, only where the feature is ON. A
+            # window with item_count=0 and succeeded=True is IDLE (no terminal
+            # items reflected); succeeded=False is BROKEN (some attempt raised,
+            # and the pump log carries the why at WARNING); no receipts at all
+            # means reflection is disabled or no pump runs. Three states that
+            # were one indistinguishable silence for a month.
+            reflection = getattr(pump, "reflection_window", None)
+            if getattr(pump, "_reflect_enabled", False) and reflection is not None:
+                await record_background_attempt(
+                    pump._store,
+                    tenant_id=tenant_id,
+                    job_name="reflection",
+                    process_instance_identity=identity,
+                    interval_seconds=window_seconds,
+                    attempted_at=receipt["attempted_at"],
+                    succeeded=reflection["failed"] == 0,
+                    item_count=reflection["written"],
+                )
+                reflection.update(attempted=0, written=0, failed=0)
         if not busy:
             await asyncio.sleep(interval)
 

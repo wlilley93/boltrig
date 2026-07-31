@@ -32,6 +32,11 @@ BACKGROUND_JOB_NAMES = (
     "anchor",
     "workflow_scheduler",
     "pump",
+    # #29: reflection publishes a receipt per pump window WHEN ENABLED, so
+    # "never written a row" is decidable: no receipts = disabled or no pump;
+    # receipts with item_count=0 = idle (no terminal items); succeeded=False =
+    # broken, with the WARNING log saying why.
+    "reflection",
 )
 BACKGROUND_JOB_OUTCOMES = ("succeeded", "failed")
 BACKGROUND_JOB_RECEIPTS_PER_JOB = 4

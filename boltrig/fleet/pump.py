@@ -43,7 +43,7 @@ from boltrig.workflows.generator import learn_from_success
 from boltrig.workflows.library import WorkflowLibrary
 
 from . import lease_token, permanent_runtime as permanent
-from .authority import context_for, reflection_context, route_to_head
+from .authority import context_for, route_to_head
 from .chief_of_staff import ChiefOfStaff, Department
 from .department_head import DepartmentHead, tree_root_id
 
@@ -137,21 +137,6 @@ def outcome_score(terminal_status: str, degraded: bool) -> dict[str, Any]:
     }
 
 
-def reflection_lesson(item: WorkItem, terminal_status: str, outcome: dict) -> str:
-    """A short, deterministic lesson distilled from an outcome (Phase 3, US-WFL-07).
-
-    Deliberately a fixed template, not a model call, so reflection is cheap and
-    reproducible. The content is bland by construction so it clears the memory
-    adapter's secret / injection screen, and it is stored THROUGH the chokepoint,
-    so that screen still runs on it (it is never bypassed)."""
-    score = outcome.get("score")
-    return (
-        f"Lesson from work item {item.id} ({item.source}): the task "
-        f"'{item.intent}' reached {terminal_status} with outcome score {score} "
-        f"(degraded={bool(item.degraded)})."
-    )
-
-
 async def persist_new_work_items(
     store: Any, parent: WorkItem, new_items: list[Any] | None, *, source: str
 ) -> list[WorkItem]:
@@ -224,6 +209,10 @@ class WorkPump:
         self._reflect_enabled = (
             reflect if reflect is not None else os.getenv("BOLTRIG_REFLECT") == "1"
         )
+        # #29: per-window reflection outcomes, published as a `reflection`
+        # receipt by run_pump_forever (pump_progress) and reset there. Public
+        # because the publisher lives outside this file (size ratchet).
+        self.reflection_window = {"attempted": 0, "written": 0, "failed": 0}
         hitl = getattr(kernel_or_store, "hitl", None)
         if hitl is None:  # bare store: build the manager lazily (no kernel import cost)
             from boltrig.kernel.hitl import HITLManager
@@ -674,33 +663,9 @@ class WorkPump:
                       exc_info=True)
 
     async def _reflect(self, item: WorkItem, run_id: str, terminal_status: str) -> None:
-        """Distil one lesson and store it via the memory verb, best-effort (US-WFL-07).
+        from boltrig.fleet.reflection import reflect_terminal_item
 
-        Governed: the write goes through ``kernel.invoke`` (the one chokepoint), so the
-        memory adapter's scope + secret + injection screens all run on it. Provenance is the
-        run id (``source_ref``) and work item id. OFF unless enabled, and any reflection
-        failure is swallowed so it can never fail the run (P9). Carries the narrow reflection
-        seat, NOT the item's execution context (``authority.REFLECTION_GRANTS``)."""
-        if not self._reflect_enabled or self._kernel is None:
-            return
-        outcome = (item.result or {}).get("outcome") or {}
-        lesson = reflection_lesson(item, terminal_status, outcome)
-        try:
-            ctx = reflection_context(item, run_id)
-            await self._kernel.invoke(
-                "memory", "memory.remember",
-                {
-                    "content": lesson,
-                    "kind": "lesson",
-                    "source_kind": "reflection",
-                    "source_ref": run_id,
-                },
-                ctx,
-            )
-        except asyncio.CancelledError:
-            raise
-        except Exception:  # reflection is best-effort; never fail the run (P9)
-            log.debug("reflection failed for %s; continuing", item.id, exc_info=True)
+        await reflect_terminal_item(self, item, run_id, terminal_status)
 
 
 # --- the org factory ----------------------------------------------------------
