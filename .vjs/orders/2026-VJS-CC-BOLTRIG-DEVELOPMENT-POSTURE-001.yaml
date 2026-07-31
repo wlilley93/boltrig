@@ -165,8 +165,15 @@ implementation_note: |
   unfalsifiable - the check-that-cannot-fail defect written into the fix for it. Caught by
   running the seeds rather than assuming they would fail.
 
-  D7 OPEN and BLOCKED on the Principal. It requires an outward communication to the client, and
-  the Principal has a standing instruction not to email that client. Nothing has been sent. The
-  lawful routes are that the Principal relays it himself, or directs another channel.
+  D7 VARIED by [2026] VJS-CC-BOLTRIG-D7-DISCHARGE-001 (2026-07-31). The Principal directed that
+  he relay the drafted notice himself; the advocate declined to substitute the checkable on his
+  own authority and returned to court. The variation replaces the channel_outbox checkable with
+  a pair: V1 the Principal's relay of the pinned notice (stated with date and channel class),
+  V2 a host-boundary security event on the cv tenant carrying the notice sha256 - selectable
+  from the client's own database, the property the original checkable existed for. D7 closes
+  when both exist; a repository note with no corresponding tenant row satisfies nothing. The
+  notice is drafted (docs/findings/2026-07-31-cv-client-notice-D7.md); NOTHING has been sent by
+  any route; V2's mechanism (scripts/record_d7_relay.py) is built, tested, and refuses to run
+  until the V1 facts are supplied.
 
   D8 OPEN.

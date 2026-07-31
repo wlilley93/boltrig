@@ -1,0 +1,64 @@
+id: SUBMISSION-2026-07-31-170419
+court_requested: county
+jurisdiction: default
+question: Does the Principal personally relaying the drafted D7 notice discharge D7 of DEVELOPMENT-POSTURE-001, whose checkable is a channel_outbox row - and if so, what evidence stands in its place?
+facts: |
+  # Discharge of D7 by a route the order did not name
+
+  Own motion. The Principal has directed that HE will relay the D7 notice to the
+  client through his own channel (AskUserQuestion answer, 2026-07-31: "You relay it
+  yourself"). Does that discharge the directive?
+
+  ## Facts
+
+  F1. D7 of [2026] VJS-CC-BOLTRIG-DEVELOPMENT-POSTURE-001 orders the act put to the
+  party it was taken from. Its checkable is exact: "a select on the cv tenant
+  database returning a channel_outbox row addressed to info@classicalvisas.com
+  referencing the audit row and the adapter re-registration", adding "a
+  hitl_requests row that expired unheard satisfies nothing".
+
+  F2. The notice is drafted (docs/findings/2026-07-31-cv-client-notice-D7.md);
+  every statement is tied to an audit sequence (seq 262-266, cvboltrig). Nothing
+  has been sent by any route.
+
+  F3. The engineering record carries a standing instruction against email to this
+  client. A delivered outbox row addressed to info@classicalvisas.com is in tension
+  with it unless the channel is not email or the Principal lifts it for one act.
+
+  F4. The stack can now produce an outbox row WITHOUT delivering (the
+  DEV-EGRESS-LOOPBACK-001 diversion), but C2 refuses it under real ingress and
+  Classical Visas runs session ingress, so the loopback is unavailable on the one
+  tenant D7 names - and a diverted row records `diverted`; a message the client
+  never receives is the expired-unheard shape in different clothes.
+
+  F5. The duty and the checkable therefore come apart: the Principal's relay can
+  perform the whole duty while the named row is never produced; a delivered row the
+  client ignores would produce the checkable while performing less of the duty.
+
+  ## Question
+
+  Does the relay discharge D7 - and if so, what evidence stands in the record in
+  place of the channel_outbox row?
+
+  ## Both ways
+
+  FOR: the checkable is the court's PROOF of the duty, not the duty. The mischief
+  is a client kept ignorant; a notice put into her hands by the human she deals
+  with remedies it more surely than a row she may never read - the expired-unheard
+  sentence shows the court cared about the telling. Substitute evidence in the same
+  spirit: a dated repository record of what was sent, when, by what channel, with
+  the Principal's own statement that it was sent.
+
+  AGAINST: the court chose a checkable a machine can verify from the tenant
+  database. "The Principal says he sent it" is prose-not-enforcement; the client
+  cannot discover it from her own deployment the way she could an outbox row.
+  Substituting it converts a verifiable directive into an honour-system one, at the
+  request of the party the directive burdens - the shape of every eroded control.
+
+  ## Not before the court
+
+  The Tag:Not Dev default (reserved); the notice's content; the email instruction
+  beyond how it bears on the checkable.
+requested_order: TBD
+private_boundary: local
+word_count: 481
