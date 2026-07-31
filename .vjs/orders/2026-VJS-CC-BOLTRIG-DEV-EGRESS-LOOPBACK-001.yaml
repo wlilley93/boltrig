@@ -1,0 +1,89 @@
+id: 2026-VJS-CC-BOLTRIG-DEV-EGRESS-LOOPBACK-001
+court: county
+jurisdiction: default
+repo_code: boltrig
+status: binding
+issue: dev_egress_loopback
+holding: |
+  PERMITTED, on five conditions, ALL of which must hold before the diversion may run once.
+
+  The matter: may the stack, under a development tag enabled by the Principal, divert governed
+  outbound egress (`channel.send`) away from its declared external recipient and into a webhook
+  the stack itself receives?
+
+  The relief is narrower than it appears and the risk runs OPPOSITE to the posture cases: this
+  does not widen what may leave the system, it prevents anything leaving. That is why it is
+  granted. It is granted CONDITIONALLY because the property that makes it safe - nothing reaches
+  the recipient - is a lie told to the approver unless the record says so at the point of
+  approval.
+
+  The advocate pleaded this as an independence question. It is NOT one, and the court declined to
+  decide it on that ground.
+
+  THE RATIO. A control may be narrowed by a declared posture where the narrowing removes the
+  protected exposure entirely; but where the narrowing makes a human's approval mean something
+  other than what the human is being asked to approve, the narrowing must be disclosed at the
+  point of approval, in the approval itself.
+
+  Three corollaries. (a) Diverting an effect is not suspending its control: where the initiator
+  is an agent and the approver a human outside the initiator set, four-eyes is SATISFIED, not
+  lifted, so [2026] VJS-CC-BOLTRIG-DEVELOPMENT-POSTURE-001's ratio is not engaged; a court must
+  not stretch a precedent to cover a case merely because the same tag enables both. (b) The
+  DIRECTION of the relaxation decides the fence: a posture permitting MORE to leave needs a fence
+  making it unreachable in production, while a posture permitting LESS to leave needs the
+  converse - that the diversion cannot persist into production unnoticed, the failure mode being
+  a sender who believes a message was delivered when it never left. (c) An approval obtained on a
+  false description of its effect is not an approval; the disclosure is not documentation, it is
+  the condition of the approval's validity.
+
+directives:
+- id: C1
+  actor: lexby
+  must: the_diversion_runs_only_on_an_affirmative_declared_development_signal_and_the_absence_of_a_production_signal_must_never_enable_it_checkable_seeded_test_asserting_the_diversion_is_unavailable_with_every_environment_variable_unset_run_red_with_the_affirmative_requirement_removed
+  when: null
+- id: C2
+  actor: lexby
+  must: refuse_the_diversion_under_any_real_ingress_posture_oidc_configured_or_cf_access_configured_or_session_auth_configured_exactly_as_require_codex_trusted_posture_does_checkable_seeded_test_asserting_refusal_under_session_auth_regardless_of_the_dev_tag
+  when: null
+- id: C3
+  actor: lexby
+  must: the_hitl_request_and_the_notification_and_the_approval_surface_each_name_the_loopback_as_the_actual_recipient_and_name_the_declared_recipient_as_not_being_messaged_checkable_seeded_test_asserting_all_three_surfaces_carry_the_true_destination_and_a_log_line_alone_does_not_satisfy_it
+  when: null
+- id: C4
+  actor: lexby
+  must: the_audit_row_and_the_outbox_receipt_and_any_user_visible_status_record_diverted_and_never_sent_checkable_seeded_test_asserting_no_reader_can_obtain_the_string_sent_for_a_diverted_message
+  when: null
+- id: C5
+  actor: lexby
+  must: expires_at_is_mandatory_and_an_expired_tag_fails_closed_to_normal_sending_and_a_red_seeded_test_establishes_the_diversion_cannot_run_with_a_production_signal_present
+  when: null
+
+reserved: |
+  What `Tag:Not Dev` should default to is NOT decided. The Principal proposes "any channel they
+  want, starting with their email by default". Email as a DEFAULT egress for a governed
+  high-consequence verb was not argued; note only that a default which sends to a real human on
+  first use deserves its own examination, and that the engineering record carries a standing
+  instruction against email to this client.
+
+not_required: |
+  The court expressly declined to require that the dev path exercise the identical egress
+  transport. Requiring a real send defeats the purpose. The honest mitigation is the one the
+  design already has: the loopback is received by the REAL intake, so routing, binding,
+  notification and approval are genuinely exercised and only the final transport leg is
+  substituted. That limitation must be recorded (C5) so nobody later cites dev-mode success as
+  evidence the transport works - it is a limitation to disclose, not to cure.
+
+assent_source: principal_direction
+implementation_status: OPEN
+implementation_note: |
+  Convened 2026-07-31 on the advocate's own motion at the Principal's direction, who identified
+  the matter as "another exception to the security posture where the dev tag is enabled on the
+  stack by principal".
+
+  The Principal's stated motive is that the sole-author exemption cannot be relied on:
+  `_sole_active_author` (boltrig/kernel/hitl_response_auth.py:124) is true only while a tenant
+  has exactly one active author-tier user and "lapses automatically the moment a second author
+  exists". Classical Visas has more than one. Verified in code.
+
+  NOTHING BUILT YET. C1-C5 are open. The opinion is docs/vjs/2026-VJS-CC-BOLTRIG-DEV-EGRESS-
+  LOOPBACK-001-opinion.md.
