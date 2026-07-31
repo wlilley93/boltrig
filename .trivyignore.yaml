@@ -40,6 +40,48 @@ misconfigurations:
       turns red on both.
 
 vulnerabilities:
+  - id: CVE-2026-16804
+    paths: &chromium_fleet
+      - usr/bin/chromium
+    expired_at: 2026-09-11
+    statement: &chromium_statement >-
+      chromium 150.0.7871.181-1~deb12u1 in the fleet image, which ships it for the
+      browser-cli adapter (browser-use). Trivy reports "fixed 151.0.7922.47-1", but
+      that is the UPSTREAM CHROME version, not a Debian package: measured 2026-07-31,
+      the newest chromium available to bookworm INCLUDING bookworm-security is exactly
+      the installed 150.0.7871.181-1~deb12u1, and trixie carries the same code as
+      150.0.7871.181-1~deb13u1. No Debian release carries the fix, so there is nothing
+      to upgrade to and no rebuild or base change takes it. Follows the ratio of
+      [2026] VJS-CC-BOLTRIG-SUPPLY-CHAIN-ADVISORY-ACCEPTANCE-001, which names this
+      exact shape: the gate blocks because a PACKAGE-level fix exists even though no
+      released ARTIFACT carries one.
+      REACHABILITY, STATED HONESTLY AS THAT RATIO REQUIRES: this is NOT unreachable.
+      chromium is present and running in both production fleet workers, and the
+      browser-cli adapter is ACTIVATED on the Classical Visas tenant. Browser
+      automation renders remote content by definition, so a sandbox escape is live
+      wherever the adapter is invoked. What bounds it TODAY is usage, not
+      architecture: all six browser verbs (web.fetch, browser.doctor, browser.tab.open,
+      browser.remote.start, browser.remote.stop, browser.page.info) have ZERO rows in
+      that tenant's audit_log - the adapter has never once been invoked. The second
+      tenant registers no browser adapter at all.
+      THE EXPIRY IS SIX WEEKS, NOT THE USUAL YEAR, because usage is a weak bound: the
+      day someone invokes a browser verb the exposure becomes real with no further
+      change. Before renewal, prefer DEACTIVATING browser-cli on any tenant not using
+      it, or dropping chromium from the image, over extending this. Recorded because
+      an unscanned image was deployed to both prod stacks on 2026-07-31 while branch
+      protection was being bypassed - silence is what this file exists to prevent.
+  - id: CVE-2026-16805
+    paths: *chromium_fleet
+    expired_at: 2026-09-11
+    statement: *chromium_statement
+  - id: CVE-2026-16806
+    paths: *chromium_fleet
+    expired_at: 2026-09-11
+    statement: *chromium_statement
+  - id: CVE-2026-16807
+    paths: *chromium_fleet
+    expired_at: 2026-09-11
+    statement: *chromium_statement
   - id: GHSA-hrxh-6v49-42gf
     paths:
       - usr/local/bin/rclone
