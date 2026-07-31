@@ -307,6 +307,33 @@ adapters:
       store: env
       kind: api_key
 
+# --- DEV-MODE EGRESS LOOPBACK ------------------------------------------------
+# Diverts governed outbound sends (channel.send) into the stack's OWN intake, so
+# nothing reaches a real recipient while a tenant is being built. Authority:
+# [2026] VJS-CC-BOLTRIG-DEV-EGRESS-LOOPBACK-001, PERMITTED on five conditions.
+#
+# It does not widen what may leave the system; it prevents anything leaving. The
+# approval is still raised, still routed, still answered by a human - and the
+# request, the notification and the approval card each state that the declared
+# recipient will NOT be messaged, because an approval obtained on a false
+# description of its effect is not an approval.
+#
+# Declaring it is NOT enough to make it run. It is refused outright when a
+# production signal is present, when the environment declares no affirmative
+# development signal, when any real ingress posture is configured (OIDC /
+# Cloudflare Access / session login), when expires_at is absent or past, or when
+# loopback_url is blank. Any of those and every send goes out for real.
+#
+# LIMITATION, and it must not be forgotten: the loopback substitutes the final
+# transport leg. A dev-mode success is NOT evidence that the real transport works.
+#
+# dev_egress_loopback:
+#   enabled: true
+#   expires_at: "2026-09-11T00:00:00Z"   # MANDATORY; an expired tag fails closed
+#   loopback_url: "http://kernel:8000/v1/channels/inbound/loopback"
+#   declared_by: "you@example.com"
+#   reason: "building the tenant; no recipient should be contacted yet"
+
 # --- HITL: routing + the verbs that ALWAYS require human approval (P5) -------
 hitl:
   primary_channel: teams

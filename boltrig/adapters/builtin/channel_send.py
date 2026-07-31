@@ -29,6 +29,7 @@ from collections.abc import Awaitable, Callable
 
 from boltrig.adapters.base import AdapterError, Credential, ErrorClass, Result, VerbSpec
 from boltrig.models import Channel, ChannelOutboxMessage, InvocationContext
+from boltrig.models.egress_diversion import DIVERTED_STATUS, Diversion
 
 _SEND_OUT = {
     "type": "object",
@@ -37,11 +38,49 @@ _SEND_OUT = {
 
 DeliverFn = Callable[[Channel, str, str | None], Awaitable[dict]]
 
+# Answers "is this send diverted, and to where" for one declared recipient. Injected
+# at the composition root so this adapter never reads the environment and a test
+# can state the posture it is exercising rather than arrange four variables.
+DiversionFn = Callable[[str], "Diversion | None"]
 
-async def _default_deliver(store, channel: Channel, text: str, target: str | None) -> dict:
+
+async def _default_deliver(
+    store,
+    channel: Channel,
+    text: str,
+    target: str | None,
+    diversion: Diversion | None = None,
+) -> dict:
     """Kernel-side outbound delivery. A channel with a configured outbound_url
     gets an egress-guarded POST; a socket channel is enqueued for the sidecar
-    (durable hand-off, decision 0003 Phase 2)."""
+    (durable hand-off, decision 0003 Phase 2).
+
+    When ``diversion`` is present the message goes to the stack's own loopback
+    intake instead, and the receipt says ``diverted`` - never ``sent``, on any
+    branch (C4 of [2026] VJS-CC-BOLTRIG-DEV-EGRESS-LOOPBACK-001). The diversion
+    is taken BEFORE the transport branch on purpose: a socket channel diverting
+    into its own outbox row would be indistinguishable from a real queued send at
+    every reader downstream.
+    """
+    if diversion is not None:
+        from boltrig.adapters.egress import pinned_async_client
+
+        # The loopback is received by the REAL intake, so routing, binding,
+        # notification and approval are genuinely exercised; only this final
+        # transport leg is substituted. The court expressly did NOT require the
+        # identical transport, and recorded that as a limitation to disclose
+        # rather than cure - nobody may cite a dev-mode success as evidence the
+        # real transport works.
+        async with pinned_async_client(diversion.loopback_url, timeout=10) as client:
+            resp = await client.post(
+                diversion.loopback_url,
+                json={"text": text, "target": target, "channel": channel.id},
+            )
+        return {
+            "status": DIVERTED_STATUS,
+            "code": resp.status_code,
+            **diversion.as_context(),
+        }
     outbound_url = (channel.config or {}).get("outbound_url")
     if outbound_url:
         from boltrig.adapters.egress import pinned_async_client
@@ -71,12 +110,44 @@ class ChannelSendAdapter:
     runtime = "script"
     source = "builtin"
 
-    def __init__(self, store, deliver: DeliverFn | None = None) -> None:
+    def __init__(
+        self,
+        store,
+        deliver: DeliverFn | None = None,
+        diversion: DiversionFn | None = None,
+    ) -> None:
         self._store = store
         self._deliver = deliver or self._deliver_default
+        self._diversion = diversion
+
+    def _diversion_for(self, params: dict) -> Diversion | None:
+        if self._diversion is None:
+            return None
+        return self._diversion(str(params.get("target") or ""))
 
     async def _deliver_default(self, channel: Channel, text: str, target: str | None) -> dict:
-        return await _default_deliver(self._store, channel, text, target)
+        return await _default_deliver(
+            self._store, channel, text, target, self._diversion_for({"target": target})
+        )
+
+    def approval_context(self, verb: str, params: dict, context: InvocationContext) -> dict | None:
+        """What the approver must be told before they approve (C3).
+
+        The approval gate lifts ``approval_notice`` into the request QUESTION,
+        which is what the notification carries, and renders the rest on the card.
+        One hook therefore reaches all three surfaces the court named - and,
+        because the resource context is part of the approval FINGERPRINT, an
+        approval given on the diverted description cannot be redeemed for a real
+        send. That is the ratio made structural rather than restated: an approval
+        obtained on a false description of its effect is not an approval.
+        """
+        del context
+        if verb != "channel.send":
+            return None
+        diversion = self._diversion_for(params)
+        if diversion is None:
+            return None
+        return {"approval_notice": diversion.notice(), "egress": diversion.as_context()}
 
     def describe(self) -> list[VerbSpec]:
         return [
@@ -124,5 +195,9 @@ class ChannelSendAdapter:
         return "ok"
 
 
-def build_channel_send(store, deliver: DeliverFn | None = None) -> ChannelSendAdapter:
-    return ChannelSendAdapter(store, deliver)
+def build_channel_send(
+    store,
+    deliver: DeliverFn | None = None,
+    diversion: DiversionFn | None = None,
+) -> ChannelSendAdapter:
+    return ChannelSendAdapter(store, deliver, diversion)

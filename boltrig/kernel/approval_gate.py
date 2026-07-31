@@ -86,6 +86,31 @@ def _approval_display_context(
     )
 
 
+# A reserved key an adapter's ``approval_context`` may set to state, in one
+# sentence, something the approver MUST be told before they approve - not merely
+# something the card may render. The gate lifts it into the request QUESTION,
+# which is the field ``HITLManager._notify_request`` sends to every eligible
+# approver, so a disclosure set here reaches the request row, the notification and
+# the card rather than only the card.
+#
+# It exists for [2026] VJS-CC-BOLTRIG-DEV-EGRESS-LOOPBACK-001 C3: where a posture
+# makes an approval mean something other than what the approver is being asked to
+# approve, the narrowing must be disclosed AT THE POINT OF APPROVAL, in the
+# approval itself. The key stays in the resource context as well as the question,
+# so it is part of the approval FINGERPRINT: an approval given on one description
+# cannot be redeemed for an action described differently.
+APPROVAL_NOTICE_KEY = "approval_notice"
+
+
+def _approval_question(verb: str, resource_context: Any) -> str:
+    notice = (
+        str(resource_context.get(APPROVAL_NOTICE_KEY) or "").strip()
+        if isinstance(resource_context, dict)
+        else ""
+    )
+    return f"Approve {verb}? {notice}".rstrip() if notice else f"Approve {verb}?"
+
+
 async def _resource_context(
     provider: AdapterProvider,
     binding: VerbBinding,
@@ -176,7 +201,7 @@ async def enforce_approval(
             tenant_id=context.tenant_id,
             run_id=context.run_id or "",
             type=HITLType.APPROVAL,
-            question=f"Approve {verb}?",
+            question=_approval_question(verb, resource),
             context=display_context,
             options=["approve", "reject"],
             verb=verb,

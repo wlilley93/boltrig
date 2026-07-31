@@ -74,7 +74,7 @@ not_required: |
   evidence the transport works - it is a limitation to disclose, not to cure.
 
 assent_source: principal_direction
-implementation_status: OPEN
+implementation_status: IMPLEMENTED
 implementation_note: |
   Convened 2026-07-31 on the advocate's own motion at the Principal's direction, who identified
   the matter as "another exception to the security posture where the dev tag is enabled on the
@@ -85,5 +85,28 @@ implementation_note: |
   has exactly one active author-tier user and "lapses automatically the moment a second author
   exists". Classical Visas has more than one. Verified in code.
 
-  NOTHING BUILT YET. C1-C5 are open. The opinion is docs/vjs/2026-VJS-CC-BOLTRIG-DEV-EGRESS-
-  LOOPBACK-001-opinion.md.
+  BUILT 2026-07-31. The opinion is docs/vjs/2026-VJS-CC-BOLTRIG-DEV-EGRESS-LOOPBACK-001-opinion.md.
+
+  C1  boltrig/config/dev_egress.py `_R_UNDECLARED_ENV` (affirmative development signal) plus
+      boltrig/api/bootstrap.py `_register_channel_send`, which injects no resolver at all where
+      there is no manifest - so the diversion is unreachable without a declaration by
+      construction, not only by a check.
+  C2  the same module's `_R_INGRESS`; all three limbs read together in
+      boltrig/kernel/dev_egress_runtime.py `DiversionResolver.block_reason`.
+  C3  `Diversion.notice` + the reserved `approval_notice` key
+      (boltrig/kernel/approval_gate.py `APPROVAL_NOTICE_KEY`), which the gate lifts into the
+      request QUESTION - the field the notification fan-out sends - while the machine-readable
+      half renders on the card. The disclosure is in the resource context, so it is part of the
+      approval FINGERPRINT: an approval given on the diverted description cannot be redeemed for
+      an identical un-diverted send.
+  C4  `DIVERTED_STATUS`; the diversion is taken BEFORE the transport branch in
+      boltrig/adapters/builtin/channel_send.py, so a socket channel cannot leave an outbox row
+      indistinguishable from a real queued send.
+  C5  `_R_UNBOUNDED` / `_R_EXPIRED`, and an unparseable expires_at parses to None, which C5
+      refuses - a typo in the one bounding field must not read as "no bound".
+
+  Red-seeded: tests/security/test_dev_egress_loopback.py, six mechanisms each reverted
+  individually and confirmed red. The C3 notification limb needed two attempts: the first test
+  asserted on the question-formatting helper and stayed GREEN with the call site in
+  enforce_approval reverted, proving the helper existed and nothing about whether any approver
+  would see it. It now drives the real chokepoint to PendingHuman and asserts on the stored row.
