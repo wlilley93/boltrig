@@ -197,7 +197,8 @@ def test_authenticated_platform_projection_is_tenant_scoped_and_opaque():
         # registered: six jobs at four retained receipts each. That DOUBLED the
         # authenticated payload's bound, which is a deliberate decision and not a
         # side effect - exactly what keeping this a literal is for.
-        "max_returned_receipts": 24,
+        # len(BACKGROUND_JOB_NAMES) * 4; 28 since reflection joined (#29)
+        "max_returned_receipts": 28,
     }
     assert [row["process_instance_identity"] for row in body["background_jobs"]] == [
         PROCESS

@@ -82,7 +82,7 @@ LOAD-BEARING	NO-SUBJECT	comment	boltrig/fleet/infrastructure/model_proxy_peer_li
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/postgres_root_engine_decisions.py:42		Durable insert-once root decision store backed by PostgreSQL.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/lease_token.py:106		Does this row still carry the lease the token names? Used ONLY as an early exit before doing work - never as the fence.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/model_profiles.py:17		A named provider/model/base-url selection, never credential material.
-LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/pump.py:140		A short, deterministic lesson distilled from an outcome (Phase 3, US-WFL-07).
+LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/reflection.py:23		A short, deterministic lesson distilled from an outcome (Phase 3, US-WFL-07).
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/stack_tool_health.py:1		Owner-local liveness evidence for first-party stack tools.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/stack_tool_receipts.py:1		Authenticated, expiring Redis receipts for fleet-owned tool health.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/stack_tool_receipts.py:87		Opaque tenant binding so signed evidence cannot cross tenant keys.
@@ -368,9 +368,9 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/postgres_exe
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/postgres_model_proxy_grants.py:44	MemoryModelProxyGrantStore	Durable model-proxy grant store backed by PostgreSQL.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/lease_token.py:1	Store.update_work_item_if_leased	The claim-time lease token, and the only fenced way to write a claimed row.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/lease_token.py:118	_record_failure	Write a claimed row, fenced on the claim-time token.
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/pump.py:584	handle_claimed_item	Durably record a cooperative cancel ([2026] VJS-COUNTY 6, D1/D4).
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/pump.py:676	kernel.invoke	Distil one lesson and store it via the memory verb, best-effort (US-WFL-07).
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/pump.py:573	handle_claimed_item	Durably record a cooperative cancel ([2026] VJS-COUNTY 6, D1/D4).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/pump_progress.py:1	run_once	Windowed throughput evidence for the work pump.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/reflection.py:38	kernel.invoke	Distil one lesson and store it via the memory verb, best-effort (US-WFL-07).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/result.py:86	degrade	The bounded degrade tag this result carries, or None.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/retention.py:1	run_retention_once	Retention purge: hard-erasure of closed conversations (M11, right-to-erasure).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/runtime.py:1	build_runtime	The pluggable agent-runtime abstraction (P4, US-FLT-04).
@@ -891,18 +891,19 @@ ORDINARY	NO-SUBJECT	comment	boltrig/fleet/prompt_stack.py:80		was tagging attack
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/prompt_stack.py:85		(a) the model emitted tool calls as PROSE, so they never reached the
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/prompt_stack.py:89		repeating an identical call is never the recovery;
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/prompt_stack.py:96		(f) the agent never remembered anything.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/pump.py:331		cancel arrived while routing, head.handle (the dispatch) never runs.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/pump.py:338		In-flight adapter call: a cancel requested DURING this never interrupts
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/pump.py:340		at the next cooperative point (D3, FORBIDDEN: no mid-step hard kill).
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/pump.py:351		never interrupted;
-ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/pump.py:366		Honor a ``workflow:<wf_id>`` target: trigger the named workflow (SEC-178).
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/pump.py:432		D6: a convergent item whose aggregate is degraded is never DONE.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/pump.py:514		idempotent, so re-running it never double-writes ([2026] VJS-COUNTY 6, D1/D4).
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/pump.py:597		D8: a refused cancel is logged by lease_token.write and NEVER swallowed -
-ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/pump.py:618		Notify a channel-originated item's human of its terminal state (SEC-179), and sweep the run's secure-input credentials (SEC-181).
-ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/pump.py:656		Re-save a succeeded, synthesised workflow as learned (US-WFL-03).
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/pump.py:320		cancel arrived while routing, head.handle (the dispatch) never runs.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/pump.py:327		In-flight adapter call: a cancel requested DURING this never interrupts
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/pump.py:329		at the next cooperative point (D3, FORBIDDEN: no mid-step hard kill).
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/pump.py:340		never interrupted;
+ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/pump.py:355		Honor a ``workflow:<wf_id>`` target: trigger the named workflow (SEC-178).
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/pump.py:421		D6: a convergent item whose aggregate is degraded is never DONE.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/pump.py:503		idempotent, so re-running it never double-writes ([2026] VJS-COUNTY 6, D1/D4).
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/pump.py:586		D8: a refused cancel is logged by lease_token.write and NEVER swallowed -
+ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/pump.py:607		Notify a channel-originated item's human of its terminal state (SEC-179), and sweep the run's secure-input credentials (SEC-181).
+ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/pump.py:645		Re-save a succeeded, synthesised workflow as learned (US-WFL-03).
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/pump.py:76		from (Phase 3, US-WFL-03).
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/pump.py:87		a deterministic automation.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/reflection.py:70		failure must never fail the run - but a swallow at DEBUG made
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/result.py:51		never at zero.
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/runtime.py:123		OpenAI-style messages with the authoritative system prompt prepended;
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/runtime.py:195		A typed unavailable result, never an unmarked echo.
@@ -1117,6 +1118,7 @@ ORDINARY	NO-SUBJECT	comment	boltrig/models/access.py:119		it, and an org SWITCH 
 ORDINARY	NO-SUBJECT	comment	boltrig/models/audit.py:51		tamper-evident stream deliberately: it is the one signal saying a control
 ORDINARY	NO-SUBJECT	docstring	boltrig/models/background_jobs.py:1		Bounded, secret-free evidence from periodic background maintenance loops.
 ORDINARY	NO-SUBJECT	comment	boltrig/models/background_jobs.py:27		parse.
+ORDINARY	NO-SUBJECT	comment	boltrig/models/background_jobs.py:36		"never written a row" is decidable: no receipts = disabled or no pump;
 ORDINARY	NO-SUBJECT	docstring	boltrig/models/channel_providers.py:1		Canonical channel-provider contracts.
 ORDINARY	NO-SUBJECT	comment	boltrig/models/channels.py:43		app credentials) - never plaintext, never returned to an agent.
 ORDINARY	NO-SUBJECT	comment	boltrig/models/channels.py:46		Addressing (Phase 2, routing data - never authority):
@@ -1292,7 +1294,8 @@ ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/model_proxy_too
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/model_gateway.py:135	disabled	The gateway's readiness `(status, reason)` when no probe is armed.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/ports/grant_leases.py:17	expected_authority	Durable atomic operations; implementations must never persist raw bearers.
 ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/fleet/prompt_stack.py:79	GOVERNANCE_FLOOR	is in ``GOVERNANCE_FLOOR``, which that lane never sent.
-ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/pump.py:707	hierarchy.tier2	Build the live org (CoS + heads + pump) from the manifest hierarchy (P7).
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/pump.py:672	hierarchy.tier2	Build the live org (CoS + heads + pump) from the manifest hierarchy (P7).
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/reflection.py:1	pump.py	Post-run reflection: one lesson per terminal work item, and its evidence.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/runtime.py:179	BOLTRIG_ENABLE_LEGACY_RUNTIMES	The deterministic fallback for a runtime Boltrig cannot provide.
 ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/fleet/turn_executor_compat.py:11	on_behalf_bearer	executor never chokes on an unexpected keyword).
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/workers.py:136	fn	Await ``fn`` directly.
@@ -1376,7 +1379,7 @@ ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/model_proxy_tool
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/postgres_capability_attestations.py:26	resolve	Durable insert-once capability-attestation store backed by PostgreSQL.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/model_gateway.py:96	endpoint	Route a resolved endpoint through the gateway for a conversation.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/model_router.py:1	SensitiveDataMisrouted	The model-endpoint router guard (US-PRIV-01, SEC-12).
-ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/pump.py:155	WorkItem	Persist a step's discovered follow-on work as PENDING children (D7).
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/pump.py:140	WorkItem	Persist a step's discovered follow-on work as PENDING children (D7).
 ORDINARY	SUBJECT-REACHED	comment	boltrig/fleet/pump.py:77	_maybe_learn	defined here, read once below, and set only by tests, so `_maybe_learn` has never fired
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/pump_progress.py:93	WorkPump	The pump's serving loop, instrumented.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/retention.py:108	run_retention_once	Loop :func:`run_retention_once` forever; cancellable, idle-sleeping.
