@@ -96,18 +96,6 @@
       "expires": "2026-09-30",
       "reason": "manifest.example.yaml:457. SURFACED IN THE UI and read by nothing. Needs a decision on what it should mean before it is wired or deleted. Tracked on task #40.",
       "blocker": "design:flag-meaning-undecided"
-    },
-    "record_projection_status": {
-      "owner": "memory-maintainers",
-      "expires": "2026-09-30",
-      "reason": "memory.fanout:521. Manifest-only, not surfaced in the UI, so the weaker form: documented but unread. Belongs with the projection/fanout read. Tracked on task #40.",
-      "blocker": "design:flag-meaning-undecided"
-    },
-    "retry_failed": {
-      "owner": "memory-maintainers",
-      "expires": "2026-09-30",
-      "reason": "memory.fanout:520. Manifest-only, same as record_projection_status. Tracked on task #40.",
-      "blocker": "design:flag-meaning-undecided"
     }
   }
 }

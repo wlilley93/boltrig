@@ -15,6 +15,7 @@ from datetime import datetime
 from typing import Any, Protocol
 
 from boltrig.models import InvocationContext, MemoryProjectionStatus, utcnow
+from boltrig.memory.projection_retry import InlineRetryMixin
 
 from .engine import EngineFact, RecallHit
 
@@ -136,17 +137,25 @@ def _row(
     )
 
 
-class MemoryProjectionFanout:
+class MemoryProjectionFanout(InlineRetryMixin):
     def __init__(
         self,
         store: Any,
         projections: list[MemoryProjection] | None = None,
         *,
         primary_projection_id: str = "mem0",
+        retry_failed: bool = True,
     ) -> None:
         self._store = store
         self._projections = list(projections or [])
         self._primary_projection_id = primary_projection_id
+        # fanout.retry_failed, finally READ (task #40). Under inline execution a
+        # failed backend call gets exactly ONE bounded reattempt when true; false
+        # fails fast and says so in the row. Until 2026-07-31 this manifest key
+        # was advertised and read by nothing, so a failed projection was never
+        # reattempted whatever it said - the comments in manifest.example.yaml
+        # documented the dishonesty rather than the behaviour.
+        self._retry_failed = bool(retry_failed)
 
     def enabled(self) -> bool:
         return bool(self._projections)
@@ -166,31 +175,31 @@ class MemoryProjectionFanout:
                 target=None,
                 row_id=row_id,
             ))
-            try:
-                result = await projection.remember(tenant_id, fact, context)
-                status = _check_status("remember", result.status, final=True)
-                final = _row(
-                    tenant_id=tenant_id,
-                    projection_id=projection.id,
-                    operation="remember",
-                    status=status,
-                    fact_id=fact.id,
-                    target=None,
-                    projection_ref=result.projection_ref,
-                    error=result.error,
-                    row_id=row_id,
-                )
-            except Exception as exc:
-                final = _row(
-                    tenant_id=tenant_id,
-                    projection_id=projection.id,
-                    operation="remember",
-                    status="failed",
-                    fact_id=fact.id,
-                    target=None,
-                    error=_short_error(exc),
-                    row_id=row_id,
-                )
+            result, exc, attempts = await self._attempt(
+                lambda p=projection: p.remember(tenant_id, fact, context)
+            )
+            base = dict(
+                tenant_id=tenant_id, projection_id=projection.id,
+                operation="remember", fact_id=fact.id, target=None,
+                attempts=attempts, row_id=row_id,
+            )
+            if result is None:
+                final = self._outcome(status="failed", error=_short_error(exc), **base)
+            else:
+                # A backend that RETURNS an out-of-vocabulary status is a
+                # contract violation, not a transient failure: recorded as
+                # failed, never retried - retrying a call that "succeeded"
+                # wrongly would double-write on a healthy backend (round-five:
+                # invalid status records failure).
+                try:
+                    status = _check_status("remember", result.status, final=True)
+                except ValueError as bad:
+                    final = self._outcome(status="failed", error=_short_error(bad), **base)
+                else:
+                    final = self._outcome(
+                        status=status, projection_ref=result.projection_ref,
+                        error=result.error, **base,
+                    )
             await self._upsert(final)
             rows.append(_public(final))
         return rows
@@ -218,37 +227,41 @@ class MemoryProjectionFanout:
                     projection_ref=getattr(prior, "projection_ref", None),
                     row_id=row_id,
                 ))
-                try:
-                    result = await projection.forget(
+                result, exc, attempts = await self._attempt(
+                    lambda p=projection, prior=prior: p.forget(
                         tenant_id,
                         fact_id=fact_id,
                         projection_ref=getattr(prior, "projection_ref", None),
                         context=context,
                     )
-                    status = _check_status("forget", result.status, final=True)
-                    final = _row(
-                        tenant_id=tenant_id,
-                        projection_id=projection.id,
-                        operation="forget",
-                        status=status,
-                        fact_id=fact_id,
-                        target=fact_id,
-                        projection_ref=result.projection_ref or getattr(prior, "projection_ref", None),
-                        error=result.error,
-                        row_id=row_id,
+                )
+                base = dict(
+                    tenant_id=tenant_id, projection_id=projection.id,
+                    operation="forget", fact_id=fact_id, target=fact_id,
+                    attempts=attempts, row_id=row_id,
+                )
+                prior_ref = getattr(prior, "projection_ref", None)
+                if result is None:
+                    final = self._outcome(
+                        status="delete_failed", projection_ref=prior_ref,
+                        error=_short_error(exc), **base,
                     )
-                except Exception as exc:
-                    final = _row(
-                        tenant_id=tenant_id,
-                        projection_id=projection.id,
-                        operation="forget",
-                        status="delete_failed",
-                        fact_id=fact_id,
-                        target=fact_id,
-                        projection_ref=getattr(prior, "projection_ref", None),
-                        error=_short_error(exc),
-                        row_id=row_id,
-                    )
+                else:
+                    # Same contract rule as remember: an invalid returned
+                    # status records delete_failed and is never retried.
+                    try:
+                        status = _check_status("forget", result.status, final=True)
+                    except ValueError as bad:
+                        final = self._outcome(
+                            status="delete_failed", projection_ref=prior_ref,
+                            error=_short_error(bad), **base,
+                        )
+                    else:
+                        final = self._outcome(
+                            status=status,
+                            projection_ref=result.projection_ref or prior_ref,
+                            error=result.error, **base,
+                        )
                 await self._upsert(final)
                 rows.append(_public(final))
         return rows

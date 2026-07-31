@@ -313,13 +313,23 @@ def build_memory_projection_fanout(store: Any, memory_cfg: dict[str, Any] | None
     if not projections:
         return None
     fanout_cfg = cfg.get("fanout") if isinstance(cfg.get("fanout"), dict) else {}
-    fanout_cls = (
-        QueuedMemoryProjectionFanout
-        if is_queued_projection_mode(fanout_cfg.get("execution"))
-        else MemoryProjectionFanout
-    )
-    return fanout_cls(
+    # fanout.retry_failed, READ since 2026-07-31 (task #40). Default TRUE: the
+    # field's name promises retry and the shipped example says `true`, so absence
+    # keeps the promise. False means fail fast, honestly, in both modes.
+    retry_failed = _as_bool(fanout_cfg.get("retry_failed", True))
+    primary = str(cfg.get("primary_projection") or "mem0")
+    if is_queued_projection_mode(fanout_cfg.get("execution")):
+        return QueuedMemoryProjectionFanout(
+            store,
+            projections,
+            primary_projection_id=primary,
+            # False collapses the queued retry budget to a single attempt - the
+            # same fact the inline path records as max_operation_attempts=1.
+            **({} if retry_failed else {"max_operation_attempts": 1}),
+        )
+    return MemoryProjectionFanout(
         store,
         projections,
-        primary_projection_id=str(cfg.get("primary_projection") or "mem0"),
+        primary_projection_id=primary,
+        retry_failed=retry_failed,
     )
