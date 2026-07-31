@@ -168,3 +168,48 @@ def test_the_helper_switches_role_before_setting_the_guc():
         "the role must be assumed before the tenant GUC is set"
     )
     assert "pool_assumes_app_role" in body, "it must consult the pool, not a literal"
+
+
+def test_the_binding_is_INERT_where_rls_was_never_applied():
+    """Every deployment except one has never run rls.sql, and must be unaffected.
+
+    ``bind_conn_to_tenant`` replaced 22 inline ``set_config`` calls. If it emitted
+    ``SET LOCAL ROLE boltrig_app`` unconditionally, every deployment that never
+    applied the overlay would fail on a role that does not exist - turning a
+    security improvement into a fleet-wide outage.
+
+    So the three states are pinned. Only the third, where rls.sql HAS been applied
+    and the role exists, may differ from the original behaviour.
+    """
+    import asyncio
+
+    from boltrig.store.rls_pool import _RlsPool
+    from boltrig.store.tenant_scope import bind_conn_to_tenant
+
+    class _Raw:  # what the store holds when BOLTRIG_RLS is unset
+        def acquire(self):  # pragma: no cover - never called here
+            raise AssertionError
+
+    class _Conn:
+        def __init__(self):
+            self.statements = []
+
+        async def execute(self, query, *args):
+            self.statements.append(query)
+
+    async def _emitted(pool):
+        conn = _Conn()
+        await bind_conn_to_tenant(conn, "t1", pool=pool)
+        return conn.statements
+
+    guc = "SELECT set_config('app.tenant_id', $1, true)"
+
+    # RLS off entirely: byte-identical to the code this replaced.
+    assert asyncio.run(_emitted(_Raw())) == [guc]
+    # RLS requested but rls.sql absent, so boltrig_app does not exist: still inert.
+    assert asyncio.run(_emitted(_RlsPool(_Raw(), assume_role=False))) == [guc]
+    # The overlay applied: and ONLY here is the role assumed.
+    assert asyncio.run(_emitted(_RlsPool(_Raw(), assume_role=True))) == [
+        "SET LOCAL ROLE boltrig_app",
+        guc,
+    ]
