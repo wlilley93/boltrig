@@ -11,13 +11,23 @@ from datetime import datetime, timedelta, timezone
 
 from boltrig.memory.session_distillation import (
     DistillationPolicy,
-    already_distilled,
     policy_from_manifest,
     select_conversations_to_distil,
 )
 from boltrig.models.conversation import Conversation, ConversationStatus
 from boltrig.models.memory import MemoryIngestion
 from boltrig.store import InMemoryStore
+
+
+
+async def already_distilled(store, tenant_id, conversation_id):
+    """Local shim: the helper moved into the store's selection predicate with
+    #43 (the growth check must sit inside the SQL LIMIT). The PROPERTY this file
+    pins is unchanged, so the assertions keep their shape."""
+    receipt = await store.get_memory_ingestion_by_source(
+        tenant_id, "conversation", conversation_id
+    )
+    return receipt is not None
 
 T = "t-distil"
 NOW = datetime(2026, 7, 30, 12, 0, tzinfo=timezone.utc)
@@ -148,7 +158,16 @@ def test_the_seat_acts_on_behalf_of_the_thread_owner():
         "without on_behalf_of the memory write is refused for every scope"
     )
     assert ctx.grants.permits("memory.remember")
-    assert not ctx.grants.permits("memory.forget"), "the seat must stay bounded"
+    # memory.forget JOINED the seat with #43 (re-distillation replaces the
+    # thread's prior summary rather than accumulating a second). The bound the
+    # old assertion protected is unchanged, because it never lived in the grant
+    # list: the governed verb scope-bounds every erasure to the scopes derived
+    # from on_behalf_of, so this seat can retire only its own owner's facts, and
+    # every erasure is ledgered (MemoryErasure). What the seat must still NOT
+    # hold is anything beyond the write-and-replace pair:
+    assert ctx.grants.permits("memory.forget")
+    for beyond in ("memory.ingest", "memory.improve", "memory.recall", "*"):
+        assert not ctx.grants.permits(beyond), "the seat must stay bounded"
 
     other = _distillation_context("t1", "bob@example.com")
     assert other.on_behalf_of == "bob@example.com", "each thread gets its own seat"
@@ -277,11 +296,10 @@ async def test_the_pg_count_uses_only_what_the_rls_pool_exposes():
             raise AssertionError("unexpected call")
 
         async def fetchrow(self, query, *args):
-            if "FROM conversations" in query:
-                return {"n": 5}
-            if "FROM memory_ingestions" in query:
-                return {"n": 2}
-            raise AssertionError(f"unexpected query: {query}")
+            # #43 collapsed the two counts into ONE time-predicate query: a
+            # thread is settled by a receipt NEWER than its last message.
+            assert "FROM conversations c" in query and "NOT EXISTS" in query
+            return {"n": 3}
 
         async def execute(self, query, *args):
             raise AssertionError("unexpected call")
