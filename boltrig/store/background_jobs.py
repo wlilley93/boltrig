@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import datetime
+import logging
 import math
 from typing import Any, Protocol
 
@@ -82,6 +83,44 @@ def _merged_receipt(
         failure_code=None if succeeded else "sweep_failed",
         last_item_count=item_count,
     )
+
+
+_log = logging.getLogger("boltrig.store.background_jobs")
+
+
+def _receipts_skipping_unknown(rows: Any) -> list[BackgroundJobReceipt]:
+    """Map rows to receipts, DROPPING any whose job_name this build does not know.
+
+    BackgroundJobReceipt validates job_name against BACKGROUND_JOB_NAMES, so a row
+    written by a NEWER process raised ValueError here and took the ENTIRE read down
+    - readiness then reported `attempt_evidence_unavailable` for every job,
+    including ones that were perfectly healthy.
+
+    Measured on the beelink 2026-07-30: registering `distillation` and rolling only
+    the fleet image left the kernel unable to read ANY receipt. Adding a job name
+    was therefore not a backward-compatible change, and during any rolling deploy
+    with mixed versions the whole readiness surface went dark.
+
+    Dropping the row costs visibility of ONE job on an old build, which is the
+    correct trade against losing all of them. It is logged, not silent - an
+    unrecognised name is either a rollout in progress or a downgrade, and both are
+    worth saying out loud.
+    """
+    out: list[BackgroundJobReceipt] = []
+    for row in rows:
+        try:
+            receipt = _receipt(row)
+        except ValueError:
+            _log.warning(
+                "background job receipt for unknown job=%r skipped; this build "
+                "knows %s (older process reading a newer row?)",
+                row["job_name"],
+                list(BACKGROUND_JOB_NAMES),
+            )
+            continue
+        if receipt is not None:
+            out.append(receipt)
+    return out
 
 
 def _receipt(row: Any) -> BackgroundJobReceipt | None:
@@ -308,7 +347,7 @@ class BackgroundJobStorePG:
                     tenant_id,
                     BACKGROUND_JOB_MAX_RETURNED_RECEIPTS,
                 )
-        return [_receipt(row) for row in rows]
+        return _receipts_skipping_unknown(rows)
 
 
 __all__ = [

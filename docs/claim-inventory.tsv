@@ -1129,7 +1129,7 @@ ORDINARY	NO-SUBJECT	docstring	boltrig/observability/background_jobs.py:29		Best-
 ORDINARY	NO-SUBJECT	docstring	boltrig/observability/backup_status.py:11		Read only the sidecar's atomic epoch marker, never backup artifacts.
 ORDINARY	NO-SUBJECT	docstring	boltrig/observability/langfuse_sink.py:238		Build a fail-closed sink from env without requiring Langfuse at import time.
 ORDINARY	NO-SUBJECT	comment	boltrig/skills/shelf.py:102		--- the shelf: descriptions only, never bodies (SEC-57 / FR-SKILL-01) ---
-ORDINARY	NO-SUBJECT	comment	boltrig/store/background_jobs.py:294		/readyz has no caller principal by design, so there is no request
+ORDINARY	NO-SUBJECT	comment	boltrig/store/background_jobs.py:333		/readyz has no caller principal by design, so there is no request
 ORDINARY	NO-SUBJECT	comment	boltrig/store/base.py:124		Observability-only rows feed stats;
 ORDINARY	NO-SUBJECT	comment	boltrig/store/base.py:145		caller cannot decide a read-then-write race.
 ORDINARY	NO-SUBJECT	comment	boltrig/store/base.py:146		one minted at claim and carried to the writing body, never one that body

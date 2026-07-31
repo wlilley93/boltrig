@@ -252,3 +252,79 @@ def test_worker_copy_never_upgrades_attempt_receipts_to_process_health():
     )[1]
     assert "set_config('app.tenant_id'" in pg_read
     assert "LIMIT $2" in pg_read
+
+
+def test_the_sql_check_constraint_admits_exactly_BACKGROUND_JOB_NAMES():
+    """The tuple and the CHECK enumerate the same names, or writes fail silently.
+
+    Registering a loop in BACKGROUND_JOB_NAMES is not enough: background_job_receipts
+    carries a CHECK that lists the names independently. On 2026-07-30 `distillation`
+    was added to the tuple and not the constraint, so every receipt write was refused
+    by Postgres - and because attempt recording is deliberately best-effort, the sweep
+    carried on while its evidence never existed. /readyz then reports
+    `attempt_evidence_not_observed`, which reads as "nothing has happened yet" rather
+    than "the write is broken".
+
+    The in-memory store has no constraint, so unit tests passed throughout and only
+    the deployment showed it. This gate is static: it reads schema.sql, so it fails on
+    a laptop with no database, at the moment the tuple and the DDL diverge.
+    """
+    import re
+    from pathlib import Path
+
+    from boltrig.models import BACKGROUND_JOB_NAMES
+
+    schema = (
+        Path(__file__).resolve().parents[2] / "boltrig" / "store" / "schema.sql"
+    ).read_text(encoding="utf-8")
+    match = re.search(r"CHECK \(job_name IN \(([^)]*)\)\)", schema)
+    assert match, "the job_name CHECK constraint is not in schema.sql any more"
+
+    in_sql = {piece.strip().strip("'") for piece in match.group(1).split(",")}
+    assert in_sql == set(BACKGROUND_JOB_NAMES), (
+        f"schema.sql admits {sorted(in_sql)} but BACKGROUND_JOB_NAMES is "
+        f"{sorted(BACKGROUND_JOB_NAMES)} - a name in one and not the other means "
+        f"receipts are silently refused (tuple-only) or unreachable (SQL-only)"
+    )
+
+
+def test_an_unknown_job_name_costs_one_row_not_the_whole_readiness_surface():
+    """A newer process's receipt must not blind an older one to every job.
+
+    BackgroundJobReceipt validates job_name against BACKGROUND_JOB_NAMES, so a row
+    written by a newer build raised ValueError while mapping rows and took the ENTIRE
+    read down. Readiness then reported `attempt_evidence_unavailable` for EVERY job,
+    including healthy ones.
+
+    Measured on the beelink 2026-07-30: registering `distillation` and rolling only
+    the fleet image left the kernel unable to read ANY receipt. Adding a job name was
+    therefore not backward compatible, and during a rolling deploy the whole readiness
+    surface went dark rather than degrading.
+
+    Dropping the unknown row costs visibility of one job on an old build, which is the
+    right trade against losing all of them - and it is logged, never silent.
+    """
+    from datetime import datetime, timezone
+
+    from boltrig.store.background_jobs import _receipts_skipping_unknown
+
+    at = datetime(2026, 7, 30, 12, 0, tzinfo=timezone.utc)
+    known = {
+        "tenant_id": T,
+        "job_name": "retention",
+        "process_instance_identity": PROCESS,
+        "interval_seconds": 3600,
+        "last_attempt_at": at,
+        "last_success_at": at,
+        "last_failure_at": None,
+        "last_outcome": "succeeded",
+        "failure_code": None,
+        "last_item_count": 3,
+        "receipt_kind": "attempt_history_not_liveness",
+    }
+    unknown = {**known, "job_name": "a-job-this-build-has-never-heard-of"}
+
+    out = _receipts_skipping_unknown([known, unknown, known])
+
+    assert len(out) == 2, "the unknown row must be dropped, the known ones kept"
+    assert {r.job_name for r in out} == {"retention"}

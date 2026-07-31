@@ -23,7 +23,7 @@ from .readiness_control import (
 from .background_readiness import read_background_job_readiness
 from .readiness_dependencies import database_checks, password_reset_check
 
-EXPECTED_ALEMBIC_HEAD = "0064_mcp_registration_revision"
+EXPECTED_ALEMBIC_HEAD = "0065_background_job_distillation"
 
 _PRODUCTION_NAMES = {"prod", "production", "staging"}
 # The tools /readyz requires. Codex is the only target agent runtime (decision
