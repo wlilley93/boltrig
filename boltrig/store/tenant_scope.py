@@ -80,6 +80,43 @@ def _bind_tenant_from_argument(fn):
     return wrapper
 
 
+def pool_assumes_app_role(pool: object) -> bool:
+    """Whether statements on ``pool``'s connections must drop to ``boltrig_app``.
+
+    ONE place decides, and it is the pool, because the pool is the thing that knows
+    whether ``rls.sql`` was ever applied. Copying the answer onto each store that
+    holds a pool is how the fence acquired a second source of truth once already.
+
+    Absent on a raw asyncpg pool (RLS off), so the default is False and nothing
+    changes for a deployment that never opted in.
+    """
+    return bool(getattr(pool, "assumes_role", False))
+
+
+async def bind_conn_to_tenant(conn, tenant_id: str, *, pool: object) -> None:
+    """Make ``conn`` subject to the tenant policies for ``tenant_id``, for real.
+
+    THE ROLE SWITCH IS THE WHOLE MECHANISM, AND 22 SITES OMITTED IT. The app
+    connects as the table owner, which on every deployment measured is a SUPERUSER,
+    and **a superuser bypasses RLS unconditionally - even under FORCE ROW LEVEL
+    SECURITY**. So a transaction that sets ``app.tenant_id`` and nothing else is not
+    fenced at all: the GUC is set, the policy is never consulted, and the code reads
+    as though isolation is enforced. Five of those sites carried the comment
+    "RLS-live: scope this explicit transaction" while enforcing nothing.
+
+    Use this for any explicit transaction the ``_RlsPool`` facade cannot wrap.
+    ``acquire()`` deliberately passes through without the switch, so a method that
+    holds its own transaction gets no fence unless it asks for one here.
+
+    The tenant is passed EXPLICITLY rather than read from the contextvar, because a
+    method that already has the tenant in hand must not be able to bind a different
+    one - that disagreement was the 2026-07-30 boot failure.
+    """
+    if pool_assumes_app_role(pool):
+        await conn.execute("SET LOCAL ROLE boltrig_app")
+    await conn.execute("SELECT set_config('app.tenant_id', $1, true)", tenant_id)
+
+
 def bind_tenant_on_store_methods(cls):
     """Apply _bind_tenant_from_argument to every public tenant-carrying coroutine.
 

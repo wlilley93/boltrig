@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .tenant_scope import bind_conn_to_tenant
+
 from dataclasses import replace
 from typing import Any
 
@@ -51,9 +53,8 @@ async def create_pg(pool: Any, connection: IntegrationConnection, credential: di
     try:
         async with pool.acquire() as conn:
             async with conn.transaction():
-                await conn.execute(
-                    "SELECT set_config('app.tenant_id', $1, true)",
-                    connection.tenant_id,
+                await bind_conn_to_tenant(
+                    conn, connection.tenant_id, pool=pool
                 )
                 credential_row = await conn.fetchrow(
                     """INSERT INTO credential_refs
@@ -118,7 +119,7 @@ async def active_pg(pool: Any, tenant_id: str, adapter_id: str):
 async def revoke_pg(pool: Any, tenant_id: str, connection_id: str):
     async with pool.acquire() as conn:
         async with conn.transaction():
-            await conn.execute("SELECT set_config('app.tenant_id', $1, true)", tenant_id)
+            await bind_conn_to_tenant(conn, tenant_id, pool=pool)
             previous_row = await conn.fetchrow(
                 """SELECT * FROM integration_connections
                     WHERE tenant_id=$1 AND id=$2

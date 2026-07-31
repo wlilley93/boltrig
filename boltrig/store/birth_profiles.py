@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .tenant_scope import bind_conn_to_tenant
+
 from typing import Protocol
 
 from boltrig.models import (
@@ -80,9 +82,8 @@ class BirthProfileStorePG:
             async with conn.transaction():
                 # Startup publication has no request context. Bind the RLS GUC
                 # from the validated receipt tenant inside this transaction.
-                await conn.execute(
-                    "SELECT set_config('app.tenant_id', $1, true)",
-                    receipt.tenant_id,
+                await bind_conn_to_tenant(
+                    conn, receipt.tenant_id, pool=self._pool
                 )
                 # Serialize pruning for this tenant/process pair. Otherwise two
                 # concurrent boots could each observe the pre-insert count and

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .tenant_scope import bind_conn_to_tenant
+
 from dataclasses import dataclass
 from datetime import datetime
 import json
@@ -224,9 +226,7 @@ async def amend_registration(
 ):
     async with pool.acquire() as conn:
         async with conn.transaction():
-            await conn.execute(
-                "SELECT set_config('app.tenant_id', $1, true)", tenant_id
-            )
+            await bind_conn_to_tenant(conn, tenant_id, pool=pool)
             rows = await _locked_registration(conn, tenant_id, server_id, expected)
             if rows is None:
                 return None
@@ -263,9 +263,7 @@ async def delete_registration(
 ):
     async with pool.acquire() as conn:
         async with conn.transaction():
-            await conn.execute(
-                "SELECT set_config('app.tenant_id', $1, true)", tenant_id
-            )
+            await bind_conn_to_tenant(conn, tenant_id, pool=pool)
             rows = await _locked_registration(conn, tenant_id, server_id, expected)
             if rows is None:
                 return None

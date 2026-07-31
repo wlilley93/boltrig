@@ -201,10 +201,8 @@ def _start_workflow_scheduler(
     """Start the store-backed cron reconciler used by every executor mode."""
 
     from boltrig.workflows import WorkflowLibrary
-    from boltrig.workflows.scheduler import (
-        run_workflow_scheduler_forever,
-        scheduler_interval_from_env,
-    )
+    from boltrig.workflows.scheduler import scheduler_interval_from_env
+    from boltrig.workflows.scheduler_loop import run_workflow_scheduler_forever
 
     interval = scheduler_interval_from_env()
     if interval <= 0:

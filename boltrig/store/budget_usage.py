@@ -294,12 +294,13 @@ class BudgetUsagePG:
     ):
         """Lock policies in stable order and debit all metered scopes or none."""
         from .postgres import _apply_guc
+        from .tenant_scope import pool_assumes_app_role
 
         observed = at or utcnow()
         aggregate = _aggregate(reservations)
         async with self._pool.acquire() as conn:
             async with conn.transaction():
-                await _apply_guc(conn)
+                await _apply_guc(conn, assume_role=pool_assumes_app_role(self._pool))
                 planned = []
                 for scope_id in sorted(aggregate):
                     tokens, micros = aggregate[scope_id]

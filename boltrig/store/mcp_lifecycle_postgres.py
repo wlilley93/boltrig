@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .tenant_scope import bind_conn_to_tenant
+
 from boltrig.models import (
     MCP_MAX_RETURNED_PROBE_RECEIPTS,
 )
@@ -72,9 +74,7 @@ class McpLifecycleStorePG:
         payload = validate_snapshot(last_known_tools, tools_observed_at)
         async with self._pool.acquire() as conn:
             async with conn.transaction():
-                await conn.execute(
-                    "SELECT set_config('app.tenant_id', $1, true)", tenant_id
-                )
+                await bind_conn_to_tenant(conn, tenant_id, pool=self._pool)
                 await require_mcp_adapter(conn, tenant_id, server_id)
                 row = await upsert_lifecycle_row(
                     conn,
@@ -111,9 +111,7 @@ class McpLifecycleStorePG:
             raise ValueError("expected MCP config revision is invalid")
         async with self._pool.acquire() as conn:
             async with conn.transaction():
-                await conn.execute(
-                    "SELECT set_config('app.tenant_id', $1, true)", probe.tenant_id
-                )
+                await bind_conn_to_tenant(conn, probe.tenant_id, pool=self._pool)
                 await require_mcp_adapter(conn, probe.tenant_id, probe.server_id)
                 lifecycle_row = await conn.fetchrow(
                     """SELECT config_revision FROM mcp_servers

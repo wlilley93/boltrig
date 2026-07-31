@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from boltrig.store.tenant_scope import bind_conn_to_tenant
+
 from .models import (
     Asset,
     IngestionBundle,
@@ -80,7 +82,7 @@ class PostgresKnowledgeRepository:
         pool = getattr(self._pool, "_pool", self._pool)
         async with pool.acquire() as connection:
             async with connection.transaction():
-                await connection.execute("SELECT set_config('app.tenant_id',$1,true)", tenant_id)
+                await bind_conn_to_tenant(connection, tenant_id, pool=self._pool)
                 status = await connection.fetchval(
                     "SELECT status FROM knowledge_uploads WHERE tenant_id=$1 AND id=$2 FOR UPDATE",
                     tenant_id, upload_id,
@@ -252,7 +254,7 @@ class PostgresKnowledgeRepository:
         pool = getattr(self._pool, "_pool", self._pool)
         async with pool.acquire() as connection:
             async with connection.transaction():
-                await connection.execute("SELECT set_config('app.tenant_id',$1,true)", tenant_id)
+                await bind_conn_to_tenant(connection, tenant_id, pool=self._pool)
                 row = await connection.fetchrow(
                     """
                     SELECT r.blob_digest FROM knowledge_assets a

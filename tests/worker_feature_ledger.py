@@ -485,7 +485,7 @@ BACKGROUND_FEATURES: dict[str, FeatureCoverage] = {
         "Closed-conversation erasure runs and Operate shows bounded attempt evidence; interval/manual recovery stays operational.",
     ),
     "workflow-scheduler": _coverage(
-        "boltrig/workflows/scheduler.py:run_workflow_scheduler_forever",
+        "boltrig/workflows/scheduler_loop.py:run_workflow_scheduler_forever",
         ("worker", "worker", "worker", "worker", "worker"),
         "Desired/observed schedule state, bounded safe occurrence receipts and exact approved terminal retry are live. Infrastructure task exceptions remain visibly pending_or_unknown because terminal Hatchet status reconciliation is unavailable; historical backfill is also explicitly unavailable because it cannot reuse the canonical observed-occurrence claim safely.",
     ),

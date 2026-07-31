@@ -212,6 +212,7 @@ def test_every_holder_of_an_rls_pool_binds_the_tenant():
     import re
 
     from boltrig.store.postgres import PostgresStore
+    from boltrig.store.rls_pool import _RlsPool as _Fence
 
     covered = {c.__module__ for c in PostgresStore.__mro__}
 
@@ -230,6 +231,12 @@ def test_every_holder_of_an_rls_pool_binds_the_tenant():
         mod = importlib.import_module(module)
         for _, cls in inspect.getmembers(mod, inspect.isclass):
             if cls.__module__ != module:
+                continue
+            # _RlsPool IS the fence, not a consumer of one: it is the thing that
+            # applies the binding, so requiring it to be decorated is circular.
+            # Excluded BY IDENTITY rather than by module, so a genuine consumer
+            # added to rls_pool.py later still fails here.
+            if cls is _Fence:
                 continue
             methods = [
                 inspect.getattr_static(cls, a, None)

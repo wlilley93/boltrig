@@ -162,3 +162,56 @@ def test_the_module_records_what_the_exemption_costs():
             f"the exemption module docstring must state {required!r} so the bypass "
             "cannot be mistaken for an ordinary read"
         )
+
+
+# The COMPLETE set of store coroutines that carry no tenant argument, and so
+# cannot be tenant-bound. Every one is a candidate for the list_orgs failure: an
+# unbound read under RLS returns zero rows and the caller cannot tell.
+TENANTLESS_STORE_COROUTINES = {
+    "apply_rls": "installs the policies; there is no tenant yet",
+    "close": "no query",
+    "list_orgs": "the discovery query; EXEMPTED, see this module's docstring",
+    "readiness_snapshot": "global catalogue facts, documented as outside the fence",
+}
+
+
+def test_the_set_of_tenantless_store_reads_is_closed():
+    """Answers "what ELSE reads unbound?" with a measurement, not a hope.
+
+    ``list_orgs`` cost nine hours of two dead janitors. The generalisable question
+    is which OTHER reads have no tenant to bind, because each one behaves the same
+    way under the fence: zero rows, no error, and a caller that cannot distinguish
+    that from an empty database.
+
+    Measured 2026-07-31: exactly four, all accounted for. Pinning the set means a
+    future tenantless method is a deliberate decision reviewed against this failure
+    rather than a silent repeat of it.
+    """
+    import inspect
+
+    from boltrig.store.postgres import PostgresStore
+
+    found = set()
+    for name in dir(PostgresStore):
+        if name.startswith("_"):
+            continue
+        fn = inspect.getattr_static(PostgresStore, name, None)
+        if not inspect.iscoroutinefunction(fn):
+            continue
+        if getattr(fn, "_boltrig_binds_tenant", False):
+            continue
+        found.add(name)
+
+    expected = set(TENANTLESS_STORE_COROUTINES)
+    added = found - expected
+    assert not added, (
+        f"new store coroutine(s) with no tenant to bind: {sorted(added)}. Under RLS "
+        "an unbound read returns ZERO ROWS with no error - the failure that killed "
+        "the anchor and hitl-expiry janitors. Decide explicitly whether each is a "
+        "control-plane exemption or needs a tenant, then record it here."
+    )
+    gone = expected - found
+    assert not gone, (
+        f"{sorted(gone)} now bind a tenant (or no longer exist), so this list is "
+        "stale. A guard describing methods that are not there protects nothing."
+    )

@@ -3,8 +3,12 @@
 .gitignore
 .venv
 venv
-__pycache__
-*.py[cod]
+# A bare pattern matches only the CONTEXT ROOT, so `__pycache__` alone let every
+# nested one through: boltrig/store/__pycache__/tenant_scope.cpython-314.pyc was
+# measured inside a python 3.12 image on 2026-07-31, host bytecode for the wrong
+# interpreter shipped into the artefact. Needs the `**/` prefix to match at depth.
+**/__pycache__
+**/*.py[cod]
 *.egg-info
 .pytest_cache
 .ruff_cache

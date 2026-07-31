@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
@@ -371,28 +370,3 @@ async def reconcile_workflow_schedules(
             max_catch_up=max_catch_up,
         )
     return queued
-
-
-async def run_workflow_scheduler_forever(
-    store: Any,
-    tenant_id: str,
-    workflows: Any,
-    *,
-    executor: Any,
-    interval: float,
-    worker_id: str | None = None,
-) -> None:
-    while True:
-        try:
-            await reconcile_workflow_schedules(
-                store,
-                tenant_id,
-                workflows,
-                executor=executor,
-                worker_id=worker_id,
-            )
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            log.warning("workflow schedule reconciliation failed", exc_info=True)
-        await asyncio.sleep(interval)

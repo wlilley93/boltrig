@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .tenant_scope import bind_conn_to_tenant
+
 from dataclasses import replace
 from datetime import datetime
 import logging
@@ -288,9 +290,7 @@ class BackgroundJobStorePG:
         failure_code = None if succeeded else "sweep_failed"
         async with self._pool.acquire() as conn:
             async with conn.transaction():
-                await conn.execute(
-                    "SELECT set_config('app.tenant_id', $1, true)", tenant_id
-                )
+                await bind_conn_to_tenant(conn, tenant_id, pool=self._pool)
                 await conn.execute(
                     """SELECT pg_advisory_xact_lock(
                          hashtext($1), hashtext($2)
@@ -335,9 +335,7 @@ class BackgroundJobStorePG:
         # trusted composition input and is bound explicitly here.
         async with self._pool.acquire() as conn:
             async with conn.transaction():
-                await conn.execute(
-                    "SELECT set_config('app.tenant_id', $1, true)", tenant_id
-                )
+                await bind_conn_to_tenant(conn, tenant_id, pool=self._pool)
                 rows = await conn.fetch(
                     """SELECT * FROM background_job_receipts
                        WHERE tenant_id=$1

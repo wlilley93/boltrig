@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .tenant_scope import bind_conn_to_tenant
+
 from dataclasses import replace
 
 from boltrig.models import AiConfig
@@ -15,8 +17,14 @@ from .ai_key_proposal_contract import (
 from .sealing import seal_ref
 
 
-async def _bind_tenant(conn, tenant_id):
-    await conn.execute("SELECT set_config('app.tenant_id', $1, true)", tenant_id)
+async def _bind_tenant(conn, tenant_id, *, pool):
+    """Bind this explicit transaction to ``tenant_id``, role switch included.
+
+    Took no pool and set only the GUC, which under a superuser owner meant these
+    five methods - including the one that CONSUMES a sealed AI-key secret - ran
+    entirely outside tenant isolation while looking fenced.
+    """
+    await bind_conn_to_tenant(conn, tenant_id, pool=pool)
 
 
 class AiKeyProposalStorePG:
@@ -24,7 +32,7 @@ class AiKeyProposalStorePG:
         validate_proposal(proposal, secret)
         async with self._pool.acquire() as conn:
             async with conn.transaction():
-                await _bind_tenant(conn, proposal.tenant_id)
+                await _bind_tenant(conn, proposal.tenant_id, pool=self._pool)
                 await conn.execute(
                     """INSERT INTO credential_refs
                          (id,tenant_id,store,ref,data,expires_at)
@@ -108,7 +116,7 @@ class AiKeyProposalStorePG:
         _validate_terminal_status(terminal_status)
         async with self._pool.acquire() as conn:
             async with conn.transaction():
-                await _bind_tenant(conn, tenant_id)
+                await _bind_tenant(conn, tenant_id, pool=self._pool)
                 row = await conn.fetchrow(
                     """SELECT * FROM ai_key_secret_proposals
                        WHERE tenant_id=$1 AND id=$2 AND requested_by=$3
@@ -134,7 +142,7 @@ class AiKeyProposalStorePG:
         _validate_terminal_status(terminal_status)
         async with self._pool.acquire() as conn:
             async with conn.transaction():
-                await _bind_tenant(conn, tenant_id)
+                await _bind_tenant(conn, tenant_id, pool=self._pool)
                 row = await conn.fetchrow(
                     """SELECT * FROM ai_key_secret_proposals
                        WHERE tenant_id=$1 AND approval_id=$2 AND status='pending'
@@ -151,7 +159,7 @@ class AiKeyProposalStorePG:
     async def expire_due_ai_key_secret_proposals(self, tenant_id, now):
         async with self._pool.acquire() as conn:
             async with conn.transaction():
-                await _bind_tenant(conn, tenant_id)
+                await _bind_tenant(conn, tenant_id, pool=self._pool)
                 rows = await conn.fetch(
                     """SELECT id,secret_ref,approval_id
                        FROM ai_key_secret_proposals
@@ -195,7 +203,7 @@ class AiKeyProposalStorePG:
         }
         async with self._pool.acquire() as conn:
             async with conn.transaction():
-                await _bind_tenant(conn, tenant_id)
+                await _bind_tenant(conn, tenant_id, pool=self._pool)
                 return await _consume_locked(conn, tenant_id, proposal_id, evidence, now)
 
 

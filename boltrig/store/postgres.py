@@ -96,59 +96,16 @@ from .tenant_scope import (  # noqa: E402,F401  (deliberate re-export)
     _bind_tenant_from_argument,
     _current_tenant,
     _tenant_of,
+    bind_conn_to_tenant,
     bind_tenant_on_store_methods,
+    pool_assumes_app_role,
     set_current_tenant,
 )
 
 
-async def _apply_guc(conn: asyncpg.Connection, *, assume_role: bool = False) -> None:
-    """SET LOCAL app.tenant_id from the request context. An unset tenant becomes
-    '' so the RLS predicate is never true (fail-closed, never wide-open).
-
-    ``assume_role`` drops to ``boltrig_app``; WITHOUT IT THE POLICIES DO NOTHING,
-    because the app connects as the owner and a superuser bypasses RLS even under
-    FORCE. Must be a plain statement: SET LOCAL inside PL/pgSQL is reverted on exit,
-    so a pg_roles guard would be the very no-op it was written to avoid. See
-    tests/integration/test_rls.py for the measurement.
-    """
-    if assume_role:
-        await conn.execute("SET LOCAL ROLE boltrig_app")
-    await conn.execute("SELECT set_config('app.tenant_id', $1, true)", _current_tenant.get() or "")
-
-
-class _RlsPool:
-    """An asyncpg-pool facade that runs every convenience call inside a transaction
-    with app.tenant_id set from the request context. This is what makes RLS LIVE:
-    the store's existing ``self._pool.fetch/fetchrow/execute`` calls become
-    tenant-scoped at the DB without touching any method body. acquire()/close()
-    pass through - the few explicit-transaction methods set the GUC themselves."""
-
-    def __init__(self, pool: asyncpg.Pool, *, assume_role: bool = False) -> None:
-        self._pool = pool
-        # False when rls.sql was never applied, so this stays a no-op rather than
-        # erroring on a role that does not exist.
-        self._assume_role = assume_role
-
-    async def _scoped(self, op: str, query: str, *args):
-        async with self._pool.acquire() as conn:
-            async with conn.transaction():
-                await _apply_guc(conn, assume_role=self._assume_role)
-                return await getattr(conn, op)(query, *args)
-
-    async def fetch(self, query, *args):
-        return await self._scoped("fetch", query, *args)
-
-    async def fetchrow(self, query, *args):
-        return await self._scoped("fetchrow", query, *args)
-
-    async def execute(self, query, *args):
-        return await self._scoped("execute", query, *args)
-
-    def acquire(self):
-        return self._pool.acquire()
-
-    async def close(self):
-        await self._pool.close()
+# The fence machinery (_apply_guc + the _RlsPool facade) lives in rls_pool.
+# Re-exported because modules and tests import both from here.
+from .rls_pool import _apply_guc, _RlsPool  # noqa: E402,F401  (deliberate re-export)
 
 
 def normalize_dsn(dsn: str) -> str:
@@ -644,7 +601,7 @@ class PostgresStore(
     async def answer_hitl(self, resp: HITLResponse):
         async with self._pool.acquire() as conn:
             async with conn.transaction():
-                await _apply_guc(conn)  # RLS-live: scope this explicit transaction
+                await _apply_guc(conn, assume_role=pool_assumes_app_role(self._pool))  # RLS-live: scope this explicit transaction
                 row = await conn.fetchrow(
                     """UPDATE hitl_requests SET status=$3, updated_at=now()
                        WHERE tenant_id=$1 AND id=$2 AND status=$4 RETURNING *""",
@@ -1018,7 +975,7 @@ class PostgresStore(
         # whose messages/summaries are already erased.
         async with self._pool.acquire() as conn:
             async with conn.transaction():
-                await _apply_guc(conn)  # RLS-live: scope this explicit transaction
+                await _apply_guc(conn, assume_role=pool_assumes_app_role(self._pool))  # RLS-live: scope this explicit transaction
                 rows = await conn.fetch(
                     """SELECT id FROM conversations
                        WHERE tenant_id=$1 AND status=$2 AND updated_at <= $3
@@ -1412,7 +1369,7 @@ class PostgresStore(
         # Replace the whole set atomically: clear then insert the fresh hashes.
         async with self._pool.acquire() as conn:
             async with conn.transaction():
-                await _apply_guc(conn)  # RLS-live: scope this explicit transaction
+                await _apply_guc(conn, assume_role=pool_assumes_app_role(self._pool))  # RLS-live: scope this explicit transaction
                 await conn.execute(
                     "DELETE FROM user_recovery_codes WHERE tenant_id=$1 AND user_id=$2",
                     tenant_id, user_id,
@@ -1640,7 +1597,7 @@ class PostgresStore(
         # otherwise leave a dangling switch candidate.
         async with self._pool.acquire() as conn:
             async with conn.transaction():
-                await _apply_guc(conn)  # RLS-live: scope this explicit transaction
+                await _apply_guc(conn, assume_role=pool_assumes_app_role(self._pool))  # RLS-live: scope this explicit transaction
                 await conn.execute(
                     """INSERT INTO org_members (tenant_id, user_id, role, created_at)
                        VALUES ($1,$2,$3,$4)
@@ -1660,7 +1617,7 @@ class PostgresStore(
     async def remove_org_member(self, tenant_id, user_id):
         async with self._pool.acquire() as conn:
             async with conn.transaction():
-                await _apply_guc(conn)  # RLS-live: scope this explicit transaction
+                await _apply_guc(conn, assume_role=pool_assumes_app_role(self._pool))  # RLS-live: scope this explicit transaction
                 await conn.execute(
                     "DELETE FROM org_members WHERE tenant_id=$1 AND user_id=$2",
                     tenant_id, user_id,

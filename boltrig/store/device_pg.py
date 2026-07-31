@@ -21,10 +21,11 @@ class DeviceStorePG:
         self, tenant_id, enrollment_id, authorization_code_hash, device
     ):
         from .postgres import _apply_guc
+        from .tenant_scope import pool_assumes_app_role
 
         async with self._pool.acquire() as conn:
             async with conn.transaction():
-                await _apply_guc(conn)
+                await _apply_guc(conn, assume_role=pool_assumes_app_role(self._pool))
                 row = await conn.fetchrow(
                     """UPDATE device_enrollments SET consumed_at=now()
                        WHERE tenant_id=$1 AND id=$2

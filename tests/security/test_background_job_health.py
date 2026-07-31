@@ -250,7 +250,17 @@ def test_worker_copy_never_upgrades_attempt_receipts_to_process_health():
         "async def list_background_job_receipts(self, tenant_id):",
         maxsplit=1,
     )[1]
-    assert "set_config('app.tenant_id'" in pg_read
+    # The readiness read holds its OWN transaction, so it must bind the tenant
+    # itself. It used to do that with a bare set_config, which under a superuser
+    # owner set the GUC and left the policy unconsulted - measured 2026-07-31 at 22
+    # sites. bind_conn_to_tenant switches role AND sets the GUC, so requiring the
+    # helper by name is strictly stronger than the literal this asserted before: an
+    # inline set_config would now fail both here and in
+    # tests/security/test_rls_covers_explicit_transactions.py.
+    assert "bind_conn_to_tenant(" in pg_read, (
+        "the readiness read must bind through the shared helper; a bare "
+        "set_config leaves the transaction unfenced"
+    )
     assert "LIMIT $2" in pg_read
 
 

@@ -72,11 +72,12 @@ class BudgetPolicyMem:
 class BudgetPolicyPG:
     async def upsert_budget_policy(self, budget: Budget) -> Budget:
         from .postgres import _apply_guc
+        from .tenant_scope import pool_assumes_app_role
 
         observed = utcnow()
         async with self._pool.acquire() as conn:
             async with conn.transaction():
-                await _apply_guc(conn)
+                await _apply_guc(conn, assume_role=pool_assumes_app_role(self._pool))
                 inserted = await conn.fetchval(
                     """INSERT INTO budgets (
                            id, tenant_id, scope_type, token_limit,
@@ -144,8 +145,9 @@ class BudgetPolicyPG:
         async with self._pool.acquire() as conn:
             async with conn.transaction():
                 from .postgres import _apply_guc
+                from .tenant_scope import pool_assumes_app_role
 
-                await _apply_guc(conn)
+                await _apply_guc(conn, assume_role=pool_assumes_app_role(self._pool))
                 policy = await conn.fetchrow(
                     """SELECT "window" FROM budgets
                        WHERE tenant_id=$1 AND id=$2 FOR UPDATE""",
