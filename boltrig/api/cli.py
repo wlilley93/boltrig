@@ -95,6 +95,11 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p_doctor.add_argument("--json", action="store_true", help="emit machine-readable JSON")
 
+    p_validate = sub.add_parser(
+        "config-validate",
+        help="parse a manifest with THIS build's loader; exit non-zero on rejection",
+    )
+    p_validate.add_argument("manifest", help="path to the manifest.yaml to validate")
     sub.add_parser("version", help="print version")
 
     return parser
@@ -260,6 +265,10 @@ def _dispatch(args: argparse.Namespace) -> int:
             argv += ["--from-seq", str(args.from_seq)]
         return audit_verify_main(argv)
 
+    if args.cmd == "config-validate":
+        from .config_validate import main as config_validate_main
+
+        return config_validate_main(args.manifest)
     if args.cmd == "worker":
         from .worker import main as worker_main
 
