@@ -42,10 +42,16 @@ misconfigurations:
 vulnerabilities:
   - id: CVE-2026-16804
     purls: &chromium_purls
-      - "pkg:deb/debian/chromium*"
-      - "pkg:deb/debian/chromium-common*"
+      - "pkg:deb/debian/chromium"
+      - "pkg:deb/debian/chromium-common"
     expired_at: 2026-09-11
     statement: &chromium_statement >-
+      SCOPED BY EXACT PURL - NO WILDCARDS, and both packages listed. Measured with the
+      pinned scanner (aquasec/trivy:0.72.0) against the built image: a trailing `*`
+      (`pkg:deb/debian/chromium*`) matches NOTHING, and `chromium-common` is a separate
+      package that needs its own purl - with only `chromium` listed, 8 findings became 7,
+      not 6. Verify any change to this block by running the scanner locally rather than
+      pushing and reading CI; two of my attempts here looked correct and suppressed nothing.
       SCOPED BY PURL, NOT BY PATH, and that distinction is load-bearing. These are dpkg
       findings: trivy attributes them to the PACKAGE, not a file, so a `paths` entry can
       never match and the ignore is silently INERT - the first attempt used
