@@ -153,7 +153,17 @@ def test_duplicate_delivery_not_double_ingested():
 # --------------------------------------------------------------------------- #
 @pytest.mark.security
 @pytest.mark.invariant("SEC-67")
-def test_inbound_intake_rate_limited_per_sender():
+def test_inbound_intake_rate_limited_per_sender(monkeypatch):
+    """Flaked once under load (2026-07-30) and the mechanism is now ESTABLISHED:
+    the limiter is a FIXED window keyed on ``time.time() // 60``, so when the
+    31 requests straddle a minute boundary the count splits across two windows
+    and the 31st is accepted. That is the limiter working as designed - a fixed
+    window admits up to 2x its limit across a boundary - not a defect, so the
+    test pins the clock instead of retrying until the boundary is elsewhere.
+    ``InMemoryCounter._now`` exists as exactly this seam."""
+    from boltrig.kernel.ratelimit import InMemoryCounter
+
+    monkeypatch.setattr(InMemoryCounter, "_now", lambda self: 1_000_000.0)
     inbound_webhook._seen_deliveries.clear()
     kernel, store = asyncio.run(_kernel_with_channel())
     client = _client(kernel)
@@ -236,3 +246,34 @@ def test_idless_redelivery_passes_after_the_content_window(monkeypatch):
     monkeypatch.setattr(channel_dedup, "utcnow", lambda: later)
     assert asyncio.run(
         is_duplicate_delivery(store, T, "ch-1", did, now=later.timestamp())) is False
+
+
+# --------------------------------------------------------------------------- #
+# SEC-67  the window boundary behaviour, stated instead of flaking (task #42)
+# --------------------------------------------------------------------------- #
+@pytest.mark.security
+@pytest.mark.invariant("SEC-67")
+def test_rate_limit_window_boundary_resets_the_count(monkeypatch):
+    """The fixed window's boundary behaviour, pinned as a FACT rather than left
+    to surface as a flake: a sender throttled at the end of one window is
+    admitted again in the next, which also means a boundary-straddling burst can
+    reach up to 2x the limit. That trade-off is the fixed-window design
+    (accepted for its Redis-INCR cheapness); this test is what makes the
+    boundary crossing a stated property instead of a 1-in-N test failure."""
+    from boltrig.kernel.ratelimit import InMemoryCounter, RateLimiter, RateLimited
+    from boltrig.kernel.channel_routes import INBOUND_RL_PER_SENDER
+
+    clock = {"now": 1_000_000.0}
+    monkeypatch.setattr(InMemoryCounter, "_now", lambda self: clock["now"])
+    limiter = RateLimiter(InMemoryCounter())
+
+    async def drive():
+        for _ in range(INBOUND_RL_PER_SENDER.max):
+            await limiter.enforce(T, "channel.inbound:U-42", INBOUND_RL_PER_SENDER)
+        with pytest.raises(RateLimited):
+            await limiter.enforce(T, "channel.inbound:U-42", INBOUND_RL_PER_SENDER)
+        # the next window: the same sender is admitted again
+        clock["now"] += 60.0
+        await limiter.enforce(T, "channel.inbound:U-42", INBOUND_RL_PER_SENDER)
+
+    asyncio.run(drive())
