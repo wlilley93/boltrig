@@ -561,6 +561,13 @@ function WorkDetail({ detail, onClose, onSelect, onChanged }: { detail: WorkDeta
   const [nextStatus, setNextStatus] = useState<WorkStatus>(detail.item.status);
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState("");
+  // Which form fields the user has edited since the form last matched the
+  // canonical item. A ref, not state: it must never itself trigger the sync
+  // effect, and it is read only inside handlers and that effect. Cleared per
+  // field on a successful submit (the typed value IS canonical then) and
+  // wholesale when a different item is shown.
+  const dirty = useRef({ owner: false, parent: false, status: false });
+  const shownItemId = useRef(detail.item.id);
   const inFlight = detail.item.status === "in_flight";
   const finalizer = useExactApprovalFinalizer<
     WorkDetailApprovalInput,
@@ -600,6 +607,9 @@ function WorkDetail({ detail, onClose, onSelect, onChanged }: { detail: WorkDeta
     },
     onApplied(result, input) {
       if (!("item" in result)) return;
+      if (input.kind === "assign") dirty.current.owner = false;
+      else if (input.kind === "status") dirty.current.status = false;
+      else dirty.current.parent = false;
       const message = input.kind === "assign"
         ? `Assignment updated to ${result.item.owner_member ?? "unassigned"}.`
         : input.kind === "status"
@@ -620,10 +630,25 @@ function WorkDetail({ detail, onClose, onSelect, onChanged }: { detail: WorkDeta
 
   useEffect(() => {
     finalizer.invalidate();
-    setOwner(detail.item.owner_member ?? "");
-    setParent(detail.item.parent_id ?? "");
-    setNextStatus(detail.item.status);
-    setNotice("");
+    if (shownItemId.current !== detail.item.id) {
+      // A DIFFERENT item: the form belongs to it now, wholesale.
+      shownItemId.current = detail.item.id;
+      dirty.current = { owner: false, parent: false, status: false };
+      setOwner(detail.item.owner_member ?? "");
+      setParent(detail.item.parent_id ?? "");
+      setNextStatus(detail.item.status);
+      setNotice("");
+      return;
+    }
+    // The SAME item refreshed upstream (an agent moved it, a sibling approval
+    // landed, the poll ticked). Reconcile only fields the user is not editing:
+    // this effect used to reset all three unconditionally, so a background
+    // refresh mid-edit silently replaced the typed value and the next Assign
+    // submitted the OLD one - an approval collected for an action the user
+    // never asked for, which is the one thing an approval must never be.
+    if (!dirty.current.owner) setOwner(detail.item.owner_member ?? "");
+    if (!dirty.current.parent) setParent(detail.item.parent_id ?? "");
+    if (!dirty.current.status) setNextStatus(detail.item.status);
   }, [detail.item.id, detail.item.owner_member, detail.item.parent_id, detail.item.status]);
 
   async function mutate(kind: "assign" | "status" | "parent", clear = false) {
@@ -670,6 +695,9 @@ function WorkDetail({ detail, onClose, onSelect, onChanged }: { detail: WorkDeta
           );
       if (result.status === "ok") {
         finalizer.clear();
+        if (kind === "assign") dirty.current.owner = false;
+        else if (kind === "status") dirty.current.status = false;
+        else dirty.current.parent = false;
         const message = kind === "assign"
           ? `Assignment updated to ${result.item.owner_member ?? "unassigned"}.`
           : kind === "status"
@@ -713,16 +741,19 @@ function WorkDetail({ detail, onClose, onSelect, onChanged }: { detail: WorkDeta
         <div className="stack">
           <label className="field-label">Owner<input className="field-control" value={owner} onChange={(event) => {
             finalizer.invalidate();
+            dirty.current.owner = true;
             setOwner(event.target.value);
           }} placeholder="Department or fleet member" /></label>
           <div className="button-row"><button className="primary-button" disabled={Boolean(busy) || inFlight} onClick={() => void mutate("assign")}>{busy === "assign" ? "Saving…" : "Assign"}</button><button className="secondary-button" disabled={Boolean(busy) || inFlight} onClick={() => void mutate("assign", true)}>Unassign</button></div>
           <label className="field-label">Status<select className="field-control" value={nextStatus} onChange={(event) => {
             finalizer.invalidate();
+            dirty.current.status = true;
             setNextStatus(event.target.value as WorkStatus);
           }}>{[detail.item.status, ...MANUAL_WORK_TRANSITIONS[detail.item.status]].map((value) => <option value={value} key={value}>{value.replaceAll("_", " ")}</option>)}</select></label>
           <button className="secondary-button" disabled={Boolean(busy) || nextStatus === detail.item.status} onClick={() => void mutate("status")}>{busy === "status" ? "Submitting…" : "Change status"}</button>
           <label className="field-label">Parent<input className="field-control" value={parent} onChange={(event) => {
             finalizer.invalidate();
+            dirty.current.parent = true;
             setParent(event.target.value);
           }} placeholder="Root (blank) or parent ID" /></label>
           <div className="button-row"><button className="secondary-button" disabled={Boolean(busy) || inFlight} onClick={() => void mutate("parent")}>{busy === "parent" ? "Submitting…" : "Change parent"}</button><button className="secondary-button" disabled={Boolean(busy) || inFlight} onClick={() => void mutate("parent", true)}>Make root</button></div>
