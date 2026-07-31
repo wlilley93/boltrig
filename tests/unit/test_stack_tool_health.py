@@ -23,6 +23,11 @@ from boltrig.fleet.stack_tool_receipts import (
 pytestmark = pytest.mark.unit
 _SIGNING_KEY = b"unit-test-stack-tool-receipt-key"
 _TENANT = "acme"
+# These cases are all about a deployment that DOES declare browser automation.
+# Since 2026-07-31 the required tool set is derived from the manifest, so a test
+# that left it implicit would silently become a test of the empty set - passing
+# while asserting nothing (the receipt cases below would all read 'ok').
+_WANTS_BROWSER = frozenset({"browser-cli"})
 
 
 @pytest.mark.invariant("FR-OPS-03")
@@ -63,6 +68,14 @@ async def test_fleet_probe_requires_both_binaries_and_live_loopback_cdp(
 
     monkeypatch.setattr("boltrig.fleet.stack_tool_health._probe_version", version)
     monkeypatch.setattr("boltrig.fleet.stack_tool_health._probe_browser_cdp", dead_cdp)
+    # This test is about a deployment that WANTS a browser: what the probe does
+    # when it is not wanted at all is tested separately
+    # (tests/security/test_browser_runtime_gate.py), and leaving it implicit here
+    # would quietly turn this into a test of the no-browser path - green, and
+    # asserting nothing about either binary.
+    monkeypatch.setattr(
+        "boltrig.fleet.browser_runtime.browser_automation_wanted", lambda *_a, **_k: True
+    )
 
     statuses = await probe_fleet_tools(
         {
@@ -115,6 +128,7 @@ async def test_browser_probe_accepts_only_a_chromium_cdp_response() -> None:
                 {"browser-cli": True},
                 _SIGNING_KEY,
                 _TENANT,
+                required=_WANTS_BROWSER,
                 now=60.0,
             ),
             100.0,
@@ -125,6 +139,7 @@ async def test_browser_probe_accepts_only_a_chromium_cdp_response() -> None:
                 {"browser-cli": True},
                 _SIGNING_KEY,
                 _TENANT,
+                required=_WANTS_BROWSER,
                 now=110.0,
             ),
             100.0,
@@ -135,6 +150,7 @@ async def test_browser_probe_accepts_only_a_chromium_cdp_response() -> None:
                 {"browser-cli": False},
                 _SIGNING_KEY,
                 _TENANT,
+                required=_WANTS_BROWSER,
                 now=100.0,
             ),
             100.0,
@@ -145,6 +161,7 @@ async def test_browser_probe_accepts_only_a_chromium_cdp_response() -> None:
                 {"browser-cli": True},
                 _SIGNING_KEY,
                 _TENANT,
+                required=_WANTS_BROWSER,
                 now=100.0,
             ),
             100.0,
@@ -162,6 +179,7 @@ def test_fleet_receipt_requires_schema_freshness_and_all_tools(
             signing_key=_SIGNING_KEY,
             tenant_id=_TENANT,
             now=now,
+            required=_WANTS_BROWSER,
         )
         == expected
     )
@@ -173,6 +191,7 @@ def test_fleet_receipt_rejects_forged_or_cross_deployment_evidence() -> None:
         {"browser-cli": True},
         b"different-deployment-key",
         _TENANT,
+        required=_WANTS_BROWSER,
         now=100.0,
     )
 

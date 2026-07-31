@@ -214,7 +214,20 @@ async def probe_fleet_tools(env: Mapping[str, str], timeout_s: float) -> dict[st
 
     The probe pair matches the readiness required set (decision 0012): OpenCode
     is staged-cutover residue and is no longer probed - a missing/unhealthy
-    residue binary must never trip the heartbeat warning."""
+    residue binary must never trip the heartbeat warning.
+
+    A tenant that ``browser_automation_wanted`` answers False for gets NO
+    browser-cli key at all, rather than a False one. False is a claim that the
+    tool is broken, and the heartbeat would log "live probe failed" once every
+    interval forever for a browser nobody asked to run. Absent is the true
+    statement: not applicable here. Readiness derives its required set from that
+    same predicate, so the key it looks for and the key published here appear and
+    disappear together.
+    """
+    from .browser_runtime import browser_automation_wanted
+
+    if not browser_automation_wanted():
+        return {}
     browser = (env.get("BOLTRIG_BROWSER_CLI_BIN") or "browser-use").strip()
     browser_root = (env.get("BOLTRIG_BROWSER_CLI_HOME") or "/var/lib/boltrig/browser-cli").strip()
     if not browser or not browser_root:

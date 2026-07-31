@@ -85,7 +85,7 @@ LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/model_profiles.py:17		A named pr
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/pump.py:140		A short, deterministic lesson distilled from an outcome (Phase 3, US-WFL-07).
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/stack_tool_health.py:1		Owner-local liveness evidence for first-party stack tools.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/stack_tool_receipts.py:1		Authenticated, expiring Redis receipts for fleet-owned tool health.
-LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/stack_tool_receipts.py:66		Opaque tenant binding so signed evidence cannot cross tenant keys.
+LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/stack_tool_receipts.py:87		Opaque tenant binding so signed evidence cannot cross tenant keys.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/identity/__init__.py:1		Identity and SSO: token verification, RBAC, and delegation (US-IAM-01..05).
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/identity/auth.py:74		RS256->HS256 / alg=none confusion cannot forge a token.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/identity/auth.py:76		A token may not claim a longer life than this regardless of its exp (IAM-03).
@@ -306,6 +306,7 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/api/bootstrap.py:186	mcp.consume	
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/api/codex_execution.py:76	RootEngineDecision	Record one shadow ``RootEngineDecision`` for a chat root, execution-neutral.
 LOAD-BEARING	SUBJECT-REACHED	comment	boltrig/api/host_boundary.py:69	SecurityWriter	addresses: the ``SecurityWriter`` ledger is append-only.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/api/mint_token.py:1	resolve_pat_principal	``boltrig mint-token`` - mint a Personal Access Token for an EXISTING user.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/api/readiness.py:35	browser_automation_wanted	The stack tools THIS tenant's readiness may require.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/api/worker.py:117	purge_closed_conversations	Start the retention janitor (M11 / SEC-74), or None when disabled.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/config/admin.py:1	ConfigRevision	AdminConfig - the Admin Console service (Round Three, Epic ADM).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/config/control_lifecycle.py:1	control.adapter.activate	Governed adapter suspension and removal - the inverse of activation (SEC-22).
@@ -321,6 +322,8 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/anchor.py:145	run_forever	L
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/authority.py:1	GrantChecker	Whose authority a delegated run carries (SEC-164, SEC-165).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/authority.py:45	effective_grants_for_request	The grants of the principal ``item`` is executed on behalf of (SEC-164).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/authority.py:85	GrantChecker	The item's EXECUTION context, capped to the requesting principal (SEC-164).
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/browser_runtime.py:1	needs_browser_cli	Whether this deployment runs the fleet image's Chromium at all.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/browser_runtime.py:47	needs_browser_cli	True iff the tenant's manifest declares browser automation, per ``needs_browser_cli``.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/chat_authority.py:42	on_behalf_adapter_id	Seal the caller's clamped external bearer for the adapter that claims it.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/chat_authority.py:73	resolve_run_scoped_credential	Carry the parent run's sealed bearer down to a delegated child run.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/chat_idempotency.py:1	IdempotencyCoordinator	Exactly once per user message, on the surface a human actually types into.
@@ -373,6 +376,7 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/runtime_resolver.py:22	reso
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/spawn.py:286	_publish_subagent_end_event	Retire the bearer this child inherited, at the child's run terminal.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/spawn.py:313	_publish_subagent_event	Settle a delegated child on the parent relay (G3, SDK-CONTRACT §5).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/spawn.py:388	resolve_run_scoped_credential	Carry a run-scoped adapter bearer from the spawning run to its child.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/stack_tool_health.py:212	browser_automation_wanted	Probe only tools that execute in the fleet worker container.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/stack_tool_status.py:200	cached_snapshot	``cached_snapshot`` returns only an already-reported scoped snapshot.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/ultracode_memory.py:73	identity.rbac.memory_owner_scopes	Memory RBAC owner scopes derivable at this layer: the principal + org.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/workers.py:1	register_workers	The Hatchet integration seam (P6, US-EXE-02).
@@ -582,7 +586,7 @@ ORDINARY	NO-SUBJECT	comment	boltrig/api/mint_token.py:74		user's own allow set.
 ORDINARY	NO-SUBJECT	comment	boltrig/api/mint_token.py:98		trivially capturable (`...
 ORDINARY	NO-SUBJECT	comment	boltrig/api/platform_bootstrap.py:36		Projection receives composition truth only, never provider details.
 ORDINARY	NO-SUBJECT	docstring	boltrig/api/readiness.py:1		Bounded, fail-closed ``/readyz`` checks for durable dependencies, governed control registration, and enabled runtime seams.
-ORDINARY	NO-SUBJECT	comment	boltrig/api/readiness.py:135		cannot amplify into unbounded Herdr subprocesses or dependency probes.
+ORDINARY	NO-SUBJECT	comment	boltrig/api/readiness.py:157		cannot amplify into unbounded Herdr subprocesses or dependency probes.
 ORDINARY	NO-SUBJECT	comment	boltrig/api/readiness.py:29		The tools /readyz requires.
 ORDINARY	NO-SUBJECT	comment	boltrig/api/readiness.py:31		status snapshot when deployed, but never readiness-GATING.
 ORDINARY	NO-SUBJECT	docstring	boltrig/api/worker.py:1		The fleet worker process.
@@ -905,7 +909,6 @@ ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/runtime_resolver.py:18		A composed r
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/spawn.py:216		cross: see _inherit_adapter_bearer for why the child cannot use the seal
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/spawn.py:368		(0/0) is priced on the total exactly as before - never at zero.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/spawn.py:496		The run never happened: honest degradation (US-FLT-07), so the chat
-ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/stack_tool_health.py:212		Probe only tools that execute in the fleet worker container.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/ultracode.py:67		(ultracode_memory.memory_prompt), never as bare prompt text (SEC-72).
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/ultracode_memory.py:283		Prompt-safe memory block: recall is untrusted data, never instruction.
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/workers.py:179		True when BOLTRIG_REQUIRE_DURABLE demands fail-closed selection (US-EXE-05).

@@ -24,6 +24,27 @@ _MAX_RECEIPT_BYTES = 4096
 _CLOCK_SKEW_SECONDS = 5.0
 
 
+def fleet_tool_ids() -> frozenset[str]:
+    """The fleet tools a receipt must carry for THIS deployment.
+
+    Every entry in ``_FLEET_TOOL_IDS`` is browser-owned, so the set collapses to
+    empty on a tenant that declares no browser automation. That has to be derived
+    on BOTH sides of the receipt: the publisher writes ``"failed"`` for any
+    required id absent from the probe results, and the validator rejects a
+    receipt missing a required id as malformed. A fixed set therefore turned a
+    deliberately-unstarted Chromium into a permanent 503 - the health check
+    reporting an outage it had itself created.
+
+    Publisher and validator run in different containers (fleet worker, kernel)
+    and both mount the same manifest, so they resolve this identically.
+    """
+    from .browser_runtime import browser_automation_wanted
+
+    if browser_automation_wanted():
+        return _FLEET_TOOL_IDS
+    return frozenset()
+
+
 def receipt_signing_key(env: Mapping[str, str]) -> bytes | None:
     """Derive a purpose-separated receipt key from the deployment audit key."""
     # [2026] VJS-CC-BOLTRIG-AUDIT-KEY-PROVISIONING-001 O3. Blank was the only
@@ -77,14 +98,18 @@ def _receipt_payload(
     signing_key: bytes,
     tenant_id: str,
     now: float | None = None,
+    required: frozenset[str] | None = None,
 ) -> str:
+    """``required`` defaults to ``fleet_tool_ids()``, and mirrors the validator's
+    parameter of the same name so a test can state the world it is exercising
+    instead of depending on whatever manifest sits at the default path."""
     body: dict[str, object] = {
         "schema": _RECEIPT_SCHEMA,
         "context": _receipt_context(tenant_id, signing_key),
         "checked_at": time.time() if now is None else now,
         "components": {
             tool_id: "ok" if statuses.get(tool_id) else "failed"
-            for tool_id in sorted(_FLEET_TOOL_IDS)
+            for tool_id in sorted(fleet_tool_ids() if required is None else required)
         },
     }
     mac = hmac.new(
@@ -150,8 +175,14 @@ def validate_fleet_tool_receipt(
     signing_key: bytes,
     tenant_id: str,
     now: float | None = None,
+    required: frozenset[str] | None = None,
 ) -> tuple[bool, str]:
-    """Validate authentication, context, schema, freshness, and tool results."""
+    """Validate authentication, context, schema, freshness, and tool results.
+
+    ``required`` defaults to ``fleet_tool_ids()`` - the deployment's own answer.
+    It is a parameter so a test can state the required set it is exercising
+    rather than depend on whatever manifest happens to sit at the default path.
+    """
     payload = _parse_receipt(raw)
     if payload is None:
         return False, "missing"
@@ -174,9 +205,10 @@ def validate_fleet_tool_receipt(
     components = body.get("components")
     if not isinstance(components, Mapping):
         return False, "malformed"
-    if not _FLEET_TOOL_IDS <= components.keys():
+    needed = fleet_tool_ids() if required is None else required
+    if not needed <= components.keys():
         return False, "malformed"
-    if any(components[tool_id] != "ok" for tool_id in _FLEET_TOOL_IDS):
+    if any(components[tool_id] != "ok" for tool_id in needed):
         return False, "degraded"
     return True, "ok"
 

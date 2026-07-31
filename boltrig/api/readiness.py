@@ -31,6 +31,28 @@ _PRODUCTION_NAMES = {"prod", "production", "staging"}
 # status snapshot when deployed, but never readiness-GATING.
 _STACK_TOOL_IDS = frozenset({"herdr", "browser-cli"})
 
+
+def _required_stack_tool_ids() -> frozenset[str]:
+    """The stack tools THIS tenant's readiness may require.
+
+    Herdr is kernel-owned and unconditional. browser-cli is required only where
+    the manifest declares browser automation, because the fleet entrypoint starts
+    Chromium on exactly that predicate - a fixed required set would gate /readyz
+    on a tool the deployment deliberately no longer runs, which is an outage
+    dressed as a health check.
+
+    ``browser_automation_wanted`` answers False for an unreadable manifest, so a
+    kernel that cannot see one requires only herdr. That is the safe direction
+    here: the failure it can cause is a browser-using tenant reporting ready
+    without its browser, which surfaces loudly at first use, against a whole
+    deployment stuck at 503 for a capability nobody asked for.
+    """
+    from boltrig.fleet.browser_runtime import browser_automation_wanted
+
+    if browser_automation_wanted():
+        return _STACK_TOOL_IDS
+    return _STACK_TOOL_IDS - {"browser-cli"}
+
 PostgresProbe = Callable[[], Awaitable[tuple[bool, tuple[str, ...]]]]
 RedisProbe = Callable[[str, float], Awaitable[bool]]
 HerdrProbe = Callable[[Mapping[str, str], float], Awaitable[bool]]
@@ -241,8 +263,9 @@ class ReadinessService:
             )
             return failed, gateway
 
-        tool_ok = _STACK_TOOL_IDS <= components.keys() and all(
-            components[name].get("status") == "ok" for name in _STACK_TOOL_IDS
+        required_tools = _required_stack_tool_ids()
+        tool_ok = required_tools <= components.keys() and all(
+            components[name].get("status") == "ok" for name in required_tools
         )
         live_health = "not_required"
         stack_reason = None if tool_ok else "posture_failed"
@@ -259,8 +282,8 @@ class ReadinessService:
             "ok" if tool_ok else "failed",
             required=True,
             reason=stack_reason,
-            expected=len(_STACK_TOOL_IDS),
-            registered=len(_STACK_TOOL_IDS & components.keys()),
+            expected=len(required_tools),
+            registered=len(required_tools & components.keys()),
             live_health=live_health,
         )
 

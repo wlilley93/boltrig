@@ -92,9 +92,23 @@ RUN python -m venv /opt/boltrig/browser-cli && \
 # primes Browser Harness' local CDP daemon, so browser.health is truthful from
 # the first probe and no runtime downloader (uvx/playwright) can be reached.
 COPY --chmod=0755 scripts/fleet-entrypoint.sh /usr/local/bin/fleet-entrypoint
-RUN BOLTRIG_BROWSER_CLI_HOME=/tmp/browser-cli-smoke \
+# Since 2026-07-31 the entrypoint starts Chromium only where a manifest declares
+# browser automation, so this smoke has to declare it - in exactly the language a
+# tenant uses, rather than through an override that would double as a bypass. The
+# build IS the test for that wiring: without the manifest below the smoke reports
+# "Chromium not started" and the layer fails, which is how the gate found this
+# consumer in the first place.
+RUN printf '%s\n' \
+      'organisation: boltrig-build-smoke' \
+      'tenant_id: build-smoke' \
+      'browser_cli:' \
+      '  enabled: true' \
+      > /tmp/browser-smoke-manifest.yaml && \
+    BOLTRIG_BROWSER_CLI_HOME=/tmp/browser-cli-smoke \
+    BOLTRIG_MANIFEST=/tmp/browser-smoke-manifest.yaml \
     fleet-entrypoint sh -c \
-    'printf "%s\n" "new_tab(\"data:text/html,<title>boltrig-browser-smoke</title>\")" "print(page_info())" | browser-use | grep -F boltrig-browser-smoke'
+    'printf "%s\n" "new_tab(\"data:text/html,<title>boltrig-browser-smoke</title>\")" "print(page_info())" | browser-use | grep -F boltrig-browser-smoke' && \
+    rm -f /tmp/browser-smoke-manifest.yaml
 
 # Boltrig v2 coding-agent runtime: ship OpenCode with the stack, not from a
 # developer workstation. Use the native npm binary tarball directly rather than
