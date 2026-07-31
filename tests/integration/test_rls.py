@@ -212,3 +212,78 @@ def test_rls_binds_the_STORE_not_just_a_hand_rolled_connection():
             await owner.close()
 
     asyncio.run(run())
+
+
+@_pg
+@pytest.mark.invariant("SEC-65")
+def test_the_control_plane_enumeration_still_sees_tenants_UNDER_rls():
+    """The 2026-07-31 outage, reproduced: the fence blinded the janitors.
+
+    ``run_anchor_sweep_detailed`` and ``run_hitl_expiry_sweep`` both begin with
+    ``store.list_orgs()``. It has no tenant to bind - it is the query that
+    DISCOVERS the tenants - so under the fence it ran unbound, the organisations
+    policy ``id = current_setting('app.tenant_id', true)`` matched nothing, and it
+    returned ZERO rows on a deployment that had a tenant.
+
+    Both sweeps then iterated an empty list, did nothing, wrote no receipt and
+    logged nothing, so overdue HITL approvals stopped timing out (SEC-14) and
+    audit-chain anchoring stopped (COUNTY 9 D4) for nine hours while both loops
+    presented as idle.
+
+    Nothing raised and nothing could. Only an assertion that the enumeration
+    RETURNS SOMETHING catches it, which is why this test asserts on the count and
+    not on an absence of errors.
+    """
+    async def run():
+        from boltrig.models.tenancy import Organisation
+        from boltrig.store.postgres import PostgresStore
+
+        owner = await PostgresStore.connect(DSN)
+        try:
+            await owner.apply_rls()
+            await owner.create_org(
+                Organisation(id="rls_cp_org", name="rls cp", slug="rls-cp")
+            )
+        finally:
+            await owner.close()
+
+        # rls=True is the deployed posture: every fenced call drops to the
+        # NOBYPASSRLS boltrig_app role, so the policies actually bind.
+        store = await PostgresStore.connect(DSN, apply_schema=False, rls=True)
+        try:
+            assert store._assume_app_role, (
+                "rls.sql must be applied for this to prove anything; without the "
+                "role switch the policies do nothing and the test cannot fail"
+            )
+            orgs = await store.list_orgs()
+            assert any(o.id == "rls_cp_org" for o in orgs), (
+                "list_orgs returned no tenants under RLS, so every janitor that "
+                "sweeps it does nothing at all and reports itself idle"
+            )
+
+            # The contrast that shows the fence is still ON for ordinary reads:
+            # a tenant-scoped read with no tenant bound must still see nothing.
+            async with store._pool.acquire() as c:
+                async with c.transaction():
+                    await c.execute("SET LOCAL ROLE boltrig_app")
+                    assert await c.fetchval("SELECT count(*) FROM nouns") == 0, (
+                        "the exemption must be narrow: unbound tenant-scoped reads "
+                        "must stay fail-closed"
+                    )
+        finally:
+            await store.close()
+            cleanup = await PostgresStore.connect(DSN, apply_schema=False)
+            try:
+                async with cleanup._pool.acquire() as c:
+                    await c.execute(_DISABLE_RLS)
+                    await c.execute(
+                        "ALTER TABLE organisations NO FORCE ROW LEVEL SECURITY"
+                    )
+                    await c.execute(
+                        "ALTER TABLE organisations DISABLE ROW LEVEL SECURITY"
+                    )
+                    await c.execute("DELETE FROM organisations WHERE id='rls_cp_org'")
+            finally:
+                await cleanup.close()
+
+    asyncio.run(run())

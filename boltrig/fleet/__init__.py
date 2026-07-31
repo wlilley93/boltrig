@@ -13,9 +13,10 @@ stays unaware of the fleet and receives the reasoning-verb invoker via
 from __future__ import annotations
 
 from .anchor import (
+    AnchorSweepOutcome,
     anchor_interval_from_env,
     run_anchor_forever,
-    run_anchor_sweep,
+    run_anchor_sweep_detailed,
 )
 from .retention import (
     retention_days_from_manifest,
@@ -69,7 +70,8 @@ __all__ = [
     "LocalDurableExecutor",
     "HatchetExecutor",
     # periodic audit-rollup anchoring (COUNTY 9 D4)
-    "run_anchor_sweep",
+    "AnchorSweepOutcome",
+    "run_anchor_sweep_detailed",
     "run_anchor_forever",
     "anchor_interval_from_env",
     "run_retention_forever",

@@ -15,6 +15,7 @@ A HITL request's ``timeout_at`` is recorded AND enforced, in two layers:
 """
 
 import asyncio
+import logging
 from datetime import timedelta
 
 import pytest
@@ -254,3 +255,52 @@ def test_expiry_interval_knob(monkeypatch):
 
     monkeypatch.setenv(INTERVAL_ENV, "0")
     assert hitl_expiry_interval_from_env() == 0.0  # honoured as "disabled"
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-14")
+async def test_a_sweep_that_sees_no_tenants_says_so_instead_of_returning_zero(caplog):
+    """The 2026-07-31 outage: the sweep went silent rather than idle.
+
+    Every tenant is reached through ``store.list_orgs()``. Enabling RLS made that
+    read return an empty list, so the per-tenant body never ran: no approval
+    expired, no receipt was written, nothing was logged, and the sweep returned 0 -
+    which is also its correct answer when there is simply nothing overdue.
+
+    For nine hours SEC-14 was not being delivered and the only trace was a
+    background-job receipt that had stopped advancing. A sweep that cannot see the
+    fleet must not present as a quiet one.
+    """
+    k, _ = await _build_kernel()
+    # No org is created: this reproduces exactly what RLS did to the enumeration.
+    with caplog.at_level(logging.INFO, logger="boltrig.kernel.hitl_expiry"):
+        assert await run_hitl_expiry_sweep(k.store) == 0
+
+    warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert warnings, (
+        "zero tenants produced no output at all, which is how this hid for nine hours"
+    )
+    message = warnings[0].getMessage()
+    assert "ZERO tenants" in message
+    assert "SEC-14" in message, "the message must name the property that stopped"
+    assert "RLS" in message, (
+        "it must name the cause that actually produced it, or the next reader takes "
+        "it for an empty deployment"
+    )
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-14")
+async def test_a_sweep_with_tenants_and_nothing_overdue_stays_quiet(caplog):
+    """The negative control: a genuinely idle sweep must not warn.
+
+    Without this, the guard above would pass just as well on a janitor that warns
+    every cycle, and a check that cries wolf is one people learn to ignore.
+    """
+    k, _ = await _build_kernel()
+    await k.store.create_org(Organisation(id=TENANT, name=TENANT, slug=TENANT))
+    with caplog.at_level(logging.INFO, logger="boltrig.kernel.hitl_expiry"):
+        assert await run_hitl_expiry_sweep(k.store) == 0
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING], (
+        "an idle sweep over a real tenant list has nothing to warn about"
+    )

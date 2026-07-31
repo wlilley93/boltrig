@@ -20,7 +20,7 @@ import asyncio
 
 import pytest
 
-from boltrig.fleet import register_workers, run_anchor_forever, run_anchor_sweep
+from boltrig.fleet import register_workers, run_anchor_forever, run_anchor_sweep_detailed
 from boltrig.fleet.anchor import (
     DEFAULT_INTERVAL_SECONDS,
     INTERVAL_ENV,
@@ -57,7 +57,7 @@ async def test_sweep_seals_each_tenant_and_is_a_noop_without_new_rows(kernel):
     await _seed_audit(kernel, 3)
 
     # First sweep seals acme (3 rows) and no-ops the empty tenant -> 1 written.
-    written = await run_anchor_sweep(kernel.store, kernel.anchorer)
+    written = (await run_anchor_sweep_detailed(kernel.store, kernel.anchorer)).sealed
     assert written == 1
 
     # The anchor the JOB wrote agrees with a recompute over the segment (SEC-122).
@@ -69,11 +69,11 @@ async def test_sweep_seals_each_tenant_and_is_a_noop_without_new_rows(kernel):
     assert await kernel.anchorer.verify_latest(OTHER) == (True, None)
 
     # A second sweep with nothing new is a clean no-op.
-    assert await run_anchor_sweep(kernel.store, kernel.anchorer) == 0
+    assert (await run_anchor_sweep_detailed(kernel.store, kernel.anchorer)).sealed == 0
 
     # New rows -> the next sweep advances only over the un-anchored tail.
     await _seed_audit(kernel, 2)
-    assert await run_anchor_sweep(kernel.store, kernel.anchorer) == 1
+    assert (await run_anchor_sweep_detailed(kernel.store, kernel.anchorer)).sealed == 1
     _, tail = await kernel.anchorer.verify_latest(TENANT)
     assert tail.seq_start == 4 and tail.seq_end == 5
 
@@ -95,7 +95,7 @@ async def test_anchor_degrades_cleanly_when_hatchet_absent(kernel):
     await _seed_org(kernel.store, TENANT)
     await _seed_audit(kernel, 2)
     # The sweep still seals the chain (a dev-fallback anchor), no crash.
-    assert await run_anchor_sweep(kernel.store, kernel.anchorer) == 1
+    assert (await run_anchor_sweep_detailed(kernel.store, kernel.anchorer)).sealed == 1
     ok, anchor = await kernel.anchorer.verify_latest(TENANT)
     assert ok and anchor.is_dev_fallback is True
 
@@ -105,7 +105,7 @@ async def test_anchor_degrades_cleanly_when_hatchet_absent(kernel):
     from boltrig.kernel.security_events import AuditAnchorer
 
     empty = InMemoryStore()
-    assert await run_anchor_sweep(empty, AuditAnchorer(empty)) == 0
+    assert (await run_anchor_sweep_detailed(empty, AuditAnchorer(empty))).sealed == 0
 
 
 # --------------------------------------------------------------------------- #
@@ -127,7 +127,7 @@ async def test_sweep_continues_past_a_failing_tenant(kernel):
 
     kernel.anchorer.anchor = flaky  # type: ignore[method-assign]
     # The failing tenant is logged + skipped; acme is still sealed.
-    assert await run_anchor_sweep(kernel.store, kernel.anchorer) == 1
+    assert (await run_anchor_sweep_detailed(kernel.store, kernel.anchorer)).sealed == 1
     ok, _ = await kernel.anchorer.verify_latest(TENANT)
     assert ok is True
 

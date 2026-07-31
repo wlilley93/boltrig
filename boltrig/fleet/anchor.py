@@ -8,7 +8,7 @@ trigger: a worker-side janitor that, on an interval, walks every tenant (org) an
 seals the un-anchored tail of its audit chain.
 
 Shape mirrors the retention janitor (:mod:`boltrig.fleet.retention`) and the
-delegation pump (:class:`boltrig.fleet.pump.WorkPump`): a ``run_anchor_sweep``
+delegation pump (:class:`boltrig.fleet.pump.WorkPump`): a ``run_anchor_sweep_detailed``
 the caller can drive deterministically, plus a cancellable ``run_anchor_forever``
 loop that idle-sleeps and never dies on a bad cycle (P9).
 
@@ -49,9 +49,12 @@ the pump (see :mod:`boltrig.api.worker`). To drive it standalone, e.g.
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 import logging
 import os
 from typing import Any
+
+from .sweep_progress import SweepProgress
 
 log = logging.getLogger("boltrig.fleet.anchor")
 
@@ -91,15 +94,34 @@ async def anchor_tenant_once(anchorer: Any, tenant_id: str) -> Any | None:
     return await anchorer.anchor(tenant_id)
 
 
-async def run_anchor_sweep(store: Any, anchorer: Any) -> int:
-    """Anchor the un-anchored tail of EVERY tenant's audit chain once.
+@dataclass(frozen=True)
+class AnchorSweepOutcome:
+    """What one sweep actually did, as three numbers the caller can judge.
+
+    ``sealed`` alone cannot be judged: a tenant with no new audit rows is a clean
+    no-op, so sealed=0 is the correct result for a quiet deployment AND the
+    result of a sweep that failed on every tenant, or saw no tenants at all.
+    """
+
+    tenants: int
+    sealed: int
+    failed: int
+
+    @property
+    def handled(self) -> int:
+        """Tenants evaluated without error. A no-op counts: it was still handled."""
+        return self.tenants - self.failed
+
+
+async def run_anchor_sweep_detailed(store: Any, anchorer: Any) -> AnchorSweepOutcome:
+    """Anchor every tenant's un-anchored tail once, reporting what was seen.
 
     Enumerates orgs via ``store.list_orgs`` (an org's id IS its tenant_id) and
     seals each. One tenant's failure is logged and the sweep continues (P9), so a
-    single bad tenant never stops the rest. Returns the number of anchors written
-    (tenants with no new rows contribute nothing).
+    single bad tenant never stops the rest.
     """
-    written = 0
+    sealed = 0
+    failed = 0
     orgs = await store.list_orgs()
     for org in orgs:
         try:
@@ -108,14 +130,16 @@ async def run_anchor_sweep(store: Any, anchorer: Any) -> int:
             raise
         except Exception:  # one tenant's fault never stops the sweep (P9)
             log.exception("anchor sweep failed for tenant=%s; continuing", org.id)
+            failed += 1
             continue
         if anchor is not None:
-            written += 1
+            sealed += 1
             log.info(
                 "audit-anchor: sealed tenant=%s seq[%s..%s] (dev_fallback=%s)",
                 org.id, anchor.seq_start, anchor.seq_end, anchor.is_dev_fallback,
             )
-    return written
+    return AnchorSweepOutcome(tenants=len(orgs), sealed=sealed, failed=failed)
+
 
 
 async def run_anchor_forever(
@@ -124,18 +148,50 @@ async def run_anchor_forever(
     *,
     interval: float = DEFAULT_INTERVAL_SECONDS,
 ) -> None:
-    """Loop :func:`run_anchor_sweep` forever; cancellable, idle-sleeping.
+    """Loop :func:`run_anchor_sweep_detailed` forever; cancellable, idle-sleeping.
 
     A bad cycle is logged and the loop continues - an anchor failure never kills
     the janitor (P9), mirroring the pump's ``run_forever`` and the retention
     loop. Cancellation propagates so the task shuts down cleanly. This depends on
     nothing but the store, so it runs whether or not Hatchet is present.
+
+    Every cycle now says what it saw against what it did. This loop ran for nine
+    hours on 2026-07-31 sealing nothing, because RLS had made its tenant
+    enumeration return an empty list, and it produced no output whatsoever - the
+    only evidence was an audit chain that had quietly stopped being anchored.
     """
+    progress = SweepProgress("audit-anchor")
     while True:
         try:
-            await run_anchor_sweep(store, anchorer)
+            outcome = await run_anchor_sweep_detailed(store, anchorer)
         except asyncio.CancelledError:
             raise
         except Exception:  # a bad cycle never kills the janitor (P9)
             log.exception("audit-anchor sweep cycle failed; continuing")
+        else:
+            _report(progress, outcome)
         await asyncio.sleep(interval)
+
+
+def _report(progress: SweepProgress, outcome: AnchorSweepOutcome) -> None:
+    """Publish one cycle, and treat an empty tenant list as a fault of its own.
+
+    ``seen`` is the tenants enumerated and ``acted`` the ones evaluated without
+    error, so a sweep failing on every tenant escalates to STALLED. That pair
+    cannot catch zero tenants - seen=0/acted=0 is idle by definition, the blind
+    spot SweepProgress documents - and zero tenants is precisely how this janitor
+    died. A control-plane enumeration returning nothing is therefore called out
+    separately, at WARNING, with the cause that has actually produced it.
+    """
+    if outcome.tenants == 0:
+        log.warning(
+            "audit-anchor: enumerated ZERO tenants, so nothing was anchored. This is "
+            "NOT an idle sweep. list_orgs must run outside the RLS fence; if it is "
+            "bound to a tenant the policy matches nothing and returns no rows."
+        )
+    progress.record(seen=outcome.tenants, acted=outcome.handled)
+    if outcome.failed:
+        log.warning(
+            "audit-anchor: %d of %d tenant(s) failed to anchor",
+            outcome.failed, outcome.tenants,
+        )

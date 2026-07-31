@@ -21,6 +21,7 @@ from .channel_outbox import ChannelOutboxStorePG
 from .budget_policy import BudgetPolicyPG
 from .budget_usage import BudgetUsagePG
 from .capabilities import CapabilityStorePG
+from .control_plane_reads import ControlPlaneReadsPG
 from .distillation_reads import DistillationReadsPG
 from .guarded_writes import GuardedWritesPG
 from .idempotency import IdempotencyStorePG
@@ -169,6 +170,7 @@ async def _init_conn(conn: asyncpg.Connection) -> None:
 
 @bind_tenant_on_store_methods
 class PostgresStore(
+    ControlPlaneReadsPG,
     DistillationReadsPG,
     BudgetPolicyPG, BudgetUsagePG, WorkItemReadsPG, IdempotencyStorePG, GuardedWritesPG,
     PermanentFleetStorePG,
@@ -1586,11 +1588,8 @@ class PostgresStore(
         )
         return _org(row)
 
-    async def list_orgs(self):
-        rows = await self._pool.fetch(
-            "SELECT * FROM organisations ORDER BY created_at DESC"
-        )
-        return [_org(r) for r in rows]
+    # list_orgs lives in ControlPlaneReadsPG: it is cross-tenant BY DEFINITION and
+    # so runs outside the fence, which is a decision that needs its own guard.
 
     async def update_org(self, org: Organisation):
         await self._pool.execute(

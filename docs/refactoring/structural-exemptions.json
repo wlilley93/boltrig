@@ -303,7 +303,7 @@
       "expires": "2026-12-31"
     },
     "boltrig/store/postgres.py": {
-      "max_file_lines": 1821,
+      "max_file_lines": 1820,
       "max_function_lines": 40,
       "over_limit_functions": [],
       "owner": "store-maintainers",

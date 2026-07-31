@@ -199,7 +199,17 @@ async def run_hitl_expiry_sweep(
     continues (P9). Returns the number of requests expired.
     """
     expired = 0
-    for org in await store.list_orgs():
+    orgs = await store.list_orgs()
+    if not orgs:
+        # NOT an idle sweep: nine hours of this on 2026-07-31 produced no receipt
+        # and no log line, because RLS had made the enumeration return nothing and
+        # the loop below simply never ran. Overdue approvals stopped timing out.
+        log.warning(
+            "hitl expiry: enumerated ZERO tenants, so NO overdue approval was "
+            "expired (SEC-14). list_orgs must run outside the RLS fence; bound to "
+            "a tenant the policy matches nothing and returns no rows."
+        )
+    for org in orgs:
         attempted_at = utcnow()
         try:
             tenant_expired = await expire_tenant_once(store, org.id)

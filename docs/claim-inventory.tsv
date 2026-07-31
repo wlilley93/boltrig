@@ -196,12 +196,12 @@ LOAD-BEARING	NO-SUBJECT	comment	boltrig/store/memory.py:222		pointers, never a s
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/store/memory.py:225		(tenant, level, scope_id);
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/store/memory.py:681		Append-only ([2026] VJS-COUNTY 4 keeps message content frozen): a summary
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/store/memory.py:695		messages AND their derived summaries;
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/store/postgres.py:1013		explicitly first.
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/store/postgres.py:1702		org, never another tenant's, joined through org_members.
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/store/postgres.py:1747		it can never return another tenant's row (None when absent, fail-closed).
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/store/postgres.py:1792		tenant's AI-config row (None when absent, fail-closed).
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/store/postgres.py:874		(tenant, user) rows, so another user's thread can never surface.
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/store/postgres.py:982		Append-only ([2026] VJS-COUNTY 4 keeps message content frozen): a summary
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/store/postgres.py:1015		explicitly first.
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/store/postgres.py:1701		org, never another tenant's, joined through org_members.
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/store/postgres.py:1746		it can never return another tenant's row (None when absent, fail-closed).
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/store/postgres.py:1791		tenant's AI-config row (None when absent, fail-closed).
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/store/postgres.py:876		(tenant, user) rows, so another user's thread can never surface.
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/store/postgres.py:984		Append-only ([2026] VJS-COUNTY 4 keeps message content frozen): a summary
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/workflows/interpreter.py:288		one-time secret result must never be replay-cached.
 LOAD-BEARING	NO-SUBJECT	compose	docker-compose.yml:48		M9 (SEC-69): no baked default credential.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/adapters/builtin/channel_send.py:1	outbound_url	channel.send - the governed outbound egress verb (decision 0003).
@@ -219,6 +219,8 @@ LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/config/author_ratchet.py:40	stay
 LOAD-BEARING	SUBJECT-EXTERNAL	comment	boltrig/config/dev_posture.py:175	actor_tier	D4.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/config/manifest.py:476	cost.py	One entry of the per-model price table, or None to drop it (FR-COST-04).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/emotion/__init__.py:1	boltrig.observability.orb_presence	Boltrig's affective side-channel: a read-only emotion projection over run events.
+LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/anchor.py:176	seen	Publish one cycle, and treat an empty tenant list as a fault of its own.
+LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/anchor.py:98	sealed	What one sweep actually did, as three numbers the caller can judge.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/authority.py:117	item	Route ``item`` to its department head, or ``None`` if unroutable (SEC-165).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/chat.py:1	queued	The conversational service (Round Two, Epic CONV).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/chat.py:128	run_id	The OLDEST queued steer still waiting for its turn, else None.
@@ -272,7 +274,7 @@ LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/models/memory.py:1	owner_scope	R
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/models/workflow_schedules.py:12	grant_ceiling	One active cron desire and its last scheduler observation.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/models/workflow_triggers.py:14	secret_hash	One approved event source bound to one stored workflow.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/store/distillation_reads.py:79	idle_before	Threads last touched before ``idle_before``, still open, NOT yet distilled.
-LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/store/postgres.py:103	assume_role	SET LOCAL app.tenant_id from the request context.
+LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/store/postgres.py:104	assume_role	SET LOCAL app.tenant_id from the request context.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/workflows/library.py:151	LookupError	Start a workflow and return a run descriptor (Hatchet seam).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/workflows/loop_contract.py:1	flow.loop	Closed declarative contract for bounded ``flow.loop`` expansion.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/adapters/base.py:1	Credential	The single adapter interface (S7.3).
@@ -314,8 +316,8 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/emotion/engine.py:71	appraise	Det
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/emotion/relay.py:1	_react	Emotion relay: the affective side-channel tapped off the kernel's event stream.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/emotion/tables.py:32	appraise	One relay-event matching rule; the first matching rule wins.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/anchor.py:1	boltrig.kernel.security_events.AuditAnchorer	Periodic audit-rollup anchoring ([2026] VJS-COUNTY 9, D4).
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/anchor.py:121	run_forever	Loop :func:`run_anchor_sweep` forever; cancellable, idle-sleeping.
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/anchor.py:94	store.list_orgs	Anchor the un-anchored tail of EVERY tenant's audit chain once.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/anchor.py:116	store.list_orgs	Anchor every tenant's un-anchored tail once, reporting what was seen.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/anchor.py:145	run_forever	Loop :func:`run_anchor_sweep_detailed` forever; cancellable, idle-sleeping.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/authority.py:1	GrantChecker	Whose authority a delegated run carries (SEC-164, SEC-165).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/authority.py:45	effective_grants_for_request	The grants of the principal ``item`` is executed on behalf of (SEC-164).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/authority.py:85	GrantChecker	The item's EXECUTION context, capped to the requesting principal (SEC-164).
@@ -459,8 +461,9 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/skills/shelf.py:1	skill.describe	
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/store/base.py:1	InMemoryStore	The Store protocol - the kernel's only persistence seam.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/store/capabilities.py:1	select_capability	Agent-capability persistence + scoped-declarative reconciliation.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/store/channel_outbox.py:1	ChannelOutboxStorePG	Channel outbox store domain (decision 0003, Phase 2).
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/store/control_plane_reads.py:1	boltrig.kernel.hitl_expiry.run_hitl_expiry_sweep	Cross-tenant control-plane reads, deliberately outside the RLS fence.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/store/distillation_reads.py:40	list_idle_conversations	How many idle threads still await distillation, measured INDEPENDENTLY of the selection query.
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/store/postgres.py:251	app.tenant_id	Yield a connection bound to one tenant for RLS.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/store/postgres.py:253	app.tenant_id	Yield a connection bound to one tenant for RLS.
 LOAD-BEARING	SUBJECT-REACHED	comment	boltrig/store/realtime_calls.py:171	append_realtime_call_event	A cross-tenant call id cannot receive an event from ``append_realtime_call_event``
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/store/sealing.py:1	refuse_default_audit_key_in_prod	At-rest envelope sealing for credential references (SEC-04, K-20).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/store/tenant_scope.py:38	_apply_guc	Set ``_current_tenant`` from this call's own argument, so ``_apply_guc`` cannot read a tenant different from the one being queried.
@@ -1032,6 +1035,7 @@ ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/held_call.py:96		Whether this pause
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/hitl.py:216		expired on the spot and refuses the answer with a typed 409 - the
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/hitl.py:289		A stale approval can never execute (SEC-14): the human approved in
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/hitl_expiry.py:124		Drop the seal of a write held by a request that has just timed out.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/hitl_expiry.py:206		the loop below simply never ran.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/hitl_expiry.py:58		default (never a boot crash, P9).
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/hitl_http.py:126		An approval whose context is not canonical JSON cannot be raised by
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/hitl_http.py:127		the gate (it refuses at creation), so this is a legacy or hand-made
@@ -1175,23 +1179,23 @@ ORDINARY	NO-SUBJECT	comment	boltrig/store/memory.py:953		back;
 ORDINARY	NO-SUBJECT	comment	boltrig/store/memory.py:982		returns False (fail-closed).
 ORDINARY	NO-SUBJECT	comment	boltrig/store/observability_reads.py:33		so an item with a hatchet_run_id contributes ONLY that ref, never its id.
 ORDINARY	NO-SUBJECT	comment	boltrig/store/password_resets.py:131		session revocation, and stale 2FA challenge deletion cannot split.
-ORDINARY	NO-SUBJECT	comment	boltrig/store/postgres.py:1015		One atomic transaction: a crash mid-purge cannot strand a conversation
-ORDINARY	NO-SUBJECT	comment	boltrig/store/postgres.py:127		False when rls.sql was never applied, so this stays a no-op rather than
-ORDINARY	NO-SUBJECT	comment	boltrig/store/postgres.py:1771		workspace-role guard).
-ORDINARY	NO-SUBJECT	comment	boltrig/store/postgres.py:1791		Tenant-scoped: the WHERE binds tenant_id, so it can never return another
-ORDINARY	NO-SUBJECT	docstring	boltrig/store/postgres.py:1815		Escape LIKE/ILIKE metacharacters so a user query is a pure substring match (US-CONV-10).
-ORDINARY	NO-SUBJECT	comment	boltrig/store/postgres.py:215		here, not per call: a database that never ran rls.sql has no such role,
-ORDINARY	NO-SUBJECT	comment	boltrig/store/postgres.py:216		and the fact cannot change without a deployment.
-ORDINARY	NO-SUBJECT	comment	boltrig/store/postgres.py:260		A SECOND path: with_tenant opens its own transaction and never
-ORDINARY	NO-SUBJECT	comment	boltrig/store/postgres.py:333		the in-memory store, so callers matching a workflow by id never see
-ORDINARY	NO-SUBJECT	comment	boltrig/store/postgres.py:346		re-recording of the same run never bumps its start time forward).
-ORDINARY	NO-SUBJECT	comment	boltrig/store/postgres.py:497		statement, FOR UPDATE SKIP LOCKED so concurrent claimers never block
-ORDINARY	NO-SUBJECT	comment	boltrig/store/postgres.py:558		re-request never overwrites the original requester.
-ORDINARY	NO-SUBJECT	comment	boltrig/store/postgres.py:602		CAS, so a concurrently answered request is never clobbered.
-ORDINARY	NO-SUBJECT	comment	boltrig/store/postgres.py:807		Seal before persisting: credential_refs.data is ALWAYS an envelope
-ORDINARY	NO-SUBJECT	comment	boltrig/store/postgres.py:808		(ciphertext), never plaintext (SEC-04).
-ORDINARY	NO-SUBJECT	comment	boltrig/store/postgres.py:876		[2026] VJS-COUNTY 4) message's content, so a superseded turn is never a live
-ORDINARY	NO-SUBJECT	comment	boltrig/store/postgres.py:983		is DERIVED data INSERTED here;
+ORDINARY	NO-SUBJECT	comment	boltrig/store/postgres.py:1017		One atomic transaction: a crash mid-purge cannot strand a conversation
+ORDINARY	NO-SUBJECT	comment	boltrig/store/postgres.py:128		False when rls.sql was never applied, so this stays a no-op rather than
+ORDINARY	NO-SUBJECT	comment	boltrig/store/postgres.py:1770		workspace-role guard).
+ORDINARY	NO-SUBJECT	comment	boltrig/store/postgres.py:1790		Tenant-scoped: the WHERE binds tenant_id, so it can never return another
+ORDINARY	NO-SUBJECT	docstring	boltrig/store/postgres.py:1814		Escape LIKE/ILIKE metacharacters so a user query is a pure substring match (US-CONV-10).
+ORDINARY	NO-SUBJECT	comment	boltrig/store/postgres.py:217		here, not per call: a database that never ran rls.sql has no such role,
+ORDINARY	NO-SUBJECT	comment	boltrig/store/postgres.py:218		and the fact cannot change without a deployment.
+ORDINARY	NO-SUBJECT	comment	boltrig/store/postgres.py:262		A SECOND path: with_tenant opens its own transaction and never
+ORDINARY	NO-SUBJECT	comment	boltrig/store/postgres.py:335		the in-memory store, so callers matching a workflow by id never see
+ORDINARY	NO-SUBJECT	comment	boltrig/store/postgres.py:348		re-recording of the same run never bumps its start time forward).
+ORDINARY	NO-SUBJECT	comment	boltrig/store/postgres.py:499		statement, FOR UPDATE SKIP LOCKED so concurrent claimers never block
+ORDINARY	NO-SUBJECT	comment	boltrig/store/postgres.py:560		re-request never overwrites the original requester.
+ORDINARY	NO-SUBJECT	comment	boltrig/store/postgres.py:604		CAS, so a concurrently answered request is never clobbered.
+ORDINARY	NO-SUBJECT	comment	boltrig/store/postgres.py:809		Seal before persisting: credential_refs.data is ALWAYS an envelope
+ORDINARY	NO-SUBJECT	comment	boltrig/store/postgres.py:810		(ciphertext), never plaintext (SEC-04).
+ORDINARY	NO-SUBJECT	comment	boltrig/store/postgres.py:878		[2026] VJS-COUNTY 4) message's content, so a superseded turn is never a live
+ORDINARY	NO-SUBJECT	comment	boltrig/store/postgres.py:985		is DERIVED data INSERTED here;
 ORDINARY	NO-SUBJECT	docstring	boltrig/store/sealing.py:126		Seal a reference dict into its versioned envelope for at-rest storage.
 ORDINARY	NO-SUBJECT	comment	boltrig/store/sealing.py:73		store layer may NOT import boltrig.config (SEC-54 stack boundary: config is an
 ORDINARY	NO-SUBJECT	comment	boltrig/store/work_items.py:120		can only REMOVE rows from the already-scoped set - never resurrect a
@@ -1238,7 +1242,7 @@ ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/config/manifest.py:178	APPROVAL_TIMEOU
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/config/spawn_rules.py:337	capability	Resolve one policy snapshot into effective skills/routing.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/emotion/tables.py:1	model.yaml	Load the emotion tables from ``libraries/emotion`` into engine dataclasses (EMO-5).
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/emotion/tables.py:161	None	Load and validate the three emotion YAML tables, or ``None`` on ANY failure.
-ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/anchor.py:65	DEFAULT_INTERVAL_SECONDS	The configured sweep interval (seconds), or :data:`DEFAULT_INTERVAL_SECONDS`.
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/anchor.py:68	DEFAULT_INTERVAL_SECONDS	The configured sweep interval (seconds), or :data:`DEFAULT_INTERVAL_SECONDS`.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/chat.py:384	cancelled	End a live chat turn's SSE stream cleanly on a server-side cancel ([2026] VJS-COUNTY 6, D5).
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/codex_trusted_wall.py:49	BOLTRIG_CODEX_TRUSTED	Fail closed unless a lawful trusted-Codex posture holds (see module docstring).
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/continuity.py:136	wrap_untrusted	Render the derived summary as a fixed, content-stable frame.
@@ -1291,8 +1295,8 @@ ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/skills/loader.py:134	locale	Resolve 
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/skills/loader.py:30	extends	A skill (or one of its ``extends`` ancestors) is not in the store.
 ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/store/base.py:276	match_parent	plus that workspace's rows, fail-closed);
 ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/store/base.py:620	level	never the raw key.
-ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/store/postgres.py:196	apply_schema	Open the durable store.
-ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/store/postgres.py:444	_still_leased	Write the row ONLY if it still carries the lease the caller was given.
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/store/postgres.py:198	apply_schema	Open the durable store.
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/store/postgres.py:446	_still_leased	Write the row ONLY if it still carries the lease the caller was given.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/work/store.py:105	cap	Persist discovered child items and write them back, capped (US-WRK-04).
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/workflows/control_flow.py:201	branch	Whether a step's declared ``branch`` is satisfied by its parents' outputs.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/builtin/desktop.py:1	HandsRegistry	The desktop-hands adapter (source = 'builtin'), binding DH-1.
@@ -1364,7 +1368,7 @@ ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/held_call.py:84	dispatch._emit
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/hitl.py:155	enqueue_approval_fanout	Best-effort channel notice to the humans who must act (SEC-179): enqueue to the subject's bound surface per their notification_prefs - and, for an APPROVAL, to every eligible approver (``enqueue_approval_fanout``: notice
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/hitl.py:247	consume_approved_by	Fire the resume notifier with the answered request, fail-safe (P9): the recorded answer is the truth; a notifier fault never voids it.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/hitl.py:90	HITLRequest	Attach the answer -> resume bridge (NFR-REL-03): a callable (sync or async) fired with the answered :class:`HITLRequest`.
-ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/hitl_expiry.py:1	run_hitl_expiry_sweep	Periodic HITL timeout enforcement (SEC-14) - the expiry sweep janitor.
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/hitl_expiry.py:1	run_hitl_expiry_forever	Periodic HITL timeout enforcement (SEC-14) - the expiry sweep janitor.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/hitl_response_auth.py:250	_notify_request	The users who may lawfully answer this APPROVAL request right now.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/ratelimit.py:1	RedisCounter	Rate limiting (FR-KER-05, US-KER-04).
 ORDINARY	SUBJECT-REACHED	comment	boltrig/models/access.py:71	workspace_id	never set it).
