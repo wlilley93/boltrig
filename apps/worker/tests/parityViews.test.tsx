@@ -251,6 +251,104 @@ describe("Worker governed Work lifecycle", () => {
       "approval-work-status",
     ));
   });
+
+  it("keeps an in-progress owner edit through a same-item upstream refresh, and submits the TYPED value", async () => {
+    // The defect this pins: WorkDetail's sync effect reset owner/parent/status
+    // whenever ANY of the item's fields changed, so a background refresh
+    // mid-edit silently replaced the typed owner and the next Assign submitted
+    // the OLD value - an approval collected for an action the user never asked
+    // for. The fix reconciles only non-dirty fields on a same-item refresh.
+    const item = {
+      id: "work-a",
+      intent: "Root task",
+      status: "pending",
+      owner_member: "engineering",
+      source: "internal",
+    };
+    api.work.mockResolvedValue({ items: [item], next_cursor: null });
+    // The refetch after the upstream mutation must RESOLVE THE CHANGED ITEM -
+    // with an unchanged-item mock, React batches the transient merge and the
+    // refetch into one render, the sync effect never re-fires, and this test
+    // passed against the defect it exists to catch (measured: one SYNC-EFFECT
+    // log for the whole flow). Production timing renders both.
+    api.workDetail
+      .mockResolvedValueOnce({ item, children: [], audit: [] })
+      .mockResolvedValue({
+        item: { ...item, status: "blocked" },
+        children: [],
+        audit: [],
+      });
+    // The upstream change: a status transition lands while the owner edit is
+    // in progress. Its result carries the OLD owner_member, which is exactly
+    // what used to clobber the input.
+    api.transitionWork.mockResolvedValue({
+      status: "ok",
+      item: { ...item, status: "blocked" },
+    });
+    api.assignWork.mockResolvedValue({
+      status: "ok",
+      item: { ...item, status: "blocked", owner_member: "operations" },
+    });
+
+    render(<WorkView />);
+    fireEvent.click(await screen.findByRole("button", { name: /Root task/ }));
+
+    // 1. Start editing the owner - do NOT submit.
+    fireEvent.change(await screen.findByLabelText("Owner"), {
+      target: { value: "operations" },
+    });
+
+    // 2. A different mutation completes and refreshes the SAME item upstream.
+    fireEvent.change(screen.getByLabelText("Status"), {
+      target: { value: "blocked" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Change status" }));
+    await screen.findByText(/Status updated to blocked/);
+
+    // 3. The in-progress edit survived the refresh...
+    expect((screen.getByLabelText("Owner") as HTMLInputElement).value)
+      .toBe("operations");
+
+    // 4. ...and Assign submits the TYPED value, not the stale canonical one.
+    fireEvent.click(screen.getByRole("button", { name: "Assign" }));
+    await waitFor(() => expect(api.assignWork).toHaveBeenCalledWith(
+      "work-a", "operations", expect.any(String),
+    ));
+  });
+
+  it("still resets the form wholesale when a DIFFERENT item is selected", async () => {
+    // The negative control: keeping edits across a same-item refresh must not
+    // leak them across items - selecting child work must show ITS fields.
+    const parentItem = {
+      id: "work-a",
+      intent: "Root task",
+      status: "pending",
+      owner_member: "engineering",
+      source: "internal",
+    };
+    const childItem = {
+      id: "work-b",
+      intent: "Child task",
+      status: "pending",
+      owner_member: "support",
+      source: "internal",
+    };
+    api.work.mockResolvedValue({ items: [parentItem], next_cursor: null });
+    api.workDetail
+      .mockResolvedValueOnce({ item: parentItem, children: [childItem], audit: [] })
+      .mockResolvedValueOnce({ item: childItem, children: [], audit: [] });
+
+    render(<WorkView />);
+    fireEvent.click(await screen.findByRole("button", { name: /Root task/ }));
+    fireEvent.change(await screen.findByLabelText("Owner"), {
+      target: { value: "half-typed-edit" },
+    });
+    fireEvent.click(await screen.findByRole("button", { name: /Child task/ }));
+
+    await waitFor(() => expect(
+      (screen.getByLabelText("Owner") as HTMLInputElement).value,
+    ).toBe("support"));
+  });
 });
 
 describe("Worker memory feedback", () => {
