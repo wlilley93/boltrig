@@ -117,14 +117,18 @@ async fn materialize_artifact(
     if bytes.len() > MAX_ARTIFACT_BYTES {
         return Err("artifact_too_large".to_string());
     }
-    let (sender, receiver) = std::sync::mpsc::channel();
+    let (sender, receiver) = tokio::sync::oneshot::channel();
     app.dialog()
         .file()
         .set_file_name(safe_name(&suggested_name))
         .save_file(move |path| {
             let _ = sender.send(path);
         });
-    let Some(path) = receiver.recv().map_err(|_| "dialog_closed".to_string())? else {
+    // The dialog is not window-modal and stays open for as long as the user
+    // leaves it open. Awaiting the selection yields the runtime worker instead
+    // of parking it, so the device agent's poll and rotation loop keeps running
+    // behind an open dialog.
+    let Some(path) = receiver.await.map_err(|_| "dialog_closed".to_string())? else {
         return Ok(None);
     };
     let destination = PathBuf::from(path.to_string());

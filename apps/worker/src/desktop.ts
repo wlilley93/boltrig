@@ -3,6 +3,8 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { DeviceEnrollmentStart, DeviceRootScope } from "@wlilley93/boltrig-web-sdk";
 import workerPackage from "../package.json";
 
+import { configuredApiOrigin } from "./apiOrigin";
+
 export const isDesktop = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 export const workerVersion = workerPackage.version;
 
@@ -158,10 +160,6 @@ export async function listenDesktopOAuthReturns(
   );
 }
 
-function apiOrigin(): string {
-  return (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "");
-}
-
 export async function clearDesktopSession(): Promise<void> {
   if (!isDesktop) return;
   await invoke("clear_device_session");
@@ -265,7 +263,7 @@ export async function completeDesktopEnrollment(
   enrollment: DeviceEnrollmentStart,
 ): Promise<DesktopEnrollmentView> {
   if (!isDesktop) throw new Error("device_enrollment_requires_desktop");
-  const origin = apiOrigin();
+  const origin = configuredApiOrigin();
   if (!origin) throw new Error("desktop_api_origin_not_configured");
   return invoke<DesktopEnrollmentView>("complete_device_enrollment", {
     apiOrigin: origin,

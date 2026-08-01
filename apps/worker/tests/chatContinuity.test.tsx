@@ -292,6 +292,81 @@ describe("Worker chat continuity", () => {
     });
   });
 
+  it("attaches a follow when a send is queued behind a turn with no local stream", async () => {
+    api.conversation.mockResolvedValue({ messages: [], active_run_id: null });
+    api.streamChat.mockResolvedValueOnce({
+      status: "queued",
+      conversation_id: "conversation-a",
+      message_id: "message-b",
+      run_id: "run-remote",
+    });
+    api.followConversation.mockResolvedValue({ status: "aborted", cursor: 0 });
+
+    render(
+      <ChatView
+        conversationId="conversation-a"
+        onConversation={vi.fn()}
+        onChanged={vi.fn()}
+      />,
+    );
+    fireEvent.change(await screen.findByLabelText("Task instructions"), {
+      target: { value: "Steer from a streamless client" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send ↑" }));
+
+    await waitFor(() => expect(api.followConversation).toHaveBeenCalledWith(
+      "conversation-a",
+      expect.any(Function),
+      expect.objectContaining({ since: 0 }),
+    ));
+  });
+
+  it("keeps a stale slower load from clobbering the selected conversation", async () => {
+    let resolveB!: (value: unknown) => void;
+    api.conversations.mockResolvedValue({
+      conversations: [
+        { id: "conversation-a", title: "Renewals", status: "active", updated_at: "2026-01-01T00:00:00Z" },
+        { id: "conversation-b", title: "Filings", status: "active", updated_at: "2026-01-01T00:00:00Z" },
+      ],
+    });
+    api.conversation.mockImplementation(async (id: string) => {
+      if (id === "conversation-b") {
+        return new Promise((resolve) => {
+          resolveB = resolve;
+        });
+      }
+      return {
+        messages: [{
+          id: "message-a",
+          role: "user",
+          content: "Renewals question",
+        }],
+        active_run_id: null,
+      };
+    });
+    const props = { onConversation: vi.fn(), onChanged: vi.fn() };
+    const view = render(<ChatView conversationId="conversation-a" {...props} />);
+    expect(await screen.findByText("Renewals question")).toBeTruthy();
+
+    view.rerender(<ChatView conversationId="conversation-b" {...props} />);
+    view.rerender(<ChatView conversationId="conversation-a" {...props} />);
+    expect(await screen.findByText("Renewals question")).toBeTruthy();
+
+    resolveB({
+      messages: [{
+        id: "message-b",
+        role: "user",
+        content: "Filings question",
+      }],
+      active_run_id: "run-b",
+    });
+    await waitFor(() => expect(api.conversation).toHaveBeenCalledWith("conversation-b"));
+    expect(screen.queryByText("Filings question")).toBeNull();
+    expect(screen.getByText("Renewals question")).toBeTruthy();
+    // The stale load must not attach a follow for the deselected conversation.
+    expect(api.followConversation).not.toHaveBeenCalled();
+  });
+
   it("offers cursor-preserving reconnect when live follow drops", async () => {
     api.conversation
       .mockResolvedValueOnce({ messages: [], active_run_id: "run-a" })

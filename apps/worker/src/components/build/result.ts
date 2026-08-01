@@ -14,6 +14,9 @@ export function resultMessage(value: unknown, success: string): string {
   if (result.status === "error") {
     return `Not changed: ${result.reason ?? "the kernel rejected the request"}.`;
   }
+  if (result.status === "unavailable") {
+    return `Not changed: ${result.reason ?? "the kernel was unreachable"}.`;
+  }
   return success;
 }
 

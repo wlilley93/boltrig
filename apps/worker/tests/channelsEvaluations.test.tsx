@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { BoltrigApiError } from "@wlilley93/boltrig-web-sdk";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -377,11 +377,10 @@ describe("Worker channel administration", () => {
     fireEvent.click(screen.getByRole("button", {
       name: "Add thread route",
     }));
-    fireEvent.change(screen.getByLabelText("Thread or chat key 2"), {
-      target: { value: "new-thread" },
-    });
-    expect(screen.getByLabelText("Thread or chat key 2"))
-      .toHaveProperty("value", "new-thread");
+    const secondRoute = screen.getByLabelText("Thread or chat key 2");
+    fireEvent.change(secondRoute, { target: { value: "new-thread" } });
+    expect(screen.getByLabelText("Thread or chat key 2")).toBe(secondRoute);
+    expect(secondRoute).toHaveProperty("value", "new-thread");
     fireEvent.click(screen.getByRole("button", { name: "Remove route 2" }));
     expect(screen.queryByLabelText("Thread or chat key 2")).toBeNull();
 
@@ -420,6 +419,29 @@ describe("Worker channel administration", () => {
         },
       }),
     ));
+  });
+
+  it("discards a slow channel's detail responses after another channel is opened", async () => {
+    const other = { ...channel, id: "ch_2", name: "Sales intake" };
+    api.channels.mockResolvedValue({ channels: [channel, other] });
+    let releaseSlowBindings: (result: unknown) => void = () => undefined;
+    api.channelBindings.mockImplementation((id: string) => (
+      id === channel.id
+        ? new Promise((resolve) => { releaseSlowBindings = resolve; })
+        : Promise.resolve({ bindings: [] })
+    ));
+
+    render(<ChannelsView />);
+    fireEvent.click(await screen.findByRole("button", { name: /Support intake/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Sales intake/ }));
+    await screen.findByText("No sender identities are bound.");
+
+    await act(async () => {
+      releaseSlowBindings({ bindings: [binding] });
+    });
+
+    expect(screen.queryByText("external-1")).toBeNull();
+    expect(api.channelDeliveries).not.toHaveBeenCalledWith(channel.id);
   });
 
   it("issues a one-time pairing code, supports direct binding, and reports pending configuration", async () => {

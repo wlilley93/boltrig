@@ -25,6 +25,40 @@ export function governedResultReason(
   return result.reason ?? fallback;
 }
 
+export interface GovernedRouteRefusal {
+  status: "denied" | "error" | "unavailable" | "degraded";
+  reason: string;
+}
+
+// Governed routes tolerate non-2xx statuses at the SDK layer, so a denial,
+// kernel error, degraded control plane, or unknown-resource body arrives as a
+// resolved value shaped nothing like the route's success record. A success
+// receipt always carries run/record fields; a refusal never carries run_id.
+export function governedRouteRefusal(
+  result: unknown,
+): GovernedRouteRefusal | null {
+  if (!result || typeof result !== "object") return null;
+  const body = result as Record<string, unknown>;
+  if (typeof body.run_id === "string" && body.run_id) return null;
+  if (
+    body.status === "denied"
+    || body.status === "error"
+    || body.status === "unavailable"
+    || body.status === "degraded"
+  ) {
+    return {
+      status: body.status,
+      reason: typeof body.reason === "string" && body.reason
+        ? body.reason
+        : `The kernel refused the request (${body.status}).`,
+    };
+  }
+  if (typeof body.error === "string" && body.error) {
+    return { status: "error", reason: body.error };
+  }
+  return null;
+}
+
 interface PendingExactMutation<TInput> {
   input: TInput;
   approvalId: string;

@@ -168,6 +168,7 @@ export function ChannelsView() {
     pairingId?: string;
   } | null>(null);
   const exactApprovalInvalidator = useRef<() => void>(() => undefined);
+  const channelDetailSequence = useRef(0);
 
   const selected = useMemo(
     () => channels.find((channel) => channel.id === selectedId) ?? null,
@@ -328,6 +329,7 @@ export function ChannelsView() {
     invalidateExactApproval();
     invalidatePendingPairing();
     invalidatePendingDeliveryRetry();
+    const sequence = ++channelDetailSequence.current;
     setSelectedId(channel.id);
     setDisconnectArmed(false);
     setDeleteArmed(null);
@@ -343,6 +345,7 @@ export function ChannelsView() {
           finalizations: [] as ChannelPairFinalization[],
         })),
       ]);
+      if (channelDetailSequence.current !== sequence) return;
       if (result.status === "denied") {
         setBindings([]);
         setBindingState("denied");
@@ -374,17 +377,21 @@ export function ChannelsView() {
         setPairFinalization(null);
       }
     } catch {
+      if (channelDetailSequence.current !== sequence) return;
       setBindings([]);
       setBindingState("unavailable");
     }
+    if (channelDetailSequence.current !== sequence) return;
     await loadDeliveries(channel.id);
   }
 
   async function loadDeliveries(channelId: string, invalidatePending = true) {
     if (invalidatePending) invalidatePendingDeliveryRetry();
+    const sequence = channelDetailSequence.current;
     setDeliveryState("loading");
     try {
       const result = await client.channelDeliveries(channelId);
+      if (channelDetailSequence.current !== sequence) return;
       if (result.status === "denied") {
         setDeliveries([]);
         setDeliveryState("denied");
@@ -393,6 +400,7 @@ export function ChannelsView() {
         setDeliveryState("ready");
       }
     } catch {
+      if (channelDetailSequence.current !== sequence) return;
       setDeliveries([]);
       setDeliveryState("unavailable");
     }
@@ -1138,7 +1146,7 @@ function ConnectChannelForm({
           deployment-managed, not tenant-authored in Worker.
         </p>
       )}
-      <label className="admin-secret-field"><span>Signing-secret reference</span><input className="field-control" value={secretRef} onChange={(event) => { onDraftChange(); setSecretRef(event.target.value); }} placeholder="BOLTRIG_CHANNEL_SIGNING_SECRET" /><small>Name a secret in the configured store. Worker never receives the secret material.</small></label>
+      <label className="admin-secret-field"><span>Signing-secret reference</span><input className="field-control" required value={secretRef} onChange={(event) => { onDraftChange(); setSecretRef(event.target.value); }} placeholder="BOLTRIG_CHANNEL_SIGNING_SECRET" /><small>Name a secret in the configured store. Worker never receives the secret material.</small></label>
       {provider.credentials.filter((key) => key !== "signing").map((key) => (
         <label className="admin-secret-field" key={key}>
           <span>{key.replaceAll("_", " ")} reference</span>
@@ -1514,7 +1522,7 @@ function ChannelDetail(props: ChannelDetailProps) {
               (target) => target.id === route.target,
             );
             return (
-              <div className="admin-fields three" key={`${index}:${route.thread}`}>
+              <div className="admin-fields three" key={index}>
                 <label>
                   <span>{`Thread or chat key ${index + 1}`}</span>
                   <input

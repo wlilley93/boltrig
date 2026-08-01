@@ -27,18 +27,22 @@ export function DeveloperTokens() {
   useEffect(refresh, []);
 
   async function mint() {
-    const result = await client.mintToken({
-      name: name.trim(),
-      scope: scope.split(",").map((item) => item.trim()).filter(Boolean),
-    });
-    if (result.status !== "ok" || !result.secret) {
-      setMessage(result.reason ?? "The token could not be minted.");
-      return;
+    try {
+      const result = await client.mintToken({
+        name: name.trim(),
+        scope: scope.split(",").map((item) => item.trim()).filter(Boolean),
+      });
+      if (result.status !== "ok" || !result.secret) {
+        setMessage(result.reason ?? "The token could not be minted.");
+        return;
+      }
+      setOneTimeSecret(result.secret);
+      setName("");
+      setMessage("Copy this token now. Boltrig will not show it again.");
+      refresh();
+    } catch {
+      setMessage("The token could not be minted. No token was created.");
     }
-    setOneTimeSecret(result.secret);
-    setName("");
-    setMessage("Copy this token now. Boltrig will not show it again.");
-    refresh();
   }
 
   async function revoke(id: string) {
@@ -46,10 +50,15 @@ export function DeveloperTokens() {
       setArmedId(id);
       return;
     }
-    const result = await client.revokeToken(id);
-    setMessage(result.status === "ok" ? "Token revoked." : result.reason ?? result.status);
-    setArmedId(null);
-    refresh();
+    try {
+      const result = await client.revokeToken(id);
+      setMessage(result.status === "ok" ? "Token revoked." : result.reason ?? result.status);
+      refresh();
+    } catch {
+      setMessage("The token could not be revoked. Nothing was changed.");
+    } finally {
+      setArmedId(null);
+    }
   }
 
   async function copyToken() {
@@ -152,10 +161,15 @@ export function SecuritySessions() {
       setArmedId(id);
       return;
     }
-    const result = await client.revokeSession(id);
-    setMessage(result.status === "ok" ? "Session revoked." : result.reason ?? result.status);
-    setArmedId(null);
-    refresh();
+    try {
+      const result = await client.revokeSession(id);
+      setMessage(result.status === "ok" ? "Session revoked." : result.reason ?? result.status);
+      refresh();
+    } catch {
+      setMessage("The session could not be revoked. Nothing was changed.");
+    } finally {
+      setArmedId(null);
+    }
   }
 
   return (
@@ -367,26 +381,41 @@ export function ActiveContext({ onChanged }: { onChanged?(): void }) {
       client.workspaces(),
       client.currentOrg(),
       client.myOrganisations(),
+      // The session's active workspace, the same source the shell reads.
+      client.consoleOverview(1).catch(() => null),
     ])
-      .then(([workspaceResult, orgResult, orgsResult]) => {
+      .then(([workspaceResult, orgResult, orgsResult, overviewResult]) => {
+        const activeWorkspaceId = overviewResult?.workspace_id ?? "";
         setWorkspaces(workspaceResult.workspaces);
         setOrganisations(orgsResult.organisations);
-        setWorkspaceId(workspaceResult.workspaces[0]?.id ?? "");
+        setWorkspaceId(
+          workspaceResult.workspaces.some((item) => item.id === activeWorkspaceId)
+            ? activeWorkspaceId
+            : workspaceResult.workspaces[0]?.id ?? "",
+        );
         setOrgId(orgResult.organisation.id);
       })
       .catch(() => setMessage("Active context is unavailable."));
   }, []);
 
   async function switchWorkspace() {
-    const result = await client.switchActiveContext(workspaceId);
-    setMessage(result.status === "ok" ? "Workspace context changed." : result.reason ?? result.status);
-    if (result.status === "ok") onChanged?.();
+    try {
+      const result = await client.switchActiveContext(workspaceId);
+      setMessage(result.status === "ok" ? "Workspace context changed." : result.reason ?? result.status);
+      if (result.status === "ok") onChanged?.();
+    } catch {
+      setMessage("The workspace context could not be changed.");
+    }
   }
 
   async function switchOrg() {
-    const result = await client.switchActiveOrg(orgId.trim());
-    setMessage(result.status === "ok" ? "Organisation context changed." : result.reason ?? result.status);
-    if (result.status === "ok") onChanged?.();
+    try {
+      const result = await client.switchActiveOrg(orgId.trim());
+      setMessage(result.status === "ok" ? "Organisation context changed." : result.reason ?? result.status);
+      if (result.status === "ok") onChanged?.();
+    } catch {
+      setMessage("The organisation context could not be changed.");
+    }
   }
 
   return (
