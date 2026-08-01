@@ -28,6 +28,33 @@ from boltrig.fleet.infrastructure.codex_trusted_proxy_provider import (
 # construction (binary existence/pinning is verified later, at cell start).
 _REAL_BINARY = "/bin/sh"
 
+# Composition now PROVES the read-only sandbox engages before it builds anything on
+# it, so the stand-in binary has to answer the probe. These two scripts are the two
+# hosts that matter: one whose sandbox refuses writes and permits reads, and one that
+# runs the command with no sandbox at all, which is what a kernel without Landlock
+# gives you while `sandbox_mode = "read-only"` stays true in the config.
+_ENGAGED_SANDBOX = """#!/bin/sh
+while [ "$1" != "--" ]; do shift || exit 64; done
+shift
+case "$*" in
+  *">"*) echo "sh: cannot create: Read-only file system" >&2; exit 2 ;;
+esac
+exec "$@"
+"""
+
+_UNENGAGED_SANDBOX = """#!/bin/sh
+while [ "$1" != "--" ]; do shift || exit 64; done
+shift
+exec "$@"
+"""
+
+
+def _fake_codex(tmp_path: Path, name: str, script: str) -> str:
+    path = tmp_path / name
+    path.write_text(script, encoding="ascii")
+    path.chmod(0o755)
+    return str(path)
+
 
 def _settings(**overrides: object) -> Settings:
     return Settings(**overrides)  # type: ignore[arg-type]
@@ -78,10 +105,12 @@ def test_builds_provider_when_all_three_set(
     # which does not exist on a dev host; /bin/sh has the same proved shape
     # (root-owned, unwritable chain) so the boundary assertion is real, not stubbed.
     monkeypatch.setenv("BOLTRIG_CODEX_AUTH_HELPER", os.path.realpath("/bin/sh"))
+    stack_root = tmp_path / "stack"
+    stack_root.mkdir()
     settings = _settings(
         codex_trusted=True,
-        codex_binary=_REAL_BINARY,
-        codex_stack_root=str(tmp_path),
+        codex_binary=_fake_codex(tmp_path, "codex-engaged", _ENGAGED_SANDBOX),
+        codex_stack_root=str(stack_root),
         model_gateway_key="k",
     )
     result = build_trusted_codex_config(
@@ -89,7 +118,7 @@ def test_builds_provider_when_all_three_set(
     )
     assert result is not None
     assert result["trusted"] is True
-    assert result["stack_root"] == tmp_path
+    assert result["stack_root"] == stack_root
     assert result["model_id"] == "glm-4.6"
     assert isinstance(result["provider"], TrustedProxyCodexPhaseCellProvider)
     assert isinstance(result["receipt_identity"], str)
@@ -101,6 +130,39 @@ def test_builds_provider_when_all_three_set(
     import asyncio
 
     asyncio.run(result["provider"]._client.aclose())
+
+
+@pytest.mark.invariant("SEC-WRK-30")
+def test_a_host_whose_sandbox_does_not_engage_composes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The wiring, proved. Without this the proof above could be deleted silently.
+
+    The test above passes on a fake whose sandbox refuses writes, which is also what
+    it would do if the composition root never called the proof at all. This one
+    supplies the opposite host - a Codex that runs the command with no sandbox, the
+    shape a kernel without Landlock produces - and requires composition to REFUSE.
+    """
+
+    from boltrig.fleet.infrastructure.codex_sandbox_engagement import (
+        CodexSandboxEngagementError,
+    )
+
+    monkeypatch.setenv("BOLTRIG_CODEX_AUTH_HELPER", os.path.realpath("/bin/sh"))
+    stack_root = tmp_path / "stack"
+    stack_root.mkdir()
+    settings = _settings(
+        codex_trusted=True,
+        codex_binary=_fake_codex(tmp_path, "codex-unengaged", _UNENGAGED_SANDBOX),
+        codex_stack_root=str(stack_root),
+        model_gateway_key="k",
+    )
+
+    with pytest.raises(CodexSandboxEngagementError) as caught:
+        build_trusted_codex_config(
+            settings, model_id="glm-4.6", gateway_base_url="http://gateway"
+        )
+    assert "THE SANDBOX DID NOT ENGAGE" in str(caught.value)
 
 
 @pytest.mark.invariant("CODEX-COMPOSITION-1")

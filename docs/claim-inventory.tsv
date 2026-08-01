@@ -578,9 +578,9 @@ ORDINARY	NO-SUBJECT	docstring	boltrig/api/chat_cli.py:72		Incremental ``data:``-
 ORDINARY	NO-SUBJECT	docstring	boltrig/api/chat_cli_gateway.py:26		One outbound line, or None - a malformed line is dropped, never fatal.
 ORDINARY	NO-SUBJECT	comment	boltrig/api/codex_execution.py:126		Lazy import so the flag-off path never pulls in the Postgres/asyncpg module
 ORDINARY	NO-SUBJECT	comment	boltrig/api/codex_execution.py:148		structural ratchet (forbidden here).
-ORDINARY	NO-SUBJECT	comment	boltrig/api/codex_trusted.py:125		Lazy imports so the flag-off path never pulls in the infrastructure layer or
-ORDINARY	NO-SUBJECT	comment	boltrig/api/codex_trusted.py:155		never carries the upstream key;
-ORDINARY	NO-SUBJECT	comment	boltrig/api/codex_trusted.py:181		model_id is non-secret admission policy: the resolver refuses a permanent
+ORDINARY	NO-SUBJECT	comment	boltrig/api/codex_trusted.py:146		Lazy imports so the flag-off path never pulls in the infrastructure layer or
+ORDINARY	NO-SUBJECT	comment	boltrig/api/codex_trusted.py:177		never carries the upstream key;
+ORDINARY	NO-SUBJECT	comment	boltrig/api/codex_trusted.py:203		model_id is non-secret admission policy: the resolver refuses a permanent
 ORDINARY	NO-SUBJECT	comment	boltrig/api/doctor.py:24		three sites cannot disagree about what counts as a placeholder again.
 ORDINARY	NO-SUBJECT	comment	boltrig/api/doctor.py:364		result rather than crashing (P9), so this is drift to report, never a deploy
 ORDINARY	NO-SUBJECT	comment	boltrig/api/host_boundary.py:26		Deliberately not an email and not a real user id: it must not collide with any
@@ -811,6 +811,10 @@ ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_runtime_events.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_runtime_preflight.py:289		fail-closed.
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_runtime_validation.py:130		Copy a schema so a malformed mutable backing value cannot race the request.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_runtime_validation.py:57		cannot predict, so the exact spec-token compare is relaxed to a slot-shape
+ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_sandbox_engagement.py:146		Leg one.
+ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_sandbox_engagement.py:164		Leg two, the claim.
+ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_sandbox_engagement.py:185		Leg three, the negative control.
+ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_sandbox_engagement.py:211		Prove the read-only sandbox refuses writes on this host, right now.
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_server_request_handler.py:57		The approve option could not be identified unambiguously (fail closed).
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_server_request_handler.py:61		Derive codex's answer to a server-initiated request; never crash the pump.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_server_request_handler.py:74		Fail closed: refuse rather than guess a label;
@@ -1287,6 +1291,7 @@ ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_cell_boun
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_model_proxy_server.py:254	function_call	Relay the upstream body, holding the ceiling and bridging the namespace.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_read_only_phase.py:94	model_id	The read-only static profile compiled into the birth policy.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_runtime_events.py:223	ThreadTokenUsage	Carry what the turn consumed onto the normalized event stream.
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_sandbox_engagement.py:63	refusal_detail	One proved statement that the sandbox refuses writes on THIS host.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_trusted_proxy_support.py:152	pid_start_ticks	Read the child's real ``/proc`` identity (D3: observed, NOT SO_PEERCRED-attested).
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/linux_peer_process_handle.py:87	SO_PEERPIDFD	Owned ``SO_PEERPIDFD`` result;
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/model_proxy_peer_listener.py:238	execve	Translate the ``@name`` argv convention into a real abstract name.
@@ -1345,6 +1350,7 @@ ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/generator.py:1	GeneratedAdap
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/mcp_transport.py:109	egress.EgressBlocked	The SSRF-pinned client for this server (H2/SEC-61): vetted and pinned to the audited IP, ``follow_redirects=False``.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/adapters/mcp_transport.py:85	allow_internal	One MCP server's HTTP transport: the pinned client, header conventions, the lazy handshake, the server-issued session id, and SSE decoding.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/api/codex_execution.py:1	shadow_admit	Flag-gated composition of the Codex read-only execution stack.
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/api/codex_trusted.py:111	assert_cell_isolation_boundary	Prove the read-only sandbox ENGAGES here, before composing anything on it.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/config/control_rehydrate.py:1	api.bootstrap._rehydrate_store_adapters	Rebuilding a live adapter instance from its persisted store row.
 ORDINARY	SUBJECT-REACHED	comment	boltrig/config/manifest.py:216	_tighten_cap	cap (min(default, manifest)), never loosen it (see ``_tighten_cap`` below).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/config/manifest.py:255	_parse_chat	Bare chat-turn authority ([2026] VJS-COUNTY 1): which skill set a bare chat turn spawns with, per caller role.
@@ -1372,6 +1378,7 @@ ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/codex_protocol.p
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/codex_read_only_phase.py:1	read_only_static_profile	The shared read-only Codex phase contract (adapter <-> admission source).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/codex_runtime_config_argv.py:194	codex_app_server_arguments	Gate the SHAPE of an argv at a boundary that cannot see the receipt.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/codex_runtime_validation.py:1	AgentRuntime	Fail-closed validation at the Codex ``AgentRuntime`` boundary.
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/codex_sandbox_engagement.py:1	QuarantinedCodexPreflightReceipt.production_complete	Prove the read-only filesystem sandbox ENGAGES on this host, or refuse to start.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/codex_trusted_proxy_provider.py:169	drop_privileges	The credentials the cell MUST hold when its identity is registered (#3).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/memory_capability_attestations.py:31	resolve	Serializable non-evicting reference adapter with bounded backpressure.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/model_proxy_peer_listener.py:97	bind	Bind either an abstract ``@name`` or a filesystem path.
