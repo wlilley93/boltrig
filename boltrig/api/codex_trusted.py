@@ -108,6 +108,27 @@ def _trusted_config(
     }
 
 
+def _prove_the_host_can_enforce_the_cell_wall(binary: Path, stack_root: Path) -> None:
+    """Prove the read-only sandbox ENGAGES here, before composing anything on it.
+
+    The generated config says ``sandbox_mode = "read-only"`` and our own tests read
+    that same line back, which is an assertion about our own bytes. What actually
+    refuses a write is Landlock, a kernel LSM this host may not carry, and on a host
+    without it the config line stays true while nothing stops a write.
+
+    Proved at composition for the same reason ``assert_cell_isolation_boundary`` is:
+    a host that cannot enforce the wall must not construct a live provider at all.
+    Raises rather than warns, because a wall reported untested reads to every
+    downstream caller exactly like a wall reported working.
+    """
+
+    from boltrig.fleet.infrastructure.codex_sandbox_engagement import (
+        prove_sandbox_engagement,
+    )
+
+    prove_sandbox_engagement(codex_binary=binary, probe_root=stack_root)
+
+
 def build_trusted_codex_config(
     settings: Settings, *, model_id: str, gateway_base_url: str
 ) -> dict[str, Any] | None:
@@ -150,6 +171,7 @@ def build_trusted_codex_config(
     )
 
     stack_root = Path(settings.codex_stack_root)
+    _prove_the_host_can_enforce_the_cell_wall(Path(settings.codex_binary), stack_root)
     source = ProvisioningCodexPhaseAdmissionSource(stack_root=stack_root, model_id=model_id)
     # D2: the supervisor is constructed with auth=None so the child environment
     # never carries the upstream key; the provider enforces supervisor._auth is None.
