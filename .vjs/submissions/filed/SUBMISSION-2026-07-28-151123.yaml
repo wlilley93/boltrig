@@ -1,0 +1,66 @@
+id: SUBMISSION-2026-07-28-151123
+court_requested: county
+jurisdiction: default
+question: What truncation size, if any, should the codex kernel-tools ceiling adopt?
+facts: |
+  # Facts: the codex kernel-tools truncation size, reserved by [2026] VJS-CC-VJS 10 D4
+
+  ## What is reserved
+
+  VJS-CC-VJS 10 wired the ranker for ORDER only. **D4 expressly reserved** the truncation SIZE,
+  holding a wiring commit is the wrong place to settle policy. This puts that question.
+
+  ## Measured position
+
+  `codex_kernel_tools_phase.py:165` **refuses** rather than truncates when a grant set exceeds
+  `MAX_KERNEL_TOOLS = 128`. Fail-closed, and correct today. The opbox side deliberately carries
+  no copy (`server.ts:61`), so the bound exists once.
+
+  Live on Classical Visas: 197 verbs. The wildcard grant path yields 197 names against 128, so
+  it is **already over the limit** - latent only because live turns load skills, and `ops/opbox`
+  names its 25 opbox verbs explicitly, wildcarding only `memory.*`. No live run reaches it. If
+  the pending republish lands, opbox goes 99 -> 443 and the wildcard path to roughly 541.
+
+  ## Why the size is not a tuning constant
+
+  In the codex lane **offer and authority are fused**: the published set IS the set the agent is
+  attested against. Adopting a budget converts a fail-closed refusal ("this configuration
+  exceeds the bound") into a silent narrowing ("here are 128 of your 541"), and the agent cannot
+  tell its authority was reduced. That is the trade D4 declined to make in a wiring commit.
+
+  ## FOR a budget
+
+  - A tenant whose grants resolve past 128 gets a turn that DIES rather than one that works with
+    fewer tools. For a client, a degraded answer beats no answer.
+  - Layer-1 discovery exists (`find_tools`/`describe_tools`), so a truncated OFFER is not a
+    truncated CAPABILITY.
+  - 128 was inherited, never derived against a real context budget.
+
+  ## AGAINST
+
+  - Silent narrowing is the exact failure the progressive-disclosure programme removed (#40
+    described-but-undispatchable; #50 made the opbox side refuse instead of truncate).
+    Reintroducing it at another layer undoes that by the back door.
+  - If truncation is adopted the ATTESTATION must be recomputed over the truncated set, or the
+    agent is attested against tools it was never offered. Nothing does that today.
+  - A refusal is loud and diagnosable; a narrowing is neither, and this programme's recurring
+    lesson is that silent reductions surface months later. Nothing is broken today.
+
+  ## Options
+
+  1. Keep the refusal; forbid configurations that exceed it (ban terminal wildcards in the
+     selection slot, as #49 did once).
+  2. Adopt a size, and REQUIRE the attestation be recomputed over exactly the published set,
+     with the narrowing recorded in the run record.
+  3. Adopt a budget only on the wildcard/discovery path, exempting explicit named grants on the
+     ground that an explicit grant is authored and a wildcard is not.
+  4. Defer again, on condition it is settled before any republish reaches a client.
+
+  ## Sequencing
+
+  Anything but option 1 should land BEFORE the opbox republish reaches Classical Visas, or every
+  wildcard-resolving turn dies at the bound. The republish is blocked on an unrelated four-eyes
+  approval, so there is time.
+requested_order: TBD
+private_boundary: local
+word_count: 497
