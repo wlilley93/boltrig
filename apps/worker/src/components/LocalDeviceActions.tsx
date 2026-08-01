@@ -59,9 +59,31 @@ function sessionState(deviceId: string): DeviceActionSessionState {
   return state;
 }
 
-export function clearLocalDeviceActionSession(deviceId?: string): void {
-  if (deviceId) actionSessionState.delete(deviceId);
-  else actionSessionState.clear();
+export function clearLocalDeviceActionSession(
+  deviceId?: string,
+  rootId?: string,
+): void {
+  if (!deviceId) {
+    actionSessionState.clear();
+    return;
+  }
+  if (!rootId) {
+    actionSessionState.delete(deviceId);
+    return;
+  }
+  // Root-scoped clearing mutates the entry in place: a mounted panel holds
+  // this object, and replacing or deleting it would orphan the live reference
+  // while destroying retained state for the device's other roots.
+  const state = actionSessionState.get(deviceId);
+  if (!state) return;
+  if (String(state.pending?.params.root_id ?? "") === rootId) {
+    state.pending = null;
+  }
+  for (const [leaseId, action] of state.issued) {
+    if (String(action.params.root_id ?? "") === rootId) {
+      state.issued.delete(leaseId);
+    }
+  }
 }
 
 export function LocalDeviceActions({
@@ -347,18 +369,37 @@ export function LocalDeviceActions({
         );
         return;
       }
-      // An approval is single-use once the dispatcher returns anything other
-      // than another pause; never offer a stale approval id for replay.
-      session.pending = null;
-      setPending(null);
       if (
         result.status === "denied"
         || result.status === "error"
         || result.status === "unavailable"
       ) {
+        // The SDK synthesizes denied (401/403) and unavailable (transport)
+        // receipts for failures the dispatcher never processed. The single-use
+        // approval is then still unconsumed; discarding it here would strand a
+        // granted Inbox decision, so keep the exact action retryable until the
+        // kernel confirms the approval is spent.
+        if (
+          pending
+          && result.status !== "error"
+          && await approvalStillRedeemable(pending.approvalId)
+        ) {
+          setMessage(
+            `The approved action was not applied: ${result.reason}. `
+            + "Retry this unchanged action.",
+          );
+          return;
+        }
+        session.pending = null;
+        setPending(null);
         setMessage(`No device lease was issued: ${result.reason}.`);
         return;
       }
+      // An approval is single-use once the dispatcher returns anything other
+      // than a pause or a synthesized failure receipt; never offer a stale
+      // approval id for replay.
+      session.pending = null;
+      setPending(null);
       const output = result.output;
       if (!isLeaseOutput(
         output,
@@ -501,6 +542,17 @@ export function LocalDeviceActions({
       )}
     </section>
   );
+}
+
+async function approvalStillRedeemable(approvalId: string): Promise<boolean> {
+  try {
+    const approval = await client.invokeApprovalState(approvalId);
+    return approval.status === "approved" || approval.status === "pending";
+  } catch {
+    // The kernel is unreachable; nothing proves the approval was consumed,
+    // so keep the exact action for retry.
+    return true;
+  }
 }
 
 function isLeaseOutput(

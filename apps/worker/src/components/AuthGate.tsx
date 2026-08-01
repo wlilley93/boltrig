@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
+import { configuredApiOrigin } from "../apiOrigin";
 import { client } from "../client";
 import { clearDesktopSession, isDesktop } from "../desktop";
 import { BoltrigApiError } from "@wlilley93/boltrig-web-sdk";
@@ -18,15 +19,22 @@ function recoveryFlowFromHash(): RecoveryFlow {
   return "none";
 }
 
+function acceptingInviteFromHash(): boolean {
+  return window.location.hash.startsWith("#/accept-invite");
+}
+
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<GateState>("checking");
   const [challenge, setChallenge] = useState<string | null>(null);
   const [recoveryFlow, setRecoveryFlow] = useState<RecoveryFlow>(recoveryFlowFromHash);
   const [recoveryEmail, setRecoveryEmail] = useState("");
-  const acceptingInvite = window.location.hash.startsWith("#/accept-invite");
+  const [acceptingInvite, setAcceptingInvite] = useState(acceptingInviteFromHash);
 
   useEffect(() => {
-    const onHashChange = () => setRecoveryFlow(recoveryFlowFromHash());
+    const onHashChange = () => {
+      setRecoveryFlow(recoveryFlowFromHash());
+      setAcceptingInvite(acceptingInviteFromHash());
+    };
     window.addEventListener("hashchange", onHashChange);
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
@@ -76,8 +84,13 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const backToSignIn = () => {
     window.location.hash = "#/chat";
     setRecoveryFlow("none");
+    setAcceptingInvite(false);
     setState("unauthenticated");
   };
+  // A desktop build packaged without VITE_API_BASE would send every request to
+  // its own tauri://localhost webview, where no kernel exists. Name that here
+  // rather than letting sign-in, chat and voice each fail as network errors.
+  if (isDesktop && !configuredApiOrigin()) return <DesktopServerMissing />;
   if (acceptingInvite) return <AcceptInvite onDone={backToSignIn} />;
   if (recoveryFlow === "request") {
     return <RequestPasswordReset initialEmail={recoveryEmail} onDone={backToSignIn} />;
@@ -109,6 +122,23 @@ function AuthSplash() {
     <main className="auth-surface">
       <div className="auth-splash" role="status"><span className="auth-spinner" /><span>Opening Boltrig Worker…</span></div>
     </main>
+  );
+}
+
+function DesktopServerMissing() {
+  return (
+    <AuthCard
+      title="No Boltrig server configured"
+      lead="This desktop build was packaged without a Boltrig API origin."
+    >
+      <div className="auth-handoff">
+        <p role="alert" className="auth-error">
+          Rebuild the desktop app with VITE_API_BASE set to the Boltrig origin
+          this install should use. Without it the app can only reach its own
+          window, so sign-in, chat and voice have nothing to talk to.
+        </p>
+      </div>
+    </AuthCard>
   );
 }
 

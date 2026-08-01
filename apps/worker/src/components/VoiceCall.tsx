@@ -9,7 +9,9 @@ import type {
   AgentCapabilityInfo,
 } from "@wlilley93/boltrig-web-sdk";
 
+import { configuredApiOrigin } from "../apiOrigin";
 import { client } from "../client";
+import { isDesktop } from "../desktop";
 
 interface VoiceCallProps {
   conversationId: string | null;
@@ -187,6 +189,7 @@ export function VoiceCall({
     if (!current) return;
     const attempt = ++connectionAttemptRef.current;
     onError("");
+    endingRef.current = false;
     setStatus("reconnecting");
     try {
       const result = await client.reopenCall(current.id);
@@ -938,7 +941,12 @@ function stopQueuedPlayback(
 }
 
 function websocketUrl(value: string): string {
-  const url = new URL(value, window.location.href);
+  // The kernel's default websocket_url is relative and same-origin, which is
+  // what the web edge proxies. The desktop shell's document is tauri://localhost
+  // and serves no gateway, so there the relative URL belongs to the configured
+  // API origin the device session is already bound to.
+  const origin = isDesktop ? configuredApiOrigin() : "";
+  const url = new URL(value, origin || window.location.href);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   return url.toString();
 }

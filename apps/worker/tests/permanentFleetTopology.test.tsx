@@ -192,4 +192,13 @@ describe("Permanent fleet exact approval continuation", () => {
     await waitFor(() => expect(api.permanentFleet).toHaveBeenCalledTimes(2));
     expect(api.applyPermanentFleet).toHaveBeenCalledTimes(1);
   });
+
+  it("keeps the department routing-identity input mounted while it is edited", async () => {
+    render(<PermanentFleetTopology />);
+    fireEvent.click(await screen.findByRole("button", { name: "Edit topology" }));
+    const routingInput = screen.getAllByLabelText("Routing identity")[1];
+    fireEvent.change(routingInput, { target: { value: "researchops" } });
+    expect(screen.getAllByLabelText("Routing identity")[1]).toBe(routingInput);
+    expect(routingInput).toHaveProperty("value", "researchops");
+  });
 });

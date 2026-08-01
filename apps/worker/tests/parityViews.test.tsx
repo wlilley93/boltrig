@@ -822,6 +822,61 @@ describe("Worker native automation authoring", () => {
     expect(await screen.findByText("Run run-executed completed.")).toBeTruthy();
   });
 
+  it("reports a kernel refusal for immediate execution instead of inventing a run", async () => {
+    const base = {
+      id: "refused-run",
+      version: "1.0.0",
+      source: "precreated",
+      intent_tags: [],
+      definition: { steps: [] },
+      status: "active",
+      schedule: null,
+    };
+    mockAutomationDetail(base);
+    api.executeWorkflow
+      .mockResolvedValueOnce({ status: "denied", reason: "workflow_execution_denied" })
+      .mockResolvedValueOnce({ error: "unknown_workflow" });
+
+    render(<AutomationsView />);
+    fireEvent.click(await screen.findByRole("button", { name: /refused-run/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Run now" }));
+    expect(await screen.findByText("workflow_execution_denied")).toBeTruthy();
+    expect(screen.queryByText(/Run undefined/)).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Run now" }));
+    expect(await screen.findByText("unknown_workflow")).toBeTruthy();
+  });
+
+  it("reports a refused execute replay instead of claiming the approved run applied", async () => {
+    const base = {
+      id: "revoked-run",
+      version: "1.0.0",
+      source: "precreated",
+      intent_tags: [],
+      definition: { steps: [] },
+      status: "active",
+      schedule: null,
+    };
+    mockAutomationDetail(base);
+    api.executeWorkflow
+      .mockResolvedValueOnce({
+        status: "pending_human",
+        hitl_request_id: "approval-execute",
+      })
+      .mockResolvedValueOnce({ status: "denied", reason: "grant_revoked" });
+    api.invokeApprovalState.mockResolvedValue({ status: "approved" });
+
+    render(<AutomationsView />);
+    fireEvent.click(await screen.findByRole("button", { name: /revoked-run/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Run now" }));
+    fireEvent.click(await screen.findByRole("button", {
+      name: "Check approval and apply exact change",
+    }));
+    await waitFor(() => expect(api.executeWorkflow).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText("grant_revoked")).toBeTruthy();
+    expect(screen.queryByText(/Run undefined/)).toBeNull();
+  });
+
   it("renders schedule desired/observed truth and explains required authority", async () => {
     const state = {
       desired: {

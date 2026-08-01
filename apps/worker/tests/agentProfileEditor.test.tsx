@@ -51,6 +51,29 @@ it("authors only the runtime's canonical expensive cost tier", async () => {
   ));
 });
 
+it("does not report a save when the kernel was unreachable", async () => {
+  api.invoke.mockResolvedValue({
+    status: "unavailable",
+    reason: "the kernel was unreachable",
+  });
+  const onSaved = vi.fn();
+
+  render(
+    <AgentProfileEditor
+      onSaved={onSaved}
+      onCancel={vi.fn()}
+    />,
+  );
+  fireEvent.change(screen.getByLabelText("Name"), {
+    target: { value: "researcher" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Request profile change" }));
+
+  expect(await screen.findByText("Not changed: the kernel was unreachable.")).toBeTruthy();
+  expect(screen.queryByText("Agent profile saved.")).toBeNull();
+  expect(onSaved).not.toHaveBeenCalled();
+});
+
 it("continues only the exact cloned profile request after approval", async () => {
   const onSaved = vi.fn();
   api.invoke

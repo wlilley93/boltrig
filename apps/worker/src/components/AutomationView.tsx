@@ -40,6 +40,7 @@ import {
 import {
   ExactApprovalFinalizer,
   governedResultReason,
+  governedRouteRefusal,
   type GovernedResult,
   useExactApprovalFinalizer,
 } from "./ExactApprovalFinalizer";
@@ -394,6 +395,10 @@ export function AutomationsView() {
           input.workflowId, input.body, approvalId,
         );
         if (isPendingHuman(result)) return result;
+        const refusal = governedRouteRefusal(result);
+        if (refusal) {
+          return { status: refusal.status, reason: refusal.reason, value: result };
+        }
         if (result.error) {
           return { status: "error", reason: result.error, value: result };
         }
@@ -403,9 +408,12 @@ export function AutomationsView() {
         const result = await client.executeWorkflow(
           input.workflowId, input.inputs, approvalId,
         );
-        return isPendingHuman(result)
-          ? result
-          : { status: "ok", value: result };
+        if (isPendingHuman(result)) return result;
+        const refusal = governedRouteRefusal(result);
+        if (refusal) {
+          return { status: refusal.status, reason: refusal.reason, value: result };
+        }
+        return { status: "ok", value: result };
       }
       if (input.kind === "bind_channel") {
         return normalizeExactResult(
@@ -481,6 +489,9 @@ export function AutomationsView() {
   function newWorkflow() {
     invalidateExactApproval();
     invalidatePendingOccurrenceRetry();
+    // An in-flight openWorkflow load can no longer clear busy once the
+    // selection moves to the blank draft; settle it here.
+    setBusy(false);
     setSelectedWorkflowId(null);
     setDraft(blankWorkflowDraft());
     setRunIds([]);
@@ -496,6 +507,8 @@ export function AutomationsView() {
     setScheduleState(null);
     setScheduleOccurrences([]);
     setScheduleHistoryTruncated(false);
+    setCron("0 9 * * 1-5");
+    setTimezone("UTC");
     setMessage("New draft. Saving may pause for author approval.");
   }
 
@@ -739,6 +752,17 @@ export function AutomationsView() {
         setOccurrenceFinalization(null);
         await openWorkflow(pending.workflowId);
         setMessage("The exact approved occurrence was queued for replay.");
+      } else if (result.status === "pending_human" && result.hitl_request_id) {
+        // The kernel refused the stale fingerprint and issued a fresh exact
+        // request. Retain the same occurrence with the new approval handle so
+        // the second Inbox decision stays redeemable.
+        setPendingOccurrenceRetry({
+          ...pending,
+          approvalId: result.hitl_request_id,
+          invalidated: false,
+        });
+        setOccurrenceFinalization("waiting");
+        setMessage("Occurrence retry is waiting for a fresh approval in Inbox.");
       } else {
         setOccurrenceFinalization("invalidated");
         setMessage(
@@ -761,10 +785,13 @@ export function AutomationsView() {
       })),
       client.workflowStats().catch(() => ({ stats: [] })),
     ]);
-    setRunIds(runs.runs);
     setStats(Object.fromEntries(
       currentStats.stats.map((item) => [item.workflow_id, item]),
     ));
+    // The selection may have moved while the fetch was in flight; another
+    // workflow's runs must not land in this editor.
+    if (selectedWorkflowIdRef.current !== workflowId) return;
+    setRunIds(runs.runs);
   }
 
   async function queueWorkflow() {
@@ -782,9 +809,12 @@ export function AutomationsView() {
       const result = await client.triggerWorkflow(
         input.workflowId, input.body,
       );
+      const refusal = isPendingHuman(result) ? null : governedRouteRefusal(result);
       if (isPendingHuman(result)) {
         exactApproval.begin(input, result, "Workflow queue request");
         setMessage("Run is waiting for approval in Inbox.");
+      } else if (refusal) {
+        setMessage(refusal.reason);
       } else if (result.error) {
         setMessage(result.error);
       } else {
@@ -820,6 +850,12 @@ export function AutomationsView() {
         exactApproval.begin(input, result, "Immediate workflow execution");
         setMessage("Execution is waiting for approval in Inbox.");
       } else {
+        const refusal = governedRouteRefusal(result);
+        if (refusal) {
+          setMessage(refusal.reason);
+          return;
+        }
+        if (selectedWorkflowIdRef.current !== input.workflowId) return;
         setLastExecution(result);
         setMessage(`Run ${result.run_id} ${result.status}.`);
         await refreshWorkflowRuns(draft.id);
@@ -834,6 +870,7 @@ export function AutomationsView() {
   async function refreshTriggers(workflowId: string) {
     invalidateExactApproval();
     const result = await client.workflowTriggers(workflowId);
+    if (selectedWorkflowIdRef.current !== workflowId) return;
     setTriggers(result.triggers);
   }
 

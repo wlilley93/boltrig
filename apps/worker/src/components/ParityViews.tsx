@@ -48,6 +48,7 @@ export function RunsView() {
   const [selected, setSelected] = useState<RunRow | null>(null);
   const [tree, setTree] = useState<AuditNode | null>(null);
   const [topology, setTopology] = useState<RunTopologyNode | null>(null);
+  const runDetailSequence = useRef(0);
   const [query, setQuery] = useState("");
   const [ownerFilter, setOwnerFilter] = useState("");
   const [sourceFilter, setSourceFilter] = useState("");
@@ -99,11 +100,16 @@ export function RunsView() {
     setTree(null);
     setTopology(null);
     setCancelArmed(false);
-    if (!row.run_id) return;
+    if (!row.run_id) {
+      runDetailSequence.current += 1;
+      return;
+    }
+    const sequence = ++runDetailSequence.current;
     void Promise.allSettled([
       client.auditTree(row.run_id),
       client.runTopology(row.run_id),
     ]).then(([audit, roster]) => {
+      if (runDetailSequence.current !== sequence) return;
       setTree(audit.status === "fulfilled" ? audit.value.root : null);
       setTopology(roster.status === "fulfilled" ? roster.value.root : null);
     });
@@ -111,6 +117,7 @@ export function RunsView() {
 
   useEffect(() => {
     if (!selectedRunId) {
+      runDetailSequence.current += 1;
       setSelected(null);
       setTree(null);
       setTopology(null);

@@ -206,7 +206,11 @@ export function ModelEndpointsBuild() {
         setMessage("Model endpoint change is waiting for approval in Inbox.");
         return;
       }
-      if (result.status === "denied" || result.status === "error") {
+      if (
+        result.status === "denied"
+        || result.status === "error"
+        || result.status === "unavailable"
+      ) {
         setMessage(`Not changed: ${result.reason}.`);
         return;
       }

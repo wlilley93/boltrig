@@ -16,7 +16,10 @@ const api = vi.hoisted(() => ({
   refreshCallMedia: vi.fn(),
 }));
 
+const native = vi.hoisted(() => ({ isDesktop: false }));
+
 vi.mock("../src/client", () => ({ client: api }));
+vi.mock("../src/desktop", () => native);
 
 import { VoiceCall } from "../src/components/VoiceCall";
 
@@ -148,6 +151,7 @@ const approved = {
 };
 
 beforeEach(() => {
+  native.isDesktop = false;
   FakeWebSocket.instances = [];
   FakeAudioContext.instances = [];
   FakeAudioContext.nextCurrentTimes = [];
@@ -203,6 +207,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.unstubAllEnvs();
   vi.unstubAllGlobals();
 });
 
@@ -514,6 +519,86 @@ describe("Worker realtime voice continuity", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("still reports a dropped socket after reconnecting from a failed end", async () => {
+    const onError = vi.fn();
+    api.callEvents.mockReset().mockResolvedValue({ events: [] });
+    api.endCall.mockRejectedValueOnce(new Error("The call could not be ended."));
+
+    render(
+      <VoiceCall
+        conversationId="conversation-a"
+        onConversation={vi.fn()}
+        onError={onError}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "◉ Start call" }));
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
+    act(() => {
+      FakeWebSocket.instances[0]?.onmessage?.(new MessageEvent("message", {
+        data: JSON.stringify({ type: "ready" }),
+      }));
+    });
+    expect(await screen.findByText("Live voice")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "End" }));
+    expect(await screen.findByText("Call interrupted")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Reconnect" }));
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(2));
+    act(() => {
+      FakeWebSocket.instances[1]?.onmessage?.(new MessageEvent("message", {
+        data: JSON.stringify({ type: "ready" }),
+      }));
+    });
+    expect(await screen.findByText("Live voice")).toBeTruthy();
+
+    act(() => {
+      FakeWebSocket.instances[1]?.onclose?.(new CloseEvent("close"));
+    });
+
+    expect(await screen.findByText("Connection paused")).toBeTruthy();
+    expect(onError).toHaveBeenLastCalledWith(
+      expect.stringContaining("connection closed"),
+    );
+    expect(screen.getByRole("button", { name: "Reconnect" })).toBeTruthy();
+  });
+
+  it("dials the relative gateway URL on the document origin in the browser", async () => {
+    api.callEvents.mockReset().mockResolvedValue({ events: [] });
+    render(
+      <VoiceCall
+        conversationId="conversation-a"
+        onConversation={vi.fn()}
+        onError={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "◉ Start call" }));
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
+
+    expect(FakeWebSocket.instances[0]?.url).toBe(
+      `ws://${window.location.host}/voice/v1/calls/call-a/media`,
+    );
+  });
+
+  it("dials the configured API origin from the desktop shell, not its webview", async () => {
+    native.isDesktop = true;
+    vi.stubEnv("VITE_API_BASE", "https://kernel.boltrig.test/");
+    api.callEvents.mockReset().mockResolvedValue({ events: [] });
+    render(
+      <VoiceCall
+        conversationId="conversation-a"
+        onConversation={vi.fn()}
+        onError={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "◉ Start call" }));
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
+
+    expect(FakeWebSocket.instances[0]?.url).toBe(
+      "wss://kernel.boltrig.test/voice/v1/calls/call-a/media",
+    );
   });
 
   it("stops queued playback on interruption and resets scheduling for a new context", async () => {

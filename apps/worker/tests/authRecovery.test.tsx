@@ -21,6 +21,7 @@ import { AuthGate } from "../src/components/AuthGate";
 
 beforeEach(() => {
   window.location.hash = "#/chat";
+  vi.stubEnv("VITE_API_BASE", "https://kernel.boltrig.test");
   api.meSettings.mockRejectedValue(new Error("no session"));
   api.refreshSession.mockResolvedValue({ status: "ok" });
   native.clearDesktopSession.mockResolvedValue(undefined);
@@ -29,6 +30,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.unstubAllEnvs();
 });
 
 describe("Worker password recovery", () => {
@@ -47,6 +49,15 @@ describe("Worker password recovery", () => {
     }));
     await waitFor(() => expect(native.clearDesktopSession).toHaveBeenCalled());
     expect(screen.getByText(/browser sign-in was not changed/i)).toBeTruthy();
+  });
+
+  it("names a desktop build with no configured server instead of offering sign-in", async () => {
+    vi.stubEnv("VITE_API_BASE", "");
+    render(<AuthGate><div>Private Worker</div></AuthGate>);
+
+    expect(await screen.findByText("No Boltrig server configured")).toBeTruthy();
+    expect(screen.queryByLabelText("Email")).toBeNull();
+    expect(screen.queryByText("Private Worker")).toBeNull();
   });
 
   it("offers recovery from sign-in and keeps the request result generic", async () => {
@@ -89,5 +100,15 @@ describe("Worker password recovery", () => {
     expect(await screen.findByText("All existing browser sessions have been signed out."))
       .toBeTruthy();
     expect(screen.getByRole("button", { name: "Go to sign in" })).toBeTruthy();
+  });
+
+  it("renders the invitation screen when the hash changes in an open tab", async () => {
+    render(<AuthGate><div>Private Worker</div></AuthGate>);
+    await screen.findByLabelText("Email");
+
+    window.location.hash = "#/accept-invite?token=invite-token";
+    fireEvent(window, new Event("hashchange"));
+
+    expect(await screen.findByText("Accept your invitation")).toBeTruthy();
   });
 });

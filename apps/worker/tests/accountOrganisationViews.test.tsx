@@ -13,6 +13,7 @@ const api = vi.hoisted(() => ({
   artifacts: vi.fn(),
   chatConfig: vi.fn(),
   configurePersonalAgent: vi.fn(),
+  consoleOverview: vi.fn(),
   conversation: vi.fn(),
   conversations: vi.fn(),
   createInvitation: vi.fn(),
@@ -152,6 +153,7 @@ beforeEach(() => {
     sessions: [{ id: "session-a", client: "Firefox", revoked: false }],
   });
   api.workspaces.mockResolvedValue({ workspaces: [workspace] });
+  api.consoleOverview.mockResolvedValue({ workspace_id: workspace.id });
   api.currentOrg.mockResolvedValue({ organisation });
   api.meNotifications.mockResolvedValue({
     prefs: [],
@@ -329,6 +331,27 @@ describe("Worker account surface", () => {
     expect(api.revokeSession).not.toHaveBeenCalled();
     fireEvent.click(within(sessionSection!).getByRole("button", { name: "Confirm revoke" }));
     await waitFor(() => expect(api.revokeSession).toHaveBeenCalledWith("session-a"));
+  });
+
+  it("preselects the active workspace and reports a failed context switch", async () => {
+    api.workspaces.mockResolvedValue({
+      workspaces: [
+        workspace,
+        { ...workspace, id: "workspace-b", name: "Research", slug: "research" },
+      ],
+    });
+    api.consoleOverview.mockResolvedValue({ workspace_id: "workspace-b" });
+    api.switchActiveContext.mockRejectedValue(new Error("kernel unreachable"));
+
+    render(<AccountView />);
+    await screen.findByText("Alice");
+    fireEvent.click(screen.getByRole("button", { name: "Access" }));
+
+    const selector = await screen.findByLabelText("Active workspace");
+    await waitFor(() => expect(selector).toHaveProperty("value", "workspace-b"));
+    fireEvent.click(screen.getByRole("button", { name: "Switch workspace" }));
+    expect(await screen.findByText("The workspace context could not be changed."))
+      .toBeTruthy();
   });
 
   it("reports clipboard success and failure for both one-time 2FA values", async () => {

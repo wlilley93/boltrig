@@ -191,7 +191,7 @@ export function PermanentFleetTopology() {
             onChange={(chief) => { finalizer.invalidate(); setDraft({ ...draft, chief }); }}
           />
           {draft.departments.map((head, index) => (
-            <div className="detail-section" key={`${head.routing_id}:${index}`}>
+            <div className="detail-section" key={index}>
               <HeadEditor
                 head={head}
                 role={`Department head ${index + 1}`}

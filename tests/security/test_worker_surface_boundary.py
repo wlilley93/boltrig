@@ -214,7 +214,7 @@ def test_desktop_oauth_return_accepts_only_kernel_brokered_opaque_results():
         assert command in wrapper
     oauth_wrapper = wrapper[
         wrapper.index("export interface DesktopOAuthReturnReadiness"):
-        wrapper.index("function apiOrigin")
+        wrapper.index("export async function clearDesktopSession")
     ]
     for forbidden in (
         "authorization_url",

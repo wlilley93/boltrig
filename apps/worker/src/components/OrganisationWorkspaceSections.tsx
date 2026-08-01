@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   AddWorkspaceMemberRequest,
   AddWorkspaceMemberResponse,
@@ -219,6 +219,7 @@ export function WorkspaceAdministration({
   const [members, setMembers] = useState<WorkspaceMemberView[]>([]);
   const [name, setName] = useState("");
   const [message, setMessage] = useState("");
+  const memberSequence = useRef(0);
 
   const finalizer = useExactApprovalFinalizer<
     WorkspaceCreateMutation,
@@ -257,13 +258,22 @@ export function WorkspaceAdministration({
   useEffect(refresh, []);
   useEffect(() => {
     if (!selected) {
+      memberSequence.current += 1;
       setMembers([]);
       return;
     }
-    void client.workspaceMembers(selected.id).then((result) => {
-      setMembers(result.members ?? []);
-      if (!result.members) setMessage(result.reason ?? result.status ?? "Roster unavailable.");
-    });
+    const sequence = ++memberSequence.current;
+    void client.workspaceMembers(selected.id)
+      .then((result) => {
+        if (memberSequence.current !== sequence) return;
+        setMembers(result.members ?? []);
+        if (!result.members) setMessage(result.reason ?? result.status ?? "Roster unavailable.");
+      })
+      .catch(() => {
+        if (memberSequence.current !== sequence) return;
+        setMembers([]);
+        setMessage("The workspace roster is unavailable.");
+      });
   }, [selected]);
 
   async function create() {

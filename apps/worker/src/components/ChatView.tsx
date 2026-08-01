@@ -66,6 +66,8 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
   const taskDetailsTriggerRef = useRef<HTMLButtonElement>(null);
   const taskDetailsPanelRef = useRef<HTMLElement>(null);
   const controllersRef = useRef(new Set<AbortController>());
+  const selectedConversationRef = useRef<string | null>(conversationId);
+  selectedConversationRef.current = conversationId;
   const liveConversationRef = useRef<string | null>(null);
   const activeRunRef = useRef<string | null>(null);
   const followCursorRef = useRef(0);
@@ -109,6 +111,9 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
     }
     void loadConversation(conversationId)
       .then((thread) => {
+        // The selection may have moved again while this load was in flight;
+        // never attach a follow stream for a conversation no longer shown.
+        if (selectedConversationRef.current !== conversationId) return;
         if (
           thread.active_run_id
           && !ownsLiveStream
@@ -118,7 +123,10 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
           void reattach(conversationId, 0, true);
         }
       })
-      .catch((reason) => setError(reasonText(reason)));
+      .catch((reason) => {
+        if (selectedConversationRef.current !== conversationId) return;
+        setError(reasonText(reason));
+      });
   }, [conversationId]);
 
   useEffect(() => () => abortStreams(), []);
@@ -210,6 +218,7 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
     const controller = new AbortController();
     addController(controller);
     let sawStreamEvent = false;
+    let followQueuedId: string | null = null;
     try {
       const queued = await client.streamChat({
         conversation_id: conversationId ?? undefined,
@@ -226,6 +235,13 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
         activeRunRef.current = queued.run_id;
         liveConversationRef.current = queued.conversation_id;
         setContinuity("Instruction queued behind the active turn.");
+        // A 202 queue receipt carries no stream. When no other stream is
+        // open (the active turn was started elsewhere or the local follow
+        // already dropped), attach a follow after this send's controller is
+        // released, or the live turn and the queued turn are both invisible.
+        if (controllersRef.current.size === 1) {
+          followQueuedId = queued.conversation_id;
+        }
       } else if (sawStreamEvent) {
         const id = liveConversationRef.current ?? conversationId;
         if (id) {
@@ -248,20 +264,32 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
       return reason instanceof BoltrigApiError && reason.status === 413;
     } finally {
       removeController(controller);
+      if (followQueuedId) void reattach(followQueuedId, 0, true);
     }
   }
 
   async function stop() {
     const runId = activeRunRef.current ?? live.runId;
     abortStreams();
-    if (runId) await client.cancelRun(runId);
-    activeRunRef.current = null;
-    liveConversationRef.current = null;
-    setContinuity("");
-    setRetryFollow(false);
-    if (conversationId) {
-      await loadConversation(conversationId);
-      setEvents([]);
+    try {
+      if (runId) await client.cancelRun(runId);
+      activeRunRef.current = null;
+      liveConversationRef.current = null;
+      setContinuity("");
+      setRetryFollow(false);
+      if (conversationId) {
+        await loadConversation(conversationId);
+        setEvents([]);
+      }
+    } catch (reason) {
+      // The cancel or reload did not reach the kernel: the run may still be
+      // active server-side, so keep the refs and offer the reconnect path
+      // instead of leaving a frozen live turn with no affordance.
+      setError(reasonText(reason));
+      if (liveConversationRef.current) {
+        setContinuity("Stop was not confirmed. The run may still be active server-side.");
+        setRetryFollow(true);
+      }
     }
   }
 
@@ -274,6 +302,9 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
       })),
       client.conversations().catch(() => ({ conversations: [] })),
     ]);
+    // A slow load must not clobber the view once the selection has moved on;
+    // callers still receive the thread for their own bookkeeping.
+    if (selectedConversationRef.current !== id) return thread;
     setMessages(thread.messages);
     setModelContext(thread.model_context ?? null);
     setArtifacts(artifactResult.artifacts);
@@ -601,7 +632,7 @@ function Message({ message }: { message: ChatMessage }) {
             ▧ {item.name}{item.size != null ? ` · ${formatBytes(item.size)}` : ""}
           </button>
         ))}
-        {message.events?.length ? <TurnActivity turn={turn} /> : null}
+        {message.events?.length ? <TurnActivity turn={turn} settled /> : null}
       </div>
     </article>
   );
@@ -639,7 +670,13 @@ function LiveTurn({ turn }: { turn: NormalizedTurn }) {
   );
 }
 
-function TurnActivity({ turn }: { turn: NormalizedTurn }) {
+function TurnActivity({
+  turn,
+  settled = false,
+}: {
+  turn: NormalizedTurn;
+  settled?: boolean;
+}) {
   if (!turn.timeline.length) return null;
   return (
     <div className="activity">
@@ -680,9 +717,23 @@ function TurnActivity({ turn }: { turn: NormalizedTurn }) {
             <strong>Approval needed</strong><p>{item.entry.question}</p>
           </div>
         );
-        if (item.kind === "question") return (
-          <LiveQuestionCard question={item.entry} key={item.key} />
-        );
+        if (item.kind === "question") {
+          // A settled transcript replays the question event, but its HITL
+          // request is already resolved; rendering the interactive card would
+          // invite re-answering (including re-typing secure secrets) against
+          // a dead request.
+          if (settled) return (
+            <div className="approval-card live-question" key={item.key}>
+              <strong>Question from this run</strong>
+              <p>{item.entry.prompt}</p>
+              <p className="muted small">
+                This question was part of a completed turn and is no longer
+                answerable.
+              </p>
+            </div>
+          );
+          return <LiveQuestionCard question={item.entry} key={item.key} />;
+        }
         return null;
       })}
     </div>

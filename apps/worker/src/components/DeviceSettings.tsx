@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import type {
-  DeviceEnrollmentStart,
-  DeviceRootResponse,
-  EnrolledDevice,
+import {
+  BoltrigApiError,
+  type DeviceEnrollmentStart,
+  type DeviceRootResponse,
+  type EnrolledDevice,
 } from "@wlilley93/boltrig-web-sdk";
 
 import { client } from "../client";
@@ -30,6 +31,7 @@ export function DeviceSettings() {
   const [devicesLoaded, setDevicesLoaded] = useState(false);
   const [nativeStatus, setNativeStatus] = useState<DesktopDeviceStatus | null>(null);
   const [available, setAvailable] = useState(true);
+  const [devicesError, setDevicesError] = useState("");
   const [busy, setBusy] = useState(false);
   const [label, setLabel] = useState("");
   const [enrollment, setEnrollment] = useState<DeviceEnrollmentStart | null>(null);
@@ -46,6 +48,7 @@ export function DeviceSettings() {
       .then((result) => {
         setDevices(result.devices);
         setAvailable(true);
+        setDevicesError("");
         setDevicesLoaded(true);
         setSelected((current) => (
           current && result.devices.some((item) => item.id === current)
@@ -53,8 +56,18 @@ export function DeviceSettings() {
             : result.devices[0]?.id ?? null
         ));
       })
-      .catch(() => {
-        setAvailable(false);
+      .catch((reason) => {
+        // Only a kernel refusal proves enrollment is not enabled; a transport
+        // failure says nothing about the deployment and must stay retryable.
+        if (
+          reason instanceof BoltrigApiError
+          && (reason.status === 403 || reason.status === 404)
+        ) {
+          setAvailable(false);
+          setDevicesError("");
+        } else {
+          setDevicesError("Devices could not be loaded. The kernel was unreachable.");
+        }
         setDevicesLoaded(true);
       });
   }
@@ -234,7 +247,7 @@ export function DeviceSettings() {
         setMessage(result.reason ?? result.status);
         return;
       }
-      clearLocalDeviceActionSession(deviceId);
+      clearLocalDeviceActionSession(deviceId, rootId);
       let localRemoved = true;
       if (desktop && nativeStatus?.device_id === deviceId && nativeStatus.root_ids.includes(rootId)) {
         try {
@@ -473,7 +486,7 @@ export function DeviceSettings() {
       </section>
       <section className="settings-card">
         <p className="eyebrow">Enrolled devices</p>
-        {!available ? <p className="muted">Device enrollment is not enabled on this deployment.</p> : devices.length === 0 ? <p className="muted">No devices enrolled.</p> : devices.map((item) => {
+        {devicesError ? <p className="muted">{devicesError} <button className="secondary-button" type="button" onClick={refresh}>Retry</button></p> : !available ? <p className="muted">Device enrollment is not enabled on this deployment.</p> : devices.length === 0 ? <p className="muted">No devices enrolled.</p> : devices.map((item) => {
           const local = desktop && nativeStatus?.device_id === item.id;
           return (
             <button className={selected === item.id ? "device-row selected" : "device-row"} key={item.id} onClick={() => setSelected(item.id)}>
