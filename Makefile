@@ -206,7 +206,7 @@ typecheck: ## Module-by-module strict mypy gate (see [tool.mypy])
 gate-status: ## Is the gate on the default branch actually green right now?
 	@./scripts/gate-status.sh
 
-check: invariants lint architecture continuity-projection codex-pin-health structure codex-protocol unwired-claims reachability tracked-symlinks typecheck test ## Run the local Python gates CI enforces
+check: invariants lint architecture continuity-projection codex-pin-health structure codex-protocol unwired-claims reachability tracked-symlinks typecheck test ## Fast local subset. NOT what CI enforces - CI runs `python-quality`, and this omits seven of its targets (claims, commit-trailers, gate-coverage, health-claims, order-directives, override-locks, prose-references). Measured 2026-08-02; the old help text claimed the opposite. Use `make python-quality` (or just push - the pre-push hook runs it).
 
 python-quality: invariants lint architecture structure codex-protocol unwired-claims reachability prose-references commit-trailers tracked-symlinks gate-coverage health-claims order-directives claims override-locks typecheck ## Run Python tests on Postgres with coverage override-locks typecheck
 	scripts/with_test_postgres.sh $(PY) -m pytest -q \
