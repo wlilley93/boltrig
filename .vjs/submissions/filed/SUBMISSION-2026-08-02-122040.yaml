@@ -1,0 +1,69 @@
+id: SUBMISSION-2026-08-02-122040
+court_requested: county
+jurisdiction: default
+question: May a bounded, value-free record of a turn's tool work be composed into the next turn's prompt, when SEC-46 states that continuity composes only persisted text?
+facts: |
+  # Facts
+
+  Filed on own motion; `vjs route` returned CourtRequired. Symmetric, no preference stated.
+
+  `fleet/continuity.py::_render_message` renders a turn from `message.content` alone.
+  `message.events`, on the same object, holds that turn's tool_call/tool_result records and is
+  never read.
+
+  `chat_event_projection.py` strips values BEFORE persistence: a call keeps `tool`, `call_id`,
+  `args_summary={keys,count}`; a result keeps `status`, `result_summary={keys,status}`. No
+  argument values, no outputs. Pinned by `test_chat_streaming_richness.py`.
+
+  Consequence: a turn that ran five tools and narrated nothing renders as an empty envelope,
+  byte-identical to a turn that did nothing. continuity.py notes this in a comment, which
+  enforces nothing.
+
+  Two facts narrow the question. (1) Full values are durable nowhere (decision 0018 F5), so
+  replaying results is unavailable at any price short of a new store. (2) There is no per-lane
+  seam: composition precedes runtime selection and the Runtime protocol takes a flat prompt
+  string, so every lane receives the identical string.
+
+  Not before the court: `tests/security/test_continuity_carries_text_only.py` (PR #211) pins
+  both directions, seeded both ways, and changes no behaviour.
+
+  ## Question
+
+  May `_render_message` append a bounded, value-free statement of a turn's tool work (a count,
+  or tool names) derived only from what is already persisted?
+
+  ## For
+
+  - The transcript asserts something FALSE: it presents a turn that acted as one that was
+    silent. The model re-plans on that and repeats work it already did.
+  - It composes only already-persisted, already-bounded data, the same projection already sent
+    to the browser. No new store, read or authority; SEC-27 and SEC-49 untouched.
+  - Prefix stability, SEC-46's load-bearing half, is preserved: the line is a pure function of
+    a frozen row. Demonstrated by seed 2 in PR #211.
+  - The alternative depends on the model narrating, making continuity turn on model verbosity,
+    an unpinnable property of a third party.
+
+  ## Against
+
+  - SEC-46 says continuity composes only persisted TEXT. This amends the invariant to fit the
+    change it was meant to constrain.
+  - The bound is only as good as a DIFFERENT module written for browser rendering. Nothing
+    ties its bounding to the prompt boundary, so a future widening, which nobody would review
+    as a prompt-security change, silently widens what reaches the model. Two gates, one
+    artefact.
+  - `args_summary.keys` are argument NAMES: not values, but not nothing. On `vault.read` a key
+    list is structurally informative, and the estate's scrub rules treat field names as
+    carrying signal.
+  - It buys less than it appears. Names and a count do not say what came back, so the model
+    still cannot use a prior result, only avoid repeating a call.
+  - Doing nothing is coherent: require narration, enforceable in the skill prompt, leaving the
+    prompt surface untouched.
+
+  ## Relief
+
+  A ruling; and if permitted, the bound (count only, names, or names plus argument-key names),
+  and whether the permitted projection must be defined AT the continuity boundary rather than
+  inherited from `chat_event_projection.py`.
+requested_order: TBD
+private_boundary: local
+word_count: 492
