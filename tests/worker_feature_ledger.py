@@ -335,6 +335,15 @@ _nested(
 )
 _nested(
     "ChatConfig",
+    "continuity_tool_name_chars continuity_tool_pairs_per_turn",
+    "boltrig/config/manifest.py",
+    ("worker", "deployment", "worker", "worker", "deployment"),
+    "The two bounds on what a prior turn's tool work may say inside a later prompt "
+    "([2026] VJS-CC-BOLTRIG-CONTINUITY-TOOL-WORK-001 D2). Tighten-only, so a manifest may "
+    "narrow what reaches a model and can never widen it.",
+)
+_nested(
+    "ChatConfig",
     "heartbeat_seconds conversation_page_size conversation_max_page_size",
     "boltrig/config/manifest.py",
     ("operator", "deployment", "worker", "worker", "deployment"),

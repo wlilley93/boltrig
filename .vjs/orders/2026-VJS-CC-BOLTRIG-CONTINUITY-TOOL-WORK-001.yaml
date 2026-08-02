@@ -1,0 +1,171 @@
+id: 2026-VJS-CC-BOLTRIG-CONTINUITY-TOOL-WORK-001
+court: county
+jurisdiction: default
+repo_code: null
+status: binding
+issue: continuity_tool_work_projection
+holding: |
+  GRANTED AS VARIED. The relief is granted; the mechanism pleaded is refused.
+
+  `_render_message` MAY append a bounded, value-free statement of a turn's tool work. It may
+  NOT do so by inheriting the bound from `chat_event_projection.py`. On the sub-question
+  expressly reserved: YES, the permitted projection must be defined AT the continuity
+  boundary.
+
+  THE RATIO. Persistence is not prompt-eligibility. A datum's presence on a persisted row
+  confers no entitlement to enter a prompt. The prompt is a distinct boundary with a distinct
+  reader, and what may cross it must be enumerated AT THAT BOUNDARY, in the module that
+  composes the prompt, as a closed allowlist of record types and of fields within them, with
+  its own caps expressed as typed configuration. A BOUND DECLARED FOR ANOTHER DESTINATION IS
+  NOT A BOUND HERE: bounds do not travel with data, they belong to the boundary that declared
+  them, and a projection built for one reader may be relied on for nothing at another however
+  tightly it binds at its own.
+
+  Corollaries. (a) Provenance is per FIELD, not per struct; arrival inside a reviewed
+  structure is not an argument about the field. (b) A field may be composed into a prompt only
+  if its value range is closed at build time, or it is a NAME whose provenance is the system's
+  own registry rather than the conversation; an instance-chosen name is not admitted, and its
+  admission elsewhere as a RECORDED LIMIT is not authority to admit it here. (c) A value with
+  a closed build-time range crosses as itself; anything outside renders as a fixed `unknown`
+  token. (d) An identifier may be READ to derive an admitted fact and must not be RENDERED;
+  the allowlist governs the rendered surface. (e) A render derived only from an immutable row
+  is prefix-stable, so the gateway-cache guarantee is not a ground to refuse a derived line.
+  (f) A transcript that asserts a falsehood is a defect, not conservatism: silence about work
+  performed is a FALSE STATEMENT THAT THE TURN WAS SILENT, and a continuity property may not
+  be made to depend on a third-party model choosing to narrate.
+
+  THE BOUND. One deterministic line per rendered message, only where the row carries at least
+  one admitted frame, inside its own wrap_untrusted("tool_work", "prior_turn", ...): the TRUE
+  count of tool_call frames (exact, never capped); the distinct (tool name, status) pairs with
+  repetition counts, sorted, joined on call_id INSIDE continuity; and an overflow marker when
+  the pair list exceeds its cap.
+
+  Rendered allowlist: tool_call.tool, tool_result.status. Read but never rendered: call_id,
+  type. Frame types admitted: {tool_call, tool_result} and nothing else.
+
+  REFUSED: args_summary in whole and in part, result_summary in whole and in part, run_id, any
+  rendering of call_id, and every other frame type (subagent, hitl, question, text_delta,
+  artifact, workflow_*, model_routing, steer_*, unknown), whose fields are neither read nor
+  rendered.
+
+  Count-only was refused as insufficient: without identity the model cannot avoid the
+  repetition that is the whole justification. Argument key names were refused because
+  2026-VJS-CC-BOLTRIG-SCHEMA-VALIDATION-LEDGER-001 admitted them at a different boundary as a
+  RECORDED LIMIT (L1) resting on four conditions, two of which cannot be reproduced here:
+  there is no write-time scrub on the prompt path, and the destination is a third-party model
+  rather than a first-party store. Under a verb with additionalProperties an instance-chosen
+  key IS a params key, which is the same defect that order refused for json_path.
+directives:
+- id: D1
+  actor: lexby
+  must: define_the_frame_type_and_field_allowlists_and_one_tool_work_line_function_in_continuity_py_which_must_not_import_chat_event_projection
+  when: composing_tool_work_into_a_prompt
+- id: D2
+  actor: lexby
+  must: express_the_three_caps_as_typed_chatconfig_data_parsed_through_parse_chat_so_a_manifest_may_only_tighten_never_as_call_site_constants
+  when: bounding_the_tool_work_line
+- id: D3
+  actor: lexby
+  must: emit_the_same_bounded_line_per_covered_turn_from_summarize_messages_and_never_truncate_it_with_the_content_snippet
+  when: a_turn_falls_behind_the_compaction_boundary
+- id: D4
+  actor: lexby
+  must: extend_test_continuity_carries_text_only_with_adjacent_frame_canaries_cap_and_status_allowlist_assertions_and_invert_the_empty_envelope_pin
+  when: landing_the_tool_work_line
+- id: D5
+  actor: lexby
+  must: run_all_six_red_seeds_and_record_each_result_never_assume_a_seed
+  when: asserting_that_the_behavioural_gate_holds
+- id: D6
+  actor: lexby
+  must: add_check_continuity_projection_py_to_make_gates_failing_on_a_key_outside_the_read_allowlist_a_widened_frozenset_a_chat_event_projection_import_or_any_other_function_touching_message_events
+  when: enforcing_the_boundary_structurally
+- id: D7
+  actor: lexby
+  must: run_the_three_structural_red_seeds_and_record_each_result
+  when: asserting_that_the_structural_gate_holds
+- id: D8
+  actor: lexby
+  must: prove_the_defence_is_positional_by_running_the_envelope_escape_test_with_normalisation_disabled_green_and_with_wrap_untrusted_removed_red
+  when: claiming_wrap_untrusted_is_the_first_line
+- id: D9
+  actor: lexby
+  must: rewrite_sec_46_to_state_the_permitted_projection_exactly_and_bind_it_to_the_new_test_ids_and_correct_the_continuity_module_docstring
+  when: the_projection_lands
+- id: D10
+  actor: lexby
+  must: record_that_a_tool_names_range_is_not_closed_at_build_time_for_mcp_imported_verbs_and_that_its_admission_is_a_recorded_limit_not_a_safety_proof
+  when: writing_the_implementation_note
+forbidden:
+- rendering_args_summary_or_result_summary_in_whole_or_in_part
+- rendering_any_call_id_or_run_id_into_a_composed_prompt
+- reading_any_frame_type_outside_tool_call_and_tool_result
+- importing_chat_event_projection_into_continuity_py
+- expressing_any_cap_as_a_call_site_constant_or_letting_a_manifest_loosen_one
+- emitting_the_tool_work_line_outside_wrap_untrusted
+- passing_an_unrecognised_status_through_instead_of_unknown
+- landing_any_part_of_this_with_an_unrun_seed
+exceptions:
+- a_turn_carrying_no_admitted_frame_renders_byte_identically_to_today_and_no_line_is_emitted
+supersedes: []
+source_opinion: docs/vjs/2026-VJS-CC-BOLTRIG-CONTINUITY-TOOL-WORK-001-opinion.md
+runtime_summary: |
+  Persistence is not prompt-eligibility. What may enter a prompt is enumerated at the
+  continuity boundary as a closed allowlist with its own typed caps, never inherited from a
+  projection built for another reader. Tool NAMES and a closed-allowlist STATUS may be
+  composed, joined on call_id read-but-not-rendered, with the true call count exact; argument
+  key names, result summaries, identifiers and every other frame type are refused.
+created_at: 2026-08-02T12:21:00Z
+citation: null
+assent_source: standing_bounded_assent
+implementation_note: |
+  Convened 2026-08-02 on Lexby's own motion after `vjs route` returned CourtRequired
+  (SUBMISSION-2026-08-02-122040, CONVENING-county-2026-08-02-122100, case file pinned
+  sha256:070dde24427280a07bfd85c91a9b11ea4e7f4e34bf184a1d65c935f61d3d5ec1). Single seat,
+  lexby-first-instance. Full opinion at the source_opinion path.
+
+  ON D6's WORDING. The judgment directed the gate be wired into "make gates". There is no
+  such target: the aggregate this repository runs, and the one CI runs, is `make check`. The
+  directive is left as ordered rather than silently reworded, and the gate is wired into
+  `make check` beside check_architecture.py, which is the target the judgment described by
+  position even though it named it wrongly. Recorded because a directive naming a target
+  that does not exist is dischargeable by doing nothing, and that is exactly the kind of
+  unrunnable requirement this estate keeps finding in its own record.
+
+  D10, DISCHARGED HERE AND NOT DEFERRED. A tool name's range is NOT closed at build time. For
+  first-party verbs it is a registered verb; for MCP-imported tools it is chosen by the tool
+  PUBLISHER at import. It is admitted because its provenance is a registry rather than the
+  conversation, and because it is capped and charset-normalised inside its own untrusted
+  envelope. THAT IS A RECORDED LIMIT AND NOT A SAFETY PROOF, and no test may be written to
+  imply otherwise. It is admitted on the same footing the schema-validation-ledger order used
+  for params key names at the audit row, and expressly NOT on the footing that names are
+  provably safe.
+
+  TWO CORRECTIONS AGAINST THE ADVOCATE, recorded because the record binds us both.
+
+  (1) The case file's "For" limb asserted that the line would compose "only already-persisted,
+  already-bounded data, the same projection already sent to the browser". THAT IS WRONG IN
+  THREE RESPECTS, found by measurement at the sitting. The cardinality cap is not in
+  chat_event_projection.py at all - MAX_PARAM_KEYS lives two modules upstream in
+  run_event_projection.py, _summarise_output has no cap whatever, and no key-name length is
+  bounded anywhere in the chain. message.events is NOT a value-free structure: the same list
+  on the same row carries text_delta.delta (the entire reply), subagent.task (unbounded), and
+  hitl.question / question.prompt as free text. And one writer of message.events,
+  held_write_resume.py, hand-builds frames and persists them directly, never passing through
+  the projection at all. The mechanism the advocate pleaded is therefore refused, and the
+  relief granted on a bound this order enumerates itself.
+
+  (2) The case file described commit e558bc0 as "changes no behaviour" and placed it outside
+  the court's consideration. It changed no CODE. It changed the LAW: it rewrote SEC-46 in
+  docs/invariants.md from "(it composes only persisted text)" into an express prohibition
+  naming message.events, on the advocate's own motion, hours before filing, in the direction
+  of refusal, while this question was live. The parenthetical does not bind this court - a
+  one-line edit to a docs table is a record of behaviour, not a holding, and the test file
+  itself says pinning what the system does today is not a ruling that it should. But the
+  advocate ought not to have told the court the commit was neutral, and D9 now directs that
+  wording be rewritten under this order rather than left as it was made.
+
+  CITATION DELIBERATELY NULL, following SCHEMA-VALIDATION-LEDGER-001, RATE-LIMIT-WINDOW-001
+  and WORK-ITEM-LEASE-FENCE-001. Hand-minting a county citation at this seat would
+  collide with the canon series and reproduce the VJS-CC-VJS 1 defect on purpose. The
+  allocator gap is not settled here.

@@ -247,6 +247,13 @@ DEFAULT_COMPACTION_KEEP_RECENT = 12
 # unbounded scan is impossible). Both are tighten-only ceilings like the attachment
 # caps: a manifest may only LOWER them (a smaller, more conservative page), never
 # grow a page past the code ceiling.
+# Continuity tool-work projection caps ([2026] VJS-CC-BOLTRIG-CONTINUITY-TOOL-WORK-001
+# D2). Tighten-only, like every cap above. The NAME cap is the schema-ledger D7 segment
+# length; the PAIR cap is its per-row cap. The true tool-call COUNT is deliberately NOT
+# capped and is not a knob: D7 requires the true count be reported however many pairs are
+# elided, because a count that silently saturates is a number that stops being a fact.
+DEFAULT_CONTINUITY_TOOL_NAME_CHARS = 64
+DEFAULT_CONTINUITY_TOOL_PAIRS_PER_TURN = 10
 DEFAULT_CONVERSATION_PAGE_SIZE = 25
 DEFAULT_CONVERSATION_MAX_PAGE_SIZE = 100
 
@@ -284,6 +291,11 @@ class ChatConfig:
     # ceiling a caller-supplied limit is clamped down to. Both are tighten-only.
     conversation_page_size: int = DEFAULT_CONVERSATION_PAGE_SIZE
     conversation_max_page_size: int = DEFAULT_CONVERSATION_MAX_PAGE_SIZE
+    # The tool-work line's bounds (CONTINUITY-TOOL-WORK-001 D2). Held here rather than at
+    # the call site because that order's forbidden list names
+    # `expressing_any_cap_as_a_call_site_constant`, following [2026] VJS-COUNTY 3.
+    continuity_tool_name_chars: int = DEFAULT_CONTINUITY_TOOL_NAME_CHARS
+    continuity_tool_pairs_per_turn: int = DEFAULT_CONTINUITY_TOOL_PAIRS_PER_TURN
 
     def resolve_page_size(self, requested: int | None) -> int:
         """The effective page size for one conversation list/search page.
@@ -679,6 +691,7 @@ def _parse_chat(raw: Mapping[str, Any]) -> ChatConfig:
     caps = raw.get("attachments") or {}
     compaction = raw.get("compaction") or {}
     pagination = raw.get("pagination") or {}
+    tool_work = raw.get("tool_work") or {}
     return ChatConfig(
         skills_by_role=skills_by_role,
         default_skills=_as_tuple(raw.get("default_skills")),
@@ -707,6 +720,14 @@ def _parse_chat(raw: Mapping[str, Any]) -> ChatConfig:
         ),
         conversation_max_page_size=_tighten_cap(
             DEFAULT_CONVERSATION_MAX_PAGE_SIZE, pagination.get("max_page_size")
+        ),
+        # Tool-work projection is tighten-only: a manifest may only SHORTEN a rendered
+        # tool name or show FEWER pairs, never widen what reaches a model's prompt.
+        continuity_tool_name_chars=_tighten_cap(
+            DEFAULT_CONTINUITY_TOOL_NAME_CHARS, tool_work.get("name_chars")
+        ),
+        continuity_tool_pairs_per_turn=_tighten_cap(
+            DEFAULT_CONTINUITY_TOOL_PAIRS_PER_TURN, tool_work.get("pairs_per_turn")
         ),
     )
 
