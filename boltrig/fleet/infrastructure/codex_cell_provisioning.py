@@ -231,22 +231,5 @@ class ProvisioningCodexPhaseAdmissionSource:
             slot_provisioned=True,
         )
 
-    def cell_tree_manifest(
-        self, layout: CodexCellLayout
-    ) -> list[dict[str, object]]:
-        """The directory manifest the spawner creates for a per-cell layout.
-
-        home/codex-home/source at 0700, workspace at 0500 (empty, read-only). The
-        provider hands this to ``provision_cell_tree``; the config.toml file is added
-        separately by ``_write_cell_config`` once it is rendered.
-        """
-
-        return [
-            {"path": layout.home.as_posix(), "mode": _CELL_DIR_MODE},
-            {"path": layout.codex_home.as_posix(), "mode": _CELL_DIR_MODE},
-            {"path": (layout.cell_root / "source").as_posix(), "mode": _CELL_DIR_MODE},
-            {"path": layout.workspace.as_posix(), "mode": _WORKSPACE_MODE},
-        ]
-
 
 __all__ = ["ProvisioningCodexPhaseAdmissionSource"]
