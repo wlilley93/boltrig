@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# boltrig pre-push gate.
+#
+# WHY THIS DID NOT EXIST UNTIL 2026-08-02. boltrig is the one repo in the estate with genuinely live
+# CI - it is public, so Actions minutes are free, and its runs take 4-9 minutes and go green. The
+# other three repos have a local pre-push gate and dead-or-manual CI. The cross-repo mechanism
+# register put it as: "the three repos with a pre-push gate have dead-or-manual CI; the repo with
+# live CI has no pre-push gate. Neither mechanism was carried across." This is that half closed.
+#
+# It is NOT redundant with CI. CI tells you after the push, from a machine, once the branch is
+# already public; this refuses the push. And CI is only free while the repo stays public.
+#
+# WHAT IT RUNS, and why not `make check`. `make check`'s own help text says "Run the local Python
+# gates CI enforces". Measured 2026-08-02, that is FALSE: CI runs `make python-quality`, and `check`
+# omits SEVEN of its targets - claims, commit-trailers, gate-coverage, health-claims,
+# order-directives, override-locks, prose-references. Among them is `gate-coverage`, which is
+# boltrig's OWN CI-reachability census: the mechanism this repo owns and the others lack was one of
+# the things you skipped by running the target documented as the CI-equivalent one. Fixed in the
+# Makefile in the same commit; this hook runs `python-quality` so it cannot drift from CI again by
+# someone editing a second list.
+#
+# Plus the two targets `check` has that `python-quality` does not and CI does not run either -
+# codex-pin-health (2s) and continuity-projection (0s). They are free and they guard a pin and an
+# allowlist that have both moved unexpectedly before.
+#
+# Measured cost: python-quality 324s (3615 tests, 86.89% coverage), the other two ~2s.
+#
+# Skips, each deliberate and each leaving a trace in the command you typed:
+#   SKIP_PUSH_GATES=1     everything
+#   SKIP_QUALITY_GATE=1   just the slow python-quality run
+# Emergency: git push --no-verify.
+#
+# Install: git config core.hooksPath .githooks   (RELATIVE - see below)
+
+set -uo pipefail
+
+if [[ "${SKIP_PUSH_GATES:-}" == "1" ]]; then
+  echo "[pre-push] SKIP_PUSH_GATES=1 set — skipping all gates."
+  exit 0
+fi
+
+cd "$(git rev-parse --show-toplevel)" || exit 1
+
+# A RELATIVE core.hooksPath is resolved by git against the top of each WORKING TREE, so a worktree
+# runs its own branch's hooks. An ABSOLUTE one makes every linked worktree execute whatever is
+# checked out in one directory - which on 2026-08-02 meant 45 worktrees across opbox-frontend and
+# opbox-prod running a hook 732 commits stale, while the corrected version on main never executed
+# once. Refuse to run under the absolute form rather than become that.
+hooks_path="$(git config --get core.hooksPath || true)"
+case "$hooks_path" in
+  /*)
+    echo "[pre-push] core.hooksPath is ABSOLUTE ($hooks_path) — push blocked."
+    echo "[pre-push]   Every linked worktree would run THAT tree's hooks, whatever branch it pushes."
+    echo "[pre-push]   Fix: git config core.hooksPath .githooks"
+    exit 1
+    ;;
+esac
+
+run_gate() { # run_gate "<name>" <make target>
+  local name="$1" target="$2" start
+  printf '\n[pre-push] === %s ===\n' "$name"
+  start=$(date +%s)
+  if ! make "$target"; then
+    echo ""
+    echo "  $name FAILED — push blocked."
+    echo "  Fix it, or in a real hurry: git push --no-verify"
+    exit 1
+  fi
+  echo "[pre-push] ✓ $name ($(( $(date +%s) - start ))s)"
+}
+
+run_gate "codex pin health" codex-pin-health
+run_gate "continuity projection" continuity-projection
+
+if [[ "${SKIP_QUALITY_GATE:-}" == "1" ]]; then
+  echo "[pre-push] SKIP_QUALITY_GATE=1 set — skipping python-quality (the gate CI enforces)."
+else
+  run_gate "python-quality (the target CI runs)" python-quality
+fi
+
+echo "[pre-push] all gates green."
+exit 0
