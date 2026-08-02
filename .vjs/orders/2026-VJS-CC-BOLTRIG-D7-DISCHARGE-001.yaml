@@ -3,6 +3,7 @@ court: county
 jurisdiction: default
 repo_code: boltrig
 status: binding
+created_at: "2026-07-31T17:04:33Z"  # from this order's own convening record, .vjs/court/convenings/CONVENING-county-2026-07-31-170433.yaml
 issue: d7-discharge
 holding: |
   D7 of [2026] VJS-CC-BOLTRIG-DEVELOPMENT-POSTURE-001 is VARIED, not waived. The

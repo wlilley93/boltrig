@@ -3,6 +3,7 @@ court: county
 jurisdiction: default
 repo_code: boltrig
 status: binding
+created_at: "2026-07-31T14:56:10Z"  # no convening record carries this matter, so this is the file's first-commit time (b1bb11df), an upper bound, not the sitting
 issue: dev_egress_loopback
 holding: |
   PERMITTED, on five conditions, ALL of which must hold before the diversion may run once.
