@@ -113,6 +113,9 @@ lint: ## Run ruff over the Python source, scripts, and tests
 architecture: ## Enforce inward-only thin-orchestration dependencies
 	$(PY) scripts/check_architecture.py
 
+continuity-projection: ## Hold the prompt boundary's allowlist to what the court fixed
+	$(PY) scripts/check_continuity_projection.py
+
 structure: ## Enforce Python file/function size limits and expiring debt ratchets
 	$(PY) scripts/check_structure.py
 
@@ -200,7 +203,7 @@ typecheck: ## Module-by-module strict mypy gate (see [tool.mypy])
 gate-status: ## Is the gate on the default branch actually green right now?
 	@./scripts/gate-status.sh
 
-check: invariants lint architecture structure codex-protocol unwired-claims reachability tracked-symlinks typecheck test ## Run the local Python gates CI enforces
+check: invariants lint architecture continuity-projection structure codex-protocol unwired-claims reachability tracked-symlinks typecheck test ## Run the local Python gates CI enforces
 
 python-quality: invariants lint architecture structure codex-protocol unwired-claims reachability prose-references commit-trailers tracked-symlinks gate-coverage health-claims order-directives claims override-locks typecheck ## Run Python tests on Postgres with coverage override-locks typecheck
 	scripts/with_test_postgres.sh $(PY) -m pytest -q \

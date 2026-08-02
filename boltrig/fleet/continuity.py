@@ -1,4 +1,9 @@
-"""Cross-turn conversation continuity for the pi lane (Round Six, gap 3.1).
+"""Cross-turn conversation continuity (Round Six, gap 3.1).
+
+This module said "for the pi lane" until 2026-08-02. That lane was retired by decision
+0020 and the docstring outlived it; composition in fact happens BEFORE a runtime is
+selected (`chat_turn_execution._turn_task`, then `spawner.spawn`), and the `Runtime`
+protocol takes a flat prompt string, so every lane receives the identical text.
 
 The chat turn path persists the incoming user message, then drives the turn with
 only that single message: prior turns were never composed into the prompt handed
@@ -16,10 +21,18 @@ load-bearing and are both proven by tests:
   gateway keep a warm prompt cache across the turns of one conversation (gap 3.2,
   ``model_gateway``).
 
-* **No new authority (SEC-27 preserved).** It reads only persisted conversation
-  *text* through the caller's tenant- and conversation-scoped store read. It
-  introduces no credential, no tool, and no cross-conversation read - the loader
-  is handed exactly one conversation's messages (SEC-49).
+* **No new authority.** It reads only rows the caller's tenant- and conversation-scoped
+  store read already returned. It introduces no credential, no tool, and no
+  cross-conversation read - the loader is handed exactly one conversation's messages
+  (SEC-49). This cited SEC-27 until 2026-08-02; SEC-27 is a Round Two invariant about no
+  verb CREDENTIAL reaching a runtime, which a value-free render does not engage, so the
+  citation claimed slightly more than the invariant says.
+
+* **A closed allowlist at THIS boundary, never inherited.** Persistence is not
+  prompt-eligibility ([2026] VJS-CC-BOLTRIG-CONTINUITY-TOOL-WORK-001). Message *text*
+  crosses, plus a bounded tool-work line built from an enumerated set of fields defined
+  below in this module. It is deliberately NOT derived from `chat_event_projection`, which
+  is a browser-safety projection and bounds nothing here.
 
 It lives in the fleet layer and imports only models; the kernel and the pi
 sidecar import nothing from it (SEC-28).
@@ -28,6 +41,7 @@ sidecar import nothing from it (SEC-28).
 from __future__ import annotations
 
 import os
+import re
 from typing import Any
 
 from boltrig.models import ConversationMessage, ConversationSummary, MessageRole
@@ -48,27 +62,132 @@ def continuity_enabled() -> bool:
     return os.environ.get("BOLTRIG_CONTINUITY", "1") != "0"
 
 
-def _render_message(message: ConversationMessage) -> str:
+# --------------------------------------------------------------------------- #
+# The tool-work projection ([2026] VJS-CC-BOLTRIG-CONTINUITY-TOOL-WORK-001, D1)
+#
+# THE RATIO THIS IMPLEMENTS: persistence is not prompt-eligibility. A datum's presence on
+# `message.events` confers no entitlement to enter a prompt. The prompt is a distinct
+# boundary with a distinct reader, so what may cross it is enumerated HERE, in the module
+# that composes the prompt, and is NOT inherited from `chat_event_projection`.
+#
+# WHY NOT INHERITED, measured at the sitting rather than assumed. That module is a
+# BROWSER-safety projection and does not bound this at all: its cardinality cap is not in it
+# (MAX_PARAM_KEYS lives two modules upstream in `run_event_projection`), `_summarise_output`
+# has no cap whatever, no key-name length is bounded anywhere in the chain, the same events
+# list carries `text_delta.delta` (the whole reply), `subagent.task` (unbounded) and
+# `hitl.question` as free text, and `held_write_resume` writes frames straight onto the row
+# without passing through it. "Structured, therefore safe" is not an argument.
+#
+# `scripts/check_continuity_projection.py` holds these four sets to exactly what the order
+# fixed, so widening one is a gate failure and not a code review question.
+# --------------------------------------------------------------------------- #
+
+_TOOL_WORK_FRAME_TYPES = frozenset({"tool_call", "tool_result"})
+# RENDERED: reaches the model. `tool` is admitted as a NAME whose provenance is a registry
+# (a first-party verb, or a publisher's tool id at MCP import) rather than the conversation.
+# Its range is NOT closed at build time, so it is capped and charset-normalised. That is a
+# RECORDED LIMIT, not a safety proof (order D10).
+_TOOL_WORK_RENDERED_FIELDS = frozenset({"tool", "status"})
+# READ but never rendered. An identifier may be read to derive an admitted fact and must not
+# be emitted (order corollary (d)): `call_id` joins a call to its result inside this module
+# and the join alone is what reaches the prompt.
+_TOOL_WORK_READ_FIELDS = frozenset({"type", "tool", "status", "call_id"})
+# Closed at build time. Anything else - including a missing or non-string status - renders
+# as the fixed token below. Enforced by
+# tests/security/test_continuity_carries_text_only.py::test_a_status_outside_the_closed_allowlist_renders_unknown,
+# which seeds a credential-shaped status and a nested object, and carries the control that a
+# status INSIDE the allowlist still crosses as itself.
+_TOOL_WORK_STATUSES = frozenset({"ok", "error", "degraded", "pending_human"})
+_TOOL_WORK_UNKNOWN_STATUS = "unknown"
+_TOOL_WORK_NAME_SAFE = re.compile(r"[^A-Za-z0-9._:-]")
+
+
+def _tool_work_caps(config: Any = None) -> tuple[int, int]:
+    """The two caps, as data. Never call-site constants (order, forbidden list)."""
+    chat = getattr(config, "chat", config)
+    name_chars = getattr(chat, "continuity_tool_name_chars", None)
+    pairs = getattr(chat, "continuity_tool_pairs_per_turn", None)
+    return (
+        int(name_chars) if isinstance(name_chars, int) and name_chars > 0 else 64,
+        int(pairs) if isinstance(pairs, int) and pairs > 0 else 10,
+    )
+
+
+def _tool_work_line(message: ConversationMessage, config: Any = None) -> str | None:
+    """A bounded, value-free statement of what this turn's tools did, or ``None``.
+
+    ``None`` whenever the row carries no admitted frame, so a turn without tool work renders
+    BYTE-IDENTICALLY to how it rendered before this existed. That is the order's one
+    exception and it is what keeps every prior content-only assertion true on its merits.
+    """
+    name_chars, max_pairs = _tool_work_caps(config)
+    calls: list[tuple[str, str]] = []  # (call_id, tool)
+    statuses: dict[str, str] = {}
+    for event in message.events or []:
+        if not isinstance(event, dict):
+            continue
+        kind = event.get("type")
+        if kind not in _TOOL_WORK_FRAME_TYPES:
+            # Every other frame type is neither read nor rendered. `subagent`, `hitl`,
+            # `question` and `text_delta` all carry free text on this same list.
+            continue
+        call_id = event.get("call_id")
+        call_id = call_id if isinstance(call_id, str) else ""
+        if kind == "tool_call":
+            raw = event.get("tool")
+            name = raw if isinstance(raw, str) and raw else "unnamed"
+            name = _TOOL_WORK_NAME_SAFE.sub("_", name)[:name_chars]
+            calls.append((call_id, name))
+        else:
+            status = event.get("status")
+            statuses[call_id] = (
+                status if isinstance(status, str) and status in _TOOL_WORK_STATUSES
+                else _TOOL_WORK_UNKNOWN_STATUS
+            )
+    if not calls:
+        return None
+
+    # The TRUE count, exact and never capped, however many pairs are elided below. A count
+    # that saturates at the cap is a number that has stopped being a fact (schema-ledger D7).
+    total = len(calls)
+    tally: dict[tuple[str, str], int] = {}
+    for call_id, name in calls:
+        key = (name, statuses.get(call_id, _TOOL_WORK_UNKNOWN_STATUS))
+        tally[key] = tally.get(key, 0) + 1
+    ordered = sorted(tally.items())
+    shown, elided = ordered[:max_pairs], len(ordered) - max_pairs
+    parts = [f"{n} {s}" + (f" x{c}" if c > 1 else "") for (n, s), c in shown]
+    if elided > 0:
+        parts.append(f"+{elided} more")
+    return f"{total} tool call(s): " + "; ".join(parts)
+
+
+def _render_message(message: ConversationMessage, config: Any = None) -> str:
     label = _ROLE_LABEL.get(message.role, str(getattr(message.role, "value", message.role)))
     # A fixed, content-stable frame per message. The label ("User:" / "Assistant:")
     # is trusted framing we add; the message *body* is untrusted conversation data,
     # so it is wrapped in a typed envelope (M1 / SEC-72) - a prior turn cannot smuggle
     # instructions into a later turn's prompt. Wrapping per message keeps the render
-    # deterministic and append-only (prefix stable), so SEC-46 still holds. Empty
-    # content (e.g. a turn that produced only tool/HITL events) still renders
-    # deterministically as an empty envelope.
+    # deterministic and append-only (prefix stable), so SEC-46 still holds.
     body = wrap_untrusted("conversation_turn", label.lower(), message.content or "")
+    # The tool-work line rides in its OWN envelope, because a tool name at MCP import is
+    # chosen by a third-party publisher and is therefore untrusted payload, not our framing.
+    # Charset normalisation above is a SECOND line behind this one, never a substitute:
+    # which of the two is load-bearing is proved by the D8 test, not asserted here.
+    work = _tool_work_line(message, config)
+    if work is not None:
+        body += " " + wrap_untrusted("tool_work", "prior_turn", work)
     return f"{label}: {body}\n\n"
 
 
-def render_transcript(messages: list[ConversationMessage]) -> str:
+def render_transcript(messages: list[ConversationMessage], config: Any = None) -> str:
     """Render an ordered message list as an append-only transcript.
 
     ``render_transcript(messages)`` is, by construction, a prefix of
     ``render_transcript(messages + more)`` - the guarantee the gateway cache
     relies on. The messages must already be ordered oldest-first (the store's
     ``list_messages`` returns them ``created_at ASC``)."""
-    return "".join(_render_message(m) for m in messages)
+    return "".join(_render_message(m, config) for m in messages)
 
 
 # --------------------------------------------------------------------------- #
@@ -112,7 +231,7 @@ def compaction_enabled(config: Any) -> bool:
     return threshold > 0 and keep_recent > 0 and keep_recent < threshold
 
 
-def summarize_messages(messages: list[ConversationMessage]) -> str:
+def summarize_messages(messages: list[ConversationMessage], config: Any = None) -> str:
     """The DETERMINISTIC, offline summariser (no model) - the always-present
     fallback, mirroring how the department head keeps a deterministic decomposition
     fallback (P9). It produces a stable role-tagged digest: one bounded line per
@@ -129,7 +248,13 @@ def summarize_messages(messages: list[ConversationMessage]) -> str:
         snippet = " ".join((m.content or "").split())
         if len(snippet) > _SUMMARY_SNIPPET_CHARS:
             snippet = snippet[: _SUMMARY_SNIPPET_CHARS - 3].rstrip() + "..."
-        lines.append(f"- {label}: {snippet}")
+        # D3: the tool-work line is carried across the compaction boundary, and the
+        # snippet truncation above applies to the CONTENT ONLY and never to it. Without
+        # this a turn's tool work would silently evaporate the moment the turn aged past
+        # the threshold - the line would be present for a while and then quietly stop
+        # being true, which is the same false-silence defect one boundary further on.
+        work = _tool_work_line(m, config)
+        lines.append(f"- {label}: {snippet}" + (f" [{work}]" if work else ""))
     return "\n".join(lines)
 
 
@@ -208,5 +333,5 @@ def compose_turn_task(
         )
         if idx is not None and idx < len(live) - 1:
             tail = live[idx + 1 :]
-            return render_summary_block(summary.summary) + render_transcript(tail)
-    return render_transcript(live)
+            return render_summary_block(summary.summary) + render_transcript(tail, config)
+    return render_transcript(live, config)

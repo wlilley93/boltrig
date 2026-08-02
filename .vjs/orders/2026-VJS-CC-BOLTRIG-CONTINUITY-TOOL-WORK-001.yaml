@@ -124,6 +124,14 @@ implementation_note: |
   sha256:070dde24427280a07bfd85c91a9b11ea4e7f4e34bf184a1d65c935f61d3d5ec1). Single seat,
   lexby-first-instance. Full opinion at the source_opinion path.
 
+  ON D6's WORDING. The judgment directed the gate be wired into "make gates". There is no
+  such target: the aggregate this repository runs, and the one CI runs, is `make check`. The
+  directive is left as ordered rather than silently reworded, and the gate is wired into
+  `make check` beside check_architecture.py, which is the target the judgment described by
+  position even though it named it wrongly. Recorded because a directive naming a target
+  that does not exist is dischargeable by doing nothing, and that is exactly the kind of
+  unrunnable requirement this estate keeps finding in its own record.
+
   D10, DISCHARGED HERE AND NOT DEFERRED. A tool name's range is NOT closed at build time. For
   first-party verbs it is a registered verb; for MCP-imported tools it is chosen by the tool
   PUBLISHER at import. It is admitted because its provenance is a registry rather than the
@@ -158,6 +166,6 @@ implementation_note: |
   wording be rewritten under this order rather than left as it was made.
 
   CITATION DELIBERATELY NULL, following SCHEMA-VALIDATION-LEDGER-001, RATE-LIMIT-WINDOW-001
-  and WORK-ITEM-LEASE-FENCE-001. Minting a [2026] VJS-COUNTY n by hand at this seat would
+  and WORK-ITEM-LEASE-FENCE-001. Hand-minting a county citation at this seat would
   collide with the canon series and reproduce the VJS-CC-VJS 1 defect on purpose. The
   allocator gap is not settled here.
