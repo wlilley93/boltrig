@@ -108,11 +108,11 @@
       "expires": "2026-12-31"
     },
     "boltrig/fleet/infrastructure/cell_spawner.py": {
-      "max_file_lines": 608,
-      "max_function_lines": 57,
+      "max_file_lines": 672,
+      "max_function_lines": 59,
       "over_limit_functions": [],
       "owner": "fleet-maintainers",
-      "reason": "Gap 5 adds the privileged 'provision' verb (parse/validate slot-bound paths + root, forked cell-uid provisioner that clears the reused slot then creates the tree with O_EXCL|O_NOFOLLOW + ownership re-verify) to the one auditable-by-eye spawner. Follow-up: extract the provision verb into a sibling cell_provisioner module and lower this to <=400.",
+      "reason": "Gap 5 adds the privileged 'provision' verb (parse/validate slot-bound paths + root, forked cell-uid provisioner that clears the reused slot then creates the tree with O_EXCL|O_NOFOLLOW + ownership re-verify) to the one auditable-by-eye spawner. Follow-up: extract the provision verb into a sibling cell_provisioner module and lower this to <=400. 2026-08-02: +64 lines (57->59 largest fn) to VALIDATE the environment instead of obeying it. Until then env was the one field this module type-checked and handed straight to execve, while argv[0], uid and cwd were each held to policy the spawner owns, and the module docstring asserted the opposite. The growth is the _validate_spawn_env guard (bounded NAME keys, no dynamic-linker variables, CODEX_HOME/HOME held inside the stack root) plus its constants. The standing follow-up to extract the provision verb and drop under 400 is unchanged and would absorb this.",
       "expires": "2026-12-31"
     },
     "boltrig/fleet/infrastructure/codex_agent_runtime.py": {

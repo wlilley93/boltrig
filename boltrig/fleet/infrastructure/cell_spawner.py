@@ -15,7 +15,15 @@ checked against policy the spawner holds itself:
 - the uid must be inside the reserved per-cell band, never 0, never the API's own;
 - ``argv[0]`` must be the exact pinned Codex binary path, not merely absolute;
 - the working directory must be inside the cell stack root;
-- the environment is rebuilt from the request's cell values, not passed through.
+- every environment entry is checked against policy the spawner holds: bounded count,
+  ``NAME``-style keys, no dynamic-linker variables, and CODEX_HOME/HOME held inside the
+  stack root exactly as ``cwd`` is.
+
+That last line read "the environment is rebuilt from the request's cell values, not passed
+through" until 2026-08-02, and the environment was in fact type-checked and handed straight
+to ``execve``. It was the one field where this module obeyed instead of validating, and the
+docstring asserted the opposite. Prose claiming an enforcement that does not exist is worse
+than silence, because it stops the next reader looking.
 
 TRANSPORT: a ``socketpair`` created BEFORE the privilege drop. That choice is
 deliberate. A filesystem socket would need a path (squattable, as the ingress
@@ -36,6 +44,7 @@ import array
 import json
 import logging
 import os
+import re
 import shutil
 import signal
 import socket
@@ -54,6 +63,23 @@ MIN_CELL_UID = 20000
 MAX_CELL_UID = 29999
 _MAX_REQUEST_BYTES = 64 * 1024
 _STDIO_COUNT = 3
+
+# The environment the spawner will agree to hand to execve. Bounds mirror the API-side
+# `codex_cell_policy` (6 base keys + MAX_ENVIRONMENT_ADDITIONS of 8), because the two must
+# not come to disagree about what a legitimate cell environment looks like.
+_MAX_ENV_ENTRIES = 14
+_MAX_ENV_VALUE_BYTES = 4096
+_ENV_KEY = re.compile(r"[A-Z][A-Z0-9_]{0,63}\Z")
+# Paths in these variables decide where the cell reads its config and its home, so they are
+# held to the stack root exactly as `cwd` is. They are not merely names.
+_ENV_PATH_KEYS = ("CODEX_HOME", "HOME")
+# Refused outright. Each of these redirects the DYNAMIC LINKER, so a compromised API could
+# make the privileged child load code of its choosing into the pinned binary's process, and
+# the digest check would still pass because the binary's own bytes are untouched. Today's
+# pinned binary is static-pie, so none of them bites; that is a property of ONE ARTEFACT and
+# not of this spawner, and the pin will move. A defence that rests on the current build being
+# static is a defence that expires silently on the day someone bumps a version.
+_ENV_LINKER_PREFIXES = ("LD_", "DYLD_")
 
 
 class CellSpawnerError(RuntimeError):
@@ -149,7 +175,45 @@ def parse_spawn_request(payload: bytes, policy: SpawnPolicy) -> SpawnRequest:
         and all(type(k) is str and type(v) is str for k, v in env.items()),
         "spawn env must be a string mapping",
     )
+    assert isinstance(env, dict)
+    _validate_spawn_env(env, policy)
     return SpawnRequest(uid, gid, tuple(argv), cwd, dict(env))
+
+
+def _validate_spawn_env(env: dict, policy: SpawnPolicy) -> None:
+    """Hold the environment to policy the spawner owns, not to the caller's word for it.
+
+    Called only after the caller-supplied mapping has been proved to be str->str.
+    """
+    _require(len(env) <= _MAX_ENV_ENTRIES, "spawn env carries too many entries")
+    for key, value in env.items():
+        _require(_ENV_KEY.fullmatch(key) is not None, f"spawn env key is not a bounded NAME: {key!r}")
+        _require(
+            not key.startswith(_ENV_LINKER_PREFIXES),
+            f"spawn env must not redirect the dynamic linker: {key!r}",
+        )
+        _require(
+            1 <= len(value) <= _MAX_ENV_VALUE_BYTES
+            and all(0x20 <= ord(c) <= 0x7E for c in value),
+            f"spawn env value for {key!r} is unbounded or not printable ASCII",
+        )
+    for key in _ENV_PATH_KEYS:
+        if key not in env:
+            continue
+        # The SAME lexical discipline as cwd above, and for the same reason: `is_relative_to`
+        # is lexical, so "<stack>/../other" would otherwise read as inside the stack root.
+        # Never resolve: a cell uid can plant a symlink inside its own tree.
+        candidate = Path(env[key])
+        _require(candidate.is_absolute(), f"spawn env {key} must be absolute")
+        _require(".." not in candidate.parts, f"spawn env {key} must not traverse upwards")
+        _require(
+            os.path.normpath(env[key]) == env[key].rstrip("/") or env[key] == "/",
+            f"spawn env {key} must be a normalized path",
+        )
+        _require(
+            candidate == policy.stack_root or candidate.is_relative_to(policy.stack_root),
+            f"spawn env {key} must live inside the cell stack root",
+        )
 
 
 # --- the provision verb ([2026] VJS-CC-VJS 7 J2) ---------------------------

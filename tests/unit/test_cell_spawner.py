@@ -237,3 +237,106 @@ def test_the_reaper_refuses_anything_outside_its_narrow_job(
 
     with pytest.raises(CellSpawnerError):
         reap_cell(pid, uid, number)
+
+
+# --------------------------------------------------------------------------- #
+# The ENVIRONMENT, held to policy the spawner owns (2026-08-02).
+#
+# Until this date the env was the ONE field this module obeyed instead of validating: it was
+# proved to be a str->str mapping and then handed straight to `execve`, while `argv[0]`, the
+# uid and the cwd were each checked against policy the spawner holds. The module docstring
+# meanwhile asserted the environment was "rebuilt from the request's cell values, not passed
+# through", which was false. These tests exist so that claim is now enforced rather than
+# merely written down.
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "key",
+    ["LD_PRELOAD", "LD_LIBRARY_PATH", "LD_AUDIT", "DYLD_INSERT_LIBRARIES"],
+)
+def test_a_compromised_api_cannot_redirect_the_dynamic_linker(key: str) -> None:
+    """THE ATTACK THIS CLOSES. The digest check proves the binary's BYTES are the reviewed
+    ones. It says nothing about what else gets mapped into that process. A compromised API
+    that could set LD_PRELOAD would run code of its own choosing inside the pinned binary,
+    as the cell uid, with every other check still green.
+
+    Today's pinned binary is static-pie, so none of these bites. That is a property of ONE
+    ARTEFACT, not of this spawner, and a defence that rests on the current build being static
+    expires silently on the day someone bumps the pin.
+    """
+    env = {"CODEX_HOME": f"{_STACK}/c1/codex-home", "PATH": "/usr/bin", key: "/tmp/evil.so"}
+    with pytest.raises(CellSpawnerError, match="dynamic linker"):
+        parse_spawn_request(_request(env=env), _policy())
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "value",
+    [
+        "/etc",                       # outside the stack root entirely
+        f"{_STACK}/../../etc",        # lexical escape, the "/v1/../admin" shape
+        "relative/path",              # not absolute
+        f"{_STACK}//c1//codex-home",  # not normalized
+    ],
+)
+def test_codex_home_is_held_inside_the_stack_root(value: str) -> None:
+    """CODEX_HOME decides where the cell reads its config.toml, which decides its sandbox
+    mode and its feature set. Pointing it outside the cell tree is the same class of escape
+    as pointing `cwd` there, and is refused by the same lexical discipline: demand the path
+    already be normalized rather than normalize it for the caller, and never resolve, because
+    a cell uid can plant a symlink inside its own tree."""
+    with pytest.raises(CellSpawnerError, match="CODEX_HOME"):
+        parse_spawn_request(_request(env={"CODEX_HOME": value, "PATH": "/usr/bin"}), _policy())
+
+
+@pytest.mark.unit
+def test_home_is_held_inside_the_stack_root_too() -> None:
+    with pytest.raises(CellSpawnerError, match="HOME"):
+        parse_spawn_request(_request(env={"HOME": "/root", "PATH": "/usr/bin"}), _policy())
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("key", ["lowercase", "1LEADING_DIGIT", "HAS-DASH", "", "A" * 65])
+def test_an_environment_key_that_is_not_a_bounded_name_is_refused(key: str) -> None:
+    """Mirrors `codex_cell_policy._ENV_ADDITION_KEY`, so the API-side bound and the
+    spawner-side bound cannot come to disagree about what a legitimate key looks like."""
+    with pytest.raises(CellSpawnerError, match="env"):
+        parse_spawn_request(_request(env={key: "x", "PATH": "/usr/bin"}), _policy())
+
+
+@pytest.mark.unit
+def test_an_unbounded_or_non_printable_environment_value_is_refused() -> None:
+    for value in ["x" * 4097, "has\nnewline", "has\x00nul", ""]:
+        with pytest.raises(CellSpawnerError, match="env"):
+            parse_spawn_request(_request(env={"SOME_KEY": value, "PATH": "/usr/bin"}), _policy())
+
+
+@pytest.mark.unit
+def test_too_many_environment_entries_are_refused() -> None:
+    env = {f"K{i}": "v" for i in range(15)}
+    with pytest.raises(CellSpawnerError, match="too many"):
+        parse_spawn_request(_request(env=env), _policy())
+
+
+@pytest.mark.unit
+def test_THE_POSITIVE_CONTROL_a_real_cell_environment_is_still_accepted() -> None:
+    """Without this the refusals above are indistinguishable from a spawner that refuses
+    every environment, which would pass all of them and break every cell.
+
+    This is the exact shape `codex_cell_policy.sanitized_environment` produces, plus the one
+    in-tree addition (`BOLTRIG_CODEX_MCP_RUN_TOKEN`, the kernel-tools bearer).
+    """
+    env = {
+        "CODEX_HOME": f"{_STACK}/c1/codex-home",
+        "HOME": f"{_STACK}/c1/home",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/usr/local/bin:/usr/bin:/bin",
+        "BOLTRIG_CODEX_MCP_RUN_TOKEN": "a" * 64,
+    }
+    parsed = parse_spawn_request(_request(env=env), _policy())
+    assert parsed.env == env
+    # And the stack root itself is a legitimate value, not an off-by-one refusal.
+    parse_spawn_request(_request(env={"CODEX_HOME": _STACK, "PATH": "/usr/bin"}), _policy())

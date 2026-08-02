@@ -56,9 +56,9 @@ LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/held_write_resume.py:150		Whethe
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/held_write_resume.py:197		Re-enter the ONE chokepoint with the recorded call.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/cell_privilege.py:179		Prove a SPAWNED CELL's privilege state before it is handed any credential.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/cell_privilege.py:87		Read this process's real privilege state out of ``/proc``.
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/fleet/infrastructure/cell_spawner.py:325		slot's own contents FIRST, as the cell uid, so a later tenant never
-LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/cell_spawner.py:499		Signal a cell by forking a reaper that shares its uid.
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/fleet/infrastructure/cell_spawner.py:558		that never did would leak a pid-table entry per cell until the container
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/fleet/infrastructure/cell_spawner.py:389		slot's own contents FIRST, as the cell uid, so a later tenant never
+LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/cell_spawner.py:563		Signal a cell by forking a reaper that shares its uid.
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/fleet/infrastructure/cell_spawner.py:622		that never did would leak a pid-table entry per cell until the container
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_cell_boundary.py:197		Assert Yama restricted ptrace, failing closed when it cannot be read (G5).
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_cell_boundary.py:230		Prove the named boundary is in force right now, or refuse to proceed (G4).
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/codex_cell_policy.py:62		Supervisor-managed upstream Codex authentication, always redacted.
@@ -731,25 +731,26 @@ ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/cell_slots.py:100		Ta
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/cell_slots.py:135		J10: prove the uids really are distinct rather than assuming the mapping.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/cell_slots.py:33		compose file cannot drift silently;
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/cell_slots.py:78		Hand out per-cell slots, and never the same one to two live cells.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/cell_spawner.py:113		Never uid 0, and never the API's own uid: a cell that shared either would
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/cell_spawner.py:158		has setuid'd to that uid can write the kernel-owned 0700 slot: the API cannot
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/cell_spawner.py:159		chown (CAP_CHOWN was refused) and cannot setuid (empty permitted set).
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/cell_spawner.py:161		THIS uid's own slot, so a compromised API cannot make the privileged child write
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/cell_spawner.py:198		Lexical checks, as in parse_spawn_request: never resolve (a cell uid can plant
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/cell_spawner.py:203		owns, never a sibling's.
-ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/cell_spawner.py:207		Validate a provision request against policy the SPAWNER holds.
-ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/cell_spawner.py:284		Empty the slot the child owns, so a reused slot never carries prior data.
-ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/cell_spawner.py:306		Create the cell's tree + files under its own uid, in a forked child.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/cell_spawner.py:327		the cell uid can write the 0700 slot and the API that releases cannot.
-ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/cell_spawner.py:358		In the forked child: drop to the cell uid, wire stdio, exec.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/cell_spawner.py:364		The drop must happen BEFORE exec so the cell never runs privileged for an
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/cell_spawner.py:51		anything Debian allocates, so a cell uid can never collide with a system account
-ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/cell_spawner.py:538		The privileged loop: read a request, validate it, spawn, hand back.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/cell_spawner.py:579		Fail closed and stay up.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/cell_spawner.py:580		and raises; it never mistakes a refusal for a running cell.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/cell_spawner.py:581		cause here (the ONLY place that holds it): the API is told nothing but
-ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/cell_spawner.py:64		What this spawner will agree to do, held by the spawner and not the caller.
-ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/cell_spawner.py:96		Validate a request against policy the SPAWNER holds.
+ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/cell_spawner.py:122		Validate a request against policy the SPAWNER holds.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/cell_spawner.py:139		Never uid 0, and never the API's own uid: a cell that shared either would
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/cell_spawner.py:205		Never resolve: a cell uid can plant a symlink inside its own tree.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/cell_spawner.py:222		has setuid'd to that uid can write the kernel-owned 0700 slot: the API cannot
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/cell_spawner.py:223		chown (CAP_CHOWN was refused) and cannot setuid (empty permitted set).
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/cell_spawner.py:225		THIS uid's own slot, so a compromised API cannot make the privileged child write
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/cell_spawner.py:262		Lexical checks, as in parse_spawn_request: never resolve (a cell uid can plant
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/cell_spawner.py:267		owns, never a sibling's.
+ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/cell_spawner.py:271		Validate a provision request against policy the SPAWNER holds.
+ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/cell_spawner.py:348		Empty the slot the child owns, so a reused slot never carries prior data.
+ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/cell_spawner.py:370		Create the cell's tree + files under its own uid, in a forked child.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/cell_spawner.py:391		the cell uid can write the 0700 slot and the API that releases cannot.
+ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/cell_spawner.py:422		In the forked child: drop to the cell uid, wire stdio, exec.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/cell_spawner.py:428		The drop must happen BEFORE exec so the cell never runs privileged for an
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/cell_spawner.py:60		anything Debian allocates, so a cell uid can never collide with a system account
+ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/cell_spawner.py:602		The privileged loop: read a request, validate it, spawn, hand back.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/cell_spawner.py:643		Fail closed and stay up.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/cell_spawner.py:644		and raises; it never mistakes a refusal for a running cell.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/cell_spawner.py:645		cause here (the ONLY place that holds it): the API is told nothing but
+ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/cell_spawner.py:90		What this spawner will agree to do, held by the spawner and not the caller.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_app_server.py:21		server request is refused with a typed error - never a pump crash.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_app_server.py:368		task so the single reader never blocks;
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/codex_app_server.py:411		Answering must never crash the pump: a failed write leaves the
@@ -1291,7 +1292,7 @@ ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/continuity.py:261	wrap_untrust
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/domain/attested_assignment.py:37	attempt	Trusted facts; no binding, pin, attestation set, or set reference appears.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/hatchet_app.py:280	bootstrap	Build the Hatchet client + the three registered Boltrig tasks.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/cell_privilege.py:141	setuid	Empty the permitted, effective and inheritable sets via ``capset(2)``.
-ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/cell_spawner.py:398	SCM_RIGHTS	Hand the pid and the three stdio descriptors back over the socketpair.
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/cell_spawner.py:462	SCM_RIGHTS	Hand the pid and the three stdio descriptors back over the socketpair.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_agent_runtime.py:286	agentMessage	The latest turn's assistant text, captured from the lifecycle stream.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_cell_boundary.py:113	path	Ask the KERNEL whether our effective ids can write ``path``.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_cell_boundary.py:292	execve	Refuse to run if any setuid/setgid binary survives in the image (J4).
@@ -1378,7 +1379,7 @@ ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/codex_runtime.py:367	_drain_unt
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/hatchet_app.py:167	HatchetExecutor	Run a stored workflow through the interpreter with BOTH durability seams wired (NFR-REL-02): each step dispatches inside its own ``executor.run_step`` boundary AND the checkpoint seam replays completed steps, so a re-run
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/hatchet_app.py:243	register_task	Register the task bodies on an executor with a ``register_task`` seam (the LocalDurableExecutor): the offline carriage of the same bodies the Hatchet worker serves (US-EXE-05).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/cell_process.py:1	CodexCellSupervisor	Drive a spawner-created cell from the unprivileged API ([2026] VJS-CC-VJS 7 J1).
-ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/cell_spawner.py:262	_require_projected_file	The ownership/mode leg of validate_cell_layout, run by the cell uid itself.
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/cell_spawner.py:326	_require_projected_file	The ownership/mode leg of validate_cell_layout, run by the cell uid itself.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/codex_client_support.py:205	send_request	Write a client->server RESPONSE to a server-initiated request.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/codex_kernel_tools_phase.py:140	knowledge.search	The exact model-facing NESTED tool name for a kernel verb.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/infrastructure/codex_protocol.py:327	_decode_object	Encode a client->server RESPONSE to a server-initiated request.
