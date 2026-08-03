@@ -186,6 +186,11 @@ claims: ## The Tier 0 ratchet: the inventory is current and the residue has not 
 gate-coverage: ## Every compose manifest is validated and every `quality` component runs in CI
 	$(PY) scripts/check_gate_coverage.py
 
+.PHONY: no-vacuous-greens
+no-vacuous-greens: ## No gate reports a pass over a tree it never read (+ its own selftest)
+	$(PY) scripts/check_no_vacuous_greens.py
+	$(PY) scripts/check_no_vacuous_greens.py --self-test
+
 health-claims: ## No service may report healthy while unable to serve
 	$(PY) scripts/check_health_claims.py
 
@@ -208,7 +213,7 @@ gate-status: ## Is the gate on the default branch actually green right now?
 
 check: invariants lint architecture continuity-projection codex-pin-health structure codex-protocol unwired-claims reachability tracked-symlinks typecheck test ## Fast local subset. NOT what CI enforces - CI runs `python-quality`, and this omits seven of its targets (claims, commit-trailers, gate-coverage, health-claims, order-directives, override-locks, prose-references). Measured 2026-08-02; the old help text claimed the opposite. Use `make python-quality` (or just push - the pre-push hook runs it).
 
-python-quality: invariants lint architecture structure codex-protocol unwired-claims reachability prose-references commit-trailers tracked-symlinks gate-coverage health-claims order-directives claims override-locks typecheck ## Run Python tests on Postgres with coverage override-locks typecheck
+python-quality: invariants lint architecture structure codex-protocol unwired-claims reachability prose-references commit-trailers tracked-symlinks gate-coverage health-claims order-directives claims override-locks typecheck no-vacuous-greens ## Run Python tests on Postgres with coverage override-locks typecheck
 	scripts/with_test_postgres.sh $(PY) -m pytest -q \
 		--cov=boltrig --cov-report=term:skip-covered --cov-report=xml \
 		--cov-fail-under=$(COVERAGE_MIN)
