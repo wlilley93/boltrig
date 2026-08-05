@@ -45,7 +45,7 @@ LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/application/grant_leases.py:57		
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/application/model_proxy_grants.py:57		The bounded idempotent-startup cache cannot retain another bearer.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/application/model_proxy_store_projection.py:1		Fail-closed validation of model-proxy grant store return values.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/application/root_admission.py:17		The sole atomic, total path from trusted root facts to a persisted decision.
-LOAD-BEARING	NO-SUBJECT	comment	boltrig/fleet/authority.py:39		never the tenant ceiling (that is the escalation this module exists to close).
+LOAD-BEARING	NO-SUBJECT	comment	boltrig/fleet/authority.py:40		never the tenant ceiling (that is the escalation this module exists to close).
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/chat_compaction.py:1		Append-only conversation compaction helpers.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/fleet/codex_runtime.py:220		caller, and carry only a cause tag - never token material.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/fleet/continuity.py:171		deterministic and append-only (prefix stable), so SEC-46 still holds.
@@ -164,8 +164,8 @@ LOAD-BEARING	NO-SUBJECT	comment	boltrig/models/access.py:60		and never stored;
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/models/audit.py:82		never a secret here.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/models/birth_profile.py:1		Redacted process birth-profile startup evidence.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/models/channel_providers.py:153		Build a sealed-store row containing reference metadata only.
-LOAD-BEARING	NO-SUBJECT	docstring	boltrig/models/channels.py:115		A durable outbound delivery for a socket-class channel (decision 0003, Phase 2).
-LOAD-BEARING	NO-SUBJECT	docstring	boltrig/models/channels.py:99		A verified external sender mapped to an internal identity, within a channel's tenant.
+LOAD-BEARING	NO-SUBJECT	docstring	boltrig/models/channels.py:103		A verified external sender mapped to an internal identity, within a channel's tenant.
+LOAD-BEARING	NO-SUBJECT	docstring	boltrig/models/channels.py:119		A durable outbound delivery for a socket-class channel (decision 0003, Phase 2).
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/models/context.py:27		AUTHORIZED the caller's membership every request (fail-closed to None), so it
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/models/errors.py:95		No verb_binding resolves this verb for this tenant (fail-closed, K-13).
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/models/grants.py:110		Tenant ∩ skill grants.
@@ -221,7 +221,7 @@ LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/config/manifest.py:488	cost.py	O
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/emotion/__init__.py:1	boltrig.observability.orb_presence	Boltrig's affective side-channel: a read-only emotion projection over run events.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/anchor.py:231	seen	Publish one cycle, and treat an empty tenant list as a fault of its own.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/anchor.py:98	sealed	What one sweep actually did, as three numbers the caller can judge.
-LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/authority.py:117	item	Route ``item`` to its department head, or ``None`` if unroutable (SEC-165).
+LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/authority.py:125	item	Route ``item`` to its department head, or ``None`` if unroutable (SEC-165).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/chat.py:1	queued	The conversational service (Round Two, Epic CONV).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/chat.py:128	run_id	The OLDEST queued steer still waiting for its turn, else None.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/chat_authority.py:1	org_members	Say when a chat turn has no usable authority.
@@ -252,6 +252,7 @@ LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/identity/rbac.py:308	None	The ca
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/identity/sessions.py:166	realm_tenant_id	Resolve + RE-AUTHORIZE the session's ACTIVE org against CURRENT membership ([2026] VJS-COUNTY 11, D2/D3).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/identity/totp.py:82	code	Whether ``code`` is a currently-valid TOTP for ``secret`` (constant-time).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/audit.py:158	id	Bring the KEY within the scrub.
+LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/channel_policy.py:57	None	Resolve an opt-in thread ceiling, failing closed on malformed policy data.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/channel_principal.py:1	unpaired_behavior	Channel gateway: the ChannelPrincipalResolver (decision 0003).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/cost.py:159	tokens	Cost in micros for a run of ``tokens`` tokens (FR-COST-04, audit M14).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/kernel/dispatch.py:83	schema_path	Validate, and return findings whose provenance is WHOLLY THE SCHEMA AND NAME-ONLY.
@@ -266,7 +267,7 @@ LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/memory/session_distillation.py:5
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/models/access.py:166	token_hash	The durable, single-use password-reset claim.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/models/ai_key_proposals.py:17	secret_ref	Metadata for one sealed, short-lived AI-key proposal.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/models/audit.py:1	boltrig.kernel.audit	The audit event (S6.5).
-LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/models/channels.py:82	owner_lease_id	Kernel-private ownership fence for one socket channel.
+LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/models/channels.py:86	owner_lease_id	Kernel-private ownership fence for one socket channel.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/models/egress_diversion.py:1	boltrig.config.dev_egress	The egress diversion value type: what a diverted send IS, not when it applies.
 LOAD-BEARING	SUBJECT-EXTERNAL	comment	boltrig/models/errors.py:51	hints	enters an append-only hash-chained store;
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/models/grants.py:102	verb_id	True iff this set authorises ``verb_id``.
@@ -323,8 +324,8 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/anchor.py:1	boltrig.kernel.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/anchor.py:116	store.list_orgs	Anchor every tenant's un-anchored tail once, reporting what was seen.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/anchor.py:145	run_forever	Loop :func:`run_anchor_sweep_detailed` forever; cancellable, idle-sleeping.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/authority.py:1	GrantChecker	Whose authority a delegated run carries (SEC-164, SEC-165).
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/authority.py:45	effective_grants_for_request	The grants of the principal ``item`` is executed on behalf of (SEC-164).
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/authority.py:85	GrantChecker	The item's EXECUTION context, capped to the requesting principal (SEC-164).
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/authority.py:46	effective_grants_for_request	The grants of the principal ``item`` is executed on behalf of (SEC-164).
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/authority.py:86	GrantChecker	The item's EXECUTION context, capped to the requesting principal (SEC-164).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/browser_runtime.py:1	needs_browser_cli	Whether this deployment runs the fleet image's Chromium at all.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/browser_runtime.py:47	needs_browser_cli	True iff the tenant's manifest declares browser automation, per ``needs_browser_cli``.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/chat_authority.py:42	on_behalf_adapter_id	Seal the caller's clamped external bearer for the adapter that claims it.
@@ -658,10 +659,11 @@ ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/application/grant_lease_cleanup.py:1
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/application/grant_leases.py:312		Return metadata health using the server clock;
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/application/model_proxy_cancellations.py:25		Detect only cancellations overlapping a cell, with bounded fail-closed overflow.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/application/root_admission.py:56		a store that returned REPLAYED for a divergent decision fails closed.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/authority.py:134		"workflow:<wf_id>" target never reaches here - the pump honors it upstream
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/authority.py:34		(``user:chief-of-staff``), and the principal cannot steer it.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/authority.py:36		principal's grants.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/authority.py:37		principal's grants (a principal holding no memory verb must not stop the org
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/authority.py:108		projection is edited later, intersecting here can never widen the
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/authority.py:142		"workflow:<wf_id>" target never reaches here - the pump honors it upstream
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/authority.py:35		(``user:chief-of-staff``), and the principal cannot steer it.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/authority.py:37		principal's grants.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/authority.py:38		principal's grants (a principal holding no memory verb must not stop the org
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/chat.py:180		user only), so a caller only ever sees their own conversations - never
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/chat_authority.py:108		function's contract is that it must NEVER take down a spawn that would
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/chat_conversation_access.py:19		A retained conversation cannot accept a turn until explicitly restored.
@@ -1010,6 +1012,7 @@ ORDINARY	NO-SUBJECT	comment	boltrig/kernel/audit.py:37		verify is indistinguisha
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/audit.py:42		it may not.
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/audit.py:44		perfectly.
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/audit.py:52		[(retired_at_seq, key)] oldest boundary first; malformed entries are ignored.
+ORDINARY	NO-SUBJECT	comment	boltrig/kernel/channel_inbound_routes.py:53		channel into allowlist mode;
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/channel_pair_finalization.py:56		List only the caller's safe pairing intent;
 ORDINARY	NO-SUBJECT	comment	boltrig/kernel/channel_principal.py:24		than the member tier - the lowest console tier, which operates but can never
 ORDINARY	NO-SUBJECT	docstring	boltrig/kernel/channel_principal.py:31		The synthetic subject a self-onboarded stranger acts as (SEC-180).
@@ -1134,8 +1137,9 @@ ORDINARY	NO-SUBJECT	comment	boltrig/models/background_jobs.py:27		parse.
 ORDINARY	NO-SUBJECT	comment	boltrig/models/background_jobs.py:36		"never written a row" is decidable: no receipts = disabled or no pump;
 ORDINARY	NO-SUBJECT	docstring	boltrig/models/channel_providers.py:1		Canonical channel-provider contracts.
 ORDINARY	NO-SUBJECT	comment	boltrig/models/channels.py:43		app credentials) - never plaintext, never returned to an agent.
-ORDINARY	NO-SUBJECT	comment	boltrig/models/channels.py:46		Addressing (Phase 2, routing data - never authority):
-ORDINARY	NO-SUBJECT	comment	boltrig/models/channels.py:57		anything higher disables onboarding fail-closed
+ORDINARY	NO-SUBJECT	comment	boltrig/models/channels.py:47		preserves historical intake behaviour, while its presence fails closed on
+ORDINARY	NO-SUBJECT	comment	boltrig/models/channels.py:50		Addressing (Phase 2, routing data - never authority):
+ORDINARY	NO-SUBJECT	comment	boltrig/models/channels.py:61		anything higher disables onboarding fail-closed
 ORDINARY	NO-SUBJECT	comment	boltrig/models/context.py:28		is never trusted from the client.
 ORDINARY	NO-SUBJECT	comment	boltrig/models/context.py:34		the User-Agent), never read from an untrusted body field by a handler.
 ORDINARY	NO-SUBJECT	comment	boltrig/models/context.py:43		The kernel dispatch never reads this;
@@ -1166,7 +1170,7 @@ ORDINARY	NO-SUBJECT	comment	boltrig/models/realtime_calls.py:58		durable so a br
 ORDINARY	NO-SUBJECT	docstring	boltrig/models/registry.py:1		The noun / verb / binding registry models (S6.1).
 ORDINARY	NO-SUBJECT	comment	boltrig/models/tenancy.py:144		own base_url is used - so an existing deploy is byte-for-byte unchanged.
 ORDINARY	NO-SUBJECT	docstring	boltrig/models/work.py:1		The work item - the source-agnostic normalised unit of work (S6.3, P10).
-ORDINARY	NO-SUBJECT	comment	boltrig/models/work.py:59		never authority: None / "cos" addresses the tier-1 chief of staff (the
+ORDINARY	NO-SUBJECT	comment	boltrig/models/work.py:62		never authority: None / "cos" addresses the tier-1 chief of staff (the
 ORDINARY	NO-SUBJECT	docstring	boltrig/observability/background_jobs.py:115		Summarize only the newest retained receipt for each job.
 ORDINARY	NO-SUBJECT	docstring	boltrig/observability/background_jobs.py:29		Best-effort evidence write that can never change the janitor outcome.
 ORDINARY	NO-SUBJECT	docstring	boltrig/observability/backup_status.py:11		Read only the sidecar's atomic epoch marker, never backup artifacts.
@@ -1319,6 +1323,7 @@ ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/identity/password_reset.py:42	False	
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/app.py:145	id	The streamable-HTTP answer for one JSON-RPC message.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/audit.py:72	seq	The ONE key a row at ``seq`` is allowed to verify under.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/channel_notify.py:71	source_route	Enqueue one outbox row per (matching pref, resolved subject, bound channel).
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/channel_policy.py:1	allowed_chats	Opt-in policy controls for channel intake.
 ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/kernel/channel_principal.py:26	self_onboard	channel's ``self_onboard`` config naming any other role is rejected fail-closed
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/channel_routes.py:193	subject	The EXACTLY-ONE pending HITL request addressed to ``subject`` whose work item's reply route is this channel+thread, else None: zero matches (nothing to answer) or several (ambiguous) both fall back to normal intake.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/kernel/dispatch.py:227	context.run_id	Publish a HITL pause to this run AND to the run that delegated to it.
@@ -1411,6 +1416,7 @@ ORDINARY	SUBJECT-REACHED	docstring	boltrig/identity/sessions.py:216	list_workspa
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/identity/sessions.py:257	request.state	Build the first-party session ``PrincipalResolver`` (D3).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/approval_gate.py:131	held_call.name_redeemer	Refuse to MINT an approval no lane could ever redeem (decision 0018, Order 5).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/channel_notify.py:126	eligible_approval_responders	Enqueue an APPROVAL request's notice to every eligible approver.
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/channel_policy.py:88	authority.context_for	Stamp the resolved narrowing onto the durable work item.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/events.py:173	max_seq	Record an event and fan it out to current subscribers (non-blocking).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/events.py:205	chat._safe_exec	Re-open a closed stream so a continuation can be published to it.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/kernel/held_call.py:143	_emit_pause	Record the pause durably: the ``held:`` checkpoint plus the sealed call.

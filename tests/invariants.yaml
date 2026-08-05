@@ -297,6 +297,12 @@ invariants:
       - tests/unit/test_codex_runtime_config_mcp.py::test_the_token_never_reaches_the_config_receipt_repr_or_argv
       - tests/unit/test_codex_runtime_config_mcp.py::test_mcp_tamper_cannot_match_its_receipt
       - tests/security/test_mcp_face.py::test_mcp_notification_gets_202_with_no_body
+  SEC-195:
+    description: 'Opt-in channel boundary policy is fail-closed and narrowing-only: when allowed_chats is present, verified intake requires a non-empty chat id in that allowlist while an absent key preserves legacy behavior; a configured thread ceiling is stamped on the work item and intersected with the resolved sender grants at both intake (including channel HITL replies) and fleet execution, so malformed policy data or item edits can never widen authority.'
+    tests:
+      - tests/security/test_channel_policy.py::test_allowed_chats_are_opt_in_and_fail_closed_for_unknown_or_missing_chat
+      - tests/security/test_channel_policy.py::test_malformed_allowlist_or_ceiling_never_falls_open
+      - tests/security/test_channel_policy.py::test_thread_ceiling_is_stamped_and_narrows_execution_authority
   SEC-185:
     description: 'The trusted-Codex wall admits exactly two postures and both refuse any production signal and require the explicit BOLTRIG_CODEX_TRUSTED flag - (a) the legacy single-operator dev posture (BOLTRIG_DEV_AUTH=1, no real ingress) and (b) the kernel-attested posture, where per-cell uids are verifiably in force (the dropped API holds the live spawner socket) and cell identity is kernel-attested end to end (SO_PEERCRED uid must equal the registered cell uid, J8; privilege re-proved at issuance, J5). Under (b) a real ingress posture - session login included - may coexist because the edge authenticates users, not cells; without per-cell uids the same session-auth env is still refused BEFORE any admit or bearer mint. This is not a production flip: production_ready stays False and the runtime remains test-gated. The SEC-184 kernel-tools lane runs under (b): a run mints its run-scoped token over the real MCP face, tools/list shows only granted verbs, a grant-denied verb is refused at the chokepoint, and the token is revoked at run end.'
     tests:
