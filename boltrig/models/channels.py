@@ -42,7 +42,11 @@ class Channel:
     # SEC-04: a reference into the secret store (webhook signing secret, bot token,
     # app credentials) - never plaintext, never returned to an agent.
     credential_ref: str | None = None
-    # policy-as-data: allowed_chats, home_channel, dm behaviour overrides, etc.
+    # policy-as-data: allowed_chats, thread_ceilings, home_channel, dm behaviour
+    # overrides, etc. ``allowed_chats`` is opt-in allowlist mode: its absence
+    # preserves historical intake behaviour, while its presence fails closed on
+    # an unknown/missing chat. ``thread_ceilings`` maps a chat/thread id to a
+    # GrantSet-shaped allow/deny snapshot that can only narrow the sender.
     # Addressing (Phase 2, routing data - never authority):
     #   config["addressing"] = {
     #     "default_target": "cos",              # tier-1 chief of staff (default)

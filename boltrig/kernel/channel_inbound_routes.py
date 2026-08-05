@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from fastapi import Depends, Request
 from fastapi.responses import JSONResponse
 
@@ -21,6 +23,7 @@ from boltrig.work.normalise import normalise
 
 from .channel_principal import resolve_channel_principal
 from .channel_workflow_trigger_bridge import bound_event_response
+from .channel_policy import chat_is_allowed, stamp_thread_ceiling, thread_ceiling
 
 
 async def channel_inbound(
@@ -45,6 +48,13 @@ async def channel_inbound(
     if not sender:
         return JSONResponse(
             {"status": "error", "reason": "no sender"}, status_code=400
+        )
+    # ``allowed_chats`` is opt-in policy-as-data. Its presence switches the
+    # channel into allowlist mode; malformed or missing chat ids fail closed,
+    # while channels without the key retain their historical behaviour.
+    if not chat_is_allowed(channel, body):
+        return JSONResponse(
+            {"status": "denied", "reason": "chat_not_allowed"}, status_code=403
         )
     principal = await _resolve_sender(kernel, channel, sender, body)
     if isinstance(principal, JSONResponse):
@@ -160,6 +170,11 @@ async def _terminal_or_work(
     from .channel_routes import _hitl_reply_response, _resolve_addressing
 
     target, reply_route = _resolve_addressing(channel, body)
+    ceiling = thread_ceiling(channel, reply_route.get("thread"))
+    if ceiling is not None:
+        # The ceiling applies to every channel action, including an inline HITL
+        # reply. It can only narrow the already-resolved Principal grants.
+        principal = replace(principal, grants=principal.grants.intersect(ceiling))
     terminal = await bound_event_response(
         _hitl_reply_response,
         kernel,
@@ -179,6 +194,7 @@ async def _terminal_or_work(
     item.on_behalf_of = principal.subject
     item.target, item.reply_route = target, reply_route
     item.reply_route["sender"] = sender
+    stamp_thread_ceiling(item, reply_route.get("thread"), ceiling)
     await kernel.store.create_work_item(item)
     await _audit_intake(kernel, channel, principal, item)
     return JSONResponse(

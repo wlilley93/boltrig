@@ -24,6 +24,7 @@ import logging
 from typing import Any
 
 from boltrig.identity.provisioning import effective_grants_for_request
+from boltrig.kernel.channel_policy import ceiling_from_item
 from boltrig.models import EMPTY_GRANTS, GrantSet, InvocationContext, WorkItem
 
 log = logging.getLogger("boltrig.fleet.authority")
@@ -100,7 +101,14 @@ async def context_for(store: Any, item: WorkItem, run_id: str) -> InvocationCont
     under a narrow tenant ceiling would collapse to NO authority rather than to the
     ceiling. Keeping the axes separate keeps both exact.
     """
-    return _context(item, run_id, await principal_grants_for_item(store, item))
+    grants = await principal_grants_for_item(store, item)
+    ceiling = ceiling_from_item(item)
+    if ceiling is not None:
+        # Intake policy is a second, durable narrowing. Even if a work-item
+        # projection is edited later, intersecting here can never widen the
+        # principal authority resolved above.
+        grants = grants.intersect(ceiling)
+    return _context(item, run_id, grants)
 
 
 def reflection_context(item: WorkItem, run_id: str) -> InvocationContext:
