@@ -21,18 +21,6 @@
       "ecosystem": "python"
     },
     {
-      "id": "GHSA-mh99-v99m-4gvg",
-      "package": "brace-expansion",
-      "version": "1.1.16, 2.1.2",
-      "owner": "site-maintainers",
-      "expires": "2026-10-23",
-      "no_fix_available": true,
-      "reachability": "Build/lint tooling only, never the shipped site bundle. The 1.x and 2.x lines reach the tree solely through minimatch@3 under eslint and @vitest/coverage-v8. The advisory is a denial of service via unbounded brace expansion, which requires processing an attacker-controlled glob pattern; the only patterns fed to these tools are authored in-repo (eslint config and test globs), so no served request can reach it.",
-      "compensating_control": "The 5.x line IS pinned to the fixed 5.0.8 via a per-major override, so every dependency that can take the fix has it. Only the two legacy lines, which have no fixed release, remain.",
-      "reason": "No fixed release exists on the 1.x or 2.x lines: 1.x ends at 1.1.16 and 2.x at 2.1.2, and the fix ships only in 5.0.8, whose API minimatch@3 cannot use (forcing it throws at lint time). Closing this needs the PULLERS to move off minimatch@3, not a version pin. Re-check at expiry.",
-      "ecosystem": "npm"
-    },
-    {
       "id": "GHSA-hrxh-6v49-42gf",
       "package": "google.golang.org/grpc",
       "version": "1.80.0",

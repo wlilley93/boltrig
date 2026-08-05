@@ -1,12 +1,28 @@
 ---
 tags: [meta, changelog]
-updated: 2026-07-21
+updated: 2026-08-05
 ---
 
 # Changelog
 
 Chronological log of notable changes to the project. Newest first.
 This is a human-curated log — not a mirror of `git log`.
+
+## 2026-08-05
+
+- **brace-expansion overrides re-pinned, and an accepted advisory retired** - a
+  new advisory (GHSA-rgw5-rvv9-x895, DoS via unbounded intermediate arrays)
+  raised the floor to 1.1.18 and 5.0.9 while `pnpm-workspace.yaml` still pinned
+  1.1.16 and >=5.0.8, so `site-build-test-lint` went red on a branch whose diff
+  does not touch this directory. Pins bumped to 1.1.18 / 2.1.4 / >=5.0.9, which
+  are the latest on each line.
+- **GHSA-mh99-v99m-4gvg is no longer suppressed** - its `ignoreGhsas` entry and
+  its `accepted-advisories.json` record are both gone. The stated grounds were
+  that "brace-expansion 1.x ends at 1.1.16 and 2.x at 2.1.2, the fix ships only
+  in 5.0.8"; both halves are now false. Verified by deleting the ignore and
+  re-running the audit, which reports no known vulnerabilities, rather than by
+  reasoning that it ought to be safe. The entry's own comment said to remove it
+  the moment the pullers moved on. `make site-quality` clean end to end.
 
 ## 2026-07-21
 
