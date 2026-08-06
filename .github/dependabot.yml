@@ -167,6 +167,22 @@ updates:
     # arrive, which is the mechanism that produced 1.28.1 in the first place.
       - dependency-name: mcp
         versions: [">=2"]
+    #
+    # cognee 1.4.1 REOPENS A SECURITY ADVISORY, which is why it is bounded rather
+    # than merely failing. It requires cryptography<50, and cryptography 50.0.0 is
+    # what closes PYSEC-2026-3552 - taken on 2026-08-05 for exactly that reason.
+    #
+    # That is what made #238 unresolvable rather than merely wrong. It arrived as a
+    # GROUP of 8, and re-solving the graph properly with all 8 allowed silently
+    # pulled cryptography 50.0.0 back to 49.0.0. The lock resolves; the audit then
+    # fails. A group is only as mergeable as its most constrained member, and this
+    # member's constraint is a live advisory.
+    #
+    # Measured, not inferred: `uv pip compile --upgrade-package cognee ...
+    # --constraint 'cryptography>=50'` holds cognee at 1.4.0. The bound lifts by
+    # itself the moment cognee raises its own cryptography ceiling.
+      - dependency-name: cognee
+        versions: [">=1.4.1"]
     labels:
       - dependencies
       - python
