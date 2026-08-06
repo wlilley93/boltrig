@@ -76,7 +76,8 @@ class PersonalAgent:
     id: str
     tenant_id: TenantId
     user_id: UserId  # the owner; acts ONLY under the owner's delegated permissions
-    runtime: str  # a capability name (e.g. pi-worker)
+    runtime: str  # a capability name (e.g. codex-worker). Intake refuses
+    # anything but codex/script - see kernel/platform_routes/personal.py.
     skills: list[str] = field(default_factory=list)
     enabled: bool = True
 

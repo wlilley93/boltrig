@@ -1,6 +1,6 @@
 """The structured result an ephemeral agent returns (US-FLT-03/04).
 
-Every runtime (script / hermes / claude-api) returns the same shape so the
+Every runtime (script / codex / claude-api) returns the same shape so the
 spawner, department heads and the audit writer can treat all runtimes
 uniformly. It is a frozen dataclass: a result is a fact, not mutable state.
 """

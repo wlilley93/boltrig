@@ -376,7 +376,6 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/reflection.py:38	kernel.inv
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/result.py:86	degrade	The bounded degrade tag this result carries, or None.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/retention.py:1	run_retention_once	Retention purge: hard-erasure of closed conversations (M11, right-to-erasure).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/runtime.py:1	build_runtime	The pluggable agent-runtime abstraction (P4, US-FLT-04).
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/runtime.py:204	ModelEndpoint	A Hermes-gateway-backed runtime (lazy SDK / HTTP, degrade if absent).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/runtime_resolver.py:22	resolve	The model that ACTUALLY served a call, for the audit record.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/spawn.py:286	_publish_subagent_end_event	Retire the bearer this child inherited, at the child's run terminal.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/spawn.py:313	_publish_subagent_event	Settle a delegated child on the parent relay (G3, SDK-CONTRACT §5).
@@ -920,13 +919,13 @@ ORDINARY	NO-SUBJECT	comment	boltrig/fleet/pump.py:76		from (Phase 3, US-WFL-03).
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/pump.py:87		a deterministic automation.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/reflection.py:70		failure must never fail the run - but a swallow at DEBUG made
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/result.py:51		never at zero.
-ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/runtime.py:123		OpenAI-style messages with the authoritative system prompt prepended;
-ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/runtime.py:195		A typed unavailable result, never an unmarked echo.
+ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/runtime.py:122		OpenAI-style messages with the authoritative system prompt prepended;
+ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/runtime.py:194		A typed unavailable result, never an unmarked echo.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/runtime.py:33		backend does not report real usage, so accounting is never left blank.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/runtime.py:42		is UNKNOWN and must degrade to the env default runtime, never crash a run (P9).
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/runtime.py:517		degrade-marked under the REQUESTED lane's name, never the lane itself.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/runtime.py:74		Decision 0012: Codex is the only target agent runtime and script stays the
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/runtime.py:87		set, or reducing it to Codex, is expressly forbidden while production_ready is
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/runtime.py:448		degrade-marked under the REQUESTED lane's name, never the lane itself.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/runtime.py:73		Decision 0012: Codex is the only target agent runtime and script stays the
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/runtime.py:86		set, or reducing it to Codex, is expressly forbidden while production_ready is
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/runtime_resolver.py:18		A composed runtime cannot honestly satisfy an authored pinned profile.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/spawn.py:216		cross: see _inherit_adapter_bearer for why the child cannot use the seal
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/spawn.py:368		(0/0) is priced on the total exactly as before - never at zero.
@@ -1314,7 +1313,7 @@ ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/ports/grant_leases.py:17	expec
 ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/fleet/prompt_stack.py:79	GOVERNANCE_FLOOR	is in ``GOVERNANCE_FLOOR``, which that lane never sent.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/pump.py:672	hierarchy.tier2	Build the live org (CoS + heads + pump) from the manifest hierarchy (P7).
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/reflection.py:1	pump.py	Post-run reflection: one lesson per terminal work item, and its evidence.
-ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/runtime.py:179	BOLTRIG_ENABLE_LEGACY_RUNTIMES	The deterministic fallback for a runtime Boltrig cannot provide.
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/runtime.py:178	BOLTRIG_ENABLE_LEGACY_RUNTIMES	The deterministic fallback for a runtime Boltrig cannot provide.
 ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/fleet/turn_executor_compat.py:11	on_behalf_bearer	executor never chokes on an unexpected keyword).
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/workers.py:136	fn	Await ``fn`` directly.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/workers.py:158	KeyError	Start the registered task on the engine without waiting (US-EXE-02).
@@ -1404,7 +1403,7 @@ ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/pump.py:140	WorkItem	Persist a 
 ORDINARY	SUBJECT-REACHED	comment	boltrig/fleet/pump.py:77	_maybe_learn	defined here, read once below, and set only by tests, so `_maybe_learn` has never fired
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/pump_progress.py:93	WorkPump	The pump's serving loop, instrumented.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/retention.py:108	run_retention_once	Loop :func:`run_retention_once` forever; cancellable, idle-sleeping.
-ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/runtime.py:476	UnavailableRuntime	Select the runtime implementation for a capability (P4, US-FLT-04, US-RUN-01).
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/runtime.py:407	UnavailableRuntime	Select the runtime implementation for a capability (P4, US-FLT-04, US-RUN-01).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/runtime_resolver.py:313	kernel.mcp.issue_run_token	The injected trusted-Codex config, gated ONLY on ``capability.runtime``.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/spawn.py:511	Spawner	Construct the fleet ``Spawner`` for a kernel.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/sweep_progress.py:1	pending	Make a stalled loop distinguishable from an idle one.

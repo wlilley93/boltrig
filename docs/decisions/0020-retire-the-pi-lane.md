@@ -132,3 +132,34 @@ no tenant script passes it. The container had been started by hand at some point
 `restart: unless-stopped` kept it alive for eight days afterwards. The removal was
 still worth making durable, and the token still worth revoking, but the urgency was
 overstated and the record should say that rather than quietly carry it.
+
+## Addendum, 2026-08-06: hermes retired the same way
+
+The Principal directed that pi and hermes both be removed entirely. pi was
+already gone under L1 above. **hermes is now gone too, and the reason that is
+lawful turns on a distinction worth stating precisely.**
+
+L3 forbids two specific acts: EMPTYING `_LEGACY_RUNTIME_KINDS`, or reducing it
+to Codex. It does not forbid dropping one lane. The roster held five non-Codex
+lanes; it now holds four (`openai`, `claude-api`, `opencode`, `rivet`), every one
+still buildable and re-wirable by setting `BOLTRIG_ENABLE_LEGACY_RUNTIMES` alone
+with no fresh order. That is what L3 requires while `production_ready` is False,
+and `production_ready` is untouched and stays False.
+
+The proof is the same instrument L3 already had:
+`test_the_multi_runtime_routing_seam_stays_live` (FR-RUN-21) asserts the roster
+is non-empty AND really CONSTRUCTS a lane rather than reading a list. It passes.
+It was not weakened to make this change fit, which is the failure mode a gate
+like that exists to catch.
+
+**What was deliberately NOT removed.** `services/channel_gateway/*_adapter.py`
+and `whatsapp_bridge/bridge.js` carry Hermes references that are **MIT licence
+attribution**, not runtime lanes: "DERIVED from the MIT-licensed Hermes gateway
+... No Hermes code is copied". Eleven files carry that provenance. Stripping the
+name from them would discharge a licence obligation by deleting it, so they are
+untouched and must stay untouched.
+
+Also unchanged: the guards. `_RETIRED_RUNTIMES` in `api/doctor.py` now names both
+pi and hermes, and the retired-set assertions in the test suite still name every
+retired lane. Removing a lane and removing the instrument that would notice it
+coming back are opposite acts.

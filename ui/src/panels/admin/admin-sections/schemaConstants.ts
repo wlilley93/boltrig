@@ -41,7 +41,7 @@ export const BUDGET_SCHEMA = {
 export const AGENT_NODE_PROPERTIES = {
   name: { type: "string", description: "The agent's stable name." },
   department: { type: "string", description: "The department this agent heads (tier 2)." },
-  runtime: { type: "string", description: "The runtime engine (e.g. hermes)." },
+  runtime: { type: "string", description: "The runtime engine (e.g. codex)." },
   model_endpoint: { type: "string", description: "The model endpoint id from Models." },
   max_depth: {
     type: "integer",

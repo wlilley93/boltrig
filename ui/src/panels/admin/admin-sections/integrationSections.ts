@@ -146,7 +146,7 @@ export const integrationSections: ReadonlyArray<AdminSection> = [
             type: "object",
             properties: {
               name: { type: "string", description: "The runtime's stable name." },
-              runtime: { type: "string", description: "The runtime engine (hermes, pi)." },
+              runtime: { type: "string", description: "The runtime engine (codex or script)." },
               model_endpoint: {
                 type: "string",
                 description: "The model endpoint id from Models.",

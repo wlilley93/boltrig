@@ -362,9 +362,9 @@ def _check_edge(env: Mapping[str, str], prod: bool, checks: list[DoctorCheck]) -
 # Runtime kinds that have been REMOVED from the codebase, not merely gated off.
 # A capability or manifest still naming one degrades to the typed unavailable
 # result rather than crashing (P9), so this is drift to report, never a deploy
-# blocker. `pi` was retired under [2026] VJS-PC 20 L1; see
-# docs/decisions/0020-retire-the-pi-lane.md.
-_RETIRED_RUNTIMES = ("pi",)
+# blocker. `pi` (PC-20 L1) and `hermes` (2026-08-06) are both retired; see
+# docs/decisions/0020-retire-the-pi-lane.md. This tuple only ever GROWS.
+_RETIRED_RUNTIMES = ("pi", "hermes")
 
 
 def _check_runtime(

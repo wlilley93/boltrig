@@ -155,7 +155,6 @@ def test_unknown_provider_degrades_to_the_env_default_without_crashing():
         assert runtime_for_provider("fireworks") == "openai"
         assert runtime_for_provider("runpod") == "openai"
         assert runtime_for_provider("anthropic") == "claude-api"
-        assert runtime_for_provider("hermes") == "hermes"
         assert runtime_for_provider("frobnicator") is None
         assert runtime_for_provider(None) is None
 
