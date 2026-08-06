@@ -275,6 +275,19 @@ updates:
       time: "07:00"
       timezone: Europe/London
     open-pull-requests-limit: 5
+    # python MAJOR is pinned to the interpreter this project actually runs. The
+    # Dockerfile builds on python:3.12.13-slim-bookworm, pyproject declares
+    # requires-python ">=3.12", CI runs 3.12 at all three job sites, and the
+    # Linux venv the macOS quality gate uses is 3.12.13 as well. #229 offered
+    # 3.14.0, which would have shipped a SERVICE IMAGE on an interpreter no gate
+    # has ever executed. Same shape as the node bound below and the /site
+    # @types/node bound above: the runtime moves deliberately, in a change that
+    # moves the gates with it. 3.12.x patches still arrive, which is where the
+    # interpreter CVEs land.
+    ignore:
+      - dependency-name: python
+        update-types:
+          - version-update:semver-major
     labels:
       - dependencies
       - containers
@@ -287,6 +300,17 @@ updates:
       time: "07:05"
       timezone: Europe/London
     open-pull-requests-limit: 5
+    # node MAJOR is held on the LTS line. The Dockerfile pins node:22-alpine and
+    # 22 is LTS; #234 offered 25, which is an ODD-numbered release and therefore
+    # never becomes LTS - it stops receiving fixes when the next current line
+    # opens. It went green, which is the point: CI cannot tell you that a
+    # runtime is supported for as long as this service will run. Moving a
+    # production service off LTS is a decision, not a dependency update. Patches
+    # and the next EVEN major both still need a person.
+    ignore:
+      - dependency-name: node
+        update-types:
+          - version-update:semver-major
     labels:
       - dependencies
       - containers
@@ -299,6 +323,22 @@ updates:
       time: "07:15"
       timezone: Europe/London
     open-pull-requests-limit: 5
+    # Two runtimes held at the versions the rest of the stack actually runs.
+    #
+    # postgres: the stack's database is pgvector/pgvector:pg16, pinned by digest
+    # in docker-compose.yml. #232 offered postgres 18.3 here, which would have
+    # put the deploy image two majors ahead of the data it talks to. A Postgres
+    # major is a dump-and-restore with a downtime window, never a lockfile edit.
+    #
+    # python: same bound as /services/channel_gateway above - 3.12 is what
+    # pyproject requires, what CI runs, and what the quality gate's venv is.
+    ignore:
+      - dependency-name: postgres
+        update-types:
+          - version-update:semver-major
+      - dependency-name: python
+        update-types:
+          - version-update:semver-major
     labels:
       - dependencies
       - containers
