@@ -75,7 +75,16 @@ run_gate "continuity projection" continuity-projection
 if [[ "${SKIP_QUALITY_GATE:-}" == "1" ]]; then
   echo "[pre-push] SKIP_QUALITY_GATE=1 set — skipping python-quality (the gate CI enforces)."
 else
-  run_gate "python-quality (the target CI runs)" python-quality
+  # `quality-gate`, not `python-quality` directly. On Linux the two are identical -
+  # it execs the same target. On macOS it runs that target inside a Linux VM,
+  # because on the host it CANNOT pass: 17 of these tests assert Linux kernel
+  # controls (yama ptrace_scope, SO_PEERCRED, landlock/seccomp) that macOS does not
+  # implement. Measured on the M4: 34 failures on the host, 1 in the VM.
+  #
+  # This is not the "second list" this file's own preamble warns about. It is one
+  # line of dispatch around the SAME make target CI runs, so there is still nothing
+  # to drift.
+  run_gate "python-quality (the target CI runs)" quality-gate
 fi
 
 echo "[pre-push] all gates green."
