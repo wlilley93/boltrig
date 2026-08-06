@@ -1,0 +1,47 @@
+# boltrig-codex: docker-default, plus the two things the codex cell-wall proof needs.
+#
+# WHY THIS EXISTS. Ubuntu 24.04 moves any process that creates an unprivileged
+# user namespace into the `unprivileged_userns` profile, which denies
+# CAP_SYS_ADMIN - so bwrap creates its namespace and then cannot mount inside it
+# ("bwrap: Failed to make / slave: Permission denied"). Carrying `userns,` in a
+# NAMED profile means the process never transitions there.
+#
+# It must stay a named profile, not unconfined: 24.04 allowlists confined docker
+# profiles for userns, and `apparmor=unconfined` LOSES that allowance - measured,
+# it is strictly worse than docker-default.
+#
+# Differs from docker-default in exactly two lines: `mount,`/`umount,` are allowed
+# (docker-default denies mount outright, which is the second block) and `userns,`
+# is granted. Every docker-default denial below is preserved verbatim.
+abi <abi/4.0>,
+include <tunables/global>
+
+profile boltrig-codex flags=(attach_disconnected,mediate_deleted) {
+  include <abstractions/base>
+
+  network,
+  capability,
+  file,
+  umount,
+  mount,
+  userns,
+  pivot_root,
+  signal,
+
+  deny @{PROC}/* w,
+  deny @{PROC}/sys/[^k]** w,
+  deny @{PROC}/sys/kernel/{?,??,[^s][^h][^m]**} w,
+  deny @{PROC}/sys/kernel/*/** w,
+  deny @{PROC}/sysrq-trigger rwklx,
+  deny @{PROC}/kcore rwklx,
+
+  deny /sys/[^fk]*/** wklx,
+  deny /sys/f[^s]*/** wklx,
+  deny /sys/fs/[^c]*/** wklx,
+  deny /sys/fs/c[^g]*/** wklx,
+  deny /sys/fs/cg[^r]*/** wklx,
+  deny /sys/firmware/** rwklx,
+  deny /sys/kernel/security/** rwklx,
+
+  ptrace (trace,read,tracedby,readby) peer=boltrig-codex,
+}

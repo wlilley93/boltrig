@@ -1262,20 +1262,21 @@ ORDINARY	NO-SUBJECT	compose	docker-compose.yml:113		to the API, or sideways to a
 ORDINARY	NO-SUBJECT	compose	docker-compose.yml:133		cell reaches a KNOWN slot path but cannot enumerate the set, and each slot is
 ORDINARY	NO-SUBJECT	compose	docker-compose.yml:172		Stack-owned Herdr state only;
 ORDINARY	NO-SUBJECT	compose	docker-compose.yml:177		Safe epoch marker only.
-ORDINARY	NO-SUBJECT	compose	docker-compose.yml:231		Reflection is the ONLY automatic memory writer in the stack: fleet/pump.py
-ORDINARY	NO-SUBJECT	compose	docker-compose.yml:237		subsystem that never records anything looks identical to one switched off.
-ORDINARY	NO-SUBJECT	compose	docker-compose.yml:244		BOLTRIG_REFLECT=1 in .env alone would always have worked.
-ORDINARY	NO-SUBJECT	compose	docker-compose.yml:262		Stack-owned OpenCode state only;
-ORDINARY	NO-SUBJECT	compose	docker-compose.yml:264		Stack-owned Browser Use CLI state only;
-ORDINARY	NO-SUBJECT	compose	docker-compose.yml:271		The worker serves no HTTP, so this cannot be a URL probe - but it does
-ORDINARY	NO-SUBJECT	compose	docker-compose.yml:313		hatchet-lite required auth/session config (it refuses to boot without a
-ORDINARY	NO-SUBJECT	compose	docker-compose.yml:354		`build: !reset null` and pull the pinned image, so tenants never build.
-ORDINARY	NO-SUBJECT	compose	docker-compose.yml:406		never routed through it (residency) - that goes to local-model.
-ORDINARY	NO-SUBJECT	compose	docker-compose.yml:451		Mount a local model cache so air-gapped boxes never reach the internet.
-ORDINARY	NO-SUBJECT	compose	docker-compose.yml:496		Development compatibility only;
-ORDINARY	NO-SUBJECT	compose	docker-compose.yml:529		Worker-authored channel provider config - it is never written here.
-ORDINARY	NO-SUBJECT	compose	docker-compose.yml:548		THIS image, never the kernel's or the Python gateway's).
-ORDINARY	NO-SUBJECT	compose	docker-compose.yml:645		a local gateway.
+ORDINARY	NO-SUBJECT	compose	docker-compose.yml:229		read_only, so it cannot create it and dies with
+ORDINARY	NO-SUBJECT	compose	docker-compose.yml:248		Reflection is the ONLY automatic memory writer in the stack: fleet/pump.py
+ORDINARY	NO-SUBJECT	compose	docker-compose.yml:254		subsystem that never records anything looks identical to one switched off.
+ORDINARY	NO-SUBJECT	compose	docker-compose.yml:261		BOLTRIG_REFLECT=1 in .env alone would always have worked.
+ORDINARY	NO-SUBJECT	compose	docker-compose.yml:279		Stack-owned OpenCode state only;
+ORDINARY	NO-SUBJECT	compose	docker-compose.yml:281		Stack-owned Browser Use CLI state only;
+ORDINARY	NO-SUBJECT	compose	docker-compose.yml:288		The worker serves no HTTP, so this cannot be a URL probe - but it does
+ORDINARY	NO-SUBJECT	compose	docker-compose.yml:330		hatchet-lite required auth/session config (it refuses to boot without a
+ORDINARY	NO-SUBJECT	compose	docker-compose.yml:371		`build: !reset null` and pull the pinned image, so tenants never build.
+ORDINARY	NO-SUBJECT	compose	docker-compose.yml:423		never routed through it (residency) - that goes to local-model.
+ORDINARY	NO-SUBJECT	compose	docker-compose.yml:468		Mount a local model cache so air-gapped boxes never reach the internet.
+ORDINARY	NO-SUBJECT	compose	docker-compose.yml:513		Development compatibility only;
+ORDINARY	NO-SUBJECT	compose	docker-compose.yml:546		Worker-authored channel provider config - it is never written here.
+ORDINARY	NO-SUBJECT	compose	docker-compose.yml:565		THIS image, never the kernel's or the Python gateway's).
+ORDINARY	NO-SUBJECT	compose	docker-compose.yml:662		a local gateway.
 ORDINARY	NO-SUBJECT	compose	docker-compose.yml:96		than folklore: a NON-ROOT container cannot hold CAP_SETUID at all.
 ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/adapters/base.py:100	disabled	``disabled`` is for one-time/bearer-secret results that must never be
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/adapters/builtin/channel_send.py:133	approval_notice	What the approver must be told before they approve (C3).

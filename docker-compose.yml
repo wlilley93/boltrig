@@ -223,6 +223,23 @@ services:
     restart: unless-stopped
     <<: *app-hardening
     command: ["python", "-m", "boltrig.api.worker"]
+    # The worker runs the SAME codex trust gate as the kernel and probes
+    # BOLTRIG_CODEX_STACK_ROOT at boot, but only the kernel declared that path: the
+    # worker inherits just `tmpfs: [/tmp]` from *app-hardening and its rootfs is
+    # read_only, so it cannot create it and dies with
+    #   CodexSandboxEngagementError: probe_root /var/lib/boltrig/codex-cells is not a directory
+    #
+    # docker-compose.vm.yml carried this as a local workaround from 2026-07-30 and
+    # said in its own comment that "the proper fix belongs upstream next to the
+    # kernel's own tmpfs block". It went un-hit for a week because the running
+    # workers predated the gate; the v0.4.31 roll on 2026-08-06 was the first to
+    # start a worker on an image that has it, and the cv tenant crash-looped.
+    #
+    # Same mode/uid/flags as the kernel's own declaration above, deliberately: both
+    # services probe the same root and a mismatch would pass one and fail the other.
+    tmpfs:
+      - /tmp
+      - /var/lib/boltrig/codex-cells:mode=0711,uid=10001,gid=10001,noexec,nosuid,nodev
     env_file: ${BOLTRIG_ENV_FILE:-.env}
     environment:
       BOLTRIG_OPENCODE_HOME: ${BOLTRIG_OPENCODE_HOME:-/var/lib/boltrig/opencode}
