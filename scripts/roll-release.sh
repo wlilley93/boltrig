@@ -112,7 +112,27 @@ PY
   case "${n:-0}" in
     6) echo "  [ok] repinned all three image lines IN THE SOURCE ($rel)" ;;
     0) echo "  [ok] source already pinned at $VERSION (safe no-op re-run)" ;;
-    *) die "source diff for $rel is $n changed lines; expected 6 (repin kernel+fleet+ui) or 0 (already pinned)" ;;
+    4)
+      # A PARTIAL roll: two image lines moved and one did not. That is legitimate
+      # only when the one that did not move is ALREADY at the target - which is
+      # the case this script first met on 2026-08-06, rolling kernel+fleet
+      # v0.4.28 -> v0.4.30 while both stacks already ran boltrig-ui:v0.4.30 at the
+      # identical digest.
+      #
+      # 4 IS NOT ACCEPTED ON THE COUNT ALONE, deliberately. The comment above
+      # records that 4 is also the exact signature of the bug this assertion
+      # exists for: repin() once rewrote only kernel+fleet, so the UI could never
+      # move, and both stacks sat on boltrig-ui:0.4.9 through twelve releases
+      # while drift checks passed. Accepting the number would re-open that hole.
+      # So the un-moved line must PROVE it is at the target pin; anything else
+      # still dies.
+      if grep -qF "ghcr.io/wlilley93/boltrig-ui:${VERSION}@${UD}" "$src"; then
+        echo "  [ok] repinned kernel+fleet IN THE SOURCE ($rel); ui already at ${VERSION}@${UD:0:19}..."
+      else
+        die "source diff for $rel is 4 changed lines but the ui line is NOT at ${VERSION}@${UD} - that is the 'UI left behind' signature, not a partial roll. Inspect $rel."
+      fi
+      ;;
+    *) die "source diff for $rel is $n changed lines; expected 6 (repin kernel+fleet+ui), 4 (two moved, the third provably already at target) or 0 (already pinned)" ;;
   esac
   rm -f "$src.bak-roll-$STAMP"
 
@@ -212,6 +232,37 @@ bring_up "$TEN/boltrig-io.override.yml" "boltrig"
 sleep 20
 gate "boltrig" "(none)"
 echo "CANARY GATE PASSED - only now is the tenant touched"
+
+# CANARY_ONLY=1 stops here, having rolled solo boltrig and nothing else.
+#
+# Added 2026-08-06 because there was no supported way to roll the fleet PARTIALLY,
+# and the alternatives were all worse: run the script and update a client that had
+# been explicitly excluded; hand-type the canary half, which this script exists to
+# stop ("a canary you do not assert on is not a canary, it is a delay"); or point
+# ROLL_TENANTS at a directory without cv/ so the tenant step dies on a missing
+# file - deliberately breaking a safety script mid-run on production.
+#
+# Use it when the tenant must be held back for a reason OUTSIDE this script: no
+# verified backup of the tenant's database, an unresolved incident on that stack,
+# or an operator instruction to move the canary only. This box has no PITR and a
+# prod wipe on record, so "no verified dump" is a real reason to hold a migration.
+#
+# NOTE WHAT THIS DOES NOT DO: it leaves the fleet UNEVEN, which is the state
+# `make fleet-drift-all` exists to report. Run it afterwards and expect the tenant
+# to show as behind - that finding is correct, not noise, until cv is rolled too.
+#
+# And note what it is NOT for: papering over a dump you could not take. On the
+# v0.4.30 roll cv's dump failed four times with 'password authentication failed',
+# which looked like a credential problem and was not - `postgres` is a PER-NETWORK
+# docker alias, and from opbox-prod_backend it names Opbox-Postgres, which does not
+# contain cvboltrig at all. cv's own postgres holds it and the password was right
+# from the first attempt. Diagnose the target before reaching for this flag.
+if [ "${CANARY_ONLY:-0}" = "1" ]; then
+  echo
+  echo "CANARY_ONLY=1 - stopping after solo boltrig. The tenant was NOT touched."
+  echo "  fleet is now UNEVEN by design; 'make fleet-drift-all' will say so."
+  exit 0
+fi
 
 say "roll CLASSICAL VISAS (opbox-provisioned: must report opbox/)"
 repin "$TEN/cv/compose.override.yml"
