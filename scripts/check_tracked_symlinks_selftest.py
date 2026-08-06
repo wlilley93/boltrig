@@ -121,7 +121,16 @@ check("a dangling absolute link", r, 1, "does not resolve")
 
 # --- resolves, but not to anywhere this repository contains -----------------
 r = build()
-os.symlink("/etc/hostname", r / "host.txt")
+# The target is CREATED, not borrowed from the host. This used to point at
+# /etc/hostname, which exists on Linux and does NOT exist on macOS - so on the M4
+# the link was dangling rather than merely outside, the checker correctly said
+# "does not resolve", and the case failed for a reason that had nothing to do with
+# the behaviour under test. A fixture that depends on a host-specific file tests
+# the host. The sibling case below already built its own target; this one now does
+# too, and both assert the same thing on any OS.
+outside_abs = Path(tempfile.mkdtemp())
+(outside_abs / "target.txt").write_text("x", encoding="utf-8")
+os.symlink(str(outside_abs / "target.txt"), r / "host.txt")
 commit(r)
 check("an absolute link to a real file outside the repo", r, 1, "OUTSIDE the repository")
 
