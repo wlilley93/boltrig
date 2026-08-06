@@ -97,9 +97,25 @@ lint: ## Run ruff over the Python source, scripts, and tests
 #
 # The drift is dangerous in both directions. A newer ruff cries wolf; an older one would pass
 # code CI rejects, and you would only learn that from a red CI run after pushing.
-	@LOCKED=$$(grep -oP '^ruff==\K[0-9.]+' requirements-dev-lock.txt | head -1); \
+#
+# THE EXTRACTION IS POSIX sed, NOT `grep -oP`. \K is a PCRE construct and PCRE is a
+# GNU grep extension, so on macOS BSD grep the whole thing aborted with
+# "grep: invalid option -- P" and LOCKED came back EMPTY. The comparison below then
+# read `"0.15.22" != ""` and printed "ruff 0.15.22 is installed,
+# requirements-dev-lock.txt pins ." - a gate failing on a correctly-pinned linter
+# and naming the wrong cause, which is the exact "teaches everyone to skip the step"
+# failure the paragraph above exists to prevent. Found 2026-08-06, the first time
+# `make python-quality` was run on the M4 after the pen moved there.
+#
+# A gate that only runs on one developer's OS is not a gate on the repository.
+	@LOCKED=$$(sed -n 's/^ruff==\([0-9][0-9.]*\).*/\1/p' requirements-dev-lock.txt | head -1); \
 	HAVE=$$($(PY) -m ruff --version 2>/dev/null | awk '{print $$2}'); \
-	if [ -z "$$HAVE" ]; then \
+	if [ -z "$$LOCKED" ]; then \
+	  echo "make lint: could not read the ruff pin out of requirements-dev-lock.txt."; \
+	  echo "           This is a fault in THIS GATE, not in your environment - do not"; \
+	  echo "           reinstall anything on the strength of it. The pin is expected as"; \
+	  echo "           a line matching '^ruff==<version>'."; exit 1; \
+	elif [ -z "$$HAVE" ]; then \
 	  echo "make lint: no ruff in $(PY). Install the dev lock: uv pip sync requirements-dev-lock.txt"; exit 1; \
 	elif [ "$$HAVE" != "$$LOCKED" ]; then \
 	  echo "make lint: ruff $$HAVE is installed, requirements-dev-lock.txt pins $$LOCKED."; \
