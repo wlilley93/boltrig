@@ -229,6 +229,9 @@ gate-status: ## Is the gate on the default branch actually green right now?
 
 check: invariants lint architecture continuity-projection codex-pin-health structure codex-protocol unwired-claims reachability tracked-symlinks typecheck test ## Fast local subset. NOT what CI enforces - CI runs `python-quality`, and this omits seven of its targets (claims, commit-trailers, gate-coverage, health-claims, order-directives, override-locks, prose-references). Measured 2026-08-02; the old help text claimed the opposite. Use `make python-quality` (or just push - the pre-push hook runs it).
 
+quality-gate: ## python-quality, run inside a Linux VM when the host is macOS (what the pre-push hook calls)
+	@scripts/quality-gate.sh
+
 python-quality: invariants lint architecture structure codex-protocol unwired-claims reachability prose-references commit-trailers tracked-symlinks gate-coverage health-claims order-directives claims override-locks typecheck no-vacuous-greens ## Run Python tests on Postgres with coverage override-locks typecheck
 	scripts/with_test_postgres.sh $(PY) -m pytest -q \
 		--cov=boltrig --cov-report=term:skip-covered --cov-report=xml \
