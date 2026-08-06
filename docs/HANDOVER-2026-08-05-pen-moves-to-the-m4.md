@@ -40,6 +40,20 @@ false when 1.1.18 and 2.1.4 shipped. Gone from `ignoreGhsas` and from
 
 ## The three gaps on the M4, in the order they bite
 
+> **CORRECTED 2026-08-06. Two of the three gaps below never existed, and the
+> third was deferred because of one of them.** Docker was installed on the M4
+> the whole time. What produced "no docker" was `which docker` run over
+> non-interactive SSH, and a non-interactive shell does not source `.zprofile`,
+> which is the only place `brew shellenv` puts `/opt/homebrew/bin` on PATH.
+> Homebrew has been on that machine since 1 Aug and carries `colima`, `docker`,
+> `docker-compose` and `lima`. The corrected state is in the next section; the
+> original text is kept below so the mistake stays legible.
+>
+> **A `which` over SSH is a fact about PATH, not about the machine.** Every
+> claim in the original section traces to that single reading. Probe with the
+> login environment (`ssh host 'zsh -lc "which docker"'`) or with an absolute
+> path, and treat a negative from a bare `which` as unproven rather than false.
+
 **1. No docker, so `make python-quality` cannot run at all.** It shells out to
 `scripts/with_test_postgres.sh`, which stands up a disposable pgvector container.
 Without it, conftest ends the run non-zero rather than skipping quietly, which is
@@ -60,6 +74,33 @@ when you do: `--upgrade-package <name>`, never a blanket `UPGRADE=--upgrade`. A
 security fix whose diff is four hundred unrelated bumps is one nobody reviews.
 
 `.venv` is Python 3.12.13 and present.
+
+## What the M4 actually has, measured 2026-08-06
+
+| | state | note |
+|---|---|---|
+| colima | **running**, 0.10.3 | `default` profile, aarch64, macOS Virtualization.Framework, virtiofs |
+| docker | **29.7.1** CLI, **29.4.0** server | socket at `~/.colima/default/docker.sock` |
+| docker-compose | **5.3.1** | |
+| uv | **0.12.2** | installed 2026-08-06, so `make relock` works |
+| `.venv` | Python 3.12.13 | matches the 3.12 CI runs at all three job sites |
+| `core.hooksPath` | **still unset** | now unblocked; gap 2's stated reason is gone |
+
+Gap 3 is closed and gap 1 was never real, so **the only remaining item is
+arming the hook**, and it should be armed with proof rather than on faith: run
+`make python-quality` once and confirm `with_test_postgres.sh` really stands the
+pgvector container up under colima. Arming a hook you have not watched pass is
+the same error as declaring a gap you have not watched fail.
+
+Two things the cutover has to work around, both measured on the same pass:
+
+- **colima is provisioned at 4 CPU / 6GiB.** The stack is kernel, fleet-worker,
+  worker-ui, redis, bifrost, hatchet engine, hatchet dashboard and postgres.
+  Expect to `colima stop && colima start --cpu N --memory N` before it fits.
+- **`127.0.0.1:5432` on the M4 is already taken**, by an `alpine/socat`
+  container named `opbox-vm-relay` which also holds 8088 and 18000. A boltrig
+  postgres that assumes the default port will either fail to bind or, worse,
+  something will connect to the relay and reach an entirely different database.
 
 ## Audit every lock file, not the ones you remember
 
@@ -114,7 +155,27 @@ disabled beelink-only override.
 
 ## Still open
 
-Seven dependabot PRs, #217 to #223. Every one was red for the two advisories
+~~Seven dependabot PRs, #217 to #223. Every one was red for the two advisories
 above rather than for anything in its own diff, so they should go green on a
-rebase. #220 is the site group and may supersede the `brace-expansion` pins
-raised today.
+rebase.~~
+
+**Corrected and closed out 2026-08-06.** The prediction held for three of the
+seven and was wrong about the other four, which failed on their own diffs.
+
+Three went green and merged: **#217** python-minor-patch, **#220** site-minor-patch,
+**#222** actions-minor-patch. #220 turned out to touch only `site/pnpm-lock.yaml`,
+so it did not disturb the `brace-expansion` pins after all.
+
+Four were impossible rather than stale, and are now bounded in
+`.github/dependabot.yml` at the constraint that refuses them:
+
+| PR | refused by |
+|---|---|
+| #218 websockets 17.0 | `cognee>=1.2.0 depends on websockets>=15.0.1,<16.0.0` |
+| #219 + #221 mcp 2.0.0 | `browser-use==0.13.7 depends on mcp==1.26.0`, and the line they edit is the override closing PYSEC-2026-3481/3482/3483 |
+| #223 node 26 alpine | `ui/Dockerfile` and five `node-version` lines in `ci.yml` all say 22 |
+
+#219 and #221 were the same one-line diff twice, because
+`deploy/browser-cli-overrides.txt` is reachable from the pip scans at both `/`
+and `/deploy`. Both ecosystems carry the bound now; an ignore in one place only
+halves the noise and fixes nothing.
