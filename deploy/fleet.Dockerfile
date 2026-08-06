@@ -5,7 +5,7 @@
 # back ends. Honours the same optional corporate proxy + CA bundle (US-DEP-04).
 
 # IAC-002: pinned to a stable tag + digest.
-FROM python:3.12.13-slim-bookworm@sha256:8a7e7cc04fd3e2bd787f7f24e22d5d119aa590d429b50c95dfe12b3abe52f48b AS base
+FROM python:3.14.0-slim-bookworm@sha256:d13fa0424035d290decef3d575cea23d1b7d5952cdf429df8f5542c71e961576 AS base
 
 ARG HTTP_PROXY=""
 ARG HTTPS_PROXY=""
