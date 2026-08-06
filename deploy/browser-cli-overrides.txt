@@ -10,4 +10,4 @@ click==8.4.2
 pillow==12.3.0
 # browser-use resolves mcp 1.26.0, which carries PYSEC-2026-3481/3482 (fixed
 # 1.27.2) and PYSEC-2026-3483 (fixed 1.28.1). 1.28.1 closes all three.
-mcp==1.28.1
+mcp==1.29.0
