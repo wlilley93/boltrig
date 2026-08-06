@@ -13,7 +13,7 @@ FROM postgres:16.14-bookworm@sha256:da788743d2060767375896de4d646f7576f591146144
 # IAC-002: rclone copied from an official, pinned image instead of installing
 # from the network at build time (which would also be acceptable, but the upstream
 # apt key URL has been unstable, so the copy path is more reliable).
-FROM rclone/rclone:1.74.4@sha256:c61954aaa32328a5486715dd063a81c7879f5195ad3505cd362deddd509dc4a1 AS rclone-src
+FROM rclone/rclone:1.75.0@sha256:b06aed988cf5967de7c25be5925240983981c757f4ed1ac9d2fa659d51d60548 AS rclone-src
 
 FROM base
 ENV DEBIAN_FRONTEND=noninteractive \
