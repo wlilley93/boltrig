@@ -112,7 +112,27 @@ PY
   case "${n:-0}" in
     6) echo "  [ok] repinned all three image lines IN THE SOURCE ($rel)" ;;
     0) echo "  [ok] source already pinned at $VERSION (safe no-op re-run)" ;;
-    *) die "source diff for $rel is $n changed lines; expected 6 (repin kernel+fleet+ui) or 0 (already pinned)" ;;
+    4)
+      # A PARTIAL roll: two image lines moved and one did not. That is legitimate
+      # only when the one that did not move is ALREADY at the target - which is
+      # the case this script first met on 2026-08-06, rolling kernel+fleet
+      # v0.4.28 -> v0.4.30 while both stacks already ran boltrig-ui:v0.4.30 at the
+      # identical digest.
+      #
+      # 4 IS NOT ACCEPTED ON THE COUNT ALONE, deliberately. The comment above
+      # records that 4 is also the exact signature of the bug this assertion
+      # exists for: repin() once rewrote only kernel+fleet, so the UI could never
+      # move, and both stacks sat on boltrig-ui:0.4.9 through twelve releases
+      # while drift checks passed. Accepting the number would re-open that hole.
+      # So the un-moved line must PROVE it is at the target pin; anything else
+      # still dies.
+      if grep -qF "ghcr.io/wlilley93/boltrig-ui:${VERSION}@${UD}" "$src"; then
+        echo "  [ok] repinned kernel+fleet IN THE SOURCE ($rel); ui already at ${VERSION}@${UD:0:19}..."
+      else
+        die "source diff for $rel is 4 changed lines but the ui line is NOT at ${VERSION}@${UD} - that is the 'UI left behind' signature, not a partial roll. Inspect $rel."
+      fi
+      ;;
+    *) die "source diff for $rel is $n changed lines; expected 6 (repin kernel+fleet+ui), 4 (two moved, the third provably already at target) or 0 (already pinned)" ;;
   esac
   rm -f "$src.bak-roll-$STAMP"
 
@@ -145,6 +165,60 @@ bring_up() { # $1=overlay $2=project
     docker compose -f $COMPOSE -f $1 -p $2 pull kernel fleet-worker ui && \
     docker compose -f $COMPOSE -f $1 -p $2 up -d --no-deps kernel fleet-worker ui" \
     || die "compose up failed for $2"
+}
+
+# THE MIGRATION GATE.
+#
+# THIS SCRIPT USED TO DEPLOY IMAGES AND NEVER TOUCH THE SCHEMA, and on the v0.4.30
+# roll (2026-08-06) that put both kernels on an 0067-expecting image over an 0066
+# database. `/readyz` answered 503 with `checks.migration: head_mismatch` and the
+# canary gate aborted - correctly, but only after the canary was already down.
+#
+# WHY IT MUST BE THE SCRIPT AND NOT A RUNBOOK STEP. The readiness check is STRICT
+# EQUALITY, so there is no ordering that avoids an unready window:
+#
+#     db 0066 + image expecting 0067  ->  503, the NEW image is unready
+#     db 0067 + image expecting 0066  ->  503, the OLD image is unready
+#
+# Migrating every stack up-front therefore takes the OTHER stacks down until their
+# images follow. That is not a hypothetical: doing exactly that by hand put a live
+# client (cv) into 503 for the minutes between its migration and its deploy. The only
+# safe shape is migrate-then-deploy BACK-TO-BACK, PER STACK, which means it belongs
+# next to the deploy - a runbook cannot hold two steps together.
+#
+# The migration docstring's promise that running kernels carry a "tolerant reader" is
+# about the job-name ROW MAPPING, not the head assertion. It does not save the old
+# image, and reading it as though it did is what cost the window.
+#
+# It migrates to the head THE TARGET IMAGE EXPECTS, not to the checkout's head: this
+# repo can be ahead of the release being rolled, and `upgrade head` would then apply
+# a revision no deployed image asserts. A database AHEAD of its image is left alone
+# and fails loudly - that is a rollback, and it needs a human and a dump.
+MIGRATION_SRC="${ROLL_MIGRATIONS:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+
+GATE_SCRIPT="$(dirname "${BASH_SOURCE[0]}")/roll-migrate-stack.sh"
+
+stage_migrations() {
+  [ -f "$MIGRATION_SRC/alembic.ini" ] || die "no alembic.ini under $MIGRATION_SRC (set ROLL_MIGRATIONS)"
+  [ -d "$MIGRATION_SRC/migrations/versions" ] || die "no migrations/versions under $MIGRATION_SRC"
+  [ -f "$GATE_SCRIPT" ] || die "missing $GATE_SCRIPT - the migration gate cannot run"
+  ssh "$H" 'rm -rf /tmp/roll-mig && mkdir -p /tmp/roll-mig' || die "could not stage migrations on $H"
+  scp -q "$MIGRATION_SRC/alembic.ini" "$H:/tmp/roll-mig/alembic.ini" || die "alembic.ini copy failed"
+  scp -qr "$MIGRATION_SRC/migrations" "$H:/tmp/roll-mig/migrations" || die "migrations copy failed"
+  scp -q "$GATE_SCRIPT" "$H:/tmp/roll-mig/migrate-stack.sh" || die "gate script copy failed"
+  echo "  staged the alembic chain + migration gate from $MIGRATION_SRC"
+}
+
+migrate_stack() { # $1=compose project prefix (container = $1-kernel-1, network = $1_default)
+  local P=$1
+  local IMG="ghcr.io/wlilley93/boltrig-kernel:${VERSION}@${KD}"
+  # The gate's body lives in scripts/roll-migrate-stack.sh and is COPIED to the box by
+  # stage_migrations, not fed over stdin. It was a heredoc first and that heredoc arrived
+  # EMPTY: the ssh returned 0, printed nothing, and the gate silently passed over an
+  # unmigrated database while the roll carried on. The same body run as a file worked
+  # first time. A gate that can no-op without saying so is worse than no gate.
+  ssh "$H" "bash /tmp/roll-mig/migrate-stack.sh '$P' '$IMG'" \
+    || die "migration gate failed for $P - NOTHING was deployed for this stack"
 }
 
 # THE GATE.
@@ -206,15 +280,59 @@ gate() { # $1=project $2=expected `addons active:` substring
   echo "  [ok] $u running $uimg"
 }
 
+say "stage the alembic chain (the migration gate needs it on the box)"
+stage_migrations
+
 say "roll the CANARY (solo boltrig: must report NO addons)"
 repin "$TEN/boltrig-io.override.yml"
+# Migrate IMMEDIATELY before the deploy, not in a batch with the tenant: between
+# these two lines the stack is unready by construction, and that window is the
+# thing being minimised.
+migrate_stack "boltrig"
 bring_up "$TEN/boltrig-io.override.yml" "boltrig"
 sleep 20
 gate "boltrig" "(none)"
 echo "CANARY GATE PASSED - only now is the tenant touched"
 
+# CANARY_ONLY=1 stops here, having rolled solo boltrig and nothing else.
+#
+# Added 2026-08-06 because there was no supported way to roll the fleet PARTIALLY,
+# and the alternatives were all worse: run the script and update a client that had
+# been explicitly excluded; hand-type the canary half, which this script exists to
+# stop ("a canary you do not assert on is not a canary, it is a delay"); or point
+# ROLL_TENANTS at a directory without cv/ so the tenant step dies on a missing
+# file - deliberately breaking a safety script mid-run on production.
+#
+# Use it when the tenant must be held back for a reason OUTSIDE this script: no
+# verified backup of the tenant's database, an unresolved incident on that stack,
+# or an operator instruction to move the canary only. This box has no PITR and a
+# prod wipe on record, so "no verified dump" is a real reason to hold a migration.
+#
+# NOTE WHAT THIS DOES NOT DO: it leaves the fleet UNEVEN, which is the state
+# `make fleet-drift-all` exists to report. Run it afterwards and expect the tenant
+# to show as behind - that finding is correct, not noise, until cv is rolled too.
+#
+# And note what it is NOT for: papering over a dump you could not take. On the
+# v0.4.30 roll cv's dump failed four times with 'password authentication failed',
+# which looked like a credential problem and was not - `postgres` is a PER-NETWORK
+# docker alias, and from opbox-prod_backend it names Opbox-Postgres, which does not
+# contain cvboltrig at all. cv's own postgres holds it and the password was right
+# from the first attempt. Diagnose the target before reaching for this flag.
+if [ "${CANARY_ONLY:-0}" = "1" ]; then
+  echo
+  echo "CANARY_ONLY=1 - stopping after solo boltrig. The tenant was NOT touched."
+  echo "  fleet is now UNEVEN by design; 'make fleet-drift-all' will say so."
+  exit 0
+fi
+
 say "roll CLASSICAL VISAS (opbox-provisioned: must report opbox/)"
 repin "$TEN/cv/compose.override.yml"
+# The tenant's schema is migrated HERE, after the canary gate has passed, and not
+# earlier with the canary's. Migrating both up-front is what took cv down on
+# 2026-08-06: its 0066-expecting kernel went unready the moment its database reached
+# 0067, and stayed that way until this deploy. If the canary gate refuses, cv is left
+# entirely alone - old image, old schema, still serving.
+migrate_stack "cv-boltrig"
 bring_up "$TEN/cv/compose.override.yml" "cv-boltrig"
 sleep 20
 gate "cv-boltrig" "opbox/"
