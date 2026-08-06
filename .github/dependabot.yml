@@ -137,6 +137,36 @@ updates:
         versions: [">=15"]
       - dependency-name: grpcio-tools
         versions: [">=1.82.1"]
+    #
+    # A THIRD round, 2026-08-06, and it is the same cognee bound wearing a new name.
+    # #218 raised websockets 15.0.1 -> 17.0 and failed EIGHT checks, which reads like
+    # broad breakage until the resolver is asked:
+    #
+    #   websockets>=16   cognee>=1.2.0 depends on websockets>=15.0.1,<16.0.0
+    #
+    # The bound is <16, so this ignores >=16 and NOT the >=17 dependabot happened to
+    # offer. Pinning at the offered version leaves 16.x to be re-proposed next Monday
+    # and refused for the identical reason, which is how a bound becomes a weekly
+    # chore. `uv pip compile --upgrade` over the whole graph holds websockets at
+    # exactly 15.0.1 with every upgrade allowed: the same impossibility proof as above.
+      - dependency-name: websockets
+        versions: [">=16"]
+    #
+    # mcp is bounded for a DIFFERENT and more dangerous reason. The only mcp in this
+    # repository is one line of deploy/browser-cli-overrides.txt, and that line is a
+    # SECURITY FIX rather than a version. browser-use==0.13.7 pins mcp==1.26.0
+    # exactly, which carries PYSEC-2026-3481/3482/3483; the override raises it to
+    # 1.28.1 to close all three. Dependabot proposed 2.0.0 against it as #219 AND
+    # #221, the same one-line diff twice, because the pip ecosystem is registered at
+    # both / and /deploy and that file is reachable from both scans.
+    #
+    # Taking either is unsatisfiable (browser-use==0.13.7 depends on mcp==1.26.0) and
+    # would replace a deliberate advisory closure with a major bump upstream itself
+    # tells you to avoid: "if your project is not ready to migrate, keep a <2 upper
+    # bound". Bounded at >=2 rather than by name so 1.x security patches still
+    # arrive, which is the mechanism that produced 1.28.1 in the first place.
+      - dependency-name: mcp
+        versions: [">=2"]
     labels:
       - dependencies
       - python
@@ -195,6 +225,14 @@ updates:
       time: "06:40"
       timezone: Europe/London
     open-pull-requests-limit: 3
+    # The twin of the mcp bound in the root pip ecosystem above, and it has to be
+    # written twice because deploy/browser-cli-overrides.txt is reachable from BOTH
+    # scans. #219 (this ecosystem) and #221 (the root one) were the same one-line
+    # diff, opened four minutes apart, against a pin whose whole purpose is to sit
+    # where it is. An ignore in only one place halves the noise and fixes nothing.
+    ignore:
+      - dependency-name: mcp
+        versions: [">=2"]
     labels:
       - dependencies
       - python
@@ -284,6 +322,20 @@ updates:
         update-types:
           - version-update:semver-major
           - version-update:semver-minor
+      # node MAJOR is pinned to the Node this project actually runs. ui/Dockerfile
+      # builds on node:22.23.1-alpine3.24 and .github/workflows/ci.yml sets
+      # node-version "22" at FIVE sites, so #223's jump to 26.5.1 would have built
+      # the image on a runtime no gate has ever exercised. This is the same fork the
+      # /site ecosystem already records for @types/node, from the other side: there,
+      # types ahead of the runtime make tsc accept a `node:` API that throws; here,
+      # the runtime itself moves ahead of every check that could catch it.
+      #
+      # One decision, three files. It moves when ui/Dockerfile and the five
+      # node-version lines move together, deliberately, in a change that says so.
+      # Patches within 22.x still arrive, which is where the base-image CVEs land.
+      - dependency-name: node
+        update-types:
+          - version-update:semver-major
     labels:
       - dependencies
       - containers
