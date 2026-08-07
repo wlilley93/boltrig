@@ -20,6 +20,16 @@ the probabilistic failure the seal exists to remove), the resumed invoke re-pend
 because the resource genuinely changed during the approval window (say so, and
 surface the NEW request id), and the approval was already spent (the write ran;
 say so rather than asking again).
+
+The DECLINE is the fourth, and it was missing from that list until 2026-08-07 -
+which is exactly why it was missing from the audit trail too. It did not read as
+a residual path, being the ordinary way an approval gate says no, and so the
+single most governance-relevant outcome this module produces wrote no row at all:
+``ActionType.HITL`` occurred twice in the whole tree, on the two paths above that
+a decline never takes. It also discarded the human's reason, left the client's
+``hitl`` frame unpaired, and never reached the conversation. All four are closed
+here; the reason itself is carried by ``HITLResponse.notes``, which the API and
+the store had been faithfully round-tripping to nobody.
 """
 
 from __future__ import annotations
@@ -54,6 +64,11 @@ log = logging.getLogger("boltrig.fleet.held_write_resume")
 # TOOL_CALL: the tool call itself is audited by the chokepoint, and exactly one
 # TOOL_CALL row per redeemed approval is the property the negative control pins.
 RESUME_VERB = "hitl.held_write.resume"
+
+# How much of a human's decline reason rides the chat stream (the rest stays on
+# the response row and in the audit detail). Long enough for a real sentence,
+# short enough that the bounded frame stays bounded.
+_MAX_DECLINE_REASON = 280
 
 
 def _frames(call_id: str | None, status: str, text: str) -> list[dict[str, Any]]:
@@ -96,6 +111,75 @@ async def _record(
             workspace_id=context.workspace_id,
             status=status,
             detail={"hitl_request_id": held.request_id, "held_verb": held.verb, **detail},
+        )
+    )
+
+
+async def _decline_reason(kernel: Any, tenant_id: str, request_id: str) -> str:
+    """The human's own words for WHY they said no, bounded.
+
+    ``HITLResponse.notes`` has been captured at ``POST /v1/hitl/{id}/respond``,
+    written to the store and read back out of it since the HITL lane was built,
+    and NOTHING downstream has ever read it. So every declined write reached the
+    agent as a bare "declined", which is the one refusal an agent answers by
+    trying the same thing again.
+
+    Bounded because this rides the chat stream, where K-20 admits a status and a
+    short human sentence and nothing else. The cap elides; it never drops the
+    reason, and the full text stays on the response row either way.
+    """
+    try:
+        response = await kernel.store.get_hitl_response(tenant_id, request_id)
+    except Exception:  # noqa: BLE001 - an unreadable reason must never void a decline
+        log.warning("decline reason could not be read", exc_info=True)
+        return ""
+    notes = (getattr(response, "notes", "") or "").strip()
+    if len(notes) > _MAX_DECLINE_REASON:
+        return notes[: _MAX_DECLINE_REASON - 3].rstrip() + "..."
+    return notes
+
+
+async def _record_decline(
+    kernel: Any,
+    tenant_id: str,
+    stream: str,
+    request_id: str,
+    held: HeldCall | None,
+    reason: str,
+) -> None:
+    """Audit the decline itself.
+
+    The module docstring above enumerates three residual paths that reach the
+    audit trail rather than being swallowed. The ORDINARY decline was not among
+    them, because it did not read as residual - and so the single most
+    governance-relevant outcome an approval gate produces, a human refusing a
+    high-consequence write, left no row at all. ``ActionType.HITL`` occurred
+    exactly twice in the tree before this, on the unreadable-seal path and the
+    redeemed path, neither of which a decline ever takes.
+
+    Unwrapped, like ``_record``: an audit failure here is loud, because the row
+    IS the record.
+    """
+    detail: dict[str, Any] = {"hitl_request_id": request_id}
+    if held is not None:
+        detail["held_verb"] = held.verb
+    if reason:
+        detail["decline_reason"] = reason
+    context = held.context if held is not None else None
+    await kernel.audit.write(
+        AuditEvent(
+            tenant_id=tenant_id,
+            ts=utcnow(),
+            run_id=stream,
+            actor=context.actor if context is not None else "hitl-resume",
+            actor_tier=context.actor_tier if context is not None else "tier1",
+            action_type=ActionType.HITL,
+            verb=RESUME_VERB,
+            noun=(held.noun or None) if held is not None else None,
+            on_behalf_of=context.on_behalf_of if context is not None else None,
+            workspace_id=context.workspace_id if context is not None else None,
+            status="declined",
+            detail=detail,
         )
     )
 
@@ -272,9 +356,18 @@ async def resume_held_write(
     # redeemed ones).
     if not await kernel.hitl.is_approved(tenant_id, request_id):
         held = await read_held_call(store, tenant_id, run_id, request_id)
+        reason = await _decline_reason(kernel, tenant_id, request_id)
         relay.reopen(tenant_id, stream)
-        declined = _frames(None, "declined", "That was declined, so I have not carried it out.")
-        await _publish(relay, tenant_id, stream, declined)
+        text = "That was declined, so I have not carried it out."
+        if reason:
+            # WHY, in the human's words, so the agent can course correct instead
+            # of re-attempting the identical action. A refusal without a reason
+            # is the one an agent answers by trying again.
+            text = f"{text} The reason given: {reason}"
+        # The decline now takes the SAME shape as every other outcome: audited,
+        # projected, settled, paired to the pause frame, and persisted to the
+        # conversation. It previously did only two of those five.
+        await _record_decline(kernel, tenant_id, stream, request_id, held, reason)
         if held is not None:
             from boltrig.kernel.realtime_call_bridge import (
                 project_realtime_hitl_outcome,
@@ -282,6 +375,16 @@ async def resume_held_write(
 
             await project_realtime_hitl_outcome(store, held, "declined")
         await settle_held_call(store, tenant_id, run_id, request_id)
+        # ``call_id`` pairs this with the ``hitl`` frame the client is still
+        # showing. Passing None left that frame pending forever on the one
+        # outcome where it is certain nothing further is coming.
+        frames = _frames(held.call_id if held is not None else None, "declined", text)
+        if held is not None:
+            # The relay evicts closed streams past ``max_closed``, so without
+            # this a client reloading after a 60-minute approval window sees the
+            # pause and never the decline.
+            await _append_continuation(store, held, stream, frames)
+        await _publish(relay, tenant_id, stream, frames)
         return {"status": "declined"}
     held = await read_held_call(store, tenant_id, run_id, request_id)
     if held is None:
