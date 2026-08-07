@@ -29,7 +29,6 @@ from .pump import WorkPump, build_org
 from .result import AgentResult
 from .runtime import (
     ClaudeApiRuntime,
-    HermesRuntime,
     Runtime,
     ScriptRuntime,
     build_runtime,
@@ -61,7 +60,6 @@ __all__ = [
     # runtimes
     "Runtime",
     "ScriptRuntime",
-    "HermesRuntime",
     "ClaudeApiRuntime",
     "build_runtime",
     "AgentResult",

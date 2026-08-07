@@ -22,7 +22,6 @@ export const AI_LEVEL_OPTIONS: Option[] = [
 export const AI_PROVIDER_OPTIONS: Option[] = [
   { value: "anthropic", label: "Anthropic" },
   { value: "openai", label: "OpenAI" },
-  { value: "hermes", label: "Hermes" },
   { value: "vllm", label: "vLLM" },
   { value: "ollama", label: "Ollama" },
 ];
@@ -32,7 +31,6 @@ export const AI_PROVIDER_OPTIONS: Option[] = [
 export const AI_MODEL_SUGGESTIONS: Record<string, string[]> = {
   anthropic: ["claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-4"],
   openai: ["gpt-4o", "gpt-4o-mini", "o3-mini"],
-  hermes: ["glm-5-turbo", "glm-5"],
   vllm: ["meta-llama/Llama-3.1-70B-Instruct", "Qwen/Qwen2.5-72B-Instruct"],
   ollama: ["llama3.1", "qwen2.5", "mistral"],
 };

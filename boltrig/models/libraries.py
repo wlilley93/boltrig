@@ -76,9 +76,9 @@ class Skill:
 class AgentCapability:
     """A runtime profile: a way to run an agent, with a cost tier and skill support."""
 
-    name: CapabilityName  # "hermes-worker"
+    name: CapabilityName  # "codex-worker"
     tenant_id: TenantId
-    runtime: str  # 'hermes' | 'claude-api' | 'script' | 'go-binary'
+    runtime: str  # 'codex' | 'script' (decision 0012); legacy lanes are opt-in
     supported_skills: list[str]  # patterns: ["writing/*","analysis/*"] or ["*"]
     max_depth: int
     is_ephemeral: bool

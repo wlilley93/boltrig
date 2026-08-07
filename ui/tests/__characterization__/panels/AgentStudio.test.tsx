@@ -24,10 +24,10 @@ describe("Agent Studio", () => {
       is_ephemeral: true,
     }];
     const merged = mergeCapabilityProfiles(configured, [
-      { ...configured[0], runtime: "hermes" },
+      { ...configured[0], runtime: "openai" },
       {
         name: "worker-2",
-        runtime: "hermes",
+        runtime: "openai",
         cost_tier: "cheap",
         max_depth: 1,
         supported_skills: ["research/*"],
@@ -62,7 +62,11 @@ describe("Agent Studio", () => {
       verb: "control.capability.upsert",
       params: {
         name: "worker-1",
-        runtime: "hermes",
+        // codex, not the old "hermes": an agent created without an explicit
+        // runtime now defaults to the only lane intake accepts. This test pinned
+        // the previous default, so it caught the change exactly as a
+        // characterization test should.
+        runtime: "codex",
         supported_skills: ["*"],
         max_depth: 2,
         is_ephemeral: true,

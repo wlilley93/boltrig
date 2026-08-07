@@ -10,7 +10,7 @@ guarantees of wiring ``RootRoutingAdmission.admit`` at the chat root:
   and the turn's execution is UNCHANGED versus the flag-off turn;
 * a shadow admission that raises is swallowed - the live turn still completes.
 
-The turns run against a hermes-only kernel with no endpoint, so every spawn degrades
+The turns run against a legacy-lane-only kernel with no endpoint, so every spawn degrades
 (P9) rather than reasoning; the degraded reply is the deterministic, model-free
 observation point. Bound to SEC-172 in tests/invariants.yaml.
 """
@@ -73,7 +73,7 @@ async def _run_turn(
     store.set_tenant_permissions(TenantPermissions(T, GrantSet.of(["*"])))
     kernel = Kernel(store)
     await kernel.store.upsert_capability(
-        AgentCapability("hermes-worker", T, "hermes", ["*"], 2, True, "standard")
+        AgentCapability("openai-worker", T, "openai", ["*"], 2, True, "standard")
     )
     chat = ChatService(
         kernel.store,

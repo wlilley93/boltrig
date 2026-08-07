@@ -135,7 +135,7 @@ class AiConfig:
     tenant_id: TenantId
     level: str  # one of AI_CONFIG_LEVELS: org | workspace | user
     scope_id: str  # tenant_id (org) | workspace_id (workspace) | user_id (user)
-    provider: str  # 'anthropic' | 'openai' | 'hermes' | ... (selection, not a secret)
+    provider: str  # 'anthropic' | 'openai' | ... (selection, not a secret)
     model: str  # pinned model/version
     credential_ref: str  # id into credential_refs (the SEALED key); never the raw key
     # An OPTIONAL endpoint URL the config names (the provider's API base). When set it

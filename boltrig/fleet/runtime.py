@@ -1,8 +1,8 @@
 """The pluggable agent-runtime abstraction (P4, US-FLT-04).
 
 A ``Runtime`` is the seam between the fleet's spawn logic and however an agent
-is actually executed: a deterministic in-process script, a Hermes gateway, or
-the Claude API. The spawner never imports an SDK directly - it asks
+is actually executed: a deterministic in-process script, an OpenAI-compatible
+gateway, or the Claude API. The spawner never imports an SDK directly - it asks
 ``build_runtime`` for the right implementation given an ``AgentCapability`` and
 runs it. Every implementation returns the same ``AgentResult``.
 
@@ -41,7 +41,6 @@ _MICROS_PER_TOKEN: dict[str, int] = {"cheap": 1, "standard": 5, "expensive": 25}
 # Anthropic provider names map to the Claude API runtime. A provider OUTSIDE this set
 # is UNKNOWN and must degrade to the env default runtime, never crash a run (P9).
 _PROVIDER_RUNTIME: dict[str, str] = {
-    "hermes": "hermes",
     "openai": "openai",
     "ollama": "openai",
     "vllm": "openai",
@@ -72,8 +71,8 @@ def runtime_for_provider(provider: str | None) -> str | None:
 
 
 # Decision 0012: Codex is the only target agent runtime and script stays the
-# deterministic non-agent fallback. Every other lane (hermes / openai /
-# claude-api / opencode / rivet) is staged-cutover rollback residue: it is
+# deterministic non-agent fallback. Every other lane (openai / claude-api /
+# opencode / rivet) is staged-cutover rollback residue: it is
 # reachable only when the operator explicitly opts in with
 # BOLTRIG_ENABLE_LEGACY_RUNTIMES (default OFF). With the flag unset, requesting
 # a legacy lane returns the typed unavailable result instead of reaching the
@@ -88,7 +87,7 @@ def runtime_for_provider(provider: str | None) -> str | None:
 # False. See docs/decisions/0020-retire-the-pi-lane.md.
 LEGACY_RUNTIMES_ENV = "BOLTRIG_ENABLE_LEGACY_RUNTIMES"
 _LEGACY_RUNTIME_KINDS = frozenset(
-    {"hermes", "openai", "claude-api", "opencode", "rivet", "rivet_agentos", "rivet-agentos"}
+    {"openai", "claude-api", "opencode", "rivet", "rivet_agentos", "rivet-agentos"}
 )
 
 
@@ -199,70 +198,6 @@ class UnavailableRuntime(ScriptRuntime):
         return AgentResult.degrade(
             runtime=self._requested, reason="runtime_unavailable", prompt=prompt
         )
-
-
-class HermesRuntime:
-    """A Hermes-gateway-backed runtime (lazy SDK / HTTP, degrade if absent).
-
-    The model is pinned by the resolved ``ModelEndpoint`` (P4). If no endpoint
-    is configured, or no API key is present, or the HTTP client cannot be
-    imported, it returns a degraded result instead of crashing (P9).
-    """
-
-    runtime = "hermes"
-    _KEY_ENVS = ("BOLTRIG_HERMES_API_KEY", "HERMES_API_KEY")
-
-    def __init__(
-        self,
-        *,
-        endpoint: ModelEndpoint | None = None,
-        cost_tier: str = "standard",
-        api_key: str | None = None,
-    ) -> None:
-        self.endpoint = endpoint
-        self.cost_tier = cost_tier
-        # A resolved per-org/workspace/user AI key ([2026] VJS-COUNTY 8, D5). When
-        # present it overrides the env key; when None the runtime falls back to the
-        # env-configured provider key exactly as before (backward-compat).
-        self._key_override = api_key or None
-
-    def _api_key(self) -> str | None:
-        return self._key_override or _first_env(self._KEY_ENVS)
-
-    async def run(
-        self, prompt: str, context: InvocationContext, *, tools: list[str]
-    ) -> AgentResult:
-        """Call the Hermes gateway; degrade cleanly when unconfigured/offline."""
-        if self.endpoint is None or not self.endpoint.base_url:
-            return AgentResult.degrade(
-                runtime=self.runtime, reason="no_endpoint", prompt=prompt
-            )
-        api_key = self._api_key()
-        if api_key is None:
-            return AgentResult.degrade(
-                runtime=self.runtime, reason="no_api_key", prompt=prompt
-            )
-        try:  # lazy import: never required at module import time
-            import httpx  # noqa: F401  (presence check + client)
-
-            payload = {
-                "model": self.endpoint.model,
-                "messages": _messages(context, prompt),
-                "tools": list(tools),
-            }
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                resp = await client.post(
-                    f"{self.endpoint.base_url.rstrip('/')}/v1/chat/completions",
-                    json=payload,
-                    headers={"Authorization": f"Bearer {api_key}"},
-                )
-                resp.raise_for_status()
-                data: dict[str, Any] = resp.json()
-            return _result_from_chat(data, self.runtime, self.cost_tier, prompt, tools)
-        except Exception as exc:  # network/SDK/parse failure -> degrade, never crash
-            return AgentResult.degrade(
-                runtime=self.runtime, reason=type(exc).__name__, prompt=prompt
-            )
 
 
 class OpenAiRuntime:
@@ -444,10 +379,6 @@ def _build_legacy_runtime(
     """Construct a legacy lane. Reached ONLY when the decision-0012 opt-in flag
     (``BOLTRIG_ENABLE_LEGACY_RUNTIMES``) is set; otherwise ``build_runtime``
     returns the typed unavailable result without ever landing here."""
-    if kind == "hermes":
-        return HermesRuntime(
-            endpoint=endpoint, cost_tier=capability.cost_tier, api_key=api_key
-        )
     if kind == "openai":
         return OpenAiRuntime(
             endpoint=endpoint, cost_tier=capability.cost_tier, api_key=api_key

@@ -142,7 +142,7 @@ CREATE TABLE IF NOT EXISTS skills (
 CREATE TABLE IF NOT EXISTS agent_capabilities (
     name             TEXT NOT NULL,
     tenant_id        TEXT NOT NULL,
-    runtime          TEXT NOT NULL,                     -- hermes | claude-api | script | go-binary
+    runtime          TEXT NOT NULL,                     -- codex | script (decision 0012)
     model_endpoint   TEXT,
     supported_skills JSONB NOT NULL,                    -- patterns
     max_depth        INT NOT NULL,
@@ -1531,7 +1531,7 @@ CREATE TABLE IF NOT EXISTS ai_configs (
     tenant_id      TEXT NOT NULL,          -- the owning organisation (== organisations.id)
     level          TEXT NOT NULL,          -- org | workspace | user
     scope_id       TEXT NOT NULL,          -- org: tenant_id; workspace: workspace_id; user: user_id
-    provider       TEXT NOT NULL,          -- 'anthropic' | 'openai' | 'hermes' | ... (selection)
+    provider       TEXT NOT NULL,          -- 'anthropic' | 'openai' | ... (selection)
     model          TEXT NOT NULL,          -- pinned model/version
     credential_ref TEXT NOT NULL,          -- id into credential_refs (the SEALED key); NEVER the raw key
     base_url       TEXT,                   -- OPTIONAL provider host the config routes to (NULL => use the endpoint's own); routing metadata, never a secret

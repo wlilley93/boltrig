@@ -76,7 +76,11 @@ function specFromRaw(raw: unknown, kind: AgentKind): AgentSpec | null {
     name,
     kind,
     department: str(r.department),
-    runtime: str(r.runtime) ?? "hermes",
+    // Decision 0012: codex is the only target agent runtime, so it is also the
+    // only honest default. This read "hermes" until 2026-08-06, which meant a
+    // spec arriving without a runtime was labelled in the console as a lane the
+    // kernel would refuse at intake (_SUPPORTED_RUNTIMES = {codex, script}).
+    runtime: str(r.runtime) ?? "codex",
     model_endpoint: str(r.model_endpoint),
     cost_tier: str(r.cost_tier) ?? "standard",
     max_depth: num(r.max_depth, kind === "chief" ? 4 : 2),
@@ -210,7 +214,12 @@ export function readModelEndpoints(
 }
 
 export function runtimeOptions(specs: AgentSpec[]): string[] {
-  return [...new Set(["hermes", "pi", ...specs.map((a) => a.runtime)])].sort();
+  // Seeded with the runtimes intake actually accepts. It seeded "hermes" and
+  // "pi" until 2026-08-06: pi has been GONE since [2026] VJS-PC 20 L1 and hermes
+  // was removed on the Principal's direction, so the console was offering two
+  // lanes that no longer exist. Specs' own runtimes still union in, so a legacy
+  // lane re-wired via BOLTRIG_ENABLE_LEGACY_RUNTIMES still shows up if in use.
+  return [...new Set(["codex", "script", ...specs.map((a) => a.runtime)])].sort();
 }
 
 export function budgetPct(budget?: BudgetItem): number | null {
