@@ -106,7 +106,7 @@ async def test_agent_invoker_runtime_failure_is_marked_degraded_not_echoed(monke
     await _add_legacy_cap(kernel)
 
     class _Boom:
-        runtime = "hermes"
+        runtime = "openai"
         cost_tier = "standard"
 
         async def run(self, prompt, context, *, tools):

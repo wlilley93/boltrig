@@ -64,7 +64,7 @@ async def _names(store, tenant) -> set[str]:
 async def _upsert_control_plane(store, tenant, name, skills=("*",)) -> None:
     await store.upsert_capability(
         AgentCapability(
-            name=name, tenant_id=tenant, runtime="hermes",
+            name=name, tenant_id=tenant, runtime="openai",
             supported_skills=list(skills), max_depth=1, is_ephemeral=True,
             cost_tier="cheap", source="control-plane",
         )

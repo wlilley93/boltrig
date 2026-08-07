@@ -10,7 +10,7 @@ reflection or outcome scoring. These tests pin the wiring that closes it:
   * a bounded reflection distils a lesson through the memory verb - governed by the
     one chokepoint - and never fails the run (US-WFL-07).
 
-Everything runs offline: the ScriptRuntime child is deterministic, the hermes
+Everything runs offline: the ScriptRuntime child is deterministic, the legacy
 capability without an endpoint degrades (P9), and reflection uses the LocalMemory
 engine behind the real MemoryAdapter, so the governance screens run for real.
 """
@@ -59,10 +59,11 @@ async def _add_script_cap(kernel: Kernel) -> None:
     )
 
 
-async def _add_hermes_cap(kernel: Kernel) -> None:
-    # hermes with no endpoint degrades every child instead of reasoning (P9).
+async def _add_legacy_cap(kernel: Kernel) -> None:
+    # A legacy lane with no endpoint degrades every child instead of reasoning
+    # (P9). This named hermes until 2026-08-06, when that lane was removed.
     await kernel.store.upsert_capability(
-        AgentCapability("hermes-worker", T, "hermes", ["*"], 3, True, "standard")
+        AgentCapability("openai-worker", T, "openai", ["*"], 3, True, "standard")
     )
 
 
@@ -105,7 +106,7 @@ async def test_terminal_item_records_outcome_score():
 
     # (b) a degraded (but non-convergent) success scores 0.5
     kernel2 = _kernel()
-    await _add_hermes_cap(kernel2)
+    await _add_legacy_cap(kernel2)
     degraded = _item("do the degraded thing", convergent=False)
     await kernel2.store.create_work_item(degraded)
     assert await _pump(kernel2).run_once(T) is True

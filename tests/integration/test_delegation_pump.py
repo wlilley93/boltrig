@@ -1,7 +1,7 @@
 """The delegation pump: the org goes live (Beat 4; US-FLT-06, US-EXE-06/07, D6).
 
 Everything runs offline: the ScriptRuntime children are deterministic, the
-hermes capability without an endpoint degrades (P9), and decomposition width is
+legacy capability without an endpoint degrades (P9), and decomposition width is
 driven by a stub runtime returning a fixed subtask list.
 """
 
@@ -337,9 +337,10 @@ async def test_child_spawn_failure_is_captured_not_raised_and_parent_terminates(
 @pytest.mark.invariant("US-FLT-07")
 async def test_convergent_degraded_aggregate_parks_for_a_human_never_done():
     kernel = _kernel()
-    # hermes with no endpoint: every child degrades instead of reasoning (P9)
+    # A legacy lane with no endpoint: every child degrades instead of reasoning
+    # (P9). Named hermes until 2026-08-06, when that lane was removed.
     await kernel.store.upsert_capability(
-        AgentCapability("hermes-worker", T, "hermes", ["*"], 3, True, "standard")
+        AgentCapability("openai-worker", T, "openai", ["*"], 3, True, "standard")
     )
     pump = _pump(kernel)
 
