@@ -129,3 +129,74 @@ def test_the_defang_leaves_ordinary_text_alone() -> None:
     body = "a < b, and the word untrusted appears here plainly"
     wrapped = wrap_untrusted("tool_result", "benign", body)
     assert body in wrapped
+
+
+# --- Track B / B3: the prompt cache stays warm because the prompt is byte-stable
+
+@pytest.mark.invariant("NFR-MNT-01")
+def test_the_system_prompt_is_byte_identical_across_renders():
+    """The same inputs render the same bytes, every time.
+
+    Hermes Quicksilver shipped a "pinned session-context render" (#67403) to stop
+    a system prompt that varied per turn from defeating provider-side prompt
+    caching - a pure cost and latency tax paid on every single turn. boltrig does
+    not have that bug, and this test exists so it cannot acquire one.
+
+    Worth stating why it is absent rather than treating it as luck. The
+    kernel-tools lane resolves ``KERNEL_TOOLS_INSTRUCTIONS`` ONCE at import
+    because the birth policy is an ATTESTED artefact and the text a process
+    compiles must not change under it mid-life; ``compose_system_prompt`` is a
+    pure join over module constants. The property therefore falls out of the
+    attestation requirement, which is a sturdier reason to have it than caching.
+
+    But a property nothing measures is a property that drifts. Interpolating a
+    timestamp, a run id, or a set iteration into any layer would go unnoticed
+    until someone read a bill, so the assertion is byte equality and nothing
+    weaker - "we made it stable" is otherwise unfalsifiable.
+    """
+    for tier in ("tier1", "tier2", "ephemeral"):
+        renders = {compose_system_prompt(tier, department="legal") for _ in range(3)}
+        assert len(renders) == 1, f"{tier} rendered {len(renders)} distinct prompts"
+
+
+@pytest.mark.invariant("NFR-MNT-01")
+def test_active_addons_compose_in_name_order_however_they_were_requested():
+    """Cross-process cache sharing depends on this, and it is easy to lose.
+
+    ``compose_tool_harness`` appends addon fragments in the caller's order, and
+    the caller is ``active_addons()``, which promises "in name order". If that
+    promise were kept by a bare ``set`` instead of ``sorted``, iteration order
+    would vary with each process's hash seed: every replica would compile
+    different bytes, hold its own prompt-cache entry, and the hit rate would
+    quietly divide by the number of replicas. Nothing would page, because the
+    failure mode is a bill.
+
+    My first version of this test compared ``harness("opbox")`` against
+    ``harness(" opbox ")`` and could not fail: only one addon is registered, and a
+    one-element set is trivially ordered. It checked whitespace handling while
+    claiming to check ordering. This one registers six and asserts the documented
+    contract itself.
+
+    Its own limit, stated rather than hidden: against an unsorted implementation
+    this fails on all but one process seed in 720, because a set COULD happen to
+    iterate sorted. There is no way to force that from outside the process, so a
+    vanishing false-pass is the honest price of testing it at all.
+    """
+    from boltrig.addons import Addon, _REGISTRY, active_addons
+    from boltrig.fleet.prompt_stack import compose_tool_harness
+
+    names = ["delta", "alpha", "foxtrot", "charlie", "echo", "bravo"]
+    for name in names:
+        _REGISTRY[name] = Addon(name=name, version="1.0.0", harness=name.upper())
+    try:
+        addons = active_addons(",".join(names))
+        assert [a.name for a in addons] == sorted(names)
+        # and the composed text follows that order, which is the thing that
+        # actually reaches the provider
+        harness = compose_tool_harness(tuple(a.harness for a in addons))
+        assert [ln for ln in harness.split("\n") if ln in {n.upper() for n in names}] == [
+            n.upper() for n in sorted(names)
+        ]
+    finally:
+        for name in names:
+            _REGISTRY.pop(name, None)
