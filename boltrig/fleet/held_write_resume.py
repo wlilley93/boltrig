@@ -20,14 +20,32 @@ the probabilistic failure the seal exists to remove), the resumed invoke re-pend
 because the resource genuinely changed during the approval window (say so, and
 surface the NEW request id), and the approval was already spent (the write ran;
 say so rather than asking again).
+
+The DECLINE is the fourth, and it was missing from that list until 2026-08-07 -
+which is exactly why it was missing from the audit trail too. It did not read as
+a residual path, being the ordinary way an approval gate says no, and so the
+single most governance-relevant outcome this module produces wrote no row at all:
+``ActionType.HITL`` occurred twice in the whole tree, on the two paths above that
+a decline never takes. It also discarded the human's reason, left the client's
+``hitl`` frame unpaired, and never reached the conversation. All four are closed
+here; the reason itself is carried by ``HITLResponse.notes``, which the API and
+the store had been faithfully round-tripping to nobody.
 """
 
 from __future__ import annotations
 
 import logging
-import uuid
 from typing import Any
 
+from boltrig.fleet.held_write_outcome import (
+    RESUME_VERB,
+    append_continuation,
+    decision_reason,
+    frames as outcome_frames,
+    publish,
+    record,
+    record_decline,
+)
 from boltrig.kernel.held_call import (
     HeldCall,
     held_run_id,
@@ -39,112 +57,14 @@ from boltrig.models import (
     ActionType,
     AuditEvent,
     BoltrigError,
-    ConversationMessage,
     HITLStateConflict,
     HITLStatus,
     HITLType,
-    MessageRole,
     PendingHuman,
     utcnow,
 )
 
 log = logging.getLogger("boltrig.fleet.held_write_resume")
-
-# The audited verb name for a resume outcome. It is a HITL action, never a
-# TOOL_CALL: the tool call itself is audited by the chokepoint, and exactly one
-# TOOL_CALL row per redeemed approval is the property the negative control pins.
-RESUME_VERB = "hitl.held_write.resume"
-
-
-def _frames(call_id: str | None, status: str, text: str) -> list[dict[str, Any]]:
-    """The continuation's frames, in the BOUNDED chat shape (K-20).
-
-    ``call_id`` is the one the pause was recorded under, so a client pairs this
-    result with the ``hitl`` frame it is still showing; without one there is no
-    tool result to report and only the sentence rides. Values never ride: the
-    verb's real output went to the caller and to the audit row, and the chat
-    stream carries only status + a short human sentence, exactly as
-    ``chat._project_chat_event`` bounds a live turn.
-    """
-    frames: list[dict[str, Any]] = []
-    if call_id:
-        frames.append(
-            {"type": "tool_result", "call_id": call_id, "status": status,
-             "result_summary": {"status": status}}
-        )
-    frames.append({"type": "text_delta", "delta": text})
-    return frames
-
-
-async def _record(
-    kernel: Any, held: HeldCall, run_id: str, status: str, detail: dict[str, Any]
-) -> None:
-    """Audit one resume outcome under the ORIGINAL run, so the approval and what
-    became of it render in the one tree ``/v1/audit/tree/{run_id}`` draws."""
-    context = held.context
-    await kernel.audit.write(
-        AuditEvent(
-            tenant_id=context.tenant_id,
-            ts=utcnow(),
-            run_id=run_id,
-            actor=context.actor,
-            actor_tier=context.actor_tier,
-            action_type=ActionType.HITL,
-            verb=RESUME_VERB,
-            noun=held.noun or None,
-            on_behalf_of=context.on_behalf_of,
-            workspace_id=context.workspace_id,
-            status=status,
-            detail={"hitl_request_id": held.request_id, "held_verb": held.verb, **detail},
-        )
-    )
-
-
-async def _publish(
-    relay: Any, tenant_id: str, run_id: str, frames: list[dict[str, Any]]
-) -> None:
-    """Publish the continuation to the run's stream and close it again.
-
-    Fail-safe (P9): the write has already happened and is audited, so a relay
-    fault must never turn a successful resume into an error."""
-    try:
-        for frame in frames:
-            relay.publish(tenant_id, run_id, {**frame, "run_id": run_id})
-        relay.close(tenant_id, run_id)
-    except Exception:  # noqa: BLE001 - the stream is the side channel, not the record
-        log.warning("held-write continuation could not be streamed", exc_info=True)
-
-
-async def _append_continuation(
-    store: Any, held: HeldCall, run_id: str, frames: list[dict[str, Any]]
-) -> None:
-    """Persist the continuation as a new assistant message on the conversation.
-
-    Necessary because the relay evicts the oldest closed streams past
-    ``max_closed``: a 60-minute approval on a busy tenant outlives the backlog, so
-    a client that reloads after the fact would see the pause and never its
-    outcome. The conversation is DERIVED from the sealed context envelope (it is
-    already in ``ctx.extra``) - no new column, no fingerprint index.
-    """
-    conversation_id = held.context.extra.get("conversation_id")
-    if not conversation_id:
-        return  # not a conversational lane: the run stream + audit are the record
-    tenant_id = held.context.tenant_id
-    text = "".join(f.get("delta", "") for f in frames if f.get("type") == "text_delta")
-    try:
-        await store.add_message(
-            ConversationMessage(
-                id=uuid.uuid4().hex, conversation_id=str(conversation_id),
-                tenant_id=tenant_id, role=MessageRole.ASSISTANT, content=text,
-                run_id=run_id, events=frames,
-            )
-        )
-        conversation = await store.get_conversation(tenant_id, str(conversation_id))
-        if conversation is not None:
-            conversation.updated_at = utcnow()
-            await store.update_conversation(conversation)
-    except Exception:  # noqa: BLE001 - the write stands; its transcript entry is best-effort
-        log.warning("held-write continuation could not be persisted", exc_info=True)
 
 
 async def _claimable(kernel: Any, tenant_id: str, run_id: str, request_id: str) -> bool:
@@ -189,7 +109,7 @@ async def _refuse_unreadable(
         )
     )
     relay.reopen(tenant_id, stream)
-    await _publish(relay, tenant_id, stream, _frames(None, "unreadable", text))
+    await publish(relay, tenant_id, stream, outcome_frames(None, "unreadable", text))
     await settle_held_call(kernel.store, tenant_id, run_id, request_id)
     return {"status": "refused", "reason": "held_call_unreadable"}
 
@@ -248,6 +168,49 @@ async def _invoke_held(
         )
 
 
+async def _decline(
+    kernel: Any,
+    store: Any,
+    relay: Any,
+    tenant_id: str,
+    run_id: str,
+    stream: str,
+    request_id: str,
+) -> dict[str, Any]:
+    """The human said no. Tell the agent WHY, and put it on the record.
+
+    Told and recorded the same four ways as every other outcome - audit row, run
+    stream, paired tool result, conversation - because this path previously did
+    only two of them, and the two it skipped were the two that persist.
+    """
+    held = await read_held_call(store, tenant_id, run_id, request_id)
+    reason = await decision_reason(kernel, tenant_id, request_id)
+    relay.reopen(tenant_id, stream)
+    text = "That was declined, so I have not carried it out."
+    if reason:
+        # WHY, in the human's words, so the agent can course correct instead of
+        # re-attempting the identical action. A refusal without a reason is the
+        # one an agent answers by trying again.
+        text = f"{text} The reason given: {reason}"
+    await record_decline(kernel, tenant_id, stream, request_id, held, reason)
+    if held is not None:
+        from boltrig.kernel.realtime_call_bridge import project_realtime_hitl_outcome
+
+        await project_realtime_hitl_outcome(store, held, "declined")
+    await settle_held_call(store, tenant_id, run_id, request_id)
+    # ``call_id`` pairs this with the ``hitl`` frame the client is still showing.
+    # Passing None left that frame pending forever on the one outcome where it is
+    # certain nothing further is coming.
+    outcome = outcome_frames(held.call_id if held is not None else None, "declined", text)
+    if held is not None:
+        # The relay evicts closed streams past ``max_closed``, so without this a
+        # client reloading after a 60-minute approval window sees the pause and
+        # never the decline.
+        await append_continuation(store, held, stream, outcome)
+    await publish(relay, tenant_id, stream, outcome)
+    return {"status": "declined"}
+
+
 async def resume_held_write(
     kernel: Any, store: Any, relay: Any, tenant_id: str, run_id: str, request_id: str
 ) -> dict[str, Any]:
@@ -271,18 +234,7 @@ async def resume_held_write(
     # seal behind would outlive its run (Order 7 applies to every outcome, not only
     # redeemed ones).
     if not await kernel.hitl.is_approved(tenant_id, request_id):
-        held = await read_held_call(store, tenant_id, run_id, request_id)
-        relay.reopen(tenant_id, stream)
-        declined = _frames(None, "declined", "That was declined, so I have not carried it out.")
-        await _publish(relay, tenant_id, stream, declined)
-        if held is not None:
-            from boltrig.kernel.realtime_call_bridge import (
-                project_realtime_hitl_outcome,
-            )
-
-            await project_realtime_hitl_outcome(store, held, "declined")
-        await settle_held_call(store, tenant_id, run_id, request_id)
-        return {"status": "declined"}
+        return await _decline(kernel, store, relay, tenant_id, run_id, stream, request_id)
     held = await read_held_call(store, tenant_id, run_id, request_id)
     if held is None:
         return await _refuse_unreadable(kernel, relay, tenant_id, run_id, stream, request_id)
@@ -291,7 +243,13 @@ async def resume_held_write(
     # closed key. The write itself never depends on it.
     relay.reopen(tenant_id, stream)
     status, text, detail = await _invoke_held(kernel, held, stream)
-    await _record(kernel, held, stream, status, detail)
+    # The approver's reasoning belongs in the record too. "Approved because the
+    # client confirmed by phone" is the sentence an auditor wants six months
+    # later, and the UI has been promising to keep it all along.
+    approval_reason = await decision_reason(kernel, tenant_id, request_id)
+    if approval_reason:
+        detail = {**detail, "decision_reason": approval_reason}
+    await record(kernel, held, stream, status, detail)
     from boltrig.kernel.realtime_call_bridge import project_realtime_hitl_outcome
 
     await project_realtime_hitl_outcome(
@@ -304,7 +262,7 @@ async def resume_held_write(
     # under a new request, or failed. The chat lane never calls sweep_run_scoped,
     # so a seal left behind here outlives its run.
     await settle_held_call(store, tenant_id, run_id, request_id)
-    frames = _frames(held.call_id, status, text)
-    await _append_continuation(store, held, stream, frames)
-    await _publish(relay, tenant_id, stream, frames)
+    frames = outcome_frames(held.call_id, status, text)
+    await append_continuation(store, held, stream, frames)
+    await publish(relay, tenant_id, stream, frames)
     return {"status": status, **detail}
