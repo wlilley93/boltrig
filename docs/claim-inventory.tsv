@@ -52,8 +52,8 @@ LOAD-BEARING	NO-SUBJECT	comment	boltrig/fleet/continuity.py:171		deterministic a
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/fleet/continuity.py:194		Long-conversation compaction (append-only DERIVED summaries).
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/domain/codex_rollout.py:130		One exact tenant/workspace allowlist cell;
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/domain/grant_lease.py:28		Durable lifecycle of a bearer digest, never of the bearer itself.
-LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/held_write_resume.py:234		Whether this answered approval is still ours to redeem.
-LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/held_write_resume.py:281		Re-enter the ONE chokepoint with the recorded call.
+LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/held_write_resume.py:117		Re-enter the ONE chokepoint with the recorded call.
+LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/held_write_resume.py:70		Whether this answered approval is still ours to redeem.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/cell_privilege.py:179		Prove a SPAWNED CELL's privilege state before it is handed any credential.
 LOAD-BEARING	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/cell_privilege.py:87		Read this process's real privilege state out of ``/proc``.
 LOAD-BEARING	NO-SUBJECT	comment	boltrig/fleet/infrastructure/cell_spawner.py:389		slot's own contents FIRST, as the cell uid, so a later tenant never
@@ -227,8 +227,9 @@ LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/chat.py:128	run_id	The OLD
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/chat_authority.py:1	org_members	Say when a chat turn has no usable authority.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/codex_runtime.py:157	finally	The tool-enabled lane: the cell's only tools are the kernel's MCP face.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/codex_runtime.py:387	total	Consume the lifecycle stream until the turn completes (the completion signal, not the content source), returning the tokens the turn reported.
-LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/held_write_resume.py:202	max_closed	Persist the continuation as a new assistant message on the conversation.
-LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/held_write_resume.py:74	call_id	The continuation's frames, in the BOUNDED chat shape (K-20).
+LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/held_write_outcome.py:177	max_closed	Persist the continuation as a new assistant message on the conversation.
+LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/held_write_outcome.py:43	call_id	The continuation's frames, in the BOUNDED chat shape (K-20).
+LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/held_write_outcome.py:87	HitlRespond.tsx	The human's own words for WHY, bounded.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/cell_privilege.py:118	no_new_privileges	Fail closed unless this process is non-root and holds no capabilities (J5).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/cell_slots.py:1	CAP_CHOWN	Per-cell uid slots ([2026] VJS-CC-VJS 7 J2 and J10).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_kernel_tools_phase.py:193	assignment	The exact kernel-tools spec the adapter sends for ``assignment``.
@@ -712,14 +713,14 @@ ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/domain/skill_attestation.py:188		Fai
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/domain/skill_attestation.py:264		Immutable invalidation gate;
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/eval.py:48		Refresh lifecycle state so stale callers cannot run an archived case.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/hatchet_app.py:319		a HITL pause can last arbitrarily long;
-ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/held_write_resume.py:187		Publish the continuation to the run's stream and close it again.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/held_write_resume.py:326		never be re-spent: swallowing this would leave a human believing an
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/held_write_resume.py:347		A REJECT MUST NOT EXECUTE.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/held_write_resume.py:348		without this the decision is never read and a declined write is carried out
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/held_write_resume.py:385		pause and never the decline.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/held_write_resume.py:394		closed key.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/held_write_resume.py:407		under a new request, or failed.
-ORDINARY	NO-SUBJECT	comment	boltrig/fleet/held_write_resume.py:63		The audited verb name for a resume outcome.
+ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/held_write_outcome.py:162		Publish the continuation to the run's stream and close it again.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/held_write_outcome.py:31		The audited verb name for a resume outcome.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/held_write_resume.py:162		never be re-spent: swallowing this would leave a human believing an
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/held_write_resume.py:208		never the decline.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/held_write_resume.py:226		A REJECT MUST NOT EXECUTE.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/held_write_resume.py:227		without this the decision is never read and a declined write is carried out
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/held_write_resume.py:243		closed key.
+ORDINARY	NO-SUBJECT	comment	boltrig/fleet/held_write_resume.py:262		under a new request, or failed.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/cell_lane.py:107		serves: a teardown signal that cannot be delivered must never replace
 ORDINARY	NO-SUBJECT	docstring	boltrig/fleet/infrastructure/cell_lane.py:117		Have the spawner build this cell's own tree + files, AS the cell uid.
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/infrastructure/cell_lane.py:184		on a read-only rootfs the cell uid cannot rewrite, so it cannot be swapped
@@ -1295,7 +1296,6 @@ ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/codex_trusted_wall.py:49	BOLTR
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/continuity.py:261	wrap_untrusted	Render the derived summary as a fixed, content-stable frame.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/domain/attested_assignment.py:37	attempt	Trusted facts; no binding, pin, attestation set, or set reference appears.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/hatchet_app.py:280	bootstrap	Build the Hatchet client + the three registered Boltrig tasks.
-ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/held_write_resume.py:118	HITLResponse.notes	The human's own words for WHY they said no, bounded.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/cell_privilege.py:141	setuid	Empty the permitted, effective and inheritable sets via ``capset(2)``.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/cell_spawner.py:462	SCM_RIGHTS	Hand the pid and the three stdio descriptors back over the socketpair.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/infrastructure/codex_agent_runtime.py:286	agentMessage	The latest turn's assistant text, captured from the lifecycle stream.

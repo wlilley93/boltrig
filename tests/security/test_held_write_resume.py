@@ -399,7 +399,7 @@ async def test_a_decline_carries_its_reason_to_the_agent_and_to_the_audit_row():
     assert len(declines) == 1, f"a decline must be audited exactly once; got {len(declines)}"
     assert declines[0].detail["hitl_request_id"] == request_id
     assert declines[0].detail["held_verb"] == "ticket.create"
-    assert "client matter you are not on" in declines[0].detail["decline_reason"]
+    assert "client matter you are not on" in declines[0].detail["decision_reason"]
 
 
 @pytest.mark.security
@@ -422,7 +422,72 @@ async def test_a_decline_without_a_reason_still_lands_a_row():
         if r.action_type == ActionType.HITL and r.status == "declined"
     ]
     assert len(declines) == 1, "a bare reject is still a decision and still a row"
-    assert "decline_reason" not in declines[0].detail, "absent, not empty"
+    assert "decision_reason" not in declines[0].detail, "absent, not empty"
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-14")
+async def test_an_approvers_reasoning_reaches_the_audit_row_too():
+    """The UI's promise, made true in the other direction.
+
+    ``HitlRespond.tsx`` labels the notes field "Your reasoning is recorded in the
+    audit trail". Until 2026-08-07 that sentence was false on BOTH branches: the
+    note went to the ``hitl_response`` row and to nothing else, and the audit
+    trail - the artefact the sentence names - never saw it.
+
+    "Approved because the client confirmed by phone" is exactly the sentence an
+    auditor wants six months later, and the operator was told it was being kept.
+    A product promise to the person operating a gate is the kind that has to be
+    true, so this pins the approve side rather than leaving it half-closed.
+    """
+    kernel, adapter, _chat = await _chat_lane()
+    request_id = await _pause(kernel)
+
+    await kernel.hitl.answer(
+        TENANT,
+        request_id,
+        "approve",
+        "boss@acme",
+        notes="the client confirmed by phone",
+    )
+
+    assert [t["title"] for t in adapter._tickets.values()] == ["post the comment"]
+    resumes = [
+        r
+        for r in kernel.store._audit.get(TENANT, [])
+        if r.action_type == ActionType.HITL and r.status == "ok"
+    ]
+    assert len(resumes) == 1, "a redeemed approval is audited exactly once"
+    assert resumes[0].detail["decision_reason"] == "the client confirmed by phone"
+
+
+@pytest.mark.security
+@pytest.mark.invariant("SEC-14")
+async def test_a_reason_too_long_for_the_chat_frame_is_elided_not_dropped():
+    """The bound elides; it never silently loses the record.
+
+    K-20 keeps the chat frame small, and an operator pasting three paragraphs
+    into the notes box must not be able to inflate it. But a cap that DROPPED the
+    reason would recreate the original defect for exactly the operator who took
+    the most trouble to explain themselves, so the cap has to be lossy in a way
+    that says so.
+    """
+    kernel, _adapter, _chat = await _chat_lane()
+    request_id = await _pause(kernel)
+    essay = "because " + ("x" * 600)
+
+    await kernel.hitl.answer(TENANT, request_id, "reject", "boss@acme", notes=essay)
+
+    told = [
+        e for e in kernel.events.snapshot(TENANT, ROOT_RUN)
+        if e.get("type") == "text_delta"
+    ]
+    assert told[-1]["delta"].endswith("...")
+    assert len(told[-1]["delta"]) < len(essay), "the frame must not carry the essay"
+    assert "because " in told[-1]["delta"], "the opening survives; only the tail goes"
+    # The full text is never lost: it stays on the response row it arrived on.
+    response = await kernel.store.get_hitl_response(TENANT, request_id)
+    assert response.notes == essay
 
 
 # --- Order 7 extended: a run's secrets outlive the turn only while a hold does --
