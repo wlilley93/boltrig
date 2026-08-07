@@ -25,5 +25,18 @@ overrides:
   brace-expansion@<2.0.0: 1.1.18
   brace-expansion@>=2.0.0 <3.0.0: 2.1.4
   brace-expansion@>=5.0.0: '>=5.0.9'
+  # js-yaml: GHSA-5p4m-2wfm-xmqj / CVE-2026-59870, quadratic CPU consumption in
+  # !!omap. Published after main last ran green on 2026-08-06 12:36, so it turned
+  # up as a red check on a branch whose diff does not reach this directory at all
+  # - the THIRD time that pattern has appeared in two days. Vulnerable >=4.0.0
+  # <4.3.1; the lock held 4.3.0, one patch short.
+  # BOTH SIDES ARE BOUNDED, and the value is the half that matters. A blanket
+  # '>=4.3.1' resolved to js-yaml@5.2.3 - a major jump to close a 4.x advisory,
+  # exactly the failure this file already records for brace-expansion. Bounding
+  # only the SELECTOR (js-yaml@>=4.0.0 <5.0.0) did not fix it: the selector picks
+  # which requests to rewrite, the value decides what they become, and '>=4.3.1'
+  # still admits 5.x. It took a clean re-resolve to see that, because pnpm keeps
+  # an already-resolved 5.2.3 and the narrowed selector then matches nothing.
+  js-yaml@>=4.0.0 <5.0.0: '>=4.3.1 <5.0.0'
   postcss: '>=8.5.18'
   sharp: '>=0.35.0'
