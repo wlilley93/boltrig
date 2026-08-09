@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Install: sed 's|CHANGEME|'"$USER"'|g' > ~/Library/LaunchAgents/app.boltrig.whisper.plist
+  then `launchctl load` it. See README.md beside this file.
+
+  launchd does NOT expand ~ or $HOME, so every path here is absolute. The model
+  itself is NOT in this repo (it is ~150MB of weights); the runner refuses to
+  start with a clear message when it is missing.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>app.boltrig.whisper</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/CHANGEME/Projects/boltrig/deploy/host-m4/run-whisper.sh</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/tmp/boltrig-whisper.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/boltrig-whisper.log</string>
+</dict>
+</plist>
