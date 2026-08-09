@@ -28,6 +28,7 @@ import {
   revealMaterializedArtifact,
 } from "../desktop";
 import { ConversationControls } from "./ConversationControls";
+import { FamiliarBadge, familiarPalette } from "./familiar/FamiliarBadge";
 import { LiveQuestionCard } from "./LiveQuestionCard";
 import { VoiceCall } from "./VoiceCall";
 
@@ -468,7 +469,7 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
       <main className="chat-main">
         <header className="chat-header">
           <div className="agent-heading">
-            <Familiar state={loading ? "working" : "ready"} />
+            <FamiliarBadge state={loading ? "working" : "ready"} />
             <div>
               <p className="eyebrow">Boltrig activity</p>
               <h1>{
@@ -607,7 +608,7 @@ function Message({ message }: { message: ChatMessage }) {
     <article className={`message ${message.role}`}>
       <div className="message-author">
         {message.role === "assistant" ? (
-          <Familiar
+          <FamiliarBadge
             state={turn.ended ? "ready" : "working"}
             genotype={identity?.familiarGenotype}
             label={identity?.name}
@@ -643,7 +644,7 @@ function LiveTurn({ turn }: { turn: NormalizedTurn }) {
   return (
     <article className="message assistant live">
       <div className="message-author">
-        <Familiar
+        <FamiliarBadge
           state={turn.ended ? "ready" : "working"}
           genotype={identity?.familiarGenotype}
           label={identity?.name}
@@ -738,37 +739,6 @@ function TurnActivity({
       })}
     </div>
   );
-}
-
-function Familiar({
-  state,
-  genotype,
-  label,
-}: {
-  state: "ready" | "working";
-  genotype?: FamiliarGenotype | null;
-  label?: string;
-}) {
-  const hasIdentity = genotype?.source === "agent_capability.name.v1";
-  return (
-    <span
-      className={`familiar-orb ${state}`}
-      data-genotype-source={hasIdentity ? genotype.source : "unbound"}
-      role="img"
-      aria-label={hasIdentity
-        ? `${label ?? "Agent"} Familiar · ${state}`
-        : `Boltrig activity · ${state}`}
-      style={hasIdentity ? familiarPalette(genotype.palette) : undefined}
-    ><i /></span>
-  );
-}
-
-function familiarPalette(palette?: string[] | null): React.CSSProperties {
-  const colors = [...(palette ?? [])]
-    .filter((value) => /^#[0-9a-f]{6}$/i.test(value))
-    .slice(0, 3);
-  if (colors.length !== 3) return {};
-  return { background: `radial-gradient(circle at 35% 30%, ${colors.join(", ")})` };
 }
 
 interface ComposerProps {
