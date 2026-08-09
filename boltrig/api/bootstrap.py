@@ -37,6 +37,7 @@ from boltrig.knowledge import register_knowledge
 from boltrig.kernel import Kernel
 from boltrig.kernel.events import build_event_relay
 from boltrig.kernel.ratelimit import build_counter
+from boltrig.distill.bootstrap import register_distill as _register_distill
 from boltrig.memory.bootstrap import register_memory as _register_memory
 from boltrig.store import InMemoryStore, Store
 
@@ -269,6 +270,7 @@ async def _seed_from_manifest(kernel: Kernel, manifest) -> None:
     await provision_builtin_integration_catalogue(kernel.store, manifest.tenant_id)
     await _register_memory(kernel, manifest.tenant_id, manifest.section("memory"))
     await register_knowledge(kernel, manifest.tenant_id, manifest.section("knowledge"))
+    await _register_distill(kernel, manifest.tenant_id, manifest.section("distill"))
     await _register_control_plane(kernel, manifest.tenant_id)
     await _register_skill_shelf(kernel, manifest.tenant_id)
     await _register_channel_send(kernel, manifest.tenant_id, manifest)

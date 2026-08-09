@@ -2557,3 +2557,52 @@ invariants:
       - tests/unit/test_permanent_fleet_store.py::test_memory_observation_is_tenant_scoped_and_latest_per_worker
       - tests/unit/test_permanent_fleet_store.py::test_observation_contract_rejects_false_or_overlapping_evidence
       - tests/store/test_postgres_store.py::test_pg_permanent_fleet_observation_is_tenant_scoped_and_upserted
+  DIS-1:
+    description: 'A distillation corpus is tenant-fenced by refusal, not by filter: a record or target endpoint outside the corpus tenant raises rather than silently thinning the corpus (decision 0023).'
+    tests:
+      - tests/unit/test_distill_corpus.py::test_cross_tenant_record_is_refused_not_filtered
+      - tests/unit/test_distill_corpus.py::test_target_endpoint_of_another_tenant_is_refused
+  DIS-2:
+    description: 'A distillation corpus may only target a sensitive-classed (local) endpoint: run-level sensitivity is not durably recorded per run, so training a standard-classed endpoint is refused rather than guessed - sensitive data can never be laundered into weights served off-box (decision 0023, SEC-12 companion).'
+    tests:
+      - tests/unit/test_distill_corpus.py::test_standard_classed_target_is_refused
+  DIS-3:
+    description: 'An adapter is a memory projection with no delete: a conversation covered by a MemoryErasure is absent from every corpus built after it, and the erasure watermark is folded into the corpus digest so "does this adapter predate that erasure" is answerable (decisions 0011 clause 6 and 0023).'
+    tests:
+      - tests/unit/test_distill_corpus.py::test_erased_conversation_is_excluded_and_watermark_changes_digest
+      - tests/unit/test_distill_corpus.py::test_erasure_by_run_id_excludes_the_conversation
+  DIS-4:
+    description: 'A candidate adapter trains from the composed PINNED BASE over the whole replay corpus, never from a prior adapter: no request field exists to name another starting point (schema-closed), the outbound train request carries the composed pin, and a sidecar response reporting any other base is refused (decision 0023 - adapter-on-adapter increments are refused, not deferred).'
+    tests:
+      - tests/unit/test_distill_adapter.py::test_train_schema_has_no_field_to_name_another_base
+      - tests/unit/test_distill_adapter.py::test_train_request_carries_the_composed_pin_and_refuses_drift
+  DIS-5:
+    description: 'A candidate endpoint is born inactive and only a PASSING gate receipt - the newest hash-chained distill_gate_promote row matching the exact (corpus digest, model) - authorises distill.promote to flip is_active. No receipt or a holding receipt refuses; promotion state is derived from the audit chain, never stored in a table (the WorkflowPromotion ruling).'
+    tests:
+      - tests/unit/test_distill_adapter.py::test_promote_without_a_passing_gate_receipt_is_refused
+      - tests/unit/test_distill_adapter.py::test_promote_flips_active_only_with_a_matching_receipt
+      - tests/unit/test_distill_adapter.py::test_a_holding_gate_receipt_does_not_authorise_promotion
+  DIS-6:
+    description: 'The craft gate promotes only when the candidate mean is >= the incumbent mean AND every case passing on the incumbent still passes on the candidate: a rising mean can never smuggle a silent case regression past the gate (decision 0023).'
+    tests:
+      - tests/unit/test_distill_adapter.py::test_craft_verdict_holds_on_case_regression_even_with_higher_mean
+      - tests/unit/test_distill_adapter.py::test_craft_verdict_promotes_on_equal_mean_without_regression
+  DIS-7:
+    description: 'Every gate run writes a hash-chained audit receipt - promote AND hold alike - carrying the corpus digest, base pin, both scores and the reason, so a night that changed nothing is as attributable as a night that promoted (decision 0023).'
+    tests:
+      - tests/unit/test_distill_adapter.py::test_gate_writes_a_receipt_on_hold_and_on_promote
+  DIS-8:
+    description: 'A promoted adapter is priced in the same act as its promotion: distill.promote installs the per-model rate into the cost accountant, closing the trap where an unpriced local model bills at the cost-tier default (~$5/M) and trips hard-stop budgets early (kernel/cost.py tier fallback).'
+    tests:
+      - tests/unit/test_distill_adapter.py::test_promotion_prices_the_model_in_the_same_act
+  DIS-9:
+    description: 'The register gate holds on entropy collapse regardless of likelihood: a candidate whose seeded sampled generations carry less than the diversity floor (0.8x) of the incumbent distinct-2 is refused promotion with reason entropy_collapse, and both diversity measurements ride on the hash-chained gate receipt. Likelihood measures fit to the accepted turns; only this guard notices that the fit was bought by collapsing onto a template (decision 0023 second pass; Karpathy/Dwarkesh 2025-10).'
+    tests:
+      - tests/unit/test_distill_adapter.py::test_register_verdict_holds_on_entropy_collapse_despite_better_likelihood
+      - tests/unit/test_distill_adapter.py::test_register_gate_fetches_diversity_and_holds_on_collapse
+  EMO-6:
+    description: 'Attachment is the bounded slow bond (decision 0024): it accumulates ONLY through appraisal deltas, decays in REAL days never tempo-scaled (the bond lives on the human calendar), lifts only the configured expression baselines (connection/warmth/tenderness rest warmer on a bonded engine; a fresh engine is the 0013 engine verbatim), survives the snapshot round trip, and is exposed solely as the tenth phenotype scalar - expression yes, action no.'
+    tests:
+      - tests/emotion/test_engine.py::test_attachment_accumulates_only_from_appraisals_and_lifts_baselines
+      - tests/emotion/test_engine.py::test_attachment_decays_in_real_days_never_tempo_scaled
+      - tests/emotion/test_engine.py::test_attachment_survives_the_snapshot_round_trip

@@ -464,6 +464,14 @@ MANIFEST_EXTRA_FEATURES: dict[str, FeatureCoverage] = {
         ("operator", "operator", "deployment", "operator", "operator"),
         "Manifest mass-deactivation policy is advanced config/apply/rollback authority.",
     ),
+    "distill": _coverage(
+        "manifest extra:distill",
+        ("worker", "operator", "worker", "worker", "deployment"),
+        "Sleep distillation (decision 0023): gate/promotion receipts and corpus "
+        "composition surface as ordinary audit rows; the section itself (base "
+        "pin, sidecar/serve URLs) is operator config, and the native trainer "
+        "sidecar is deployment topology.",
+    ),
 }
 
 

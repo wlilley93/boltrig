@@ -95,24 +95,34 @@ RUN set -eux; \
 # too, since a console chat turn resolves + spawns the Codex runtime IN the kernel
 # process (not only the fleet-worker). Same pin + digest as deploy/fleet.Dockerfile;
 # the supervisor re-verifies the exact sha256 at spawn (codex_cell_policy.
-# verify_pinned_binary), so this is defence in depth. amd64-only (x86_64 musl build);
-# other arches skip rather than fail. Inert unless BOLTRIG_CODEX_TRUSTED is set - the
-# runtime is dev-gated and refuses under any production signal. TARGETARCH is
-# already in scope from the Herdr block above.
+# verify_pinned_binary), so this is defence in depth. Inert unless
+# BOLTRIG_CODEX_TRUSTED is set - the runtime is dev-gated and refuses under any
+# production signal. TARGETARCH is already in scope from the Herdr block above.
+#
+# 2026-08-05: this block used to skip on non-amd64, on the stated ground that
+# codex was "amd64-only". That was NOT true for this pin - the release publishes
+# codex-aarch64-unknown-linux-musl for rust-v0.144.3 as well - and the skip was
+# not harmless: the kernel's own gate (_prove_the_host_can_enforce_the_cell_wall)
+# REFUSES to boot when the binary is absent, so an arm64 host got a container
+# that could never start rather than one running without codex. Both arches are
+# now fetched and each is pinned to the sha256 of its OWN extracted binary,
+# because the checksum is verified against the binary, not the tarball.
 ARG CODEX_VERSION=0.144.3
 ARG CODEX_SHA256=37e6f5953f191b04f7b62cb07dae90f51d0947ad89f0355665b421fbde28700b
+ARG CODEX_SHA256_ARM64=afb0d0379242b598de8a2d44174e0c7ccdf1512b7b41a32adf2c6c9a6f5b6f15
 RUN set -eux; \
-    if [ "${TARGETARCH:-amd64}" != "amd64" ]; then \
-        echo "codex ${CODEX_VERSION} is amd64-only; skipping on ${TARGETARCH:-unknown}"; \
-    else \
-        url="https://github.com/openai/codex/releases/download/rust-v${CODEX_VERSION}/codex-x86_64-unknown-linux-musl.tar.gz"; \
-        python -c 'import sys, urllib.request; urllib.request.urlretrieve(sys.argv[1], "/tmp/codex.tgz")' "$url"; \
-        tar -xzf /tmp/codex.tgz -C /tmp codex-x86_64-unknown-linux-musl; \
-        printf '%s  %s\n' "$CODEX_SHA256" /tmp/codex-x86_64-unknown-linux-musl | sha256sum -c -; \
-        install -D -m 0755 /tmp/codex-x86_64-unknown-linux-musl /opt/boltrig/codex/codex; \
-        rm -f /tmp/codex.tgz /tmp/codex-x86_64-unknown-linux-musl; \
-        /opt/boltrig/codex/codex --version; \
-    fi
+    case "${TARGETARCH:-amd64}" in \
+        amd64) triple="x86_64-unknown-linux-musl"; want="$CODEX_SHA256" ;; \
+        arm64) triple="aarch64-unknown-linux-musl"; want="$CODEX_SHA256_ARM64" ;; \
+        *) echo "codex ${CODEX_VERSION}: no pinned build for ${TARGETARCH:-unknown}" >&2; exit 1 ;; \
+    esac; \
+    url="https://github.com/openai/codex/releases/download/rust-v${CODEX_VERSION}/codex-${triple}.tar.gz"; \
+    python -c 'import sys, urllib.request; urllib.request.urlretrieve(sys.argv[1], "/tmp/codex.tgz")' "$url"; \
+    tar -xzf /tmp/codex.tgz -C /tmp "codex-${triple}"; \
+    printf '%s  %s\n' "$want" "/tmp/codex-${triple}" | sha256sum -c -; \
+    install -D -m 0755 "/tmp/codex-${triple}" /opt/boltrig/codex/codex; \
+    rm -f /tmp/codex.tgz "/tmp/codex-${triple}"; \
+    /opt/boltrig/codex/codex --version
 ENV BOLTRIG_CODEX_BIN=/opt/boltrig/codex/codex
 
 # [2026] VJS-CC-VJS 5 G2: the per-cell auth helper used to be written into the

@@ -8,6 +8,8 @@
 rules:
   - {type: text_delta, appraise: stream_text, intensity: 0.5, throttle_s: 2}
   - {type: reasoning_delta, appraise: thinking, intensity: 0.6, throttle_s: 2}
+  - {type: tool_call, where: {verb: distill.promote}, appraise: growth, intensity: 1.0}
+  - {type: tool_call, where: {verb: distill.night}, appraise: spawn_worker, intensity: 0.6}
   - {type: tool_call, has: [noun], appraise: tool_call, intensity: 0.7, throttle_s: 1}
   - {type: tool_result, has: [call_id], where: {status: ok}, appraise: task_success, intensity: 0.7}
   - type: tool_result
