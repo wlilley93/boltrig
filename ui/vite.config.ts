@@ -47,6 +47,16 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: KERNEL_PROXY,
+    // Vite refuses requests whose Host header it does not recognise and answers
+    // 403. That is correct for drive-by DNS-rebinding, but it also means a dev
+    // server reached through a tunnel under a real hostname serves 403 for every
+    // request while looking completely healthy in its own log. Comma-separated,
+    // env-driven so no deployment's hostname is baked into the shared config:
+    //   BOLTRIG_UI_ALLOWED_HOSTS=dev.boltrig.io
+    allowedHosts: (process.env.BOLTRIG_UI_ALLOWED_HOSTS || "")
+      .split(",")
+      .map((h) => h.trim())
+      .filter(Boolean),
   },
   preview: {
     port: 4173,
