@@ -22,9 +22,10 @@ BOLTRIG_DISTILL_MLX_PYTHON=~/opbox-dev/mlx-venv/bin/python \
   python3 services/distill_sidecar/app.py
 ```
 
-For boot persistence copy `app.boltrig.distill.plist.example` to
-`~/Library/LaunchAgents/app.boltrig.distill.plist`, fix the paths, and
-`launchctl load` it (the `app.boltrig.whisper` pattern). Remember the macOS
+For boot persistence use `deploy/host-m4/` - the launchd job runs
+`run-distill-sidecar.sh` from there (the wrapper, not `app.py` directly, so the
+MLX interpreter is the one that starts), and its README carries the install
+command and what else runs natively on the Mac. Remember the macOS
 local-network privacy trap: a launchd job that must reach LAN addresses needs
 the loopback relay - this sidecar only ever *listens*, so it is unaffected.
 

@@ -49,7 +49,7 @@ cd "$HOME/Projects/boltrig/ui" || exit 1
 # plain curl works throughout. Nothing about the address was ever wrong, so
 # neither an IPv4 literal nor --dns-result-order fixes it.
 #
-# run-kernel-relay.sh (launchd: app.boltrig.kernel-relay) publishes the kernel on
+# run-vm-relay.sh (launchd: app.opbox.vm-relay, opbox-owned) publishes the kernel on
 # 127.0.0.1:18000 via an OrbStack container, so OrbStack - which already holds
 # local-network permission - makes the hop and vite only ever touches loopback.
 # If /healthz starts 500-ing with EHOSTUNREACH, check that relay first.
