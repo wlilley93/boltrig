@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { FamiliarGenotype } from "@wlilley93/boltrig-web-sdk";
+import type { FamiliarGenotype, FamiliarPhenotypeResponse } from "@wlilley93/boltrig-web-sdk";
 import { FamiliarBadge } from "./FamiliarBadge";
 import { FamiliarWebGLRenderer } from "./FamiliarWebGLRenderer";
 import type { FamiliarPresentationMode, FamiliarStageState } from "./FamiliarState";
@@ -12,11 +12,13 @@ import "./familiar.css";
 export function FamiliarStage({
   mode,
   state,
+  phenotype,
   genotype,
   label,
 }: {
   mode: FamiliarPresentationMode;
   state: FamiliarStageState;
+  phenotype?: FamiliarPhenotypeResponse | null;
   genotype?: FamiliarGenotype | null;
   label?: string;
 }) {
@@ -44,6 +46,12 @@ export function FamiliarStage({
   useEffect(() => {
     rendererRef.current?.setMode(mode);
   }, [mode]);
+
+  useEffect(() => {
+    rendererRef.current?.applyPhenotype(
+      phenotype?.fresh && phenotype.phenotype ? phenotype.phenotype : null,
+    );
+  }, [phenotype]);
 
   const busy = state.working || state.speaking;
   return (

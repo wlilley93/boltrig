@@ -17,6 +17,7 @@ import {
   type ChatMessage,
   type ConversationModelContext,
   type FamiliarGenotype,
+  type FamiliarPhenotypeResponse,
   type ModelProfile,
   type NormalizedTurn,
 } from "@wlilley93/boltrig-web-sdk";
@@ -69,6 +70,7 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
   const [retryFollow, setRetryFollow] = useState(false);
   const compactTaskDetails = useMediaQuery("(max-width: 1020px)");
   const [voiceActivity, setVoiceActivity] = useState({ speaking: false, level: 0 });
+  const [phenotype, setPhenotype] = useState<FamiliarPhenotypeResponse | null>(null);
   const [pageHidden, setPageHidden] = useState(
     typeof document !== "undefined" && document.visibilityState === "hidden",
   );
@@ -194,6 +196,25 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [compactTaskDetails, taskDetailsOpen]);
+
+  // Cosmetic phenotype poll (A3): ~0.3Hz, paused while hidden; any failure
+  // simply rests the being. The visual layer never gains a second event stream.
+  useEffect(() => {
+    if (pageHidden) return;
+    let cancelled = false;
+    const pull = () => {
+      if (typeof client.familiarPhenotype !== "function") return;
+      void client.familiarPhenotype()
+        .then((result) => { if (!cancelled) setPhenotype(result); })
+        .catch(() => { if (!cancelled) setPhenotype(null); });
+    };
+    pull();
+    const timer = window.setInterval(pull, 3000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [pageHidden]);
 
   useEffect(() => {
     const onVisibility = () => setPageHidden(document.visibilityState === "hidden");
@@ -499,7 +520,7 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
     voiceSpeaking: voiceActivity.speaking,
     voiceLevel: voiceActivity.level,
   });
-  const stage = <FamiliarStage mode={stageMode} state={stageState} />;
+  const stage = <FamiliarStage mode={stageMode} state={stageState} phenotype={phenotype} />;
 
   return (
     <div className="chat-layout">

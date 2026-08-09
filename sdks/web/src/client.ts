@@ -219,6 +219,7 @@ import type {
   VerbResponse,
   VerbsResponse,
 } from "./types.js";
+import type { FamiliarPhenotypeResponse } from "./familiarState.js";
 
 export interface BoltrigClientOptions {
   baseUrl?: string;
@@ -390,6 +391,11 @@ export class BoltrigClient {
 
   chatConfig(): Promise<ChatConfigResponse> {
     return this.request("/v1/chat/config");
+  }
+
+  /** Cosmetic, owner-scoped familiar phenotype (ADR 0025). Resting when stale. */
+  familiarPhenotype(): Promise<FamiliarPhenotypeResponse> {
+    return this.request("/v1/familiar/phenotype");
   }
 
   conversationsPage(limit = 50, offset = 0): Promise<ConversationsPageResponse> {

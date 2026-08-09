@@ -35,6 +35,18 @@ export type FamiliarPresentationModeV2 =
 
 export type FamiliarGazeSource = "pointer" | "camera" | "none";
 
+/** The ten server phenotype scalars (decision 0013 + 0024's attachment). */
+export type FamiliarPhenotypeScalar =
+  | "valence" | "arousal" | "irritation" | "fatigue" | "attention"
+  | "social" | "buoyancy" | "luminosity" | "tension" | "attachment";
+
+/** Shape of GET /v1/familiar/phenotype - resting when the relay is absent/stale. */
+export interface FamiliarPhenotypeResponse {
+  v: 1;
+  fresh: boolean;
+  phenotype: Partial<Record<FamiliarPhenotypeScalar, number>> | null;
+}
+
 export interface FamiliarPhenotypeV2 {
   valence: number;
   arousal: number;

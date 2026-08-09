@@ -26,6 +26,8 @@ export {
 } from "./familiarState.js";
 export type {
   FamiliarActivityMode,
+  FamiliarPhenotypeResponse,
+  FamiliarPhenotypeScalar,
   FamiliarGesture,
   FamiliarGazeSource,
   FamiliarPhenotypeV2,

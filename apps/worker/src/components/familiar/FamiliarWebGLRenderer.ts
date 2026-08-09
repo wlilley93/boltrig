@@ -32,6 +32,7 @@ type UniformName = (typeof UNIFORMS)[number];
 
 const MOOD_KEYS = [
   "valence", "arousal", "attention", "social", "buoyancy", "luminosity", "tension",
+  "irritation", "fatigue",
 ] as const;
 type MoodKey = (typeof MOOD_KEYS)[number];
 type Mood = Record<MoodKey, number>;
@@ -62,7 +63,7 @@ export class FamiliarWebGLRenderer {
   private mood: { cur: Mood; tgt: Mood | null; tau: number; lastT: number; nextSwitch: number } = {
     cur: {
       valence: 0.5, arousal: 0.07, attention: 0.6, social: 0.5,
-      buoyancy: 0.5, luminosity: 0.5, tension: 0,
+      buoyancy: 0.5, luminosity: 0.5, tension: 0, irritation: 0, fatigue: 0,
     },
     tgt: null,
     tau: 6,
@@ -71,6 +72,9 @@ export class FamiliarWebGLRenderer {
   };
 
   private gesture = { id: 0, amt: 0, start: 0, ttl: 2000, nextAt: 0 };
+  private serverPhenotype:
+    | { at: number; scalars: Partial<Record<MoodKey, number>> }
+    | null = null;
   private aperture = { value: 0, from: 0, to: 1, start: 0, dur: 1400 };
 
   constructor(options?: { reducedMotion?: boolean }) {
@@ -129,6 +133,18 @@ export class FamiliarWebGLRenderer {
     this.state = clampStageState(next);
   }
 
+  /**
+   * Live phenotype from the server projection (A3). While fresh it OWNS the
+   * mood targets (the wandering baseline stands down); when it goes null or
+   * stale the inner life resumes wandering, so an absent relay looks like a
+   * calm being, never a broken one.
+   */
+  applyPhenotype(scalars: Partial<Record<MoodKey, number>> | null): void {
+    this.serverPhenotype = scalars
+      ? { at: performance.now(), scalars }
+      : null;
+  }
+
   setMode(mode: FamiliarPresentationMode): void {
     if (mode === "minimised") this.suspend();
     else this.resume();
@@ -183,7 +199,7 @@ export class FamiliarWebGLRenderer {
 
   private pickMood(now: number): void {
     const roll = Math.random();
-    let m: Mood;
+    let m: Omit<Mood, "irritation" | "fatigue">;
     if (roll < 0.25) {
       m = { arousal: rand(0.5, 0.75), valence: rand(0.55, 0.9), attention: rand(0.75, 1),
         social: rand(0.65, 0.95), buoyancy: rand(0.6, 0.9), luminosity: rand(0.7, 1),
@@ -201,13 +217,28 @@ export class FamiliarWebGLRenderer {
         social: rand(0.4, 0.7), buoyancy: rand(0.4, 0.6), luminosity: rand(0.45, 0.65),
         tension: rand(0.3, 0.6) };
     }
-    this.mood.tgt = m;
+    this.mood.tgt = { ...m, irritation: 0, fatigue: 0 };
     this.mood.tau = rand(4, 8);
     this.mood.nextSwitch = now + rand(20_000, 45_000);
   }
 
   private moodTick(now: number): void {
-    if (!this.mood.tgt || now >= this.mood.nextSwitch) this.pickMood(now);
+    const server = this.serverPhenotype
+      && now - this.serverPhenotype.at < 10_000
+      ? this.serverPhenotype
+      : null;
+    if (server) {
+      const target: Mood = { ...(this.mood.tgt ?? this.mood.cur) };
+      for (const key of MOOD_KEYS) {
+        const value = server.scalars[key];
+        if (typeof value === "number" && Number.isFinite(value)) {
+          target[key] = Math.min(1, Math.max(0, value));
+        }
+      }
+      this.mood.tgt = target;
+      this.mood.tau = 2; // explicit attack/release toward the real inner life
+      this.mood.nextSwitch = now + 60_000;
+    } else if (!this.mood.tgt || now >= this.mood.nextSwitch) this.pickMood(now);
     const dt = Math.min(0.5, (now - this.mood.lastT) / 1000);
     this.mood.lastT = now;
     const k = 1 - Math.exp(-dt / this.mood.tau);
@@ -328,8 +359,8 @@ export class FamiliarWebGLRenderer {
     const m = this.mood.cur;
     f("uValence", m.valence);
     f("uArousal", Math.min(1, m.arousal + (working ? 0.25 : 0)));
-    f("uIrritation", 0);
-    f("uFatigue", 0);
+    f("uIrritation", m.irritation);
+    f("uFatigue", m.fatigue);
     f("uAttention", m.attention);
     f("uSocial", m.social);
     f("uBuoyancy", m.buoyancy);
