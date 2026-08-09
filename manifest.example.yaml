@@ -599,3 +599,18 @@ knowledge:
   cognee:
     # cognee_root defaults beside the per-user Knowledge data. Set
     # BOLTRIG_COGNEE_ROOT for a managed deployment.
+
+# --- sleep distillation (decision 0023) --------------------------------------
+# Nightly consolidation: derive a corpus from the governed record, train a
+# candidate LoRA from the PINNED base on the local sidecar, gate mechanically,
+# promote or hold - an audit row either way. Disabled by default; enabling it
+# without a base_pin registers nothing (an unpinned base would make promotion
+# state underivable). The sidecar URL is operator-owned, never agent input.
+distill:
+  enabled: false
+  sidecar_url: http://host.orb.internal:8930
+  # A chat-serving endpoint (mlx_lm.server) for CANDIDATE adapters. The
+  # trainer sidecar serves no chat completions; without this the craft gate
+  # refuses typed rather than routing eval traffic at a dead URL.
+  serve_url: http://host.orb.internal:8931/v1
+  base_pin: mlx-community/Qwen2.5-7B-Instruct-4bit@main

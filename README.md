@@ -240,6 +240,16 @@ service or credentials to exercise):
   local OpenAI-compatible endpoint for sensitive data; it needs a model + (for
   vLLM) a GPU, or swap in Ollama for CPU. (The routing guard that *requires* it
   for sensitive data is done.)
+- **Sleep distillation** (decision 0023, DIS-1..8). The governed loop is
+  implemented and tested: erasure-filtered digest-pinned corpus derivation,
+  the five `distill.*` verbs, mechanical craft/register gates, audit-receipt
+  promotion with same-act pricing, and the native trainer/scorer sidecar
+  (`services/distill_sidecar/`, exercised end-to-end against mlx-lm on a toy
+  corpus). The remaining legs: a production-scale corpus over live Postgres
+  history, a department eval-case library for the craft gate, serving a
+  promoted adapter through the Codex composition's sensitive role, and the
+  scheduled nightly itself (a runbook act -
+  `docs/proposals/sleep-distillation.md`).
 - **Cognee model configuration.** Cognee ships in the first-party image and is
   enabled as a Knowledge compiler, but compilation reports degraded until an
   approved LLM and embedding configuration is available. Canonical Knowledge

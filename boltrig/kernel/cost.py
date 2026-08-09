@@ -214,6 +214,12 @@ class CostAccountant:
         """Install the per-model price table (manifest seeding, apply_manifest)."""
         self._prices = dict(prices or {})
 
+    def set_price(self, model: str, rate: Rate) -> None:
+        """Set ONE model's rate without replacing the table (DIS-8: a promoted
+        distill adapter is priced in the same act as its promotion; the manifest
+        re-seeds the full table on the next apply)."""
+        self._prices[model] = rate
+
     @property
     def has_prices(self) -> bool:
         """True when a per-model price table is configured (else pure tier fallback)."""
