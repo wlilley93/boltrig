@@ -31,18 +31,32 @@ async def register_gate(
     call: SidecarCall, digest: str, incumbent: str, candidate: str
 ) -> GateVerdict | AdapterError:
     scores: dict[str, float] = {}
+    diversity: dict[str, float] = {}
     for name in (incumbent, candidate):
         ll = await call("POST", "/loglik", {"corpus_digest": digest, "model": name})
         if isinstance(ll, AdapterError):
             return ll
+        # The entropy guard is deliberately STRICT: a sidecar that cannot
+        # measure diversity fails the gate rather than silently waiving DIS-9
+        # (both halves ship together, so skew here is a deployment error).
+        dv = await call("POST", "/diversity", {"corpus_digest": digest, "model": name})
+        if isinstance(dv, AdapterError):
+            return dv
         try:
             scores[name] = float(ll["mean_loglik"])
+            diversity[name] = float(dv["distinct_2"])
         except (KeyError, TypeError, ValueError):
             return AdapterError(
-                ErrorClass.INVALID, "sidecar returned no mean_loglik",
+                ErrorClass.INVALID,
+                "sidecar returned no mean_loglik/distinct_2",
                 retryable=False,
             )
-    return register_verdict(scores[incumbent], scores[candidate])
+    return register_verdict(
+        scores[incumbent],
+        scores[candidate],
+        incumbent_diversity=diversity[incumbent],
+        candidate_diversity=diversity[candidate],
+    )
 
 
 async def craft_gate(

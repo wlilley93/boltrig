@@ -14,6 +14,7 @@ Routes:
     PUT  /corpus/{digest}     store a shipped corpus (header digest must match)
     POST /train               {corpus_digest, adapter_kind, base_pin}
     POST /loglik              {corpus_digest, model}
+    POST /diversity           {corpus_digest, model}  (entropy guard, DIS-9)
 
 Two contract clauses are load-bearing (DIS-4):
   * /train refuses a corpus whose header ``base_pin`` differs from the
@@ -199,7 +200,9 @@ def run_train(body: dict) -> tuple[int, dict]:
     model_repo = base_pin.split("@", 1)[0]
     cmd = [
         MLX_PYTHON, "-m", "mlx_lm", "lora", "--train",
-        "--model", model_repo,          # the BARE base - never a prior adapter
+        # the BARE base - never a prior adapter; mlx's --resume-adapter-file
+        # exists and is deliberately never passed (DIS-4)
+        "--model", model_repo,
         "--data", str(data_dir),
         "--adapter-path", str(adapter_path),
         "--batch-size", str(_BATCH),
@@ -214,15 +217,12 @@ def run_train(body: dict) -> tuple[int, dict]:
     return 200, meta
 
 
-def run_loglik(body: dict) -> tuple[int, dict]:
-    digest = str(body.get("corpus_digest") or "")
-    model = str(body.get("model") or "")
+def _held_out_eval_file(digest: str) -> tuple[Path, int] | tuple[int, dict]:
+    """Materialise the held-out sft rows for a shipped corpus, or an error."""
     try:
         header, records = load_corpus(digest)
     except (ValueError, FileNotFoundError) as exc:
         return 404 if isinstance(exc, FileNotFoundError) else 400, {"error": str(exc)}
-    if not mlx_available():
-        return 503, {"error": "mlx_lm is not installed in BOLTRIG_DISTILL_MLX_PYTHON"}
     held = set(header.get("held_out") or [])
     rows = [r for r in records if r["record_id"] in held and r["kind"] == "sft"]
     if not rows:
@@ -230,24 +230,58 @@ def run_loglik(body: dict) -> tuple[int, dict]:
     eval_file = STATE_DIR / "eval" / f"{digest}.jsonl"
     eval_file.parent.mkdir(parents=True, exist_ok=True)
     _write_rows(eval_file, rows)
-    adapter_path = adapters_dir() / model
+    return eval_file, len(rows)
+
+
+def _model_args(digest: str, model: str) -> list[str]:
+    """Resolve a gate 'model' name: a trained candidate (base + adapter dir)
+    or the incumbent (an explicit repo name, else the corpus's bare base)."""
+    header, _ = load_corpus(digest)
     base_repo = str(header.get("base_pin") or "").split("@", 1)[0]
-    cmd = [MLX_PYTHON, str(Path(__file__).parent / "mlx_score.py"),
-           "--data", str(eval_file)]
+    adapter_path = adapters_dir() / model
     if adapter_path.is_dir():
-        # a trained candidate: score base + that adapter
-        cmd += ["--model", base_repo, "--adapter", str(adapter_path)]
-    else:
-        # the incumbent may be the bare base, or an explicit repo name
-        cmd += ["--model", model if "/" in model else base_repo]
+        return ["--model", base_repo, "--adapter", str(adapter_path)]
+    return ["--model", model if "/" in model else base_repo]
+
+
+def _run_scorer(script: str, digest: str, model: str, extra: list[str]) -> tuple[int, dict]:
+    if not mlx_available():
+        return 503, {"error": "mlx_lm is not installed in BOLTRIG_DISTILL_MLX_PYTHON"}
+    located = _held_out_eval_file(digest)
+    if isinstance(located[0], int):
+        return located  # type: ignore[return-value]
+    eval_file, count = located
+    cmd = [MLX_PYTHON, str(Path(__file__).parent / script),
+           "--data", str(eval_file), *_model_args(digest, model), *extra]
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
         return 500, {"error": "scoring failed", "stderr": proc.stderr[-4000:]}
     try:
-        mean = float(proc.stdout.strip().splitlines()[-1])
+        value = float(proc.stdout.strip().splitlines()[-1])
     except (ValueError, IndexError):
-        return 500, {"error": "scorer returned no mean loglik"}
-    return 200, {"model": model, "mean_loglik": mean, "held_out": len(rows)}
+        return 500, {"error": "scorer returned no value"}
+    return 200, {"model": model, "value": value, "held_out": count}
+
+
+def run_loglik(body: dict) -> tuple[int, dict]:
+    digest = str(body.get("corpus_digest") or "")
+    model = str(body.get("model") or "")
+    code, out = _run_scorer("mlx_score.py", digest, model, [])
+    if code == 200:
+        out = {"model": model, "mean_loglik": out["value"], "held_out": out["held_out"]}
+    return code, out
+
+
+def run_diversity(body: dict) -> tuple[int, dict]:
+    """Distinct-2 over sampled generations for the held-out prompts, seeded
+    from the corpus digest so a gate re-run samples the same generations."""
+    digest = str(body.get("corpus_digest") or "")
+    model = str(body.get("model") or "")
+    seed = int(digest[:8], 16) if _DIGEST_RE.match(digest) else 0
+    code, out = _run_scorer("mlx_diversity.py", digest, model, ["--seed", str(seed)])
+    if code == 200:
+        out = {"model": model, "distinct_2": out["value"], "held_out": out["held_out"]}
+    return code, out
 
 
 def _write_rows(path: Path, rows: list[dict]) -> None:
@@ -300,6 +334,8 @@ class Handler(BaseHTTPRequestHandler):
             self._reply(*run_train(body))
         elif self.path == "/loglik":
             self._reply(*run_loglik(body))
+        elif self.path == "/diversity":
+            self._reply(*run_diversity(body))
         else:
             self._reply(404, {"error": "not found"})
 

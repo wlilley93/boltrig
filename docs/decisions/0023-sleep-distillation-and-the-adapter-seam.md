@@ -59,17 +59,25 @@ your own output is the collapse recipe):
   histogram + dedup count, so a night trained mostly on merely-clean
   synthetic turns is visible in its receipt, not discovered in behaviour.
 
-## Next lanes (deliberately not in this cut)
+## Next lanes (status at 2026-08-09, third pass)
 
-- **System-prompt-learning lane**: distill the day into bounded addon
-  harness-text edits BEFORE weights - reversible, attested, cheaper; weights
-  then consolidate only what survives in the notes. (Karpathy's "system
-  prompt learning" direction.)
-- **DPO over pref pairs**: the regenerate signal is genuine human preference
-  data; the sidecar currently trains the CHOSEN side only and says so.
-- **A diversity metric in the gate**: distinct-n / self-BLEU of candidate
-  generations vs base, so entropy loss blocks promotion mechanically rather
-  than being noticed by a human reading tone.
+- **A diversity metric in the gate** - IMPLEMENTED (DIS-9): the register gate
+  measures distinct-2 over seeded sampled generations for candidate and
+  incumbent (`/diversity`, `mlx_diversity.py`); a candidate under 0.8x the
+  incumbent's diversity is held with `entropy_collapse` regardless of
+  likelihood, and both measurements ride on the gate receipt. First live
+  measurement caught real collapse: the toy template-corpus adapter scored
+  0.625 vs base 0.9375 (ratio 0.67) and would be held - correctly.
+- **System-prompt-learning lane** - proposal written
+  (`docs/proposals/notes-before-weights.md`). Not implemented here: the notes'
+  natural container is the addon harness, which is compiled into the ATTESTED
+  birth profile - a nightly self-edit changes what the attestation claims and
+  needs its own ruling.
+- **DPO over pref pairs** - checked and blocked on the toolchain: mlx-lm
+  0.31.3 has no preference loss (no `--train-type`; `tuner.losses` carries
+  only kl/js distillation losses). Wiring it means adopting the third-party
+  `mlx-lm-lora` trainer - a new dependency, surfaced here rather than added
+  silently. The pref data is already collected and shipped in every corpus.
 
 ## Context
 

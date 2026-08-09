@@ -658,6 +658,7 @@ ORDINARY	NO-SUBJECT	docstring	boltrig/config/spawn_rules.py:255		Choose the uniq
 ORDINARY	NO-SUBJECT	docstring	boltrig/config/spawn_rules.py:34		A request cannot be resolved to one deterministic rule.
 ORDINARY	NO-SUBJECT	comment	boltrig/distill/adapter.py:236		the sidecar refuses a corpus whose header pin differs.
 ORDINARY	NO-SUBJECT	comment	boltrig/distill/adapter.py:237		never resume from a prior adapter because no request field exists to
+ORDINARY	NO-SUBJECT	comment	boltrig/distill/adapter_gates.py:39		The entropy guard is deliberately STRICT: a sidecar that cannot
 ORDINARY	NO-SUBJECT	comment	boltrig/distill/bootstrap.py:45		off, never toward a guessable default (the emotion-addon posture).
 ORDINARY	NO-SUBJECT	docstring	boltrig/distill/corpus.py:116		Deterministic ~10% split, pinned by record id (no randomness: the same corpus always splits the same way, so the digest also pins the split).
 ORDINARY	NO-SUBJECT	docstring	boltrig/distill/corpus_io.py:1		JSONL serialisation for a derived distillation corpus (decision 0023).

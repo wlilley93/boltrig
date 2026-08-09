@@ -45,10 +45,17 @@ def _ctx(grants: list[str] | None = None, run_id: str = "run-1") -> InvocationCo
 class _Sidecar:
     """Scripted sidecar: records every request, answers by route."""
 
-    def __init__(self, *, base_pin: str = PIN, logliks: dict[str, float] | None = None):
+    def __init__(
+        self,
+        *,
+        base_pin: str = PIN,
+        logliks: dict[str, float] | None = None,
+        diversities: dict[str, float] | None = None,
+    ):
         self.requests: list[tuple[str, str, dict]] = []
         self.base_pin = base_pin
         self.logliks = logliks or {}
+        self.diversities = diversities or {}
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content.decode() or "{}")
@@ -60,6 +67,10 @@ class _Sidecar:
         if request.url.path == "/loglik":
             return httpx.Response(
                 200, json={"mean_loglik": self.logliks.get(body.get("model"), -2.0)}
+            )
+        if request.url.path == "/diversity":
+            return httpx.Response(
+                200, json={"distinct_2": self.diversities.get(body.get("model"), 0.5)}
             )
         return httpx.Response(200, json={"ok": True})
 
@@ -475,3 +486,42 @@ async def test_craft_gate_without_serve_url_refuses_typed():
     )
     assert not result.ok
     assert "serve_url" in result.error.message
+
+
+@pytest.mark.invariant("DIS-9")
+def test_register_verdict_holds_on_entropy_collapse_despite_better_likelihood():
+    """A likelihood win bought by collapsing onto a template is a hold: the
+    candidate fits the accepted turns better AND generates with less than the
+    diversity floor of the incumbent's distinct-2."""
+    verdict = register_verdict(
+        -3.0, -1.0, incumbent_diversity=0.60, candidate_diversity=0.40
+    )
+    assert verdict.promote is False
+    assert verdict.reason == "entropy_collapse"
+    # at the floor exactly (0.8 x 0.60 = 0.48) the candidate survives
+    ok = register_verdict(
+        -3.0, -1.0, incumbent_diversity=0.60, candidate_diversity=0.48
+    )
+    assert ok.promote is True
+
+
+@pytest.mark.invariant("DIS-9")
+async def test_register_gate_fetches_diversity_and_holds_on_collapse():
+    sidecar = _Sidecar(
+        logliks={"incumbent": -2.0, "cand": -1.0},        # candidate fits better...
+        diversities={"incumbent": 0.6, "cand": 0.3},      # ...by collapsing
+    )
+    _, adapter, store = await _kernel_with_adapter(sidecar)
+    result = await adapter.execute(
+        "distill.gate",
+        {"corpus_digest": DIGEST, "adapter_kind": "register",
+         "candidate_model": "cand", "incumbent_model": "incumbent"},
+        None, _ctx(),
+    )
+    assert result.ok
+    assert result.output["promote"] is False
+    assert result.output["reason"] == "entropy_collapse"
+    # the receipt carries both diversity measurements (DIS-7 receipt shape)
+    rows = [e for e in await store.audit_query(T, limit=50) if e.verb == "distill.gate"]
+    assert rows[0].detail["incumbent_diversity"] == 0.6
+    assert rows[0].detail["candidate_diversity"] == 0.3

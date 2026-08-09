@@ -64,6 +64,8 @@ async def register_distill(kernel: Any, tenant_id: str, distill_cfg: Any) -> Non
         base_pin=base_pin,
         base_url=sidecar_url,
         serve_url=serve_url,  # unset => craft gate refuses typed
+        # a 7B nightly train routinely outlives the default HTTP timeout
+        timeout=float(distill_cfg.get("timeout_seconds") or 1800),
     )
     await kernel.register_adapter(tenant_id, adapter)
     log.info("distill subsystem enabled (base_pin=%s)", base_pin)
