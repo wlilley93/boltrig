@@ -5,6 +5,7 @@
 user_message:
   emotions: {connection: 0.18, curiosity: 0.15, anticipation: 0.12, restlessness: -0.08}
   needs: {social: 2.2, stimulation: 1.2}
+  attachment: 0.003
 task_success:
   emotions:
     {satisfaction: 0.28, confidence: 0.18, playfulness: 0.12, frustration: -0.15, focus: -0.1}
@@ -25,6 +26,7 @@ praise:
   emotions:
     {warmth: 0.25, tenderness: 0.18, satisfaction: 0.2, confidence: 0.12, melancholy: -0.1}
   needs: {recognition: 3, social: 1.5}
+  attachment: 0.012
 poke:
   emotions: {frustration: 0.22, defiance: 0.15, restlessness: 0.15, curiosity: 0.08}
   needs: {stimulation: 1.5}
@@ -52,3 +54,11 @@ interrupted:
   emotions: {melancholy: 0.15, frustration: 0.15, restlessness: 0.1, satisfaction: -0.1}
   needs: {}
   tension: 0.4
+
+# A promoted distillation night (decision 0024): the system consolidating the
+# owner's judgments into its own weights is a relational act - quiet pride
+# plus a grain of bond.
+growth:
+  emotions: {satisfaction: 0.3, confidence: 0.2, warmth: 0.1, melancholy: -0.1}
+  needs: {purpose: 3, recognition: 1.5}
+  attachment: 0.01

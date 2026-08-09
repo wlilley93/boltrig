@@ -27,3 +27,10 @@ needs:
   novelty: {default: 5.0, decay_h: 4}
   social: {default: 5.0, decay_h: 6}
   rest: {default: 5.0, decay_h: 24}
+# Attachment (decision 0024): the slow bond. REAL-days half-life, never
+# tempo-scaled - the one state that lives on the human calendar. Lifts raise
+# the resting point of the bonded emotions as attachment builds; at 0 the
+# engine is the 0013 engine verbatim.
+attachment:
+  half_life_days: 30
+  lifts: {connection: 0.3, warmth: 0.25, tenderness: 0.2}

@@ -49,6 +49,7 @@ class Appraisal:
     emotions: Mapping[str, float]
     needs: Mapping[str, float]
     tension: float = 0.0
+    attachment: float = 0.0  # slow-bond delta (0024); most kinds carry none
 
 
 @dataclass(frozen=True)
@@ -66,6 +67,11 @@ class EmotionModel:
     need_decay_h: Mapping[str, float]
     appraisals: Mapping[str, Appraisal] = field(default_factory=dict)
     tempo: float = 60.0
+    # Attachment (0024): REAL-days half-life (never tempo-scaled - the tension
+    # precedent at the opposite end of the clock) and per-emotion baseline
+    # lifts. Empty lifts = the exact 0013 engine.
+    attachment_half_life_days: float = 30.0
+    attachment_lifts: Mapping[str, float] = field(default_factory=dict)
 
 
 class EmotionEngine:
@@ -86,6 +92,7 @@ class EmotionEngine:
         }
         self._mood: dict[str, float] = {"p": 0.55, "a": 0.4, "d": 0.5}
         self._tension = 0.0
+        self._attachment = 0.0  # the slow bond (0024): builds over weeks, one float
         self._last_updated = now
 
     # -- internal helpers ------------------------------------------------------
@@ -113,7 +120,10 @@ class EmotionEngine:
         pleasure = self._mood["p"]
         for name in self._emotions:
             base = self._model.baselines.get(name, 0.0)
-            base_eff = _clamp01(base + (pleasure - 0.5) * 0.16)
+            # Attachment lifts the resting point of the bonded emotions (0024):
+            # a bonded engine rests warmer; with no lift this is 0013 verbatim.
+            lift = self._model.attachment_lifts.get(name, 0.0) * self._attachment
+            base_eff = _clamp01(base + (pleasure - 0.5) * 0.16 + lift)
             hl_s = self._model.half_lives_h.get(name, 1.0) * 3600.0 / tempo
             value = self._emotions[name]
             if hl_s > 0.0:
@@ -131,6 +141,13 @@ class EmotionEngine:
         # Tension decays with a REAL 1.4 s half-life, never tempo-scaled.
         self._tension = _clamp01(self._tension * math.pow(0.5, dt / 1.4))
 
+        # Attachment decays in REAL days, never tempo-scaled (0024): the bond
+        # is the one state that must live on the human calendar, not the
+        # model's accelerated clock.
+        att_hl_s = max(self._model.attachment_half_life_days, 0.0) * 86400.0
+        if att_hl_s > 0.0:
+            self._attachment = _clamp01(self._attachment * math.pow(0.5, dt / att_hl_s))
+
         # Need pressure: starved needs leak into emotions (real-seconds coupling).
         if self._needs.get("stimulation", 10.0) < 2.5:
             self._push_emotion("restlessness", dt * 0.004)
@@ -139,8 +156,11 @@ class EmotionEngine:
         if self._needs.get("rest", 10.0) < 2.0:
             self._push_emotion("focus", -dt * 0.003)
 
-        # Mood integrator: each P/A/D axis eases toward its target with a
-        # 240 s half-life gain k = 1 - 0.5^(dt / 240).
+        self._integrate_mood(dt)
+
+    def _integrate_mood(self, dt: float) -> None:
+        """Each P/A/D axis eases toward its emotion-derived target with a
+        240 s half-life gain k = 1 - 0.5^(dt / 240)."""
         k = 1.0 - math.pow(0.5, dt / 240.0)
         p_target = _clamp01(
             0.5
@@ -192,12 +212,13 @@ class EmotionEngine:
             if name in self._needs:
                 self._needs[name] = _clamp(self._needs[name] + delta * intensity, 0.0, 10.0)
         self._tension = _clamp01(self._tension + appraisal.tension * intensity)
+        self._attachment = _clamp01(self._attachment + appraisal.attachment * intensity)
         return True
 
     # -- projections -----------------------------------------------------------
 
     def phenotype(self, now: float) -> dict[str, float]:
-        """The nine observable scalars (each 0..1), after decaying state to ``now``.
+        """The ten observable scalars (each 0..1), after decaying state to ``now``.
 
         This is the ONLY surface downstream consumers (the orb) read; it is
         derived, never stored, and contains no free text (EMO-2).
@@ -226,6 +247,7 @@ class EmotionEngine:
             "buoyancy": _clamp01(0.5 + 0.3 * d + 0.2 * self._emo("confidence") - 0.35 * fatigue),
             "luminosity": _clamp01(0.35 + 0.4 * p + 0.3 * self._emo("playfulness") - 0.3 * fatigue),
             "tension": _clamp01(self._tension),
+            "attachment": _clamp01(self._attachment),
         }
 
     def snapshot(self, now: float) -> dict[str, object]:
@@ -236,6 +258,7 @@ class EmotionEngine:
             "needs": dict(self._needs),
             "mood": {"p": self._mood["p"], "a": self._mood["a"], "d": self._mood["d"]},
             "tension": self._tension,
+            "attachment": self._attachment,
             "last_updated": now,
         }
 
@@ -266,5 +289,6 @@ class EmotionEngine:
             for axis in ("p", "a", "d"):
                 engine._mood[axis] = _clamp01(_as_float(mood.get(axis), engine._mood[axis]))
         engine._tension = _clamp01(_as_float(snap.get("tension"), 0.0))
+        engine._attachment = _clamp01(_as_float(snap.get("attachment"), 0.0))
         engine.tick(now)
         return engine

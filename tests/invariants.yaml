@@ -2600,3 +2600,9 @@ invariants:
     tests:
       - tests/unit/test_distill_adapter.py::test_register_verdict_holds_on_entropy_collapse_despite_better_likelihood
       - tests/unit/test_distill_adapter.py::test_register_gate_fetches_diversity_and_holds_on_collapse
+  EMO-6:
+    description: 'Attachment is the bounded slow bond (decision 0024): it accumulates ONLY through appraisal deltas, decays in REAL days never tempo-scaled (the bond lives on the human calendar), lifts only the configured expression baselines (connection/warmth/tenderness rest warmer on a bonded engine; a fresh engine is the 0013 engine verbatim), survives the snapshot round trip, and is exposed solely as the tenth phenotype scalar - expression yes, action no.'
+    tests:
+      - tests/emotion/test_engine.py::test_attachment_accumulates_only_from_appraisals_and_lifts_baselines
+      - tests/emotion/test_engine.py::test_attachment_decays_in_real_days_never_tempo_scaled
+      - tests/emotion/test_engine.py::test_attachment_survives_the_snapshot_round_trip

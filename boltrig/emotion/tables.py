@@ -95,6 +95,7 @@ def _parse_appraisals(doc: object) -> dict[str, Appraisal]:
             emotions=_float_map(spec.get("emotions")),
             needs=_float_map(spec.get("needs")),
             tension=_num(spec.get("tension", 0.0)),
+            attachment=_num(spec.get("attachment", 0.0)),
         )
     return out
 
@@ -127,6 +128,16 @@ def _parse_model(doc: object, appraisals: Mapping[str, Appraisal]) -> EmotionMod
         need_decay_h=need_decay_h,
         appraisals=appraisals,
         tempo=_tempo(_num(doc.get("tempo", 60.0))),
+        attachment_half_life_days=_num(
+            (doc.get("attachment") or {}).get("half_life_days", 30.0)
+        )
+        if isinstance(doc.get("attachment"), dict)
+        else 30.0,
+        attachment_lifts=_float_map(
+            (doc.get("attachment") or {}).get("lifts")
+        )
+        if isinstance(doc.get("attachment"), dict)
+        else {},
     )
 
 
