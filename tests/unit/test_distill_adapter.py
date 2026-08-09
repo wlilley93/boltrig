@@ -525,3 +525,19 @@ async def test_register_gate_fetches_diversity_and_holds_on_collapse():
     rows = [e for e in await store.audit_query(T, limit=50) if e.verb == "distill.gate"]
     assert rows[0].detail["incumbent_diversity"] == 0.6
     assert rows[0].detail["candidate_diversity"] == 0.3
+
+
+async def test_gate_schema_refuses_a_traversal_shaped_model_name():
+    """Model names are adapter ids or HF repo paths, never filesystem escapes
+    - the kernel schema refuses them before anything reaches the sidecar
+    (which enforces its own boundary too)."""
+    sidecar = _Sidecar()
+    kernel, _, _ = await _kernel_with_adapter(sidecar)
+    with pytest.raises(SchemaValidationError):
+        await kernel.invoke(
+            "distill", "distill.gate",
+            {"corpus_digest": DIGEST, "adapter_kind": "register",
+             "candidate_model": "../../etc/passwd", "incumbent_model": "base"},
+            _ctx(),
+        )
+    assert sidecar.requests == []

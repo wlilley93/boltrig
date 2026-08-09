@@ -120,6 +120,24 @@ def _held_out(record_id: str) -> bool:
     return int(h[:8], 16) % 100 < _HELD_OUT_PERCENT
 
 
+def _held_out_split(records: list[SftRecord | PrefRecord]) -> tuple[str, ...]:
+    """The register gate's scoring set. The ~10% hash split can select nothing
+    from a small corpus, and a gate with an empty scoring set cannot run - so
+    one record (smallest id, deterministic) is guaranteed whenever any sft
+    record exists."""
+    held = tuple(
+        sorted(
+            r.record_id
+            for r in records
+            if isinstance(r, SftRecord) and _held_out(r.record_id)
+        )
+    )
+    if held:
+        return held
+    sft_ids = sorted(r.record_id for r in records if isinstance(r, SftRecord))
+    return tuple(sft_ids[:1])
+
+
 def _scrub(text: str) -> str | None:
     """Redact PII spans first, then refuse the record if a true secret remains.
 
@@ -238,13 +256,7 @@ async def build_corpus(
             )
 
     records, deduped = dedupe(records)
-    held_out = tuple(
-        sorted(
-            r.record_id
-            for r in records
-            if isinstance(r, SftRecord) and _held_out(r.record_id)
-        )
-    )
+    held_out = _held_out_split(records)
     digest = corpus_digest(records, base_pin, watermark)
     return Corpus(
         tenant_id=tenant_id,
