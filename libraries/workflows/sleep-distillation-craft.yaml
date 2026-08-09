@@ -1,0 +1,44 @@
+# Sleep distillation, craft lane (decision 0023). The NIGHTLY consolidation:
+# one step, one governed verb - distill.night runs build -> ship -> train ->
+# gate inside the adapter, because step outputs cannot thread between workflow
+# steps declaratively (the loop contract binds whole JSON values and never
+# interpolates - boltrig/workflows/loop_contract.py) and the corpus digest
+# only exists once the corpus is built.
+#
+# Promotion is deliberately NOT here: a passing gate leaves a hash-chained
+# receipt, and distill.promote is its own high-consequence, human-approvable
+# act carrying the digest from that receipt (DIS-5).
+#
+# NOTE this file is authoring data, not a boot-time load: nothing scans
+# libraries/workflows/ at startup (docs/architecture/engine-components.md
+# honesty note). Land it with `control.workflow.upsert`, then schedule with
+# `control.workflow.schedule` (e.g. cron "0 3 * * *") AS A REAL USER holding
+# control.workflow.trigger - a schedule created by a service principal
+# persists as needs_action and never runs
+# (boltrig/config/control_workflows.py authority binding).
+#
+# The register lane is the same shape with adapter_kind: register on a weekly
+# cron ("0 4 * * 0") - copy this file, change id/params.
+id: sleep-distillation-craft
+version: 1.0.0
+source: precreated
+intent_tags:
+  - distillation
+  - self-improvement
+  - nightly
+origin_task: null
+definition:
+  name: sleep-distillation-craft
+  version: 1.0.0
+  on:
+    event: distill.nightly
+  steps:
+    - id: night
+      name: nightly-craft-consolidation
+      parents: []
+      action: distill.night
+      params:
+        target_endpoint_id: craft-candidate
+        adapter_kind: craft
+        incumbent_model: craft-incumbent
+        auto_promote: false
