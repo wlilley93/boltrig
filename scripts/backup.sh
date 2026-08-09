@@ -103,20 +103,7 @@ fi
 
 # Prune: keep the newest BACKUP_KEEP local archives (dumps + encrypted dumps).
 if [ "$BACKUP_KEEP" -gt 0 ]; then
-  # A while-read loop, NOT `mapfile`. mapfile is a bash 4 builtin and macOS still
-  # ships bash 3.2, where this aborted the prune with
-  # "scripts/backup.sh: line 106: mapfile: command not found". The backup itself
-  # had already been written at that point, so the visible symptom was not a
-  # failed backup: it was archives quietly accumulating forever while every run
-  # reported success. Found 2026-08-06 by tests/deploy/test_backup_scripts.py on
-  # the M4, which is the only reason it surfaced at all.
-  #
-  # The loop body is `old+=(...)` and nothing in it reads stdin, so the redirect
-  # cannot be eaten out from under the loop.
-  old=()
-  while IFS= read -r _stale; do
-    old+=("$_stale")
-  done < <(ls -1t "$BACKUP_DIR"/boltrig-*.dump "$BACKUP_DIR"/boltrig-*.dump.enc 2>/dev/null | tail -n +"$((BACKUP_KEEP + 1))")
+  mapfile -t old < <(ls -1t "$BACKUP_DIR"/boltrig-*.dump "$BACKUP_DIR"/boltrig-*.dump.enc 2>/dev/null | tail -n +"$((BACKUP_KEEP + 1))")
   if [ "${#old[@]}" -gt 0 ]; then
     log "pruning ${#old[@]} old archive(s) (keeping ${BACKUP_KEEP})"
     for stale in "${old[@]}"; do

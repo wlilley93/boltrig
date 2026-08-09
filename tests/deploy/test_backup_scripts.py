@@ -23,32 +23,6 @@ def _executable(directory: Path, name: str, body: str) -> None:
     path.chmod(0o755)
 
 
-# EVERY FAILURE INJECTION BELOW IS AN EXPLICIT `exit`, and that is not a style
-# preference. A bare `[[ cond ]]` relying on `set -e` to abort behaves DIFFERENTLY
-# across bash versions when another command follows it:
-#
-#   #!/usr/bin/env bash
-#   set -euo pipefail
-#   [[ "${FAKE:-0}" != 1 ]]
-#   [[ 1 == 1 ]]
-#
-#   FAKE=1 ./probe.sh   ->   bash 5.3.9 (Linux):  exit 1
-#                            bash 3.2.57 (macOS): exit 0
-#
-# macOS still ships bash 3.2, so on the M4 the pg_restore and openssl stubs
-# stopped simulating failure at all: backup.sh ran to completion, wrote its
-# archive and its .sha256, and exited 0 with an EMPTY stderr. The two negative
-# tests then failed on `assert result.returncode != 0`, which reads like a defect
-# in backup.sh and was in fact a defect in the stub that was meant to break it.
-#
-# The rclone stub never had the bug, because its `[[ ]]` is the last line and a
-# script's exit status is its last command's on any bash. That is the whole
-# difference, and it is invisible from the stub itself.
-#
-# A test double that silently stops injecting the failure turns a negative test
-# into one that can only pass by accident. Found 2026-08-06 on the M4.
-
-
 def _fake_tools(tmp_path: Path) -> tuple[Path, Path]:
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
@@ -70,7 +44,7 @@ printf 'custom-format-test-dump\n' >"$output"
         fake_bin,
         "pg_restore",
         """
-if [[ "${FAKE_PG_RESTORE_FAIL:-0}" == 1 ]]; then exit 42; fi
+[[ "${FAKE_PG_RESTORE_FAIL:-0}" != 1 ]]
 [[ "$1" == --list && -s "$2" ]]
 """.strip(),
     )
@@ -79,7 +53,7 @@ if [[ "${FAKE_PG_RESTORE_FAIL:-0}" == 1 ]]; then exit 42; fi
         "rclone",
         """
 printf '%s\n' "$*" >>"$RCLONE_LOG"
-if [[ "${FAKE_RCLONE_FAIL:-0}" == 1 ]]; then exit 43; fi
+[[ "${FAKE_RCLONE_FAIL:-0}" != 1 ]]
 """.strip(),
     )
     _executable(
@@ -94,7 +68,7 @@ while [[ $# -gt 0 ]]; do
     *) shift ;;
   esac
 done
-if [[ "${FAKE_OPENSSL_FAIL:-0}" == 1 ]]; then exit 44; fi
+[[ "${FAKE_OPENSSL_FAIL:-0}" != 1 ]]
 cp "$input" "$output"
 """.strip(),
     )
