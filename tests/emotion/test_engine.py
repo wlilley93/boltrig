@@ -271,3 +271,95 @@ def test_appraisal_table_is_data_and_mutating_it_changes_behavior() -> None:
     changed = EmotionEngine(mutated, _T0)
     assert changed.appraise("task_success", 1.0, _T0) is True
     assert _emotions(changed, _T0)["satisfaction"] == pytest.approx(sat0 - 0.2)
+
+
+# --- attachment: the slow bond (decision 0024, EMO-6) -------------------------
+
+def _bonding_model(tempo: float = 60.0) -> EmotionModel:
+    appraisals = dict(_APPRAISALS)
+    appraisals["praise"] = dataclasses.replace(
+        _APPRAISALS.get("praise", Appraisal(emotions={}, needs={})),
+        attachment=0.012,
+    )
+    appraisals["user_message"] = dataclasses.replace(
+        _APPRAISALS["user_message"], attachment=0.003
+    )
+    return dataclasses.replace(
+        _model(tempo),
+        appraisals=appraisals,
+        attachment_half_life_days=30.0,
+        attachment_lifts={"connection": 0.3, "warmth": 0.25, "tenderness": 0.2},
+    )
+
+
+@pytest.mark.invariant("EMO-6")
+def test_attachment_accumulates_only_from_appraisals_and_lifts_baselines() -> None:
+    bonded = EmotionEngine(_bonding_model(), _T0)
+    stranger = EmotionEngine(_bonding_model(), _T0)
+    now = _T0
+    for _ in range(300):  # hundreds of warm interactions build the bond
+        now += 60.0
+        bonded.appraise("user_message", 1.0, now)
+        bonded.appraise("praise", 0.5, now)
+        stranger.tick(now)
+    att = bonded.phenotype(now)["attachment"]
+    assert att > 0.5
+    assert stranger.phenotype(now)["attachment"] == 0.0
+    # after hours of silence the bonded engine RESTS warmer: the lift moves
+    # the baseline the emotions decay toward, not the momentary spike
+    later = now + 6 * 3600.0
+    bonded.tick(later)
+    stranger.tick(later)
+    bonded_rest = _emotions(bonded, later)
+    stranger_rest = _emotions(stranger, later)
+    for name in ("connection", "warmth", "tenderness"):
+        assert bonded_rest[name] > stranger_rest[name] + 0.02
+    # ...and the lift never touches un-bonded emotions
+    assert abs(bonded_rest["focus"] - stranger_rest["focus"]) < 0.05
+
+
+@pytest.mark.invariant("EMO-6")
+def test_attachment_decays_in_real_days_never_tempo_scaled() -> None:
+    fast = EmotionEngine(_bonding_model(tempo=60.0), _T0)
+    slow = EmotionEngine(_bonding_model(tempo=1.0), _T0)
+    for engine in (fast, slow):
+        for i in range(100):
+            engine.appraise("praise", 1.0, _T0 + i)
+    a0 = fast.phenotype(_T0 + 100.0)["attachment"]
+    # 30 real days elapse: about half the bond remains, at EITHER tempo -
+    # the bond lives on the human calendar, not the model's clock
+    later = _T0 + 100.0 + 30 * 86400.0
+    for engine in (fast, slow):
+        remaining = engine.phenotype(later)["attachment"]
+        assert 0.4 * a0 < remaining < 0.6 * a0
+
+
+@pytest.mark.invariant("EMO-6")
+def test_attachment_survives_the_snapshot_round_trip() -> None:
+    engine = EmotionEngine(_bonding_model(), _T0)
+    for i in range(50):
+        engine.appraise("praise", 1.0, _T0 + i)
+    snap = engine.snapshot(_T0 + 60.0)
+    assert isinstance(snap["attachment"], float)
+    restored = EmotionEngine.restore(_bonding_model(), snap, _T0 + 120.0)
+    assert restored.phenotype(_T0 + 120.0)["attachment"] == pytest.approx(
+        engine.phenotype(_T0 + 120.0)["attachment"], abs=1e-9
+    )
+
+
+def test_attachment_zero_is_the_0013_engine_verbatim() -> None:
+    """With no bond, dynamics are IDENTICAL to the pre-0024 engine: the lift
+    is multiplicative in attachment, so a fresh engine is unchanged."""
+    plain = EmotionEngine(_model(), _T0)
+    lifted = EmotionEngine(
+        dataclasses.replace(
+            _model(), attachment_lifts={"connection": 0.3, "warmth": 0.25}
+        ),
+        _T0,
+    )
+    now = _T0
+    for _ in range(20):
+        now += 30.0
+        plain.appraise("task_success", 0.8, now)
+        lifted.appraise("task_success", 0.8, now)
+    assert plain.snapshot(now) == lifted.snapshot(now)

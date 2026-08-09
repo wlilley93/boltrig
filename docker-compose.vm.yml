@@ -1,0 +1,107 @@
+# Overlay for running the stack inside the OrbStack Linux machine `boltrig-vm`
+# on the M4 (not used on the beelink, not used by the Mac's own Docker engine).
+#
+# WHY THIS FILE EXISTS
+# The kernel proves at boot that it can enforce the codex cell wall, and that
+# proof shells out to bubblewrap. bwrap needs to create a nested user namespace,
+# and inside a container on this Mac that is refused by the default seccomp
+# profile - the kernel then refuses to start rather than run an unproven sandbox
+# (codex_sandbox_engagement._assert_sandboxed_read_works).
+#
+# Measured on this host, rather than assumed:
+#   OrbStack's own Docker engine : ONLY --privileged unblocks bwrap.
+#                                  seccomp=unconfined, apparmor=unconfined and
+#                                  cap_add SYS_ADMIN were each still refused.
+#   Docker inside this Linux VM  : seccomp=unconfined is ENOUGH.
+#
+# So the stack runs in the VM specifically to avoid needing --privileged. What is
+# relaxed here is syscall filtering and nothing else: read_only, cap_drop ALL,
+# no-new-privileges, pids_limit and mem_limit all still apply, and the per-cell
+# uid separation the kernel sets up is untouched. Full privileged would have
+# dropped all of those at once.
+#
+# The beelink needs none of this - its Docker permits the nested userns under the
+# default profile - which is why this lives in a separate overlay rather than in
+# docker-compose.yml.
+# security_opt is APPENDED to the anchor's list by compose, not replaced, so only
+# the added entry belongs here - repeating no-new-privileges makes compose reject
+# the file for duplicate items.
+# IPv6 on the app networks. Not cosmetic, and not about wanting IPv6:
+# resolve_and_vet() pins the connection to ips[0] of the audited resolution, and
+# for a dual-stack host getaddrinfo returns the AAAA first often enough that the
+# adapter then pins an address a v4-only container cannot route. The symptom is
+# an intermittent "transport error: ConnectError" that looks like the remote API
+# flapping - measured here against api.x.ai and api.fish.audio, which alternated
+# between v4 and v6 across successive calls. This affects EVERY outbound adapter
+# (ms-graph, xai-voice, fish-audio), not just voice.
+#
+# Giving the containers a working v6 path makes either pin routable, which is
+# the fix that does not touch the security-sensitive pinning logic. The daemon's
+# own "ipv6": true only covers the default bridge, so each user-defined network
+# has to opt in as well.
+networks:
+  default:
+    enable_ipv6: true
+  sandbox:
+    enable_ipv6: true
+
+volumes:
+  # Keeps hatchet-lite's generated keyset across container recreates - see the
+  # hatchet-engine service note below for why this is not optional here.
+  hatchet_config:
+
+services:
+  # hatchet-lite GENERATES its encryption keys into /config on first boot and
+  # /config is not a volume in the base compose, so every recreate of this
+  # container mints a new keyset and instantly invalidates whatever
+  # HATCHET_CLIENT_TOKEN the worker and kernel hold. Observed twice on this box:
+  # the worker crash-loops on "invalid auth token" and the kernel's /readyz goes
+  # not_ready with hatchet probe_failed, both simply because the container was
+  # recreated (a network change was enough).
+  #
+  # Persisting /config makes the keyset outlive the container, so a token stays
+  # valid across recreates and this stops being a recurring manual remint.
+  hatchet-engine:
+    volumes:
+      - hatchet_config:/config
+
+  kernel:
+    security_opt:
+      - seccomp:unconfined
+    # The emotion add-on with attachment (decisions 0013 + 0024). Enablement is
+    # environmental (no orbctl exists in a container, so the desktop heuristic
+    # would leave it off) and both paths are bind-mounted to the MAC so:
+    #   - the engine RESUMES the affective state written by boltrig's
+    #     native-era life on this machine (~/.local/state/boltrig held an
+    #     emotion-state.json from before the 2026-08-05 VM migration - the
+    #     bond's history survives the move);
+    #   - the phenotype lands where the desktop orb can read it when it
+    #     returns. A missing/ignored consumer costs nothing (P9); the relay is
+    #     a side-channel and dispatch is identical with it on or off (EMO-1).
+    environment:
+      BOLTRIG_EMOTION: "1"
+      XDG_RUNTIME_DIR: /run/boltrig-emotion
+      XDG_STATE_HOME: /var/lib/boltrig/xdg-state
+    volumes:
+      - /Users/williamlilley/.local/state/boltrig-runtime:/run/boltrig-emotion
+      # ONLY the boltrig state dir, not all of ~/.local/state: the relay
+      # resolves $XDG_STATE_HOME/boltrig/emotion-state.json.
+      - /Users/williamlilley/.local/state/boltrig:/var/lib/boltrig/xdg-state/boltrig
+
+  fleet-worker:
+    security_opt:
+      - seccomp:unconfined
+    # The worker runs the SAME codex trust gate as the kernel and probes
+    # BOLTRIG_CODEX_STACK_ROOT (/var/lib/boltrig/codex-cells), but only the
+    # kernel service declares that path - the worker inherits just `tmpfs:
+    # [/tmp]` from *app-hardening, and its rootfs is read_only, so it cannot
+    # create it and dies with "probe_root ... is not a directory".
+    #
+    # The beelink does not hit this: its running worker container predates the
+    # gate (its image is older than current main), so this is a latent problem
+    # in docker-compose.yml rather than something specific to the VM. Given here
+    # to keep the M4 on current main; the proper fix belongs upstream next to the
+    # kernel's own tmpfs block.
+    tmpfs:
+      - /tmp
+      - /var/lib/boltrig/codex-cells:mode=0711,uid=10001,gid=10001,noexec,nosuid,nodev

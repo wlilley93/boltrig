@@ -40,6 +40,7 @@ _KERNEL_DIR = _REPO / "boltrig" / "kernel"
 _PHENOTYPE_KEYS = {
     "fatigue", "valence", "arousal", "irritation", "attention", "social",
     "buoyancy", "luminosity", "tension",
+    "attachment",  # the slow bond (decision 0024) - the tenth scalar
 }
 
 

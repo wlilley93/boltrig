@@ -323,7 +323,7 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/distill/adapter.py:1	boltrig.dist
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/distill/corpus.py:1	kernel.pii.redact	Sleep-distillation corpus builder (decision 0023, DIS-1..3).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/distill/corpus.py:141	redact	Redact PII spans first, then refuse the record if a true secret remains.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/distill/corpus_identity.py:1	record_id	Corpus identity: content fingerprints, exact dedup, and the digest.
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/emotion/engine.py:71	appraise	Deterministic emotion state advanced only by explicit timestamps (EMO-3).
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/emotion/engine.py:77	appraise	Deterministic emotion state advanced only by explicit timestamps (EMO-3).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/emotion/relay.py:1	_react	Emotion relay: the affective side-channel tapped off the kernel's event stream.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/emotion/tables.py:32	appraise	One relay-event matching rule; the first matching rule wins.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/fleet/anchor.py:1	boltrig.kernel.security_events.AuditAnchorer	Periodic audit-rollup anchoring ([2026] VJS-COUNTY 9, D4).
@@ -664,7 +664,9 @@ ORDINARY	NO-SUBJECT	comment	boltrig/distill/bootstrap.py:45		off, never toward a
 ORDINARY	NO-SUBJECT	docstring	boltrig/distill/corpus.py:116		Deterministic ~10% split, pinned by record id (no randomness: the same corpus always splits the same way, so the digest also pins the split).
 ORDINARY	NO-SUBJECT	docstring	boltrig/distill/corpus.py:123		The register gate's scoring set.
 ORDINARY	NO-SUBJECT	docstring	boltrig/distill/corpus_io.py:1		JSONL serialisation for a derived distillation corpus (decision 0023).
-ORDINARY	NO-SUBJECT	comment	boltrig/emotion/engine.py:131		Tension decays with a REAL 1.4 s half-life, never tempo-scaled.
+ORDINARY	NO-SUBJECT	comment	boltrig/emotion/engine.py:141		Tension decays with a REAL 1.4 s half-life, never tempo-scaled.
+ORDINARY	NO-SUBJECT	comment	boltrig/emotion/engine.py:144		Attachment decays in REAL days, never tempo-scaled (0024): the bond
+ORDINARY	NO-SUBJECT	comment	boltrig/emotion/engine.py:70		Attachment (0024): REAL-days half-life (never tempo-scaled - the tension
 ORDINARY	NO-SUBJECT	comment	boltrig/emotion/relay.py:263		--- publisher thread (the ONLY place that touches the filesystem after init) ---
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/anchor.py:187		needs no clause here and must not get one: _record iterates the same
 ORDINARY	NO-SUBJECT	comment	boltrig/fleet/anchor.py:190		description of a janitor that cannot see the fleet.
@@ -1276,8 +1278,8 @@ ORDINARY	NO-SUBJECT	comment	boltrig/workflows/library.py:200		itself guarantees 
 ORDINARY	NO-SUBJECT	comment	boltrig/workflows/scheduler_loop.py:113		never change the outcome, and a failed write must not stall the loop.
 ORDINARY	NO-SUBJECT	comment	boltrig/workflows/scheduler_loop.py:94		due rows cannot make its own inaction look like there was nothing due.
 ORDINARY	NO-SUBJECT	compose	docker-compose.vm.yml:32		adapter then pins an address a v4-only container cannot route.
-ORDINARY	NO-SUBJECT	compose	docker-compose.vm.yml:78		[/tmp]` from *app-hardening, and its rootfs is read_only, so it cannot
 ORDINARY	NO-SUBJECT	compose	docker-compose.vm.yml:8		profile - the kernel then refuses to start rather than run an unproven sandbox
+ORDINARY	NO-SUBJECT	compose	docker-compose.vm.yml:97		[/tmp]` from *app-hardening, and its rootfs is read_only, so it cannot
 ORDINARY	NO-SUBJECT	compose	docker-compose.yml:112		survived intact.
 ORDINARY	NO-SUBJECT	compose	docker-compose.yml:113		to the API, or sideways to a sibling, and cannot exec a setuid binary
 ORDINARY	NO-SUBJECT	compose	docker-compose.yml:133		cell reaches a KNOWN slot path but cannot enumerate the set, and each slot is
@@ -1309,7 +1311,7 @@ ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/api/logging_config.py:48	force	Insta
 ORDINARY	SUBJECT-EXTERNAL	comment	boltrig/config/manifest.py:178	APPROVAL_TIMEOUT_SECONDS_FLOOR	``APPROVAL_TIMEOUT_SECONDS_FLOOR`` and cannot resolve differently.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/config/spawn_rules.py:337	capability	Resolve one policy snapshot into effective skills/routing.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/emotion/tables.py:1	model.yaml	Load the emotion tables from ``libraries/emotion`` into engine dataclasses (EMO-5).
-ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/emotion/tables.py:161	None	Load and validate the three emotion YAML tables, or ``None`` on ANY failure.
+ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/emotion/tables.py:172	None	Load and validate the three emotion YAML tables, or ``None`` on ANY failure.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/anchor.py:68	DEFAULT_INTERVAL_SECONDS	The configured sweep interval (seconds), or :data:`DEFAULT_INTERVAL_SECONDS`.
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/chat.py:384	cancelled	End a live chat turn's SSE stream cleanly on a server-side cancel ([2026] VJS-COUNTY 6, D5).
 ORDINARY	SUBJECT-EXTERNAL	docstring	boltrig/fleet/codex_trusted_wall.py:49	BOLTRIG_CODEX_TRUSTED	Fail closed unless a lawful trusted-Codex posture holds (see module docstring).
@@ -1398,9 +1400,9 @@ ORDINARY	SUBJECT-REACHED	docstring	boltrig/config/manifest_reconcile.py:88	BulkC
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/config/weak_secrets.py:52	is_weak_secret	True when ``value`` is absent, a known placeholder, or obviously unfilled.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/distill/adapter.py:159	allow_internal	JSON call to the fixed operator-configured sidecar.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/emotion/engine.py:1	now	The pure affective engine: emotions, needs, mood and tension over time (EMO-3).
-ORDINARY	SUBJECT-REACHED	docstring	boltrig/emotion/engine.py:177	now	Apply the ``kind`` appraisal's deltas, scaled by ``intensity``.
-ORDINARY	SUBJECT-REACHED	docstring	boltrig/emotion/engine.py:199	now	The nine observable scalars (each 0..1), after decaying state to ``now``.
-ORDINARY	SUBJECT-REACHED	docstring	boltrig/emotion/engine.py:243	tick	Rebuild an engine from a :meth:`snapshot` mapping, tolerantly.
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/emotion/engine.py:197	now	Apply the ``kind`` appraisal's deltas, scaled by ``intensity``.
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/emotion/engine.py:220	now	The ten observable scalars (each 0..1), after decaying state to ``now``.
+ORDINARY	SUBJECT-REACHED	docstring	boltrig/emotion/engine.py:266	tick	Rebuild an engine from a :meth:`snapshot` mapping, tolerantly.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/__init__.py:1	kernel.set_agent_invoker	The Boltrig agent fleet (Epic FLT).
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/application/assignment_admission.py:58	GrantLeaseBinding.from_execution_assignment	The sole atomic, total path from trusted facts to an attested assignment.
 ORDINARY	SUBJECT-REACHED	docstring	boltrig/fleet/chat.py:284	store.mark_message_superseded	Regenerate the last assistant reply (append-plus-supersede, [2026] VJS-COUNTY 4).
