@@ -36,6 +36,7 @@ import os
 import re
 import subprocess
 import sys
+import threading
 import time
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -130,7 +131,7 @@ def _replay_weight(record: dict, now: float) -> int:
             age = now - datetime.fromisoformat(created).timestamp()
             if 0 <= age <= _RECENT_SECONDS:
                 weight *= _RECENT_FACTOR
-        except ValueError:
+        except (TypeError, ValueError):
             pass
     return weight
 
@@ -163,7 +164,19 @@ def _chat_rows(
     return rows
 
 
+_TRAIN_LOCK = threading.Lock()  # one train at a time: shared data dirs + one GPU
+
+
 def run_train(body: dict) -> tuple[int, dict]:
+    if not _TRAIN_LOCK.acquire(blocking=False):
+        return 409, {"error": "a training run is already in progress"}
+    try:
+        return _run_train_locked(body)
+    finally:
+        _TRAIN_LOCK.release()
+
+
+def _run_train_locked(body: dict) -> tuple[int, dict]:
     digest = str(body.get("corpus_digest") or "")
     kind = str(body.get("adapter_kind") or "")
     base_pin = str(body.get("base_pin") or "")
@@ -233,13 +246,22 @@ def _held_out_eval_file(digest: str) -> tuple[Path, int] | tuple[int, dict]:
     return eval_file, len(rows)
 
 
+_MODEL_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._@/-]*$")
+
+
 def _model_args(digest: str, model: str) -> list[str]:
     """Resolve a gate 'model' name: a trained candidate (base + adapter dir)
-    or the incumbent (an explicit repo name, else the corpus's bare base)."""
+    or the incumbent (an explicit repo name, else the corpus's bare base).
+
+    The adapter-dir lookup is confined to adapters_dir(): a crafted name must
+    not escape it (defence in depth - the kernel schemas also constrain the
+    charset, but this server enforces its own boundary)."""
+    if not _MODEL_NAME_RE.match(model) or ".." in model:
+        raise ValueError(f"refused model name {model!r}")
     header, _ = load_corpus(digest)
     base_repo = str(header.get("base_pin") or "").split("@", 1)[0]
-    adapter_path = adapters_dir() / model
-    if adapter_path.is_dir():
+    adapter_path = (adapters_dir() / model).resolve()
+    if adapter_path.is_relative_to(adapters_dir().resolve()) and adapter_path.is_dir():
         return ["--model", base_repo, "--adapter", str(adapter_path)]
     return ["--model", model if "/" in model else base_repo]
 
@@ -251,8 +273,12 @@ def _run_scorer(script: str, digest: str, model: str, extra: list[str]) -> tuple
     if isinstance(located[0], int):
         return located  # type: ignore[return-value]
     eval_file, count = located
+    try:
+        model_args = _model_args(digest, model)
+    except ValueError as exc:
+        return 400, {"error": str(exc)}
     cmd = [MLX_PYTHON, str(Path(__file__).parent / script),
-           "--data", str(eval_file), *_model_args(digest, model), *extra]
+           "--data", str(eval_file), *model_args, *extra]
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
         return 500, {"error": "scoring failed", "stderr": proc.stderr[-4000:]}

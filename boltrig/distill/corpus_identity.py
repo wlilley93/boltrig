@@ -31,21 +31,32 @@ def record_fingerprint(r: Any) -> str:
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
+# Signal quality for duplicate resolution, best first. Mirrors the trainer's
+# replay weights: when identical turns carry different signals, the surviving
+# record must be the one whose signal earns the most replay - keeping a
+# clean_run copy while discarding its hitl_approved twin would silently
+# discard the human anchor.
+_SIGNAL_RANK = {"hitl_approved": 0, "superseded": 1, "eval_pass": 2, "clean_run": 3}
+
+
 def dedupe(records: list[Any]) -> tuple[list[Any], int]:
-    """Collapse exact (prompt, text) duplicates, keeping the first.
+    """Collapse exact (prompt, text) duplicates, keeping the BEST-signal copy
+    (first occurrence position, so order stays stable).
 
     Templated flows repeat near-identical turns by the hundred; training on
     the flood over-weights the template and squeezes output entropy - the
     silent-collapse failure mode. Exact dedup is the cheap first defence;
     signal-weighted replay at the trainer is the second."""
-    seen: set[str] = set()
-    kept: list[Any] = []
-    for r in records:
+    best: dict[str, tuple[int, Any]] = {}  # content key -> (position, record)
+    order: list[str] = []
+    for position, r in enumerate(records):
         key = json.dumps([[list(p) for p in r.prompt], _text(r)], sort_keys=True)
-        if key in seen:
-            continue
-        seen.add(key)
-        kept.append(r)
+        if key not in best:
+            best[key] = (position, r)
+            order.append(key)
+        elif _SIGNAL_RANK.get(r.signal, 9) < _SIGNAL_RANK.get(best[key][1].signal, 9):
+            best[key] = (best[key][0], r)  # better signal, original position
+    kept = [best[key][1] for key in order]
     return kept, len(records) - len(kept)
 
 

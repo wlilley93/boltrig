@@ -13,6 +13,10 @@ from typing import Any
 ADAPTER_KINDS = ("craft", "register")
 _DIGEST = {"type": "string", "minLength": 64, "maxLength": 64,
            "pattern": "^[0-9a-f]{64}$"}
+# A model name is an adapter id or an HF-style repo path - never a filesystem
+# escape. The sidecar enforces its own boundary too (defence in depth).
+_MODEL_NAME = {"type": "string", "minLength": 1, "maxLength": 256,
+               "pattern": "^(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._@/-]*$"}
 
 
 def corpus_schema() -> dict[str, Any]:
@@ -45,8 +49,8 @@ def gate_schema() -> dict[str, Any]:
         "properties": {
             "corpus_digest": _DIGEST,
             "adapter_kind": {"type": "string", "enum": list(ADAPTER_KINDS)},
-            "candidate_model": {"type": "string", "minLength": 1, "maxLength": 256},
-            "incumbent_model": {"type": "string", "minLength": 1, "maxLength": 256},
+            "candidate_model": _MODEL_NAME,
+            "incumbent_model": _MODEL_NAME,
         },
         "required": ["corpus_digest", "adapter_kind", "candidate_model",
                      "incumbent_model"],
@@ -62,7 +66,7 @@ def night_schema() -> dict[str, Any]:
         "properties": {
             "target_endpoint_id": {"type": "string", "minLength": 1, "maxLength": 128},
             "adapter_kind": {"type": "string", "enum": list(ADAPTER_KINDS)},
-            "incumbent_model": {"type": "string", "minLength": 1, "maxLength": 256},
+            "incumbent_model": _MODEL_NAME,
             "auto_promote": {"type": "boolean"},
             "price_micros_per_token": {"type": "number", "minimum": 0, "maximum": 1000},
         },

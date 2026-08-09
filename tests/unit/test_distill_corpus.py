@@ -396,3 +396,57 @@ def test_manifest_carries_the_distill_section(tmp_path):
     )
     manifest = load_manifest(str(path))
     assert manifest.section("distill").get("base_pin") == "base@rev"
+
+
+async def test_dedup_keeps_the_best_signal_copy():
+    """Identical turns with different signals: the surviving record carries
+    the strongest signal (a clean_run twin must never displace hitl_approved,
+    which earns 3x replay at the trainer)."""
+    store = await _seeded_store()
+    # clean_run copy FIRST
+    await store.add_message(_msg("c1", "m1", MessageRole.USER, "same ask"))
+    await store.add_message(
+        _msg("c1", "m2", MessageRole.ASSISTANT, "same answer", run_id="r1")
+    )
+    await _clean_run(store, "r1")
+    # hitl-approved identical twin SECOND, in another conversation
+    await store.create_conversation(Conversation(id="c2", tenant_id=T, user_id="u1"))
+    await store.create_hitl_request(
+        HITLRequest(
+            id="h1", tenant_id=T, run_id="r2", type=HITLType.APPROVAL,
+            urgency=Urgency.BLOCKING, context="", question="ok?",
+        )
+    )
+    await store.answer_hitl(
+        HITLResponse(
+            id="hr1", request_id="h1", tenant_id=T, decision="approve",
+            respondent="u1", responded_at=utcnow(),
+        )
+    )
+    await store.add_message(_msg("c2", "n1", MessageRole.USER, "same ask"))
+    await store.add_message(
+        _msg("c2", "n2", MessageRole.ASSISTANT, "same answer",
+             run_id="r2", hitl_request_id="h1")
+    )
+    corpus = await build_corpus(
+        store, T, base_pin=BASE, target_tenant_id=T, target_data_class="sensitive"
+    )
+    assert len(corpus.records) == 1
+    assert corpus.deduped == 1
+    assert corpus.records[0].signal == "hitl_approved"
+
+
+async def test_small_corpus_always_holds_out_at_least_one_record():
+    """The ~10% hash split can select nothing from a small corpus; the
+    register gate then has an empty scoring set. One record is guaranteed."""
+    store = await _seeded_store()
+    await store.add_message(_msg("c1", "m1", MessageRole.USER, "q"))
+    await store.add_message(
+        _msg("c1", "m2", MessageRole.ASSISTANT, "a", run_id="r1")
+    )
+    await _clean_run(store, "r1")
+    corpus = await build_corpus(
+        store, T, base_pin=BASE, target_tenant_id=T, target_data_class="sensitive"
+    )
+    assert len(corpus.records) == 1
+    assert len(corpus.held_out) == 1  # guaranteed even when the hash says 0

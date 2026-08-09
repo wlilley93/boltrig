@@ -219,7 +219,7 @@ LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/config/author_ratchet.py:40	stay
 LOAD-BEARING	SUBJECT-EXTERNAL	comment	boltrig/config/dev_posture.py:175	actor_tier	D4.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/config/manifest.py:488	cost.py	One entry of the per-model price table, or None to drop it (FR-COST-04).
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/distill/adapter_night.py:1	distill.night	The ``distill.night`` orchestration: one governed verb for one night.
-LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/distill/corpus.py:182	target_tenant_id	Derive the tenant's training corpus from the governed record.
+LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/distill/corpus.py:200	target_tenant_id	Derive the tenant's training corpus from the governed record.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/emotion/__init__.py:1	boltrig.observability.orb_presence	Boltrig's affective side-channel: a read-only emotion projection over run events.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/anchor.py:231	seen	Publish one cycle, and treat an empty tenant list as a fault of its own.
 LOAD-BEARING	SUBJECT-EXTERNAL	docstring	boltrig/fleet/anchor.py:98	sealed	What one sweep actually did, as three numbers the caller can judge.
@@ -321,7 +321,7 @@ LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/config/dev_posture.py:128	Develop
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/config/manifest_reconcile.py:1	plan_capability_reconciliation	Scoped-declarative capability reconciliation for ``apply_manifest``.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/distill/adapter.py:1	boltrig.distill.bootstrap.register_distill	The ``distill`` adapter: sleep distillation as governed verbs (decision 0023).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/distill/corpus.py:1	kernel.pii.redact	Sleep-distillation corpus builder (decision 0023, DIS-1..3).
-LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/distill/corpus.py:123	redact	Redact PII spans first, then refuse the record if a true secret remains.
+LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/distill/corpus.py:141	redact	Redact PII spans first, then refuse the record if a true secret remains.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/distill/corpus_identity.py:1	record_id	Corpus identity: content fingerprints, exact dedup, and the digest.
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/emotion/engine.py:71	appraise	Deterministic emotion state advanced only by explicit timestamps (EMO-3).
 LOAD-BEARING	SUBJECT-REACHED	docstring	boltrig/emotion/relay.py:1	_react	Emotion relay: the affective side-channel tapped off the kernel's event stream.
@@ -659,8 +659,10 @@ ORDINARY	NO-SUBJECT	docstring	boltrig/config/spawn_rules.py:34		A request cannot
 ORDINARY	NO-SUBJECT	comment	boltrig/distill/adapter.py:236		the sidecar refuses a corpus whose header pin differs.
 ORDINARY	NO-SUBJECT	comment	boltrig/distill/adapter.py:237		never resume from a prior adapter because no request field exists to
 ORDINARY	NO-SUBJECT	comment	boltrig/distill/adapter_gates.py:39		The entropy guard is deliberately STRICT: a sidecar that cannot
+ORDINARY	NO-SUBJECT	comment	boltrig/distill/adapter_specs.py:16		A model name is an adapter id or an HF-style repo path - never a filesystem
 ORDINARY	NO-SUBJECT	comment	boltrig/distill/bootstrap.py:45		off, never toward a guessable default (the emotion-addon posture).
 ORDINARY	NO-SUBJECT	docstring	boltrig/distill/corpus.py:116		Deterministic ~10% split, pinned by record id (no randomness: the same corpus always splits the same way, so the digest also pins the split).
+ORDINARY	NO-SUBJECT	docstring	boltrig/distill/corpus.py:123		The register gate's scoring set.
 ORDINARY	NO-SUBJECT	docstring	boltrig/distill/corpus_io.py:1		JSONL serialisation for a derived distillation corpus (decision 0023).
 ORDINARY	NO-SUBJECT	comment	boltrig/emotion/engine.py:131		Tension decays with a REAL 1.4 s half-life, never tempo-scaled.
 ORDINARY	NO-SUBJECT	comment	boltrig/emotion/relay.py:263		--- publisher thread (the ONLY place that touches the filesystem after init) ---
