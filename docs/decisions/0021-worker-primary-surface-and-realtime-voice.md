@@ -98,3 +98,46 @@ acceptance, accessibility, browser/Tauri acceptance, and the absence of an
 OpenWorker Python process are all proven. Until then the deployment continues
 to serve Operator as its default and must describe Worker, device execution,
 connectors, and realtime voice by their actual enabled/certified state.
+
+## Cutover record, 2026-08-06
+
+**Worker is the root route on `dev.boltrig.io` and `app.boltrig.io` as of
+2026-08-06, on the Principal's direction, with the acceptance list above NOT
+proven.** This section exists so the record does not disagree with the running
+site, which it did for the length of a working day.
+
+The paragraph above says the deployment "continues to serve Operator as its
+default" until surface parity, connector certification, device and call
+acceptance, accessibility, and browser/Tauri acceptance are all proven. Five of
+those six remain unproven. The sixth - the absence of an OpenWorker Python
+process - is proven, by
+`tests/security/test_worker_surface_boundary.py`, which asserts it negatively and
+guards itself with a corpus floor so the assertions cannot pass over zero bytes.
+
+What actually shipped, both serving `boltrig-worker-ui:v0.4.31`:
+
+| host | `/` | `/operator/` |
+|---|---|---|
+| `app.boltrig.io` | Worker | Operator |
+| `dev.boltrig.io` | Worker | Operator |
+
+Operator was not removed. `worker-ui` packages both maintained clients, so the
+advanced console moved down a path exactly as this decision specifies.
+
+**The mechanism used was not `deploy/compose.worker-primary.yml`.** That overlay
+switches the *compose-managed* Caddy, and both these hosts front the stack with a
+host Caddy (prod) or a cloudflared tunnel (dev) instead. So `worker-ui` was
+published on a loopback port and the existing front door repointed at it. The
+overlay remains correct for a stack that uses the bundled Caddy, and is untouched.
+
+Reversal is still one line in each case and needs no kernel or tenant state
+change: prod's `boltrig-ui-1` is still running on `127.0.0.1:8620`, and the M4's
+`app.boltrig.ui` launchd agent still exists, merely unloaded.
+
+**The honesty obligation in the section above now binds harder, not less.** With
+Worker at the root, the requirement that the deployment "describe Worker, device
+execution, connectors, and realtime voice by their actual enabled/certified
+state" is the only thing standing between a user and a surface that looks more
+finished than it is. Auditing the five is now follow-up work against a live
+route rather than a precondition, and each should either be closed or its
+unavailability made visible in the UI.
