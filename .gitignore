@@ -63,3 +63,5 @@ docker-compose.override.yml
 backups/
 .secrets/
 deploy/wheelhouse/
+docker-compose.override.*.yml*
+_migration/
