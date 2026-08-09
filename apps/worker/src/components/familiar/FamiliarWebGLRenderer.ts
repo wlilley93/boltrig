@@ -324,8 +324,19 @@ export class FamiliarWebGLRenderer {
     // FamiliarState v2 (8-band voice features) will replace.
     let ax = 0;
     let ay = 0;
-    const { working, speaking, level } = this.state;
-    if (speaking) {
+    let az = 0;
+    let aw = 0;
+    let beat = 0;
+    const { working, speaking, level, bands, onset } = this.state;
+    if (speaking && bands && bands.length === 8) {
+      // Real voice embodiment (A4): lows pressurise the nucleus, mids move the
+      // interior, highs light the surface; onset is the beat channel.
+      ax = level;
+      ay = (bands[0] + bands[1]) / 2;
+      az = (bands[2] + bands[3] + bands[4]) / 3;
+      aw = (bands[5] + bands[6] + bands[7]) / 3;
+      beat = onset ?? 0;
+    } else if (speaking) {
       const amp = 0.35 + 0.55 * (level || 0.5);
       ax = amp * (0.75 + 0.25 * Math.sin(t * 3.1));
       ay = amp * (0.6 + 0.4 * Math.sin(t * 2.2 + 1.3));
@@ -369,8 +380,8 @@ export class FamiliarWebGLRenderer {
 
     f("uGesture", this.gesture.id);
     f("uGestureAmt", this.gesture.amt);
-    gl.uniform4f(u.uAudio ?? null, ax, ay, 0, 0);
-    f("uBeat", 0);
+    gl.uniform4f(u.uAudio ?? null, ax, ay, az, aw);
+    f("uBeat", beat);
     f("uPortWide", 0);
     f("uHover", 0);
 

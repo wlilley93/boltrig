@@ -69,7 +69,12 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
   const [continuity, setContinuity] = useState("");
   const [retryFollow, setRetryFollow] = useState(false);
   const compactTaskDetails = useMediaQuery("(max-width: 1020px)");
-  const [voiceActivity, setVoiceActivity] = useState({ speaking: false, level: 0 });
+  const [voiceActivity, setVoiceActivity] = useState<{
+    speaking: boolean;
+    level: number;
+    bands?: number[];
+    onset?: number;
+  }>({ speaking: false, level: 0 });
   const [phenotype, setPhenotype] = useState<FamiliarPhenotypeResponse | null>(null);
   const [pageHidden, setPageHidden] = useState(
     typeof document !== "undefined" && document.visibilityState === "hidden",
@@ -519,6 +524,8 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
     liveEnded: live.ended,
     voiceSpeaking: voiceActivity.speaking,
     voiceLevel: voiceActivity.level,
+    voiceBands: voiceActivity.bands ?? null,
+    voiceOnset: voiceActivity.onset,
   });
   const stage = <FamiliarStage mode={stageMode} state={stageState} phenotype={phenotype} />;
 

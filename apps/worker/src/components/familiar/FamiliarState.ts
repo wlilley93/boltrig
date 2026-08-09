@@ -16,22 +16,37 @@ export interface FamiliarStageState {
   speaking: boolean;
   /** 0..1 voice/activity level; clamped, non-finite values ignored. */
   level: number;
+  /** Eight 0..1 log-band energies of the outgoing voice; optional. */
+  bands?: number[] | null;
+  /** 0..1 spectral-flux onset of the outgoing voice; optional. */
+  onset?: number;
 }
 
 export const RESTING_STAGE_STATE: FamiliarStageState = {
   working: false,
   speaking: false,
   level: 0,
+  bands: null,
+  onset: 0,
 };
 
 export function clampStageState(next: Partial<FamiliarStageState>): FamiliarStageState {
   const level = typeof next.level === "number" && Number.isFinite(next.level)
     ? Math.min(1, Math.max(0, next.level))
     : 0;
+  const clamp01 = (value: unknown) =>
+    typeof value === "number" && Number.isFinite(value)
+      ? Math.min(1, Math.max(0, value))
+      : 0;
+  const bands = Array.isArray(next.bands) && next.bands.length === 8
+    ? next.bands.map(clamp01)
+    : null;
   return {
     working: next.working === true,
     speaking: next.speaking === true,
     level,
+    bands,
+    onset: clamp01(next.onset),
   };
 }
 
@@ -46,11 +61,15 @@ export function familiarStateFromTurn(input: {
   liveEnded: boolean;
   voiceSpeaking: boolean;
   voiceLevel: number;
+  voiceBands?: number[] | null;
+  voiceOnset?: number;
 }): FamiliarStageState {
   return clampStageState({
     working: input.loading || (input.hasLiveEvents && !input.liveEnded),
     speaking: input.voiceSpeaking,
     level: input.voiceLevel,
+    bands: input.voiceBands ?? null,
+    onset: input.voiceOnset,
   });
 }
 

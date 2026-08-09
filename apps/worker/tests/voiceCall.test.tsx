@@ -88,6 +88,12 @@ class FakeAudioContext {
   createGain = vi.fn(() => Object.assign(new FakeAudioNode(), {
     gain: { value: 1 },
   }));
+  createAnalyser = vi.fn(() => Object.assign(new FakeAudioNode(), {
+    fftSize: 0,
+    smoothingTimeConstant: 0,
+    frequencyBinCount: 512,
+    getByteFrequencyData: vi.fn(),
+  }));
   createBuffer = vi.fn(() => ({
     duration: 1,
     getChannelData: () => new Float32Array(),

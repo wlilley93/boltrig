@@ -14,7 +14,13 @@ import { client } from "../client";
 import { isDesktop } from "../desktop";
 
 interface VoiceCallProps {
-  onFamiliarActivity?(activity: { speaking: boolean; level: number }): void;
+  onFamiliarActivity?(activity: {
+    speaking: boolean;
+    level: number;
+    bands?: number[];
+    centroid?: number;
+    onset?: number;
+  }): void;
   conversationId: string | null;
   modelProfileId?: string;
   onConversation(id: string): void;
@@ -40,11 +46,90 @@ interface MediaResources {
   playbackSources: Set<AudioBufferSourceNode>;
   /** Familiar lift (ADR 0025): fires as assistant playback starts/stops. */
   onPlayback?: (speaking: boolean) => void;
+  /** Voice embodiment (A4): playback routes through this analyser; a ~30Hz
+   * sampler emits bounded spectral features only - PCM never leaves the graph. */
+  analyser?: AnalyserNode;
+  voiceTimer?: number | null;
+  prevSpectrum?: Float32Array | null;
+  onVoiceFeatures?: (features: VoiceFeatures) => void;
   readyTimeout: number | null;
   rejectReady: ((reason: Error) => void) | null;
 }
 
 const VOICE_READY_TIMEOUT_MS = 15_000;
+
+export interface VoiceFeatures {
+  speaking: boolean;
+  level: number;
+  bands: number[];
+  centroid: number;
+  onset: number;
+}
+
+/** Bounded spectral features from the playback analyser: level, eight log
+ * bands, centroid, onset (positive spectral flux). Numbers only, all 0..1. */
+function sampleVoiceFeatures(
+  analyser: AnalyserNode,
+  prev: Float32Array | null,
+): { features: Omit<VoiceFeatures, "speaking">; spectrum: Float32Array } {
+  const bins = analyser.frequencyBinCount;
+  const data = new Uint8Array(bins);
+  analyser.getByteFrequencyData(data);
+  const spectrum = new Float32Array(bins);
+  let total = 0;
+  let weighted = 0;
+  let flux = 0;
+  for (let index = 0; index < bins; index += 1) {
+    const value = (data[index] ?? 0) / 255;
+    spectrum[index] = value;
+    total += value;
+    weighted += value * index;
+    const delta = value - (prev?.[index] ?? 0);
+    if (delta > 0) flux += delta;
+  }
+  const bands: number[] = [];
+  for (let band = 0; band < 8; band += 1) {
+    // Logarithmic bands: each spans an octave of the bin range.
+    const lo = Math.floor(bins * (2 ** band - 1) / 255);
+    const hi = Math.max(lo + 1, Math.floor(bins * (2 ** (band + 1) - 1) / 255));
+    let sum = 0;
+    for (let index = lo; index < hi && index < bins; index += 1) sum += spectrum[index] ?? 0;
+    bands.push(Math.min(1, sum / (hi - lo) * 1.6));
+  }
+  return {
+    features: {
+      level: Math.min(1, (total / bins) * 2.4),
+      bands,
+      centroid: total > 0 ? weighted / total / bins : 0,
+      onset: Math.min(1, flux / 6),
+    },
+    spectrum,
+  };
+}
+
+function stopVoiceSampler(media: MediaResources) {
+  if (media.voiceTimer != null) {
+    window.clearInterval(media.voiceTimer);
+    media.voiceTimer = null;
+  }
+  media.prevSpectrum = null;
+  media.onVoiceFeatures?.({ speaking: false, level: 0, bands: [0, 0, 0, 0, 0, 0, 0, 0], centroid: 0, onset: 0 });
+}
+
+function startVoiceSampler(media: MediaResources) {
+  if (media.voiceTimer != null || !media.analyser) return;
+  media.voiceTimer = window.setInterval(() => {
+    const analyser = media.analyser;
+    if (!analyser) return;
+    if (media.playbackSources.size === 0) {
+      stopVoiceSampler(media);
+      return;
+    }
+    const { features, spectrum } = sampleVoiceFeatures(analyser, media.prevSpectrum ?? null);
+    media.prevSpectrum = spectrum;
+    media.onVoiceFeatures?.({ speaking: true, ...features });
+  }, 33);
+}
 
 class VoiceConnectionError extends Error {
   constructor(
@@ -306,6 +391,16 @@ export function VoiceCall({
           speaking,
           level: speaking ? 0.6 : 0,
         }),
+        analyser: (() => {
+          const analyser = context.createAnalyser();
+          analyser.fftSize = 1024;
+          analyser.smoothingTimeConstant = 0.5;
+          analyser.connect(context.destination);
+          return analyser;
+        })(),
+        voiceTimer: null,
+        prevSpectrum: null,
+        onVoiceFeatures: (features) => onFamiliarActivityRef.current?.(features),
         readyTimeout: null,
         rejectReady: null,
       };
@@ -830,6 +925,12 @@ function closeMedia(
   ref.current = null;
   playAt.current = 0;
   if (!media) return;
+  stopVoiceSampler(media);
+  try {
+    media.analyser?.disconnect();
+  } catch {
+    // context may already be closed
+  }
   media.rejectReady?.(new VoiceConnectionCancelledError());
   media.rejectReady = null;
   if (media.readyTimeout !== null) {
@@ -947,6 +1048,7 @@ function stopQueuedPlayback(
     safeDisconnect(source);
   }
   media.playbackSources.clear();
+  stopVoiceSampler(media);
   media.onPlayback?.(false);
   playAt.current = media.context.currentTime;
 }
@@ -996,9 +1098,10 @@ function playPcm(
   }
   const source = context.createBufferSource();
   source.buffer = buffer;
-  source.connect(context.destination);
+  source.connect(media.analyser ?? context.destination);
   media.playbackSources.add(source);
   media.onPlayback?.(true);
+  startVoiceSampler(media);
   source.onended = () => {
     media.playbackSources.delete(source);
     safeDisconnect(source);

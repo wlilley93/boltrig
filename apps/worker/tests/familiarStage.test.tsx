@@ -75,7 +75,9 @@ describe("FamiliarWebGLRenderer lifecycle", () => {
 
 describe("clampStageState", () => {
   it("bounds and defaults every field", () => {
-    expect(clampStageState({})).toEqual({ working: false, speaking: false, level: 0 });
+    expect(clampStageState({})).toEqual({
+      working: false, speaking: false, level: 0, bands: null, onset: 0,
+    });
     expect(clampStageState({ level: 7, speaking: true }).level).toBe(1);
     expect(clampStageState({ level: -3 }).level).toBe(0);
     expect(clampStageState({ level: Number.NaN }).level).toBe(0);
