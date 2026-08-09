@@ -2595,3 +2595,8 @@ invariants:
     description: 'A promoted adapter is priced in the same act as its promotion: distill.promote installs the per-model rate into the cost accountant, closing the trap where an unpriced local model bills at the cost-tier default (~$5/M) and trips hard-stop budgets early (kernel/cost.py tier fallback).'
     tests:
       - tests/unit/test_distill_adapter.py::test_promotion_prices_the_model_in_the_same_act
+  DIS-9:
+    description: 'The register gate holds on entropy collapse regardless of likelihood: a candidate whose seeded sampled generations carry less than the diversity floor (0.8x) of the incumbent distinct-2 is refused promotion with reason entropy_collapse, and both diversity measurements ride on the hash-chained gate receipt. Likelihood measures fit to the accepted turns; only this guard notices that the fit was bought by collapsing onto a template (decision 0023 second pass; Karpathy/Dwarkesh 2025-10).'
+    tests:
+      - tests/unit/test_distill_adapter.py::test_register_verdict_holds_on_entropy_collapse_despite_better_likelihood
+      - tests/unit/test_distill_adapter.py::test_register_gate_fetches_diversity_and_holds_on_collapse

@@ -23,6 +23,13 @@ from dataclasses import dataclass
 # noise: equality is a hold (the incumbent keeps its seat on a tie).
 _REGISTER_EPSILON = 1e-9
 
+# Entropy guard (DIS-9): a candidate whose sampled generations carry less than
+# this fraction of the incumbent's distinct-n diversity is held regardless of
+# likelihood. Likelihood measures fitting the accepted turns; nothing else in
+# the register gate notices that the fit was bought by collapsing onto a
+# template - the silent-collapse failure mode (Karpathy/Dwarkesh 2025-10).
+_DIVERSITY_FLOOR = 0.8
+
 
 @dataclass(frozen=True)
 class CaseScore:
@@ -38,6 +45,8 @@ class GateVerdict:
     incumbent_score: float
     candidate_score: float
     regressed_cases: tuple[str, ...] = ()
+    incumbent_diversity: float | None = None
+    candidate_diversity: float | None = None
 
 
 def _mean(scores: list[CaseScore]) -> float:
@@ -69,12 +78,34 @@ def craft_verdict(
 
 
 def register_verdict(
-    incumbent_loglik: float, candidate_loglik: float
+    incumbent_loglik: float,
+    candidate_loglik: float,
+    *,
+    incumbent_diversity: float | None = None,
+    candidate_diversity: float | None = None,
 ) -> GateVerdict:
     """Promote iff the candidate finds the held-out accepted turns strictly
-    more likely than the incumbent does. A tie keeps the incumbent."""
+    more likely than the incumbent does, AND its sampled generations keep at
+    least the diversity floor relative to the incumbent (DIS-9). A tie keeps
+    the incumbent; a likelihood win bought by collapse is a hold."""
+    if (
+        incumbent_diversity is not None
+        and candidate_diversity is not None
+        and candidate_diversity < _DIVERSITY_FLOOR * incumbent_diversity
+    ):
+        return GateVerdict(
+            False, "entropy_collapse", incumbent_loglik, candidate_loglik,
+            incumbent_diversity=incumbent_diversity,
+            candidate_diversity=candidate_diversity,
+        )
     if candidate_loglik > incumbent_loglik + _REGISTER_EPSILON:
-        return GateVerdict(True, "promote", incumbent_loglik, candidate_loglik)
+        return GateVerdict(
+            True, "promote", incumbent_loglik, candidate_loglik,
+            incumbent_diversity=incumbent_diversity,
+            candidate_diversity=candidate_diversity,
+        )
     return GateVerdict(
-        False, "held_out_likelihood_not_improved", incumbent_loglik, candidate_loglik
+        False, "held_out_likelihood_not_improved", incumbent_loglik, candidate_loglik,
+        incumbent_diversity=incumbent_diversity,
+        candidate_diversity=candidate_diversity,
     )

@@ -777,7 +777,7 @@ def load_manifest(path: str, *, env: Mapping[str, str] | None = None) -> FleetMa
         extra={k: doc[k] for k in (
             "evaluation", "notifications", "personal_agents", "memory", "knowledge",
             "runtimes", "mcp", "chat", "stack", "mastra", "rivet_agentos",
-            "browser_cli", "langfuse", "reconcile",
+            "browser_cli", "langfuse", "reconcile", "distill",
         ) if k in doc},
     )
 

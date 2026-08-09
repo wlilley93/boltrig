@@ -382,3 +382,17 @@ async def test_records_carry_message_timestamps_for_recency_replay():
     assert rec.created_at is not None
     line = list(corpus_jsonl_lines(corpus))[1]
     assert json.loads(line)["created_at"] == rec.created_at.isoformat()
+
+
+def test_manifest_carries_the_distill_section(tmp_path):
+    """The extra whitelist must name 'distill' or bootstrap silently sees an
+    empty section and registers nothing - found live on the first deploy."""
+    from boltrig.config.manifest import load_manifest
+
+    path = tmp_path / "manifest.yaml"
+    path.write_text(
+        "tenant_id: t\ndistill:\n  enabled: true\n  base_pin: base@rev\n",
+        encoding="utf-8",
+    )
+    manifest = load_manifest(str(path))
+    assert manifest.section("distill").get("base_pin") == "base@rev"

@@ -297,6 +297,8 @@ class DistillAdapter(HttpAdapter):
                     "incumbent": incumbent,
                     "incumbent_score": verdict.incumbent_score,
                     "candidate_score": verdict.candidate_score,
+                    "incumbent_diversity": verdict.incumbent_diversity,
+                    "candidate_diversity": verdict.candidate_diversity,
                     "reason": verdict.reason,
                     "regressed_cases": list(verdict.regressed_cases),
                 },
