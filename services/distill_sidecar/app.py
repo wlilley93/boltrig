@@ -43,6 +43,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 _DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
+# Also the shape of every value handed to the trainer subprocess as --model:
+# the leading alphanumeric means no crafted name can read as a flag.
+_MODEL_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._@/-]*$")
 _MAX_BODY = 256 * 1024 * 1024  # a corpus of chat text; bounded, not unlimited
 
 STATE_DIR = Path(
@@ -66,6 +69,19 @@ _TRAIN_ARGS = {
     "register": ["--iters", "200", "--learning-rate", "2e-6"],
 }
 _MIN_TRAINABLE = _BATCH * 3  # one valid batch + at least two train batches
+
+
+def _confined(base: Path, leaf: str) -> Path:
+    """The one place a request-derived name may become a path under ``base``.
+
+    normpath + prefix check rather than resolve(): the state dir itself may sit
+    behind a symlink, and the property enforced here is that the relative part
+    cannot climb out of ``base``, not that ``base`` is canonical."""
+    root = os.path.normpath(str(base))
+    candidate = os.path.normpath(os.path.join(root, leaf))
+    if not candidate.startswith(root + os.sep):
+        raise ValueError(f"refused path element {leaf!r}")
+    return Path(candidate)
 
 
 def corpora_dir() -> Path:
@@ -94,20 +110,20 @@ def parse_corpus(jsonl: str) -> tuple[dict, list[dict]]:
 
 
 def store_corpus(digest: str, jsonl: str) -> dict:
-    if not _DIGEST_RE.match(digest):
+    if not _DIGEST_RE.fullmatch(digest):
         raise ValueError("bad digest")
     header, records = parse_corpus(jsonl)
     if header.get("digest") != digest:
         raise ValueError("corpus header digest does not match the path digest")
     corpora_dir().mkdir(parents=True, exist_ok=True)
-    (corpora_dir() / f"{digest}.jsonl").write_text(jsonl, encoding="utf-8")
+    _confined(corpora_dir(), f"{digest}.jsonl").write_text(jsonl, encoding="utf-8")
     return {"digest": digest, "records": len(records)}
 
 
 def load_corpus(digest: str) -> tuple[dict, list[dict]]:
-    if not _DIGEST_RE.match(digest):
+    if not _DIGEST_RE.fullmatch(digest):
         raise ValueError("bad digest")
-    path = corpora_dir() / f"{digest}.jsonl"
+    path = _confined(corpora_dir(), f"{digest}.jsonl")
     if not path.exists():
         raise FileNotFoundError(f"corpus {digest} not shipped")
     return parse_corpus(path.read_text(encoding="utf-8"))
@@ -197,9 +213,14 @@ def _run_train_locked(body: dict) -> tuple[int, dict]:
     if len(weighted) < _MIN_TRAINABLE:
         return 400, {"error": f"corpus has {len(weighted)} trainable records; "
                               f"at least {_MIN_TRAINABLE} are needed"}
+    model_repo = base_pin.split("@", 1)[0]
+    if not _MODEL_NAME_RE.fullmatch(model_repo) or ".." in model_repo:
+        # the pin also names the subprocess's --model argument; a repo that
+        # does not look like a repo (or starts with '-') is refused, not passed
+        return 400, {"error": f"refused base_pin repo {model_repo!r}"}
     adapter_id = f"{kind}-{digest[:12]}"
-    adapter_path = adapters_dir() / adapter_id
-    data_dir = STATE_DIR / "train" / adapter_id
+    adapter_path = _confined(adapters_dir(), adapter_id)
+    data_dir = _confined(STATE_DIR / "train", adapter_id)
     data_dir.mkdir(parents=True, exist_ok=True)
     # mlx_lm.lora expects train.jsonl/valid.jsonl in one data dir, and each
     # side must hold at least one full batch. Split by EXAMPLE first; only the
@@ -210,7 +231,6 @@ def _run_train_locked(body: dict) -> tuple[int, dict]:
         data_dir / "train.jsonl",
         [row for row, weight in weighted[split:] for _ in range(weight)],
     )
-    model_repo = base_pin.split("@", 1)[0]
     cmd = [
         MLX_PYTHON, "-m", "mlx_lm", "lora", "--train",
         # the BARE base - never a prior adapter; mlx's --resume-adapter-file
@@ -240,13 +260,10 @@ def _held_out_eval_file(digest: str) -> tuple[Path, int] | tuple[int, dict]:
     rows = [r for r in records if r["record_id"] in held and r["kind"] == "sft"]
     if not rows:
         return 400, {"error": "corpus has no held-out records to score"}
-    eval_file = STATE_DIR / "eval" / f"{digest}.jsonl"
+    eval_file = _confined(STATE_DIR / "eval", f"{digest}.jsonl")
     eval_file.parent.mkdir(parents=True, exist_ok=True)
     _write_rows(eval_file, rows)
     return eval_file, len(rows)
-
-
-_MODEL_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._@/-]*$")
 
 
 def _model_args(digest: str, model: str) -> list[str]:
@@ -256,12 +273,17 @@ def _model_args(digest: str, model: str) -> list[str]:
     The adapter-dir lookup is confined to adapters_dir(): a crafted name must
     not escape it (defence in depth - the kernel schemas also constrain the
     charset, but this server enforces its own boundary)."""
-    if not _MODEL_NAME_RE.match(model) or ".." in model:
+    if not _MODEL_NAME_RE.fullmatch(model) or ".." in model:
         raise ValueError(f"refused model name {model!r}")
     header, _ = load_corpus(digest)
     base_repo = str(header.get("base_pin") or "").split("@", 1)[0]
-    adapter_path = (adapters_dir() / model).resolve()
-    if adapter_path.is_relative_to(adapters_dir().resolve()) and adapter_path.is_dir():
+    if not _MODEL_NAME_RE.fullmatch(base_repo) or ".." in base_repo:
+        raise ValueError(f"refused base_pin repo {base_repo!r}")
+    try:
+        adapter_path = _confined(adapters_dir(), model)
+    except ValueError:
+        adapter_path = None
+    if adapter_path is not None and adapter_path.is_dir():
         return ["--model", base_repo, "--adapter", str(adapter_path)]
     return ["--model", model if "/" in model else base_repo]
 
