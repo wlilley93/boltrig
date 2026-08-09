@@ -35,6 +35,25 @@ export function clampStageState(next: Partial<FamiliarStageState>): FamiliarStag
   };
 }
 
+/**
+ * Derives the Stage's state from what ChatView already knows. The visual
+ * renderer never parses chat events itself — activity arrives through this
+ * one seam (and later through FamiliarState v2).
+ */
+export function familiarStateFromTurn(input: {
+  loading: boolean;
+  hasLiveEvents: boolean;
+  liveEnded: boolean;
+  voiceSpeaking: boolean;
+  voiceLevel: number;
+}): FamiliarStageState {
+  return clampStageState({
+    working: input.loading || (input.hasLiveEvents && !input.liveEnded),
+    speaking: input.voiceSpeaking,
+    level: input.voiceLevel,
+  });
+}
+
 export interface FamiliarRendererStatus {
   kind: "webgl2";
   state: "mounted" | "running" | "suspended" | "failed" | "destroyed";

@@ -82,3 +82,17 @@ describe("clampStageState", () => {
     expect(clampStageState({ level: Infinity }).level).toBe(0);
   });
 });
+
+describe("familiarStateFromTurn", () => {
+  it("derives working from loading or an unfinished live turn", async () => {
+    const { familiarStateFromTurn } = await import("../src/components/familiar/FamiliarState");
+    const base = { loading: false, hasLiveEvents: false, liveEnded: false, voiceSpeaking: false, voiceLevel: 0 };
+    expect(familiarStateFromTurn(base).working).toBe(false);
+    expect(familiarStateFromTurn({ ...base, loading: true }).working).toBe(true);
+    expect(familiarStateFromTurn({ ...base, hasLiveEvents: true }).working).toBe(true);
+    expect(familiarStateFromTurn({ ...base, hasLiveEvents: true, liveEnded: true }).working).toBe(false);
+    const speaking = familiarStateFromTurn({ ...base, voiceSpeaking: true, voiceLevel: 2 });
+    expect(speaking.speaking).toBe(true);
+    expect(speaking.level).toBe(1);
+  });
+});

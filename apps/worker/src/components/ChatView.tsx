@@ -29,6 +29,11 @@ import {
 } from "../desktop";
 import { ConversationControls } from "./ConversationControls";
 import { FamiliarBadge, familiarPalette } from "./familiar/FamiliarBadge";
+import { FamiliarStage } from "./familiar/FamiliarStage";
+import {
+  familiarStateFromTurn,
+  type FamiliarPresentationMode,
+} from "./familiar/FamiliarState";
 import { LiveQuestionCard } from "./LiveQuestionCard";
 import { VoiceCall } from "./VoiceCall";
 
@@ -63,6 +68,10 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
   const [continuity, setContinuity] = useState("");
   const [retryFollow, setRetryFollow] = useState(false);
   const compactTaskDetails = useMediaQuery("(max-width: 1020px)");
+  const [voiceActivity, setVoiceActivity] = useState({ speaking: false, level: 0 });
+  const [pageHidden, setPageHidden] = useState(
+    typeof document !== "undefined" && document.visibilityState === "hidden",
+  );
   const [taskDetailsOpen, setTaskDetailsOpen] = useState(false);
   const taskDetailsTriggerRef = useRef<HTMLButtonElement>(null);
   const taskDetailsPanelRef = useRef<HTMLElement>(null);
@@ -185,6 +194,12 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [compactTaskDetails, taskDetailsOpen]);
+
+  useEffect(() => {
+    const onVisibility = () => setPageHidden(document.visibilityState === "hidden");
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, []);
 
   useEffect(() => {
     void client.modelProfiles().then((result) => {
@@ -464,12 +479,36 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
     window.setTimeout(() => taskDetailsTriggerRef.current?.focus(), 0);
   }
 
+  // One Familiar Stage per client (ADR 0025): hero over the welcome, compact
+  // in the header once the transcript has content, voice while the assistant
+  // speaks, minimised when the tab is hidden. Conditional rendering guarantees
+  // a single renderer session; the hero->conversation move is a remount by
+  // design (the being re-arrives through its aperture in the new position).
+  const stageIsHero = messages.length === 0 && events.length === 0;
+  const stageMode: FamiliarPresentationMode = pageHidden
+    ? "minimised"
+    : voiceActivity.speaking
+      ? "voice"
+      : stageIsHero
+        ? "hero"
+        : "conversation";
+  const stageState = familiarStateFromTurn({
+    loading,
+    hasLiveEvents: events.length > 0,
+    liveEnded: live.ended,
+    voiceSpeaking: voiceActivity.speaking,
+    voiceLevel: voiceActivity.level,
+  });
+  const stage = <FamiliarStage mode={stageMode} state={stageState} />;
+
   return (
     <div className="chat-layout">
       <main className="chat-main">
         <header className="chat-header">
           <div className="agent-heading">
-            <FamiliarBadge state={loading ? "working" : "ready"} />
+            {stageIsHero
+              ? <FamiliarBadge state={loading ? "working" : "ready"} />
+              : stage}
             <div>
               <p className="eyebrow">Boltrig activity</p>
               <h1>{
@@ -488,6 +527,7 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
                 modelProfileId={profile || undefined}
                 onConversation={onConversation}
                 onError={setError}
+                onFamiliarActivity={setVoiceActivity}
               />
             )}
             {compactTaskDetails && (
@@ -505,7 +545,7 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
           </div>
         </header>
         <div className="transcript" aria-live="polite">
-          {messages.length === 0 && events.length === 0 ? <Welcome /> : null}
+          {stageIsHero ? <Welcome stage={stage} /> : null}
           {messages.map((message) => <Message key={message.id} message={message} />)}
           {modelContext?.compacted && (
             <details className="notice model-context-notice">
@@ -586,10 +626,10 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
   );
 }
 
-function Welcome() {
+function Welcome({ stage }: { stage?: React.ReactNode }) {
   return (
     <section className="welcome">
-      <div className="welcome-mark" aria-hidden>ϟ</div>
+      {stage ?? <div className="welcome-mark" aria-hidden>ϟ</div>}
       <h2>Bring me a task, not a prompt.</h2>
       <p>I can plan the work, use the tools your workspace grants, pause for approval, and return the artifact here.</p>
       <div className="suggestions">

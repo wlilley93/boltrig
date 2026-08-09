@@ -14,6 +14,7 @@ import { client } from "../client";
 import { isDesktop } from "../desktop";
 
 interface VoiceCallProps {
+  onFamiliarActivity?(activity: { speaking: boolean; level: number }): void;
   conversationId: string | null;
   modelProfileId?: string;
   onConversation(id: string): void;
@@ -37,6 +38,8 @@ interface MediaResources {
   source: MediaStreamAudioSourceNode;
   mute: GainNode;
   playbackSources: Set<AudioBufferSourceNode>;
+  /** Familiar lift (ADR 0025): fires as assistant playback starts/stops. */
+  onPlayback?: (speaking: boolean) => void;
   readyTimeout: number | null;
   rejectReady: ((reason: Error) => void) | null;
 }
@@ -65,6 +68,7 @@ export function VoiceCall({
   modelProfileId,
   onConversation,
   onError,
+  onFamiliarActivity,
 }: VoiceCallProps) {
   const [call, setCall] = useState<RealtimeCall | null>(null);
   const [status, setStatus] = useState<CallStatus | "idle">("idle");
@@ -82,6 +86,8 @@ export function VoiceCall({
   const endingRef = useRef(false);
   const connectionAttemptRef = useRef(0);
   const playAtRef = useRef(0);
+  const onFamiliarActivityRef = useRef(onFamiliarActivity);
+  onFamiliarActivityRef.current = onFamiliarActivity;
   const seenEventIdsRef = useRef(new Set<string>());
   const pendingApprovalsRef = useRef(new Set<string>());
 
@@ -296,6 +302,10 @@ export function VoiceCall({
         source,
         mute,
         playbackSources: new Set(),
+        onPlayback: (speaking) => onFamiliarActivityRef.current?.({
+          speaking,
+          level: speaking ? 0.6 : 0,
+        }),
         readyTimeout: null,
         rejectReady: null,
       };
@@ -937,6 +947,7 @@ function stopQueuedPlayback(
     safeDisconnect(source);
   }
   media.playbackSources.clear();
+  media.onPlayback?.(false);
   playAt.current = media.context.currentTime;
 }
 
@@ -987,9 +998,11 @@ function playPcm(
   source.buffer = buffer;
   source.connect(context.destination);
   media.playbackSources.add(source);
+  media.onPlayback?.(true);
   source.onended = () => {
     media.playbackSources.delete(source);
     safeDisconnect(source);
+    media.onPlayback?.(media.playbackSources.size > 0);
   };
   const startsAt = Math.max(context.currentTime, playAt.current);
   source.start(startsAt);
