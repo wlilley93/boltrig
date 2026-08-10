@@ -37,6 +37,17 @@ pytestmark = pytest.mark.skipif(
     reason="set HATCHET_CLIENT_TOKEN (+ a reachable Hatchet engine) for the live test",
 )
 
+def _shared_db_url() -> str | None:
+    """The shared-store URL for the live legs.
+
+    tests/conftest strips ``DATABASE_URL`` for hermeticity (a test must not
+    inherit product behaviour from the shell); the SANCTIONED kept variable is
+    ``BOLTRIG_TEST_DATABASE_URL``. Accept it first; keep the bare name as a
+    fallback for running this file outside the repo conftest.
+    """
+    return os.environ.get("BOLTRIG_TEST_DATABASE_URL") or os.environ.get("DATABASE_URL")
+
+
 
 def _worker_tenant() -> str:
     """The tenant the worker will seed: derived exactly as the worker derives
@@ -76,10 +87,18 @@ def _start_worker() -> subprocess.Popen:
     # Own process group (start_new_session): the hatchet SDK spawns listener
     # child processes, and killing only the parent leaves them heartbeating as
     # ghost "active" workers that swallow every subsequent dispatch.
+    # tests/conftest strips product env (DATABASE_URL, HATCHET_* except the
+    # kept token) for hermeticity; the spawned worker is PRODUCT, not test, so
+    # re-inject what its bootstrap needs from the sanctioned kept variables.
+    env = dict(os.environ)
+    db = _shared_db_url()
+    if db:
+        env["DATABASE_URL"] = db
+    env.setdefault("HATCHET_CLIENT_TLS_STRATEGY", "none")
     return subprocess.Popen(
         [sys.executable, "-m", "boltrig.fleet.hatchet_worker"],
         cwd=str(_REPO),
-        env=dict(os.environ),
+        env=env,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         start_new_session=True,
@@ -103,8 +122,22 @@ async def _poll_checkpoints(store, run_id: str, ready, *, budget: float, interva
     sleeps) because live engine dispatch to a fresh worker can take 45-75s."""
     deadline = time.monotonic() + budget
     by_step: dict = {}
+
+    def _step_key(step: str) -> str | None:
+        # Interpreter checkpoint keys are workflow-scoped ("<wf_id>:<step>");
+        # the kernel's held-call bookkeeping uses the reserved "held:" prefix
+        # (kernel/held_call.py) and is not a workflow step. Normalize to bare
+        # step ids so the predicates below read as authored.
+        if step.startswith("held:"):
+            return None
+        return step.split(":", 1)[1] if ":" in step else step
+
     while time.monotonic() < deadline:
-        by_step = {c.step: c for c in await store.list_checkpoints(_TENANT, run_id)}
+        by_step = {}
+        for c in await store.list_checkpoints(_TENANT, run_id):
+            key = _step_key(c.step)
+            if key is not None:
+                by_step[key] = c
         if ready(by_step):
             return by_step
         await asyncio.sleep(interval)
@@ -151,8 +184,8 @@ async def test_live_workflow_run_pauses_on_gated_step():
     not complete) - the durable wait registered by the engine is what a scoped
     approval event resumes (NFR-REL-01). Needs DATABASE_URL so the test and the
     worker share one store for the workflow definition."""
-    if not os.environ.get("DATABASE_URL"):
-        pytest.skip("set DATABASE_URL (shared store) for the live pause test")
+    if not _shared_db_url():
+        pytest.skip("set BOLTRIG_TEST_DATABASE_URL (shared store) for the live pause test")
     from boltrig.fleet.hatchet_app import (
         TASK_WORKFLOW_RUN,
         WorkflowRunInput,
@@ -161,7 +194,7 @@ async def test_live_workflow_run_pauses_on_gated_step():
     from boltrig.models import WorkflowDefinition, WorkflowSource
     from boltrig.store import PostgresStore
 
-    store = await PostgresStore.connect(os.environ["DATABASE_URL"])
+    store = await PostgresStore.connect(_shared_db_url())
     wf_id = f"live-gated-{uuid.uuid4().hex[:8]}"
     workflow = WorkflowDefinition(
         id=wf_id,
@@ -217,14 +250,14 @@ async def test_live_workflow_run_pauses_on_gated_step():
 @pytest.mark.invariant("FR-WFL-17")
 async def test_live_ultracode_run_fans_out_agent_child_tasks():
     """Live v2 gate: Ultracode parent dispatches child phase-agent tasks."""
-    if not os.environ.get("DATABASE_URL"):
-        pytest.skip("set DATABASE_URL (shared store) for the live Ultracode test")
+    if not _shared_db_url():
+        pytest.skip("set BOLTRIG_TEST_DATABASE_URL (shared store) for the live Ultracode test")
     from boltrig.fleet.hatchet_app import TASK_ULTRACODE_RUN, build_hatchet_app
     from boltrig.fleet.hatchet_ultracode import UltracodeRunInput
     from boltrig.models import ActionType, AgentCapability, GrantSet, TenantPermissions
     from boltrig.store import PostgresStore
 
-    store = await PostgresStore.connect(os.environ["DATABASE_URL"])
+    store = await PostgresStore.connect(_shared_db_url())
     capability = f"live-script-{uuid.uuid4().hex[:8]}"
     seed = store.set_tenant_permissions(TenantPermissions(_TENANT, GrantSet.of(["*"])))
     if hasattr(seed, "__await__"):
@@ -316,8 +349,8 @@ async def test_live_kill_restart_approve_resume():
     re-dispatch and completes the run. Proven live: s1 REPLAYS from its
     checkpoint, never re-executes (NFR-REL-02); s2 executes exactly once via
     the consume-if-approved CAS (NFR-REL-03, SEC-14); s3 runs to completion."""
-    if not os.environ.get("DATABASE_URL"):
-        pytest.skip("set DATABASE_URL (shared store) for the live kill/restart test")
+    if not _shared_db_url():
+        pytest.skip("set BOLTRIG_TEST_DATABASE_URL (shared store) for the live kill/restart test")
     from boltrig.fleet.hatchet_app import (
         TASK_WORKFLOW_RUN,
         WorkflowRunInput,
@@ -328,7 +361,7 @@ async def test_live_kill_restart_approve_resume():
     from boltrig.models import Channel, WorkflowDefinition, WorkflowSource
     from boltrig.store import PostgresStore
 
-    store = await PostgresStore.connect(os.environ["DATABASE_URL"])
+    store = await PostgresStore.connect(_shared_db_url())
     # A real enabled channel (no outbound_url) so the approved send SUCCEEDS:
     # delivery is honestly "queued" for the sidecar and the Result is success,
     # letting the run finish instead of failing on an unknown channel.
