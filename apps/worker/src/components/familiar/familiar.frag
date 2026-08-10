@@ -71,7 +71,12 @@ const int   SHELLS = 5;
 const int   SPARKS = 7;
 const int   EMBERS = 12;   // particles thrown off the rim
 const float RADIUS = 1.0;
-const float WARMTH = 0.35;   // 0.0 = strict blue family; >0 = the ember at the core
+const float WARMTH = 0.35;   // 0.0 = strict blue family; >0 = the ember at the core.
+// DEAD IN THE SHIPPED THEME. Grep says WARMTH appears only here and in two comments; theme 2
+// carries its own vWARMTH below, which is the one the heart actually reads. A warmth gene was
+// briefly attached HERE and measured byte-identical across a 3x sweep - a gene wired to a
+// constant nothing consumes. Left in place for theme 0, and named as dead so the next reader
+// does not spend the same afternoon.
 
 // THEME. Bodies inside the same crystal ball, sharing every mood scalar and the host contract:
 //   0 = the photoreal non-human eye (AMBITION.md): iris, aperture, tapetum, corneal refraction.
@@ -120,6 +125,205 @@ float ridge(vec3 p){ return 1.0 - abs(vnoise(p)*2.0 - 1.0); }
 mat2 rot2(float a){ float c=cos(a), s=sin(a); return mat2(c,-s,s,c); }
 vec3 aces(vec3 x){ return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14), 0.0, 1.0); }
 
+
+// ---------------------------------------------------------------------------
+// GENOTYPE (GENOTYPE.md). uGene carries the parameters that say what this being
+// IS, as opposed to the uValence..uTension block which says how it FEELS. Read
+// from ~/.config/familiar/genotype.json by the host; ABSENT IS A CIRCLE, so a
+// missing or malformed file degrades to exactly the old body rather than to a
+// black screen (WL-2).
+//   [0] = shape family, blend, focal(a), cassini b
+//   [1] = lobe balance, superM, superN1, superN2
+//   [2] = superN3, superA, superB, aspect
+//   [3] = rotation, twist, (reserved), (reserved)
+//   [4] = warmth, breathDepth, bumpAmp, silkChurn
+//   [5] = specSharp, haloReach, specGain, fresnelGain
+//   [6] = tempoBase, bodyScale, haloGain, irritationGain
+//   [7] = lightAzimuth, bumpScale, (reserved), (reserved)
+uniform vec4 uGene[8];   // 32 slots, 30 of them claimed. 30-31 RESERVED.
+// moteGain and ejectRate were wired here and REMOVED before shipping: both feed `moteA`, which
+// only reaches `cover`, and cover is discarded wherever uPresence is 1. Swept across the moods
+// that produce motes and ejecta, neither changed a single pixel in any configuration that could
+// be measured. A gene that cannot be shown to do something is the warmth defect again.
+//
+// EVERY gene below is wired in BOTH theme branches, and both are measured: the bench reads the
+// shader as a file, so `sed 's/FAMILIAR_THEME 2/FAMILIAR_THEME 0/'` into a copy renders the
+// other theme with no rebuild. Wiring a theme nobody can render would be a claim, not a gene.
+
+// --- Cassini oval, polar form -----------------------------------------------
+// Implicit: |p-f1| * |p-f2| = b^2, foci at (+/-a, 0). Solving for r at angle th:
+//     r^2 = a^2*cos(2th) +/- sqrt(b^4 - a^4*sin^2(2th))
+// The discriminant goes NEGATIVE past the lobe tips, where that angle has no
+// boundary at all. Returns BOTH roots. The outer one is the silhouette; the inner one only exists when
+// a > b, and it is the hole in the middle - the gap that makes two separate lobes two
+// separate lobes. An earlier cut of this returned the + root alone, which is correct
+// for a <= b and quietly WRONG above it: the waist filled in and every "split" case
+// rendered as a solid bowtie. Measured, not reasoned - a scanline through the centre
+// reported inside=True at a=1.40, where the figure should have been empty.
+vec2 cassiniRoots(float th, float a, float b) {
+  float a2 = a*a, a4 = a2*a2;
+  float b4 = b*b*b*b;
+  float s = sin(2.0*th);
+  float disc = b4 - a4*s*s;
+  if (disc < 0.0) return vec2(0.0);    // no boundary at this angle: past the lobe tips
+  float k = a2*cos(2.0*th);
+  float root = sqrt(disc);
+  float r2o = k + root;                // outer boundary
+  float r2i = k - root;                // inner boundary; <= 0 means no hole
+  return vec2(r2o <= 0.0 ? 0.0 : sqrt(r2o),
+              r2i <= 0.0 ? 0.0 : sqrt(r2i));
+}
+
+// --- Superformula (Gielis) --------------------------------------------------
+//     r(th) = ( |cos(m*th/4)/A|^n2 + |sin(m*th/4)/B|^n3 ) ^ (-1/n1)
+// The exponents are guarded away from zero: n1 near 0 sends the reciprocal to
+// infinity, and pow() of a negative base is undefined behaviour on real drivers -
+// the same class of UB already guarded elsewhere in this shader.
+float superR(float th, float m, float n1, float n2, float n3, float A, float B) {
+  float mm = m*th*0.25;
+  float ca = abs(cos(mm)/max(A, 1e-3));
+  float sa = abs(sin(mm)/max(B, 1e-3));
+  float t1 = pow(max(ca, 1e-6), max(n2, 1e-3));
+  float t2 = pow(max(sa, 1e-6), max(n3, 1e-3));
+  float sum = max(t1 + t2, 1e-6);
+  return pow(sum, -1.0/max(n1, 1e-3));
+}
+
+// --- The dispatcher ---------------------------------------------------------
+// p        offset from the body centre, in the same units familiar.frag uses for uv
+// gShape   0 = circle (identity: byte-for-byte the old behaviour), 1 = cassini,
+//          2 = superformula, 3 = blend of 1 and 2
+// gBlend   crossfade for mode 3
+// Returns the normalised distance described in the contract above.
+float shapeDist(vec2 p,
+                float gShape, float gBlend,
+                float gFocal, float gCassB, float gLobe,
+                float gM, float gN1, float gN2, float gN3, float gSA, float gSB,
+                float gAspect, float gRot, float gTwist,
+                float gScale) {
+  // Aspect and rotation are applied to the SAMPLE, not the formula, so they compose
+  // with every family for free.
+  float rl = length(p);
+  float ct = cos(-gRot), st = sin(-gRot);
+  vec2 q = vec2(p.x*ct - p.y*st, p.x*st + p.y*ct);
+  q.x /= max(gAspect, 1e-3);
+  q.y *= max(gAspect, 1e-3);
+
+  // Twist: orientation that varies with radius, which shears lobes into a spiral.
+  float th = atan(q.y, q.x) + gTwist*rl;
+
+  // Lobe balance: bias one half of the figure larger. Applied as an angular gain so
+  // a figure-of-8 can have a big head and a small tail.
+  float bal = 1.0 + gLobe*0.45*cos(th);
+
+  float r = 1.0;
+  float rInner = 0.0;
+  if (gShape < 0.5) {
+    r = 1.0;                                            // circle - the identity case
+  } else if (gShape < 1.5) {
+    vec2 cr = cassiniRoots(th, gFocal, gCassB);
+    r = cr.x; rInner = cr.y;
+  } else if (gShape < 2.5) {
+    r = superR(th, gM, gN1, gN2, gN3, gSA, gSB);
+  } else {
+    vec2 cr = cassiniRoots(th, gFocal, gCassB);
+    float rs = superR(th, gM, gN1, gN2, gN3, gSA, gSB);
+    float bl = clamp(gBlend, 0.0, 1.0);
+    r = mix(cr.x, rs, bl);
+    rInner = cr.y*(1.0 - bl);                           // the hole fades out as we blend away
+  }
+  r *= bal;
+  rInner *= bal;
+
+  // r == 0 means "this angle is outside the figure entirely" (a parted Cassini). A
+  // huge distance puts it firmly outside every downstream test, which is what a gap
+  // should look like. Without this the divide would produce inf/NaN and the driver
+  // would paint whatever fell out of it.
+  if (r <= 1e-4) return 1e4;
+  float lq = length(q);
+
+  // A PARTED BODY HAS NO CENTRE, so it cannot be measured from one.
+  //
+  // Measured before this branch existed: a genotype past the split rendered at 5.9% lit with
+  // a peak of 39/255, and the bench called it SUSPECT (flat/black). The silhouette was right -
+  // the lobes exist within +/-20.5 degrees and span r 0.616..1.351 - but every downstream
+  // consumer measures depth as distance from the figure's centre, and the figure's centre is
+  // the empty gap between the lobes. Each lobe rendered as the outer rind of a sphere whose
+  // glowing middle had been cut out.
+  //
+  // So when the body is parted, depth is measured across the LOBE's own thickness instead:
+  // 0 on its radial mid-line, 1 at both of its boundaries. That preserves the contract exactly
+  // (1.0 on the silhouette, <1 inside, >1 outside), so the ~20 `scale`-relative comparisons
+  // downstream keep their meaning, while giving the interior a core to build light around.
+  //
+  // Only when parted. For rInner == 0 the same formula would read 1.0 at the body's CENTRE,
+  // which would invert every unparted familiar - so the unparted path is untouched and stays
+  // pixel-identical to what is already verified.
+  if (rInner > 1e-4) {
+    // UNITS. The contract is not "1.0 on the silhouette" as the header above once said - it is
+    // that the returned value equals `scale` there, because every downstream test compares it
+    // against `scale`. The unparted `lq/r` satisfies that because the boundary sits at
+    // lq = r*scale. A first cut of this branch returned a dimensionless 0..1 and the body
+    // vanished completely: rendered, measured 5.8% lit, and the image was pure background.
+    //
+    // So the lobe's mid-line has to be located in the SAME units as lq, which means knowing
+    // `scale`. It is threaded in rather than guessed, and it is used ONLY here.
+    float midUv  = (rInner + r)*0.5*gScale;   // the lobe's radial centre, in uv
+    // Guarded: at the lobe TIPS the two boundaries meet, the half-thickness goes to zero, and
+    // an unguarded divide would send the tips to infinity - a body with its points snipped off.
+    float halfT  = max((r - rInner)*0.5, 1e-4);
+    if (lq < rInner*gScale) return 1e4;       // the gap between the lobes: outside the body
+    return abs(lq - midUv)/halfT;
+  }
+  return lq/r;
+}
+
+// --- GENOTYPE HUE ------------------------------------------------------------
+// Rotates a colour about the achromatic axis. The YIQ form is used rather than a
+// full RGB->HSV->RGB trip because it is three dot products and this runs per pixel
+// per frame for every familiar on the page.
+//
+// APPLIED TO THE BODY PALETTE ONLY, AND BEFORE IRRITATION'S MAGENTA IS MIXED IN.
+// That placement is the whole design. Magenta is the shader's single exception in a
+// blue field and the phenotype spends it on exactly one state - a failed run. If a
+// per-agent hue rotated it too, "magenta means failed" would become "some colour
+// means failed, depending on which agent you are looking at", and the most valuable
+// signal on the screen would stop being learnable. So identity tints the being and
+// never touches the alarm.
+vec3 hueRotate(vec3 c, float a) {
+  float u = cos(a), w = sin(a);
+  return clamp(mat3(0.299 + 0.701*u + 0.168*w, 0.587 - 0.587*u + 0.330*w, 0.114 - 0.114*u - 0.497*w,
+                    0.299 - 0.299*u - 0.328*w, 0.587 + 0.413*u + 0.035*w, 0.114 - 0.114*u + 0.292*w,
+                    0.299 - 0.300*u + 1.250*w, 0.587 - 0.588*u - 1.050*w, 0.114 + 0.886*u - 0.203*w) * c,
+               0.0, 1.0);
+}
+
+// Saturation about luma. Kept narrow at the call site: a familiar desaturated to grey
+// stops reading as alive, and one oversaturated stops reading as the same species.
+vec3 saturate3(vec3 c, float k) {
+  float l = dot(c, vec3(0.299, 0.587, 0.114));
+  return clamp(mix(vec3(l), c, k), 0.0, 1.0);
+}
+
+// gene: lightAzimuth. The key light turns about the VIEW axis, so the highlight walks around
+// the limb and can never end up behind the body. At 0 it is upper-left, where it has always
+// been. Only x and y rotate: the light's angle TO the camera is therefore fixed, so the gene
+// changes where the light comes from and never how much of it there is. Both themes call this
+// rather than each spelling the constant out, so the identity cannot differ between them.
+vec3 keyLight(float az) {
+  const vec2 b = vec2(-0.50, 0.62);
+  return normalize(vec3(b.x*cos(az) - b.y*sin(az), b.x*sin(az) + b.y*cos(az), -0.60));
+}
+
+// Convenience wrapper: unpacks uGene so call sites stay readable.
+float bodyDist(vec2 p, float s) {
+  return shapeDist(p,
+    uGene[0].x, uGene[0].y, uGene[0].z, uGene[0].w,
+    uGene[1].x, uGene[1].y, uGene[1].z, uGene[1].w,
+    uGene[2].x, uGene[2].y, uGene[2].z, uGene[2].w,
+    uGene[3].x, uGene[3].y, s);
+}
+
 void main(){
 #if FAMILIAR_THEME == 2
   // ==========================================================================
@@ -140,8 +344,9 @@ void main(){
   float soc     = clamp(uSocial, 0.0, 1.0);
   float buo     = clamp(uBuoyancy, 0.0, 1.0);
   float voice   = clamp(uAudio.x, 0.0, 1.0);
-  float vWARMTH = 0.25;   // a faint warm breath in the heart (voice variant)
-  float tempo   = (0.26 + 0.85*clamp(uArousal,0.0,1.0))*(1.0 - 0.45*fatigue);
+  float vWARMTH = 0.25*uGene[4].x;   // gene: warmth. The warm breath in the heart, and
+                                    // the value theme 2 actually consumes (see WARMTH above).
+  float tempo   = (0.26*uGene[6].x + 0.85*clamp(uArousal,0.0,1.0))*(1.0 - 0.45*fatigue);
   // The master clock IS an emotion readout: it runs at tempo, not wall speed. With no phenotype
   // published the host feeds the resting baseline (arousal ~0.07), so the being drifts at roughly
   // a sixth of its old fixed rate - an animated idle, not a canned loop racing through its moves.
@@ -182,9 +387,9 @@ void main(){
     growP = 0.0;
   }
   // the voice SWELLS the whole body - this is now its primary voice tell (rings removed).
-  float breathe = 1.0 + (0.010 + 0.012*tempo)*sin(iTime*0.9) + 0.030*uAudio.y + 0.02*uBeat + 0.090*voice;
+  float breathe = 1.0 + (0.010 + 0.012*tempo)*sin(iTime*0.9) + 0.030*uAudio.y + 0.02*uBeat + 0.090*voice*uGene[4].y;          // gene: breathDepth
   float voiceScale = 1.0 + 0.10*voice;
-  float scaleFull = 0.265*breathe*voiceScale*(1.0 + gSwell)*(1.0 - 0.05*fatigue)*(1.0 + 0.025*soc);
+  float scaleFull = 0.265*uGene[6].y*breathe*voiceScale*(1.0 + gSwell)*(1.0 - 0.05*fatigue)*(1.0 + 0.025*soc);
   float scaleDock = uScaleDock*breathe*(1.0 + gSwell*0.5)*(1.0 + 0.012*soc);
   // There is no travelling seed in the void. The old 0.0035-radius remnant was still visible as a
   // bright pixel and its interpolated centre made the supposed teleport read as physical movement.
@@ -202,7 +407,27 @@ void main(){
   vec2  portalPos = vec2(-0.03, 0.02);  // slightly off-centre, close to the orb's centre
   vec2 centre = (uFill > 0.5) ? centreDock : centreFull;
 
-  vec3 ro = vec3((uv - centre)/scale, -3.0);
+  // THE GENOTYPE RESHAPES THE BODY, NOT JUST ITS OUTLINE.
+  //
+  // A first cut changed only `dScreen` (the rim and the halo). It compiled, the uniform
+  // demonstrably reached the shader, and it was still wrong: the contact sheet showed a
+  // star-shaped WIRE around a perfectly circular ball, because the interior never asked
+  // the genotype anything. Compiling is not rendering, and rendering is not looking.
+  //
+  // The fix is one definition rather than one per call site. `ro.xy` is remapped so its
+  // LENGTH is the normalised shape distance (1.0 exactly on the silhouette) with its
+  // DIRECTION untouched. Every consumer below is already written against that length -
+  // the ray-sphere gate (disc = 1 - |ro.xy|^2), the lit normal, and the interior's own
+  // sr0/chord - so all of them follow the shape from here, and none of them can drift
+  // out of agreement with the rim, because there is only one answer to "how far out am I".
+  //
+  // For a circle bodyDist() returns length(), so rn == length(rxy), the remap is the
+  // identity, and the pre-genotype body is preserved exactly.
+  float dScreen = bodyDist(uv - centre, scale);
+  vec2  rxy = (uv - centre)/scale;
+  float rn  = dScreen/max(scale, 1e-6);
+  float rl0 = length(rxy);
+  vec3 ro = vec3(rl0 > 1e-6 ? rxy*(rn/rl0) : rxy, -3.0);
   vec3 rd = vec3(0.0, 0.0, 1.0);
 
   float b = dot(ro, rd);
@@ -221,15 +446,18 @@ void main(){
                   mix(azure, sky, smoothstep(0.55,1.00,val)),
                   smoothstep(0.40,0.80,val));
   base = mix(base, sky,     clamp(gWarm,0.0,1.0)*0.6);
-  base = mix(base, magenta, irr*0.70);
+  // Identity tint. Slots 14/15 of the genotype, applied here and nowhere else.
+  base = saturate3(hueRotate(base, uGene[3].z), 1.0 + uGene[3].w);
+  base = mix(base, magenta, clamp(irr*0.70*uGene[6].w, 0.0, 1.0));   // gene: irritationGain
   base *= mix(vec3(0.90,0.94,1.12), vec3(1.02,0.98,1.06), clamp(uDay,0.0,1.0));
   vec3 hot = mix(base, vec3(0.45,0.75,1.00), 0.40 + 0.18*lum);
   hot = mix(hot, vec3(1.00,0.30,0.70), irr*0.75);   // irritation floods the highlights too
 
   vec3 col = vec3(0.0);
   float alpha = 0.0;
-  float dScreen = length(uv - centre);
-  vec3  L = normalize(vec3(-0.50, 0.62, -0.60));
+  // dScreen is computed once, above, where the body's ray origin is derived from it.
+  // Two calls would be two chances to disagree.
+  vec3  L = keyLight(uGene[7].x);                              // gene: lightAzimuth
   float excite = clamp(val*clamp(uArousal,0.0,1.0)*1.8 - 0.15, 0.0, 1.0);
 
   float near = 0.0;   // cursor proximity drives nothing here
@@ -244,12 +472,12 @@ void main(){
     float face = clamp(dot(n, -rd), 0.0, 1.0);
     float limb = pow(face, 0.55);
 
-    vec3  bq = n*3.4 + vec3(0.0, -t*0.30, 0.0);
+    vec3  bq = n*3.4*uGene[7].y + vec3(0.0, -t*0.30, 0.0);   // gene: bumpScale (frequency, not amplitude)
     float be = 0.40;
     vec3  bump = vec3(vnoise(bq + vec3(be,0,0)) - vnoise(bq - vec3(be,0,0)),
                       vnoise(bq + vec3(0,be,0)) - vnoise(bq - vec3(0,be,0)),
                       vnoise(bq + vec3(0,0,be)) - vnoise(bq - vec3(0,0,be)));
-    vec3  nb = normalize(n + bump*(0.25 + 0.30*ten));
+    vec3  nb = normalize(n + bump*(0.25 + 0.30*ten)*uGene[4].z);
 
     // ==================== INTERIOR: silk ====================
     vec2  sp    = ro.xy;
@@ -260,6 +488,24 @@ void main(){
 
     vec2 nuc = gaze*0.10 + vec2(0.0, -0.22*fatigue);
     float nucD = length(sp - nuc);
+
+    // BREATHING WARP (technique from MilkDrop 2's warp field, BSD - reimplemented with our
+    // own constants): sin/cos pairs whose SPATIAL frequencies themselves drift over time,
+    // applied as a domain distortion of the silk sampling coords only. The interior sways
+    // with the bass; sp itself (nucleus, arcs, particles) and the silhouette stay put.
+    // At rest the amplitude gates to zero and the silk samples exactly where it always did.
+    vec2 warpV = vec2(0.0);
+    float wAmp = 0.030*clamp(0.70*uAudio.y + 0.35*arousal + 0.45*uBeat, 0.0, 1.0)
+               *(1.0 - 0.6*fatigue);
+    if (wAmp > 0.002) {
+      float wt = t*0.6;
+      float wf0 =  9.3 + 3.2*cos(wt*1.31 + 8.0);
+      float wf1 =  7.1 + 2.6*cos(wt*1.09 + 5.5);
+      float wf2 =  8.6 + 2.8*cos(wt*1.19 + 2.6);
+      float wf3 = 10.2 + 3.5*cos(wt*0.87 + 4.4);
+      warpV = wAmp*vec2(sin(wt*0.34 + sp.x*wf0 - sp.y*wf3) + cos(wt*0.71 - sp.x*wf1 + sp.y*wf2),
+                        cos(wt*0.39 - sp.x*wf2 - sp.y*wf1) + sin(wt*0.82 + sp.x*wf0 + sp.y*wf3));
+    }
 
     float edge0 = mix(0.34, 0.45, ten);   // tension crispens the silk
     float edge1 = mix(0.76, 0.57, ten);
@@ -273,7 +519,7 @@ void main(){
     vec3 inner = vec3(0.0);
     for (int j = 0; j < 2; j++) {
       float side = float(j)*2.0 - 1.0;               // -1 back, +1 front
-      vec3 q = vec3(sp, side*chord*0.5);
+      vec3 q = vec3(sp + warpV, side*chord*0.5);
       q.xz = rot2( gaze.x*0.25)*q.xz;
       q.yz = rot2(-gaze.y*0.20)*q.yz;
       float vort = exp(-nucD*nucD*2.5)*(1.10 + 0.25*side)*vortK*(0.70 + 0.30*sin(t*0.23));
@@ -284,7 +530,7 @@ void main(){
       vec3 w = q*aniso*(1.0 + 0.5*ten)*mix(0.78, 1.22, val) + vec3(0.0, -t*0.09 + 0.30*fatigue, 0.0);
       float w1 = vnoise(w*1.1 + 3.7);
       float w2 = vnoise(w*1.7 + vec3(w1*2.2, 0.0, 0.0) - vec3(0.0, t*0.07, 0.0) + 9.1);
-      float silk = vnoise(w*1.5 + vec3(w1, w2, w1)*(1.9 + 0.8*irr));
+      float silk = vnoise(w*1.5 + vec3(w1, w2, w1)*(1.9 + 0.8*irr)*uGene[4].w);
       // (voice ripple removed - the orb swells on voice instead of ringing)
       silk += (vnoise(w*5.5 + vec3(0.0, iTime*1.2, 0.0)) - 0.5)*irr*0.55;   // anger: jagged chop
       float band = smoothstep(edge0, edge1, silk);
@@ -386,6 +632,78 @@ void main(){
       inner += partCol*pAmt*(0.35 + 0.65*lum);
     }
 
+    // ==================== SPECTRAL FILAMENT SHELL (V2 phase 1) ====================
+    // A thin shell of radial fibres riding just under the skin. Screen-polar on purpose
+    // (anti-pattern 5: structure that must stay sharp varies in screen space), and built
+    // on sp, whose LENGTH is already the normalised shape distance - so the shell follows
+    // the genotype silhouette for free and is faded out before it can ever touch the rim
+    // (anti-pattern 1: the outline stays analytic; this is emission only).
+    //
+    // The behaviour, not just the look: calm = almost invisible. Voice and arousal EXTEND
+    // the fibres inward from the skin; treble lights the fine second octave; tension pulls
+    // the whole shell into thin needles; the beat and the churn gestures shake its twist
+    // briefly; fatigue lets it recede. Fixed relationships for now - the modulation-matrix
+    // config is a later phase.
+    float filDrive = clamp(0.55*voice + 0.45*arousal + 0.35*uAudio.w + 0.30*ga + 0.25*excite,
+                           0.0, 1.0)*(1.0 - 0.75*fatigue);
+    if (filDrive > 0.02 && sr0 > 0.30) {
+      // reach: how deep below the skin the fibres extend. The window grows inward as the
+      // being speaks or activates; the outer edge dies at 0.975 so the silhouette is never
+      // consulted, let alone disturbed.
+      float reachIn = 0.10 + 0.42*filDrive + 0.10*soc;
+      float rimIn   = 1.0 - reachIn;
+      float filWin  = smoothstep(rimIn, min(rimIn + 0.22, 0.99), sr0)
+                    * smoothstep(1.0, 0.975, sr0);
+      if (filWin > 0.001) {
+        vec2 fdir = sp/max(sr0, 1e-4);
+        // spiral flow: fibre phase drifts with radius (thought leaving the core), and the
+        // beat jolts the twist rather than the brightness - a shiver, not a strobe.
+        float swirl = 0.55*sr0 + t*0.18 + 0.25*uBeat*sin(iTime*7.0) + 0.30*gChurn*sin(iTime*5.0);
+        vec2 fd2 = rot2(swirl)*fdir;
+        // Radially-elongated ridged noise: fast along the angle (the unit direction scaled
+        // hard), slow along the radius - that anisotropy is what reads as fibres rather
+        // than froth. Two octaves on different orientations so it never reads as one grid;
+        // treble owns the fine octave. Sampling the unit direction keeps it seamless at pi.
+        float sharp = 6.0 + 18.0*ten;
+        float fibA = pow(ridge(vec3(fd2*13.0, sr0*3.0 - t*0.55)), sharp);
+        float fibB = pow(ridge(vec3(fd2.yx*29.0, sr0*4.5 + t*0.35 + 7.3)), sharp*1.4);
+        float fil = clamp(fibA*0.85 + fibB*0.55*(0.35 + 0.65*uAudio.w), 0.0, 1.0);
+        fil *= filWin*(0.35 + 0.65*diff);          // concentrated on the lit side
+
+        // HERO STREAMERS. The wash above gives density; these give individuals. Technique
+        // from the plasma-globe family (reimplemented from scratch in 2D polar - the classic
+        // implementations are non-libre, the idea is not): each of eight filaments has a
+        // hashed home angle, a centreline that WANDERS with radius on its own noise, a
+        // length owned by one audio band (bass-anchored streamers are long and slow, treble
+        // ones short and flickery), and its own twinkle. They ride the same swirl as the
+        // wash, so the two layers read as one combed material, not two effects.
+        float angF = atan(fd2.y, fd2.x);
+        float hero = 0.0;
+        for (int i = 0; i < 8; i++) {
+          float fi = float(i);
+          float a0 = hash13(vec3(fi*3.17, 11.3, 5.9))*6.28318 + t*0.11;
+          float bandMix = fi*0.1429;               // 0..1 across the eight streamers
+          float bandE = mix(mix(uAudio.y, uAudio.z, smoothstep(0.0, 0.5, bandMix)),
+                            uAudio.w, smoothstep(0.5, 1.0, bandMix));
+          float wander = (vnoise(vec3(sr0*2.6 - t*0.7, fi*7.7, 3.3)) - 0.5)*0.55;
+          float dAng = mod(angF - a0 - wander + 3.14159, 6.28318) - 3.14159;
+          // reach: how deep this streamer dives below the skin - its band's energy decides
+          float reachI = reachIn*(0.35 + 0.65*bandE);
+          float winI = smoothstep(1.0 - reachI, min(1.0 - reachI + 0.12, 0.99), sr0)
+                     * smoothstep(1.0, 0.975, sr0);
+          float flick = 0.55 + 0.45*hash13(vec3(fi, floor(iTime*5.0), 2.2));
+          hero += exp(-dAng*dAng*sr0*sr0/0.0011)*winI*flick*(0.25 + 0.75*bandE);
+        }
+        hero = min(hero, 1.5);
+
+        vec3 filC = mix(hot, vec3(0.62,0.88,1.00), 0.5);
+        filC = mix(filC, magenta, irr*0.55);       // irritation stains the needles
+        inner += filC*fil*filDrive*(0.50 + 0.70*lum + 0.45*ten);
+        inner += filC*hero*filDrive*(0.55 + 0.60*lum)*(0.35 + 0.65*diff);
+      }
+    }
+    // ==================== end filament shell ====================
+
     float fatigueDim = mix(1.0, 0.45, fatigue);
     col = inner*fatigueDim;
     col *= 1.0 + near*0.15;
@@ -397,10 +715,10 @@ void main(){
     col += hot*exp(-dScreen*dScreen/(scale*scale*0.16))*(0.05 + 0.16*lum)*(1.0 - 0.5*fatigue)*diff;
 
     float fres  = pow(1.0 - face, 3.2);
-    float spec  = pow(max(dot(reflect(rd, nb), L), 0.0), 34.0);
+    float spec  = pow(max(dot(reflect(rd, nb), L), 0.0), 34.0*uGene[5].x);
     float glint = pow(max(dot(reflect(rd, nb), L), 0.0), 140.0);
-    col += base*fres*(0.16 + 0.34*lum + 0.22*soc)*(0.30 + 0.70*diff);
-    col += vec3(0.80,0.85,1.00)*spec*(0.10 + 0.18*lum)*(1.0 - 0.5*fatigue);
+    col += base*fres*(0.16 + 0.34*lum + 0.22*soc)*(0.30 + 0.70*diff)*uGene[5].w;          // gene: fresnelGain
+    col += vec3(0.80,0.85,1.00)*spec*(0.10 + 0.18*lum)*(1.0 - 0.5*fatigue)*uGene[5].z;   // gene: specGain
     col += vec3(0.92,0.94,1.00)*glint*(0.5 + 0.8*lum)*(1.0 - 0.6*fatigue);
     vec3  L2 = normalize(vec3(0.55,-0.30,-0.60));
     float glint2 = pow(max(dot(reflect(rd, nb), L2), 0.0), 180.0);
@@ -416,7 +734,7 @@ void main(){
   col *= fade;
 
   // corona: tight; social widens it; the voice makes it shimmer (but no concentric rings)
-  float haloK = 34.0 - 16.0*soc;
+  float haloK = (34.0 - 16.0*soc)*uGene[5].y;                  // gene: haloReach
   float outside = smoothstep(scale*0.985, scale*1.010, dScreen);
   float halo = exp(-max(dScreen - scale, 0.0)*haloK/max(scale,0.02))*outside;
   halo *= smoothstep(scale*1.75, scale*1.02, dScreen);
@@ -472,7 +790,7 @@ void main(){
   ejectCore *= fade;
   float moteA = clamp(moteGlow*0.30 + moteCore + ejectGlow*0.35 + ejectCore, 0.0, 1.0);
   vec3 particleC = mix(vec3(0.55,0.84,1.00), vec3(1.00,0.18,0.55), irr);
-  vec3 outCol = col + base*halo*(0.22 + 0.45*lum + 0.6*uBeat + 0.5*voice + 0.32*portalEnergy)*(1.0 - 0.4*fatigue)
+  vec3 outCol = col + base*halo*(0.22 + 0.45*lum + 0.6*uBeat + 0.5*voice + 0.32*portalEnergy)*(1.0 - 0.4*fatigue)*uGene[6].z   // gene: haloGain
               + base*sonar*(0.5 + 0.5*lum)
               + mix(base, vec3(0.75,0.92,1.00), 0.6)*(moteGlow*0.18 + moteCore*1.35)*(0.8 + 0.4*lum)
               + particleC*(ejectGlow*0.22 + ejectCore*1.55)*(0.7 + 0.5*lum);
@@ -1137,7 +1455,9 @@ void main(){
                   mix(azure, sky, smoothstep(0.55,1.00,val)),
                   smoothstep(0.40,0.80,val));
   base = mix(base, sky,     clamp(gWarm,0.0,1.0)*0.6);
-  base = mix(base, magenta, irr*0.70);
+  // Identity tint. Slots 14/15 of the genotype, applied here and nowhere else.
+  base = saturate3(hueRotate(base, uGene[3].z), 1.0 + uGene[3].w);
+  base = mix(base, magenta, clamp(irr*0.70*uGene[6].w, 0.0, 1.0));   // gene: irritationGain
   // (The time-of-day tint is gone: colour belongs to boltrig's emotion engine alone. uDay stays in
   // the contract but paints nothing.)
   vec3 hot   = mix(base, vec3(0.40,0.64,1.00), 0.26 + 0.16*lum);   // moonlit, not lit
@@ -1145,8 +1465,8 @@ void main(){
 
   vec3 col = vec3(0.0);
   float alpha = 0.0;
-  float dScreen = length(uv - centre);
-  vec3  L = normalize(vec3(-0.50, 0.62, -0.60));
+  float dScreen = bodyDist(uv - centre, scale);
+  vec3  L = keyLight(uGene[7].x);                              // gene: lightAzimuth
 
   // curiosity: it notices when your cursor comes near, and leans in. "Near" is measured in BODY
   // RADII, not screen units - docked in the bar it is a 36 px bead, and a fixed screen threshold
@@ -1170,7 +1490,7 @@ void main(){
     float face = clamp(dot(n, -rd), 0.0, 1.0);
     float limb = pow(face, 0.55);
 
-    vec3  bq = n*3.4 + vec3(0.0, -t*0.30, 0.0);
+    vec3  bq = n*3.4*uGene[7].y + vec3(0.0, -t*0.30, 0.0);   // gene: bumpScale (frequency, not amplitude)
     float be = 0.40;
     vec3  bump = vec3(vnoise(bq + vec3(be,0,0)) - vnoise(bq - vec3(be,0,0)),
                       vnoise(bq + vec3(0,be,0)) - vnoise(bq - vec3(0,be,0)),
@@ -1578,10 +1898,10 @@ void main(){
     float disp  = pow(1.0 - face, 7.0);
     col += vec3(-0.25, 0.05, 0.55)*disp*0.16*(0.4 + 0.6*lum);
     float fres  = pow(1.0 - face, 3.2);
-    float spec  = pow(max(dot(reflect(rd, nb), L), 0.0), 34.0);
+    float spec  = pow(max(dot(reflect(rd, nb), L), 0.0), 34.0*uGene[5].x);
     float glint = pow(max(dot(reflect(rd, nb), L), 0.0), 140.0);
-    col += base*fres*(0.03 + 0.07*lum + 0.05*soc)*(0.30 + 0.70*diff);   // limb, not an outline
-    col += vec3(0.80,0.85,1.00)*spec*(0.10 + 0.18*lum)*(1.0 - 0.5*fatigue);
+    col += base*fres*(0.03 + 0.07*lum + 0.05*soc)*(0.30 + 0.70*diff)*uGene[5].w;   // limb, not an outline; gene: fresnelGain
+    col += vec3(0.80,0.85,1.00)*spec*(0.10 + 0.18*lum)*(1.0 - 0.5*fatigue)*uGene[5].z;   // gene: specGain
     col += vec3(0.92,0.94,1.00)*glint*(0.5 + 0.8*lum)*(1.0 - 0.6*fatigue);
     alpha = max(alpha, fres*0.5);
   }
@@ -1591,11 +1911,11 @@ void main(){
   col *= mix(1.12, 1.0, pres);   // docked it burns only slightly brighter: 1.55 blew it to white
 
   // --- corona OUTSIDE the rim only; a tight soft halo, social widens it ---
-  float haloK = 34.0 - 16.0*soc;
+  float haloK = (34.0 - 16.0*soc)*uGene[5].y;                  // gene: haloReach
   float outside = smoothstep(scale*0.985, scale*1.010, dScreen);
   float halo = exp(-max(dScreen - scale, 0.0)*haloK/max(scale,0.02))*outside;
   halo *= smoothstep(scale*1.75, scale*1.02, dScreen);
-  vec3 outCol = col + base*halo*(0.22 + 0.45*lum)*(1.0 - 0.4*fatigue)*(1.0 + near*0.3);
+  vec3 outCol = col + base*halo*(0.22 + 0.45*lum)*(1.0 - 0.4*fatigue)*(1.0 + near*0.3)*uGene[6].z;   // gene: haloGain
 
   // --- FLAME OFF THE RIM, INTO THE VOID ---
   // Actual particles, not a modulated glow: embers are born ON the silhouette at a random angle,

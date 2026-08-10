@@ -112,6 +112,25 @@ export class FamiliarWebGLRenderer {
       gl.deleteShader(fs);
       gl.useProgram(prog);
       for (const name of UNIFORMS) this.uniforms[name] = gl.getUniformLocation(prog, name);
+
+    // GENOTYPE. The canonical shader shapes the whole body from uGene; absent
+    // is NOT a circle for the silk theme (bodyScale lives in a gene), so the
+    // canonical defaults from boltrig-familiar/familiar/genotype.h are uploaded
+    // verbatim. Identity variation is a later, deliberate feature.
+    const geneLoc = gl.getUniformLocation(prog, "uGene");
+    if (geneLoc) {
+      gl.uniform4fv(geneLoc, new Float32Array([
+        0.0, 0.0, 0.0, 0.75,
+        0.0, 4.0, 1.0, 1.0,
+        1.0, 1.0, 1.0, 1.0,
+        0.0, 0.0, 0.0, 0.0,
+        1.0, 1.0, 1.0, 1.0,
+        1.0, 1.0, 1.0, 1.0,
+        1.0, 1.0, 1.0, 1.0,
+        0.0, 1.0, 1.0, 1.0,
+      ]));
+    }
+
     } catch (error) {
       // Per the design brief: never rewrite the look to survive a failure —
       // report it and let the Stage fall back to the badge.
