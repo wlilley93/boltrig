@@ -15,8 +15,8 @@ importers:
   .:
     dependencies:
       '@wlilley93/boltrig-web-sdk':
-        specifier: 0.1.1
-        version: 0.1.1
+        specifier: 0.2.0
+        version: 0.2.0
       '@xyflow/react':
         specifier: ^12.11.1
         version: 12.11.1(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -638,8 +638,8 @@ packages:
   '@vitest/utils@4.1.10':
     resolution: {integrity: sha512-fy9am/HWxbaGt/Sawrp90vt6Y6jQwf1RX77cz3uwoJwJVMli/e1IEwRPnMNJ7vKfPTwo0diXifkpPvwH9v7nGA==}
 
-  '@wlilley93/boltrig-web-sdk@0.1.1':
-    resolution: {integrity: sha512-I1ZbOAO8Ka2c8dZK4VlCVqNr3pJHxDMhwHSg/kwZvI6X8AwHI1Rk9BjEu4LjV8lN7OvEq0TUuYKT/d0iihy8yw==, tarball: https://npm.pkg.github.com/download/@wlilley93/boltrig-web-sdk/0.1.1/1de40efc26700711530211e51843a2165fb423e6}
+  '@wlilley93/boltrig-web-sdk@0.2.0':
+    resolution: {integrity: sha512-mTlsdkLYMX3+s+oK3rTKABJDU7Qwux8cfThdX7ms1yUmdnt1NT79u+ys7ApMgBatbVUffs4rCk3fmv0F/8owrg==, tarball: https://npm.pkg.github.com/download/@wlilley93/boltrig-web-sdk/0.2.0/8d3713aaa41a10f3a7ba28bc28868f67aefde23e}
     engines: {node: '>=20'}
 
   '@xyflow/react@12.11.1':
@@ -1879,7 +1879,7 @@ snapshots:
       convert-source-map: 2.0.0
       tinyrainbow: 3.1.0
 
-  '@wlilley93/boltrig-web-sdk@0.1.1': {}
+  '@wlilley93/boltrig-web-sdk@0.2.0': {}
 
   '@xyflow/react@12.11.1(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:

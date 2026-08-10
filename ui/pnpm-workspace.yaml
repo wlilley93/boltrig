@@ -32,6 +32,7 @@ onlyBuiltDependencies:
 # same package cannot silently disable the first again.
 minimumReleaseAgeExclude:
   - '@wlilley93/boltrig-web-sdk@0.1.1'
+  - '@wlilley93/boltrig-web-sdk@0.2.0'
 
 # Accepted advisory, recorded in docs/security/accepted-advisories.json with its
 # reachability, owner, EXPIRY (2026-10-23) and compensating control. No fixed

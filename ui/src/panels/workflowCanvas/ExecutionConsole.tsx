@@ -65,20 +65,14 @@ export function ExecutionConsole({ open, onClose, runResult }: ExecutionConsoleP
       <header className="wf3-console__head">
         <span className="wf3-console__title">Console</span>
         <span className="wf3-console__count muted">{lines.length} events</span>
-        {(() => {
-          // In the SDK source but not yet the published package; structural
-          // read until the next SDK publish.
-          const recovered = (runResult as { exceptions_count?: number } | null)
-            ?.exceptions_count;
-          return recovered ? (
-            <span
-              className="wf3-console__exceptions"
-              title="Failures absorbed by step error strategies or loop error modes - the run completed, but not cleanly"
-            >
-              {recovered} recovered
-            </span>
-          ) : null;
-        })()}
+        {(runResult?.exceptions_count ?? 0) > 0 && (
+          <span
+            className="wf3-console__exceptions"
+            title="Failures absorbed by step error strategies or loop error modes - the run completed, but not cleanly"
+          >
+            {runResult!.exceptions_count} recovered
+          </span>
+        )}
         <button type="button" className="wf3-console__close" onClick={onClose} aria-label="Close console">
           x
         </button>

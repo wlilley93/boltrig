@@ -21,6 +21,9 @@ const LANE_LABELS: Record<WorkStatus, string> = {
   awaiting_human: "Awaiting human",
   done: "Done",
   failed: "Failed",
+  // Neutral terminal (cooperative server-side cancel) - surfaced by SDK 0.2.0,
+  // which is the first published cut carrying the source's WorkStatus union.
+  cancelled: "Cancelled",
 };
 
 function WorkCard({ item, childCount = 0 }: { item: WorkItem; childCount?: number }) {

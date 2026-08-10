@@ -139,13 +139,19 @@ function RegisterMcpForm({ onRegistered }: { onRegistered: () => void }) {
       setMcpError("MCP server id is required.");
       return;
     }
+    // SDK 0.2.0 types url as required - the register verb needs somewhere to
+    // connect to, so surface that here instead of a server-side rejection.
+    if (!mcpUrl.trim()) {
+      setMcpError("MCP server URL is required.");
+      return;
+    }
     setMcpBusy(true);
     setMcpError(null);
     setMcpAck(null);
     try {
       const res = await api.registerMcpServer({
         id: mcpId.trim(),
-        url: mcpUrl.trim() || undefined,
+        url: mcpUrl.trim(),
       });
       setMcpAck(res);
       if (res.status === "ok") onRegistered();

@@ -109,12 +109,7 @@ export function useStudioChat(workflowId: string, steps: WorkflowStep[]) {
         return;
       }
       if (ev.type === "workflow_step") {
-        // `reason` (skip cause / retry tick / absorbed-failure strategy) is in
-        // the SDK source (sdks/web/src/types.ts) but not yet in the published
-        // package this app installs; read it structurally until the next SDK
-        // publish picks it up.
-        const reason = (ev as { reason?: string }).reason;
-        const cause = reason ? ` (${reason})` : "";
+        const cause = ev.reason ? ` (${ev.reason})` : "";
         patchTail((msg) => ({
           ...msg,
           activity: [...msg.activity, `step ${ev.step_id}: ${ev.status}${cause}`],
