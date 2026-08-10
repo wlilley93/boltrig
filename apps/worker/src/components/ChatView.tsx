@@ -28,6 +28,7 @@ import {
   openMaterializedArtifact,
   revealMaterializedArtifact,
 } from "../desktop";
+import { appliedTheme, toggleTheme } from "../theme";
 import { ConversationControls } from "./ConversationControls";
 import { FamiliarBadge, familiarPalette } from "./familiar/FamiliarBadge";
 import { FamiliarStage } from "./familiar/FamiliarStage";
@@ -537,18 +538,16 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
             {stageIsHero
               ? <FamiliarBadge state={loading ? "working" : "ready"} />
               : stage}
-            <div>
-              <p className="eyebrow">Boltrig activity</p>
-              <h1>{
-                conversationStatus === "closed"
-                  ? "Closed conversation"
-                  : conversationId
-                    ? "Continue the work"
-                    : "What should we get done?"
-              }</h1>
-            </div>
+            <h1>{
+              conversationStatus === "closed"
+                ? "Closed conversation"
+                : conversationId
+                  ? (conversationTitle || "Untitled task")
+                  : "New chat"
+            }</h1>
           </div>
           <div className="chat-header-actions">
+            <ThemeToggle />
             {(!conversationId || conversationStatus === "active") && (
               <VoiceCall
                 conversationId={conversationId}
@@ -654,16 +653,40 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
   );
 }
 
+function ThemeToggle() {
+  const [theme, setTheme] = useState(appliedTheme);
+  return (
+    <button
+      aria-label="Toggle theme"
+      className="icon-button theme-toggle"
+      onClick={() => setTheme(toggleTheme())}
+      title={theme === "dark" ? "Switch to light" : "Switch to dark"}
+      type="button"
+    >
+      {theme === "dark" ? (
+        <svg aria-hidden fill="none" height="15" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.7" viewBox="0 0 24 24" width="15">
+          <path d="M12 7.6a4.4 4.4 0 1 1 0 8.8 4.4 4.4 0 0 1 0-8.8z" />
+          <path d="M12 2v2.2M12 19.8V22M4.3 4.3l1.6 1.6M18.1 18.1l1.6 1.6M2 12h2.2M19.8 12H22M4.3 19.7l1.6-1.6M18.1 5.9l1.6-1.6" />
+        </svg>
+      ) : (
+        <svg aria-hidden fill="none" height="15" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.7" viewBox="0 0 24 24" width="15">
+          <path d="M20 14.5A8.2 8.2 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z" />
+        </svg>
+      )}
+    </button>
+  );
+}
+
 function Welcome({ stage }: { stage?: React.ReactNode }) {
   return (
     <section className="welcome">
       {stage ?? <div className="welcome-mark" aria-hidden>ϟ</div>}
-      <h2>Bring me a task, not a prompt.</h2>
+      <h2>What needs doing?</h2>
       <p>I can plan the work, use the tools your workspace grants, pause for approval, and return the artifact here.</p>
-      <div className="suggestions">
-        <span>Turn these notes into a brief</span>
-        <span>Research and compare options</span>
-        <span>Prepare this week’s update</span>
+      <div className="starters">
+        <span className="starter-card">Turn these notes into a brief</span>
+        <span className="starter-card">Research and compare options</span>
+        <span className="starter-card">Prepare this week’s update</span>
       </div>
     </section>
   );
@@ -674,16 +697,16 @@ function Message({ message }: { message: ChatMessage }) {
   const identity = turn.subagents[0];
   return (
     <article className={`message ${message.role}`}>
-      <div className="message-author">
-        {message.role === "assistant" ? (
+      {message.role === "assistant" && (
+        <div className="message-author">
           <FamiliarBadge
             state={turn.ended ? "ready" : "working"}
             genotype={identity?.familiarGenotype}
             label={identity?.name}
           />
-        ) : <span className="user-avatar">Y</span>}
-        <strong>{message.role === "assistant" ? identity?.name ?? "Boltrig" : "You"}</strong>
-      </div>
+          <strong>{identity?.name ?? "Boltrig"}</strong>
+        </div>
+      )}
       <div className="message-content">
         {turn.degraded && (
           <p className="notice" role="status">
@@ -933,8 +956,17 @@ function Composer({
               ■ Stop
             </button>
           )}
-          <button className="send-button" type="submit" disabled={disabled || !value.trim()}>
-            {busy ? "Queue next ↑" : "Send ↑"}
+          <button
+            aria-label={busy ? "Queue next ↑" : "Send ↑"}
+            className="send-button"
+            disabled={disabled || !value.trim()}
+            title={busy ? "Queue next" : "Send"}
+            type="submit"
+          >
+            <svg aria-hidden fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.3" viewBox="0 0 24 24" width="14">
+              <line x1="12" x2="12" y1="19" y2="5" />
+              <polyline points="5 12 12 5 19 12" />
+            </svg>
           </button>
         </div>
       </div>
