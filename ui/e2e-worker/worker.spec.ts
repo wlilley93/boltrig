@@ -27,14 +27,20 @@ test("built Worker is the task-first Boltrig surface and retains Operator escape
   await page.goto("/#/chat");
 
   await expect(page.getByRole("complementary", { name: "Worker navigation" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "What should we get done?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "What needs doing?" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Open Operator" })).toHaveAttribute(
     "href",
     "/operator/",
   );
 
-  for (const label of ["Inbox", "Routines", "Plugins", "Runs", "Work", "Agents", "Knowledge", "Memory"]) {
+  // The decided target's sidebar carries four surfaces and no second group.
+  // Inbox, Runs, Work, Knowledge and Memory stay reachable from the account
+  // menu and the command palette, which the palette test below exercises.
+  for (const label of ["Chat", "Agents", "Plugins", "Routines"]) {
     await expect(page.getByRole("button", { name: label, exact: true })).toBeVisible();
+  }
+  for (const gone of ["Inbox", "Runs", "Work", "Knowledge", "Memory"]) {
+    await expect(page.getByRole("button", { name: gone, exact: true })).toHaveCount(0);
   }
 });
 
@@ -133,12 +139,13 @@ test("Worker approves a canonical Inbox decision and converges its global count"
 
   await page.goto("/#/chat");
   await expect(page.getByRole("button", {
-    name: "Inbox 1 pending decisions",
+    name: "1 pending decisions",
+    exact: true,
   })).toBeVisible();
-  await expect(page.getByLabel("1 pending decisions")).toBeVisible();
+  await expect(page.getByLabel("1 pending decisions", { exact: true })).toBeVisible();
   await expect(page.getByLabel(/Signed in as e2e-worker/)).toBeVisible();
 
-  await page.getByRole("button", { name: "Inbox 1 pending decisions" }).click();
+  await page.getByRole("button", { name: "1 pending decisions", exact: true }).click();
   await expect(page).toHaveURL(/#\/inbox$/);
 
   const decision = page.getByRole("article").filter({
