@@ -37,6 +37,7 @@ import {
   type FamiliarPresentationMode,
 } from "./familiar/FamiliarState";
 import { LiveQuestionCard } from "./LiveQuestionCard";
+import { MobileChat } from "./MobileChat";
 import { VoiceCall } from "./VoiceCall";
 
 interface ChatViewProps {
@@ -70,6 +71,10 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
   const [continuity, setContinuity] = useState("");
   const [retryFollow, setRetryFollow] = useState(false);
   const compactTaskDetails = useMediaQuery("(max-width: 1020px)");
+  // Mobile is a different surface, not the console squeezed. Below the phone
+  // breakpoint the conversation is drawn by MobileChat on its own palette.
+  const phone = useMediaQuery("(max-width: 640px)");
+  const [mobileDraft, setMobileDraft] = useState("");
   const [voiceActivity, setVoiceActivity] = useState<{
     speaking: boolean;
     level: number;
@@ -539,6 +544,29 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
   const stage = <FamiliarStage mode={stageMode} state={stageState} phenotype={phenotype} />;
   const bulletStage = stagePlacement === "bullet" ? stage : undefined;
 
+  if (phone) {
+    return (
+      <MobileChat
+        busy={Boolean(live.runId) && !live.ended}
+        composerValue={mobileDraft}
+        messages={messages}
+        onBack={() => onConversation("")}
+        onComposerChange={setMobileDraft}
+        onSend={() => {
+          const text = mobileDraft.trim();
+          if (!text) return;
+          setMobileDraft("");
+          void send(text, []);
+        }}
+        subtitle={live.subagents.length > 0
+          ? `${live.subagents.length} working`
+          : conversationStatus === "closed" ? "Closed" : ""}
+        title={conversationId ? (conversationTitle || "Untitled task") : "New chat"}
+        turn={live}
+      />
+    );
+  }
+
   return (
     <div className="chat-layout">
       <main className="chat-main">
@@ -551,6 +579,14 @@ export function ChatView({ conversationId, onConversation, onChanged }: ChatView
                   ? (conversationTitle || "Untitled task")
                   : "New chat"
             }</h1>
+            {/* The decided target sets a muted count beside the title. It is
+                stated only when there is something to count, so an empty chat
+                does not carry a "0 subagents" label the design never draws. */}
+            {live.subagents.length > 0 && (
+              <span className="chat-header-sub">
+                {live.subagents.length} {live.subagents.length === 1 ? "subagent" : "subagents"}
+              </span>
+            )}
           </div>
           <div className="chat-header-actions">
             <ThemeToggle />
@@ -979,14 +1015,15 @@ function Composer({
         <div>
           <input ref={input} hidden type="file" multiple onChange={(event) => void addFiles(event.target.files)} />
           <button type="button" className="icon-button" disabled={disabled} onClick={() => input.current?.click()} aria-label="Attach files">＋</button>
+        </div>
+        <div>
           {profiles.length > 0 && (
-            <select aria-label="Model profile" disabled={disabled} value={profile} onChange={(event) => onProfile(event.target.value)}>
-              <option value="">Automatic routing</option>
+            <select className="composer-model" aria-label="Model profile" disabled={disabled} value={profile} onChange={(event) => onProfile(event.target.value)}>
+              <option value="">Best available</option>
               {profiles.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
             </select>
           )}
-        </div>
-        <div>
+
           {busy && (
             <button className="stop-button" type="button" onClick={() => void onStop()}>
               ■ Stop
@@ -1012,6 +1049,67 @@ function Composer({
         {!attachmentLimitsVerified && " Server limits will be checked when you send."}
       </p>
     </form>
+  );
+}
+
+// A rail group: a header line carrying a title and at most one verb, then its
+// rows. The seam between groups is drawn by `.rail-group + .rail-group`, so a
+// group never draws its own border and the rail stays one card.
+function RailGroup({
+  title,
+  action,
+  onAction,
+  children,
+}: {
+  title: string;
+  action?: string;
+  onAction?(): void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rail-group">
+      <div className="rail-group-head">
+        <span>{title}</span>
+        {action !== undefined && (
+          onAction
+            ? <button className="rail-action" onClick={onAction} type="button">{action}</button>
+            : <span className="rail-action" aria-hidden={false}>{action}</span>
+        )}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function RailRow({
+  tone,
+  mark,
+  label,
+  meta,
+  quiet,
+  onClick,
+}: {
+  tone?: "green" | "amber" | "red" | "unknown";
+  mark?: React.ReactNode;
+  label: string;
+  meta?: string;
+  quiet?: boolean;
+  onClick?(): void;
+}) {
+  const inner = (
+    <>
+      {mark
+        ? <span className="rail-mark">{mark}</span>
+        : <span className="rail-dot" style={{ background: `var(--${tone ?? "unknown"})` }} />}
+      <span className="rail-label" data-quiet={quiet ? "true" : undefined}>{label}</span>
+      {meta ? <span className="rail-meta">{meta}</span> : null}
+    </>
+  );
+  if (!onClick) return <div className="rail-row">{inner}</div>;
+  return (
+    <button className="rail-row" data-interactive="true" onClick={onClick} type="button">
+      {inner}
+    </button>
   );
 }
 
@@ -1125,8 +1223,45 @@ function RightRail({
           </button>
         </div>
       )}
-      <section>
-        <p className="eyebrow">Artifacts</p>
+      <div className="rail-card">
+      <RailGroup title="This run">
+        <RailRow
+          tone={turn.cancelled ? "red" : turn.ended ? "green" : turn.runId ? "green" : "unknown"}
+          label={turn.cancelled ? "Cancelled" : turn.ended ? "Done" : turn.runId ? "Running" : "Ready"}
+          meta={turn.runId ? turn.runId.slice(0, 10) : "—"}
+        />
+        <RailRow
+          tone="unknown"
+          quiet
+          label={`${turn.tools.length} ${turn.tools.length === 1 ? "tool" : "tools"}`}
+          meta={`${turn.subagents.length} ${turn.subagents.length === 1 ? "subagent" : "subagents"}`}
+        />
+      </RailGroup>
+      {(turn.hitls.length > 0 || turn.questions.length > 0) && (
+        <RailGroup title="Waiting for you" action={String(turn.hitls.length + turn.questions.length)}>
+          {turn.hitls.map((item) => (
+            <RailRow key={item.hitlRequestId} tone="amber" label={item.question} meta={item.verb} />
+          ))}
+          {turn.questions.map((item) => (
+            <RailRow key={item.questionId} tone="amber" label={item.prompt} />
+          ))}
+        </RailGroup>
+      )}
+      {turn.subagents.length > 0 && (
+        <RailGroup title="Subagents">
+          {turn.subagents.map((item) => (
+            <RailRow
+              key={item.key}
+              quiet
+              mark={<FamiliarBadge state={turn.ended ? "ready" : "working"} label={item.name ?? item.task} />}
+              label={item.name ?? item.task}
+              meta={item.role}
+            />
+          ))}
+        </RailGroup>
+      )}
+      <RailGroup title="Artifacts">
+      <div className="rail-body">
         {artifacts.length === 0 ? <p className="muted small">Outputs from this task will appear here.</p> : artifacts.map((item) => {
           const handle = materialized[item.id];
           return (
@@ -1167,30 +1302,25 @@ function RightRail({
           </button>
         )}
         {downloadError && <p className="notice" role="alert">{downloadError}</p>}
-      </section>
-      <section>
-        <p className="eyebrow">Activity</p>
-        <dl className="run-facts">
-          <div><dt>Run</dt><dd>{turn.runId?.slice(0, 10) ?? "—"}</dd></div>
-          <div><dt>Tools</dt><dd>{turn.tools.length}</dd></div>
-          <div><dt>Delegations</dt><dd>{turn.subagents.length}</dd></div>
-          <div><dt>Status</dt><dd>{turn.cancelled ? "Cancelled" : turn.ended ? "Done" : turn.runId ? "Running" : "Ready"}</dd></div>
-        </dl>
-      </section>
+      </div>
+      </RailGroup>
       {conversation && (
-        <ConversationControls
-          conversationId={conversation.id}
-          title={conversation.title}
-          status={conversation.status}
-          lastAssistantMessageId={conversation.lastAssistantMessageId}
-          onChanged={() => void onConversationChanged()}
-          onDeleted={onConversationDeleted}
-        />
+        <div className="rail-group">
+          <ConversationControls
+            conversationId={conversation.id}
+            title={conversation.title}
+            status={conversation.status}
+            lastAssistantMessageId={conversation.lastAssistantMessageId}
+            onChanged={() => void onConversationChanged()}
+            onDeleted={onConversationDeleted}
+          />
+        </div>
       )}
-      <section className="privacy-note">
+      <div className="rail-group privacy-note">
         <span aria-hidden>◇</span>
         <p><strong>Governed by Boltrig</strong>Tools, credentials, memory, and approvals stay server-side.</p>
-      </section>
+      </div>
+      </div>
     </aside>
   );
 }

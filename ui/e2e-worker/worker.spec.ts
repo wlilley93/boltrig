@@ -33,7 +33,7 @@ test("built Worker is the task-first Boltrig surface and retains Operator escape
     "/operator/",
   );
 
-  for (const label of ["Inbox", "Automations", "Integrations", "Runs", "Work", "Agents", "Knowledge", "Memory"]) {
+  for (const label of ["Inbox", "Routines", "Plugins", "Runs", "Work", "Agents", "Knowledge", "Memory"]) {
     await expect(page.getByRole("button", { name: label, exact: true })).toBeVisible();
   }
 });

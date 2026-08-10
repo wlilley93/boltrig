@@ -6,6 +6,7 @@ import type {
 
 import { client } from "../client";
 import { navigate, type WorkerRoute } from "../routes";
+import { SETTINGS_SECTIONS, type SettingsSection } from "../settingsSections";
 import { useWorkerGlobalContext } from "./WorkerGlobalContext";
 
 // Stroke-path icons carried over from the Boltrig Console design component so
@@ -68,16 +69,19 @@ function Icon({ name, size = 16 }: { name: keyof typeof ICON_PATHS; size?: numbe
   );
 }
 
-// The console nav holds the task-first surfaces under their canonical Worker
-// names (the browser acceptance contract in ui/e2e-worker/worker.spec.ts
-// names them exactly), a quiet Workspace group keeps the record surfaces
-// visible, and the remainder stays one press away inside the account menu.
+// The console nav holds the task-first surfaces under the names the decided
+// target gives them — Plugins and Routines, not Integrations and Automations
+// (the browser acceptance contract in ui/e2e-worker/worker.spec.ts names them
+// exactly, so it moves with this list). The design carries only these four; the
+// Workspace group below is the honest remainder, kept visible because the
+// destinations that would absorb it (Knowledge inside settings, Runs and Work
+// inside the run section view) are not built yet.
 const primary: Array<{ route: WorkerRoute; label: string; icon: keyof typeof ICON_PATHS }> = [
   { route: "chat", label: "Chat", icon: "chat" },
   { route: "inbox", label: "Inbox", icon: "inbox" },
   { route: "agents", label: "Agents", icon: "agents" },
-  { route: "integrations", label: "Integrations", icon: "plug" },
-  { route: "automations", label: "Automations", icon: "flow" },
+  { route: "integrations", label: "Plugins", icon: "plug" },
+  { route: "automations", label: "Routines", icon: "flow" },
 ];
 
 const workspace: Array<{ route: WorkerRoute; label: string; icon: keyof typeof ICON_PATHS }> = [
@@ -113,6 +117,9 @@ interface SidebarProps {
   onRetryConversations?(): void;
   hasMoreConversations: boolean;
   onCommandPalette?(): void;
+  /** Present only while the settings surface is open. */
+  settingsSection?: SettingsSection;
+  onSettingsSection?(section: SettingsSection): void;
 }
 
 interface ConversationSearchState {
@@ -138,7 +145,10 @@ export function Sidebar({
   onRetryConversations,
   hasMoreConversations,
   onCommandPalette,
+  settingsSection,
+  onSettingsSection,
 }: SidebarProps) {
+  const [settingsQuery, setSettingsQuery] = useState("");
   const {
     identity,
     identityStatus,
@@ -281,6 +291,61 @@ export function Sidebar({
   const healthTone = health.status === "ready"
     ? "green"
     : health.status === "degraded" ? "amber" : "unknown";
+
+  // In settings the sidebar becomes the settings nav, as the decided target
+  // draws it: a way back, one search over every setting, and the ten sections
+  // under their heads. The global nav is one press away behind "Back to app".
+  if (route === "settings" && onSettingsSection) {
+    return (
+      <aside className="sidebar" aria-label="Settings navigation">
+        <div className="settings-side-top">
+          <button className="settings-back" onClick={() => onRoute("chat")} type="button">
+            <svg aria-hidden fill="none" height="15" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="15">
+              <line x1="19" x2="5" y1="12" y2="12" />
+              <polyline points="11 18 5 12 11 6" />
+            </svg>
+            <span>Back to app</span>
+          </button>
+          <div className="settings-search">
+            <svg aria-hidden fill="none" height="14" stroke="var(--text-4)" strokeLinecap="round" strokeWidth="2" viewBox="0 0 24 24" width="14">
+              <circle cx="11" cy="11" r="7" />
+              <line x1="16.5" x2="21" y1="16.5" y2="21" />
+            </svg>
+            <input
+              aria-label="Search every setting"
+              onChange={(event) => setSettingsQuery(event.target.value)}
+              placeholder="Search every setting"
+              value={settingsQuery}
+            />
+          </div>
+        </div>
+        <nav aria-label="Settings sections" className="settings-side-nav">
+          {SETTINGS_SECTIONS.filter((entry) => {
+            const needle = settingsQuery.trim().toLowerCase();
+            if (!needle) return true;
+            return `${entry.label} ${entry.title} ${entry.lead}`.toLowerCase().includes(needle);
+          }).map((entry) => (
+            <div key={entry.id}>
+              {entry.head && !settingsQuery.trim() && (
+                <p className="settings-side-head">{entry.head}</p>
+              )}
+              <button
+                aria-current={settingsSection === entry.id ? "page" : undefined}
+                className={settingsSection === entry.id ? "nav-row active" : "nav-row"}
+                onClick={() => onSettingsSection(entry.id)}
+                type="button"
+              >
+                <span>{entry.label}</span>
+              </button>
+            </div>
+          ))}
+        </nav>
+        <p className="settings-side-foot">
+          Every setting is one search away. Nothing is hidden, only quiet.
+        </p>
+      </aside>
+    );
+  }
 
   return (
     <aside className="sidebar" aria-label="Worker navigation">

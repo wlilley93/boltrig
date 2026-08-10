@@ -334,7 +334,7 @@ export function IntegrationsView() {
   return (
     <div className="page">
       <Topbar
-        title="Integrations"
+        title="Plugins"
         status={apiState === "available" ? `${connections.length} connected` : "Catalogue preview"}
       />
       <div className="page-content">
@@ -344,7 +344,7 @@ export function IntegrationsView() {
         />
         <div className="page-intro">
           <div>
-            <h2>Work across your tools</h2>
+            <h2>Plugins</h2>
             <p>Boltrig owns connection state and credentials. Worker only starts governed setup and never reads a stored secret.</p>
           </div>
           <input className="search" aria-label="Search integrations" placeholder="Search tools…" value={query} onChange={(event) => setQuery(event.target.value)} />

@@ -15,6 +15,7 @@ import {
   type WorkflowRunStat,
   type WorkflowScheduleOccurrence,
   type WorkflowScheduleState,
+  type WorkflowStepDefinition,
   type WorkflowSummary,
   type WorkflowTriggerDelivery,
   type WorkflowTriggerMutationResponse,
@@ -44,6 +45,7 @@ import {
   type GovernedResult,
   useExactApprovalFinalizer,
 } from "./ExactApprovalFinalizer";
+import { RoutineThumb } from "./RoutineThumb";
 import { Topbar, Unavailable } from "./Shell";
 
 type PendingTriggerMutation =
@@ -1039,14 +1041,14 @@ export function AutomationsView() {
 
   return (
     <div className="page">
-      <Topbar title="Automations" status={surfaceState === "loading" ? "Loading…" : surfaceState === "ready" ? `${workflows.length} workflows` : surfaceState === "denied" ? "Restricted" : "Unavailable"} />
+      <Topbar title="Routines" status={surfaceState === "loading" ? "Loading…" : surfaceState === "ready" ? `${workflows.length} workflows` : surfaceState === "denied" ? "Restricted" : "Unavailable"} />
       <div className="page-content">
         <div className="page-intro">
           <div>
-            <h2>Build governed workflows</h2>
-            <p>Every step names a scoped Boltrig verb. Saves, approvals, runs, credentials, and Hatchet handoff stay behind the kernel.</p>
+            <h2>Routines</h2>
+            <p>Steps boltrig repeats the same way every time, held as data rather than code. Each one is a graph: what starts it, then steps that wait on the steps before them. Every step names a scoped verb, and saves, approvals, runs, credentials and Hatchet handoff stay behind the kernel.</p>
           </div>
-          {surfaceState === "ready" && <button className="primary-button" onClick={newWorkflow}>New workflow</button>}
+          {surfaceState === "ready" && <button className="primary-button" onClick={newWorkflow}>New routine</button>}
         </div>
         {listNotice && <p className="notice" role="status">{listNotice}</p>}
         {detailError && <p className="notice" role="alert">{detailError}</p>}
@@ -1054,8 +1056,17 @@ export function AutomationsView() {
         {surfaceState === "loading" && <Unavailable title="Loading automations">Loading the governed workflow library.</Unavailable>}
         {surfaceState === "denied" && <Unavailable title="Automation access denied">Your current role cannot view or author workflows.</Unavailable>}
         {surfaceState === "unavailable" && <Unavailable title="Automations unavailable">The governed workflow library could not be reached.</Unavailable>}
-        {surfaceState === "ready" && (
-          <div className={`automation-studio ${draft ? "editor-open" : ""}`}>
+        {surfaceState === "ready" && !draft && (
+          <RoutinePicker
+            onNew={newWorkflow}
+            onOpen={(id) => { invalidateExactApproval(); setSelectedWorkflowId(id); }}
+            onRefresh={() => void refreshList()}
+            stats={stats}
+            workflows={workflows}
+          />
+        )}
+        {surfaceState === "ready" && draft && (
+          <div className="automation-studio editor-open">
             <aside className="workflow-library" aria-label="Workflow library">
               <div className="workflow-library-head">
                 <strong>Library</strong>
@@ -1865,4 +1876,133 @@ function lifecyclePastTense(action: "unschedule" | "archive" | "restore") {
   if (action === "unschedule") return "unscheduled";
   if (action === "archive") return "archived";
   return "restored";
+}
+
+// --- The routine picker -----------------------------------------------------
+// The decided target opens Routines as a picker rather than a table: a card per
+// routine showing its own graph, so you recognise one by its shape before you
+// read its name. Opening a card routes into the editor that already exists.
+
+function routineWhen(value: string | null | undefined): string {
+  if (!value) return "never run";
+  const then = new Date(value).getTime();
+  if (Number.isNaN(then)) return "never run";
+  const seconds = Math.max(0, Math.round((Date.now() - then) / 1000));
+  if (seconds < 60) return "just now";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
+}
+
+export function RoutinePicker({
+  workflows,
+  stats,
+  onOpen,
+  onNew,
+  onRefresh,
+}: {
+  workflows: WorkflowSummary[];
+  stats: Record<string, WorkflowRunStat>;
+  onOpen(id: string): void;
+  onNew(): void;
+  onRefresh(): void;
+}) {
+  const [steps, setSteps] = useState<Record<string, WorkflowStepDefinition[]>>({});
+
+  // Summaries carry no steps, so the graph has to be read from each detail. A
+  // failed read leaves that card without a drawing rather than inventing one.
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all(workflows.map(async (workflow) => {
+      try {
+        const detail = await client.workflow(workflow.id);
+        const list = (detail.definition?.steps ?? []) as WorkflowStepDefinition[];
+        return [workflow.id, Array.isArray(list) ? list : []] as const;
+      } catch {
+        return [workflow.id, []] as const;
+      }
+    })).then((entries) => {
+      if (cancelled) return;
+      setSteps(Object.fromEntries(entries));
+    });
+    return () => { cancelled = true; };
+  }, [workflows]);
+
+  return (
+    <>
+    <div className="routine-picker-bar">
+      <button className="icon-button" aria-label="Refresh workflows" onClick={onRefresh} type="button">↻</button>
+    </div>
+    {workflows.length === 0 && <p className="muted small">No saved workflows yet.</p>}
+    <div className="console-cards">
+      <button className="routine-new" onClick={onNew} type="button">
+        <span className="routine-new-plus" aria-hidden>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+        </span>
+        <span className="routine-new-title">New routine</span>
+        <span className="routine-new-sub">
+          An empty routine with a chat in it. Ask it to read a run that went well, or say what should happen.
+        </span>
+      </button>
+      {workflows.map((workflow) => {
+        const stat = stats[workflow.id];
+        const runs = stat?.run_count ?? 0;
+        const failed = runs > 0 && (stat?.success_count ?? 0) < runs;
+        const tone = runs === 0 ? "unknown" : failed ? "red" : "green";
+        const scheduled = Boolean(workflow.schedule);
+        const observed = workflow.schedule_state?.observed.status;
+        const needsYou = observed === "needs_action";
+        return (
+          <button
+            className="routine-card"
+            key={workflow.id}
+            onClick={() => onOpen(workflow.id)}
+            type="button"
+          >
+            <span className="routine-thumb">
+              <RoutineThumb steps={steps[workflow.id] ?? []} />
+            </span>
+            <span className="routine-body">
+              <span className="routine-name-row">
+                <span className="rail-dot" style={{ background: `var(--${tone})` }} />
+                <span className="routine-name">{workflow.id}</span>
+                <span className="routine-version">v{workflow.version}</span>
+              </span>
+              <span className="routine-sub">
+                {(workflow.intent_tags ?? []).length > 0
+                  ? (workflow.intent_tags ?? []).join(", ")
+                  : `Held as data, from ${workflow.source}`}
+              </span>
+              <span style={{ flex: 1 }} />
+              <span className="routine-foot-row">
+                <span className="routine-starts">
+                  {scheduled
+                    ? `${workflow.schedule?.cron} ${workflow.schedule?.timezone}`
+                    : "Nothing starts it on a schedule"}
+                  {workflow.schedule_state?.desired.status === "active"
+                    ? ` \u00b7 scheduler ${workflow.schedule_state.observed.status.replace("_", " ")}`
+                    : ""}
+                </span>
+                <span className="routine-state" data-tone={needsYou ? "needs" : undefined}>
+                  {needsYou
+                    ? "needs you"
+                    : workflow.status === "archived"
+                      ? "archived"
+                      : scheduled ? "unattended" : "manual"}
+                </span>
+                <span className="routine-when" data-tone={failed ? "failed" : undefined}>
+                  {routineWhen(stat?.last_run_at)}
+                </span>
+              </span>
+            </span>
+          </button>
+        );
+      })}
+    </div>
+    </>
+  );
 }

@@ -607,7 +607,7 @@ describe("Worker native automation authoring", () => {
 
     render(<AutomationsView />);
     await waitFor(() => expect(api.capabilities).toHaveBeenCalled());
-    fireEvent.click(screen.getByRole("button", { name: "New workflow" }));
+    fireEvent.click(screen.getByRole("button", { name: "New routine" }));
     fireEvent.change(screen.getByLabelText("Workflow id"), {
       target: { value: "daily-review" },
     });
@@ -673,7 +673,7 @@ describe("Worker native automation authoring", () => {
     api.invokeApprovalState.mockResolvedValue({ status: "approved" });
 
     render(<AutomationsView />);
-    fireEvent.click(await screen.findByRole("button", { name: "New workflow" }));
+    fireEvent.click(await screen.findByRole("button", { name: "New routine" }));
     fireEvent.change(screen.getByLabelText("Workflow id"), {
       target: { value: "approval-workflow" },
     });
@@ -1073,6 +1073,14 @@ describe("Worker native automation authoring", () => {
     });
     api.channels.mockResolvedValue({ channels: [] });
     api.workflow
+      // The Routines picker reads each routine's definition to draw its own
+      // graph on the card, so one detail read happens before anything is
+      // selected. The editor's sequence below is unchanged.
+      .mockResolvedValueOnce({
+        ...base,
+        status: "active",
+        schedule: { type: "cron", cron: "0 9 * * 1-5", timezone: "UTC" },
+      })
       .mockResolvedValueOnce({
         ...base,
         status: "active",

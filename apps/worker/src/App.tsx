@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react"
 import type { ConversationSummary } from "@wlilley93/boltrig-web-sdk";
 
 import { client } from "./client";
+import type { SettingsSection } from "./settingsSections";
 import { ChatView } from "./components/ChatView";
 import { CommandPalette } from "./components/CommandPalette";
 import { Sidebar } from "./components/Shell";
@@ -41,6 +42,9 @@ export function App() {
     "loading" | "ready" | "unavailable"
   >("loading");
   const [railOpen, setRailOpen] = useState(false);
+  // Which settings section is open. The sidebar and the pane both read it, so
+  // it lives above them rather than inside either.
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>("you");
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const mobileMenuRef = useRef<HTMLButtonElement>(null);
   const sidebarWrapRef = useRef<HTMLDivElement>(null);
@@ -223,6 +227,8 @@ export function App() {
           onRetryConversations={refreshConversations}
           hasMoreConversations={conversationOffset !== null}
           onCommandPalette={() => setCommandPaletteOpen(true)}
+          onSettingsSection={setSettingsSection}
+          settingsSection={settingsSection}
         />
       </div>
       <section className="surface" ref={surfaceRef}>
@@ -243,7 +249,7 @@ export function App() {
         {route === "integrations" && <IntegrationsView />}
         {route === "operate" && <OperateView />}
         {route === "organisation" && <OrganisationView />}
-        {route === "settings" && <SettingsView />}
+        {route === "settings" && <SettingsView onContextChanged={contextChanged} section={settingsSection} />}
         {route === "account" && <AccountView onContextChanged={contextChanged} />}
         {route === "runs" && <RunsView />}
         {route === "work" && <WorkView />}

@@ -952,11 +952,24 @@ export function AgentsView() {
     && !agents.some((agent) => agent.name === selectedAgentName);
   return (
     <div className="page">
-      <Topbar title="Agents" status={`${activeCount}/${agents.length} active profiles`} />
-      <div className="page-content">
-        <div className="page-intro">
-          <div><h2>Agent profiles</h2><p>Profiles are selectable runtime configuration, not proof of a live permanent agent. The desired/observed org chart below is the authority for Chief of Staff and department heads.</p></div>
-          {surfaceState === "ready" && <div className="inline-actions"><span className="status-pill"><i />{skillCount} skills visible</span><button className="primary-button" onClick={() => { lifecycleFinalizer.invalidate(); setSelectedAgentName(null); setEditing(null); }}>New profile</button></div>}
+      <div className="console-page">
+        <div className="console-head">
+          <div>
+            <h1>Agents</h1>
+            <p>Who does what. Each one can only do what the person or agent above it can do, and usually less.</p>
+          </div>
+          {surfaceState === "ready" && (
+            <button
+              className="console-primary"
+              onClick={() => { lifecycleFinalizer.invalidate(); setSelectedAgentName(null); setEditing(null); }}
+              type="button"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+                <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              <span>New agent</span>
+            </button>
+          )}
         </div>
         {error && <p className="notice">{error}</p>}
         {message && <p className="notice" role="status">{message}</p>}
@@ -969,14 +982,40 @@ export function AgentsView() {
         {surfaceState === "ready" && <PermanentFleetTopology />}
         {surfaceState === "ready" && !unknownAgent && editing !== undefined && <AgentProfileEditor initial={editing} onCancel={() => { setEditing(undefined); setSelectedAgentName(null); }} onSaved={refresh} />}
         {surfaceState === "ready" && !unknownAgent && (agents.length === 0 ? <Unavailable title="No agent profiles visible">Your workspace has not approved a durable or ephemeral agent profile for this role.</Unavailable> : (
-          <div className="agent-grid">{agents.map((agent) => <AgentCard agent={agent} busy={busy === agent.name} onEdit={() => setSelectedAgentName(agent.name)} onLifecycle={() => void changeLifecycle(agent)} key={agent.name} />)}</div>
+          <div className="console-table-wrap">
+            <div className="console-table">
+              <div className="console-table-head">
+                <span style={{ flex: 1 }}>Agent</span>
+                <span className="console-cell">What it may do</span>
+                <span className="console-state">State</span>
+                <span className="console-far">Tier</span>
+              </div>
+              {agents.map((agent) => (
+                <AgentRow
+                  agent={agent}
+                  busy={busy === agent.name}
+                  key={agent.name}
+                  onEdit={() => setSelectedAgentName(agent.name)}
+                  onLifecycle={() => void changeLifecycle(agent)}
+                />
+              ))}
+            </div>
+            {/* The decided target puts a "Today" spend column here. This client
+                has no per-agent spend on the author inventory, so the column
+                states the cost tier it does have rather than a figure it does
+                not. */}
+            <p className="console-foot">
+              Each agent&rsquo;s picture is drawn from what it is and how its work is going.
+              Nothing in it is decoration. {skillCount} skills are visible to this role.
+            </p>
+          </div>
         ))}
       </div>
     </div>
   );
 }
 
-function AgentCard({ agent, busy, onEdit, onLifecycle }: {
+function AgentRow({ agent, busy, onEdit, onLifecycle }: {
   agent: AgentCapabilityAuthorInfo;
   busy: boolean;
   onEdit(): void;
@@ -984,33 +1023,48 @@ function AgentCard({ agent, busy, onEdit, onLifecycle }: {
 }) {
   const genotype = agent.familiar_genotype;
   const hasIdentity = genotype?.source === "agent_capability.name.v1";
+  const skills = agent.supported_skills;
+  // The row is a div carrying two buttons rather than one clickable row, because
+  // the lifecycle control has to stay a real button: it is the entry to the
+  // exact-approval replay, and a control nested inside a button is neither valid
+  // nor reachable.
   return (
-    <article className="agent-card">
-      <div
+    <div className="console-row">
+      <span
         aria-label={hasIdentity
           ? `${agent.name} profile Familiar`
           : `${agent.name} profile identity unavailable`}
-        className="profile-familiar"
+        className="console-mark profile-familiar"
         data-genotype-source={hasIdentity ? genotype.source : "unavailable"}
         role="img"
         style={hasIdentity ? familiarStyle(genotype) : undefined}
-      ><i /></div>
-      <div className="agent-card-heading"><div><p className="eyebrow">{agent.is_ephemeral ? "Ephemeral worker profile" : "Persistent profile"}</p><h3>{agent.name}</h3></div><span className="row-meta">{agent.status} · {agent.cost_tier}</span></div>
-      <dl className="fact-grid">
-        <Fact label="Runtime" value={agent.runtime} />
-        <Fact label="Max depth" value={String(agent.max_depth)} />
-      </dl>
-      <div className="skill-list">
-        {agent.supported_skills.length === 0 ? <span className="muted small">No named skills</span> : agent.supported_skills.slice(0, 8).map((skill) => <span key={skill}>{skill}</span>)}
-        {agent.supported_skills.length > 8 && <span>+{agent.supported_skills.length - 8}</span>}
-      </div>
-      <div className="inline-actions">
-        <button className="secondary-button" onClick={onEdit}>Configure profile</button>
-        <button className="secondary-button" disabled={busy} onClick={onLifecycle}>
-          {busy ? "Requesting…" : agent.is_active ? "Retire profile" : "Restore profile"}
-        </button>
-      </div>
-    </article>
+      ><i /></span>
+      <button className="console-row-main" onClick={onEdit} type="button">
+        <span className="console-row-title">
+          <span>{agent.name}</span>
+          <span className="console-tech">{agent.runtime}</span>
+        </span>
+        <span className="console-row-sub">
+          {agent.is_ephemeral ? "Ephemeral worker profile" : "Persistent profile"}
+        </span>
+      </button>
+      <span className="console-cell">
+        {skills.length === 0
+          ? "No named skills"
+          : `${skills.slice(0, 3).join(", ")}${skills.length > 3 ? ` +${skills.length - 3}` : ""}`}
+      </span>
+      <span className="console-state" data-tone={agent.is_active ? undefined : "asking"}>
+        {`${agent.status} \u00b7 ${agent.cost_tier}`}
+      </span>
+      <button
+        className="console-lifecycle"
+        disabled={busy}
+        onClick={onLifecycle}
+        type="button"
+      >
+        {busy ? "Requesting\u2026" : agent.is_active ? "Retire profile" : "Restore profile"}
+      </button>
+    </div>
   );
 }
 
