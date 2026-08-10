@@ -17,7 +17,6 @@ The interpreter tests use a stub kernel (the interpreter only needs
 
 from __future__ import annotations
 
-import pytest
 
 from boltrig.models import (
     BoltrigError,
@@ -26,7 +25,6 @@ from boltrig.models import (
     WorkflowDefinition,
     WorkflowSource,
 )
-from boltrig.workflows import control_flow
 from boltrig.workflows.control_flow import (
     _compare,
     aggregate_loop_results,
