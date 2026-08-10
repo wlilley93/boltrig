@@ -10,8 +10,10 @@ from boltrig.models import InvocationContext
 from .control_approval import require_unchanged_approval_context
 from .control_workflows import (
     change_workflow_lifecycle_record,
+    publish_draft_record,
     retry_workflow_schedule_occurrence_record,
     schedule_workflow_record,
+    upsert_draft_record,
     upsert_workflow_record,
 )
 from .control_workflow_triggers import (
@@ -55,6 +57,18 @@ async def _definition_mutation(
             store, tenant, params, workspace_id=context.workspace_id
         )
         return Result.success({"upserted": "workflow", "id": workflow.id})
+    if verb == "control.workflow.draft.upsert":
+        draft = await upsert_draft_record(
+            store, tenant, params, workspace_id=context.workspace_id
+        )
+        return Result.success({"upserted": "draft", "id": params["id"], "draft_id": draft.id})
+    if verb == "control.workflow.publish":
+        workflow = await publish_draft_record(
+            store, tenant, params, workspace_id=context.workspace_id
+        )
+        return Result.success(
+            {"published": "workflow", "id": workflow.id, "version": workflow.version}
+        )
     if verb == "control.workflow.schedule":
         schedule, schedule_state = await schedule_workflow_record(
             store, tenant, params, context=context

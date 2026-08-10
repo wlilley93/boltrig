@@ -37,6 +37,17 @@ def _archived(wf: WorkflowDefinition) -> bool:
     return isinstance(lifecycle, dict) and lifecycle.get("status") == "archived"
 
 
+# Draft rows (chat-first authoring) live under this reserved id prefix and are
+# working copies, never runnable: excluded from get/match/trigger/execute so a
+# draft can never be selected, matched, or run. Kept as a string literal here
+# to avoid importing config into the workflows package (layering).
+_DRAFT_ID_PREFIX = "__draft__:"
+
+
+def _is_draft(wf: WorkflowDefinition) -> bool:
+    return wf.id.startswith(_DRAFT_ID_PREFIX)
+
+
 def _run_id(executor: Any | None, requested: str | None) -> str:
     if requested:
         return requested
@@ -88,7 +99,7 @@ class WorkflowLibrary:
         compat).
         """
         for wf in await self._store.list_workflows(tenant):
-            if wf.id == id and _visible_in_workspace(wf, active_workspace_id):
+            if wf.id == id and not _is_draft(wf) and _visible_in_workspace(wf, active_workspace_id):
                 return cast(WorkflowDefinition, wf)
         return None
 
@@ -132,6 +143,7 @@ class WorkflowLibrary:
             for wf in await self._store.list_workflows(tenant)
             if (
                 wanted & set(wf.intent_tags)
+                and not _is_draft(wf)
                 and _visible_in_workspace(wf, active_workspace_id)
                 and not _archived(wf)
             )
